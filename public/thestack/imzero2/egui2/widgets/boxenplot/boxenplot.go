@@ -560,10 +560,21 @@ func (inst Renderer) PaintCrosshair(ch Crosshair) {
 //
 // No-op when ch.Valid is false; callers that want a placeholder
 // message ("hover a distribution to inspect cursor values") should
-// emit it themselves on the !ch.Valid branch.
+// emit it themselves on the !ch.Valid branch. For the explaining,
+// multi-line counterpart use [WriteStatusLineVerbose].
 func WriteStatusLine(ch Crosshair) {
-	if !ch.Valid {
+	s := formatStatusLine(ch)
+	if s == "" {
 		return
+	}
+	c.LabelAtoms(c.Atoms().BeginRichText(s).Small().Weak().End().Keep()).Send()
+}
+
+// formatStatusLine renders the terse single line, or "" when ch is not
+// Valid. Pure (no egui) so the wording is unit-testable.
+func formatStatusLine(ch Crosshair) string {
+	if !ch.Valid {
+		return ""
 	}
 	var summary string
 	if ch.Depth == 0 {
@@ -595,11 +606,76 @@ func WriteStatusLine(ch Crosshair) {
 			ch.DepthTailCount,
 		)
 	}
-	txt := fmt.Sprintf(
+	return fmt.Sprintf(
 		"%s │ x=%.4g, y=%.4g │ n=%d, median=%.4g │ %s",
 		ch.Name, ch.Argument, ch.PlotY, ch.TotalN, ch.Median, summary,
 	)
-	c.LabelAtoms(c.Atoms().BeginRichText(txt).Small().Weak().End().Keep()).Send()
+}
+
+// VerboseReadoutLineCount is the fixed number of rows
+// [WriteStatusLineVerbose] emits, so a host panel's status area keeps a
+// constant height whether or not the cursor is over a distribution
+// (mirrors ecdf.ReadoutLineCount). Hosts budget vertical space from this.
+const VerboseReadoutLineCount = 3
+
+// WriteStatusLineVerbose emits the explaining, multi-line counterpart to
+// [WriteStatusLine]: it describes the hovered letter-value box in plain
+// language — what quantiles its edges represent, the central fraction it
+// covers, and the tail beyond it — rather than packing the same facts
+// into one dense line. It always emits [VerboseReadoutLineCount] rows: the
+// description when ch.Valid, a one-line hover hint otherwise, padded with
+// blank rows so hovering on / off never reflows the host. Text via the
+// pure [formatVerbose].
+func WriteStatusLineVerbose(ch Crosshair) {
+	lines := formatVerbose(ch)
+	for _, ln := range lines {
+		c.LabelAtoms(c.Atoms().BeginRichText(ln).Small().Weak().End().Keep()).Send()
+	}
+	for i := len(lines); i < VerboseReadoutLineCount; i++ {
+		c.LabelAtoms(c.Atoms().BeginRichText(" ").Small().Weak().End().Keep()).Send()
+	}
+}
+
+// formatVerbose renders ch into the explaining readout's rows (at most
+// [VerboseReadoutLineCount]) — pure, so the wording is unit-testable. It
+// describes the hovered letter-value box by the quantiles its edges
+// represent (the directly-meaningful concept) and the central fraction it
+// covers, or, outside every box, which tail the cursor sits in beyond the
+// deepest ring. Returns a single hover hint when ch is not Valid.
+func formatVerbose(ch Crosshair) (lines []string) {
+	if !ch.Valid {
+		return []string{"Hover a distribution to inspect its letter-value boxes."}
+	}
+	lines = make([]string, 0, VerboseReadoutLineCount)
+	lines = append(lines, fmt.Sprintf(
+		"Cursor at value y = %.4g in %q (n=%d, median=%.4g).",
+		ch.PlotY, ch.Name, ch.TotalN, ch.Median))
+	if ch.Depth == 0 {
+		// Outside every box — in a tail beyond the deepest drawn ring.
+		lowerQ := math.Ldexp(1.0, -int(ch.MaxDepth))
+		upperQ := 1 - lowerQ
+		if ch.PlotY > ch.MaxDepthHigh {
+			lines = append(lines, fmt.Sprintf(
+				"Above the %.6gth percentile — beyond the deepest drawn box [%.4g, %.4g].",
+				upperQ*100, ch.MaxDepthLow, ch.MaxDepthHigh))
+		} else {
+			lines = append(lines, fmt.Sprintf(
+				"Below the %.6gth percentile — beyond the deepest drawn box [%.4g, %.4g].",
+				lowerQ*100, ch.MaxDepthLow, ch.MaxDepthHigh))
+		}
+		lines = append(lines, fmt.Sprintf(
+			"About %d observations lie in this tail.", ch.MaxDepthTailCount))
+		return
+	}
+	// Inside a box: name its quantile edges and the central fraction it spans.
+	coverage := (ch.DepthUpperQ - ch.DepthLowerQ) * 100
+	lines = append(lines, fmt.Sprintf(
+		"Hovered letter-value box spans the [%.6g%%, %.6g%%] quantiles — value range [%.4g, %.4g].",
+		ch.DepthLowerQ*100, ch.DepthUpperQ*100, ch.DepthLow, ch.DepthHigh))
+	lines = append(lines, fmt.Sprintf(
+		"It holds the central %.6g%% of the distribution; ≈%d observations lie in each tail beyond it.",
+		coverage, ch.DepthTailCount))
+	return
 }
 
 // withAlpha replaces the alpha byte (low 8 bits) of an RGBA-packed

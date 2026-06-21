@@ -3,6 +3,7 @@ package boxenplot
 import (
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/letterval"
@@ -263,4 +264,56 @@ func TestMonotonicNestingInRenderedSpread(t *testing.T) {
 	// depth 1 lower = upper = median.
 	assert.False(t, math.IsNaN(levels[0].LowerValue))
 	assert.InDelta(t, levels[0].LowerValue, levels[0].UpperValue, 1e-12)
+}
+
+// TestFormatStatusLineTerse pins the compact single line: "" when
+// invalid, and the dense notation (name, anchor, quantile range) inside
+// a box when valid.
+func TestFormatStatusLineTerse(t *testing.T) {
+	assert.Equal(t, "", formatStatusLine(Crosshair{Valid: false}))
+	s := formatStatusLine(Crosshair{
+		Valid: true, Name: "lat", Argument: 1, PlotY: 15, TotalN: 100, Median: 15,
+		Depth: 2, DepthLowerQ: 0.25, DepthUpperQ: 0.75,
+		DepthLow: 10, DepthHigh: 20, DepthTailCount: 5,
+	})
+	assert.Contains(t, s, "lat")
+	assert.Contains(t, s, "n=100, median=15")
+	assert.Contains(t, s, "quantiles [25%, 75%] = [10, 20]")
+	assert.NotContains(t, s, "\n") // one line
+}
+
+// TestFormatVerboseInsideBox: the explaining readout names the hovered
+// box's quantile edges, value range, central fraction, and per-tail count.
+func TestFormatVerboseInsideBox(t *testing.T) {
+	joined := strings.Join(formatVerbose(Crosshair{
+		Valid: true, Name: "lat", PlotY: 15, TotalN: 100, Median: 15,
+		Depth: 2, DepthLowerQ: 0.25, DepthUpperQ: 0.75,
+		DepthLow: 10, DepthHigh: 20, DepthTailCount: 5,
+	}), "\n")
+	assert.Contains(t, joined, `Cursor at value y = 15 in "lat"`)
+	assert.Contains(t, joined, "n=100, median=15")
+	assert.Contains(t, joined, "[25%, 75%] quantiles")
+	assert.Contains(t, joined, "value range [10, 20]")
+	assert.Contains(t, joined, "central 50%")
+	assert.Contains(t, joined, "≈5 observations")
+}
+
+// TestFormatVerboseOutsideBox: above the deepest ring, the readout names
+// the deepest percentile, the deepest box bounds, and the tail count.
+func TestFormatVerboseOutsideBox(t *testing.T) {
+	joined := strings.Join(formatVerbose(Crosshair{
+		Valid: true, Name: "lat", PlotY: 40, TotalN: 100, Median: 15,
+		Depth: 0, MaxDepth: 3, MaxDepthLow: 5, MaxDepthHigh: 30, MaxDepthTailCount: 2,
+	}), "\n")
+	assert.Contains(t, joined, "Above the 87.5th percentile")
+	assert.Contains(t, joined, "deepest drawn box [5, 30]")
+	assert.Contains(t, joined, "About 2 observations")
+}
+
+// TestFormatVerboseHoverHint: invalid crosshair yields a single hint row.
+func TestFormatVerboseHoverHint(t *testing.T) {
+	lines := formatVerbose(Crosshair{Valid: false})
+	require.Len(t, lines, 1)
+	assert.Contains(t, lines[0], "Hover a distribution")
+	assert.LessOrEqual(t, len(lines), VerboseReadoutLineCount)
 }

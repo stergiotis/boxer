@@ -111,13 +111,21 @@ resulting conservatism honest.
   hover on/off never reflows the host window.
 - A live or repeatedly-recomputed exact band settles; its calibration `n` (and
   any conservatism) is visible.
+- Both crosshair widgets offer two readout registers: a terse single line and an
+  explaining fixed-height paragraph. `ecdf` defaults verbose (`WriteStatusLine`)
+  with `WriteStatusLineTerse` the one-liner; `boxenplot` defaults terse
+  (`WriteStatusLine`) with `WriteStatusLineVerbose` the paragraph. The
+  `distsummary` inspector uses the verbose register on both tabs.
 - Pure helpers (`tailClipBounds`, `bucketExactN`, `formatTailClipNote`,
-  `formatBandStateLine`, `ecdf.formatReadout`) are unit-tested without egui.
+  `formatBandStateLine`, `ecdf.formatReadout` / `formatStatusLineTerse`,
+  `boxenplot.formatStatusLine` / `formatVerbose`) are unit-tested without egui.
 
 ## Implementation
 
-First cut implemented 2026-06-21 (uncommitted): `ADR-0093` markers in
+First cut committed to main `520663c2` 2026-06-21: `ADR-0093` markers in
 `widgets/ecdf` (Crosshair provenance, `formatReadout`/`WriteStatusLine`),
 `widgets/ecdfdigest` (`BuildDigestGridRange`), `widgets/distsummary`
 (`tailClipBounds`, `bucketExactN`, `renderEcdfBody`), and
-`analytics/stats/ecdfbands` (`BandMethodE.String`).
+`analytics/stats/ecdfbands` (`BandMethodE.String`). Follow-up: terse/verbose
+readout registers added to both `ecdf` and `boxenplot`, inspector boxenplot tab
+switched to the verbose register.

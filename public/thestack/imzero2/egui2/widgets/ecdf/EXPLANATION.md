@@ -120,6 +120,16 @@ curve, a one-line hover hint otherwise, padded to a constant height so
 hovering on / off never reflows the host (which, in the distsummary
 host, would re-enter the plot-width grow guard).
 
+`WriteStatusLineTerse` is the compact one-line counterpart for inline
+placements (a status bar, a dense table row): the same facts in standard
+notation — `x = … │ F_n(x) = … │ <cov>% band […, …] (<provenance>) │
+nearest X_(i) = …` — with the band provenance abbreviated and the nearest
+clause dropped on the grid path. It no-ops when `!ch.Valid` (the compact
+register; callers emit their own placeholder). The two registers are
+deliberately symmetric with `boxenplot`, which defaults the other way:
+its `WriteStatusLine` is terse and `WriteStatusLineVerbose` is the
+paragraph.
+
 The Renderer is value-typed and stateless — every call re-reads
 `c.CurrentApplicationState.StateManager.GetPlotPointer()`. The cache
 is populated by `StateManager.Sync` after the previous frame's drain,

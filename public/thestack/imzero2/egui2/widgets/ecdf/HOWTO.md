@@ -148,6 +148,12 @@ Order of `At` / `Render` / `PaintCrosshair` is free as long as
 everything lands before `c.Plot(plotID).Send()` drains the
 registers.
 
+For an inline placement where the multi-line paragraph is too tall (a
+status bar, a dense table row), use `ecdf.WriteStatusLineTerse(ch)`
+instead — one compact line in standard notation, no-op when `!ch.Valid`.
+(`boxenplot` mirrors this the other way: terse `WriteStatusLine`, with
+`WriteStatusLineVerbose` the explaining paragraph.)
+
 `Crosshair.Valid` is false when the cursor is outside the plot,
 when the hover refers to a different plot id, or when no plot has
 rendered yet this session. `PaintCrosshair` no-ops on `!ch.Valid`;

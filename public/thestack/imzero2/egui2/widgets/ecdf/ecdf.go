@@ -569,3 +569,55 @@ func formatBandLines(ch Crosshair) (lines []string) {
 		ch.LowerX, ch.UpperX, cov))
 	return
 }
+
+// WriteStatusLineTerse emits the compact one-line counterpart to
+// [WriteStatusLine]: a single weak row in standard ECDF notation, for
+// inline placements (a status bar, a dense table row) where the
+// multi-line readout is too tall. No-op when ch.Valid is false — terse
+// callers that want a placeholder emit their own. The text is built by
+// the pure [formatStatusLineTerse].
+func WriteStatusLineTerse(ch Crosshair) {
+	s := formatStatusLineTerse(ch)
+	if s == "" {
+		return
+	}
+	c.LabelAtoms(c.Atoms().BeginRichText(s).Small().Weak().End().Keep()).Send()
+}
+
+// formatStatusLineTerse renders ch as one compact line —
+// `x = … │ F_n(x) = … │ <cov>% band […, …] (<provenance>) │ nearest X_(i) = …`
+// — or "" when ch is not Valid. Pure; unit-tested. The band provenance is
+// abbreviated (exact <family> / DKW preview, calibration n, a "cons."
+// flag when it lags the sample); the nearest-order-statistic clause is
+// dropped on the grid path, where it would be a grid point, not an X_(i).
+func formatStatusLineTerse(ch Crosshair) string {
+	if !ch.Valid {
+		return ""
+	}
+	band := formatBandTerse(ch)
+	if ch.FromGrid {
+		return fmt.Sprintf("x = %.4g │ F_n(x) = %.3f │ %s", ch.X, ch.FnX, band)
+	}
+	return fmt.Sprintf("x = %.4g │ F_n(x) = %.3f │ %s │ nearest X_(%d) = %.4g",
+		ch.X, ch.FnX, band, ch.NearestIdx+1, ch.NearestX)
+}
+
+// formatBandTerse renders the compact `(<cov>% band […, …] (<provenance>))`
+// segment of the terse line: the conservative DKW preview, or the exact
+// family + calibration n with a "cons." flag when that n lags the sample.
+func formatBandTerse(ch Crosshair) string {
+	cov := (1 - ch.Alpha) * 100
+	switch ch.BandKind {
+	case BandNone:
+		return "no band"
+	case BandPreview:
+		return fmt.Sprintf("%.6g%% band [%.3f, %.3f] (DKW preview)", cov, ch.LowerX, ch.UpperX)
+	default: // BandExact
+		if ch.BandN < ch.SampleN {
+			return fmt.Sprintf("%.6g%% band [%.3f, %.3f] (exact %s, n=%d cons.)",
+				cov, ch.LowerX, ch.UpperX, ch.Method.String(), ch.BandN)
+		}
+		return fmt.Sprintf("%.6g%% band [%.3f, %.3f] (exact %s, n=%d)",
+			cov, ch.LowerX, ch.UpperX, ch.Method.String(), ch.BandN)
+	}
+}

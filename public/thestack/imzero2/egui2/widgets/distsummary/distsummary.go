@@ -768,7 +768,10 @@ func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, 
 	if pad > 0 {
 		c.AddSpace(pad)
 	}
-	boxenplot.WriteStatusLine(ch)
+	// Explaining readout (parity with the ECDF tab's verbose readout) so
+	// the inspector describes the hovered letter-value box in plain language
+	// rather than the terse single line.
+	boxenplot.WriteStatusLineVerbose(ch)
 }
 
 // renderEcdfBody emits the ECDF + simultaneous confidence band body under

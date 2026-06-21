@@ -265,3 +265,41 @@ func TestFormatReadoutCoverageVariesWithAlpha(t *testing.T) {
 	assert.Contains(t, mk(0.01), "99%")
 	assert.NotContains(t, mk(0.01), "99.0000")
 }
+
+// TestFormatStatusLineTerse exercises the compact one-line variant:
+// "" when invalid; the dense notation with abbreviated band provenance
+// when valid; the nearest-X clause only on the raw-sample path; and the
+// "cons." flag when the calibration n lags the sample.
+func TestFormatStatusLineTerse(t *testing.T) {
+	assert.Equal(t, "", formatStatusLineTerse(Crosshair{Valid: false}))
+
+	exactRaw := formatStatusLineTerse(Crosshair{
+		Valid: true, X: 1240, FnX: 0.973, LowerX: 0.961, UpperX: 0.982,
+		NearestX: 1210, NearestIdx: 1780, Alpha: 0.05,
+		BandKind: BandExact, Method: ecdfbands.BandMethodBerkJones,
+		BandN: 1832, SampleN: 1832, FromGrid: false,
+	})
+	assert.Contains(t, exactRaw, "x = 1240")
+	assert.Contains(t, exactRaw, "F_n(x) = 0.973")
+	assert.Contains(t, exactRaw, "95% band [0.961, 0.982]")
+	assert.Contains(t, exactRaw, "(exact Berk-Jones, n=1832)")
+	assert.Contains(t, exactRaw, "nearest X_(1781) = 1210")
+	assert.NotContains(t, exactRaw, "cons.")
+	// One line, not a paragraph.
+	assert.NotContains(t, exactRaw, "\n")
+
+	previewGrid := formatStatusLineTerse(Crosshair{
+		Valid: true, X: 50, FnX: 0.5, LowerX: 0.42, UpperX: 0.58, Alpha: 0.05,
+		BandKind: BandPreview, Method: ecdfbands.BandMethodDKW,
+		BandN: 2000, SampleN: 2000, FromGrid: true,
+	})
+	assert.Contains(t, previewGrid, "(DKW preview)")
+	assert.NotContains(t, previewGrid, "nearest X_(") // grid point is not an order statistic
+
+	staleGrid := formatStatusLineTerse(Crosshair{
+		Valid: true, X: 3, FnX: 0.8, LowerX: 0.7, UpperX: 0.9, Alpha: 0.05,
+		BandKind: BandExact, Method: ecdfbands.BandMethodBerkJones,
+		BandN: 413, SampleN: 505, FromGrid: true,
+	})
+	assert.Contains(t, staleGrid, "n=413 cons.")
+}

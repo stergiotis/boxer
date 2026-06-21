@@ -144,6 +144,17 @@ scaffold across to the other without re-learning the contract.
    `n` was divisible by `2ᵈ` and otherwise off by less than `2ᵈ` —
    within human-readout tolerance.
 
+   For panels with vertical room, `boxenplot.WriteStatusLineVerbose(ch)`
+   is the explaining counterpart: the same facts spread over a
+   fixed-height (`VerboseReadoutLineCount`) plain-language paragraph —
+   "Hovered letter-value box spans the [25%, 75%] quantiles — value range
+   […]. It holds the central 50% of the distribution; ≈N observations lie
+   in each tail beyond it." — with a hover hint when `ch.Valid` is false.
+   The terse `WriteStatusLine` is the compact register; the verbose one is
+   what the `distsummary` inspector uses, mirroring `ecdf`'s verbose
+   readout. (`ecdf` is symmetric the other way: `WriteStatusLine` is its
+   verbose default and `WriteStatusLineTerse` the one-liner.)
+
    `ch.Depth` remains a `Crosshair` field for callers that want to
    key off the LV index programmatically (e.g. an external readout
    keyed to Hofmann's letter codes M/F/E/D/…); only the default
