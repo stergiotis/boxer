@@ -16,7 +16,6 @@ const DefaultRequestTimeout = 5 * time.Second
 // doc for the authorization posture (server-side, not enforced here).
 type Client struct {
 	nc             *nats.Conn
-	appId          app.AppIdT
 	requestTimeout time.Duration
 }
 
@@ -53,12 +52,9 @@ func Connect(opts Options) (inst *Client, err error) {
 		err = eh.Errorf("natsbus: connect %q: %w", opts.URL, cerr)
 		return
 	}
-	inst = &Client{nc: nc, appId: opts.AppId, requestTimeout: opts.RequestTimeout}
+	inst = &Client{nc: nc, requestTimeout: opts.RequestTimeout}
 	return
 }
-
-// AppId returns the identity this client connected under.
-func (inst *Client) AppId() (id app.AppIdT) { return inst.appId }
 
 func (inst *Client) Publish(subject string, payload []byte) (err error) {
 	err = inst.nc.Publish(subject, payload)

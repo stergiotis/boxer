@@ -2,7 +2,6 @@ package sysmetricsbus
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -31,20 +30,18 @@ type BundleSampler interface {
 	Close() (err error)
 }
 
-// Producer is the publishing half of the metric plane (ADR-0090 SD2/SD5):
-// it owns the sysmetrics.Bundle, ticks at its configured cadence, encodes
-// each BundleSnapshot, and publishes it. It is the sole sampler — the
-// dataflow is one way, so there is no path from a consumer back here; Pause
-// and SetInterval are local controls the co-located owner drives directly.
+// Producer is the publishing half of the metric plane (ADR-0090 SD2/SD5): it
+// owns the metric source (a [BundleSampler]), ticks at its configured cadence,
+// encodes each BundleSnapshot, and publishes it. It is the sole sampler — the
+// dataflow is one way, so there is no path from a consumer back here, and the
+// cadence is fixed at construction.
 type Producer struct {
-	bundle  BundleSampler
-	bus     app.BusI
-	subject string
-	codec   Codec
-	log     zerolog.Logger
-
-	intervalNs atomic.Int64
-	paused     atomic.Bool
+	bundle   BundleSampler
+	bus      app.BusI
+	subject  string
+	codec    Codec
+	interval time.Duration
+	log      zerolog.Logger
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -84,18 +81,18 @@ func NewProducer(opts ProducerOptions) (inst *Producer, err error) {
 		opts.Interval = DefaultInterval
 	}
 	inst = &Producer{
-		bundle:  opts.Bundle,
-		bus:     opts.Bus,
-		subject: opts.Subject,
-		codec:   opts.Codec,
-		log:     opts.Log,
+		bundle:   opts.Bundle,
+		bus:      opts.Bus,
+		subject:  opts.Subject,
+		codec:    opts.Codec,
+		interval: clampInterval(opts.Interval),
+		log:      opts.Log,
 	}
-	inst.intervalNs.Store(int64(clampInterval(opts.Interval)))
 	return
 }
 
 // Start launches the tick loop. The first sample is published immediately,
-// then once per Interval until ctx is cancelled or Close is called.
+// then once per interval until ctx is cancelled or Close is called.
 func (inst *Producer) Start(ctx context.Context) {
 	runCtx, cancel := context.WithCancel(ctx)
 	inst.cancel = cancel
@@ -108,8 +105,7 @@ func (inst *Producer) loop(ctx context.Context) {
 
 	inst.tick(ctx)
 
-	cur := time.Duration(inst.intervalNs.Load())
-	ticker := time.NewTicker(cur)
+	ticker := time.NewTicker(inst.interval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -117,21 +113,11 @@ func (inst *Producer) loop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			inst.tick(ctx)
-			next := time.Duration(inst.intervalNs.Load())
-			if next != cur {
-				ticker.Reset(next)
-				cur = next
-			}
 		}
 	}
 }
 
 func (inst *Producer) tick(ctx context.Context) {
-	// Pause short-circuits before Sample: the collectors walk /proc, /sys,
-	// etc., and a paused producer should spend no CPU (ADR-0020 SD14).
-	if inst.paused.Load() {
-		return
-	}
 	snap, err := inst.bundle.Sample(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
@@ -148,29 +134,6 @@ func (inst *Producer) tick(ctx context.Context) {
 	if err != nil {
 		inst.log.Warn().Err(err).Str("subject", inst.subject).Msg("sysmetricsbus: publish error")
 	}
-}
-
-// Pause stops (p=true) or resumes (p=false) sampling. While paused the
-// producer emits nothing, so consumers keep their last snapshot.
-func (inst *Producer) Pause(p bool) { inst.paused.Store(p) }
-
-// IsPaused reports the current pause state.
-func (inst *Producer) IsPaused() (p bool) { return inst.paused.Load() }
-
-// SetInterval changes the tick period, clamped to [MinInterval, MaxInterval].
-// The new period takes effect after the current ticker fires.
-func (inst *Producer) SetInterval(d time.Duration) {
-	inst.intervalNs.Store(int64(clampInterval(d)))
-}
-
-// Interval returns the current tick period.
-func (inst *Producer) Interval() (d time.Duration) {
-	return time.Duration(inst.intervalNs.Load())
-}
-
-// IntervalLabel returns the tick period as a short human-readable string.
-func (inst *Producer) IntervalLabel() (out string) {
-	return time.Duration(inst.intervalNs.Load()).String()
 }
 
 // Close stops the tick loop and closes the underlying Bundle (the producer
