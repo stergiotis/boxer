@@ -123,6 +123,14 @@ P2–P4 and the headless deployment shipped. `sysmetricsbus` (Producer/Consumer/
 
 The headless-sandboxed case (the original problem) is solved **not** by SD4's "all capabilities over NATS" but by a narrower `sysmetricsbus.Bridge`: an external `sysmetricsd` reads `/proc` in its own sandbox and publishes to NATS; the carrier connects to NATS and republishes only the metric plane onto its in-proc host bus, so the carrier never reads `/proc` while the UI-coupled fs/clipboard/persist brokers stay co-located on inprocbus (they remain hardwired to `inprocbus.Inst`). Full SD4 — migrating every broker off `inprocbus.Inst` — is left as a larger future milestone; the `BusProvider` foundation is in place for it.
 
+### 2026-06-21 — Review follow-up: observed cadence; SD6 correction; data/collector decoupling scheduled
+
+Self-review fixes (commit `42bfa7c8`): the per-process CPU EWMA and the topbar/heatmap now use the *observed* sample cadence (the delta between consecutive bundle timestamps) rather than a configured interval — imztop no longer sets the rate, the scraper does — so the now-dead `SetInterval` and the topbar ± control are removed. `windowhost` copies the manifest caps before minting a client.
+
+Correction to the SD6 note in the entry above: imztop is **not** capability-clean even setting the screenshot tour aside — `imztop_panel_topology.go` reads the CPU topology from sysfs directly (`cpu.ReadTopology`) in a production panel. Full SD6 needs either publishing CPU topology on the metric plane or accepting that read as a documented exception.
+
+Scheduled focused follow-up: extract the per-domain data types plus `BundleSnapshot`/`Domain` into a data-only package so consumers (`sysmetricsbus`, `imztop`) stop importing the collector packages, and resolve the topology fork above. The bus-data extraction alone decouples 9/10 collectors; `cpu` stays coupled via topology until the fork is decided.
+
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) sysmetrics collector · [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) imztop · [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) remote access · [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) auth/TLS
