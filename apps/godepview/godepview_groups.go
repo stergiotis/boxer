@@ -78,6 +78,23 @@ func (inst *App) ensureArch() {
 		inst.archViolGroup[v.FromGroup] = true
 		inst.archViolGroup[v.ToGroup] = true
 	}
+
+	// Group cycles (SCCs of the quotient) and the edges inside them.
+	inst.cycles = inst.archGraph.StronglyConnected()
+	inst.cycleComp = make(map[godep.GroupKey]int)
+	for ci, comp := range inst.cycles {
+		for _, k := range comp {
+			inst.cycleComp[k] = ci
+		}
+	}
+	inst.cycleEdge = make(map[[2]godep.GroupKey]struct{})
+	for _, e := range inst.archGraph.Edges {
+		if ci, ok := inst.cycleComp[e.From]; ok {
+			if cj, ok2 := inst.cycleComp[e.To]; ok2 && ci == cj {
+				inst.cycleEdge[[2]godep.GroupKey{e.From, e.To}] = struct{}{}
+			}
+		}
+	}
 }
 
 // archExternalsShown reports whether external module groups appear in the
@@ -131,9 +148,20 @@ func (inst *App) renderGraphArchitecture() {
 	if lay == nil || len(lay.Nodes) == 0 {
 		return
 	}
-	if n := len(inst.violations); n > 0 {
-		for range c.RichTextLabelColored(egcolor.Hex(styletokens.ErrorDefault.AsHex()), egcolor.Transparent,
-			fmt.Sprintf("⚠ %d forbidden app→app edge(s) in red — listed in the detail pane", n)) {
+	// Legend banner: forbidden app→app edges (red) and dependency cycles (amber).
+	if len(inst.violations) > 0 || len(inst.cycles) > 0 {
+		for range c.Horizontal().KeepIter() {
+			if n := len(inst.violations); n > 0 {
+				for range c.RichTextLabelColored(egcolor.Hex(styletokens.ErrorDefault.AsHex()), egcolor.Transparent,
+					fmt.Sprintf("⚠ %d app→app (red)", n)) {
+				}
+				c.AddSpace(inst.spaceOuter())
+			}
+			if n := len(inst.cycles); n > 0 {
+				for range c.RichTextLabelColored(egcolor.Hex(styletokens.WarningDefault.AsHex()), egcolor.Transparent,
+					fmt.Sprintf("⟳ %d cycle(s) (amber)", n)) {
+				}
+			}
 		}
 	}
 
@@ -200,15 +228,21 @@ func (inst *App) archNodeFill() func(id string) (col egcolor.Color, ok bool) {
 	}
 }
 
-// archEdgeStroke paints a group edge in the error tone when it carries a
-// forbidden app→app dependency. At grouping depths that collapse apps into one
-// node the pair no longer matches an edge — the detail-pane list stays
-// authoritative (see SiblingViolations).
+// archEdgeStroke paints a group edge by its worst property: the error tone for a
+// forbidden app→app dependency, else the warning tone for an edge inside a
+// dependency cycle, else the style default. At grouping depths that collapse the
+// endpoints into one node the pair no longer matches an edge — the detail-pane
+// lists stay authoritative (see SiblingViolations / StronglyConnected).
 func (inst *App) archEdgeStroke() func(from string, to string) (col egcolor.Color, ok bool) {
 	red := egcolor.Hex(styletokens.ErrorDefault.AsHex())
+	amber := egcolor.Hex(styletokens.WarningDefault.AsHex())
 	return func(from string, to string) (col egcolor.Color, ok bool) {
-		if _, bad := inst.violEdge[[2]godep.GroupKey{godep.GroupKey(from), godep.GroupKey(to)}]; bad {
+		key := [2]godep.GroupKey{godep.GroupKey(from), godep.GroupKey(to)}
+		if _, bad := inst.violEdge[key]; bad {
 			return red, true
+		}
+		if _, cyc := inst.cycleEdge[key]; cyc {
+			return amber, true
 		}
 		return egcolor.Color{}, false
 	}
@@ -225,6 +259,9 @@ func (inst *App) onArchClick(key godep.GroupKey) {
 	}
 	if inst.mode == viewModules {
 		if n.Class == godep.ClassExternal {
+			if inst.focusModule != string(key) {
+				inst.traceFrom = 0 // a new module invalidates the trace
+			}
 			inst.focusModule = string(key)
 		}
 		return
@@ -251,11 +288,51 @@ func (inst *App) renderArchDetail() {
 	if inst.focusGroup != "" {
 		inst.renderGroupDetail()
 	}
+	inst.renderCyclesSection()
+	inst.renderViolationsSection()
+}
 
+// renderCyclesSection lists the quotient's dependency cycles (SCCs), each a row
+// of click-to-focus group chips. A cycle is the deepest entanglement signal —
+// groups that mutually depend — and the per-package view cannot show it.
+func (inst *App) renderCyclesSection() {
 	c.AddSpace(inst.spaceTight())
 	c.Separator().Horizontal().Send()
 	c.AddSpace(inst.spaceTight())
+	if len(inst.cycles) == 0 {
+		for rt := range c.RichTextLabel("✓ No dependency cycles between groups") {
+			rt.Strong()
+		}
+		return
+	}
+	for rt := range c.RichTextLabel(fmt.Sprintf("Dependency cycles (%d)", len(inst.cycles))) {
+		rt.Strong()
+	}
+	for rt := range c.RichTextLabel("these groups mutually depend — click a group to inspect it") {
+		rt.Weak().Small()
+	}
+	c.AddSpace(inst.spaceTight())
+	for ci, comp := range inst.cycles {
+		for range c.Horizontal().KeepIter() {
+			for j, k := range comp {
+				if j > 0 {
+					c.Label("⇄").Send()
+				}
+				if c.SelectableLabel(inst.ids.PrepareStr(fmt.Sprintf("cyc:%d:%d", ci, j)), k == inst.focusGroup, shortGroup(k)).
+					SendResp().HasPrimaryClicked() {
+					inst.focusGroup = k
+				}
+			}
+		}
+	}
+}
 
+// renderViolationsSection lists the forbidden app→app edges (the keelson rule),
+// each a click-through to the offending importer's neighborhood.
+func (inst *App) renderViolationsSection() {
+	c.AddSpace(inst.spaceTight())
+	c.Separator().Horizontal().Send()
+	c.AddSpace(inst.spaceTight())
 	if len(inst.violations) == 0 {
 		for rt := range c.RichTextLabel("✓ No forbidden app→app dependencies") {
 			rt.Strong()
@@ -390,9 +467,9 @@ func (inst *App) renderGroupsTable() {
 	cols[gcolGroup] = colDef{"Group", 300}
 	cols[gcolClass] = colDef{"Class", 78}
 	cols[gcolPkgs] = colDef{"Pkgs", 56}
-	cols[gcolOut] = colDef{"Out", 52} // groups this one depends on
-	cols[gcolIn] = colDef{"In", 52}   // groups that depend on this one
-	cols[gcolViol] = colDef{"⚠", 36}
+	cols[gcolOut] = colDef{"Out", 52}    // groups this one depends on
+	cols[gcolIn] = colDef{"In", 52}      // groups that depend on this one
+	cols[gcolViol] = colDef{"flags", 52} // ⚠ app→app violation · ⟳ in a cycle
 
 	for i := range numGroupCols {
 		c.EtColumn(cols[i].w).Resizable(true).Send()
@@ -427,8 +504,19 @@ func (inst *App) renderGroupsTable() {
 			c.Label(fmt.Sprintf("%d", inst.archIn[n.Key])).Send()
 		}
 		for range et.Cells(uint64(dr), gcolViol) {
+			marks := ""
 			if inst.archViolGroup[n.Key] {
-				for range c.RichTextLabelColored(egcolor.Hex(styletokens.ErrorDefault.AsHex()), egcolor.Transparent, "⚠") {
+				marks += "⚠"
+			}
+			if _, cyc := inst.cycleComp[n.Key]; cyc {
+				marks += "⟳"
+			}
+			if marks != "" {
+				col := egcolor.Hex(styletokens.WarningDefault.AsHex())
+				if inst.archViolGroup[n.Key] {
+					col = egcolor.Hex(styletokens.ErrorDefault.AsHex())
+				}
+				for range c.RichTextLabelColored(col, egcolor.Transparent, marks) {
 				}
 			}
 		}

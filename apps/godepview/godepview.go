@@ -190,6 +190,7 @@ type App struct {
 	modView      []int // display order: indices into modules
 	modViewDirty bool
 	focusModule  string // selected module path; "" = none
+	traceFrom    uint64 // first-party package being traced to the focused module; 0 = none
 
 	// Architecture (group quotient) graph state. The group graph + its dot layout
 	// are cached against archSig; violations are grouping-independent and cached
@@ -210,6 +211,14 @@ type App struct {
 	violReady     bool
 	violations    []godep.SiblingViolation
 	violEdge      map[[2]godep.GroupKey]struct{}
+
+	// Group-cycle (SCC) state, recomputed with the quotient: the non-trivial
+	// strongly-connected components, each group's component index, and the edges
+	// inside a cycle (painted amber). Group imports are acyclic but the quotient
+	// need not be.
+	cycles    [][]godep.GroupKey
+	cycleComp map[godep.GroupKey]int
+	cycleEdge map[[2]godep.GroupKey]struct{}
 }
 
 var _ app.AppI = (*App)(nil)

@@ -137,6 +137,9 @@ func (inst *App) renderModules() {
 		for range et.Cells(uint64(row), mcolModule) {
 			if c.SelectableLabel(inst.ids.PrepareSeq(modRowSeqBase+uint64(row)), m.ModulePath == inst.focusModule, m.ModulePath).
 				SendResp().HasPrimaryClicked() {
+				if inst.focusModule != m.ModulePath {
+					inst.traceFrom = 0 // a new module invalidates the trace
+				}
 				inst.focusModule = m.ModulePath
 			}
 		}
@@ -203,6 +206,7 @@ func (inst *App) renderModuleDetail() {
 		if c.Button(inst.ids.PrepareStr("mod-clear"), c.Atoms().Text("clear").Keep()).
 			SendResp().HasPrimaryClicked() {
 			inst.focusModule = ""
+			inst.traceFrom = 0
 		}
 	}
 	usage := "transitive — no first-party package imports it directly"
@@ -217,10 +221,90 @@ func (inst *App) renderModuleDetail() {
 	c.AddSpace(inst.spaceTight())
 
 	importers := inst.idx.ModuleImporters(m.PkgIDs)
-	inst.renderModulePkgList("mimp", fmt.Sprintf("Direct first-party importers (%d)", len(importers)), importers)
+	inst.renderModulePkgList("mimp", fmt.Sprintf("Direct first-party importers (%d) — click to open", len(importers)), importers)
 	c.AddSpace(inst.spaceInner())
+
+	// The blast list traces *why*: clicking a transitively-affected package shows
+	// the shortest import chain from it down to this module.
 	blast := inst.idx.ReverseReachInternal(m.PkgIDs)
-	inst.renderModulePkgList("mblast", fmt.Sprintf("Blast radius — transitively affected (%d)", len(blast)), blast)
+	inst.renderBlastList(blast)
+	if inst.traceFrom != 0 {
+		inst.renderWitnessPath(m)
+	}
+}
+
+// renderBlastList renders the transitively-affected first-party packages; a
+// click selects the package to trace (sets traceFrom), rather than navigating
+// away, so the witness path can render below it.
+func (inst *App) renderBlastList(ids []uint64) {
+	for rt := range c.RichTextLabel(fmt.Sprintf("Blast radius — transitively affected (%d)", len(ids))) {
+		rt.Strong()
+	}
+	if len(ids) == 0 {
+		for rt := range c.RichTextLabel("— none") {
+			rt.Weak()
+		}
+		return
+	}
+	for rt := range c.RichTextLabel("click a package to trace why it pulls this module in") {
+		rt.Weak().Small()
+	}
+	sorted := inst.sortedByPath(ids)
+	shown := min(len(sorted), maxDetailListRows)
+	for i := range shown {
+		id := sorted[i]
+		if c.SelectableLabel(inst.ids.PrepareStr("bl:"+strconv.FormatUint(id, 10)), id == inst.traceFrom, shortPath(inst.pathOf(id))).
+			SendResp().HasPrimaryClicked() {
+			inst.traceFrom = id
+		}
+	}
+	if len(sorted) > shown {
+		for rt := range c.RichTextLabel(fmt.Sprintf("… +%d more (browse in the table)", len(sorted)-shown)) {
+			rt.Weak().Small()
+		}
+	}
+}
+
+// renderWitnessPath shows the shortest forward-import chain from the traced
+// first-party package down to the focused module — the concrete answer to "why
+// does this package depend on this module". Each hop is click-to-open.
+func (inst *App) renderWitnessPath(m *godep.ModuleStat) {
+	inModule := make(map[uint64]struct{}, len(m.PkgIDs))
+	for _, id := range m.PkgIDs {
+		inModule[id] = struct{}{}
+	}
+	path := inst.idx.ShortestImportPathTo(inst.traceFrom, func(id uint64) bool {
+		_, ok := inModule[id]
+		return ok
+	})
+	c.AddSpace(inst.spaceTight())
+	c.Separator().Horizontal().Send()
+	c.AddSpace(inst.spaceTight())
+	for rt := range c.RichTextLabel(fmt.Sprintf("Why %s depends on %s", shortPath(inst.pathOf(inst.traceFrom)), m.ModulePath)) {
+		rt.Strong()
+	}
+	if len(path) == 0 {
+		for rt := range c.RichTextLabel("no import path found") {
+			rt.Weak()
+		}
+		return
+	}
+	for rt := range c.RichTextLabel(fmt.Sprintf("%d hops — click any to open it", len(path)-1)) {
+		rt.Weak().Small()
+	}
+	for i, id := range path {
+		for range c.Horizontal().KeepIter() {
+			if i > 0 {
+				c.AddSpace(float32(i) * 14)
+				c.Label("↳").Send()
+			}
+			if c.SelectableLabel(inst.ids.PrepareStr("wp:"+strconv.FormatUint(id, 10)), id == inst.focus, shortPath(inst.pathOf(id))).
+				SendResp().HasPrimaryClicked() {
+				inst.focus = id
+				inst.mode = viewPackages
+			}
+		}
+	}
 }
 
 // renderModulePkgList renders one path-sorted, click-to-focus package list for
