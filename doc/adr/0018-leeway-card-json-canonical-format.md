@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-01
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0018: Canonical Card-JSON Format and JsonCardEmitter Rewrite Plan
 
@@ -512,7 +510,7 @@ Tracked as named follow-ons:
 
 ## Status
 
-Proposed — awaiting review by repo owner.
+Accepted — 2026-06-21 (reviewed by @spx).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

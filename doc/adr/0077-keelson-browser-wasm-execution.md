@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-12
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted. Phase gates in §Status apply even after acceptance.
 
 # ADR-0077: Keelson in the browser — dual-module wasm execution with an in-page FFFI2 bridge
 
@@ -150,7 +148,7 @@ Recorded with kill-reasons and salvage, so these are not re-derived when they re
 
 ## Status
 
-Proposed — awaiting review by @spx. Phasing: **Phase 0** — SD7(f) fleet probe + SD2 guest-target spike (gating number) → **Phase 1** — renderer web build (SD4, SD5), boots in a tab against a synthetic stream → **Phase 2** — SD3 fetch coalescing on the native path → **host-language strategy ADR** (SD11 gate; §Alternatives O7) → **Phase 3** — SD1 bridge at scale, SD8 build-tag sweep, SD9 data plane → **Phase 4** — SD10 static demo tier as a named deliverable.
+Accepted — 2026-06-21 (reviewed by @spx). Phasing: **Phase 0** — SD7(f) fleet probe + SD2 guest-target spike (gating number) → **Phase 1** — renderer web build (SD4, SD5), boots in a tab against a synthetic stream → **Phase 2** — SD3 fetch coalescing on the native path → **host-language strategy ADR** (SD11 gate; §Alternatives O7) → **Phase 3** — SD1 bridge at scale, SD8 build-tag sweep, SD9 data plane → **Phase 4** — SD10 static demo tier as a named deliverable.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
 

@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-04-23
-reviewed-by: ""
-reviewed-date: ""
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0054: Regex Explorer Match-Offset Authority
 
@@ -129,7 +127,7 @@ Rejection rationale for the top-level options is in the QOC matrix; notes below 
 
 ## Status
 
-Proposed — 2026-04-23. Pending first human review. Accepted on review pass; transition the front-matter `status` to `accepted`, populate `reviewed-by` / `reviewed-date`, and remove the draft banner.
+Accepted — 2026-06-21 (reviewed by @spx).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 

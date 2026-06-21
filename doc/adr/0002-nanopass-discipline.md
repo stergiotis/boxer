@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-04-17
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0002: Nanopass Pipeline Discipline — Stateless Passes on CST + Scopes
 
@@ -111,7 +109,7 @@ The following operational heuristics follow from the decision and are recorded h
 
 ## Status
 
-Proposed — retrospective ADR documenting decisions already embodied in the nanopass package. Promote to `accepted` and fill `reviewed-by` + `reviewed-date` after review by a code owner of [`public/db/clickhouse/dsl/nanopass`](../../public/db/clickhouse/dsl/nanopass).
+Accepted — 2026-06-21 (reviewed by @spx). Retrospective ADR documenting decisions already embodied in the nanopass package.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 

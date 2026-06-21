@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0030: ImZero2 design system — typography (mono, proportional, type scale)
 
@@ -398,7 +396,7 @@ Build artefact location: `rust/imzero2/assets/fonts/symbols-nerd-font-mono/Symbo
 
 ## Status
 
-Proposed — awaiting review by @spx. M0 (acquire + commit font artifacts) can begin immediately upon acceptance; M1 (wire into the IDS token apply path; convert pilot app to IDS Mono + Aile) lands as part of [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md)'s M1.
+Accepted — 2026-06-21 (reviewed by @spx). M0 (acquire + commit font artifacts) can begin immediately; M1 (wire into the IDS token apply path; convert pilot app to IDS Mono + Aile) lands as part of [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md)'s M1.
 
 Open questions:
 

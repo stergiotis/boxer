@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-13
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Implemented on a review branch; do not treat as accepted until reviewed and merged.
 
 # ADR-0083: Retire the `llm_generated_*` build-tag governance
 
@@ -115,7 +113,7 @@ model tag simultaneously, so their union was always co-compilable.
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis. Implemented on a review branch (the `llm_generated_*` directives were stripped tree-wide and `gov llmtag` retired); do not treat as accepted until reviewed and merged.
+Accepted — 2026-06-21 (reviewed by @spx). Implemented tree-wide: the `llm_generated_*` directives were stripped and `gov llmtag` retired.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).

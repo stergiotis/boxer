@@ -1,13 +1,10 @@
 ---
 type: reference
 audience: contributor
-status: draft
-# reviewed-by: "@<handle>"   # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD  # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: draft — pre-human-review.** A first cut; verify against the linked
-> sources before relying on any single line.
 
 # AGENTS.md
 

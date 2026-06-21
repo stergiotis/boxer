@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-20
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0091: ImZero2 spectrumdisplay widget — RF/audio spectrum-analyzer display
 
@@ -182,7 +182,7 @@ left gutter, so strip, gutter, and texture colors are consistent by construction
 
 ## Status
 
-Proposed — 2026-06-20. AI-drafted; pending maintainer review before `accepted`.
+Accepted — 2026-06-21 (reviewed by @spx). AI-drafted.
 
 Status lifecycle: `proposed → accepted → (deferred | deprecated | superseded by ADR-XXXX)`.
 

@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0028: Low-latency local SQL via pre-spawned clickhouse-local workers
 
@@ -320,7 +318,7 @@ No CGO. No exec into anything other than the configured `BinaryPath`. No network
 
 ## Status
 
-Proposed — awaiting review by @spx. Implementation is gated on M0 (§SD9): `clickhouse-local`'s spawn-vs-first-byte preload semantics must be confirmed before any production code lands.
+Accepted — 2026-06-21 (reviewed by @spx). Implementation is gated on M0 (§SD9): `clickhouse-local`'s spawn-vs-first-byte preload semantics must be confirmed before any production code lands.
 
 Open questions:
 

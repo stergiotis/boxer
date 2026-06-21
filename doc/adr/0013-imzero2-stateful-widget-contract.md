@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-04-26
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0013: ImZero2 — Stateful-Widget API Contract
 
@@ -65,7 +63,7 @@ The push value is the literal `true`: inside the `clicked()` gate the radio is b
 
 ## Status
 
-Proposed — awaiting review by @stergiotis.
+Accepted — 2026-06-21 (reviewed by @spx).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

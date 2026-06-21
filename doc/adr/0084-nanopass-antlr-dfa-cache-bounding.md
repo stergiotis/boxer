@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-13
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0084: Bounding the ANTLR DFA cache for long-running SQL parsing
 
@@ -95,7 +95,7 @@ The thresholds are first-cut and intentionally conservative (descope over gate);
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis. Decision under consideration; do not implement as if accepted.
+Accepted — 2026-06-21 (reviewed by @spx).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).

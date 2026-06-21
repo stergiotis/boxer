@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-04-25
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-06-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0012: ImZero2 — Retained Bodies for Collapsible Block Skipping
 
@@ -436,7 +434,7 @@ A widget body may use both (Phase 2 for the structural gate, Phase 3 for the dat
 
 ## Status
 
-Proposed — awaiting review by ImZero2 maintainers.
+Accepted — 2026-06-21 (reviewed by @spx).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
