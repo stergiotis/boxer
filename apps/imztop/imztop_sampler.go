@@ -10,17 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/battery"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/container"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/disk"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/gpu"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/mem"
-	netcoll "github.com/stergiotis/boxer/public/observability/sysmetrics/net"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/psi"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // PublishedSnapshot is the read-only frame the renderer consumes. Built
@@ -51,16 +41,16 @@ type PublishedSnapshot struct {
 	HistoryNetRxByIface   []NamedSeries // MiB/s per interface
 	HistoryNetTxByIface   []NamedSeries // MiB/s per interface
 
-	LatestCPU       *cpu.Snapshot
-	LatestMem       *mem.Snapshot
-	LatestDisk      *disk.Snapshot
-	LatestNet       *netcoll.Snapshot
-	LatestBattery   *battery.Snapshot
-	LatestGPU       *gpu.Snapshot
-	LatestContainer *container.Info
-	LatestPSI       *psi.Snapshot
-	Sensors         []sensors.TempReading
-	Procs           []proc.Info
+	LatestCPU       *sysmsnap.CPUSnapshot
+	LatestMem       *sysmsnap.MemSnapshot
+	LatestDisk      *sysmsnap.DiskSnapshot
+	LatestNet       *sysmsnap.NetSnapshot
+	LatestBattery   *sysmsnap.BatterySnapshot
+	LatestGPU       *sysmsnap.GPUSnapshot
+	LatestContainer *sysmsnap.ContainerInfo
+	LatestPSI       *sysmsnap.PSISnapshot
+	Sensors         []sysmsnap.TempReading
+	Procs           []sysmsnap.ProcInfo
 
 	// ProcCPUSmoothed is the per-process EWMA-smoothed CPU% (α=
 	// procCPUEWMAAlpha), parallel to Procs by index. Drives the
@@ -71,7 +61,13 @@ type PublishedSnapshot struct {
 	// Sampler's procCPUEWMA map (evicted when a PID disappears).
 	ProcCPUSmoothed []float32
 
-	Errors map[sysmetrics.Domain]error
+	// Topology is the static CPU containment hierarchy, delivered on the metric
+	// plane (ADR-0090 SD6) rather than read in-process by the consumer. nil until
+	// the first topology-bearing snapshot arrives (or if the scraper could not
+	// read it); the topology panel builds its treemap from it once.
+	Topology *sysmsnap.Topology
+
+	Errors map[sysmsnap.Domain]error
 }
 
 // SamplerOptions configures a Sampler.
@@ -251,7 +247,7 @@ func (inst *Sampler) Close() (err error) {
 // synchronous dispatch, or the NATS subscription goroutine), so the window
 // state and procCPUEWMA need no locking. localPaused (ADR-0020 SD14) drops
 // frames while the user has paused the display.
-func (inst *Sampler) onBundle(bundleSnap *sysmetrics.BundleSnapshot) {
+func (inst *Sampler) onBundle(bundleSnap *sysmsnap.BundleSnapshot) {
 	if inst.localPaused.Load() {
 		return
 	}
@@ -346,6 +342,7 @@ func (inst *Sampler) onBundle(bundleSnap *sysmetrics.BundleSnapshot) {
 		Sensors:               bundleSnap.Sensors,
 		Procs:                 procs,
 		ProcCPUSmoothed:       smoothed,
+		Topology:              bundleSnap.Topology,
 		Errors:                bundleSnap.Errors,
 	}
 	inst.latest.Store(pub)
@@ -396,7 +393,7 @@ const procCPUEWMATau = 1500 * time.Millisecond
 // which is now the OBSERVED cadence (onBundle sets it from consecutive sample
 // timestamps), so the smoothing tracks the scraper's real rate even though
 // imztop no longer controls it (ADR-0090 SD5).
-func (inst *Sampler) updateProcCPUEWMA(procs []proc.Info) (smoothed []float32) {
+func (inst *Sampler) updateProcCPUEWMA(procs []sysmsnap.ProcInfo) (smoothed []float32) {
 	n := len(procs)
 	smoothed = make([]float32, n)
 	next := make(map[procEWMAKey]float32, n)
@@ -424,7 +421,7 @@ func (inst *Sampler) updateProcCPUEWMA(procs []proc.Info) (smoothed []float32) {
 	return
 }
 
-func memUsedPercent(snap *mem.Snapshot) (pct float64) {
+func memUsedPercent(snap *sysmsnap.MemSnapshot) (pct float64) {
 	if snap.TotalBytes == 0 {
 		return
 	}
@@ -434,7 +431,7 @@ func memUsedPercent(snap *mem.Snapshot) (pct float64) {
 
 const bytesPerMiB = 1024 * 1024
 
-func sumDiskIOMiB(snap *disk.Snapshot) (readMiB, writeMiB float64) {
+func sumDiskIOMiB(snap *sysmsnap.DiskSnapshot) (readMiB, writeMiB float64) {
 	var read, write uint64
 	for _, d := range snap.BlockDevices {
 		read += d.ReadBytesPerSec
@@ -445,7 +442,7 @@ func sumDiskIOMiB(snap *disk.Snapshot) (readMiB, writeMiB float64) {
 	return
 }
 
-func sumNetIOMiB(snap *netcoll.Snapshot) (rxMiB, txMiB float64) {
+func sumNetIOMiB(snap *sysmsnap.NetSnapshot) (rxMiB, txMiB float64) {
 	var rx, tx uint64
 	for _, ifc := range snap.Interfaces {
 		rx += ifc.RxBytesPerSec
@@ -459,7 +456,7 @@ func sumNetIOMiB(snap *netcoll.Snapshot) (rxMiB, txMiB float64) {
 // diskRatesByDevice projects per-block-device rates into NamedValue
 // pairs for the named ring set. `read` selects the read-rate axis;
 // the write-rate axis flows through the same helper.
-func diskRatesByDevice(snap *disk.Snapshot, read bool) (out []NamedValue) {
+func diskRatesByDevice(snap *sysmsnap.DiskSnapshot, read bool) (out []NamedValue) {
 	out = make([]NamedValue, 0, len(snap.BlockDevices))
 	for _, d := range snap.BlockDevices {
 		var rate uint64
@@ -474,7 +471,7 @@ func diskRatesByDevice(snap *disk.Snapshot, read bool) (out []NamedValue) {
 }
 
 // netRatesByIface mirrors diskRatesByDevice for network interfaces.
-func netRatesByIface(snap *netcoll.Snapshot, rx bool) (out []NamedValue) {
+func netRatesByIface(snap *sysmsnap.NetSnapshot, rx bool) (out []NamedValue) {
 	out = make([]NamedValue, 0, len(snap.Interfaces))
 	for _, ifc := range snap.Interfaces {
 		var rate uint64

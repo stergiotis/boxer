@@ -11,28 +11,12 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
-
-// Snapshot is a single sample of system memory state. All byte counts are
-// absolute bytes (kB lines from /proc/meminfo are scaled <<10).
-type Snapshot struct {
-	SampledAtUnixMs int64
-	TotalBytes      uint64 // MemTotal
-	FreeBytes       uint64 // MemFree
-	AvailableBytes  uint64 // MemAvailable; falls back to Free+Cached on old kernels
-	BuffersBytes    uint64 // Buffers
-	CachedBytes     uint64 // Cached (+ ZFS ARC size when EnableZFSArc and arcstats present)
-	SwapTotalBytes  uint64
-	SwapFreeBytes   uint64
-	UsedBytes       uint64 // derived: Total - (Available <= Total ? Available : Free)
-	SwapUsedBytes   uint64 // derived: SwapTotal - SwapFree (0 when SwapTotal == 0)
-	ARCSizeBytes    uint64 // ZFS ARC size; 0 when disabled or absent
-	ARCMinBytes     uint64 // ZFS ARC c_min; 0 when disabled or absent
-}
 
 // CollectorI is the public surface a memory sampler implements.
 type CollectorI interface {
-	Sample(ctx context.Context) (snap Snapshot, err error)
+	Sample(ctx context.Context) (snap sysmsnap.MemSnapshot, err error)
 }
 
 // Options configures a [Collector].
@@ -82,7 +66,7 @@ var _ CollectorI = (*Collector)(nil)
 // computed Snapshot. The function is cheap (one or two file reads, no
 // allocations beyond the byte slices) and may be called at any cadence;
 // the Snapshot is point-in-time and carries no implicit prior state.
-func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
+func (inst *Collector) Sample(ctx context.Context) (snap sysmsnap.MemSnapshot, err error) {
 	select {
 	case <-ctx.Done():
 		err = ctx.Err()
@@ -139,7 +123,7 @@ func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
 	return
 }
 
-func parseMeminfo(content []byte) (snap Snapshot, err error) {
+func parseMeminfo(content []byte) (snap sysmsnap.MemSnapshot, err error) {
 	for key, val := range procfs.IterKV(content) {
 		v, ok := parseKB(val)
 		if !ok {

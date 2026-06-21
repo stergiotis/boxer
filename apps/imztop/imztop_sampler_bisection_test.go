@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +33,7 @@ func newColocatedSampler(t *testing.T, opts SamplerOptions) (s *Sampler) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	built.Start(ctx) // subscribe before the scraper publishes
-	stopScraper, sErr := sysmetricsbus.StartScraper(ctx, pub, "test", opts.UpdateInterval, zerolog.Nop())
+	stopScraper, sErr := sysmscrape.StartScraper(ctx, pub, "test", opts.UpdateInterval, zerolog.Nop())
 	if sErr != nil {
 		t.Skipf("scraper unavailable (no /proc?): %v", sErr)
 	}

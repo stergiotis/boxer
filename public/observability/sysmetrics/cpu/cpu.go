@@ -16,6 +16,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 const (
@@ -28,44 +29,9 @@ const (
 	CGroupCPUSetPath = "fs/cgroup/cpuset.cpus.effective"
 )
 
-// Snapshot is a single sample of CPU state.
-type Snapshot struct {
-	SampledAtUnixMs int64
-
-	// TotalPercent is total CPU busy percentage [0..100], rounded.
-	// First Sample after [New] returns 0.
-	TotalPercent uint8
-	// PerCorePercent is per-logical-CPU busy percentage, in /proc/stat
-	// order. First Sample returns all zeros.
-	PerCorePercent []uint8
-
-	// PerCoreFreqMHz is the current frequency of each logical CPU in MHz,
-	// 0 when cpufreq is not available for that core.
-	PerCoreFreqMHz []uint32
-
-	// LoadAvgN are the kernel-reported 1/5/15-minute load averages.
-	LoadAvg1, LoadAvg5, LoadAvg15 float32
-
-	// UsageWatts is the average package power over the most recent sample
-	// interval, derived from the Intel RAPL energy_uj counter. Valid only
-	// when UsageWattsAvailable is true.
-	UsageWatts          float32
-	UsageWattsAvailable bool
-
-	// ActiveCPUs is the cgroup v2 effective cpuset (cpuset.cpus.effective)
-	// or nil when the cgroup file is absent. Indices are logical CPU ids.
-	ActiveCPUs []int32
-
-	// ModelName is the /proc/cpuinfo "model name" field, copied at New().
-	ModelName string
-
-	// LogicalCores is the number of logical CPUs detected at New().
-	LogicalCores int32
-}
-
 // CollectorI is the public surface a CPU sampler implements.
 type CollectorI interface {
-	Sample(ctx context.Context) (snap Snapshot, err error)
+	Sample(ctx context.Context) (snap sysmsnap.CPUSnapshot, err error)
 }
 
 // Options configures a [Collector]. Disable* flags default to false (the
@@ -144,9 +110,9 @@ func New(opts Options) (inst *Collector, err error) {
 
 var _ CollectorI = (*Collector)(nil)
 
-// Sample reads the live CPU state and returns a Snapshot. The first call
+// Sample reads the live CPU state and returns a sysmsnap.CPUSnapshot. The first call
 // returns zero percentages and zero watts (no prior tick to delta against).
-func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
+func (inst *Collector) Sample(ctx context.Context) (snap sysmsnap.CPUSnapshot, err error) {
 	select {
 	case <-ctx.Done():
 		err = ctx.Err()
@@ -225,7 +191,7 @@ func (inst *Collector) statSysfs(rel string) (name string, err error) {
 	return rel, nil
 }
 
-func (inst *Collector) sampleStat(snap *Snapshot) (err error) {
+func (inst *Collector) sampleStat(snap *sysmsnap.CPUSnapshot) (err error) {
 	var raw []byte
 	raw, err = inst.proc.ReadFile("stat")
 	if err != nil {
@@ -273,7 +239,7 @@ func (inst *Collector) sampleStat(snap *Snapshot) (err error) {
 	return
 }
 
-func (inst *Collector) sampleLoadAvg(snap *Snapshot) (err error) {
+func (inst *Collector) sampleLoadAvg(snap *sysmsnap.CPUSnapshot) (err error) {
 	var raw []byte
 	raw, err = inst.proc.ReadFile("loadavg")
 	if err != nil {
@@ -306,7 +272,7 @@ func (inst *Collector) sampleLoadAvg(snap *Snapshot) (err error) {
 	return
 }
 
-func (inst *Collector) sampleFreq(snap *Snapshot) {
+func (inst *Collector) sampleFreq(snap *sysmsnap.CPUSnapshot) {
 	snap.PerCoreFreqMHz = make([]uint32, inst.logicalCores)
 	for i, p := range inst.cpuFreqPaths {
 		if p == "" {
@@ -329,7 +295,7 @@ func (inst *Collector) sampleFreq(snap *Snapshot) {
 // watts over the elapsed wall-clock window.
 //
 // provenance: btop src/linux/btop_collect.cpp:1008-1047 (get_cpuConsumptionWatts).
-func (inst *Collector) sampleRAPL(now time.Time, snap *Snapshot) {
+func (inst *Collector) sampleRAPL(now time.Time, snap *sysmsnap.CPUSnapshot) {
 	s, err := inst.sys.ReadString(RAPLEnergyPath)
 	if err != nil {
 		// Counter absent or not readable — treat as unavailable forever.
@@ -371,7 +337,7 @@ func (inst *Collector) sampleRAPL(now time.Time, snap *Snapshot) {
 	inst.raplPrevUJ = uj
 }
 
-func (inst *Collector) sampleActiveCPUs(snap *Snapshot) {
+func (inst *Collector) sampleActiveCPUs(snap *sysmsnap.CPUSnapshot) {
 	s, err := inst.sys.ReadString(CGroupCPUSetPath)
 	if err != nil {
 		return

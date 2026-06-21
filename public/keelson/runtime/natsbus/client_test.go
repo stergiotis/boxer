@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -149,12 +150,12 @@ func TestSysmetricsProducerConsumerOverNATS(t *testing.T) {
 	subject := sysmetricsbus.BundleSubject("test")
 	codec := sysmetricsbus.NewCBORCodec()
 
-	got := make(chan *sysmetrics.BundleSnapshot, 4)
+	got := make(chan *sysmsnap.BundleSnapshot, 4)
 	consumer, err := sysmetricsbus.NewConsumer(sysmetricsbus.ConsumerOptions{
 		Bus:     sub,
 		Subject: subject,
 		Codec:   codec,
-		Handler: func(snap *sysmetrics.BundleSnapshot) {
+		Handler: func(snap *sysmsnap.BundleSnapshot) {
 			select {
 			case got <- snap:
 			default:
@@ -221,7 +222,7 @@ func TestHeadlessBridge_EndToEnd(t *testing.T) {
 	t.Cleanup(bridgeStop)
 
 	// imztop-side consumer on the in-proc host bus.
-	got := make(chan *sysmetrics.BundleSnapshot, 4)
+	got := make(chan *sysmsnap.BundleSnapshot, 4)
 	hostSub := hostBus.NewClient("imztop", []app.SubjectFilter{
 		{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub},
 	})
@@ -229,7 +230,7 @@ func TestHeadlessBridge_EndToEnd(t *testing.T) {
 		Bus:     hostSub,
 		Subject: sysmetricsbus.BundleSubjectWildcard(),
 		Codec:   sysmetricsbus.NewCBORCodec(),
-		Handler: func(s *sysmetrics.BundleSnapshot) {
+		Handler: func(s *sysmsnap.BundleSnapshot) {
 			select {
 			case got <- s:
 			default:

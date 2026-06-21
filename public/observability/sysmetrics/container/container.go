@@ -12,63 +12,12 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
-
-// EngineE classifies the detected container runtime.
-type EngineE uint8
-
-const (
-	// EngineNone — not running inside a container (default zero value).
-	EngineNone EngineE = iota
-	// EngineUnknown — a marker indicating containerization was found,
-	// but the runtime could not be classified.
-	EngineUnknown
-	EngineDocker
-	EnginePodman
-	EngineLXC
-	EngineKubernetes
-	EngineSystemdNspawn
-)
-
-func (e EngineE) String() (out string) {
-	switch e {
-	case EngineDocker:
-		return "docker"
-	case EnginePodman:
-		return "podman"
-	case EngineLXC:
-		return "lxc"
-	case EngineKubernetes:
-		return "kubernetes"
-	case EngineSystemdNspawn:
-		return "systemd-nspawn"
-	case EngineUnknown:
-		return "unknown"
-	default:
-		return "none"
-	}
-}
-
-// AllEngines lists every defined [EngineE] value.
-var AllEngines = []EngineE{
-	EngineNone, EngineUnknown, EngineDocker, EnginePodman,
-	EngineLXC, EngineKubernetes, EngineSystemdNspawn,
-}
-
-// Info is the result of a [Detector.Detect] call.
-type Info struct {
-	Engine EngineE
-
-	// Detail holds runtime-specific metadata when available — the
-	// content of /run/systemd/container for nspawn-class, or the
-	// matched cgroup path substring for cgroup-based detection. Empty
-	// otherwise.
-	Detail string
-}
 
 // DetectorI is the public surface a container detector implements.
 type DetectorI interface {
-	Detect(ctx context.Context) (info Info, err error)
+	Detect(ctx context.Context) (info sysmsnap.ContainerInfo, err error)
 }
 
 // Options configures a [Detector].
@@ -112,7 +61,7 @@ var _ DetectorI = (*Detector)(nil)
 // Detect classifies the host according to the precedence documented on
 // the package. Hard errors (ctx cancellation, /proc not present)
 // propagate; absent marker files are not errors.
-func (inst *Detector) Detect(ctx context.Context) (info Info, err error) {
+func (inst *Detector) Detect(ctx context.Context) (info sysmsnap.ContainerInfo, err error) {
 	select {
 	case <-ctx.Done():
 		err = ctx.Err()
@@ -122,12 +71,12 @@ func (inst *Detector) Detect(ctx context.Context) (info Info, err error) {
 
 	// 1. Podman
 	if pathExists(inst.markerPath("run/.containerenv")) {
-		info.Engine = EnginePodman
+		info.Engine = sysmsnap.EnginePodman
 		return
 	}
 	// 2. Docker (legacy /.dockerenv)
 	if pathExists(inst.markerPath(".dockerenv")) {
-		info.Engine = EngineDocker
+		info.Engine = sysmsnap.EngineDocker
 		return
 	}
 	// 3. systemd-nspawn / vendor-set runtime
@@ -136,15 +85,15 @@ func (inst *Detector) Detect(ctx context.Context) (info Info, err error) {
 		info.Detail = s
 		switch s {
 		case "systemd-nspawn":
-			info.Engine = EngineSystemdNspawn
+			info.Engine = sysmsnap.EngineSystemdNspawn
 		case "docker":
-			info.Engine = EngineDocker
+			info.Engine = sysmsnap.EngineDocker
 		case "podman":
-			info.Engine = EnginePodman
+			info.Engine = sysmsnap.EnginePodman
 		case "lxc", "lxc-libvirt":
-			info.Engine = EngineLXC
+			info.Engine = sysmsnap.EngineLXC
 		default:
-			info.Engine = EngineUnknown
+			info.Engine = sysmsnap.EngineUnknown
 		}
 		return
 	} else if !errors.Is(rerr, fs.ErrNotExist) {
@@ -157,12 +106,12 @@ func (inst *Detector) Detect(ctx context.Context) (info Info, err error) {
 	// hide /proc/1/cgroup, and absent procfs is fine on a sandboxed test.
 	if cgroupRaw, cerr := inst.proc.ReadFile("1/cgroup"); cerr == nil {
 		info = classifyCgroup(cgroupRaw)
-		if info.Engine != EngineNone {
+		if info.Engine != sysmsnap.EngineNone {
 			return
 		}
 	}
 
-	info.Engine = EngineNone
+	info.Engine = sysmsnap.EngineNone
 	return
 }
 
@@ -178,7 +127,7 @@ func pathExists(path string) (yes bool) {
 // classifyCgroup walks /proc/1/cgroup lines and matches known runtime
 // substrings. The file shape is "<hierarchy-id>:<controller>:<path>"
 // per kernel docs; we match on the path field's substrings.
-func classifyCgroup(content []byte) (info Info) {
+func classifyCgroup(content []byte) (info sysmsnap.ContainerInfo) {
 	for line := range procfs.IterLines(content) {
 		path := lastColonField(line)
 		if len(path) == 0 {
@@ -186,19 +135,19 @@ func classifyCgroup(content []byte) (info Info) {
 		}
 		switch {
 		case bytes.Contains(path, []byte("kubepods")):
-			info.Engine = EngineKubernetes
+			info.Engine = sysmsnap.EngineKubernetes
 			info.Detail = string(path)
 			return
 		case bytes.Contains(path, []byte("/docker/")), bytes.Contains(path, []byte("docker-")):
-			info.Engine = EngineDocker
+			info.Engine = sysmsnap.EngineDocker
 			info.Detail = string(path)
 			return
 		case bytes.Contains(path, []byte("/podman/")), bytes.Contains(path, []byte("podman-")):
-			info.Engine = EnginePodman
+			info.Engine = sysmsnap.EnginePodman
 			info.Detail = string(path)
 			return
 		case bytes.Contains(path, []byte("/lxc/")), bytes.Contains(path, []byte("/lxc.payload")):
-			info.Engine = EngineLXC
+			info.Engine = sysmsnap.EngineLXC
 			info.Detail = string(path)
 			return
 		}

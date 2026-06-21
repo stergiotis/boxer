@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // MinInterval and MaxInterval clamp the producer's tick period, matching
@@ -21,13 +21,23 @@ const (
 // DefaultInterval is the tick period when ProducerOptions.Interval is unset.
 const DefaultInterval = 1 * time.Second
 
+// BundleSampler is the producer's view of the metric source: anything that
+// samples a [sysmsnap.BundleSnapshot] and can be closed. *sysmetrics.Bundle
+// satisfies it. The interface keeps this package free of collector imports
+// (ADR-0090 SD6) — the concrete Bundle is wired in the scraper-side sysmscrape
+// package, so a consumer importing sysmetricsbus pulls in no /proc reader.
+type BundleSampler interface {
+	Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, err error)
+	Close() (err error)
+}
+
 // Producer is the publishing half of the metric plane (ADR-0090 SD2/SD5):
 // it owns the sysmetrics.Bundle, ticks at its configured cadence, encodes
 // each BundleSnapshot, and publishes it. It is the sole sampler — the
 // dataflow is one way, so there is no path from a consumer back here; Pause
 // and SetInterval are local controls the co-located owner drives directly.
 type Producer struct {
-	bundle  *sysmetrics.Bundle
+	bundle  BundleSampler
 	bus     app.BusI
 	subject string
 	codec   Codec
@@ -43,7 +53,7 @@ type Producer struct {
 // ProducerOptions configures NewProducer. Bundle, Bus, Subject, and Codec
 // are required.
 type ProducerOptions struct {
-	Bundle   *sysmetrics.Bundle
+	Bundle   BundleSampler
 	Bus      app.BusI
 	Subject  string
 	Codec    Codec

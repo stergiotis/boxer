@@ -6,17 +6,18 @@ import (
 	"context"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/gpu"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
-// Generic returns a vendor-neutral [gpu.Snapshot] view of s.
-// All AMD-specific fields map directly into [gpu.Device] — there's no
+// Generic returns a vendor-neutral [sysmsnap.GPUSnapshot] view of s.
+// All AMD-specific fields map directly into [sysmsnap.GPUDevice] — there's no
 // per-engine richness to collapse, so this is a one-to-one copy.
-func (s Snapshot) Generic() (out gpu.Snapshot) {
+func (s Snapshot) Generic() (out sysmsnap.GPUSnapshot) {
 	out.SampledAtUnixMs = s.SampledAtUnixMs
-	out.Devices = make([]gpu.Device, 0, len(s.Devices))
+	out.Devices = make([]sysmsnap.GPUDevice, 0, len(s.Devices))
 	for i, d := range s.Devices {
-		out.Devices = append(out.Devices, gpu.Device{
-			Vendor:           gpu.VendorAMD.String(),
+		out.Devices = append(out.Devices, sysmsnap.GPUDevice{
+			Vendor:           sysmsnap.VendorAMD.String(),
 			Index:            int32(i),
 			Name:             d.Name,
 			PCIID:            d.PCIID,
@@ -48,7 +49,7 @@ func NewGenericSampler(opts Options) (inst *GenericSampler, err error) {
 	return
 }
 
-func (inst *GenericSampler) Sample(ctx context.Context) (snap gpu.Snapshot, err error) {
+func (inst *GenericSampler) Sample(ctx context.Context) (snap sysmsnap.GPUSnapshot, err error) {
 	var s Snapshot
 	s, err = inst.Inner.Sample(ctx)
 	if err != nil {

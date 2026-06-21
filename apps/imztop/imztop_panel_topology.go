@@ -8,8 +8,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
@@ -81,16 +80,13 @@ func topoDepthPalette() (p []uint32) {
 	return
 }
 
-// initTopology performs the one-shot sysfs topology read and builds the treemap
-// widget. Called lazily on the first Topology-tab frame so it captures the
-// post-Mount inst.ids. On read failure topoErr is recorded.
-func (inst *App) initTopology() {
-	topo, err := cpu.ReadTopology(cpu.TopologyOptions{})
-	if err != nil {
-		inst.topoErr = err
-		return
-	}
-	root, nodeObj := buildTopoLayout(topo)
+// initTopology builds the treemap widget from the CPU topology delivered on the
+// metric plane (ADR-0090 SD6: the scraper reads sysfs and publishes it; imztop
+// consumes it like any other metric and holds no system-state capability).
+// Called once, on the first frame a topology-bearing snapshot is available, so
+// it captures the post-Mount inst.ids the treemap must bind to.
+func (inst *App) initTopology(topo *sysmsnap.Topology) {
+	root, nodeObj := buildTopoLayout(*topo)
 	inst.topoNodeObj = nodeObj
 
 	// The tint is normalised to [0,1] against inst.topoScaleMax (the same value
@@ -100,7 +96,7 @@ func (inst *App) initTopology() {
 	// always returns ok, so depth is FIRST and the load override LAST.
 	loadFn := func(n *layout.Node) (v float64) {
 		obj := inst.topoNodeObj[n]
-		if obj == nil || obj.Kind != cpu.TopoKindPU || inst.topoScaleMax == 0 {
+		if obj == nil || obj.Kind != sysmsnap.TopoKindPU || inst.topoScaleMax == 0 {
 			return math.NaN()
 		}
 		// PUs outside the cgroup-effective cpuset render inactive (grey).
@@ -141,16 +137,14 @@ func (inst *App) initTopology() {
 func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 	inst.sectionHeader("CPU Topology")
 
-	if !inst.topoInit {
-		inst.topoInit = true
-		inst.initTopology()
-	}
-	if inst.topoErr != nil {
-		c.Label("CPU topology unavailable: " + inst.topoErr.Error()).Send()
-		return
+	// Build the treemap once, from the first snapshot that carries the static
+	// topology (it rides the metric plane now — ADR-0090 SD6). Until one
+	// arrives, or if the scraper could not read it, show a waiting message.
+	if inst.topoTreemap == nil && snap != nil && snap.Topology != nil {
+		inst.initTopology(snap.Topology)
 	}
 	if inst.topoTreemap == nil {
-		c.Label("CPU topology unavailable").Send()
+		c.Label("CPU topology unavailable (none on the metric plane yet).").Send()
 		return
 	}
 
@@ -307,7 +301,7 @@ func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
 		return
 	}
 
-	var cs *cpu.Snapshot
+	var cs *sysmsnap.CPUSnapshot
 	if snap != nil {
 		cs = snap.LatestCPU
 	}
@@ -315,7 +309,7 @@ func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
 	var b strings.Builder
 	b.WriteString(obj.Label())
 	switch obj.Kind {
-	case cpu.TopoKindPU:
+	case sysmsnap.TopoKindPU:
 		id := int(obj.OSIndex)
 		if cs != nil {
 			if id >= 0 && id < len(cs.PerCorePercent) {
@@ -336,20 +330,20 @@ func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
 		if !cpuActive(inst.topoActive, obj.OSIndex) {
 			b.WriteString(" · outside cpuset")
 		}
-	case cpu.TopoKindCore:
-		fmt.Fprintf(&b, " · %d threads", countKind(obj, cpu.TopoKindPU))
+	case sysmsnap.TopoKindCore:
+		fmt.Fprintf(&b, " · %d threads", countKind(obj, sysmsnap.TopoKindPU))
 		if pct, mhz, ok := inst.aggLoadFreq(obj); ok {
 			fmt.Fprintf(&b, " · %.0f%% busy", pct)
 			if mhz > 0 {
 				fmt.Fprintf(&b, " · %s", mhzLabel(mhz))
 			}
 		}
-	case cpu.TopoKindCache:
+	case sysmsnap.TopoKindCache:
 		fmt.Fprintf(&b, " · shared by %d threads / %d cores",
-			countKind(obj, cpu.TopoKindPU), countKind(obj, cpu.TopoKindCore))
-	case cpu.TopoKindPackage:
+			countKind(obj, sysmsnap.TopoKindPU), countKind(obj, sysmsnap.TopoKindCore))
+	case sysmsnap.TopoKindPackage:
 		fmt.Fprintf(&b, " · %d cores / %d threads",
-			countKind(obj, cpu.TopoKindCore), countKind(obj, cpu.TopoKindPU))
+			countKind(obj, sysmsnap.TopoKindCore), countKind(obj, sysmsnap.TopoKindPU))
 		if cs != nil && cs.UsageWattsAvailable {
 			fmt.Fprintf(&b, " · %.1f W", cs.UsageWatts)
 		}
@@ -358,13 +352,13 @@ func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
 				fmt.Fprintf(&b, " · %.0f°C", tC)
 			}
 		}
-	case cpu.TopoKindNUMANode:
+	case sysmsnap.TopoKindNUMANode:
 		if obj.MemBytes > 0 {
 			fmt.Fprintf(&b, " · %s RAM", humanize.IBytes(obj.MemBytes))
 		}
 		fmt.Fprintf(&b, " · %d cores / %d threads",
-			countKind(obj, cpu.TopoKindCore), countKind(obj, cpu.TopoKindPU))
-	case cpu.TopoKindMachine:
+			countKind(obj, sysmsnap.TopoKindCore), countKind(obj, sysmsnap.TopoKindPU))
+	case sysmsnap.TopoKindMachine:
 		if cs != nil {
 			if cs.ModelName != "" {
 				fmt.Fprintf(&b, " · %s", cs.ModelName)
@@ -389,7 +383,7 @@ func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
 }
 
 // aggLoadFreq averages live busy% and frequency over the PU leaves under o.
-func (inst *App) aggLoadFreq(o *cpu.TopoObject) (pct float64, mhz uint32, ok bool) {
+func (inst *App) aggLoadFreq(o *sysmsnap.TopoObject) (pct float64, mhz uint32, ok bool) {
 	ids := puIndexes(o)
 	var sumPct float64
 	var sumMHz uint64
@@ -426,7 +420,7 @@ func mhzLabel(mhz uint32) string {
 // packageTempC returns the first CPU-package temperature reading, if any. The
 // label→object match is heuristic (Tctl / Tdie / "Package id N"); per-core
 // matching is intentionally not attempted (AMD reports per-CCD, not per-core).
-func packageTempC(readings []sensors.TempReading) (tC float32, ok bool) {
+func packageTempC(readings []sysmsnap.TempReading) (tC float32, ok bool) {
 	for _, r := range readings {
 		if r.KindCPUPackage {
 			return r.TempC, true

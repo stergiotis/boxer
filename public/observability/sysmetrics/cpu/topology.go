@@ -8,142 +8,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
-
-// TopoKindE enumerates the object kinds in a [Topology] tree, mirroring the
-// subset of hwloc object types we read from sysfs.
-type TopoKindE uint8
-
-const (
-	// TopoKindMachine is the synthetic root spanning every online CPU.
-	TopoKindMachine TopoKindE = iota
-	// TopoKindPackage is a physical package (socket); physical_package_id.
-	TopoKindPackage
-	// TopoKindNUMANode is a NUMA node (/sys/devices/system/node/nodeN).
-	TopoKindNUMANode
-	// TopoKindCache is a CPU cache level (L1/L2/L3, data/instruction/unified).
-	TopoKindCache
-	// TopoKindCore is a physical core; core_id within a package.
-	TopoKindCore
-	// TopoKindPU is a processing unit — one logical CPU / hardware thread.
-	TopoKindPU
-)
-
-// String returns the short hwloc-style name of the kind.
-func (inst TopoKindE) String() (s string) {
-	switch inst {
-	case TopoKindMachine:
-		return "Machine"
-	case TopoKindPackage:
-		return "Package"
-	case TopoKindNUMANode:
-		return "NUMANode"
-	case TopoKindCache:
-		return "Cache"
-	case TopoKindCore:
-		return "Core"
-	case TopoKindPU:
-		return "PU"
-	default:
-		return "Unknown"
-	}
-}
-
-// CacheTypeE distinguishes the sysfs cache `type` values.
-type CacheTypeE uint8
-
-const (
-	// CacheTypeUnified is a combined data+instruction cache ("Unified").
-	CacheTypeUnified CacheTypeE = iota
-	// CacheTypeData is a data cache ("Data").
-	CacheTypeData
-	// CacheTypeInstruction is an instruction cache ("Instruction").
-	CacheTypeInstruction
-)
-
-// suffix returns the lstopo-style cache-type suffix ("d", "i", "").
-func (inst CacheTypeE) suffix() (s string) {
-	switch inst {
-	case CacheTypeData:
-		return "d"
-	case CacheTypeInstruction:
-		return "i"
-	default:
-		return ""
-	}
-}
-
-// TopoObject is one node in the static CPU containment tree. The tree is
-// uniform (every node is a TopoObject) so it maps 1:1 onto a renderer's
-// node type; Kind discriminates which of the optional fields are meaningful.
-//
-// Zero value is not used directly — construct via [ReadTopology].
-type TopoObject struct {
-	Kind TopoKindE
-
-	// OSIndex is the kernel-reported id for the object: physical_package_id
-	// (Package), NUMA node id (NUMANode), core_id (Core), or the logical CPU
-	// id (PU). It is -1 for Machine and Cache, which have no single id.
-	OSIndex int32
-
-	// CacheLevel / CacheType / CacheSizeBytes are populated only when
-	// Kind == TopoKindCache.
-	CacheLevel     uint8
-	CacheType      CacheTypeE
-	CacheSizeBytes uint64
-
-	// MemBytes is the node-local RAM in bytes (MemTotal from the node's
-	// meminfo); set only for Kind == TopoKindNUMANode, 0 otherwise.
-	MemBytes uint64
-
-	// FreqPolicy is the cpufreq scaling policy; set only for Kind ==
-	// TopoKindPU, nil otherwise.
-	FreqPolicy *FreqPolicy
-
-	// Children are the contained objects, in discovery order.
-	Children []*TopoObject
-}
-
-// FreqPolicy is a CPU's cpufreq scaling policy (governor, driver, and the
-// min/max clock the governor may select), read once from cpuN/cpufreq.
-type FreqPolicy struct {
-	MinMHz   uint32
-	MaxMHz   uint32
-	Governor string
-	Driver   string
-}
-
-// Label returns a human-readable lstopo-style label, e.g. "Package P#0",
-// "L3 (32 MiB)", "Core P#5", "PU P#11".
-func (inst *TopoObject) Label() (s string) {
-	switch inst.Kind {
-	case TopoKindMachine:
-		return "Machine"
-	case TopoKindPackage:
-		return "Package P#" + strconv.FormatInt(int64(inst.OSIndex), 10)
-	case TopoKindNUMANode:
-		return "NUMANode #" + strconv.FormatInt(int64(inst.OSIndex), 10)
-	case TopoKindCache:
-		return "L" + strconv.FormatInt(int64(inst.CacheLevel), 10) + inst.CacheType.suffix() +
-			" (" + cacheSizeLabel(inst.CacheSizeBytes) + ")"
-	case TopoKindCore:
-		return "Core P#" + strconv.FormatInt(int64(inst.OSIndex), 10)
-	case TopoKindPU:
-		return "PU P#" + strconv.FormatInt(int64(inst.OSIndex), 10)
-	default:
-		return inst.Kind.String()
-	}
-}
-
-// Topology is a static snapshot of the CPU containment hierarchy, read once
-// from sysfs. Unlike [Snapshot] it carries no time-varying fields and is not
-// part of the sampling path — call [ReadTopology] once.
-type Topology struct {
-	// Root is the Machine object; its subtree is the full hierarchy.
-	Root *TopoObject
-	// LogicalCount is the number of online logical CPUs (PU leaves).
-	LogicalCount int32
-}
 
 // TopologyOptions configures [ReadTopology].
 type TopologyOptions struct {
@@ -153,9 +19,9 @@ type TopologyOptions struct {
 }
 
 // ReadTopology reads the CPU package / NUMA / cache / core / thread hierarchy
-// from sysfs and returns it as a [Topology]. It is a one-shot structural read:
-// the result does not change while the machine is running, so callers read it
-// once (e.g. at startup) rather than on a sampling cadence.
+// from sysfs and returns it as a [sysmsnap.Topology]. It is a one-shot
+// structural read: the result does not change while the machine is running, so
+// callers read it once (e.g. at startup) rather than on a sampling cadence.
 //
 // Sources, all under the reader's root ("/sys"):
 //   - devices/system/cpu/online                       — the online CPU set
@@ -171,7 +37,7 @@ type TopologyOptions struct {
 // intersection. On the common topologies (one package per NUMA node, or
 // sub-NUMA clustering within a package) this is correct; a NUMA node that
 // spans multiple packages (legacy node-interleave) is not modelled in v1.
-func ReadTopology(opts TopologyOptions) (topo Topology, err error) {
+func ReadTopology(opts TopologyOptions) (topo sysmsnap.Topology, err error) {
 	sys := opts.Sys
 	if sys == nil {
 		sys = sysfs.New("")
@@ -213,13 +79,13 @@ func ReadTopology(opts TopologyOptions) (topo Topology, err error) {
 // (package) to narrowest (the PU itself). Steps are emitted already ordered
 // outermost-first by readCPUSteps.
 type topoStep struct {
-	kind       TopoKindE
+	kind       sysmsnap.TopoKindE
 	osIndex    int32
 	level      uint8
-	ctype      CacheTypeE
+	ctype      sysmsnap.CacheTypeE
 	size       uint64
 	mem        uint64
-	freqPolicy *FreqPolicy
+	freqPolicy *sysmsnap.FreqPolicy
 	// key uniquely identifies the object among its siblings: it folds the
 	// covered CPU set together with the cache discriminators so two CPUs that
 	// share, say, an L3 dedupe to the same node while L1d and L1i (same set,
@@ -255,14 +121,14 @@ func readCPUSteps(sys *sysfs.Reader, cpu int32, numaByCPU map[int32]int32, nodeM
 	}
 
 	steps = append(steps, topoStep{
-		kind: TopoKindPackage, osIndex: pkgID,
+		kind: sysmsnap.TopoKindPackage, osIndex: pkgID,
 		key: "pkg:" + setKey(pkgSet),
 	})
 
 	if numaByCPU != nil {
 		if node, ok := numaByCPU[cpu]; ok {
 			steps = append(steps, topoStep{
-				kind: TopoKindNUMANode, osIndex: node, mem: nodeMem[node],
+				kind: sysmsnap.TopoKindNUMANode, osIndex: node, mem: nodeMem[node],
 				key: "numa:" + strconv.FormatInt(int64(node), 10),
 			})
 		}
@@ -277,11 +143,11 @@ func readCPUSteps(sys *sysfs.Reader, cpu int32, numaByCPU map[int32]int32, nodeM
 	}
 
 	steps = append(steps, topoStep{
-		kind: TopoKindCore, osIndex: coreID,
+		kind: sysmsnap.TopoKindCore, osIndex: coreID,
 		key: "core:" + setKey(threadSet),
 	})
 	steps = append(steps, topoStep{
-		kind: TopoKindPU, osIndex: cpu, freqPolicy: readPUFreqPolicy(sys, cpu),
+		kind: sysmsnap.TopoKindPU, osIndex: cpu, freqPolicy: readPUFreqPolicy(sys, cpu),
 		key: "pu:" + strconv.FormatInt(int64(cpu), 10),
 	})
 	return
@@ -318,13 +184,13 @@ func readCaches(sys *sysfs.Reader, cacheDir string) (steps []topoStep, err error
 		}
 		ctype := parseCacheType(typeStr)
 		steps = append(steps, topoStep{
-			kind:  TopoKindCache,
+			kind:  sysmsnap.TopoKindCache,
 			level: uint8(level),
 			ctype: ctype,
 			size:  parseCacheSize(sizeStr),
 			// Include level+type in the key so L1d and L1i (identical CPU
 			// set) remain distinct nodes.
-			key: "cache:" + strconv.FormatUint(level, 10) + ctype.suffix() + ":" + setKey(sharedStr),
+			key: "cache:" + strconv.FormatUint(level, 10) + ctype.Suffix() + ":" + setKey(sharedStr),
 		})
 	}
 	sort.SliceStable(steps, func(i, j int) bool {
@@ -339,14 +205,14 @@ func readCaches(sys *sysfs.Reader, cacheDir string) (steps []topoStep, err error
 // topoBuilder assembles the tree by inserting each CPU's chain and deduping
 // nodes that share an identity key with an existing sibling.
 type topoBuilder struct {
-	root     *TopoObject
-	children map[*TopoObject]map[string]*TopoObject
+	root     *sysmsnap.TopoObject
+	children map[*sysmsnap.TopoObject]map[string]*sysmsnap.TopoObject
 }
 
 func newTopoBuilder() (b *topoBuilder) {
 	return &topoBuilder{
-		root:     &TopoObject{Kind: TopoKindMachine, OSIndex: -1},
-		children: make(map[*TopoObject]map[string]*TopoObject),
+		root:     &sysmsnap.TopoObject{Kind: sysmsnap.TopoKindMachine, OSIndex: -1},
+		children: make(map[*sysmsnap.TopoObject]map[string]*sysmsnap.TopoObject),
 	}
 }
 
@@ -357,16 +223,16 @@ func (b *topoBuilder) insert(steps []topoStep) {
 	for _, s := range steps {
 		idx := b.children[parent]
 		if idx == nil {
-			idx = make(map[string]*TopoObject)
+			idx = make(map[string]*sysmsnap.TopoObject)
 			b.children[parent] = idx
 		}
 		child := idx[s.key]
 		if child == nil {
 			osIdx := s.osIndex
-			if s.kind == TopoKindCache {
+			if s.kind == sysmsnap.TopoKindCache {
 				osIdx = -1
 			}
-			child = &TopoObject{
+			child = &sysmsnap.TopoObject{
 				Kind:           s.kind,
 				OSIndex:        osIdx,
 				CacheLevel:     s.level,
@@ -442,7 +308,7 @@ func readNodeMemTotal(sys *sysfs.Reader, nodeName string) (bytes uint64) {
 // readPUFreqPolicy reads cpuN/cpufreq/{scaling_min_freq,scaling_max_freq,
 // scaling_governor,scaling_driver}. Returns nil when the CPU exposes no
 // cpufreq policy (container, cpufreq disabled, or a non-cpufreq kernel).
-func readPUFreqPolicy(sys *sysfs.Reader, cpu int32) (p *FreqPolicy) {
+func readPUFreqPolicy(sys *sysfs.Reader, cpu int32) (p *sysmsnap.FreqPolicy) {
 	base := "devices/system/cpu/cpu" + strconv.FormatInt(int64(cpu), 10) + "/cpufreq/"
 	gov, _ := sys.ReadString(base + "scaling_governor")
 	drv, _ := sys.ReadString(base + "scaling_driver")
@@ -451,7 +317,7 @@ func readPUFreqPolicy(sys *sysfs.Reader, cpu int32) (p *FreqPolicy) {
 	if gov == "" && drv == "" && minKHz == 0 && maxKHz == 0 {
 		return nil
 	}
-	return &FreqPolicy{
+	return &sysmsnap.FreqPolicy{
 		MinMHz:   uint32(minKHz / 1000),
 		MaxMHz:   uint32(maxKHz / 1000),
 		Governor: strings.TrimSpace(gov),
@@ -503,15 +369,15 @@ func setKey(cpulist string) (key string) {
 	return sb.String()
 }
 
-// parseCacheType maps the sysfs cache `type` string to a [CacheTypeE].
-func parseCacheType(s string) (t CacheTypeE) {
+// parseCacheType maps the sysfs cache `type` string to a [sysmsnap.CacheTypeE].
+func parseCacheType(s string) (t sysmsnap.CacheTypeE) {
 	switch strings.TrimSpace(s) {
 	case "Data":
-		return CacheTypeData
+		return sysmsnap.CacheTypeData
 	case "Instruction":
-		return CacheTypeInstruction
+		return sysmsnap.CacheTypeInstruction
 	default:
-		return CacheTypeUnified
+		return sysmsnap.CacheTypeUnified
 	}
 }
 
@@ -540,19 +406,4 @@ func parseCacheSize(s string) (bytes uint64) {
 		return 0
 	}
 	return n * mult
-}
-
-// cacheSizeLabel renders a cache size in binary units (KiB/MiB), preferring
-// the largest unit that divides evenly.
-func cacheSizeLabel(bytes uint64) (s string) {
-	switch {
-	case bytes == 0:
-		return "?"
-	case bytes%(1<<20) == 0:
-		return strconv.FormatUint(bytes>>20, 10) + " MiB"
-	case bytes%(1<<10) == 0:
-		return strconv.FormatUint(bytes>>10, 10) + " KiB"
-	default:
-		return strconv.FormatUint(bytes, 10) + " B"
-	}
 }

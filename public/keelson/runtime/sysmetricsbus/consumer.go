@@ -4,7 +4,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // Consumer is the subscribing half of the metric plane (ADR-0090 SD5): it
@@ -20,7 +20,7 @@ type Consumer struct {
 	bus     app.BusI
 	subject string
 	codec   Codec
-	handler func(snap *sysmetrics.BundleSnapshot)
+	handler func(snap *sysmsnap.BundleSnapshot)
 	log     zerolog.Logger
 
 	unsubscribe func()
@@ -32,7 +32,7 @@ type ConsumerOptions struct {
 	Bus     app.BusI
 	Subject string
 	Codec   Codec
-	Handler func(snap *sysmetrics.BundleSnapshot)
+	Handler func(snap *sysmsnap.BundleSnapshot)
 	Log     zerolog.Logger
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 func TestSample_Coretemp(t *testing.T) {
@@ -18,7 +19,7 @@ func TestSample_Coretemp(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, readings, 3)
 
-	byName := map[string]sensors.TempReading{}
+	byName := map[string]sysmsnap.TempReading{}
 	for _, r := range readings {
 		byName[r.Name] = r
 	}
@@ -48,7 +49,7 @@ func TestSample_DeviceSubdirFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, readings, 2)
 
-	byName := map[string]sensors.TempReading{}
+	byName := map[string]sysmsnap.TempReading{}
 	for _, r := range readings {
 		byName[r.Name] = r
 	}
@@ -111,7 +112,7 @@ func TestSample_LiveSys_Smoke(t *testing.T) {
 
 func TestAll_BreakEarly(t *testing.T) {
 	c, _ := sensors.New(sensors.Options{Sys: sysfs.New("testdata/coretemp")})
-	var got []sensors.TempReading
+	var got []sysmsnap.TempReading
 	for r, err := range c.All(context.Background()) {
 		require.NoError(t, err)
 		got = append(got, r)

@@ -5,7 +5,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // Codec encodes a BundleSnapshot to bus bytes and back. The Producer and
@@ -13,8 +13,8 @@ import (
 // them: P2 ships CBORCodec; ADR-0090 SD3's leeway-facts codec is the
 // planned replacement.
 type Codec interface {
-	Encode(snap *sysmetrics.BundleSnapshot) (payload []byte, err error)
-	Decode(payload []byte) (snap *sysmetrics.BundleSnapshot, err error)
+	Encode(snap *sysmsnap.BundleSnapshot) (payload []byte, err error)
+	Decode(payload []byte) (snap *sysmsnap.BundleSnapshot, err error)
 }
 
 // CBORCodec is the P2 interim codec (ADR-0090 SD3). It uses fxamacker/cbor
@@ -34,18 +34,18 @@ func NewCBORCodec() (c CBORCodec) { return }
 // to an empty map, dropping the message). Snap.Errors is nil on the wire;
 // Errors carries the messages.
 type wireBundle struct {
-	Snap   sysmetrics.BundleSnapshot    `cbor:"1,keyasint"`
-	Errors map[sysmetrics.Domain]string `cbor:"2,keyasint"`
+	Snap   sysmsnap.BundleSnapshot    `cbor:"1,keyasint"`
+	Errors map[sysmsnap.Domain]string `cbor:"2,keyasint"`
 }
 
-func (CBORCodec) Encode(snap *sysmetrics.BundleSnapshot) (payload []byte, err error) {
+func (CBORCodec) Encode(snap *sysmsnap.BundleSnapshot) (payload []byte, err error) {
 	if snap == nil {
 		err = eh.Errorf("sysmetricsbus: encode nil snapshot")
 		return
 	}
 	w := wireBundle{Snap: *snap} // shallow copy; we only blank Errors on the copy
 	if len(snap.Errors) > 0 {
-		w.Errors = make(map[sysmetrics.Domain]string, len(snap.Errors))
+		w.Errors = make(map[sysmsnap.Domain]string, len(snap.Errors))
 		for k, v := range snap.Errors {
 			if v != nil {
 				w.Errors[k] = v.Error()
@@ -60,7 +60,7 @@ func (CBORCodec) Encode(snap *sysmetrics.BundleSnapshot) (payload []byte, err er
 	return
 }
 
-func (CBORCodec) Decode(payload []byte) (snap *sysmetrics.BundleSnapshot, err error) {
+func (CBORCodec) Decode(payload []byte) (snap *sysmsnap.BundleSnapshot, err error) {
 	var w wireBundle
 	err = cbor.Unmarshal(payload, &w)
 	if err != nil {
@@ -69,7 +69,7 @@ func (CBORCodec) Decode(payload []byte) (snap *sysmetrics.BundleSnapshot, err er
 	}
 	s := w.Snap
 	if len(w.Errors) > 0 {
-		s.Errors = make(map[sysmetrics.Domain]error, len(w.Errors))
+		s.Errors = make(map[sysmsnap.Domain]error, len(w.Errors))
 		for k, v := range w.Errors {
 			s.Errors[k] = errors.New(v)
 		}

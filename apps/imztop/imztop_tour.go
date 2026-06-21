@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
@@ -90,7 +91,7 @@ func ensureTourScraper() {
 			{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub},
 		})
 		setSamplerBus(sub)
-		if _, err := sysmetricsbus.StartScraper(context.Background(), pub, sysmetricsbus.DefaultHostToken(), tourSamplerPeriod, log.Logger); err != nil {
+		if _, err := sysmscrape.StartScraper(context.Background(), pub, sysmetricsbus.DefaultHostToken(), tourSamplerPeriod, log.Logger); err != nil {
 			log.Warn().Err(err).Msg("imztop tour: scraper unavailable; panels will be empty")
 		}
 	})

@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // SysClassNet is the sysfs-relative root for kernel network interfaces.
@@ -28,38 +29,9 @@ const SysClassNet = "class/net"
 // rollover for the unusual 64-bit-but-resetting case.
 const DefaultRolloverMax uint64 = math.MaxUint32
 
-// Interface is the per-NIC sample.
-type Interface struct {
-	Name         string
-	Index        int32
-	HardwareAddr string // lowercase, colon-separated hex; empty when unavailable
-
-	Up      bool // IFF_UP
-	Running bool // IFF_RUNNING
-
-	IPv4 []string
-	IPv6 []string
-
-	// Cumulative byte counters as reported by /sys/class/net/{name}/statistics/.
-	// These reflect the kernel value at sample time — they may wrap on 32-bit
-	// virtual NICs; the per-second rate fields below already compensate.
-	RxBytes uint64
-	TxBytes uint64
-
-	// Per-second rates derived from the prior-sample delta; 0 on first sample.
-	RxBytesPerSec uint64
-	TxBytesPerSec uint64
-}
-
-// Snapshot is a single sample of all visible network interfaces.
-type Snapshot struct {
-	SampledAtUnixMs int64
-	Interfaces      []Interface
-}
-
 // CollectorI is the public surface a network sampler implements.
 type CollectorI interface {
-	Sample(ctx context.Context) (snap Snapshot, err error)
+	Sample(ctx context.Context) (snap sysmsnap.NetSnapshot, err error)
 }
 
 // InterfaceLister returns the live network interface list as the standard
@@ -138,7 +110,7 @@ var _ CollectorI = (*Collector)(nil)
 // Sample reads the live interface list and returns a Snapshot. Cumulative
 // byte counters are read once per call; rates are derived against the
 // prior call's tick.
-func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
+func (inst *Collector) Sample(ctx context.Context) (snap sysmsnap.NetSnapshot, err error) {
 	select {
 	case <-ctx.Done():
 		err = ctx.Err()
@@ -163,7 +135,7 @@ func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
 		}
 		seen[ifc.Name] = struct{}{}
 
-		entry := Interface{
+		entry := sysmsnap.NetInterface{
 			Name:         ifc.Name,
 			Index:        int32(ifc.Index),
 			HardwareAddr: strings.ToLower(ifc.HardwareAddr.String()),
@@ -220,7 +192,7 @@ func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
 		}
 	}
 
-	slices.SortFunc(snap.Interfaces, func(a, b Interface) int {
+	slices.SortFunc(snap.Interfaces, func(a, b sysmsnap.NetInterface) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 	return

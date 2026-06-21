@@ -131,6 +131,14 @@ Correction to the SD6 note in the entry above: imztop is **not** capability-clea
 
 Scheduled focused follow-up: extract the per-domain data types plus `BundleSnapshot`/`Domain` into a data-only package so consumers (`sysmetricsbus`, `imztop`) stop importing the collector packages, and resolve the topology fork above. The bus-data extraction alone decouples 9/10 collectors; `cpu` stays coupled via topology until the fork is decided.
 
+### 2026-06-21 — Data/collector decoupling done; topology fork resolved (publish on the plane)
+
+The scheduled follow-up landed. The per-domain snapshot types, `BundleSnapshot`, and `Domain` moved into a new data-only package, `observability/sysmetrics/sysmsnap` (stdlib-only, no `/proc`/`/sys` code); each collector imports it and returns its types, and `sysmetrics` keeps only the orchestrating `Bundle`/`BundleOptions`/`DefaultBundleOptions`. `sysmetricsbus` is now collector-free too: the Producer takes a small `BundleSampler` interface instead of a concrete `*sysmetrics.Bundle`, and the collector-wiring `StartScraper` moved to a new scraper-side package, `keelson/runtime/sysmscrape` — the one place that imports both the collectors and the bus. A subscriber importing `sysmetricsbus` for its Consumer now pulls in no `/proc` reader.
+
+The topology fork is resolved by **publishing CPU topology on the plane** (the consistent, data-centric option). The scraper's `Bundle` reads the static topology once (best-effort, when the CPU domain is wired) and stamps the same `*sysmsnap.Topology` onto every `BundleSnapshot`; the consumer builds its treemap from `PublishedSnapshot.Topology`. The recursive tree survives the CBOR codec, so a late subscriber still receives it and the production panel reads no sysfs.
+
+Net effect: the production `imztop` App imports zero collector packages and reads neither `/proc` nor `/sys` — both §SD6 production gaps (the panel's sysfs read and the data-type coupling) are closed. The one remaining in-package collector reach is the screenshot-tour harness (`imztop_tour.go`, ADR-0057 Demo enrollment), which starts an in-proc `sysmscrape` scraper to feed live capture data — a capture-only path, not the deployed capability surface; relocating it (synthetic capture data or a build-tagged tour) is deferred.
+
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) sysmetrics collector · [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) imztop · [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) remote access · [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) auth/TLS

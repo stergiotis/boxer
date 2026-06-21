@@ -6,19 +6,20 @@ import (
 	"context"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/gpu"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
-// Generic returns a vendor-neutral [gpu.Snapshot] view of s. Per-engine
-// detail is collapsed into a single [gpu.Device.BusyPercent] equal to
+// Generic returns a vendor-neutral [sysmsnap.GPUSnapshot] view of s. Per-engine
+// detail is collapsed into a single [sysmsnap.GPUDevice.BusyPercent] equal to
 // the maximum across the four engines. Frequency passes through as
-// [gpu.Device.FreqMHz] (the actual GT clock).
+// [sysmsnap.GPUDevice.FreqMHz] (the actual GT clock).
 //
 // PowerWatts, TempC, and the memory fields are left at zero — the i915
 // PMU does not expose them. Consumers that need per-engine richness
 // should use [Collector.Sample] directly and cast to the rich [Snapshot].
-func (s Snapshot) Generic() (out gpu.Snapshot) {
+func (s Snapshot) Generic() (out sysmsnap.GPUSnapshot) {
 	out.SampledAtUnixMs = s.SampledAtUnixMs
-	out.Devices = make([]gpu.Device, 0, len(s.Devices))
+	out.Devices = make([]sysmsnap.GPUDevice, 0, len(s.Devices))
 	for i, d := range s.Devices {
 		busy := d.RenderBusyPercent
 		if d.CopyBusyPercent > busy {
@@ -30,13 +31,13 @@ func (s Snapshot) Generic() (out gpu.Snapshot) {
 		if d.VideoEnhanceBusyPercent > busy {
 			busy = d.VideoEnhanceBusyPercent
 		}
-		out.Devices = append(out.Devices, gpu.Device{
-			Vendor:  gpu.VendorIntel.String(),
-			Index:   int32(i),
-			Name:    d.Name,
-			PCIID:   d.PCIID,
+		out.Devices = append(out.Devices, sysmsnap.GPUDevice{
+			Vendor:      sysmsnap.VendorIntel.String(),
+			Index:       int32(i),
+			Name:        d.Name,
+			PCIID:       d.PCIID,
 			BusyPercent: busy,
-			FreqMHz: d.ActualFreqMHz,
+			FreqMHz:     d.ActualFreqMHz,
 		})
 	}
 	return
@@ -63,8 +64,8 @@ func NewGenericSampler(opts Options) (inst *GenericSampler, err error) {
 }
 
 // Sample reads the inner Collector and converts its rich [Snapshot] to
-// the unified [gpu.Snapshot].
-func (inst *GenericSampler) Sample(ctx context.Context) (snap gpu.Snapshot, err error) {
+// the unified [sysmsnap.GPUSnapshot].
+func (inst *GenericSampler) Sample(ctx context.Context) (snap sysmsnap.GPUSnapshot, err error) {
 	var s Snapshot
 	s, err = inst.Inner.Sample(ctx)
 	if err != nil {

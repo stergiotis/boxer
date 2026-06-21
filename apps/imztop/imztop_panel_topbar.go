@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/container"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -48,8 +48,8 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 	}
 }
 
-func containerBadge(info *container.Info) (out string) {
-	if info == nil || info.Engine == container.EngineNone {
+func containerBadge(info *sysmsnap.ContainerInfo) (out string) {
+	if info == nil || info.Engine == sysmsnap.EngineNone {
 		out = "bare metal"
 		return
 	}

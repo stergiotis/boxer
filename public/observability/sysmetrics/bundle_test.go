@@ -17,24 +17,24 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/container"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/disk"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/gpu"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/mem"
 	pnet "github.com/stergiotis/boxer/public/observability/sysmetrics/net"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // fakeGPUSampler is a deterministic test double for gpu.SamplerI.
 type fakeGPUSampler struct {
-	snap     gpu.Snapshot
+	snap      sysmsnap.GPUSnapshot
 	sampleErr error
-	closed   bool
-	closeErr error
+	closed    bool
+	closeErr  error
 }
 
-func (f *fakeGPUSampler) Sample(ctx context.Context) (gpu.Snapshot, error) {
+func (f *fakeGPUSampler) Sample(ctx context.Context) (sysmsnap.GPUSnapshot, error) {
 	return f.snap, f.sampleErr
 }
 func (f *fakeGPUSampler) Close() error {
@@ -92,7 +92,7 @@ func TestBundle_AllDomains_FromFixtures(t *testing.T) {
 	require.NotNil(t, snap.Net)
 	require.NotNil(t, snap.Battery)
 	require.NotNil(t, snap.Container)
-	assert.Equal(t, container.EngineNone, snap.Container.Engine)
+	assert.Equal(t, sysmsnap.EngineNone, snap.Container.Engine)
 
 	assert.Greater(t, snap.Mem.TotalBytes, uint64(0))
 	assert.NotEmpty(t, snap.Net.Interfaces)
@@ -129,8 +129,8 @@ func TestBundle_PartialFailure_DoesNotAbortOthers(t *testing.T) {
 	snap, err := b.Sample(context.Background())
 	require.NoError(t, err, "ctx is fine — partial failure must not bubble up as Sample err")
 
-	require.Contains(t, snap.Errors, sysmetrics.DomainCPU)
-	require.NotContains(t, snap.Errors, sysmetrics.DomainMem)
+	require.Contains(t, snap.Errors, sysmsnap.DomainCPU)
+	require.NotContains(t, snap.Errors, sysmsnap.DomainMem)
 	require.NotNil(t, snap.Mem)
 	assert.Nil(t, snap.CPU)
 	_ = cpuC // silence unused
@@ -149,9 +149,9 @@ func TestBundle_ContextCancellation_PropagatesAsSampleErr(t *testing.T) {
 }
 
 func TestBundle_GPU_Wired(t *testing.T) {
-	fake := &fakeGPUSampler{snap: gpu.Snapshot{
+	fake := &fakeGPUSampler{snap: sysmsnap.GPUSnapshot{
 		SampledAtUnixMs: 999,
-		Devices: []gpu.Device{
+		Devices: []sysmsnap.GPUDevice{
 			{Vendor: "intel", Index: 0, Name: "Tiger Lake-H GT2", BusyPercent: 42},
 		},
 	}}
@@ -169,7 +169,7 @@ func TestBundle_GPU_SampleError_LandsInErrors(t *testing.T) {
 	b, _ := sysmetrics.NewBundle(sysmetrics.BundleOptions{GPU: fake})
 	snap, err := b.Sample(context.Background())
 	require.NoError(t, err)
-	require.Contains(t, snap.Errors, sysmetrics.DomainGPU)
+	require.Contains(t, snap.Errors, sysmsnap.DomainGPU)
 	assert.Nil(t, snap.GPU)
 }
 
@@ -286,8 +286,8 @@ func newFullFixtureTree(t *testing.T) (root string) {
 	return
 }
 
-func stubStatfs(path string) (cap disk.Capacity, err error) {
-	cap = disk.Capacity{TotalBytes: 1 << 20, FreeBytes: 1 << 19, UsedBytes: 1 << 19, UsedPercent: 50}
+func stubStatfs(path string) (cap sysmsnap.DiskCapacity, err error) {
+	cap = sysmsnap.DiskCapacity{TotalBytes: 1 << 20, FreeBytes: 1 << 19, UsedBytes: 1 << 19, UsedPercent: 50}
 	return
 }
 

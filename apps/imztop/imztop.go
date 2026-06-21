@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
@@ -111,22 +111,18 @@ type App struct {
 	gpuDistsumDigest  *tdigest.TDigest
 
 	// Topology panel state (imztop_panel_topology.go). The CPU topology is
-	// static, so it is read from sysfs once — lazily, on the first Topology-
-	// tab frame (initTopology), which is also when inst.ids is the post-Mount
-	// stack the treemap must bind to.
+	// static and arrives on the metric plane (ADR-0090 SD6); the treemap is
+	// built once, on the first topology-bearing snapshot (initTopology), which
+	// is also when inst.ids is the post-Mount stack the treemap must bind to.
 	//
-	//   topoInit     guards the one-shot initTopology call.
-	//   topoErr      non-nil when the sysfs read failed; panel shows a message.
 	//   topoTreemap  the squarify widget; nil until built / on error.
 	//   topoNodeObj    layout node → source TopoObject (live tint + hover detail).
 	//   topoLoad       per-frame per-core busy%; aliases the snapshot slice.
 	//   topoFreq       per-frame per-core MHz; aliases the snapshot slice.
 	//   topoFreqMaxMHz running max core MHz, for normalising the freq tint.
 	//   topoDim        which dimension the continuous tint encodes (% or MHz).
-	topoInit       bool
-	topoErr        error
 	topoTreemap    *treemap.Treemap
-	topoNodeObj    map[*layout.Node]*cpu.TopoObject
+	topoNodeObj    map[*layout.Node]*sysmsnap.TopoObject
 	topoLoad       []uint8
 	topoFreq       []uint32
 	topoFreqMaxMHz uint32
@@ -143,7 +139,7 @@ type App struct {
 	topoScaleKey     string
 	topoLastSampleMs int64
 
-	// topoActive aliases the latest cgroup-effective cpuset (cpu.ActiveCPUs);
+	// topoActive aliases the latest cgroup-effective cpuset (CPUSnapshot.ActiveCPUs);
 	// PU boxes whose logical CPU is outside it render inactive (greyed).
 	topoActive []int32
 }

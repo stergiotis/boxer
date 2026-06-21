@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +26,7 @@ func newEWMATestSampler(interval time.Duration) (inst *Sampler) {
 // ticks before the sort surfaces it.
 func TestSampler_EWMA_FirstSightingSeedsRaw(t *testing.T) {
 	inst := newEWMATestSampler(time.Second)
-	smoothed := inst.updateProcCPUEWMA([]proc.Info{
+	smoothed := inst.updateProcCPUEWMA([]sysmsnap.ProcInfo{
 		{PID: 42, StartedAtUnixMs: 1, CPUPercent: 75},
 	})
 	require.Len(t, smoothed, 1)
@@ -41,14 +41,14 @@ func TestSampler_EWMA_FirstSightingSeedsRaw(t *testing.T) {
 // observed.
 func TestSampler_EWMA_EvictsDeadPIDs(t *testing.T) {
 	inst := newEWMATestSampler(time.Second)
-	_ = inst.updateProcCPUEWMA([]proc.Info{
+	_ = inst.updateProcCPUEWMA([]sysmsnap.ProcInfo{
 		{PID: 1, StartedAtUnixMs: 100, CPUPercent: 30},
 		{PID: 2, StartedAtUnixMs: 200, CPUPercent: 50},
 	})
 	require.Len(t, inst.procCPUEWMA, 2)
 
 	// PID 2 disappears between ticks.
-	_ = inst.updateProcCPUEWMA([]proc.Info{
+	_ = inst.updateProcCPUEWMA([]sysmsnap.ProcInfo{
 		{PID: 1, StartedAtUnixMs: 100, CPUPercent: 30},
 	})
 	assert.Len(t, inst.procCPUEWMA, 1, "dead PID must be evicted on the next tick")
@@ -66,14 +66,14 @@ func TestSampler_EWMA_DistinguishesPIDReuse(t *testing.T) {
 	inst := newEWMATestSampler(time.Second)
 
 	// Tick 1: PID 1234 starting at time A, heavy load.
-	_ = inst.updateProcCPUEWMA([]proc.Info{
+	_ = inst.updateProcCPUEWMA([]sysmsnap.ProcInfo{
 		{PID: 1234, StartedAtUnixMs: 1_000_000, CPUPercent: 90},
 	})
 
 	// Tick 2: PID 1234 is now a brand-new process (different
 	// StartedAt) running idle. Without the (PID, StartedAt) key,
 	// the new process would inherit the old one's smoothed=90.
-	smoothed := inst.updateProcCPUEWMA([]proc.Info{
+	smoothed := inst.updateProcCPUEWMA([]sysmsnap.ProcInfo{
 		{PID: 1234, StartedAtUnixMs: 2_000_000, CPUPercent: 0},
 	})
 	require.Len(t, smoothed, 1)
@@ -108,13 +108,13 @@ func TestSampler_EWMA_CadenceInvariant(t *testing.T) {
 		inst := newEWMATestSampler(interval)
 		// Seed at zero so the EWMA starts from idle (first call goes
 		// through the seed-from-raw branch with raw=0).
-		_ = inst.updateProcCPUEWMA([]proc.Info{
+		_ = inst.updateProcCPUEWMA([]sysmsnap.ProcInfo{
 			{PID: 1, StartedAtUnixMs: 1, CPUPercent: 0},
 		})
 		ticks := int(wallClock / interval)
 		var out []float32
 		for i := 0; i < ticks; i++ {
-			out = inst.updateProcCPUEWMA([]proc.Info{
+			out = inst.updateProcCPUEWMA([]sysmsnap.ProcInfo{
 				{PID: 1, StartedAtUnixMs: 1, CPUPercent: stepValue},
 			})
 		}

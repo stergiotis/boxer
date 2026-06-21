@@ -13,6 +13,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/cpu"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // mustWrite writes content to path, creating parent directories.
@@ -76,8 +77,8 @@ func writeTopoFixture(t *testing.T) (sysRoot string) {
 }
 
 // collectPUs returns every PU object's OSIndex in the subtree.
-func collectPUs(o *cpu.TopoObject) (pus []int32) {
-	if o.Kind == cpu.TopoKindPU {
+func collectPUs(o *sysmsnap.TopoObject) (pus []int32) {
+	if o.Kind == sysmsnap.TopoKindPU {
 		pus = append(pus, o.OSIndex)
 		return
 	}
@@ -88,7 +89,7 @@ func collectPUs(o *cpu.TopoObject) (pus []int32) {
 }
 
 // findKind reports whether any object in the subtree has the given kind.
-func findKind(o *cpu.TopoObject, k cpu.TopoKindE) bool {
+func findKind(o *sysmsnap.TopoObject, k sysmsnap.TopoKindE) bool {
 	if o.Kind == k {
 		return true
 	}
@@ -106,30 +107,30 @@ func TestReadTopology_Hierarchy(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotNil(t, topo.Root)
-	assert.Equal(t, cpu.TopoKindMachine, topo.Root.Kind)
+	assert.Equal(t, sysmsnap.TopoKindMachine, topo.Root.Kind)
 	assert.Equal(t, int32(8), topo.LogicalCount)
 	assert.Equal(t, "Machine", topo.Root.Label())
 
 	// Machine → Package P#0
 	require.Len(t, topo.Root.Children, 1)
 	pkg := topo.Root.Children[0]
-	assert.Equal(t, cpu.TopoKindPackage, pkg.Kind)
+	assert.Equal(t, sysmsnap.TopoKindPackage, pkg.Kind)
 	assert.Equal(t, int32(0), pkg.OSIndex)
 	assert.Equal(t, "Package P#0", pkg.Label())
 
 	// Package → NUMANode #0
 	require.Len(t, pkg.Children, 1)
 	numa := pkg.Children[0]
-	assert.Equal(t, cpu.TopoKindNUMANode, numa.Kind)
+	assert.Equal(t, sysmsnap.TopoKindNUMANode, numa.Kind)
 	assert.Equal(t, "NUMANode #0", numa.Label())
 	assert.Equal(t, uint64(8000000)*1024, numa.MemBytes, "per-node MemTotal, in bytes")
 
 	// NUMANode → two L3 caches (the CCX split)
 	require.Len(t, numa.Children, 2)
 	l3 := numa.Children[0]
-	assert.Equal(t, cpu.TopoKindCache, l3.Kind)
+	assert.Equal(t, sysmsnap.TopoKindCache, l3.Kind)
 	assert.Equal(t, uint8(3), l3.CacheLevel)
-	assert.Equal(t, cpu.CacheTypeUnified, l3.CacheType)
+	assert.Equal(t, sysmsnap.CacheTypeUnified, l3.CacheType)
 	assert.Equal(t, uint64(8<<20), l3.CacheSizeBytes)
 	assert.Equal(t, "L3 (8 MiB)", l3.Label())
 
@@ -143,23 +144,23 @@ func TestReadTopology_Hierarchy(t *testing.T) {
 	require.Len(t, l2.Children, 1)
 	l1d := l2.Children[0]
 	assert.Equal(t, uint8(1), l1d.CacheLevel)
-	assert.Equal(t, cpu.CacheTypeData, l1d.CacheType)
+	assert.Equal(t, sysmsnap.CacheTypeData, l1d.CacheType)
 	assert.Equal(t, "L1d (32 KiB)", l1d.Label())
 
 	require.Len(t, l1d.Children, 1)
 	l1i := l1d.Children[0]
-	assert.Equal(t, cpu.CacheTypeInstruction, l1i.CacheType)
+	assert.Equal(t, sysmsnap.CacheTypeInstruction, l1i.CacheType)
 	assert.Equal(t, "L1i (32 KiB)", l1i.Label())
 
 	// L1i → Core P#0 → {PU P#0, PU P#1}
 	require.Len(t, l1i.Children, 1)
 	core := l1i.Children[0]
-	assert.Equal(t, cpu.TopoKindCore, core.Kind)
+	assert.Equal(t, sysmsnap.TopoKindCore, core.Kind)
 	assert.Equal(t, int32(0), core.OSIndex)
 	assert.Equal(t, "Core P#0", core.Label())
 
 	require.Len(t, core.Children, 2)
-	assert.Equal(t, cpu.TopoKindPU, core.Children[0].Kind)
+	assert.Equal(t, sysmsnap.TopoKindPU, core.Children[0].Kind)
 	assert.Equal(t, int32(0), core.Children[0].OSIndex)
 	assert.Equal(t, "PU P#0", core.Children[0].Label())
 	assert.Equal(t, int32(1), core.Children[1].OSIndex)
@@ -194,10 +195,10 @@ func TestReadTopology_NoNUMA_CachesUnderPackage(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, topo.Root.Children, 1)
 	pkg := topo.Root.Children[0]
-	assert.False(t, findKind(topo.Root, cpu.TopoKindNUMANode), "no NUMA node expected")
+	assert.False(t, findKind(topo.Root, sysmsnap.TopoKindNUMANode), "no NUMA node expected")
 	// Highest object under the package is the L2 cache, not a NUMA node.
 	require.Len(t, pkg.Children, 1)
-	assert.Equal(t, cpu.TopoKindCache, pkg.Children[0].Kind)
+	assert.Equal(t, sysmsnap.TopoKindCache, pkg.Children[0].Kind)
 	assert.ElementsMatch(t, []int32{0, 1}, collectPUs(topo.Root))
 }
 
@@ -217,9 +218,9 @@ func TestReadTopology_NoCache_CoresUnderPackage(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, topo.Root.Children, 1)
 	pkg := topo.Root.Children[0]
-	assert.False(t, findKind(topo.Root, cpu.TopoKindCache), "no cache nodes expected")
+	assert.False(t, findKind(topo.Root, sysmsnap.TopoKindCache), "no cache nodes expected")
 	require.Len(t, pkg.Children, 2) // two cores directly under the package
-	assert.Equal(t, cpu.TopoKindCore, pkg.Children[0].Kind)
+	assert.Equal(t, sysmsnap.TopoKindCore, pkg.Children[0].Kind)
 }
 
 func TestReadTopology_MissingOnline_Errors(t *testing.T) {
@@ -230,7 +231,7 @@ func TestReadTopology_MissingOnline_Errors(t *testing.T) {
 }
 
 // sprintTopo renders a topology subtree as an indented outline for eyeballing.
-func sprintTopo(o *cpu.TopoObject, depth int, sb *strings.Builder) {
+func sprintTopo(o *sysmsnap.TopoObject, depth int, sb *strings.Builder) {
 	sb.WriteString(strings.Repeat("  ", depth))
 	sb.WriteString(o.Label())
 	sb.WriteByte('\n')
@@ -249,7 +250,7 @@ func TestReadTopology_LiveSmoke(t *testing.T) {
 	topo, err := cpu.ReadTopology(cpu.TopologyOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, topo.Root)
-	assert.Equal(t, cpu.TopoKindMachine, topo.Root.Kind)
+	assert.Equal(t, sysmsnap.TopoKindMachine, topo.Root.Kind)
 
 	// Every online logical CPU surfaces exactly once as a PU leaf.
 	pus := collectPUs(topo.Root)

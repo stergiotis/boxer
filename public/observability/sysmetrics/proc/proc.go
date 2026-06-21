@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 const (
@@ -37,53 +38,10 @@ const (
 	CmdMaxBytes = 1000
 )
 
-// Info is one process's sample.
-type Info struct {
-	PID  uint32
-	PPID uint32
-
-	// Name is /proc/[pid]/comm — the kernel-truncated binary name (15
-	// chars max).
-	Name string
-
-	// Cmd is /proc/[pid]/cmdline with NUL separators converted to spaces
-	// and trailing NUL stripped. Empty for kernel threads.
-	Cmd string
-
-	// State is the single-letter Linux process state (R/S/D/Z/T/I/...).
-	State byte
-
-	UID  uint32
-	GID  uint32
-	User string // resolved name; empty when uid is unknown to NSS
-
-	// StartedAtUnixMs is the wall-clock process start time, derived from
-	// /proc/uptime + /proc/[pid]/stat starttime.
-	StartedAtUnixMs int64
-
-	// CPUPercent is the per-CPU CPU usage. A process pegging one core
-	// reads 100; pegging N cores reads N*100. 0 on first sample (no
-	// prior tick to delta against).
-	//
-	// Formula: deltaPidTicks * 100 * NumCPUs / deltaGlobalTicks
-	// (matches btop src/linux/btop_collect.cpp:3250).
-	CPUPercent float32
-
-	RSSBytes    uint64
-	VMSizeBytes uint64
-
-	NumThreads int32
-	Nice       int32
-	Priority   int32
-
-	// KernelThread is true when PID == 2 or PPID == 2.
-	KernelThread bool
-}
-
 // CollectorI is the public surface a process-table sampler implements.
 type CollectorI interface {
-	All(ctx context.Context) iter.Seq2[Info, error]
-	Sample(ctx context.Context) (infos []Info, err error)
+	All(ctx context.Context) iter.Seq2[sysmsnap.ProcInfo, error]
+	Sample(ctx context.Context) (infos []sysmsnap.ProcInfo, err error)
 }
 
 // UserLookupFunc maps a numeric uid to a username. The default
@@ -208,7 +166,7 @@ var _ CollectorI = (*Collector)(nil)
 
 // Sample returns every visible process as a slice. Equivalent to
 // `slices.Collect2(c.All(ctx))` but skips the iterator wrapper.
-func (inst *Collector) Sample(ctx context.Context) (infos []Info, err error) {
+func (inst *Collector) Sample(ctx context.Context) (infos []sysmsnap.ProcInfo, err error) {
 	infos, err = inst.collectAll(ctx)
 	return
 }
@@ -216,11 +174,11 @@ func (inst *Collector) Sample(ctx context.Context) (infos []Info, err error) {
 // All returns an iterator that yields every visible process. The
 // underlying snapshot is materialized eagerly when iteration begins, so
 // breaking out of the loop early does not corrupt the prior-tick state.
-func (inst *Collector) All(ctx context.Context) (seq iter.Seq2[Info, error]) {
-	return func(yield func(Info, error) bool) {
+func (inst *Collector) All(ctx context.Context) (seq iter.Seq2[sysmsnap.ProcInfo, error]) {
+	return func(yield func(sysmsnap.ProcInfo, error) bool) {
 		infos, err := inst.collectAll(ctx)
 		if err != nil {
-			yield(Info{}, err)
+			yield(sysmsnap.ProcInfo{}, err)
 			return
 		}
 		for _, info := range infos {
@@ -231,7 +189,7 @@ func (inst *Collector) All(ctx context.Context) (seq iter.Seq2[Info, error]) {
 	}
 }
 
-func (inst *Collector) collectAll(ctx context.Context) (infos []Info, err error) {
+func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInfo, err error) {
 	select {
 	case <-ctx.Done():
 		err = ctx.Err()
@@ -259,7 +217,7 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []Info, err error)
 		return
 	}
 
-	infos = make([]Info, 0, len(pids))
+	infos = make([]sysmsnap.ProcInfo, 0, len(pids))
 	seen := make(map[uint32]struct{}, len(pids))
 
 	var deltaGlobal uint64
@@ -293,7 +251,7 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []Info, err error)
 	// freshly-spawned heavyweight visible even when its first sample has
 	// no prior tick to delta against (CPUPercent==0 on first sighting).
 	if inst.maxProcs > 0 && uint32(len(infos)) > inst.maxProcs {
-		slices.SortFunc(infos, func(a, b Info) int {
+		slices.SortFunc(infos, func(a, b sysmsnap.ProcInfo) int {
 			switch {
 			case a.CPUPercent > b.CPUPercent:
 				return -1
@@ -323,7 +281,7 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []Info, err error)
 		}
 	}
 
-	slices.SortFunc(infos, func(a, b Info) int {
+	slices.SortFunc(infos, func(a, b sysmsnap.ProcInfo) int {
 		switch {
 		case a.PID < b.PID:
 			return -1
@@ -340,7 +298,7 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []Info, err error)
 // is also updated here — phase 2's CPU%-desc cap relies on a single
 // linear scan to set the sort key. Returns ok=false on dead-pid race
 // (ENOENT on comm), missing stat, or malformed stat.
-func (inst *Collector) readBasicPID(pid uint32, bootTime time.Time, deltaGlobal uint64) (info Info, ok bool) {
+func (inst *Collector) readBasicPID(pid uint32, bootTime time.Time, deltaGlobal uint64) (info sysmsnap.ProcInfo, ok bool) {
 	dir := strconv.FormatUint(uint64(pid), 10)
 	info.PID = pid
 
@@ -400,7 +358,7 @@ func (inst *Collector) readBasicPID(pid uint32, bootTime time.Time, deltaGlobal 
 // enrichDetailPID fills Cmd + UID/GID/User from /proc/[pid]/{cmdline,
 // status}. Failures are silent: dead-PID races and missing files leave
 // the fields at their zero values, matching the pre-split behaviour.
-func (inst *Collector) enrichDetailPID(info *Info) {
+func (inst *Collector) enrichDetailPID(info *sysmsnap.ProcInfo) {
 	dir := strconv.FormatUint(uint64(info.PID), 10)
 
 	if cmdRaw, cerr := inst.proc.ReadFileInto(filepath.Join(dir, "cmdline"), inst.scratch); cerr == nil {

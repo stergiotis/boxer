@@ -3,12 +3,12 @@ package imztop
 import (
 	"testing"
 
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 func TestBuildProcOrder_Forest(t *testing.T) {
 	// 1 → {2 → 4, 3}; plus orphan 9 whose parent 99 is absent (→ a root).
-	infos := []proc.Info{
+	infos := []sysmsnap.ProcInfo{
 		{PID: 1, PPID: 0},
 		{PID: 2, PPID: 1},
 		{PID: 3, PPID: 1},
@@ -50,7 +50,7 @@ func TestBuildProcOrder_Forest(t *testing.T) {
 func TestBuildProcOrder_CycleSafe(t *testing.T) {
 	// PID-reuse cycle 5↔6 (each names the other as parent): must terminate
 	// and include both exactly once.
-	infos := []proc.Info{{PID: 5, PPID: 6}, {PID: 6, PPID: 5}}
+	infos := []sysmsnap.ProcInfo{{PID: 5, PPID: 6}, {PID: 6, PPID: 5}}
 	order, depth := buildProcOrder(infos)
 	if len(order) != 2 || len(depth) != 2 {
 		t.Fatalf("got order=%d depth=%d want 2/2", len(order), len(depth))

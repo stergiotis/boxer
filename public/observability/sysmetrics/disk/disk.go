@@ -17,6 +17,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 const (
@@ -36,50 +37,15 @@ const (
 	SectorSize uint64 = 512
 )
 
-// Capacity is one filesystem's space accounting.
-type Capacity struct {
-	TotalBytes  uint64
-	FreeBytes   uint64 // available to non-root (matches statvfs f_bavail)
-	UsedBytes   uint64
-	UsedPercent float32
-}
-
-// Mount is one /proc/self/mounts entry.
-type Mount struct {
-	Device     string // raw device field, e.g. "/dev/sda1" or "tmpfs" or "none"
-	MountPoint string // e.g. "/", "/home"
-	FSType     string // e.g. "ext4", "tmpfs"
-	Options    string // raw options string from the mount entry
-	BlockName  string // basename of canonical /dev path, "" when not a block device
-	Real       bool   // true when fstype is in /proc/filesystems without "nodev" prefix
-	Capacity   Capacity
-}
-
-// BlockDevice is one /sys/class/block/{name}/stat reading with derived
-// per-second rates and busy percent.
-type BlockDevice struct {
-	Name             string // "sda1", "nvme0n1p1", "dm-2"
-	ReadBytesPerSec  uint64
-	WriteBytesPerSec uint64
-	BusyPercent      uint8 // io_ticks delta / elapsed wall-time, clamped 0..100
-}
-
-// Snapshot is a single sample.
-type Snapshot struct {
-	SampledAtUnixMs int64
-	Mounts          []Mount
-	BlockDevices    []BlockDevice
-}
-
 // CollectorI is the public surface a disk sampler implements.
 type CollectorI interface {
-	Sample(ctx context.Context) (snap Snapshot, err error)
+	Sample(ctx context.Context) (snap sysmsnap.DiskSnapshot, err error)
 }
 
 // StatfsFunc returns the capacity of the filesystem rooted at path. The
 // default implementation calls [unix.Statfs]; tests inject a synthetic
 // implementation.
-type StatfsFunc func(path string) (cap Capacity, err error)
+type StatfsFunc func(path string) (cap sysmsnap.DiskCapacity, err error)
 
 // DeviceResolver maps a mount entry's device field to a /sys/class/block
 // entry name. The default implementation uses [filepath.EvalSymlinks]
@@ -169,7 +135,7 @@ var _ CollectorI = (*Collector)(nil)
 
 // Sample reads /proc/self/mounts, calls statvfs per mountpoint, and
 // reads /sys/class/block/*/stat for unique block devices.
-func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
+func (inst *Collector) Sample(ctx context.Context) (snap sysmsnap.DiskSnapshot, err error) {
 	select {
 	case <-ctx.Done():
 		err = ctx.Err()
@@ -220,7 +186,7 @@ func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
 			continue
 		}
 
-		m := Mount{
+		m := sysmsnap.DiskMount{
 			Device:     string(f0),
 			MountPoint: string(f1),
 			FSType:     fstype,
@@ -252,7 +218,7 @@ func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
 		}
 	}
 
-	slices.SortFunc(snap.BlockDevices, func(a, b BlockDevice) int {
+	slices.SortFunc(snap.BlockDevices, func(a, b sysmsnap.BlockDevice) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 	return
@@ -289,7 +255,7 @@ func (inst *Collector) realFilesystems() (out map[string]bool) {
 	return out
 }
 
-func (inst *Collector) sampleBlock(now time.Time, name string) (bd BlockDevice, ok bool) {
+func (inst *Collector) sampleBlock(now time.Time, name string) (bd sysmsnap.BlockDevice, ok bool) {
 	raw, err := inst.sys.ReadString(filepath.Join(SysClassBlockDir, name, "stat"))
 	if err != nil {
 		return
@@ -350,7 +316,7 @@ func hasBlockStat(sys *sysfs.Reader, name string) (yes bool) {
 }
 
 // realStatfs is the production [StatfsFunc].
-func realStatfs(path string) (cap Capacity, err error) {
+func realStatfs(path string) (cap sysmsnap.DiskCapacity, err error) {
 	var s unix.Statfs_t
 	err = unix.Statfs(path, &s)
 	if err != nil {
@@ -375,7 +341,7 @@ func realDeviceResolver(device string) (blockName string) {
 	return filepath.Base(device)
 }
 
-func computeCapacity(blockSize, totalBlocks, freeBlocks uint64) (cap Capacity) {
+func computeCapacity(blockSize, totalBlocks, freeBlocks uint64) (cap sysmsnap.DiskCapacity) {
 	if blockSize == 0 {
 		blockSize = 4096
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // HwmonClassDir is the sysfs-relative root for kernel hwmon devices.
@@ -19,37 +20,10 @@ const HwmonClassDir = "class/hwmon"
 // "<basepath>_crit" file exists. Matches btop's 95000-millidegree default.
 const DefaultCriticalC float32 = 95
 
-// TempReading is a single temperature sample with its sensor metadata.
-type TempReading struct {
-	// Name is "<chip>/<label>", e.g. "coretemp/Package id 0".
-	Name string
-
-	// Path is the sysfs-relative path to the temp*_input file the reading
-	// came from. Useful for diagnostics and for re-reading without re-
-	// discovering.
-	Path string
-
-	// TempC is the current temperature in degrees Celsius. Sysfs reports
-	// millidegrees as integers; we divide by 1000.
-	TempC float32
-
-	// CriticalC is the manufacturer-declared critical threshold in degrees
-	// Celsius, or [DefaultCriticalC] when no _crit file exists.
-	CriticalC float32
-
-	// KindCPUPackage is true when the label looks like a CPU package
-	// sensor: "Package id N", "Tdie", or "SoC Temperature".
-	KindCPUPackage bool
-
-	// KindCPUCore is true when the label looks like a per-core CPU
-	// sensor: "Core N" or "Tccd N".
-	KindCPUCore bool
-}
-
 // CollectorI is the public surface a sensor enumerator implements.
 type CollectorI interface {
-	All(ctx context.Context) iter.Seq2[TempReading, error]
-	Sample(ctx context.Context) (readings []TempReading, err error)
+	All(ctx context.Context) iter.Seq2[sysmsnap.TempReading, error]
+	Sample(ctx context.Context) (readings []sysmsnap.TempReading, err error)
 }
 
 // Options configures a [Collector].
@@ -84,14 +58,14 @@ var _ CollectorI = (*Collector)(nil)
 //
 // A missing /sys/class/hwmon directory yields nothing without error; this
 // matches low-end / virtualized hardware that expose no hwmon class.
-func (inst *Collector) All(ctx context.Context) (seq iter.Seq2[TempReading, error]) {
-	return func(yield func(TempReading, error) bool) {
+func (inst *Collector) All(ctx context.Context) (seq iter.Seq2[sysmsnap.TempReading, error]) {
+	return func(yield func(sysmsnap.TempReading, error) bool) {
 		names, err := inst.sys.ListDir(HwmonClassDir)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return
 			}
-			yield(TempReading{}, err)
+			yield(sysmsnap.TempReading{}, err)
 			return
 		}
 		for _, hwmonName := range names {
@@ -100,7 +74,7 @@ func (inst *Collector) All(ctx context.Context) (seq iter.Seq2[TempReading, erro
 			}
 			select {
 			case <-ctx.Done():
-				yield(TempReading{}, ctx.Err())
+				yield(sysmsnap.TempReading{}, ctx.Err())
 				return
 			default:
 			}
@@ -115,7 +89,7 @@ func (inst *Collector) All(ctx context.Context) (seq iter.Seq2[TempReading, erro
 // from individual sensors are appended via yield-then-skip; the slice is
 // the union of successful reads. The first hard error (e.g. ctx cancel)
 // aborts and returns the partial slice.
-func (inst *Collector) Sample(ctx context.Context) (readings []TempReading, err error) {
+func (inst *Collector) Sample(ctx context.Context) (readings []sysmsnap.TempReading, err error) {
 	for r, ierr := range inst.All(ctx) {
 		if ierr != nil {
 			err = ierr
@@ -129,7 +103,7 @@ func (inst *Collector) Sample(ctx context.Context) (readings []TempReading, err 
 // walkHwmon enumerates one hwmon device, yielding TempReadings via yield.
 // Returns false when the caller broke out of iteration so the outer loop
 // can stop too.
-func (inst *Collector) walkHwmon(hwmonName string, yield func(TempReading, error) bool) (cont bool) {
+func (inst *Collector) walkHwmon(hwmonName string, yield func(sysmsnap.TempReading, error) bool) (cont bool) {
 	base := filepath.Join(HwmonClassDir, hwmonName)
 	chip, _ := inst.sys.ReadString(filepath.Join(base, "name"))
 	if chip == "" {
@@ -186,7 +160,7 @@ func (inst *Collector) walkHwmon(hwmonName string, yield func(TempReading, error
 			}
 		}
 
-		tr := TempReading{
+		tr := sysmsnap.TempReading{
 			Name:           chip + "/" + label,
 			Path:           inputPath,
 			TempC:          tempC,

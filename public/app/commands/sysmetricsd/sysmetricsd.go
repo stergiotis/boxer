@@ -19,6 +19,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
 )
@@ -65,7 +66,7 @@ func run(c *cli.Context) (err error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	stopScraper, err := sysmetricsbus.StartScraper(ctx, client, host, c.Duration("interval"), log.Logger)
+	stopScraper, err := sysmscrape.StartScraper(ctx, client, host, c.Duration("interval"), log.Logger)
 	if err != nil {
 		_ = client.Close()
 		return eh.Errorf("sysmetricsd: %w", err)

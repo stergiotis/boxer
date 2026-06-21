@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/battery"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -50,7 +50,7 @@ func (inst *App) renderBatteryPanel(snap *PublishedSnapshot) {
 	}
 }
 
-func (inst *App) renderOneBattery(b battery.BatteryStatus) {
+func (inst *App) renderOneBattery(b sysmsnap.BatteryStatus) {
 	frac := float32(b.Percent) / 100
 	fill := colorBatteryFill
 	if b.Percent < 20 {

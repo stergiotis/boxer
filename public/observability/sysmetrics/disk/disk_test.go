@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/disk"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 const filesystemsFixture = `nodev	sysfs
@@ -260,16 +261,16 @@ func rewriteBlockStat(t *testing.T, root, name, stat string) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "sys", "class", "block", name, "stat"), []byte(stat), 0o644))
 }
 
-func mountsByMountPoint(ms []disk.Mount) map[string]disk.Mount {
-	out := map[string]disk.Mount{}
+func mountsByMountPoint(ms []sysmsnap.DiskMount) map[string]sysmsnap.DiskMount {
+	out := map[string]sysmsnap.DiskMount{}
 	for _, m := range ms {
 		out[m.MountPoint] = m
 	}
 	return out
 }
 
-func stubStatfs(path string) (cap disk.Capacity, err error) {
-	cap = disk.Capacity{
+func stubStatfs(path string) (cap sysmsnap.DiskCapacity, err error) {
+	cap = sysmsnap.DiskCapacity{
 		TotalBytes:  1 << 20,
 		FreeBytes:   1 << 19,
 		UsedBytes:   1 << 19,
@@ -278,8 +279,8 @@ func stubStatfs(path string) (cap disk.Capacity, err error) {
 	return
 }
 
-func erroringStatfs(path string) (cap disk.Capacity, err error) {
-	return disk.Capacity{}, os.ErrPermission
+func erroringStatfs(path string) (cap sysmsnap.DiskCapacity, err error) {
+	return sysmsnap.DiskCapacity{}, os.ErrPermission
 }
 
 // deviceBasename is the test [DeviceResolver] — strips /dev/ prefix and

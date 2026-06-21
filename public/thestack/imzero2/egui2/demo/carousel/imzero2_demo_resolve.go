@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -28,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/videooutput"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+
 	// Side-effect imports — each app's init() registers itself into
 	// app.DefaultRegistry. Carousel is the single import site that pulls all
 	// M3-migrated apps; the dock host iterates the registry directly.
@@ -246,7 +248,7 @@ func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.Facts
 			} else {
 				log.Info().Str("url", natsURL).Msg("carousel: bridging system metrics from NATS onto the host bus")
 			}
-		} else if _, serr := sysmetricsbus.StartScraper(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), time.Second, log.Logger); serr != nil {
+		} else if _, serr := sysmscrape.StartScraper(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), time.Second, log.Logger); serr != nil {
 			log.Warn().Err(serr).Msg("carousel: sysmetrics scraper unavailable; metric panels will be empty")
 		}
 	}

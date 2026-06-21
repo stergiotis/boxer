@@ -3,7 +3,7 @@ package imztop
 import (
 	"fmt"
 
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/psi"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -31,7 +31,7 @@ func (inst *App) renderPressurePanel(snap *PublishedSnapshot) {
 
 	rows := []struct {
 		label string
-		p     psi.Pressure
+		p     sysmsnap.PSIPressure
 	}{
 		{"CPU · some", ps.CPU.Some},
 		{"Memory · some", ps.Memory.Some},

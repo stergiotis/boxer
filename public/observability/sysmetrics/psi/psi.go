@@ -7,40 +7,8 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
-
-// Pressure is one PSI line (the "some" or "full" share): the percentage of
-// wall-time stalled, averaged over 10/60/300 s windows, plus the cumulative
-// stall time in microseconds. avgN are already percentages [0,100].
-type Pressure struct {
-	Avg10   float32
-	Avg60   float32
-	Avg300  float32
-	TotalUs uint64
-}
-
-// Resource holds the some/full pressure for one PSI resource. "full" is the
-// "every non-idle task stalled" share; the cpu resource reports full as
-// all-zero on most kernels (only "some" is meaningful for CPU).
-type Resource struct {
-	Some Pressure
-	Full Pressure
-}
-
-// Snapshot is a single sample of Linux PSI from
-// /proc/pressure/{cpu,memory,io}.
-type Snapshot struct {
-	SampledAtUnixMs int64
-
-	CPU    Resource
-	Memory Resource
-	IO     Resource
-
-	// Available is false when /proc/pressure is absent — the kernel was built
-	// without CONFIG_PSI or booted with psi=0. The Resource fields are then
-	// zero and callers should render "unavailable" rather than "0% pressure".
-	Available bool
-}
 
 // Options configures a [Collector].
 type Options struct {
@@ -52,7 +20,7 @@ type Options struct {
 
 // CollectorI is the public surface a PSI sampler implements.
 type CollectorI interface {
-	Sample(ctx context.Context) (Snapshot, error)
+	Sample(ctx context.Context) (sysmsnap.PSISnapshot, error)
 }
 
 // Collector samples Linux Pressure Stall Information. It is stateless beyond
@@ -79,7 +47,7 @@ var _ CollectorI = (*Collector)(nil)
 // Sample reads the three pressure files. A missing /proc/pressure tree is not
 // an error — it yields Available=false so callers can degrade gracefully on
 // kernels without PSI.
-func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
+func (inst *Collector) Sample(ctx context.Context) (snap sysmsnap.PSISnapshot, err error) {
 	select {
 	case <-ctx.Done():
 		err = ctx.Err()
@@ -98,10 +66,10 @@ func (inst *Collector) Sample(ctx context.Context) (snap Snapshot, err error) {
 
 // readResource parses one /proc/pressure/<name> file. ok is false when the
 // file is absent or unreadable (PSI disabled, or the resource unsupported).
-func (inst *Collector) readResource(rel string) (r Resource, ok bool) {
+func (inst *Collector) readResource(rel string) (r sysmsnap.PSIResource, ok bool) {
 	raw, e := inst.proc.ReadFile(rel)
 	if e != nil {
-		return Resource{}, false
+		return sysmsnap.PSIResource{}, false
 	}
 	for line := range strings.SplitSeq(string(raw), "\n") {
 		fields := strings.Fields(line)
@@ -120,7 +88,7 @@ func (inst *Collector) readResource(rel string) (r Resource, ok bool) {
 }
 
 // parsePressure reads the "avg10=… avg60=… avg300=… total=…" key=value fields.
-func parsePressure(kvs []string) (p Pressure) {
+func parsePressure(kvs []string) (p sysmsnap.PSIPressure) {
 	for _, kv := range kvs {
 		k, v, found := strings.Cut(kv, "=")
 		if !found {

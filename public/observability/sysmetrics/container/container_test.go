@@ -11,6 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/container"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 func TestDetect_Podman_ContainerEnv(t *testing.T) {
@@ -21,7 +22,7 @@ func TestDetect_Podman_ContainerEnv(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: root, Proc: procfs.New(t.TempDir())})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EnginePodman, info.Engine)
+	assert.Equal(t, sysmsnap.EnginePodman, info.Engine)
 }
 
 func TestDetect_Docker_DotDockerenv(t *testing.T) {
@@ -31,7 +32,7 @@ func TestDetect_Docker_DotDockerenv(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: root, Proc: procfs.New(t.TempDir())})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineDocker, info.Engine)
+	assert.Equal(t, sysmsnap.EngineDocker, info.Engine)
 }
 
 func TestDetect_SystemdNspawn_FromContainerFile(t *testing.T) {
@@ -42,7 +43,7 @@ func TestDetect_SystemdNspawn_FromContainerFile(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: root, Proc: procfs.New(t.TempDir())})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineSystemdNspawn, info.Engine)
+	assert.Equal(t, sysmsnap.EngineSystemdNspawn, info.Engine)
 	assert.Equal(t, "systemd-nspawn", info.Detail)
 }
 
@@ -54,7 +55,7 @@ func TestDetect_VendorContainerFile_Lxc(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: root, Proc: procfs.New(t.TempDir())})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineLXC, info.Engine)
+	assert.Equal(t, sysmsnap.EngineLXC, info.Engine)
 }
 
 func TestDetect_VendorContainerFile_Unknown(t *testing.T) {
@@ -65,7 +66,7 @@ func TestDetect_VendorContainerFile_Unknown(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: root, Proc: procfs.New(t.TempDir())})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineUnknown, info.Engine)
+	assert.Equal(t, sysmsnap.EngineUnknown, info.Engine)
 	assert.Equal(t, "custom-runtime-xyz", info.Detail)
 }
 
@@ -80,7 +81,7 @@ func TestDetect_Cgroup_Kubernetes(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: t.TempDir(), Proc: procfs.New(procRoot)})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineKubernetes, info.Engine)
+	assert.Equal(t, sysmsnap.EngineKubernetes, info.Engine)
 	assert.Contains(t, info.Detail, "kubepods")
 }
 
@@ -95,7 +96,7 @@ func TestDetect_Cgroup_DockerWithoutMarker(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: t.TempDir(), Proc: procfs.New(procRoot)})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineDocker, info.Engine)
+	assert.Equal(t, sysmsnap.EngineDocker, info.Engine)
 }
 
 func TestDetect_Cgroup_LXC(t *testing.T) {
@@ -109,7 +110,7 @@ func TestDetect_Cgroup_LXC(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: t.TempDir(), Proc: procfs.New(procRoot)})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineLXC, info.Engine)
+	assert.Equal(t, sysmsnap.EngineLXC, info.Engine)
 }
 
 func TestDetect_NotInContainer(t *testing.T) {
@@ -123,7 +124,7 @@ func TestDetect_NotInContainer(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: t.TempDir(), Proc: procfs.New(procRoot)})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineNone, info.Engine)
+	assert.Equal(t, sysmsnap.EngineNone, info.Engine)
 }
 
 func TestDetect_Precedence_PodmanBeatsDockerEnv(t *testing.T) {
@@ -137,14 +138,14 @@ func TestDetect_Precedence_PodmanBeatsDockerEnv(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: root, Proc: procfs.New(t.TempDir())})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EnginePodman, info.Engine)
+	assert.Equal(t, sysmsnap.EnginePodman, info.Engine)
 }
 
 func TestDetect_NoProc_NoMarker_ReturnsNone(t *testing.T) {
 	d, _ := container.New(container.Options{MarkerRoot: t.TempDir(), Proc: procfs.New(t.TempDir())})
 	info, err := d.Detect(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, container.EngineNone, info.Engine)
+	assert.Equal(t, sysmsnap.EngineNone, info.Engine)
 }
 
 func TestDetect_LiveSystem_Smoke(t *testing.T) {
@@ -165,14 +166,14 @@ func TestDetect_ContextCancelled(t *testing.T) {
 }
 
 func TestEngineE_String(t *testing.T) {
-	cases := map[container.EngineE]string{
-		container.EngineNone:          "none",
-		container.EngineUnknown:       "unknown",
-		container.EngineDocker:        "docker",
-		container.EnginePodman:        "podman",
-		container.EngineLXC:           "lxc",
-		container.EngineKubernetes:    "kubernetes",
-		container.EngineSystemdNspawn: "systemd-nspawn",
+	cases := map[sysmsnap.EngineE]string{
+		sysmsnap.EngineNone:          "none",
+		sysmsnap.EngineUnknown:       "unknown",
+		sysmsnap.EngineDocker:        "docker",
+		sysmsnap.EnginePodman:        "podman",
+		sysmsnap.EngineLXC:           "lxc",
+		sysmsnap.EngineKubernetes:    "kubernetes",
+		sysmsnap.EngineSystemdNspawn: "systemd-nspawn",
 	}
 	for e, want := range cases {
 		assert.Equal(t, want, e.String(), "engine=%d", e)

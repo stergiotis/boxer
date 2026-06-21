@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
@@ -82,7 +82,7 @@ func toggleProcTree() {
 // Sort by ProcSortByCPU keys off the smoothed slice so the row order
 // is stable across brief spikes (see procCPUEWMAAlpha); every other
 // sort key reads from infos.
-func applyProcView(infos []proc.Info, smoothed []float32, v procViewState) (outInfos []proc.Info, outSmoothed []float32) {
+func applyProcView(infos []sysmsnap.ProcInfo, smoothed []float32, v procViewState) (outInfos []sysmsnap.ProcInfo, outSmoothed []float32) {
 	if v.Filter != "" {
 		needle := strings.ToLower(v.Filter)
 		wi := infos[:0]
@@ -102,7 +102,7 @@ func applyProcView(infos []proc.Info, smoothed []float32, v procViewState) (outI
 			indices[i] = i
 		}
 		slices.SortStableFunc(indices, cmpIdx)
-		sortedInfos := make([]proc.Info, len(infos))
+		sortedInfos := make([]sysmsnap.ProcInfo, len(infos))
 		sortedSmoothed := make([]float32, len(infos))
 		for ni, oi := range indices {
 			sortedInfos[ni] = infos[oi]
@@ -121,7 +121,7 @@ func applyProcView(infos []proc.Info, smoothed []float32, v procViewState) (outI
 // ProcSortByCPU reads its key from smoothed[i] rather than the proc
 // itself — closing over both slices lets one comparator shape serve
 // every sort key without packing the value into a synthetic struct.
-func procIndexCmp(infos []proc.Info, smoothed []float32, by ProcSortByE, desc bool) (cmpf func(a, b int) int) {
+func procIndexCmp(infos []sysmsnap.ProcInfo, smoothed []float32, by ProcSortByE, desc bool) (cmpf func(a, b int) int) {
 	switch by {
 	case ProcSortByCPU:
 		cmpf = func(a, b int) int { return cmp.Compare(smoothed[a], smoothed[b]) }
@@ -399,7 +399,7 @@ func treeIndent(depth int, name string) string {
 // truncated to the top-N by CPU, or it's a real root like PID 1) starts a new
 // root. A visited guard makes PID-reuse cycles safe; any node the walk misses
 // is appended at depth 0.
-func buildProcOrder(infos []proc.Info) (order, depth []int) {
+func buildProcOrder(infos []sysmsnap.ProcInfo) (order, depth []int) {
 	n := len(infos)
 	idxByPID := make(map[uint32]int, n)
 	for i := range infos {

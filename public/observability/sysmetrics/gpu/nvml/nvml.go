@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/gpu"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // ErrNVMLUnavailable is returned by [New] when the NVML library cannot
@@ -174,15 +175,15 @@ func (inst *Collector) Close() (err error) {
 	return inst.nvml.Close()
 }
 
-// Generic returns a vendor-neutral [gpu.Snapshot] view of s. NVML
+// Generic returns a vendor-neutral [sysmsnap.GPUSnapshot] view of s. NVML
 // already exposes a single device-wide BusyPercent (the gpu field of
 // nvmlUtilization_t), so the conversion is direct.
-func (s Snapshot) Generic() (out gpu.Snapshot) {
+func (s Snapshot) Generic() (out sysmsnap.GPUSnapshot) {
 	out.SampledAtUnixMs = s.SampledAtUnixMs
-	out.Devices = make([]gpu.Device, 0, len(s.Devices))
+	out.Devices = make([]sysmsnap.GPUDevice, 0, len(s.Devices))
 	for _, d := range s.Devices {
-		out.Devices = append(out.Devices, gpu.Device{
-			Vendor:           gpu.VendorNVIDIA.String(),
+		out.Devices = append(out.Devices, sysmsnap.GPUDevice{
+			Vendor:           sysmsnap.VendorNVIDIA.String(),
 			Index:            d.Index,
 			Name:             d.Name,
 			PCIID:            d.PCIID,
@@ -215,7 +216,7 @@ func NewGenericSampler(opts Options) (inst *GenericSampler, err error) {
 	return
 }
 
-func (inst *GenericSampler) Sample(ctx context.Context) (snap gpu.Snapshot, err error) {
+func (inst *GenericSampler) Sample(ctx context.Context) (snap sysmsnap.GPUSnapshot, err error) {
 	var s Snapshot
 	s, err = inst.Inner.Sample(ctx)
 	if err != nil {

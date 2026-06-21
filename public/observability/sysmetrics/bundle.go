@@ -17,28 +17,12 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/psi"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
-)
-
-// Domain identifies one collector slot in [BundleOptions]. Used as the
-// key in [BundleSnapshot.Errors].
-type Domain string
-
-const (
-	DomainCPU       Domain = "cpu"
-	DomainMem       Domain = "mem"
-	DomainDisk      Domain = "disk"
-	DomainNet       Domain = "net"
-	DomainBattery   Domain = "battery"
-	DomainProc      Domain = "proc"
-	DomainSensors   Domain = "sensors"
-	DomainContainer Domain = "container"
-	DomainGPU       Domain = "gpu"
-	DomainPSI       Domain = "psi"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // BundleOptions wires per-domain collectors into a [Bundle]. Any nil
-// field is skipped — its corresponding [BundleSnapshot] field stays at
-// the zero value and no entry appears in [BundleSnapshot.Errors].
+// field is skipped — its corresponding [sysmsnap.BundleSnapshot] field stays at
+// the zero value and no entry appears in [sysmsnap.BundleSnapshot.Errors].
 type BundleOptions struct {
 	CPU       *cpu.Collector
 	Mem       *mem.Collector
@@ -60,42 +44,13 @@ type BundleOptions struct {
 	PSI *psi.Collector
 
 	// NowFunc, when non-nil, overrides the wall clock used to stamp
-	// [BundleSnapshot.SampledAtUnixMs]. Defaults to [time.Now].
+	// [sysmsnap.BundleSnapshot.SampledAtUnixMs]. Defaults to [time.Now].
 	NowFunc func() time.Time
-}
-
-// BundleSnapshot is the per-domain union of all configured collectors'
-// outputs. Fields are nil / empty when their collector was not wired.
-type BundleSnapshot struct {
-	SampledAtUnixMs int64
-
-	CPU       *cpu.Snapshot
-	Mem       *mem.Snapshot
-	Disk      *disk.Snapshot
-	Net       *net.Snapshot
-	Battery   *battery.Snapshot
-	Container *container.Info
-	GPU       *gpu.Snapshot
-	PSI       *psi.Snapshot
-
-	// Procs is the slice form of the process table. Empty when the proc
-	// collector was not wired.
-	Procs []proc.Info
-
-	// Sensors is the temperature reading list. Empty when the sensors
-	// collector was not wired (or when the cpu collector is wired and
-	// already includes per-cpu temperatures inline).
-	Sensors []sensors.TempReading
-
-	// Errors maps the domain that failed to its error. Empty (not nil)
-	// when every wired collector succeeded; consumers can iterate to
-	// log per-domain failures without aborting on partial success.
-	Errors map[Domain]error
 }
 
 // Bundle orchestrates a set of per-domain collectors, running each
 // domain concurrently and collecting per-domain errors into the
-// [BundleSnapshot.Errors] map.
+// [sysmsnap.BundleSnapshot.Errors] map.
 //
 // Hard errors — [context.Canceled] and [context.DeadlineExceeded] —
 // are returned as the [Sample] function's error and also recorded in
@@ -103,6 +58,12 @@ type BundleSnapshot struct {
 // [Sample] returns them in the Errors map but does not abort.
 type Bundle struct {
 	opts BundleOptions
+	// topo is the static CPU containment hierarchy, read once at NewBundle
+	// (best-effort) and stamped onto every snapshot so the metric plane carries
+	// it (ADR-0090 SD6). nil when the CPU domain was not wired or the one-shot
+	// sysfs read failed; the consumer then renders the topology panel as
+	// unavailable.
+	topo *sysmsnap.Topology
 }
 
 // NewBundle returns a Bundle configured by opts. The returned error is
@@ -113,23 +74,33 @@ func NewBundle(opts BundleOptions) (inst *Bundle, err error) {
 		opts.NowFunc = time.Now
 	}
 	inst = &Bundle{opts: opts}
+	// Read the static CPU topology once (best-effort). It does not change while
+	// the machine runs, so the same pointer rides every snapshot; a read failure
+	// (no sysfs, a sandbox) leaves Topology nil. Only attempted when the CPU
+	// domain is wired, since topology is CPU-domain data.
+	if opts.CPU != nil {
+		if topo, terr := cpu.ReadTopology(cpu.TopologyOptions{}); terr == nil {
+			inst.topo = &topo
+		}
+	}
 	return
 }
 
 // Sample fans out to every wired collector concurrently and returns
 // once all goroutines have settled. The first ctx-cancellation seen by
 // any goroutine is returned as err; per-domain non-ctx errors do not
-// abort the others and are collected in [BundleSnapshot.Errors].
-func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error) {
+// abort the others and are collected in [sysmsnap.BundleSnapshot.Errors].
+func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, err error) {
 	snap.SampledAtUnixMs = inst.opts.NowFunc().UnixMilli()
-	snap.Errors = map[Domain]error{}
+	snap.Topology = inst.topo
+	snap.Errors = map[sysmsnap.Domain]error{}
 
 	var (
 		mu sync.Mutex
 		wg sync.WaitGroup
 	)
 
-	captureErr := func(d Domain, e error) {
+	captureErr := func(d sysmsnap.Domain, e error) {
 		if e == nil {
 			return
 		}
@@ -148,7 +119,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.CPU = &s
 				mu.Unlock()
 			}
-			captureErr(DomainCPU, e)
+			captureErr(sysmsnap.DomainCPU, e)
 		}()
 	}
 	if inst.opts.Mem != nil {
@@ -161,7 +132,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.Mem = &s
 				mu.Unlock()
 			}
-			captureErr(DomainMem, e)
+			captureErr(sysmsnap.DomainMem, e)
 		}()
 	}
 	if inst.opts.PSI != nil {
@@ -174,7 +145,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.PSI = &s
 				mu.Unlock()
 			}
-			captureErr(DomainPSI, e)
+			captureErr(sysmsnap.DomainPSI, e)
 		}()
 	}
 	if inst.opts.Disk != nil {
@@ -187,7 +158,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.Disk = &s
 				mu.Unlock()
 			}
-			captureErr(DomainDisk, e)
+			captureErr(sysmsnap.DomainDisk, e)
 		}()
 	}
 	if inst.opts.Net != nil {
@@ -200,7 +171,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.Net = &s
 				mu.Unlock()
 			}
-			captureErr(DomainNet, e)
+			captureErr(sysmsnap.DomainNet, e)
 		}()
 	}
 	if inst.opts.Battery != nil {
@@ -213,7 +184,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.Battery = &s
 				mu.Unlock()
 			}
-			captureErr(DomainBattery, e)
+			captureErr(sysmsnap.DomainBattery, e)
 		}()
 	}
 	if inst.opts.Proc != nil {
@@ -226,7 +197,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.Procs = infos
 				mu.Unlock()
 			}
-			captureErr(DomainProc, e)
+			captureErr(sysmsnap.DomainProc, e)
 		}()
 	}
 	if inst.opts.Sensors != nil {
@@ -239,7 +210,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.Sensors = readings
 				mu.Unlock()
 			}
-			captureErr(DomainSensors, e)
+			captureErr(sysmsnap.DomainSensors, e)
 		}()
 	}
 	if inst.opts.Container != nil {
@@ -252,7 +223,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.Container = &info
 				mu.Unlock()
 			}
-			captureErr(DomainContainer, e)
+			captureErr(sysmsnap.DomainContainer, e)
 		}()
 	}
 	if inst.opts.GPU != nil {
@@ -265,7 +236,7 @@ func (inst *Bundle) Sample(ctx context.Context) (snap BundleSnapshot, err error)
 				snap.GPU = &s
 				mu.Unlock()
 			}
-			captureErr(DomainGPU, e)
+			captureErr(sysmsnap.DomainGPU, e)
 		}()
 	}
 

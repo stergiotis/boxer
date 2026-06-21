@@ -79,7 +79,7 @@ func (inst *App) renderNetPanel(snap *PublishedSnapshot) {
 
 	// No per-interface distsummary here — utilization (the
 	// commensurable cross-device metric Disk/GPU use) needs link
-	// capacity to be meaningful, and netcoll.Interface doesn't yet
+	// capacity to be meaningful, and sysmsnap.NetInterface doesn't yet
 	// expose link speed. A throughput-based summary would mix
 	// heterogeneous interfaces (lo vs ethX vs wlanX vs virtual)
 	// and degenerate under typical "one busy + many idle" patterns,

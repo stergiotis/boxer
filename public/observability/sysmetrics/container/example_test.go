@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/container"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
 // Example_detect shows the one-shot host-classifier API. The detector
@@ -22,7 +23,7 @@ func Example_detect() {
 	}
 	// On a non-containerized host: Engine == EngineNone, Detail == "".
 	switch info.Engine {
-	case container.EngineNone:
+	case sysmsnap.EngineNone:
 		fmt.Println("not in a container")
 	default:
 		fmt.Println("running in:", info.Engine.String())
