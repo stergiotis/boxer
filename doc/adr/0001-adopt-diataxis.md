@@ -158,14 +158,14 @@ supersedes no prior record.
   repositories at the time of this update), and the `proposed →
   accepted` flip was withheld pending an unreachable "review the
   whole accreted chain" bar (28/39 ADRs stuck in `proposed` in
-  pebble2impl). DOCUMENTATION_STANDARD §1 ADR now distinguishes Tier
+  a downstream consumer). DOCUMENTATION_STANDARD §1 ADR now distinguishes Tier
   1 (in-place edits for values, paths, typos), Tier 2 (dated H3s
   inside a single `## Updates` H2 for design refinements, milestone
   landings, retracted claims), and Tier 3 (new superseding ADR for
   changed options, changed scope, or chains that have started to
   describe a different decision than the body). The canonical
   amendment section is named `## Updates` (boxer-precedent;
-  pebble2impl renames its `## Amendments` to match in the same
+  a downstream consumer renames its `## Amendments` to match in the same
   pass). `proposed → accepted` is clarified as a one-time
   single-owner pass that does not re-open on subsequent Tier 1/2
   edits. The core Diátaxis + ADR decision above is unchanged; this

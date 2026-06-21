@@ -12,7 +12,7 @@ date: 2026-04-26
 
 ## Context
 
-ImZero2's widget surface is reached through a single Ui-shaped value (the `*c.WidgetIdStack` receiver in generated code, conventionally bound to the variable `c` at call sites). Every widget method is defined on this one type, and every widget therefore appears callable in every nesting context. Container preconditions exist — but only as runtime rules carried in CLAUDE.md and the per-frame visual-feedback loop. From the pebble2impl-local supplement:
+ImZero2's widget surface is reached through a single Ui-shaped value (the `*c.WidgetIdStack` receiver in generated code, conventionally bound to the variable `c` at call sites). Every widget method is defined on this one type, and every widget therefore appears callable in every nesting context. Container preconditions exist — but only as runtime rules carried in CLAUDE.md and the per-frame visual-feedback loop. From a downstream consumer's local supplement:
 
 - `AllocateUiAtRect` positions its child Ui at the parent's *absolute* coordinates and silently breaks an enclosing `Vertical` / `Horizontal` flow.
 - `c.PanelCentral()` is mandatory for full-screen apps; widgets emitted outside any panel have no Ui scope (flicker + lost input).

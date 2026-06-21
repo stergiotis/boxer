@@ -10,7 +10,7 @@ reviewed-date: 2026-06-08
 
 ## Context
 
-Several pebble2impl surfaces already model their lifecycle as a finite
+Several boxer surfaces already model their lifecycle as a finite
 state machine — the spinnaker/play UMAP projector
 (`Idle → Running → Cancelling → Cancelled`), the ADR-0026 app runtime's
 manifest reconciliation, the ADR-0028 ch.local.exec cap's worker pool —

@@ -8,16 +8,16 @@ reviewed-date: 2026-04-28
 
 # ADR-0005: Port Redpanda Connect's franz-go Kafka Input/Output as a Boxer-Style Derivative
 
-> **Migration note.** Originally drafted as pebble2impl ADR-0015 on
+> **Migration note.** Originally drafted in a downstream consumer (not in this repo) as its ADR-0015 on
 > 2026-04-27. Renumbered and migrated into boxer on 2026-04-28 when the
 > [`public/streaming/persisted/kafka/`](../../public/streaming/persisted/kafka)
 > package moved here so it can be reused across boxer-derived projects.
-> The decision content below is unchanged from the original pebble2impl
-> framing; pebble2impl is now a downstream consumer.
+> The decision content below is unchanged from the original
+> framing; that consumer is now downstream of boxer.
 
 ## Context
 
-A production-grade Kafka client surface is needed downstream of boxer (originally for pebble2impl). Re-implementing the Kafka consumer/producer state machine from scratch against [`github.com/twmb/franz-go`][franz-go] is non-trivial — rebalance handling, ordered ack-drain semantics, transaction isolation, and idempotent-producer write paths each have known traps that [Redpanda Connect][rpcn]'s `internal/impl/kafka/` package has already solved in production.
+A production-grade Kafka client surface is needed downstream of boxer (originally for a consumer not in this repo). Re-implementing the Kafka consumer/producer state machine from scratch against [`github.com/twmb/franz-go`][franz-go] is non-trivial — rebalance handling, ordered ack-drain semantics, transaction isolation, and idempotent-producer write paths each have known traps that [Redpanda Connect][rpcn]'s `internal/impl/kafka/` package has already solved in production.
 
 That package is Apache-2.0 licensed (header sample verified at the pinned SHA across `input_kafka_franz.go`, `input_sarama_kafka.go`, `input_redpanda.go`, `output_kafka_franz.go`, `franz_writer.go`, `franz_reader_unordered.go`). Adopting it directly couples us to [`github.com/redpanda-data/benthos/v4/public/service`][benthos-service] — a stream-processing framework that imposes its own message, ack, and resource abstractions. The framework dependency is the actual cost; the franz-go interaction logic is the value.
 
@@ -128,7 +128,7 @@ Names are placeholders; the Phase 1 implementation reconciles them against exist
 
 ## Status
 
-Accepted on 2026-04-27 by @stergiotis (originally as pebble2impl ADR-0015); migrated into boxer as ADR-0005 on 2026-04-28.
+Accepted on 2026-04-27 by @stergiotis (originally as a downstream consumer's ADR-0015); migrated into boxer as ADR-0005 on 2026-04-28.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

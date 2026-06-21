@@ -22,7 +22,7 @@ Forces the design must respect:
 
 - **Linux-only.** This ADR explicitly does not cover macOS / BSD; later ADRs may. The Go source uses `//go:build linux` files.
 - **Non-interactive and library-shaped.** No TUI, no global config, no logger singleton; collectors take options structs and return values.
-- **Boxer conventions** (CLAUDE.md, [ADR-0055](0055-adopt-boxer-standards.md)) — `inst` receivers, `*I` interface suffix, `*E` enum suffix, `eh.Errorf` errors, `iter.Seq2[V, error]` for variable-length sequences, sized integers on fields, zero-value-usable structs, SoA over AoS where multiplicity exists.
+- **Boxer conventions** (CLAUDE.md, [CODINGSTANDARDS.md](../../CODINGSTANDARDS.md)) — `inst` receivers, `*I` interface suffix, `*E` enum suffix, `eh.Errorf` errors, `iter.Seq2[V, error]` for variable-length sequences, sized integers on fields, zero-value-usable structs, SoA over AoS where multiplicity exists.
 - **No cgo, no libstdc++.** This repo's binary footprint already carries Rust-via-FFFI2 and a Go core; pulling C++ runtime support to read `/proc/stat` is disproportionate.
 - **GPU vendor SDKs are optional and gated.** btop dlopens NVML and ROCm-SMI at runtime and degrades gracefully when missing; we mirror that, but at build-tag granularity so callers can compile NVIDIA-free binaries.
 - **Drift-guarded.** Kernel procfs/sysfs schemas are stable but not literally append-only; we need fixture-based tests so a 2030 kernel change in `/proc/meminfo` field ordering does not silently corrupt our counters.
@@ -290,7 +290,6 @@ func ReadTopology(opts TopologyOptions) (Topology, error)
 - [`../../../contrib/btop/src/btop_shared.hpp`](../../../contrib/btop/src/btop_shared.hpp) — upstream Snapshot struct shapes.
 - `../../CLAUDE.md` — repo conventions, build-tag handling.
 - [`../../tags`](../../tags) — build-tag listing; new GPU tags appended here.
-- [ADR-0055](0055-adopt-boxer-standards.md) — boxer coding/doc standards adoption.
 - [ADR-0005](0005-streaming-persisted-kafka-from-connect.md) — possible downstream sink for snapshots (out of scope here).
 - `golang.org/x/sys/unix` — `PerfEventOpen` for Intel GPU PMU access (M5).
 - `github.com/ebitengine/purego` — cgo-free vendor SDK loader for NVML / ROCm-SMI (M6).

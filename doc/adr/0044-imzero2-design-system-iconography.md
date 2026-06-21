@@ -139,10 +139,10 @@ Everything else is stripped: Codicons (U+EA60–U+EC1E), Material Design Icons, 
 Subsetting approach:
 
 - The subset is produced by [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts), the same repository ADR-0030 §SD9 already uses for IDS Mono. The driver is `scripts/subset-nerd.sh` in that repo, which uses [`pyftsubset`](https://fonttools.readthedocs.io/en/latest/subset/index.html) (Python fonttools) to strip the upstream `SymbolsNerdFontMono-Regular.ttf` down to the codepoint ranges declared in `icons.toml` (one entry per range above plus the one-off MaterialDesign FontAwesome codepoint).
-- pebble2impl consumes the result as a SHA-pinned release artefact (`NFBrand.ttf`), same model as IDS Mono. Contributor machines never install `fonttools` — the toolchain lives upstream.
+- boxer consumes the result as a SHA-pinned release artefact (`NFBrand.ttf`), same model as IDS Mono. Contributor machines never install `fonttools` — the toolchain lives upstream.
 - Pin: `NERDFONTS_VERSION` in `stergiotis/ids-fonts` (currently `v3.4.0`).
 
-Build artifact location (pebble2impl side, post-M1 wire-up):
+Build artifact location (boxer side, post-M1 wire-up):
 
 ```
 rust/imzero2/assets/fonts/nf-brand/
@@ -152,7 +152,7 @@ rust/imzero2/assets/fonts/nf-brand/
 └── SHA256SUMS       # CI verifies NFBrand.ttf
 ```
 
-The upstream `SymbolsNerdFontMono-Regular.ttf` is *not* vendored on pebble2impl — it lives only in ids-fonts CI staging (it is downloaded fresh during the build job and discarded after subsetting). Removing it from this repo eliminates ~3 MB of dead binary weight.
+The upstream `SymbolsNerdFontMono-Regular.ttf` is *not* vendored in boxer — it lives only in ids-fonts CI staging (it is downloaded fresh during the build job and discarded after subsetting). Removing it from this repo eliminates ~3 MB of dead binary weight.
 
 Size estimate: a 200-codepoint subset of a 10 000-glyph .ttf typically lands at 100–200 KB depending on glyph complexity; brand marks are visually richer than affordances, so the upper end is more likely. Empirical measurement during M1 will confirm.
 
@@ -184,7 +184,7 @@ Naming convention — two layers:
 
 Generation discipline:
 
-- The vendored `phosphor-icons.json` is the source-of-truth for pebble2impl. The JSON is a release artefact of [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts) — that repo owns the upstream `@phosphor-icons/core` pin, downloads `src/icons.ts`, runs `scripts/ts-to-json.py` against it, and attaches the result alongside `Phosphor.ttf` to each tagged release. This split follows the discipline ADR-0030 §SD9 established for IDS Mono: contributor machines need only `curl + sha256sum -c`; the font/JSON toolchain lives upstream.
+- The vendored `phosphor-icons.json` is the source-of-truth for boxer. The JSON is a release artefact of [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts) — that repo owns the upstream `@phosphor-icons/core` pin, downloads `src/icons.ts`, runs `scripts/ts-to-json.py` against it, and attaches the result alongside `Phosphor.ttf` to each tagged release. This split follows the discipline ADR-0030 §SD9 established for IDS Mono: contributor machines need only `curl + sha256sum -c`; the font/JSON toolchain lives upstream.
 - The Go generator reads the vendored JSON via `encoding/json` and emits the two `.out.go` files. It consumes only four fields (`name`, `pascal_name`, `codepoint`, optional `alias`); all other catalogue metadata is dropped by the upstream TS→JSON step. If upstream renames any of the four fields, the JSON either omits the field (skipped entries surface as missing `PhXxx` constants) or fails to unmarshal (the generator exits non-zero with `unable to unmarshal phosphor-icons.json`) — both are the correct signal to re-evaluate the converter in `stergiotis/ids-fonts`.
 - Regen is `bash public/keelson/runtime/icons/generate.sh` (out-of-band). The `.out.go` outputs are checked in per the project's `.out.go` convention.
 - Bumping the upstream pin happens in *two* places, in order: first bump `PHOSPHOR_VERSION` in `stergiotis/ids-fonts` and tag a release; then re-vendor the new release's `phosphor-icons.json` here, regenerate `SHA256SUMS`, rerun `generate.sh`. Any net rename of an icon between versions surfaces as a removed `PhXxx` constant; CI catches the resulting compile error in callers (or in the curated layer's alias). M3 may add an explicit drift-detection diff against a previous codepoint snapshot.
@@ -265,9 +265,9 @@ The artefacts being decommissioned:
 - `public/thestack/imzero2/nerdfont/glyphnames.json` — the upstream Nerd Fonts catalogue (~535 KB, vendored).
 - `public/thestack/imzero2/nerdfont/generate.sh` — the regen driver.
 
-All five move to `../boxer_attic/public/thestack/{imzero2/nerdfont, cmd/nerdfontgen}/`, preserving pebble's `public/...` layout under a sibling repository that exists specifically to archive decommissioned-but-historically-valuable code. The pebble2impl side deletes them outright — no shim is left at the old path.
+All five move to `../boxer_attic/public/thestack/{imzero2/nerdfont, cmd/nerdfontgen}/`, preserving boxer's `public/...` layout under a sibling repository that exists specifically to archive decommissioned-but-historically-valuable code. The boxer side deletes them outright — no shim is left at the old path.
 
-The Rust-side `rust/imzero2/assets/fonts/symbols-nerd-font-mono/` directory (Phosphor's predecessor in the egui atlas) is *not* moved to the attic; it is deleted from pebble2impl in the same M1 change that adds `phosphor/` and `nf-brand/`. The Rust-side LICENSE and SHA file lineage is preserved in git history; there is no value in archiving the upstream binary in a parallel repo.
+The Rust-side `rust/imzero2/assets/fonts/symbols-nerd-font-mono/` directory (Phosphor's predecessor in the egui atlas) is *not* moved to the attic; it is deleted from boxer in the same M1 change that adds `phosphor/` and `nf-brand/`. The Rust-side LICENSE and SHA file lineage is preserved in git history; there is no value in archiving the upstream binary in a parallel repo.
 
 This deletion plus archive is the §SD1 / §SD2 implementation's final M2 step (§SD8). It is *not* part of M0 (this ADR) or M1 (Phosphor wiring) — call sites must migrate first before the legacy package can be removed.
 
@@ -289,7 +289,7 @@ This ADR is M0. Subsequent milestones land as separate commits with separate rev
 |-----------|-------|-------------|--------|
 | **M0** | This ADR + decision recorded + full Go-side scaffold | `doc/adr/0044-*.md` (proposed) + `iconset-comparison.html` design aid + nerdfont packages mirrored to `../boxer_attic` + `keelson/runtime/icons/` package (curated `IconXxx` + full generated `PhXxx` for every Phosphor regular icon, vendored upstream catalogue + iconsgen generator + generate.sh) | **two commits: ADR + scaffold first; full Phosphor generator second** |
 | **M1** | Rust-side font embedding | Phosphor.ttf + NFBrand.ttf added to `rust/imzero2/assets/fonts/{phosphor,nf-brand}/` with SHA pinning; `load_custom_fonts` updated; iconography catalogue verified against the actual TTF | next commit (after ADR review) |
-| **M2** | Call-site migration | The 15 files importing `nerdfont` migrate to `icons.*`; old `nerdfont` package deleted from pebble2impl (build green again); old Rust SymbolsNerdFontMono removed in the same change | follow-on commit |
+| **M2** | Call-site migration | The 15 files importing `nerdfont` migrate to `icons.*`; old `nerdfont` package deleted from boxer (build green again); old Rust SymbolsNerdFontMono removed in the same change | follow-on commit |
 | **M3** | Cleanup + density-weight evaluation | Density-preset → Phosphor weight mapping (§SD4) tested under M1 screenshots; filled-variant decisions; `patterns/iconography.md` written (the catalogue ADR-0030 §SD12 promised) | as-needed |
 
 **The build is intentionally broken between M0 and M2.** The 15 call sites (badge, filepicker, windowhost, ~10 demo apps, idsshowcase) will fail to compile after M0 because the `nerdfont` package no longer exists at its import path. This is acknowledged as the cost of decisively decommissioning Nerd Fonts before having to maintain two parallel systems. Any concurrent worktree-using session that relies on a green build needs to do M2 (or wait for M2) before proceeding.
@@ -344,7 +344,7 @@ Accepted — 2026-06-08 (reviewed by p@stergiotis). The single-slot Phosphor ico
 - `iconset-comparison.html` at repo root (visual decision aid; can be moved or deleted post-acceptance)
 - Legacy `nerdfont` packages mirrored to `../boxer_attic` (initial commit there)
 - `public/keelson/runtime/icons/` package scaffold: hand-curated `affordances.out.go` (Slot A, 33 high-frequency icons with Phosphor codepoints from the public catalogue) + `brandmarks.out.go` (Slot B, 10 NF-subset codepoints preserved verbatim)
-- Legacy `nerdfont` packages deleted from pebble2impl
+- Legacy `nerdfont` packages deleted from boxer
 
 **Second commit** (§SD3 generator addition):
 
@@ -358,7 +358,7 @@ Accepted — 2026-06-08 (reviewed by p@stergiotis). The single-slot Phosphor ico
 **Third commit** (move font/JSON build upstream to `stergiotis/ids-fonts`):
 
 - `stergiotis/ids-fonts` extended with Phase 2 — `scripts/fetch-phosphor.sh`, `scripts/subset-nerd.sh`, `scripts/ts-to-json.py`, `icons.toml` codepoint-range manifest, `PHOSPHOR_VERSION` + `NERDFONTS_VERSION` pins, Makefile + workflow updates (separate commit in that repo: `c9926f6`)
-- pebble2impl side trimmed: `phosphor-icons.ts` + `tsToJson.py` deleted (now produced upstream); `phosphor-icons.json` becomes a release-artefact vendored from `stergiotis/ids-fonts` (the in-repo file remains the artefact, just sourced differently going forward); `generate.sh` simplified to JSON-only
+- boxer side trimmed: `phosphor-icons.ts` + `tsToJson.py` deleted (now produced upstream); `phosphor-icons.json` becomes a release-artefact vendored from `stergiotis/ids-fonts` (the in-repo file remains the artefact, just sourced differently going forward); `generate.sh` simplified to JSON-only
 
 **Fourth commit** (M1 — Rust-side font embedding):
 
@@ -373,7 +373,7 @@ Open questions:
 
 1. **Phosphor multi-weight v1?** §SD4 defers density-preset weight mapping until M2. Worth reconsidering if even one app in M1 would visibly benefit (e.g., `imztop`'s density-of-information argues for Light at Caption size). Default: defer; revisit M3.
 2. **Phosphor fill variant v1?** §SD4 defers `Phosphor-Fill.ttf` embedding. Worth reconsidering if M1 testing finds 3+ affordances read materially worse as outline. Default: defer; revisit M2.
-3. ~~**Vendor the upstream Nerd Fonts `.ttf` input to `subset.sh`?**~~ Resolved by the move of the subset pipeline to [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts): the upstream `.ttf` lives only in ids-fonts CI staging (downloaded fresh per build, discarded after subsetting). pebble2impl never sees it.
+3. ~~**Vendor the upstream Nerd Fonts `.ttf` input to `subset.sh`?**~~ Resolved by the move of the subset pipeline to [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts): the upstream `.ttf` lives only in ids-fonts CI staging (downloaded fresh per build, discarded after subsetting). boxer never sees it.
 4. **Custom brand-mark family at M3?** Reserve the option to drop the Nerd Fonts dependency for Slot B by hand-vendoring each brand mark as a Rust Foundation / Go Foundation / Docker Inc. canonical SVG. Cost: per-brand legal due-diligence on logo redistribution. Defer indefinitely; revisit only if Devicons styling becomes a recognised problem.
 5. **Naming: `icons.IconCheck` reads with a stutter.** Consider `icon.Check` (singular package name, dropping the per-constant `Icon` prefix). Default: `icons.IconCheck` for v1 to match the existing `nerdfont.CodCheck` pattern's conceptual structure; revisit at M2 when the package is broadly imported.
 6. **Should ADR-0030 §SD12 be edited to point at this ADR**, or left as-is with this ADR's "supersedes" claim being the bridge? Default: edit ADR-0030 §SD12 with an Amendment block (mirroring ADR-0030 §SD11's 2026-05-17 Amendment pattern) once this ADR flips to accepted.

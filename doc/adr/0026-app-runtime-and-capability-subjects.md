@@ -10,7 +10,7 @@ reviewed-date: 2026-05-11
 
 ## Context
 
-The pebble2impl monolith hosts a growing collection of interactive programs — `play` (SQL playground), `imztop` (resource monitor, [ADR-0020](./0020-imzero2-imztop-resource-monitor.md)), the regex explorer, the Hacker News explorer, the leewaywidgets tour, the widgets showcase (under [ADR-0057](0057-demo-registry-and-drivers.md)) — plus a parallel collection of headless CLI subcommands (`kafka`, `gov`, `badger`, `funccharacterize`, the `spinnaker` tree, …). Three structural deficiencies have accumulated:
+The boxer demo monolith hosts a growing collection of interactive programs — `play` (SQL playground), `imztop` (resource monitor, [ADR-0020](./0020-imzero2-imztop-resource-monitor.md)), the regex explorer, the Hacker News explorer, the leewaywidgets tour, the widgets showcase (under [ADR-0057](0057-demo-registry-and-drivers.md)) — plus a parallel collection of headless CLI subcommands (`kafka`, `gov`, `badger`, `funccharacterize`, the `spinnaker` tree, …). Three structural deficiencies have accumulated:
 
 - **No "app" type.** Graphical programs are wired as numbered render closures (`appCode` 1–7) in [`public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go). `--launch a001,a005` accepts a comma list but resolves to sequential rendering in one CentralPanel, not coexistence. The only registry — `public/thestack/imzero2/egui2/demo/apps/registry/registry.go` — is consumed only by the widgets showcase. Adding an app means editing the switch.
 - **No capability mediation.** Every program reaches `os.Open`, `clickhouse.OpenDB`, `kafka.NewClient`, etc. directly. There is no broker between an app's intent and the system resource, no audit of which app touched what, no consistency in how a "file open" is requested. The file picker at `public/thestack/imzero2/egui2/widgets/filepicker/` is already backed by `io/fs.FS` — the substrate for a capability handle exists, but nothing uses it that way.
@@ -32,7 +32,7 @@ Invariants the design must respect:
 
 ## Design space (QOC)
 
-**Question.** How should pebble2impl organise its launchable programs so that (a) multiple apps can coexist inside one viewport, (b) every external resource access is mediated by a uniform broker, and (c) the architecture accommodates NATS-as-universal-transport without later restructuring?
+**Question.** How should boxer organise its launchable programs so that (a) multiple apps can coexist inside one viewport, (b) every external resource access is mediated by a uniform broker, and (c) the architecture accommodates NATS-as-universal-transport without later restructuring?
 
 **Options.**
 
@@ -720,7 +720,7 @@ The M3 design originally placed each open app in an `egui_dock` tab inside a sin
 
 ### 2026-05-12 — Runtime-run identity & app-lifecycle audit events
 
-The runtime now writes auditable events to the leeway facts table for every process boot and every app open/close. A *run* is one pebble2impl process invocation, identified by a 16-character nanoid (`run_id`) that:
+The runtime now writes auditable events to the leeway facts table for every process boot and every app open/close. A *run* is one boxer process invocation, identified by a 16-character nanoid (`run_id`) that:
 
 - Is generated (or inherited from `PEBBLE2_RUN_ID`) at startup by the new `runtime/runinfo` package.
 - Is exported back into the environment as `PEBBLE2_RUN_ID` so child processes and app code that prefers env reads see the same value.

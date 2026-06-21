@@ -259,7 +259,7 @@ The font rasteriser (egui's via `epaint`) is deterministic for a given (font byt
 
 ### SD9 — IDS Mono build pipeline
 
-The build lives upstream in [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts) — not in pebble2impl. CI there clones Iosevka at the pinned `IOSEVKA_VERSION`, applies the IDS Mono build plan, and publishes a tagged release with six `.ttf` files, `SHA256SUMS`, and the OFL `LICENSE`. See [ADR-0034 §SD2 pivot Amendment](./0034-imzero2-design-system-typography-m0.md#sd2-pivot--docker-on-ci-not-on-contributor-machine) for the architectural rationale.
+The build lives upstream in [`stergiotis/ids-fonts`](https://github.com/stergiotis/ids-fonts) — not in boxer. CI there clones Iosevka at the pinned `IOSEVKA_VERSION`, applies the IDS Mono build plan, and publishes a tagged release with six `.ttf` files, `SHA256SUMS`, and the OFL `LICENSE`. See [ADR-0034 §SD2 pivot Amendment](./0034-imzero2-design-system-typography-m0.md#sd2-pivot--docker-on-ci-not-on-contributor-machine) for the architectural rationale.
 
 - **Build manifest upstream.** `private-build-plans.toml` lives in `ids-fonts/`; not duplicated here.
 - **Built artefacts vendored.** `IDSMono-*.ttf` are downloaded from a pinned `ids-fonts` release tag and committed under `rust/imzero2/assets/fonts/ids-mono/`. Storage cost is ~56 MB at Iosevka v34.5.0 — the v34 line ships larger TTFs than this §SD7 estimate predicted; see [ADR-0034 §SD7-finding Amendment](./0034-imzero2-design-system-typography-m0.md#sd7-finding--aile-bundle-budget-overrun).

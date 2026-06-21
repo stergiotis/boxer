@@ -116,9 +116,9 @@ Current shape (post-pivot):
 
 1. `ids-fonts/` CI clones Iosevka at the pinned `IOSEVKA_VERSION`, applies the IDS Mono build plan from `private-build-plans.toml`, and runs `npm run build -- ttf::IDSMono` on `ubuntu-24.04` with `ttfautohint` / `p7zip-full` / `python3` from apt + Node.js 22.
 2. On `v*` tag push, the release attaches six `.ttf` files, `SHA256SUMS`, the build TOML, `IOSEVKA_VERSION`, and the OFL `LICENSE` to a versioned URL: `https://github.com/stergiotis/ids-fonts/releases/download/<tag>/`.
-3. pebble2impl re-vendors by `curl` + `sha256sum -c` into `rust/imzero2/assets/fonts/ids-mono/`.
+3. boxer re-vendors by `curl` + `sha256sum -c` into `rust/imzero2/assets/fonts/ids-mono/`.
 
-Output: six `.ttf` files (Regular, Italic, Medium, MediumItalic, Bold, BoldItalic). No Docker, Node.js, or font toolchain required on pebble2impl contributor machines.
+Output: six `.ttf` files (Regular, Italic, Medium, MediumItalic, Bold, BoldItalic). No Docker, Node.js, or font toolchain required on boxer contributor machines.
 
 **Container tag pinning.** [ADR-0030 §Status Q6](./0030-imzero2-design-system-typography.md) frames the tag-vs-SHA choice; M0 ships with **tag-based pinning** (`iosevkadocker/build:latest` or a specific dated tag like `iosevkadocker/build:2026-04`). SHA-based pinning is reserved for the build-drift trigger (T3-006) — same rationale as the Iosevka version pin: bug fixes flow through latest-tag unless drift surfaces.
 
@@ -297,7 +297,7 @@ Closes §SD9 M0b. Lands the pinned version + downloaded artefacts the parent ADR
 
 **Aile downloaded but bundle reduced.** Iosevka Aile downloaded from `github.com/be5invis/Iosevka/releases/download/v34.5.0/PkgTTF-IosevkaAile-34.5.0.zip` — see [§SD7 finding](#sd7-finding-aile-bundle-budget-overrun) for why only Regular landed.
 
-**SHA-pinned bytes shipped in `pebble2impl`** at `rust/imzero2/assets/fonts/`:
+**SHA-pinned bytes shipped in `boxer`** at `rust/imzero2/assets/fonts/`:
 
 | File | SHA-256 |
 |---|---|
@@ -308,7 +308,7 @@ Closes §SD9 M0b. Lands the pinned version + downloaded artefacts the parent ADR
 
 #### SD2 pivot — Docker on CI, not on contributor machine
 
-§SD2 specified a Docker-based build (`iosevkadocker/build`) on the contributor's machine, with the resulting `.ttf` files committed back into `pebble2impl/assets/fonts/ids-mono/`. M0b discovered three problems with that shape:
+§SD2 specified a Docker-based build (`iosevkadocker/build`) on the contributor's machine, with the resulting `.ttf` files committed back into `rust/imzero2/assets/fonts/ids-mono/`. M0b discovered three problems with that shape:
 
 1. **Contributor friction.** Asking every contributor who touches `private-build-plans.toml` to install Docker (or the alternative npm+premake5+ttfautohint chain) is heavyweight for a font build.
 2. **Iosevka build deps churn.** The `iosevkadocker/build` image referenced by §SD2 was already showing signs of being stale relative to upstream Iosevka's current build instructions.
@@ -316,18 +316,18 @@ Closes §SD9 M0b. Lands the pinned version + downloaded artefacts the parent ADR
 
 Resolved by **moving the build to its own CI-driven repository: `github.com/stergiotis/ids-fonts`** (initial commits `f4bcf73` + `2ebf3de`). The new repo houses:
 
-- The IDS `private-build-plans.toml` (single source of truth — *not* duplicated into pebble2impl).
+- The IDS `private-build-plans.toml` (single source of truth — *not* duplicated into boxer).
 - An `IOSEVKA_VERSION` file pinning the upstream release; CI clones Iosevka at that tag.
 - `.github/workflows/build.yml` — runs the build on `ubuntu-24.04` with `ttfautohint` / `p7zip-full` / `python3` from apt + Node.js 22 from the official action. On every push to `main` it smoke-tests (artifact retention 30 days); on `v*` tag push it creates a GitHub release with the six TTFs, `SHA256SUMS`, the build TOML, and `IOSEVKA_VERSION` attached.
 - Phase-2 scaffolding for the Nerd-Font-merged variant: `icons.toml` placeholder + `scripts/subset-nerd.sh` + `scripts/patch.sh` stubs.
 - License: SIL OFL 1.1 (matches upstream Iosevka), Reserved Font Name "IDS Mono".
 
 **What this means for §SD2 / §SD7 of this ADR:**
-- Local Docker build is no longer the supported path. The `Makefile` target `fonts-ids-mono` in pebble2impl was **deleted outright** (along with the whole `Makefile`) once the §SD2 pivot landed — keeping a half-broken shortcut pointing at an abandoned-looking image was worse than no shortcut. Emergency rebuilds run against `../ids-fonts/Makefile` (`make build`) directly.
-- The contributor flow becomes: bump `IOSEVKA_VERSION` in `ids-fonts/`, push a tag, CI publishes a release, pebble2impl bumps its `SHA256SUMS` to the new release URL. No Docker on any contributor machine.
+- Local Docker build is no longer the supported path. The `Makefile` target `fonts-ids-mono` in boxer was **deleted outright** (along with the whole `Makefile`) once the §SD2 pivot landed — keeping a half-broken shortcut pointing at an abandoned-looking image was worse than no shortcut. Emergency rebuilds run against `../ids-fonts/Makefile` (`make build`) directly.
+- The contributor flow becomes: bump `IOSEVKA_VERSION` in `ids-fonts/`, push a tag, CI publishes a release, boxer bumps its `SHA256SUMS` to the new release URL. No Docker on any contributor machine.
 - `iosevkadocker/build` reference in §SD2 / §SD9 + open question 5 about the image tag are obsolete — the *new* CI uses npm+apt directly, not the abandoned-looking docker image.
 
-**IDS Mono bytes are NOT yet shipped in pebble2impl.** The ids-fonts repo is scaffolded but the first release tag hasn't been pushed; the `.ttf` files will land in pebble2impl via a follow-up PR that consumes the release URL. Until then, apps that set `IMZERO2_IDS_FONTS=on` fall back to egui's default mono in monospace contexts (only Aile + Symbols Nerd Font Mono are wired in).
+**IDS Mono bytes are NOT yet shipped in boxer.** The ids-fonts repo is scaffolded but the first release tag hasn't been pushed; the `.ttf` files will land in boxer via a follow-up PR that consumes the release URL. Until then, apps that set `IMZERO2_IDS_FONTS=on` fall back to egui's default mono in monospace contexts (only Aile + Symbols Nerd Font Mono are wired in).
 
 #### SD7 finding — Aile bundle budget overrun
 
@@ -335,7 +335,7 @@ Resolved by **moving the build to its own CI-driven repository: `github.com/ster
 
 To stay within reasonable repo-bloat bounds, M0b shipped **Regular only** (10 MB committed). The other seven weights (Italic / Medium / MediumItalic / SemiBold / SemiBoldItalic / Bold / BoldItalic) are deferred pending one of:
 
-- **Subsetting decision.** `pyftsubset` the upstream TTFs to the codepoints IDS apps actually use (Latin Basic + Extended-A + Cyrillic Basic + common punctuation + the Nerd Font codepoints). Plausibly drops each style from ~10 MB to ~500-700 KB, bringing the 8-weight bundle to ~5 MB — close to §SD7's original budget. Belongs in `ids-fonts` rather than pebble2impl, naturally pairs with Phase 2 of that repo.
+- **Subsetting decision.** `pyftsubset` the upstream TTFs to the codepoints IDS apps actually use (Latin Basic + Extended-A + Cyrillic Basic + common punctuation + the Nerd Font codepoints). Plausibly drops each style from ~10 MB to ~500-700 KB, bringing the 8-weight bundle to ~5 MB — close to §SD7's original budget. Belongs in `ids-fonts` rather than boxer, naturally pairs with Phase 2 of that repo.
 - **Git LFS adoption.** Move `assets/fonts/**` to LFS so the full 80 MB doesn't grow `.git`. Acceptable but doesn't address the per-binary `include_bytes!` cost (every consumer binary gains 80 MB).
 - **Acceptance.** Ship 8 weights × 10 MB. Repo grows ~80 MB permanently; demo binary grows 80 MB.
 
@@ -371,7 +371,7 @@ The original family name contained upstream Iosevka's Reserved Font Name. A stri
 
 Fixed at `v0.1.1`: capitalized keys (`weights.Regular`, etc.) plus an explicit `widths.Normal` block. Output is the conventional six `IDSMono-{Regular,Italic,Medium,MediumItalic,Bold,BoldItalic}.ttf` files (~56 MB total, half the v0.1.0 size). **Skip v0.1.0 entirely**; pin v0.1.1 or later.
 
-**3. Rust-side assets lift** (this PR, pebble2impl side).
+**3. Rust-side assets lift** (this PR, boxer side).
 
 Moved `rust/imzero2/imzero2_egui/assets/` → `rust/imzero2/assets/`. The fonts and color tokens are not egui-specific (TTFs, palette TOMLs, scientific colormap LUTs); they're project-wide Rust resources that any future crate can consume without depending on `imzero2_egui`. [ADR-0030 §SD7](./0030-imzero2-design-system-typography.md) and this ADR's §SD7 layout blocks updated; Go codegen paths (`gen.go`, `vendor.go`, `emit.go`) and `scripts/ci/lint.sh` SHA-verify path also updated.
 
@@ -387,7 +387,7 @@ Moved `rust/imzero2/imzero2_egui/assets/` → `rust/imzero2/assets/`. The fonts 
 | `IDSMono-BoldItalic.ttf` | `c0516ca39d2315e162f47a75a754c52d7b52fe93f307b89d1f519ecb64b74144` |
 | `LICENSE` | OFL 1.1 — travels with the binaries per OFL §2 |
 
-**M1 partial landing.** The `IDS_MONO_REGULAR` const + `install_fonts` Monospace primary registration in `imzero2_egui/src/style/tokens/typography.rs` closes the `Iosevka IDS bytes are NOT yet shipped in pebble2impl` line of the 2026-05-16 Amendment. Italic / Medium / Bold weights are vendored but not yet `include_bytes!`-embedded — same size-budget constraint as Aile (the §SD7-finding Amendment above).
+**M1 partial landing.** The `IDS_MONO_REGULAR` const + `install_fonts` Monospace primary registration in `imzero2_egui/src/style/tokens/typography.rs` closes the `Iosevka IDS bytes are NOT yet shipped in boxer` line of the 2026-05-16 Amendment. Italic / Medium / Bold weights are vendored but not yet `include_bytes!`-embedded — same size-budget constraint as Aile (the §SD7-finding Amendment above).
 
 **Status note.** The 2026-05-16 Amendment was authored when the family was still "Iosevka IDS"; its prose was updated in-place to "IDS Mono" for consistency with current naming. The architectural pivot it documents (`iosevkadocker/build` → `stergiotis/ids-fonts` CI) is unchanged in substance and date. This 2026-05-17 entry is the canonical source for the rename event itself.
 

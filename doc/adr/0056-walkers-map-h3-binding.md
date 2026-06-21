@@ -112,7 +112,7 @@ Tile servers are Go-configurable at the call site via fluid methods (`.TileUrl`,
 ### Derived practices
 
 - **New overlay types follow the same shape.** Register-drain node → pending Vec on `ImZeroFffi` → cleared in `prepare_next_frame` → drained by `render_walkers_map` → pre-projected into a renderable form → fed to `OverlayPlugin`. Any new overlay (e.g. heatmap grid lines, animated markers) adds one struct, one pending Vec, one prerender function, and a branch in the plugin's `run()`.
-- **H3 on the data side routes through `boxer/public/science/geo/h3`.** Direct `//go:build cgo` dependencies on `uber/h3-go/v4` are out of scope for pebble2impl's Go code. If a data pipeline needs H3 operations not yet exposed by the boxer wrapper, extend the wrapper rather than bypassing it.
+- **H3 on the data side routes through `boxer/public/science/geo/h3`.** Direct `//go:build cgo` dependencies on `uber/h3-go/v4` are out of scope for a downstream consumer's Go code. If a data pipeline needs H3 operations not yet exposed by the boxer wrapper, extend the wrapper rather than bypassing it.
 - **Tile server presets live in call sites, not in the binding.** `walkers::sources::Mapbox` / `Geoportal` / `OpenFreeMap` exist on the Rust side but aren't wired in; users pass `{z}/{x}/{y}` templates via `.TileUrl(...)`. A named-preset enum is scope creep with no payoff given the custom URL path.
 - **The uniform heatmap demo is the reference implementation.** Future work adjusting the viewport→cells→colormap pipeline should modify that demo first and then generalise to library code if patterns stabilise.
 

@@ -225,7 +225,7 @@ egress.
 
 - **Boxer dependency.** This ADR ships alongside a public addition to
   `boxer/public/observability/eh` (`Stream`, `Fact`, `WalkStreams`).
-  Pebble2impl bumps the boxer pin once the upstream PR lands; until
+  A downstream consumer bumps the boxer pin once the upstream PR lands; until
   then the change is consumed via the workspace go.work pin.
 - **PC-prefix dedup behavior.** `isSubStack` is strict-prefix-only
   (`a >= b → false`), so most nested wrap chains produce one stream

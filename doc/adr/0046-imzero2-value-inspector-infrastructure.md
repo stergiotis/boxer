@@ -12,7 +12,7 @@ reviewed-date: 2026-05-31
 
 ## Context
 
-Several pebble2impl widgets have emerged organically as "value inspectors" —
+Several boxer widgets have emerged organically as "value inspectors" —
 small surfaces that bind to a domain value and expose it for human
 exploration:
 

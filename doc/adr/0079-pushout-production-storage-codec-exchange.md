@@ -275,6 +275,6 @@ engine through the public read API.
   (semantics, invariants, review-remediation history).
 - Seam precedent: `public/caching/` (`StashBackendI`,
   `caching/diskbacked/`).
-- ADR-0039 (pebble2impl): antiquing design space.
-- ADR-0025 (pebble2impl): vault-by-design erasure architecture that the
+- ADR-0039: antiquing design space.
+- ADR-0025: vault-by-design erasure architecture that the
   retention/purge mechanics here support.

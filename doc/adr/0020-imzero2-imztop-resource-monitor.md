@@ -20,7 +20,7 @@ Forces the design must respect:
 - **FFFI databindings reset every Sync.** `r9_*` bindings re-register every frame and carry a one-frame lag (see CLAUDE.md "FFFI databindings reset every Sync"). Slices passed to plot widgets must come from stable memory and be re-sliced, not re-allocated.
 - **~100k visible-points-per-pane budget.** Inherited from the Grafana-replacement scope target. At 1 Hz with a 10-minute history window, a 12-panel app stays well under it.
 - **Host shell wraps top + bottom panels.** [`../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go:24-66`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go) (`decorateRenderer`) provides `PanelTop` (menu bar with Quit / Layout / theme toggles) and `PanelBottom` (metrics overlay). Subcommand bodies fit **between** those — they must not double up.
-- **Boxer conventions** (CLAUDE.md, [ADR-0055](0055-adopt-boxer-standards.md)) — `inst` receivers, `*I` interface suffix, `*E` enum suffix, `eh.Errorf` errors, sized integers, zero-value-usable structs.
+- **Boxer conventions** (CLAUDE.md, [CODINGSTANDARDS.md](../../CODINGSTANDARDS.md)) — `inst` receivers, `*I` interface suffix, `*E` enum suffix, `eh.Errorf` errors, sized integers, zero-value-usable structs.
 - **No process write-side.** ADR-0019 explicitly excludes `kill(pid)` / `set_priority(pid, nice)`. imztop is read-only against `sysmetrics`.
 
 [btop](https://github.com/aristocratos/btop) ([`../../../contrib/btop/`](../../../contrib/btop/)) — Apache 2.0 ([`../../../contrib/btop/LICENSE`](../../../contrib/btop/LICENSE)) — is the feature-parity reference. We mirror btop's panel set (CPU / MEM / DISK / NET / PROC / GPU / SENSORS / BATTERY) but not its implementation: btop's UI lives in `src/btop_draw.cpp` (TUI character cells), `src/btop_input.cpp` (terminal input), `src/btop_menu.cpp` (modal menus). None of that translates to egui. The mapping is **feature → sysmetrics field → egui2 widget**, not source-to-source.
@@ -293,6 +293,5 @@ Runtime-tree path references in this ADR were swept from `public/thestack/runtim
 - [`../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go) — virtualized-table usage at 10k rows.
 - [`../../../boxer/public/math/numerical/timeticks/`](../../../boxer/public/math/numerical/timeticks/) — calendar-aware time-axis tick generator (M5).
 - [`../../tags`](../../tags) — build-tag listing; `gpu_rocm` appended in M1.
-- [ADR-0055](0055-adopt-boxer-standards.md) — boxer coding/doc standards adoption.
 - [ADR-0013](./0013-imzero2-stateful-widget-contract.md) — stateful-widget contract; relevant for any future settings dialog.
 - `../../CLAUDE.md` — repo conventions, build tags, ImZero2-local invariants.

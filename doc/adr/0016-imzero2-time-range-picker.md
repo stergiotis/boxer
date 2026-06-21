@@ -10,7 +10,7 @@ reviewed-date: 2026-04-27
 
 ## Context
 
-pebble2impl is replacing parts of Grafana's UI with imzero2 + egui_plot (project scope: ~100k visible points per pane, M4-in-SQL upstream, layout in code, no dashboard JSON). The current imzero2 date picker — a thin wrapper over [`egui_extras::DatePickerButton`][egui-datepicker] with a packed `u64` (`YYYYMMDD`) wire format — covers about 5 % of what a Grafana-equivalent dashboard needs from a time control. It is single-point, date-only, no relative expressions, no range, no timezone awareness, no quick-range presets.
+A downstream consumer (not in this repo) is replacing parts of Grafana's UI with imzero2 + egui_plot (project scope: ~100k visible points per pane, M4-in-SQL upstream, layout in code, no dashboard JSON). The current imzero2 date picker — a thin wrapper over [`egui_extras::DatePickerButton`][egui-datepicker] with a packed `u64` (`YYYYMMDD`) wire format — covers about 5 % of what a Grafana-equivalent dashboard needs from a time control. It is single-point, date-only, no relative expressions, no range, no timezone awareness, no quick-range presets.
 
 Grafana's "time range picker" is the load-bearing time control across the entire product. Five capabilities define it:
 
@@ -30,7 +30,7 @@ The decision is two independent sub-questions. Each meets the ≥3 options × �
 
 ### Sub-question A — Derivation strategy
 
-**Question.** How should pebble2impl obtain a Grafana-equivalent time range picker without inheriting AGPL obligations?
+**Question.** How should a downstream consumer obtain a Grafana-equivalent time range picker without inheriting AGPL obligations?
 
 **Options.**
 
@@ -89,7 +89,7 @@ The decision is two independent sub-questions. Each meets the ≥3 options × �
 | C5 | ++ | ++ | −  | −  |
 | C6 | ++ | ++ | −  | −  |
 
-**B3's win on C1.** pebble2impl's data lives in ClickHouse; the picker's expression string *is* expressible directly in the query layer. The picker computes `anchor_now - INTERVAL 1 HOUR`, the query plan computes `WHERE ts >= anchor_now - INTERVAL 1 HOUR` — identical SQL, identical semantics, no translation step. This eliminates a known drift source in dashboarding products (Grafana's own `datemath.ts` ↔ data source backend mismatches).
+**B3's win on C1.** the consumer's data lives in ClickHouse; the picker's expression string *is* expressible directly in the query layer. The picker computes `anchor_now - INTERVAL 1 HOUR`, the query plan computes `WHERE ts >= anchor_now - INTERVAL 1 HOUR` — identical SQL, identical semantics, no translation step. This eliminates a known drift source in dashboarding products (Grafana's own `datemath.ts` ↔ data source backend mismatches).
 
 **B3's costs and their mitigations.**
 
@@ -106,7 +106,7 @@ We will:
    - `public/thestack/imzero2/egui2/widgets/timerangepicker/` (Go side — multiple files justify a sub-package over the single-file convention used for the legacy date picker).
    - `rust/imzero2/src/imzero2/time_range_picker.rs` (Rust side, sibling to existing `date_picker_button.rs`).
 
-   Per-file Apache-2.0 headers (upstream copyright + pebble2impl modification copyright + §4.b modification line), a package-level `NOTICE`, and an entry in `doc/legal/third_party.md` mirror the [ADR-0005][adr-0015] pattern.
+   Per-file Apache-2.0 headers (upstream copyright + downstream modification copyright + §4.b modification line), a package-level `NOTICE`, and an entry in `doc/legal/third_party.md` mirror the [ADR-0005][adr-0015] pattern.
 
 2. **Expression engine (B3).** ClickHouse SQL is the expression language. The picker injects a stable per-Apply `anchor_now`, validates expressions in-process via the dsl ANTLR parser, and evaluates via a long-running `clickhouse-local` subprocess on Apply / focus-out:
 
@@ -120,7 +120,7 @@ We will:
 
    Subprocess discovery: probe `clickhouse-local` on `PATH` first, fall back to `clickhouse local` (older invocation). If neither is available, the evaluator constructor returns `ErrEvaluatorUnavailable` and any test depending on evaluation calls `t.Skip(...)`.
 
-3. **Presets registry.** A `Presets` registry maps human labels ("Last 5 minutes", "Today so far", "Yesterday") to ClickHouse SQL fragments. The default registry mirrors Grafana 7.5's defaults (translated to ClickHouse SQL). Customers register their own presets — this is the surface that lets pebble2impl encode site-specific quick-ranges (e.g. "Yesterday's batch window 02:00–06:00 UTC") as first-class.
+3. **Presets registry.** A `Presets` registry maps human labels ("Last 5 minutes", "Today so far", "Yesterday") to ClickHouse SQL fragments. The default registry mirrors Grafana 7.5's defaults (translated to ClickHouse SQL). Customers register their own presets — this is the surface that lets a downstream consumer encode site-specific quick-ranges (e.g. "Yesterday's batch window 02:00–06:00 UTC") as first-class.
 
 4. **Wire format.** The current `u64 YYYYMMDD` is **kept for the legacy single-date widget** for backward compatibility. The new range picker uses a separate FFFI2 wire shape: `(from_epoch_ms i64, to_epoch_ms i64, tz_id u16)`, where `tz_id` is an interned IANA-tz index (zone catalogue lives Go-side, indices are stable per-process). Expression strings stay Go-side; only the *evaluated* result crosses FFFI2. The picker is a stateful widget per [ADR-0013][adr-0013] (`SendRespVal`-bound).
 
@@ -192,7 +192,7 @@ ADRs are append-only; supersession is recorded, not deleted.
   [demo](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_datepicker_demo.go).
 - Local license text: `licenses/Apache-2.0.txt`.
 - Aggregate third-party attribution: `doc/legal/third_party.md`.
-- Related: [ADR-0055 — adopt boxer standards](0055-adopt-boxer-standards.md); [ADR-0013 — imzero2 stateful widget contract](0013-imzero2-stateful-widget-contract.md) (the picker is a stateful widget under that contract); [ADR-0005 — port Connect's franz-go Kafka I/O](0005-streaming-persisted-kafka-from-connect.md) (the Apache-2.0 derivative pattern this ADR mirrors).
+- Related: [ADR-0013 — imzero2 stateful widget contract](0013-imzero2-stateful-widget-contract.md) (the picker is a stateful widget under that contract); [ADR-0005 — port Connect's franz-go Kafka I/O](0005-streaming-persisted-kafka-from-connect.md) (the Apache-2.0 derivative pattern this ADR mirrors).
 
 [egui-datepicker]: https://docs.rs/egui_extras/latest/egui_extras/struct.DatePickerButton.html
 [grafana-datemath]: https://github.com/grafana/grafana/blob/v7.5.17/packages/grafana-data/src/datetime/datemath.ts

@@ -20,7 +20,7 @@ This changes the implementation calculus:
 - Go's type system, IDE support (`gopls`), and integration with the existing Leeway codegen give the Go API benefits the text frontend cannot match: compile-time schema/path/type validation, refactoring safety, and native composition with arbitrary Go code.
 - The Go API admits two execution targets cleanly: in-process (a `SinkI` implementation interpreting the query graph against an Arrow `RecordBatch`) and ClickHouse (the same query graph lowered to CH SQL via the existing `boxer/public/db/clickhouse/dsl/ast` and `ToSQL` infrastructure).
 
-The text-form syntax is still required: pebble2impl needs `lwq` integrated into SQL as a "little language" served via a SQL proxy, and that requires a textual surface. This ADR therefore does not supersede ADR-0022; it sequences it. The Go API ships first; the FLWOR text frontend, when built, parses to the *same operator graph* the Go API constructs and reuses the same backends.
+The text-form syntax is still required: a downstream consumer needs `lwq` integrated into SQL as a "little language" served via a SQL proxy, and that requires a textual surface. This ADR therefore does not supersede ADR-0022; it sequences it. The Go API ships first; the FLWOR text frontend, when built, parses to the *same operator graph* the Go API constructs and reuses the same backends.
 
 ## Decision
 
@@ -651,7 +651,7 @@ Indicative scope: v0 + v1 together is on the order of a few thousand lines of ne
 ## Alternatives
 
 - **Implement ADR-0022 verbatim (FLWOR text frontend first).** Rejected for v1: the Go API delivers the same structural capabilities with strictly less new infrastructure (no grammar, no parser, no AST). The text frontend remains valuable for the SQL-proxy use case and is sequenced as v3.
-- **Skip the Go API entirely and ship only the text frontend.** Rejected: Go consumers (the dominant pebble2impl audience) lose compile-time schema validation, IDE autocompletion, refactoring safety, and native composition. The text frontend serves only the proxy and external-consumer audiences.
+- **Skip the Go API entirely and ship only the text frontend.** Rejected: Go consumers (the dominant downstream audience) lose compile-time schema validation, IDE autocompletion, refactoring safety, and native composition. The text frontend serves only the proxy and external-consumer audiences.
 - **Build both frontends simultaneously.** Rejected: doubles the v1 cost without doubling the value while one of the two has no concrete consumer yet. Sequencing is cheaper and lets the Go API's adoption signal shape the text frontend's design.
 - **Single execution target (CH only) for the Go API.** Rejected: the in-process target via `SinkI` is essentially free given the existing `streamreadaccess` package, and it unlocks Parquet / Arrow snapshot queries the CH target cannot serve.
 - **Build the Go API on top of `clickhouse/dsl/astbuilder` directly, skipping the `*Plan` abstraction.** Rejected: the `*Plan` abstraction is what lets the same query target both backends. Without it, the Go API is locked to CH, the in-process target requires a separate API, and the future text frontend has no shared substrate to lower onto.
@@ -686,7 +686,7 @@ Indicative scope: v0 + v1 together is on the order of a few thousand lines of ne
 
 ## Status
 
-Proposed — awaiting review by Leeway and CH DSL maintainers and the pebble2impl architecture review.
+Proposed — awaiting review by Leeway and CH DSL maintainers and a downstream architecture review.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

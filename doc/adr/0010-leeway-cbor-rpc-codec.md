@@ -10,7 +10,7 @@ date: 2026-05-15
 
 Leeway is optimised for high-throughput batched workloads: Go value → `dml/runtime` → Arrow `RecordBatch` → ClickHouse / Parquet / Arrow IPC, with per-batch overhead (section co-arrays, dictionaries, Arrow metadata) amortised across thousands of entities. **For one-entity-per-call RPC the amortisation never happens.** A one-row Arrow batch plus IPC framing costs far more than the payload warrants under a tens-of-microseconds round-trip budget.
 
-Downstream consumers (pebble2impl `runtime.facts`, the spinnaker fact lineage) define **multi-shape** leeway tables: one fixed table accepts many domain payloads via per-canonical-type sections + memberships. The same Go struct can legitimately serialise into more than one target table, so the codec must keep the Go type target-agnostic.
+Downstream consumers (the `runtime.facts` table, the spinnaker fact lineage) define **multi-shape** leeway tables: one fixed table accepts many domain payloads via per-canonical-type sections + memberships. The same Go struct can legitimately serialise into more than one target table, so the codec must keep the Go type target-agnostic.
 
 The ergonomic target is `encoding/json`: `Marshal(v)` / `Unmarshal(b, v)` for nested structs, maps, and slices, without the caller constructing Arrow batches.
 

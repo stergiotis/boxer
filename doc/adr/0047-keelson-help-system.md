@@ -39,7 +39,7 @@ Three additional pressures shaped the timing:
   (frontmatter, callouts, code-block highlighting per language,
   wikilinks, inline images via `resolver.LoadImage`) — a renderable
   surface already existed.
-- ADR-0055 / boxer's `DOCUMENTATION_STANDARD.md` mandates Diátaxis
+- boxer's `DOCUMENTATION_STANDARD.md` mandates Diátaxis
   frontmatter (`type:`, `audience:`, `status:`) on every Markdown
   file under `doc/`. That metadata is exactly what a help-reader
   needs to populate navigation without per-app boilerplate.

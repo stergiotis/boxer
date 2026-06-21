@@ -970,9 +970,9 @@ columns. Six sections stay scalar: `bool`, `foreignKey`, `symbol`,
 `symbolArray` schema section for genuine multi-symbol per attribute;
 the scalar `Symbol` API stays distinct.)
 
-#### Vocabulary rename across pebble2impl
+#### Vocabulary rename across a downstream consumer
 
-The schema rename surfaces in pebble2impl as a vocabulary rename
+The schema rename surfaces in a downstream consumer as a vocabulary rename
 on both vdd memberships and DTO `lw:` tags. The scalar names are
 gone from the schema, so DTOs and vdd register against the new
 canonical `*Array` names:
@@ -1200,7 +1200,7 @@ runtime has needed so far.
 The boxer-side regression flagged in the 2026-05-21 runtime.facts
 schema-rename entry (`AccelHomogenousArray` returning row 0's
 values for every entityIdx > 0 on multi-row mixed-membership
-sections) is fixed upstream. With pebble2impl resolving boxer via
+sections) is fixed upstream. With a downstream consumer resolving boxer via
 `go.work`, no go.mod pin bump is needed locally; CI/CD will pick
 up the new pin when it next bumps.
 

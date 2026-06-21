@@ -12,7 +12,7 @@ date: 2026-05-08
 
 ## Context
 
-Pebble2impl uses ClickHouse + Leeway for semi-structured data (per ADR-0018 and the Leeway protocol at `boxer/public/semistructured/leeway/`). Leeway decomposes documents into typed canonical-type sections with multi-membership tagging, parameterised paths, semantic aspects, and co-section overlays. The structural advantages and capability comparison against Snowflake VARIANT and ClickHouse JSON v2 are documented in [`doc/skills/leeway-advanced/references/leeway-vs-snowflake.md`](../skills/leeway-advanced/references/leeway-vs-snowflake.md).
+A downstream consumer (not in this repo) uses ClickHouse + Leeway for semi-structured data (per ADR-0018 and the Leeway protocol at `boxer/public/semistructured/leeway/`). Leeway decomposes documents into typed canonical-type sections with multi-membership tagging, parameterised paths, semantic aspects, and co-section overlays. The structural advantages and capability comparison against Snowflake VARIANT and ClickHouse JSON v2 are documented in [`doc/skills/leeway-advanced/references/leeway-vs-snowflake.md`](../skills/leeway-advanced/references/leeway-vs-snowflake.md).
 
 The query-time consequence of Leeway's storage decision is that idiomatic queries against Leeway data require:
 
@@ -164,13 +164,13 @@ The point of enumerating these is to record what specifically would be lost unde
 
 ### Neutral
 
-- The package boundary places `lwq` in boxer, not pebble2impl. Pebble2impl will be the first consumer but will not own the implementation — the same boxer-owns / pebble2impl-consumes split as the membership-role classifier (boxer ADR-0007).
+- The package boundary places `lwq` in boxer, not in a downstream consumer. That consumer will be the first consumer but will not own the implementation — the same boxer-owns / consumer-consumes split as the membership-role classifier (boxer ADR-0007).
 - The decision to start with CH as the only backend (Arrow and DuckDB deferred to v3) commits the lowerer to CH semantics. Generalising later requires lifting the lowerer to a target-agnostic IR — a reasonable but non-trivial refactor that should be planned before v2 if multi-backend looks likely.
 - The `lvar_*` pseudo-function family remains valid post-`lwq` v0; users who prefer SQL-embedded form continue with them, while users who prefer FLWOR-shape adopt `lwq`. Maintaining both is a small additional surface but a meaningful ergonomic choice.
 
 ## Status
 
-Proposed — awaiting review by Leeway and CH DSL maintainers and the pebble2impl architecture review.
+Proposed — awaiting review by Leeway and CH DSL maintainers and a downstream architecture review.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

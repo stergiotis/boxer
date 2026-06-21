@@ -25,14 +25,14 @@ The fragmentation has produced concrete defects already visible in the survey:
 
 Two additional pressures push beyond "tidy what's there":
 
-- **Cross-project sharing.** Pebble2impl also reads `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` / `CLICKHOUSE_ENDPOINT`, plus its own `PEBBLE_*` family (`PEBBLE_CIPHER_KEY_HEX`, `PEBBLE_ALGORITHM`, `PEBBLE_N_ANCHOR_BYTES`, `PEBBLE_MAX_HAMMING_DIST_PER_BYTE_INCL`). A third consumer of boxer (not in this repo) also consumes `public/config` and would benefit from the same registry. Whatever boxer adopts has to work as a stable, shared API surface, not a boxer-internal helper.
-- **Coexistence with the Configer pattern.** `public/config/config.go` defines `Configer` (`ToCliFlags(nameTransf, envVarNameTransf)`, `FromContext(...)`, `Validate(...)`) and `NameTransformFunc`. Configer is actively used in pebble2impl for flag-name composition (`imzero2/application/config.go` composes `ImZeroClientConfig` under a `clientPrefixNameTransf`). It is **not** used to declare env vars — across both projects, no Configer impl populates `EnvVars` on its `cli.Flag`. The `envVarNameTransf` parameter is held for the unnamed third consumer.
+- **Cross-project sharing.** A downstream consumer (not in this repo) also reads `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` / `CLICKHOUSE_ENDPOINT`, plus its own private credential/parameter var family. A third consumer of boxer (also not in this repo) consumes `public/config` and would benefit from the same registry. Whatever boxer adopts has to work as a stable, shared API surface, not a boxer-internal helper.
+- **Coexistence with the Configer pattern.** `public/config/config.go` defines `Configer` (`ToCliFlags(nameTransf, envVarNameTransf)`, `FromContext(...)`, `Validate(...)`) and `NameTransformFunc`. Configer is actively used by a downstream consumer for flag-name composition (composing a client config under a prefix name-transform). It is **not** used to declare env vars — across both projects, no Configer impl populates `EnvVars` on its `cli.Flag`. The `envVarNameTransf` parameter is held for the unnamed third consumer.
 
 The question is how to introduce env-var declaration as a first-class concern without disturbing Configer, without forcing a rewrite of the `BOXER_*` flag struct files, and while extending naturally to downstream consumers.
 
 ## Design space (QOC)
 
-**Question.** How should environment variable declarations in boxer (and consumers of `public/config`) be unified so that (a) every read is discoverable from a central registry, (b) defaults, types, descriptions, and sensitivity are declared in one place per variable, (c) the existing `Configer` flag-composition pattern is unaffected, and (d) downstream projects (pebble2impl and a third unnamed consumer) participate in the same registry without coordination?
+**Question.** How should environment variable declarations in boxer (and consumers of `public/config`) be unified so that (a) every read is discoverable from a central registry, (b) defaults, types, descriptions, and sensitivity are declared in one place per variable, (c) the existing `Configer` flag-composition pattern is unaffected, and (d) downstream consumers (not in this repo) participate in the same registry without coordination?
 
 **Options.**
 
@@ -47,11 +47,11 @@ The question is how to introduce env-var declaration as a first-class concern wi
 
 - **C1 — Discoverability:** can the full set of env vars boxer (and linked consumers) read be enumerated at runtime and rendered as documentation?
 - **C2 — Single read path:** do all env reads go through one typed API, so type parsing, defaults, and caching live in one place?
-- **C3 — Cross-project participation:** does a downstream project (pebble2impl, third consumer) get its declarations into the same registry without coordination?
+- **C3 — Cross-project participation:** does a downstream consumer (not in this repo) get its declarations into the same registry without coordination?
 - **C4 — Configer coexistence:** does the option leave the existing `Configer` flag-composition pattern intact, including the `envVarNameTransf` parameter that the unnamed third consumer relies on?
 - **C5 — Per-spec metadata:** can each variable carry type, default, description, category, sensitivity (for redaction), and origin (which module declared it)?
 - **C6 — Lint enforceability:** can a CI test prevent new stray `os.Getenv` / `os.LookupEnv` calls outside the registry?
-- **C7 — Migration cost:** how disruptive across boxer + pebble2impl?
+- **C7 — Migration cost:** how disruptive across boxer + its downstream consumers?
 - **C8 — API stability for downstreams:** does the API have a small enough surface that downstream projects can depend on it long-term?
 
 **Assessment.** `++` strong positive, `+` positive, `−` negative, `−−` strong negative.
@@ -139,7 +139,7 @@ func NewDuration(s Spec) *DurationVar
 func NewPath(s Spec) *PathVar
 ```
 
-`Origin` is auto-derived at registration via `runtime.Caller(2)` and `runtime.FuncForPC`, then mapped to module + package path. Callers do not set it. Rationale: no coordination needed when a new project (boxer, pebble2impl, third) adopts the package; the registry can answer "which module declared this var?" without per-spec annotation.
+`Origin` is auto-derived at registration via `runtime.Caller(2)` and `runtime.FuncForPC`, then mapped to module + package path. Callers do not set it. Rationale: no coordination needed when a new project (boxer or a downstream consumer) adopts the package; the registry can answer "which module declared this var?" without per-spec annotation.
 
 ### 3. Var API
 
@@ -168,14 +168,14 @@ A `Configer` impl that wants to attach the existing name-transform pattern calls
 spec.AsCliFlag(env.WithCliFlagName(nameTransf(spec.CliFlagName)))
 ```
 
-The Spec's `Name` (env var side) is **canonical and not transformable**. This is consistent with current practice: no Configer impl in either project sets `EnvVars`, so freezing the env name introduces no regression. `envVarNameTransf` on `Configer.ToCliFlags` stays in the interface for the unnamed third consumer; the env package simply ignores it.
+The Spec's `Name` (env var side) is **canonical and not transformable**. This is consistent with current practice: no Configer impl in any consumer sets `EnvVars`, so freezing the env name introduces no regression. `envVarNameTransf` on `Configer.ToCliFlags` stays in the interface for the unnamed third consumer; the env package simply ignores it.
 
 ### 4. Registry introspection
 
 ```go
 func All() []Spec                          // every spec registered process-wide
 func ByCategory(c CategoryE) []Spec
-func ByOrigin(modulePath string) []Spec    // e.g. boxer's specs vs pebble2impl's
+func ByOrigin(modulePath string) []Spec    // e.g. boxer's specs vs a downstream consumer's
 func ByPrefix(prefix string) []Spec        // e.g. ByPrefix("BOXER_")
 ```
 
@@ -188,7 +188,7 @@ Surfaces:
 
 Direct env-var access (`os.Getenv` / `os.LookupEnv` / `os.Environ` / `syscall.Getenv`) outside `public/config/env` is flagged at error severity by **codelint CS011** (see ADR-0011). The check is part of `scripts/ci/lint.sh`; a regression sets rc=1 and fails CI.
 
-Downstream consumers (pebble2impl, third) can adopt the same rule in their own modules; boxer cannot enforce against external ones.
+Downstream consumers (not in this repo) can adopt the same rule in their own modules; boxer cannot enforce against external ones.
 
 ### 6. Migration scope
 
@@ -201,7 +201,7 @@ Downstream consumers (pebble2impl, third) can adopt the same rule in their own m
 
 **Out of scope for the initial PR**:
 
-- Migrating pebble2impl. That's a follow-up coordinated with the pebble2impl owner (the user), once the boxer-side API has been exercised.
+- Migrating downstream consumers. That's a follow-up coordinated with their owners, once the boxer-side API has been exercised.
 - Migrating Configer impls to use spec-derived flags. They currently expose zero env vars, so there is no pressure.
 
 ## Alternatives
@@ -218,7 +218,7 @@ Downstream consumers (pebble2impl, third) can adopt the same rule in their own m
 
 - All env-var reads become enumerable at runtime via the registry; documentation is generated, not maintained by hand.
 - Type parsing, default handling, and caching live in one place — three latent defects identified in the survey (lowercase `clickhouse`, `IN_START` typo, mixed default-declaration patterns) are fixed mechanically during migration and prevented going forward.
-- Downstream consumers (pebble2impl, third) opt in by importing `public/config/env` and using `env.New*` for their own variables; their specs join the same registry automatically. `CLICKHOUSE_*` becomes a single shared spec instead of duplicated string literals.
+- Downstream consumers (not in this repo) opt in by importing `public/config/env` and using `env.New*` for their own variables; their specs join the same registry automatically. `CLICKHOUSE_*` becomes a single shared spec instead of duplicated string literals.
 - `Configer` is unaffected. The `envVarNameTransf` parameter that the third consumer depends on stays in the interface.
 - Day-one lint catches future drift before it lands.
 
@@ -226,7 +226,7 @@ Downstream consumers (pebble2impl, third) can adopt the same rule in their own m
 
 - Every existing `os.Getenv` / `os.LookupEnv` site must migrate. The boxer-internal count is small (~13 read sites across 24 specs), but the change touches packages that don't otherwise change often.
 - `Origin` auto-derivation uses `runtime.Caller` + `runtime.FuncForPC` at registration time. This is mildly reflective and ties registration to Go's runtime symbol tables. The alternative (explicit `Origin` per Spec) was rejected because it requires every adopting project to remember to set it.
-- The registry is a **process-global singleton**. Binaries that link both boxer and pebble2impl share one registry. This is the intended outcome (single `CLICKHOUSE_USER` spec across both projects), but it means specs cannot be locally scoped, and a misregistration in one module is visible to all.
+- The registry is a **process-global singleton**. Binaries that link both boxer and a downstream consumer share one registry. This is the intended outcome (single `CLICKHOUSE_USER` spec across both), but it means specs cannot be locally scoped, and a misregistration in one module is visible to all.
 - `AsCliFlag`'s write-back into the var's cache via `Action` introduces a small piece of mutable global state per spec. Reads after CLI parsing return the parsed value; reads before parsing return env-or-default. Documented; not problematic in single-binary CLI use, but worth noting if the package is ever used outside a CLI process.
 
 ### Neutral
@@ -244,8 +244,8 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## Updates
 
-- **2026-05-17 — M1/M2/M3 shipped; scaffold signature refinements
-  during implementation.** Implementation across boxer and pebble2impl
+- **2026-05-17 — M1/M2 shipped; scaffold signature refinements
+  during implementation.** Implementation
   revealed five design gaps; this entry records them in one place
   rather than threading rationale through three more commit messages.
 
@@ -259,18 +259,14 @@ ADRs are append-only; supersession is recorded, not deleted.
      `WithBoolAction` / `WithInt64Action` / `WithDurationAction` /
      `WithPathAction`, each typed to the matching `cli.*Flag`
      signature. The chained Action runs the user function first; the
-     cache is written only when the user function returns nil. The
-     pebble2impl migration exercised the same options (e.g.
-     `BOXER_FLIGHT_RECORDER` retains its trace-recorder bootstrap
-     Action).
+     cache is written only when the user function returns nil.
 
   2. **`IntVar` is 64-bit.** §3's signature
      `NewInt(s Spec) *IntVar` did not specify bit width. The boxer
      coding standard mandates sized integers on fields; the scaffold
      uses `int64` internally and emits `cli.Int64Flag`. Existing
      consumers reading via `ctx.Int(...)` migrated to
-     `int(env.X.Get())`. The two pebble2impl `findAnchor` flags
-     exercise this path; no consumer regressions surfaced.
+     `int(env.X.Get())`.
 
   3. **`Lookup()` shape uniform across typed vars.** §3 named the
      StringVar signature `Lookup() (val string, set bool)` and left
@@ -303,27 +299,18 @@ ADRs are append-only; supersession is recorded, not deleted.
      migration also reused the original `cli.Flag.Category` strings
      ("logging", "tracing", "doc") to avoid CLI-help UX churn.
 
-  Three deviations from the §6 migration scope proved benign:
+  Two deviations from the §6 migration scope proved benign:
 
-  - `CLICKHOUSE_PASSWORD` (both boxer nanopass test and pebble2impl
-    clickhouseenv) and `PEBBLE_CIPHER_KEY_HEX` (pebble2impl
-    encryptedHash) marked `Sensitive: true` even though §6 only
-    named the Gemini/Google keys explicitly; all three are
-    credentials and the redaction policy is "redact in dumps and
-    generated docs".
+  - `CLICKHOUSE_PASSWORD` (boxer nanopass test, plus a downstream
+    consumer's clickhouse env) and a downstream consumer's cipher-key
+    var marked `Sensitive: true` even though §6 only named the
+    Gemini/Google keys explicitly; all are credentials and the
+    redaction policy is "redact in dumps and generated docs".
   - `flightRecorderOutputFile` module-level mirror in
     `public/observability/tracing/flightrecorder.go` dropped —
     `FlightRecorderOutputFile.Get()` is now the single source of
     truth. The mirror existed only because the original code lacked
     a typed handle.
-  - Pebble2impl mirrored the §5 lint test rather than depending on
-    boxer's `_test.go` helper. The mirror at
-    `public/config/envlint/envlint_test.go` skips nested
-    `go.mod` sub-modules (the `scripts/dev/sponsor_deps` standalone
-    tool, the `whole_program_fixture` test fixtures) by
-    `os.Stat`-checking for `go.mod` in each directory. ADR §5 already
-    noted "boxer cannot enforce against external modules"; within-repo
-    sub-modules are equivalent for this purpose.
 
   **Milestones shipped.**
 
@@ -337,11 +324,6 @@ ADRs are append-only; supersession is recorded, not deleted.
     `BOXER_LOG_MODULE_INFO_IN_START` → `_ON_START` typo fixed;
     lowercase `clickhouse` → `BOXER_CLICKHOUSE_BINARY_PATH`;
     `TestNoStrayOsGetenv` un-skipped.
-  - **M3 pebble2impl migration** — pebble2impl `06bfb90c`. 7
-    cli.Flag declarations + 28 direct reads folded across 24 files;
-    three new shared spec packages
-    (`db/clickhouse/clickhouseenv`, `thestack/imzero2/imzero2env`,
-    `config/envlint`); mirror walker active.
 
   **Still open.** The `boxer env list` runtime subcommand
   (§4 introspection) has not been built.
@@ -370,7 +352,7 @@ ADRs are append-only; supersession is recorded, not deleted.
     standard's enum-suffix convention. The pre-existing constants
     (`CategoryObservability`, …) keep their names. The ADR §4
     `ByCategory(c Category)` signature is corrected in passing.
-    Pebble2impl's ten `env.Category("…")` consumer sites migrate
+    A downstream consumer's ten `env.Category("…")` sites migrate
     in a follow-up.
 
   Initial generated `doc/env-vars.md` covers 21 variables across 6
@@ -415,54 +397,17 @@ ADRs are append-only; supersession is recorded, not deleted.
   All ADR §4 surfaces (doc generator + runtime introspection)
   have shipped. The core decision is unchanged.
 
-- **2026-05-17 — M6 shipped: pebble2impl envgen mirror.** The
-  pebble2impl-side doc generator landed at
-  `public/app/commands/env/main.go`, mirroring the boxer pattern. The
-  renderer was extracted from `internal/cmd/envgen` into a new
-  importable package `public/config/env/envdoc` so both generators
-  share one source of truth for the markdown layout; each cmd binds
-  its own side-effect imports of owner packages. Pebble2impl's
-  initial output covers 26 variables across 9 categories at
-  `pebble2impl/doc/env-vars.md`.
+- **2026-05-17 — Closed: BOXER_LOG_FACTS gap.** The two
+  `BOXER_LOG_FACTS` / `BOXER_LOG_FACTS_URL` specs previously declared
+  in `package main` moved to a new
+  `public/keelson/runtime/factsstore/chstore/envvars.go` file as
+  `chstore.LogFactsEnabled` / `chstore.LogFactsURL`, which is the
+  natural home — chstore consumes both (`LogFactsEnabled` decides
+  whether the upper layer wires `chstore.New` at all; `LogFactsURL`
+  overrides `chstore.Defaults().URL`). The thestack imzero2 main now
+  reads through the moved package.
 
-  Two pebble2impl-specific wrinkles:
-
-  - The cmd's main.go is gated on `llm_generated_opus47` so it can
-    import the tag-gated owner packages (play, runinfo, windowhost,
-    elevation_profile_demo). A tag-less `go generate ./public/app/commands/env/...`
-    would skip the directive in that file. Workaround: a sibling
-    `generate.go` gated on the standard `generate` build tag
-    (which `go generate` sets automatically) carries the directive.
-    The directive itself shells `go run -tags=\"$(cat
-    ../../../../tags)\" . -out ../../../../doc/env-vars.md` so the
-    full pebble2impl tag set travels through to the build.
-  - `BOXER_LOG_FACTS` / `BOXER_LOG_FACTS_URL` declared in
-    `package main` at `public/thestack/cmd/imzero2/thestack_app.go`
-    do not appear in the pebble2impl doc — package main is not
-    importable from another main. A future refactor may relocate
-    them to a non-main sibling package. The pebble2impl envgen
-    documents this gap in its own header comment.
-
-- **2026-05-17 — Closed: BOXER_LOG_FACTS gap.** The two specs
-  documented as unreachable in the M6 entry above are no longer in
-  `package main`. They moved to a new
-  `public/keelson/runtime/factsstore/chstore/envvars.go`
-  file as `chstore.LogFactsEnabled` / `chstore.LogFactsURL`, which
-  is the natural home — chstore is the consumer of both
-  (`LogFactsEnabled` decides whether the upper layer wires
-  `chstore.New` at all; `LogFactsURL` overrides
-  `chstore.Defaults().URL`). The thestack imzero2 main reads
-  through the moved package; pebble2impl envgen gains a
-  side-effect import of chstore so the catalogue covers both
-  specs. The pebble2impl `doc/env-vars.md` regeneration brings the
-  total to 39 specs across 10 categories (the chstore import path
-  also transitively loads boxer's logging / tracing / dev / docgen
-  packages, surfacing their 14 BOXER_* specs in the pebble2impl
-  catalogue — accurate reflection of what a thestack-imzero2
-  binary actually consumes, not duplication of boxer's own
-  doc/env-vars.md).
-
-- **2026-05-18 — §5 enforcement migrated to codelint CS011.** The bespoke `public/config/env/lint_test.go` AST walker that had enforced the no-stray-env rule since M1 is removed. Its successor is **codelint rule CS011** (ADR-0011), which runs against `./public/...` from `scripts/ci/lint.sh` at error severity and additionally covers `os.Environ` (which the original test had not modelled). The core decision (single-read-path lint enforced from day one) is unchanged; only the enforcer's location moved from an in-package `_test.go` to the project-wide governance lint suite. Downstream pebble2impl mirror at `public/config/envlint/envlint_test.go` is unaffected and continues to work independently.
+- **2026-05-18 — §5 enforcement migrated to codelint CS011.** The bespoke `public/config/env/lint_test.go` AST walker that had enforced the no-stray-env rule since M1 is removed. Its successor is **codelint rule CS011** (ADR-0011), which runs against `./public/...` from `scripts/ci/lint.sh` at error severity and additionally covers `os.Environ` (which the original test had not modelled). The core decision (single-read-path lint enforced from day one) is unchanged; only the enforcer's location moved from an in-package `_test.go` to the project-wide governance lint suite.
 
 - **2026-05-22 — Sixth typed var: `CategorialStringVar`.** Adds `NewCategorialString(spec, allowed []string) *CategorialStringVar` for strings constrained to a declared value set (e.g. log levels, log formats). `TypeE` gains `TypeCategorialString`; `Spec` gains an `Allowed []string` field that is empty for the five existing typed vars and populated by `NewCategorialString` at registration (alongside `Origin` / `Type`). At registration, an empty `allowed` or a `Default` outside `allowed` panics; at read time, an env value outside the set silently falls back to `Default` per the §3 update-2026-05-17 env-parse-failure convention. `AsCliFlag` appends `(one of: a|b|c)` to the cli.Flag `Usage` and validates membership in the chained Action before invoking any `WithStringAction` callback. Renderer surfaces — `envdoc.formatRow` appends `<br>**Allowed:** …` to the Description cell when `len(Spec.Allowed) > 0`; `boxer env list` appends `(one of: a|b|c)` to its Description column (subject to the existing 70-char truncation). Migrated `LogLevel` / `LogFormat` (the two pre-existing categorical specs identified by their `default:` rejection branches in `public/observability/logging/flags.go`); their `default:` "unhandled X" branches drop (unreachable post-validation) and the `BOXER_LOG_LEVEL` action drops the prior `strings.ToLower(s)` coercion — env values are now case-sensitive, matching the convention every other typed var follows. Core decision stands; the addition is a sixth scaffold entry in the §2 type table.
 

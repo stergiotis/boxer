@@ -266,11 +266,11 @@ The two are deterministically interconvertible: an NDJSON stream is the batch-ob
 
 Eight milestones, each independently shippable. Round-trip and golden-file tests gate each transition.
 
-### M1 — Bump boxer pin in pebble2impl
+### M1 — Bump boxer pin in the downstream consumer
 
 `go get -u github.com/stergiotis/boxer` to pick up boxer commits `699e0a1` (membershiprole + use-aspects) and `ec97676` (`AspectSet.Contains`). Re-run `scripts/ci/lint.sh` per `../../CLAUDE.md` ("Bumping boxer"). No code changes downstream of the bump in M1; this is the prerequisite for M2.
 
-**Done when:** `go build ./...` succeeds with the new pin; `useaspects.AspectSectionMembershipsAllPrimary` resolves; `membershiprole.DefaultClassifier{}` is callable from pebble2impl.
+**Done when:** `go build ./...` succeeds with the new pin; `useaspects.AspectSectionMembershipsAllPrimary` resolves; `membershiprole.DefaultClassifier{}` is callable from a downstream consumer.
 
 ### M2 — `JsonCardEmitterV2` skeleton, classifier wiring
 
@@ -320,7 +320,7 @@ Two output modes wired: schema-as-sidecar (one file per table) and schema-as-hea
 
 **Done when:** every emitted data document is valid against its schema document; the fingerprint round-trips through emit-then-read; a downstream contract or schema generator can consume the schema doc directly.
 
-Landed across boxer commits `f66b86c` (SinkI carries `useaspects.AspectSet` on `BeginSection`) + `606af4a` (`Driver.DriveSchema`); pebble2impl commits `835526dd` (drop IR shim, adopt new SinkI signature, add `WithSchemaFingerprint`/`WithSchemaDocument`) + `e4f0fee5` (`JsonCardSchemaEmitter` + tests + anchor `TestCardE2eSchema` integration + gold regen).
+Landed across boxer commits `f66b86c` (SinkI carries `useaspects.AspectSet` on `BeginSection`) + `606af4a` (`Driver.DriveSchema`); a downstream consumer's commits `835526dd` (drop IR shim, adopt new SinkI signature, add `WithSchemaFingerprint`/`WithSchemaDocument`) + `e4f0fee5` (`JsonCardSchemaEmitter` + tests + anchor `TestCardE2eSchema` integration + gold regen).
 
 ### M8 — NDJSON mode + cutover
 

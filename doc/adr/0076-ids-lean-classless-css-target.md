@@ -33,7 +33,7 @@ Two clarifications bound the scope:
   (Context fourth force, §O12) and is explicitly out of scope here.
 - **The generator was not runnable in boxer.** `gen.go` read `src/rust/...`
   input paths and emitted `./src/go/cmd/...` provenance headers — the upstream
-  pebble2impl layout. The committed `palette_generated.*` were imported
+  a downstream consumer's layout. The committed `palette_generated.*` were imported
   artefacts; `doc/design-system/foundations/` did not exist. Honouring the
   "single source of truth" intent for a CSS colour target meant first making the
   generator run in-tree.

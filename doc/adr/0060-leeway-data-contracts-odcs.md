@@ -85,7 +85,7 @@ We adopt **ODCS v3.1.0** as Leeway's canonical data-contract envelope, in descri
 5. **One-way derivation.** ODCS envelope is generated from `TableDescDto` + a small annotation file (ownership, SLA, attribute-scoped classifications). Reverse direction (ODCS → `TableDescDto`) is out of scope: Leeway's section assignment, membership-kind choice, and multi-membership semantics exceed ODCS's expressive reach.
 6. **Quality check emission as SQL over self-describing columns.** Tier-1 (per-batch vectorised) and Tier-2 (warehouse pushdown) checks are generated from attribute-level constraints and emitted into ODCS's `quality` blocks; `datacontract-cli` or any ODCS-aware runner executes them. Leeway's naming convention makes this possible without a Leeway-native runtime.
 7. **Confluent Data Contracts as complementary emission.** When a Leeway dataset is transported via Kafka streaming groups, the same generator emits a Confluent Data Contract form for the Kafka topics alongside the ODCS envelope. The two describe different layers (dataset vs. topic) and do not conflict.
-8. **Generator location.** Initial implementation lives in pebble2impl's staging tree next to the card emitter at `public/semistructured/leeway/`; upstreaming to `boxer/public/semistructured/leeway/` is a tracked follow-on.
+8. **Generator location.** Initial implementation lives in a downstream consumer's staging tree next to the card emitter at `public/semistructured/leeway/`; upstreaming to `boxer/public/semistructured/leeway/` is a tracked follow-on.
 
 ### Subsidiary design decisions
 
@@ -93,7 +93,7 @@ We adopt **ODCS v3.1.0** as Leeway's canonical data-contract envelope, in descri
 
 - **SD2 — Descriptive, not authoritative.** `TableDescDto` remains the source of truth; the ODCS contract is derived. This matches how Leeway schemas are built today (Go `TableManipulator` fluent API). An authoritative mode (ODCS → `TableDescDto`) would require committing to a subset of ODCS that fits Leeway's expressivity; the descriptive choice preserves Leeway's full range.
 
-- **SD3 — Extension namespace is `customProperties.x-leeway`.** ODCS sanctions `customProperties` for extensions; `x-`-prefixed keys are the cross-spec convention for non-standard fields. The extension is documented inside pebble2impl (initially) as a Bitol-style addendum; upstreaming as a recognised extension to Bitol is a longer-horizon aspiration but not a commitment here.
+- **SD3 — Extension namespace is `customProperties.x-leeway`.** ODCS sanctions `customProperties` for extensions; `x-`-prefixed keys are the cross-spec convention for non-standard fields. The extension is documented inside a downstream consumer (initially) as a Bitol-style addendum; upstreaming as a recognised extension to Bitol is a longer-horizon aspiration but not a commitment here.
 
 - **SD4 — Card JSON is the canonical lossless JSON serialization; no reconstructed-document emitter.** Reconstructed JSON cannot in general represent multi-membership, set-vs-array distinction, co-section topology, or ragged-tensor `value-card` structure without loss. Rather than ship a lossy emitter that consumers would silently depend on, we commit to card JSON as the JSON form Leeway exposes. Consumers who want "nice JSON" either read the opaque / data-mart plain columns via SQL or accept the card form.
 
@@ -149,7 +149,7 @@ Rejection rationale for the top-level options is in the QOC matrix; notes below 
 - **Aspect mapping freeze is new ongoing work.** Every new aspect (in `valueaspects`, `useaspects`, or upstream ODCS logical types) requires a table update and a contract-generator revision. Expected cadence is low; still non-zero.
 - **ODCS v3.1.0 is early-majority.** Minor-version churn is likely even with the "zero breaking changes from v3.0.x" commitment; pinned version output is mandatory for reproducibility.
 - **"Relationships" (new in 3.1.0) has uneven downstream tooling support.** Catalog ingest for relationship edges is maturing unevenly across vendors; rich relationship usage may be ahead of what some consumers can render.
-- **The generator and card emitter live in pebble2impl staging today.** Upstreaming to boxer is a commitment-gated follow-on; the strategic promise ("Leeway is ODCS-compliant") eventually requires boxer to carry the capability, not just pebble2impl.
+- **The generator and card emitter live in a downstream consumer's staging today.** Upstreaming to boxer is a commitment-gated follow-on; the strategic promise ("Leeway is ODCS-compliant") eventually requires boxer to carry the capability, not just a downstream consumer.
 
 ### Neutral
 
@@ -207,4 +207,3 @@ ADRs are append-only; withdrawal is recorded, not deleted.
 - [`../skills/leeway-streamreadaccess/SKILLS.md`](../skills/leeway-streamreadaccess/SKILLS.md) — `SinkI` protocol, card-JSON emitter
 - [`../skills/canonicaltypes/SKILL.md`](../skills/canonicaltypes/SKILL.md) — canonical type signatures
 - [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go) — current `JsonCardEmitter` location
-- [ADR-0055](0055-adopt-boxer-standards.md) — pattern for "adopt external standard via pinned reference"

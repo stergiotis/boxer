@@ -6,16 +6,16 @@ reviewed-by: "@stergiotis"
 reviewed-date: 2026-05-25
 ---
 
-# ADR-0048: Go file and package naming for pebble2impl
+# ADR-0048: Go file and package naming
 
 ## Context
 
-Boxer's [`CODINGSTANDARDS.md`](../../../boxer/CODINGSTANDARDS.md) (canonical for new Go code per CLAUDE.md) covers *symbol* naming exhaustively — interface `…I`, enum `…E`, `Set`/`Get`/`Is` prefixes, opposite verb pairs — but is silent on Go *file* and *package* names. Pebble2impl has nontheless converged on conventions through practice; a survey of 1062 Go files under `./public/` and `./apps/` (2026-05-25, branch `main`) shows:
+Boxer's [`CODINGSTANDARDS.md`](../../CODINGSTANDARDS.md) (canonical for new Go code per CLAUDE.md) covers *symbol* naming exhaustively — interface `…I`, enum `…E`, `Set`/`Get`/`Is` prefixes, opposite verb pairs — but is silent on Go *file* and *package* names. Boxer has nonetheless converged on conventions through practice; surveying the Go files under `./public/` and `./apps/` shows the de-facto conventions below; the live set of outliers is enumerated in [`scripts/ci/naming-baseline.txt`](../../scripts/ci/naming-baseline.txt), not frozen here:
 
-- **File basenames:** snake_case in 1051/1062 files (99 %). 11 outliers are camelCase (`encryptedHash.go`, `keyGenerator.go`, `parseTreeSexpr.go`, …) including one misspelling (`encyptedHash.go`).
-- **Package names:** lowercase no-underscore in ~98 %. 8 outliers carry either an underscore (`data_encoding`, `dml_cbor`, `hn_explorer`, `regex_explorer`, `leewaywidgets_demo`) or a capital (`encryptedHash`, `findAnchor`, `wrapInArray`).
-- **Generated files:** the `.out.go` dotted extension is used in ~36 checked-in generated files (`enums.out.go`, `affordances.out.go`, …); `.gen.go` is mentioned in [boxer's `ENGINEERING_PRACTICES.md`](../../../boxer/doc/ENGINEERING_PRACTICES.md) as the build-time equivalent but is not yet used here.
-- **App-prefix discipline is uneven.** `apps/imztop/` uses `imztop_*.go` for 23/26 files (88 %); `apps/capdemo/`, `apps/capinspector/`, `apps/taskdemo/` use it for 11–33 %. Search ergonomics differ markedly between apps.
+- **File basenames:** snake_case dominates; a small number of outliers are camelCase.
+- **Package names:** lowercase with no underscores almost everywhere; the few outliers carry either an underscore or a capital.
+- **Generated files:** the `.out.go` dotted extension is used for checked-in generated files; `.gen.go` is mentioned in [boxer's `ENGINEERING_PRACTICES.md`](../../doc/ENGINEERING_PRACTICES.md) as the build-time equivalent but is not yet used here.
+- **App-prefix discipline is uneven.** `apps/imztop/` consistently uses `imztop_*.go`, while `apps/capinspector/` applies the prefix only partially. Search ergonomics differ markedly between apps.
 - **Test conventions** (`_test.go`, external `_test` package suffix) are Go-standard and uniformly followed; no OS/arch build-suffix files exist (build constraints use `//go:build` directives instead).
 
 The pressures motivating a spec now:
@@ -26,12 +26,12 @@ The pressures motivating a spec now:
 
 ## Design space (QOC)
 
-**Question.** What policy regime should pebble2impl adopt to keep Go file and package naming consistent without imposing a tree-wide rename?
+**Question.** What policy regime should boxer adopt to keep Go file and package naming consistent without imposing a tree-wide rename?
 
 **Options.**
 
 - **O1 — No spec.** Status quo; conventions drift implicitly. New code may diverge further from de-facto.
-- **O2 — Spec + immediate full normalize.** Codify rules and rename all 19 outliers (11 files + 8 packages) in one PR before merging the spec.
+- **O2 — Spec + immediate full normalize.** Codify rules and rename every outlier in one PR before merging the spec.
 - **O3 — Spec + baseline + opportunistic migration.** Codify rules, write `naming-baseline.txt` enumerating today's violations, lint blocks new violations immediately; existing ones migrate when their owning code is otherwise touched. Mirrors the Entry-Points enforcement pattern already in [`scripts/ci/lint.sh`](../../scripts/ci/lint.sh).
 - **O4 — Spec only, no enforcement.** Document rules; rely on review.
 
@@ -82,14 +82,14 @@ We will adopt the following naming rules for new Go files and packages under `./
 
 ### Migration
 
-- The 11 camelCase files and 8 non-conformant packages identified by the 2026-05-25 survey ship in the initial `naming-baseline.txt`.
-- Migration is opportunistic: when a baselined file or package is renamed for other reasons (refactor, scope change, typo fix — `encyptedHash` is a candidate), the baseline line is removed in the same commit.
+- The camelCase files and non-conformant packages present when the spec landed ship in the initial `naming-baseline.txt`.
+- Migration is opportunistic: when a baselined file or package is renamed for other reasons (refactor, scope change, typo fix), the baseline line is removed in the same commit.
 - No dedicated rename PR is planned. The user has stated this preference explicitly; ADR-0035-style namespace work is the higher-priority migration.
 
 ## Alternatives
 
-- **O1 No spec.** Rejected: the survey already shows drift (11 → ?) and ADR-0035 will accelerate it.
-- **O2 Immediate full normalize.** Rejected: 19 renames across the tree at once is incompatible with the shared-worktree workflow (memory: `project_shared_worktree`); high coordination cost for a cosmetic win.
+- **O1 No spec.** Rejected: the survey already shows drift, and ADR-0035 will accelerate it.
+- **O2 Immediate full normalize.** Rejected: renaming every outlier across the tree at once is incompatible with the shared-worktree workflow (memory: `project_shared_worktree`); high coordination cost for a cosmetic win.
 - **O4 Spec only, advisory.** Rejected: an unenforced spec is invisible to agents and to humans skimming a diff; the drift the spec exists to prevent will continue.
 
 ## Consequences
@@ -109,7 +109,7 @@ We will adopt the following naming rules for new Go files and packages under `./
 
 ### Neutral
 
-- The decision is silent on rule N3 (`*.gen.go`) actually being used. No file in pebble2impl emits to that path today; the rule reserves the extension so a future build-time generator does not have to amend this ADR to use it.
+- The decision is silent on rule N3 (`*.gen.go`) actually being used. No file in boxer emits to that path today; the rule reserves the extension so a future build-time generator does not have to amend this ADR to use it.
 - Test-package external-suffix files (`<pkg>_test`) are recognised but the spec does not require them; `_test.go` files may be in-package or external as the test author chooses, per Go-standard practice.
 
 ## Status
@@ -117,12 +117,11 @@ We will adopt the following naming rules for new Go files and packages under `./
 Accepted 2026-05-25.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
-See [DOCUMENTATION_STANDARD §1 ADR](../../../boxer/doc/DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+See [DOCUMENTATION_STANDARD §1 ADR](../../doc/DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
 ## References
 
 - [ADR-0035 — keelson namespace introduction](0035-keelson-namespace-introduction.md) — motivates `apps/` top-level layout enforced by rule N7.
 - [`scripts/ci/entry-points-baseline.txt`](../../scripts/ci/entry-points-baseline.txt) — pattern this ADR mirrors for enforcement.
-- CLAUDE.md "pebble2impl-local supplement" — the build-tags and Conventional-Commits rules sit alongside this naming spec as pebble-local extensions to boxer.
 - [Effective Go — Package names](https://go.dev/doc/effective_go#package-names) — upstream authority for rule N6.
-- [boxer `CODINGSTANDARDS.md`](../../../boxer/CODINGSTANDARDS.md) — covers symbol naming; this ADR is the file/package counterpart.
+- [boxer `CODINGSTANDARDS.md`](../../CODINGSTANDARDS.md) — covers symbol naming; this ADR is the file/package counterpart.

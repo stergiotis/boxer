@@ -90,7 +90,7 @@ The CBOR-as-IR concept and the CBOR → columnar ingestion capability are *not* 
 
 - **SD1 — Per-caller migration, no compatibility shim.** Each of the 20+ importers migrates to its replacement entrypoint in a dedicated commit. A shim that re-exports alpha/cbor symbols from the attic is explicitly rejected: the whole point is to stop paying for the API, and a shim perpetuates the import graph.
 - **SD2 — Attic location follows existing convention.** The repository already uses `public/attic/` for retired code (e.g. `public/attic/hmi/semistructured/jsonindexeddtovis.go`). The move keeps git history intact and signals "retired, do not extend." A `doc.go` in the attic'd package cross-links to this ADR.
-- **SD3 — `boxer/public/semistructured/cbor` is untouched.** Only `pebble2impl`'s `alpha/cbor` and the derived `public/semistructured/cbor` indexing layer retire; the upstream boxer CBOR encoder remains a supported dependency for low-level CBOR encoding needs unrelated to semi-structured ingestion.
+- **SD3 — `boxer/public/semistructured/cbor` is untouched.** Only a downstream consumer's `alpha/cbor` and the derived `public/semistructured/cbor` indexing layer retire; the upstream boxer CBOR encoder remains a supported dependency for low-level CBOR encoding needs unrelated to semi-structured ingestion.
 - **SD4 — No further bug fixes on the attic copy.** The `IsPositiveInt` / `IsNegativeInt` 8-bit gap and related defects are recorded in this ADR's *Package-local health* section for the record; they are not fixed. Downstream code that depended on the buggy behavior is rewritten during migration, not bug-compatible-ported.
 - **SD5 — CLI tool triage is part of the migration.** `app/commands/cbor/{convert,parse,tokenize,index,experiments,integrate}` each receive an independent keep-or-retire decision during migration. Expectation: roughly half retire as collateral, since their reason to exist was exercising the alpha/cbor API.
 - **SD6 — ADR is the load-bearing narrative.** Any design rationale, oral history, or PSM semantics understanding captured in `// design:` comments or contributor memory is condensed into this document's *Why the package was built* and *Architectural benefits being retired* sections. The attic'd source is the remaining artifact; this ADR is the remaining narrative.
@@ -135,7 +135,7 @@ This section records what the retired design *did* offer, so a future contributo
 
 ### Neutral
 
-- **`boxer/public/semistructured/cbor` continues as an upstream dependency for low-level CBOR encoding.** Code that needs to emit CBOR bytes (e.g., content-addressable hashing, wire-level test fixtures) keeps the boxer API; only the pebble2impl-local parser stack retires.
+- **`boxer/public/semistructured/cbor` continues as an upstream dependency for low-level CBOR encoding.** Code that needs to emit CBOR bytes (e.g., content-addressable hashing, wire-level test fixtures) keeps the boxer API; only the consumer-local parser stack retires.
 - **Historical audit findings are captured here, not on a branch.** Anyone reading the attic'd source can recover the known-buggy list from this ADR's *Package-local health* section without re-running the audit.
 
 ### Derived practices

@@ -494,7 +494,7 @@ ADR's Decision section should be revisited at that point.
 
 ### 2026-05-17 — relocated from boxer
 
-This ADR was previously hosted in the boxer repository as `boxer/doc/adr/0008-pushout-antiquing.md`. It now lives in pebble2impl as ADR-0039 because the decision's motivation — at the time, the compensating-patch construction required by [ADR-0025](./0025-pushout-forget-architecture.md) and [ADR-0027](./0027-pushout-forget-swiss-fadp.md) — was owned by pebble2impl, even though the pushout package code remains in `../../../boxer/public/algebraicarch/pushout`. Content was unchanged apart from path rewrites; the original proposal date (2026-05-12) is preserved above. The compliance motivation was reframed later the same day (see entry above).
+This ADR was previously hosted in the boxer repository as `boxer/doc/adr/0008-pushout-antiquing.md`. It now lives here as ADR-0039 because the decision's motivation — at the time, the compensating-patch construction required by [ADR-0025](./0025-pushout-forget-architecture.md) and [ADR-0027](./0027-pushout-forget-swiss-fadp.md) — was owned by a downstream consumer, even though the pushout package code remains in `../../../boxer/public/algebraicarch/pushout`. Content was unchanged apart from path rewrites; the original proposal date (2026-05-12) is preserved above. The compliance motivation was reframed later the same day (see entry above).
 
 ## References
 

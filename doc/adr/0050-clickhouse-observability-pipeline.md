@@ -232,7 +232,7 @@ The QOC matrix carries the comparative assessment. Nuance:
   that backend exists.
 - The bridge implementation is intentionally outside this ADR's
   primary Go package. It may sit as a sibling package (e.g.
-  `chbridge/cmd/pebble2impl-ch-bridge/`) once the consumer side
+  `chbridge/cmd/ch-bridge/`) once the consumer side
   stabilises.
 - `INSERT INTO FUNCTION url(…, 'ArrowStream', '<schema>', …)` declares
   the result schema at the ClickHouse-function call site. The consumer

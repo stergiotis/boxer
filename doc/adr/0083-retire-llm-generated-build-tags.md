@@ -30,8 +30,7 @@ value had eroded:
   maintained per package and of unverified completeness.
 - **It taxed every invocation.** `-tags="$(cat ./tags)"` had to be threaded
   through every build/test/vet/generate/lint and the IDE/gopls; omitting it
-  produced misleading "undefined" errors. Cross-repo consumers (`pebble2impl`,
-  `hackathon_2026`) had to replicate `./tags` (ADR-0055).
+  produced misleading "undefined" errors. Cross-repo consumers (`hackathon_2026`) had to replicate `./tags`.
 - **It was drifting.** The current authoring model, `opus48`, was never added to
   the tool's identity registry, so `gov llmtag` would have *stripped* the
   `opus48` tags that `./tags` and four files carried by hand.
@@ -87,7 +86,7 @@ model tag simultaneously, so their union was always co-compilable.
   commit trailer. Deletions are not subtracted, so totals over-count rewritten
   lines; the report labels these as "authored," not current.
 - Cross-repo imported provenance is undercounted. Code imported from another
-  repo (e.g. the 2026-05 pebble2impl import) is attributed to its boxer import
+  repo (e.g. the 2026-05 downstream-consumer import) is attributed to its boxer import
   commit, which carried no LLM trailer; the tags used to carry that origin. The
   signal still exists in the source repo's history.
 
@@ -96,7 +95,7 @@ model tag simultaneously, so their union was always co-compilable.
 - `gov llmtag` and its `KnownLLMIdentities` registry remain in-tree as the
   reversal path; a stale `llm_generated_*` mention survives in a commented-out
   nilaway block in `lint.sh`.
-- Cross-repo consumers (`pebble2impl`, `hackathon_2026`) keep their own
+- Cross-repo consumers (`hackathon_2026`) keep their own
   `llm_generated_*` governance until separately lifted; nothing here forces it.
 
 ## Alternatives considered
