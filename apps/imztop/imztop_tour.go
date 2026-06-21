@@ -5,10 +5,12 @@
 // whose body is the imztop dashboard rendered into the host Ui scope. The
 // central TestDriver (widgets) captures one PNG per scene.
 //
-// imztop's values are live system metrics (CPU%, memory, processes, GPU), so
-// captures are not byte-stable across runs — every Demo is flagged
-// NonDeterministic and the TestDriver skips them under
-// IMZERO2_SCREENSHOT_DETERMINISTIC. The shared sampler is started/tuned at Init
+// The panels are fed a synthetic, live-looking metric stream (tourSampler) over
+// an in-proc bus rather than a real /proc scrape, so package imztop imports no
+// collector even for capture (ADR-0090 SD6 — fully closed). The values still
+// wander per tick and are time-seeded, so captures are not byte-stable — every
+// Demo is flagged NonDeterministic and the TestDriver skips them under
+// IMZERO2_SCREENSHOT_DETERMINISTIC. The shared sampler + feed start at Init
 // (which the TestDriver runs before the capture loop), so plots have history by
 // the time a scene is captured.
 
@@ -24,7 +26,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
@@ -73,16 +74,17 @@ type imztopDemoState struct {
 	filter string
 }
 
-var tourScraperOnce sync.Once
+var tourFeedOnce sync.Once
 
-// ensureTourScraper wires a co-located in-proc scraper for the screenshot tour,
-// which runs without a host bus: an inprocbus carries StartScraper's published
-// bundles to the singleton consumer Sampler. Idempotent; the scraper runs for
-// the process lifetime (the tour is a capture harness). This is the one place
-// the imztop package still reaches the collectors — only on the tour path, not
-// in the production App; full capslock-clean SD6 would relocate it (tracked).
-func ensureTourScraper() {
-	tourScraperOnce.Do(func() {
+// ensureTourFeed wires a co-located in-proc SYNTHETIC metric feed for the
+// screenshot tour, which runs without a host bus: an inprocbus carries a
+// sysmetricsbus.Producer's published bundles to the singleton consumer Sampler,
+// but the Producer samples a synthetic source ([tourSampler]) rather than the
+// /proc collectors. Idempotent; runs for the process lifetime (the tour is a
+// capture harness). Feeding synthetic data is what lets package imztop import
+// zero collectors even here — the last §SD6 in-package reach is closed.
+func ensureTourFeed() {
+	tourFeedOnce.Do(func() {
 		bus := inprocbus.NewInst(log.Logger)
 		pub := bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
 			{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub},
@@ -91,20 +93,30 @@ func ensureTourScraper() {
 			{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub},
 		})
 		setSamplerBus(sub)
-		if _, err := sysmscrape.StartScraper(context.Background(), pub, sysmetricsbus.DefaultHostToken(), tourSamplerPeriod, log.Logger); err != nil {
-			log.Warn().Err(err).Msg("imztop tour: scraper unavailable; panels will be empty")
+		producer, err := sysmetricsbus.NewProducer(sysmetricsbus.ProducerOptions{
+			Bundle:   newTourSampler(),
+			Bus:      pub,
+			Subject:  sysmetricsbus.BundleSubject(sysmetricsbus.DefaultHostToken()),
+			Codec:    sysmetricsbus.NewCBORCodec(),
+			Interval: tourSamplerPeriod,
+			Log:      log.Logger,
+		})
+		if err != nil {
+			log.Warn().Err(err).Msg("imztop tour: synthetic feed unavailable; panels will be empty")
+			return
 		}
+		producer.Start(context.Background())
 	})
 }
 
 // makeTourInit returns an Init that builds an imztop App bound to the host id
-// stack, wires the tour-local scraper, and tunes the EWMA cadence for capture.
+// stack, wires the tour-local synthetic feed, and starts the consumer.
 func makeTourInit(filter string) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
 		inst.ids = ids
-		ensureTourScraper()    // the tour has no host bus; feed the consumer locally
-		_, _ = ensureSampler() // start the singleton consumer; the scraper sets the cadence
+		ensureTourFeed()       // the tour has no host bus; feed the consumer locally
+		_, _ = ensureSampler() // start the singleton consumer; the feed sets the cadence
 		state = &imztopDemoState{app: inst, filter: filter}
 		return
 	}
