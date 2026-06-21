@@ -115,6 +115,14 @@ Accepted on 2026-06-20 by @spx. Implementation begins at P2 (SD9).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. Post-acceptance edits follow [DOCUMENTATION_STANDARD §1 ADR](../../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) tiers (Tier 2 dated `## Updates`).
 
+## Updates
+
+### 2026-06-21 — P2→M4 implemented; headless metric plane via a NATS→in-proc bridge
+
+P2–P4 and the headless deployment shipped. `sysmetricsbus` (Producer/Consumer/Codec/`StartScraper`) and `sysmetrics.DefaultBundleOptions` (shared collector wiring, GPU included) are in; `imztop` is a pure `MountCtx.Bus()` consumer (declares a `sysmetrics.>` Sub cap, no collectors/producer — SD6 for the production App, modulo the screenshot-tour harness which still scrapes in-package for live capture); the carousel host runs the scraper co-located; a standalone `sysmetricsd` CLI command publishes over NATS. SD4's NATS↔inprocbus swap is realised at the host via `app.BusProvider` (`inprocbus.Inst` and `natsbus.Provider`) threaded through `windowhost.SetBus`.
+
+The headless-sandboxed case (the original problem) is solved **not** by SD4's "all capabilities over NATS" but by a narrower `sysmetricsbus.Bridge`: an external `sysmetricsd` reads `/proc` in its own sandbox and publishes to NATS; the carrier connects to NATS and republishes only the metric plane onto its in-proc host bus, so the carrier never reads `/proc` while the UI-coupled fs/clipboard/persist brokers stay co-located on inprocbus (they remain hardwired to `inprocbus.Inst`). Full SD4 — migrating every broker off `inprocbus.Inst` — is left as a larger future milestone; the `BusProvider` foundation is in place for it.
+
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) sysmetrics collector · [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) imztop · [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) remote access · [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) auth/TLS
