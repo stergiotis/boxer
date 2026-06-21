@@ -1,0 +1,44 @@
+# Go file / package naming baseline (ADR-0048).
+#
+# Each line below is a violation present on `main` at 2026-06-21 that
+# pre-dates the naming spec. The scripts/ci/file-naming.sh --strict gate
+# wired into scripts/ci/lint.sh only fails on NEW violations not in this
+# list (and on baseline lines that no longer violate — keep this file
+# in sync when you rename).
+#
+# Line format: <kind>:<path>
+#   file:<path>          rule N1 (file basename must be snake_case lower)
+#   package:<dir>        rule N6 (package name must be lowercase, no _)
+#   app-prefix:<path>    rule N7 (files under apps/<n>/ must start with <n>_)
+#
+# Removing a line here means the corresponding file or package has been
+# renamed to conform. Do NOT add new entries here; fix the source instead.
+#
+# Out-of-scope (not audited): experiments/*, scripts/dev/*, attic/,
+# *.out.go, *.gen.go.
+
+# N7 — capinspector pre-dates the prefix mandate.
+app-prefix:apps/capinspector/active_backends.go
+app-prefix:apps/capinspector/archgraph.go
+app-prefix:apps/capinspector/audit_counters.go
+app-prefix:apps/capinspector/audit_sparkline.go
+app-prefix:apps/capinspector/caps.go
+
+# N1 — camelCase Go file name (the `findAnchor` package's command file).
+# Folds naturally into the N6 package rename below when findAnchor is
+# next touched.
+file:public/app/commands/findAnchor/findAnchor_cmd.go
+
+# N6 — package names with a capital (findAnchor) or an underscore
+# (ast_test2, data_encoding, dml_cbor, h3o_wasm, leewaywidgets_demo,
+# regex_explorer). Each migration requires touching every importer; defer
+# until the package itself is otherwise being refactored. Note: the
+# leewaywidgets dir declares `package leewaywidgets_demo`, so the reported
+# dir and the offending package name differ.
+package:public/app/commands/findAnchor
+package:public/db/clickhouse/dsl/ast_test2
+package:public/keelson/designsystem/styletokens/data_encoding
+package:public/keelson/runtime/factsschema/dml_cbor
+package:public/science/geo/h3/internal/h3o_wasm
+package:public/thestack/imzero2/egui2/demo/apps/leewaywidgets
+package:public/thestack/imzero2/egui2/demo/apps/regex_explorer

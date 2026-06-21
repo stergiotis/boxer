@@ -135,6 +135,29 @@ else
     step_end fail
 fi
 
+step_begin "file-naming"
+# Enforces ADR-0048 Go file/package naming across ./public and ./apps:
+# N1 (file basenames snake_case lowercase), N6 (package names lowercase,
+# no underscores; external <pkg>_test exempt), N7 (files directly under
+# apps/<n>/ prefixed <n>_, with main.go/doc.go/app_register.go/<n>.go/
+# *_test.go exempt). --strict fails on any violation not grandfathered
+# in naming-baseline.txt, and on baseline lines that no longer violate
+# (forces baseline hygiene). Pure bash + POSIX tools, no Go build. Same
+# `if out=$(...)` capture as the entry-points step — required under
+# `set -e`, since --strict exits non-zero on findings.
+if out=$("$here/file-naming.sh" --baseline "$here/naming-baseline.txt" --strict 2>&1); then
+    if [ -n "$out" ]; then
+        echo "$out"
+    else
+        echo "passed"
+    fi
+    step_end pass
+else
+    echo "$out"
+    rc=1
+    step_end fail
+fi
+
 step_begin "doclint"
 # Surfaces all warn-and-above doclint findings. Only error-severity
 # findings set rc=1 (warnings are visible but non-blocking, consistent
