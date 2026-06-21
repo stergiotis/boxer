@@ -140,7 +140,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 - [`../../../boxer/public/db/clickhouse/dsl/marshalling/ch_marshalling_marshall.go`](../../../boxer/public/db/clickhouse/dsl/marshalling/ch_marshalling_marshall.go) — `EscapeString` / `MarshalGoValueToSQL`, the fallback if SD2 verification fails.
 - [`clickhouse local` reference](https://clickhouse.com/docs/en/operations/utilities/clickhouse-local) — the zero-setup ClickHouse CLI the app's transport uses (SD7).
 - `public/spinnaker/hmi/play/play_client.go` — the HTTP-based `ExecuteArrowStream` retained for other demos (case 5); not used by the regex explorer.
-- [`public/thestack/imzero2/egui2/demo/apps/hn_explorer/hn_explorer.go`](../../public/thestack/imzero2/egui2/demo/apps/hn_explorer/hn_explorer.go) — structural template the new demo follows.
+- [`public/thestack/imzero2/egui2/demo/apps/sccmap/sccmap.go`](../../public/thestack/imzero2/egui2/demo/apps/sccmap/sccmap.go) — a self-contained sibling demo for structural reference (the earlier `hn_explorer` template this demo followed has since been removed).
 - [`public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_sql_demo.go) — prior art for `{name:Type}` placeholder SQL display.
 - Go [`regexp`](https://pkg.go.dev/regexp) package — pure-Go implementation of RE2 syntax (minus `\C`) with RE2's linear-time guarantee; used for in-process offset computation.
 - [RE2 syntax reference](https://github.com/google/re2/wiki/Syntax) — the specification both Go `regexp` and ClickHouse's single-pattern functions target.

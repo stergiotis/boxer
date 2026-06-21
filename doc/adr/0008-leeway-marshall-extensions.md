@@ -785,7 +785,7 @@ refinements (code in `mappingplan`, `marshall/go/{goplan,marshallreflect,marshal
   model without the toolkit), so it stays, with a per-layer stability promise (model =
   broad/frozen; goplan authoring API stable; goplan codec-shared helpers narrower).
 - **Reflect contract published + preflighted.** The DML-write / RA-read method contract
-  is spelled out in `marshallreflect`'s package doc; `marshallreflect.Validate[T](dml)`
+  is spelled out in `marshallreflect`'s package doc; `marshallreflect.Validate[T]`
   aggregates every missing / wrong-arity method (incl. `SetId` arity and the channel's
   `AddMembership…P`) into one up-front error instead of a mid-row `mustCall` panic. A
   static entity interface was dropped — per-section method names are data, so the
