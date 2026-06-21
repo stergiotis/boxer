@@ -102,10 +102,8 @@ func makeTourInit(filter string) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
 		inst.ids = ids
-		ensureTourScraper() // the tour has no host bus; feed the consumer locally
-		if s, err := ensureSampler(); err == nil && s != nil {
-			s.SetInterval(tourSamplerPeriod)
-		}
+		ensureTourScraper()    // the tour has no host bus; feed the consumer locally
+		_, _ = ensureSampler() // start the singleton consumer; the scraper sets the cadence
 		state = &imztopDemoState{app: inst, filter: filter}
 		return
 	}

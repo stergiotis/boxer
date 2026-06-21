@@ -31,15 +31,9 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 		}
 		c.Separator().Vertical().Send()
 
-		c.Label(fmt.Sprintf("interval: %s", s.IntervalLabel())).Send()
-		if c.Button(inst.ids.PrepareStr("topbar-int-down"), c.Atoms().Text("−").Keep()).
-			SendResp().HasPrimaryClicked() {
-			s.SetInterval(s.Interval() - 500*time.Millisecond)
-		}
-		if c.Button(inst.ids.PrepareStr("topbar-int-up"), c.Atoms().Text("+").Keep()).
-			SendResp().HasPrimaryClicked() {
-			s.SetInterval(s.Interval() + 500*time.Millisecond)
-		}
+		// Observed sample cadence (the scraper's rate). imztop is a pure
+		// consumer and cannot change it (ADR-0090 SD5), so there is no control.
+		c.Label(fmt.Sprintf("cadence: %s", s.IntervalLabel())).Send()
 		c.Separator().Vertical().Send()
 
 		ts := time.UnixMilli(snap.SampledAtUnixMs).Format("15:04:05")

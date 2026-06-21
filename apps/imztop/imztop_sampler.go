@@ -92,8 +92,17 @@ type SamplerI interface {
 // Sampler runs a goroutine that periodically calls Bundle.Sample and
 // publishes a PublishedSnapshot via atomic.Pointer.
 type Sampler struct {
+	// intervalNs holds the most recent OBSERVED sample cadence — the delta
+	// between consecutive bundles' SampledAtUnixMs, set by onBundle and
+	// initialised to SamplerOptions.UpdateInterval until the first delta is
+	// known. Read by Interval()/IntervalLabel() (topbar, heatmap) and by the
+	// per-process EWMA as its time-constant input, so the smoothing tracks the
+	// scraper's real rate (imztop does not set it — ADR-0090 SD5).
 	intervalNs atomic.Int64
-	histN      int32
+	// lastSampledAtMs is the previous bundle's SampledAtUnixMs, for the
+	// observed-cadence delta. Owned by onBundle (single writer).
+	lastSampledAtMs int64
+	histN           int32
 
 	timeWindow *SlidingWindow[float64]
 	cpuTotal   *SlidingWindow[float64]
@@ -214,23 +223,16 @@ func (inst *Sampler) IsPaused() (p bool) {
 	return inst.localPaused.Load()
 }
 
-// IntervalLabel returns the configured tick interval as a short
-// human-readable label suitable for the top-bar status row.
+// IntervalLabel returns the observed sample cadence as a short human-readable
+// label for the top-bar status row (the scraper's real rate; see intervalNs).
 func (inst *Sampler) IntervalLabel() (out string) {
 	out = time.Duration(inst.intervalNs.Load()).String()
 	return
 }
 
-// SetInterval sets the interval the per-process EWMA uses as its time-constant
-// input (updateProcCPUEWMA reads Interval()). It does NOT change the sample
-// rate — that belongs to the scraper, which imztop cannot reach (unidirectional
-// plane, ADR-0090 SD5). Clamped to [MinInterval, MaxInterval].
-func (inst *Sampler) SetInterval(d time.Duration) {
-	d = min(max(d, sysmetricsbus.MinInterval), sysmetricsbus.MaxInterval)
-	inst.intervalNs.Store(int64(d))
-}
-
-// Interval returns the current tick period.
+// Interval returns the most recent observed sample cadence (the scraper's real
+// rate; see intervalNs). There is no setter — imztop does not control the
+// cadence; it observes it from consecutive samples (ADR-0090 SD5).
 func (inst *Sampler) Interval() (d time.Duration) {
 	d = time.Duration(inst.intervalNs.Load())
 	return
@@ -253,6 +255,17 @@ func (inst *Sampler) onBundle(bundleSnap *sysmetrics.BundleSnapshot) {
 	if inst.localPaused.Load() {
 		return
 	}
+	// Track the observed cadence (delta between consecutive samples) so the
+	// EWMA time-constant and the topbar/heatmap reflect the scraper's real
+	// rate, which imztop cannot set (ADR-0090 SD5). The first sample has no
+	// prior, so intervalNs keeps its initial value.
+	if inst.lastSampledAtMs != 0 {
+		if dtMs := bundleSnap.SampledAtUnixMs - inst.lastSampledAtMs; dtMs > 0 {
+			inst.intervalNs.Store(int64(time.Duration(dtMs) * time.Millisecond))
+		}
+	}
+	inst.lastSampledAtMs = bundleSnap.SampledAtUnixMs
+
 	inst.timeWindow.Push(float64(bundleSnap.SampledAtUnixMs) / 1000.0)
 	if bundleSnap.CPU != nil {
 		inst.cpuTotal.Push(float64(bundleSnap.CPU.TotalPercent))
@@ -379,12 +392,10 @@ const procCPUEWMATau = 1500 * time.Millisecond
 // procs slice rather than mark-and-sweep, so the map is bounded by
 // the live process count and dead PIDs cannot leak memory.
 //
-// The per-sample weight α is derived from procCPUEWMATau and the
-// sampler's current Interval(); inst.Interval() is the configured
-// cadence rather than the wall-clock gap, which is good enough — the
-// configured period is what the sampler is *aiming* for, and brief
-// scheduling jitter doesn't change the smoothing's intended time
-// constant materially.
+// The per-sample weight α is derived from procCPUEWMATau and inst.Interval(),
+// which is now the OBSERVED cadence (onBundle sets it from consecutive sample
+// timestamps), so the smoothing tracks the scraper's real rate even though
+// imztop no longer controls it (ADR-0090 SD5).
 func (inst *Sampler) updateProcCPUEWMA(procs []proc.Info) (smoothed []float32) {
 	n := len(procs)
 	smoothed = make([]float32, n)

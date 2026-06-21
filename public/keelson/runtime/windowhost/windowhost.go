@@ -247,9 +247,11 @@ func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 		// Compute the full cap set before minting: manifest caps plus the
 		// host-injected persist cap for apps declaring PersistedKeys, so the
 		// transport-agnostic provider needs no post-hoc AddCap.
-		caps := m.Caps
+		// Copy the manifest caps before minting so a later AddCap on the client
+		// (capbroker grants) can never alias-mutate the manifest's slice.
+		caps := append([]app.SubjectFilter(nil), m.Caps...)
 		if len(m.PersistedKeys) > 0 {
-			caps = append(append([]app.SubjectFilter(nil), m.Caps...), app.SubjectFilter{
+			caps = append(caps, app.SubjectFilter{
 				Pattern:   persist.SubjectPrefix + m.Id.SubjectAlias() + ".>",
 				Direction: app.CapDirectionPub,
 				Reason:    "host-injected for declared PersistedKeys",
