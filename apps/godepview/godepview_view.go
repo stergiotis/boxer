@@ -38,65 +38,63 @@ func (inst *App) renderExplorer() {
 	if inst.viewDirty {
 		inst.rebuildView()
 	}
-	inst.ensureNeighborhood()
-	// Build the derived lenses the active modes need before the controls read
-	// their counts (architecture: group quotient + violations; modules: rollup).
-	if inst.archMode {
+	// Build only the derived data the active view needs (the controls below read
+	// its counts). Each view owns one focus object, so the three panes never
+	// disagree.
+	switch inst.mode {
+	case viewArchitecture:
 		inst.ensureArch()
-	}
-	if inst.showModules {
-		inst.ensureModules()
+	case viewModules:
+		inst.ensureArch()    // the graph pane shows the quotient with externals
+		inst.ensureModules() // the master pane shows the rollup table
+	default:
+		inst.ensureNeighborhood()
 	}
 	inst.renderControls()
 	c.AddSpace(inst.spaceTight())
 
-	// Master–detail as a three-leaf dock: the master pane (package table, or the
-	// module rollup) on the left, the graph (focus neighborhood, or the
-	// architecture quotient) top-right, and the detail pane bottom-right. A dock
-	// leaf hands its content a bounded rect, which is what lets the detail pane's
-	// ScrollArea clip+scroll and the graph fill its pane (a width-pinned column
-	// would collapse a ScrollArea to its first child — schemaview's hard-won
-	// idiom). The two master/graph toggles switch each pane's content; the leaf
-	// labels name both options so the active mode reads off the controls.
+	// Master–detail as a three-leaf dock: a master table on the left, a graph
+	// top-right, and a detail pane bottom-right. A dock leaf hands its content a
+	// bounded rect, which is what lets the detail pane's ScrollArea clip+scroll
+	// and the graph fill its pane (a width-pinned column would collapse a
+	// ScrollArea to its first child — schemaview's hard-won idiom). The single
+	// view switch reconfigures all three panes together; the master leaf is
+	// labelled with the active view so the mode is unambiguous.
 	c.UiSetMinHeight(dockMinHeight)
 	for dock := range c.DockArea(inst.ids.PrepareStr("dock")) {
 		root := dock.InitRoot(tabPackages)
 		graphLeaf := dock.Split(root, c.DockRight, 0.60, tabGraph)
 		dock.Split(graphLeaf, c.DockBelow, 0.50, tabDetail)
 
-		for range dock.Tab(tabPackages, "packages / modules") {
-			if inst.showModules {
+		for range dock.Tab(tabPackages, inst.mode.label()) {
+			switch inst.mode {
+			case viewArchitecture:
+				inst.renderGroupsTable()
+			case viewModules:
 				inst.renderModules()
-			} else {
+			default:
 				inst.renderTable()
 			}
 		}
-		for range dock.Tab(tabGraph, "neighborhood / architecture") {
-			if inst.archMode {
-				inst.renderGraphArchitecture()
-			} else {
+		for range dock.Tab(tabGraph, "graph") {
+			if inst.mode == viewPackages {
 				inst.renderNeighborhoodGraph()
+			} else {
+				inst.renderGraphArchitecture()
 			}
 		}
 		for range dock.Tab(tabDetail, "detail") {
 			for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-				inst.renderDetailDispatch()
+				switch inst.mode {
+				case viewArchitecture:
+					inst.renderArchDetail()
+				case viewModules:
+					inst.renderModuleDetail()
+				default:
+					inst.renderDetail()
+				}
 			}
 		}
-	}
-}
-
-// renderDetailDispatch routes the detail pane to the lens that matches the
-// active master/graph modes: a focused module's footprint, the architecture
-// violations list, or (default) the focused package's metadata + dep lists.
-func (inst *App) renderDetailDispatch() {
-	switch {
-	case inst.showModules && inst.focusModule != "":
-		inst.renderModuleDetail()
-	case inst.archMode:
-		inst.renderArchDetail()
-	default:
-		inst.renderDetail()
 	}
 }
 
@@ -115,9 +113,21 @@ func (inst *App) renderControls() {
 	c.Separator().Horizontal().Send()
 	c.AddSpace(inst.spaceTight())
 
-	// Row 1: text filter + class toggles.
+	// The single top-level view switch — one control, three coherent modes. This
+	// replaces the former two independent master/graph toggles.
 	for range c.Horizontal().KeepIter() {
-		c.Label("Filter").Send()
+		c.Label("view").Send()
+		c.AddSpace(inst.spaceInner())
+		inst.viewToggle("v-pkg", viewPackages)
+		inst.viewToggle("v-arch", viewArchitecture)
+		inst.viewToggle("v-mod", viewModules)
+	}
+	c.AddSpace(inst.spaceTight())
+
+	// Filter (shared by the package + module tables) plus, in Packages view, the
+	// class toggles. The shown-count reflects the active master table.
+	for range c.Horizontal().KeepIter() {
+		c.Label("filter").Send()
 		c.AddSpace(inst.spaceInner())
 		resp := c.TextEdit(inst.ids.PrepareStr("flt"), inst.filter, false).
 			DesiredWidth(280).
@@ -127,37 +137,38 @@ func (inst *App) renderControls() {
 			inst.viewDirty = true
 			inst.modViewDirty = true // the filter box is shared with the modules table
 		}
-		c.AddSpace(inst.spaceOuter())
-		inst.classToggle("cls-std", godep.ClassStdlib, &inst.showStd)
-		inst.classToggle("cls-int", godep.ClassInternal, &inst.showInt)
-		inst.classToggle("cls-ext", godep.ClassExternal, &inst.showExt)
-		c.AddSpace(inst.spaceOuter())
-		shown := len(inst.view)
-		if inst.showModules {
-			shown = len(inst.modView)
+		if inst.mode == viewPackages {
+			c.AddSpace(inst.spaceOuter())
+			inst.classToggle("cls-std", godep.ClassStdlib, &inst.showStd)
+			inst.classToggle("cls-int", godep.ClassInternal, &inst.showInt)
+			inst.classToggle("cls-ext", godep.ClassExternal, &inst.showExt)
 		}
-		c.Label(fmt.Sprintf("%d shown", shown)).Send()
-	}
-	c.AddSpace(inst.spaceTight())
-
-	// Row 2: pane modes — master (packages / modules) and graph (neighborhood /
-	// architecture). Each toggle switches one pane's content independently.
-	for range c.Horizontal().KeepIter() {
-		c.Label("master").Send()
-		inst.masterToggle("m-pkgs", "packages", false)
-		inst.masterToggle("m-mods", "modules", true)
 		c.AddSpace(inst.spaceOuter())
-		c.Label("graph").Send()
-		inst.graphModeToggle("g-nbhd", "neighborhood", false)
-		inst.graphModeToggle("g-arch", "architecture", true)
+		c.Label(fmt.Sprintf("%d shown", inst.shownCount())).Send()
 	}
 	c.AddSpace(inst.spaceTight())
 
-	// Row 3: context controls for the active graph mode.
-	if inst.archMode {
+	// Per-view context controls.
+	switch inst.mode {
+	case viewArchitecture:
 		inst.renderArchControls()
-	} else {
+	case viewModules:
+		// The modules table carries its own sortable headers — no extra row.
+	default:
 		inst.renderNeighborhoodControls()
+	}
+}
+
+// shownCount is the row count of the active master table, for the controls
+// readout.
+func (inst *App) shownCount() (n int) {
+	switch inst.mode {
+	case viewArchitecture:
+		return len(inst.visibleGroupRows())
+	case viewModules:
+		return len(inst.modView)
+	default:
+		return len(inst.view)
 	}
 }
 
@@ -212,23 +223,14 @@ func (inst *App) renderArchControls() {
 	}
 }
 
-// masterToggle is one segment of the packages/modules master switch.
-func (inst *App) masterToggle(id string, label string, modules bool) {
-	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
-		Selected(inst.showModules == modules).
+// viewToggle is one segment of the top-level Packages / Architecture / Modules
+// switch.
+func (inst *App) viewToggle(id string, mode viewMode) {
+	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(mode.label()).Keep()).
+		Selected(inst.mode == mode).
 		Frame(true).
 		SendResp().HasPrimaryClicked() {
-		inst.showModules = modules
-	}
-}
-
-// graphModeToggle is one segment of the neighborhood/architecture graph switch.
-func (inst *App) graphModeToggle(id string, label string, arch bool) {
-	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
-		Selected(inst.archMode == arch).
-		Frame(true).
-		SendResp().HasPrimaryClicked() {
-		inst.archMode = arch
+		inst.mode = mode
 	}
 }
 

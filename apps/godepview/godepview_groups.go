@@ -41,7 +41,7 @@ func (inst *App) ensureArch() {
 	if inst.idx == nil {
 		return
 	}
-	sig := archSig{depth: inst.groupDepthInt(), showExt: inst.archShowExt, hideStd: inst.graphHideStd}
+	sig := archSig{depth: inst.groupDepthInt(), showExt: inst.archExternalsShown(), hideStd: inst.graphHideStd}
 	if inst.archGraph != nil && sig == inst.archSig {
 		return
 	}
@@ -62,11 +62,38 @@ func (inst *App) ensureArch() {
 	}
 	inst.archGraph = inst.idx.BuildGroupGraph(inst.man.Run.RootModulePath, godep.GroupingOpts{InternalDepth: sig.depth}, include)
 
+	// Quotient degrees, for the groups table.
+	inst.archOut = make(map[godep.GroupKey]int, len(inst.archGraph.Nodes))
+	inst.archIn = make(map[godep.GroupKey]int, len(inst.archGraph.Nodes))
+	for _, e := range inst.archGraph.Edges {
+		inst.archOut[e.From]++
+		inst.archIn[e.To]++
+	}
+
 	inst.ensureViolations()
 	inst.violEdge = make(map[[2]godep.GroupKey]struct{}, len(inst.violations))
+	inst.archViolGroup = make(map[godep.GroupKey]bool, len(inst.violations))
 	for _, v := range inst.violations {
 		inst.violEdge[[2]godep.GroupKey{v.FromGroup, v.ToGroup}] = struct{}{}
+		inst.archViolGroup[v.FromGroup] = true
+		inst.archViolGroup[v.ToGroup] = true
 	}
+}
+
+// archExternalsShown reports whether external module groups appear in the
+// quotient: always in Modules view (that view is about them), otherwise per the
+// show-external toggle.
+func (inst *App) archExternalsShown() (ok bool) {
+	return inst.archShowExt || inst.mode == viewModules
+}
+
+// archHighlightKey is the group the graph paints in the success tone — the
+// focused module in Modules view, otherwise the focused group.
+func (inst *App) archHighlightKey() (key godep.GroupKey) {
+	if inst.mode == viewModules {
+		return godep.GroupKey(inst.focusModule)
+	}
+	return inst.focusGroup
 }
 
 // ensureViolations computes the keelson apps-independence violations once. They
@@ -156,10 +183,15 @@ func layoutGroupGraph(gg *godep.GroupGraph) (lay *layeredgraph.Layout, err error
 	})
 }
 
-// archNodeFill colours each group by its dominant class, matching the
-// neighborhood palette (internal accent / external info / stdlib neutral).
+// archNodeFill colours each group by its dominant class (internal accent /
+// external info / stdlib neutral), with the focused group/module in the success
+// tone so "you are here" stands out.
 func (inst *App) archNodeFill() func(id string) (col egcolor.Color, ok bool) {
+	highlight := string(inst.archHighlightKey())
 	return func(id string) (col egcolor.Color, ok bool) {
+		if highlight != "" && id == highlight {
+			return egcolor.Hex(styletokens.SuccessDefault.AsHex()), true
+		}
 		class := ""
 		if n, found := inst.archGraph.Node(godep.GroupKey(id)); found {
 			class = n.Class
@@ -182,21 +214,22 @@ func (inst *App) archEdgeStroke() func(from string, to string) (col egcolor.Colo
 	}
 }
 
-// onArchClick routes a group click: an external module group opens the modules
-// lens on it; any other group filters the package table to its path prefix.
+// onArchClick selects within the active view (no mode jump — modes change only
+// via the top switch or the explicit drill-through links in the detail pane).
+// In Modules view a module node becomes the focused module; in Architecture
+// view any group becomes the focused group.
 func (inst *App) onArchClick(key godep.GroupKey) {
 	n, ok := inst.archGraph.Node(key)
 	if !ok {
 		return
 	}
-	if n.Class == godep.ClassExternal {
-		inst.showModules = true
-		inst.focusModule = string(key)
+	if inst.mode == viewModules {
+		if n.Class == godep.ClassExternal {
+			inst.focusModule = string(key)
+		}
 		return
 	}
-	inst.showModules = false
-	inst.filter = string(key) // substring of the full import path → filters the table to this group
-	inst.viewDirty = true
+	inst.focusGroup = key
 }
 
 // renderArchDetail is the architecture companion in the detail pane: the
@@ -213,6 +246,12 @@ func (inst *App) renderArchDetail() {
 	}
 	c.Label(fmt.Sprintf("%d groups · grouping depth %d · %d crossing edges",
 		groups, inst.groupDepthInt(), inst.archEdgeCount())).Send()
+
+	// Focused-group block: the group a row/node click selected, with its members.
+	if inst.focusGroup != "" {
+		inst.renderGroupDetail()
+	}
+
 	c.AddSpace(inst.spaceTight())
 	c.Separator().Horizontal().Send()
 	c.AddSpace(inst.spaceTight())
@@ -227,7 +266,7 @@ func (inst *App) renderArchDetail() {
 	for rt := range c.RichTextLabel(fmt.Sprintf("Forbidden app→app edges (%d)", len(inst.violations))) {
 		rt.Strong()
 	}
-	for rt := range c.RichTextLabel("keelson apps should not depend on each other — click an edge to inspect the importing package") {
+	for rt := range c.RichTextLabel("keelson apps should not depend on each other — click to inspect the importing package") {
 		rt.Weak().Small()
 	}
 	c.AddSpace(inst.spaceTight())
@@ -238,11 +277,49 @@ func (inst *App) renderArchDetail() {
 		if c.SelectableLabel(inst.ids.PrepareSeq(violSeqBase+uint64(i)), false, label).
 			SendResp().HasPrimaryClicked() {
 			inst.focus = v.FromPkg
-			inst.archMode = false // jump to the offender's neighborhood
+			inst.mode = viewPackages // jump to the offender's neighborhood
 		}
 	}
 	if len(inst.violations) > shown {
 		for rt := range c.RichTextLabel(fmt.Sprintf("… +%d more", len(inst.violations)-shown)) {
+			rt.Weak().Small()
+		}
+	}
+}
+
+// renderGroupDetail shows the focused group's class, size, and quotient degree,
+// then its member packages — each a click-through that opens the Packages view
+// focused on that package.
+func (inst *App) renderGroupDetail() {
+	n, ok := inst.archGraph.Node(inst.focusGroup)
+	if !ok {
+		return
+	}
+	c.AddSpace(inst.spaceTight())
+	for range c.Horizontal().KeepIter() {
+		for rt := range c.RichTextLabel(string(n.Key)) {
+			rt.Strong()
+		}
+		c.AddSpace(inst.spaceInner())
+		if c.Button(inst.ids.PrepareStr("grp-clear"), c.Atoms().Text("clear").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.focusGroup = ""
+		}
+	}
+	c.Label(fmt.Sprintf("class: %s · packages: %d · depends on %d groups · used by %d groups",
+		n.Class, n.NumPkgs, inst.archOut[n.Key], inst.archIn[n.Key])).Send()
+	members := inst.sortedByPath(n.MemberIDs)
+	shown := min(len(members), maxDetailListRows)
+	for i := range shown {
+		id := members[i]
+		if c.SelectableLabel(inst.ids.PrepareStr("gm:"+strconv.FormatUint(id, 10)), false, shortPath(inst.pathOf(id))).
+			SendResp().HasPrimaryClicked() {
+			inst.focus = id
+			inst.mode = viewPackages
+		}
+	}
+	if len(members) > shown {
+		for rt := range c.RichTextLabel(fmt.Sprintf("… +%d more", len(members)-shown)) {
 			rt.Weak().Small()
 		}
 	}
@@ -260,6 +337,113 @@ func (inst *App) archEdgeCount() (n int) {
 // violSeqBase is the id seq base for the violations list — disjoint from the
 // table seq bases.
 const violSeqBase uint64 = 0xD000_0000
+
+// Groups-table column indices (the Architecture master view).
+const (
+	gcolGroup = iota
+	gcolClass
+	gcolPkgs
+	gcolOut
+	gcolIn
+	gcolViol
+	numGroupCols
+)
+
+// groupRowSeqBase is the id seq base for the groups table's rows — disjoint from
+// every other table/list base.
+const groupRowSeqBase uint64 = 0xE000_0000
+
+// visibleGroupRows is the filtered display order of the quotient's groups
+// (indices into archGraph.Nodes), honouring the shared filter box against the
+// group key. The quotient is small, so this is recomputed per frame rather than
+// cached.
+func (inst *App) visibleGroupRows() (rows []int) {
+	if inst.archGraph == nil {
+		return nil
+	}
+	needle := strings.ToLower(strings.TrimSpace(inst.filter))
+	rows = make([]int, 0, len(inst.archGraph.Nodes))
+	for i := range inst.archGraph.Nodes {
+		if needle == "" || strings.Contains(strings.ToLower(string(inst.archGraph.Nodes[i].Key)), needle) {
+			rows = append(rows, i)
+		}
+	}
+	return rows
+}
+
+// renderGroupsTable is the Architecture master: every group in the current
+// quotient with its class, package count, out/in quotient degree, and a
+// violation flag. Selecting a row focuses the group (highlighted in the graph,
+// expanded in the detail pane). Rows follow the quotient's node order (by key),
+// filtered by the shared filter box.
+func (inst *App) renderGroupsTable() {
+	inst.ensureArch()
+	if inst.archGraph == nil || len(inst.archGraph.Nodes) == 0 {
+		c.Label("No groups — widen the grouping depth, show external, or unhide stdlib.").Send()
+		return
+	}
+	type colDef struct {
+		title string
+		w     float32
+	}
+	var cols [numGroupCols]colDef
+	cols[gcolGroup] = colDef{"Group", 300}
+	cols[gcolClass] = colDef{"Class", 78}
+	cols[gcolPkgs] = colDef{"Pkgs", 56}
+	cols[gcolOut] = colDef{"Out", 52} // groups this one depends on
+	cols[gcolIn] = colDef{"In", 52}   // groups that depend on this one
+	cols[gcolViol] = colDef{"⚠", 36}
+
+	for i := range numGroupCols {
+		c.EtColumn(cols[i].w).Resizable(true).Send()
+	}
+
+	rows := inst.visibleGroupRows()
+	et := c.EndETable(inst.ids.PrepareStr("grp-tbl"), uint64(len(rows)), 20.0, 1, 0)
+	for ci := range numGroupCols {
+		for range et.Headers(0, uint32(ci)) {
+			c.Label(cols[ci].title).Send()
+		}
+	}
+
+	for dr, ni := range rows {
+		n := &inst.archGraph.Nodes[ni]
+		for range et.Cells(uint64(dr), gcolGroup) {
+			if c.SelectableLabel(inst.ids.PrepareSeq(groupRowSeqBase+uint64(ni)), n.Key == inst.focusGroup, string(n.Key)).
+				SendResp().HasPrimaryClicked() {
+				inst.focusGroup = n.Key
+			}
+		}
+		for range et.Cells(uint64(dr), gcolClass) {
+			c.Label(n.Class).Send()
+		}
+		for range et.Cells(uint64(dr), gcolPkgs) {
+			c.Label(fmt.Sprintf("%d", n.NumPkgs)).Send()
+		}
+		for range et.Cells(uint64(dr), gcolOut) {
+			c.Label(fmt.Sprintf("%d", inst.archOut[n.Key])).Send()
+		}
+		for range et.Cells(uint64(dr), gcolIn) {
+			c.Label(fmt.Sprintf("%d", inst.archIn[n.Key])).Send()
+		}
+		for range et.Cells(uint64(dr), gcolViol) {
+			if inst.archViolGroup[n.Key] {
+				for range c.RichTextLabelColored(egcolor.Hex(styletokens.ErrorDefault.AsHex()), egcolor.Transparent, "⚠") {
+				}
+			}
+		}
+	}
+
+	if inst.focusGroup != "" {
+		for dr, ni := range rows {
+			if inst.archGraph.Nodes[ni].Key == inst.focusGroup {
+				et = et.SelectedRow(uint64(dr))
+				break
+			}
+		}
+	}
+	et.Striped(true).Send()
+}
 
 // shortGroup is the architecture node label: the last two segments of a group
 // key, since a full module path or deep internal path is too long for a box.

@@ -242,7 +242,7 @@ func (inst *App) renderModulePkgList(idkey string, title string, ids []uint64) {
 		if c.SelectableLabel(inst.ids.PrepareStr(idkey+":"+strconv.FormatUint(id, 10)), id == inst.focus, inst.pathOf(id)).
 			SendResp().HasPrimaryClicked() {
 			inst.focus = id
-			inst.showModules = false // jump to the package's neighborhood
+			inst.mode = viewPackages // jump to the package's neighborhood
 		}
 	}
 	if len(sorted) > shown {

@@ -76,6 +76,28 @@ type archSig struct {
 	hideStd bool
 }
 
+// viewMode is the single top-level mode the explorer is in. Each mode drives all
+// three panes (master table / graph / detail) around one focus object — a
+// package, a group, or a module — so there are no incoherent pane combinations.
+type viewMode uint8
+
+const (
+	viewPackages     viewMode = iota // package table · neighborhood graph · package detail
+	viewArchitecture                 // groups table · group quotient graph · group/violations detail
+	viewModules                      // modules table · quotient-with-externals · module detail
+)
+
+func (m viewMode) label() (s string) {
+	switch m {
+	case viewArchitecture:
+		return "Architecture"
+	case viewModules:
+		return "Modules"
+	default:
+		return "Packages"
+	}
+}
+
 // Module-table column indices (the modules-lens master view).
 const (
 	mcolModule = iota
@@ -155,32 +177,39 @@ type App struct {
 	detailImports   []uint64
 	detailImporters []uint64
 
-	// Master-pane mode + modules-lens state. showModules flips the master leaf
-	// from the package table to the external-module rollup; the modules slice is
-	// the derived per-module footprint (ADR-0064 group/module Update), built once.
-	showModules    bool
-	modules        []godep.ModuleStat
-	modulesReady   bool
-	modSortCol     int
-	modSortDesc    bool
-	modView        []int // display order: indices into modules
-	modViewDirty   bool
-	focusModule    string // selected module path; "" = none
+	// mode is the single top-level view; it drives every pane (the two former
+	// independent toggles collapsed into one switch).
+	mode viewMode
 
-	// Architecture (group quotient) graph state. The group graph + its dot
-	// layout are cached against archSig; violations are grouping-independent and
-	// cached once. violEdge maps a forbidden (from,to) group pair to red.
-	archMode    bool
-	groupDepth  float64 // grouping granularity slider (path segments)
-	archShowExt bool    // include external module groups in the architecture view
-	archGraph   *godep.GroupGraph
-	archLayout  *layeredgraph.Layout
-	archErr     error
-	archView    lgview.ViewState
-	archSig     archSig
-	violReady   bool
-	violations  []godep.SiblingViolation
-	violEdge    map[[2]godep.GroupKey]struct{}
+	// Modules-lens state: the derived per-module footprint (ADR-0064 group/module
+	// Update), built once, plus the filtered/sorted display order and selection.
+	modules      []godep.ModuleStat
+	modulesReady bool
+	modSortCol   int
+	modSortDesc  bool
+	modView      []int // display order: indices into modules
+	modViewDirty bool
+	focusModule  string // selected module path; "" = none
+
+	// Architecture (group quotient) graph state. The group graph + its dot layout
+	// are cached against archSig; violations are grouping-independent and cached
+	// once. violEdge maps a forbidden (from,to) group pair to red; archOut/archIn
+	// are the quotient degrees and archViolGroup the violation-involved groups,
+	// both for the groups table. focusGroup is the selected group.
+	groupDepth    float64 // grouping granularity slider (path segments)
+	archShowExt   bool    // include external module groups (forced on in modules view)
+	focusGroup    godep.GroupKey
+	archGraph     *godep.GroupGraph
+	archLayout    *layeredgraph.Layout
+	archErr       error
+	archView      lgview.ViewState
+	archSig       archSig
+	archOut       map[godep.GroupKey]int
+	archIn        map[godep.GroupKey]int
+	archViolGroup map[godep.GroupKey]bool
+	violReady     bool
+	violations    []godep.SiblingViolation
+	violEdge      map[[2]godep.GroupKey]struct{}
 }
 
 var _ app.AppI = (*App)(nil)
