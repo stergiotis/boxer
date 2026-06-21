@@ -299,9 +299,19 @@ toolchain nor any UI.
   **blast radius** (the first-party packages a change to the module would reach,
   via reverse reachability). This is the dependency-surface view the per-package
   table cannot give.
+- **Group cycles (`group.go`).** `StronglyConnected` returns the quotient's
+  non-trivial strongly-connected components (Tarjan). Go forbids package import
+  cycles, but the *group* quotient can still cycle — two areas each importing
+  some package from the other — and that mutual dependency is the deepest
+  "intertangled" signal, invisible to the per-package view.
+- **Witness path (`module.go`).** `ShortestImportPathTo` returns the minimum-hop
+  forward-import chain from a package to the nearest target — the concrete answer
+  to "*why* does this first-party package pull in that module": a breadth-first
+  walk that names the intermediate packages realising a transitive dependency.
 
 The seam additions are covered by table-driven tests (`group_module_test.go`):
-grouping, quotient edge weights, the apps violation, and the module stats.
+grouping, quotient edge weights, the apps violation, the module stats, the
+witness path, and the group cycles.
 
 On the UI side (`apps/godepview`), these surface behind a **single top-level
 view switch** — *Packages · Architecture · Modules* — that reconfigures all
@@ -312,14 +322,17 @@ table beside a per-package neighbourhood) and a detail pane that silently change
 meaning; the single switch replaced it.
 
 - **Architecture view** — a groups table (class, package count, quotient
-  in/out-degree, violation flag) as the master; the quotient rendered with the
-  [ADR-0069](0069-imzero2-layeredgraph-widget.md) `layeredgraph` widget,
-  class-coloured, edges labelled with crossing-import counts and **forbidden
-  app→app edges in the error tone**; the violations list plus the selected
-  group's member packages in the detail pane.
+  in/out-degree, violation/cycle flags) as the master; the quotient rendered with
+  the [ADR-0069](0069-imzero2-layeredgraph-widget.md) `layeredgraph` widget,
+  class-coloured, edges labelled with crossing-import counts, **forbidden app→app
+  edges in the error tone** and **dependency-cycle edges in the warning tone**;
+  the violations and cycles lists plus the selected group's member packages in
+  the detail pane.
 - **Modules view** — the rollup table as the master, the quotient with external
   modules folded in (selected module highlighted), and the selected module's
-  first-party importers + blast set in the detail pane.
+  first-party importers + blast set in the detail pane — where clicking a
+  blast-radius package renders the **witness path** explaining why it pulls the
+  module in.
 
 The architecture graph reuses ADR-0069's engine with **no new widget
 capability** — the quotient is a flat graph whose nodes happen to be groups.
