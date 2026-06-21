@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
 	"github.com/stergiotis/boxer/public/app/commands/sample"
 	"github.com/stergiotis/boxer/public/app/commands/swisstopo"
+	"github.com/stergiotis/boxer/public/app/commands/sysmetricsd"
 	"github.com/stergiotis/boxer/public/app/commands/watch"
 	"github.com/stergiotis/boxer/public/code"
 	"github.com/stergiotis/boxer/public/config/env"
@@ -100,6 +101,7 @@ func mainC() (exitCode int) {
 			runtimecodegen.NewCliCommand(),
 			sample.NewCliCommand(),
 			swisstopo.NewCliCommand(),
+			sysmetricsd.NewCliCommand(),
 			watch.NewCliCommand(),
 			// Codegen tools folded from cmd/* mains (entry-point standard).
 			egui2gen.NewCliCommand(),

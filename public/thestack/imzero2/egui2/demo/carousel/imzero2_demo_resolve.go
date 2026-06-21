@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker/pickerbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -227,17 +228,27 @@ func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.Facts
 		// real inprocbus.Client at Open. SetBus after Open has no
 		// retroactive effect on already-mounted windows.
 		host.SetBus(bus)
-		// Run the co-located system-metrics scraper (ADR-0090): it reads /proc
-		// and publishes the metric plane so imztop (and any consumer) gets data
-		// over MountCtx.Bus() without holding a collector capability itself.
-		// Process-lifetime; on a /proc-restricted host this fails and the metric
-		// panels stay empty — the headless-sandboxed deployment instead needs an
-		// external sysmetricsd over a NATS host bus (the remaining M4 step).
-		scraperPub := bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
+		// System-metrics plane (ADR-0090). imztop consumes it via MountCtx.Bus()
+		// either way. With IMZERO2_SYSMETRICS_NATS_URL set (headless/sandboxed),
+		// an external sysmetricsd reads /proc in its own sandbox and publishes to
+		// NATS; we bridge that onto this in-proc host bus, so the carrier itself
+		// never reads /proc. Otherwise (desktop/dev) we run the scraper
+		// co-located. Process-lifetime; failures are logged and leave the metric
+		// panels empty.
+		metricPub := bus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
 			{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub},
 		})
-		if _, serr := sysmetricsbus.StartScraper(context.Background(), scraperPub, sysmetricsbus.DefaultHostToken(), time.Second, log.Logger); serr != nil {
-			log.Warn().Err(serr).Msg("carousel: sysmetrics scraper unavailable; imztop panels will be empty")
+		if natsURL := sysmetricsbus.NatsURL.Get(); natsURL != "" {
+			if natsClient, nerr := natsbus.Connect(natsbus.Options{URL: natsURL, AppId: sysmetricsbus.ServiceAppId}); nerr != nil {
+				log.Warn().Err(nerr).Str("url", natsURL).Msg("carousel: sysmetrics NATS bridge connect failed; metric panels will be empty")
+			} else if _, berr := sysmetricsbus.Bridge(natsClient, metricPub, sysmetricsbus.BundleSubjectWildcard()); berr != nil {
+				log.Warn().Err(berr).Msg("carousel: sysmetrics NATS bridge subscribe failed")
+				_ = natsClient.Close()
+			} else {
+				log.Info().Str("url", natsURL).Msg("carousel: bridging system metrics from NATS onto the host bus")
+			}
+		} else if _, serr := sysmetricsbus.StartScraper(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), time.Second, log.Logger); serr != nil {
+			log.Warn().Err(serr).Msg("carousel: sysmetrics scraper unavailable; metric panels will be empty")
 		}
 	}
 	if runId != "" && facts != nil {

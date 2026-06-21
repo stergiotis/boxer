@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics"
@@ -180,5 +182,72 @@ func TestSysmetricsProducerConsumerOverNATS(t *testing.T) {
 		require.NotNil(t, snap)
 	case <-time.After(3 * time.Second):
 		t.Fatal("no BundleSnapshot delivered producer->NATS->consumer")
+	}
+}
+
+// TestHeadlessBridge_EndToEnd proves the ADR-0090 headless deployment dataflow:
+// a sysmetricsd-style scraper publishes to NATS; a carrier-side Bridge relays
+// it onto an in-proc host bus; an imztop-style Consumer on that in-proc bus
+// receives it. The carrier (in-proc side) never reads /proc — the scraper does,
+// in its own process. An empty Bundle exercises the transport without /proc.
+func TestHeadlessBridge_EndToEnd(t *testing.T) {
+	url := startNATS(t)
+
+	// External sysmetricsd: publish to NATS.
+	scraperNats, err := natsbus.Connect(natsbus.Options{URL: url, AppId: sysmetricsbus.ServiceAppId})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = scraperNats.Close() })
+	bundle, err := sysmetrics.NewBundle(sysmetrics.BundleOptions{})
+	require.NoError(t, err)
+	producer, err := sysmetricsbus.NewProducer(sysmetricsbus.ProducerOptions{
+		Bundle:   bundle,
+		Bus:      scraperNats,
+		Subject:  sysmetricsbus.BundleSubject("box1"),
+		Codec:    sysmetricsbus.NewCBORCodec(),
+		Interval: 30 * time.Millisecond,
+	})
+	require.NoError(t, err)
+
+	// Carrier: bridge NATS -> in-proc host bus.
+	hostBus := inprocbus.NewInst(zerolog.Nop())
+	bridgeNats, err := natsbus.Connect(natsbus.Options{URL: url, AppId: "carrier.bridge"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bridgeNats.Close() })
+	hostPub := hostBus.NewClient(sysmetricsbus.ServiceAppId, []app.SubjectFilter{
+		{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionPub},
+	})
+	bridgeStop, err := sysmetricsbus.Bridge(bridgeNats, hostPub, sysmetricsbus.BundleSubjectWildcard())
+	require.NoError(t, err)
+	t.Cleanup(bridgeStop)
+
+	// imztop-side consumer on the in-proc host bus.
+	got := make(chan *sysmetrics.BundleSnapshot, 4)
+	hostSub := hostBus.NewClient("imztop", []app.SubjectFilter{
+		{Pattern: sysmetricsbus.SubjectWildcard, Direction: app.CapDirectionSub},
+	})
+	consumer, err := sysmetricsbus.NewConsumer(sysmetricsbus.ConsumerOptions{
+		Bus:     hostSub,
+		Subject: sysmetricsbus.BundleSubjectWildcard(),
+		Codec:   sysmetricsbus.NewCBORCodec(),
+		Handler: func(s *sysmetrics.BundleSnapshot) {
+			select {
+			case got <- s:
+			default:
+			}
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, consumer.Start())
+	t.Cleanup(func() { _ = consumer.Close() })
+
+	require.NoError(t, bridgeNats.Flush()) // bridge SUB visible before the scraper publishes
+	producer.Start(context.Background())
+	t.Cleanup(func() { _ = producer.Close() })
+
+	select {
+	case s := <-got:
+		require.NotNil(t, s)
+	case <-time.After(3 * time.Second):
+		t.Fatal("no snapshot delivered scraper->NATS->bridge->inproc->consumer")
 	}
 }
