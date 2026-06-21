@@ -263,6 +263,76 @@ manifest DTOs, or the deferred facts path.
   edges. Edge attributes are still not modelled (SD2), so the layered edges
   carry direction only.
 
+### 2026-06-21 — group/module derived views + a single view switch
+
+The explorer grows from a per-package navigator into one that also answers
+*architecture-altitude* questions — how intertangled the code is, whether
+sibling apps stay independent, and what the third-party-dependency surface looks
+like. Every addition is a **derived** lens over the existing manifest: a pure
+function of the stored `PackageNode` fields, built on load like `Index`. The
+serialized seam, the DTOs, and the deferred facts path are unchanged — SD6 holds
+(derived structures are never serialized), and `godep` still imports neither the
+toolchain nor any UI.
+
+- **Group quotient (`group.go`).** A path-derived grouping (`GroupOf`) folds each
+  package into a group — each `apps/<name>` and `public/<area>` (first-party,
+  truncated to a grouping depth), each external module (by module path), stdlib
+  collapsed. `BuildGroupGraph` returns the quotient: one node per group, one edge
+  per ordered group pair, weighted by the number of crossing package imports.
+  Unlike the package closure (thousands of nodes), the quotient is small (tens),
+  so the architecture view draws it **whole** — the SD5 filter+focus lever is not
+  needed at this altitude.
+- **Coupling violations (`group.go`).** `SiblingViolations` reports first-party
+  import edges that cross between two distinct siblings directly under a prefix;
+  with `"apps/"` it is the keelson rule "apps must not depend on each other".
+  The check keys on the immediate child of the prefix, so it is **independent of
+  the view's grouping depth** — sliding the graph coarser never hides a real
+  violation. It flags **direct** app→app edges; transitive coupling
+  (`app → lib → app`) is visible as a path in the quotient but not reddened, a
+  deliberately simple first cut (a reverse-reachability variant is the noted
+  upgrade if it proves necessary). This generalises the lone hand-written seam
+  invariant (`godep_seam_test.go`) into a reusable, run-time check.
+- **Module rollup (`module.go`).** `ModuleStats` rolls the external packages up
+  by owning module and computes, per module: package count, **direct vs
+  transitive** (does any first-party package import it, derived structurally from
+  the graph rather than parsed from `go.mod`), first-party **fan-in**, and
+  **blast radius** (the first-party packages a change to the module would reach,
+  via reverse reachability). This is the dependency-surface view the per-package
+  table cannot give.
+
+The seam additions are covered by table-driven tests (`group_module_test.go`):
+grouping, quotient edge weights, the apps violation, and the module stats.
+
+On the UI side (`apps/godepview`), these surface behind a **single top-level
+view switch** — *Packages · Architecture · Modules* — that reconfigures all
+three dock panes together, each view organised around one focus object (a
+package, a group, a module). A first cut used two independent master/graph
+toggles, but that 2×2 matrix produced incoherent pane combinations (a module
+table beside a per-package neighbourhood) and a detail pane that silently changed
+meaning; the single switch replaced it.
+
+- **Architecture view** — a groups table (class, package count, quotient
+  in/out-degree, violation flag) as the master; the quotient rendered with the
+  [ADR-0069](0069-imzero2-layeredgraph-widget.md) `layeredgraph` widget,
+  class-coloured, edges labelled with crossing-import counts and **forbidden
+  app→app edges in the error tone**; the violations list plus the selected
+  group's member packages in the detail pane.
+- **Modules view** — the rollup table as the master, the quotient with external
+  modules folded in (selected module highlighted), and the selected module's
+  first-party importers + blast set in the detail pane.
+
+The architecture graph reuses ADR-0069's engine with **no new widget
+capability** — the quotient is a flat graph whose nodes happen to be groups.
+Nested group *clusters* (Graphviz `subgraph cluster_…`, drawn as nested boxes)
+would need a cluster field on the `layeredgraph` model and box-painting in its
+view; that is a possible future ADR-0069 enhancement, deliberately out of scope
+here (the light cut ships; the heavy 10% is deferred).
+
+No change to the seam, the manifest DTOs, or the deferred facts path. The
+`gov godep` subcommand floated in the original Alternatives is now the natural
+home for these same derived queries (group coupling, module rollup) as a
+CI/scripting surface — still not built, still not precluded.
+
 ## References
 
 - [ADR-0042](0042-keelson-leeway-codec-soa-generator.md) — `marshallgen` SoA codec generator; the grammar the manifest DTOs target.
