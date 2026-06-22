@@ -15,10 +15,11 @@
 # Encoder defaults to VAAPI (ADR-0024 SD3). On boxes without VAAPI H.264
 # encode (e.g. Fedora's mesa without the freeworld drivers), override:
 #   IMZERO2_HEADLESS_ENCODER_ARGS="-c:v libopenh264 -rc_mode off -bf 0 -g 120"
-# (-g 120 = periodic IDR, matching the built-in default: a late-joining passive
-# viewer can start at the next scheduled key frame, ADR-0086 SD5, and the active
-# view pays a tunable refresh, SD10. Use -g 100000 only for a known single
-# viewer — an infinite GOP starves any passive joiner of a key frame.)
+# (the carrier auto-toggles the GOP by viewer mix, ADR-0086 SD10 Update: an
+# effectively-infinite, pulse-free GOP while only the active viewer is
+# connected, dropping to your -g value, e.g. -g 120, once a passive viewer joins
+# so it can start at a key frame. Omitting -g entirely keeps ffmpeg's default
+# GOP and opts out of the toggle.)
 set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"

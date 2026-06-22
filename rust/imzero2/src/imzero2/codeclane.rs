@@ -68,14 +68,13 @@ impl VideoCodec {
 /// this replaces the retired `aud=insert` of the original Annex-B path).
 const H264_BSF: &str = "dump_extra=freq=keyframe";
 
-/// Periodic IDR interval in **frames** (ffmpeg `-g`), ADR-0086 SD5. The single
-/// shared encoder serves the active viewer *and* late-joining passive viewers,
-/// so the stream can no longer run the effectively-infinite GOP of ADR-0024 SD3
-/// (a joiner could never start): periodic key frames let a passive viewer begin
-/// at the next *scheduled* IDR without forcing one (which would pulse viewers
-/// already watching). `-bf 0` is kept, so the active latency target is
-/// unchanged; the price is a tunable colour-pulse refresh on the active view
-/// (ADR-0086 SD10), with the two-encoder split (SD7) as the gated remedy.
+/// Periodic IDR interval in **frames** (ffmpeg `-g`), ADR-0086 SD5/SD10. Used
+/// while a passive viewer is present: the single shared encoder must emit
+/// periodic key frames so a late-joining passive viewer can begin at the next
+/// *scheduled* IDR without forcing one (which would pulse viewers already
+/// watching). `-bf 0` is kept, so the active latency target is unchanged; the
+/// price is a tunable colour-pulse refresh, paid **only while serving a passive
+/// viewer** (the conditional GOP — see [`CodecLane::with_gop`] and the carrier).
 ///
 /// The unit is *encoded* frames, not wall-clock: blake3 dedup + reactive
 /// cadence (ADR-0062) mean the encoder only sees changed frames, so on a
@@ -84,6 +83,14 @@ const H264_BSF: &str = "dump_extra=freq=keyframe";
 /// Field-tunable without a rebuild via `IMZERO2_HEADLESS_ENCODER_ARGS` (a full
 /// encoder-arg override, which can set its own `-g`).
 const PERIODIC_IDR_GOP: &str = "120";
+
+/// Effectively-infinite GOP (a single IDR at stream start) — ADR-0024 SD3's
+/// pulse-free active stream. Used while **only the active viewer** is connected
+/// (no passive viewer needs periodic key frames), so the common single-viewer
+/// case never sees the colour pulse. The carrier raises the GOP to this when
+/// alone and drops it to [`PERIODIC_IDR_GOP`] when a passive joins (ADR-0086
+/// SD10 Update — a single-encoder, lighter form of the SD7 two-encoder split).
+const INFINITE_GOP: &str = "100000";
 
 #[derive(Clone, Debug)]
 pub struct CodecLane {
@@ -136,11 +143,30 @@ impl CodecLane {
         }
     }
 
+    /// A clone of this lane with its GOP (`-g`) chosen for the current viewer
+    /// mix (ADR-0086 SD10 Update — the conditional GOP). `periodic` (a passive
+    /// viewer is present, so the shared stream needs periodic key frames for it
+    /// to join) selects [`PERIODIC_IDR_GOP`]; otherwise [`INFINITE_GOP`] keeps
+    /// the lone active stream pulse-free (ADR-0024 SD3). The carrier applies
+    /// this at each encoder (re)spawn. A no-op when the args carry no `-g` (a
+    /// raw `ENCODER_ARGS` override without one keeps ffmpeg's default GOP and so
+    /// opts out of the toggle).
+    pub fn with_gop(&self, periodic: bool) -> Self {
+        let gop = if periodic { PERIODIC_IDR_GOP } else { INFINITE_GOP };
+        let mut lane = self.clone();
+        if let Some(i) = lane.encoder_args.iter().position(|a| a == "-g") {
+            if let Some(v) = lane.encoder_args.get_mut(i + 1) {
+                *v = gop.to_owned();
+            }
+        }
+        lane
+    }
+
     /// Default software lane for a codec, muxed through NUT (ADR-0088 SD4).
-    /// Latency-tuned (`-bf 0`) with a **periodic** IDR ([`PERIODIC_IDR_GOP`],
-    /// ADR-0086 SD5) so the single shared encoder can serve late-joining
-    /// passive viewers; the active stream pays a tunable refresh for that
-    /// (ADR-0086 SD10), reversible by the SD7 two-encoder split.
+    /// Latency-tuned (`-bf 0`); the baked `-g` is a periodic-IDR default that
+    /// the carrier overrides per viewer mix via [`CodecLane::with_gop`]
+    /// (ADR-0086 SD10) — periodic while a passive viewer is present, otherwise
+    /// effectively-infinite and pulse-free.
     pub fn software(codec: VideoCodec) -> Self {
         // `-pix_fmt yuv420p` is load-bearing: the render readback is BGRA, and
         // left to choose, ffmpeg converts it to a 4:4:4(+alpha) format the

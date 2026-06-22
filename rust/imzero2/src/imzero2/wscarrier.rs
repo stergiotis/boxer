@@ -214,6 +214,13 @@ struct Inner {
     /// cheaply each frame to decide whether to render pixels and run the
     /// shared encoder. Mirrors `registry.conns.is_empty()` negated.
     connected: std::sync::atomic::AtomicBool,
+    /// True while a passive viewer is present (≥ 2 connections — the ≤1-active
+    /// invariant + lone-survivor auto-promote make a single connection always
+    /// the active one). Drives the conditional GOP (ADR-0086 SD10 Update): the
+    /// render thread runs the shared encoder periodic-IDR while this holds and
+    /// effectively-infinite (pulse-free) otherwise. Set in `broadcast_roster`,
+    /// read each frame by `on_frame`.
+    want_periodic: std::sync::atomic::AtomicBool,
     /// First-class connections + the single active slot (ADR-0086 SD1).
     registry: std::sync::Mutex<Registry>,
     /// Current stream geometry; sent on connect and after each applied
@@ -240,6 +247,10 @@ pub struct WsCarrier {
     /// encoder targets a clone of this, so the distributor outlives any single
     /// encoder generation.
     encoder_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+    /// GOP mode of the current encoder (true = periodic IDR). Tracked so the
+    /// render thread restarts the encoder when passive presence flips
+    /// (`Inner::want_periodic`) — the conditional GOP, ADR-0086 SD10 Update.
+    encoder_periodic: bool,
     fps: f32,
     lane: CodecLane,
     /// blake3 of the last frame fed to the encoder; identical frames are
@@ -278,6 +289,7 @@ impl WsCarrier {
             paste: std::sync::Mutex::new(None),
             waker,
             connected: std::sync::atomic::AtomicBool::new(false),
+            want_periodic: std::sync::atomic::AtomicBool::new(false),
             registry: std::sync::Mutex::new(Registry::new(max)),
             hello: std::sync::Mutex::new(pb::SessionHello {
                 width_px,
@@ -338,6 +350,7 @@ impl WsCarrier {
             inner,
             encoder: None,
             encoder_tx,
+            encoder_periodic: false,
             fps,
             lane,
             last_frame_hash: None,
@@ -476,26 +489,42 @@ impl WsCarrier {
     /// Frames whose pixels are identical to the previous fed one (blake3) are
     /// skipped, except the first frame of a fresh encoder.
     pub fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, frame_idx: u64) {
-        let connected = self.inner.connected.load(std::sync::atomic::Ordering::Acquire);
+        use std::sync::atomic::Ordering::{Acquire, Relaxed};
+        let connected = self.inner.connected.load(Acquire);
         if !connected {
             if self.encoder.take().is_some() {
                 tracing::info!("all viewers disconnected — stopping shared encoder");
                 self.last_frame_hash = None;
+                // Telemetry is per-session: clear it so the next 0→1 spawn
+                // starts a fresh byte/frame count (the EMA bitrate the Go
+                // control reads). Done here, not on every (re)spawn, so a
+                // mid-session GOP restart does not zero the running counts.
+                self.inner.bytes_sent.store(0, Relaxed);
+                self.inner.frames_sent.store(0, Relaxed);
+                self.inner.frames_decoded.store(0, Relaxed);
             }
             return;
         }
+        // Conditional GOP (ADR-0086 SD10 Update): periodic IDR while a passive
+        // viewer is present (it needs key frames to join), else an
+        // effectively-infinite, pulse-free GOP for the lone active viewer. A
+        // change in passive presence restarts the shared encoder — a one-off
+        // fresh IDR at the transition is the only pulse the active sees when not
+        // serving a passive.
+        let want_periodic = self.inner.want_periodic.load(Acquire);
+        if self.encoder.is_some() && self.encoder_periodic != want_periodic {
+            tracing::info!(want_periodic, "passive presence changed — restarting shared encoder for GOP switch");
+            self.encoder = None;
+            self.last_frame_hash = None;
+        }
         if self.encoder.is_none() {
             self.last_frame_hash = None;
-            // Telemetry is per-session: a fresh shared encoder starts a fresh
-            // byte/frame count (the EMA bitrate the Go control reads).
-            use std::sync::atomic::Ordering::Relaxed;
-            self.inner.bytes_sent.store(0, Relaxed);
-            self.inner.frames_sent.store(0, Relaxed);
-            self.inner.frames_decoded.store(0, Relaxed);
-            match EncoderSink::new(width, height, self.fps, self.lane.clone(), EncoderTarget::Channel(self.encoder_tx.clone())) {
+            let lane = self.lane.with_gop(want_periodic);
+            match EncoderSink::new(width, height, self.fps, lane, EncoderTarget::Channel(self.encoder_tx.clone())) {
                 Ok(enc) => {
-                    tracing::info!("first viewer connected — shared periodic-IDR encoder started");
+                    tracing::info!(periodic_idr = want_periodic, "shared encoder started");
                     self.encoder = Some(enc);
+                    self.encoder_periodic = want_periodic;
                 }
                 Err(e) => {
                     tracing::error!(error=%e, "failed to start shared encoder");
@@ -562,6 +591,18 @@ fn broadcast_hello(inner: &Inner, hello: pb::SessionHello) {
 /// own `you_id`/`you_role`. Called on every membership/role change.
 fn broadcast_roster(inner: &Inner) {
     let Ok(reg) = inner.registry.lock() else { return };
+    // Conditional GOP (ADR-0086 SD10 Update): a passive viewer is present iff
+    // there is more than one connection (≤1-active + lone-survivor auto-promote
+    // ⇒ a single connection is always the active one). On a change, wake the
+    // render thread so it re-picks the shared encoder's GOP promptly.
+    let want_periodic = reg.conns.len() >= 2;
+    if inner
+        .want_periodic
+        .swap(want_periodic, std::sync::atomic::Ordering::Release)
+        != want_periodic
+    {
+        let _ = inner.waker.send(());
+    }
     let entries: Vec<pb::RosterEntry> = reg
         .conns
         .iter()
