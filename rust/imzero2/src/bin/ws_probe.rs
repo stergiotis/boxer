@@ -12,8 +12,12 @@
 //!   received after that hello to `<out>.resized` so both stream segments
 //!   can be ffprobe'd independently for their dimensions.
 //!
+//! On connect it sends a `ClientHello` (webcodecs, label "probe") so the host
+//! lists it in the roster as takeover-capable (ADR-0086), prints every roster
+//! and clipboard message it receives, and can request takeover mid-stream.
+//!
 //! Usage:
-//!   imzero2_ws_probe <ws-url> <out.h264> <num_aus> [click_x click_y after_au] [resize lw lh scale after_au]
+//!   imzero2_ws_probe <ws-url> <out.h264> <num_aus> [click_x click_y after_au] [resize lw lh scale after_au] [take after_au]
 
 use futures_util::{SinkExt as _, StreamExt as _};
 use imzero2::imzero2::inputproto as pb;
@@ -50,6 +54,9 @@ async fn main() {
     // pipes fill, congesting the encoder. With SD9 the server's render
     // loop must keep running regardless.
     let mut stall: Option<(u64, u64)> = None;
+    // After `after_au` AUs, request to become the active connection
+    // (ADR-0086 TakeSession) — scripted takeover verification.
+    let mut take_session: Option<u64> = None;
     let mut i = 4;
     while i < args.len() {
         if args.get(i).map(String::as_str) == Some("cadence") {
@@ -64,6 +71,11 @@ async fn main() {
                 args.get(i + 2).and_then(|v| v.parse().ok()).expect("stall hold_secs"),
             ));
             i += 3;
+        } else if args.get(i).map(String::as_str) == Some("take") {
+            take_session = Some(
+                args.get(i + 1).and_then(|v| v.parse().ok()).expect("take after_au"),
+            );
+            i += 2;
         } else if args.get(i).map(String::as_str) == Some("resize") {
             resize = Some((
                 args.get(i + 1).and_then(|v| v.parse().ok()).expect("resize lw"),
@@ -86,6 +98,22 @@ async fn main() {
         .await
         .expect("websocket connect failed");
     let (mut tx, mut rx) = ws.split();
+    // Announce caps + a label so the host marks this probe takeover-capable and
+    // lists it in the roster (ADR-0086 SD8). Without it the probe reads
+    // webcodecs=false and a TakeSession would be refused.
+    {
+        let hello = pb::SessionControl {
+            control: Some(pb::session_control::Control::ClientHello(pb::ClientHello {
+                webcodecs: true,
+                label: "probe".to_owned(),
+            })),
+        };
+        tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+            framed(pb::PREFIX_SESSION, &hello).into(),
+        ))
+        .await
+        .expect("send client hello");
+    }
     let mut out = std::fs::File::create(out_path).expect("create out file");
     let mut resized_out: Option<std::fs::File> = None;
     let mut aus: u64 = 0;
@@ -108,19 +136,44 @@ async fn main() {
         match prefix {
             pb::PREFIX_SESSION => {
                 if let Ok(ctl) = pb::SessionControl::decode(payload) {
-                    if let Some(pb::session_control::Control::Hello(h)) = ctl.control {
-                        hellos += 1;
-                        eprintln!(
-                            "hello #{hellos}: {}x{} @ppp {}",
-                            h.width_px, h.height_px, h.pixels_per_point
-                        );
-                        if hellos > 1 && resized_out.is_none() {
-                            // Geometry changed: split subsequent AUs into a
-                            // second file so each segment can be ffprobe'd.
-                            let path = format!("{out_path}.resized");
-                            resized_out = Some(std::fs::File::create(&path).expect("create resized out"));
-                            eprintln!("geometry change — subsequent AUs go to {path}");
+                    match ctl.control {
+                        Some(pb::session_control::Control::Hello(h)) => {
+                            hellos += 1;
+                            eprintln!(
+                                "hello #{hellos}: {}x{} @ppp {}",
+                                h.width_px, h.height_px, h.pixels_per_point
+                            );
+                            if hellos > 1 && resized_out.is_none() {
+                                // Geometry changed: split subsequent AUs into a
+                                // second file so each segment can be ffprobe'd.
+                                let path = format!("{out_path}.resized");
+                                resized_out = Some(std::fs::File::create(&path).expect("create resized out"));
+                                eprintln!("geometry change — subsequent AUs go to {path}");
+                            }
                         }
+                        Some(pb::session_control::Control::Roster(r)) => {
+                            let role = if r.you_role == pb::Role::Active as i32 { "active" } else { "passive" };
+                            let conns: Vec<String> = r
+                                .connections
+                                .iter()
+                                .map(|c| {
+                                    format!(
+                                        "#{}{}{}",
+                                        c.id,
+                                        if c.role == pb::Role::Active as i32 { "=active" } else { "" },
+                                        if c.webcodecs { ":wc" } else { "" }
+                                    )
+                                })
+                                .collect();
+                            eprintln!(
+                                "roster: you=#{} {} active=#{} {}/{} [{}]",
+                                r.you_id, role, r.active_id, r.count, r.max, conns.join(" ")
+                            );
+                        }
+                        Some(pb::session_control::Control::Clipboard(c)) => {
+                            eprintln!("clipboard <- {:?}", c.text);
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -204,6 +257,22 @@ async fn main() {
                                 .await
                                 .expect("send input");
                             }
+                        }
+                    }
+                    if let Some(after) = take_session {
+                        if aus >= after {
+                            take_session = None;
+                            eprintln!("injecting TakeSession after AU {aus}");
+                            let msg = pb::SessionControl {
+                                control: Some(pb::session_control::Control::TakeSession(
+                                    pb::TakeSession {},
+                                )),
+                            };
+                            tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+                                framed(pb::PREFIX_SESSION, &msg).into(),
+                            ))
+                            .await
+                            .expect("send take_session");
                         }
                     }
                 }

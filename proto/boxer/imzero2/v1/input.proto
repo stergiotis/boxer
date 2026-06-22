@@ -13,9 +13,13 @@
 //
 // Wire framing (ADR-0024 SD6): a single WebSocket carries everything as
 // binary messages with a one-byte type prefix:
-//   0x01 server→client  VideoChunk     (encoded H.264 access unit)
-//   0x02 client→server  InputEvent
-//   0x03 both ways      SessionControl (hello, resize, ping, set-cadence)
+//   0x01 server→client  VideoChunk     (encoded H.264 access unit; broadcast
+//                                        to every connection, ADR-0086)
+//   0x02 client→server  InputEvent     (honoured only from the active
+//                                        connection, ADR-0086 SD2)
+//   0x03 both ways      SessionControl (hello, resize, ping, set-cadence,
+//                                        decode-caps, client-hello, roster,
+//                                        take-session, clipboard)
 
 syntax = "proto3";
 
@@ -98,7 +102,68 @@ message SessionControl {
     Ping ping = 3;
     SetCadence set_cadence = 4;
     DecodeCapabilities decode_capabilities = 5;
+    // ADR-0086 active/passive roster:
+    ClientHello client_hello = 6;   // client→server, post-connect
+    Roster roster = 7;              // server→client, per recipient
+    TakeSession take_session = 8;   // client→server
+    // ADR-0082 SD6 clipboard (both ways):
+    ClipboardData clipboard = 9;
   }
+}
+
+// Connection role in the session (ADR-0086 SD1). Server-authoritative:
+// exactly one ACTIVE connection drives input + geometry; PASSIVE connections
+// watch read-only. PASSIVE is the proto3 default (0) — the safe role.
+enum Role {
+  ROLE_PASSIVE = 0;
+  ROLE_ACTIVE = 1;
+}
+
+// Client→server (ADR-0086 SD8/SD9): the viewer's capabilities and an optional
+// device label, sent once just after connect. `webcodecs` gates takeover —
+// only a decode-capable connection may become active (SD2). Geometry is not
+// here: it continues to flow on ViewportResize (active-only).
+message ClientHello {
+  bool webcodecs = 1;
+  string label = 2;
+}
+
+// One connection as seen in the roster (ADR-0086 SD9). Identity stays minimal:
+// id, role, an optional label, and the takeover-capable (webcodecs) flag. Peer
+// IP is used for rate-limiting/audit (ADR-0082) only and never appears here.
+message RosterEntry {
+  uint64 id = 1;
+  Role role = 2;
+  string label = 3;
+  bool webcodecs = 4;
+}
+
+// Server→client (ADR-0086 SD1): the session roster, built PER RECIPIENT and
+// rebroadcast on every membership/role change. `you_id`/`you_role` identify
+// the receiving connection so its viewer can mirror its own role into the
+// ViewMode and detect its own promotion/demotion — this folds the separate
+// RoleChanged of SD8 into the roster.
+message Roster {
+  uint64 you_id = 1;
+  Role you_role = 2;
+  uint64 active_id = 3;   // 0 = no active connection (slot empty)
+  uint32 count = 4;
+  uint32 max = 5;
+  repeated RosterEntry connections = 6;
+}
+
+// Client→server (ADR-0086 SD2): request to become the active connection.
+// Honoured only from a webcodecs-capable connection; unilateral — it demotes
+// the prior active to passive.
+message TakeSession {
+}
+
+// Both ways (ADR-0082 SD6): clipboard text. Server→client carries text the
+// host copied (drained from egui OutputCommand::CopyText) for the viewer to
+// write to navigator.clipboard; client→server carries a paste the viewer read,
+// which the host injects as egui::Event::Paste. Only the active session syncs.
+message ClipboardData {
+  string text = 1;
 }
 
 // Client→server: the viewer's decode capabilities (ADR-0088 SD2/SD8),

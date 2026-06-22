@@ -1,8 +1,8 @@
-//! WebSocket carrier (ADR-0024 SD4/SD6, Phases 4–5).
+//! WebSocket carrier (ADR-0024 SD4/SD6; ADR-0086 active/passive roster).
 //!
 //! Two TCP listeners (`IMZERO2_HEADLESS_LISTEN` and port+1, kept for URL
 //! compatibility) run an identical dispatcher: a request that carries a
-//! WebSocket upgrade header becomes the data channel; anything else is
+//! WebSocket upgrade header becomes a data channel; anything else is
 //! answered with the embedded single-file viewer page. Sniffing uses
 //! `TcpStream::peek`, so the stream reaches the WebSocket handshake
 //! unconsumed. Either port therefore works for both the page and the
@@ -14,16 +14,30 @@
 //! prefix (SD6): 0x01 video chunks server→client, 0x02 protobuf input
 //! events client→server, 0x03 session control both ways.
 //!
-//! Session model (v1, per the ADR): single session — a second connection
-//! is rejected while one is active. The per-connection encoder is owned
-//! by this carrier's [`FrameSink`] impl: it spawns on connect and drops on
-//! disconnect, so every connection starts its stream at SPS/PPS + IDR
-//! (the acceptance-review (re)connect rule) and no encoding happens with
-//! nobody watching.
+//! Session model (ADR-0086): connections are first-class — a [`Registry`]
+//! holds each [`Conn`] with its role (`active` | `passive`) and a
+//! per-connection outbound queue. The invariant is **≤ 1 active**; the
+//! first connection is admitted active and the rest passive (read-only).
+//! Every membership/role change rebroadcasts a per-recipient [`pb::Roster`]
+//! (each connection's copy carries its own `you_id`/`you_role`, which folds
+//! SD8's RoleChanged into the roster). Input, resize, cadence and clipboard
+//! injection are honoured **only** from the active connection; passive
+//! connections are dropped at the server. Takeover (`TakeSession`) is
+//! unilateral (one principal, ADR-0082): it promotes the requester and
+//! demotes the prior active; a slot freed by a disconnect auto-promotes a
+//! lone passive.
 //!
-//! The tokio runtime lives on a dedicated thread; the render loop talks
-//! to it only through atomics, a mutex-guarded event vector, and the
-//! bounded video channel.
+//! One **shared** periodic-IDR encoder serves the whole session (ADR-0086
+//! SD5): it spawns on the 0→1 transition (a fresh SPS/PPS + IDR for the
+//! first viewer) and stops on N→0. Its NAL units are broadcast by a
+//! [`distribute`] task to every connection's queue; a late joiner starts
+//! at the next *scheduled* IDR (no forced mid-stream IDR → no colour pulse
+//! for viewers already watching, ADR-0024 SD3 active-scoped). Geometry and
+//! codec changes re-announce the hello to all connections.
+//!
+//! The tokio runtime lives on a dedicated thread; the render loop talks to
+//! it only through atomics, mutex-guarded vectors, the registry, and the
+//! bounded encoder channel.
 
 use crate::imzero2::codeclane::CodecLane;
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
@@ -32,48 +46,186 @@ use crate::imzero2::inputproto as pb;
 use futures_util::{SinkExt as _, StreamExt as _};
 use prost::Message as _;
 
+/// Per-connection outbound queue depth: video NAL units and per-recipient
+/// control (roster, clipboard, hello re-announce) share it. A connection
+/// that stops draining (a stalled viewer) overflows this and is dropped to
+/// (recovering on its own decode-error reconnect) rather than backing up
+/// the encoder or the other viewers.
 const VIDEO_CHANNEL_CAP: usize = 16;
 
-/// Render-thread control sends (the hello re-announce on a resize or codec
-/// switch) must never block the render/FFFI2 loop on a stalled viewer
-/// (ADR-0024 SD9). They ride out a transient-full channel with a brief
-/// bounded retry, then give up. ~64 ms total: long enough to absorb a burst
-/// on the 16-deep / 30 fps channel, short enough to be a non-issue on the
-/// resize/switch that already gaps the stream.
-const RENDER_SEND_POLL: std::time::Duration = std::time::Duration::from_millis(2);
-const RENDER_SEND_MAX_POLLS: u32 = 32;
+/// Default bound on simultaneously-parked connections (ADR-0086 SD2 /
+/// ADR-0082 SD5 `IMZERO2_HEADLESS_MAX_CONNECTIONS`). Read from the env once
+/// at [`WsCarrier::start`]; this is the fallback.
+const DEFAULT_MAX_CONNECTIONS: usize = 8;
+
+/// Liveness keepalive. A viewer that stops draining its socket — a backgrounded
+/// or frozen tab, or a half-open connection left behind by a browser
+/// decode-error reconnect — would otherwise park its session task on a pending
+/// send forever, never observe the close, and **linger in the roster, inflating
+/// the viewer count**. So every socket write is bounded by [`WRITE_TIMEOUT`],
+/// and an otherwise-idle connection is pinged every [`PING_INTERVAL`] (the
+/// browser auto-replies); a peer that cannot accept a write in time is reaped.
+const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// One first-class connection (ADR-0086 SD1). Identity stays minimal (SD9):
+/// peer IP is used for rate-limiting/audit (ADR-0082) only and never enters
+/// the roster.
+struct Conn {
+    id: u64,
+    role: pb::Role,
+    /// Takeover-capable: only a WebCodecs-capable connection may become
+    /// active (SD2). Reported by the client's `ClientHello`; until then it
+    /// reads false.
+    webcodecs: bool,
+    /// Optional device label ("iPad"), reported by the `ClientHello`.
+    label: String,
+    /// Outbound queue for this connection (video + per-recipient control).
+    tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+}
+
+/// The set of live connections and the single active slot (ADR-0086 SD1).
+/// Guarded by [`Inner::registry`]; mutated only from the carrier's async
+/// session tasks and read briefly by the render thread (active lookup).
+struct Registry {
+    conns: Vec<Conn>,
+    /// `Some(id)` of the active connection, or `None` when the slot is empty
+    /// (several passives present, none promoted — each keeps its button).
+    active_id: Option<u64>,
+    next_id: u64,
+    max: usize,
+}
+
+impl Registry {
+    fn new(max: usize) -> Self {
+        Self {
+            conns: Vec::new(),
+            active_id: None,
+            next_id: 1,
+            max,
+        }
+    }
+
+    fn find(&self, id: u64) -> Option<&Conn> {
+        self.conns.iter().find(|c| c.id == id)
+    }
+
+    /// Admit a connection, assigning it the next id and a role: **active iff
+    /// there is no current active, else passive** (SD2 — first device drives,
+    /// later devices watch). Returns the new id, or `None` if `max` parked
+    /// connections are already present (the connection is refused).
+    fn admit(&mut self, tx: tokio::sync::mpsc::Sender<Vec<u8>>) -> Option<u64> {
+        if self.conns.len() >= self.max {
+            return None;
+        }
+        let id = self.next_id;
+        self.next_id += 1;
+        let role = if self.active_id.is_none() {
+            self.active_id = Some(id);
+            pb::Role::Active
+        } else {
+            pb::Role::Passive
+        };
+        self.conns.push(Conn {
+            id,
+            role,
+            webcodecs: false,
+            label: String::new(),
+            tx,
+        });
+        Some(id)
+    }
+
+    /// Remove a connection. Whenever this leaves the active slot empty and a
+    /// **lone** connection behind, that one auto-promotes (SD2 — zero-friction
+    /// return to your other device); with several remaining the slot stays
+    /// empty (each keeps its button). This covers both removing the active and
+    /// removing a passive that leaves a single connection — so the last
+    /// remaining viewer always drives.
+    fn remove(&mut self, id: u64) {
+        self.conns.retain(|c| c.id != id);
+        if self.active_id == Some(id) {
+            self.active_id = None;
+        }
+        if self.active_id.is_none() {
+            if let [only] = self.conns.as_mut_slice() {
+                only.role = pb::Role::Active;
+                self.active_id = Some(only.id);
+            }
+        }
+    }
+
+    /// Make `id` the active connection and demote the prior active to passive
+    /// (SD2 — unilateral takeover). Returns whether anything changed.
+    fn take_session(&mut self, id: u64) -> bool {
+        if self.active_id == Some(id) {
+            return false;
+        }
+        for c in &mut self.conns {
+            if c.id == id {
+                c.role = pb::Role::Active;
+            } else if c.role == pb::Role::Active {
+                c.role = pb::Role::Passive;
+            }
+        }
+        self.active_id = Some(id);
+        true
+    }
+
+    /// Record a connection's reported capabilities + label (`ClientHello`).
+    fn set_caps(&mut self, id: u64, webcodecs: bool, label: String) {
+        if let Some(c) = self.conns.iter_mut().find(|c| c.id == id) {
+            c.webcodecs = webcodecs;
+            c.label = label;
+        }
+    }
+
+    fn is_active(&self, id: u64) -> bool {
+        self.active_id == Some(id)
+    }
+
+    /// The active connection's outbound queue, if any (clipboard → active).
+    fn active_tx(&self) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
+        self.active_id
+            .and_then(|id| self.find(id))
+            .map(|c| c.tx.clone())
+    }
+}
 
 struct Inner {
-    /// Raw wire events, drained by the render thread each tick.
+    /// Raw wire events from the **active** connection, drained by the render
+    /// thread each tick (passive input is dropped at the server, SD2/SD8).
     events: std::sync::Mutex<Vec<pb::input_event::Event>>,
-    /// Latest viewport-resize request; drained by the render thread,
-    /// which applies it (target rebuild + hello re-announce + encoder
-    /// restart) and answers with a fresh [`pb::SessionHello`].
+    /// Latest viewport-resize from the active connection; drained by the
+    /// render thread, which applies it (target rebuild + hello re-announce +
+    /// encoder restart) and answers with a fresh [`pb::SessionHello`].
     resize: std::sync::Mutex<Option<pb::ViewportResize>>,
-    /// Latest runtime cadence request (0 continuous / 1 reactive),
-    /// drained by the render thread.
+    /// Latest runtime cadence request (0 continuous / 1 reactive) from the
+    /// active connection, drained by the render thread.
     cadence_request: std::sync::Mutex<Option<u32>>,
+    /// Latest clipboard paste from the active connection (ADR-0082 SD6),
+    /// drained by the render thread and injected as `egui::Event::Paste`.
+    paste: std::sync::Mutex<Option<String>>,
     /// Wakes the render thread out of its reactive sleep when anything
     /// arrives that wants a pass soon: input, resize, cadence change,
-    /// connect/disconnect. Sends are fire-and-forget.
+    /// connect/disconnect, takeover, paste. Sends are fire-and-forget.
     waker: std::sync::mpsc::Sender<()>,
+    /// True while ≥ 1 connection is present — the render thread checks this
+    /// cheaply each frame to decide whether to render pixels and run the
+    /// shared encoder. Mirrors `registry.conns.is_empty()` negated.
     connected: std::sync::atomic::AtomicBool,
-    /// Bumped on every accepted connection; the render thread compares it
-    /// to decide when to (re)spawn the per-connection encoder.
-    conn_gen: std::sync::atomic::AtomicU64,
-    /// Sender for pre-framed outbound payloads of the *current*
-    /// connection — video chunks and mid-session hello re-announcements
-    /// share it, which is what orders "hello before the new stream's IDR"
-    /// during a geometry change.
-    video_tx: std::sync::Mutex<Option<tokio::sync::mpsc::Sender<Vec<u8>>>>,
+    /// First-class connections + the single active slot (ADR-0086 SD1).
+    registry: std::sync::Mutex<Registry>,
     /// Current stream geometry; sent on connect and after each applied
     /// resize. Updated by the render thread via [`WsCarrier::apply_geometry`].
     hello: std::sync::Mutex<pb::SessionHello>,
-    /// Latest decode capabilities reported by the viewer (ADR-0088 SD2/SD8),
-    /// drained by the render thread to forward to the Go interpreter.
+    /// Latest decode capabilities reported by the active connection (ADR-0088
+    /// SD2/SD8), drained by the render thread to forward to the Go interpreter.
     decode_caps: std::sync::Mutex<Option<pb::DecodeCapabilities>>,
-    /// Wire telemetry (ADR-0088): bytes + frames sent to the viewer, and the
-    /// viewer's latest decoded-frame count (from its progress pings).
+    /// Wire telemetry (ADR-0088): bytes + frames the shared encoder produced
+    /// (counted once per access unit in [`distribute`], not multiplied by the
+    /// viewer count — it is the stream bitrate, not aggregate egress), and the
+    /// active viewer's latest decoded-frame count (from its progress pings).
     bytes_sent: std::sync::atomic::AtomicU64,
     frames_sent: std::sync::atomic::AtomicU64,
     frames_decoded: std::sync::atomic::AtomicU64,
@@ -81,8 +233,13 @@ struct Inner {
 
 pub struct WsCarrier {
     inner: std::sync::Arc<Inner>,
+    /// The single shared encoder (ADR-0086 SD5): present while ≥ 1 connection,
+    /// `None` otherwise. Geometry/codec changes drop it for a restart.
     encoder: Option<EncoderSink>,
-    encoder_gen: u64,
+    /// Stable input to the [`distribute`] fan-out task; every (re)spawned
+    /// encoder targets a clone of this, so the distributor outlives any single
+    /// encoder generation.
+    encoder_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
     fps: f32,
     lane: CodecLane,
     /// blake3 of the last frame fed to the encoder; identical frames are
@@ -93,9 +250,9 @@ pub struct WsCarrier {
 
 impl WsCarrier {
     /// Bind `listen` (e.g. "127.0.0.1:8089") for WebSocket and `port+1`
-    /// for the viewer page, then run both on a dedicated tokio thread.
-    /// `waker` is signalled whenever wire activity wants a render pass
-    /// soon (input, resize, cadence change, connect/disconnect).
+    /// for the viewer page, then run both — plus the broadcast distributor —
+    /// on a dedicated tokio thread. `waker` is signalled whenever wire
+    /// activity wants a render pass soon.
     pub fn start(
         listen: &str,
         width_px: u32,
@@ -106,14 +263,22 @@ impl WsCarrier {
         lane: CodecLane,
         waker: std::sync::mpsc::Sender<()>,
     ) -> std::io::Result<Self> {
+        let max = std::env::var("IMZERO2_HEADLESS_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .filter(|n| *n >= 1)
+            .unwrap_or(DEFAULT_MAX_CONNECTIONS);
+        // The encoder→distributor channel is created once and lives for the
+        // carrier's lifetime, independent of any single encoder generation.
+        let (encoder_tx, encoder_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(VIDEO_CHANNEL_CAP);
         let inner = std::sync::Arc::new(Inner {
             events: std::sync::Mutex::new(Vec::new()),
             resize: std::sync::Mutex::new(None),
             cadence_request: std::sync::Mutex::new(None),
+            paste: std::sync::Mutex::new(None),
             waker,
             connected: std::sync::atomic::AtomicBool::new(false),
-            conn_gen: std::sync::atomic::AtomicU64::new(0),
-            video_tx: std::sync::Mutex::new(None),
+            registry: std::sync::Mutex::new(Registry::new(max)),
             hello: std::sync::Mutex::new(pb::SessionHello {
                 width_px,
                 height_px,
@@ -134,7 +299,7 @@ impl WsCarrier {
         let page_addr = std::net::SocketAddr::new(ws_addr.ip(), ws_addr.port().wrapping_add(1));
         let page_listener = std::net::TcpListener::bind(page_addr)?;
         page_listener.set_nonblocking(true)?;
-        tracing::info!(viewer=%format!("http://{page_addr}/"), websocket=%format!("ws://{ws_addr}/"), "remote viewer carrier listening");
+        tracing::info!(viewer=%format!("http://{page_addr}/"), websocket=%format!("ws://{ws_addr}/"), max_connections=max, "remote viewer carrier listening");
 
         let inner_thread = inner.clone();
         std::thread::Builder::new()
@@ -163,26 +328,29 @@ impl WsCarrier {
                             Err(e) => tracing::error!(error=%e, "page listener conversion failed"),
                         }
                     };
-                    tokio::join!(a, b);
+                    // The distributor fans the shared encoder's NAL units out to
+                    // every connection's queue; it runs for the carrier's lifetime.
+                    let dist = distribute(encoder_rx, inner_thread.clone());
+                    tokio::join!(a, b, dist);
                 });
             })?;
         Ok(Self {
             inner,
             encoder: None,
-            encoder_gen: 0,
+            encoder_tx,
             fps,
             lane,
             last_frame_hash: None,
         })
     }
 
-    /// True while a viewer session is active — the host skips rendering
-    /// pixels entirely when nothing consumes them.
+    /// True while ≥ 1 viewer is connected — the host skips rendering pixels
+    /// entirely when nothing consumes them.
     pub fn connected(&self) -> bool {
         self.inner.connected.load(std::sync::atomic::Ordering::Acquire)
     }
 
-    /// Latest pending runtime cadence request, if any.
+    /// Latest pending runtime cadence request from the active connection.
     pub fn take_cadence(&mut self) -> Option<u32> {
         self.inner.cadence_request.lock().ok().and_then(|mut c| c.take())
     }
@@ -194,24 +362,47 @@ impl WsCarrier {
         }
     }
 
-    /// Drain wire input events into `out` for the render thread.
+    /// Drain active-connection wire input events into `out` for the render thread.
     pub fn drain_events(&mut self, out: &mut Vec<pb::input_event::Event>) {
         if let Ok(mut events) = self.inner.events.lock() {
             out.append(&mut events);
         }
     }
 
-    /// Latest pending viewport-resize request, if any (latest wins; the
-    /// render thread applies at tick granularity).
+    /// Latest pending viewport-resize from the active connection (latest wins).
     pub fn take_resize(&mut self) -> Option<pb::ViewportResize> {
         self.inner.resize.lock().ok().and_then(|mut r| r.take())
     }
 
-    /// Commit a new stream geometry (already clamped by the host): update
-    /// the hello for future connections, stop the current encoder, and —
-    /// if a viewer is connected — re-announce the hello through the
-    /// outbound channel *before* the next encoder spawns, so the viewer
-    /// resizes its canvas and rejoins at the new stream's first IDR.
+    /// Latest pending clipboard paste from the active connection (ADR-0082
+    /// SD6), drained by the render thread to inject `egui::Event::Paste`.
+    pub fn take_paste(&mut self) -> Option<String> {
+        self.inner.paste.lock().ok().and_then(|mut p| p.take())
+    }
+
+    /// Send host-copied text to the **active** connection's clipboard
+    /// (ADR-0082 SD6 — only the active session syncs). Non-blocking on the
+    /// render thread (SD9): a full/stalled active queue drops the copy.
+    pub fn send_clipboard_to_active(&mut self, text: String) {
+        let tx = self.inner.registry.lock().ok().and_then(|r| r.active_tx());
+        if let Some(tx) = tx {
+            let msg = pb::SessionControl {
+                control: Some(pb::session_control::Control::Clipboard(pb::ClipboardData { text })),
+            };
+            let mut framed = Vec::with_capacity(1 + msg.encoded_len());
+            framed.push(pb::PREFIX_SESSION);
+            let _ = msg.encode(&mut framed);
+            if tx.try_send(framed).is_err() {
+                tracing::debug!("clipboard copy dropped — active viewer queue full or gone");
+            }
+        }
+    }
+
+    /// Commit a new stream geometry (already clamped by the host): update the
+    /// hello for future connections, stop the current encoder, and — if any
+    /// viewer is connected — re-announce the hello to **all** connections
+    /// *before* the next encoder spawns, so each viewer resizes its canvas and
+    /// rejoins at the new stream's first IDR.
     pub fn apply_geometry(&mut self, width_px: u32, height_px: u32, pixels_per_point: f32) {
         let mut hello = pb::SessionHello {
             width_px,
@@ -225,35 +416,19 @@ impl WsCarrier {
             *guard = hello.clone();
         }
         // Drop first: reap blocks until the old drain flushed its remaining
-        // (old-geometry) access units into the channel, so the hello below
-        // lands after them and before anything from the new stream.
+        // (old-geometry) access units into the encoder channel, so the hello
+        // below lands after them at the distributor.
         if self.encoder.take().is_some() {
-            tracing::info!(width_px, height_px, pixels_per_point, "geometry change — encoder stopped for restart");
+            tracing::info!(width_px, height_px, pixels_per_point, "geometry change — shared encoder stopped for restart");
         }
-        let tx = self.inner.video_tx.lock().ok().and_then(|g| g.clone());
-        if let Some(tx) = tx {
-            let msg = pb::SessionControl {
-                control: Some(pb::session_control::Control::Hello(hello)),
-            };
-            let mut framed = Vec::with_capacity(1 + msg.encoded_len());
-            framed.push(pb::PREFIX_SESSION);
-            let _ = msg.encode(&mut framed);
-            // Non-blocking on the render thread (ADR-0024 SD9): a healthy
-            // viewer keeps the channel drained so this lands first try; a
-            // stalled viewer drops the re-announce and resyncs on its
-            // decode-error reconnect rather than wedging the render loop.
-            if !send_control_render_thread(&tx, framed) {
-                tracing::debug!("hello re-announce skipped — viewer stalled or mid-teardown");
-            }
-        }
+        self.last_frame_hash = None;
+        broadcast_hello(&self.inner, hello);
     }
 
     /// ADR-0088 SD7: switch the active codec at runtime. Updates the lane and
     /// the hello's codec string, stops the current encoder (its drain flushes
-    /// the old codec's tail), re-announces the hello so it lands between the
-    /// old and new streams, and lets `on_frame` respawn the encoder with the
-    /// new lane (fresh key frame). Geometry is unchanged — the same
-    /// resize-shaped teardown, codec in place of size.
+    /// the old codec's tail), re-announces the hello to all connections, and
+    /// lets `on_frame` respawn the encoder with the new lane (fresh key frame).
     pub fn set_video_codec(&mut self, codec: crate::imzero2::codeclane::VideoCodec) {
         if codec == self.lane.codec {
             return;
@@ -268,27 +443,18 @@ impl WsCarrier {
         self.encoder.take(); // flush old stream; on_frame respawns the new lane
         self.last_frame_hash = None;
         let hello = self.inner.hello.lock().map(|h| (*h).clone()).unwrap_or_default();
-        let tx = self.inner.video_tx.lock().ok().and_then(|g| g.clone());
-        if let Some(tx) = tx {
-            let msg = pb::SessionControl {
-                control: Some(pb::session_control::Control::Hello(hello)),
-            };
-            let mut framed = Vec::with_capacity(1 + msg.encoded_len());
-            framed.push(pb::PREFIX_SESSION);
-            let _ = msg.encode(&mut framed);
-            // Non-blocking on the render thread (ADR-0024 SD9) — see apply_geometry.
-            let _ = send_control_render_thread(&tx, framed);
-        }
+        broadcast_hello(&self.inner, hello);
         tracing::info!(codec = self.lane.codec.as_str(), "video codec switched at runtime");
     }
 
-    /// ADR-0088: a clone of the viewer's latest reported decode capabilities.
+    /// ADR-0088: a clone of the active connection's latest reported decode caps.
     pub fn decode_caps(&self) -> Option<pb::DecodeCapabilities> {
         self.inner.decode_caps.lock().ok().and_then(|g| g.clone())
     }
 
     /// ADR-0088 wire telemetry for the Go control: (bytes_sent, frames_sent,
-    /// frames_decoded, frames_dropped). Cumulative for the current connection.
+    /// frames_decoded, frames_dropped). Cumulative for the current session
+    /// (reset when the shared encoder respawns on the 0→1 transition).
     pub fn stats(&self) -> (u64, u64, u64, u64) {
         use std::sync::atomic::Ordering::Relaxed;
         let dropped = self.encoder.as_ref().map(|e| e.dropped()).unwrap_or(0);
@@ -302,38 +468,39 @@ impl WsCarrier {
 }
 
 impl WsCarrier {
-    /// Feed one rendered frame. Frames whose pixels are identical to the
-    /// previous fed one (blake3) are skipped — no encode, no wire
-    /// traffic — except the first frame of a fresh encoder, which must
-    /// exist for the stream to start at an IDR.
+    /// Feed one rendered frame to the shared encoder (ADR-0086 SD5). The
+    /// encoder spawns on the first connection (0→1, a fresh SPS/PPS + IDR for
+    /// the first viewer) and stops when the last leaves (N→0); a connection
+    /// that joins an existing session does **not** respawn it — it waits for
+    /// the next scheduled IDR, so no viewer already watching is pulsed.
+    /// Frames whose pixels are identical to the previous fed one (blake3) are
+    /// skipped, except the first frame of a fresh encoder.
     pub fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, frame_idx: u64) {
         let connected = self.inner.connected.load(std::sync::atomic::Ordering::Acquire);
-        let cur_gen = self.inner.conn_gen.load(std::sync::atomic::Ordering::Acquire);
         if !connected {
             if self.encoder.take().is_some() {
-                tracing::info!("viewer disconnected — stopping encoder");
+                tracing::info!("all viewers disconnected — stopping shared encoder");
                 self.last_frame_hash = None;
             }
             return;
         }
-        if self.encoder.is_none() || self.encoder_gen != cur_gen {
-            self.encoder = None; // reap a previous connection's encoder first
+        if self.encoder.is_none() {
             self.last_frame_hash = None;
-            let tx = self.inner.video_tx.lock().ok().and_then(|g| g.clone());
-            if let Some(tx) = tx {
-                match EncoderSink::new(width, height, self.fps, self.lane.clone(), EncoderTarget::Channel(tx)) {
-                    Ok(enc) => {
-                        tracing::info!(conn_gen = cur_gen, "viewer connected — encoder started");
-                        self.encoder = Some(enc);
-                        self.encoder_gen = cur_gen;
-                    }
-                    Err(e) => {
-                        tracing::error!(error=%e, "failed to start encoder for viewer session");
-                        return;
-                    }
+            // Telemetry is per-session: a fresh shared encoder starts a fresh
+            // byte/frame count (the EMA bitrate the Go control reads).
+            use std::sync::atomic::Ordering::Relaxed;
+            self.inner.bytes_sent.store(0, Relaxed);
+            self.inner.frames_sent.store(0, Relaxed);
+            self.inner.frames_decoded.store(0, Relaxed);
+            match EncoderSink::new(width, height, self.fps, self.lane.clone(), EncoderTarget::Channel(self.encoder_tx.clone())) {
+                Ok(enc) => {
+                    tracing::info!("first viewer connected — shared periodic-IDR encoder started");
+                    self.encoder = Some(enc);
                 }
-            } else {
-                return; // connection is mid-teardown
+                Err(e) => {
+                    tracing::error!(error=%e, "failed to start shared encoder");
+                    return;
+                }
             }
         }
         let hash = blake3::hash(bgra);
@@ -347,28 +514,84 @@ impl WsCarrier {
     }
 }
 
-/// Enqueue a pre-framed message into the current connection's outbound
-/// channel from the render thread without an unbounded block (ADR-0024 SD9).
-/// Returns true if it was queued. A dropped receiver (mid-teardown) or a
-/// channel that stays full past the bounded retry (a stalled viewer not
-/// reading the socket) returns false; the caller treats either as "skip" —
-/// the stalled case self-heals on the viewer's reconnect. Unlike the encoder
-/// drain (a background thread that may block for backpressure), this runs on
-/// the render thread, so it bounds its wait instead of using `blocking_send`.
-fn send_control_render_thread(tx: &tokio::sync::mpsc::Sender<Vec<u8>>, framed: Vec<u8>) -> bool {
-    use tokio::sync::mpsc::error::TrySendError;
-    let mut pending = framed;
-    for _ in 0..RENDER_SEND_MAX_POLLS {
-        match tx.try_send(pending) {
-            Ok(()) => return true,
-            Err(TrySendError::Closed(_)) => return false,
-            Err(TrySendError::Full(returned)) => {
-                pending = returned;
-                std::thread::sleep(RENDER_SEND_POLL);
-            }
+/// Fan the shared encoder's pre-framed NAL units (0x01 + VideoChunk) out to
+/// every connection's queue (ADR-0086 SD5 broadcast). Each connection's send
+/// is non-blocking `try_send`: a stalled viewer drops the unit (and recovers
+/// at its next decode-error reconnect) without backing up the encoder or the
+/// other viewers. Telemetry counts each unit once (stream bitrate, not egress).
+async fn distribute(mut encoder_rx: tokio::sync::mpsc::Receiver<Vec<u8>>, inner: std::sync::Arc<Inner>) {
+    use std::sync::atomic::Ordering::Relaxed;
+    while let Some(payload) = encoder_rx.recv().await {
+        inner.bytes_sent.fetch_add(payload.len() as u64, Relaxed);
+        inner.frames_sent.fetch_add(1, Relaxed);
+        // Clone the senders under the lock, send outside it — never hold the
+        // registry mutex across a (non-blocking, but still) channel op.
+        let txs: Vec<tokio::sync::mpsc::Sender<Vec<u8>>> = match inner.registry.lock() {
+            Ok(r) => r.conns.iter().map(|c| c.tx.clone()).collect(),
+            Err(_) => continue,
+        };
+        for tx in txs {
+            let _ = tx.try_send(payload.clone());
         }
     }
-    false
+}
+
+/// Re-announce a hello to every connection from the render thread (geometry /
+/// codec change). Strictly non-blocking (SD9): a per-connection `try_send`
+/// that finds a full queue drops the re-announce for that viewer, which
+/// resyncs on its own decode-error reconnect. The SD9 ride-out retry the
+/// single-session path used is intentionally not applied here — it cannot be
+/// summed across N connections without risking an N×-bounded render stall.
+fn broadcast_hello(inner: &Inner, hello: pb::SessionHello) {
+    let msg = pb::SessionControl {
+        control: Some(pb::session_control::Control::Hello(hello)),
+    };
+    let mut framed = Vec::with_capacity(1 + msg.encoded_len());
+    framed.push(pb::PREFIX_SESSION);
+    let _ = msg.encode(&mut framed);
+    let Ok(reg) = inner.registry.lock() else { return };
+    for c in &reg.conns {
+        if c.tx.try_send(framed.clone()).is_err() {
+            tracing::debug!(id = c.id, "hello re-announce skipped — viewer stalled or mid-teardown");
+        }
+    }
+}
+
+/// Build and send each connection its own per-recipient [`pb::Roster`]
+/// (ADR-0086 SD1/SD8): every copy shares the connection list but carries its
+/// own `you_id`/`you_role`. Called on every membership/role change.
+fn broadcast_roster(inner: &Inner) {
+    let Ok(reg) = inner.registry.lock() else { return };
+    let entries: Vec<pb::RosterEntry> = reg
+        .conns
+        .iter()
+        .map(|c| pb::RosterEntry {
+            id: c.id,
+            role: c.role as i32,
+            label: c.label.clone(),
+            webcodecs: c.webcodecs,
+        })
+        .collect();
+    let active_id = reg.active_id.unwrap_or(0);
+    let count = reg.conns.len() as u32;
+    let max = reg.max as u32;
+    for c in &reg.conns {
+        let roster = pb::Roster {
+            you_id: c.id,
+            you_role: c.role as i32,
+            active_id,
+            count,
+            max,
+            connections: entries.clone(),
+        };
+        let msg = pb::SessionControl {
+            control: Some(pb::session_control::Control::Roster(roster)),
+        };
+        let mut framed = Vec::with_capacity(1 + msg.encoded_len());
+        framed.push(pb::PREFIX_SESSION);
+        let _ = msg.encode(&mut framed);
+        let _ = c.tx.try_send(framed); // drop-on-full (stalled viewer)
+    }
 }
 
 /// Case-insensitive ASCII substring search over a request head.
@@ -425,23 +648,6 @@ async fn serve_page(mut stream: tokio::net::TcpStream, page: &str) {
     let _ = stream.shutdown().await;
 }
 
-/// Atomically claim the single-session slot (ADR-0024 v1). Returns true to
-/// exactly one caller while the slot is free; concurrent callers get false.
-/// This must be a `compare_exchange`, not a load-then-store: the original
-/// split (`load` in the accept task, `store(true)` only after the upgrade
-/// handshake) raced across the handshake await — two near-simultaneous
-/// upgrades could both observe "free" and both be admitted (M1).
-fn try_claim_session(connected: &std::sync::atomic::AtomicBool) -> bool {
-    connected
-        .compare_exchange(
-            false,
-            true,
-            std::sync::atomic::Ordering::AcqRel,
-            std::sync::atomic::Ordering::Relaxed,
-        )
-        .is_ok()
-}
-
 async fn accept_loop(
     listener: tokio::net::TcpListener,
     inner: std::sync::Arc<Inner>,
@@ -462,22 +668,12 @@ async fn accept_loop(
                 serve_page(stream, &page).await;
                 return;
             }
-            // Single session at v1 (ADR-0024): claim the slot atomically
-            // *before* the upgrade handshake, so two concurrent upgrades can
-            // never both be admitted (M1). The loser is rejected.
-            if !try_claim_session(&inner.connected) {
-                tracing::info!(%peer, "rejecting second viewer connection (single-session v1)");
-                drop(stream);
-                return;
-            }
-            if let Err(e) = handle_session(stream, peer, inner.clone()).await {
+            // Admission (capacity + role) happens inside handle_session under
+            // the registry mutex, which is the synchronisation point — there is
+            // no single-slot to race for anymore (ADR-0086 SD1).
+            if let Err(e) = handle_session(stream, peer, inner).await {
                 tracing::info!(%peer, error=%e, "viewer session ended with error");
             }
-            // Release the slot on every exit path — including a handshake
-            // failure that returns before handle_session sets up its session —
-            // then wake the host so it reaps the encoder promptly.
-            inner.connected.store(false, std::sync::atomic::Ordering::Release);
-            let _ = inner.waker.send(());
         });
     }
 }
@@ -490,20 +686,26 @@ async fn handle_session(
     let ws = tokio_tungstenite::accept_async(stream).await?;
     let (mut ws_tx, mut ws_rx) = ws.split();
 
-    let (video_tx, mut video_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(VIDEO_CHANNEL_CAP);
-    if let Ok(mut guard) = inner.video_tx.lock() {
-        *guard = Some(video_tx);
-    }
-    inner.conn_gen.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-    // The single-session slot was already claimed in accept_loop (before the
-    // handshake) — see try_claim_session — so this only wakes the host to
-    // render the first frame for the fresh viewer promptly.
-    let _ = inner.waker.send(());
-    tracing::info!(%peer, "viewer connected");
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(VIDEO_CHANNEL_CAP);
 
-    // First message: session hello with the current stream geometry
-    // (SD6 0x03). Geometry changes mid-session re-announce the same
-    // message through the outbound channel (see apply_geometry).
+    // Admit into the registry. A full roster (MAX_CONNECTIONS) refuses the
+    // connection — the loser is dropped (its viewer reconnects with backoff).
+    let id = match inner.registry.lock().ok().and_then(|mut r| r.admit(tx)) {
+        Some(id) => id,
+        None => {
+            tracing::info!(%peer, "rejecting connection — MAX_CONNECTIONS reached");
+            return Ok(());
+        }
+    };
+    // ≥ 1 connection now: the render thread renders pixels and runs the
+    // shared encoder. (Idempotent — already true if others were present.)
+    inner.connected.store(true, std::sync::atomic::Ordering::Release);
+    let _ = inner.waker.send(());
+    tracing::info!(%peer, id, "viewer connected");
+
+    // First wire message: the session hello with current stream geometry
+    // (SD6 0x03), sent directly so it precedes any queued video/roster — the
+    // viewer needs it to size its canvas and configure its decoder.
     let current_hello = inner.hello.lock().map(|h| (*h).clone()).unwrap_or_default();
     let hello = pb::SessionControl {
         control: Some(pb::session_control::Control::Hello(current_hello)),
@@ -518,94 +720,207 @@ async fn handle_session(
     let result: Result<(), tokio_tungstenite::tungstenite::Error> = if let Err(e) = hello_result {
         Err(e)
     } else {
+        // Announce the new arrival to everyone (this connection learns its own
+        // id/role here, which drives its viewer ViewMode).
+        broadcast_roster(&inner);
+        // Liveness (see PING_INTERVAL/WRITE_TIMEOUT): bound writes and ping an
+        // idle peer so an unresponsive connection is reaped, not leaked.
+        let mut ping = tokio::time::interval(PING_INTERVAL);
+        ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        ping.tick().await; // the first interval tick fires immediately — drop it
+        // Liveness state: set when we send a keepalive ping, cleared by any
+        // inbound frame (the browser's automatic Pong, or real input). If a ping
+        // goes a whole interval unanswered, the peer has stopped reading its
+        // socket and is reaped.
+        let mut awaiting_pong = false;
         loop {
             tokio::select! {
-                chunk = video_rx.recv() => {
-                    match chunk {
+                out = rx.recv() => {
+                    match out {
                         Some(payload) => {
-                            inner.bytes_sent.fetch_add(payload.len() as u64, std::sync::atomic::Ordering::Relaxed);
-                            inner.frames_sent.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            if let Err(e) = ws_tx.send(tokio_tungstenite::tungstenite::Message::Binary(payload.into())).await {
-                                break Err(e);
+                            match tokio::time::timeout(WRITE_TIMEOUT, ws_tx.send(tokio_tungstenite::tungstenite::Message::Binary(payload.into()))).await {
+                                Ok(Ok(())) => {}
+                                Ok(Err(e)) => break Err(e),
+                                Err(_) => {
+                                    tracing::info!(%peer, id, "viewer unresponsive (send timed out) — reaping connection");
+                                    break Ok(());
+                                }
                             }
                         }
-                        None => break Ok(()), // encoder side gone
+                        None => break Ok(()), // all senders gone (only after registry removal)
                     }
                 }
                 msg = ws_rx.next() => {
+                    awaiting_pong = false; // any inbound frame proves the peer is reading
                     match msg {
                         Some(Ok(tokio_tungstenite::tungstenite::Message::Binary(data))) => {
-                            handle_client_message(&data, &inner);
+                            handle_client_message(&data, &inner, id);
                         }
                         Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_))) | None => break Ok(()),
                         Some(Ok(_)) => {} // text/ping/pong — ignore
                         Some(Err(e)) => break Err(e),
                     }
                 }
+                _ = ping.tick() => {
+                    if awaiting_pong {
+                        // Our previous keepalive ping went a full interval
+                        // unanswered — the peer has stopped reading its socket (a
+                        // backgrounded or half-open tab). Reap it so it stops
+                        // lingering in the roster and inflating the viewer count.
+                        tracing::info!(%peer, id, "viewer unresponsive (keepalive unanswered) — reaping connection");
+                        break Ok(());
+                    }
+                    awaiting_pong = true;
+                    // A reading peer auto-replies with Pong (which clears the flag
+                    // above); the write is still bounded in case the send buffer
+                    // is already full against a non-draining peer.
+                    match tokio::time::timeout(WRITE_TIMEOUT, ws_tx.send(tokio_tungstenite::tungstenite::Message::Ping(Vec::<u8>::new().into()))).await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(_)) => break Ok(()),
+                        Err(_) => {
+                            tracing::info!(%peer, id, "viewer unresponsive (ping send timed out) — reaping connection");
+                            break Ok(());
+                        }
+                    }
+                }
             }
         }
     };
 
-    // The single-session slot is released by accept_loop once this returns, so
-    // it is freed on every exit path (including a handshake failure that
-    // returns before this point via `?`); here we only drop this session's own
-    // resources. The host reaps the encoder when accept_loop clears `connected`.
-    if let Ok(mut guard) = inner.video_tx.lock() {
-        *guard = None;
+    // Remove from the registry on every exit path, auto-promoting a lone
+    // survivor (SD2). Clear `connected` only when the last connection leaves,
+    // then rebroadcast the roster and wake the host (reap the shared encoder
+    // promptly if the session is now empty).
+    let became_empty = match inner.registry.lock() {
+        Ok(mut r) => {
+            r.remove(id);
+            r.conns.is_empty()
+        }
+        Err(_) => false,
+    };
+    if became_empty {
+        inner.connected.store(false, std::sync::atomic::Ordering::Release);
     }
-    tracing::info!(%peer, "viewer disconnected");
+    broadcast_roster(&inner);
+    let _ = inner.waker.send(());
+    tracing::info!(%peer, id, "viewer disconnected");
     result
 }
 
-fn handle_client_message(data: &[u8], inner: &Inner) {
+fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
     let Some((&prefix, payload)) = data.split_first() else {
         return;
     };
+    // Input, resize, cadence, decode-caps and clipboard are honoured ONLY from
+    // the active connection (ADR-0086 SD2/SD8) — a passive connection's are
+    // dropped here at the server. ClientHello and TakeSession are accepted from
+    // any connection.
+    let active = inner
+        .registry
+        .lock()
+        .map(|r| r.is_active(id))
+        .unwrap_or(false);
     match prefix {
-        pb::PREFIX_INPUT => match pb::InputEvent::decode(payload) {
-            Ok(ev) => {
-                if let Some(ev) = ev.event {
-                    if let Ok(mut events) = inner.events.lock() {
-                        events.push(ev);
-                    }
-                    let _ = inner.waker.send(()); // input wants a pass now
-                }
+        pb::PREFIX_INPUT => {
+            if !active {
+                return;
             }
-            Err(e) => tracing::debug!(error=%e, "undecodable input event"),
-        },
+            match pb::InputEvent::decode(payload) {
+                Ok(ev) => {
+                    if let Some(ev) = ev.event {
+                        if let Ok(mut events) = inner.events.lock() {
+                            events.push(ev);
+                        }
+                        let _ = inner.waker.send(()); // input wants a pass now
+                    }
+                }
+                Err(e) => tracing::debug!(error=%e, "undecodable input event"),
+            }
+        }
         pb::PREFIX_SESSION => match pb::SessionControl::decode(payload) {
             Ok(ctl) => match ctl.control {
                 Some(pb::session_control::Control::ViewportResize(r)) => {
-                    if let Ok(mut resize) = inner.resize.lock() {
-                        *resize = Some(r);
+                    if active {
+                        if let Ok(mut resize) = inner.resize.lock() {
+                            *resize = Some(r);
+                        }
+                        let _ = inner.waker.send(());
                     }
-                    let _ = inner.waker.send(());
                 }
                 Some(pb::session_control::Control::SetCadence(c)) => {
-                    if let Ok(mut pending) = inner.cadence_request.lock() {
-                        *pending = Some(c.cadence);
+                    if active {
+                        if let Ok(mut pending) = inner.cadence_request.lock() {
+                            *pending = Some(c.cadence);
+                        }
+                        let _ = inner.waker.send(());
                     }
-                    let _ = inner.waker.send(());
                 }
                 Some(pb::session_control::Control::Ping(p)) => {
-                    // The viewer pings with its decoded-frame count: a remote
-                    // attestation that WebCodecs decode is working client-side.
-                    inner.frames_decoded.store(p.nonce, std::sync::atomic::Ordering::Relaxed);
-                    tracing::debug!(frames_decoded = p.nonce, "viewer decode-progress ping");
+                    // The active viewer pings with its decoded-frame count: a
+                    // remote attestation that WebCodecs decode is working.
+                    if active {
+                        inner.frames_decoded.store(p.nonce, std::sync::atomic::Ordering::Relaxed);
+                        tracing::debug!(frames_decoded = p.nonce, "active viewer decode-progress ping");
+                    }
                 }
                 Some(pb::session_control::Control::DecodeCapabilities(caps)) => {
-                    tracing::info!(
-                        codecs = ?caps.codecs.iter()
-                            .map(|c| format!("{}:s{}m{}p{}", c.codec, c.supported as u8, c.smooth as u8, c.power_efficient as u8))
-                            .collect::<Vec<_>>(),
-                        "viewer decode capabilities"
-                    );
-                    if let Ok(mut guard) = inner.decode_caps.lock() {
-                        *guard = Some(caps);
+                    if active {
+                        tracing::info!(
+                            codecs = ?caps.codecs.iter()
+                                .map(|c| format!("{}:s{}m{}p{}", c.codec, c.supported as u8, c.smooth as u8, c.power_efficient as u8))
+                                .collect::<Vec<_>>(),
+                            "active viewer decode capabilities"
+                        );
+                        if let Ok(mut guard) = inner.decode_caps.lock() {
+                            *guard = Some(caps);
+                        }
+                        let _ = inner.waker.send(());
                     }
-                    let _ = inner.waker.send(());
                 }
-                Some(pb::session_control::Control::Hello(_)) | None => {}
+                Some(pb::session_control::Control::ClientHello(h)) => {
+                    // Caps + label arrive shortly after connect; update and
+                    // rebroadcast so the roster shows the device label and
+                    // takeover-capability.
+                    if let Ok(mut r) = inner.registry.lock() {
+                        r.set_caps(id, h.webcodecs, h.label);
+                    }
+                    broadcast_roster(inner);
+                }
+                Some(pb::session_control::Control::TakeSession(_)) => {
+                    // Honoured only from a WebCodecs-capable connection (SD2).
+                    let changed = match inner.registry.lock() {
+                        Ok(mut r) => {
+                            if r.find(id).map(|c| c.webcodecs).unwrap_or(false) {
+                                r.take_session(id)
+                            } else {
+                                tracing::debug!(id, "TakeSession ignored — connection not WebCodecs-capable");
+                                false
+                            }
+                        }
+                        Err(_) => false,
+                    };
+                    if changed {
+                        tracing::info!(id, "session taken — new active connection");
+                        broadcast_roster(inner);
+                        // The new active owns geometry: its viewer re-reports
+                        // ViewportResize, which (now active) rebuilds the stream
+                        // if its geometry differs (SD5). Wake to apply promptly.
+                        let _ = inner.waker.send(());
+                    }
+                }
+                Some(pb::session_control::Control::Clipboard(c)) => {
+                    // Viewer→host paste (active-only, ADR-0082 SD6).
+                    if active {
+                        if let Ok(mut p) = inner.paste.lock() {
+                            *p = Some(c.text);
+                        }
+                        let _ = inner.waker.send(());
+                    }
+                }
+                // Server→client only; ignore if a client echoes one.
+                Some(pb::session_control::Control::Hello(_))
+                | Some(pb::session_control::Control::Roster(_))
+                | None => {}
             },
             Err(e) => tracing::debug!(error=%e, "undecodable session control"),
         },
@@ -617,76 +932,68 @@ fn handle_client_message(data: &[u8], inner: &Inner) {
 mod tests {
     use super::*;
 
-    /// ADR-0024 SD9: a render-thread control send must return — not hang —
-    /// when the viewer has stopped reading and the channel stays full. This
-    /// is the carrier-side half of the H1 fix (the encoder drain is the other).
-    #[test]
-    fn render_send_gives_up_on_full_channel() {
-        let (tx, _rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
-        tx.try_send(vec![0u8; 2]).expect("fill the one slot"); // _rx never reads
-        let start = std::time::Instant::now();
-        assert!(
-            !send_control_render_thread(&tx, vec![1u8; 2]),
-            "must give up on a stalled viewer, not block the render loop"
-        );
-        let waited = start.elapsed();
-        assert!(waited >= RENDER_SEND_POLL, "should have retried at least once");
-        assert!(waited < std::time::Duration::from_secs(2), "wait must stay bounded");
+    fn mk_tx() -> tokio::sync::mpsc::Sender<Vec<u8>> {
+        tokio::sync::mpsc::channel::<Vec<u8>>(1).0
     }
 
-    /// Room in the channel delivers immediately (the common resize case on a
-    /// healthy viewer).
+    /// First admit is active; the rest are passive (ADR-0086 SD2).
     #[test]
-    fn render_send_delivers_when_space() {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
-        assert!(send_control_render_thread(&tx, vec![7u8; 3]));
-        assert_eq!(rx.try_recv().expect("delivered"), vec![7u8; 3]);
+    fn first_admit_active_rest_passive() {
+        let mut r = Registry::new(8);
+        let a = r.admit(mk_tx()).expect("first admitted");
+        let b = r.admit(mk_tx()).expect("second admitted");
+        assert_eq!(r.find(a).unwrap().role, pb::Role::Active);
+        assert_eq!(r.find(b).unwrap().role, pb::Role::Passive);
+        assert_eq!(r.active_id, Some(a));
     }
 
-    /// A dropped receiver (mid-teardown) returns false rather than retrying.
+    /// MAX_CONNECTIONS refuses the surplus connection.
     #[test]
-    fn render_send_false_on_closed() {
-        let (tx, rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
-        drop(rx);
-        assert!(!send_control_render_thread(&tx, vec![9u8; 1]));
+    fn admit_refuses_past_max() {
+        let mut r = Registry::new(2);
+        assert!(r.admit(mk_tx()).is_some());
+        assert!(r.admit(mk_tx()).is_some());
+        assert!(r.admit(mk_tx()).is_none(), "third refused at max=2");
     }
 
-    /// M1: under maximal contention the single-session slot admits exactly one
-    /// claimant — the guarantee the load-then-store split could not make.
+    /// Takeover promotes the requester and demotes the prior active (SD2).
     #[test]
-    fn single_session_admits_exactly_one_under_contention() {
-        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-        use std::sync::{Arc, Barrier};
-        let slot = Arc::new(AtomicBool::new(false));
-        let gate = Arc::new(Barrier::new(8));
-        let wins = Arc::new(AtomicU32::new(0));
-        let handles: Vec<_> = (0..8)
-            .map(|_| {
-                let (slot, gate, wins) = (slot.clone(), gate.clone(), wins.clone());
-                std::thread::spawn(move || {
-                    gate.wait(); // release all threads at once for real contention
-                    if try_claim_session(&slot) {
-                        wins.fetch_add(1, Ordering::Relaxed);
-                    }
-                })
-            })
-            .collect();
-        for h in handles {
-            h.join().expect("join claimant");
-        }
-        assert_eq!(wins.load(Ordering::Relaxed), 1, "exactly one viewer admitted");
-        assert!(slot.load(Ordering::Relaxed), "slot left claimed by the winner");
+    fn take_session_promotes_and_demotes() {
+        let mut r = Registry::new(8);
+        let a = r.admit(mk_tx()).unwrap();
+        let b = r.admit(mk_tx()).unwrap();
+        assert!(r.take_session(b), "takeover changes state");
+        assert_eq!(r.find(b).unwrap().role, pb::Role::Active);
+        assert_eq!(r.find(a).unwrap().role, pb::Role::Passive);
+        assert_eq!(r.active_id, Some(b));
+        assert!(!r.take_session(b), "no-op when already active");
     }
 
-    /// The slot is reclaimable once released (the disconnect → next-viewer path).
+    /// When the active disconnects and exactly one passive remains, it
+    /// auto-promotes (SD2 — lone-passive return); with several, the slot
+    /// stays empty.
     #[test]
-    fn single_session_reclaimable_after_release() {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        let slot = AtomicBool::new(false);
-        assert!(try_claim_session(&slot), "first claim wins");
-        assert!(!try_claim_session(&slot), "second rejected while busy");
-        slot.store(false, Ordering::Release);
-        assert!(try_claim_session(&slot), "reclaimable after release");
+    fn lone_passive_auto_promotes_else_slot_empty() {
+        let mut r = Registry::new(8);
+        let a = r.admit(mk_tx()).unwrap();
+        let b = r.admit(mk_tx()).unwrap();
+        let c = r.admit(mk_tx()).unwrap();
+        r.remove(a); // two passives remain → slot stays empty
+        assert_eq!(r.active_id, None);
+        assert_eq!(r.find(b).unwrap().role, pb::Role::Passive);
+        r.remove(c); // now a lone passive remains → it auto-promotes
+        assert_eq!(r.active_id, Some(b));
+        assert_eq!(r.find(b).unwrap().role, pb::Role::Active);
+    }
+
+    /// Removing a passive leaves the active untouched.
+    #[test]
+    fn removing_passive_keeps_active() {
+        let mut r = Registry::new(8);
+        let a = r.admit(mk_tx()).unwrap();
+        let b = r.admit(mk_tx()).unwrap();
+        r.remove(b);
+        assert_eq!(r.active_id, Some(a));
+        assert_eq!(r.find(a).unwrap().role, pb::Role::Active);
     }
 }
-

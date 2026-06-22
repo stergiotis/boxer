@@ -68,6 +68,23 @@ impl VideoCodec {
 /// this replaces the retired `aud=insert` of the original Annex-B path).
 const H264_BSF: &str = "dump_extra=freq=keyframe";
 
+/// Periodic IDR interval in **frames** (ffmpeg `-g`), ADR-0086 SD5. The single
+/// shared encoder serves the active viewer *and* late-joining passive viewers,
+/// so the stream can no longer run the effectively-infinite GOP of ADR-0024 SD3
+/// (a joiner could never start): periodic key frames let a passive viewer begin
+/// at the next *scheduled* IDR without forcing one (which would pulse viewers
+/// already watching). `-bf 0` is kept, so the active latency target is
+/// unchanged; the price is a tunable colour-pulse refresh on the active view
+/// (ADR-0086 SD10), with the two-encoder split (SD7) as the gated remedy.
+///
+/// The unit is *encoded* frames, not wall-clock: blake3 dedup + reactive
+/// cadence (ADR-0062) mean the encoder only sees changed frames, so on a
+/// mostly-static dashboard a key frame (and a joiner's start) can lag in real
+/// time — acceptable for the demo (a static screen has nothing to watch).
+/// Field-tunable without a rebuild via `IMZERO2_HEADLESS_ENCODER_ARGS` (a full
+/// encoder-arg override, which can set its own `-g`).
+const PERIODIC_IDR_GOP: &str = "120";
+
 #[derive(Clone, Debug)]
 pub struct CodecLane {
     pub codec: VideoCodec,
@@ -120,9 +137,10 @@ impl CodecLane {
     }
 
     /// Default software lane for a codec, muxed through NUT (ADR-0088 SD4).
-    /// Latency-tuned with an effectively-infinite GOP: a viewer (re)connect
-    /// or a codec switch forces a fresh key frame, so periodic IDRs buy
-    /// nothing (ADR-0024 SD3).
+    /// Latency-tuned (`-bf 0`) with a **periodic** IDR ([`PERIODIC_IDR_GOP`],
+    /// ADR-0086 SD5) so the single shared encoder can serve late-joining
+    /// passive viewers; the active stream pays a tunable refresh for that
+    /// (ADR-0086 SD10), reversible by the SD7 two-encoder split.
     pub fn software(codec: VideoCodec) -> Self {
         // `-pix_fmt yuv420p` is load-bearing: the render readback is BGRA, and
         // left to choose, ffmpeg converts it to a 4:4:4(+alpha) format the
@@ -130,15 +148,15 @@ impl CodecLane {
         // Forcing 4:2:0 also matches the chroma the browser path assumes.
         let args: &[&str] = match codec {
             VideoCodec::H264 => &[
-                "-c:v", "libopenh264", "-rc_mode", "off", "-bf", "0", "-g", "100000",
+                "-c:v", "libopenh264", "-rc_mode", "off", "-bf", "0", "-g", PERIODIC_IDR_GOP,
                 "-pix_fmt", "yuv420p",
             ],
             VideoCodec::Vp9 => &[
                 "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-b:v", "6M",
-                "-g", "100000", "-pix_fmt", "yuv420p",
+                "-g", PERIODIC_IDR_GOP, "-pix_fmt", "yuv420p",
             ],
             VideoCodec::Av1 => &[
-                "-c:v", "libsvtav1", "-preset", "8", "-g", "100000", "-pix_fmt", "yuv420p",
+                "-c:v", "libsvtav1", "-preset", "8", "-g", PERIODIC_IDR_GOP, "-pix_fmt", "yuv420p",
             ],
             // 4:4:4 lane: libsvtav1 is 4:2:0-only, so libaom-av1 (which does
             // yuv444p). Realtime usage + cpu-used 8 keeps it interactive
@@ -146,7 +164,7 @@ impl CodecLane {
             // point — full chroma for chart/text linework.
             VideoCodec::Av1Hi444 => &[
                 "-c:v", "libaom-av1", "-usage", "realtime", "-cpu-used", "8",
-                "-g", "100000", "-pix_fmt", "yuv444p",
+                "-g", PERIODIC_IDR_GOP, "-pix_fmt", "yuv444p",
             ],
         };
         Self {
@@ -192,7 +210,7 @@ impl CodecLane {
             encoder_args.push("-profile:v".to_owned());
             encoder_args.push("constrained_baseline".to_owned());
         }
-        encoder_args.extend(["-bf", "0", "-g", "100000"].iter().map(|s| (*s).to_owned()));
+        encoder_args.extend(["-bf", "0", "-g", PERIODIC_IDR_GOP].iter().map(|s| (*s).to_owned()));
         Self {
             codec,
             encoder_args,

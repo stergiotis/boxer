@@ -36,6 +36,15 @@
                overscroll-behavior: none; }
   #status { padding: 4px 8px; }
   #cadence { color: #6a9fb5; text-decoration: none; }
+  #role { font-weight: bold; }
+  #takeBtn { font: inherit; background: #2a3a44; color: #cfe3ee; border: 1px solid #3d5562;
+             border-radius: 3px; padding: 1px 8px; margin: 0 2px; cursor: pointer; display: none; }
+  #takeBtn:hover { background: #36505e; }
+  #roster { color: #7a7a7a; }
+  /* Off-screen focusable trap so a Ctrl/Cmd+V paste fires a `paste` event with
+     clipboardData even though the canvas itself is not editable (Firefox will
+     not fire paste on a focused non-editable element). */
+  #pasteTrap { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
   /* touch-action: none hands every touch to our pointer handlers instead
      of native scrolling — without it, mobile browsers cancel pointer
      events mid-drag to scroll the page, which is what broken gestures
@@ -47,8 +56,9 @@
 </style>
 </head>
 <body>
-<div id="status"><span id="statusmsg">connecting…</span> · <a id="cadence" href="#" title="toggle render cadence (host-wide)"></a></div>
+<div id="status"><span id="statusmsg">connecting…</span> · <a id="cadence" href="#" title="toggle render cadence (host-wide)"></a> · <span id="role"></span><button id="takeBtn" type="button" title="take control of this session">Take session</button> · <span id="roster"></span></div>
 <canvas id="screen" tabindex="0"></canvas>
+<textarea id="pasteTrap" aria-hidden="true" tabindex="-1"></textarea>
 <script>
 "use strict";
 
@@ -64,8 +74,21 @@ const WS_URL = new URLSearchParams(location.search).get("ws")
 const statusBar = document.getElementById("status");
 const statusEl = document.getElementById("statusmsg");
 const cadenceEl = document.getElementById("cadence");
+const roleEl = document.getElementById("role");
+const takeBtn = document.getElementById("takeBtn");
+const rosterEl = document.getElementById("roster");
+const pasteTrap = document.getElementById("pasteTrap");
 const canvas = document.getElementById("screen");
 const ctx2d = canvas.getContext("2d");
+
+// Optional device label shown in everyone's roster ("?label=iPad").
+const LABEL = new URLSearchParams(location.search).get("label") || "";
+
+// Server-authoritative session role (ADR-0086): the viewer never self-assigns
+// active — it mirrors the roster's `you_role`. Input is gated on this (SD3),
+// so a freshly-connected viewer sends no input until the first roster confirms
+// it is active. All of this is updated in applyRoster().
+let myId = 0n, myRole = "passive", activeId = 0n, rosterConns = [], rosterMax = 0;
 
 // 0 = continuous, 1 = reactive; truth arrives with the hello, toggled
 // optimistically on click (host scope, not per session).
@@ -75,11 +98,18 @@ function renderCadence() {
 }
 cadenceEl.addEventListener("click", (e) => {
   e.preventDefault();
+  // Cadence is host-scoped but honoured only from the active connection
+  // (ADR-0086 SD2); a passive viewer's toggle would be dropped, so ignore it.
+  if (myRole !== "active") return;
   cadence = cadence === 1 ? 0 : 1;
   sendSetCadence(cadence);
   renderCadence();
 });
 renderCadence();
+
+// Take control of the session (ADR-0086 SD2): promotes us to active and
+// demotes the prior active. Unilateral (one principal) — no approval prompt.
+takeBtn.addEventListener("click", () => sendTakeSession());
 
 // ---- minimal protobuf reader (proto3 subset used by the wire) ----
 class Reader {
@@ -109,27 +139,75 @@ class Reader {
   }
 }
 
-function parseHello(bytes) { // SessionControl{ hello = 1 }
+// SessionControl oneof (input.proto): hello=1, viewport_resize=2, ping=3,
+// set_cadence=4, decode_capabilities=5, client_hello=6, roster=7,
+// take_session=8, clipboard=9. The viewer receives hello, roster and clipboard.
+function parseSessionControl(bytes) {
   const r = new Reader(bytes);
   while (!r.eof()) {
     const [field, wire] = r.tag();
-    if (field === 1 && wire === 2) {
-      const h = new Reader(r.bytes());
-      const out = { width: 0, height: 0, ppp: 1.0, cadence: 0, codec: "" };
-      while (!h.eof()) {
-        const [f, w] = h.tag();
-        if (f === 1 && w === 0) out.width = Number(h.varint());
-        else if (f === 2 && w === 0) out.height = Number(h.varint());
-        else if (f === 3 && w === 5) out.ppp = h.float();
-        else if (f === 4 && w === 0) out.cadence = Number(h.varint());
-        else if (f === 5 && w === 2) out.codec = new TextDecoder().decode(h.bytes());
-        else h.skip(w);
-      }
-      return out;
+    if (wire === 2) {
+      const sub = r.bytes();
+      if (field === 1) return { kind: "hello", hello: parseHelloBody(sub) };
+      if (field === 7) return { kind: "roster", roster: parseRosterBody(sub) };
+      if (field === 9) return { kind: "clipboard", text: parseClipboardBody(sub) };
+    } else {
+      r.skip(wire);
     }
-    r.skip(wire);
   }
   return null;
+}
+function parseHelloBody(bytes) { // SessionHello
+  const h = new Reader(bytes);
+  const out = { width: 0, height: 0, ppp: 1.0, cadence: 0, codec: "" };
+  while (!h.eof()) {
+    const [f, w] = h.tag();
+    if (f === 1 && w === 0) out.width = Number(h.varint());
+    else if (f === 2 && w === 0) out.height = Number(h.varint());
+    else if (f === 3 && w === 5) out.ppp = h.float();
+    else if (f === 4 && w === 0) out.cadence = Number(h.varint());
+    else if (f === 5 && w === 2) out.codec = new TextDecoder().decode(h.bytes());
+    else h.skip(w);
+  }
+  return out;
+}
+function parseRosterBody(bytes) { // Roster{ you_id, you_role, active_id, count, max, connections[] }
+  const r = new Reader(bytes);
+  const out = { youId: 0n, youRole: 0, activeId: 0n, count: 0, max: 0, connections: [] };
+  while (!r.eof()) {
+    const [f, w] = r.tag();
+    if (f === 1 && w === 0) out.youId = r.varint();
+    else if (f === 2 && w === 0) out.youRole = Number(r.varint());
+    else if (f === 3 && w === 0) out.activeId = r.varint();
+    else if (f === 4 && w === 0) out.count = Number(r.varint());
+    else if (f === 5 && w === 0) out.max = Number(r.varint());
+    else if (f === 6 && w === 2) out.connections.push(parseRosterEntry(r.bytes()));
+    else r.skip(w);
+  }
+  return out;
+}
+function parseRosterEntry(bytes) { // RosterEntry{ id, role, label, webcodecs }
+  const r = new Reader(bytes);
+  const e = { id: 0n, role: 0, label: "", webcodecs: false };
+  while (!r.eof()) {
+    const [f, w] = r.tag();
+    if (f === 1 && w === 0) e.id = r.varint();
+    else if (f === 2 && w === 0) e.role = Number(r.varint());
+    else if (f === 3 && w === 2) e.label = new TextDecoder().decode(r.bytes());
+    else if (f === 4 && w === 0) e.webcodecs = r.varint() !== 0n;
+    else r.skip(w);
+  }
+  return e;
+}
+function parseClipboardBody(bytes) { // ClipboardData{ text }
+  const r = new Reader(bytes);
+  let text = "";
+  while (!r.eof()) {
+    const [f, w] = r.tag();
+    if (f === 1 && w === 2) text = new TextDecoder().decode(r.bytes());
+    else r.skip(w);
+  }
+  return text;
 }
 
 function parseVideoChunk(bytes) {
@@ -161,6 +239,11 @@ class Writer {
 
 function sendFramed(prefix, writer) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  // Input is honoured only from the active connection (ADR-0086 SD2/SD3); a
+  // passive viewer must not even emit it. The server drops it too (defence in
+  // depth), but gating here is the anti-race point: no input until the roster
+  // confirms us active.
+  if (prefix === PREFIX_INPUT && myRole !== "active") return;
   const body = writer.bytes();
   const framed = new Uint8Array(1 + body.length);
   framed[0] = prefix;
@@ -195,6 +278,21 @@ function sendResize(lw, lh, scale) {
 // the server side (useful for headless verification and field debugging).
 function sendPing(nonce) {
   sendFramed(PREFIX_SESSION, new Writer().sub(3, new Writer().uint(1, nonce)));
+}
+// ADR-0086 SD8: announce our capabilities + label just after connect.
+// client_hello = 6 (SessionControl); ClientHello{ webcodecs=1, label=2 }.
+function sendClientHello(webcodecs, label) {
+  sendFramed(PREFIX_SESSION, new Writer().sub(6, new Writer().bool(1, webcodecs).str(2, label)));
+}
+// Request to become the active connection. take_session = 8; empty message.
+function sendTakeSession() {
+  sendFramed(PREFIX_SESSION, new Writer().sub(8, new Writer()));
+}
+// ADR-0082 SD6 clipboard (client→server = a paste to inject). clipboard = 9;
+// ClipboardData{ text=1 }. The server keeps it only from the active session.
+function sendClipboard(text) {
+  if (myRole !== "active") return;
+  sendFramed(PREFIX_SESSION, new Writer().sub(9, new Writer().str(1, text)));
 }
 
 // Client→server decode capabilities (ADR-0088 SD2/SD8). For each codec the
@@ -378,6 +476,10 @@ function flushMove() {
 let lastSentGeometry = null;
 function measureAndSend() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  // Only the active connection owns geometry (ADR-0086 SD2/SD6); a passive
+  // viewer is pinned to the active's stream size and reports nothing. On
+  // promotion, applyRoster clears the echo guard and calls this.
+  if (myRole !== "active") return;
   const scale = window.devicePixelRatio || 1;
   // documentElement.client{Width,Height} exclude the scrollbar gutter;
   // window.inner{Width,Height} include it. With overflow:hidden no gutter
@@ -495,12 +597,45 @@ function setupInput() {
   canvas.addEventListener("keydown", (e) => {
     sendKey(e.key, e.code, true, e.repeat, mods(e));
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) sendText(e.key);
+    // Paste shortcut (Ctrl/Cmd+V): hand the browser's paste to the off-screen
+    // trap so the `paste` event fires reliably (Firefox won't fire it on the
+    // non-editable canvas). Let the default proceed so the paste happens; a
+    // safety timer hands focus back if the paste never lands (empty clipboard).
+    if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
+      if (myRole === "active") {
+        pasteTrap.value = "";
+        pasteTrap.focus();
+        setTimeout(() => { if (document.activeElement === pasteTrap) canvas.focus(); }, 50);
+      }
+      return;
+    }
     if (!(e.key === "F5" || e.key === "F11" || e.key === "F12")) e.preventDefault();
   });
   canvas.addEventListener("keyup", (e) => {
     sendKey(e.key, e.code, false, false, mods(e));
     e.preventDefault();
   });
+  // Clipboard paste (ADR-0082 SD6), active-only (gated in sendClipboard) → the
+  // host injects it as egui's Paste event. The trap catches the keyboard paste
+  // and stops propagation so the document fallback (context-menu paste) does
+  // not double-send it.
+  pasteTrap.addEventListener("paste", (e) => {
+    const t = (e.clipboardData || window.clipboardData).getData("text");
+    if (t) sendClipboard(t);
+    e.preventDefault();
+    e.stopPropagation();
+    setTimeout(() => canvas.focus(), 0);
+  });
+  document.addEventListener("paste", (e) => {
+    const t = (e.clipboardData || window.clipboardData).getData("text");
+    if (t) sendClipboard(t);
+    e.preventDefault();
+  });
+  // Flush a host→viewer clipboard write that writeText deferred for lack of a
+  // user activation (Firefox); any interaction supplies one (capture phase so
+  // it runs before the per-widget handlers).
+  document.addEventListener("pointerdown", flushClipboardWrite, true);
+  document.addEventListener("keydown", flushClipboardWrite, true);
   requestAnimationFrame(flushMove);
 }
 
@@ -509,7 +644,13 @@ let reconnectDelay = 1000;
 function connect() {
   ws = new WebSocket(WS_URL);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => { reconnectDelay = 1000; statusEl.textContent = "connected — waiting for stream"; };
+  ws.onopen = () => {
+    reconnectDelay = 1000;
+    statusEl.textContent = "connected — waiting for stream";
+    // Announce capabilities + label (ADR-0086 SD8). WebCodecs is implied — the
+    // page only connects when VideoDecoder exists (see the bottom guard).
+    sendClientHello(true, LABEL);
+  };
   ws.onclose = () => {
     statusEl.textContent = "disconnected — reconnecting…";
     configured = false;
@@ -527,39 +668,104 @@ function connect() {
     const payload = data.subarray(1);
     if (data[0] === PREFIX_VIDEO) onVideo(payload);
     else if (data[0] === PREFIX_SESSION) {
-      const h = parseHello(payload);
-      if (h) {
-        const changed = !hello || hello.width !== h.width || hello.height !== h.height || hello.ppp !== h.ppp || hello.codec !== h.codec;
-        hello = h;
-        if (changed) {
-          canvas.width = h.width;
-          canvas.height = h.height;
-          canvas.style.width = (h.width / h.ppp) + "px";
-          canvas.style.height = (h.height / h.ppp) + "px";
-          // New geometry means a fresh stream (SPS/PPS + IDR) follows;
-          // drop the decoder and rejoin at the keyframe, same as connect.
-          if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
-          configured = false;
-          probeAndSendCapabilities(); // (re)probe at the new geometry (ADR-0088 SD8)
-        }
-        cadence = h.cadence;
-        renderCadence();
-        if (!inputSetup) { inputSetup = true; setupInput(); canvas.focus(); }
-        // ?cadence=reactive|continuous applies once per page load.
-        if (!cadenceParamApplied) {
-          cadenceParamApplied = true;
-          const want = new URLSearchParams(location.search).get("cadence");
-          const mode = want === "reactive" || want === "1" ? 1 : want === "continuous" || want === "0" ? 0 : null;
-          if (mode !== null && mode !== cadence) {
-            cadence = mode;
-            sendSetCadence(mode);
-            renderCadence();
-          }
-        }
-        measureAndSend();
-      }
+      const ctl = parseSessionControl(payload);
+      if (!ctl) return;
+      if (ctl.kind === "hello") onHello(ctl.hello);
+      else if (ctl.kind === "roster") applyRoster(ctl.roster);
+      else if (ctl.kind === "clipboard") onClipboard(ctl.text);
     }
   };
+}
+
+function onHello(h) {
+  const changed = !hello || hello.width !== h.width || hello.height !== h.height || hello.ppp !== h.ppp || hello.codec !== h.codec;
+  hello = h;
+  if (changed) {
+    canvas.width = h.width;
+    canvas.height = h.height;
+    canvas.style.width = (h.width / h.ppp) + "px";
+    canvas.style.height = (h.height / h.ppp) + "px";
+    // New geometry means a fresh stream (SPS/PPS + IDR) follows;
+    // drop the decoder and rejoin at the keyframe, same as connect.
+    if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
+    configured = false;
+    probeAndSendCapabilities(); // (re)probe at the new geometry (ADR-0088 SD8)
+  }
+  cadence = h.cadence;
+  renderCadence();
+  if (!inputSetup) { inputSetup = true; setupInput(); canvas.focus(); }
+  // ?cadence=reactive|continuous applies once per page load.
+  if (!cadenceParamApplied) {
+    cadenceParamApplied = true;
+    const want = new URLSearchParams(location.search).get("cadence");
+    const mode = want === "reactive" || want === "1" ? 1 : want === "continuous" || want === "0" ? 0 : null;
+    if (mode !== null && mode !== cadence) {
+      cadence = mode;
+      sendSetCadence(mode);
+      renderCadence();
+    }
+  }
+  measureAndSend(); // gated on active — a passive viewer is pinned to the active's geometry
+}
+
+// Mirror the server-authoritative roster into the viewer ViewMode (ADR-0086
+// SD3). The role drives input gating (in sendFramed) and, on promotion, a
+// fresh viewport report so the host rebuilds the shared stream to this device.
+function applyRoster(roster) {
+  const wasActive = myRole === "active";
+  myId = roster.youId;
+  myRole = roster.youRole === 1 ? "active" : "passive";
+  activeId = roster.activeId;
+  rosterConns = roster.connections;
+  rosterMax = roster.max;
+  renderRoster();
+  if (myRole === "active" && !wasActive) {
+    // Promoted: take ownership of geometry/cadence — report our viewport so
+    // the host rebuilds the stream to us if it differs (SD5). Clear the echo
+    // guard so the report is not suppressed.
+    lastSentGeometry = null;
+    measureAndSend();
+  }
+  // Demotion needs no teardown: input/resize/cadence are gated by myRole.
+}
+
+function renderRoster() {
+  const active = myRole === "active";
+  roleEl.textContent = active ? "ACTIVE — you drive" : "passive — view only";
+  roleEl.style.color = active ? "#9ccc65" : "#b58a6a";
+  // Offer "Take session" only while passive (a WebCodecs-capable viewer; this
+  // page requires WebCodecs to connect at all, so the capability is implied).
+  takeBtn.style.display = active ? "none" : "";
+  const parts = rosterConns.map((c) => {
+    const you = c.id === myId ? "▸" : "";
+    const name = c.label || ("#" + c.id);
+    const tag = c.role === 1 ? "active" : "passive";
+    return `${you}${name}[${tag}]`;
+  });
+  rosterEl.textContent = rosterConns.length
+    ? `viewers ${rosterConns.length}/${rosterMax}: ${parts.join("  ")}`
+    : "";
+}
+
+// Host→viewer clipboard (ADR-0082 SD6): the remote app copied text; write it to
+// the local clipboard. navigator.clipboard.writeText needs a secure context
+// (loopback qualifies) AND — in Firefox, and Chrome when the tab is unfocused —
+// a transient user activation, which a host-initiated copy lacks. So we attempt
+// it immediately and, on rejection, keep the text pending and retry on the next
+// user gesture (the capture-phase listeners in setupInput).
+let pendingClipboardWrite = null;
+function onClipboard(text) {
+  if (!text) return;
+  pendingClipboardWrite = text;
+  flushClipboardWrite();
+}
+function flushClipboardWrite() {
+  if (pendingClipboardWrite === null) return;
+  if (!(navigator.clipboard && navigator.clipboard.writeText)) { pendingClipboardWrite = null; return; }
+  const text = pendingClipboardWrite;
+  navigator.clipboard.writeText(text)
+    .then(() => { if (pendingClipboardWrite === text) pendingClipboardWrite = null; })
+    .catch(() => { /* no user activation yet — a later gesture retries this */ });
 }
 
 if (!("VideoDecoder" in window)) {

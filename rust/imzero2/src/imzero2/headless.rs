@@ -757,6 +757,12 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             for ev in wire_events.drain(..) {
                 translator.translate(ev, &mut egui_events);
             }
+            // Clipboard paste from the active session (ADR-0082 SD6): the
+            // viewer read its clipboard on a paste gesture and sent the text;
+            // inject it as the egui paste event the interpreter expects.
+            if let Some(text) = c.take_paste() {
+                egui_events.push(egui::Event::Paste(text));
+            }
         }
 
         let mut raw_input = egui::RawInput {
@@ -846,6 +852,21 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             .get(&egui::ViewportId::ROOT)
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::ZERO);
+
+        // Clipboard copy from the host toward the active session (ADR-0082
+        // SD6): the interpreter's CopyTextToClipboard opcode pushes an egui
+        // OutputCommand::CopyText, dropped until now. Borrow ends before `out`
+        // is consumed by the render/readback below. Only the active session
+        // syncs (enforced in the carrier).
+        if let Some(c) = &mut carrier {
+            for cmd in &out.platform_output.commands {
+                if let egui::OutputCommand::CopyText(text) = cmd {
+                    if !text.is_empty() {
+                        c.send_clipboard_to_active(text.clone());
+                    }
+                }
+            }
+        }
 
         // ADR-0088: apply a runtime codec switch the Go control requested
         // (drained after dispatch; the carrier re-points the encoder).

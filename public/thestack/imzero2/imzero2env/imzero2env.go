@@ -131,6 +131,30 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// HeadlessIgnoreClose, when truthy, makes a viewport-close request (an
+	// app-emitted ViewportCommand::Close, e.g. a "Quit" menu item) a no-op
+	// instead of a host shutdown — so one viewer of a served deployment cannot
+	// terminate the shared host (ADR-0085). The genuine shutdown path (the Go
+	// control closing the FFFI2 pipe) is unaffected. Read by the Rust client
+	// (headless.rs); the carousel also reads HeadlessListen to drop the Quit
+	// affordance entirely in served mode. Registered here for the env catalog.
+	HeadlessIgnoreClose = env.NewBool(env.Spec{
+		Name:        "IMZERO2_HEADLESS_IGNORE_CLOSE",
+		Description: "truthy makes a UI viewport-close (e.g. a File→Quit item) a no-op instead of a host shutdown; set for a long-lived served deployment so one viewer can't take the host down for everyone",
+		Category:    env.CategoryDev,
+	})
+
+	// HeadlessMaxConnections bounds how many viewers may be connected to the
+	// carrier at once (ADR-0086 SD2 active/passive roster): one is active
+	// (drives input), the rest passive (read-only), and a surplus connection
+	// past this bound is refused. Read by the Rust client (wscarrier.rs).
+	HeadlessMaxConnections = env.NewInt(env.Spec{
+		Name:        "IMZERO2_HEADLESS_MAX_CONNECTIONS",
+		Description: "max simultaneous viewers on the carrier (ADR-0086 active/passive roster): 1 active + the rest passive; a surplus connection is refused",
+		Category:    env.CategoryDev,
+		Default:     "8",
+	})
+
 	// HeadlessFps is the headless render tick in Hz (Rust clamps to
 	// 1–240). Paces the FFFI2 loop in place of vsync.
 	HeadlessFps = env.NewFloat(env.Spec{
