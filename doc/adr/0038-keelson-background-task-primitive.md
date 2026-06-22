@@ -218,6 +218,40 @@ A complementary, fidelity-preserving speedup landed alongside: `ecdfbands.logFac
 
 Source: [`../../public/analytics/stats/ecdfbands/`](../../public/analytics/stats/ecdfbands/) (`WarmBand` / `BandReady` / `ProgressFunc`, tabulated `logFactorial`); [`../../public/thestack/imzero2/egui2/widgets/ecdf/bandjob.go`](../../public/thestack/imzero2/egui2/widgets/ecdf/bandjob.go) (per-instance registry + `Spawn` + `cancelBandJob`); [`../../public/thestack/imzero2/egui2/widgets/jobprogress/`](../../public/thestack/imzero2/egui2/widgets/jobprogress/); [`../../public/thestack/imzero2/egui2/widgets/distsummary/distsummary.go`](../../public/thestack/imzero2/egui2/widgets/distsummary/distsummary.go) (render-thread orchestration). `status` and `reviewed-date` are deliberately not re-stamped — the decision is unchanged, only confirmed by a consumer.
 
+### 2026-06-22 — Optional durable execution backend: River (open-core) on embedded SQLite
+
+This ADR deliberately stopped at *coordination*: O2 (runtime-managed pool) was rejected, execution stays app-side, and the M3 supervisor is **audit-only** — a task that stops heartbeating is promoted to `InflightStateAbandoned` and *recorded*, never resumed. O5's rejection named the exact edge left open: "what happens to in-flight tasks across runtime restarts?" Today the answer is — they die, and the supervisor notes the death. For the ephemeral, UI-coupled consumers (imztop sampling, snapshot rendering, the ECDF warm-up whose result is a cache side-effect) that is correct: they are frame-shaped and worthless after a restart. But three of the Context's named workloads are *restart-worthy* — a multi-minute `chlocalbroker` export, an `fsbroker` import proportional to tree size, a Kafka catch-up bounded by lag. Losing one to a window crash or a deploy is a real cost the `abandoned` state only *names*.
+
+[River](https://github.com/riverqueue/river) (open-core, MPL-2.0) on its embedded **SQLite** driver is the "pool layered *on top* of O3" that the O2 rejection — and the 2026-05-29 ECDF update — both predicted. It slots *beneath* `HandleI` as an optional durable executor for the heavy subset. It is **not** a protocol change and does not touch the bus contract: coordination stays bus-side, durable execution moves DB-side.
+
+**What River open-core on SQLite provides** (the half keelson would otherwise have to build and harden itself):
+
+- **Durable jobs that survive restart.** Work is rows in a single SQLite file (`river_job`); a crash mid-export resumes instead of abandoning. At-least-once via `SKIP LOCKED`.
+- **Automatic retries with backoff** (`retry_policy`, overridable per worker) and a **rescuer** that requeues jobs whose worker died without reporting — the durability the supervisor's `abandoned` state only *observes*.
+- **Durable scheduling** — scheduled-at jobs plus in-memory cron/periodic (single-process keelson needs no more; the DB-persisted *durable periodic* variant is Pro and out of scope).
+- **Concurrency + backpressure** per queue (`MaxWorkers`) — one principled mechanism in place of N hand-rolled goroutine pools the Context warned about.
+- **A richer state machine + history** (`available/running/retryable/scheduled/completed/cancelled/discarded`, attempt counts, persisted error chain) — a strict superset of `InflightStateE`.
+- **CGO-free, server-free.** The `riversqlite` driver ships no SQLite library of its own; paired with pure-Go `modernc.org/sqlite` it honours the ADR-0026 CGO-free invariant. One file, no daemon, embeddable in the same binary.
+- **River UI** — an embeddable, CGO-free `http.Handler`, SQLite-capable — as an *ops-side* durable dashboard (an adjunct to, not a replacement for, the in-app `taskmonitor`).
+
+**What keelson must still own itself** (River knows nothing about any of this):
+
+- **The entire bus protocol** — the `task.<id>.{created,progress,cancel,done,error}` taxonomy and the buscodec/CBOR wire (ADR-0036). River persists opaque JSON args; the CBOR payload rides as opaque bytes, consistent with the existing `Result []byte` decode-by-`Kind` rule.
+- **Progress + the estimator.** River has no progress concept. The worker still calls keelson `Report()`; `task/estimator` and the humanized-change gate remain the sole authority over what reaches the bus.
+- **The live observer/UI surface** — `WatchAll`, `taskmonitor` (M4), `jobprogress`. The in-app "current activity" panel stays keelson's; River UI is at most an external adjunct.
+- **Cancellation bridging.** `task.<id>.cancel` → River job cancellation (ctx cause). The producer-honours-`Ctx().Done()` contract (Consequences §Negative) is unchanged and is exactly what a River worker already expects.
+- **Capability declarations** (`task.>` Both/Sub, `task.*.cancel` Pub) and `OwnerAppId`/manifest identity — River has no notion of apps or caps.
+- **The adapter shim and the routing policy.** A `HandleI` backed by a River `Worker[T]`, plus the per-consumer decision of which `Kind`s are durable (export / import / catch-up / scheduled rollup) vs which stay in-process (everything frame-shaped). That choice is the app-side judgement this ADR has always kept app-side.
+- **Idempotent worker bodies** (at-least-once ⇒ a resumed export must tolerate re-run), schema migration (`rivermigrate`) inside the app binary, and the SQLite connection discipline (`SetMaxOpenConns(1)`, `_journal_mode=WAL`, `_busy_timeout`).
+
+**Integration shape.** `Spawn` gains an optional durable path: for a durable `Kind` it enqueues a River job and returns a `HandleI` whose `Report/Note/Done/Error/Cancelled` are wired to the same bus verbs. The River worker runs the body, calls the handle's `Report` (→ `task.<id>.progress`), and `Done`/`Error` close the task exactly as today. To an observer the task is indistinguishable from an in-process one — it simply survives a restart and retries on failure. This keeps the M4 split clean: **River = durable cross-process work distribution; NATS = ephemeral progress/cancel fan-out.**
+
+**Boundaries (open-core + SQLite).** SQLite serialises writers, so the pool is pinned at `SetMaxOpenConns(1)` and throughput is modest — right for minutes-long exports, wrong for a 10 Hz sampler (the granularity rule that sank O4, now applied in the other direction). Listen/notify is emulated (a `river_notification` outbox polled ~50 ms) and inserts/completions run one row at a time, so SQLite River is a single-node *durability* layer, not a throughput play; the M4 server tier swaps the driver to `riverpgxv5` (reusing the `pgx` dependency already in-tree at `apps/godepview`) with no job-code change. The driver is self-described as *early testing*. And we stay strictly **open-core**: workflows, sequences, durable periodic jobs, partitioned concurrency limits, batching, dead-letter queues and encrypted jobs are River **Pro** and explicitly out of scope — a DAG-shaped need is a separate ADR, not a backend toggle.
+
+`status` and `reviewed-date` are deliberately not re-stamped: O3 is unchanged. This records an *optional, additive* durable backend beneath `HandleI`, not a revision of the decision.
+
+Source / further reading: [River](https://github.com/riverqueue/river) (MPL-2.0); `riverdriver/riversqlite` (embedded, CGO-free with `modernc.org/sqlite`); [River UI](https://github.com/riverqueue/riverui) (embeddable `http.Handler`). Pairs with `runtime/task` as the "pool on top of O3" foreshadowed in the O2 rejection.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — app runtime, in-proc bus, cap-as-subject taxonomy. Defines `AppI`, `Manifest.Caps`, `BusI`, `MountContext.Cancel()`.
