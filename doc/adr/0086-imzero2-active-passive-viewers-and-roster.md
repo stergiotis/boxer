@@ -135,6 +135,28 @@ Implementation phasing: **Phase 1** — `Registry` + roles + `Roster` + browser 
 
 Status lifecycle: `proposed → accepted → (deferred | deprecated | superseded by ADR-XXXX)`.
 
+## Updates
+
+### 2026-06-22 — Conditional GOP: the active stream is pulse-free while alone
+
+SD5's single shared periodic-IDR encoder is refined so its GOP is **conditional
+on passive presence** — a lighter, single-encoder form of SD7. While only the
+active viewer is connected the shared encoder runs an effectively-infinite GOP,
+which is **pulse-free**, restoring ADR-0024 SD3 literally for the common
+single-viewer case. When a passive viewer joins (connection count ≥ 2) the
+encoder restarts to a periodic IDR so the joiner can start at a scheduled key
+frame, and it returns to the infinite GOP when the last passive leaves. The
+active therefore sees a one-off IDR only at each passive join/leave transition,
+plus the periodic refreshes only **while a passive is actually watching** — and
+nothing at all when alone. This narrows SD10's "the active view pays a periodic
+refresh" to "…only while serving a passive viewer." It is still **one** encoder
+(SD5 holds); only its GOP toggles. The full SD7 two-encoder split (active and
+passive each on a tuned stream, so the active never pulses even with passives
+present) remains the gated upgrade. Mechanism: `CodecLane::with_gop(periodic)`
+chosen at each encoder (re)spawn from a `want_periodic` flag the carrier
+maintains from the roster; a raw `IMZERO2_HEADLESS_ENCODER_ARGS` override
+without a `-g` opts out (keeps ffmpeg's default GOP).
+
 ## References
 
 - [ADR-0024 — ImZero2 remote access via headless render + ffmpeg + browser viewer](./0024-imzero2-remote-access-browser-viewer.md) — the shipped pipeline this tier reuses; SD3 (no mid-stream IDR), SD6 (wire framing), SD9 (frame mailbox) are load-bearing here.
