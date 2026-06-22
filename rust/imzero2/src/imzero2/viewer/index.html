@@ -34,22 +34,33 @@
                   pixels" the surface measurement appeared to have). */
                overflow: hidden;
                overscroll-behavior: none; }
-  #status { padding: 4px 8px; }
+  body { display: flex; flex-direction: column; }
+  #status { padding: 4px 8px; flex: 0 0 auto; }
+  /* The canvas lives in a flex stage that fills the space below the status
+     bar; the canvas fits inside it (max-width/height) so it never overflows or
+     hides the chrome, and is crisp at 1:1 when its backing store matches the
+     displayed device pixels (the active viewer). A passive viewer, pinned to
+     the active's geometry (ADR-0086 SD6), is letterboxed to fit. */
+  #stage { flex: 1 1 auto; min-height: 0; display: flex;
+           align-items: center; justify-content: center; overflow: hidden; }
   #cadence { color: #6a9fb5; text-decoration: none; }
   #role { font-weight: bold; }
   #takeBtn { font: inherit; background: #2a3a44; color: #cfe3ee; border: 1px solid #3d5562;
              border-radius: 3px; padding: 1px 8px; margin: 0 2px; cursor: pointer; display: none; }
   #takeBtn:hover { background: #36505e; }
   #roster { color: #7a7a7a; }
-  /* Off-screen focusable trap so a Ctrl/Cmd+V paste fires a `paste` event with
-     clipboardData even though the canvas itself is not editable (Firefox will
-     not fire paste on a focused non-editable element). */
-  #pasteTrap { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
+  /* Focusable paste trap so a Ctrl/Cmd+V fires a `paste` event with
+     clipboardData even though the canvas is not editable (Firefox will not fire
+     paste on a focused non-editable element). Kept 1px/transparent at the
+     origin, NOT off-screen at a huge negative offset — `position: fixed;
+     left: -9999px` confuses the iOS visual viewport and shifts the layout. */
+  #pasteTrap { position: absolute; top: 0; left: 0; width: 1px; height: 1px;
+               opacity: 0; border: 0; padding: 0; pointer-events: none; }
   /* touch-action: none hands every touch to our pointer handlers instead
      of native scrolling — without it, mobile browsers cancel pointer
      events mid-drag to scroll the page, which is what broken gestures
      look like. The -webkit bits kill iOS long-press callouts/selection. */
-  #screen { display: block; margin: 0 auto; outline: none;
+  #screen { display: block; max-width: 100%; max-height: 100%; outline: none;
             touch-action: none;
             -webkit-user-select: none; user-select: none;
             -webkit-touch-callout: none; }
@@ -57,7 +68,7 @@
 </head>
 <body>
 <div id="status"><span id="statusmsg">connecting…</span> · <a id="cadence" href="#" title="toggle render cadence (host-wide)"></a> · <span id="role"></span><button id="takeBtn" type="button" title="take control of this session">Take session</button> · <span id="roster"></span></div>
-<canvas id="screen" tabindex="0"></canvas>
+<div id="stage"><canvas id="screen" tabindex="0"></canvas></div>
 <textarea id="pasteTrap" aria-hidden="true" tabindex="-1"></textarea>
 <script>
 "use strict";
@@ -497,10 +508,14 @@ function measureAndSend() {
   sendResize(lw, lh, scale);
 }
 let resizeTimer = null;
-window.addEventListener("resize", () => {
+function scheduleMeasure() {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(measureAndSend, 300); // debounce drag-resizing
-});
+  resizeTimer = setTimeout(measureAndSend, 300); // debounce drag-resizing / rotation
+}
+window.addEventListener("resize", scheduleMeasure);
+// iPadOS/iOS rotation: 'resize' is unreliable mid-rotation; 'orientationchange'
+// fires once the new viewport has settled.
+window.addEventListener("orientationchange", scheduleMeasure);
 
 // ---- touch gesture layer ----
 // One finger forwards as the pointer (tap = click, drag = pointer drag —
@@ -683,8 +698,10 @@ function onHello(h) {
   if (changed) {
     canvas.width = h.width;
     canvas.height = h.height;
-    canvas.style.width = (h.width / h.ppp) + "px";
-    canvas.style.height = (h.height / h.ppp) + "px";
+    // No explicit CSS size: #stage + #screen max-width/height fit the canvas
+    // to the stage preserving aspect — crisp at 1:1 when the backing store
+    // matches the displayed device pixels, and never upscaled from a stale
+    // logical size on a high-DPR device (the iPad "mushy" + overflow).
     // New geometry means a fresh stream (SPS/PPS + IDR) follows;
     // drop the decoder and rejoin at the keyframe, same as connect.
     if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
