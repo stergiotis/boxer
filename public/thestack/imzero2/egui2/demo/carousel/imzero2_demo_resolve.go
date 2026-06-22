@@ -86,6 +86,16 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 	//      pass renders for capture, rather than the interactive idle
 	//      heartbeat below.
 	screenshotMode := imzero2env.ScreenshotDir.Get() != ""
+	// served: this process is a headless pixel-streaming carrier listening for
+	// remote viewers (IMZERO2_HEADLESS_LISTEN set by imzero2-demo.service / the
+	// nix module), as opposed to the desktop host or a screenshot tour. The
+	// "viewport" is then a shared remote stream, not a per-viewer window, so the
+	// File→Quit affordance below is omitted: it maps to ViewportCommand::Close,
+	// which the headless host treats as a process shutdown — a single remote
+	// click would take the demo down for everyone (ADR-0085). A remote viewer
+	// closes their browser tab instead. Captured once; the env is read by the
+	// Rust client too but the Go process inherits it.
+	served := imzero2env.HeadlessListen.Get() != ""
 	// Render cadence (IMZERO2_RENDER_CADENCE), captured once — the launch-time
 	// default, and the fallback when no remote stream is live. Continuous
 	// (default) paints at vsync rate; reactive drops to an idle heartbeat when
@@ -141,9 +151,14 @@ func decorateRenderer(r func() error, extraMenus func(), status *runtimestatus.S
 		defer c.CurrentApplicationState.FinishServersideFrame()
 		for range c.PanelTop(ids.PrepareStr("topPanel")).KeepIter() {
 			for range c.MenuBar().KeepIter() {
-				for range c.MenuButton(c.Atoms().Text("File").Keep()).KeepIter() {
-					if c.Button(ids.PrepareStr("quit"), c.Atoms().Text("Quit").Keep()).SendResp().HasPrimaryClicked() {
-						c.ContextSendViewPortCommandClose()
+				// File menu holds only Quit, which terminates the host — omit the
+				// whole menu when served headlessly (see `served` above). Restore
+				// the menu (not just the item) if File gains a safe entry.
+				if !served {
+					for range c.MenuButton(c.Atoms().Text("File").Keep()).KeepIter() {
+						if c.Button(ids.PrepareStr("quit"), c.Atoms().Text("Quit").Keep()).SendResp().HasPrimaryClicked() {
+							c.ContextSendViewPortCommandClose()
+						}
 					}
 				}
 				for range c.MenuButton(c.Atoms().Text("Layout").Keep()).KeepIter() {

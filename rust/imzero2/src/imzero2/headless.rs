@@ -47,6 +47,13 @@
 //! - `IMZERO2_HEADLESS_LISTEN` — bind address for the WebSocket carrier
 //!   (e.g. `127.0.0.1:8089`); the embedded browser viewer page is served
 //!   over HTTP on port+1. Unset = remote access disabled.
+//! - `IMZERO2_HEADLESS_IGNORE_CLOSE` — truthy (`1`/`true`/`yes`/`on`) makes a
+//!   viewport-close request (an app-emitted `ViewportCommand::Close`, e.g. a
+//!   "Quit" menu item) a no-op instead of a host shutdown. Set it for a
+//!   long-lived served deployment so one viewer cannot tear the shared host
+//!   down for everyone (ADR-0085). The genuine shutdown path — the Go control
+//!   closing the FFFI2 pipe (`PeerClosed`) — is unaffected. Unset = a close
+//!   request shuts the host down (the right default for a one-shot run).
 
 use crate::imzero2::appconfig::AppConfig;
 use crate::imzero2::apphost;
@@ -85,6 +92,11 @@ struct HeadlessOpts {
     /// WebSocket carrier bind address (e.g. "127.0.0.1:8089"); the viewer
     /// page is served on port+1. None = carrier disabled.
     listen: Option<String>,
+    /// When true, a viewport-close request (app-emitted `ViewportCommand::Close`)
+    /// is logged and ignored rather than shutting the host down — so one viewer
+    /// of a served deployment cannot terminate the shared host (ADR-0085). The
+    /// `PeerClosed` shutdown path (the Go control exiting) is unaffected.
+    ignore_close: bool,
 }
 
 impl HeadlessOpts {
@@ -100,6 +112,13 @@ impl HeadlessOpts {
                 .ok()
                 .filter(|v| !v.is_empty())
                 .map(std::path::PathBuf::from)
+        }
+        // `bool::from_str` only accepts "true"/"false"; accept the usual env
+        // truthy spellings so a unit can set `=1` (systemd's idiom).
+        fn flag(name: &str) -> bool {
+            std::env::var(name)
+                .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false)
         }
         let h264_out = path_var("IMZERO2_HEADLESS_H264_OUT");
         let listen = std::env::var("IMZERO2_HEADLESS_LISTEN")
@@ -124,6 +143,7 @@ impl HeadlessOpts {
             h264_out,
             lane,
             listen,
+            ignore_close: flag("IMZERO2_HEADLESS_IGNORE_CLOSE"),
         }
     }
 }
@@ -648,6 +668,9 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     let mut last_pass = std::time::Instant::now() - frame_dt;
     let mut repaint_hint = std::time::Duration::ZERO;
     let mut frame_idx: u64 = 0;
+    // Latch so an app that re-emits ViewportCommand::Close every frame under
+    // `ignore_close` logs once, not once per frame.
+    let mut warned_ignore_close = false;
     let mut bgra_frame: Vec<u8> = Vec::new();
     let mut translator = InputTranslator::default();
     let mut wire_events: Vec<crate::imzero2::inputproto::input_event::Event> = Vec::new();
@@ -802,8 +825,21 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             }
         });
         if close_requested(&out) {
-            tracing::info!("viewport close requested — shutting down headless host");
-            shutdown = true;
+            if opts.ignore_close {
+                // Served deployment (ADR-0085): a viewport-close from the UI
+                // (e.g. an app "Quit") must not shut the shared host down for
+                // every viewer. Ignore it; the genuine shutdown is PeerClosed
+                // (the Go control exiting), handled above. Latched to one log.
+                if !warned_ignore_close {
+                    tracing::warn!(
+                        "viewport close requested — ignored (IMZERO2_HEADLESS_IGNORE_CLOSE set)"
+                    );
+                    warned_ignore_close = true;
+                }
+            } else {
+                tracing::info!("viewport close requested — shutting down headless host");
+                shutdown = true;
+            }
         }
         repaint_hint = out
             .viewport_output
