@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-22
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0086: ImZero2 active/passive remote viewers and the session roster
 
@@ -86,7 +84,7 @@ Implement **O1**: a two-tier viewer model — one **active** session (video + in
 
 - **SD7 — The two-encoder split is the named, trigger-gated upgrade.** When **measured passive bandwidth, or a thin-link / small-screen passive viewer**, actually bites, add a second encoder config: the **active** stream returns to effectively-infinite GOP (pulse-free — restoring ADR-0024 SD3 literally), and a **passive** stream is tuned for compression (periodic IDR, B-frames, optionally a different codec), shared by all passives. The trigger is recorded so the limit is a stated gate, not a silent cap. (SVC / temporal layers is the only single-encoder way to serve both targets — carrier drops enhancement-layer NALs for passive — but it is not light and hardware support is uneven; noted, not pursued.)
 
-- **SD8 — Wire additions are additive on `0x03`** (ADR-0082's `boxer/imzero2/v1` discipline): `ClientHello { caps {webcodecs}, geometry, label? }`, `Roster { you {id, role}, active_id, count, max, connections[{ id, role, label?, webcodecs }] }`, `TakeSession`, `RoleChanged`. Video stays `0x01` (now broadcast to all connections); input stays `0x02` (dropped from passive connections at the server). The hello extends the existing geometry/cadence handshake rather than adding a new frame type.
+- **SD8 — Wire additions are additive on `0x03`** (ADR-0082's `boxer/imzero2/v1` discipline), riding the existing `SessionControl` oneof exactly as `DecodeCapabilities` already does — no new frame type: `ClientHello { webcodecs, label? }` (client→server, sent post-connect to report caps and a device label), `Roster { you {id, role}, active_id, count, max, connections[{ id, role, label?, webcodecs }] }` (server→client), and `TakeSession` (client→server). The `Roster` is built **per recipient** — each connection's copy carries its own `you {id, role}` — which **folds the originally-separate `RoleChanged` into it**: a connection observes its own promotion/demotion as a change in `you.role` between successive rosters, so no dedicated role-change message is needed (a deliberate wire-minimality refinement at acceptance). Geometry continues to flow on the existing `ViewportResize` (now honoured only from the active connection); video stays `0x01` (now broadcast to all connections); input stays `0x02` (dropped from passive connections at the server).
 
 - **SD9 — Roster identity stays minimal.** Per connection the roster carries `id`, `role`, an optional user/device `label` ("iPad"), and the `webcodecs` (takeover-capable) flag — nothing more. Peer IP is used for ADR-0082 rate-limiting/audit only and never appears in the roster. One principal (ADR-0082); this is not multi-tenancy.
 
@@ -131,7 +129,7 @@ Implement **O1**: a two-tier viewer model — one **active** session (video + in
 
 ## Status
 
-Proposed — 2026-06-14. On acceptance, [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) (SD3, active-scoped) and [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) (SD5, standby → passive) gain dated Tier-2 `## Updates` pointers to this ADR, per `doc/DOCUMENTATION_STANDARD.md` §1.
+Accepted — 2026-06-22 (proposed 2026-06-14). On acceptance, [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) (SD3, active-scoped) and [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) (SD5, standby → passive) gained dated Tier-2 `## Updates` pointers to this ADR, per `doc/DOCUMENTATION_STANDARD.md` §1.
 
 Implementation phasing: **Phase 1** — `Registry` + roles + `Roster` + browser `ViewMode` + roster panel, loopback, no auth. **Phase 2** — single shared periodic-IDR encoder + broadcast-to-N + per-connection queues. **Phase 3** — ADR-0082 auth at `admit`. **Phase 4** — takeover end-to-end (promote/demote, lone-passive auto-promote, geometry rebuild on differing-geometry takeover).
 
