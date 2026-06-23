@@ -9,7 +9,8 @@ pub fn run_main_loop(config: appconfig::AppConfig) -> eframe::Result {
             .with_inner_size([config.initial_main_window_width, config.initial_main_window_height])
             .with_min_inner_size([config.inner_min_size_width, config.inner_min_size_height])
             .with_fullscreen(config.fullscreen)
-            .with_title(config.window_title.clone()),
+            .with_title(config.window_title.clone())
+            .with_resizable(true),
         ..Default::default()
     };
     native_options.vsync = config.vsync;

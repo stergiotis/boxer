@@ -44,6 +44,7 @@ package treemap
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -158,6 +159,45 @@ func WithInitialPath(path []*layout.Node) Option {
 	}
 }
 
+// WithLeafClickSensing enables click detection on frontier leaf cells.
+// When enabled, leaf cells at the visible frontier will sense clicks and
+// the result is accessible via ClickedLeaf(). Drill-in (drillable) and
+// drill-up behavior is unaffected; this only adds interaction to otherwise
+// inert leaf tiles. Default: false.
+func WithLeafClickSensing(enabled bool) Option {
+	return func(t *Treemap) { t.leafClickSensing = enabled }
+}
+
+// WithFilterSiblings controls whether non-active siblings are excluded from
+// the treemap layout when the user has drilled down past root. When true,
+// only the active breadcrumb child and its descendants occupy layout space;
+// sibling subtrees are not rendered at all. The breadcrumb bar remains as
+// the sole navigation affordance for returning to or switching between
+// siblings. Default (false) preserves the historic behavior where siblings
+// are laid out but rendered hatched/inert.
+func WithFilterSiblings(enabled bool) Option {
+	return func(t *Treemap) { t.filterSiblings = enabled }
+}
+
+// WithVerticalChromeBudget sets the number of logical pixels to subtract
+// from the container height in containerRect(), accounting for chrome
+// rendered above the treemap area (breadcrumb bar, legend labels, detail
+// panels, spacing). This prevents the treemap Frame content from overflowing
+// the available window space and triggering egui's auto-resize loop.
+// Default 0 (no subtraction).
+func WithVerticalChromeBudget(budget float32) Option {
+	return func(t *Treemap) { t.verticalChromeBudget = budget }
+}
+
+// WithHorizontalChromeBudget sets the number of logical pixels to subtract
+// from the container width in containerRect(), accounting for chrome rendered
+// on the sides (e.g., gutter labels, sidebar panels, scrollbars). This prevents
+// the treemap Frame content from overflowing horizontally and triggering egui's
+// auto-resize loop on the width axis. Default 0 (no subtraction).
+func WithHorizontalChromeBudget(budget float32) Option {
+	return func(t *Treemap) { t.horizontalChromeBudget = budget }
+}
+
 // CellStateE is a bitfield of orthogonal per-cell state flags. Multiple flags
 // can be set simultaneously (e.g. a drill-up cell is both OnPath and DrillUp).
 // Used by ColoringI and StyleI resolution so callers can style by any
@@ -218,12 +258,13 @@ func (h HatchSpec) IsZero() bool { return h.Width <= 0 || h.Spacing <= 0 }
 // orthogonal: StyleI decides *which* color role applies to each visual
 // element; ColoringI decides *what* the colors actually are.
 type CellVisuals struct {
-	BorderWidth     float32 // 0 = no border
-	CornerRadius    float32
-	Hatch           HatchSpec // zero value = no hatch overlay
-	UseDimFill      bool      // use ColoringI.DimFill instead of ColoringI.Fill
-	UseHoverFill    bool      // when CellStateHovered: use ColoringI.HoverFill (overrides UseDimFill)
-	UseAccentBorder bool      // use ColoringI.AccentBorder instead of ColoringI.Border
+	BorderWidth          float32 // 0 = no border
+	CornerRadius         float32
+	Hatch                HatchSpec // zero value = no hatch overlay
+	UseDimFill           bool      // use ColoringI.DimFill instead of ColoringI.Fill
+	UseHoverFill         bool      // when CellStateHovered: use ColoringI.HoverFill (overrides UseDimFill)
+	UseAccentBorder      bool      // use ColoringI.AccentBorder instead of ColoringI.Border
+	AccentBorderOverride uint32    // non-zero: force this stroke color (0xRRGGBBAA), overrides UseAccentBorder
 }
 
 // StyleI returns the per-cell visual properties (geometry + decoration).
@@ -340,6 +381,16 @@ type cellDesc struct {
 	depth     int
 }
 
+// nodeInSlice reports whether node is present in the slice (pointer comparison).
+func nodeInSlice(node *layout.Node, slice []*layout.Node) bool {
+	for _, n := range slice {
+		if n == node {
+			return true
+		}
+	}
+	return false
+}
+
 // Treemap is a Frame-based zoomable treemap widget.
 type Treemap struct {
 	ids      *c.WidgetIdStack
@@ -369,6 +420,29 @@ type Treemap struct {
 	// metrics supplies the measured label-height gates (see metrics.go).
 	metrics labelMetrics
 
+	// filterSiblings: when true and breadcrumb depth > 0, only the active
+	// child at each level is laid out/rendered; siblings are excluded
+	// entirely (no hatched placeholder cells).
+	filterSiblings bool
+
+	// leafClickSensing: when true, frontier leaf cells sense clicks and the
+	// result is accessible via ClickedLeaf(). Default: false.
+	leafClickSensing bool
+
+	// verticalChromeBudget is the number of logical pixels to subtract
+	// from the container height in containerRect(), accounting for chrome
+	// rendered above the treemap area (breadcrumb bar, legend labels,
+	// detail panels, spacing). Prevents the treemap Frame from overflowing
+	// the available window space and triggering egui's auto-resize loop.
+	// Default 0 (no subtraction); set via WithVerticalChromeBudget.
+	verticalChromeBudget float32
+
+	// horizontalChromeBudget is the number of logical pixels to subtract
+	// from the container width in containerRect(), accounting for chrome
+	// rendered on the sides (e.g., gutter labels, sidebar panels).
+	// Default 0 (no subtraction); set via WithHorizontalChromeBudget.
+	horizontalChromeBudget float32
+
 	// Retained chrome colors (breadcrumb / container / leaf-view backgrounds)
 	colorBreadcrumbBg  color.Color
 	colorFrameStroke   color.Color
@@ -384,6 +458,10 @@ type Treemap struct {
 
 	// Per-frame transient; reset at the start of every Render.
 	cells []cellDesc
+
+	// leafClicked tracks the node of a frontier leaf cell that was clicked
+	// this frame (when leafClickSensing is enabled). Consumed on next read.
+	leafClicked *layout.Node
 
 	// Zoom-transition animation state machine.
 	anim animMachine
@@ -490,6 +568,16 @@ func (t *Treemap) HoveredNode() (node *layout.Node) {
 	return nil
 }
 
+// ClickedLeaf returns the node of a frontier leaf cell that was clicked this
+// frame, or nil. Only populated when leafClickSensing is enabled. Call after
+// Render(); the result is consumed on next read (subsequent calls return nil
+// until the next click).
+func (t *Treemap) ClickedLeaf() *layout.Node {
+	node := t.leafClicked
+	t.leafClicked = nil
+	return node
+}
+
 // resolveColors picks the appropriate fill, border, and text color from
 // colors using the StyleI's role selectors and the cell's state. The text
 // color tracks whichever fill slot is selected so WCAG-picked contrast
@@ -507,14 +595,57 @@ func (t *Treemap) resolveColors(colors CellColors, visuals CellVisuals, state Ce
 		text = colors.HoverText
 	}
 	border = colors.Border
-	if visuals.UseAccentBorder {
+	if visuals.AccentBorderOverride != 0 {
+		border = color.Hex(visuals.AccentBorderOverride)
+	} else if visuals.UseAccentBorder {
 		border = colors.AccentBorder
 	}
 	return
 }
 
 func (t *Treemap) containerRect() layout.Rect {
-	return layout.Rect{W: float64(t.containerW), H: float64(t.containerH)}
+	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	effW, effH := t.effectiveContainerWH(avail)
+	// Subtract vertical chrome budget (breadcrumb bar, legend, spacing,
+	// detail panels rendered above the treemap area). This prevents the
+	// treemap Frame from overflowing the available space and triggering
+	// egui's auto-resize loop — mirrors sccmap's treemapChromeH approach.
+	if t.verticalChromeBudget > 0 && effH > t.verticalChromeBudget {
+		effH -= t.verticalChromeBudget
+	}
+	// Subtract horizontal chrome budget (gutter labels, sidebar panels).
+	if t.horizontalChromeBudget > 0 && effW > t.horizontalChromeBudget {
+		effW -= t.horizontalChromeBudget
+	}
+	return layout.Rect{W: float64(effW), H: float64(effH)}
+}
+
+// SetHorizontalChromeBudget sets the number of logical pixels to subtract
+// from the container width dynamically.
+func (t *Treemap) SetHorizontalChromeBudget(budget float32) {
+	t.horizontalChromeBudget = budget
+}
+
+// SetVerticalChromeBudget sets the number of logical pixels to subtract
+// from the container height dynamically.
+func (t *Treemap) SetVerticalChromeBudget(budget float32) {
+	t.verticalChromeBudget = budget
+}
+
+// effectiveContainerWH returns the widget's effective container dimensions.
+// It reads the previous frame's captured ui.available_size from
+// StateManager; when both W and H are NaN or non-positive it falls back
+// to the fixed containerW/containerH set via WithContainerSize. This
+// gives a one-frame lag on resize that is imperceptible to users.
+func (t *Treemap) effectiveContainerWH(avail c.AvailableSizeValue) (w, h float32) {
+	w, h = t.containerW, t.containerH
+	if !math.IsNaN(float64(avail.W)) && avail.W > 0 {
+		w = avail.W
+	}
+	if !math.IsNaN(float64(avail.H)) && avail.H > 0 {
+		h = avail.H
+	}
+	return
 }
 
 // innerRect computes the interior rect of a cell for recursive rendering.
@@ -677,7 +808,6 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 	if len(node.Children) == 0 {
 		return
 	}
-	lay := layout.ComputeLayoutAt(node, bounds)
 
 	var activeChild *layout.Node
 	if bcLevel+1 < len(t.breadcrumb) {
@@ -685,7 +815,27 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 	}
 	atFrontier := bcLevel+1 >= len(t.breadcrumb)
 
-	for _, child := range node.Children {
+	// When filterSiblings is enabled and we have an active breadcrumb child,
+	// lay out all siblings to find the active child's rect, then replace
+	// node.Children so the squarified algorithm only sees the active child
+	// and fills the entire available space.
+	children := node.Children
+	parentBounds := bounds
+	var lay *layout.Layout
+	if t.filterSiblings && activeChild != nil {
+		// Temporarily swap node.Children so ComputeLayoutAt lays out
+		// only the active child, filling the entire available space.
+		origChildren := node.Children
+		node.Children = []*layout.Node{activeChild}
+		children = node.Children
+		bounds = parentBounds
+		lay = layout.ComputeLayoutAt(node, bounds)
+		node.Children = origChildren
+	} else {
+		lay = layout.ComputeLayoutAt(node, bounds)
+	}
+
+	for _, child := range children {
 		r := lay.RectOf(child)
 		if r.W < 6 || r.H < 6 {
 			continue
@@ -746,9 +896,14 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 				CornerRadius(visuals.CornerRadius).
 				Stroke(visuals.BorderWidth, strokeColor).
 				InnerMarginSides(3, 3, 2, 2)
-			if drillable || drillUpTo > 0 {
+			if drillable || drillUpTo > 0 || (t.leafClickSensing && atFrontier) {
 				frame = frame.SenseClick()
 			}
+			// A cell shows its own children inside it when it's the drilled-in
+			// (active) container or a frontier container rendering a preview;
+			// such cells skip the secondary value line so it doesn't overrun
+			// the header into the nested content.
+			rendersInner := hasChildren && (isActive || atFrontier)
 			for range frame.KeepIter() {
 				c.UiSetMinWidth(cellW - 7)
 				c.UiSetMinHeight(cellH - zoomCellVSlack)
@@ -778,9 +933,13 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 		}
 
 		if isActive && len(child.Children) > 0 {
-			inner := innerRect(r)
-			if inner.W > 8 && inner.H > 8 {
-				t.renderZoom(child, inner, depth+1, bcLevel+1, cellSeq)
+			// When filterSiblings is active, pass parentBounds (the full
+			// available space) to the recursive call so the child fills
+			// the entire canvas instead of being constrained by its
+			// original sibling-weighted rect.
+			recBounds := innerRect(parentBounds)
+			if recBounds.W > 8 && recBounds.H > 8 {
+				t.renderZoom(child, recBounds, depth+1, bcLevel+1, cellSeq)
 			}
 		} else if atFrontier && len(child.Children) > 0 {
 			inner := innerRect(r)
@@ -830,7 +989,7 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 
 		t.cells = append(t.cells, cellDesc{
 			node: child, handle: cellHandle, rect: r,
-			state: state, depth: depth,
+			state: state, depth: depth, drillable: len(child.Children) > 0,
 		})
 
 		cellW := float32(r.W)
@@ -850,12 +1009,15 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 		for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
 			// Same paint backstop as the renderZoom cells.
 			c.UiClipToMaxRect()
-			for range c.Frame(frameCreator).
+			frame := c.Frame(frameCreator).
 				Fill(fill).
 				CornerRadius(visuals.CornerRadius).
 				Stroke(visuals.BorderWidth, strokeColor).
-				InnerMarginSides(2, 2, 1, 1).
-				KeepIter() {
+				InnerMarginSides(2, 2, 1, 1)
+			if t.leafClickSensing {
+				frame = frame.SenseClick()
+			}
+			for range frame.KeepIter() {
 
 				c.UiSetMinWidth(cellW - 5)
 				c.UiSetMinHeight(cellH - previewCellVSlack)
@@ -894,6 +1056,10 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 // Wraps its body in c.IdScope(scopeKey) so multiple instances sharing the
 // same WidgetIdStack don't collide.
 func (t *Treemap) Render() {
+	// Capture available size before entering the IdScope so we read the
+	// full window ui.available_size instead of the scoped container rect.
+	c.CaptureAvailableSize()
+
 	for range c.IdScope(t.ids.PrepareStr(t.scopeKey)) {
 		t.renderBody()
 	}
@@ -905,6 +1071,11 @@ func (t *Treemap) renderBody() {
 	// Keep the measured label gates current across Sync's databind reset;
 	// the real row heights land one frame after the first call (metrics.go).
 	t.metrics.renewBindings()
+	// Capture available size for adaptive container sizing. The captured
+	// value lands in the next frame's StateManager, so the first frame
+	// falls back to the fixed containerW/containerH; subsequent frames
+	// use the captured ui.available_size when valid (NaN on first frame).
+	c.CaptureAvailableSize()
 
 	// --- Breadcrumb bar ---
 	// Per-segment pills: ancestors are framed buttons; the tail is a
@@ -920,7 +1091,7 @@ func (t *Treemap) renderBody() {
 					End().Keep()).Send()
 			}
 			if level < len(t.breadcrumb)-1 {
-				if c.Button(t.ids.PrepareSeq(uint64(level)),
+				if c.Button(t.ids.PrepareStr("bc-btn-"+node.Name),
 					c.Atoms().BeginRichTextColored(t.colorBreadcrumbFg, t.colorTransparentBg, node.Name).End().Keep()).
 					Frame(true).
 					SendResp().HasPrimaryClicked() {
@@ -930,7 +1101,7 @@ func (t *Treemap) renderBody() {
 				}
 			} else {
 				// Tail chip: non-interactive, white-bordered so "you are here" reads at a glance.
-				for range c.Frame(t.ids.PrepareStr("bc-tail")).
+				for range c.Frame(t.ids.PrepareStr("bc-tail-"+node.Name)).
 					Fill(t.colorBreadcrumbBg).
 					CornerRadius(styletokens.RoundingSm).
 					Stroke(styletokens.StrokeRegular, t.colorBreadcrumbFg).
@@ -960,21 +1131,18 @@ func (t *Treemap) renderBody() {
 			renderBounds = lerpRect(t.anim.FromRect(), renderBounds, effT)
 		}
 
-		for range c.Frame(t.ids.PrepareStr("container")).
+		for range c.Frame(t.ids.PrepareStr("container-" + t.scopeKey)).
 			Fill(t.colorContainerBg).
 			CornerRadius(styletokens.RoundingMd).
 			InnerMargin(0).
 			KeepIter() {
-
-			c.UiSetMinWidth(t.containerW)
-			c.UiSetMinHeight(t.containerH)
 
 			cellSeq := cellSeqBase
 			t.renderZoom(t.root, renderBounds, 0, 0, &cellSeq)
 		}
 
 		// Drive the tween every frame to keep egui's AnimationManager primed.
-		animId := t.ids.PrepareStr("anim").Derive()
+		animId := t.ids.PrepareStr("anim-" + t.scopeKey).Derive()
 		c.AnimateBoolWithTimeBind(animId, t.anim.Target(), t.animDurSecs, t.anim.TPtr())
 
 		// --- Interaction pass ---
@@ -996,6 +1164,10 @@ func (t *Treemap) renderBody() {
 				case t.cells[i].drillUpTo > 0:
 					drillUpTarget = t.cells[i].node
 					drillUpToLen = t.cells[i].drillUpTo
+				case t.leafClickSensing && t.cells[i].state.Has(CellStateFrontier) && t.cells[i].state.Has(CellStateLeaf):
+					t.leafClicked = t.cells[i].node
+				case t.leafClickSensing && t.cells[i].state.Has(CellStatePreview) && t.cells[i].state.Has(CellStateLeaf):
+					t.leafClicked = t.cells[i].node
 				}
 			}
 		}
@@ -1010,6 +1182,18 @@ func (t *Treemap) renderBody() {
 		switch {
 		case drillTarget != nil:
 			newPath := append([]*layout.Node(nil), t.breadcrumb...)
+			// If the clicked node's parent is not already in the breadcrumb,
+			// insert missing ancestors so the path reflects the full hierarchy
+			// (e.g. root → segment → cluster when drilling directly into a cluster).
+			if !nodeInSlice(drillTarget, cur.Children) {
+				// Search for drillTarget's parent among current focus's children.
+				for _, child := range cur.Children {
+					if nodeInSlice(drillTarget, child.Children) {
+						newPath = append(newPath, child)
+						break
+					}
+				}
+			}
 			newPath = append(newPath, drillTarget)
 			t.applyNavigation(newPath, NavTriggerCellClick)
 		case drillUpTarget != nil:
@@ -1018,7 +1202,7 @@ func (t *Treemap) renderBody() {
 		}
 	} else {
 		c.Label(fmt.Sprintf("leaf: %s  |  size: %.0f", cur.Name, cur.TotalSize())).Send()
-		for range c.Frame(t.ids.PrepareStr("leaf")).
+		for range c.Frame(t.ids.PrepareStr("leaf-" + t.scopeKey)).
 			Fill(t.colorLeafBg).
 			InnerMargin(styletokens.PaddingLoose(t.density)).
 			CornerRadius(styletokens.RoundingLg).
