@@ -34,6 +34,9 @@
                   pixels" the surface measurement appeared to have). */
                overflow: hidden;
                overscroll-behavior: none; }
+  /* height:100% above is the pre-script fallback; applyViewportHeight() then
+     pins the body to window.visualViewport so the column matches the visible
+     area on iPadOS, where the layout viewport is taller (see the JS comment). */
   body { display: flex; flex-direction: column; }
   #status { padding: 4px 8px; flex: 0 0 auto; }
   /* The canvas lives in a flex stage that fills the space below the status
@@ -484,6 +487,34 @@ function flushMove() {
 // geometry and answers with a fresh SessionHello. Guarded against echo
 // loops: a hello caused by our own report doesn't re-send unless the
 // window actually changed meanwhile.
+//
+// The size we measure MUST be the actually-visible area, not the layout
+// viewport. On iPadOS/iOS the two differ: documentElement.client{Width,Height}
+// (what CSS `height: 100%` resolves against) describe the layout viewport,
+// which is TALLER than the visual viewport — Safari's toolbars and the
+// home-indicator inset live in the gap. Laying the flex column out against the
+// layout viewport pushes #stage below the fold, and `align-items: center` then
+// re-centres the canvas in the over-tall stage, sliding the app's own bottom
+// bar off the screen. The backing store is the right size — those pixels are
+// just drawn where they can't be seen, which is why the pixel height looks
+// correct while the bar is missing. window.visualViewport reports the visible
+// area directly; we drive BOTH the laid-out body height and this measurement
+// off it so the stage, the geometry we report, and what the user sees agree.
+const vv = window.visualViewport;
+function viewportSize() {
+  // visualViewport dimensions are fractional; round to integer CSS px so a
+  // sub-pixel value can't feed back into the geometry (and, under
+  // overflow:hidden, can't spawn a scrollbar whose gutter inflates the next
+  // read). Pre-visualViewport browsers fall back to the content box.
+  const doc = document.documentElement;
+  return vv
+    ? { w: Math.round(vv.width), h: Math.round(vv.height) }
+    : { w: doc.clientWidth, h: doc.clientHeight };
+}
+// Pin the body to the visible area so the flex column never extends past it.
+// Not gated on role — a passive viewer must fit on screen too.
+function applyViewportHeight() { document.body.style.height = viewportSize().h + "px"; }
+
 let lastSentGeometry = null;
 function measureAndSend() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -492,14 +523,9 @@ function measureAndSend() {
   // promotion, applyRoster clears the echo guard and calls this.
   if (myRole !== "active") return;
   const scale = window.devicePixelRatio || 1;
-  // documentElement.client{Width,Height} exclude the scrollbar gutter;
-  // window.inner{Width,Height} include it. With overflow:hidden no gutter
-  // exists, so they normally agree — but measuring the content box directly
-  // is the correct, gutter-proof source and also yields integer CSS px (no
-  // fractional offsetHeight rounding feeding back into the geometry).
-  const doc = document.documentElement;
-  const lw = Math.max(320, doc.clientWidth);
-  const lh = Math.max(240, doc.clientHeight - statusBar.offsetHeight);
+  const view = viewportSize();
+  const lw = Math.max(320, view.w);
+  const lh = Math.max(240, view.h - statusBar.offsetHeight);
   if (lastSentGeometry &&
       Math.abs(lastSentGeometry[0] - lw) < 1 &&
       Math.abs(lastSentGeometry[1] - lh) < 1 &&
@@ -512,10 +538,15 @@ function scheduleMeasure() {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(measureAndSend, 300); // debounce drag-resizing / rotation
 }
-window.addEventListener("resize", scheduleMeasure);
-// iPadOS/iOS rotation: 'resize' is unreliable mid-rotation; 'orientationchange'
-// fires once the new viewport has settled.
-window.addEventListener("orientationchange", scheduleMeasure);
+// Re-pin the body immediately (layout must never lag the visible area) and
+// re-measure debounced. visualViewport.resize is the reliable signal on iOS
+// (it fires for toolbar collapse and rotation settle); window 'resize' /
+// 'orientationchange' cover desktop and pre-visualViewport browsers.
+function onViewportChange() { applyViewportHeight(); scheduleMeasure(); }
+window.addEventListener("resize", onViewportChange);
+window.addEventListener("orientationchange", onViewportChange);
+if (vv) vv.addEventListener("resize", onViewportChange);
+applyViewportHeight(); // pin to the visible area before the first frame
 
 // ---- touch gesture layer ----
 // One finger forwards as the pointer (tap = click, drag = pointer drag —
