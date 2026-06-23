@@ -15,9 +15,11 @@ import (
 //
 // Zero-value usage is invalid; construct via NewOpenAIChatClient.
 type OpenAIChatClient struct {
-	client      openaichat.ClientI
-	temperature float32
-	numCtx      int32
+	client         openaichat.ClientI
+	temperature    float32
+	numCtx         int32
+	seed           *int64
+	responseFormat *openaichat.ResponseFormat
 }
 
 var _ orchestrator.LLMClientI = (*OpenAIChatClient)(nil)
@@ -36,6 +38,21 @@ func WithOpenAIChatTemperature(t float32) OpenAIChatOption {
 // default) for OpenAI / Gemini endpoints, which reject the field.
 func WithOpenAIChatNumCtx(n int32) OpenAIChatOption {
 	return func(inst *OpenAIChatClient) { inst.numCtx = n }
+}
+
+// WithOpenAIChatSeed sets the sampling seed for reproducible output where the
+// provider honors it. Pair with WithOpenAIChatTemperature(0) for deterministic
+// SQL generation. Unset by default (the provider seeds randomly).
+func WithOpenAIChatSeed(seed int64) OpenAIChatOption {
+	return func(inst *OpenAIChatClient) { inst.seed = &seed }
+}
+
+// WithOpenAIChatResponseFormat constrains the model's output — e.g.
+// openaichat.JSONObjectFormat() to force valid JSON, or JSONSchemaFormat(...)
+// to pin a schema. Unset by default (free-form text). The orchestrator's
+// prompt must request a shape consistent with the format.
+func WithOpenAIChatResponseFormat(rf *openaichat.ResponseFormat) OpenAIChatOption {
+	return func(inst *OpenAIChatClient) { inst.responseFormat = rf }
 }
 
 // NewOpenAIChatClient wraps an existing openaichat.ClientI for text2sql2.
@@ -67,10 +84,12 @@ func (inst *OpenAIChatClient) Chat(ctx context.Context, model string, messages [
 	}
 	var resp openaichat.CompletionResponse
 	resp, err = inst.client.Complete(ctx, openaichat.CompletionRequest{
-		ModelId:     model,
-		Messages:    wireMessages,
-		Temperature: &inst.temperature,
-		NumCtx:      inst.numCtx,
+		ModelId:        model,
+		Messages:       wireMessages,
+		Temperature:    &inst.temperature,
+		NumCtx:         inst.numCtx,
+		Seed:           inst.seed,
+		ResponseFormat: inst.responseFormat,
 	})
 	if err != nil {
 		err = eh.Errorf("openaichat complete: %w", err)
