@@ -125,7 +125,7 @@ func TestBandsCacheStore_LRUEviction(t *testing.T) {
 	inst := &TimelineDriver{}
 	for i := range bandsCacheSize + 3 {
 		key := bandsCacheKey{MinMS: int64(i), MaxMS: int64(i + 1), SQL: "x"}
-		inst.bandsCacheStore(key, []layout.BackgroundBand{{FromMS: int64(i)}})
+		inst.bandsCacheStoreLocked(key, []layout.BackgroundBand{{FromMS: int64(i)}})
 	}
 	assert.Equal(t, bandsCacheSize, len(inst.bandsCache),
 		"cache should be bounded to bandsCacheSize")
@@ -141,20 +141,20 @@ func TestBandsCacheLookup_MoveToFront(t *testing.T) {
 		{MinMS: 5, MaxMS: 6, SQL: "c"},
 	}
 	for _, k := range keys {
-		inst.bandsCacheStore(k, nil)
+		inst.bandsCacheStoreLocked(k, nil)
 	}
 	// Most-recent first: c, b, a.
 	require.Equal(t, keys[2], inst.bandsCache[0].Key)
 
 	// Looking up `a` should move it to front.
-	_, ok := inst.bandsCacheLookup(keys[0])
+	_, ok := inst.bandsCacheLookupLocked(keys[0])
 	require.True(t, ok)
 	assert.Equal(t, keys[0], inst.bandsCache[0].Key)
 }
 
 func TestBandsCacheLookup_Miss(t *testing.T) {
 	inst := &TimelineDriver{}
-	inst.bandsCacheStore(bandsCacheKey{MinMS: 1, MaxMS: 2, SQL: "a"}, nil)
-	_, ok := inst.bandsCacheLookup(bandsCacheKey{MinMS: 99, MaxMS: 100, SQL: "z"})
+	inst.bandsCacheStoreLocked(bandsCacheKey{MinMS: 1, MaxMS: 2, SQL: "a"}, nil)
+	_, ok := inst.bandsCacheLookupLocked(bandsCacheKey{MinMS: 99, MaxMS: 100, SQL: "z"})
 	assert.False(t, ok)
 }

@@ -107,7 +107,10 @@ func formatDictValue(d *array.Dictionary, row int) string {
 	dict := d.Dictionary()
 	switch dv := dict.(type) {
 	case *array.String:
-		return dv.Value(idx)
+		// EnsureUTF8 to match the direct *array.String case in formatCell —
+		// CH LowCardinality(String) can carry non-UTF-8 bytes that would
+		// break the FFI wire downstream of c.Label.
+		return utfsafe.EnsureUTF8(dv.Value(idx))
 	case *array.Int64:
 		return strconv.FormatInt(dv.Value(idx), 10)
 	case *array.Uint64:

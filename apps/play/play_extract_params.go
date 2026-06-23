@@ -39,53 +39,17 @@ func ExtractParams(sql string) (residual string, params map[string]string, err e
 		return
 	}
 
-	params = make(map[string]string)
-	rw := nanopass.NewRewriter(pr)
-
-	queryCtx := findFirstQuery(pr)
-	if queryCtx == nil {
-		residual = sql
+	var paramStmts []*grammar1.SetStmtContext
+	params, paramStmts, err = collectParamSettings(pr)
+	if err != nil {
+		err = eh.Errorf("ExtractParams: %w", err)
 		return
 	}
 
-	n := queryCtx.GetChildCount()
-	for i := 0; i < n; i++ {
-		setStmt, ok := queryCtx.GetChild(i).(*grammar1.SetStmtContext)
-		if !ok {
-			continue
-		}
-		var paramPairs []paramPair
-		var nonParamCount uint32
-		stmtErr := iterateSettingExprs(setStmt, func(expr *grammar1.SettingExprContext) (stopErr error) {
-			name, value, exErr := extractSettingNameValue(pr, expr)
-			if exErr != nil {
-				stopErr = exErr
-				return
-			}
-			if !strings.HasPrefix(name, "param_") {
-				nonParamCount++
-				return
-			}
-			paramPairs = append(paramPairs, paramPair{name: name, value: value})
-			return
-		})
-		if stmtErr != nil {
-			err = eh.Errorf("ExtractParams: %w", stmtErr)
-			return
-		}
-		if len(paramPairs) == 0 {
-			continue
-		}
-		if nonParamCount > 0 {
-			err = eb.Build().Errorf("ExtractParams: SET statement mixes param_* with non-param settings (not supported)")
-			return
-		}
-		for _, p := range paramPairs {
-			params[p.name] = p.value
-		}
+	rw := nanopass.NewRewriter(pr)
+	for _, setStmt := range paramStmts {
 		deleteSetStmt(rw, pr, setStmt)
 	}
-
 	residual = strings.TrimLeft(nanopass.GetText(rw), " \t\r\n")
 	return
 }
@@ -93,6 +57,59 @@ func ExtractParams(sql string) (residual string, params map[string]string, err e
 type paramPair struct {
 	name  string
 	value string
+}
+
+// collectParamSettings walks the first query's top-level SET statements and
+// harvests every `param_*` setting into a name→value map, also returning the
+// SetStmt nodes that consist *only* of param_* settings so ExtractParams can
+// delete them from the residual. This is the single SET-harvest both
+// ExtractParams (which deletes) and collectParamValues (which only reads)
+// share. A SET that mixes param_* with regular settings is rejected (partial
+// deletion is out of scope); a SET with no param_* settings is left untouched.
+func collectParamSettings(pr *nanopass.ParseResult) (params map[string]string, paramOnlyStmts []*grammar1.SetStmtContext, err error) {
+	params = make(map[string]string)
+	queryCtx := findFirstQuery(pr)
+	if queryCtx == nil {
+		return
+	}
+	n := queryCtx.GetChildCount()
+	for i := 0; i < n; i++ {
+		setStmt, ok := queryCtx.GetChild(i).(*grammar1.SetStmtContext)
+		if !ok {
+			continue
+		}
+		var pairs []paramPair
+		var nonParam uint32
+		stmtErr := iterateSettingExprs(setStmt, func(expr *grammar1.SettingExprContext) (stopErr error) {
+			name, value, exErr := extractSettingNameValue(pr, expr)
+			if exErr != nil {
+				stopErr = exErr
+				return
+			}
+			if !strings.HasPrefix(name, "param_") {
+				nonParam++
+				return
+			}
+			pairs = append(pairs, paramPair{name: name, value: value})
+			return
+		})
+		if stmtErr != nil {
+			err = stmtErr
+			return
+		}
+		if len(pairs) == 0 {
+			continue
+		}
+		if nonParam > 0 {
+			err = eb.Build().Errorf("SET statement mixes param_* with non-param settings (not supported)")
+			return
+		}
+		for _, p := range pairs {
+			params[p.name] = p.value
+		}
+		paramOnlyStmts = append(paramOnlyStmts, setStmt)
+	}
+	return
 }
 
 func findFirstQuery(pr *nanopass.ParseResult) (out *grammar1.QueryContext) {

@@ -19,7 +19,7 @@ import (
 func TestAffordanceEvaluatorEndToEnd(t *testing.T) {
 	var observed []nanopass.Observation
 	eval := passes.NewFunctionEvaluator()
-	eval.Register("multiMatchIndexAny", func(args []any) (any, error) {
+	eval.Register("multiMatchAnyIndex", func(args []any) (any, error) {
 		return marshalling.ControlFlow{Sentinel: nanopass.PassDiscardOutput}, nil
 	}, true)
 	eval.OnObservation(func(obs nanopass.Observation) {
@@ -35,7 +35,7 @@ func TestAffordanceEvaluatorEndToEnd(t *testing.T) {
 	)
 
 	out, err := pipe.Run(
-		"select multiMatchIndexAny(text, 'foo.*', 'bar.*') from t")
+		"select multiMatchAnyIndex(text, ['foo.*', 'bar.*']) from t")
 	if err != nil {
 		t.Fatalf("preview pipeline failed: %v", err)
 	}
@@ -46,16 +46,16 @@ func TestAffordanceEvaluatorEndToEnd(t *testing.T) {
 	}
 	// The call site survives the analytical pass — discard mechanism
 	// forwarded its input to the canonicalisers.
-	if !strings.Contains(out, "multiMatchIndexAny") {
-		t.Errorf("multiMatchIndexAny was rewritten away; out=%q", out)
+	if !strings.Contains(out, "multiMatchAnyIndex") {
+		t.Errorf("multiMatchAnyIndex was rewritten away; out=%q", out)
 	}
 
 	// And the observation arrived.
 	if got := len(observed); got != 1 {
 		t.Fatalf("expected 1 observation, got %d", got)
 	}
-	if observed[0].Name != "multimatchindexany" {
-		t.Errorf("observation name=%q, want multimatchindexany",
+	if observed[0].Name != "multimatchanyindex" {
+		t.Errorf("observation name=%q, want multimatchanyindex",
 			observed[0].Name)
 	}
 	if observed[0].Src.Empty() {

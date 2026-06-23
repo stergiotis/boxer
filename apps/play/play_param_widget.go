@@ -135,7 +135,12 @@ func newDateTimePairWidget() *dateTimePairWidget {
 	return &dateTimePairWidget{state: map[string]*dateTimePairSlotState{}}
 }
 
-func (w *dateTimePairWidget) Matches(slots []paramSlot) (consumedIdx []int, ok bool) {
+// matchAdjacentFromToDateTime scans slots for the first adjacent (from, to)
+// pair where both names match case-insensitively and both are DateTime-typed,
+// returning the two indices consumed. Shared by the pair and range widgets
+// (the range widget additionally gates on having an evaluator wired) so the
+// two stay in lockstep on what counts as a foldable range.
+func matchAdjacentFromToDateTime(slots []paramSlot) (consumedIdx []int, ok bool) {
 	for i := 0; i+1 < len(slots); i++ {
 		a, b := slots[i], slots[i+1]
 		if !strings.EqualFold(a.Name, "from") || !strings.EqualFold(b.Name, "to") {
@@ -144,11 +149,13 @@ func (w *dateTimePairWidget) Matches(slots []paramSlot) (consumedIdx []int, ok b
 		if !isDateTimeType(a.Type) || !isDateTimeType(b.Type) {
 			continue
 		}
-		consumedIdx = []int{i, i + 1}
-		ok = true
-		return
+		return []int{i, i + 1}, true
 	}
 	return
+}
+
+func (w *dateTimePairWidget) Matches(slots []paramSlot) (consumedIdx []int, ok bool) {
+	return matchAdjacentFromToDateTime(slots)
 }
 
 func (w *dateTimePairWidget) Render(ctx *paramCtx) {

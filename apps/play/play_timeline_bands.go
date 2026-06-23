@@ -126,16 +126,21 @@ type bandsCacheEntry struct {
 	Bands []layout.BackgroundBand
 }
 
+// bandsFetchTimeout bounds a single bands round-trip. The fetch runs on a
+// background goroutine (see runBandsFetch) so this is defence-in-depth — a
+// wedged ClickHouse can no longer pin a goroutine indefinitely.
+const bandsFetchTimeout = 10 * time.Second
+
 // fetchBands runs the bands SQL through the existing play *Client,
 // substituting the (min, max) scalars, and returns the resulting
-// background bands. Synchronous (v1) — blocks the caller for the round-
-// trip duration; a future revision should hoist this off the render
-// goroutine. Unknown color names are dropped silently from the band
-// list; the count of skipped rows surfaces in skipped so the UI can
-// flag them.
+// background bands. Called from a background goroutine (runBandsFetch), never
+// the render thread. Unknown color names are dropped silently from the band
+// list; the count of skipped rows surfaces in skipped so the UI can flag them.
 func fetchBands(client *Client, sql string, minMS, maxMS int64) (bands []layout.BackgroundBand, skipped int, err error) {
 	rewritten := substituteBandsRange(sql, minMS, maxMS)
-	rdr, body, _, fErr := client.ExecuteArrowStream(context.TODO(), rewritten, memory.NewGoAllocator())
+	ctx, cancel := context.WithTimeout(context.Background(), bandsFetchTimeout)
+	defer cancel()
+	rdr, body, _, fErr := client.ExecuteArrowStream(ctx, rewritten, memory.NewGoAllocator())
 	if fErr != nil {
 		err = fErr
 		return
@@ -257,12 +262,15 @@ func fieldNames(schema *arrow.Schema) (names []string) {
 }
 
 // bandsProducer is the BackgroundBandProducer closure handed to the
-// composite widget at construction. It filters inst.bands by the per-
-// frame view range — bands fully outside the visible window are
-// silently dropped, so the widget never paints offscreen geometry.
+// composite widget at construction. It filters inst.bandsView (the
+// render-thread snapshot refreshed each frame by refreshBandsView) by the
+// per-frame view range — bands fully outside the visible window are
+// silently dropped, so the widget never paints offscreen geometry. Reading
+// bandsView (not the shared bands) keeps this off the lock and clear of the
+// fetch goroutine.
 func (inst *TimelineDriver) bandsProducer(viewMinMS, viewMaxMS int64) iter.Seq[layout.BackgroundBand] {
 	return func(yield func(layout.BackgroundBand) bool) {
-		for _, b := range inst.bands {
+		for _, b := range inst.bandsView {
 			if b.ToMS < viewMinMS || b.FromMS > viewMaxMS {
 				continue
 			}
@@ -284,52 +292,102 @@ func (inst *TimelineDriver) maybeFetchBands(force bool) {
 	}
 	sql := strings.TrimSpace(*inst.bandsSQLPtr)
 	if sql == "" || !inst.dataExtentValid || inst.client == nil {
-		inst.bands = nil
-		inst.bandsErr = nil
-		inst.bandsSkipped = 0
-		inst.bandsHaveFetched = false
+		inst.clearBands()
 		return
 	}
 
 	key := bandsCacheKey{MinMS: inst.dataMinMS, MaxMS: inst.dataMaxMS, SQL: sql}
-	if !force && inst.bandsHaveFetched && key == inst.bandsLastFetchKey {
-		return
-	}
+
+	inst.bandsMu.Lock()
 	if !force {
-		if cached, hit := inst.bandsCacheLookup(key); hit {
+		// Already showing this key, a fetch for it is in flight, or it's
+		// cached — nothing new to do.
+		if inst.bandsHaveFetched && key == inst.bandsLastFetchKey {
+			inst.bandsMu.Unlock()
+			return
+		}
+		if inst.bandsInFlight && key == inst.bandsInFlightKey {
+			inst.bandsMu.Unlock()
+			return
+		}
+		if cached, hit := inst.bandsCacheLookupLocked(key); hit {
 			inst.bands = cached
 			inst.bandsErr = nil
 			inst.bandsSkipped = 0
 			inst.bandsLastFetchKey = key
 			inst.bandsHaveFetched = true
+			inst.bandsMu.Unlock()
 			return
 		}
 	}
+	// Spawn the fetch on a background goroutine; the render loop repaints
+	// every frame (PlayApp.Render), so the result is picked up next frame.
+	inst.bandsInFlight = true
+	inst.bandsInFlightKey = key
+	inst.bandsMu.Unlock()
 
+	go inst.runBandsFetch(key)
+}
+
+// runBandsFetch performs one bands round-trip off the render thread and
+// publishes the result under bandsMu — but only if it is still the current
+// in-flight key. A newer query extent or bands-SQL edit (or a clearBands)
+// supersedes us: the staleness guard then discards this result, mirroring
+// Projector.run's `inst.cancel == cancel` check.
+func (inst *TimelineDriver) runBandsFetch(key bandsCacheKey) {
 	start := time.Now()
-	bands, skipped, err := fetchBands(inst.client, sql, inst.dataMinMS, inst.dataMaxMS)
-	inst.bandsFetchDur = time.Since(start)
+	bands, skipped, err := fetchBands(inst.client, key.SQL, key.MinMS, key.MaxMS)
+	dur := time.Since(start)
+
+	inst.bandsMu.Lock()
+	defer inst.bandsMu.Unlock()
+	if !inst.bandsInFlight || inst.bandsInFlightKey != key {
+		return // superseded or cleared while we were fetching
+	}
+	inst.bandsInFlight = false
+	inst.bandsFetchDur = dur
 	inst.bandsFetchedAt = time.Now()
 	inst.bandsSkipped = skipped
+	inst.bandsLastFetchKey = key
+	inst.bandsHaveFetched = true
 	if err != nil {
 		inst.bands = nil
 		inst.bandsErr = err
-		inst.bandsLastFetchKey = key
-		inst.bandsHaveFetched = true
 		return
 	}
 	inst.bands = bands
 	inst.bandsErr = nil
-	inst.bandsLastFetchKey = key
-	inst.bandsHaveFetched = true
-	inst.bandsCacheStore(key, bands)
+	inst.bandsCacheStoreLocked(key, bands)
 }
 
-// bandsCacheLookup returns the cached band slice for key, if any.
-// Lookups touch the entry (move-to-front) so the LRU eviction is
-// recency-ordered. The slice is shared with the caller — bands are
-// immutable once published.
-func (inst *TimelineDriver) bandsCacheLookup(key bandsCacheKey) (bands []layout.BackgroundBand, ok bool) {
+// clearBands resets all band state (the SQL went empty, the extent became
+// invalid, or there's no client). Flipping bandsInFlight off makes any
+// in-flight goroutine's publish a no-op via the staleness guard.
+func (inst *TimelineDriver) clearBands() {
+	inst.bandsMu.Lock()
+	inst.bands = nil
+	inst.bandsErr = nil
+	inst.bandsSkipped = 0
+	inst.bandsHaveFetched = false
+	inst.bandsInFlight = false
+	inst.bandsMu.Unlock()
+}
+
+// refreshBandsView copies the shared (goroutine-written) band slice into the
+// render-thread-only bandsView under the lock. Called once per frame in
+// TimelineDriver.Render before tl.Render(); bandsProducer then reads bandsView
+// lock-free. The slice is immutable once published, so sharing the header is safe.
+func (inst *TimelineDriver) refreshBandsView() {
+	inst.bandsMu.Lock()
+	inst.bandsView = inst.bands
+	inst.bandsMu.Unlock()
+}
+
+// bandsCacheLookupLocked returns the cached band slice for key, if any.
+// Caller must hold bandsMu. Lookups touch the entry (move-to-front) so the
+// LRU eviction is recency-ordered. The slice is shared with the caller —
+// bands are immutable once published.
+func (inst *TimelineDriver) bandsCacheLookupLocked(key bandsCacheKey) (bands []layout.BackgroundBand, ok bool) {
 	for i, e := range inst.bandsCache {
 		if e.Key == key {
 			bands = e.Bands
@@ -345,11 +403,12 @@ func (inst *TimelineDriver) bandsCacheLookup(key bandsCacheKey) (bands []layout.
 	return
 }
 
-// bandsCacheStore inserts (key, bands) at the front of the LRU,
-// evicting the oldest entry when the cap is exceeded. Duplicate keys
-// would only appear via concurrent writes; the lookup path strips
-// them on the next miss.
-func (inst *TimelineDriver) bandsCacheStore(key bandsCacheKey, bands []layout.BackgroundBand) {
+// bandsCacheStoreLocked inserts (key, bands) at the front of the LRU,
+// evicting the oldest entry when the cap is exceeded. Caller must hold
+// bandsMu. A forced refetch can leave a superseded duplicate key behind;
+// the lookup path returns the front (newest) one and the stale duplicate
+// ages out.
+func (inst *TimelineDriver) bandsCacheStoreLocked(key bandsCacheKey, bands []layout.BackgroundBand) {
 	entry := bandsCacheEntry{Key: key, Bands: bands}
 	if len(inst.bandsCache) < bandsCacheSize {
 		inst.bandsCache = append([]bandsCacheEntry{entry}, inst.bandsCache...)
@@ -395,25 +454,32 @@ func (inst *TimelineDriver) renderBandsControls() {
 // count and fetch duration only render when non-trivial.
 func (inst *TimelineDriver) bandsStatusLine() (s string) {
 	if inst.bandsSQLPtr == nil || strings.TrimSpace(*inst.bandsSQLPtr) == "" {
-		s = "no bands SQL — fill in to overlay shaded ranges"
-		return
+		return "no bands SQL — fill in to overlay shaded ranges"
 	}
-	if inst.bandsErr != nil {
-		s = "bands error: " + inst.bandsErr.Error()
-		return
-	}
-	if !inst.bandsHaveFetched {
-		s = "bands pending — run a query above"
-		return
+	inst.bandsMu.Lock()
+	inFlight := inst.bandsInFlight
+	err := inst.bandsErr
+	haveFetched := inst.bandsHaveFetched
+	n := len(inst.bands)
+	dur := inst.bandsFetchDur
+	skipped := inst.bandsSkipped
+	inst.bandsMu.Unlock()
+
+	switch {
+	case inFlight:
+		return "fetching bands…"
+	case err != nil:
+		return "bands error: " + err.Error()
+	case !haveFetched:
+		return "bands pending — run a query above"
 	}
 	parts := []string{
-		fmt.Sprintf("%d bands", len(inst.bands)),
-		fmt.Sprintf("fetched in %s", inst.bandsFetchDur.Round(time.Millisecond)),
+		fmt.Sprintf("%d bands", n),
+		fmt.Sprintf("fetched in %s", dur.Round(time.Millisecond)),
 	}
-	if inst.bandsSkipped > 0 {
+	if skipped > 0 {
 		parts = append(parts,
-			fmt.Sprintf("%d skipped (unknown color or to<from)", inst.bandsSkipped))
+			fmt.Sprintf("%d skipped (unknown color or to<from)", skipped))
 	}
-	s = strings.Join(parts, " · ")
-	return
+	return strings.Join(parts, " · ")
 }

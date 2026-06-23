@@ -2,6 +2,7 @@ package play
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -88,6 +89,14 @@ type TimelineDriver struct {
 	dataMaxMS       int64
 	dataExtentValid bool
 
+	// Bands concurrency model (mirrors Projector in play_projection.go): the
+	// fetch runs on a background goroutine so a slow ClickHouse never blocks
+	// the render thread. bandsMu guards every field written by that goroutine
+	// (and by the render-thread cache-hit path). bandsView is the
+	// render-thread-only copy that bandsProducer reads each frame — refreshed
+	// from the shared state under the lock in Render, so the producer never
+	// touches a slice the goroutine might be replacing.
+	bandsMu           sync.Mutex
 	bands             []layout.BackgroundBand
 	bandsCache        []bandsCacheEntry
 	bandsLastFetchKey bandsCacheKey
@@ -96,6 +105,10 @@ type TimelineDriver struct {
 	bandsSkipped      int
 	bandsFetchedAt    time.Time
 	bandsFetchDur     time.Duration
+	bandsInFlight     bool
+	bandsInFlightKey  bandsCacheKey
+
+	bandsView []layout.BackgroundBand
 }
 
 // NewTimelineDriver constructs the driver and the underlying composite
@@ -180,6 +193,9 @@ func (inst *TimelineDriver) Render(rec arrow.RecordBatch, schema *arrow.Schema, 
 	inst.renderToolbar()
 	inst.renderBandsControls()
 	inst.maybeFetchBands(false)
+	// Refresh the render-thread-only band slice from the shared (goroutine-
+	// written) state, so bandsProducer reads a stable snapshot for this frame.
+	inst.refreshBandsView()
 	inst.tl.Render()
 }
 

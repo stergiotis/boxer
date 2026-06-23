@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -159,19 +160,12 @@ func parseSummaryHeader(s string) (out Summary) {
 	if s == "" {
 		return
 	}
-	// ClickHouse emits `{"read_rows":"123","read_bytes":"456",...}`.
-	trim := strings.TrimSpace(s)
-	trim = strings.TrimPrefix(trim, "{")
-	trim = strings.TrimSuffix(trim, "}")
+	// ClickHouse emits a flat JSON object of string-typed counters, e.g.
+	// `{"read_rows":"123","read_bytes":"456",...}`.
 	kv := map[string]string{}
-	for _, part := range strings.Split(trim, ",") {
-		kvPair := strings.SplitN(part, ":", 2)
-		if len(kvPair) != 2 {
-			continue
-		}
-		k := strings.Trim(strings.TrimSpace(kvPair[0]), `"`)
-		v := strings.Trim(strings.TrimSpace(kvPair[1]), `"`)
-		kv[k] = v
+	if err := json.Unmarshal([]byte(s), &kv); err != nil {
+		log.Debug().Err(err).Str("header", s).Msg("play: malformed X-ClickHouse-Summary header")
+		return
 	}
 	parseU64 := func(k string) uint64 {
 		n, _ := strconv.ParseUint(kv[k], 10, 64)

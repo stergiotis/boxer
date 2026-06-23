@@ -138,8 +138,10 @@ from the result's column names:
 - **Ad-hoc grouping** — for ordinary SQL results (aliased or aggregated columns),
   columns are grouped by name prefix into pinned / relations / data / meta sections.
 
-Before a query it reads *Run a query, then select a row to see its detail.*; with a
-result but no selection, *Select a row in the Table tab to see its detail.*
+Before a query it reads *Run a query, then select a row to see its detail.* When a
+result lands the first row is selected automatically, so the card populates straight
+away; click another row in **Table** (or a point in **Projection** / an event in
+**Timeline**) to retarget it.
 
 ### Projection
 

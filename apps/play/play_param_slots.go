@@ -7,7 +7,6 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // paramSlot is one `{name : Type}` placeholder occurrence the
@@ -100,52 +99,11 @@ func collectParamSlots(pr *nanopass.ParseResult) (out []paramSlot) {
 	return
 }
 
-// collectParamValues is the SET-statement walk that backs the
-// orchestrator's prelude-value cache. Mirrors ExtractParams's
-// extraction logic without the rewriter (no residual produced):
-// only the `param_<name> → value` map is returned. Rejects mixed
-// SETs (param_* + regular settings) just like ExtractParams.
+// collectParamValues backs the orchestrator's prelude-value cache: it returns
+// just the `param_<name> → value` map from the leading SET prelude, reusing
+// the same harvest as ExtractParams (collectParamSettings) and discarding the
+// SetStmt-deletion list. Rejects mixed SETs (param_* + regular settings).
 func collectParamValues(pr *nanopass.ParseResult) (params map[string]string, err error) {
-	params = make(map[string]string)
-	queryCtx := findFirstQuery(pr)
-	if queryCtx == nil {
-		return
-	}
-	n := queryCtx.GetChildCount()
-	for i := 0; i < n; i++ {
-		setStmt, ok := queryCtx.GetChild(i).(*grammar1.SetStmtContext)
-		if !ok {
-			continue
-		}
-		var pairs []paramPair
-		var nonParam uint32
-		stmtErr := iterateSettingExprs(setStmt, func(expr *grammar1.SettingExprContext) (stopErr error) {
-			name, value, exErr := extractSettingNameValue(pr, expr)
-			if exErr != nil {
-				stopErr = exErr
-				return
-			}
-			if !strings.HasPrefix(name, "param_") {
-				nonParam++
-				return
-			}
-			pairs = append(pairs, paramPair{name: name, value: value})
-			return
-		})
-		if stmtErr != nil {
-			err = stmtErr
-			return
-		}
-		if len(pairs) == 0 {
-			continue
-		}
-		if nonParam > 0 {
-			err = eb.Build().Errorf("SET statement mixes param_* with non-param settings (not supported)")
-			return
-		}
-		for _, p := range pairs {
-			params[p.name] = p.value
-		}
-	}
+	params, _, err = collectParamSettings(pr)
 	return
 }

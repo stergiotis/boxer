@@ -26,6 +26,8 @@ func TestHelpCorpusIndexes(t *testing.T) {
 
 	want := map[string]bool{
 		"overview":              false,
+		"features":              false,
+		"snippets":              false,
 		"howto-example-queries": false,
 	}
 	for _, d := range b.Docs() {

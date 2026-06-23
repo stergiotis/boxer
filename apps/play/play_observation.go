@@ -25,7 +25,14 @@ func newAffordanceEvaluator(sink *[]nanopass.Observation) *passes.FunctionEvalua
 	discard := func(args []any) (any, error) {
 		return marshalling.ControlFlow{Sentinel: nanopass.PassDiscardOutput}, nil
 	}
-	eval.Register("multiMatchIndexAny", discard, true)
+	// Register the whole multi-pattern regex family (multiMatch* and the
+	// fuzzy multiFuzzyMatch*). Registration is case-insensitive; the
+	// affordance matcher keys off the lowercased obs.Name. See
+	// multiMatchRegexFamily (play_affordance.go) for the canonical set —
+	// multiSearch* is deliberately absent (substring, not regex).
+	for _, spec := range multiMatchRegexFamily {
+		eval.Register(spec.display, discard, true)
+	}
 
 	eval.OnObservation(func(obs nanopass.Observation) {
 		log.Info().

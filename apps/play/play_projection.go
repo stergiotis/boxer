@@ -748,6 +748,26 @@ func renderProjectionPlot(ids *c.WidgetIdStack, snap projectorSnapshot, selected
 	return
 }
 
+// bucketIndex maps value v in [mn, mx] to one of n equal-width buckets in
+// [0, n). Values at mx land in the top bucket (n-1); a degenerate range
+// (mx <= mn) or n <= 1 maps everything to bucket 0. Pure — unit-tested in
+// play_projection_test.go. Note the divisor is n (not n-1): with n-1 the top
+// bucket would catch only the exact maximum and one colour would go unused.
+func bucketIndex(v, mn, mx float64, n int) int {
+	span := mx - mn
+	if span <= 1e-12 || n <= 1 {
+		return 0
+	}
+	idx := int((v - mn) / span * float64(n))
+	if idx < 0 {
+		return 0
+	}
+	if idx >= n {
+		return n - 1
+	}
+	return idx
+}
+
 // emitBucketedScatters partitions points by feature value into len(Viridis8)
 // equal-width bins (min-max scale) and emits one PlotScatter per non-empty
 // bucket. Each series is named with the bucket's value range so the egui_plot
@@ -772,16 +792,7 @@ func emitBucketedScatters(coords [][2]float64, values []float64, featureName str
 	bucketXs := make([][]float64, nBuckets)
 	bucketYs := make([][]float64, nBuckets)
 	for i, v := range values {
-		idx := 0
-		if span > 1e-12 {
-			idx = int((v - mn) / span * float64(nBuckets-1))
-			if idx < 0 {
-				idx = 0
-			}
-			if idx >= nBuckets {
-				idx = nBuckets - 1
-			}
-		}
+		idx := bucketIndex(v, mn, mx, nBuckets)
 		bucketXs[idx] = append(bucketXs[idx], coords[i][0])
 		bucketYs[idx] = append(bucketYs[idx], coords[i][1])
 	}
@@ -791,8 +802,10 @@ func emitBucketedScatters(coords [][2]float64, values []float64, featureName str
 		}
 		var lo, hi float64
 		if span > 1e-12 {
-			lo = mn + span*float64(b)/float64(nBuckets-1)
-			hi = mn + span*float64(b+1)/float64(nBuckets-1)
+			// Equal-width bins: divide the span into exactly nBuckets, so the
+			// top bucket's upper edge is mx (no overshoot).
+			lo = mn + span*float64(b)/float64(nBuckets)
+			hi = mn + span*float64(b+1)/float64(nBuckets)
 		} else {
 			lo, hi = mn, mn
 		}

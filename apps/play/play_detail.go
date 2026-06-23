@@ -10,28 +10,14 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// tagNameLookup maps an idTagValue (uint64) to the VDD-registered name.
-// Built lazily at first use so we don't depend on init ordering.
-var tagNameLookup map[uint64]string
-
-func buildTagNameLookup() {
-	if tagNameLookup != nil {
-		return
-	}
-	tagNameLookup = make(map[uint64]string, 16)
-	//for _, r := range vdd.VcsTagValueRegistry.IterateAll() {
-	//	tv := uint64(r.GetTagValue())
-	//	tagNameLookup[tv] = r.GetNaturalKey().String()
-	//}
-}
-
-// tagNameForIdTagValue returns "codeLine" / "gitHash" / … for a known tag
-// value, otherwise a hex fallback.
+// tagNameForIdTagValue renders an entity id's tag value as a compact hex
+// label (e.g. "tv:0x1a"). The playground queries arbitrary leeway tables
+// whose id-tag values are domain-specific, and there is no general (non-VCS)
+// tag-value name registry to resolve them against, so a hex label is the
+// honest, schema-agnostic rendering. (Earlier scaffolding reached for
+// vdd.VcsTagValueRegistry, but that only names VCS-domain tags —
+// codeLine/gitHash — never the drone/cyber/sensor entities shown here.)
 func tagNameForIdTagValue(tv uint64) string {
-	buildTagNameLookup()
-	if name, ok := tagNameLookup[tv]; ok {
-		return name
-	}
 	return fmt.Sprintf("tv:0x%x", tv)
 }
 

@@ -220,7 +220,7 @@ func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, su
 		s = "0 rows · ran " + humanizeAgo(executed)
 	case queryStateFailed:
 		if err != nil {
-			s = "errored: " + capLen(firstLine(err.Error()), 80)
+			s = "errored: " + truncateRunes(firstLine(err.Error()), 80)
 		} else {
 			s = "errored · " + humanizeAgo(executed)
 		}
@@ -258,13 +258,6 @@ func humanizeAgo(t time.Time) string {
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		return s[:i]
-	}
-	return s
-}
-
-func capLen(s string, n int) string {
-	if len(s) > n {
-		return s[:n] + "…"
 	}
 	return s
 }

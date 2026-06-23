@@ -154,7 +154,7 @@ type PlayApp struct {
 	affordances []sqlAffordanceI
 
 	// Shared regex test-input buffer for affordances that match against a
-	// user-typed string (currently: multiMatchIndexAny).
+	// user-typed string (the multiMatch* / multiFuzzyMatch* families).
 	affordanceTestInput string
 
 	// Param-slot UI (see play_param_render.go). paramSlots mirrors what
@@ -1255,10 +1255,7 @@ func historyLabel(e HistoryEntry) string {
 	}
 	line := fmt.Sprintf("%s  %s  %s",
 		e.Executed.Format("15:04:05"), status, sql)
-	if len(line) > historyLabelChar {
-		line = line[:historyLabelChar-1] + "…"
-	}
-	return line
+	return truncateRunes(line, historyLabelChar)
 }
 
 func humanBytes(b uint64) string {

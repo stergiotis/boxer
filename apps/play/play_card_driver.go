@@ -130,7 +130,6 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		log.Warn().Err(err).Msg("play: driver construction failed — falling back")
 		return false
 	}
-	_ = nFields
 	inst.driver = driver
 	inst.emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, leewaywidgets.ColorPaletteViridis, nil)
 	inst.usable = true
