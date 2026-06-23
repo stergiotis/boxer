@@ -15,6 +15,11 @@ type wireRequest struct {
 	Streaming bool              `json:"streaming,omitempty"`
 	Cacheable bool              `json:"cacheable,omitempty"`
 	Settings  map[string]string `json:"settings,omitempty"`
+	// InputTables rides as a CBOR map of byte strings (ADR-0094 §SD5):
+	// table name → Arrow IPC `Arrow` file-format bytes, bound as
+	// TEMPORARY tables by the broker. buscodec carries []byte as CBOR
+	// major type 2, so no base64 expansion.
+	InputTables map[string][]byte `json:"input_tables,omitempty"`
 	// DeadlineUnixNanos encodes the caller's ctx.Deadline so the
 	// broker can shorten its own execution context. 0 means "no
 	// caller-supplied deadline"; the broker falls back to its

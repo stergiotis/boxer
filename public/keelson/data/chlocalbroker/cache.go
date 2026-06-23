@@ -145,6 +145,36 @@ func computeCacheKey(sql string, format string, settings map[string]string) (key
 	return
 }
 
+// foldInputTables derives a new cache key from a base key and a
+// request's InputTables, so a cached result never outlives a changed
+// input under unchanged SQL (ADR-0094 §SD5). Returns base unchanged
+// when there are no input tables. Table names are sorted so map
+// iteration order does not perturb the key; the full table bytes are
+// folded in (not just a length) because that is what makes the key
+// faithful to the data the query actually saw.
+func foldInputTables(base cacheKey, inputTables map[string][]byte) (key cacheKey) {
+	if len(inputTables) == 0 {
+		key = base
+		return
+	}
+	names := make([]string, 0, len(inputTables))
+	for name := range inputTables {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	h := blake3.New(32, nil)
+	_, _ = h.Write(base[:])
+	for _, name := range names {
+		_, _ = h.Write([]byte(name))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(inputTables[name])
+		_, _ = h.Write([]byte{0})
+	}
+	sum := h.Sum(nil)
+	copy(key[:], sum)
+	return
+}
+
 // cacheableSQLPrefixes is the set of opening keywords whose SQL is
 // (a) read-only by construction, (b) most likely to be deterministic
 // in a clickhouse-local scratch context. Caller's `Cacheable` flag

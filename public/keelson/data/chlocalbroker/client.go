@@ -34,6 +34,17 @@ type ExecRequest struct {
 	// Settings is forwarded to the worker via SETTINGS k=v pairs.
 	// Reserved for future use; ignored by the M2 broker.
 	Settings map[string]string
+	// InputTables exposes in-memory Arrow data as TEMPORARY tables to
+	// the SQL (ADR-0094 §SD5). Each value is Arrow IPC in the `Arrow`
+	// file format (with footer — i.e. ipc.FileWriter output, NOT
+	// ArrowStream). The broker writes each to a private temp dir and
+	// prepends `CREATE TEMPORARY TABLE <name> AS SELECT * FROM
+	// file('<abs>','Arrow');` to SQL before submitting. Names must be
+	// `[A-Za-z_][A-Za-z0-9_]*` (≤64 bytes); others are rejected. When
+	// non-empty, each table's bytes fold into the result-cache key, so
+	// a cached entry never outlives a changed input under unchanged
+	// SQL — callers may set Cacheable even for volatile inputs.
+	InputTables map[string][]byte
 }
 
 // ExecReply wraps a broker response. The embedded ReadCloser exposes
@@ -88,11 +99,12 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 		return
 	}
 	wireReq := wireRequest{
-		SQL:       req.SQL,
-		Format:    req.Format,
-		Streaming: req.Streaming,
-		Cacheable: req.Cacheable,
-		Settings:  req.Settings,
+		SQL:         req.SQL,
+		Format:      req.Format,
+		Streaming:   req.Streaming,
+		Cacheable:   req.Cacheable,
+		Settings:    req.Settings,
+		InputTables: req.InputTables,
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		wireReq.DeadlineUnixNanos = deadline.UnixNano()

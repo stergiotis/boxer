@@ -196,10 +196,11 @@ type auditFields struct {
 	subject    string
 	sender     app.AppIdT
 	sqlBlake3  string // hex-encoded; empty if request never decoded
-	format     string
-	cacheable  bool
-	streaming  bool
-	cacheHit   bool
+	format      string
+	cacheable   bool
+	streaming   bool
+	inputTables int
+	cacheHit    bool
 	latencyNs  int64
 	bytesOut   int
 	exitCode   int32
@@ -224,6 +225,9 @@ func (inst *Service) emitAudit(f auditFields) {
 		Bool("cache_hit", f.cacheHit).
 		Int64("latency_ns", f.latencyNs).
 		Int("bytes_out", f.bytesOut)
+	if f.inputTables > 0 {
+		ev = ev.Int("input_tables", f.inputTables)
+	}
 	if f.format != "" {
 		ev = ev.Str("format", f.format)
 	}
@@ -287,8 +291,21 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		return
 	}
 
+	// Validate input table names up front (ADR-0094 §SD5): a bad name
+	// must never reach the cache-key fold or the SQL prelude.
+	aud.inputTables = len(req.InputTables)
+	for name := range req.InputTables {
+		if !validInputTableName(name) {
+			aud.errMsg = "invalid input table name: " + name
+			inst.sendError(msg.Reply, aud.errMsg, "", 0)
+			return
+		}
+	}
+
 	// Compute sql_blake3 once; reused as cache key when cacheable.
-	key := computeCacheKey(req.SQL, req.Format, req.Settings)
+	// InputTables fold into the key so a volatile input never serves a
+	// stale hit under unchanged SQL (ADR-0094 §SD5).
+	key := foldInputTables(computeCacheKey(req.SQL, req.Format, req.Settings), req.InputTables)
 	aud.sqlBlake3 = hex.EncodeToString(key[:])
 
 	// Cache lookup (ADR-0028 §SD5). Eligibility = caller opted in
@@ -336,7 +353,22 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	}
 	defer func() { _ = w.Close() }()
 
-	if err = w.WriteSQL(req.SQL, req.Format); err != nil {
+	// Bind any InputTables as TEMPORARY tables ahead of the query
+	// (ADR-0094 §SD5). The files must outlive the worker's read, so
+	// cleanup is deferred to handler return — i.e. after Wait below.
+	sql := req.SQL
+	if len(req.InputTables) > 0 {
+		prelude, cleanup, mErr := materializeInputTables(inst.poolCfg.BaseTmpDir, req.InputTables)
+		defer cleanup()
+		if mErr != nil {
+			aud.errMsg = mErr.Error()
+			inst.sendError(msg.Reply, aud.errMsg, "", 0)
+			return
+		}
+		sql = prelude + req.SQL
+	}
+
+	if err = w.WriteSQL(sql, req.Format); err != nil {
 		aud.errMsg = "write sql: " + err.Error()
 		aud.stderrTail = string(w.StderrTail())
 		inst.sendError(msg.Reply, aud.errMsg, aud.stderrTail, 0)
