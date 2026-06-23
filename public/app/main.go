@@ -47,6 +47,8 @@ import (
 	// Side-effect imports: load env-var Specs from packages that are not
 	// otherwise referenced by this binary, so `boxer env list` and the
 	// envdoc generator see the full registered set (ADR-0009 §4).
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	_ "github.com/stergiotis/boxer/public/llm/openaichat"
 	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 )
