@@ -350,7 +350,11 @@ func newSummarizeCommand() *cli.Command {
 			if err != nil {
 				return eh.Errorf("resolve api key: %w", err)
 			}
-			llm, err := openaichat.NewClient(c.String("llm-endpoint"), apiKey)
+			// Retry transient provider failures (429 / 5xx); Gemini rate-limits
+			// under load. The per-call --llm-timeout still bounds total time,
+			// since the backoff is context-aware.
+			llm, err := openaichat.NewClient(c.String("llm-endpoint"), apiKey,
+				openaichat.WithRetry(openaichat.DefaultRetryPolicy()))
 			if err != nil {
 				return eh.Errorf("new llm client: %w", err)
 			}
