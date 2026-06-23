@@ -26,6 +26,8 @@ var _ orchestrator.LLMClientI = (*OpenAIChatClient)(nil)
 type OpenAIChatOption func(*OpenAIChatClient)
 
 // WithOpenAIChatTemperature sets the sampling temperature (default: 0.1).
+// Pass 0 for deterministic / greedy decoding — the adapter always forwards an
+// explicit temperature, so 0 reaches the provider rather than being dropped.
 func WithOpenAIChatTemperature(t float32) OpenAIChatOption {
 	return func(inst *OpenAIChatClient) { inst.temperature = t }
 }
@@ -67,7 +69,7 @@ func (inst *OpenAIChatClient) Chat(ctx context.Context, model string, messages [
 	resp, err = inst.client.Complete(ctx, openaichat.CompletionRequest{
 		ModelId:     model,
 		Messages:    wireMessages,
-		Temperature: inst.temperature,
+		Temperature: &inst.temperature,
 		NumCtx:      inst.numCtx,
 	})
 	if err != nil {
