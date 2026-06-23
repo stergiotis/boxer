@@ -434,6 +434,40 @@ func (inst *Inst) Len() (n int) {
 	return
 }
 
+// WindowInfo is a public, read-only snapshot of one open window's
+// metadata, returned by WindowInfos for runtime introspection (ADR-0094
+// §SD8) without exposing the private window state.
+type WindowInfo struct {
+	Key        WindowKeyT
+	AppId      app.AppIdT
+	Display    string
+	Title      string
+	Surface    app.SurfaceE
+	Category   string
+	StopReason string
+}
+
+// WindowInfos returns a metadata snapshot of the currently open windows
+// in declaration order. Like the rest of Inst it is not goroutine-safe
+// against concurrent Open/Close; call it from the render goroutine.
+func (inst *Inst) WindowInfos() (out []WindowInfo) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	out = make([]WindowInfo, 0, len(inst.windows))
+	for _, w := range inst.windows {
+		out = append(out, WindowInfo{
+			Key:        w.key,
+			AppId:      w.manifest.Id,
+			Display:    w.manifest.Display,
+			Title:      w.manifest.WindowTitle(),
+			Surface:    w.manifest.Surface,
+			Category:   w.manifest.Category,
+			StopReason: w.stopReason,
+		})
+	}
+	return
+}
+
 // reapClosed unmounts and removes windows whose closeReq flag is set.
 // Called at the end of Frame() so we never mutate the slice mid-
 // render. Emits app-lifecycle "stopped" rows for each reaped window
