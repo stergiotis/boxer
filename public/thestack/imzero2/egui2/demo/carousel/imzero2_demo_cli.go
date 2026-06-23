@@ -369,6 +369,9 @@ func NewCommand() *cli.Command {
 			if regErr := introspectprovidersgui.RegisterAll(introspectReg, windowHostRef); regErr != nil {
 				log.Warn().Err(regErr).Msg("introspect: GUI provider registration failed")
 			}
+			if regErr := introspect.RegisterCatalog(introspectReg); regErr != nil {
+				log.Warn().Err(regErr).Msg("introspect: catalog registration failed")
+			}
 			introspectSrv := introspecthttp.New(introspecthttp.Config{Registry: introspectReg}, log.Logger)
 			if startErr := introspectSrv.Start(); startErr != nil {
 				log.Warn().Err(startErr).Msg("introspect: HTTP table source start failed; keelson.* url() endpoint unavailable")

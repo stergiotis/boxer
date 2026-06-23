@@ -49,6 +49,7 @@ func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	r := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(r))
+	require.NoError(t, introspect.RegisterCatalog(r))
 	s := New(Config{Registry: r}, zerolog.Nop())
 	require.NoError(t, s.Start())
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
@@ -101,6 +102,18 @@ func TestServer_ColsProjection(t *testing.T) {
 	sc := rdr.Schema()
 	require.Equal(t, 1, sc.NumFields())
 	assert.Equal(t, "name", sc.Field(0).Name)
+}
+
+// TestServer_CatalogViaUrl checks the system.tables-equivalent: querying
+// keelson.tables over url() lists every registered table, itself included.
+func TestServer_CatalogViaUrl(t *testing.T) {
+	bin := chBin(t)
+	s := newTestServer(t)
+	out := runCH(t, bin, fmt.Sprintf(
+		"SELECT name FROM url('%s/table/tables','ArrowStream') ORDER BY name", s.BaseURL()))
+	for _, want := range []string{"apps", "build", "columns", "env", "sbom", "tables"} {
+		assert.Contains(t, out, want, "catalog should list %q", want)
+	}
 }
 
 func TestServer_UnknownTable404(t *testing.T) {
