@@ -13,7 +13,7 @@ reviewed-date: 2026-05-13
 A survey of the boxer codebase finds **24 distinct environment variables read across 9 packages**, through **three different mechanisms**:
 
 - **CLI flag framework** (urfave/cli/v2 `EnvVars`): 13 `BOXER_*` vars declared in per-package flag struct files (`public/observability/logging/flags.go`, `public/observability/tracing/flightrecorder.go`, `public/dev/debugger.go`, `public/docgen/docflags.go`).
-- **Direct `os.Getenv` / `os.LookupEnv`**: 11 vars, including credentials (`GEMINI_API_KEY`, `GOOGLE_API_KEY`), system vars consumed for path shortening (`GOPATH`, `HOME`), and the ClickHouse test integration (`CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_ENDPOINT`, lowercase `clickhouse` for the binary path).
+- **Direct `os.Getenv` / `os.LookupEnv`**: 11 vars, including credentials (`GEMINI_API_KEY`), system vars consumed for path shortening (`GOPATH`, `HOME`), and the ClickHouse test integration (`CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_ENDPOINT`, lowercase `clickhouse` for the binary path).
 - **`os.Environ` manipulation**: `GOWORK` in two test setups.
 
 The fragmentation has produced concrete defects already visible in the survey:
@@ -197,7 +197,7 @@ Downstream consumers (not in this repo) can adopt the same rule in their own mod
 - Move the 13 `BOXER_*` cli.Flag declarations to spec-derived form. Fix `BOXER_LOG_MODULE_INFO_IN_START` → `BOXER_LOG_MODULE_INFO_ON_START` in passing.
 - Migrate the 11 direct `os.Getenv` / `os.LookupEnv` call sites. Fix the lowercase `clickhouse` to a properly-named `BOXER_CLICKHOUSE_BINARY_PATH` (or similar) in passing.
 - Register the system vars (`HOME`, `GOPATH`, `GOWORK`) with `CategorySystem`. Reads of these go through `env.Home.Get()` etc., even though the *defaults* are owned by the OS.
-- `GEMINI_API_KEY` and `GOOGLE_API_KEY` register with `Sensitive: true`. The existing `LoadGeminiApiKey` composite stays: it reads through both specs and the `~/.config/gemini/api_key` file fallback.
+- `GEMINI_API_KEY` registers with `Sensitive: true`. The existing `LoadGeminiApiKey` composite stays: it reads through the spec and the `~/.config/gemini/api_key` file fallback.
 
 **Out of scope for the initial PR**:
 
@@ -233,7 +233,7 @@ Downstream consumers (not in this repo) can adopt the same rule in their own mod
 
 - The package is process-global by design; this is captured under "Negative" only because of the visibility implication, not because it's avoidable.
 - System vars (`HOME`, `GOPATH`, `GOWORK`) appear in the registry alongside boxer-owned vars. The `Category: CategorySystem` field makes the distinction explicit for documentation rendering and filtering.
-- Sensitive vars (`GEMINI_API_KEY`, `GOOGLE_API_KEY`) are redacted in dumps and generated docs but otherwise behave identically. Test helpers respect redaction.
+- Sensitive vars (e.g. `GEMINI_API_KEY`) are redacted in dumps and generated docs but otherwise behave identically. Test helpers respect redaction.
 
 ## Status
 
@@ -304,7 +304,7 @@ ADRs are append-only; supersession is recorded, not deleted.
   - `CLICKHOUSE_PASSWORD` (boxer nanopass test, plus a downstream
     consumer's clickhouse env) and a downstream consumer's cipher-key
     var marked `Sensitive: true` even though §6 only named the
-    Gemini/Google keys explicitly; all are credentials and the
+    Gemini key explicitly; all are credentials and the
     redaction policy is "redact in dumps and generated docs".
   - `flightRecorderOutputFile` module-level mirror in
     `public/observability/tracing/flightrecorder.go` dropped —

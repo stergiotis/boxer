@@ -19,7 +19,7 @@ import (
 // Resolution order:
 //  1. --gemini-api-key set to a non-empty value → use it
 //  2. --gemini-api-key explicitly set (even to "") → walk the Gemini
-//     precedence chain (GEMINI_API_KEY → GOOGLE_API_KEY → ~/.config/gemini/api_key)
+//     precedence chain (GEMINI_API_KEY → ~/.config/gemini/api_key)
 //  3. --llm-endpoint URL looks like Gemini → walk the chain (best-effort;
 //     fall through to (4) if the chain yields nothing)
 //  4. --llm-apikey (or LLM_API_KEY env) → use it

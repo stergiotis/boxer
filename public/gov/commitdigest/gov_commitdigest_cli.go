@@ -256,7 +256,7 @@ func newSummarizeCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "gemini-api-key",
-				Usage: "Gemini API key. When set, overrides --llm-apikey; when set empty, walks GEMINI_API_KEY → GOOGLE_API_KEY → ~/.config/gemini/api_key. Auto-engaged when --llm-endpoint points at generativelanguage.googleapis.com.",
+				Usage: "Gemini API key. When set, overrides --llm-apikey; when set empty, walks GEMINI_API_KEY → ~/.config/gemini/api_key. Auto-engaged when --llm-endpoint points at generativelanguage.googleapis.com.",
 			},
 			&cli.IntFlag{
 				Name:  "llm-timeout",
