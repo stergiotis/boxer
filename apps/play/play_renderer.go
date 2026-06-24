@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,7 @@ const (
 	dockTabPreview    uint64 = 6
 	dockTabTimeline   uint64 = 7
 	dockTabSnippets   uint64 = 8
+	dockTabMap        uint64 = 9
 )
 
 type PlayApp struct {
@@ -101,6 +103,10 @@ type PlayApp struct {
 	timeline               *TimelineDriver
 	timelineBandsSql       string
 	timelineNowLineEnabled bool
+
+	// mapDriver is the ADR-0096 geo-raster map panel (Map dock tab): a walkers
+	// map whose viewport drives an in-DB-rendered raster on a panel-local lane.
+	mapDriver *MapDriver
 
 	// colorByFeature picks the EntityFeatures field whose value drives the
 	// projection scatter's per-point colour. -1 means monochrome (default);
@@ -402,6 +408,7 @@ func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
 		},
 	}
 	inst.timeline = NewTimelineDriver(timelineIds, &inst.selectedRow, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
+	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	return inst
 }
@@ -502,8 +509,12 @@ func (inst *PlayApp) Render() error {
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
-			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45,
-				dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets)
+			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap}
+			if os.Getenv("SPINNAKER_PLAY_FOCUS_MAP") != "" {
+				// Scripted-screenshot focus: make Map the default-active body tab.
+				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets}
+			}
+			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45, bodyTabs...)
 			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
 			_ = dock.Split(editLeaf, c.DockRight, 0.55, dockTabPreview)
 
@@ -535,6 +546,9 @@ func (inst *PlayApp) Render() error {
 			for range dock.Tab(dockTabDetail, "Detail") {
 				inst.renderDetailTab(rec, schema, inst.selectedRow)
 			}
+			for range dock.Tab(dockTabMap, "Map") {
+				inst.mapDriver.Render()
+			}
 		}
 	}
 
@@ -557,6 +571,17 @@ func (inst *PlayApp) Render() error {
 	inst.autoShotTick()
 	c.RequestRepaint()
 	return nil
+}
+
+// playShotSvgPath returns the SVG sibling path for a screenshot PNG path.
+func playShotSvgPath(pngPath string) string {
+	return strings.TrimSuffix(pngPath, ".png") + ".svg"
+}
+
+// shotArtifactReady reports whether a capture artifact exists and is non-empty.
+func shotArtifactReady(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.Size() > 0
 }
 
 // autoShotTick implements: first frame → kick auto-run; once results
@@ -602,16 +627,31 @@ func (inst *PlayApp) autoShotTick() {
 		// the formatter never running (parse error already covered
 		// by formattedErr != nil).
 		previewReady := inst.formatted != "" || inst.formattedErr != nil
-		settled := inst.frame-inst.shotSettle >= 5
-		ceiling := inst.frame-inst.shotSettle >= 60
+		// SPINNAKER_PLAY_SHOT_SETTLE bumps the settle window so scripted
+		// captures can wait out an async panel fetch (e.g. the Map tab's
+		// debounced raster round-trip) before the screenshot fires.
+		settleFrames := 5
+		if v := os.Getenv("SPINNAKER_PLAY_SHOT_SETTLE"); v != "" {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 {
+				settleFrames = n
+			}
+		}
+		settled := inst.frame-inst.shotSettle >= settleFrames
+		ceiling := inst.frame-inst.shotSettle >= settleFrames+60
 		if settled && (previewReady || ceiling) {
 			c.RequestScreenshot(inst.ScreenshotPath)
+			// Also dump an SVG alongside the PNG: the headless render host
+			// can't do PNG framebuffer readback, but its SVG visitor captures
+			// the frame — including painter-drawn textures like the Map raster
+			// overlay — so scripted captures work headless (ADR-0057 tour idiom).
+			c.ExportSvg(playShotSvgPath(inst.ScreenshotPath), true, 0x1e1e1eff)
 			inst.shotPhase = 2
 		}
 	case 2:
-		// Wait until the PNG actually exists on disk before quitting.
-		// See the function docstring for the race this closes.
-		if fi, err := os.Stat(inst.ScreenshotPath); err == nil && fi.Size() > 0 {
+		// Done once either artifact lands: the windowed path writes the PNG;
+		// the headless host writes only the SVG. Stat-gating closes the async
+		// readback/encode race described in the docstring.
+		if shotArtifactReady(inst.ScreenshotPath) || shotArtifactReady(playShotSvgPath(inst.ScreenshotPath)) {
 			inst.shotPhase = 3
 			if inst.ExitOnShot {
 				c.ContextSendViewPortCommandClose()
