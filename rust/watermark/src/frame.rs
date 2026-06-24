@@ -1,7 +1,7 @@
 //! The luma plane we operate on, plus PNG I/O and synthetic test bases.
 //!
 //! Everything is done in **sRGB-gamma luma, 0..255** — the same domain end to
-//! end, so deltas and reference levels stay consistent (`DESIGN.md`
+//! end, so deltas and reference levels stay consistent (`EXPLANATION.md`
 //! §Guardrails 2). PNG load goes through Rec.601 luma; we treat that as our
 //! working space.
 

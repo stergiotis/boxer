@@ -4,6 +4,8 @@ audience: engineer packaging boxer for an offline host
 status: draft
 ---
 
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
 # How to build boxer on an airgapped host
 
 Boxer can be packaged so it builds — and runs — on a host with no network and

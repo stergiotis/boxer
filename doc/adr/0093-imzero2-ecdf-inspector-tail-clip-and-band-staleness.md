@@ -4,6 +4,8 @@ status: proposed
 date: 2026-06-21
 ---
 
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
 # ADR-0093: ECDF inspector — adaptive tail cutoff and confidence-band staleness
 
 ## Context
@@ -72,12 +74,9 @@ hidden. Configurable via `Renderer.TailClip` / `TailTrigger` / `NoTailClip`;
 default-on is safe because the trigger leaves well-behaved distributions
 full-range.
 
-Rejected: **O1** (the repo already rejects 1.5×IQR as over-flagging skewed data —
-`analytics/stats/letterval`), **O2** (the medcouple is not computable from a
-t-digest and is unimplemented; it also addresses skew, not tail-heaviness),
-**O3** (needlessly hides a clean distribution's true extent). O4 uses the IQR
-only as the *trigger* — not as the cutoff — so it is not subject to the 1.5×IQR
-objection.
+O4 uses the IQR only as the *trigger* — not as the cutoff — so it is not subject
+to the 1.5×IQR objection. The rejected options are recorded under
+[Alternatives](#alternatives).
 
 ### Band staleness — visible, and settle live bands
 
@@ -96,11 +95,28 @@ staleness, not a silent error. Windowed / recomputed / slow-growth digests
 settle; pathological fast-unbounded growth still can't out-run any fixed bucket
 and cleanly stays on the always-correct DKW preview, which the readout explains.
 
-Rejected for "settle": a **hysteresis / let-the-running-solve-finish** scheme
-that self-tunes the bucket to the solve duration — more correct but a larger
-change to the `ecdf` band-job semantics and per-instance state; deferred. Bucket
-granularity is configurable (`Renderer.ExactBandBucket`); the readout makes any
-resulting conservatism honest.
+Bucket granularity is configurable (`Renderer.ExactBandBucket`); the readout
+makes any resulting conservatism honest. The deferred settle alternative is
+recorded under [Alternatives](#alternatives).
+
+## Alternatives
+
+Tail cutoff — rejected in favour of O4 (the QOC matrix above scores them):
+
+- **O1 — Tukey 1.5×IQR fences.** The repo already rejects 1.5×IQR as
+  over-flagging skewed / heavy-tailed data (`analytics/stats/letterval`).
+- **O2 — skew-adjusted boxplot (medcouple).** The medcouple is not computable
+  from a t-digest and is unimplemented in-repo; it also targets skew, not
+  tail-heaviness.
+- **O3 — fixed quantile clip, always on.** Needlessly hides a well-behaved
+  distribution's true extent.
+
+Band staleness — rejected for "settle":
+
+- **Hysteresis / let-the-running-solve-finish.** Self-tunes the bucket to the
+  observed solve duration — more correct, but a larger change to the `ecdf`
+  band-job semantics and per-instance state; deferred in favour of the
+  round-down geometric ladder.
 
 ## Consequences
 
@@ -119,6 +135,15 @@ resulting conservatism honest.
 - Pure helpers (`tailClipBounds`, `bucketExactN`, `formatTailClipNote`,
   `formatBandStateLine`, `ecdf.formatReadout` / `formatStatusLineTerse`,
   `boxenplot.formatStatusLine` / `formatVerbose`) are unit-tested without egui.
+
+## Status
+
+Proposed — awaiting review by @spx. A first cut is already committed to `main`
+(see Implementation, below); the decision is treated as provisional until that
+review lands.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
 ## Implementation
 

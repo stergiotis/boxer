@@ -11,12 +11,12 @@
 //! Codeword layout is **info in the high 12 bits**: `codeword = info<<12 |
 //! parity`. Decoding is syndrome → coset-leader table lookup. The four 4096-entry
 //! tables are built once on first use (`LazyLock`); no GF(256), no
-//! Berlekamp–Massey, no external FEC crate — exactly what `DESIGN.md` mandates.
+//! Berlekamp–Massey, no external FEC crate — exactly what `EXPLANATION.md` mandates.
 //!
 //! Each word corrects ≤3 bit errors and *detects* 4 (reported as
 //! `n_errors == UNCORRECTABLE`). A word hit by >3 errors can also be
 //! *mis-corrected* into a valid-but-wrong codeword with a low error count — that
-//! is caught downstream by the payload CRC (`DESIGN.md` §Guardrails 9), never
+//! is caught downstream by the payload CRC (`EXPLANATION.md` §Guardrails 9), never
 //! surfaced as a clean decode.
 
 use std::sync::LazyLock;
@@ -190,7 +190,7 @@ pub fn decode_words(words: &[u32; N_WORDS]) -> ([bool; INFO_BITS], DecodeStats) 
 ///
 /// Returns [`Error::CrcMismatch`] when the recovered info word fails its CRC —
 /// the only honest outcome when Golay may have mis-corrected a burst-damaged
-/// word (`DESIGN.md` §Guardrails 9).
+/// word (`EXPLANATION.md` §Guardrails 9).
 pub fn decode_payload(words: &[u32; N_WORDS]) -> Result<Payload, Error> {
     let (info, _stats) = decode_words(words);
     Payload::from_info_bits(&info)

@@ -3,7 +3,7 @@
 //! Embeds a 64-bit payload into a frame as a periodically tiled grid of luma
 //! deltas, such that **every 464×432 px crop** recovers all 64 bits after
 //! H.264 / VP9 / AV1 compression. The full design — geometry, FEC budget, and
-//! the single-tile decode guarantee — lives in `DESIGN.md`.
+//! the single-tile decode guarantee — lives in `EXPLANATION.md`.
 //!
 //! Pipeline: [`Payload`] → CRC-16 → 80-bit info word → Golay [24,12,8] FEC
 //! ([`fec`]) → interleave → render luma cells ([`render`]) → … → sample
@@ -30,7 +30,7 @@ pub use payload::Payload;
 /// `CrcMismatch` is the load-bearing one: a decode that produces a payload whose
 /// CRC does not check **must** return this rather than the (possibly Golay
 /// mis-corrected) bytes. Reporting a confident wrong answer is worse than a
-/// detected failure — see `DESIGN.md` §Guardrails.
+/// detected failure — see `EXPLANATION.md` §Guardrails.
 #[derive(Debug)]
 pub enum Error {
     /// Recovered info word failed its CRC-16 — payload is not trustworthy.

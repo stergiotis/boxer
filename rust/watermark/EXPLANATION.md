@@ -1,3 +1,13 @@
+---
+type: explanation
+audience: watermark crate maintainer
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # Implementation Plan: Tiled Luminance-Grid Watermark (Rust)
 
 A task brief for an autonomous coding agent. Build a Rust library + CLI that

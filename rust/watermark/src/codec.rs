@@ -5,7 +5,7 @@
 //! a given CRF in `yuv420p`, then pull the first frame's Y plane back out as
 //! grayscale. The watermark is luma-only, so chroma subsampling is irrelevant.
 //! Output resolution is checked against the input — a silent rescale would
-//! invalidate every cell-size assumption (`DESIGN.md` §Guardrails 7).
+//! invalidate every cell-size assumption (`EXPLANATION.md` §Guardrails 7).
 //!
 //! Limited-range quantization (the `yuv420p` default) scales/offsets our luma,
 //! but the reference-cell calibration absorbs exactly that affine change.

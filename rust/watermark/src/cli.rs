@@ -14,7 +14,7 @@ use watermark::{Error, LumaFrame, Payload, TileSpec};
 #[command(
     name = "watermark",
     version,
-    about = "Tiled luminance-grid watermark (see DESIGN.md)"
+    about = "Tiled luminance-grid watermark (see EXPLANATION.md)"
 )]
 struct Cli {
     #[command(subcommand)]

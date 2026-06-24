@@ -3,7 +3,7 @@ name = "watermark"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Tiled luminance-grid watermark: 64 bits embedded so every 464x432 crop recovers the payload after H.264/VP9/AV1 compression. See DESIGN.md."
+description = "Tiled luminance-grid watermark: 64 bits embedded so every 464x432 crop recovers the payload after H.264/VP9/AV1 compression. See EXPLANATION.md."
 license = "MIT OR Apache-2.0"
 
 # Library (src/lib.rs) + CLI binary (src/main.rs, target name `watermark`).

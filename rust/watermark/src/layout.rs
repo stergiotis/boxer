@@ -13,7 +13,7 @@
 //! cells per class = one Golay word**. The `+3·row` term means 4-neighbours
 //! (Δ=±1 horizontally, ±3 vertically) and diagonals (Δ=±2,±4) are all in
 //! *different* classes — so a localized codec burst damages a few bits across
-//! many words, never several bits of one word (`DESIGN.md` §Guardrails 5).
+//! many words, never several bits of one word (`EXPLANATION.md` §Guardrails 5).
 
 /// Reference-cell luma levels (sRGB-gamma, 0..255), kept clear of 0/255 clipping.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

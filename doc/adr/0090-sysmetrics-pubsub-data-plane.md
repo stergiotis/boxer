@@ -113,7 +113,7 @@ Independently shippable: **P1** this ADR; **P2** bisect `Sampler`, pub/sub over 
 
 Accepted on 2026-06-20 by @spx. Implementation begins at P2 (SD9).
 
-Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. Post-acceptance edits follow [DOCUMENTATION_STANDARD §1 ADR](../../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) tiers (Tier 2 dated `## Updates`).
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. Post-acceptance edits follow [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) tiers (Tier 2 dated `## Updates`).
 
 ## Updates
 

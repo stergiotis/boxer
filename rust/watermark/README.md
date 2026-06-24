@@ -1,3 +1,13 @@
+---
+type: reference
+audience: watermark crate user / developer
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+
 # watermark
 
 A Rust library + CLI that embeds a **64-bit payload** into a frame as a
@@ -5,12 +15,12 @@ periodically tiled grid of luma deltas, so that **every 464×432 px crop** of th
 frame recovers the payload after H.264 / VP9 / AV1 compression and a screenshot.
 
 The full design — geometry, the Golay FEC budget, and the single-tile decode
-guarantee that the crop size rests on — is in [`DESIGN.md`](./DESIGN.md). This
+guarantee that the crop size rests on — is in [`EXPLANATION.md`](./EXPLANATION.md). This
 README covers how to build, run, and what the measured limits are.
 
 ## Status
 
-The test-driven staircase in `DESIGN.md` is implemented through Stage 9 (the
+The test-driven staircase in `EXPLANATION.md` is implemented through Stage 9 (the
 crop requirement) plus CLI/polish. Stage 10 (perspective/homography for skewed
 screenshots) is deferred — decode assumes axis-aligned, unscaled crops. The
 numbers below were measured on synthetic content with single-tile decode; treat

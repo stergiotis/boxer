@@ -4,7 +4,7 @@
 //! Soft values are averaged across **whatever complete tiles are present** (one
 //! in the worst case) *before* thresholding, so multi-tile crops get a free
 //! SNR boost while the guarantee still rests on single-tile Golay decoding
-//! (`DESIGN.md` §Guardrails 4).
+//! (`EXPLANATION.md` §Guardrails 4).
 
 use crate::calibrate::Calibration;
 use crate::fec::{self, BITS_PER_WORD, N_WORDS};
