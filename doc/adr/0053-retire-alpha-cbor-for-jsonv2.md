@@ -152,7 +152,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## References
 
-- [`doc/adr/0001-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md), [`0002-query-categorization-provenance.md`](0051-query-categorization-provenance.md), [`0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — prior ADRs; template shape followed here.
+- [`0050-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md), [`0051-query-categorization-provenance.md`](0051-query-categorization-provenance.md), [`0052-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — prior ADRs; template shape followed here.
 - [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions this document follows.
 - [`0002-nanopass-discipline.md`](0002-nanopass-discipline.md) — retrospective-ADR style reference used here.
 - `public/alpha/cbor/` — package being retired, relocating to `public/attic/alpha/cbor/`.

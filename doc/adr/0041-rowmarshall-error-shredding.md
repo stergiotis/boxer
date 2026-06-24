@@ -238,7 +238,7 @@ egress.
 Accepted — 2026-06-08 (reviewed by p@stergiotis). The no-reflection-on-hot-path rule and the shredded parallel-array error layout are in force. The original hand-coded `rowmarshall` package was retired by ADR-0042's codegen retrofit; the encoding survives unchanged in [`codec/errkind`](../../public/keelson/runtime/codec/errkind/) and [`codec/capabilitygrant`](../../public/keelson/runtime/codec/capabilitygrant/).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
-See boxer's `doc/DOCUMENTATION_STANDARD.md` (resolve via `bash scripts/boxer-path.sh`) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
 <!--
 ## Updates
@@ -250,7 +250,7 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 
 ## References
 
-- **boxer ADR-0059 — leeway-cbor-rpc-codec.** Resolve path via `bash scripts/boxer-path.sh` → `doc/adr/0010-leeway-cbor-rpc-codec.md`.
+- [ADR-0010 — leeway-cbor-rpc-codec](0010-leeway-cbor-rpc-codec.md) — the `runtime.facts` codec referenced above.
 - [ADR-0026 — app runtime + cap subjects](0026-app-runtime-and-capability-subjects.md) — the runtime layer that originally motivated `runtime.facts` schema.
 - [`public/observability/eh/walk.go`](../../public/observability/eh/walk.go) — the upstream `WalkStreams` accessor.
 - [`public/observability/eh/zerolog.go`](../../public/observability/eh/zerolog.go) — `MarshalError` / `gatherFactsAndStacks` (lines 230–445).

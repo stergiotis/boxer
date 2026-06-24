@@ -133,7 +133,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## References
 
-- [`doc/adr/0001-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md), [`0002-query-categorization-provenance.md`](0051-query-categorization-provenance.md), [`0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md), [`0004-retire-alpha-cbor-for-jsonv2.md`](0053-retire-alpha-cbor-for-jsonv2.md) — prior ADRs; template shape followed here.
+- [`0050-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md), [`0051-query-categorization-provenance.md`](0051-query-categorization-provenance.md), [`0052-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md), [`0053-retire-alpha-cbor-for-jsonv2.md`](0053-retire-alpha-cbor-for-jsonv2.md) — prior ADRs; template shape followed here.
 - [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions this document follows.
 - [`CODINGSTANDARDS.md`](../../CODINGSTANDARDS.md) — Go conventions the demo implementation follows.
 - [`public/db/clickhouse/dsl/nanopass/passes/nanopass_passes_manipulate_setting.go`](../../public/db/clickhouse/dsl/nanopass/passes/nanopass_passes_manipulate_setting.go) — `WriteSettings` pass used for parameter binding (SD2).

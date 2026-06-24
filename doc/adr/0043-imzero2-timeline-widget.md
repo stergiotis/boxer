@@ -131,7 +131,7 @@ Implementation landed across six commits on the timeline branch:
 Accepted — 2026-05-19, reviewed by `p@stergiotis`. The M0–M4 implementation (`a7acc819`, `c0b334d1`, `b9e8c263`, `35bd0600`, `c87e1291`, `fc232e4a`) constitutes the accepted design; subsequent refinements follow the standard edit-policy tiers.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
-See boxer's `doc/DOCUMENTATION_STANDARD.md` (resolve via `bash scripts/boxer-path.sh`) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
 ## Updates
 

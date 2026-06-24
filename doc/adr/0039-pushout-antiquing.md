@@ -492,9 +492,9 @@ expansion to legacy PII-bearing repositories or an Architecture C overlay on
 top of A), antiquing becomes a compliance prerequisite again and this
 ADR's Decision section should be revisited at that point.
 
-### 2026-05-17 — relocated from boxer
+### 2026-05-17 — provenance
 
-This ADR was previously hosted in the boxer repository as `boxer/doc/adr/0008-pushout-antiquing.md`. It now lives here as ADR-0039 because the decision's motivation — at the time, the compensating-patch construction required by [ADR-0025](./0025-pushout-forget-architecture.md) and [ADR-0027](./0027-pushout-forget-swiss-fadp.md) — was owned by a downstream consumer, even though the pushout package code remains in `../../public/algebraicarch/pushout`. Content was unchanged apart from path rewrites; the original proposal date (2026-05-12) is preserved above. The compliance motivation was reframed later the same day (see entry above).
+This ADR was originally drafted in boxer as `0008-pushout-antiquing.md`, then moved to a downstream consumer (not in this repo) and renumbered ADR-0039 because the decision's motivation — the compensating-patch construction required by [ADR-0025](./0025-pushout-forget-architecture.md) and [ADR-0027](./0027-pushout-forget-swiss-fadp.md) — was owned there, even though the pushout package code stayed in boxer at [`public/algebraicarch/pushout`](../../public/algebraicarch/pushout). It now lives in boxer again as ADR-0039, alongside that code. Content was unchanged apart from path rewrites; the original proposal date (2026-05-12) is preserved above. The compliance motivation was reframed later the same day (see entry above).
 
 ## References
 

@@ -125,8 +125,8 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 ## References
 
 - [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions this document follows.
-- [`doc/adr/0001-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md) — prior ADR in this repository.
-- [`doc/adr/0002-query-categorization-provenance.md`](0051-query-categorization-provenance.md) — prior ADR; template shape followed here.
+- [`0050-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md) — prior ADR in this repository.
+- [`0051-query-categorization-provenance.md`](0051-query-categorization-provenance.md) — prior ADR; template shape followed here.
 - [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) — ImZero2 runtime conventions, including block skipping / culling (§11) and reserved name rules.
 - [`public/thestack/imzero2/egui2/definition/`](../../public/thestack/imzero2/egui2/definition) — hand-written IDL definition files targeted by the refactor.
 - [`public/thestack/fffi2/ir/idl/fffi2_ir_idl_arguments.go`](../../public/thestack/fffi2/ir/idl/fffi2_ir_idl_arguments.go) — IDL primitive declarations (`PlainArg`, `EvaluatedArg`).

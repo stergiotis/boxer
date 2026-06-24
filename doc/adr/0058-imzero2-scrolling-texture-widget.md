@@ -151,8 +151,8 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## References
 
-- [`doc/adr/0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — `egui2.Color` unified type; SD9 of this ADR documents the narrow exception for bulk pixel buffers.
-- [`doc/adr/0005-regex-explorer-offset-authority.md`](0054-regex-explorer-offset-authority.md), [`doc/adr/0007-walkers-map-h3-binding.md`](0056-walkers-map-h3-binding.md) — prior ADRs; template shape followed here.
+- [`0052-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — `egui2.Color` unified type; SD9 of this ADR documents the narrow exception for bulk pixel buffers.
+- [`0054-regex-explorer-offset-authority.md`](0054-regex-explorer-offset-authority.md), [`0056-walkers-map-h3-binding.md`](0056-walkers-map-h3-binding.md) — prior ADRs; template shape followed here.
 - [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions followed by this document.
 - [`doc/skills/fffi2/SKILLS.md`](../skills/fffi2/SKILLS.md) — FFFI2 widget-definition rules: argument naming, allowed types, return-type conventions, generated vs hand-written file split.
 - [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) — ImZero2 runtime conventions; §11 covers deferred/culled blocks and register usage.
