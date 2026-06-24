@@ -219,3 +219,46 @@ func TestSerializeRecordText_Roundtrip(t *testing.T) {
 		t.Errorf("serializer did not append trailing newline")
 	}
 }
+
+// TestFormatSplitCellLine_RoundTrip locks the exported single-cell
+// contract the pijuldemo draft-diff preview relies on: a value with
+// quotes, backslashes, a tab and non-ASCII must round-trip through
+// FormatCellLine -> SplitKVLine unchanged, and SplitKVLine must tolerate
+// the trailing newline FormatCellLine appends. Non-conforming lines
+// report ok=false.
+func TestFormatSplitCellLine_RoundTrip(t *testing.T) {
+	for _, value := range []string{
+		"plain",
+		"",
+		`has "quotes"`,
+		`back\slash`,
+		"tab\tinside",
+		"unicode-π-é",
+		`{"json":"v"}`,
+	} {
+		line := FormatCellLine(KVLine{Path: "/contact/email", Value: value})
+		if !strings.HasSuffix(line, "\n") {
+			t.Errorf("FormatCellLine(%q) missing trailing newline: %q", value, line)
+		}
+		// Parses with the trailing newline present (node-content shape).
+		path, got, ok := SplitKVLine(line)
+		if !ok {
+			t.Errorf("SplitKVLine(%q) ok=false, want true", line)
+			continue
+		}
+		if path != "/contact/email" || got != value {
+			t.Errorf("round-trip %q: got (%q, %q), want (/contact/email, %q)", value, path, got, value)
+		}
+		// And with the newline already stripped.
+		if _, got2, ok2 := SplitKVLine(strings.TrimSuffix(line, "\n")); !ok2 || got2 != value {
+			t.Errorf("SplitKVLine (no newline) %q: got (%q, ok=%v), want (%q, true)", value, got2, ok2, value)
+		}
+	}
+
+	// Non-conforming lines (a conflict side marker, an unquoted value).
+	for _, bad := range []string{">>>>>>> 1", "/foo bar", "", "/foo"} {
+		if _, _, ok := SplitKVLine(bad); ok {
+			t.Errorf("SplitKVLine(%q) ok=true, want false", bad)
+		}
+	}
+}

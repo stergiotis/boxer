@@ -262,6 +262,29 @@ func splitKVLine(line string) (path string, value string, ok bool) {
 	return
 }
 
+// FormatCellLine renders one [KVLine] to the canonical single-line
+// flat-KV text the backends store as a graggle node's content:
+// `<path> <quoted-value>\n` (value strconv.Quote'd, trailing newline
+// included). Exported so out-of-package tooling — notably the pijuldemo
+// draft-diff preview, which must format lines byte-identically to what
+// the backend records or [patch.LineDiff] reports spurious changes —
+// can reference the canonical formatter instead of keeping a drift-prone
+// copy.
+func FormatCellLine(c KVLine) (s string) {
+	s = formatCellLine(c)
+	return
+}
+
+// SplitKVLine is the inverse of [FormatCellLine]: it parses a single
+// flat-KV line (with or without its trailing newline) into path and
+// strconv.Unquote'd value. ok is false when the line does not match the
+// `<path> <quoted-value>` shape (e.g. a conflict side-marker node), so
+// callers can use it as a "not a clean cell line" signal.
+func SplitKVLine(line string) (path string, value string, ok bool) {
+	path, value, ok = splitKVLine(strings.TrimSuffix(line, "\n"))
+	return
+}
+
 // validateCellPaths rejects cell paths that cannot survive the
 // `<path> <quoted-value>` line format: the path must be non-empty and
 // free of spaces (the separator), quotes, and newlines. Values are
