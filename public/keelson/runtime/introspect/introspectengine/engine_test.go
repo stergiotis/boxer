@@ -133,3 +133,22 @@ func TestQuery_NoTableSelectLiteral(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "1", strings.TrimSpace(string(body)))
 }
+
+func TestQuery_KeelsonMacro(t *testing.T) {
+	e := newEngineWithBroker(t)
+	// keelson('env') must resolve exactly like FROM env.
+	body, _, err := e.Query(context.Background(), "SELECT count() FROM keelson('env')", "TabSeparated")
+	require.NoError(t, err)
+	n, err := strconv.Atoi(strings.TrimSpace(string(body)))
+	require.NoError(t, err, "body: %q", string(body))
+	assert.Positive(t, n)
+}
+
+func TestQuery_KeelsonMacroUnknownFailsFast(t *testing.T) {
+	// The macro rewrite runs before any broker call, so this needs no
+	// clickhouse-local — an unknown keelson table errors immediately.
+	e := &Engine{reg: testRegistry(t)}
+	_, _, err := e.Query(context.Background(), "SELECT * FROM keelson('bogus')", "TabSeparated")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown keelson table")
+}

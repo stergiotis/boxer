@@ -27,6 +27,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -72,6 +73,13 @@ func New(cfg Config, log zerolog.Logger) (e *Engine, err error) {
 // FORMAT (e.g. "ArrowStream", "JSONEachRow", "PrettyCompact"; empty for
 // the clickhouse-local default).
 func (e *Engine) Query(ctx context.Context, sql, format string) (body []byte, contentType string, err error) {
+	// Expand keelson('x') table-function macros to bare TEMPORARY-table
+	// names before analysis (ADR-0094 §SD4): keelson('env') and env are
+	// interchangeable, and an unknown keelson table fails fast here.
+	sql, err = keelsonsql.RewriteToBare(e.reg, sql)
+	if err != nil {
+		return nil, "", err
+	}
 	p := e.plan(sql)
 	body, contentType, err = e.exec(ctx, sql, format, p.tables, p.proj)
 	if err != nil && p.pruned {
