@@ -561,3 +561,98 @@ func heatmapPalette(t float64) uint32 {
 	}
 	return palette[idx]
 }
+
+// =============================================================================
+// mapRaster demo (ADR-0096) — an RGBA framebuffer (here a synthetic gradient
+// standing in for an in-DB-rendered tile) pinned to a lat/lon bbox and
+// composited on a NoTiles walkers canvas via the mapRaster overlay. NoTiles
+// keeps it network-free and tour-capturable: the raster is painter-drawn, so it
+// shows in the headless screenshot even though HttpTiles basemaps don't.
+// =============================================================================
+
+const (
+	rasterDemoW         = 320
+	rasterDemoH         = 256
+	rasterDemoMinLat    = 51.049
+	rasterDemoMaxLat    = 51.149
+	rasterDemoMinLon    = 16.957
+	rasterDemoMaxLon    = 17.117
+	rasterDemoCenterLat = (rasterDemoMinLat + rasterDemoMaxLat) / 2
+	rasterDemoCenterLon = (rasterDemoMinLon + rasterDemoMaxLon) / 2
+)
+
+// getDemoRasterPixels builds a fixed, orientation-revealing pattern once: a red
+// band along the north edge, a green band along the west edge, a red(west→east)
+// / blue(north→south) gradient, and dark grid lines every 32 px. If the overlay
+// projects correctly the red band sits at the map's top (north) and the green
+// band at its left (west) — a visible check of the row-0-is-north y-flip (SD5).
+var (
+	rasterDemoPixelsOnce sync.Once
+	rasterDemoPixels     []uint32
+)
+
+func getDemoRasterPixels() (w int, h int, pixels []uint32) {
+	rasterDemoPixelsOnce.Do(func() {
+		rasterDemoPixels = make([]uint32, rasterDemoW*rasterDemoH)
+		for y := 0; y < rasterDemoH; y++ {
+			for x := 0; x < rasterDemoW; x++ {
+				r := uint32(x * 255 / (rasterDemoW - 1)) // west → east
+				g := uint32(0)
+				b := uint32(y * 255 / (rasterDemoH - 1)) // north → south (row 0 = north)
+				switch {
+				case y < 18:
+					r, g, b = 0xff, 0x22, 0x22 // north band
+				case x < 18:
+					r, g, b = 0x22, 0xff, 0x22 // west band
+				case x%32 == 0 || y%32 == 0:
+					r, g, b = 0x10, 0x10, 0x10 // grid
+				}
+				rasterDemoPixels[y*rasterDemoW+x] = (r << 24) | (g << 16) | (b << 8) | 0xff
+			}
+		}
+	})
+	return rasterDemoW, rasterDemoH, rasterDemoPixels
+}
+
+type walkersRasterDemoState struct {
+	inited   bool
+	uploaded bool
+	opacity  float64
+}
+
+// demoWalkersRaster emits a mapRaster overlay pinned to a fixed bbox, then a
+// NoTiles walkers map framing it. The pixel buffer ships only on the first
+// frame (contentVersion gate); later frames send an empty slice and the Rust
+// side reuses the cached texture — the idiom a live panel would use.
+func demoWalkersRaster(ids *c.WidgetIdStack, st *walkersRasterDemoState) {
+	c.SliderF64(ids.PrepareStr("mapraster-opacity"), st.opacity, 0.1, 1.0).
+		Text("opacity").SendRespVal(&st.opacity)
+	c.Label("Synthetic raster pinned to a bbox: red band = north, green band = west.").Send()
+
+	w, h, full := getDemoRasterPixels()
+	pixels := full
+	if st.uploaded {
+		pixels = []uint32{} // version unchanged → reuse the cached texture (empty, NOT nil)
+	}
+	c.MapRaster(
+		1, // rasterId
+		rasterDemoMinLat, rasterDemoMinLon, rasterDemoMaxLat, rasterDemoMaxLon,
+		uint32(w), uint32(h),
+		1, // contentVersion — static raster
+		pixels,
+	).Opacity(float32(st.opacity)).Nearest(true).Send()
+	st.uploaded = true
+
+	mw := c.WalkersMap(
+		ids.PrepareStr("mapraster-map"),
+		rasterDemoCenterLat, rasterDemoCenterLon,
+		true, // noTiles — network-free canvas
+	).
+		Width(640).
+		Height(460)
+	if !st.inited {
+		mw = mw.SetZoom(12.0)
+		st.inited = true
+	}
+	mw.Send()
+}

@@ -134,6 +134,9 @@ func structH3Region() ir.ConcreteType {
 func structH3CellsColored() ir.ConcreteType {
 	return ir.NewConcreteType("h3CellsColored")
 }
+func structMapRaster() ir.ConcreteType {
+	return ir.NewConcreteType("mapRaster")
+}
 
 func structImage() ir.ConcreteType {
 	return ir.NewConcreteType("image", traitWidget())

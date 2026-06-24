@@ -97,6 +97,7 @@ status: draft
 | LabelWidgetText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | MapMarker | BuilderFactory | No | 3 | 0 | 3 | Immediate |
 | MapPolyline | BuilderFactory | No | 2 | 0 | 2 | Immediate |
+| MapRaster | BuilderFactory | No | 9 | 0 | 2 | Immediate |
 | MeasureText | Procedural | No | 4 | 0 | - | - |
 | MeasureTextSize | Procedural | No | 5 | 0 | - | - |
 | MemoryResetAreas | Procedural | No | 0 | 0 | - | - |
@@ -1249,6 +1250,37 @@ MapMarker
 #### Return Type
 
 MapPolyline
+
+---
+
+### MapRaster
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| rasterId | plain | u64 |
+| minLat | plain | f64 |
+| minLon | plain | f64 |
+| maxLat | plain | f64 |
+| maxLon | plain | f64 |
+| widthPx | plain | u32 |
+| heightPx | plain | u32 |
+| contentVersion | plain | u64 |
+| pixels | plain | u32h |
+
+#### Builder Methods
+
+- **Opacity**(op: f32)
+- **Nearest**(on: b)
+
+#### Return Type
+
+MapRaster
 
 ---
 

@@ -922,6 +922,25 @@ pub struct H3Region {
     pub label: Option<String>,
 }
 
+// One in-DB-rendered geo raster pinned to a lat/lon bbox (ADR-0096). Drained
+// by walkersMap into an upload + a WalkersRasterRenderable; the texture is
+// cached by (rasterId, content_version) in `walkers_raster_cache`, so a
+// version-unchanged frame ships an empty `pixels` and re-uses the cached GPU
+// texture. Pixels are 0xRRGGBBAA, row-major, row 0 = north.
+pub struct WalkersRaster {
+    pub id: u64,
+    pub min_lat: f64,
+    pub min_lon: f64,
+    pub max_lat: f64,
+    pub max_lon: f64,
+    pub width_px: u32,
+    pub height_px: u32,
+    pub content_version: u64,
+    pub pixels: Vec<u32>,
+    pub opacity: f32,
+    pub nearest: bool,
+}
+
 // Pre-projected renderable form of an H3Choropleth: per-cell boundary in
 // lat/lon + the color. Computed once per frame in render_walkers_map,
 // projected per-frame inside the plugin.
@@ -944,6 +963,17 @@ pub struct H3RegionRenderable {
     pub stroke: Option<egui::Stroke>,
     pub label: Option<String>,
     pub label_position: Option<walkers::Position>, // centroid of first ring
+}
+
+// Uploaded form of a WalkersRaster: the texture id plus the two corner
+// Positions (NW = min_lon/max_lat, SE = max_lon/min_lat). The plugin projects
+// the corners and draws one textured quad — the raster is mercator-uniform, so
+// a single stretched quad is geometrically exact (ADR-0096 SD5).
+pub struct WalkersRasterRenderable {
+    pub nw: walkers::Position,
+    pub se: walkers::Position,
+    pub tex: egui::TextureId,
+    pub opacity: f32,
 }
 
 // Custom tile source — Go-supplied XYZ URL template with optional
@@ -1304,6 +1334,7 @@ pub struct OverlayPlugin<'p> {
     pub polylines: Vec<WalkersPolyline>,
     pub h3_choropleth: Vec<H3ChoroplethRenderable>,
     pub h3_regions: Vec<H3RegionRenderable>,
+    pub rasters: Vec<WalkersRasterRenderable>,
     pub camera_out: &'p mut Option<WalkersCamera>,
     pub map_id: u64,
 }
@@ -1378,6 +1409,26 @@ impl<'p> walkers::Plugin for OverlayPlugin<'p> {
                     && mx_lon >= cull_min_lon
                     && mn_lon <= cull_max_lon
             };
+
+        // ---- layer 0: geo rasters (textured quad over the basemap, beneath
+        // the vector overlays) ----
+        for r in &me.rasters {
+            // r.nw = (min_lon, max_lat) NW corner; r.se = (max_lon, min_lat) SE.
+            if !bbox_in_viewport(r.se.lat(), r.nw.lat(), r.nw.lng(), r.se.lng()) {
+                continue;
+            }
+            let q = egui::Rect::from_two_pos(project(r.nw), project(r.se));
+            if q.width() <= 0.0 || q.height() <= 0.0 {
+                continue;
+            }
+            let mut mesh = egui::Mesh::with_texture(r.tex);
+            mesh.add_rect_with_uv(
+                q,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE.gamma_multiply(r.opacity),
+            );
+            painter.add(egui::Shape::mesh(mesh));
+        }
 
         // ---- layer 1: H3 regions (fill hexes + stroke outline + label) ----
         for region in &me.h3_regions {
@@ -2100,6 +2151,7 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub walkers_pending_polylines: Vec<WalkersPolyline>,
     pub walkers_pending_h3_choropleth: Vec<H3Choropleth>,
     pub walkers_pending_h3_regions: Vec<H3Region>,
+    pub walkers_pending_rasters: Vec<WalkersRaster>,
     pub walkers_states: std::collections::HashMap<u64, WalkersState>,
     pub walkers_last_camera: Option<WalkersCamera>,
 
@@ -2110,6 +2162,12 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // image — RGBA pixel widget; texture cache keyed by widget id, upload
     // gated by Go-supplied content_version. Module: image.
     pub image_cache: ImageCache,
+
+    // walkers mapRaster (ADR-0096) — a second ImageCache instance for geo
+    // raster overlays, keyed by rasterId. Separate from image_cache to avoid
+    // sharing the widget-id keyspace; same content-version + tour-capture
+    // plumbing. The overlay paints the texture itself (ImageCache::ensure).
+    pub walkers_raster_cache: ImageCache,
 
     // egui-snarl (ADR-0021) — node-editor binding. Per-frame pending
     // accumulators (drained by the `snarlEditor` opcode) + retained
@@ -2308,10 +2366,12 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             walkers_pending_polylines: Vec::with_capacity(16),
             walkers_pending_h3_choropleth: Vec::with_capacity(4),
             walkers_pending_h3_regions: Vec::with_capacity(8),
+            walkers_pending_rasters: Vec::with_capacity(4),
             walkers_states: std::collections::HashMap::new(),
             walkers_last_camera: None,
             scrolling_texture: ScrollingTextureCache::new(),
             image_cache: ImageCache::new(),
+            walkers_raster_cache: ImageCache::new(),
             snarl_pending_nodes: Vec::with_capacity(64),
             snarl_pending_connections: Vec::with_capacity(64),
             snarl_pending_pins: Vec::with_capacity(64),
@@ -2328,6 +2388,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         // visitor embed `Shape::Mesh.texture_id` as an `<image>` data
         // URL for image widgets, heatmaps, and scrolling textures alike.
         s.image_cache.attach_texture_cache(s.texture_cache.clone());
+        s.walkers_raster_cache.attach_texture_cache(s.texture_cache.clone());
         s.scrolling_texture.attach_texture_cache(s.texture_cache.clone());
         s
     }
@@ -2417,12 +2478,14 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             || !self.walkers_pending_polylines.is_empty()
             || !self.walkers_pending_h3_choropleth.is_empty()
             || !self.walkers_pending_h3_regions.is_empty()
+            || !self.walkers_pending_rasters.is_empty()
         {
             tracing::debug!("walkers pending overlays leaked (no walkersMap drained them), clearing");
             self.walkers_pending_markers.clear();
             self.walkers_pending_polylines.clear();
             self.walkers_pending_h3_choropleth.clear();
             self.walkers_pending_h3_regions.clear();
+            self.walkers_pending_rasters.clear();
         }
 
         // snarl — same shape as walkers/graphs. Pending accumulators are
@@ -2455,6 +2518,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         // because it is re-entered from `replay_deferred_block`.
         self.scrolling_texture.tick();
         self.image_cache.tick();
+        self.walkers_raster_cache.tick();
         let result = self.interpret_outer(ctx, &mut None);
         // Capture even on error so the overlay keeps reporting the time spent
         // before the failure rather than freezing on a stale value.
@@ -7386,6 +7450,66 @@ self.end_consume_message()?;
 }
 // apply
 self.walkers_pending_polylines.push(WalkersPolyline { lats, lons, stroke, closed });
+
+}
+FuncProcId::MapRaster => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match FuncProcId::MapRaster");
+// arguments
+#[allow(unused_mut)]
+let mut raster_id = self.io.read_plain_u64()?;
+#[allow(unused_mut)]
+let mut min_lat = self.io.read_plain_f64()?;
+#[allow(unused_mut)]
+let mut min_lon = self.io.read_plain_f64()?;
+#[allow(unused_mut)]
+let mut max_lat = self.io.read_plain_f64()?;
+#[allow(unused_mut)]
+let mut max_lon = self.io.read_plain_f64()?;
+#[allow(unused_mut)]
+let mut width_px = self.io.read_plain_u32()?;
+#[allow(unused_mut)]
+let mut height_px = self.io.read_plain_u32()?;
+#[allow(unused_mut)]
+let mut content_version = self.io.read_plain_u64()?;
+#[allow(unused_mut)]
+let mut pixels = self.io.read_plain_u32h()?;
+// construct
+
+#[allow(unused_mut)]
+let mut w = 0u8;
+let mut opacity: f32 = 1.0;
+let mut nearest: bool = false;
+// methods
+loop {
+    let (m,_) = self.read_from_repr(MapRasterBuilderMethodId::from_repr)?;
+    match m {
+MapRasterBuilderMethodId::Build => {
+    break;
+}
+MapRasterBuilderMethodId::Opacity => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match MapRasterBuilderMethodId::Opacity");
+#[allow(unused_mut)]
+let mut op = self.io.read_plain_f32()?;
+opacity = op;
+
+}
+MapRasterBuilderMethodId::Nearest => {
+    #[cfg(feature = "puffin")]
+	puffin::profile_scope!("match MapRasterBuilderMethodId::Nearest");
+#[allow(unused_mut)]
+let mut on = self.io.read_plain_b()?;
+nearest = on;
+
+}
+}
+}
+if d == 0 {
+self.end_consume_message()?;
+}
+// apply
+self.walkers_pending_rasters.push(WalkersRaster { id: raster_id, min_lat, min_lon, max_lat, max_lon, width_px, height_px, content_version, pixels, opacity, nearest });
 
 }
 FuncProcId::MeasureText => {
@@ -12941,6 +13065,7 @@ Ok(r)
             self.walkers_pending_polylines.clear();
             self.walkers_pending_h3_choropleth.clear();
             self.walkers_pending_h3_regions.clear();
+            self.walkers_pending_rasters.clear();
             //tracing::debug!("late culled walkers map {:?}", f);
             return;
         }
@@ -12999,6 +13124,38 @@ Ok(r)
         let h3_choropleth_renderables: Vec<H3ChoroplethRenderable> =
             h3_choropleth_raw.into_iter().map(prerender_choropleth).collect();
 
+        // mapRaster (ADR-0096): drain pending geo rasters, upload each into the
+        // dedicated raster texture cache (content-version gated; tour-captured
+        // via the shared texture_cache), and keep the texture id + corner
+        // Positions for the plugin to project. Runs before the walkers_states
+        // borrow below — walkers_raster_cache is a sibling field of self.
+        let rasters_raw = std::mem::take(&mut self.walkers_pending_rasters);
+        let mut raster_renderables: Vec<WalkersRasterRenderable> =
+            Vec::with_capacity(rasters_raw.len());
+        for r in rasters_raw {
+            let opts = if r.nearest {
+                egui::TextureOptions::NEAREST
+            } else {
+                egui::TextureOptions::LINEAR
+            };
+            if let Some(tex) = self.walkers_raster_cache.ensure(
+                &ctx_clone,
+                r.id,
+                r.width_px,
+                r.height_px,
+                r.content_version,
+                opts,
+                &r.pixels,
+            ) {
+                raster_renderables.push(WalkersRasterRenderable {
+                    nw: walkers::lon_lat(r.min_lon, r.max_lat),
+                    se: walkers::lon_lat(r.max_lon, r.min_lat),
+                    tex,
+                    opacity: r.opacity,
+                });
+            }
+        }
+
         // Take a scoped mutable borrow of the retained state. We need it
         // for outline-cache lookup and for the memory/tiles borrow into
         // Map::new; we drop it before we touch self.r7_push to avoid
@@ -13034,6 +13191,7 @@ Ok(r)
                     polylines,
                     h3_choropleth: h3_choropleth_renderables,
                     h3_regions: h3_region_renderables,
+                    rasters: raster_renderables,
                     camera_out: &mut camera_captured,
                     map_id,
                 };

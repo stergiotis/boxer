@@ -15,7 +15,7 @@ package definition
 //   (per-     mapPolyline(lats[], lons[])     .Stroke/.Width
 //    frame     h3CellsColored(cellIds[], rgbas[]) .StrokeWidth/.StrokeColor
 //    register- h3Region(cellIds[])              .Fill/.Stroke/.Width/.Label
-//    drain):
+//    drain):   mapRaster(rasterId, bbox, w/h, contentVersion, pixels[]) .Opacity/.Nearest
 //
 //   Fetcher:   fetchR15WalkersCamera — viewport bbox + zoom + pointer state
 //
@@ -36,7 +36,7 @@ import (
 // --- Registered nodes (overlay accumulators, drained by walkersMap) ---
 
 func definitionsWalkersRegistered() []*ir.BuilderFactoryNode {
-	registered := make([]*ir.BuilderFactoryNode, 0, 4)
+	registered := make([]*ir.BuilderFactoryNode, 0, 5)
 
 	// mapMarker — one point-of-interest in the next frame's marker list.
 	registered = append(registered, idl.NewBuilderFactoryNode("mapMarker").
@@ -141,6 +141,44 @@ let mut label: Option<String> = None;
 `)).
 		WithSettingImmediate(true).
 		WithReturnType(structH3Region()).
+		Build())
+
+	// mapRaster — one in-DB-rendered raster (or any RGBA framebuffer) pinned to
+	// a geographic bbox, composited over the basemap in the next frame's overlay
+	// pass. Same register-drain shape as h3CellsColored. Pixels are 0xRRGGBBAA,
+	// row-major, row 0 = north; raw (NOT .AsColors() — already final RGBA, same
+	// convention as the image binding). The buffer ships only when
+	// contentVersion changes; an unchanged version drains an empty `pixels` and
+	// the per-rasterId cached texture is reused. Bounds are WGS84 degrees —
+	// walkers' Projector maps them to the screen rect, so Go never replicates
+	// the projection (ADR-0096).
+	registered = append(registered, idl.NewBuilderFactoryNode("mapRaster").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("rasterId", ctabb.U64).
+			PlainArg("minLat", ctabb.F64).
+			PlainArg("minLon", ctabb.F64).
+			PlainArg("maxLat", ctabb.F64).
+			PlainArg("maxLon", ctabb.F64).
+			PlainArg("widthPx", ctabb.U32).
+			PlainArg("heightPx", ctabb.U32).
+			PlainArg("contentVersion", ctabb.U64).
+			PlainArg("pixels", ctabb.U32h).
+			Build()).
+		AddMethods(idl.NewMethodBuilder().
+			BeginMethod("opacity").Arg("op", ctabb.F32).
+			CodeClientRust(rustClientCode("opacity = op;\n")).EndMethod().
+			BeginMethod("nearest").Arg("on", ctabb.B).
+			CodeClientRust(rustClientCode("nearest = on;\n")).EndMethod().
+			Build()...).
+		WithConstructionCodeClientRust(rustClientCode(`0u8;
+let mut opacity: f32 = 1.0;
+let mut nearest: bool = false;
+`)).
+		WithApplyCodeClientRust(rustClientCode(
+			`self.walkers_pending_rasters.push(WalkersRaster { id: raster_id, min_lat, min_lon, max_lat, max_lon, width_px, height_px, content_version, pixels, opacity, nearest });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structMapRaster()).
 		Build())
 
 	return registered

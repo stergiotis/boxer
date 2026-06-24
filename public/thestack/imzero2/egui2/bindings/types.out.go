@@ -267,6 +267,11 @@ type MapPolylineFluid struct {
 }
 type MapPolylineMethodIdE uint32
 
+type MapRasterFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type MapRasterMethodIdE uint32
+
 type MenuBarFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -798,6 +803,8 @@ var _ WidgetI = LabelS{}
 type MapMarkerS struct{}
 
 type MapPolylineS struct{}
+
+type MapRasterS struct{}
 
 type NewTableColumnS struct{}
 

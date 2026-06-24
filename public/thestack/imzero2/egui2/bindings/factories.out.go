@@ -764,6 +764,26 @@ func MapPolyline(lats []float64, lons []float64) (inst MapPolylineFluid) {
 	return
 }
 
+func MapRaster(rasterId uint64, minLat float64, minLon float64, maxLat float64, maxLon float64, widthPx uint32, heightPx uint32, contentVersion uint64, pixels []uint32) (inst MapRasterFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdMapRaster))
+	r.WriteUint64(rasterId)
+	r.WriteFloat64(minLat)
+	r.WriteFloat64(minLon)
+	r.WriteFloat64(maxLat)
+	r.WriteFloat64(maxLon)
+	r.WriteUint32(widthPx)
+	r.WriteUint32(heightPx)
+	r.WriteUint64(contentVersion)
+	runtime.PutUint32SliceArg(r, pixels)
+
+	inst = MapRasterFluid{
+		r: r,
+	}
+
+	return
+}
+
 func MeasureText(measureId uint64, text string, fontSize float32, monospace bool) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdMeasureText))

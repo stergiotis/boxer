@@ -162,6 +162,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "mapraster", Category: "Maps & geo", Title: icons.IconGlobe + " mapRaster (in-DB geo raster)",
+		Stage:       [2]float32{760, 600},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindUX,
+		Description: "An RGBA framebuffer (synthetic stand-in for an in-DB-rendered tile, ADR-0096) pinned to a lat/lon bbox and composited on a NoTiles walkers map via the mapRaster overlay.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			return &walkersRasterDemoState{opacity: 0.9}
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoWalkersRaster(ids, state.(*walkersRasterDemoState))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "sql", Category: "Text & code", Title: icons.IconDatabase + " SQL highlighter",
 		Stage:       [2]float32{1024, 600},
 		Kind:        registry.DemoKindUX,

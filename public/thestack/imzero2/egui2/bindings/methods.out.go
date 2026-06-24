@@ -2248,6 +2248,27 @@ func (inst MapPolylineFluid) Send() {
 	r.WriteOpCode(uint32(MapPolylineMethodIdBuild))
 	r.SendIntermediate()
 }
+func (inst MapRasterFluid) Opacity(op float32) MapRasterFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(MapRasterMethodIdOpacity))
+	r.WriteFloat32(op)
+
+	return inst
+}
+
+func (inst MapRasterFluid) Nearest(on bool) MapRasterFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(MapRasterMethodIdNearest))
+	r.WriteBool(on)
+
+	return inst
+}
+
+func (inst MapRasterFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(MapRasterMethodIdBuild))
+	r.SendIntermediate()
+}
 func (inst MenuBarFluid) Send() {
 	r := inst.r
 

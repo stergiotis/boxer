@@ -147,6 +147,48 @@ impl ImageCache {
         );
     }
 
+    /// Upload-if-needed and return the cached texture id **without drawing**.
+    /// Mirrors `show`'s cache logic for callers that paint the texture
+    /// themselves — e.g. the walkers `mapRaster` overlay, which projects the
+    /// texture onto a geographic quad rather than the ui cursor. Returns
+    /// `None` when there's nothing to show (no pixels and no cached entry).
+    #[allow(clippy::too_many_arguments)]
+    pub fn ensure(
+        &mut self,
+        ctx: &Context,
+        id: u64,
+        w: u32,
+        h: u32,
+        content_version: u64,
+        filter_opts: TextureOptions,
+        pixels: &[u32],
+    ) -> Option<egui::TextureId> {
+        let cached_version = self.entries.get(&id).map(|e| e.content_version);
+        let cached_shape = self.entries.get(&id).map(|e| (e.w, e.h));
+        let needs_upload = match (cached_version, cached_shape) {
+            (Some(cv), Some(cs)) => cv != content_version || cs != (w, h),
+            _ => true,
+        };
+        if needs_upload && !pixels.is_empty() {
+            let expected = (w as usize).saturating_mul(h as usize);
+            if pixels.len() == expected {
+                self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
+            } else {
+                tracing::warn!(
+                    id = id,
+                    w = w,
+                    h = h,
+                    got = pixels.len(),
+                    expected = expected,
+                    "image ensure: pixels length mismatch; skipping upload"
+                );
+            }
+        }
+        let entry = self.entries.get_mut(&id)?;
+        entry.last_touched_frame = self.frame;
+        Some(entry.tex.id())
+    }
+
     /// Compute the screen-space size for the allocated rect given the fit mode
     /// and native texture dims. `fixed_w/fixed_h` are inputs for FIXED and
     /// ASPECT_MAX modes; `available` is `ui.available_size()`, used by
