@@ -7,6 +7,7 @@ package introspecthttp
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -30,11 +32,12 @@ var ListenAddr = env.NewString(env.Spec{
 
 // Server serves introspection tables as ArrowStream over HTTP.
 type Server struct {
-	reg  *introspect.Registry
-	log  zerolog.Logger
-	addr string
-	srv  *http.Server
-	ln   net.Listener
+	reg    *introspect.Registry
+	log    zerolog.Logger
+	addr   string
+	runner QueryRunner
+	srv    *http.Server
+	ln     net.Listener
 }
 
 // Config parameterises a Server.
@@ -44,7 +47,25 @@ type Config struct {
 	// Addr is the bind address; defaults to ListenAddr (env), else
 	// 127.0.0.1:0 (a loopback ephemeral port).
 	Addr string
+	// Runner, when set, backs POST /query (ADR-0094 §SD4): it runs a SQL
+	// statement (FORMAT clause included) against clickhouse-local and
+	// returns the raw output. nil disables /query (it answers 503).
+	Runner QueryRunner
 }
+
+// QueryRunner executes SQL (the FORMAT clause is already part of sql) and
+// returns the raw clickhouse-local output. Kept an interface so
+// introspecthttp need not import the bus / chlocal broker; the runtime
+// supplies a broker-backed implementation.
+type QueryRunner interface {
+	RunSQL(ctx context.Context, sql string) (body []byte, err error)
+}
+
+// RunnerFunc adapts a function to QueryRunner.
+type RunnerFunc func(ctx context.Context, sql string) ([]byte, error)
+
+// RunSQL implements QueryRunner.
+func (f RunnerFunc) RunSQL(ctx context.Context, sql string) ([]byte, error) { return f(ctx, sql) }
 
 // New returns an unstarted Server.
 func New(cfg Config, log zerolog.Logger) (s *Server) {
@@ -60,7 +81,7 @@ func New(cfg Config, log zerolog.Logger) (s *Server) {
 			addr = "127.0.0.1:0"
 		}
 	}
-	s = &Server{reg: reg, log: log, addr: addr}
+	s = &Server{reg: reg, log: log, addr: addr, runner: cfg.Runner}
 	s.srv = &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second}
 	return
 }
@@ -107,6 +128,8 @@ func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /tables", s.handleTables)
 	mux.HandleFunc("GET /table/{name}", s.handleTable)
+	mux.HandleFunc("POST /query", s.handleQuery)
+	mux.HandleFunc("GET /query", s.handleQuery)
 	return mux
 }
 
@@ -142,6 +165,81 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
 	_, _ = w.Write(b)
+}
+
+// maxQueryBytes caps the SQL a /query request may carry.
+const maxQueryBytes = 1 << 20
+
+// handleQuery runs a SQL statement against clickhouse-local after
+// expanding keelson('<table>') macros to url() references against this
+// server (ADR-0094 §SD4). A client (e.g. apps/play) can point at this
+// endpoint and query keelson('env') with no external server and no url()
+// boilerplate. The SQL carries its own FORMAT clause (clients append
+// FORMAT ArrowStream); the response is clickhouse-local's raw output.
+func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
+	if s.runner == nil {
+		http.Error(w, "introspection /query is not configured (no clickhouse-local runner)", http.StatusServiceUnavailable)
+		return
+	}
+	sql := readQuerySQL(r)
+	if sql == "" {
+		http.Error(w, "empty query", http.StatusBadRequest)
+		return
+	}
+	rewritten, err := keelsonsql.RewriteToURL(s.reg, s.BaseURL(), sql)
+	if err != nil {
+		// unknown keelson table / malformed macro — a client error.
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	body, err := s.runner.RunSQL(r.Context(), rewritten)
+	if err != nil {
+		s.log.Warn().Err(err).Msg("introspecthttp: /query failed")
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", formatContentType(rewritten))
+	_, _ = w.Write(body)
+}
+
+// readQuerySQL takes the SQL from the POST body, falling back to the
+// ?query= parameter — close enough to ClickHouse's HTTP interface for
+// clients like apps/play, which POST the statement as the body.
+func readQuerySQL(r *http.Request) (sql string) {
+	b, _ := io.ReadAll(io.LimitReader(r.Body, maxQueryBytes))
+	sql = strings.TrimSpace(string(b))
+	if sql == "" {
+		sql = strings.TrimSpace(r.URL.Query().Get("query"))
+	}
+	return
+}
+
+// formatContentType maps the trailing FORMAT clause of sql to a
+// best-effort Content-Type. Informational only — a client that set the
+// format itself already knows how to read the body.
+func formatContentType(sql string) string {
+	i := strings.LastIndex(strings.ToUpper(sql), "FORMAT ")
+	if i < 0 {
+		return "application/octet-stream"
+	}
+	name := strings.TrimSpace(sql[i+len("FORMAT "):])
+	if j := strings.IndexAny(name, " \t\r\n;"); j >= 0 {
+		name = name[:j]
+	}
+	switch name {
+	case "ArrowStream", "Arrow":
+		return "application/vnd.apache.arrow.stream"
+	case "Parquet":
+		return "application/vnd.apache.parquet"
+	case "JSON", "JSONEachRow", "JSONCompact", "JSONStrings":
+		return "application/json"
+	case "CSV", "CSVWithNames":
+		return "text/csv"
+	case "TabSeparated", "TSV", "TabSeparatedWithNames":
+		return "text/tab-separated-values"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 func splitCols(s string) (out []string) {

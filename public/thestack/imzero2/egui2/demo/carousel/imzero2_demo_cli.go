@@ -3,6 +3,7 @@ package demo
 import (
 	gocontext "context"
 	"encoding/binary"
+	"io"
 	"os"
 	"os/signal"
 	"slices"
@@ -372,7 +373,29 @@ func NewCommand() *cli.Command {
 			if regErr := introspect.RegisterCatalog(introspectReg); regErr != nil {
 				log.Warn().Err(regErr).Msg("introspect: catalog registration failed")
 			}
-			introspectSrv := introspecthttp.New(introspecthttp.Config{Registry: introspectReg}, log.Logger)
+			introspectCfg := introspecthttp.Config{Registry: introspectReg}
+			if chlocalSvc != nil {
+				// Back POST /query with the chlocal broker so a client (e.g.
+				// play) can query `SELECT ... FROM keelson('env')` here and get
+				// ArrowStream back — no external server, no url() boilerplate
+				// (ADR-0094 §SD4). The broker runs the url()-rewritten SQL,
+				// which fetches tables from this server's own /table endpoints.
+				queryBus := bus.NewClient("runtime.introspect.query", []runtimeapp.SubjectFilter{
+					{Pattern: chlocalbroker.SubjectExecAll, Direction: runtimeapp.CapDirectionPub, Reason: "introspect /query runs SQL via clickhouse-local"},
+				})
+				introspectCfg.Runner = introspecthttp.RunnerFunc(func(ctx gocontext.Context, sql string) ([]byte, error) {
+					rep, rerr := chlocalbroker.ExecOnPool(ctx, queryBus, "introspect", chlocalbroker.ExecRequest{SQL: sql})
+					if rerr != nil {
+						return nil, rerr
+					}
+					defer func() { _ = rep.Close() }()
+					if e := rep.Err(); e != nil {
+						return nil, e
+					}
+					return io.ReadAll(rep)
+				})
+			}
+			introspectSrv := introspecthttp.New(introspectCfg, log.Logger)
 			if startErr := introspectSrv.Start(); startErr != nil {
 				log.Warn().Err(startErr).Msg("introspect: HTTP table source start failed; keelson.* url() endpoint unavailable")
 			} else {
