@@ -85,7 +85,7 @@ We adopt **ODCS v3.1.0** as Leeway's canonical data-contract envelope, in descri
 5. **One-way derivation.** ODCS envelope is generated from `TableDescDto` + a small annotation file (ownership, SLA, attribute-scoped classifications). Reverse direction (ODCS → `TableDescDto`) is out of scope: Leeway's section assignment, membership-kind choice, and multi-membership semantics exceed ODCS's expressive reach.
 6. **Quality check emission as SQL over self-describing columns.** Tier-1 (per-batch vectorised) and Tier-2 (warehouse pushdown) checks are generated from attribute-level constraints and emitted into ODCS's `quality` blocks; `datacontract-cli` or any ODCS-aware runner executes them. Leeway's naming convention makes this possible without a Leeway-native runtime.
 7. **Confluent Data Contracts as complementary emission.** When a Leeway dataset is transported via Kafka streaming groups, the same generator emits a Confluent Data Contract form for the Kafka topics alongside the ODCS envelope. The two describe different layers (dataset vs. topic) and do not conflict.
-8. **Generator location.** Initial implementation lives in a downstream consumer's staging tree next to the card emitter at `public/semistructured/leeway/`; upstreaming to `boxer/public/semistructured/leeway/` is a tracked follow-on.
+8. **Generator location.** Initial implementation lives in a downstream consumer's staging tree next to the card emitter (the consumer's `public/semistructured/leeway/`); upstreaming into boxer's `public/semistructured/leeway/` is a tracked follow-on.
 
 ### Subsidiary design decisions
 
