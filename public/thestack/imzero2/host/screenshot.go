@@ -1,14 +1,11 @@
 package imzhost
 
 import (
-	"fmt"
-	"os"
-	"strings"
-
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
 
 // AdaptBodyOnly wraps an app's body without Window chrome. Used in screenshot
@@ -50,21 +47,14 @@ func DecorateScreenshotRenderer(bodyRenderers []func(hids *c.WidgetIdStack) erro
 	}
 }
 
-// ScreenshotStageSize reads IMZERO2_SCREENSHOT_SIZE (WxH format, same as
-// boxer's hmi.sh) and returns the capture dimensions. Falls back to 1600×900
-// when the env var is empty or malformed — large enough for most UIs.
+// ScreenshotStageSize returns the capture dimensions from the registered
+// imzero2env.ScreenshotSize variable (IMZERO2_SCREENSHOT_SIZE, WxH format,
+// same as boxer's hmi.sh). Falls back to 1600×900 when the env var is empty
+// or malformed — large enough for most UIs.
 func ScreenshotStageSize() (w, h float32) {
 	w, h = 1600, 900 // fallback matching boxer's testStageDefault caps
-	if s := os.Getenv("IMZERO2_SCREENSHOT_SIZE"); s != "" {
-		n := strings.SplitN(s, "x", 2)
-		if len(n) == 2 {
-			var wi, hi int
-			if _, err := fmt.Sscanf(n[0], "%d", &wi); err == nil {
-				if _, err = fmt.Sscanf(n[1], "%d", &hi); err == nil && wi > 0 && hi > 0 {
-					w, h = float32(wi), float32(hi)
-				}
-			}
-		}
+	if wi, hi, ok := imzero2env.ScreenshotSizeWH(); ok {
+		w, h = float32(wi), float32(hi)
 	}
 	return
 }
