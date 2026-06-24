@@ -1,12 +1,10 @@
 ---
 type: reference
 audience: contributor
-status: draft
-# reviewed-by: "@<handle>"   # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD  # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-06-24
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
 # Engineering Practices
 
