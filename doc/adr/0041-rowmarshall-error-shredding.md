@@ -252,7 +252,7 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 
 - **boxer ADR-0059 — leeway-cbor-rpc-codec.** Resolve path via `bash scripts/boxer-path.sh` → `doc/adr/0010-leeway-cbor-rpc-codec.md`.
 - [ADR-0026 — app runtime + cap subjects](0026-app-runtime-and-capability-subjects.md) — the runtime layer that originally motivated `runtime.facts` schema.
-- [`boxer/public/observability/eh/walk.go`](../../../boxer/public/observability/eh/walk.go) — the upstream `WalkStreams` accessor.
-- [`boxer/public/observability/eh/zerolog.go`](../../../boxer/public/observability/eh/zerolog.go) — `MarshalError` / `gatherFactsAndStacks` (lines 230–445).
+- [`public/observability/eh/walk.go`](../../public/observability/eh/walk.go) — the upstream `WalkStreams` accessor.
+- [`public/observability/eh/zerolog.go`](../../public/observability/eh/zerolog.go) — `MarshalError` / `gatherFactsAndStacks` (lines 230–445).
 - [`public/keelson/runtime/codec/errkind/`](../../public/keelson/runtime/codec/errkind) — successor package (ADR-0042 M11 retrofit). The hand-coded `rowmarshall.Error` types and RowBinary writer this ADR introduced were replaced by codegen-emitted `ErrorColumns` + `Marshal` here; the shredded parallel-array encoding survives unchanged. The original `rowmarshall/{error,error_from_boxer,error_rowbinary,colspec}.go` files are retired.
 - [`feedback_eh_dedup_strict_prefix`](../../) — agent memory documenting the PC-prefix dedup edge case.

@@ -14,7 +14,7 @@ ImZero2 is a Go-driven, Rust-rendered UI layer over [egui](https://www.egui.rs/)
 
 Two concrete near-term consumers need pixel-data rendering:
 
-- **Audio spectrograms**, ported from [`../egui_spectrogramm`](../../../egui_spectrogramm/) — scrolling time × frequency × dB magnitude, typically 512 wide × 1024 tall, redrawing at tens of Hz.
+- **Audio spectrograms**, ported from an external `egui_spectrogramm` crate — scrolling time × frequency × dB magnitude, typically 512 wide × 1024 tall, redrawing at tens of Hz.
 - **RF waterfalls** — the convention for SDR applications ([GQRX](https://github.com/gqrx-sdr/gqrx), [SDRangel](https://github.com/f4exb/sdrangel), [inspectrum](https://github.com/miek/inspectrum)); same data shape, vertical scroll, different axis units.
 
 The general pattern is streaming 2D intensity display: time × N bins × scalar intensity. Thermal imaging, radar, sonar, rolling network-traffic heatmaps all fit. A landscape survey of comparable widgets ([ImPlot](https://github.com/epezent/implot), [matplotlib](https://matplotlib.org/), [PyQtGraph](https://pyqtgraph.readthedocs.io/), [Makie.jl](https://docs.makie.org/), [Observable Plot](https://observablehq.com/plot/), SDR apps, [Grafana heatmap panel](https://grafana.com/docs/grafana/latest/panels-visualizations/visualizations/heatmap/)) produced convergent findings:
@@ -153,13 +153,13 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 - [`doc/adr/0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — `egui2.Color` unified type; SD9 of this ADR documents the narrow exception for bulk pixel buffers.
 - [`doc/adr/0005-regex-explorer-offset-authority.md`](0054-regex-explorer-offset-authority.md), [`doc/adr/0007-walkers-map-h3-binding.md`](0056-walkers-map-h3-binding.md) — prior ADRs; template shape followed here.
-- [`boxer/doc/DOCUMENTATION_STANDARD.md`](../../../boxer/doc/DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions followed by this document (canonical copy lives in boxer per `CLAUDE.md`).
+- [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions followed by this document.
 - [`doc/skills/fffi2/SKILLS.md`](../skills/fffi2/SKILLS.md) — FFFI2 widget-definition rules: argument naming, allowed types, return-type conventions, generated vs hand-written file split.
 - [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) — ImZero2 runtime conventions; §11 covers deferred/culled blocks and register usage.
 - [`public/thestack/imzero2/egui2/definition/`](../../public/thestack/imzero2/egui2/definition) — hand-written IDL definition files; new definition lands here.
 - [`public/thestack/imzero2/egui2/definition/egui2_definition_d_plot.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_plot.go) — structural precedent (homogeneous-array payload + `.WithApplyCodeClientRust(...)` apply snippets).
 - [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs) — generated dispatch; `scrollingTexture` apply snippets land here after `./generate.sh`, calling into the new hand-written `scrolling_texture.rs` module.
-- [`../../../egui_spectrogramm/`](../../../egui_spectrogramm/) — first-consumer source; port target for the audio-spectrogram Go wrapper that composes `heatmapscroll` in a follow-up PR.
+- `egui_spectrogramm` (external crate) — first-consumer source; port target for the audio-spectrogram Go wrapper that composes `heatmapscroll` in a follow-up PR.
 - [egui `TextureHandle`](https://docs.rs/egui/latest/egui/struct.TextureHandle.html), [`TextureHandle::set_partial`](https://docs.rs/egui/latest/egui/struct.TextureHandle.html#method.set_partial) — partial-upload API used for O(heightSlots) per-column writes.
 - [egui `TextureOptions`](https://docs.rs/egui/latest/egui/struct.TextureOptions.html) — `NEAREST`/`LINEAR` filter constants mirrored by `FilterNearestE`/`FilterLinearE` (SD3).
 - [ImPlot `PlotHeatmap`](https://github.com/epezent/implot/blob/master/implot.h), [Makie `heatmap`](https://docs.makie.org/stable/reference/plots/heatmap), [PyQtGraph `ImageItem`](https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/imageitem.html), [Observable `Plot.raster`](https://observablehq.com/plot/marks/raster), [Grafana heatmap panel](https://grafana.com/docs/grafana/latest/panels-visualizations/visualizations/heatmap/), [SDRangel spectrum reference](https://github.com/f4exb/sdrangel/blob/master/sdrgui/gui/spectrum.md) — toolkit survey informing the QOC criteria and the scientific-default choices in SD3–SD6.

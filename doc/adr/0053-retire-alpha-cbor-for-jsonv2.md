@@ -153,8 +153,8 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 ## References
 
 - [`doc/adr/0001-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md), [`0002-query-categorization-provenance.md`](0051-query-categorization-provenance.md), [`0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — prior ADRs; template shape followed here.
-- [`../boxer/doc/DOCUMENTATION_STANDARD.md`](../../../boxer/doc/DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions this document follows.
-- [`../boxer/doc/adr/0002-nanopass-discipline.md`](../../../boxer/doc/adr/0002-nanopass-discipline.md) — retrospective-ADR style reference used here.
+- [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions this document follows.
+- [`0002-nanopass-discipline.md`](0002-nanopass-discipline.md) — retrospective-ADR style reference used here.
 - `public/alpha/cbor/` — package being retired, relocating to `public/attic/alpha/cbor/`.
 - [`public/semistructured/cbor/`](../../public/semistructured/cbor) — downstream indexing subsystem; migrated off alpha/cbor during retirement.
 - `encoding/json/v2` / `encoding/json/jsontext` — Go experimental packages (enabled in this repo via `goexperiment.jsonv2`) providing the streaming-pull API that replaces alpha/cbor's role.

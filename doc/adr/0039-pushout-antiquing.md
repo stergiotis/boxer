@@ -18,10 +18,10 @@ Decision section is intentionally empty until those resolve.
 ## Context
 
 The pushout package
-([`public/algebraicarch/pushout`](../../../boxer/public/algebraicarch/pushout))
+([`public/algebraicarch/pushout`](../../public/algebraicarch/pushout))
 implements a patch-theory version control system in which patches are
 content-addressed and propagated peer-to-peer via Push/Pull. The package's
-[`public/algebraicarch/pushout/pijul/EXPLANATION.md`](../../../boxer/public/algebraicarch/pushout/pijul/EXPLANATION.md)
+[`public/algebraicarch/pushout/pijul/EXPLANATION.md`](../../public/algebraicarch/pushout/pijul/EXPLANATION.md)
 adopts the framing of Pijul (and Joe Neeman's `ojo` prototype): files are
 objects in a category, merges are categorical pushouts, and patches commute
 when they don't depend on each other.
@@ -41,19 +41,19 @@ across diverged history work.
 ### Current state of the code
 
 - `patch.NewPatch` in
-  [`public/algebraicarch/pushout/graggle/patch/patch.go`](../../../boxer/public/algebraicarch/pushout/graggle/patch/patch.go)
+  [`public/algebraicarch/pushout/graggle/patch/patch.go`](../../public/algebraicarch/pushout/graggle/patch/patch.go)
   records whatever the caller hands it.
 - `ComputeDependencies` in the same file extracts dependencies as literally
   referenced in change context fields.
 - No pass rewrites changes to reduce the dependency set.
 - `LineDiff` in
-  [`public/algebraicarch/pushout/graggle/patch/diff.go`](../../../boxer/public/algebraicarch/pushout/graggle/patch/diff.go)
+  [`public/algebraicarch/pushout/graggle/patch/diff.go`](../../public/algebraicarch/pushout/graggle/patch/diff.go)
   anchors new insertions at the LCS-immediate neighbours. In the linearly
   ordered case the LCS-immediate anchors *are* the minimal anchors, so
   `LineDiff`'s output is incidentally near-antique. This is an accidental
   property of the LCS choice, not a guarantee.
 - `changesForResolution`'s `commonAnchors` in
-  [`public/algebraicarch/pushout/pijul/pijul_pushout_backend.go`](../../../boxer/public/algebraicarch/pushout/pijul/pijul_pushout_backend.go)
+  [`public/algebraicarch/pushout/pijul/pijul_pushout_backend.go`](../../public/algebraicarch/pushout/pijul/pijul_pushout_backend.go)
   picks the first live parent and the first live child of a conflict sibling —
   a deterministic but arbitrary choice that can be more conservative than the
   antique form requires.
@@ -161,7 +161,7 @@ What this ADR explicitly does *not* try to guarantee:
   conceptual lineage (Mimram & Di Giusto 2013; jneem's blog series; reading
   Pijul's code to understand its choices) is fine; verbatim porting is not.
   This matches the existing constraint recorded in
-  [`public/algebraicarch/pushout/graggle/NOTICE`](../../../boxer/public/algebraicarch/pushout/graggle/NOTICE).
+  [`public/algebraicarch/pushout/graggle/NOTICE`](../../public/algebraicarch/pushout/graggle/NOTICE).
 - **The graggle representation is fixed.** Antiquing must work on the data
   structures we have (NodeID, Edge, EdgeKindE, pseudo-edge bookkeeping,
   tombstone retention). Changes to the graph representation are out of scope.
@@ -456,14 +456,14 @@ questions.
   identity remains content-addressed.
 - The on-disk envelope format does not change. Tombstone GC is unaffected.
 - The qc invariants in
-  [`public/algebraicarch/pushout/graggle/qc/invariants.go`](../../../boxer/public/algebraicarch/pushout/graggle/qc/invariants.go)
+  [`public/algebraicarch/pushout/graggle/qc/invariants.go`](../../public/algebraicarch/pushout/graggle/qc/invariants.go)
   are unaffected. Antiquing operates pre-`Apply`; qc operates on the
   resulting graggle.
 
 ## Status
 
 Proposed — awaiting design dialogue on SD1–SD10 and OQ1–OQ6, then review by a
-code owner of [`public/algebraicarch/pushout`](../../../boxer/public/algebraicarch/pushout).
+code owner of [`public/algebraicarch/pushout`](../../public/algebraicarch/pushout).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
@@ -494,7 +494,7 @@ ADR's Decision section should be revisited at that point.
 
 ### 2026-05-17 — relocated from boxer
 
-This ADR was previously hosted in the boxer repository as `boxer/doc/adr/0008-pushout-antiquing.md`. It now lives here as ADR-0039 because the decision's motivation — at the time, the compensating-patch construction required by [ADR-0025](./0025-pushout-forget-architecture.md) and [ADR-0027](./0027-pushout-forget-swiss-fadp.md) — was owned by a downstream consumer, even though the pushout package code remains in `../../../boxer/public/algebraicarch/pushout`. Content was unchanged apart from path rewrites; the original proposal date (2026-05-12) is preserved above. The compliance motivation was reframed later the same day (see entry above).
+This ADR was previously hosted in the boxer repository as `boxer/doc/adr/0008-pushout-antiquing.md`. It now lives here as ADR-0039 because the decision's motivation — at the time, the compensating-patch construction required by [ADR-0025](./0025-pushout-forget-architecture.md) and [ADR-0027](./0027-pushout-forget-swiss-fadp.md) — was owned by a downstream consumer, even though the pushout package code remains in `../../public/algebraicarch/pushout`. Content was unchanged apart from path rewrites; the original proposal date (2026-05-12) is preserved above. The compliance motivation was reframed later the same day (see entry above).
 
 ## References
 
@@ -512,10 +512,10 @@ Related ADRs:
 - [ADR-0025 — Right-to-Erasure Architecture for the Pushout VCS](./0025-pushout-forget-architecture.md) — SD4 names antiquing as a prerequisite for compensating-patch construction.
 - [ADR-0027 — Swiss-Only Forget Architecture for the Pushout VCS](./0027-pushout-forget-swiss-fadp.md) — inherits SD4's antiquing prerequisite via the S2→S4 upgrade path.
 
-In-repo siblings (under `../../../boxer/`):
+In-repo siblings:
 
-- [`public/algebraicarch/pushout/pijul/EXPLANATION.md`](../../../boxer/public/algebraicarch/pushout/pijul/EXPLANATION.md) — package overview; the "Open design questions / Antiquing" section is the user-facing explanation that this ADR formalises.
-- [`public/algebraicarch/pushout/graggle/patch/patch.go`](../../../boxer/public/algebraicarch/pushout/graggle/patch/patch.go) — patch construction; `NewPatch` and `ComputeDependencies` live here.
-- [`public/algebraicarch/pushout/graggle/patch/diff.go`](../../../boxer/public/algebraicarch/pushout/graggle/patch/diff.go) — `LineDiff`.
-- [`public/algebraicarch/pushout/pijul/pijul_pushout_backend.go`](../../../boxer/public/algebraicarch/pushout/pijul/pijul_pushout_backend.go) — `commonAnchors` (the B-stage target).
-- [`public/algebraicarch/pushout/graggle/NOTICE`](../../../boxer/public/algebraicarch/pushout/graggle/NOTICE) — Pijul/ojo provenance and the GPL-2.0 read-for-understanding constraint.
+- [`public/algebraicarch/pushout/pijul/EXPLANATION.md`](../../public/algebraicarch/pushout/pijul/EXPLANATION.md) — package overview; the "Open design questions / Antiquing" section is the user-facing explanation that this ADR formalises.
+- [`public/algebraicarch/pushout/graggle/patch/patch.go`](../../public/algebraicarch/pushout/graggle/patch/patch.go) — patch construction; `NewPatch` and `ComputeDependencies` live here.
+- [`public/algebraicarch/pushout/graggle/patch/diff.go`](../../public/algebraicarch/pushout/graggle/patch/diff.go) — `LineDiff`.
+- [`public/algebraicarch/pushout/pijul/pijul_pushout_backend.go`](../../public/algebraicarch/pushout/pijul/pijul_pushout_backend.go) — `commonAnchors` (the B-stage target).
+- [`public/algebraicarch/pushout/graggle/NOTICE`](../../public/algebraicarch/pushout/graggle/NOTICE) — Pijul/ojo provenance and the GPL-2.0 read-for-understanding constraint.

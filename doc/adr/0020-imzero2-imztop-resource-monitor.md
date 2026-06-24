@@ -23,7 +23,7 @@ Forces the design must respect:
 - **Boxer conventions** (CLAUDE.md, [CODINGSTANDARDS.md](../../CODINGSTANDARDS.md)) — `inst` receivers, `*I` interface suffix, `*E` enum suffix, `eh.Errorf` errors, sized integers, zero-value-usable structs.
 - **No process write-side.** ADR-0019 explicitly excludes `kill(pid)` / `set_priority(pid, nice)`. imztop is read-only against `sysmetrics`.
 
-[btop](https://github.com/aristocratos/btop) ([`../../../contrib/btop/`](../../../contrib/btop/)) — Apache 2.0 ([`../../../contrib/btop/LICENSE`](../../../contrib/btop/LICENSE)) — is the feature-parity reference. We mirror btop's panel set (CPU / MEM / DISK / NET / PROC / GPU / SENSORS / BATTERY) but not its implementation: btop's UI lives in `src/btop_draw.cpp` (TUI character cells), `src/btop_input.cpp` (terminal input), `src/btop_menu.cpp` (modal menus). None of that translates to egui. The mapping is **feature → sysmetrics field → egui2 widget**, not source-to-source.
+[btop](https://github.com/aristocratos/btop) — Apache 2.0 ([LICENSE](https://github.com/aristocratos/btop/blob/main/LICENSE)) — is the feature-parity reference. We mirror btop's panel set (CPU / MEM / DISK / NET / PROC / GPU / SENSORS / BATTERY) but not its implementation: btop's UI lives in `src/btop_draw.cpp` (TUI character cells), `src/btop_input.cpp` (terminal input), `src/btop_menu.cpp` (modal menus). None of that translates to egui. The mapping is **feature → sysmetrics field → egui2 widget**, not source-to-source.
 
 ## Design space (QOC)
 
@@ -87,7 +87,7 @@ DockArea is **deferred** to a post-M5 follow-on; once M1–M5 stabilises and per
 
 - **SD11 — No process write-side (kill / nice).** ADR-0019 SD-equivalent already excluded write-side from sysmetrics. imztop does not ship a kill button, signal-sender, or priority editor. Read-only against `sysmetrics`. Revisit only if a user explicitly asks; would need a separate `os.Process.Signal` shim plus a confirmation modal, neither of which belongs in M1–M5.
 
-- **SD12 — Time axis labelling deferred to M5.** The egui2 `Plot` fluent ([`components/methods.out.go`](../../public/thestack/imzero2/egui2/bindings/methods.out.go), `Plot*` block) does not expose a tick-formatter callback. M1–M4 use Unix-second numeric X labels (acceptable for short windows). M5 adds a thin Go-side helper that pre-computes labels via [`boxer/public/math/numerical/timeticks`](../../../boxer/public/math/numerical/timeticks/) and renders them with `PlotText` at the appropriate X positions.
+- **SD12 — Time axis labelling deferred to M5.** The egui2 `Plot` fluent ([`components/methods.out.go`](../../public/thestack/imzero2/egui2/bindings/methods.out.go), `Plot*` block) does not expose a tick-formatter callback. M1–M4 use Unix-second numeric X labels (acceptable for short windows). M5 adds a thin Go-side helper that pre-computes labels via [`public/math/numerical/timeticks`](../../public/math/numerical/timeticks/) and renders them with `PlotText` at the appropriate X positions.
 
 - **SD13 — Snapshot ownership and lifecycle.** Sampler owns `*sysmetrics.Bundle`; sampler goroutine constructs once, defers `Close()` ([`bundle.go:272`](../../public/observability/sysmetrics/bundle.go)) on shutdown. The application's `RenderLoopHandlerDemo` does not touch the Bundle directly. Shutdown signal flows through a `context.Context` cancelled on egui close.
 
@@ -178,7 +178,7 @@ Five milestones, each independently shippable. A green `scripts/ci/lint.sh` and 
 
 ### M5 — Keybindings, time-axis ticks, screenshot tour
 
-`imztop_keybindings.go` (`q` quit, `space` pause, `+`/`-` interval, `1-7` panel toggle). `imztop_timeticks.go` — Go-side helper computing labels via [`boxer/public/math/numerical/timeticks`](../../../boxer/public/math/numerical/timeticks/) and rendering them with `PlotText` at the appropriate X positions. `imztop_tour.go` — deterministic 6-frame tour for `IMZERO2_SCREENSHOT_DIR` capture, mirroring [`regex_explorer_tour.go:74-96`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_tour.go).
+`imztop_keybindings.go` (`q` quit, `space` pause, `+`/`-` interval, `1-7` panel toggle). `imztop_timeticks.go` — Go-side helper computing labels via [`public/math/numerical/timeticks`](../../public/math/numerical/timeticks/) and rendering them with `PlotText` at the appropriate X positions. `imztop_tour.go` — deterministic 6-frame tour for `IMZERO2_SCREENSHOT_DIR` capture, mirroring [`regex_explorer_tour.go:74-96`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_tour.go).
 
 **Done when:** keybindings respond on the next frame; X axis tick labels read as `15:42:00` / `15:42:30` (not `1746635320`); `IMZERO2_SCREENSHOT_DIR=/tmp/imztop-tour ./rust/imzero2/hmi.sh imzero2 7 --tour` produces 6 deterministic PNGs that survive a re-run.
 
@@ -283,15 +283,15 @@ Runtime-tree path references in this ADR were swept from `public/thestack/runtim
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) — sysmetrics data layer (parent ADR; this ADR is the GUI consumer).
-- [`../../../contrib/btop/`](../../../contrib/btop/) — feature-parity reference; Apache 2.0.
-- [`../../../contrib/btop/LICENSE`](../../../contrib/btop/LICENSE) — license verification.
+- [`btop`](https://github.com/aristocratos/btop) — feature-parity reference; Apache 2.0.
+- [`btop/LICENSE`](https://github.com/aristocratos/btop/blob/main/LICENSE) — license verification.
 - [`../../public/observability/sysmetrics/`](../../public/observability/sysmetrics) — data source.
 - `../../doc/observability/sysmetrics/REFERENCE.md` — public API of sysmetrics.
 - [`../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go) — host shell + subcommand registry.
 - [`../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer.go`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer.go) — multi-panel demo precedent.
 - [`../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_plot_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_plot_demo.go) — `PlotLine` / `PlotBars` usage.
 - [`../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go) — virtualized-table usage at 10k rows.
-- [`../../../boxer/public/math/numerical/timeticks/`](../../../boxer/public/math/numerical/timeticks/) — calendar-aware time-axis tick generator (M5).
+- [`public/math/numerical/timeticks/`](../../public/math/numerical/timeticks/) — calendar-aware time-axis tick generator (M5).
 - [`../../tags`](../../tags) — build-tag listing; `gpu_rocm` appended in M1.
 - [ADR-0013](./0013-imzero2-stateful-widget-contract.md) — stateful-widget contract; relevant for any future settings dialog.
 - `../../CLAUDE.md` — repo conventions, build tags, ImZero2-local invariants.
