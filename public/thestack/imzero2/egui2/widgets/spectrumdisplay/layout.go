@@ -1,8 +1,10 @@
 package spectrumdisplay
 
 // rect is a sub-region in widget-local coordinates (origin top-left). The
-// AllocateUiAtRect opcode treats these as offsets from the current Ui cursor — the
-// treemap idiom — so the widget never needs the viewport-absolute origin.
+// AllocateUiAtRect opcode resolves these against the parent Ui's min_rect origin
+// (its top-left), so Render wraps the whole widget in its own child Ui — the
+// treemap idiom — making that origin the widget's slot at the cursor. The
+// coordinates here therefore stay viewport-independent.
 type rect struct {
 	minX, minY, maxX, maxY float32
 }

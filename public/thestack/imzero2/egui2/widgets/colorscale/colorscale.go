@@ -20,6 +20,7 @@ import (
 	"math"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/math/numerical/finddivisions"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -83,8 +84,11 @@ var (
 	DefaultDesiredTicks = 6
 	// DefaultFontSize is the default tick-label font size in logical pixels.
 	DefaultFontSize = float32(10)
-	// DefaultBg is the default background fill colour (RGBA, 0xRRGGBBAA).
-	DefaultBg = uint32(0x1a1a22ff)
+	// DefaultBg is the default background fill colour (RGBA, 0xRRGGBBAA). Sourced
+	// from the IDS neutral spine (ADR-0031 §SD4) so a colorbar abutting a panel —
+	// or a spectrumdisplay gutter — reads as the same surface, not a distinct
+	// rectangle (ADR-0091 §Update 2026-06-21).
+	DefaultBg = styletokens.NeutralBgPanel.AsHex()
 	// DefaultTickColor is the default tick-mark stroke colour (RGBA).
 	DefaultTickColor = uint32(0xd0d0d0ff)
 	// DefaultLabelColor is the default tick-label text colour (RGBA).

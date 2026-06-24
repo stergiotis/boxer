@@ -50,6 +50,49 @@ func TestDbToPx(t *testing.T) {
 	require.InDelta(t, 50, sd.dbToPx(-50, 100), 1e-4)
 }
 
+// TestGutterTicksMaxAtTop: the dB convention puts the maximum at the top, so
+// ascending tick values map to descending y.
+func TestGutterTicksMaxAtTop(t *testing.T) {
+	sd := &SpectrumDisplay{}
+	ticks := sd.gutterTicks(AxisSpec{Min: -100, Max: 0, Unit: AxisUnitDecibel}, 0, 100, true)
+	require.NotEmpty(t, ticks)
+	for i := 1; i < len(ticks); i++ {
+		require.Less(t, ticks[i].Pos, ticks[i-1].Pos, "ascending dB ⇒ descending y (max at top)")
+	}
+}
+
+// TestGutterTicksMinAtTop: the time-since convention puts the minimum at the top
+// (newest row up), so ascending values map to ascending y, offset by top.
+func TestGutterTicksMinAtTop(t *testing.T) {
+	sd := &SpectrumDisplay{}
+	ticks := sd.gutterTicks(AxisSpec{Min: 0, Max: 6, Unit: AxisUnitSeconds}, 10, 100, false)
+	require.NotEmpty(t, ticks)
+	for i := 1; i < len(ticks); i++ {
+		require.Greater(t, ticks[i].Pos, ticks[i-1].Pos)
+	}
+	require.GreaterOrEqual(t, ticks[0].Pos, float32(10), "positions are offset by top")
+}
+
+// TestLeftGutterWidthFallback: with no axis to label, the gutter falls back to
+// the documented default width.
+func TestLeftGutterWidthFallback(t *testing.T) {
+	sd := &SpectrumDisplay{fontSize: DefaultFontSize}
+	require.Equal(t, DefaultLeftGutterW, sd.leftGutterWidth())
+}
+
+// TestLeftGutterWidthMeasured: a set power axis yields a measured width within
+// the clamp bounds (the ADR-0091 §SD2 widest-label rule).
+func TestLeftGutterWidthMeasured(t *testing.T) {
+	sd := &SpectrumDisplay{
+		fontSize:      DefaultFontSize,
+		showLinePanel: true,
+		powerAxis:     AxisSpec{Min: -110, Max: -20, Unit: AxisUnitDecibel},
+	}
+	w := sd.leftGutterWidth()
+	require.GreaterOrEqual(t, w, minLeftGutterWPx)
+	require.LessOrEqual(t, w, maxLeftGutterWPx)
+}
+
 // TestRegionBand maps placements to vertical bands.
 func TestRegionBand(t *testing.T) {
 	y0, y1 := regionBand(PlacementFull, 100)

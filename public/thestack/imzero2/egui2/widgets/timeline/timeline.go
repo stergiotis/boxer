@@ -52,6 +52,7 @@ import (
 	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/axisruler"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 )
@@ -1144,14 +1145,30 @@ func (inst *Timeline) paintLanes(tm layout.TickMap, vl verticalLayout) {
 	}
 }
 
+// paintAxis draws the bottom tick axis (baseline + tick marks + labels) through
+// the shared axisruler renderer, the same renderer the spectrumdisplay gutters
+// use. The geometry is unchanged from the hand-rolled version: baseline across
+// [axisStartPx, axisEndPx]; tick marks of tickMarkHeight; labels at
+// tickLabelOffsetY (= tickMarkHeight + LabelGap), centered. EdgeAnchor is off so
+// the end labels stay centered (the timeline reserves labelW on the left and
+// lets the right end overhang, as before). The calendar rollover rows are a
+// separate, time-specific concern and stay in paintRolloverRows.
 func (inst *Timeline) paintAxis(tm layout.TickMap, vl verticalLayout) {
-	c.PaintLine(vl.axisStartPx, vl.axisBaselineY, vl.axisEndPx, vl.axisBaselineY, inst.visuals.AxisColor, 1.0).Send()
-	for _, tick := range tm.Ticks {
-		x := float32(tick.X)
-		c.PaintLine(x, vl.axisBaselineY, x, vl.axisBaselineY+tickMarkHeight, inst.visuals.TickMarkColor, 1.0).Send()
-		c.PaintText(x, vl.axisBaselineY+tickLabelOffsetY, anchorCenter, anchorTop,
-			tick.Label, tickLabelFontSize, inst.visuals.TickLabelColor).Send()
+	ticks := make([]axisruler.Tick, len(tm.Ticks))
+	for i, tick := range tm.Ticks {
+		ticks[i] = axisruler.Tick{Pos: float32(tick.X), Label: tick.Label}
 	}
+	axisruler.Paint(axisruler.SideBottom, vl.axisBaselineY, vl.axisStartPx, vl.axisEndPx, ticks, axisruler.Style{
+		AxisColor:   inst.visuals.AxisColor,
+		TickColor:   inst.visuals.TickMarkColor,
+		LabelColor:  inst.visuals.TickLabelColor,
+		FontSize:    tickLabelFontSize,
+		TickLen:     tickMarkHeight,
+		LabelGap:    tickLabelOffsetY - tickMarkHeight,
+		StrokeWidth: 1.0,
+		Baseline:    true,
+		EdgeAnchor:  false,
+	})
 }
 
 func (inst *Timeline) paintRolloverRows(tm layout.TickMap, vl verticalLayout) {

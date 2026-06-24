@@ -127,8 +127,38 @@ func demoSpectrumDisplay(ids *c.WidgetIdStack, st *spectrumDemoState) {
 			c.Label(txt).Send()
 		}
 		c.AddSpace(padInner())
+		spectrumDemoFeatures(ids)
+		c.AddSpace(padInner())
 		st.sd.SetLinePanelVisible(st.showLine)
 		st.sd.SetDisplaySize(840, 560)
 		st.sd.Render()
 	}
+}
+
+// spectrumDemoFeatures renders a collapsible bullet list of everything the
+// widget does — a capability reference beside the live display. Collapsed by
+// default so it does not crowd the waterfall.
+func spectrumDemoFeatures(ids *c.WidgetIdStack) {
+	for range c.CollapsingHeader(ids.PrepareStr("sd-features"), c.WidgetText().Text("Features").Keep()).KeepIter() {
+		for _, line := range spectrumDemoFeatureList {
+			c.Label(line).Send()
+		}
+	}
+}
+
+// spectrumDemoFeatureList enumerates the widget's user-facing capabilities. Each
+// entry is capitalised after the bullet so designlint L1 (lowercase-label) stays
+// quiet; keep it in sync with ADR-0091 when the feature set changes.
+var spectrumDemoFeatureList = []string{
+	"  • Scrolling waterfall — heatmapscroll texture, newest row on top, scaled to fill the area.",
+	"  • Frequency axis — engineering Hz / kHz / MHz / GHz labels, edge-anchored so the ends don't clip.",
+	"  • Power (dB) axis — left gutter plus the colorbar legend, in lock-step with the waterfall colormap.",
+	"  • Time-since axis — left gutter showing the depth of visible history.",
+	"  • Colorbar — vertical gradient strip and dB ticks (reused colorscale), one shared colormap.Config.",
+	"  • Spectrum-line trace — optional FFT line panel above the waterfall, split height, dB grid.",
+	"  • Markers — vertical / horizontal / crosshair annotation lines with optional labels.",
+	"  • Regions — shaded named frequency bands (top / bottom / full placement).",
+	"  • Cursor readout — frequency / dB / column-age under the pointer (one-frame lag).",
+	"  • Independent ranges — waterfall colormap range set apart from the line-panel power axis.",
+	"  • Themed chrome — gutters, line panel, and colorbar share the panel surface; axis labels match the timeline (shared axisruler).",
 }

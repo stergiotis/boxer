@@ -186,6 +186,51 @@ Accepted — 2026-06-21 (reviewed by @spx). AI-drafted.
 
 Status lifecycle: `proposed → accepted → (deferred | deprecated | superseded by ADR-XXXX)`.
 
+## Updates
+
+### 2026-06-21 — IDS theming, shared `axisruler`, and a label-clipping fix
+
+Three first-use corrections after the widget was exercised on a real scene; the
+SD1–SD5 decisions stand, so `status` / `reviewed-date` are not re-stamped.
+
+- **Chrome now reads as one surface (IDS tokens).** The hand-picked hex defaults
+  (`DefaultBg = 0x12121a`, axis/label/grid greys, …) were three near-but-unequal
+  darks: the gutters/line-panel (`0x12121a`), the colorbar
+  ([`colorscale`](../../public/thestack/imzero2/egui2/widgets/colorscale/)'s
+  `0x1a1a22`), and the egui panel behind (`NeutralBgPanel`) — so every sub-rect of
+  the widget was individually visible. All chrome colors are now sourced from the
+  IDS neutral spine / semantic palette ([ADR-0031](./0031-imzero2-design-system-color.md)):
+  gutters, line panel, and colorbar all paint `NeutralBgPanel`, so the composite
+  shows no internal seams against a panel. `colorscale.DefaultBg` was migrated to
+  `NeutralBgPanel` fleet-wide (it is a shared legend); axis baselines/ticks use
+  `NeutralBorderFaint`, axis labels `NeutralTextSecondary`, annotation labels
+  `NeutralTextPrimary`, the trace `InfoDefault` — the same tokens the
+  [`timeline`](../../public/thestack/imzero2/egui2/widgets/timeline/) axis uses.
+
+- **Axis labels render through a shared `axisruler`.** The gutter painting (a
+  baseline, tick marks, and anchored labels) was duplicated here and in the
+  timeline. It is now one leaf package,
+  [`axisruler`](../../public/thestack/imzero2/egui2/widgets/axisruler/): the caller
+  computes ticks (this widget via `finddivisions`, the timeline via `timeticks`)
+  and hands `[]Tick{Pos,Label}` + a `SideE` + a `Style` to `axisruler.Paint`, which
+  owns the visual treatment. Both the frequency gutter (`SideBottom`) and the
+  dB/time gutter (`SideLeft`) now go through it, and `timeline.paintAxis` was
+  retrofitted onto it with geometry preserved (the calendar rollover rows remain
+  the timeline's own concern). This is the "reuse the timeline's axis labels for
+  the frequency/range axes" follow-through.
+
+- **Labels no longer clip — the SD2 "widest label" rule is now implemented.** SD2
+  specified a left-gutter "width = widest label via a cached measurer" but the
+  first cut used a fixed `DefaultLeftGutterW = 48`; the bottom gutter was a too-
+  short 18 px and the end ticks centered (so a frequency label at the colorbar
+  edge overhung). The left gutter is now sized per frame from the widest
+  power/time label (`leftGutterWidth`, an ASCII-width estimate clamped to
+  `[28,96]`), the bottom gutter is 22 px (descender room), and `axisruler`
+  edge-anchors the first/last label inward so it stays inside the rect.
+
+The demo gained a collapsed **Features** bullet list enumerating the widget's
+capabilities.
+
 ## References
 
 - [ADR-0058 — ImZero2 scrolling-texture widget](./0058-imzero2-scrolling-texture-widget.md) — the `heatmapscroll` backing opcode.

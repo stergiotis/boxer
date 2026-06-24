@@ -31,7 +31,9 @@ package spectrumdisplay
 import (
 	"math"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/axisruler"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
@@ -43,23 +45,38 @@ var (
 	// DefaultSize is the fallback widget size [w,h] in logical pixels, used when
 	// SetDisplaySize is auto (0,0) and the available size is not yet known.
 	DefaultSize = [2]float32{640, 400}
-	// DefaultLeftGutterW / DefaultFreqGutterH / DefaultColorbarW reserve space for
-	// the axis labels and the colorbar (strip + dB labels).
+	// DefaultLeftGutterW is the fallback left-gutter width (logical px) used when
+	// no power/time axis is set so there are no labels to measure; otherwise the
+	// width is derived per frame from the widest label (leftGutterWidth, the
+	// ADR-0091 §SD2 "widest label" rule). DefaultFreqGutterH reserves the bottom
+	// gutter; DefaultColorbarW the colorbar.
 	DefaultLeftGutterW = float32(48)
-	DefaultFreqGutterH = float32(18)
+	DefaultFreqGutterH = float32(22)
 	DefaultColorbarW   = float32(60)
 	// DefaultFontSize is the axis-label font size in logical pixels.
 	DefaultFontSize = float32(11)
 
-	DefaultBg          = uint32(0x12121aff)
-	DefaultAxisColor   = uint32(0xd0d0d0ff)
-	DefaultLabelColor  = uint32(0xe8e8f0ff)
-	DefaultGridColor   = uint32(0x2a2a3aff)
-	DefaultMarkerColor = uint32(0xffcc44ff)
-	DefaultCursorColor = uint32(0xffffffcc)
-	DefaultRegionColor = uint32(0x4488ff33)
-	DefaultTraceColor  = uint32(0x66ccffff)
+	// Colors are sourced from the IDS neutral spine / semantic palette
+	// (ADR-0031) rather than ad-hoc hex, so the display reads as part of the
+	// fleet and its chrome matches the surrounding panel — the gutters, the line
+	// panel, and the colorbar all paint NeutralBgPanel, so the composite shows no
+	// internal seams (ADR-0091 §Update 2026-06-21). The axis treatment mirrors
+	// the timeline's, since both now render through axisruler.
+	DefaultBg          = styletokens.NeutralBgPanel.AsHex()       // chrome bg (gutters, line panel)
+	DefaultAxisColor   = styletokens.NeutralBorderFaint.AsHex()   // axis baselines + tick marks
+	DefaultLabelColor  = styletokens.NeutralTextSecondary.AsHex() // axis tick labels
+	DefaultGridColor   = styletokens.NeutralBorderFaint.AsHex()   // line-panel grid lines
+	DefaultMarkerColor = styletokens.AccentDefault.AsHex()        // marker line (annotation)
+	DefaultCursorColor = withAlpha(styletokens.NeutralTextPrimary.AsHex(), 0xcc)
+	DefaultRegionColor = withAlpha(styletokens.AccentSubtle.AsHex(), 0x44)
+	DefaultTraceColor  = styletokens.InfoDefault.AsHex()         // spectrum-line trace (single series)
+	DefaultAnnotationColor = styletokens.NeutralTextPrimary.AsHex() // marker/region label text
 )
+
+// withAlpha replaces the alpha byte of a 0xRRGGBBAA color, so a translucent
+// overlay (cursor, region wash) can be derived from an opaque IDS token without
+// a raw color literal.
+func withAlpha(packed uint32, a uint8) uint32 { return (packed &^ 0xff) | uint32(a) }
 
 // AxisSpec describes one physical axis range the caller supplies each frame.
 type AxisSpec struct {
@@ -280,7 +297,7 @@ func (inst *SpectrumDisplay) renderInner() {
 		return
 	}
 	o := layoutOpts{
-		leftGutterW: DefaultLeftGutterW,
+		leftGutterW: inst.leftGutterWidth(),
 		freqGutterH: DefaultFreqGutterH,
 		showLine:    inst.showLinePanel,
 		splitRatio:  inst.splitRatio,
@@ -291,29 +308,37 @@ func (inst *SpectrumDisplay) renderInner() {
 	}
 	r := partition(W, H, o)
 
-	if r.texture.valid() {
-		for range c.AllocateUiAtRect(r.texture.minX, r.texture.minY, r.texture.maxX, r.texture.maxY).KeepIter() {
-			c.UiClipToMaxRect()
-			inst.hs.SetDisplaySize(r.texture.w(), r.texture.h())
-			inst.hs.Render()
+	// Sub-rects are widget-local (origin top-left); AllocateUiAtRect anchors them
+	// to the parent Ui's min_rect origin (interpreter.rs), not to the cursor. So
+	// render inside our own child Ui: its origin is our slot at the cursor, and a
+	// single Ui makes every sub-rect share that one origin so the gutters stay in
+	// register. Without this wrapper the rects anchor to the *enclosing* panel's
+	// top-left and paint over anything placed above us — e.g. the demo's controls.
+	for range c.Vertical().KeepIter() {
+		if r.texture.valid() {
+			for range c.AllocateUiAtRect(r.texture.minX, r.texture.minY, r.texture.maxX, r.texture.maxY).KeepIter() {
+				c.UiClipToMaxRect()
+				inst.hs.SetDisplaySize(r.texture.w(), r.texture.h())
+				inst.hs.Render()
+			}
+			inst.renderOverlay(r.texture)
 		}
-		inst.renderOverlay(r.texture)
-	}
-	if inst.showLinePanel && r.linePanel.valid() {
-		inst.renderLinePanel(r.linePanel)
-	}
-	if inst.showColorbar && r.colorbar.valid() {
-		for range c.AllocateUiAtRect(r.colorbar.minX, r.colorbar.minY, r.colorbar.maxX, r.colorbar.maxY).KeepIter() {
-			c.UiClipToMaxRect()
-			inst.cbar.SetSize(r.colorbar.w(), r.colorbar.h())
-			inst.cbar.Render()
+		if inst.showLinePanel && r.linePanel.valid() {
+			inst.renderLinePanel(r.linePanel)
 		}
-	}
-	if r.leftGutter.valid() {
-		inst.renderLeftGutter(r)
-	}
-	if r.freqGutter.valid() {
-		inst.renderFreqGutter(r.freqGutter)
+		if inst.showColorbar && r.colorbar.valid() {
+			for range c.AllocateUiAtRect(r.colorbar.minX, r.colorbar.minY, r.colorbar.maxX, r.colorbar.maxY).KeepIter() {
+				c.UiClipToMaxRect()
+				inst.cbar.SetSize(r.colorbar.w(), r.colorbar.h())
+				inst.cbar.Render()
+			}
+		}
+		if r.leftGutter.valid() {
+			inst.renderLeftGutter(r)
+		}
+		if r.freqGutter.valid() {
+			inst.renderFreqGutter(r.freqGutter)
+		}
 	}
 	inst.updateReadout()
 }
@@ -353,7 +378,7 @@ func (inst *SpectrumDisplay) renderOverlay(tr rect) {
 			}
 			c.PaintRectFilled(x0, y0, x1, y1, 0, color.Hex(col)).Send()
 			if rg.Label != "" {
-				c.PaintText((x0+x1)/2, y0+1, 1 /*center*/, 0 /*top*/, rg.Label, inst.fontSize, color.Hex(inst.labelColor)).Send()
+				c.PaintText((x0+x1)/2, y0+1, 1 /*center*/, 0 /*top*/, rg.Label, inst.fontSize, color.Hex(DefaultAnnotationColor)).Send()
 			}
 		}
 		for _, m := range inst.markers {
@@ -367,7 +392,7 @@ func (inst *SpectrumDisplay) renderOverlay(tr rect) {
 			x := inst.freqToPx(m.Freq, tw)
 			c.PaintLine(x, 0, x, th, color.Hex(col), 1.0).Send()
 			if m.Label != "" {
-				c.PaintText(x+3, 2, 0 /*left*/, 0 /*top*/, m.Label, inst.fontSize, color.Hex(inst.labelColor)).Send()
+				c.PaintText(x+3, 2, 0 /*left*/, 0 /*top*/, m.Label, inst.fontSize, color.Hex(DefaultAnnotationColor)).Send()
 			}
 		}
 		if inst.lastReadout.Ok {
@@ -405,40 +430,91 @@ func (inst *SpectrumDisplay) renderLinePanel(lp rect) {
 func (inst *SpectrumDisplay) renderLeftGutter(r layoutRects) {
 	g := r.leftGutter
 	gw, gh := g.w(), g.h()
+	st := inst.rulerStyle()
+	st.Baseline = false // the power and time axes share the gutter; neither owns a full-height baseline
 	for range c.AllocateUiAtRect(g.minX, g.minY, g.maxX, g.maxY).KeepIter() {
 		c.UiClipToMaxRect()
 		if inst.showLinePanel && r.linePanel.valid() && inst.powerAxis.Max > inst.powerAxis.Min {
-			top := r.linePanel.minY - g.minY
-			hgt := r.linePanel.h()
-			positions, labels := AxisTicks(inst.powerAxis)
-			for i, v := range positions {
-				frac := (inst.powerAxis.Max - v) / (inst.powerAxis.Max - inst.powerAxis.Min)
-				if frac < 0 || frac > 1 {
-					continue
-				}
-				inst.gutterTick(gw, top+float32(frac)*hgt, labels[i])
-			}
+			top, hgt := r.linePanel.minY-g.minY, r.linePanel.h()
+			ticks := inst.gutterTicks(inst.powerAxis, top, hgt, true) // dB: max signal at the top
+			axisruler.Paint(axisruler.SideLeft, gw, top, top+hgt, ticks, st)
 		}
 		if inst.timeAxisSet && inst.timeAxis.Max > inst.timeAxis.Min {
-			top := r.texture.minY - g.minY
-			hgt := r.texture.h()
-			positions, labels := AxisTicks(inst.timeAxis)
-			for i, v := range positions {
-				frac := (v - inst.timeAxis.Min) / (inst.timeAxis.Max - inst.timeAxis.Min)
-				if frac < 0 || frac > 1 {
-					continue
-				}
-				inst.gutterTick(gw, top+float32(frac)*hgt, labels[i])
-			}
+			top, hgt := r.texture.minY-g.minY, r.texture.h()
+			ticks := inst.gutterTicks(inst.timeAxis, top, hgt, false) // time-since: newest row at the top
+			axisruler.Paint(axisruler.SideLeft, gw, top, top+hgt, ticks, st)
 		}
 		c.PaintCanvas(inst.ids.PrepareStr("lgutter"), gw, gh).Background(color.Hex(inst.bgColor)).Send()
 	}
 }
 
-func (inst *SpectrumDisplay) gutterTick(gw, y float32, label string) {
-	c.PaintLine(gw-4, y, gw, y, color.Hex(inst.axisColor), 1.0).Send()
-	c.PaintText(gw-6, y, 2 /*right*/, 1 /*center*/, label, inst.fontSize, color.Hex(inst.labelColor)).Send()
+// gutterTicks maps an axis's ticks to gutter-local y positions over [top,
+// top+hgt]. maxAtTop puts the axis maximum at the top edge (the dB convention,
+// strongest signal up); otherwise the minimum is at the top (the time-since
+// convention, newest row up). Off-range ticks are dropped.
+func (inst *SpectrumDisplay) gutterTicks(a AxisSpec, top, hgt float32, maxAtTop bool) []axisruler.Tick {
+	positions, labels := AxisTicks(a)
+	span := a.Max - a.Min
+	ticks := make([]axisruler.Tick, 0, len(positions))
+	for i, v := range positions {
+		frac := (v - a.Min) / span
+		if maxAtTop {
+			frac = (a.Max - v) / span
+		}
+		if frac < 0 || frac > 1 {
+			continue
+		}
+		ticks = append(ticks, axisruler.Tick{Pos: top + float32(frac)*hgt, Label: labels[i]})
+	}
+	return ticks
 }
+
+// rulerStyle builds the axisruler treatment from this display's configured axis
+// colors and font, so the gutters and the timeline share one visual language.
+func (inst *SpectrumDisplay) rulerStyle() axisruler.Style {
+	st := axisruler.DefaultStyle()
+	axis := color.Hex(inst.axisColor)
+	st.AxisColor, st.TickColor = axis, axis
+	st.LabelColor = color.Hex(inst.labelColor)
+	st.FontSize = inst.fontSize
+	return st
+}
+
+// leftGutterWidth derives the gutter width from the widest power/time label it
+// will draw (the ADR-0091 §SD2 "widest label" rule), so signed dB or GHz labels
+// are not clipped; it falls back to DefaultLeftGutterW when there is nothing to
+// label.
+func (inst *SpectrumDisplay) leftGutterWidth() float32 {
+	widest := 0
+	consider := func(a AxisSpec, on bool) {
+		if !on || !(a.Max > a.Min) {
+			return
+		}
+		_, labels := AxisTicks(a)
+		for _, l := range labels {
+			if n := len(l); n > widest {
+				widest = n
+			}
+		}
+	}
+	consider(inst.powerAxis, inst.showLinePanel)
+	consider(inst.timeAxis, inst.timeAxisSet)
+	if widest == 0 {
+		return DefaultLeftGutterW
+	}
+	st := inst.rulerStyle()
+	// charWidthEst: a per-glyph width estimate at the current font (6.5px at 11pt,
+	// the timeline's ASCII estimate). Reserve tick + gap + a small left pad.
+	charWidthEst := st.FontSize * (6.5 / 11.0)
+	w := float32(widest)*charWidthEst + st.TickLen + st.LabelGap + leftGutterPadPx
+	return max(minLeftGutterWPx, min(maxLeftGutterWPx, w))
+}
+
+const (
+	leftGutterPadPx  float32 = 8  // breathing room left of the left-gutter labels
+	minLeftGutterWPx float32 = 28 // never collapse the gutter below this
+	maxLeftGutterWPx float32 = 96 // nor let a pathological label balloon it
+)
 
 func (inst *SpectrumDisplay) renderFreqGutter(fg rect) {
 	fw, fh := fg.w(), fg.h()
@@ -446,18 +522,14 @@ func (inst *SpectrumDisplay) renderFreqGutter(fg rect) {
 		c.UiClipToMaxRect()
 		if inst.freqAxis.Max > inst.freqAxis.Min {
 			positions, labels := AxisTicks(inst.freqAxis)
+			ticks := make([]axisruler.Tick, len(positions))
 			for i, v := range positions {
-				x := inst.freqToPx(v, fw)
-				var anchorH uint8 = 1
-				switch {
-				case x < 12:
-					anchorH = 0
-				case x > fw-12:
-					anchorH = 2
-				}
-				c.PaintLine(x, 0, x, 4, color.Hex(inst.axisColor), 1.0).Send()
-				c.PaintText(x, 5, anchorH, 0 /*top*/, labels[i], inst.fontSize, color.Hex(inst.labelColor)).Send()
+				ticks[i] = axisruler.Tick{Pos: inst.freqToPx(v, fw), Label: labels[i]}
 			}
+			// Baseline at the gutter top (y=0) sits flush under the texture, so the
+			// frequency ruler reads as the texture's bottom axis; ticks + labels
+			// hang below, the end labels anchored inward so they stay in the gutter.
+			axisruler.Paint(axisruler.SideBottom, 0, 0, fw, ticks, inst.rulerStyle())
 		}
 		c.PaintCanvas(inst.ids.PrepareStr("fgutter"), fw, fh).Background(color.Hex(inst.bgColor)).Send()
 	}
