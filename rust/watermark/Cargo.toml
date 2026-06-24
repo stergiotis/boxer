@@ -1,0 +1,27 @@
+[package]
+name = "watermark"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Tiled luminance-grid watermark: 64 bits embedded so every 464x432 crop recovers the payload after H.264/VP9/AV1 compression. See DESIGN.md."
+license = "MIT OR Apache-2.0"
+
+# Library (src/lib.rs) + CLI binary (src/main.rs, target name `watermark`).
+
+[dependencies]
+# PNG I/O only — default features off keeps the transitive graph small (no
+# gif/webp/jpeg codecs). The watermark works in luma, but PNG is the friendly
+# interchange format for `encode`/`decode`.
+image = { version = "0.25", default-features = false, features = ["png"] }
+# CLI: encode / decode / roundtrip / sweep subcommands.
+clap = { version = "4", features = ["derive"] }
+# Deterministic, seedable RNG for payload generation in the CLI and tests.
+rand = "0.8"
+
+# NOTE: no `crc` or `rustfft` dependency. CRC-16/CCITT is hand-rolled in
+# payload.rs (~10 lines); the Stage-7 locator evaluates a single Fourier
+# coefficient at the *known* tile period (Goertzel-style, O(N)) in locate.rs, so
+# a full FFT crate is unnecessary. Golay FEC is likewise in-crate (fec.rs).
+
+[profile.release]
+opt-level = 3
