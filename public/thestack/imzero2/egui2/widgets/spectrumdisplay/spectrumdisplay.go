@@ -62,14 +62,14 @@ var (
 	// panel, and the colorbar all paint NeutralBgPanel, so the composite shows no
 	// internal seams (ADR-0091 §Update 2026-06-21). The axis treatment mirrors
 	// the timeline's, since both now render through axisruler.
-	DefaultBg          = styletokens.NeutralBgPanel.AsHex()       // chrome bg (gutters, line panel)
-	DefaultAxisColor   = styletokens.NeutralBorderFaint.AsHex()   // axis baselines + tick marks
-	DefaultLabelColor  = styletokens.NeutralTextSecondary.AsHex() // axis tick labels
-	DefaultGridColor   = styletokens.NeutralBorderFaint.AsHex()   // line-panel grid lines
-	DefaultMarkerColor = styletokens.AccentDefault.AsHex()        // marker line (annotation)
-	DefaultCursorColor = withAlpha(styletokens.NeutralTextPrimary.AsHex(), 0xcc)
-	DefaultRegionColor = withAlpha(styletokens.AccentSubtle.AsHex(), 0x44)
-	DefaultTraceColor  = styletokens.InfoDefault.AsHex()         // spectrum-line trace (single series)
+	DefaultBg              = styletokens.NeutralBgPanel.AsHex()       // chrome bg (gutters, line panel)
+	DefaultAxisColor       = styletokens.NeutralBorderFaint.AsHex()   // axis baselines + tick marks
+	DefaultLabelColor      = styletokens.NeutralTextSecondary.AsHex() // axis tick labels
+	DefaultGridColor       = styletokens.NeutralBorderFaint.AsHex()   // line-panel grid lines
+	DefaultMarkerColor     = styletokens.AccentDefault.AsHex()        // marker line (annotation)
+	DefaultCursorColor     = withAlpha(styletokens.NeutralTextPrimary.AsHex(), 0xcc)
+	DefaultRegionColor     = withAlpha(styletokens.AccentSubtle.AsHex(), 0x44)
+	DefaultTraceColor      = styletokens.InfoDefault.AsHex()        // spectrum-line trace (single series)
 	DefaultAnnotationColor = styletokens.NeutralTextPrimary.AsHex() // marker/region label text
 )
 
@@ -182,7 +182,12 @@ func New(ids *c.WidgetIdStack, scopeKey string, cfg *colormap.Config, widthSlots
 	}
 	hs := heatmapscroll.New(ids, scopeKey+".wf", cfg, widthSlots, heightSlots)
 	hs.SetOrientation(heatmapscroll.ScrollDown) // RF waterfall: newest on top, frequency across X
-	cbar := colorscale.New(ids, scopeKey+".cb", cfg, colorscale.WithOrientation(colorscale.OrientationVertical))
+	// Pin the colorbar to this display's chrome bg (panel tier) rather than the
+	// colorscale's standalone default (surface tier), so the colorbar, gutters and
+	// line panel read as one surface with no internal seam.
+	cbar := colorscale.New(ids, scopeKey+".cb", cfg,
+		colorscale.WithOrientation(colorscale.OrientationVertical),
+		colorscale.WithBg(DefaultBg))
 	return &SpectrumDisplay{
 		ids:          ids,
 		scopeKey:     scopeKey,

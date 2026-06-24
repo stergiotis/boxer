@@ -85,10 +85,13 @@ var (
 	// DefaultFontSize is the default tick-label font size in logical pixels.
 	DefaultFontSize = float32(10)
 	// DefaultBg is the default background fill colour (RGBA, 0xRRGGBBAA). Sourced
-	// from the IDS neutral spine (ADR-0031 §SD4) so a colorbar abutting a panel —
-	// or a spectrumdisplay gutter — reads as the same surface, not a distinct
-	// rectangle (ADR-0091 §Update 2026-06-21).
-	DefaultBg = styletokens.NeutralBgPanel.AsHex()
+	// from the IDS neutral spine (ADR-0031 §SD4): NeutralBgSurface — the
+	// raised-card/window tier that sibling widget canvases (timeline, treemap,
+	// gauge) paint — so a standalone colorscale reads as a surface, not a near-
+	// black rectangle. A host that embeds the scale as panel-tier chrome (e.g.
+	// the spectrumdisplay colorbar) overrides this via WithBg so the composite
+	// reads as one surface (ADR-0091 §Update 2026-06-21).
+	DefaultBg = styletokens.NeutralBgSurface.AsHex()
 	// DefaultTickColor is the default tick-mark stroke colour (RGBA).
 	DefaultTickColor = uint32(0xd0d0d0ff)
 	// DefaultLabelColor is the default tick-label text colour (RGBA).
@@ -140,6 +143,15 @@ func WithLabelFormat(fn func(float64) string) Option {
 		panic("colorscale: WithLabelFormat requires a non-nil fn")
 	}
 	return func(inst *ColorScale) { inst.labelFormat = fn }
+}
+
+// WithBg overrides the background fill colour (RGBA, 0xRRGGBBAA) painted behind
+// the gradient and the tick/label margins. Default DefaultBg (NeutralBgSurface,
+// the standalone surface tier). A host embedding the scale as panel-tier chrome —
+// e.g. spectrumdisplay's colorbar — passes its own chrome colour so the embedded
+// legend and the surrounding panel read as one surface rather than two darks.
+func WithBg(rgba uint32) Option {
+	return func(inst *ColorScale) { inst.bgColor = rgba }
 }
 
 // HoverInfo reports the colormap value currently under the pointer.
