@@ -174,10 +174,16 @@ fn axis_origins(win: u32, period: u32, phase: f32) -> Vec<u32> {
     let p = (phase as f64).rem_euclid(period as f64);
     let mut out = Vec::new();
     let mut x = p;
-    let win = win as f64;
+    let win_f = win as f64;
     let per = period as f64;
-    while x + per <= win + 0.5 {
-        out.push(x.round() as u32);
+    while x + per <= win_f + 0.5 {
+        // The +0.5 above tolerates float drift at the W=2w boundary; this integer
+        // check is the real containment contract. Rounding the origin first means
+        // a fractional phase can't admit a tile that overhangs the window edge.
+        let o = x.round() as u32;
+        if o + period <= win {
+            out.push(o);
+        }
         x += per;
     }
     out
@@ -196,7 +202,7 @@ fn build_cells(cols: u32, rows: u32) -> Vec<Cell> {
             .flat_map(|row| (0..cols).map(move |col| (col, row)))
             .filter(|&(col, row)| (col + 3 * row) % 7 == class)
             .collect();
-        debug_assert_eq!(members.len(), 26, "class {class} must hold 26 cells");
+        assert_eq!(members.len(), 26, "class {class} must hold 26 cells");
 
         // Two reference cells per class, spread ~1/3 and ~2/3 down the member
         // list (which is itself spread diagonally across the tile).
@@ -220,7 +226,7 @@ fn build_cells(cols: u32, rows: u32) -> Vec<Cell> {
                 data_bit += 1;
             }
         }
-        debug_assert_eq!(data_bit, 24, "class {class} must yield 24 data cells");
+        assert_eq!(data_bit, 24, "class {class} must yield 24 data cells");
     }
 
     (0..rows)
@@ -289,5 +295,36 @@ mod tests {
             seen.iter().all(|w| w.iter().all(|&b| b)),
             "all bits covered"
         );
+    }
+
+    #[test]
+    fn fractional_phase_never_overhangs() {
+        // Every enumerated origin must yield a tile fully inside the window, even
+        // for sub-pixel phases (complete_tile_origins is public and takes f32).
+        let s = TileSpec::default();
+        for &win in &[
+            (s.tile_w, s.tile_h),
+            (s.window_w(), s.window_h()),
+            (700, 650),
+        ] {
+            for &px in &[0.0f32, 0.5, 1.0, 115.9, 116.0, 116.5, 231.5] {
+                for &py in &[0.0f32, 0.5, 107.5, 215.5] {
+                    for (ox, oy) in s.complete_tile_origins(win.0, win.1, px, py) {
+                        assert!(
+                            ox + s.tile_w <= win.0,
+                            "x overhang: {ox}+{} > {}",
+                            s.tile_w,
+                            win.0
+                        );
+                        assert!(
+                            oy + s.tile_h <= win.1,
+                            "y overhang: {oy}+{} > {}",
+                            s.tile_h,
+                            win.1
+                        );
+                    }
+                }
+            }
+        }
     }
 }

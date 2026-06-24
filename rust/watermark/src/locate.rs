@@ -42,22 +42,16 @@ pub fn locate(frame: &LumaFrame, spec: &TileSpec) -> Locate {
         .collect();
     let nom_mean = refs.iter().map(|r| r.2).sum::<f32>() / refs.len() as f32;
 
+    // Score = covariance of the reference cells' measured means with their
+    // nominal levels. Since Σ(nom − nom_mean) = 0, the measured mean drops out:
+    // cov = Σ measured·(nom − nom_mean), a single pass with no per-call storage.
     let score = |px: u32, py: u32| -> f32 {
-        let mut meas = [0f32; 16];
-        let mut sum = 0f32;
-        for (i, &(col, row, _)) in refs.iter().enumerate() {
+        let mut cov = 0f32;
+        for &(col, row, nom) in &refs {
             match sample::inner_mean(frame, px, py, col, row, spec) {
-                Some(m) => {
-                    meas[i] = m;
-                    sum += m;
-                }
+                Some(m) => cov += m * (nom - nom_mean),
                 None => return f32::NEG_INFINITY, // tile doesn't fit here
             }
-        }
-        let mm = sum / refs.len() as f32;
-        let mut cov = 0f32;
-        for (i, &(_, _, nom)) in refs.iter().enumerate() {
-            cov += (meas[i] - mm) * (nom - nom_mean);
         }
         cov
     };

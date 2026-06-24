@@ -30,9 +30,14 @@ impl Calibration {
         let mut sum = [0f32; 3];
         let mut cnt = [0u32; 3];
         for &(m, lv) in samples {
-            let i = lv as usize;
-            sum[i] += m;
-            cnt[i] += 1;
+            // Reject non-finite measurements: a NaN/Inf reaching the sort below
+            // would panic, and decode given garbage must return an error, never
+            // panic (LumaFrame.y is a public `Vec<f32>`).
+            if m.is_finite() {
+                let i = lv as usize;
+                sum[i] += m;
+                cnt[i] += 1;
+            }
         }
         let nominals = [
             RefLevel::Black.luma(),
@@ -46,10 +51,19 @@ impl Calibration {
         if anchors.len() < 2 {
             return None;
         }
-        anchors.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        // Measured order must agree with nominal order (monotonic, no ties).
+        anchors.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        // Measured order must agree with nominal order (monotonic, no ties), and
+        // the gain must be sane. A near-flat reference set (tiny measured gaps →
+        // huge interpolation slope) means a destroyed or false-located tile; we
+        // reject it so its calibration can't explode and, in a multi-tile crop,
+        // dominate the (unweighted) soft-combine. Real channels — including the
+        // gamma sweep — keep slopes well under this bound (~1–2).
+        const MAX_SLOPE: f32 = 8.0;
         for w in anchors.windows(2) {
             if w[1].0 <= w[0].0 || w[1].1 <= w[0].1 {
+                return None;
+            }
+            if (w[1].1 - w[0].1) / (w[1].0 - w[0].0) > MAX_SLOPE {
                 return None;
             }
         }
@@ -124,5 +138,33 @@ mod tests {
     fn fit_rejects_single_level() {
         let s = [(50.0, RefLevel::Mid), (51.0, RefLevel::Mid)];
         assert!(Calibration::fit(&s).is_none());
+    }
+
+    #[test]
+    fn fit_rejects_degenerate_gain() {
+        // Near-flat reference set (huge implied slope) → reject, so a bad tile's
+        // calibration cannot explode and hijack a multi-tile combine.
+        let s = [
+            (100.0, RefLevel::Black),
+            (100.5, RefLevel::Mid),
+            (101.0, RefLevel::White),
+        ];
+        assert!(Calibration::fit(&s).is_none());
+    }
+
+    #[test]
+    fn fit_ignores_non_finite_without_panic() {
+        // A NaN measurement must not panic the sort; here it drops Mid, leaving
+        // two valid levels that still fit.
+        let s = [
+            (16.0, RefLevel::Black),
+            (f32::NAN, RefLevel::Mid),
+            (240.0, RefLevel::White),
+        ];
+        let c = Calibration::fit(&s).expect("two finite levels still fit");
+        assert!((c.to_nominal(16.0) - 16.0).abs() < 1e-2);
+        // All-NaN input simply yields no calibration (no panic).
+        let bad = [(f32::NAN, RefLevel::Black), (f32::NAN, RefLevel::White)];
+        assert!(Calibration::fit(&bad).is_none());
     }
 }

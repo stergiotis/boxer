@@ -23,13 +23,14 @@ impl LumaFrame {
         LumaFrame {
             w,
             h,
-            y: vec![level; (w * h) as usize],
+            y: vec![level; w as usize * h as usize],
         }
     }
 
     #[inline]
     pub fn idx(&self, x: u32, y: u32) -> usize {
-        (y * self.w + x) as usize
+        // Compute in usize: u32 products overflow for frames with w*h ≥ 2^32.
+        y as usize * self.w as usize + x as usize
     }
 
     #[inline]
@@ -45,10 +46,14 @@ impl LumaFrame {
 
     /// A `cw×ch` crop with top-left at `(x0,y0)`. Panics if out of bounds.
     pub fn crop(&self, x0: u32, y0: u32, cw: u32, ch: u32) -> LumaFrame {
-        assert!(x0 + cw <= self.w && y0 + ch <= self.h, "crop out of bounds");
-        let mut y = Vec::with_capacity((cw * ch) as usize);
+        // Compare in u64 so an overflowing x0+cw can't wrap past the guard.
+        assert!(
+            x0 as u64 + cw as u64 <= self.w as u64 && y0 as u64 + ch as u64 <= self.h as u64,
+            "crop out of bounds"
+        );
+        let mut y = Vec::with_capacity(cw as usize * ch as usize);
         for row in y0..y0 + ch {
-            let base = (row * self.w + x0) as usize;
+            let base = row as usize * self.w as usize + x0 as usize;
             y.extend_from_slice(&self.y[base..base + cw as usize]);
         }
         LumaFrame { w: cw, h: ch, y }
@@ -81,7 +86,7 @@ impl LumaFrame {
     /// matters), without pulling in image fixtures.
     pub fn synthetic_natural(w: u32, h: u32, seed: u64) -> LumaFrame {
         let s = (seed % 17) as f32;
-        let mut y = Vec::with_capacity((w * h) as usize);
+        let mut y = Vec::with_capacity(w as usize * h as usize);
         let (fw, fh) = (w as f32, h as f32);
         for py in 0..h {
             for px in 0..w {
