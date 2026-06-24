@@ -12,26 +12,26 @@ date: 2026-05-08
 
 ## Context
 
-[ADR-0022](0022-leeway-lwq-flwor-query-language.md) proposes `lwq` as a FLWOR-style text language for querying Leeway-stored data, with a parser, AST, and lowerer to ClickHouse SQL. Subsequent design review examined the existing `boxer/public/semistructured/leeway/streamreadaccess/` package and concluded that the `SinkI` / `Driver` substrate already exposes the full Leeway protocol structure as a streaming visitor pattern — entity boundaries, sections, co-section grouping, use-aspects, value-aspects, membership types, cardinality, all available via SAX-style events.
+[ADR-0022](0022-leeway-lwq-flwor-query-language.md) proposes `lwq` as a FLWOR-style text language for querying Leeway-stored data, with a parser, AST, and lowerer to ClickHouse SQL. Subsequent design review examined the existing `public/semistructured/leeway/streamreadaccess/` package and concluded that the `SinkI` / `Driver` substrate already exposes the full Leeway protocol structure as a streaming visitor pattern — entity boundaries, sections, co-section grouping, use-aspects, value-aspects, membership types, cardinality, all available via SAX-style events.
 
 This changes the implementation calculus:
 
 - The structural capabilities ADR-0022 sets out to surface — multi-membership predicates, primary/secondary role distinction, co-value joins, aspect-driven section selection, tree-shaped construction — can be delivered through a typed Go API over `SinkI` without a grammar, parser, or separate AST.
 - Go's type system, IDE support (`gopls`), and integration with the existing Leeway codegen give the Go API benefits the text frontend cannot match: compile-time schema/path/type validation, refactoring safety, and native composition with arbitrary Go code.
-- The Go API admits two execution targets cleanly: in-process (a `SinkI` implementation interpreting the query graph against an Arrow `RecordBatch`) and ClickHouse (the same query graph lowered to CH SQL via the existing `boxer/public/db/clickhouse/dsl/ast` and `ToSQL` infrastructure).
+- The Go API admits two execution targets cleanly: in-process (a `SinkI` implementation interpreting the query graph against an Arrow `RecordBatch`) and ClickHouse (the same query graph lowered to CH SQL via the existing `public/db/clickhouse/dsl/ast` and `ToSQL` infrastructure).
 
 The text-form syntax is still required: a downstream consumer needs `lwq` integrated into SQL as a "little language" served via a SQL proxy, and that requires a textual surface. This ADR therefore does not supersede ADR-0022; it sequences it. The Go API ships first; the FLWOR text frontend, when built, parses to the *same operator graph* the Go API constructs and reuses the same backends.
 
 ## Decision
 
-We will implement `lwq` v1 as a typed Go API at `boxer/public/db/leeway/lwq/`, with two execution targets: in-process via `SinkI` against Arrow data, and ClickHouse via the existing CH AST and `ToSQL` emitter. The FLWOR text frontend (per ADR-0022) is deferred until the SQL-proxy integration becomes a concrete deliverable; when built, it parses to the same operator graph and reuses both backends.
+We will implement `lwq` v1 as a typed Go API at `public/db/leeway/lwq/`, with two execution targets: in-process via `SinkI` against Arrow data, and ClickHouse via the existing CH AST and `ToSQL` emitter. The FLWOR text frontend (per ADR-0022) is deferred until the SQL-proxy integration becomes a concrete deliverable; when built, it parses to the same operator graph and reuses both backends.
 
 ## API specification
 
 ### Package layout
 
 ```
-boxer/public/db/leeway/lwq/
+public/db/leeway/lwq/
 ├── lwq.go              # entry: New(env) → *Plan; Run/Collect/Reduce
 ├── plan.go             # *Plan, operators, internal operator graph
 ├── binder.go           # *Binder — typed accessor inside a binding scope
@@ -84,7 +84,7 @@ type Binder struct { /* internal */ }
 type Target interface { /* internal */ }
 
 // RoleKindE distinguishes the membership-role classifier output
-// (per boxer ADR-0007). This is orthogonal to
+// (per ADR-0007). This is orthogonal to
 // MembershipSpec — every membership has both a kind and a spec.
 type RoleKindE uint8
 
@@ -103,7 +103,7 @@ Memberships are the protocol-level mechanism by which values are tagged in Leewa
 - **Value form** — `Ref` (numeric reference into a dictionary), `Verbatim` (literal bytes/string), or parametrized variants of either.
 - **Mixed specs** — sections may combine a low-card prefix with high-card params (the path-with-slots case).
 
-The eight `MembershipSpec` variants from `boxer/public/semistructured/leeway/common/`:
+The eight `MembershipSpec` variants from `public/semistructured/leeway/common/`:
 
 | Spec | Meaning | Typical use |
 |---|---|---|
@@ -222,7 +222,7 @@ func (p *Plan) ForEachInSection(name string) *Plan
 
 // ForEachValueWithMembership iterates values whose memberships satisfy
 // the matcher. The role kind further constrains by primary/secondary
-// classification (per boxer ADR-0007). The matcher carries the
+// classification (per ADR-0007). The matcher carries the
 // MembershipSpec it targets, so the lowerer pushes the correct
 // cardinality- and spec-aware predicate into the section's columns.
 func (p *Plan) ForEachValueWithMembership(kind RoleKindE, m MembershipMatcher) *Plan
@@ -369,7 +369,7 @@ type Target interface {
 func InProcess(driver *streamreadaccess.Driver) Target
 
 // ClickHouse lowers the plan to a CH SQL AST via the existing
-// boxer/public/db/clickhouse/dsl/ast package, runs ToSQL, executes
+// public/db/clickhouse/dsl/ast package, runs ToSQL, executes
 // against the connection, and streams results back into Go values.
 func ClickHouse(conn ClickHouseConn) Target
 ```
@@ -681,7 +681,7 @@ Indicative scope: v0 + v1 together is on the order of a few thousand lines of ne
 ### Neutral
 
 - ADR-0022 stands. This ADR sequences its phasing rather than superseding it. The text frontend remains the long-term direction; only the order of implementation changes.
-- The Go API is a peer of `boxer/public/db/clickhouse/dsl/astbuilder` (CH SQL fluent builder) and the Leeway SDK's read-access codegen. The pattern of "fluent typed Go API" is established in the boxer ecosystem.
+- The Go API is a peer of `public/db/clickhouse/dsl/astbuilder` (CH SQL fluent builder) and the Leeway SDK's read-access codegen. The pattern of "fluent typed Go API" is established in the boxer ecosystem.
 - The decision to start with `*Plan` as a type-erased core (rather than `*Plan[T]` generic) is a Go-language pragmatic choice. Switching to generic later would require breaking-change migration; deciding now keeps options open.
 
 ## Status

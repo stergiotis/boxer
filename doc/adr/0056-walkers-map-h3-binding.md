@@ -26,7 +26,7 @@ Constraints the design had to respect:
 
 **Options.**
 
-- **O1 — Walkers map widget + `h3o` on the Rust render side + `h3o-wazero` on the Go data side (chosen).** Native-Rust slippy map (`walkers = "0.53"`), native-Rust H3 (`h3o = "0.9"` with the `geo` feature) for render-side aggregation and boundary computation, and the pure-Go + wasm h3o bridge at `boxer/public/science/geo/h3` for server-side cell work. H3 cell IDs (`u64`) are the wire primitive for ROIs, heatmaps, and click-targets.
+- **O1 — Walkers map widget + `h3o` on the Rust render side + `h3o-wazero` on the Go data side (chosen).** Native-Rust slippy map (`walkers = "0.53"`), native-Rust H3 (`h3o = "0.9"` with the `geo` feature) for render-side aggregation and boundary computation, and the pure-Go + wasm h3o bridge at `public/science/geo/h3` for server-side cell work. H3 cell IDs (`u64`) are the wire primitive for ROIs, heatmaps, and click-targets.
 - **O2 — Walkers map widget + polygon wire format.** Same basemap; ROIs exchanged as lat/lng ring arrays. H3 appears only as a client implementation detail (or not at all).
 - **O3 — Galileo map engine + `galileo-egui`.** Full GIS stack with vector tiles, projections, styled feature layers, and 3D. Requires switching eframe to `wgpu`.
 - **O4 — Walkers + `uber/h3-go/v4` CGO binding on Go.** Identical render side to O1; Go-side H3 via Uber's reference C implementation with CGO enabled.
@@ -55,7 +55,7 @@ O1 is the Pareto optimum for this repo's constraints: the only option that satis
 
 ## Decision
 
-We bind the `walkers` crate as a plain ImZero2 widget with a register-drain overlay plugin; `h3o` as the Rust-side H3 implementation for cell boundary computation, multipolygon dissolve, and bbox culling; and `boxer/public/science/geo/h3` (h3o compiled to wasm32-unknown-unknown, driven through wazero) as the Go-side H3 for cell computation off the render path.
+We bind the `walkers` crate as a plain ImZero2 widget with a register-drain overlay plugin; `h3o` as the Rust-side H3 implementation for cell boundary computation, multipolygon dissolve, and bbox culling; and `public/science/geo/h3` (h3o compiled to wasm32-unknown-unknown, driven through wazero) as the Go-side H3 for cell computation off the render path.
 
 Overlay model: all overlays are register-drain nodes — `mapMarker`, `mapPolyline`, `h3CellsColored` (bulk choropleth), `h3Region` (dissolved-outline ROI). A `walkersMap` opcode rendered later in the frame drains all pending overlays into its `OverlayPlugin` and paints them under the plugin's clip rect.
 
@@ -90,7 +90,7 @@ Tile servers are Go-configurable at the call site via fluid methods (`.TileUrl`,
 - **H3 cell IDs flow through the entire stack unchanged.** Go computes a cell set, ships it as `[]u64`, Rust dissolves it for rendering, Rust fetches viewport bbox back, Go recomputes cells for the new viewport. One data type, one meaning, no lossy conversions.
 - **Uniform heatmap workload works end-to-end.** The challenger app that shaped the design (per-frame viewport → polygonToCells → per-cell value → colormap → render) is implemented in the demo with a `viewHash`-gated cache that keeps still cameras at zero CPU.
 - **Tile servers are Go-driven.** Users pass any XYZ URL template at the call site; the Rust side swaps `HttpTiles` in place without losing pan/zoom state. No recompile for new tile providers.
-- **No CGO, no backend switch.** The whole binding drops into the existing build with `walkers`, `h3o`, `lyon_tessellation` (currently not used but planned), and `boxer/public/science/geo/h3` (already a dep via go.mod). Binary grows by ~5 MB.
+- **No CGO, no backend switch.** The whole binding drops into the existing build with `walkers`, `h3o`, `lyon_tessellation` (currently not used but planned), and `public/science/geo/h3` (already a dep via go.mod). Binary grows by ~5 MB.
 - **Forward path preserved.** Future work (Mapbox vector tiles, additional tile sources, editable ROI drawing, antimeridian handling, Lyon tessellation) lands additively on the existing IDL surface; no wire-format break anticipated.
 
 ### Negative
@@ -112,7 +112,7 @@ Tile servers are Go-configurable at the call site via fluid methods (`.TileUrl`,
 ### Derived practices
 
 - **New overlay types follow the same shape.** Register-drain node → pending Vec on `ImZeroFffi` → cleared in `prepare_next_frame` → drained by `render_walkers_map` → pre-projected into a renderable form → fed to `OverlayPlugin`. Any new overlay (e.g. heatmap grid lines, animated markers) adds one struct, one pending Vec, one prerender function, and a branch in the plugin's `run()`.
-- **H3 on the data side routes through `boxer/public/science/geo/h3`.** Direct `//go:build cgo` dependencies on `uber/h3-go/v4` are out of scope for a downstream consumer's Go code. If a data pipeline needs H3 operations not yet exposed by the boxer wrapper, extend the wrapper rather than bypassing it.
+- **H3 on the data side routes through `public/science/geo/h3`.** Direct `//go:build cgo` dependencies on `uber/h3-go/v4` are out of scope for a downstream consumer's Go code. If a data pipeline needs H3 operations not yet exposed by the boxer wrapper, extend the wrapper rather than bypassing it.
 - **Tile server presets live in call sites, not in the binding.** `walkers::sources::Mapbox` / `Geoportal` / `OpenFreeMap` exist on the Rust side but aren't wired in; users pass `{z}/{x}/{y}` templates via `.TileUrl(...)`. A named-preset enum is scope creep with no payoff given the custom URL path.
 - **The uniform heatmap demo is the reference implementation.** Future work adjusting the viewport→cells→colormap pipeline should modify that demo first and then generalise to library code if patterns stabilise.
 
@@ -129,7 +129,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 - [`public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) — walkers IDL definitions (walkersMap, mapMarker, mapPolyline, h3CellsColored, h3Region, fetchR15WalkersCamera).
 - [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs) — `WalkersState`, `CustomTileSource`, `OverlayPlugin`, `render_walkers_map`, `aggregate_h3_region`, `bbox_of_rings`.
 - [`public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_walkers_demo.go) — reference demo including the uniform-heatmap challenger.
-- [`boxer/public/science/geo/h3/`](https://github.com/stergiotis/boxer/tree/main/public/science/geo/h3) — h3o compiled to wasm + wazero runtime (Go-side H3 without CGO).
+- [`public/science/geo/h3/`](https://github.com/stergiotis/boxer/tree/main/public/science/geo/h3) — h3o compiled to wasm + wazero runtime (Go-side H3 without CGO).
 - [`walkers = "0.53"`](https://crates.io/crates/walkers) — slippy map widget for egui.
 - [`h3o = "0.9"`](https://crates.io/crates/h3o) — pure-Rust H3 implementation (native + wasm).
 - ADR-0052's SKILLS.md reference block for §11 block-skipping / culling remains load-bearing for the overlay drain semantics here.

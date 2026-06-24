@@ -536,7 +536,7 @@ Pattern for the remaining broker DTOs (TaskCreated/Done/Error/Cancel
 reuse `MembTaskId`; GrantRequest/Reply, wireRequest/Reply,
 PersistReply follow the same flattening; `map[string]string` settings
 via sorted co-arrays backed by
-`boxer/public/containers.BinarySearchGrowingKV` when iteration
+`public/containers.BinarySearchGrowingKV` when iteration
 determinism matters). Each migration is an isolated commit using the
 canary's vocabulary + DTO + test triple. Once all migrate, the
 fxamacker-cbor default in buscodec is dead weight.

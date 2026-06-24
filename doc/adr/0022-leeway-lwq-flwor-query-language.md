@@ -12,7 +12,7 @@ date: 2026-05-08
 
 ## Context
 
-A downstream consumer (not in this repo) uses ClickHouse + Leeway for semi-structured data (per ADR-0018 and the Leeway protocol at `boxer/public/semistructured/leeway/`). Leeway decomposes documents into typed canonical-type sections with multi-membership tagging, parameterised paths, semantic aspects, and co-section overlays. The structural advantages and capability comparison against Snowflake VARIANT and ClickHouse JSON v2 are documented in [`doc/skills/leeway-advanced/references/leeway-vs-snowflake.md`](../skills/leeway-advanced/references/leeway-vs-snowflake.md).
+A downstream consumer (not in this repo) uses ClickHouse + Leeway for semi-structured data (per ADR-0018 and the Leeway protocol at `public/semistructured/leeway/`). Leeway decomposes documents into typed canonical-type sections with multi-membership tagging, parameterised paths, semantic aspects, and co-section overlays. The structural advantages and capability comparison against Snowflake VARIANT and ClickHouse JSON v2 are documented in [`doc/skills/leeway-advanced/references/leeway-vs-snowflake.md`](../skills/leeway-advanced/references/leeway-vs-snowflake.md).
 
 The query-time consequence of Leeway's storage decision is that idiomatic queries against Leeway data require:
 
@@ -72,7 +72,7 @@ Three observations are decisive:
 
 ## Decision
 
-We will build **`lwq`** (Leeway-Wide Query), a FLWOR-style query language for Leeway-stored data, compiled to ClickHouse SQL via the existing boxer CH DSL infrastructure. The package will live at `boxer/public/db/leeway/lwq/` as a peer of `boxer/public/db/clickhouse/dsl/`.
+We will build **`lwq`** (Leeway-Wide Query), a FLWOR-style query language for Leeway-stored data, compiled to ClickHouse SQL via the existing boxer CH DSL infrastructure. The package will live at `public/db/leeway/lwq/` as a peer of `public/db/clickhouse/dsl/`.
 
 The path-lowering nanopass (O2) is preserved as a v0 deliverable embedded within `lwq`'s lowering pipeline — `lvar_path` / `lvar_flatten` pseudo-functions remain valid and useful for SQL-shaped consumers, while `lwq`'s grammar sits above them as the FLWOR-shaped front end.
 
@@ -94,7 +94,7 @@ lwq source
   → ANTLR4 parser            → lwq AST
   → resolver (Leeway env)    → annotated lwq AST
   → scope analyser           → annotated lwq AST + scope tree
-  → lowerer                  → CH SQL AST (existing boxer/public/db/clickhouse/dsl/ast)
+  → lowerer                  → CH SQL AST (existing public/db/clickhouse/dsl/ast)
   → construction emitter     → relation | JSON | CBOR shape
   → existing CH ToSQL        → CH SQL text
 ```
@@ -111,7 +111,7 @@ Beyond the syntactic ergonomics gap, `lwq` is justified by the set of Leeway cap
 - *Filtering by cardinality* — `where membership_card($v) >= 2` selects values playing multiple roles regardless of which. Compiles to a predicate on the section's `mvhp_card` column (or the equivalent under whichever MembershipSpec is in play).
 - *Reading the role-set* — `$v.roles` returns the membership array as a sequence; usable in `return` constructors (`return { roles: $v.roles }`) and in further predicates.
 
-The membership-role classifier from boxer ADR-0007 splits memberships into **primary** (defining the attribute) and **secondary** (annotating it). `lwq` honours this distinction: `with primary roles [...]` filters only on primary memberships, `with secondary roles [...]` only on secondary, and the unqualified `with roles [...]` operates on the union. Section uniformity hints (`AspectSectionMembershipsAllPrimary` and the `Secondary` peer) drive short-circuit dispatch in the lowerer so uniform-role sections skip the per-membership classifier call.
+The membership-role classifier from ADR-0007 splits memberships into **primary** (defining the attribute) and **secondary** (annotating it). `lwq` honours this distinction: `with primary roles [...]` filters only on primary memberships, `with secondary roles [...]` only on secondary, and the unqualified `with roles [...]` operates on the union. Section uniformity hints (`AspectSectionMembershipsAllPrimary` and the `Secondary` peer) drive short-circuit dispatch in the lowerer so uniform-role sections skip the per-membership classifier call.
 
 **Co-value.** Sections that share a parameter scope are co — their attributes belong together at the corresponding scope grain. `lwq` exposes co-value semantics in two complementary forms:
 
@@ -164,7 +164,7 @@ The point of enumerating these is to record what specifically would be lost unde
 
 ### Neutral
 
-- The package boundary places `lwq` in boxer, not in a downstream consumer. That consumer will be the first consumer but will not own the implementation — the same boxer-owns / consumer-consumes split as the membership-role classifier (boxer ADR-0007).
+- The package boundary places `lwq` in boxer, not in a downstream consumer. That consumer will be the first consumer but will not own the implementation — the same boxer-owns / consumer-consumes split as the membership-role classifier (ADR-0007).
 - The decision to start with CH as the only backend (Arrow and DuckDB deferred to v3) commits the lowerer to CH semantics. Generalising later requires lifting the lowerer to a target-agnostic IR — a reasonable but non-trivial refactor that should be planned before v2 if multi-backend looks likely.
 - The `lvar_*` pseudo-function family remains valid post-`lwq` v0; users who prefer SQL-embedded form continue with them, while users who prefer FLWOR-shape adopt `lwq`. Maintaining both is a small additional surface but a meaningful ergonomic choice.
 

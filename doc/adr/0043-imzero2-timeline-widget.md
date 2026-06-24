@@ -17,7 +17,7 @@ A literature survey at the start of the work confirmed the canonical academic re
 Forces shaping the decision:
 
 - **No upstream renderer fits.** `egui_plot` is wired into the Rust side but isn't exported to Go bindings, and its series/transform model doesn't represent laned interval bars cleanly. `walkers` is the only crate that handles pan/zoom natively, and it does so entirely Rust-side via its own gesture stack. The wgpu escape hatch is explicitly out of scope per the Grafana-replacement memory.
-- **Existing primitives exist for ~80% of what we need.** `boxer/public/math/numerical/timeticks` already produces the calendar-aware tick ladder. `widgets/timerangepicker` already exposes Grafana-style range presets on the same `(FromEpochMS, ToEpochMS, TzID)` wire shape. `PaintCanvas` already supports `paintRectFilled` / `paintLine` / `paintText` / `paintSenseRegion` + a whole-canvas `Sense(click, drag, hover)`. The Crameri batlow palette + sequential lookup is wired via `styletokens.Sequential`.
+- **Existing primitives exist for ~80% of what we need.** `public/math/numerical/timeticks` already produces the calendar-aware tick ladder. `widgets/timerangepicker` already exposes Grafana-style range presets on the same `(FromEpochMS, ToEpochMS, TzID)` wire shape. `PaintCanvas` already supports `paintRectFilled` / `paintLine` / `paintText` / `paintSenseRegion` + a whole-canvas `Sense(click, drag, hover)`. The Crameri batlow palette + sequential lookup is wired via `styletokens.Sequential`.
 - **`StateManager.GetCanvasPointer` existed, but the rest of the input layer didn't.** Pan and zoom need scroll delta, modifier keys, and (for auto-fit) `ui.available_size`; none were surfaced to Go. The decision needs to either work around the gap or extend FFFI2.
 - **Composite widgets are not ADR-0013 primitives.** The existing [[ADR-0013]] *Stateful widget contract* governs FFFI2 atomic primitives (Checkbox, Slider, …) — apply blocks routed through `applyCodeWidgetRustOnEvent`, `SendRespVal(*T)` databindings. Composite widgets (`treemap`, anything assembled from primitives + PaintCanvas) sit outside that contract; `treemap` already established the pattern of receiver-owned state + `c.IdScope(scopeKey)`. The timeline widget should *not* invent a third pattern.
 
@@ -58,7 +58,7 @@ Constraints inherited from the rest of the stack:
 
 We build a custom composite widget at `public/thestack/imzero2/egui2/widgets/timeline/`, layered as:
 
-- **SD0 — Pure-Go layout package** (`widgets/timeline/layout/`). Wire types `PointEvent{TMS int64, KindID int32, Intensity float32}` and `IntervalEvent{FromMS, ToMS int64, KindID int32, Intensity float32, LaneHint string}`; algorithms `PackLanes` (greedy left-to-right), `LODIndex` (multi-resolution sparse bins), `TickMap` (wraps `boxer/public/math/numerical/timeticks` + maps to screen-x). 41 unit tests, `-race -count=2` clean. No UI dependency, fully testable from `go test`.
+- **SD0 — Pure-Go layout package** (`widgets/timeline/layout/`). Wire types `PointEvent{TMS int64, KindID int32, Intensity float32}` and `IntervalEvent{FromMS, ToMS int64, KindID int32, Intensity float32, LaneHint string}`; algorithms `PackLanes` (greedy left-to-right), `LODIndex` (multi-resolution sparse bins), `TickMap` (wraps `public/math/numerical/timeticks` + maps to screen-x). 41 unit tests, `-race -count=2` clean. No UI dependency, fully testable from `go test`.
 
 - **SD1 — Composite widget shell mirroring treemap.** `Timeline.New(ids, scopeKey, intervals, opts...)` returns a `*Timeline` whose caller holds the pointer across frames. `Render()` wraps the body in `c.IdScope(ids.PrepareStr(scopeKey))`. All state lives on the receiver; the widget does NOT use [[ADR-0013]]'s `SendRespVal` databinding contract because that contract applies only to FFFI2 atomic primitives defined in `egui2_definition_d_widgets.go`, not to composites. This invariant is captured in [[feedback_composite_widget_state]].
 
@@ -355,7 +355,7 @@ Drag, double-click, right-click, and keyboard activation remain unbuilt. Drag is
 - [ADR-0032 — Design system spacing/density/motion](./0032-imzero2-design-system-spacing-density-motion.md) — motion ladder we would tap into if SD11 reverses.
 - [ADR-0035 — Keelson namespace](./0035-keelson-namespace-introduction.md) — explains why `styletokens` is imported from `keelson/designsystem/` rather than the local widget tree.
 - `public/thestack/imzero2/egui2/widgets/timeline/` — implementation.
-- `boxer/public/math/numerical/timeticks` — calendar-aware tick generator (uPlot-derived ladder).
+- `public/math/numerical/timeticks` — calendar-aware tick generator (uPlot-derived ladder).
 - Plaisant, Milash, Rose, Widoff, Shneiderman, *LifeLines: Visualizing Personal Histories*, CHI '96 — canonical reference for mixed point + interval timelines.
 - Monroe, Lan, Lee, Plaisant, Shneiderman, *Temporal Event Sequence Simplification*, IEEE InfoVis 2013 — EventFlow successor; aggregation patterns.
 - Aigner, Miksch, Schumann, Tominski, *Visualization of Time-Oriented Data* (2nd ed. 2023), mirrored at <https://timeviz.net>.

@@ -39,7 +39,7 @@ Constraints:
 - **Lexical only.** No access to CH system catalogs at categorization
   time. The categorizer sees SQL text, nothing else.
 - **Bounded nanopass complexity.** The pipeline runs on
-  [`boxer/public/db/clickhouse/dsl/nanopass`][boxer-nanopass] —
+  [`public/db/clickhouse/dsl/nanopass`][boxer-nanopass] —
   CST-level, ANTLR4-parsed, pass-composed. Adding passes is cheap;
   adding *rules per pass* is the complexity we cap.
 - **Auditable.** Every category decision must cite the published rule
@@ -504,7 +504,7 @@ facts_id_traced(AST) = true iff
 ```
 
 This predicate is purely syntactic (scope resolution from
-[`boxer/public/db/clickhouse/dsl/nanopass/nanopass_scope.go`][boxer-nanopass];
+[`public/db/clickhouse/dsl/nanopass/nanopass_scope.go`][boxer-nanopass];
 no catalog). Aliases, CTE references, and subquery-derived tables
 are resolved through the scope tree.
 
@@ -602,7 +602,7 @@ Notes:
 
 ### Algorithm (nanopass pipeline)
 
-Passes compose at the `boxer/public/db/clickhouse/dsl/nanopass` layer.
+Passes compose at the `public/db/clickhouse/dsl/nanopass` layer.
 All passes are CST-level (ANTLR4); they return valid SQL or a terminal
 report.
 
@@ -895,7 +895,7 @@ in training material for reviewers:
   entry, and a hash-mismatch case that exercises the drift
   diagnostic.
 
-### Interaction with `boxer/public/db/clickhouse/dsl/nanopass`
+### Interaction with `public/db/clickhouse/dsl/nanopass`
 
 The nanopass framework treats every pass as SQL → SQL. Our passes
 #4 (`check_whitelist`), #5 (`classify_filter_only_ctes`),
@@ -1030,7 +1030,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 ### Framework
 
 - <a id="boxer-nanopass"></a>**[boxer-nanopass]**
-  `../boxer/public/db/clickhouse/dsl/nanopass/README.md` — the
+  `public/db/clickhouse/dsl/nanopass/README.md` — the
   CST-based pass framework this ADR's passes plug into. Passes
   receive and return valid SQL; scope resolution is provided by
   `BuildScopes`.

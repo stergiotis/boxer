@@ -224,7 +224,7 @@ egress.
 ### Neutral
 
 - **Boxer dependency.** This ADR ships alongside a public addition to
-  `boxer/public/observability/eh` (`Stream`, `Fact`, `WalkStreams`).
+  `public/observability/eh` (`Stream`, `Fact`, `WalkStreams`).
   A downstream consumer bumps the boxer pin once the upstream PR lands; until
   then the change is consumed via the workspace go.work pin.
 - **PC-prefix dedup behavior.** `isSubStack` is strict-prefix-only
