@@ -112,6 +112,34 @@ else
     step_end fail
 fi
 
+step_begin "designlint"
+# IDS Tier 1 mechanical rules (ADR-0029 §SD8), driven via `go vet -vettool=`
+# over a tempfile-built multichecker binary — the tag-aware analyzer path
+# (multichecker.Main's own -tags flag is a deprecated no-op). Warn-only while
+# per-app backfill completes (SD14 / M5); rules graduate warn->error per app
+# via the `// designlint:strict` annotation. Scoped to the egui2 UI tree and
+# keelson runtime, where IDS tokens apply; generated files are filtered out.
+# A failed build (not a finding) is the only thing that fails the step.
+dl_bin=$(mktemp -t designlint.XXXXXX)
+if go build -tags "$tags" -o "$dl_bin" ./public/keelson/designsystem/lint/cmd/designlint 2>/dev/null; then
+    dl_out=$(go vet -vettool="$dl_bin" -tags "$tags" \
+        ./public/thestack/imzero2/... ./public/keelson/runtime/... 2>&1 \
+        | grep -v '\.out\.go:' | grep -v '\.gen\.go:' || true)
+    rm -f "$dl_bin"
+    if [ -n "$dl_out" ]; then
+        printf '%s\n' "$dl_out"
+        step_end warn
+    else
+        echo "passed"
+        step_end pass
+    fi
+else
+    rm -f "$dl_bin"
+    echo "designlint vettool failed to build"
+    rc=1
+    step_end fail
+fi
+
 step_begin "entry-points"
 # Enforces CODINGSTANDARDS.md "Entry Points": every `package main`
 # discovered under ./... must import github.com/urfave/cli/v2 and
