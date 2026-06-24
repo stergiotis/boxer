@@ -227,6 +227,20 @@ else
     step_end fail
 fi
 
+step_begin "fetcher discipline"
+# Enforces the imzero2 "fetchers only run in StateManager.Sync" rule
+# (doc/skills/imzero2-fetchers/SKILLS.md). An inline Fetcher.Fetch* call
+# in a render body deadlocks the loop the moment that body is wrapped in
+# a deferred-block capture (dock.Tab, etable row, …), so this is a hard
+# gate: a violation is a deadlock waiting to happen. The script prints
+# its own findings and exits non-zero on any.
+if "$here/fetcher-discipline.sh"; then
+    step_end pass
+else
+    rc=1
+    step_end fail
+fi
+
 # === summary trailer ===
 overall_dur=$(awk -v s="$overall_t0" -v e="$EPOCHREALTIME" 'BEGIN{printf "%.2f", e-s}')
 
