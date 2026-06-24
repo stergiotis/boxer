@@ -4,7 +4,7 @@ audience: IDS palette reviewers checking ADR-0029 §SD12 / ADR-0033 §SD7 bounda
 status: draft
 ---
 
-> **Status: draft — pre-human-review.** Generated artefact. Re-emit via `go run ./cmd/designsystem colors gen`.
+> **Status: draft — pre-human-review.** Generated artefact. Re-emit via `boxer.sh designsystem colors gen`.
 
 # IDS palette IP-boundary check (generated)
 

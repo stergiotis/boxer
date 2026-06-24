@@ -4,7 +4,7 @@ audience: IDS app authors and contributors checking palette tokens
 status: draft
 ---
 
-> **Status: draft — pre-human-review.** Generated artefact. Source: `src/rust/assets/colors/palette.toml`. Re-emit via `go run ./cmd/designsystem colors gen`.
+> **Status: draft — pre-human-review.** Generated artefact. Source: `rust/imzero2/assets/colors/palette.toml`. Re-emit via `boxer.sh designsystem colors gen`.
 
 # IDS color tokens (generated)
 
