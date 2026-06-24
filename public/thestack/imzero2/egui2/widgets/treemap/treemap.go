@@ -44,7 +44,6 @@ package treemap
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -177,25 +176,6 @@ func WithLeafClickSensing(enabled bool) Option {
 // are laid out but rendered hatched/inert.
 func WithFilterSiblings(enabled bool) Option {
 	return func(t *Treemap) { t.filterSiblings = enabled }
-}
-
-// WithVerticalChromeBudget sets the number of logical pixels to subtract
-// from the container height in containerRect(), accounting for chrome
-// rendered above the treemap area (breadcrumb bar, legend labels, detail
-// panels, spacing). This prevents the treemap Frame content from overflowing
-// the available window space and triggering egui's auto-resize loop.
-// Default 0 (no subtraction).
-func WithVerticalChromeBudget(budget float32) Option {
-	return func(t *Treemap) { t.verticalChromeBudget = budget }
-}
-
-// WithHorizontalChromeBudget sets the number of logical pixels to subtract
-// from the container width in containerRect(), accounting for chrome rendered
-// on the sides (e.g., gutter labels, sidebar panels, scrollbars). This prevents
-// the treemap Frame content from overflowing horizontally and triggering egui's
-// auto-resize loop on the width axis. Default 0 (no subtraction).
-func WithHorizontalChromeBudget(budget float32) Option {
-	return func(t *Treemap) { t.horizontalChromeBudget = budget }
 }
 
 // CellStateE is a bitfield of orthogonal per-cell state flags. Multiple flags
@@ -429,20 +409,6 @@ type Treemap struct {
 	// result is accessible via ClickedLeaf(). Default: false.
 	leafClickSensing bool
 
-	// verticalChromeBudget is the number of logical pixels to subtract
-	// from the container height in containerRect(), accounting for chrome
-	// rendered above the treemap area (breadcrumb bar, legend labels,
-	// detail panels, spacing). Prevents the treemap Frame from overflowing
-	// the available window space and triggering egui's auto-resize loop.
-	// Default 0 (no subtraction); set via WithVerticalChromeBudget.
-	verticalChromeBudget float32
-
-	// horizontalChromeBudget is the number of logical pixels to subtract
-	// from the container width in containerRect(), accounting for chrome
-	// rendered on the sides (e.g., gutter labels, sidebar panels).
-	// Default 0 (no subtraction); set via WithHorizontalChromeBudget.
-	horizontalChromeBudget float32
-
 	// Retained chrome colors (breadcrumb / container / leaf-view backgrounds)
 	colorBreadcrumbBg  color.Color
 	colorFrameStroke   color.Color
@@ -603,49 +569,20 @@ func (t *Treemap) resolveColors(colors CellColors, visuals CellVisuals, state Ce
 	return
 }
 
+// containerRect returns the treemap canvas rect at its configured size.
+// The size is fixed — set once via WithContainerSize or per-frame via
+// SetContainerSize — and is deliberately NOT derived from ui.available_size
+// here. Consumers that want the treemap to track their pane (sccmap,
+// imztop) measure available_size themselves, apply their own grow-guard
+// and chrome budget, and push the result in through SetContainerSize each
+// frame. Capturing/reading available_size internally as well would (a)
+// double-write the process-global capture register those consumers depend
+// on, and (b) inside an auto-sizing host — e.g. the demo gallery's
+// ScrollArea — ratchet the host's height upward every frame, since the
+// Frame would request the full available height while the breadcrumb bar
+// and status label still need room above and below it.
 func (t *Treemap) containerRect() layout.Rect {
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	effW, effH := t.effectiveContainerWH(avail)
-	// Subtract vertical chrome budget (breadcrumb bar, legend, spacing,
-	// detail panels rendered above the treemap area). This prevents the
-	// treemap Frame from overflowing the available space and triggering
-	// egui's auto-resize loop — mirrors sccmap's treemapChromeH approach.
-	if t.verticalChromeBudget > 0 && effH > t.verticalChromeBudget {
-		effH -= t.verticalChromeBudget
-	}
-	// Subtract horizontal chrome budget (gutter labels, sidebar panels).
-	if t.horizontalChromeBudget > 0 && effW > t.horizontalChromeBudget {
-		effW -= t.horizontalChromeBudget
-	}
-	return layout.Rect{W: float64(effW), H: float64(effH)}
-}
-
-// SetHorizontalChromeBudget sets the number of logical pixels to subtract
-// from the container width dynamically.
-func (t *Treemap) SetHorizontalChromeBudget(budget float32) {
-	t.horizontalChromeBudget = budget
-}
-
-// SetVerticalChromeBudget sets the number of logical pixels to subtract
-// from the container height dynamically.
-func (t *Treemap) SetVerticalChromeBudget(budget float32) {
-	t.verticalChromeBudget = budget
-}
-
-// effectiveContainerWH returns the widget's effective container dimensions.
-// It reads the previous frame's captured ui.available_size from
-// StateManager; when both W and H are NaN or non-positive it falls back
-// to the fixed containerW/containerH set via WithContainerSize. This
-// gives a one-frame lag on resize that is imperceptible to users.
-func (t *Treemap) effectiveContainerWH(avail c.AvailableSizeValue) (w, h float32) {
-	w, h = t.containerW, t.containerH
-	if !math.IsNaN(float64(avail.W)) && avail.W > 0 {
-		w = avail.W
-	}
-	if !math.IsNaN(float64(avail.H)) && avail.H > 0 {
-		h = avail.H
-	}
-	return
+	return layout.Rect{W: float64(t.containerW), H: float64(t.containerH)}
 }
 
 // innerRect computes the interior rect of a cell for recursive rendering.
@@ -820,7 +757,6 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 	// node.Children so the squarified algorithm only sees the active child
 	// and fills the entire available space.
 	children := node.Children
-	parentBounds := bounds
 	var lay *layout.Layout
 	if t.filterSiblings && activeChild != nil {
 		// Temporarily swap node.Children so ComputeLayoutAt lays out
@@ -828,7 +764,6 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 		origChildren := node.Children
 		node.Children = []*layout.Node{activeChild}
 		children = node.Children
-		bounds = parentBounds
 		lay = layout.ComputeLayoutAt(node, bounds)
 		node.Children = origChildren
 	} else {
@@ -933,13 +868,17 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 		}
 
 		if isActive && len(child.Children) > 0 {
-			// When filterSiblings is active, pass parentBounds (the full
-			// available space) to the recursive call so the child fills
-			// the entire canvas instead of being constrained by its
-			// original sibling-weighted rect.
-			recBounds := innerRect(parentBounds)
-			if recBounds.W > 8 && recBounds.H > 8 {
-				t.renderZoom(child, recBounds, depth+1, bcLevel+1, cellSeq)
+			// Recurse into the active child's OWN rect r. With filterSiblings
+			// off, r is its sibling-weighted cell, so the active subtree
+			// nests inside it and the off-path siblings keep their own space.
+			// With filterSiblings on, the active child was laid out alone and
+			// already fills bounds (r ≈ bounds), so the subtree still fills
+			// the canvas. Recursing into the parent's full bounds instead
+			// would spill the active subtree across — and behind — the
+			// off-path sibling cells painted later in this loop.
+			inner := innerRect(r)
+			if inner.W > 8 && inner.H > 8 {
+				t.renderZoom(child, inner, depth+1, bcLevel+1, cellSeq)
 			}
 		} else if atFrontier && len(child.Children) > 0 {
 			inner := innerRect(r)
@@ -1056,10 +995,6 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 // Wraps its body in c.IdScope(scopeKey) so multiple instances sharing the
 // same WidgetIdStack don't collide.
 func (t *Treemap) Render() {
-	// Capture available size before entering the IdScope so we read the
-	// full window ui.available_size instead of the scoped container rect.
-	c.CaptureAvailableSize()
-
 	for range c.IdScope(t.ids.PrepareStr(t.scopeKey)) {
 		t.renderBody()
 	}
@@ -1071,11 +1006,6 @@ func (t *Treemap) renderBody() {
 	// Keep the measured label gates current across Sync's databind reset;
 	// the real row heights land one frame after the first call (metrics.go).
 	t.metrics.renewBindings()
-	// Capture available size for adaptive container sizing. The captured
-	// value lands in the next frame's StateManager, so the first frame
-	// falls back to the fixed containerW/containerH; subsequent frames
-	// use the captured ui.available_size when valid (NaN on first frame).
-	c.CaptureAvailableSize()
 
 	// --- Breadcrumb bar ---
 	// Per-segment pills: ancestors are framed buttons; the tail is a
