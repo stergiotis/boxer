@@ -1,3 +1,8 @@
+---
+name: nanopass-marshalling
+description: "Use when converting Go values to or from ClickHouse SQL literal text — the marshalling package TypedLiteral (scalars, SoA arrays, tuples) with canonical cast types for lossless round-trips."
+---
+
 # SKILL: ClickHouse SQL Literal Marshalling
 
 ## Overview

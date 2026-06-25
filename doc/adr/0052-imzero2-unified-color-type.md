@@ -26,7 +26,7 @@ An audit across [`public/thestack/imzero2/egui2/definition/egui2_definition_d_*.
 Forces at play that the decision must respect:
 
 - **FFFI2 rules.** Generated files under `components/*.out.go` and `rust/imzero2/src/imzero2/enums_out.rs` are off-limits; all changes must land in the hand-written definition files and the generator under [`public/thestack/fffi2/`](../../public/thestack/fffi2). FFFI2 reserves argument names matching `[a-zA-Z][0-9]*` ([`fffi2/ir/idl/fffi2_ir_idl_arguments.go:23`](../../public/thestack/fffi2/ir/idl/fffi2_ir_idl_arguments.go)).
-- **ImZero2 execution model.** The runtime is not a linear opcode stream: deferred blocks record opcodes on the Go side and splice them in at a different position later; the Rust side can cull whole blocks without executing their opcodes (documented in [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) §11). Any stateful encoding scheme that assumes ordered execution breaks under this model.
+- **ImZero2 execution model.** The runtime is not a linear opcode stream: deferred blocks record opcodes on the Go side and splice them in at a different position later; the Rust side can cull whole blocks without executing their opcodes (documented in [`doc/skills/imzero2/SKILL.md`](../skills/imzero2/SKILL.md) §11). Any stateful encoding scheme that assumes ordered execution breaks under this model.
 - **Performance sensitivity.** Painter/plot call sites run in tight per-frame loops (treemap with thousands of rectangles, graphs with hundreds of edges). Per-call overhead of a few bytes is tolerable; per-call atomic operations or allocations are not.
 - **Screenshot-based testing.** Parts of the test infrastructure rely on bit-identical pixel output. Changes that alter the pixels produced at the final `egui::Color32` value would require regenerating baselines across many tests.
 
@@ -127,7 +127,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 - [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) — Diátaxis + ADR conventions this document follows.
 - [`0050-clickhouse-observability-pipeline.md`](0050-clickhouse-observability-pipeline.md) — prior ADR in this repository.
 - [`0051-query-categorization-provenance.md`](0051-query-categorization-provenance.md) — prior ADR; template shape followed here.
-- [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) — ImZero2 runtime conventions, including block skipping / culling (§11) and reserved name rules.
+- [`doc/skills/imzero2/SKILL.md`](../skills/imzero2/SKILL.md) — ImZero2 runtime conventions, including block skipping / culling (§11) and reserved name rules.
 - [`public/thestack/imzero2/egui2/definition/`](../../public/thestack/imzero2/egui2/definition) — hand-written IDL definition files targeted by the refactor.
 - [`public/thestack/fffi2/ir/idl/fffi2_ir_idl_arguments.go`](../../public/thestack/fffi2/ir/idl/fffi2_ir_idl_arguments.go) — IDL primitive declarations (`PlainArg`, `EvaluatedArg`).
 - [`public/thestack/fffi2/compiletime/goserver/fffi2_compiletime_go_server.go`](../../public/thestack/fffi2/compiletime/goserver/fffi2_compiletime_go_server.go) — Go emitter.

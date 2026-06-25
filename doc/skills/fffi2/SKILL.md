@@ -1,4 +1,6 @@
 ---
+name: fffi2
+description: "Use when defining or consuming a Go↔native (Rust/C++) FFI boundary with FFFI2 (frame-oriented foreign function interface) — writing the IDL, generating stubs, or using the runtime API."
 type: reference
 audience: agent reading this skill
 status: draft

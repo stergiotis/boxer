@@ -342,7 +342,7 @@ Other proposed paths (`rust/imzero2/imzero2_egui/src/style/tokens/`, `public/gov
 - [ADR-0020 — ImZero2 imztop resource monitor](./0020-imzero2-imztop-resource-monitor.md) — data-density showcase; SD9 V5 calibration target.
 - [ADR-0021 — ImZero2 snarl node editor binding](./0021-imzero2-snarl-node-editor-binding.md) — existing case that lives near the SD1 no-widgets boundary; precedent for Tier 3 escalation shape.
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — the app catalog this design system stylises.
-- `doc/skills/imzero2/SKILLS.md` — culling, registers, block skipping; existing platform constraints absorbed by the policy catalog.
+- `doc/skills/imzero2/SKILL.md` — culling, registers, block skipping; existing platform constraints absorbed by the policy catalog.
 - [`spectrum.adobe.com`](https://spectrum.adobe.com/) — inspiration only; foundations-vs-patterns structural vocabulary consulted, no content lifted.
 - [`carbondesignsystem.com`](https://carbondesignsystem.com/) — inspiration; data-density heritage.
 - [`m3.material.io`](https://m3.material.io/) — inspiration; token-system structure.

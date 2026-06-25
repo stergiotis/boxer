@@ -1,4 +1,6 @@
 ---
+name: leeway-streamreadaccess
+description: "Use when reading Leeway-encoded data via the stream read-access protocol — the sink-side read path and membership-role classification."
 type: reference
 audience: agent reading this skill
 status: draft

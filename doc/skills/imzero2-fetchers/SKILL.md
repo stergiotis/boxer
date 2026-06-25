@@ -1,4 +1,6 @@
 ---
+name: imzero2-fetchers
+description: "Use when calling imzero2 Fetcher.Fetch* opcodes — they must run only from StateManager.Sync() at frame end; calling them inline from a widget or deferred-block body deadlocks the render loop."
 type: explanation
 audience: contributor
 status: draft

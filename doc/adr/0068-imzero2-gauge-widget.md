@@ -227,7 +227,7 @@ Built, `go test` / `go vet` green (with new `fit.go` pure-helper tests), and scr
 
 ### 2026-06-11 — readout `MeasureText` reviewed against fetcher discipline: reads only in `Sync`, in bulk
 
-The auto-fit path added 2026-06-09 was reviewed against the imzero2 **fetcher discipline** (`doc/skills/imzero2-fetchers/SKILLS.md`); the finding is recorded here, no code changed. The rule that discipline enforces: every `Fetcher.Fetch*` opcode must originate from `StateManager.Sync()` at frame end. An inline fetch from a widget render body is silent at top scope but **deadlocks** the render loop the moment that body runs inside a deferred-block capture (a `dock.Tab` body, an `etable` row) — the fetch request sits unflushed in the capture buffer while its synchronous response read blocks on an empty pipe.
+The auto-fit path added 2026-06-09 was reviewed against the imzero2 **fetcher discipline** (`doc/skills/imzero2-fetchers/SKILL.md`); the finding is recorded here, no code changed. The rule that discipline enforces: every `Fetcher.Fetch*` opcode must originate from `StateManager.Sync()` at frame end. An inline fetch from a widget render body is silent at top scope but **deadlocks** the render loop the moment that body runs inside a deferred-block capture (a `dock.Tab` body, an `etable` row) — the fetch request sits unflushed in the capture buffer while its synchronous response read blocks on an empty pipe.
 
 The readout fit stays on the right side of that rule: it reads nothing back itself. Per frame `fitReadoutFont` (`fit.go`) does two non-blocking things —
 

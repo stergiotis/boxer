@@ -105,7 +105,7 @@ Stages 5–7 reuse existing boxer infrastructure unchanged. Net-new code is the 
 
 Beyond the syntactic ergonomics gap, `lwq` is justified by the set of Leeway capabilities that have no idiomatic expression in CH SQL — and in several cases no representation at all in alternative storage models (Snowflake VARIANT, CH JSON v2). The language deliberately surfaces these as first-class constructs.
 
-**Multi-membership.** A single value can bear N memberships (the SKILLS.md example: `19.99` simultaneously playing `/price/current`, `/stats/min`, `/promo/flash_sale` with `membership-card: 3`). The language handles this in three orthogonal modes:
+**Multi-membership.** A single value can bear N memberships (the SKILL.md example: `19.99` simultaneously playing `/price/current`, `/stats/min`, `/promo/flash_sale` with `membership-card: 3`). The language handles this in three orthogonal modes:
 
 - *Filtering by role-set* — `for $v with roles ['/price/current', '/stats/min']` selects values playing all listed roles. Compiles to conjunction of `has(low_card_memberships, ...)` predicates.
 - *Filtering by cardinality* — `where membership_card($v) >= 2` selects values playing multiple roles regardless of which. Compiles to a predicate on the section's `mvhp_card` column (or the equivalent under whichever MembershipSpec is in play).
@@ -118,13 +118,13 @@ The membership-role classifier from ADR-0007 splits memberships into **primary**
 - *Implicit* — scope-nested `for` clauses (`for $i in $order/items/_`) automatically join across all sections that contain paths under the extended scope. The lowerer emits `high_card_parameters` equality predicates between sibling sections without the user writing them. This is the dominant idiom and what most users will write.
 - *Explicit* — `join $label in cosection($v, 'string__pii_labels')` joins a primary section with a named co-section, sharing parameter scope and `entity_id`. Used for annotation overlays and multi-representation patterns. The explicit form is required when the co-section name is not prefix-derivable from the primary path.
 
-**Annotation-only co-sections.** Co-sections with memberships but no value columns. The language treats them as value-grain tag overlays: `with secondary roles` over a `cosection` join produces filtering on per-value annotations without touching the primary section's value column. This is the syntactic form of the "secondary co-section for annotation overlays" pattern documented in the [Leeway skill](../skills/leeway-advanced/SKILLS.md).
+**Annotation-only co-sections.** Co-sections with memberships but no value columns. The language treats them as value-grain tag overlays: `with secondary roles` over a `cosection` join produces filtering on per-value annotations without touching the primary section's value column. This is the syntactic form of the "secondary co-section for annotation overlays" pattern documented in the [Leeway skill](../skills/leeway-advanced/SKILL.md).
 
 **Multi-representation co-sections.** A geographic dataset can carry `(latitude, longitude)` in one co-section and an `h3` index in another, sharing memberships. `lwq`'s explicit `cosection(...)` form addresses each by name; aspect-driven selection (`with aspect AspectGeographicH3`) lets queries pick the representation matching the analytical need without hard-coding section names.
 
 **Aliasing in canonical JSON construction.** Per ADR-0007, the canonical JSON layout for Leeway data is attribute-centric: when one value plays multiple primary roles, the JSON output collapses into one attribute object with an `aliases` field rather than emitting the value once per role. The construction emitter respects this — `output canonical-json` produces aliasing-aware output (one object, `aliases` array); `output json` produces straightforward role-keyed output (one entry per role). The choice is per-query.
 
-**Membership type taxonomy.** Sections vary in MembershipSpec (`HighCardRef`, `LowCardVerbatim`, `MixedLowCardVerbatimHighCardParameters`, and the others enumerated in SKILLS.md); the actual columns present in each section depend on the spec. The lowerer dispatches per-spec when generating filter predicates and projections. This is not user-visible — `lwq` queries are spec-agnostic at the source level — but it shapes a meaningful chunk of the lowerer's section-handling code.
+**Membership type taxonomy.** Sections vary in MembershipSpec (`HighCardRef`, `LowCardVerbatim`, `MixedLowCardVerbatimHighCardParameters`, and the others enumerated in SKILL.md); the actual columns present in each section depend on the spec. The lowerer dispatches per-spec when generating filter predicates and projections. This is not user-visible — `lwq` queries are spec-agnostic at the source level — but it shapes a meaningful chunk of the lowerer's section-handling code.
 
 **Aspect-driven section selection.** Value aspects (the ~60 aspects enumerated in the Leeway skill — `AspectMachineLearningEmbedding`, `AspectFeatureScalingMinMax01`, `AspectIdContentAddressableKey`, `AspectAnonymized`, etc.) tag sections with semantic intent. `with aspect ...` filters bindings to sections carrying the aspect, enabling polymorphic dispatch: vector search across all embedding-bearing sections, governance queries across all anonymised-aspect-bearing sections, ML feature selection across all scaling-aspect-bearing sections. This is `lwq`'s mechanism for exposing Leeway's distinctive semantic-aspect surface to query authors without committing them to specific section names.
 
@@ -177,7 +177,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## References
 
-- [Leeway protocol skill](../skills/leeway-advanced/SKILLS.md) — canonical types, sections, memberships, aspects, co-sections.
+- [Leeway protocol skill](../skills/leeway-advanced/SKILL.md) — canonical types, sections, memberships, aspects, co-sections.
 - [Leeway vs Snowflake VARIANT vs CH JSON v2 comparison](../skills/leeway-advanced/references/leeway-vs-snowflake.md) — the syntactic and structural gap this ADR addresses.
 - [ADR-0007](0007-leeway-membership-role-classifier.md) — membership-role classifier; the basis for `with roles` semantics.
 - [ADR-0018](0018-leeway-card-json-canonical-format.md) — card-JSON canonical format; a representative tree-shaped construction target.

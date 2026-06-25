@@ -302,7 +302,7 @@ Wire the classifier's `Secondary` output into a `labels` accumulator on the matc
 
 Test: a fixture with `/price/current` ≡ `/stats/min` ≡ `/promo/flash_sale` produces one attribute object with two-element `aliases`; a `null` section attribute with an `errormsg` secondary co-section emits `labels: [{"name": "errormsg"}]`.
 
-**Done when:** both fixtures round-trip; secondary co-section pattern documented in `doc/skills/leeway-advanced/SKILLS.md` exercises this path.
+**Done when:** both fixtures round-trip; secondary co-section pattern documented in `doc/skills/leeway-advanced/SKILL.md` exercises this path.
 
 ### M6 — Co-grouped attributes, sets, ragged tensors
 
@@ -326,7 +326,7 @@ Landed across boxer commits `f66b86c` (SinkI carries `useaspects.AspectSet` on `
 
 Add `--ndjson` flag that suppresses the outer batch-object wrapper, emits the schema header as line 1, and writes one entity object per subsequent line. Validate against a streaming JSON validator (`gojsonschema`).
 
-Cutover: rename `JsonCardEmitterV2` → `JsonCardEmitter`, retire the old emitter, update all consumers (`cli/lw_cmd_card.go`, `proxy/clickhouse_grafana/transformer/`, `anchor/card_anchor_integration3_test.go`). Update [`../skills/leeway-streamreadaccess/SKILLS.md`](../skills/leeway-streamreadaccess/SKILLS.md) reference table.
+Cutover: rename `JsonCardEmitterV2` → `JsonCardEmitter`, retire the old emitter, update all consumers (`cli/lw_cmd_card.go`, `proxy/clickhouse_grafana/transformer/`, `anchor/card_anchor_integration3_test.go`). Update [`../skills/leeway-streamreadaccess/SKILL.md`](../skills/leeway-streamreadaccess/SKILL.md) reference table.
 
 **Done when:** old emitter removed; NDJSON streaming validates with stock tooling.
 
@@ -520,5 +520,5 @@ ADRs are append-only; supersession is recorded, not deleted.
 - [ADR-0007](0007-leeway-membership-role-classifier.md) — membership-role classifier design.
 - [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go) — current `JsonCardEmitter`; rewrite source.
 - [`../../public/semistructured/leeway/anchor/card_anchor_integration3_test.go`](../../public/semistructured/leeway/anchor/card_anchor_integration3_test.go) — existing fixtures.
-- [`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) §"Membership roles" — primary/secondary semantics.
-- [`../skills/leeway-streamreadaccess/SKILLS.md`](../skills/leeway-streamreadaccess/SKILLS.md) §"Membership Role Classification" — classifier on the sink side.
+- [`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md) §"Membership roles" — primary/secondary semantics.
+- [`../skills/leeway-streamreadaccess/SKILL.md`](../skills/leeway-streamreadaccess/SKILL.md) §"Membership Role Classification" — classifier on the sink side.

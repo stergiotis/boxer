@@ -1,4 +1,6 @@
 ---
+name: imzero2
+description: "Use when writing imzero2 / egui2 GUI code — the FFFI render pipeline, memory management, the deterministic XOR id stack, retained/deferred bodies, and widget contracts."
 type: reference
 audience: contributor
 status: stable
@@ -1188,7 +1190,7 @@ c.MapPolyline(lats, lons).Stroke(color.Hex(0xffffffff), 2).Send()
 c.WalkersMap(ids.PrepareStr("m"), lat, lon, false).Width(w).Height(h).Send()
 ```
 
-If overlays must be computed from the visible viewport (e.g. a viewport-driven heatmap), emit them from the **previous** frame's camera via `StateManager.GetWalkersCamera()` and accept the one-frame lag — imperceptible at interactive cadence. The camera cannot be fetched inline during render; see `doc/skills/imzero2-fetchers/SKILLS.md` for the deadlock rationale and §16.5 below for the multi-map ambiguity.
+If overlays must be computed from the visible viewport (e.g. a viewport-driven heatmap), emit them from the **previous** frame's camera via `StateManager.GetWalkersCamera()` and accept the one-frame lag — imperceptible at interactive cadence. The camera cannot be fetched inline during render; see `doc/skills/imzero2-fetchers/SKILL.md` for the deadlock rationale and §16.5 below for the multi-map ambiguity.
 
 ### 16.3 `SetZoom` and `CenterAt` are sticky for one frame — gate them on an apply-once flag
 

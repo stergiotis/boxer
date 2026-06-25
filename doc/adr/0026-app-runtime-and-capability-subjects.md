@@ -201,7 +201,7 @@ The cap-broker subject handlers (`fs.dialog.*`, `fs.handle.*`, `ch.query.*`, etc
 
 ### SD6 — Leeway-shaped `runtime.facts` table, modelled on `spinnaker.facts`
 
-Runtime state, capability grants, and audit records all live in a single CH+leeway table named `runtime.facts`, modelled on the existing `spinnaker.facts` schema at `public/spinnaker/schema/spinnaker_schema.go` and emitted by `spinnaker_sql_ch.go`. A naive single-`payload`-string column is rejected because it abandons every property the leeway encoding provides — typed columnar query, dictionary compression on low-cardinality values, membership-as-ACL, co-section streaming, subset-projection for hot readers. The vocabulary used here (plain values, tagged value sections, memberships, streaming groups, co-sections) is defined in [`doc/skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md).
+Runtime state, capability grants, and audit records all live in a single CH+leeway table named `runtime.facts`, modelled on the existing `spinnaker.facts` schema at `public/spinnaker/schema/spinnaker_schema.go` and emitted by `spinnaker_sql_ch.go`. A naive single-`payload`-string column is rejected because it abandons every property the leeway encoding provides — typed columnar query, dictionary compression on low-cardinality values, membership-as-ACL, co-section streaming, subset-projection for hot readers. The vocabulary used here (plain values, tagged value sections, memberships, streaming groups, co-sections) is defined in [`doc/skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md).
 
 **Plain values** (one instance per row, identifying the fact; written by the runtime, never by an app):
 
@@ -820,7 +820,7 @@ Runtime-tree path references in this ADR were swept from `public/thestack/runtim
 - [ADR-0005](0005-streaming-persisted-kafka-from-connect.md) — Kafka package whose API the `kafka.*` subject family wraps.
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — imztop's existence as a CLI-launchable graphical app is one of the motivating examples.
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — Remote-access direction that establishes the single-viewport invariant.
-- [`doc/skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) — Authoritative leeway vocabulary (plain values, tagged value sections, memberships, streaming groups, co-sections) used by `SD6`.
+- [`doc/skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md) — Authoritative leeway vocabulary (plain values, tagged value sections, memberships, streaming groups, co-sections) used by `SD6`.
 - `public/spinnaker/schema/spinnaker_schema.go` — `spinnaker.facts` mapping; the structural precedent `runtime.facts` follows.
 - `public/spinnaker/sql/spinnaker_sql_ch.go` — Leeway → ClickHouse DDL emission used by `SD6`.
 - `public/semistructured/leeway/ddl/clickhouse` — Code generator that `LoadRuntimeFactsMapping` reuses.

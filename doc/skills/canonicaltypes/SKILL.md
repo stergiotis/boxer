@@ -1,3 +1,8 @@
+---
+name: canonicaltypes
+description: "Use when generating, parsing, or manipulating Canonical Type Signatures (CT) — the compact string representation of data types (primitives, groups, signatures) for RPC/FFI interface descriptions."
+---
+
 This **SKILL.md** is designed for both human developers and LLM agents to understand, generate, and manipulate **Canonical Type Signatures (CT)**. It incorporates the latest networking extensions and structural fixes.
 
 # SKILL: Canonical Type Signatures (CT)

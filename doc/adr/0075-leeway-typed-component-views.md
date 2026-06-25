@@ -252,6 +252,6 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0074: leeway marshall package layout](0074-leeway-marshall-package-layout.md)
   — where `marshallreflect` and the RA readers live.
 - The generic complement: `leewaywidgets/table2_emitter.go` (`Table2CardEmitter`);
-  the read protocol: `doc/skills/leeway-streamreadaccess/SKILLS.md`.
+  the read protocol: `doc/skills/leeway-streamreadaccess/SKILL.md`.
 - Schema/data home for the seed: `anchor/card_anchor_schema.go`,
   `anchor/card_anchor_data_drone.go`.

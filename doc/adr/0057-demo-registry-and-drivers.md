@@ -14,16 +14,16 @@ The ImZero2 demo app currently renders as 17 top-level `egui::Window`s inside a 
 
 Forces that have accumulated:
 
-- **Interactive UX and deterministic capture want opposite things.** Humans want animations, scroll, persisted window positions, responsive resize. CI wants animations snapped to their target values, fresh egui memory, scripted navigation, pixel-stable PNGs. Reconciling both in one code path has produced a growing tax of per-widget mitigations: `.DefaultOpen(true)` to survive the 4-frame tour (see [`SKILLS.md §12`](../skills/imzero2/SKILLS.md) CollapsingHeader pitfall), `frame < 6` warmup guards, `RequestRepaint` calls wedged into the tour tick to keep the loop hot, `c.SetWindowCollapsed` / `c.MoveWindowToTop` scaffolding to manage inter-window z-order.
+- **Interactive UX and deterministic capture want opposite things.** Humans want animations, scroll, persisted window positions, responsive resize. CI wants animations snapped to their target values, fresh egui memory, scripted navigation, pixel-stable PNGs. Reconciling both in one code path has produced a growing tax of per-widget mitigations: `.DefaultOpen(true)` to survive the 4-frame tour (see [`SKILL.md §12`](../skills/imzero2/SKILL.md) CollapsingHeader pitfall), `frame < 6` warmup guards, `RequestRepaint` calls wedged into the tour tick to keep the loop hot, `c.SetWindowCollapsed` / `c.MoveWindowToTop` scaffolding to manage inter-window z-order.
 - **Jitter is multi-source.** 17 persisted window positions restored from egui memory; neighbouring collapsed title bars still contributing to layout; z-order flicker during `MoveWindowToTop`; full-viewport PNG captures bleeding neighbour chrome into the target's screenshot; font-warmup and text-shaping shifts on first paint. Each is small; together they desynchronise pixel-compare baselines.
-- **The 4-frame budget is a hard ceiling.** CollapsingHeader open animation, force-directed graph settle, walkers tile-load, spring-based layout all exceed it. Already documented in [`SKILLS.md §14.2`](../skills/imzero2/SKILLS.md) and [ADR-0056](0056-walkers-map-h3-binding.md). The walkers demo specifically had to avoid being wrapped in `CollapsingHeader` because of this.
+- **The 4-frame budget is a hard ceiling.** CollapsingHeader open animation, force-directed graph settle, walkers tile-load, spring-based layout all exceed it. Already documented in [`SKILL.md §14.2`](../skills/imzero2/SKILL.md) and [ADR-0056](0056-walkers-map-h3-binding.md). The walkers demo specifically had to avoid being wrapped in `CollapsingHeader` because of this.
 - **Profiler embedding is a first-class use case.** A profiler or debug shell wants to drop a specific demo (e.g. `graphs`, `treemap2`) into its own layout for live inspection. Today a demo *is* a `Window` — it owns its chrome. An embedding host cannot compose it into a `SidePanel` or `Frame` without ripping it out of its window wrapper.
 - **New demos pay a tour tax.** Adding a demo today means editing `demoWindows[]` with a matching id, wiring `SetWindowCollapsed` targets, and auditing any animations for 4-frame-tour hazards. Works, but every new widget increases the probability of a CI regression for an unrelated reason.
 
 Invariants the design must respect:
 
 - **`IMZERO2_SCREENSHOT_DIR` contract.** When set, CI expects one PNG per demo under that directory. Filename-per-demo is the stable external surface.
-- **FFFI2 register-drain and deferred-block semantics** ([`SKILLS.md §11`](../skills/imzero2/SKILLS.md)). Any new opcode must cooperate with frame-level culling and the drain protocol.
+- **FFFI2 register-drain and deferred-block semantics** ([`SKILL.md §11`](../skills/imzero2/SKILL.md)). Any new opcode must cooperate with frame-level culling and the drain protocol.
 - **CGO-free Go build.** Unaffected here — this ADR is entirely within Go and Rust sources we already compile.
 - **Incremental migration.** 17 demos cannot be rewritten atomically. The old and new paths must coexist during the transition.
 
@@ -161,7 +161,7 @@ The registry, the `TestDriver`, and the interactive gallery (which consumes the 
 
 - [`public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_demo.go) — current closure-driven 17-window tour, the source of the problem.
 - [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs) — `handle_screenshot_event` at line 1734; site of the `RequestScreenshotRect` crop logic (SD1) and animation-freeze flag (SD2).
-- [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) §14 (screenshot infrastructure) and §12 (CollapsingHeader 4-frame tour pitfall) — existing documented hazards this ADR supersedes with structural fixes.
+- [`doc/skills/imzero2/SKILL.md`](../skills/imzero2/SKILL.md) §14 (screenshot infrastructure) and §12 (CollapsingHeader 4-frame tour pitfall) — existing documented hazards this ADR supersedes with structural fixes.
 - [ADR-0056](0056-walkers-map-h3-binding.md) — establishes the "4-frame tour is a constraint on widget design" precedent that SD2 (animation freeze) removes.
 - [ADR-0052](0052-imzero2-unified-color-type.md) — prior ImZero2 binding ADR; template shape followed here.
 - [Dear ImGui `imgui_demo.cpp`](https://github.com/ocornut/imgui/blob/master/imgui_demo.cpp) — UX reference for the interactive shell (SD10); one-window catalog with CollapsingHeader-per-topic + top-of-window filter.

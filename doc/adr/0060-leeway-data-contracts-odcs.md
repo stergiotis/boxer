@@ -13,7 +13,7 @@ withdrawn-date: 2026-06-05
 
 ## Context
 
-Leeway is boxer's columnar protocol for semi-structured data ([`../skills/leeway-beginner/SKILLS.md`](../skills/leeway-beginner/SKILLS.md), [`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md)). It shreds domain documents into type-specific sections with an orthogonal membership graph, carries rich semantic metadata via aspect bitmasks, and ships self-describing physical column names that let a consumer reconstruct the full `TableDesc` from column names alone. The schema surface is programmatic today: `TableDescDto` (CBOR-serializable) is authoritative; generators emit Arrow, ClickHouse, and Go artifacts.
+Leeway is boxer's columnar protocol for semi-structured data ([`../skills/leeway-beginner/SKILL.md`](../skills/leeway-beginner/SKILL.md), [`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md)). It shreds domain documents into type-specific sections with an orthogonal membership graph, carries rich semantic metadata via aspect bitmasks, and ships self-describing physical column names that let a consumer reconstruct the full `TableDesc` from column names alone. The schema surface is programmatic today: `TableDescDto` (CBOR-serializable) is authoritative; generators emit Arrow, ClickHouse, and Go artifacts.
 
 What Leeway does *not* carry is an explicit **data contract** layer. In the current ecosystem a data contract is a declarative, versioned, governance-grade interface between producers and consumers, carrying schema, ownership, SLAs, quality expectations, and compatibility rules. Catalog vendors (Collibra, Atlan, DataHub, Unity Catalog, Purview), quality tools (Soda, Great Expectations, Monte Carlo), and governance pipelines all hook on standardised contract formats; an Arrow/ClickHouse table with only a `TableDescDto` is invisible to them.
 
@@ -25,7 +25,7 @@ Two facts reshape the decision space as of 2026-04:
 Leeway has three structural features that interact with any contract standard:
 
 1. **Plain value columns** (entity id, timestamp, routing, lifecycle, transaction, opaque) — conventional columns by design.
-2. **Tagged value sections** — sparse, type-indexed containers of values carrying uniform column-wise aspects ([`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md)).
+2. **Tagged value sections** — sparse, type-indexed containers of values carrying uniform column-wise aspects ([`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md)).
 3. **Tagged attributes** — individual tag paths within a section, with memberships (5 kinds), high-card parameters, multi-membership aliasing, co-occurrence, and per-attribute value constraints. Graph-shaped; no standard contract format expresses this directly.
 
 The physical naming convention (`tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::` and friends) already encodes schema in Base62-serialised column names — so schema discovery does not require an external registry. The lossless streaming JSON form is carried by `JsonCardEmitter` at [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go); it is byte-deterministic (sorted co-groups, ordered sections/columns/tags) and a strict superset of native JSON. Reconstructed-document JSON (original `{"hostname": …, "metrics": {"cpu": …}}` shape) is not derivable in general — multi-membership, co-sections, sets-vs-arrays, and `value-card`-carried ragged tensors exceed what a JSON tree can express without loss.
@@ -105,7 +105,7 @@ We adopt **ODCS v3.1.0** as Leeway's canonical data-contract envelope, in descri
 
 - **SD8 — Version Leeway schema and ODCS contract independently.** The contract carries its own `version` per ODCS v3.1.0 conventions. `TableDescDto` has its own internal versioning cadence. Compatibility (when does a contract change, when does a schema change force a contract revision) is a follow-on ADR; this ADR commits to independent versioning only.
 
-- **SD9 — Opaque / data-mart columns get the most mileage from the standard path.** Since opaque columns are explicitly conventional ([`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) §2.1), they are the surface on which generic SQL/BI tooling operates. The ADR does not expand opaque-column policy, but flags that richer opaque projections of frequently-queried tagged attributes compound the value of ODCS alignment proportionally.
+- **SD9 — Opaque / data-mart columns get the most mileage from the standard path.** Since opaque columns are explicitly conventional ([`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md) §2.1), they are the surface on which generic SQL/BI tooling operates. The ADR does not expand opaque-column policy, but flags that richer opaque projections of frequently-queried tagged attributes compound the value of ODCS alignment proportionally.
 
 - **SD10 — Go tooling gap is real and tracked.** No first-class Go ODCS parser/validator exists publicly as of 2026-04. The initial implementation validates via the published ODCS v3.1.0 JSON Schema using a generic Go JSON-Schema library (`gojsonschema` / `jsonschema-go`); a typed Go ODCS model package is a follow-on and a candidate contribution to Bitol. A Python step in CI (via `datacontract-cli`) is acceptable in the interim.
 
@@ -156,7 +156,7 @@ Rejection rationale for the top-level options is in the QOC matrix; notes below 
 - **Quality-check runtime is delegated to the ODCS tooling.** `datacontract-cli` + its Soda/Great-Expectations backends execute the emitted SQL. Leeway does not ship a check runner of its own; this is right-sized given SD10.
 - **The contract artifact is authored per table, not per section.** One `.odcs.yaml` file per Leeway table is the granularity; streaming groups show up as multiple `servers` entries under one contract, not as separate files.
 - **Registry is not required.** The self-describing naming convention plus the derived ODCS envelope together remove the need for an external schema registry for Leeway's own operation. Customers who run a registry for other reasons can ingest Leeway contracts into it, but there is no dependency.
-- **Opaque columns become commercially load-bearing.** ([`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) §2.1 already treats them as the BI surface.) ODCS alignment elevates them from "nice for BI" to "strategic adoption lever"; this ADR does not change opaque-column policy but notes the shift.
+- **Opaque columns become commercially load-bearing.** ([`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md) §2.1 already treats them as the BI surface.) ODCS alignment elevates them from "nice for BI" to "strategic adoption lever"; this ADR does not change opaque-column policy but notes the shift.
 
 ### Derived practices
 
@@ -202,8 +202,8 @@ ADRs are append-only; withdrawal is recorded, not deleted.
 - [Data Contract Specification (datacontract.com) — deprecated in favour of ODCS](https://datacontract-specification.com/)
 - [PayPal's original data contract template (pre-Bitol ancestor of ODCS)](https://github.com/paypal/data-contract-template)
 - [Confluent Data Contracts (Schema Registry)](https://docs.confluent.io/platform/current/schema-registry/fundamentals/data-contracts.html)
-- [`../skills/leeway-beginner/SKILLS.md`](../skills/leeway-beginner/SKILLS.md) — Leeway overview
-- [`../skills/leeway-advanced/SKILLS.md`](../skills/leeway-advanced/SKILLS.md) — Leeway structural semantics, membership types, aspects
-- [`../skills/leeway-streamreadaccess/SKILLS.md`](../skills/leeway-streamreadaccess/SKILLS.md) — `SinkI` protocol, card-JSON emitter
+- [`../skills/leeway-beginner/SKILL.md`](../skills/leeway-beginner/SKILL.md) — Leeway overview
+- [`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md) — Leeway structural semantics, membership types, aspects
+- [`../skills/leeway-streamreadaccess/SKILL.md`](../skills/leeway-streamreadaccess/SKILL.md) — `SinkI` protocol, card-JSON emitter
 - [`../skills/canonicaltypes/SKILL.md`](../skills/canonicaltypes/SKILL.md) — canonical type signatures
 - [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go) — current `JsonCardEmitter` location

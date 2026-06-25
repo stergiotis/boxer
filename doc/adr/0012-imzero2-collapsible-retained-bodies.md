@@ -72,7 +72,7 @@ Plus egui's own `Memory`, which is where the open/closed bit for every `Collapsi
 
 - **Stream-of-operations as the dominant pattern.** Most widgets must remain re-renderable from the current frame's stream. New persistent state must be id-keyed and not load-bearing for widgets that don't opt in.
 - **One-frame FFI lag is intrinsic.** The Go→Rust stream is one-way per frame. Solutions that require Go to know mid-frame Rust state must explicitly model a sync round-trip; pretending the lag isn't there leads to the gate's failure mode.
-- **Capture infrastructure already exists.** `Fffi2.captureStack`, `BeginCapture`/`EndCapture`, `AppendRawToCapture`, the `iter.Seq` iter-scope wrapper for deferred-block widgets ([`SKILLS.md` §5.5](../skills/imzero2/SKILLS.md)) are all in place for ETable and DockArea. Reuse beats re-invention.
+- **Capture infrastructure already exists.** `Fffi2.captureStack`, `BeginCapture`/`EndCapture`, `AppendRawToCapture`, the `iter.Seq` iter-scope wrapper for deferred-block widgets ([`SKILL.md` §5.5](../skills/imzero2/SKILL.md)) are all in place for ETable and DockArea. Reuse beats re-invention.
 - **Iter-scope ergonomics.** The block-iterator API (`for range c.X(...).KeepIter()`) is the canonical idiom for blocks throughout the codebase. New machinery should compose with it, not parallel it.
 - **Heavy bodies exist in the wild.** Demos with treemap layout, walkers tile fetch, force-layout graphs are not pathological — they're the design target. Steady-state-collapsed cost matters.
 - **Nested collapsibles are common** (Window > CollapsingHeader > ScrollArea > Grid > …). Whatever fixes the top-level case must compose, not just succeed at depth 1.
@@ -91,7 +91,7 @@ The first attempt at the stopgap — drop the `HasBlockSkipped` gate from the co
 3. The parent's drain loop (`interpret_outer(c, &mut None)`) keeps reading messages. When it hits the inner block's `End`, it terminates **one block too early** — leaving the parent's own body remainder and its own `End` unconsumed.
 4. The unconsumed messages bubble up to the next outer frame of `interpret_outer`, which itself sees an `End` it didn't intend to consume. Frame rendering corrupts from that point: collapsing a `Window` makes the entire window disappear (its `show()` already drew the title bar, but the closed-branch drain returned mid-body and the leftover messages took the top-level loop down with them).
 
-[`SKILLS.md` §13.3](../skills/imzero2/SKILLS.md) Scenario B previously claimed this nested-cull case was safe because "registers are global, drain semantics are preserved — just at the wrong nesting depth, which doesn't matter for register operations." That note covers register correctness but **not** `End`-sentinel framing. Pre-stopgap the gate prevented the scenario entirely (collapsed parents emitted no body messages, so there were no orphaned nested `End`s to leak), so the bug never surfaced. Removing the gate exposes it immediately and severely.
+[`SKILL.md` §13.3](../skills/imzero2/SKILL.md) Scenario B previously claimed this nested-cull case was safe because "registers are global, drain semantics are preserved — just at the wrong nesting depth, which doesn't matter for register operations." That note covers register correctness but **not** `End`-sentinel framing. Pre-stopgap the gate prevented the scenario entirely (collapsed parents emitted no body messages, so there were no orphaned nested `End`s to leak), so the bug never surfaced. Removing the gate exposes it immediately and severely.
 
 The stopgap (O2) was therefore reverted. The gate is re-classified: **load-bearing for stream framing, not just a performance optimization**. Any future gate-removal must be paired with making every block's Rust apply code drain its own body when `u=None` (i.e. add `else { interpret_outer(c, &mut None)?; }` next to the existing `if u.is_some() { … }` in every block in [`egui2_definition_d_blocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go)).
 
@@ -141,7 +141,7 @@ We will adopt **O4 — iterator-based retained bodies** as the long-term mechani
 
 The original plan had **O2 — gate removal** land first as a quick stopgap. After live testing the stopgap (`hmi.sh`) it was reverted because it triggered the framing bug described in *Discovery*. The stopgap is now **only viable after a prerequisite Rust-side change**:
 
-**Prerequisite step: drain-on-cull for every block.** Add `else { interpret_outer(c, &mut None)?; }` to every block's apply code in [`egui2_definition_d_blocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go) so each block consumes its own body and `End` regardless of whether `u` is `Some(ui)` or `None`. Affects ~30 blocks: `Horizontal*`, `Vertical*`, `Frame`, `Group`, `Indent`, `ScrollArea`, `Panel*`, `PushId`, `Scope`, `MenuBar`, plus the existing ones (`CollapsingHeader`, `Window`, `ComboBox`, `MenuButton`, `HoverText`) which currently have an explicit drain only inside the `u.is_some()` branch and need a sibling drain in the `else`. After this change, [`SKILLS.md` §13.3](../skills/imzero2/SKILLS.md) Scenario B is no longer relied on; every block is self-contained for stream framing.
+**Prerequisite step: drain-on-cull for every block.** Add `else { interpret_outer(c, &mut None)?; }` to every block's apply code in [`egui2_definition_d_blocks.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_blocks.go) so each block consumes its own body and `End` regardless of whether `u` is `Some(ui)` or `None`. Affects ~30 blocks: `Horizontal*`, `Vertical*`, `Frame`, `Group`, `Indent`, `ScrollArea`, `Panel*`, `PushId`, `Scope`, `MenuBar`, plus the existing ones (`CollapsingHeader`, `Window`, `ComboBox`, `MenuButton`, `HoverText`) which currently have an explicit drain only inside the `u.is_some()` branch and need a sibling drain in the `else`. After this change, [`SKILL.md` §13.3](../skills/imzero2/SKILL.md) Scenario B is no longer relied on; every block is self-contained for stream framing.
 
 Once the drain-on-cull change is in place, **O2 (gate removal) becomes safe** and can be reapplied as the stopgap, on the same explicit understanding as before:
 
@@ -301,7 +301,7 @@ This survey also surfaces a question for the existing caches: should `dock_state
 
 - **Stream-of-operations identity weakens slightly.** A frame's stream alone no longer fully describes what is on screen for retained-body collapsibles; the cached bytes from previous frames participate. The framework was already partly in this regime (dock, graphs, walkers, scrolling-texture, code-view); this is one more class. Worth recording but not the introduction of a new paradigm.
 - **`HasBlockSkipped` register stays.** Still set by Rust, still readable by Go; just no longer the structural gate on body emission.
-- **Capture-stack invariants unchanged.** Retained bodies push/pop on the same stack as deferred blocks; nesting rules from [`SKILLS.md` §5.4](../skills/imzero2/SKILLS.md) carry over verbatim.
+- **Capture-stack invariants unchanged.** Retained bodies push/pop on the same stack as deferred blocks; nesting rules from [`SKILL.md` §5.4](../skills/imzero2/SKILL.md) carry over verbatim.
 - **ETable's deferred-block mechanism is unaffected.** The two systems sit on orthogonal axes (in-frame vs cross-frame); they share infrastructure but solve different problems.
 
 ## Updates
@@ -400,7 +400,7 @@ Milestones, sized to land on the same review-per-milestone cadence as Phase 1/2:
 
 **M3.4 — Documentation + sample.**
 
-- Update `doc/skills/imzero2/SKILLS.md` to describe the `.Keep()` cross-frame contract and the eviction-fault behaviour. (Currently `SKILLS.md` describes `.Keep()` as marshal-once-splice-many — the new behaviour is a strict superset.)
+- Update `doc/skills/imzero2/SKILL.md` to describe the `.Keep()` cross-frame contract and the eviction-fault behaviour. (Currently `SKILL.md` describes `.Keep()` as marshal-once-splice-many — the new behaviour is a strict superset.)
 - One worked example in [`doc/skills/imzero2/`](../skills/imzero2/) showing the imztop sparkline pattern: `.Keep()`'d once when sampler data changes, `.SyncRetained()` per frame in between.
 - Update the FFFI2 widget-definition rules note (memory: [[feedback_fffi2_widget_definitions]]) to flag that `Retained=true` IDL widgets now carry cross-frame semantics in addition to compositional reuse.
 
@@ -444,7 +444,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 - Generated gate sites: [`components/methods.out.go`](../../public/thestack/imzero2/egui2/bindings/methods.out.go) (~24 `KeepIter` functions).
 - Rust-side block-skip handlers: [`interpreter.rs:2700`](../../rust/imzero2/src/imzero2/interpreter.rs) (CollapsingHeader), [`:3086`](../../rust/imzero2/src/imzero2/interpreter.rs) (Window).
 - Persistent-state catalogue: [`interpreter.rs:1469`](../../rust/imzero2/src/imzero2/interpreter.rs) (`ImZeroFffi` fields), [`:1691`](../../rust/imzero2/src/imzero2/interpreter.rs) (`prepare_next_frame`).
-- Capture infrastructure and iter-scope idiom: [`SKILLS.md` §5](../skills/imzero2/SKILLS.md).
-- Frame-table for current gate semantics: [`SKILLS.md` §13.4](../skills/imzero2/SKILLS.md).
+- Capture infrastructure and iter-scope idiom: [`SKILL.md` §5](../skills/imzero2/SKILL.md).
+- Frame-table for current gate semantics: [`SKILL.md` §13.4](../skills/imzero2/SKILL.md).
 - Demo shell stall workaround tied to current gate: [`demo/widgets/interactive_driver.go:19-29`](../../public/thestack/imzero2/egui2/demo/apps/widgets/interactive_driver.go).
 - Related ADRs: [ADR-0052 (unified color, deferred-block invariants)](0052-imzero2-unified-color-type.md), [ADR-0057 (demo registry / drivers — origin of the ~11s stall context)](0057-demo-registry-and-drivers.md), [ADR-0058 (scrolling-texture, persistent texture cache as precedent for id-keyed Rust-side state)](0058-imzero2-scrolling-texture-widget.md).

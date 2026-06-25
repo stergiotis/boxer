@@ -10,7 +10,7 @@ status: draft
 
 # Leeway vs Snowflake VARIANT vs ClickHouse JSON v2 — Explanation
 
-This document compares three architectures for storing and querying large volumes of semi-structured data with high schema variety: **Snowflake** with the VARIANT type (managed-cloud auto-shred), **ClickHouse JSON v2** (self-hosted auto-shred), and **ClickHouse + Leeway** (self-hosted explicit modelling), where Leeway is the columnar encoding protocol described in [SKILLS.md](../SKILLS.md). It is written for a developer evaluating Leeway against the available alternatives for a real workload — typically one where data volume is large enough that storage layout matters, schema variety is broad enough that a fixed relational schema is unacceptable, and the team has both the capacity to invest in modelling and the appetite for self-hosted infrastructure. The document does not advocate one over the others; it lays out what each can express, what each costs to operate, and when each wins, so the reader can match capabilities to their workload.
+This document compares three architectures for storing and querying large volumes of semi-structured data with high schema variety: **Snowflake** with the VARIANT type (managed-cloud auto-shred), **ClickHouse JSON v2** (self-hosted auto-shred), and **ClickHouse + Leeway** (self-hosted explicit modelling), where Leeway is the columnar encoding protocol described in [SKILL.md](../SKILL.md). It is written for a developer evaluating Leeway against the available alternatives for a real workload — typically one where data volume is large enough that storage layout matters, schema variety is broad enough that a fixed relational schema is unacceptable, and the team has both the capacity to invest in modelling and the appetite for self-hosted infrastructure. The document does not advocate one over the others; it lays out what each can express, what each costs to operate, and when each wins, so the reader can match capabilities to their workload.
 
 ## Background
 
@@ -55,7 +55,7 @@ The vertical axis (managed vs self-hosted) is a deployment and economics choice;
 
 1. Define canonical types and aspect specifications in code (Go SDK, fluid API).
 2. Run Leeway codegen → produces ClickHouse DDL, typed Go ingestion API, typed Go read-access API, and Apache Arrow bindings.
-3. Ingest data through the typed API; values land in canonical-type sections with explicit multi-membership encoding (see SKILLS.md §"Example: Mapping JSON to a equivalent Leeway representation").
+3. Ingest data through the typed API; values land in canonical-type sections with explicit multi-membership encoding (see SKILL.md §"Example: Mapping JSON to a equivalent Leeway representation").
 4. Query via standard ClickHouse SQL on the generated tables, with full visibility of section layout and physical column naming convention.
 5. Schema evolution: extend canonical types or memberships, regenerate, apply migration. Leeway's nominal schema comparison and physical-column naming convention let the schema be reconstructed from any subset that preserves section boundaries.
 
@@ -77,7 +77,7 @@ The single most structural differentiator. Consider an e-commerce price `19.99` 
 
 **Auto-shred (VARIANT, JSON v2)** must denormalise (duplicate the value into three distinct paths in the document) or normalise (separate edge table joining product → relation → value). Denormalisation triples storage and update cost; normalisation requires a JOIN at read time. Neither VARIANT nor JSON v2 has a primitive for "one value, multiple memberships."
 
-**Leeway** stores `19.99` once in the `float64` section with `membership-card: 3` and three entries in `low-card-memberships`. No duplication, no JOIN. From the [SKILLS.md "Multi-Membership" Case](../SKILLS.md):
+**Leeway** stores `19.99` once in the `float64` section with `membership-card: 3` and three entries in `low-card-memberships`. No duplication, no JOIN. From the [SKILL.md "Multi-Membership" Case](../SKILL.md):
 
 ```json
 "float64": {
@@ -116,7 +116,7 @@ A common organisational pattern: layering PII tags, ML labels, governance flags,
 
 **Auto-shred**: Snowflake's tag library applies tags to *columns*; masking policies govern row access. CH JSON v2 has no value-grain tagging primitive — column-level metadata exists but does not align to per-value memberships. In both, per-value tagging requires bolt-on columns or a separate join table, coupling annotations to primary data.
 
-**Leeway**: co-sections share row count with a primary section but may have only memberships, no values. The PII team or governance team adds a co-section without touching the primary; vertical subsetting drops or keeps the secondary co-group whole. From SKILLS.md:
+**Leeway**: co-sections share row count with a primary section but may have only memberships, no values. The PII team or governance team adds a co-section without touching the primary; vertical subsetting drops or keeps the secondary co-group whole. From SKILL.md:
 
 ```go
 manip.TaggedValueSection("null__labels").
@@ -243,7 +243,7 @@ These trade-offs are structural, not implementation details. They follow from th
 
 ## Further reading
 
-- The Leeway protocol: [`doc/skills/leeway-advanced/SKILLS.md`](../SKILLS.md)
+- The Leeway protocol: [`doc/skills/leeway-advanced/SKILL.md`](../SKILL.md)
 - Boxer Leeway package source — `boxer/public/semistructured/leeway/` (resolve via `bash scripts/boxer-path.sh`)
 - Membership role classifier: boxer ADR-0007 (`$(boxer-path)/doc/adr/0007-leeway-membership-role-classifier.md`)
 - Card-JSON canonical format: boxer ADR-0018 (`$(boxer-path)/doc/adr/0018-leeway-card-json-canonical-format.md`)

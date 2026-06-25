@@ -14,7 +14,7 @@ ImZero2 had no way to render geographic data. Several in-flight uses needed an i
 
 Constraints the design had to respect:
 
-- **FFFI2 execution model.** ImZero2 is a register-drain, opcode-stream protocol with deferred-block capture and frame-level culling (see [`SKILLS.md`](../skills/imzero2/SKILLS.md) §11). Any binding must cooperate with those invariants; it cannot rely on synchronous call semantics or persistent stateful encoders.
+- **FFFI2 execution model.** ImZero2 is a register-drain, opcode-stream protocol with deferred-block capture and frame-level culling (see [`SKILL.md`](../skills/imzero2/SKILL.md) §11). Any binding must cooperate with those invariants; it cannot rely on synchronous call semantics or persistent stateful encoders.
 - **CGO-free Go build.** `rust/imzero2/build_go.sh` sets `CGO_ENABLED=0` deliberately. Go-side geospatial libraries that require CGO (notably `github.com/uber/h3-go/v4`) are out-of-bounds.
 - **Eframe backend.** The repo uses eframe with the `glow` feature. Any map library requiring `wgpu` would force a backend switch with cross-cutting effects on every widget.
 - **Screenshot-based testing.** The demo test harness relies on headless `IMZERO2_SCREENSHOT_DIR` runs; animated / HTTP-async widgets need to tolerate the 4-frame tour without panicking.
@@ -51,7 +51,7 @@ Constraints the design had to respect:
 | C5 | +  | ++ | −− | +  |
 | C6 | +  | −  | ++ | +  |
 
-O1 is the Pareto optimum for this repo's constraints: the only option that satisfies C1+C2+C3 simultaneously while keeping C5 bounded. O3 is the strongest on future-looking criteria (C4, C6) but requires the eframe backend switch and has an order-of-magnitude higher dev cost. O4 matches O1 on render-side but trips C1. O2 is cheaper than O1 in the short term but loses the "H3 as exchange format" property that the uniform-heatmap challenger was designed around (see [`SKILLS.md`](../skills/imzero2/SKILLS.md) §16.1).
+O1 is the Pareto optimum for this repo's constraints: the only option that satisfies C1+C2+C3 simultaneously while keeping C5 bounded. O3 is the strongest on future-looking criteria (C4, C6) but requires the eframe backend switch and has an order-of-magnitude higher dev cost. O4 matches O1 on render-side but trips C1. O2 is cheaper than O1 in the short term but loses the "H3 as exchange format" property that the uniform-heatmap challenger was designed around (see [`SKILL.md`](../skills/imzero2/SKILL.md) §16.1).
 
 ## Decision
 
@@ -67,10 +67,10 @@ Tile servers are Go-configurable at the call site via fluid methods (`.TileUrl`,
 
 - **SD1 — H3 cell IDs (`u64`) are the canonical exchange format.** Both sides treat a cell set as an opaque `[]u64` (or a roaring bitmap when sparseness warrants). Lat/lng polygon wire formats are available (`mapPolyline`) but not the recommended path for ROIs. Rationale: deterministic rasterization, exact set operations, free antimeridian and polar correctness, compact storage. Polygon-exchange rejected because two consumers rasterizing the same polygon at different densification thresholds produce different cell sets; cell-set-as-ground-truth avoids the interoperability trap.
 - **SD2 — Overlays drain into the next `walkersMap`, not a preceding one.** Each pending-overlay Vec is drained at `walkersMap` apply time. Orphaned overlays (no `walkersMap` in the frame) are logged as a warning and cleared in `prepare_next_frame`. This matches the existing FFFI2 register-drain idiom for plots, graphs, and painter.
-- **SD3 — Single `walkers_last_camera` register.** Multi-map frames see the last render's camera. Rejected per-id camera HashMap — complicates the common (single-map) case for a rare multi-map need. Recognised limitation; documented with workarounds in [`SKILLS.md §16.5`](../skills/imzero2/SKILLS.md).
+- **SD3 — Single `walkers_last_camera` register.** Multi-map frames see the last render's camera. Rejected per-id camera HashMap — complicates the common (single-map) case for a rare multi-map need. Recognised limitation; documented with workarounds in [`SKILL.md §16.5`](../skills/imzero2/SKILL.md).
 - **SD4 — Non-`'static` `OverlayPlugin<'p>` borrowing a stack-local camera out-slot.** Walkers 0.53 changed the `Plugin` trait from the `'static` bound in earlier versions to a `'c` lifetime, enabling `&'p mut Option<WalkersCamera>` to flow into the plugin without `Arc<Mutex<…>>`. Simpler than the alternative; pins the binding to walkers ≥ 0.53.
-- **SD5 — Overlay projection uses absolute viewport coordinates directly.** Walkers' `Projector::project`/`unproject` take/return absolute screen pixels (internally adjust for `clip_rect.center()`). The overlay plugin does **not** add `rect.center()` on either path. First implementation added it twice, producing a zoom-dependent drift that's imperceptible at low zoom and kilometre-scale at high zoom — the bug surfaced under interactive testing and cost one iteration to diagnose. Documented in [`SKILLS.md §16.10`](../skills/imzero2/SKILLS.md) to prevent re-introduction.
-- **SD6 — Custom tile source is a `CustomTileSource` struct with leaked-once `&'static str` attribution.** Walkers' `Attribution` type requires `&'static str`. Runtime-supplied strings are `Box::leak`'d at source-construction time (once per unique tile config), not per `attribution()` call. Bounded growth in practice; eliminates the attribution cost from the fetch hot path. Documented in [`SKILLS.md §16.8`](../skills/imzero2/SKILLS.md).
+- **SD5 — Overlay projection uses absolute viewport coordinates directly.** Walkers' `Projector::project`/`unproject` take/return absolute screen pixels (internally adjust for `clip_rect.center()`). The overlay plugin does **not** add `rect.center()` on either path. First implementation added it twice, producing a zoom-dependent drift that's imperceptible at low zoom and kilometre-scale at high zoom — the bug surfaced under interactive testing and cost one iteration to diagnose. Documented in [`SKILL.md §16.10`](../skills/imzero2/SKILL.md) to prevent re-introduction.
+- **SD6 — Custom tile source is a `CustomTileSource` struct with leaked-once `&'static str` attribution.** Walkers' `Attribution` type requires `&'static str`. Runtime-supplied strings are `Box::leak`'d at source-construction time (once per unique tile config), not per `attribution()` call. Bounded growth in practice; eliminates the attribution cost from the fetch hot path. Documented in [`SKILL.md §16.8`](../skills/imzero2/SKILL.md).
 - **SD7 — Naive AABB bbox culling, no antimeridian handling.** Overlays are coarse-culled by AABB intersection in lat/lng space with a 5% viewport margin. Polygons crossing ±180° longitude cull incorrectly (their bbox degenerates or inverts). Deferred: the first real dataset hitting this needs an antimeridian-aware splitter; until then, documented as a known limitation.
 - **SD8 — Concave `h3Region` fill renders as per-cell hexes.** Drawing the dissolved multipolygon outline would require `lyon_tessellation` for concave-safe fill. For the expected cell counts (hundreds to low thousands per ROI) per-cell fill is fast enough and visually communicates the H3 grid. Lyon can be added later when a real country-scale workflow demands smooth fills.
 - **SD9 — H3 compute on Rust side for render operations; h3o-wazero on Go side for data operations.** Boundaries + dissolve run on the Rust side (they're needed for rendering, and Rust-native is fastest). Cells-in-viewport, grid-disk expansion, cell-from-lat-lng run on the Go side via h3o-wazero when the Go code has its own consumer (ETL, heatmap pre-compute). Both sides use the same `h3o` crate (one native, one wasm), so cell-ID semantics match bit-for-bit — the central property that makes `u64` a viable exchange format.
@@ -95,8 +95,8 @@ Tile servers are Go-configurable at the call site via fluid methods (`.TileUrl`,
 
 ### Negative
 
-- **Bug 2 — walkers' Ctrl+Wheel semantics across multiple maps.** When two `walkersMap` widgets are visible simultaneously, Ctrl+Wheel zooms both even if the pointer is over one. Walkers-side issue; documented in [`SKILLS.md §16.4`](../skills/imzero2/SKILLS.md) with a `.ZoomGesture(false)` workaround for secondary maps. Upstream PR candidate if the workaround proves insufficient.
-- **Single `walkers_last_camera`.** Multi-map frames lose per-map camera distinction (SD3). Workarounds documented in [`SKILLS.md §16.5`](../skills/imzero2/SKILLS.md).
+- **Bug 2 — walkers' Ctrl+Wheel semantics across multiple maps.** When two `walkersMap` widgets are visible simultaneously, Ctrl+Wheel zooms both even if the pointer is over one. Walkers-side issue; documented in [`SKILL.md §16.4`](../skills/imzero2/SKILL.md) with a `.ZoomGesture(false)` workaround for secondary maps. Upstream PR candidate if the workaround proves insufficient.
+- **Single `walkers_last_camera`.** Multi-map frames lose per-map camera distinction (SD3). Workarounds documented in [`SKILL.md §16.5`](../skills/imzero2/SKILL.md).
 - **Antimeridian / polar polygons cull incorrectly (SD7).** Deferred until first real dataset exhibits the bug.
 - **Concave fill is per-cell hexes (SD8).** Fine at H3-native scales; visible grid at country scale. Lyon tessellation is the escape hatch when needed.
 - **Attribution leaks `&'static str` at tile-config changes (SD6).** Bounded growth — one leak per unique attribution across the process lifetime. Not a leak in any useful sense unless an adversary forces unbounded tile configs.
@@ -118,13 +118,13 @@ Tile servers are Go-configurable at the call site via fluid methods (`.TileUrl`,
 
 ## Status
 
-Accepted — 2026-04-23. Implementation shipped across commits `8669a813` (initial binding), `0556800f` (tile server config), `1bdbebc8` (RadioButton UX cleanup), `c5f163ba` (h3o-wazero integration + uniform heatmap), and `7162f955` (SKILLS.md §16 + this ADR). Known limitations documented here and in [`SKILLS.md §16`](../skills/imzero2/SKILLS.md) are deferred work with explicit triggers — no blocker for the current scope.
+Accepted — 2026-04-23. Implementation shipped across commits `8669a813` (initial binding), `0556800f` (tile server config), `1bdbebc8` (RadioButton UX cleanup), `c5f163ba` (h3o-wazero integration + uniform heatmap), and `7162f955` (SKILL.md §16 + this ADR). Known limitations documented here and in [`SKILL.md §16`](../skills/imzero2/SKILL.md) are deferred work with explicit triggers — no blocker for the current scope.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
 ## References
 
-- [`doc/skills/imzero2/SKILLS.md`](../skills/imzero2/SKILLS.md) §16 — walkers binding limitations and gotchas (companion to this ADR).
+- [`doc/skills/imzero2/SKILL.md`](../skills/imzero2/SKILL.md) §16 — walkers binding limitations and gotchas (companion to this ADR).
 - [`doc/adr/0003-imzero2-unified-color-type.md`](0052-imzero2-unified-color-type.md) — prior ImZero2 binding ADR; template shape followed here.
 - [`public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_walkers.go) — walkers IDL definitions (walkersMap, mapMarker, mapPolyline, h3CellsColored, h3Region, fetchR15WalkersCamera).
 - [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs) — `WalkersState`, `CustomTileSource`, `OverlayPlugin`, `render_walkers_map`, `aggregate_h3_region`, `bbox_of_rings`.
@@ -132,4 +132,4 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 - [`public/science/geo/h3/`](https://github.com/stergiotis/boxer/tree/main/public/science/geo/h3) — h3o compiled to wasm + wazero runtime (Go-side H3 without CGO).
 - [`walkers = "0.53"`](https://crates.io/crates/walkers) — slippy map widget for egui.
 - [`h3o = "0.9"`](https://crates.io/crates/h3o) — pure-Rust H3 implementation (native + wasm).
-- ADR-0052's SKILLS.md reference block for §11 block-skipping / culling remains load-bearing for the overlay drain semantics here.
+- ADR-0052's SKILL.md reference block for §11 block-skipping / culling remains load-bearing for the overlay drain semantics here.

@@ -1,4 +1,6 @@
 ---
+name: leeway-beginner
+description: "Use to learn Leeway fundamentals — the backbone (plain values) vs payload (tagged values) architecture and basic columnar data modelling."
 type: reference
 audience: agent reading this skill
 status: draft

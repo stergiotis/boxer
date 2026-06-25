@@ -119,4 +119,4 @@ overhead shift, but the flusher gets to do its work without re-parsing.
 - zerolog CBOR encoder — `internal/cbor/README.md` at
   `github.com/rs/zerolog/internal/cbor`
 - fxamacker/cbor decoder — https://github.com/fxamacker/cbor
-- Leeway membership vocabulary — [`doc/skills/leeway-advanced/SKILLS.md`](../../../../doc/skills/leeway-advanced/SKILLS.md)
+- Leeway membership vocabulary — [`doc/skills/leeway-advanced/SKILL.md`](../../../../doc/skills/leeway-advanced/SKILL.md)

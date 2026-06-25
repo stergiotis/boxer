@@ -1,3 +1,8 @@
+---
+name: obsidian-markdown
+description: "Use when rendering Obsidian-flavored Markdown to HTML via the obsidian goldmark package — wikilinks, callouts, and the toggleable extension bitmask."
+---
+
 # SKILL: Obsidian-Flavored Markdown to HTML
 
 ## Overview
