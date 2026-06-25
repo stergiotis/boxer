@@ -227,6 +227,27 @@ else
     step_end fail
 fi
 
+step_begin "ids font SHA256SUMS"
+# IDS font binary hash pinning (ADR-0034 §SD5). Each per-directory
+# SHA256SUMS verifies the committed .ttf bytes; drift fails the build
+# with a structured error naming the file and expected vs observed SHA.
+ids_fonts_dir="$here/../../rust/imzero2/assets/fonts"
+ids_fonts_ok=1
+if [ -d "$ids_fonts_dir" ]; then
+    for d in "$ids_fonts_dir"/*/; do
+        if [ -f "$d/SHA256SUMS" ]; then
+            (cd "$d" && sha256sum -c --quiet SHA256SUMS) || ids_fonts_ok=0
+        fi
+    done
+fi
+if [ "$ids_fonts_ok" -eq 0 ]; then
+    rc=1
+    step_end fail
+else
+    echo "passed"
+    step_end pass
+fi
+
 step_begin "fetcher discipline"
 # Enforces the imzero2 "fetchers only run in StateManager.Sync" rule
 # (doc/skills/imzero2-fetchers/SKILLS.md). An inline Fetcher.Fetch* call
