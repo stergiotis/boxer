@@ -33,8 +33,9 @@ concurrent state machine, which is what a model checker is for.
 |------|------|
 | `pushout_exchange.qnt` | The distributed protocol: record / offer / deliverApply / unrecord / sweep / drop, with safety invariants and executable witness runs. |
 | `erasure_dilemma.qnt`  | A 2-node, 2-patch model isolating the erasure-vs-convergence tension. |
-| `crash_recovery.qnt`   | The single-repo durability layer: the commit ack-ordering + `Open` recovery, with a crash possible between any two steps. |
-| `crash_recovery_unsafe.qnt` | The counterfactual (writes swapped) that shows the ack-ordering is what makes recovery total. |
+| `crash_recovery.qnt`   | The single-repo durability layer: the record + unrecord commit ack-orderings + `Open` recovery, with a crash possible between any two steps. |
+| `crash_recovery_unsafe.qnt` | Counterfactual (record writes swapped) — shows put-before-append is what makes recovery total. |
+| `crash_recovery_unsafe_snapshot.qnt` | Counterfactual (snapshot trusted without the prefix check) — shows the prefix-or-discard rule is what makes unrecord atomic. |
 
 ## Refinement map (spec action → Go symbol)
 
@@ -93,15 +94,22 @@ detail. The usual escape is **per-patch crypto-erasure**: keep the (encrypted)
 envelope so structure/deps survive and re-ship works, throw away the key to
 satisfy erasure. The spec is where that design gets validated.
 
-## Crash recovery: the ack-ordering is load-bearing
+## Crash recovery: ack-ordering + unrecord atomicity
 
-`crash_recovery.qnt` models one repo's durability. The commit path
-(`commitPatchLocked`, repo/repo.go:309) is four steps —
-apply-on-clone → `PutEnvelope` (durable) → `AppendApplied` (durable, the
-**commit point**) → in-memory commit — and `crash` can strike between any two,
-wiping volatile state. `Open` (repo/repo.go:109) then recovers: if a snapshot's
-applied list is a prefix of the log, restore it and replay only the suffix,
-else replay the whole log from empty.
+`crash_recovery.qnt` models one repo's durability for **both** write verbs, with
+`crash` able to strike between any two steps (volatile state is then lost and
+`Open`, repo/repo.go:109, recovers from durable storage):
+
+- **Record** (`commitPatchLocked`, repo/repo.go:309): apply-on-clone →
+  `PutEnvelope` (durable) → `AppendApplied` (durable, **commit point**) →
+  in-memory commit.
+- **Unrecord** (repo/repo.go:339): pre-flight (no applied dependent) +
+  clone+Unapply → `SaveSnapshot(newApplied)` (durable) → `ReplaceApplied`
+  (durable, **commit point**) → in-memory commit. The envelope is **kept**.
+
+`Open` recovers by restoring a snapshot only if its applied list is a **prefix**
+of the log (replaying just the suffix), otherwise discarding it and replaying
+the whole log from empty.
 
 Proved with Apalache to depth 12 (`NoError`):
 
@@ -112,18 +120,27 @@ Proved with Apalache to depth 12 (`NoError`):
 | `LogDepClosed` | the durable log is dependency-closed |
 | `LogNoDup` | no patch is committed twice |
 | `StableConsistency` | with no op in flight, memory equals the durable log |
-| `SnapshotIsPrefix` | a snapshot never disagrees with the log it accelerates |
+| `SnapshotConsistent` | a snapshot's stored state equals its own applied list |
+| `RecoveryCorrect` | **after any crash, `Open` reconstructs exactly the durable log's state** |
 
-The witness runs pin the three crash windows: before the commit point the patch
-is lost (its envelope a harmless orphan); after it the patch survives even
-though the in-memory commit never ran; and a snapshot prefix plus a replayed
-suffix reconstructs the state.
+`RecoveryCorrect` is the atomicity result: each verb either fully took effect or
+not at all, across any crash. The witnesses pin the windows — record lost before
+/ durable after its commit point; **unrecord rolled back** when the crash
+precedes `ReplaceApplied` (the middle-patch snapshot `[1,3]` is not a prefix of
+`[1,2,3]`, so `Open` discards it and the kept envelope lets the full replay
+restore `{1,2,3}`); **unrecord durable** when the crash follows it.
 
-**Why the order matters.** `crash_recovery_unsafe.qnt` swaps the two durable
-writes (append-then-put). `quint run --invariant=NoCorruption
-crash_recovery_unsafe.qnt` then finds a crash in the window that leaves the log
-pointing at a patch with no envelope — `ErrCorruptStore`. So put-before-append
-(repo/repo.go:315 before :318) is *why* recovery is total, proved by the contrast.
+**Why the orderings matter** (two counterfactuals, each a mechanical proof):
+
+- `crash_recovery_unsafe.qnt` swaps record's writes (append-then-put);
+  `quint run --invariant=NoCorruption` finds the crash that logs a patch whose
+  envelope was never stored — `ErrCorruptStore`. So put-before-append
+  (repo/repo.go:315 before :318) is *why* recovery is total.
+- `crash_recovery_unsafe_snapshot.qnt` trusts a snapshot without the prefix
+  check; `quint run --invariant=RecoveryCorrect` finds a crash mid-unrecord
+  whose non-prefix snapshot is used as a base, **silently dropping a patch**. So
+  `Open`'s prefix-or-discard (repo/repo.go:147) is a correctness requirement,
+  not an optimization.
 
 ## Running
 
@@ -137,19 +154,17 @@ npm run findings   # prints the counterexample traces (erasure, unsafe ordering)
 Per spec, e.g.:
 
 ```sh
-npx quint verify crash_recovery.qnt        --invariant=Safety --max-steps=12  # NoError
-npx quint run    crash_recovery_unsafe.qnt --invariant=NoCorruption           # counterexample
-npx quint run    pushout_exchange.qnt      --invariant=ErasureComplete        # counterexample
+npx quint verify crash_recovery.qnt                 --invariant=Safety --max-steps=12  # NoError
+npx quint run    crash_recovery_unsafe.qnt          --invariant=NoCorruption           # counterexample
+npx quint run    crash_recovery_unsafe_snapshot.qnt --invariant=RecoveryCorrect        # counterexample
+npx quint run    pushout_exchange.qnt               --invariant=ErasureComplete        # counterexample
 ```
 
 ## Not yet modelled (next increments)
 
-- ✓ **Crash-recovery ack-ordering** — modelled in `crash_recovery.qnt` (+ the
-  `_unsafe` counterfactual); see the section above.
-- **Unrecord + `ReplaceApplied` atomicity.** `Unrecord` (repo/repo.go:339) writes
-  a snapshot then atomically replaces the log; a crash between them leaves a
-  non-prefix snapshot that `Open` must discard. Extend `crash_recovery.qnt` with
-  `unrecord` and assert the discard is safe.
+- ✓ **Crash-recovery ack-ordering + unrecord atomicity** — modelled in
+  `crash_recovery.qnt` (+ the two `_unsafe` counterfactuals); see the section
+  above. `RecoveryCorrect` proves each verb is all-or-nothing across any crash.
 - **Liveness / convergence under fairness.** Convergence is a `◇□`(all applied
   sets equal) property needing weak fairness on `deliverApply`+`offer` and
   quiescence on `record`/`drop`. Apalache's liveness support is thin; export to

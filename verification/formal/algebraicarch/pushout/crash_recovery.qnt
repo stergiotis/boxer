@@ -4,36 +4,45 @@
 // pushout engine (package public/algebraicarch/pushout/; this spec mirrors
 // that path under verification/formal/). Go paths below are package-relative.
 //
-// The engine's write verbs commit through a fixed "ack ordering"
-// (commitPatchLocked, repo/repo.go:309):
-//     1. g.Clone(); p.Apply(clone)     -- volatile, on a clone
-//     2. st.PutEnvelope(h, framed)     -- DURABLE (filestore: temp+fsync+rename)
-//     3. st.AppendApplied(h)           -- DURABLE (O_APPEND+fsync)   <= COMMIT POINT
-//     4. g = clone; appliedSet[h] = {} -- volatile in-memory commit
-// A crash (power loss) can strike between any two steps; volatile state is
-// lost. On restart, Open (repo/repo.go:109) recovers: LoadApplied, and if a
-// snapshot's Applied list is a PREFIX of the log, restore it and replay only
-// the suffix envelopes, else replay everything from empty. Replay refuses to
-// open if a logged patch has no envelope / identity mismatch / a dependency
-// that does not precede it (ErrCorruptStore, repo/repo.go:170-191).
+// TWO write verbs, each with its own durable-write ordering and commit point,
+// and a crash (power loss) that can strike between ANY two steps:
 //
-// THE POINT: recovery is safe *because* the envelope (step 2) is durable
-// BEFORE the log entry (step 3). So "logged => stored" is an invariant, and
-// replay never starves. crash_recovery_unsafe.qnt swaps the two writes and
-// the model checker exhibits the ErrCorruptStore that results.
+//   Record/ApplyEnvelope (commitPatchLocked, repo/repo.go:309):
+//     1. clone+Apply            volatile
+//     2. PutEnvelope            DURABLE
+//     3. AppendApplied          DURABLE   <= commit point
+//     4. in-memory commit       volatile
+//
+//   Unrecord (repo/repo.go:339):
+//     1. clone+Unapply          volatile  (pre-flight: no applied dependent)
+//     2. SaveSnapshot(next, newApplied)  DURABLE
+//     3. ReplaceApplied(newApplied)      DURABLE   <= commit point
+//     4. in-memory commit       volatile
+//   The envelope is KEPT (never deleted) so a rolled-back unrecord replays.
+//
+// On restart Open (repo/repo.go:109) recovers: load the log; if the snapshot's
+// Applied list is a PREFIX of the log, restore the snapshot state and replay
+// only the suffix envelopes; otherwise DISCARD the snapshot and replay the
+// whole log from empty. The prefix check is the crux for Unrecord: a crash
+// between steps 2 and 3 leaves a snapshot of newApplied while the log still
+// holds the old list — and newApplied is generally NOT a prefix of the old
+// log, so the snapshot must be discarded and the old log replayed (the
+// unrecord rolls back atomically).
 //
 // REFINEMENT MAP (spec action -> Go):
-//   recordBegin -> commitPatchLocked clone+Apply   repo/repo.go:310-314
-//   putEnv      -> st.PutEnvelope                   repo/repo.go:315
-//   appendLog   -> st.AppendApplied (COMMIT POINT)  repo/repo.go:318
-//   memCommit   -> in-memory commit                 repo/repo.go:321-326
-//   checkpoint  -> repo.Repo.Checkpoint             repo/repo.go:430
-//   crash       -> power loss + repo.Open recovery  repo/repo.go:109
+//   recordBegin/putEnv/appendLog/memCommit -> commitPatchLocked  repo/repo.go:309-326
+//   unrecordBegin   -> Unrecord pre-flight + clone+Unapply       repo/repo.go:345-377
+//   unrSaveSnapshot -> saveSnapshotLocked(next, newApplied)      repo/repo.go:380
+//   unrReplaceLog   -> st.ReplaceApplied (COMMIT POINT)          repo/repo.go:383
+//   unrMemCommit    -> in-memory commit                          repo/repo.go:386-388
+//   checkpoint      -> repo.Repo.Checkpoint                      repo/repo.go:430
+//   crash           -> power loss + repo.Open recovery           repo/repo.go:109
 module crash_recovery {
   type Patch = int
 
   pure val Patches: Set[Patch] = Set(1, 2, 3)
-  // 2 and 3 depend on 1; 1 is a root.
+  // 2 and 3 each depend on 1 (and are independent of each other) so that 2 can
+  // be unrecorded from the MIDDLE of [1,2,3] -> a non-prefix snapshot.
   pure val directDeps: Patch -> Set[Patch] = Map(1 -> Set(), 2 -> Set(1), 3 -> Set(1))
   pure def depsOf(p: Patch): Set[Patch] = directDeps.get(p)
 
@@ -44,132 +53,187 @@ module crash_recovery {
   pure def isPrefix(pre: List[Patch], full: List[Patch]): bool =
     pre.length() <= full.length() and full.slice(0, pre.length()) == pre
 
+  // remove every occurrence of p (= the single one, since the log has no dups);
+  // models slices.Delete of the unrecorded patch from the applied list.
+  pure def removeAll(l: List[Patch], p: Patch): List[Patch] =
+    l.foldl(List(), (acc, x) => if (x == p) acc else acc.append(x))
+
+  // --- Open's recovery, as pure functions of the durable state -------
+  // A snapshot is usable only if its applied list is a prefix of the log.
+  pure def snapUsable(hasS: bool, snapA: List[Patch], log: List[Patch]): bool =
+    hasS and isPrefix(snapA, log)
+  // The set of patches whose envelopes must be replayed (only the suffix when
+  // a snapshot is used; the whole log otherwise).
+  pure def replayNeedsEnv(hasS: bool, snapA: List[Patch], log: List[Patch]): Set[Patch] =
+    if (snapUsable(hasS, snapA, log)) listToSet(log.slice(snapA.length(), log.length()))
+    else listToSet(log)
+  // The state Open reconstructs: snapshot base + replayed suffix, or full replay.
+  pure def recoveredSet(hasS: bool, snapA: List[Patch], snapS: Set[Patch], log: List[Patch]): Set[Patch] =
+    if (snapUsable(hasS, snapA, log)) snapS.union(listToSet(log.slice(snapA.length(), log.length())))
+    else listToSet(log)
+
   // ---- Durable storage (survives a crash) --------------------------
-  var envStore: Set[Patch]      // PutEnvelope'd, content-addressed (HasEnvelope)
+  var envStore: Set[Patch]      // PutEnvelope'd, content-addressed; KEPT across unrecord
   var appliedLog: List[Patch]   // AppendApplied / ReplaceApplied, apply order
-  var snapApplied: List[Patch]  // snapshot's Applied prefix
+  var snapApplied: List[Patch]  // snapshot's Applied list
+  var snapState: Set[Patch]     // snapshot's graggle state (abstracted to its applied set)
   var hasSnap: bool             // a snapshot exists
 
   // ---- Volatile in-memory (lost on crash) --------------------------
   var memApplied: Set[Patch]    // Repo.appliedSet
-  var opPatch: Patch            // patch being committed (0 = none in flight)
-  var opPhase: int              // 0 none, 1 cloneApplied, 2 envPut, 3 logAppended
+  var opKind: int               // 0 none, 1 record, 2 unrecord
+  var opPhase: int              // step within the in-flight verb (1..3)
+  var opPatch: Patch            // the verb's target patch
+  var pendingApplied: List[Patch] // unrecord's computed newApplied, carried across its steps
+  var pendingState: Set[Patch]    // unrecord's computed post-state
 
   // ---- Recovery outcome -------------------------------------------
   var corrupt: bool             // recovery would return ErrCorruptStore
 
   action init = all {
-    envStore'    = Set(),
-    appliedLog'  = List(),
-    snapApplied' = List(),
-    hasSnap'     = false,
-    memApplied'  = Set(),
-    opPatch'     = 0,
-    opPhase'     = 0,
-    corrupt'     = false,
+    envStore' = Set(), appliedLog' = List(), snapApplied' = List(),
+    snapState' = Set(), hasSnap' = false, memApplied' = Set(),
+    opKind' = 0, opPhase' = 0, opPatch' = 0,
+    pendingApplied' = List(), pendingState' = Set(), corrupt' = false,
   }
 
-  // step 1: apply on a clone (volatile). deps must already be applied.
+  // ===== RECORD pipeline =====
+
   action recordBegin(p: Patch): bool = all {
-    opPhase == 0,
+    opKind == 0,
     not(memApplied.contains(p)),
     depsOf(p).subseteq(memApplied),
-    opPatch'     = p,
-    opPhase'     = 1,
+    opKind' = 1, opPhase' = 1, opPatch' = p,
     envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
-    hasSnap' = hasSnap, memApplied' = memApplied, corrupt' = corrupt,
+    snapState' = snapState, hasSnap' = hasSnap, memApplied' = memApplied,
+    pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
   }
 
-  // step 2: persist the envelope (DURABLE).
   action putEnv = all {
-    opPhase == 1,
-    envStore'    = envStore.union(Set(opPatch)),
-    opPhase'     = 2,
-    appliedLog' = appliedLog, snapApplied' = snapApplied, hasSnap' = hasSnap,
-    memApplied' = memApplied, opPatch' = opPatch, corrupt' = corrupt,
+    opKind == 1, opPhase == 1,
+    envStore' = envStore.union(Set(opPatch)), opPhase' = 2,
+    appliedLog' = appliedLog, snapApplied' = snapApplied, snapState' = snapState,
+    hasSnap' = hasSnap, memApplied' = memApplied, opKind' = opKind, opPatch' = opPatch,
+    pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
   }
 
-  // step 3: append to the applied log (DURABLE) -- the COMMIT POINT.
   action appendLog = all {
-    opPhase == 2,
-    appliedLog'  = appliedLog.append(opPatch),
-    opPhase'     = 3,
-    envStore' = envStore, snapApplied' = snapApplied, hasSnap' = hasSnap,
-    memApplied' = memApplied, opPatch' = opPatch, corrupt' = corrupt,
+    opKind == 1, opPhase == 2,
+    appliedLog' = appliedLog.append(opPatch), opPhase' = 3,
+    envStore' = envStore, snapApplied' = snapApplied, snapState' = snapState,
+    hasSnap' = hasSnap, memApplied' = memApplied, opKind' = opKind, opPatch' = opPatch,
+    pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
   }
 
-  // step 4: in-memory commit (volatile).
   action memCommit = all {
-    opPhase == 3,
-    memApplied'  = memApplied.union(Set(opPatch)),
-    opPhase'     = 0,
-    opPatch'     = 0,
+    opKind == 1, opPhase == 3,
+    memApplied' = memApplied.union(Set(opPatch)),
+    opKind' = 0, opPhase' = 0, opPatch' = 0,
     envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
-    hasSnap' = hasSnap, corrupt' = corrupt,
+    snapState' = snapState, hasSnap' = hasSnap,
+    pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
   }
 
-  // Checkpoint: snapshot the current stable durable state (no op in flight).
-  action checkpoint = all {
-    opPhase == 0,
-    hasSnap'     = true,
-    snapApplied' = appliedLog,
+  // ===== UNRECORD pipeline =====
+
+  // Pre-flight + clone+Unapply (volatile): refuse if any applied patch depends
+  // on p. Compute the post-unrecord applied list and state, carried as pending.
+  action unrecordBegin(p: Patch): bool = all {
+    opKind == 0,
+    memApplied.contains(p),
+    not(memApplied.exists(q => depsOf(q).contains(p))),
+    opKind' = 2, opPhase' = 1, opPatch' = p,
+    pendingApplied' = removeAll(appliedLog, p),
+    pendingState'   = memApplied.exclude(Set(p)),
+    envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
+    snapState' = snapState, hasSnap' = hasSnap, memApplied' = memApplied, corrupt' = corrupt,
+  }
+
+  // SaveSnapshot of the post-unrecord state (DURABLE).
+  action unrSaveSnapshot = all {
+    opKind == 2, opPhase == 1,
+    hasSnap' = true, snapApplied' = pendingApplied, snapState' = pendingState, opPhase' = 2,
     envStore' = envStore, appliedLog' = appliedLog, memApplied' = memApplied,
-    opPatch' = opPatch, opPhase' = opPhase, corrupt' = corrupt,
+    opKind' = opKind, opPatch' = opPatch,
+    pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
   }
 
-  // crash: power loss wipes volatile state; Open recovers from durable
-  // storage. If a snapshot is a prefix of the log, only the suffix envelopes
-  // are replayed; otherwise the snapshot is discarded and the whole log is
-  // replayed. Recovery fails (corrupt) iff a patch that must be replayed has
-  // no stored envelope.
-  action crash = {
-    val logged   = listToSet(appliedLog)
-    val useSnap  = hasSnap and isPrefix(snapApplied, appliedLog)
-    val toReplay = if (useSnap) listToSet(appliedLog.slice(snapApplied.length(), appliedLog.length()))
-                   else logged
-    all {
-      corrupt'     = not(toReplay.subseteq(envStore)),
-      memApplied'  = logged,
-      opPhase'     = 0,
-      opPatch'     = 0,
-      envStore' = envStore, appliedLog' = appliedLog,
-      snapApplied' = snapApplied, hasSnap' = hasSnap,
-    }
+  // ReplaceApplied with newApplied (DURABLE) -- the unrecord COMMIT POINT.
+  action unrReplaceLog = all {
+    opKind == 2, opPhase == 2,
+    appliedLog' = pendingApplied, opPhase' = 3,
+    envStore' = envStore, snapApplied' = snapApplied, snapState' = snapState,
+    hasSnap' = hasSnap, memApplied' = memApplied, opKind' = opKind, opPatch' = opPatch,
+    pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+  }
+
+  // in-memory commit (volatile). Envelope is kept: envStore unchanged.
+  action unrMemCommit = all {
+    opKind == 2, opPhase == 3,
+    memApplied' = pendingState,
+    opKind' = 0, opPhase' = 0, opPatch' = 0,
+    pendingApplied' = List(), pendingState' = Set(),
+    envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
+    snapState' = snapState, hasSnap' = hasSnap, corrupt' = corrupt,
+  }
+
+  // Checkpoint: snapshot the current stable state (no op in flight).
+  action checkpoint = all {
+    opKind == 0,
+    hasSnap' = true, snapApplied' = appliedLog, snapState' = memApplied,
+    envStore' = envStore, appliedLog' = appliedLog, memApplied' = memApplied,
+    opKind' = opKind, opPhase' = opPhase, opPatch' = opPatch,
+    pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+  }
+
+  // crash: power loss wipes volatile state; Open recovers from durable storage.
+  action crash = all {
+    corrupt'    = not(replayNeedsEnv(hasSnap, snapApplied, appliedLog).subseteq(envStore)),
+    memApplied' = recoveredSet(hasSnap, snapApplied, snapState, appliedLog),
+    opKind' = 0, opPhase' = 0, opPatch' = 0,
+    pendingApplied' = List(), pendingState' = Set(),
+    envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
+    snapState' = snapState, hasSnap' = hasSnap,
   }
 
   action step =
     nondet p = Patches.oneOf()
     any {
-      recordBegin(p),
-      putEnv,
-      appendLog,
-      memCommit,
-      checkpoint,
-      crash,
+      recordBegin(p), putEnv, appendLog, memCommit,
+      unrecordBegin(p), unrSaveSnapshot, unrReplaceLog, unrMemCommit,
+      checkpoint, crash,
     }
 
   // ===== SAFETY INVARIANTS =====
 
-  // Recovery never returns ErrCorruptStore. THE headline crash-safety result.
+  // Recovery never returns ErrCorruptStore (the kept envelope makes every
+  // replay — including an unrecord rollback's suffix replay — total).
   val NoCorruption = not(corrupt)
 
-  // Every logged patch has a durable envelope — the ack-ordering guarantee
-  // (put before append) that MAKES recovery safe.
+  // Every logged patch has a durable envelope (put-before-append; unrecord
+  // keeps envelopes and only shrinks the log).
   val LoggedImpliesStored = listToSet(appliedLog).subseteq(envStore)
 
-  // The durable log is dependency-closed (deps precede dependents).
+  // The durable log is dependency-closed (unrecord refuses while a dependent
+  // is applied, so removing a patch cannot orphan a dependency).
   val LogDepClosed =
     listToSet(appliedLog).forall(p => depsOf(p).subseteq(listToSet(appliedLog)))
 
-  // The log never contains a patch twice (idempotent apply / no double-commit).
   val LogNoDup = appliedLog.length() == listToSet(appliedLog).size()
 
-  // With no operation in flight, the volatile set matches the durable log.
-  val StableConsistency = (opPhase == 0) implies (memApplied == listToSet(appliedLog))
+  // With no op in flight, volatile memory matches the durable log.
+  val StableConsistency = (opKind == 0) implies (memApplied == listToSet(appliedLog))
 
-  // A snapshot is only ever a real prefix of the log's state (so Open's
-  // prefix check never restores a snapshot that disagrees with the log).
-  val SnapshotIsPrefix = hasSnap implies isPrefix(snapApplied, appliedLog)
+  // A snapshot's stored state always equals its own applied list's set, so the
+  // snapshot never lies about the prefix it represents.
+  val SnapshotConsistent = hasSnap implies (snapState == listToSet(snapApplied))
+
+  // THE ATOMICITY RESULT: whenever a crash happens, Open reconstructs EXACTLY
+  // the state of the durable log — never a half-applied or half-unrecorded
+  // mess. This is what the prefix-check-or-discard logic buys; drop the check
+  // (crash_recovery_unsafe_snapshot.qnt) and this fails.
+  val RecoveryCorrect =
+    recoveredSet(hasSnap, snapApplied, snapState, appliedLog) == listToSet(appliedLog)
 
   val Safety = and {
     NoCorruption,
@@ -177,38 +241,50 @@ module crash_recovery {
     LogDepClosed,
     LogNoDup,
     StableConsistency,
-    SnapshotIsPrefix,
+    SnapshotConsistent,
+    RecoveryCorrect,
   }
 
   // ===== WITNESS RUNS =====
 
-  // Crash AFTER PutEnvelope, BEFORE AppendApplied: the patch did not commit.
-  // Recovery yields the empty log; the envelope is a harmless orphan.
+  // Record crash windows (unchanged behaviour from the record-only model).
   run crashBeforeCommitTest =
-    init
-      .then(recordBegin(1))
-      .then(putEnv)
-      .then(crash)
-      .expect(memApplied == Set() and appliedLog == List() and envStore == Set(1)
-          and not(corrupt))
+    init.then(recordBegin(1)).then(putEnv).then(crash)
+      .expect(memApplied == Set() and appliedLog == List() and envStore == Set(1) and not(corrupt))
 
-  // Crash AFTER AppendApplied, BEFORE the in-memory commit: the patch IS
-  // durable. Recovery brings it back even though memCommit never ran.
   run crashAfterCommitTest =
-    init
-      .then(recordBegin(1))
-      .then(putEnv)
-      .then(appendLog)
-      .then(crash)
+    init.then(recordBegin(1)).then(putEnv).then(appendLog).then(crash)
       .expect(memApplied == Set(1) and appliedLog == List(1) and not(corrupt))
 
-  // Snapshot-accelerated recovery: a snapshot prefix [1] plus a replayed
-  // suffix [2] reconstructs {1,2}.
-  run snapshotRecoveryTest =
+  // Unrecord happy path: 2 is backed out; the log becomes [1].
+  run unrecordCommitsTest =
     init
       .then(recordBegin(1)).then(putEnv).then(appendLog).then(memCommit)
-      .then(checkpoint)
       .then(recordBegin(2)).then(putEnv).then(appendLog).then(memCommit)
+      .then(unrecordBegin(2)).then(unrSaveSnapshot).then(unrReplaceLog).then(unrMemCommit)
+      .expect(memApplied == Set(1) and appliedLog == List(1))
+
+  // ATOMICITY — crash BEFORE ReplaceApplied, unrecording the MIDDLE patch 2.
+  // The snapshot's applied list [1,3] is NOT a prefix of the durable log
+  // [1,2,3], so Open DISCARDS it and replays the whole log: the unrecord rolls
+  // back to {1,2,3}. (The kept envelope for 2 makes the replay total.)
+  run unrecordRollbackOnCrashTest =
+    init
+      .then(recordBegin(1)).then(putEnv).then(appendLog).then(memCommit)
+      .then(recordBegin(2)).then(putEnv).then(appendLog).then(memCommit)
+      .then(recordBegin(3)).then(putEnv).then(appendLog).then(memCommit)
+      .then(unrecordBegin(2)).then(unrSaveSnapshot)
       .then(crash)
-      .expect(memApplied == Set(1, 2) and not(corrupt))
+      .expect(memApplied == Set(1, 2, 3) and appliedLog == List(1, 2, 3) and not(corrupt))
+
+  // ATOMICITY — crash AFTER ReplaceApplied: the unrecord is durable; recovery
+  // keeps it backed out.
+  run unrecordDurableAfterCrashTest =
+    init
+      .then(recordBegin(1)).then(putEnv).then(appendLog).then(memCommit)
+      .then(recordBegin(2)).then(putEnv).then(appendLog).then(memCommit)
+      .then(recordBegin(3)).then(putEnv).then(appendLog).then(memCommit)
+      .then(unrecordBegin(2)).then(unrSaveSnapshot).then(unrReplaceLog)
+      .then(crash)
+      .expect(memApplied == Set(1, 3) and appliedLog == List(1, 3) and not(corrupt))
 }
