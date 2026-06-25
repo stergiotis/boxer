@@ -36,6 +36,8 @@ concurrent state machine, which is what a model checker is for.
 | `crash_recovery.qnt`   | The single-repo durability layer: the record + unrecord commit ack-orderings + `Open` recovery, with a crash possible between any two steps. |
 | `crash_recovery_unsafe.qnt` | Counterfactual (record writes swapped) — shows put-before-append is what makes recovery total. |
 | `crash_recovery_unsafe_snapshot.qnt` | Counterfactual (snapshot trusted without the prefix check) — shows the prefix-or-discard rule is what makes unrecord atomic. |
+| `convergence.qnt` | Liveness model (record / offer / deliver, reliable carrier) with a bounded witness; the readable source for the TLA⁺ below. |
+| `convergence.tla` + `.cfg` | TLC-native companion proving `<>[]FullyReplicated` under fairness; `convergence_nofair.cfg` shows it fails without fairness. |
 
 ## Refinement map (spec action → Go symbol)
 
@@ -142,13 +144,52 @@ restore `{1,2,3}`); **unrecord durable** when the crash follows it.
   `Open`'s prefix-or-discard (repo/repo.go:147) is a correctness requirement,
   not an optimization.
 
+## Convergence: liveness under fairness
+
+Safety says nothing bad happens; **liveness** says something good eventually
+does. `convergence.qnt` models progress — `record` (each patch authored once at
+its origin), perpetual `offer` (Push/Pull recompute the diff each run), and
+dependency-gated `deliver` over a **reliable** carrier (loss/reorder/dup are a
+safety concern, covered in `pushout_exchange.qnt`). The property:
+
+```
+Convergence == <>[]FullyReplicated   (eventually, every node holds every patch)
+```
+
+This is a `◇□` property: it needs **fairness** (an enabled sync must not be
+starved forever) and is checked with **TLC**, not Apalache (whose liveness
+search is impractically slow even on a toy here). `convergence.tla` is a
+TLC-native module kept in lockstep with the Quint source (same Nodes / Patches /
+deps / origin and the same three actions); `convergence.qnt` additionally
+carries a fast bounded witness (`quint test`) of one fair interleaving reaching
+full replication.
+
+Results (TLC, 133 distinct states):
+
+- **`convergence.cfg` (with `WF` on every action) → holds.** "Model checking
+  completed. No error has been found." Under weak fairness the dependency-
+  coupled chain always completes: `record 1 → propagate → record 2,3 →
+  propagate`, so every repo ends with `{1,2,3}`.
+- **`convergence_nofair.cfg` (no fairness) → violated.** TLC returns a
+  counterexample that does some work then **stutters forever** before
+  replicating. That is the mechanical proof that **fairness is required** — the
+  liveness analogue of the safety counterfactuals.
+
+Needs `tla2tools.jar` (TLC); see Running.
+
 ## Running
 
 ```sh
-npm install        # pins quint locally
-npm run check      # typecheck + test + randomized Safety sweeps, ALL specs
-npm run verify     # Apalache bounded proofs of Safety (exchange + crash_recovery)
-npm run findings   # prints the counterexample traces (erasure, unsafe ordering)
+npm install         # pins quint locally
+npm run check       # typecheck + test + randomized Safety sweeps, ALL specs
+npm run verify      # Apalache bounded proofs of Safety (exchange + crash_recovery)
+npm run findings    # prints the counterexample traces (erasure, unsafe ordering)
+
+# liveness needs TLC (one-time): grab tla2tools.jar to ~/.tlaplus/ (or set $TLA_TOOLS)
+curl -fL -o ~/.tlaplus/tla2tools.jar \
+  https://github.com/tlaplus/tlaplus/releases/latest/download/tla2tools.jar
+npm run liveness         # TLC: Convergence holds under fairness -> "No error has been found"
+npm run liveness:nofair  # TLC: Convergence fails without fairness -> stuttering counterexample
 ```
 
 Per spec, e.g.:
@@ -165,12 +206,12 @@ npx quint run    pushout_exchange.qnt               --invariant=ErasureComplete 
 - ✓ **Crash-recovery ack-ordering + unrecord atomicity** — modelled in
   `crash_recovery.qnt` (+ the two `_unsafe` counterfactuals); see the section
   above. `RecoveryCorrect` proves each verb is all-or-nothing across any crash.
-- **Liveness / convergence under fairness.** Convergence is a `◇□`(all applied
-  sets equal) property needing weak fairness on `deliverApply`+`offer` and
-  quiescence on `record`/`drop`. Apalache's liveness support is thin; export to
-  TLA⁺ (`quint compile --target tlaplus`) and check with TLC.
+- ✓ **Liveness / convergence under fairness** — modelled in `convergence.qnt`
+  and proved with TLC (`convergence.tla`): `<>[]FullyReplicated` holds under weak
+  fairness, fails without it. See the section above.
 - **Smarter reconciliation** (frontiers / set sketches) — ADR-0079 OQ-1 — vs.
-  the current full applied-list exchange.
+  the current full applied-list exchange. This is where liveness gets
+  interesting again: a frontier protocol must still guarantee progress.
 - **Authentication / Byzantine peers.** `envelope.Validate` (envelope/envelope.go:67)
   already does hash tamper-detection; add signatures and model a peer that ships
   well-formed-but-unauthorized envelopes.
