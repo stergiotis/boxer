@@ -267,6 +267,7 @@ func (m *repoMachine) reopen(rt *rapid.T) {
 	idx := rapid.IntRange(0, len(m.repos)-1).Draw(rt, "repo")
 	old := m.repos[idx]
 	before := m.observable(old)
+	beforeRet := m.retentionFingerprint(old)
 	if err := old.Close(m.ctx); err != nil {
 		rt.Fatalf("close %s: %v", old.Actor(), err)
 	}
@@ -276,6 +277,11 @@ func (m *repoMachine) reopen(rt *rapid.T) {
 	}
 	if got := m.observable(fresh); got != before {
 		rt.Fatalf("recovery diverged for %s:\nbefore:\n%s\nafter:\n%s", old.Actor(), before, got)
+	}
+	// The pending retention horizon must survive recovery (ADR-0079): the
+	// durable ledger seeds tombstoneAt so full replay cannot reset it.
+	if got := m.retentionFingerprint(fresh); got != beforeRet {
+		rt.Fatalf("retention horizon diverged across reopen for %s:\nbefore:\n%s\nafter:\n%s", old.Actor(), beforeRet, got)
 	}
 	m.repos[idx] = fresh
 }
@@ -365,6 +371,21 @@ func (m *repoMachine) check(rt *rapid.T) {
 // path/value for clean cells, path/sides for conflicts. Credit is
 // excluded — first-writer-wins provenance may legitimately differ
 // between repos for hash-converged patches.
+// retentionFingerprint renders a repo's durable retention horizon
+// (replica-local, so compared only across the SAME repo's reopen, never
+// across the fleet — unlike observable).
+func (m *repoMachine) retentionFingerprint(pr *PushoutRepo) string {
+	entries, err := pr.Engine().RetentionStamps(m.ctx)
+	if err != nil {
+		m.tb.Fatalf("retention stamps: %v", err)
+	}
+	var sb strings.Builder
+	for _, e := range entries {
+		fmt.Fprintf(&sb, "%v=%d\n", e.Node, e.UnixNano)
+	}
+	return sb.String()
+}
+
 func (m *repoMachine) observable(repo *PushoutRepo) string {
 	cells, _, _, err := repo.State(m.ctx)
 	if err != nil {

@@ -57,11 +57,15 @@ type Graggle struct {
 	// Tombstone retention bookkeeping (storage-limitation under GDPR Art
 	// 5(1)(e) / FADP Art 6(4); see SweepTombstones).
 	//
-	// tombstoneAt[id] holds the wall-clock time the node was tombstoned
-	// by THIS graggle session. Populated by DeleteNode via inst.clock(),
-	// cleared by UndeleteNode and RemoveNode. Reflects session-local
-	// timing — graggles rebuilt from envelopes on each startup reset the
-	// clock; long-running processes accumulate genuine retention.
+	// tombstoneAt[id] holds the wall-clock time the node was tombstoned as
+	// observed by THIS replica. Populated by DeleteNode via inst.clock(),
+	// cleared by UndeleteNode and RemoveNode, and carried in the GRG1
+	// snapshot. It is a working copy of the repo's durable retention
+	// ledger: full replay re-stamps it to replay time, but the repo
+	// re-seeds it from the ledger at Open (see SeedTombstoneStamps), so the
+	// pending retention horizon survives crash/restart on the same store
+	// (ADR-0079). A fresh clone carries no ledger and starts the horizon at
+	// clone time — fleet-wide erasure across clones is ADR-0025's layer.
 	tombstoneAt map[t.NodeID]time.Time
 
 	// contentPurged[id] is present iff content was destroyed by
@@ -899,9 +903,11 @@ func (inst *Graggle) NodeContentStatus(id t.NodeID) (status t.NodeContentStatusE
 // workflows.
 //
 // Caveats:
-//   - tombstoneAt is session-local: graggles rebuilt from envelopes on
-//     each startup reset the clock. Applications needing
-//     session-persistent retention must layer persistence on top.
+//   - The pending retention horizon is durable across crash/restart on
+//     the same store: tombstoneAt is mirrored to the repo's retention
+//     ledger and re-seeded at Open, so full replay no longer resets it
+//     (ADR-0079). A fresh clone carries no ledger and starts the horizon
+//     at clone time; fleet-wide erasure across clones is ADR-0025's layer.
 //   - Not safe for concurrent use with mutating graggle operations; the
 //     caller's mutex (e.g. PushoutRepo.Mu) applies.
 //
@@ -934,6 +940,33 @@ func (inst *Graggle) SweepTombstones(now time.Time, horizon time.Duration) (purg
 		slices.SortFunc(purgedIDs, t.CompareNodeID)
 	}
 	return
+}
+
+// SeedTombstoneStamps overlays durable retention times onto the in-memory
+// tombstoneAt working copy: for every currently-tombstoned node present in
+// ledger, its stamp is replaced with the durable value; tombstones absent
+// from the ledger keep whatever stamp decode or replay produced (that
+// stamp is the fallback). This is how the repo restores replay-stable
+// retention horizons at Open without re-stamping — see ADR-0079 and the
+// tombstoneAt field doc. Entries in ledger for non-tombstoned nodes are
+// ignored.
+func (inst *Graggle) SeedTombstoneStamps(ledger map[t.NodeID]time.Time) {
+	for _, id := range inst.deletedNodes.Items() {
+		if when, ok := ledger[id]; ok {
+			inst.tombstoneAt[id] = when
+		}
+	}
+}
+
+// TombstoneStamps returns a copy of the per-node tombstone times. Only
+// tombstoned nodes have entries; the repo persists this as the durable
+// retention ledger.
+func (inst *Graggle) TombstoneStamps() map[t.NodeID]time.Time {
+	out := make(map[t.NodeID]time.Time, len(inst.tombstoneAt))
+	for id, when := range inst.tombstoneAt {
+		out[id] = when
+	}
+	return out
 }
 
 // --- InspectableI / VisualizableI adapter methods ---

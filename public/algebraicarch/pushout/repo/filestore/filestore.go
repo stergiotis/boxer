@@ -4,7 +4,9 @@
 //
 //	<root>/applied.txt          one 64-hex hash per line, apply order
 //	<root>/snapshot.bin         repo.Snapshot (own framing, see below)
+//	<root>/retention.txt        one "<64-hex> <index> <unixnano>" per line
 //	<root>/changes/<hh>/<hash>  framed envelopes, sharded by first byte
+//	<root>/lock                 advisory inter-process lock (see lock_unix.go)
 //
 // Durability discipline: envelope files and the snapshot are written to
 // a temp file in the destination directory, fsynced, renamed into
@@ -25,6 +27,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -33,20 +37,39 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 )
 
+// ErrLocked is returned by Open when another live process already holds
+// the store's directory lock. The engine assumes a single writer per
+// store (StorageI methods run under the engine's in-memory locks); two
+// processes on one root would interleave applied-log and snapshot writes
+// and corrupt acknowledged state, so Open refuses rather than race.
+var ErrLocked = errors.New("store directory is locked by another process")
+
 // Store implements repo.StorageI over a root directory.
 type Store struct {
 	root string
+	// lockFile holds the advisory whole-directory lock for this store's
+	// lifetime (see acquireLock); Close releases it, and process death
+	// releases it automatically (no stale lock to clean up after a crash).
+	// nil on platforms without advisory locking.
+	lockFile *os.File
 }
 
 var _ repo.StorageI = (*Store)(nil)
 
-// Open creates (if needed) and opens a store rooted at dir.
+// Open creates (if needed) and opens a store rooted at dir. It takes an
+// advisory inter-process lock on dir; a second Open against a root a live
+// process already holds fails with ErrLocked.
 func Open(dir string) (st *Store, err error) {
 	if err = os.MkdirAll(filepath.Join(dir, "changes"), 0o755); err != nil {
 		err = eh.Errorf("create store layout: %w", err)
 		return
 	}
-	st = &Store{root: dir}
+	lockFile, lerr := acquireLock(dir)
+	if lerr != nil {
+		err = lerr
+		return
+	}
+	st = &Store{root: dir, lockFile: lockFile}
 	return
 }
 
@@ -247,6 +270,73 @@ func (inst *Store) LoadSnapshot(ctx context.Context) (snap repo.Snapshot, ok boo
 	return
 }
 
+func (inst *Store) retentionPath() string { return filepath.Join(inst.root, "retention.txt") }
+
+// SaveRetention atomically replaces the retention ledger. Entries are
+// written sorted by node id (deterministic, debuggable); an empty slice
+// writes an empty file.
+func (inst *Store) SaveRetention(ctx context.Context, entries []repo.RetentionEntry) (err error) {
+	sorted := make([]repo.RetentionEntry, len(entries))
+	copy(sorted, entries)
+	slices.SortFunc(sorted, func(a, b repo.RetentionEntry) int { return t.CompareNodeID(a.Node, b.Node) })
+	var sb strings.Builder
+	for _, e := range sorted {
+		sb.WriteString(hex.EncodeToString(e.Node.Patch[:]))
+		sb.WriteByte(' ')
+		sb.WriteString(strconv.FormatUint(e.Node.Index, 10))
+		sb.WriteByte(' ')
+		sb.WriteString(strconv.FormatInt(e.UnixNano, 10))
+		sb.WriteByte('\n')
+	}
+	err = writeAtomic(inst.retentionPath(), []byte(sb.String()))
+	return
+}
+
+// LoadRetention reads the retention ledger. A missing file (fresh store)
+// yields an empty slice. The whole file is replaced atomically, so there
+// is no torn-tail case: any malformed line is corruption.
+func (inst *Store) LoadRetention(ctx context.Context) (entries []repo.RetentionEntry, err error) {
+	data, rerr := os.ReadFile(inst.retentionPath())
+	if rerr != nil {
+		if errors.Is(rerr, fs.ErrNotExist) {
+			return
+		}
+		err = eh.Errorf("read retention ledger: %w", rerr)
+		return
+	}
+	for i, line := range strings.Split(string(data), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, " ")
+		if len(fields) != 3 {
+			err = eh.Errorf("retention ledger line %d: want 3 fields, got %d", i+1, len(fields))
+			return
+		}
+		var e repo.RetentionEntry
+		if uerr := e.Node.Patch.UnmarshalText([]byte(fields[0])); uerr != nil {
+			err = eh.Errorf("retention ledger line %d: %w", i+1, uerr)
+			return
+		}
+		idx, perr := strconv.ParseUint(fields[1], 10, 64)
+		if perr != nil {
+			err = eh.Errorf("retention ledger line %d index: %w", i+1, perr)
+			return
+		}
+		e.Node.Index = idx
+		nanos, perr := strconv.ParseInt(fields[2], 10, 64)
+		if perr != nil {
+			err = eh.Errorf("retention ledger line %d unixnano: %w", i+1, perr)
+			return
+		}
+		e.UnixNano = nanos
+		entries = append(entries, e)
+	}
+	return
+}
+
 func (inst *Store) Close() (err error) {
+	err = releaseLock(inst.lockFile)
+	inst.lockFile = nil
 	return
 }

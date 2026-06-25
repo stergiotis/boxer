@@ -31,6 +31,26 @@ func h(b byte) (out t.PatchHash) {
 	return
 }
 
+func nid(b byte, idx uint64) t.NodeID {
+	return t.NodeID{Patch: h(b), Index: idx}
+}
+
+func retentionSetEqual(got, want []repo.RetentionEntry) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	m := make(map[t.NodeID]int64, len(got))
+	for _, e := range got {
+		m[e.Node] = e.UnixNano
+	}
+	for _, e := range want {
+		if v, ok := m[e.Node]; !ok || v != e.UnixNano {
+			return false
+		}
+	}
+	return true
+}
+
 // CheckEnvelopes: put/get/has round-trip, idempotent re-put,
 // first-write-wins immutability, ErrEnvelopeNotFound on miss.
 func CheckEnvelopes(ctx context.Context, open OpenFunc, location string) (err error) {
@@ -153,6 +173,50 @@ func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err err
 	return
 }
 
+// CheckRetention: absent on fresh, save/load set round-trip, and
+// whole-ledger replace (not append).
+func CheckRetention(ctx context.Context, open OpenFunc, location string) (err error) {
+	st, err := open(location)
+	if err != nil {
+		return fmt.Errorf("open: %w", err)
+	}
+	defer st.Close()
+
+	got, err := st.LoadRetention(ctx)
+	if err != nil || len(got) != 0 {
+		return fmt.Errorf("fresh load = %v, %v (want empty, nil)", got, err)
+	}
+	want := []repo.RetentionEntry{{Node: nid(1, 0), UnixNano: 100}, {Node: nid(2, 7), UnixNano: 200}}
+	if err = st.SaveRetention(ctx, want); err != nil {
+		return fmt.Errorf("save: %w", err)
+	}
+	got, err = st.LoadRetention(ctx)
+	if err != nil {
+		return fmt.Errorf("load: %w", err)
+	}
+	if !retentionSetEqual(got, want) {
+		return fmt.Errorf("round-trip mismatch: got %v want %v", got, want)
+	}
+	// Whole-ledger replace, not append: a second save with one entry
+	// leaves only that entry.
+	replaced := []repo.RetentionEntry{{Node: nid(3, 0), UnixNano: 300}}
+	if err = st.SaveRetention(ctx, replaced); err != nil {
+		return fmt.Errorf("replace: %w", err)
+	}
+	got, err = st.LoadRetention(ctx)
+	if err != nil || !retentionSetEqual(got, replaced) {
+		return fmt.Errorf("post-replace load = %v, %v", got, err)
+	}
+	if err = st.SaveRetention(ctx, nil); err != nil {
+		return fmt.Errorf("replace-to-empty: %w", err)
+	}
+	got, err = st.LoadRetention(ctx)
+	if err != nil || len(got) != 0 {
+		return fmt.Errorf("post-empty load = %v, %v", got, err)
+	}
+	return
+}
+
 // CheckReopenDurability: everything written before Close is observable
 // after reopening the same location — the property crash recovery
 // stands on.
@@ -169,6 +233,9 @@ func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) 
 		return err
 	}
 	if err = st.SaveSnapshot(ctx, repo.Snapshot{Applied: []t.PatchHash{h(7)}, Graggle: []byte("G")}); err != nil {
+		return err
+	}
+	if err = st.SaveRetention(ctx, []repo.RetentionEntry{{Node: nid(7, 3), UnixNano: 999}}); err != nil {
 		return err
 	}
 	if err = st.Close(); err != nil {
@@ -192,6 +259,10 @@ func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) 
 	if err != nil || !ok || len(snap.Applied) != 1 {
 		return fmt.Errorf("snapshot did not survive reopen: %+v ok:%v err:%v", snap, ok, err)
 	}
+	ret, err := st2.LoadRetention(ctx)
+	if err != nil || len(ret) != 1 || ret[0].Node != nid(7, 3) || ret[0].UnixNano != 999 {
+		return fmt.Errorf("retention ledger did not survive reopen: %v, %v", ret, err)
+	}
 	return
 }
 
@@ -207,6 +278,7 @@ func Run(tt *testing.T, open OpenFunc) {
 		{"Envelopes", CheckEnvelopes},
 		{"AppliedLog", CheckAppliedLog},
 		{"Snapshot", CheckSnapshot},
+		{"Retention", CheckRetention},
 		{"ReopenDurability", CheckReopenDurability},
 	}
 	for _, c := range checks {

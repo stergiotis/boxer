@@ -250,6 +250,115 @@ Accepted — 2026-06-12. Implementation phases P1–P7 landed, verified
 the reopen verb), and pushed; the hackathon_2026 pijuldemo consumes the
 engine through the public read API.
 
+## Update — 2026-06-25: retention-clock durability; conflict-ordering, identity-claim, and storage-lock fixes
+
+A distributed-systems review of the package surfaced one residual design
+gap and three smaller defects. All four are addressed in this update; the
+gap's solution (the retention ledger) is described in full below, then
+implemented with the conformance + rapid-harness coverage its `StorageI`-
+contract change requires (per Derived Practices).
+
+### Retention-clock durability (implemented)
+
+Q5/O5b made the *purge result* durable: once `Sweep` returns,
+`contentPurged` survives restart, because the swept clone is snapshotted
+before the verb acks. But the *pending* retention horizon —
+`tombstoneAt[id]` for tombstones not yet swept — is **not** durable
+across the full-replay recovery path. `tombstoneAt` is stamped by
+`DeleteNode` from `Options.Clock` at apply time and persisted only inside
+the GRG1 snapshot; snapshot-prefix recovery restores it, but full replay
+re-runs `DeleteNode` and re-stamps every tombstone to *replay time*. Full
+replay is the crash fallback (a non-prefix snapshot, e.g. a crash
+mid-unrecord) and the only path for a fresh clone (which has no
+snapshot). So §Context's "purge un-happens on restart" hole was closed
+for swept content but left open for the *un-swept horizon*: it resets to
+"now" on those paths. Two consequences of different character:
+
+- **Same-store restart — fixable.** A crash without a clean `Close`, or a
+  non-prefix snapshot, resets horizons on the next `Open` even though the
+  data has objectively been tombstoned since the original delete. A repo
+  that crash-loops faster than its horizon could defer a compliance purge
+  indefinitely.
+- **Fresh clone — intrinsic.** A new replica receives only envelopes +
+  log; envelopes carry no trusted time (identity is clock-free by
+  design), so a clone has no replay-stable basis for an earlier stamp.
+  Starting the horizon at clone time is defensible under a *replica-local*
+  retention model ("I have held this data since I received it"), but it
+  means re-cloning resets the fleet's erasure clock — a fleet-coordination
+  problem, not a per-replica one.
+
+**Decision.** Introduce a **replica-local, replay-stable retention
+ledger**: a durable `NodeID → first-observed-deleted (unix-nanos)` map
+owned by `StorageI`, written when a committing verb creates a tombstone
+(and on sweep/unrecord), and *seeded into the graggle at `Open` instead of
+re-stamping*. Because it persists independently of the snapshot and is
+never reconstructed from envelopes, it survives full replay on the same
+store, closing the same-store case. `StorageI` delta:
+`SaveRetention(ctx, []RetentionEntry)` (atomic replace, mirroring
+`ReplaceApplied`) + `LoadRetention(ctx)`; `storagetest` gains a Retention
+check and folds the ledger into its reopen-durability case; the in-tree
+fakes embed `StorageI` and inherit the pair (the fault store overrides
+`SaveRetention` to inject failures). `Open` reconciles: adopt the ledger's
+stamp for each current tombstone where present, keep the decode/replay
+stamp otherwise, drop entries for nodes no longer tombstoned, and write
+back only when the set changed. The graggle's `tombstoneAt` is a working
+copy of the ledger, re-seeded via `SeedTombstoneStamps`.
+
+**Rejected.** *Salvaging stamps from a discarded (non-prefix) snapshot* —
+couples retention to topology the engine has decided not to trust, and
+does nothing for a fresh clone (no snapshot exists). *Per-patch
+first-applied-at* instead of per-node — adds a node→deleter→time
+indirection without changing the durability story; per-node matches the
+existing `tombstoneAt` shape.
+
+The fresh-clone case is explicitly **not** closed by the ledger.
+Fleet-wide erasure that survives re-cloning is **OQ-7**, owned by
+ADR-0025's cooperative-purge layer (compensating patches / erasure
+propagation), with the durable ledger as the per-replica primitive it
+builds on. Code comments (`graggle.tombstoneAt`, `SweepTombstones`) and
+`doc/explanation/pushout-distributed-operation.md` §2 are corrected to
+state this durability boundary rather than implying session-local
+retention is wholly benign. This refines, but does not contradict, SD8:
+the clock stays injected (determinism preserved); the ledger adds
+*durability* of the stamp, which SD8 never promised.
+
+**Implemented** as described above: `StorageI.SaveRetention`/
+`LoadRetention` + the `filestore` `retention.txt` ledger + a `storagetest`
+Retention check; `Open` seeds from the ledger then writes back when the
+set changed; ledger writes happen on tombstone-changing commits *before*
+the commit point (`AppendApplied`/`ReplaceApplied`), so a failed retention
+write is crash-equivalent and an orphan ledger entry is dropped on
+recovery. A public `Repo.RetentionStamps` accessor exposes the horizon for
+audit, and the rapid harness's reopen verb now asserts horizon durability
+across recovery. The fresh-clone case remains **OQ-7**.
+
+### Fixes landed with this update
+
+- **Deterministic conflict reporting.** `algo.DetectConflicts` iterated
+  adjacency in apply order, so two replicas with identical converged
+  state could emit the same conflict *set* in different list / intra-
+  conflict order — a cross-peer-determinism asymmetry versus
+  `LinearOrder`, which is already canonical. Output is now sorted
+  (conflict list and member nodes) by `CompareNodeID`, matching
+  `TopoSort`'s existing discipline. The conflict *set* is unchanged, so
+  qc invariant 13 still holds.
+- **Identity-disambiguation claim corrected.** `Repo.Record`'s
+  collision shift is deterministic relative to the **local** applied
+  set; the comment's "concurrent identical re-creations on different
+  repos still converge on one patch" holds only when both repos carry
+  the same colliding patches. With divergent collision histories the
+  re-creation degrades to a benign duplicate (a fork conflict,
+  indistinguishable from two actors typing the same line). Comment
+  reworded; behaviour is already safe and unchanged.
+- **Storage single-writer enforcement.** `filestore.Open` took no
+  inter-process lock; two processes on one root could interleave
+  `applied.txt` / snapshot writes and corrupt acknowledged state. `Open`
+  now takes an advisory `flock` (`LOCK_EX|LOCK_NB`, released on `Close`,
+  auto-released on process death) and returns `ErrLocked` on contention.
+  Unix-gated (`lock_unix.go`) with a no-op fallback elsewhere
+  (`lock_other.go`); the crash-simulation engine tests now release the
+  store lock as a process exit would.
+
 ## Open questions
 
 - **OQ-1 — sync at scale.** Full-list exchange is O(history) per

@@ -17,6 +17,18 @@ type Snapshot struct {
 	Graggle []byte
 }
 
+// RetentionEntry is one node's replica-local first-observed-deleted time
+// (unix nanoseconds), the durable form of the graggle's tombstoneAt
+// stamp. The retention ledger exists because envelopes carry no trusted
+// time, so a full replay would otherwise re-stamp every tombstone to
+// replay time and reset its retention horizon (see ADR-0079). Unlike the
+// Snapshot, the ledger is NOT prefix-gated — it is always authoritative
+// for times — and it is replica-local policy, never shipped over the wire.
+type RetentionEntry struct {
+	Node     t.NodeID
+	UnixNano int64
+}
+
 // StorageI is the persistence seam of the repo engine. Implementations
 // provide atomic, durable primitives; the ENGINE owns operation
 // sequencing (envelope before log append before in-memory commit), so a
@@ -43,6 +55,10 @@ type Snapshot struct {
 //   - SaveSnapshot atomically replaces the snapshot; LoadSnapshot
 //     reports ok=false when none exists. A snapshot is opaque to the
 //     storage layer.
+//   - SaveRetention atomically replaces the whole retention ledger (not
+//     an append); LoadRetention returns the entries in unspecified order
+//     (treat as a set) and an empty slice when none exists. The ledger
+//     is durable when SaveRetention returns.
 //   - All durability promises must hold across Close + reopen of the
 //     same location.
 //   - Methods are called under the engine's locks; implementations need
@@ -59,6 +75,9 @@ type StorageI interface {
 
 	SaveSnapshot(ctx context.Context, snap Snapshot) error
 	LoadSnapshot(ctx context.Context) (snap Snapshot, ok bool, err error)
+
+	SaveRetention(ctx context.Context, entries []RetentionEntry) error
+	LoadRetention(ctx context.Context) ([]RetentionEntry, error)
 
 	Close() error
 }

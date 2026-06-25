@@ -195,6 +195,30 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 	}
 	r0.applied = slices.Clone(applied)
 
+	// Seed replay-stable retention horizons from the durable ledger, then
+	// persist the reconciled set. Full replay re-stamped tombstoneAt to
+	// replay time, so without this the horizon would reset on every
+	// snapshot-less or non-prefix open (ADR-0079). The reconcile adopts the
+	// ledger's stamp where present, keeps the decode/replay stamp for
+	// tombstones new to the ledger, and drops entries for nodes no longer
+	// tombstoned — writing back only when something changed.
+	retEntries, lerr := opts.Storage.LoadRetention(ctx)
+	if lerr != nil {
+		err = lerr
+		return
+	}
+	ledger := make(map[t.NodeID]time.Time, len(retEntries))
+	for _, e := range retEntries {
+		ledger[e.Node] = time.Unix(0, e.UnixNano)
+	}
+	r0.g.SeedTombstoneStamps(ledger)
+	if retentionChanged(r0.g, ledger) {
+		if serr := r0.saveRetentionLocked(ctx, r0.g); serr != nil {
+			err = serr
+			return
+		}
+	}
+
 	if r0.hooks.OnRecovered != nil {
 		r0.hooks.OnRecovered(RecoveredEvent{
 			Applied:      len(applied),
@@ -225,8 +249,15 @@ func isPrefix(prefix, full []t.PatchHash) bool {
 // Identity collision: identical changes against identical anchors
 // reproduce the hash of an applied patch (typical when re-creating
 // previously deleted content). The placeholder index space is shifted
-// deterministically, so concurrent identical re-creations on different
-// repos still converge on one patch.
+// deterministically — but only relative to the LOCAL applied set, so the
+// shift count depends on which colliding patches this repo happens to
+// hold. Two repos converge on one patch for an identical re-creation only
+// when their colliding histories agree; with divergent histories they may
+// land on different shift counts and thus different hashes, and the
+// re-creation surfaces post-sync as a benign duplicate (a fork conflict,
+// indistinguishable from two actors independently typing the same line).
+// Fleet-wide single-identity for identical re-creation is not a guarantee
+// the local shift can make — see ADR-0079.
 func (inst *Repo) Record(ctx context.Context, author, message string, changes []patch.Change) (h t.PatchHash, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -315,6 +346,15 @@ func (inst *Repo) commitPatchLocked(ctx context.Context, p *patch.Patch, framed 
 	if err = inst.st.PutEnvelope(ctx, p.Hash, framed); err != nil {
 		return
 	}
+	// When this patch can create tombstones, persist the retention ledger
+	// before the commit point (AppendApplied) so the horizon is durable
+	// before the verb acks. A failure fails the verb; the orphan envelope
+	// and any orphan ledger entry are harmless — recovery reconciles.
+	if patchTombstones(p) {
+		if err = inst.saveRetentionLocked(ctx, next); err != nil {
+			return
+		}
+	}
 	if err = inst.st.AppendApplied(ctx, p.Hash); err != nil {
 		return
 	}
@@ -378,6 +418,11 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	newApplied := slices.Delete(slices.Clone(inst.applied), idx, idx+1)
 
 	if err = inst.saveSnapshotLocked(ctx, next, newApplied); err != nil {
+		return
+	}
+	// Unrecord can resurrect a node (dropping its tombstoneAt), so refresh
+	// the ledger before the commit point (ReplaceApplied).
+	if err = inst.saveRetentionLocked(ctx, next); err != nil {
 		return
 	}
 	if err = inst.st.ReplaceApplied(ctx, newApplied); err != nil {
@@ -455,6 +500,47 @@ func (inst *Repo) saveSnapshotLocked(ctx context.Context, g *store.Graggle, appl
 	return
 }
 
+// saveRetentionLocked persists the durable retention ledger from the
+// GIVEN graggle's tombstone stamps. Called on tombstone-changing commits
+// and at Open so a full replay cannot reset retention horizons (ADR-0079).
+func (inst *Repo) saveRetentionLocked(ctx context.Context, g *store.Graggle) (err error) {
+	stamps := g.TombstoneStamps()
+	entries := make([]RetentionEntry, 0, len(stamps))
+	for id, when := range stamps {
+		entries = append(entries, RetentionEntry{Node: id, UnixNano: when.UnixNano()})
+	}
+	err = inst.st.SaveRetention(ctx, entries)
+	return
+}
+
+// patchTombstones reports whether applying p can change the tombstone set
+// (it carries a DeleteNode change), so the caller knows to refresh the
+// retention ledger.
+func patchTombstones(p *patch.Patch) bool {
+	for _, c := range p.Changes {
+		if c.Kind == patch.ChangeKindDeleteNode {
+			return true
+		}
+	}
+	return false
+}
+
+// retentionChanged reports whether g's current tombstone stamps differ
+// from the loaded ledger (a node added, dropped, or re-stamped), so Open
+// rewrites the ledger only when the reconcile actually changed it.
+func retentionChanged(g *store.Graggle, ledger map[t.NodeID]time.Time) bool {
+	current := g.TombstoneStamps()
+	if len(current) != len(ledger) {
+		return true
+	}
+	for id, when := range current {
+		if lw, ok := ledger[id]; !ok || !lw.Equal(when) {
+			return true
+		}
+	}
+	return false
+}
+
 // Close checkpoints and releases the storage. The repo is unusable
 // afterwards.
 func (inst *Repo) Close(ctx context.Context) (err error) {
@@ -488,6 +574,26 @@ func (inst *Repo) Applied(ctx context.Context) (hs []t.PatchHash, err error) {
 		return
 	}
 	hs = slices.Clone(inst.applied)
+	return
+}
+
+// RetentionStamps returns the durable retention horizon: each tombstoned
+// node's first-observed-deleted time on THIS replica, in CompareNodeID
+// order. Replica-local policy (see ADR-0079), for audit/observability and
+// crash-recovery tests; it is the in-memory view of the same data the
+// engine persists as the retention ledger.
+func (inst *Repo) RetentionStamps(ctx context.Context) (entries []RetentionEntry, err error) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if err = inst.checkOpenLocked(); err != nil {
+		return
+	}
+	stamps := inst.g.TombstoneStamps()
+	entries = make([]RetentionEntry, 0, len(stamps))
+	for id, when := range stamps {
+		entries = append(entries, RetentionEntry{Node: id, UnixNano: when.UnixNano()})
+	}
+	slices.SortFunc(entries, func(a, b RetentionEntry) int { return t.CompareNodeID(a.Node, b.Node) })
 	return
 }
 

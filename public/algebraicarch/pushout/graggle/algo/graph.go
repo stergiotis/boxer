@@ -3,6 +3,7 @@
 package algo
 
 import (
+	"cmp"
 	"slices"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/graggle/types"
@@ -204,6 +205,14 @@ type ConflictInfo struct {
 
 // DetectConflicts returns a list of all conflicts in the live subgraph.
 //
+// The result is deterministic and replica-independent: both the conflict
+// list and the nodes within each conflict are sorted by CompareNodeID
+// (Kind first), so two repos that converged on the same graph report the
+// same conflicts in the same order even though their adjacency lists are
+// in differing apply order. Sorting changes only the order, never the
+// set, so the qc invariant-13 cross-check (LinearOrder()==nil iff a
+// linearity-breaking conflict is reported) is unaffected.
+//
 // Precondition: ResolvePseudoEdges must have been called.
 func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 	var conflicts []ConflictInfo
@@ -216,20 +225,24 @@ func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 	sccs := Tarjan(g)
 	for _, scc := range sccs {
 		if len(scc) > 1 || hasSelfEdge(g, scc[0]) {
+			members := slices.Clone(scc)
+			slices.SortFunc(members, t.CompareNodeID)
 			conflicts = append(conflicts, ConflictInfo{
 				Kind:  "cycle",
-				Nodes: scc,
+				Nodes: members,
 			})
 		}
 	}
 
 	// Order conflicts: nodes with multiple live children that have
-	// no ordering between them (forks in the DAG).
+	// no ordering between them (forks in the DAG). Children are sorted so
+	// the emitted pairs — and thus Nodes[1:] — are replica-independent.
 	for v := range g.AllLiveNodes() {
 		children := slices.Collect(g.LiveChildren(v))
 		if len(children) <= 1 {
 			continue
 		}
+		slices.SortFunc(children, t.CompareNodeID)
 		for i := range len(children) {
 			for j := i + 1; j < len(children); j++ {
 				if !hasPath(g, children[i], children[j]) && !hasPath(g, children[j], children[i]) {
@@ -293,6 +306,7 @@ func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 			}
 		}
 		if len(deletedCtx) > 0 {
+			slices.SortFunc(deletedCtx, t.CompareNodeID)
 			conflicts = append(conflicts, ConflictInfo{
 				Kind:  "zombie",
 				Nodes: append([]t.NodeID{v}, deletedCtx...),
@@ -300,7 +314,24 @@ func DetectConflicts(g t.GraphReaderI) []ConflictInfo {
 		}
 	}
 
+	slices.SortFunc(conflicts, compareConflict)
 	return conflicts
+}
+
+// compareConflict orders conflicts deterministically so DetectConflicts'
+// output is stable across replicas, whose adjacency lists differ by apply
+// order: Kind first, then the involved nodes lexicographically by
+// CompareNodeID, then by count.
+func compareConflict(a, b ConflictInfo) int {
+	if a.Kind != b.Kind {
+		return cmp.Compare(a.Kind, b.Kind)
+	}
+	for i := 0; i < min(len(a.Nodes), len(b.Nodes)); i++ {
+		if c := t.CompareNodeID(a.Nodes[i], b.Nodes[i]); c != 0 {
+			return c
+		}
+	}
+	return cmp.Compare(len(a.Nodes), len(b.Nodes))
 }
 
 // hasSelfEdge reports whether v has a live/pseudo edge to itself.

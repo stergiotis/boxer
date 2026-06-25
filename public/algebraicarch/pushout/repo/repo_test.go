@@ -58,6 +58,21 @@ func openTest(tt testing.TB, dir string) *repo.Repo {
 	return r
 }
 
+// openTestStore is openTest plus the storage handle, so crash-simulation
+// tests can release the store's inter-process lock the way a real process
+// exit would. A faithful crash drops the filestore lock (the OS frees it
+// on exit); a mere in-memory leak does not, which would falsely collide
+// with the recovery Open.
+func openTestStore(tt testing.TB, dir string) (*repo.Repo, repo.StorageI) {
+	tt.Helper()
+	opts := testOptions(tt, dir)
+	r, err := repo.Open(context.Background(), opts)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	return r, opts.Storage
+}
+
 // recordLine records one new node anchored at the given context (root
 // for the chain head), returning the patch hash and the node id.
 func recordLine(tt testing.TB, r *repo.Repo, anchor t.NodeID, line string) (h t.PatchHash, node t.NodeID) {
@@ -164,12 +179,14 @@ func TestRepo_RecordCloseReopen(tt *testing.T) {
 func TestRepo_FullReplayWithoutSnapshot(tt *testing.T) {
 	ctx := context.Background()
 	dir := tt.TempDir()
-	r := openTest(tt, dir)
+	r, st := openTestStore(tt, dir)
 	_, nA := recordLine(tt, r, t.RootNodeID, "alpha")
 	recordLine(tt, r, nA, "beta")
 	want := fingerprint(tt, r)
 	// Crash (no Close): the snapshot only exists if a verb wrote one;
-	// Record does not. Recovery must replay the full log.
+	// Record does not. Recovery must replay the full log. Releasing the
+	// store models process exit freeing the inter-process lock.
+	_ = st.Close()
 	var recovered repo.RecoveredEvent
 	opts := testOptions(tt, dir)
 	opts.Hooks.OnRecovered = func(ev repo.RecoveredEvent) { recovered = ev }
@@ -226,10 +243,12 @@ func TestRepo_NonPrefixSnapshotDiscarded(tt *testing.T) {
 func TestRepo_CorruptStoreRefusesOpen(tt *testing.T) {
 	ctx := context.Background()
 	dir := tt.TempDir()
-	r := openTest(tt, dir)
+	r, st0 := openTestStore(tt, dir)
 	hA, nA := recordLine(tt, r, t.RootNodeID, "alpha")
 	recordLine(tt, r, nA, "beta")
-	// Crash without snapshot, then destroy an applied envelope.
+	// Crash without snapshot (release the lock as process exit would),
+	// then destroy an applied envelope.
+	_ = st0.Close()
 	st, err := filestore.Open(dir)
 	if err != nil {
 		tt.Fatal(err)
@@ -246,16 +265,17 @@ func TestRepo_CorruptStoreRefusesOpen(tt *testing.T) {
 	if !errors.Is(err, repo.ErrCorruptStore) {
 		tt.Fatalf("expected ErrCorruptStore, got %v", err)
 	}
-	_ = r // keep alive; never closed (crash semantics)
+	_ = r // crashed; never cleanly closed
 }
 
 // faultStore wraps a StorageI and fails selected operations once armed.
 type faultStore struct {
 	repo.StorageI
-	failPut     bool
-	failAppend  bool
-	failReplace bool
-	failSnap    bool
+	failPut       bool
+	failAppend    bool
+	failReplace   bool
+	failSnap      bool
+	failRetention bool
 }
 
 var errInjected = errors.New("injected storage fault")
@@ -286,6 +306,13 @@ func (f *faultStore) SaveSnapshot(ctx context.Context, snap repo.Snapshot) error
 		return errInjected
 	}
 	return f.StorageI.SaveSnapshot(ctx, snap)
+}
+
+func (f *faultStore) SaveRetention(ctx context.Context, entries []repo.RetentionEntry) error {
+	if f.failRetention {
+		return errInjected
+	}
+	return f.StorageI.SaveRetention(ctx, entries)
 }
 
 // Every mutating verb, failed at every storage write it performs, must
@@ -328,12 +355,8 @@ func TestRepo_StorageFaultsAreCrashEquivalent(tt *testing.T) {
 	for _, s := range steps {
 		tt.Run(s.name, func(tt *testing.T) {
 			dir := tt.TempDir()
-			st, err := filestore.Open(dir)
-			if err != nil {
-				tt.Fatal(err)
-			}
-			fault := &faultStore{StorageI: st}
 			opts := testOptions(tt, dir)
+			fault := &faultStore{StorageI: opts.Storage}
 			opts.Storage = fault
 			r, err := repo.Open(ctx, opts)
 			if err != nil {
@@ -354,6 +377,8 @@ func TestRepo_StorageFaultsAreCrashEquivalent(tt *testing.T) {
 			assertInvariants(tt, r)
 
 			// Crash-reopen from the underlying storage: pre-verb state.
+			// Release the lock as process exit would.
+			_ = fault.Close()
 			r2, err := repo.Open(ctx, testOptions(tt, dir))
 			if err != nil {
 				tt.Fatal(err)
@@ -371,7 +396,7 @@ func TestRepo_StorageFaultsAreCrashEquivalent(tt *testing.T) {
 func TestRepo_SweepDurableAcrossCrash(tt *testing.T) {
 	ctx := context.Background()
 	dir := tt.TempDir()
-	r := openTest(tt, dir)
+	r, st := openTestStore(tt, dir)
 	_, nA := recordLine(tt, r, t.RootNodeID, "alpha")
 	hDel := recordDelete(tt, r, nA)
 	report, err := r.Sweep(ctx, time.Unix(2_000_000_000, 0).UTC(), 0)
@@ -381,8 +406,10 @@ func TestRepo_SweepDurableAcrossCrash(tt *testing.T) {
 	if len(report.Purged) == 0 {
 		tt.Fatal("setup: sweep purged nothing")
 	}
-	// Crash. Reopen. The tombstone's content must still be purged:
-	// unrecording its deleting patch is permanently blocked.
+	// Crash (release the lock as process exit would). Reopen. The
+	// tombstone's content must still be purged: unrecording its deleting
+	// patch is permanently blocked.
+	_ = st.Close()
 	r2, err := repo.Open(ctx, testOptions(tt, dir))
 	if err != nil {
 		tt.Fatal(err)
@@ -396,6 +423,92 @@ func TestRepo_SweepDurableAcrossCrash(tt *testing.T) {
 		tt.Fatalf("expected the patch-level sentinel to remain matchable, got %v", err)
 	}
 	assertInvariants(tt, r2)
+}
+
+// The retention horizon survives full replay — the bug ADR-0079's ledger
+// closes. A tombstone stamped at T must still be swept at T+horizon after
+// a crash that forces full replay (no snapshot), instead of having its
+// horizon reset to reopen time.
+func TestRepo_RetentionHorizonSurvivesFullReplay(tt *testing.T) {
+	ctx := context.Background()
+	dir := tt.TempDir()
+	stampedAt := time.Unix(1_700_000_000, 0).UTC()
+
+	opts := testOptions(tt, dir)
+	opts.Clock = func() time.Time { return stampedAt }
+	st := opts.Storage
+	r, err := repo.Open(ctx, opts)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	_, nA := recordLine(tt, r, t.RootNodeID, "alpha")
+	recordDelete(tt, r, nA)
+	// Crash without a snapshot (Record writes none): the next Open
+	// full-replays, which re-stamps tombstoneAt to the replay clock.
+	_ = st.Close()
+
+	reopenAt := stampedAt.Add(48 * time.Hour)
+	opts2 := testOptions(tt, dir)
+	opts2.Clock = func() time.Time { return reopenAt }
+	var rec repo.RecoveredEvent
+	opts2.Hooks.OnRecovered = func(ev repo.RecoveredEvent) { rec = ev }
+	r2, err := repo.Open(ctx, opts2)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	defer r2.Close(ctx)
+	if rec.FromSnapshot {
+		tt.Fatalf("expected full replay (the bug path), got %+v", rec)
+	}
+	// Sweep with a 24h horizon at reopen time. The tombstone was stamped
+	// at T (= reopenAt-48h), well past the cutoff, so it must be purged.
+	// Without the ledger, replay would have re-stamped it to reopenAt and
+	// the sweep would purge nothing.
+	report, err := r2.Sweep(ctx, reopenAt, 24*time.Hour)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	if len(report.Purged) == 0 {
+		tt.Fatal("retention horizon was reset by full replay: tombstone not swept")
+	}
+}
+
+// A retention-ledger write failure on a delete-bearing Record fails the
+// verb before the commit point (AppendApplied), so nothing commits and a
+// crash-reopen shows pre-verb state.
+func TestRepo_RetentionWriteFaultIsCrashEquivalent(tt *testing.T) {
+	ctx := context.Background()
+	dir := tt.TempDir()
+	opts := testOptions(tt, dir)
+	fault := &faultStore{StorageI: opts.Storage}
+	opts.Storage = fault
+	r, err := repo.Open(ctx, opts)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	_, nA := recordLine(tt, r, t.RootNodeID, "alpha")
+	want := fingerprint(tt, r)
+
+	fault.failRetention = true
+	_, derr := r.Record(ctx, "tester", "del", []patch.Change{{Kind: patch.ChangeKindDeleteNode, NodeID: nA}})
+	if !errors.Is(derr, errInjected) {
+		tt.Fatalf("expected injected retention fault, got %v", derr)
+	}
+	if got := fingerprint(tt, r); got != want {
+		tt.Fatalf("in-memory state changed across failed retention write:\n got:\n%s\nwant:\n%s", got, want)
+	}
+	assertInvariants(tt, r)
+
+	// Crash-reopen: the delete never committed.
+	_ = fault.Close()
+	r2, err := repo.Open(ctx, testOptions(tt, dir))
+	if err != nil {
+		tt.Fatal(err)
+	}
+	defer r2.Close(ctx)
+	if got := fingerprint(tt, r2); got != want {
+		tt.Fatalf("disk state diverged across failed retention write:\n got:\n%s\nwant:\n%s", got, want)
+	}
 }
 
 func TestRepo_ExchangeSemantics(tt *testing.T) {

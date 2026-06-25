@@ -84,7 +84,7 @@ skew:
 - **Envelope timestamps** are provenance claims — display metadata,
   unread by apply/merge, and untrusted until the OQ-3 signature seam
   exists.
-- **Retention** (`tombstoneAt`, `repo.Sweep`) is a session-local
+- **Retention** (`tombstoneAt`, `repo.Sweep`) is a replica-local
   policy: each replica stamps tombstones with its own clock at its own
   apply time and purges on its own schedule. Skew shifts *when* a
   replica purges, never *what* the converged live state is. The one
@@ -92,10 +92,20 @@ skew:
   to unrecord the final deleter (`ErrRetentionBlocked`) while an
   unswept one still can — which is intended and test-pinned. Sync
   cannot resurrect purged content (set difference runs over applied
-  sets, so an applied patch is never re-shipped), but a fresh clone
-  from an unswept peer does carry full content: fleet-wide erasure
-  coordination is [ADR-0025](../adr/0025-pushout-forget-architecture.md)'s
-  layer, with session-local durable sweep as its per-replica primitive.
+  sets, so an applied patch is never re-shipped).
+
+  Two boundaries to be honest about. First, *durability*: on the same
+  store the horizon survives crash/restart. The purge **result** is
+  durable (a sweep snapshots before it acks), and the **pending**
+  horizon — `tombstoneAt` for a tombstone not yet swept — is backed by a
+  replica-local retention ledger that the repo re-seeds at `Open`, so
+  full replay no longer resets it
+  ([ADR-0079](../adr/0079-pushout-production-storage-codec-exchange.md),
+  retention ledger). Second, *scope*: a fresh clone carries full content
+  but no ledger, so it starts the horizon at clone time — re-cloning
+  resets the fleet's erasure clock. Fleet-wide erasure coordination is
+  [ADR-0025](../adr/0025-pushout-forget-architecture.md)'s layer, with
+  the durable per-replica ledger + sweep as its primitive.
 
 ## 3. Versions and how they compare
 
