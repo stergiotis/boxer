@@ -132,8 +132,12 @@ const (
 	// loose enough to hold "Size & color (Complexity):" (the widest of
 	// the three forms) at the default font without truncation, so the
 	// inline summary lines start at the same x across metric switches.
-	distGutterW    float32 = 200
-	treemapChromeH float32 = 96 + 56 + 8 + distSummaryRowH // chrome + colorscale + inter-row gap + dist row
+	distGutterW float32 = 200
+	// The two summary rows below the controls — the per-metric distsummary
+	// row and the aggregate "Σ" totals row (renderTotals) — are each one
+	// monospace line tall, so both reserve distSummaryRowH. They sit above
+	// the captureAvailableSize point, mirroring each other's budget.
+	treemapChromeH float32 = 96 + 56 + 8 + 2*distSummaryRowH // chrome + colorscale + inter-row gap + dist row + totals row
 	// containerGrowGuardPx is the anti-ratchet deadband applied to
 	// both axes of SetContainerSize. Frame-over-frame upward deltas
 	// smaller than this are almost always chrome-budget mis-estimates
@@ -262,6 +266,15 @@ type App struct {
 	// twice.
 	sizeDigest  *tdigest.TDigest
 	colorDigest *tdigest.TDigest
+	// sizeTotal / colorTotal are the aggregate sums of the per-file weights
+	// under the current size and color metrics across the same kept leaf set
+	// the digests survey — the "Σ" totals rendered by renderTotals. Computed
+	// alongside the digests in computeMetricDigest (a TDigest tracks the
+	// observation count, not the value-sum — Weight() == n since every Push
+	// has weight 1 — so the total cannot be read back from it). colorTotal
+	// mirrors sizeTotal when the two metric indices coincide.
+	sizeTotal  float64
+	colorTotal float64
 	// distRenderer is the configure-once distsummary template shared by
 	// both metric summaries. Renderer is value-typed and stateless, so
 	// per-row .Render calls take fresh prepared ids without disturbing
@@ -300,12 +313,18 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m runtimeapp.Manifest) { m = manifest; return }
 
 // computeMetricDigest streams every kept file in groups through a fresh
-// TDigest under the given weight. Mirrors buildTreeForMetrics' file-walk
-// filter (scctree.IsGenerated when keep is set) so the resulting digest
-// covers exactly the leaves the treemap visualises — switching the
-// include-generated checkbox or either metric ComboBox propagates the
-// same set into both surfaces.
-func computeMetricDigest(groups []scctree.SccGroup, w scctree.Weight, keep func(*scctree.SccFile) bool) (d *tdigest.TDigest) {
+// TDigest under the given weight, and returns the running sum of those same
+// weights as total. Mirrors buildTreeForMetrics' file-walk filter
+// (scctree.IsGenerated when keep is set) so the digest and total cover
+// exactly the leaves the treemap visualises — switching the include-generated
+// checkbox or either metric ComboBox propagates the same set into all three
+// surfaces (treemap, distribution, total).
+//
+// total is summed here rather than read back from the digest because a
+// TDigest tracks observation count (Weight() == n, every Push has weight 1),
+// not the sum of the pushed values; folding it into this single walk keeps
+// the total exactly consistent with the digest by construction.
+func computeMetricDigest(groups []scctree.SccGroup, w scctree.Weight, keep func(*scctree.SccFile) bool) (d *tdigest.TDigest, total float64) {
 	d = tdigest.NewTDigest()
 	for gi := range groups {
 		g := &groups[gi]
@@ -314,7 +333,9 @@ func computeMetricDigest(groups []scctree.SccGroup, w scctree.Weight, keep func(
 			if keep != nil && !keep(f) {
 				continue
 			}
-			d.Push(w(f))
+			v := w(f)
+			d.Push(v)
+			total += v
 		}
 	}
 	return
@@ -377,14 +398,15 @@ func (inst *App) makeCellLabelFn(valueFn func(*layout.Node) float64) func(*layou
 func (inst *App) rebuildTreemap() {
 	keep := inst.keepFunc()
 	root, valueFn, maxValue := buildTreeForMetrics(inst.sizeMetricIdx, inst.colorMetricIdx, keep)
-	inst.sizeDigest = computeMetricDigest(sccGroups, sccMetrics[inst.sizeMetricIdx].W, keep)
+	inst.sizeDigest, inst.sizeTotal = computeMetricDigest(sccGroups, sccMetrics[inst.sizeMetricIdx].W, keep)
 	if inst.colorMetricIdx == inst.sizeMetricIdx {
 		// Both axes share a single distribution — alias the pointer so
 		// downstream code can detect the collapse via pointer equality
-		// without recomputing.
+		// without recomputing. The total collapses the same way.
 		inst.colorDigest = inst.sizeDigest
+		inst.colorTotal = inst.sizeTotal
 	} else {
-		inst.colorDigest = computeMetricDigest(sccGroups, sccMetrics[inst.colorMetricIdx].W, keep)
+		inst.colorDigest, inst.colorTotal = computeMetricDigest(sccGroups, sccMetrics[inst.colorMetricIdx].W, keep)
 	}
 	cm := treemap.NewLogColormap(scctree.ComplexityPalette, 1, maxValue)
 	inst.hoverBand = colorscale.NewHoverBand(
@@ -477,6 +499,7 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	}
 
 	inst.renderDistSummaries()
+	inst.renderTotals()
 
 	w, h := availableContainerSize()
 	if inst.lastContainerW > 0 && w > inst.lastContainerW && w-inst.lastContainerW < containerGrowGuardPx {
@@ -609,4 +632,34 @@ func (inst *App) renderDistSummaries() {
 			inst.distRenderer.Render(inst.ids.PrepareStr("color-dist"), inst.colorDigest, nil)
 		}
 	}
+}
+
+// renderTotals paints a single compact line below the distribution row
+// giving the aggregate sum ("Σ") of each axis's metric over the same kept
+// leaf set the distributions survey — total code lines, total complexity,
+// etc. — so the treemap's relative proportions have an absolute scale to
+// read against. Each value is rendered with its own metric humanizer (counts
+// as "1.2M", bytes as "1.2 MB"), matching the in-cell tile labels rather
+// than the distsummary's SI form. When the size and color metrics coincide
+// the two totals are identical, so the line collapses to the single metric —
+// mirroring the aliasing in renderDistSummaries.
+func (inst *App) renderTotals() {
+	if inst.sizeDigest == nil {
+		return
+	}
+	sizeM := sccMetrics[inst.sizeMetricIdx]
+	colorM := sccMetrics[inst.colorMetricIdx]
+	aliased := inst.sizeDigest == inst.colorDigest
+	var b strings.Builder
+	b.WriteString("Σ  ")
+	b.WriteString(sizeM.Name)
+	b.WriteString(" ")
+	b.WriteString(sizeM.Humanize(inst.sizeTotal))
+	if !aliased {
+		b.WriteString("   ·   ")
+		b.WriteString(colorM.Name)
+		b.WriteString(" ")
+		b.WriteString(colorM.Humanize(inst.colorTotal))
+	}
+	c.LabelAtoms(c.Atoms().BeginRichText(b.String()).Monospace().End().Keep()).Send()
 }
