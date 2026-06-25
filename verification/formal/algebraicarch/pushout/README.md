@@ -1,3 +1,14 @@
+---
+type: explanation
+audience: contributors
+status: draft
+---
+
+> **Status: draft — pre-human-review.** Formal Quint/TLA⁺ model of the
+> pushout exchange protocol. The specs and their invariants are
+> machine-checked (Quint, Apalache, TLC); this surrounding prose has not
+> had human review.
+
 # Formal spec: pushout exchange protocol
 
 A [Quint](https://quint-lang.org) model of the **distributed layer** of the
@@ -38,6 +49,8 @@ concurrent state machine, which is what a model checker is for.
 | `crash_recovery_unsafe_snapshot.qnt` | Counterfactual (snapshot trusted without the prefix check) — shows the prefix-or-discard rule is what makes unrecord atomic. |
 | `convergence.qnt` | Liveness model (record / offer / deliver, reliable carrier) with a bounded witness; the readable source for the TLA⁺ below. |
 | `convergence.tla` + `.cfg` | TLC-native companion proving `<>[]FullyReplicated` under fairness; `convergence_nofair.cfg` shows it fails without fairness. |
+| `frontier_reconcile.qnt` | The ADR-0079 OQ-1 optimization: frontier (DAG-head) exchange + dep walk, proved complete vs full-list exchange. |
+| `frontier_reconcile_unsafe.qnt` | Counterfactuals — heads-only (no walk) is incomplete, and completeness needs the closure invariant. |
 
 ## Refinement map (spec action → Go symbol)
 
@@ -177,6 +190,52 @@ Results (TLC, 133 distinct states):
 
 Needs `tla2tools.jar` (TLC); see Running.
 
+## Frontier reconciliation: a complete, cheaper exchange (ADR-0079 OQ-1)
+
+Today `Pull`/`Push` ship the **full applied list** and diff it (`minus`,
+exchange/exchange.go:68/111) — O(history) per round. ADR-0079 OQ-1 proposes
+exchanging only the **frontier** (the DAG heads — patches nothing else depends
+on) and walking the dependency DAG to fetch what's missing, like git's
+have/want. `frontier_reconcile.qnt` proves that optimization is **complete**:
+
+```
+FrontierComplete == for every dependency-closed S:  reachDown(headsOf(S)) = S
+```
+
+i.e. advertising `headsOf(S)` and walking deps recovers exactly `S`, so a
+frontier sync transfers the same missing set (`applied[a] \ applied[b]`) a
+full-list sync would. How each invariant is established:
+
+- `FrontierComplete` and `FrontierCompact` are each a single `forall` over the
+  **entire `2^|Patches|` powerset**, so one evaluation is a *complete exhaustive*
+  check of every dependency-closed subset — stronger than bounded model
+  checking. (`FrontierCompact` records the saving: the frontier is strictly
+  smaller whenever there's any depth.)
+- `FrontierEqualsFull` is then a **corollary** — `FrontierComplete` instantiated
+  at each repo's applied set, which is closed by `DepClosed`.
+- `DepClosed` (the one genuinely inductive obligation) is checked by randomized
+  simulation (20k traces) and the witness runs.
+
+(Apalache is *not* used for this model: `frontierSync`'s guard computes
+`reachDown`, a nested set-fold, which the SMT backend encodes into the whole
+transition relation and chokes on. That is a model-shape limitation, not a gap —
+the exhaustive powerset check above is the actual theorem and needs no SMT.)
+Witnesses show a peer reconstructing a 3-deep chain from a single head, and two
+diverged repos reconciling by swapping frontiers.
+
+**The keystone:** completeness holds *because* every repo is
+dependency-closed — the very invariant proved in `pushout_exchange.qnt`
+(`DependencyClosure`) and `crash_recovery.qnt` (`LogDepClosed`). The safety
+invariant is what licenses the optimization. Two counterfactuals in
+`frontier_reconcile_unsafe.qnt` make that precise:
+
+- `HeadsOnlySufficient` is false — shipping only the tips without walking deps
+  drops every interior patch (e.g. `S = {1,2}`, `headsOf = {2} ≠ {1,2}`). You
+  must walk the DAG.
+- `FrontierNeedsClosure` is false — on a non-closed set (e.g. `{1,3}`, missing
+  `2`) `reachDown(headsOf(S)) ≠ S`. Drop dependency-closure and frontier
+  reconciliation becomes unsound.
+
 ## Running
 
 ```sh
@@ -199,6 +258,8 @@ npx quint verify crash_recovery.qnt                 --invariant=Safety --max-ste
 npx quint run    crash_recovery_unsafe.qnt          --invariant=NoCorruption           # counterexample
 npx quint run    crash_recovery_unsafe_snapshot.qnt --invariant=RecoveryCorrect        # counterexample
 npx quint run    pushout_exchange.qnt               --invariant=ErasureComplete        # counterexample
+npx quint run    frontier_reconcile.qnt             --invariant=FrontierComplete --max-steps=0  # exhaustive [ok]
+npx quint run    frontier_reconcile_unsafe.qnt      --invariant=HeadsOnlySufficient     # counterexample
 ```
 
 ## Not yet modelled (next increments)
@@ -209,9 +270,12 @@ npx quint run    pushout_exchange.qnt               --invariant=ErasureComplete 
 - ✓ **Liveness / convergence under fairness** — modelled in `convergence.qnt`
   and proved with TLC (`convergence.tla`): `<>[]FullyReplicated` holds under weak
   fairness, fails without it. See the section above.
-- **Smarter reconciliation** (frontiers / set sketches) — ADR-0079 OQ-1 — vs.
-  the current full applied-list exchange. This is where liveness gets
-  interesting again: a frontier protocol must still guarantee progress.
+- ✓ **Frontier reconciliation** (ADR-0079 OQ-1) — modelled in
+  `frontier_reconcile.qnt` (+ counterfactuals): frontier exchange is complete
+  vs full-list, *because* repos are dependency-closed. See the section above.
+  (Set-sketch / IBLT-family reconciliation, the other OQ-1 branch, is still
+  open — it trades exactness for probabilistic recovery and would need a
+  collision/failure-rate model.)
 - **Authentication / Byzantine peers.** `envelope.Validate` (envelope/envelope.go:67)
   already does hash tamper-detection; add signatures and model a peer that ships
   well-formed-but-unauthorized envelopes.
