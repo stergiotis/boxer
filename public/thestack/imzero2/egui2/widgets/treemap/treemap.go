@@ -361,16 +361,6 @@ type cellDesc struct {
 	depth     int
 }
 
-// nodeInSlice reports whether node is present in the slice (pointer comparison).
-func nodeInSlice(node *layout.Node, slice []*layout.Node) bool {
-	for _, n := range slice {
-		if n == node {
-			return true
-		}
-	}
-	return false
-}
-
 // Treemap is a Frame-based zoomable treemap widget.
 type Treemap struct {
 	ids      *c.WidgetIdStack
@@ -1021,7 +1011,7 @@ func (t *Treemap) renderBody() {
 					End().Keep()).Send()
 			}
 			if level < len(t.breadcrumb)-1 {
-				if c.Button(t.ids.PrepareStr("bc-btn-"+node.Name),
+				if c.Button(t.ids.PrepareSeq(uint64(level)),
 					c.Atoms().BeginRichTextColored(t.colorBreadcrumbFg, t.colorTransparentBg, node.Name).End().Keep()).
 					Frame(true).
 					SendResp().HasPrimaryClicked() {
@@ -1067,6 +1057,16 @@ func (t *Treemap) renderBody() {
 			InnerMargin(0).
 			KeepIter() {
 
+			// Pin the container Frame to the full canvas so it doesn't shrink
+			// to the painted cell bounding box. During a zoom the cells fill
+			// the lerped renderBounds (a sub-rect of the container); a
+			// content-sized Frame would track that shrink and make the status
+			// label below — and the host's layout — jump every animation
+			// frame. The fixed minimum keeps the container background and
+			// downstream layout stable.
+			c.UiSetMinWidth(t.containerW)
+			c.UiSetMinHeight(t.containerH)
+
 			cellSeq := cellSeqBase
 			t.renderZoom(t.root, renderBounds, 0, 0, &cellSeq)
 		}
@@ -1111,21 +1111,16 @@ func (t *Treemap) renderBody() {
 
 		switch {
 		case drillTarget != nil:
-			newPath := append([]*layout.Node(nil), t.breadcrumb...)
-			// If the clicked node's parent is not already in the breadcrumb,
-			// insert missing ancestors so the path reflects the full hierarchy
-			// (e.g. root → segment → cluster when drilling directly into a cluster).
-			if !nodeInSlice(drillTarget, cur.Children) {
-				// Search for drillTarget's parent among current focus's children.
-				for _, child := range cur.Children {
-					if nodeInSlice(drillTarget, child.Children) {
-						newPath = append(newPath, child)
-						break
-					}
-				}
+			// drillTarget is a direct child of the focus (a frontier cell) or
+			// a deeper preview cell (renderLeafChildren marks previews drillable
+			// when leafClickSensing is on). Resolve the full root→target path
+			// via findPath so the breadcrumb stays contiguous at any drill
+			// depth: inserting a single ancestor by hand skipped levels for
+			// previews deeper than one, and applyNavigation does not re-validate,
+			// so the resulting gap would corrupt the drill state.
+			if newPath := findPath(t.root, drillTarget, nil); newPath != nil {
+				t.applyNavigation(newPath, NavTriggerCellClick)
 			}
-			newPath = append(newPath, drillTarget)
-			t.applyNavigation(newPath, NavTriggerCellClick)
 		case drillUpTarget != nil:
 			newPath := append([]*layout.Node(nil), t.breadcrumb[:drillUpToLen]...)
 			t.applyNavigation(newPath, NavTriggerDrillUpCellClick)
