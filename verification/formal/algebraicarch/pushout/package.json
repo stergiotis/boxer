@@ -1,0 +1,18 @@
+{
+  "name": "pushout-spec",
+  "version": "1.0.0",
+  "description": "Quint formal model of the boxer pushout exchange protocol",
+  "private": true,
+  "scripts": {
+    "typecheck": "quint typecheck pushout_exchange.qnt && quint typecheck erasure_dilemma.qnt",
+    "test": "quint test pushout_exchange.qnt && quint test erasure_dilemma.qnt",
+    "sweep": "quint run pushout_exchange.qnt --invariant=Safety --max-steps=12 --max-samples=20000",
+    "verify": "quint verify pushout_exchange.qnt --invariant=Safety --max-steps=6",
+    "findings": "quint run pushout_exchange.qnt --invariant=ErasureComplete --max-steps=8 ; quint run erasure_dilemma.qnt --invariant=EnvelopeAvailable --max-steps=6",
+    "check": "npm run typecheck && npm run test && npm run sweep"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@informalsystems/quint": "^0.32.0"
+  }
+}
