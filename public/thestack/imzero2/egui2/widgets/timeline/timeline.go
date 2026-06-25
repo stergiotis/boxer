@@ -323,6 +323,7 @@ type Timeline struct {
 	backgroundBands  BackgroundBandProducer
 	nowLineEnabled   bool
 	intensityEncoded bool
+	intervalColors   []color.Color // categorical interval palette (KindID-indexed); overrides intensity when non-empty
 
 	selection SelectionInfo
 
@@ -453,6 +454,20 @@ func WithNowLine(enabled bool) Option {
 func WithIntensityEncoding(enabled bool) Option {
 	return func(inst *Timeline) {
 		inst.intensityEncoded = enabled
+	}
+}
+
+// WithIntervalColors paints interval bars from a categorical palette indexed by
+// IntervalEvent.KindID (modulo len) — the interval analogue of annotations'
+// PaletteIdx coloring. When the palette is non-empty it takes precedence over
+// intensity and flat coloring, so callers can paint bars by a discrete category
+// (deploy state, severity, …) with their own semantic colors. A nil/empty
+// palette restores the default intensity/flat path.
+//
+// Validation: none — nil/empty is a no-op.
+func WithIntervalColors(palette []color.Color) Option {
+	return func(inst *Timeline) {
+		inst.intervalColors = palette
 	}
 }
 
@@ -1133,7 +1148,9 @@ func (inst *Timeline) paintLanes(tm layout.TickMap, vl verticalLayout) {
 				x1 = min(x0+inst.visuals.BarMinPx, vl.axisEndPx)
 			}
 			fill := inst.visuals.IntervalColor
-			if inst.intensityEncoded {
+			if n := len(inst.intervalColors); n > 0 {
+				fill = inst.intervalColors[((int(ev.KindID)%n)+n)%n] // categorical, negative-KindID-safe
+			} else if inst.intensityEncoded {
 				rgba := styletokens.Sequential(inst.visuals.IntensityColormap, clamp01(ev.Intensity))
 				fill = color.Hex(rgba.AsHex())
 			}

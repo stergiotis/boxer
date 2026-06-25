@@ -186,6 +186,28 @@ func TestIntensityEncoding_OptionAndSetter(t *testing.T) {
 	}
 }
 
+// TestIntervalColors_Option locks in the categorical interval palette: when set
+// it is stored verbatim and (per paintIntervals) takes precedence over intensity
+// encoding so callers can paint bars by a discrete category (e.g. deploy state).
+func TestIntervalColors_Option(t *testing.T) {
+	if tl := newTestTimeline(t, nil); len(tl.intervalColors) != 0 {
+		t.Errorf("intervalColors should default empty, got %d", len(tl.intervalColors))
+	}
+	palette := []color.Color{
+		color.Hex(styletokens.SuccessDefault.AsHex()).Keep(),
+		color.Hex(styletokens.ErrorDefault.AsHex()).Keep(),
+	}
+	tl := newTestTimeline(t, nil, WithIntervalColors(palette))
+	if len(tl.intervalColors) != len(palette) {
+		t.Fatalf("intervalColors len: got %d want %d", len(tl.intervalColors), len(palette))
+	}
+	for i := range palette {
+		if tl.intervalColors[i] != palette[i] {
+			t.Errorf("intervalColors[%d]: got %+v want %+v", i, tl.intervalColors[i], palette[i])
+		}
+	}
+}
+
 func TestNew_PanicsOnNilIds(t *testing.T) {
 	defer func() {
 		if recover() == nil {
