@@ -45,3 +45,7 @@ rust/*/target/
 # boxer adr tool cache — the `boxer adr build` default --out dir. It can be
 # created in any working directory (the command takes --root), so not anchored.
 .adrcache/
+
+# Local Claude Code settings (machine-specific); the .claude/skills symlink stays tracked.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
