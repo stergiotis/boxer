@@ -1,9 +1,9 @@
 name: code statistics
 on:
+  workflow_dispatch:
   push:
-    branches:
-      - main
-  pull_request:
+    tags:
+      - 'v*'
   schedule:
     - cron: '0 6 * * 1' # weekly Monday 6am UTC
 

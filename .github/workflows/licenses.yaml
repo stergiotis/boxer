@@ -1,6 +1,10 @@
 name: License compliance
 
-on: [push]
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read

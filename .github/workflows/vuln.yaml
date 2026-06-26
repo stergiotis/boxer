@@ -1,6 +1,10 @@
 name: Go vulnerability checks
 
-on: [push]
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
