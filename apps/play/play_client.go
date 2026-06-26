@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -27,13 +28,40 @@ type ClientConfig struct {
 type Client struct {
 	cfg  ClientConfig
 	http *http.Client
+
+	// mu guards targetURL, the live endpoint. It starts at cfg.URL and can be
+	// switched at runtime via SetURL — e.g. play's endpoint switcher points at
+	// the in-process keelson introspection /query endpoint (ADR-0094 §SD6).
+	// cfg.User/cfg.Password are not switchable in v1.
+	mu        sync.RWMutex
+	targetURL string
 }
 
 func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{}
 	}
-	return &Client{cfg: cfg, http: httpClient}
+	return &Client{cfg: cfg, http: httpClient, targetURL: cfg.URL}
+}
+
+// URL returns the current target endpoint.
+func (inst *Client) URL() (u string) {
+	inst.mu.RLock()
+	u = inst.targetURL
+	inst.mu.RUnlock()
+	return
+}
+
+// SetURL switches the target endpoint. Safe to call from the UI goroutine
+// while a query runs on another: ExecuteArrowStream reads the target once at
+// request-build time. An empty url is ignored (keeps the current target).
+func (inst *Client) SetURL(u string) {
+	if u == "" {
+		return
+	}
+	inst.mu.Lock()
+	inst.targetURL = u
+	inst.mu.Unlock()
 }
 
 // ExecuteArrowStream rewrites the query's FORMAT clause to `ArrowStream` via
@@ -93,8 +121,9 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		}
 	}
 	// ClickHouse reads the body verbatim as SQL — params must ride the URL
-	// query string. See the function doc for size limits.
-	reqURL := inst.cfg.URL
+	// query string. See the function doc for size limits. The target is read
+	// once here so a concurrent SetURL never tears a request mid-build.
+	reqURL := inst.URL()
 	if len(params) > 0 {
 		qs := url.Values{}
 		for k, v := range params {

@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
@@ -67,6 +68,12 @@ type PlayApp struct {
 	ids    *c.WidgetIdStack
 	store  *QueryStore
 	client *Client
+
+	// endpointDraft is the editable URL in the toolbar endpoint switcher;
+	// launchURL is the original target restored by "External (reset)". See
+	// renderEndpointSwitcher and Client.SetURL (ADR-0094 §SD6).
+	endpointDraft string
+	launchURL     string
 
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at NewPlayApp.
@@ -368,12 +375,21 @@ func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
 	cards := NewCardDriver(cardIds, nil)
 	projFSM := newProjectorFSM()
 	queryFSM := newQueryFSM()
+	// client may be nil in tests and the legacy CLI path; the endpoint switcher
+	// is guarded behind a non-nil client in renderTopBar, so an empty launch
+	// URL is harmless here.
+	launchURL := ""
+	if client != nil {
+		launchURL = client.URL()
+	}
 	inst := &PlayApp{
-		ids:         c.NewWidgetIdStack(),
-		store:       store,
-		client:      client,
-		density:     styletokens.DensityFromEnv(),
-		sql:         initialSQL,
+		ids:           c.NewWidgetIdStack(),
+		store:         store,
+		client:        client,
+		endpointDraft: launchURL,
+		launchURL:     launchURL,
+		density:       styletokens.DensityFromEnv(),
+		sql:           initialSQL,
 		selectedRow: -1,
 		cards:       cards,
 		projector:   NewProjector(projectorIds, cards),
@@ -712,9 +728,7 @@ func (inst *PlayApp) renderTopBar() {
 
 		if inst.client != nil {
 			c.Separator().Vertical().Send()
-			c.Label(fmt.Sprintf("%s  as %s",
-				inst.client.cfg.URL, inst.client.cfg.User)).
-				Truncate().Send()
+			inst.renderEndpointSwitcher()
 		}
 
 		// Hide-prelude toggle (visible only when there's at least one
@@ -728,6 +742,50 @@ func (inst *PlayApp) renderTopBar() {
 				SendRespVal(&inst.paramHidePrelude)
 		}
 	}
+}
+
+// renderEndpointSwitcher is the toolbar control for the query target. It shows
+// the current endpoint read-only beside a fixed-label "Endpoint" menu (a
+// dynamic MenuButton label would shift its derived id and drop menu state). The
+// menu offers a manual URL plus two presets: the in-process keelson
+// introspection /query endpoint (shown only when a co-resident host published
+// one via introspecthost.Start → introspect.LocalQueryEndpoint, ADR-0094 §SD6)
+// and the launch URL ("External"). Every widget uses an explicit stable id, so
+// conditionally showing the keelson preset never drifts the others' ids.
+func (inst *PlayApp) renderEndpointSwitcher() {
+	ids := inst.ids
+	c.Label(fmt.Sprintf("%s  as %s", truncateRunes(inst.client.URL(), 40), inst.client.cfg.User)).
+		Truncate().Send()
+	for range c.MenuButton(c.Atoms().Text("Endpoint").Keep()).KeepIter() {
+		c.TextEdit(ids.PrepareStr("endpointDraft"), inst.endpointDraft, false).
+			SendRespVal(&inst.endpointDraft)
+		if c.Button(ids.PrepareStr("endpointApply"), c.Atoms().Text("Apply").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.client.SetURL(strings.TrimSpace(inst.endpointDraft))
+		}
+		c.Separator().Send()
+		if ep := introspect.LocalQueryEndpoint(); ep != "" {
+			if c.Button(ids.PrepareStr("endpointKeelson"),
+				c.Atoms().Text("Keelson introspection").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.setEndpoint(ep)
+			}
+		}
+		if c.Button(ids.PrepareStr("endpointExternal"),
+			c.Atoms().Text("External (reset)").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.setEndpoint(inst.launchURL)
+		}
+	}
+}
+
+// setEndpoint repoints the client and syncs the draft TextEdit, telling the
+// frontend to drop its cached buffer so the new URL shows (the "Stubborn Text"
+// override — a programmatic write to an interactive-widget binding).
+func (inst *PlayApp) setEndpoint(u string) {
+	inst.client.SetURL(u)
+	inst.endpointDraft = u
+	c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.endpointDraft)
 }
 
 // renderEditorTab is the Editor dock tab body: multi-line SQL editor

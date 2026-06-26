@@ -122,3 +122,50 @@ func TestExecuteArrowStreamPlainPostWhenNoParams(t *testing.T) {
 		t.Errorf("body missing FORMAT clause: %q", gotBody)
 	}
 }
+
+// TestSetURLRoutesToNewTarget: the endpoint switcher (ADR-0094 §SD6) repoints
+// the client at runtime, and ExecuteArrowStream reads the live target — the
+// request must hit the new endpoint, not the original. Empty is ignored.
+func TestSetURLRoutesToNewTarget(t *testing.T) {
+	body := emptyArrowStream(t)
+	var hitA, hitB bool
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hitA = true
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srvA.Close)
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hitB = true
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srvB.Close)
+
+	c := NewClient(ClientConfig{URL: srvA.URL}, nil)
+	if got := c.URL(); got != srvA.URL {
+		t.Fatalf("initial URL() = %q, want %q", got, srvA.URL)
+	}
+	c.SetURL("") // ignored
+	if got := c.URL(); got != srvA.URL {
+		t.Fatalf("empty SetURL changed target to %q", got)
+	}
+	c.SetURL(srvB.URL)
+	if got := c.URL(); got != srvB.URL {
+		t.Fatalf("URL() after SetURL = %q, want %q", got, srvB.URL)
+	}
+
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator())
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+
+	if hitA {
+		t.Error("request hit the old target after SetURL")
+	}
+	if !hitB {
+		t.Error("request did not hit the new target after SetURL")
+	}
+}

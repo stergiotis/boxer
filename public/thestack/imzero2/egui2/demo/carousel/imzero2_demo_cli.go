@@ -3,7 +3,6 @@ package demo
 import (
 	gocontext "context"
 	"encoding/binary"
-	"io"
 	"os"
 	"os/signal"
 	"slices"
@@ -30,10 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
-	introspectproviders "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
-	introspectprovidersgui "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
@@ -356,56 +352,27 @@ func NewCommand() *cli.Command {
 				log.Info().Int("initialWindows", len(launchApps)).Msg("window host: started")
 			}
 
-			// ADR-0094 §SD3: expose keelson runtime state as ClickHouse-
-			// queryable tables over a loopback HTTP endpoint, so a
-			// clickhouse-local or clickhouse-server can pull them via the
-			// url() table function and JOIN with other data. windowHostRef
-			// is nil in screenshot mode, which drops only keelson.windows.
-			// Best-effort: a failure leaves the endpoint down but never
-			// blocks boot, matching the runtime brokers above.
-			introspectReg := introspect.NewRegistry()
-			if regErr := introspectproviders.RegisterStatic(introspectReg); regErr != nil {
-				log.Warn().Err(regErr).Msg("introspect: static provider registration failed")
+			// ADR-0094 §SD3/§SD4: expose keelson runtime state as ClickHouse-
+			// queryable tables over a loopback HTTP endpoint, and (when chlocal
+			// is up) back POST /query so a co-resident app (apps/play) can query
+			// keelson('env') in-process. This MUST run here, in the GUI host's
+			// own process — the providers read live state (windowHostRef is nil
+			// in screenshot mode, dropping only keelson.windows). Gated by
+			// KEELSON_INTROSPECT_ENABLE; best-effort, never blocks boot.
+			introspectStop, introspectErr := introspecthost.Start(introspecthost.Deps{
+				WindowHost:       windowHostRef,
+				Bus:              bus,
+				ChlocalAvailable: chlocalSvc != nil,
+				Log:              log.Logger,
+			})
+			if introspectErr != nil {
+				log.Warn().Err(introspectErr).Msg("introspect: table source unavailable")
 			}
-			if regErr := introspectprovidersgui.RegisterAll(introspectReg, windowHostRef); regErr != nil {
-				log.Warn().Err(regErr).Msg("introspect: GUI provider registration failed")
-			}
-			if regErr := introspect.RegisterCatalog(introspectReg); regErr != nil {
-				log.Warn().Err(regErr).Msg("introspect: catalog registration failed")
-			}
-			introspectCfg := introspecthttp.Config{Registry: introspectReg}
-			if chlocalSvc != nil {
-				// Back POST /query with the chlocal broker so a client (e.g.
-				// play) can query `SELECT ... FROM keelson('env')` here and get
-				// ArrowStream back — no external server, no url() boilerplate
-				// (ADR-0094 §SD4). The broker runs the url()-rewritten SQL,
-				// which fetches tables from this server's own /table endpoints.
-				queryBus := bus.NewClient("runtime.introspect.query", []runtimeapp.SubjectFilter{
-					{Pattern: chlocalbroker.SubjectExecAll, Direction: runtimeapp.CapDirectionPub, Reason: "introspect /query runs SQL via clickhouse-local"},
-				})
-				introspectCfg.Runner = introspecthttp.RunnerFunc(func(ctx gocontext.Context, sql string) ([]byte, error) {
-					rep, rerr := chlocalbroker.ExecOnPool(ctx, queryBus, "introspect", chlocalbroker.ExecRequest{SQL: sql})
-					if rerr != nil {
-						return nil, rerr
-					}
-					defer func() { _ = rep.Close() }()
-					if e := rep.Err(); e != nil {
-						return nil, e
-					}
-					return io.ReadAll(rep)
-				})
-			}
-			introspectSrv := introspecthttp.New(introspectCfg, log.Logger)
-			if startErr := introspectSrv.Start(); startErr != nil {
-				log.Warn().Err(startErr).Msg("introspect: HTTP table source start failed; keelson.* url() endpoint unavailable")
-			} else {
-				log.Info().Str("addr", introspectSrv.Addr()).Msg("introspect: table source listening (query via url())")
-				defer func() {
-					ctx, cancel := gocontext.WithTimeout(gocontext.Background(), 5*time.Second)
-					defer cancel()
-					_ = introspectSrv.Stop(ctx)
-				}()
-			}
+			defer func() {
+				ctx, cancel := gocontext.WithTimeout(gocontext.Background(), 5*time.Second)
+				defer cancel()
+				_ = introspectStop(ctx)
+			}()
 
 			application_, err = application.NewApplication(cfg, u)
 			if err != nil {

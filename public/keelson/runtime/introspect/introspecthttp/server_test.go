@@ -3,6 +3,7 @@ package introspecthttp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -243,4 +244,48 @@ func TestServer_QueryUnknownKeelson400(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	b, _ := io.ReadAll(resp.Body)
 	assert.Contains(t, string(b), "unknown keelson table")
+}
+
+// TestServer_QueryRejectsParams: play ships top-level `SET param_*` on the URL
+// query string, but the in-process runner cannot bind them — the endpoint must
+// reject up front rather than mis-run (ADR-0094 §SD4). Rejected before the
+// runner is reached, so no clickhouse-local is needed.
+func TestServer_QueryRejectsParams(t *testing.T) {
+	r := introspect.NewRegistry()
+	require.NoError(t, providers.RegisterStatic(r))
+	dummy := RunnerFunc(func(context.Context, string) ([]byte, error) {
+		return nil, errors.New("runner must not be called when params are present")
+	})
+	s := New(Config{Registry: r, Runner: dummy}, zerolog.Nop())
+	require.NoError(t, s.Start())
+	defer func() { _ = s.Stop(context.Background()) }()
+	resp, err := http.Post(s.BaseURL()+"/query?param_x=1", "text/plain",
+		strings.NewReader("SELECT {x:UInt64} FORMAT ArrowStream"))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	b, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(b), "parameter binding is not supported")
+	assert.Contains(t, string(b), "param_x")
+}
+
+// TestServer_QuerySummaryHeader: a successful /query carries a minimal,
+// parseable X-ClickHouse-Summary so a client's stats line is not all-zero
+// (ADR-0094 §SD4). read_rows/read_bytes are 0 on the in-process path.
+func TestServer_QuerySummaryHeader(t *testing.T) {
+	s := newQueryServer(t)
+	const sql = "SELECT count() AS c FROM keelson('env') FORMAT ArrowStream"
+	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader(sql))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	hdr := resp.Header.Get("X-ClickHouse-Summary")
+	require.NotEmpty(t, hdr, "expected an X-ClickHouse-Summary header")
+	var kv map[string]string
+	require.NoError(t, json.Unmarshal([]byte(hdr), &kv), "summary header must be valid JSON: %q", hdr)
+	rb, err := strconv.Atoi(kv["result_bytes"])
+	require.NoError(t, err, "result_bytes must be numeric: %q", kv["result_bytes"])
+	assert.Positive(t, rb, "result_bytes should reflect the ArrowStream size")
+	assert.Contains(t, kv, "elapsed_ns")
 }

@@ -224,6 +224,60 @@ GUI-verified work; per-package `package_props` seeding awaits a TinyGo 0.41.1 bo
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Update (2026-06-27) — wiring `apps/play` to the `/query` endpoint
+
+`apps/play` (the external-over-HTTP SQL playground) could not query keelson
+tables: it never expanded the `keelson('…')` macro and pointed at an external
+ClickHouse, so the macro reached that server verbatim and errored. The §SD3
+`/query` endpoint was already built to be play-compatible (POST SQL body →
+`RewriteToURL` → broker → ArrowStream), but nothing started it where play runs,
+and play was never pointed at it. This update closes that gap; it does not
+change any §SD decision.
+
+- **In-process is mandatory; no standalone daemon.** The providers read *live*
+  in-process state — `keelson.windows` is the running window host, `keelson.env`
+  values are this process's live `Get()`, and the registries are in-process. A
+  separate OS process would report its own empty state, so a standalone
+  `introspect serve` was considered and rejected (it could only serve the static
+  `build`/`sbom` facets, and would mislead on the live ones). A cross-process
+  variant would require exporting GUI state over NATS (the
+  [ADR-0090](./0090-sysmetrics-pubsub-data-plane.md) pattern), which §SD2
+  deliberately did not adopt. The table source therefore runs in the GUI host's
+  own process, where `apps/play` is already co-resident.
+
+- **Reusable host hook (`introspecthost.Start`).** The carousel's inline startup
+  block is lifted into `keelson/runtime/introspect/introspecthost`, so any
+  keelson GUI host stands the table source up with one call (registry build +
+  optional chlocal-broker `/query` runner + bind + diagnostic). It lives above
+  `introspecthttp` because it needs the bus and broker, which `introspecthttp`
+  deliberately does not import. A new `KEELSON_INTROSPECT_ENABLE` env var
+  (default on) gates it; `KEELSON_INTROSPECT_HTTP_LISTEN` still sets the bind
+  address.
+
+- **Endpoint discovery (`introspect.LocalQueryEndpoint`).** The hook publishes
+  the bound `/query` URL via a process-global, but only when the endpoint is
+  backed by a runner (an unbacked `/query` answers 503, so advertising it would
+  be a foot-gun). A co-resident app reads it without a hard-coded port (the
+  server binds an ephemeral port by default).
+
+- **`apps/play` switchable destination.** The `Client` target is now mutable
+  under a lock (`URL`/`SetURL`, read once per request), and the toolbar gains an
+  "Endpoint" menu: a manual URL plus a "Keelson introspection" preset (shown only
+  when `LocalQueryEndpoint` is non-empty) and an "External (reset)". No protocol
+  change — play talks to `/query` exactly as it talks to ClickHouse.
+
+- **`/query` HTTP-interface parity.** To make play work against `/query`
+  unchanged, the handler now emits a minimal `X-ClickHouse-Summary`
+  (`result_bytes`/`elapsed_ns`; the broker surfaces no read counters, so those
+  stay 0) and rejects `param_*` query-string keys with a clear 400 rather than
+  mis-running an unbound placeholder (parameter binding through the in-process
+  runner is out of scope). The wire subset that matters here — POST body,
+  `X-ClickHouse-*` headers, status codes, summary header — was cross-checked
+  against a sibling ClickHouse-Arrow-to-JSON proxy that speaks the same dialect.
+
+The §SD6 console widget remains deferred; this update gives play (a separate
+backend by §Consequences) the same reach without building that widget.
+
 ## References
 
 - [ADR-0009 — environment variable registry](./0009-environment-variable-registry.md)

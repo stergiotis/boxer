@@ -7,9 +7,11 @@ package introspecthttp
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -181,6 +183,15 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "introspection /query is not configured (no clickhouse-local runner)", http.StatusServiceUnavailable)
 		return
 	}
+	// Parameter binding is not plumbed through the in-process runner: a client
+	// (apps/play) ships top-level `SET param_*` statements on the URL query
+	// string, but the chlocal broker path has no param channel, so an unbound
+	// `{x:Type}` placeholder would otherwise fail deeper with a confusing
+	// error. Reject up front with a clear message (ADR-0094 §SD4).
+	if name, ok := firstParamName(r); ok {
+		http.Error(w, "parameter binding is not supported on the introspection /query endpoint (got "+name+"); inline the value or query an external ClickHouse", http.StatusBadRequest)
+		return
+	}
 	sql := readQuerySQL(r)
 	if sql == "" {
 		http.Error(w, "empty query", http.StatusBadRequest)
@@ -192,14 +203,45 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	start := time.Now()
 	body, err := s.runner.RunSQL(r.Context(), rewritten)
 	if err != nil {
 		s.log.Warn().Err(err).Msg("introspecthttp: /query failed")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	// Minimal ClickHouse-compatible summary so a client's stats line is not
+	// all-zero. The chlocal runner surfaces no row/byte read counters
+	// (chlocalbroker.ExecReply carries only the body + content-type), so only
+	// result_bytes and elapsed_ns are populated; read_rows/read_bytes stay 0.
+	w.Header().Set("X-ClickHouse-Summary", summaryHeader(len(body), time.Since(start)))
 	w.Header().Set("Content-Type", formatContentType(rewritten))
 	_, _ = w.Write(body)
+}
+
+// firstParamName returns the first `param_*` substitution key on the request
+// URL, if any, choosing deterministically (sorted) so the rejection message
+// names the same one each time. play ships `SET param_x=...` this way.
+func firstParamName(r *http.Request) (name string, ok bool) {
+	var keys []string
+	for k := range r.URL.Query() {
+		if strings.HasPrefix(k, "param_") {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return "", false
+	}
+	sort.Strings(keys)
+	return keys[0], true
+}
+
+// summaryHeader builds a minimal X-ClickHouse-Summary JSON object. Only the
+// result size and elapsed time are known on the in-process path; the read
+// counters are reported as 0 (the runner does not surface them).
+func summaryHeader(resultBytes int, elapsed time.Duration) string {
+	return fmt.Sprintf(`{"read_rows":"0","read_bytes":"0","result_bytes":"%d","elapsed_ns":"%d"}`,
+		resultBytes, elapsed.Nanoseconds())
 }
 
 // readQuerySQL takes the SQL from the POST body, falling back to the
