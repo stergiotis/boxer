@@ -16,9 +16,13 @@ boxer pushout engine — the package `public/algebraicarch/pushout`. This spec
 tree deliberately **mirrors that package path** under `verification/formal/`,
 so the model sits beside the code it constrains. The engine backs the
 `pijuldemo` app (a consumer, in the separate hackathon repo). The goal is to
-pin down a *long-term-correct* protocol **before** the real distribution
+check the protocol's design **before** the real distribution
 (NATS / gRPC behind the `PeerI`/`AcceptorI` seam) is built, while the seams are
-still clean and there is no legacy wire protocol to preserve.
+still clean and there is no legacy wire protocol to preserve. The only carrier
+that exists today is `exchange/inproc` — reliable, ordered, in-process — so the
+loss / reordering / duplication this model admits describe that *future*
+best-effort transport, not the shipped one; this is forward-looking design
+validation, not verification of the demo as it runs now.
 
 > Go file paths in this document are relative to the package root
 > `public/algebraicarch/pushout/`.
@@ -43,7 +47,8 @@ concurrent state machine, which is what a model checker is for.
 | File | What |
 |------|------|
 | `pushout_exchange.qnt` | The distributed protocol: record / offer / deliverApply / unrecord / sweep / drop, with safety invariants and executable witness runs. |
-| `erasure_dilemma.qnt`  | A 2-node, 2-patch model isolating the erasure-vs-convergence tension. |
+| `erasure_dilemma.qnt`  | A 2-node, 2-patch model isolating the erasure-vs-convergence tension (the impossibility horn). |
+| `erasure_vault.qnt`    | The constructive resolution: vault-by-design (ADR-0025) — `EnvelopeAvailable` and `PersonalDataErased` hold together once the value moves to a non-propagated vault. |
 | `crash_recovery.qnt`   | The single-repo durability layer: the record + unrecord commit ack-orderings + `Open` recovery, with a crash possible between any two steps. |
 | `crash_recovery_unsafe.qnt` | Counterfactual (record writes swapped) — shows put-before-append is what makes recovery total. |
 | `crash_recovery_unsafe_snapshot.qnt` | Counterfactual (snapshot trusted without the prefix check) — shows the prefix-or-discard rule is what makes unrecord atomic. |
@@ -58,15 +63,17 @@ The model is faithful only insofar as each action mirrors a real code path:
 
 | Spec action    | Go symbol | Modelled semantics |
 |----------------|-----------|--------------------|
-| `record`       | `repo.Repo.Record` (repo/repo.go:230) | deps computed from referenced (applied) nodes |
+| `record`       | `repo.Repo.Record` (repo/repo.go:261) | deps computed from referenced (applied) nodes |
 | `offer`        | `exchange.Push` / `Pull` (exchange/exchange.go:102/:59) | ship a held envelope toward a peer |
-| `deliverApply` | `repo.Repo.ApplyEnvelope` (repo/repo.go:275) | **idempotent**, **dependency-gated on the applied set** |
-| `unrecord`     | `repo.Repo.Unrecord` (repo/repo.go:339) | refused if a dependent is applied or the patch was made permanent; **envelope kept** |
-| `sweep`        | `repo.Repo.Sweep` (repo/repo.go:406) | purge tombstone content, make permanent, **keep the envelope** |
-| `drop`         | carrier loss | `PeerI`/`AcceptorI` are best-effort; no single Go symbol |
+| `deliverApply` | `repo.Repo.ApplyEnvelope` (repo/repo.go:306) | **idempotent**, **dependency-gated on the applied set** |
+| `unrecord`     | `repo.Repo.Unrecord` (repo/repo.go:379) | refused if a dependent is applied or the patch was made permanent; **envelope kept** |
+| `sweep`        | `repo.Repo.Sweep` (repo/repo.go:451) | purge tombstone content, make permanent, **keep the envelope** |
+| `drop`         | carrier loss | a *future* best-effort transport (NATS/gRPC); `exchange/inproc` is reliable, so nothing drops today |
 
-Faults the model admits: message **loss** (`drop`), **reordering** and
-**duplication** (envelopes are an unordered set; `deliverApply` is idempotent),
+Faults the model admits — none exhibited by today's reliable `inproc` carrier,
+all anticipated for the future wire transport: message **loss** (`drop`),
+**reordering** and **duplication** (envelopes are an unordered set;
+`deliverApply` is idempotent),
 and **partial sync** (because `Push`/`Pull` stop on first error, a peer can be
 left holding any dependency-closed prefix — and that prefix-safety is exactly
 the `DependencyClosure` invariant).
@@ -109,16 +116,28 @@ detail. The usual escape is **per-patch crypto-erasure**: keep the (encrypted)
 envelope so structure/deps survive and re-ship works, throw away the key to
 satisfy erasure. The spec is where that design gets validated.
 
+**The constructive resolution — `erasure_vault.qnt`.** That escape is modelled
+in full: move each personal-data *value* into a controller-side **vault** that
+is never propagated, and have the patch carry only a reference (a carrier
+token). Erasure (`forget`) deletes the vault row and never touches the envelope
+layer, so `EnvelopeAvailable` and a new `PersonalDataErased` invariant hold
+**simultaneously** in every reachable state (`quint verify --invariant=Safe`,
+`NoError` to depth 10) — the unsatisfiability above dissolves once the erasure
+unit (a vault row) is separated from the convergence unit (an envelope token).
+The model also pins the cost: its per-occurrence `recorded`-once guard is the
+value-equality tradeoff — identical values become distinct references, so they
+no longer content-converge (ADR-0025 SD13).
+
 ## Crash recovery: ack-ordering + unrecord atomicity
 
 `crash_recovery.qnt` models one repo's durability for **both** write verbs, with
 `crash` able to strike between any two steps (volatile state is then lost and
 `Open`, repo/repo.go:109, recovers from durable storage):
 
-- **Record** (`commitPatchLocked`, repo/repo.go:309): apply-on-clone →
+- **Record** (`commitPatchLocked`, repo/repo.go:340): apply-on-clone →
   `PutEnvelope` (durable) → `AppendApplied` (durable, **commit point**) →
   in-memory commit.
-- **Unrecord** (repo/repo.go:339): pre-flight (no applied dependent) +
+- **Unrecord** (repo/repo.go:379): pre-flight (no applied dependent) +
   clone+Unapply → `SaveSnapshot(newApplied)` (durable) → `ReplaceApplied`
   (durable, **commit point**) → in-memory commit. The envelope is **kept**.
 
@@ -150,7 +169,7 @@ restore `{1,2,3}`); **unrecord durable** when the crash follows it.
 - `crash_recovery_unsafe.qnt` swaps record's writes (append-then-put);
   `quint run --invariant=NoCorruption` finds the crash that logs a patch whose
   envelope was never stored — `ErrCorruptStore`. So put-before-append
-  (repo/repo.go:315 before :318) is *why* recovery is total.
+  (repo/repo.go:346 before :358) is *why* recovery is total.
 - `crash_recovery_unsafe_snapshot.qnt` trusts a snapshot without the prefix
   check; `quint run --invariant=RecoveryCorrect` finds a crash mid-unrecord
   whose non-prefix snapshot is used as a base, **silently dropping a patch**. So
@@ -260,6 +279,7 @@ npx quint run    crash_recovery_unsafe_snapshot.qnt --invariant=RecoveryCorrect 
 npx quint run    pushout_exchange.qnt               --invariant=ErasureComplete        # counterexample
 npx quint run    frontier_reconcile.qnt             --invariant=FrontierComplete --max-steps=0  # exhaustive [ok]
 npx quint run    frontier_reconcile_unsafe.qnt      --invariant=HeadsOnlySufficient     # counterexample
+npx quint verify erasure_vault.qnt                  --invariant=Safe --max-steps=10     # NoError (both hold)
 ```
 
 ## Not yet modelled (next increments)

@@ -5,7 +5,11 @@
 //
 // SCOPE: the DISTRIBUTED layer — many repos shipping patches to one
 // another under loss / reordering / duplication / crash-driven PARTIAL
-// sync, plus local record / unrecord / retention-sweep.
+// sync, plus local record / unrecord / retention-sweep. The only carrier
+// that exists today is exchange/inproc (reliable, ordered, in-process);
+// the loss / reorder / dup faults below model a FUTURE best-effort wire
+// (NATS / gRPC behind PeerI/AcceptorI), so this is forward-looking design
+// validation of the protocol, not verification of the shipped transport.
 //
 // The merge ALGEBRA (graggle pushout: commutativity, associativity,
 // apply/unapply inverse) is ASSUMED correct — it is property-tested in
@@ -19,13 +23,13 @@
 // relative to that package root.
 //
 // REFINEMENT MAP (spec action -> Go symbol):
-//   record       -> repo.Repo.Record         repo/repo.go:230
+//   record       -> repo.Repo.Record         repo/repo.go:261
 //   offer        -> exchange.Push / Pull ship exchange/exchange.go:102 / :59
-//   deliverApply -> repo.Repo.ApplyEnvelope  repo/repo.go:275 (idempotent, dep-gated)
-//   unrecord     -> repo.Repo.Unrecord       repo/repo.go:339
-//   sweep        -> repo.Repo.Sweep          repo/repo.go:406 (keeps envelope)
-//   drop         -> carrier loses a framed envelope (PeerI/AcceptorI are
-//                   best-effort; no single Go symbol)
+//   deliverApply -> repo.Repo.ApplyEnvelope  repo/repo.go:306 (idempotent, dep-gated)
+//   unrecord     -> repo.Repo.Unrecord       repo/repo.go:379
+//   sweep        -> repo.Repo.Sweep          repo/repo.go:451 (keeps envelope)
+//   drop         -> a FUTURE best-effort carrier loses a framed envelope;
+//                   exchange/inproc is reliable, so nothing drops today
 module pushout_exchange {
   // ---- Patch universe: a fixed acyclic dependency DAG --------------
   type Node  = str
@@ -79,7 +83,7 @@ module pushout_exchange {
   // deliverApply: m applies an inflight envelope. IDEMPOTENT (re-apply of
   // an already-applied patch is a no-op = ApplyEnvelope applied=false) and
   // DEPENDENCY-GATED on the APPLIED set ("merely having seen an envelope
-  // is not enough", repo.go:272). A dep-missing envelope is simply not
+  // is not enough", repo.go:303). A dep-missing envelope is simply not
   // enabled here — it waits in flight until its deps are applied.
   action deliverApply(m: Node, p: Patch): bool = all {
     inflight.contains((m, p)),
@@ -90,7 +94,8 @@ module pushout_exchange {
     inflight' = inflight.exclude(Set((m, p))),
   }
 
-  // drop: the carrier loses an envelope (best-effort transport).
+  // drop: the carrier loses an envelope (a FUTURE best-effort transport;
+  // exchange/inproc, the only carrier today, does not lose anything).
   action drop(m: Node, p: Patch): bool = all {
     inflight.contains((m, p)),
     inflight' = inflight.exclude(Set((m, p))),
@@ -114,7 +119,7 @@ module pushout_exchange {
 
   // sweep: retention purge. The current Sweep destroys tombstone CONTENT
   // (the patch becomes permanent: unrecord refuses it) but KEEPS the
-  // envelope for re-ship (repo.go:406; Unrecord docstring repo.go:334).
+  // envelope for re-ship (repo.go:451; Unrecord docstring repo.go:370).
   action sweep(n: Node, p: Patch): bool = all {
     applied.get(n).contains(p),
     not(purged.get(n).contains(p)),

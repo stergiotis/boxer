@@ -6,8 +6,8 @@
   "scripts": {
     "typecheck": "for f in *.qnt; do quint typecheck \"$f\" || exit 1; done",
     "test": "for f in *.qnt; do quint test \"$f\" || exit 1; done",
-    "sweep": "quint run pushout_exchange.qnt --invariant=Safety --max-steps=12 --max-samples=20000 && quint run crash_recovery.qnt --invariant=Safety --max-steps=14 --max-samples=20000 && quint run convergence.qnt --invariant=DepClosed --max-steps=18 --max-samples=20000 && quint run frontier_reconcile.qnt --invariant=Safety --max-steps=14 --max-samples=20000",
-    "verify": "quint verify pushout_exchange.qnt --invariant=Safety --max-steps=6 && quint verify crash_recovery.qnt --invariant=Safety --max-steps=12",
+    "sweep": "quint run pushout_exchange.qnt --invariant=Safety --max-steps=12 --max-samples=20000 && quint run crash_recovery.qnt --invariant=Safety --max-steps=14 --max-samples=20000 && quint run convergence.qnt --invariant=DepClosed --max-steps=18 --max-samples=20000 && quint run frontier_reconcile.qnt --invariant=Safety --max-steps=14 --max-samples=20000 && quint run erasure_vault.qnt --invariant=Safe --max-steps=12 --max-samples=20000",
+    "verify": "quint verify pushout_exchange.qnt --invariant=Safety --max-steps=6 && quint verify crash_recovery.qnt --invariant=Safety --max-steps=12 && quint verify erasure_vault.qnt --invariant=Safe --max-steps=10",
     "findings": "quint run pushout_exchange.qnt --invariant=ErasureComplete --max-steps=8 ; quint run erasure_dilemma.qnt --invariant=EnvelopeAvailable --max-steps=6 ; quint run crash_recovery_unsafe.qnt --invariant=NoCorruption --max-steps=6 ; quint run crash_recovery_unsafe_snapshot.qnt --invariant=RecoveryCorrect --max-steps=6 ; quint run frontier_reconcile_unsafe.qnt --invariant=HeadsOnlySufficient --max-steps=1 ; quint run frontier_reconcile_unsafe.qnt --invariant=FrontierNeedsClosure --max-steps=1",
     "liveness": "java -cp \"${TLA_TOOLS:-$HOME/.tlaplus/tla2tools.jar}\" tlc2.TLC -deadlock -cleanup -config convergence.cfg convergence.tla",
     "liveness:nofair": "java -cp \"${TLA_TOOLS:-$HOME/.tlaplus/tla2tools.jar}\" tlc2.TLC -deadlock -cleanup -config convergence_nofair.cfg convergence.tla",

@@ -359,11 +359,54 @@ across recovery. The fresh-clone case remains **OQ-7**.
   (`lock_other.go`); the crash-simulation engine tests now release the
   store lock as a process exit would.
 
+## Update — 2026-06-26: formal model of the exchange protocol, recovery, and frontier reconciliation
+
+A Quint / TLA⁺ model of the distributed layer now sits beside the code
+at `verification/formal/algebraicarch/pushout/` (mirroring the package
+path). It checks the protocol *design* ahead of the real transport: the
+only carrier that exists today is the reliable in-process
+`exchange/inproc`, so the loss / reorder / duplication the specs admit
+describe the *future* NATS/gRPC wire, not the shipped one. The model
+abstracts a repo to its applied *set* of patch ids — licensed by the
+merge algebra's order-independence, already property-tested in graggle —
+and machine-checks the protocol against this ADR's decisions:
+
+- **Exchange safety** (`pushout_exchange.qnt`, Apalache) — every repo
+  stays dependency-closed under loss / reorder / duplication / partial
+  sync. The prefix a peer is left holding when `Push`/`Pull` stop on the
+  first error (O6b) is always dependency-closed.
+- **Crash-recovery atomicity** (`crash_recovery.qnt`, Apalache) — Record
+  and Unrecord are each all-or-nothing across a crash between any two
+  steps. Two counterfactuals show the SD1 ack-ordering and the Q4/O4b
+  prefix-or-discard rule are load-bearing, not stylistic: swapping the
+  durable writes to append-then-put yields the `ErrCorruptStore`
+  recovery refuses (`crash_recovery_unsafe.qnt`), and trusting a
+  non-prefix snapshot silently drops a patch
+  (`crash_recovery_unsafe_snapshot.qnt`). Q5/O5b's snapshot-before-ack
+  is the same put-before-commit shape.
+- **Convergence liveness** (`convergence.tla`, TLC) —
+  `<>[]FullyReplicated` holds under weak fairness and fails without it,
+  making the fairness requirement mechanical.
+- **Frontier reconciliation completeness** (`frontier_reconcile.qnt`) —
+  an exhaustive powerset check that advertising the frontier (DAG heads)
+  and walking the dependency DAG recovers exactly what full-list
+  exchange would, *because* every repo is dependency-closed. This
+  settles the completeness half of OQ-1.
+
+The model is design validation, not a substitute for the package's test
+battery (rapid state machine, conformance suites, goldens); it pins the
+protocol the seams will carry before a wire transport exists to constrain
+it. The retention-ledger durability added in the 2026-06-25 update is not
+part of this model. `README.md` in that tree is the index.
+
 ## Open questions
 
 - **OQ-1 — sync at scale.** Full-list exchange is O(history) per
   round; frontier exchange over the dependency DAG or set
-  reconciliation (IBLT-family) when histories grow.
+  reconciliation (IBLT-family) when histories grow. *(Update
+  2026-06-26: the frontier-exchange branch is now formally proved
+  complete vs full-list — `frontier_reconcile.qnt`; the
+  set-reconciliation / IBLT branch remains open.)*
 - **OQ-2 — orphan-envelope GC.** Crash-orphaned envelopes accumulate;
   a mark-and-sweep against the applied closure is mechanical once
   needed.
@@ -377,6 +420,14 @@ across recovery. The fresh-clone case remains **OQ-7**.
 - **OQ-6 — antiquing (ADR-0039).** Without it, false dependencies
   amplify sync traffic at scale; the deferred design dialogue is now
   load-bearing for the distributed roadmap.
+- **OQ-7 — fleet-wide erasure across re-cloning.** The durable
+  retention ledger (2026-06-25 update) closes only the *same-store*
+  case: a fresh clone receives only envelopes + log and has no
+  replay-stable basis for an earlier retention stamp, so re-cloning
+  resets the fleet's erasure clock. Fleet erasure that survives
+  re-cloning is owned by ADR-0025's cooperative-purge layer
+  (compensating patches / erasure propagation), with the durable ledger
+  as the per-replica primitive it builds on.
 
 ## References
 
@@ -387,3 +438,6 @@ across recovery. The fresh-clone case remains **OQ-7**.
 - ADR-0039: antiquing design space.
 - ADR-0025: vault-by-design erasure architecture that the
   retention/purge mechanics here support.
+- Formal model: `verification/formal/algebraicarch/pushout/` — exchange
+  safety, crash-recovery atomicity, convergence liveness, and
+  frontier-reconciliation completeness (see Update 2026-06-26).

@@ -3,7 +3,7 @@
 // The counterfactual that justifies Open's snapshot PREFIX check
 // (repo/repo.go:147, `isPrefix(snap.Applied, applied)`). Unrecord saves a
 // snapshot of the post-unrecord state BEFORE it replaces the log
-// (repo/repo.go:380 then :383); a crash in between leaves a snapshot whose
+// (repo/repo.go:420 then :428); a crash in between leaves a snapshot whose
 // applied list is generally NOT a prefix of the still-old log. The real Open
 // discards such a snapshot and replays the whole log (rolling the unrecord
 // back). This model instead TRUSTS any snapshot as a recovery base — and the

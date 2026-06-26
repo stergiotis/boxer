@@ -20,6 +20,11 @@
 //   ErasureComplete  and  EnvelopeAvailable  cannot both hold.
 // That is an ARCHITECTURE decision the protocol must make explicit
 // (e.g. per-patch crypto-erasure: keep the envelope, throw away the key).
+//
+// The CONSTRUCTIVE resolution of that decision is modelled in
+// erasure_vault.qnt: vault-by-design (ADR-0025) separates the erasure unit
+// (a vault row) from the convergence unit (the envelope), so EnvelopeAvailable
+// and PersonalDataErased hold SIMULTANEOUSLY.
 module erasure_dilemma {
   type Node  = str
   type Patch = int

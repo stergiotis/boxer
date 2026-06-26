@@ -24,7 +24,7 @@
 //   headsOf       -> the frontier a peer would advertise (vs full Applied())
 //   reachDown     -> walking envelope.Dependencies down from advertised heads
 //   frontierSync  -> one fetch step of the have/want walk (dependency-gated,
-//                    mirroring repo.ApplyEnvelope's gate, repo/repo.go:289)
+//                    mirroring repo.ApplyEnvelope's gate, repo/repo.go:320)
 module frontier_reconcile {
   type Node  = str
   type Patch = int

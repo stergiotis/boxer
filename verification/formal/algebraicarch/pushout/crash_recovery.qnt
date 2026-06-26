@@ -7,13 +7,13 @@
 // TWO write verbs, each with its own durable-write ordering and commit point,
 // and a crash (power loss) that can strike between ANY two steps:
 //
-//   Record/ApplyEnvelope (commitPatchLocked, repo/repo.go:309):
+//   Record/ApplyEnvelope (commitPatchLocked, repo/repo.go:340):
 //     1. clone+Apply            volatile
 //     2. PutEnvelope            DURABLE
 //     3. AppendApplied          DURABLE   <= commit point
 //     4. in-memory commit       volatile
 //
-//   Unrecord (repo/repo.go:339):
+//   Unrecord (repo/repo.go:379):
 //     1. clone+Unapply          volatile  (pre-flight: no applied dependent)
 //     2. SaveSnapshot(next, newApplied)  DURABLE
 //     3. ReplaceApplied(newApplied)      DURABLE   <= commit point
@@ -30,12 +30,12 @@
 // unrecord rolls back atomically).
 //
 // REFINEMENT MAP (spec action -> Go):
-//   recordBegin/putEnv/appendLog/memCommit -> commitPatchLocked  repo/repo.go:309-326
-//   unrecordBegin   -> Unrecord pre-flight + clone+Unapply       repo/repo.go:345-377
-//   unrSaveSnapshot -> saveSnapshotLocked(next, newApplied)      repo/repo.go:380
-//   unrReplaceLog   -> st.ReplaceApplied (COMMIT POINT)          repo/repo.go:383
-//   unrMemCommit    -> in-memory commit                          repo/repo.go:386-388
-//   checkpoint      -> repo.Repo.Checkpoint                      repo/repo.go:430
+//   recordBegin/putEnv/appendLog/memCommit -> commitPatchLocked  repo/repo.go:340-367
+//   unrecordBegin   -> Unrecord pre-flight + clone+Unapply       repo/repo.go:385-418
+//   unrSaveSnapshot -> saveSnapshotLocked(next, newApplied)      repo/repo.go:420
+//   unrReplaceLog   -> st.ReplaceApplied (COMMIT POINT)          repo/repo.go:428
+//   unrMemCommit    -> in-memory commit                          repo/repo.go:431-433
+//   checkpoint      -> repo.Repo.Checkpoint                      repo/repo.go:475
 //   crash           -> power loss + repo.Open recovery           repo/repo.go:109
 module crash_recovery {
   type Patch = int
@@ -49,7 +49,7 @@ module crash_recovery {
   pure def listToSet(l: List[Patch]): Set[Patch] =
     l.foldl(Set(), (acc, x) => acc.union(Set(x)))
 
-  // pre is a prefix of full  (Open's isPrefix, repo/repo.go:209)
+  // pre is a prefix of full  (Open's isPrefix, repo/repo.go:233)
   pure def isPrefix(pre: List[Patch], full: List[Patch]): bool =
     pre.length() <= full.length() and full.slice(0, pre.length()) == pre
 

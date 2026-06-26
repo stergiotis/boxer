@@ -5,12 +5,12 @@
 // BEFORE the envelope is persisted (append-then-put instead of put-then-
 // append). A crash in the window between them leaves the durable log
 // referencing a patch whose envelope was never stored — exactly the
-// ErrCorruptStore that Open refuses to recover from (repo/repo.go:170-191).
+// ErrCorruptStore that Open refuses to recover from (repo/repo.go:169-195).
 //
 //   quint run --invariant=NoCorruption crash_recovery_unsafe.qnt
 //
 // prints the counterexample. So the put-before-append order in
-// commitPatchLocked (repo/repo.go:315 before :318) is not stylistic — it is
+// commitPatchLocked (repo/repo.go:346 before :358) is not stylistic — it is
 // the reason recovery is total.
 module crash_recovery_unsafe {
   type Patch = int

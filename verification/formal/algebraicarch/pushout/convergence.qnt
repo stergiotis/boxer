@@ -21,9 +21,9 @@
 // carrier eventually delivers, which is exactly "fair scheduling".
 //
 // REFINEMENT MAP (spec action -> Go):
-//   record  -> repo.Repo.Record           repo/repo.go:230  (authored once at its origin)
+//   record  -> repo.Repo.Record           repo/repo.go:261  (authored once at its origin)
 //   offer   -> exchange.Push/Pull diff     exchange/exchange.go:102/:59 (recomputed each sync => perpetual re-offer)
-//   deliver -> repo.Repo.ApplyEnvelope     repo/repo.go:275  (idempotent, dependency-gated)
+//   deliver -> repo.Repo.ApplyEnvelope     repo/repo.go:306  (idempotent, dependency-gated)
 module convergence {
   type Node  = str
   type Patch = int
