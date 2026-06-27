@@ -1,47 +1,115 @@
 ---
 name: clickhouse-nanopass
-description: "Use this skill when writing ClickHouse SQL transformation passes, pipelines, macro expanders, or analysis functions using the nanopass framework. Triggers include: any mention of 'nanopass', 'SQL pass', 'SQL transformation', 'SQL rewrite', 'ClickHouse pass', 'macro expansion', 'qualify tables', 'add WHERE', or requests to manipulate ClickHouse SQL programmatically in Go. Also use when the user wants to parse ClickHouse SQL, walk a CST, rewrite tokens, build scope-aware transformations, or compose SQL→SQL pipelines. Do NOT use for general SQL querying, ClickHouse client usage, or ORM-based database access."
+description: "Use this skill when writing ClickHouse SQL transformation passes, pipelines, macro expanders, function evaluators, or analysis functions using the nanopass framework. Triggers include: any mention of 'nanopass', 'SQL pass', 'SQL transformation', 'SQL rewrite', 'ClickHouse pass', 'canonicalize SQL', 'macro expansion', 'qualify tables', 'expand columns', 'extract literals', 'add/modify SETTINGS', or requests to manipulate ClickHouse SQL programmatically in Go. Also use when parsing ClickHouse SQL, walking a CST, rewriting tokens, building scope-aware transformations, declaring PassProperties, or composing SQL→SQL pipelines with Sequence/FixedPoint. Do NOT use for general SQL querying, ClickHouse client usage, or ORM-based database access."
 ---
 
 # ClickHouse SQL Nanopass Framework
 
+A Go library for composable SQL→SQL transformations of ClickHouse SELECT
+statements. Each transformation is a self-contained **pass**: a `nanopass.Pass`
+struct value carrying an `Apply` function plus declared `PassProperties`. Passes
+compose through combinators that take and return `Pass`; the runner threads a
+shared `env.Environment` through the chain so settings, params, and FORMAT are
+first-class Go values.
+
+Authoritative design records — read these before changing the substrate:
+
+- **[ADR-0002](../../adr/0002-nanopass-discipline.md)** — the substrate:
+  stateless passes on the CST + a centralised `SelectScope`. No AST.
+- **[ADR-0006](../../adr/0006-nanopass-environment-and-first-class-pass.md)** —
+  the `Pass` struct + `PassProperties` and the `env` package.
+- **[ADR-0084](../../adr/0084-nanopass-antlr-dfa-cache-bounding.md)** — the
+  bounded process-local DFA cache that makes long-running parsing memory-safe.
+
+The package README at
+[`public/db/clickhouse/dsl/nanopass/README.md`](../../../public/db/clickhouse/dsl/nanopass/README.md)
+is kept current and is the next stop after this skill.
+
 ## Critical Rules — Read Before Writing Any Code
 
-1. **Every pass re-parses from scratch.** A pass receives a `string` and returns a `string`. Never share a `ParseResult` or `TokenStreamRewriter` across passes.
-2. **Every pass must return syntactically valid SQL.** If you cannot guarantee this, add `nanopass.Validate` after your pass in the pipeline.
-3. **Use `BuildScopes` for any pass that touches tables, WHERE clauses, or needs UNION ALL awareness.** Never use `FindAll`/`FindFirst` for table references — use scopes instead.
-4. **Never use `FindAll` to locate `TableIdentifierContext` directly.** `TableIdentifier` appears both in FROM clauses and inside `ColumnIdentifier` (as column qualifiers like `t1.id`). Scopes handle this correctly.
-5. **The grammar parses `NOT(x)` as a function call, not logical NOT.** Only `NOT x` (without parens) produces `ColumnExprNotContext`.
-6. **Whitespace is on the hidden channel.** The lexer uses `-> channel(HIDDEN)` for whitespace and comments. The `TokenStreamRewriter` preserves them automatically.
+1. **A pass is a `nanopass.Pass` struct, not a function.** `Pass{Name, Apply,
+   Properties}` where `Apply` is `func(e *env.Environment, body string) (string,
+   error)`. There is no `func(sql) (sql, error)` pass type and no `Pipeline()` —
+   compose with `Sequence`, run with `.Run(sql)`. (Pre-ADR-0006 `Pipeline`,
+   `FixedPointPipeline`, and the function alias were removed.)
+2. **Every pass re-parses from scratch.** `Apply` receives a `body` string and
+   returns a `body` string. Never share a `*ParseResult` or
+   `*antlr.TokenStreamRewriter` across passes. This is what keeps passes
+   composable and reorderable (ADR-0002).
+3. **Two grammars.** `nanopass.Parse` uses **Grammar1** (the full ClickHouse
+   SELECT surface). `nanopass.ParseCanonical` uses **Grammar2** (canonical forms
+   only) and doubles as a *completeness proof* that normalisation finished.
+   Normalisation passes parse with `Parse`.
+4. **`Apply` sees `body`, not the whole statement.** `Pass.Run` calls
+   `env.Extract` first, so the leading `SET …;` prelude is already split off into
+   the `Environment`. Parse and rewrite `body`; read/write settings and params
+   through `e`.
+5. **Declare behaviour in `Properties`.** `Idempotent` and `NeedsFixedPoint` are
+   mutually exclusive; the runner auto-wraps `NeedsFixedPoint` passes in
+   `FixedPoint(p, 128)`. `AssertProperties` enforces both against a corpus — a
+   wrong flag fails the test.
+6. **Every pass must return syntactically valid SQL.** If you can't guarantee
+   it, add `nanopass.ValidateGrammar1` (or `Validating(GrammarG1, p)`) after your
+   pass.
+7. **Use `BuildScopes` for anything touching tables, WHERE, or UNION ALL.** Never
+   `FindAll` a `TableIdentifierContext` directly — `TableIdentifier` appears both
+   in FROM clauses and inside `ColumnIdentifier` (column qualifiers like
+   `t1.id`). Scopes disambiguate.
+8. **Whitespace and comments are on the hidden channel** (`-> channel(HIDDEN)`).
+   The `TokenStreamRewriter` preserves them automatically, giving lossless
+   round-trips.
+9. **`Parse`/`ParseCanonical` are total.** `CheckInputGuards` runs first and
+   rejects pathological input (deep nesting, oversized payloads, invalid UTF-8).
+   You never get a panic from parsing; you get an error.
+10. **Fix canonicalisation at the canonicalize pass, not downstream.** Downstream
+    consumers (the AST converter via `ParseCanonical`) only ever see canonical,
+    function-call forms. If a shape reaches them un-normalised, fix the relevant
+    `Canonicalize*` pass so it emits the canonical shape — do not special-case
+    the non-canonical shape in the consumer.
+
+## Architecture
+
+```
+SQL string
+  → env.Extract            split leading `SET …;` prelude → (Environment, body)
+  → Pass.Apply(env, body)  parse body → walk CST → rewrite tokens → emit body
+  → env.Integrate(body)    re-emit SET prelude + body
+  → next pass repeats (shares the same Environment inside a Sequence)
+```
+
+`Pass.Run(sql)` does the full round-trip. `Sequence` shares the `env` across its
+children, so they observe each other's mutations to settings and params.
+Re-parsing per `Apply` trades CPU for composability (negligible for typical
+query sizes; `Parse` is the dominant per-pass cost).
 
 ## Module Layout
 
 ```
-github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/
-├── parse.go          # Parse(sql) → *ParseResult
-├── walk.go           # WalkCST, FindAll, FindFirst
-├── rewrite.go        # NewRewriter, ReplaceNode, DeleteNode, InsertBefore, InsertAfter, etc.
-│                     # TrackedRewriter for overlap detection
-├── pipeline.go       # Pass type, Pipeline, FixedPoint, FixedPointPipeline, Validate
-├── scope.go          # BuildScopes → []*SelectScope, table alias resolution, CTE tracking
-├── macro.go          # MacroExpander, ExtractLiteralArgs, LiteralArg, LiteralTypeE
-├── analysis/
-│   ├── tables.go     # ExtractTables
-│   ├── columns.go    # ExtractColumns
-│   └── functions.go  # ExtractFunctions
-├── passes/
-│   ├── normalize_case.go
-│   ├── normalize_whitespace.go
-│   ├── strip_comments.go
-│   ├── remove_parens.go
-│   ├── qualify_tables.go
-│   ├── add_where.go
-│   ├── add_settings.go
-│   ├── rewrite_functions.go
-│   └── helpers.go    # findOutermostSelectStmt, findLastSelectStmtClause
-└── testdata/
-    ├── corpus.go     # LoadCorpus() via embed.FS
-    └── corpus/       # 56 .sql files
+github.com/stergiotis/boxer/public/db/clickhouse/dsl/
+├── env/                          # the SELECT-statement environment (ADR-0006)
+│   ├── env_environment.go        # Environment, Setting, Param, NewEnvironment
+│   ├── env_extract.go            # Extract(sql) → (*Environment, body, err)
+│   └── env_integrate.go          # (*Environment).Integrate(body) → (sql, err)
+├── grammar1/                     # generated Grammar1 lexer+parser (full surface)
+├── grammar2/                     # generated Grammar2 lexer+parser (canonical only)
+└── nanopass/
+    ├── nanopass_pipeline.go      # Pass, PassProperties, combinators, Run, validators, discard marker
+    ├── nanopass_parse.go         # Parse (Grammar1), ParseCanonical (Grammar2), ParseResult
+    ├── nanopass_guard.go         # CheckInputGuards, MaxInputBytes, MaxNestingDepth
+    ├── nanopass_dfacache.go      # bounded DFA cache (ADR-0084), DFACacheStats
+    ├── nanopass_walk.go          # WalkCST, FindAll, FindFirst
+    ├── nanopass_rewrite.go       # RewriterI, node helpers, TrackedRewriter
+    ├── nanopass_scope.go         # BuildScopes, FlattenScopes, SelectScope, TableSource, CTEDef
+    ├── nanopass_macro.go         # MacroExpander, LiteralArg, LiteralTypeE, ExtractLiteralArgs
+    ├── nanopass_identifier.go    # DecodeIdentifier, QuoteIdentifier, NormalizeCallName
+    ├── nanopass_observation.go   # SourceRange, Observation, ObservationFuncI
+    ├── nanopass_assert_properties.go  # AssertProperties(t, p, corpus)
+    ├── analysis/                 # ExtractTables / ExtractColumns / ExtractFunctions
+    ├── highlight/                # Highlight → []Span; RenderANSI / RenderHTML / HighlightCSS
+    ├── passes/                   # the shipped passes (see "Included Passes")
+    └── testdata/
+        ├── nanopass_testdata_corpus.go   # LoadCorpus() []CorpusEntry via embed.FS
+        └── corpus/               # 82 .sql files (+ corpus/unsupported/ with 4)
 ```
 
 ## Dependencies and Imports
@@ -49,67 +117,146 @@ github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/
 ```go
 import (
     "github.com/antlr4-go/antlr/v4"
-    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
-    "github.com/stergiotis/boxer/public/observability/eh"
-    "github.com/rs/zerolog"
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"      // Grammar1 CST types
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar2"      // Grammar2 CST types (rarely needed)
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"           // Environment
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"   // TypedLiteral, VerbatimSql, ControlFlow
+    "github.com/stergiotis/boxer/public/observability/eh"                // eh.Errorf
+    "github.com/stergiotis/boxer/public/observability/eh/eb"             // eb.Build() structured errors
+    "github.com/rs/zerolog"                                              // TrackedRewriter logger
 )
 ```
 
+Build tags are mandatory for every `go build/test/vet` in this repo — pass
+`-tags="$(cat ./tags)"` (and export `GOFLAGS=-tags=…` so gopls/`go doc` resolve
+symbols). Without them, packages fail to compile with misleading "undefined"
+errors.
+
 ## Coding Standards (Mandatory)
 
-- **Named return values** on all functions/methods
-- **Naked returns** after setting `err`
-- **No `if err := func(); err != nil`** — always assign then check
-- **Receiver name always `inst`**
-- **Interfaces end with `I`**, enums end with `E`
-- **Use `eh.Errorf` with `%w`** for error wrapping
-- **Pre-allocate slices/maps** when size is known
-- **Explicit anonymous blocks** for scoping within large functions
+House style — full rules in
+[CODINGSTANDARDS.md](../../../CODINGSTANDARDS.md). The load-bearing ones here:
+
+- **Named return values** on functions/methods; **naked returns** after setting
+  `err`.
+- **No `if err := f(); err != nil`** — assign, then check.
+- **Receiver name is always `inst`.** Interfaces end in `I`, enum types end in `E`.
+- **Wrap errors with `eh.Errorf("…: %w", err)`**; build structured errors with
+  `eb.Build().Str("k", v).Errorf("…")`.
+- **Pre-allocate** slices/maps when the size is known.
+- Use **explicit anonymous blocks** to scope locals within large functions.
+
+## The Pass Model
+
+```go
+type Pass struct {
+    Name       string
+    Apply      ApplyFunc       // func(e *env.Environment, body string) (newBody string, err error)
+    Properties PassProperties
+}
+
+type PassProperties struct {
+    Idempotent      bool        // f(f(x)) == f(x) over the corpus
+    NeedsFixedPoint bool        // runner auto-wraps Apply in FixedPoint(p, DefaultFixedPointMaxIter=128)
+    Reads, Writes   EnvRegions  // bitset: RegionBody | RegionSessionSettings | RegionStatementSettings | RegionParams | RegionFormat
+    Requires        []FormTag   // ordering hints (documentation in v1)
+    Produces        []FormTag
+}
+```
+
+- `Idempotent` and `NeedsFixedPoint` are **mutually exclusive** — declaring both
+  is a contract violation caught by `AssertProperties`.
+- `Reads`/`Writes` are documentation in v1 (a future scheduler may parallelise
+  passes with disjoint write sets). Still, declare them honestly — they are the
+  greppable record of which passes touch which env region.
+- `Pass.Run(sql)` is the external entry point. A pass invoked *from another
+  pass's `Apply`* calls the inner pass's `Apply` directly (sharing the env), not
+  `Run`.
+
+### Combinators
+
+Everything that takes a `Pass` returns a `Pass`; composition stays first-class.
+
+```go
+func Sequence(name string, ps ...Pass) Pass                          // left-to-right, shared env
+func FixedPoint(p Pass, maxIter int) Pass                            // iterate to convergence; sets Idempotent, clears NeedsFixedPoint
+func Validating(g Grammar, p Pass) Pass                              // run p, then parse-validate its body against g
+func Conditional(name string, pred func(*env.Environment) bool, p Pass) Pass  // run p only when pred(env)
+func LiftBodyPass(name string, fn func(string)(string,error), props PassProperties) Pass  // wrap a body-only func
+
+// Grammar selectors for Validating:
+const ( GrammarG1 Grammar = iota; GrammarG2 )
+
+// Validation passes (Pass values, usable directly in a Sequence):
+var ValidateGrammar1 Pass  // body must parse with Grammar1
+var ValidateGrammar2 Pass  // body must parse with Grammar2 (canonical-only) — final-step completeness check
+```
+
+`Validating` and `Conditional` delegate to the wrapped pass's own fixpoint
+execution and therefore *clear* `NeedsFixedPoint` on the wrapper (no double
+loop). `FixedPoint` preserves the wrapped properties, clears `NeedsFixedPoint`,
+and declares `Idempotent`.
+
+## The Environment (`dsl/env`)
+
+```go
+type Environment struct {
+    SessionSettings   map[string]Setting   // leading `SET k = v;` where k does NOT start with "param_"
+    StatementSettings map[string]Setting   // inline `... SETTINGS k=v`  (read-only view in v1)
+    Params            map[string]Param     // unified: `SET param_x = …;` AND `{x: Type}` slots
+    Format            string               // `FORMAT Name`              (read-only view in v1)
+}
+
+type Setting struct { Name, Raw string; Value any }   // Raw = verbatim SQL; Value = deserialised when known
+type Param   struct { Name, Type, Raw string; Value any }
+
+func (p Param) IsResolved() bool    // both Type (slot) and Raw (SET) present → Value holds the deserialised value
+func (p Param) IsUnresolved() bool  // slot referenced from body, no SET bound
+
+func Extract(sql string) (e *Environment, body string, err error)  // best-effort body parse; always returns a usable env
+func NewEnvironment() *Environment                                  // all maps allocated
+func (e *Environment) Integrate(body string) (sql string, err error)
+const ParamPrefix = "param_"
+```
+
+v1 semantics to internalise:
+
+- `Extract` owns the **`SET` prelude** and harvests `{name: Type}` slots from the
+  body to populate `Param.Type`. A `SET` key wins a `Params` slot if it starts
+  with `param_` *or* matches a body slot name; everything else is a
+  `SessionSettings` entry.
+- `StatementSettings` and `Format` are **read-only views** — they stay in `body`.
+  Passes that change them rewrite the body's CST; `Integrate` re-emits only the
+  `SET` prelude.
+- `Integrate(Extract(sql))` is **normalising** (SET ordering, whitespace), not
+  byte-identical.
 
 ## How to Write a New Pass
 
-### Template: Simple Token-Level Pass
+### Template: pure body pass (no env) via `LiftBodyPass`
 
-For passes that operate on individual tokens (keywords, whitespace, comments):
+For token-level or CST-node rewrites that never touch settings/params/format —
+this is the most common shape. Declare it as a package-level `var`.
 
 ```go
 package passes
 
 import (
-    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar"
-    "github.com/stergiotis/boxer/public/observability/eh"
+    "github.com/antlr4-go/antlr/v4"
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
     "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+    "github.com/stergiotis/boxer/public/observability/eh"
 )
 
-func MyTokenPass(sql string) (result string, err error) {
-    pr, err := nanopass.Parse(sql)
-    if err != nil {
-        err = eh.Errorf("MyTokenPass: %w", err)
-        return
-    }
-    rw := nanopass.NewRewriter(pr)
+var MyNodePass = nanopass.LiftBodyPass("MyNodePass", myNodePassImpl, nanopass.PassProperties{
+    Idempotent: true,
+    Reads:      nanopass.RegionBody,
+    Writes:     nanopass.RegionBody,
+})
 
-    for i := 0; i < pr.TokenStream.Size(); i++ {
-        tok := pr.TokenStream.Get(i)
-        tokenType := tok.GetTokenType()
-        // Operate on tokens here
-        // Use: nanopass.ReplaceToken(rw, tok.GetTokenIndex(), newText)
-        // Use: nanopass.DeleteToken(rw, tok.GetTokenIndex())
-        _ = tokenType
-    }
-
-    result = nanopass.GetText(rw)
-    return
-}
-```
-
-### Template: CST Node Pass (No Scope Needed)
-
-For passes that match specific CST node types but don't need table/CTE awareness:
-
-```go
-func MyNodePass(sql string) (result string, err error) {
+func myNodePassImpl(sql string) (result string, err error) {
     pr, err := nanopass.Parse(sql)
     if err != nil {
         err = eh.Errorf("MyNodePass: %w", err)
@@ -119,12 +266,11 @@ func MyNodePass(sql string) (result string, err error) {
 
     nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
         switch c := ctx.(type) {
-        case *grammar.SomeSpecificContext:
-            // Operate on the node
+        case *grammar1.ColumnExprFunctionContext:
             nanopass.ReplaceNode(rw, c, "new text")
-            return false // don't descend into replaced node
+            return false // don't descend into the replaced node
         }
-        return true // continue walking
+        return true // keep walking
     })
 
     result = nanopass.GetText(rw)
@@ -132,254 +278,247 @@ func MyNodePass(sql string) (result string, err error) {
 }
 ```
 
-### Template: Scope-Aware Pass
+### Template: env-aware pass (`Pass` value with a real `Apply`)
 
-For passes that touch tables, WHERE clauses, or need UNION ALL awareness:
+When the pass reads or writes settings/params/format, write `Apply` directly so
+it can consult `e`.
 
 ```go
-func MyStructuralPass(param string) nanopass.Pass {
-    return func(sql string) (result string, err error) {
+var MyEnvPass = nanopass.Pass{
+    Name: "MyEnvPass",
+    Apply: func(e *env.Environment, body string) (result string, err error) {
+        pr, err := nanopass.Parse(body)
+        if err != nil {
+            err = eh.Errorf("MyEnvPass: %w", err)
+            return
+        }
+        rw := nanopass.NewRewriter(pr)
+        // ... rewrite body, and read/mutate e.Params / e.SessionSettings ...
+        result = nanopass.GetText(rw)
+        return
+    },
+    Properties: nanopass.PassProperties{
+        Idempotent: true,
+        Reads:      nanopass.RegionBody | nanopass.RegionParams,
+        Writes:     nanopass.RegionBody,
+    },
+}
+```
+
+### Template: scope-aware pass (tables / WHERE / UNION ALL)
+
+`BuildScopes` returns one root scope per top-level UNION member and now returns
+an **error** for unexpected tree shapes — handle it. Iterate the whole tree with
+`FlattenScopes`.
+
+```go
+func QualifyTables(defaultDB string) nanopass.Pass {        // parameterised → factory returns a Pass
+    return nanopass.LiftBodyPass("QualifyTables", func(sql string) (result string, err error) {
         pr, err := nanopass.Parse(sql)
         if err != nil {
-            err = eh.Errorf("MyStructuralPass: %w", err)
+            err = eh.Errorf("QualifyTables: %w", err)
             return
         }
         rw := nanopass.NewRewriter(pr)
 
-        scopes := nanopass.BuildScopes(pr)
-        for _, scope := range scopes {
-            applyToScope(rw, scope, param)
+        scopes, err := nanopass.BuildScopes(pr, defaultDB)
+        if err != nil {
+            err = eh.Errorf("QualifyTables: %w", err)
+            return
         }
-
+        for _, scope := range nanopass.FlattenScopes(scopes) {   // every scope exactly once
+            for i := range scope.Tables {
+                ts := &scope.Tables[i]
+                if ts.IsCTE || ts.IsSubquery || ts.IsFunction {  // none of these live in a database
+                    continue
+                }
+                if ts.Database == "" {
+                    nanopass.InsertBefore(rw, ts.Node, nanopass.QuoteIdentifier(ts.ResolvedDatabase(scope))+".")
+                }
+            }
+        }
         result = nanopass.GetText(rw)
         return
-    }
-}
-
-func applyToScope(rw *antlr.TokenStreamRewriter, scope *nanopass.SelectScope, param string) {
-    // Access scope.Node (*grammar.SelectStmtContext) for clauses:
-    //   scope.Node.WhereClause()
-    //   scope.Node.FromClause()
-    //   scope.Node.ProjectionClause()
-    //   scope.Node.OrderByClause()
-    //   scope.Node.GroupByClause()
-    //   scope.Node.HavingClause()
-    //   scope.Node.LimitClause()
-    //   scope.Node.SettingsClause()
-
-    // Access scope.Tables for FROM/JOIN table sources:
-    for _, ts := range scope.Tables {
-        if ts.IsCTE || ts.IsSubquery {
-            continue
-        }
-        // ts.Table, ts.Database, ts.Alias, ts.Node
-    }
-
-    // Resolve aliases:
-    // source, found := scope.ResolveAlias("alias_or_table_name")
-
-    // Check CTE names:
-    // def, found := scope.ResolveCTE("cte_name")
-
-    // Recurse into CTE bodies:
-    for _, cte := range scope.CTEDefs {
-        if cte.Scope != nil {
-            applyToScope(rw, cte.Scope, param)
-        }
-    }
-
-    // Recurse into subqueries:
-    for _, sub := range scope.Subqueries {
-        applyToScope(rw, sub, param)
-    }
-
-    // Recurse into FROM subquery scopes:
-    for _, ts := range scope.Tables {
-        if ts.IsSubquery && ts.Scope != nil {
-            applyToScope(rw, ts.Scope, param)
-        }
-    }
+    }, nanopass.PassProperties{Idempotent: true, Reads: nanopass.RegionBody, Writes: nanopass.RegionBody})
 }
 ```
 
-### Template: Parameterized Pass (Returns `nanopass.Pass`)
+`FlattenScopes` is the flat idiom. When you need to walk structurally instead,
+recurse through the typed fields: `scope.CTEDefs[i].Scopes`,
+`scope.Tables[i].Scopes` (FROM subqueries), and `scope.Subqueries`
+(expression-level subqueries). All names (`Table`, `Database`, `Alias`,
+`CTEDef.Name`) are stored **decoded** — re-encode with `QuoteIdentifier` (or
+splice `NodeText`) when writing back.
 
-When a pass needs configuration, return a closure:
-
-```go
-func QualifyTables(defaultDB string) nanopass.Pass {
-    return func(sql string) (result string, err error) {
-        // ... implementation using defaultDB
-    }
-}
-```
-
-### Template: Macro Registration
+### Template: macro registration (compile-time string expansion)
 
 ```go
 expander := nanopass.NewMacroExpander()
-expander.Register("macroName", func(args []nanopass.LiteralArg) (string, error) {
-    // args[i].Type: LiteralTypeString, LiteralTypeInt, LiteralTypeFloat, LiteralTypeNull
-    // args[i].Value: raw text (strings include quotes, e.g. "'hello'")
-    return "expanded SQL fragment", nil
+expander.Register("jsonCol", func(args []nanopass.LiteralArg) (string, error) {
+    // args[i].Type ∈ {LiteralTypeString, LiteralTypeInt, LiteralTypeFloat, LiteralTypeBool, LiteralTypeNull, LiteralTypeUnknown}
+    // args[i].Value is RAW text — strings keep their quotes, e.g. "'hello'"
+    return "JSONExtractString(payload, " + args[0].Value + ")", nil
 })
-// Use: expander.Pass() returns a nanopass.Pass
-// For nested macros: nanopass.FixedPoint(expander.Pass(), 10)
+result, err := nanopass.Sequence("expand", expander.Pass(), nanopass.ValidateGrammar1).Run(sql)
 ```
 
-## How to Write Tests for a Pass
+`MacroExpander.Pass()` declares `NeedsFixedPoint` (a macro nested in another's
+argument list only becomes expandable after the inner one expands). Name matching
+is case- and quoting-insensitive (`NormalizeCallName`). A registered macro that is
+*never* reducible to literals is an error — macros are not real ClickHouse
+functions, so leaving the call in the output would fail at query time.
 
-Every pass MUST have these four test categories:
+### Template: compile-time function evaluation (Go-evaluable functions)
 
-### 1. Explicit Input/Output Pairs
+```go
+eval := passes.NewFunctionEvaluator()
+eval.RegisterBuiltins()                               // array(), tuple()
+eval.Register("daysInMonth", func(args []any) (any, error) {   // EvalFuncI
+    year, month := args[0].(uint64), args[1].(uint64)
+    return computeDays(year, month), nil
+}, true /* useAny: hand the evaluator unwrapped Go values, not marshalling.TypedLiteral */)
+
+eval.OnObservation(func(obs nanopass.Observation) { /* inspect call sites; always-fire */ })
+
+result, err := eval.Pass().Run("SELECT daysInMonth(2024, 2)")  // → "SELECT 29"
+```
+
+`FunctionEvaluator` folds recursively and partially: `myAdd(myAdd(1,2),3)` → `6`;
+`myAdd(a, myAdd(1,2))` → `myAdd(a, 3)`. A `{name: Type}` slot argument resolves
+via `env.Params` (resolved param ⇒ literal; unresolved ⇒ the outer call is
+non-evaluable). Returning `marshalling.VerbatimSql{SQL: …}` splices raw SQL,
+which is what justifies its `NeedsFixedPoint` (the spliced text may contain more
+registered calls only the next re-parse sees).
+
+## Canonicalization Pipeline
+
+`passes.CanonicalizeFull(maxIter)` is a `Sequence` in this exact order — and is
+the reference for how the substrate's "fix it at canonicalisation" rule cashes
+out. It rewrites every sugar/operator form into **function-call form**, then
+normalises case and identifier quoting last:
+
+```
+CanonicalizeWhitespaceSingleLine     // idempotent
+CanonicalizeEquals                   // ==  →  =
+CanonicalizeSugar                    // DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function calls   (fixpoint)
+FixedPoint(CanonicalizeConstructors(ConstructorFormFunction), maxIter)  // [..]/(..) → array()/tuple()
+FixedPoint(CanonicalizeCaseConditionals, maxIter)                       // CASE → if()/multiIf()/caseWithExpression()
+CanonicalizeMultiIf                  // 3-arg multiIf(c,r,d) → if(c,r,d)
+FixedPoint(CanonicalizeCasts, maxIter)        // x::T and CAST(x AS T) → CAST(x, 'T')
+CanonicalizeJoin                     // strictness-before-direction, drop OUTER, comma→CROSS, parenthesise USING
+FixedPoint(CanonicalizeTernary, maxIter)      // c ? a : b → if(c, a, b)
+CanonicalizeKeywordCase              // uppercase keywords (must be 2nd-to-last)
+CanonicalizeIdentifiers              // double-quote identifiers (must be last)
+```
+
+`CanonicalizeConstructors(form)` takes `ConstructorFormFunction` (toward
+`array()`/`tuple()`, what `CanonicalizeFull` uses — Grammar2 forbids `[..]`/`(..)`
+literal syntax) or `ConstructorFormLiteral` (the reverse). End a normalisation
+pipeline with `nanopass.ValidateGrammar2`: if it parses, canonicalisation is
+provably complete.
+
+## Analytical Passes — observation side channels and the discard marker
+
+A pass that exists only to *observe* (not rewrite) returns the **discard marker**
+so the runner forwards the input unchanged while keeping any env mutations:
+
+- Return `marshalling.ControlFlow{Sentinel: nanopass.PassDiscardOutput}` from a
+  handler; the marshaller renders it as a comment-shaped marker spliced into the
+  body. `Sequence`, `runFixedPoint`, and `Pass.Run` detect it via
+  `IsDiscardOutput` and forward the *input* instead of the rewrite.
+- The marker scan is **quote-aware** — marker text inside a string literal or
+  quoted identifier does not trigger; marker text inside a comment does. So
+  `Sequence(p).Run(x) == p.Run(x)` holds for analytical passes.
+- `FunctionEvaluator.OnObservation` is the canonical consumer: it fires one
+  `Observation{Name, Args, Evaluated, Src}` per registered call site, whether or
+  not the call folded. `Observation.Src` is a `SourceRange` into the *current*
+  body (earlier passes / fixpoint iterations may have rewritten it).
+
+## Testing a Pass
+
+Every pass MUST be covered by the categories below. The mechanised core is
+`nanopass.AssertProperties(t, p, corpus)`, which turns declared `PassProperties`
+into enforced contracts (`Idempotent`, `NeedsFixedPoint`, their mutual exclusion,
+and "the property must actually be exercised — no vacuous pass").
+
+### 1. `AssertProperties` (idempotency / fixpoint, machine-checked)
+
+Build the corpus from the shared `testdata` and feed it to every pass. For a
+`NeedsFixedPoint` pass, the corpus must contain at least one entry that does
+*not* converge in a single `Apply`, or the flag is rejected as unjustified.
+
+```go
+import (
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+    "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
+    "github.com/stretchr/testify/require"
+)
+
+func TestMyPassProperties(t *testing.T) {
+    entries, err := testdata.LoadCorpus()
+    require.NoError(t, err)
+    corpus := make([]string, 0, len(entries))
+    for _, e := range entries {
+        corpus = append(corpus, e.SQL)   // CorpusEntry{Name, SQL}
+    }
+    nanopass.AssertProperties(t, passes.MyPass, corpus)
+}
+```
+
+(See `passes_test/nanopass_passes_assert_properties_test.go` for the live sweep
+over every pass, including how factory passes — `MacroExpander`,
+`FunctionEvaluator`, `ExpandColumns` — get registries/schemas wired and a
+nested-forms corpus for the `NeedsFixedPoint` passes.)
+
+### 2. Explicit input/output pairs
 
 ```go
 func TestMyPass(t *testing.T) {
-    tests := []struct {
-        name     string
-        input    string
-        expected string
-    }{
+    tests := []struct{ name, input, expected string }{
         {name: "basic", input: "SELECT a FROM t", expected: "SELECT a FROM t"},
-        // Add 5-10 cases covering the transformation
+        // 5–10 cases covering the transformation
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            got, err := passes.MyPass(tt.input)
+            got, err := passes.MyPass.Run(tt.input)
             require.NoError(t, err)
-            assert.Equal(t, tt.expected, got)
-
-            // ALWAYS verify output is parseable
-            _, err = nanopass.Parse(got)
+            require.Equal(t, tt.expected, got)
+            _, err = nanopass.Parse(got)                 // ALWAYS verify output parses
             require.NoError(t, err, "produced invalid SQL: %s", got)
         })
     }
 }
 ```
 
-### 2. Idempotency
+### 3. Corpus validity, 4. UNION ALL / CTEs / subqueries, 5. Invalid-input rejection
 
-```go
-func TestMyPassIdempotent(t *testing.T) {
-    sqls := []string{
-        "SELECT a FROM t",
-        "SELECT a FROM t WHERE x > 1",
-        // Include cases that exercise the transformation
-    }
-    for i, sql := range sqls {
-        t.Run(fmt.Sprintf("idempotent_%d", i), func(t *testing.T) {
-            pass1, err := passes.MyPass(sql)
-            require.NoError(t, err)
-            pass2, err := passes.MyPass(pass1)
-            require.NoError(t, err)
-            assert.Equal(t, pass1, pass2, "not idempotent")
-        })
-    }
-}
-```
-
-### 3. Corpus Validity
-
-```go
-func TestMyPassOutputValidity(t *testing.T) {
-    entries, err := testdata.LoadCorpus()
-    require.NoError(t, err)
-
-    for _, entry := range entries {
-        t.Run(entry.Name, func(t *testing.T) {
-            out, err := passes.MyPass(entry.SQL)
-            if err != nil {
-                t.Skipf("pass failed: %v", err)
-            }
-            _, err = nanopass.Parse(out)
-            require.NoError(t, err, "produced invalid SQL for %s:\n%s", entry.Name, out)
-        })
-    }
-}
-```
-
-### 4. Scope Preservation (for pure passes only)
-
-Pure passes (case normalization, whitespace, comments, parens) must not change the query structure:
-
-```go
-func TestMyPassPreservesScopes(t *testing.T) {
-    entries, err := testdata.LoadCorpus()
-    require.NoError(t, err)
-
-    for _, entry := range entries {
-        t.Run(entry.Name, func(t *testing.T) {
-            prBefore, err := nanopass.Parse(entry.SQL)
-            if err != nil { t.Skip() }
-
-            out, err := passes.MyPass(entry.SQL)
-            if err != nil { t.Skip() }
-
-            prAfter, err := nanopass.Parse(out)
-            require.NoError(t, err)
-
-            scopesBefore := nanopass.BuildScopes(prBefore)
-            scopesAfter := nanopass.BuildScopes(prAfter)
-            require.Equal(t, len(scopesBefore), len(scopesAfter))
-        })
-    }
-}
-```
-
-### Additional: UNION ALL Tests (for structural passes)
-
-```go
-func TestMyPassUnionAll(t *testing.T) {
-    // Always test with 2+ UNION ALL branches
-    sql := "SELECT a FROM t1 UNION ALL SELECT b FROM t2"
-    got, err := passes.MyPass(sql)
-    require.NoError(t, err)
-    // Verify the transformation applied to BOTH branches
-}
-```
-
-### Additional: CTE Tests (for structural passes)
-
-```go
-func TestMyPassCTEs(t *testing.T) {
-    // Verify CTE references are not accidentally modified
-    sql := "WITH cte AS (SELECT a FROM real_table) SELECT x FROM cte"
-    got, err := passes.MyPass(sql)
-    require.NoError(t, err)
-    // Verify: "FROM cte" unchanged, "FROM real_table" was transformed
-}
-```
-
-### Additional: Invalid SQL Rejection
-
-```go
-func TestMyPassRejectsInvalid(t *testing.T) {
-    invalid := []string{"", "   ", "SELECT", ";;;"}
-    for _, sql := range invalid {
-        _, err := passes.MyPass(sql)
-        assert.Error(t, err)
-    }
-}
-```
+- **Corpus validity** — `passes.MyPass.Run(entry.SQL)` produces parseable SQL for
+  every corpus entry (skip entries the pass legitimately rejects).
+- **UNION ALL / CTEs / subqueries** (structural passes) — assert the
+  transformation reaches every branch; CTE *references* stay untouched while CTE
+  *bodies* are transformed; use `len(BuildScopes(before)) == len(BuildScopes(after))`
+  to check scope structure is preserved for pure passes.
+- **Invalid input** — `""`, `"   "`, `"SELECT"`, `";;;"` must error (the input
+  guards and parser reject them).
 
 ## ANTLR4 Go Runtime API Quick Reference
 
 ```go
-// Parsing
-pr, err := nanopass.Parse(sql)
-// pr.Tree        — *grammar.QueryStmtContext (root)
-// pr.TokenStream — *antlr.CommonTokenStream
-// pr.Parser      — *grammar.ClickHouseParser
+// Parsing (Grammar1 unless you specifically want canonical-only)
+pr, err := nanopass.Parse(sql)            // *ParseResult, Grammar1
+pr, err := nanopass.ParseCanonical(sql)   // *ParseResult, Grammar2 (rejects non-canonical SQL)
+// pr.Tree        antlr.ParserRuleContext  — assert to *grammar1.QueryStmtContext (Parse) / *grammar2.QueryStmtContext
+// pr.TokenStream *antlr.CommonTokenStream — includes hidden-channel + EOF tokens
+// pr.Parser      antlr.Parser
+// pr.Source      string                   — original input (for SourceRangeOf)
 
 // Token access
-tok := pr.TokenStream.Get(i)     // antlr.Token
-tok.GetTokenType()                // int
-tok.GetText()                     // string
-tok.GetTokenIndex()               // int
-tok.GetChannel()                  // int (0=default, 1=hidden)
-pr.TokenStream.Size()             // int (total tokens including hidden + EOF)
+tok := pr.TokenStream.Get(i)              // antlr.Token
+tok.GetTokenType(); tok.GetText(); tok.GetTokenIndex(); tok.GetChannel()
+pr.TokenStream.Size()                     // total tokens incl. hidden + EOF
 
-// Rewriter
+// Rewriter (node-level helpers accept RewriterI: both *antlr.TokenStreamRewriter and *TrackedRewriter)
 rw := nanopass.NewRewriter(pr)
 nanopass.ReplaceNode(rw, ctx, "new text")
 nanopass.DeleteNode(rw, ctx)
@@ -388,128 +527,236 @@ nanopass.InsertAfter(rw, ctx, " suffix")
 nanopass.ReplaceToken(rw, tokenIndex, "new text")
 nanopass.DeleteToken(rw, tokenIndex)
 result := nanopass.GetText(rw)
+text   := nanopass.NodeText(pr, ctx)      // original source text of a node (incl. hidden-channel whitespace)
+rng    := pr.SourceRangeOf(ctx)           // SourceRange{Start,End} byte offsets — src[rng.Start:rng.End]
+
+// Conflict detection during development
+trw := nanopass.NewTrackedRewriter(pr, logger)  // logs fatal/lossy edit overlaps as they are recorded
+trw.HasConflicts(); trw.ConflictCount(); trw.Inner()
 
 // CST navigation
-ctx.GetStart().GetTokenIndex()    // first token index
-ctx.GetStop().GetTokenIndex()     // last token index
-ctx.GetParent()                   // antlr.Tree
-ctx.GetChildCount()               // int
-ctx.GetChild(i)                   // antlr.Tree
-ctx.GetRuleIndex()                // int
+ctx.GetStart().GetTokenIndex(); ctx.GetStop().GetTokenIndex()
+ctx.GetParent(); ctx.GetChildCount(); ctx.GetChild(i); ctx.GetRuleIndex()
 ```
 
-## Key Grammar Types
+`TrackedRewriter` classifies the antlr4-go v4.13.x rewriter's quirks: partially
+overlapping replaces and an insert strictly inside a replace **panic at
+GetText** (fatal); a replace containing an earlier replace, overlapping deletes,
+and inserts at a shared index are silently dropped/merged (lossy). Panics are
+recovered to errors at the `Pass` boundary, so a conflicting pass fails its `Run`
+rather than crashing the process.
 
-### Token Type Constants
+## Identifier Codec
 
 ```go
-// Keywords: grammar.ClickHouseLexerADD (1) through grammar.ClickHouseLexerJSON_TRUE (199)
-// IDENTIFIER = 200
-// STRING_LITERAL = 205
-// WHITESPACE = 240 (on hidden channel)
-// MULTI_LINE_COMMENT, SINGLE_LINE_COMMENT (on hidden channel)
+nanopass.DecodeIdentifier(`"a""b"`)   // → a"b   (strip quoting/escapes to the raw name)
+nanopass.QuoteIdentifier(`a"b`)       // → "a""b" (inverse, double-quoted output)
+nanopass.NormalizeCallName(`"MyFn"`)  // → myfn   (registry key: case- and quoting-insensitive)
 ```
 
-### CST Context Types for Type-Switching
-
-**Column expressions** (alternatives of `columnExpr` rule, all have `GetRuleIndex() == RULE_columnExpr`):
-
-```go
-*grammar.ColumnExprOrContext           // a OR b
-*grammar.ColumnExprAndContext          // a AND b
-*grammar.ColumnExprNotContext          // NOT a (only without parens after NOT)
-*grammar.ColumnExprIsNullContext       // a IS [NOT] NULL
-*grammar.ColumnExprPrecedence3Context  // =, !=, <, >, <=, >=, [NOT] IN, [NOT] LIKE, GLOBAL [NOT] IN
-*grammar.ColumnExprBetweenContext      // a [NOT] BETWEEN b AND c
-*grammar.ColumnExprPrecedence2Context  // +, -, ||
-*grammar.ColumnExprPrecedence1Context  // *, /, %
-*grammar.ColumnExprNegateContext       // -a (unary)
-*grammar.ColumnExprTernaryOpContext    // a ? b : c
-*grammar.ColumnExprLiteralContext      // 42, 'hello', NULL
-*grammar.ColumnExprIdentifierContext   // column_name
-*grammar.ColumnExprFunctionContext     // func(args) — includes NOT(x)!
-*grammar.ColumnExprParensContext       // (expr) — single expression in parens
-*grammar.ColumnExprTupleContext        // (expr, expr, ...) — 2+ expressions
-*grammar.ColumnExprSubqueryContext     // (SELECT ...)
-*grammar.ColumnExprCaseContext         // CASE WHEN ... END
-*grammar.ColumnExprCastContext         // CAST(x AS T)
-*grammar.ColumnExprAliasContext        // expr AS alias
-*grammar.ColumnExprArrayContext        // [1, 2, 3]
-*grammar.ColumnExprArrayAccessContext  // arr[i]
-*grammar.ColumnExprTupleAccessContext  // t.1
-*grammar.ColumnExprWinFunctionContext  // func() OVER (...)
-*grammar.ColumnExprParamSlotContext    // {name: Type}
-```
-
-**Table expressions** (alternatives of `tableExpr` rule):
-
-```go
-*grammar.TableExprIdentifierContext  // table_name or db.table_name
-*grammar.TableExprAliasContext       // tableExpr AS alias
-*grammar.TableExprSubqueryContext    // (SELECT ...) in FROM
-*grammar.TableExprFunctionContext    // table_function(args)
-```
-
-**Join expressions** (alternatives of `joinExpr` rule):
-
-```go
-*grammar.JoinExprTableContext        // single table source
-*grammar.JoinExprOpContext           // left JOIN right ON condition
-```
-
-**Key accessor patterns on SelectStmtContext:**
-
-```go
-stmt.FromClause()        // IFromClauseContext or nil
-stmt.WhereClause()       // IWhereClauseContext or nil
-stmt.ProjectionClause()  // IProjectionClauseContext
-stmt.GroupByClause()     // IGroupByClauseContext or nil
-stmt.HavingClause()      // IHavingClauseContext or nil
-stmt.OrderByClause()     // IOrderByClauseContext or nil
-stmt.LimitClause()       // ILimitClauseContext or nil
-stmt.LimitByClause()     // ILimitByClauseContext or nil
-stmt.SettingsClause()    // ISettingsClauseContext or nil
-stmt.PrewhereClause()    // IPrewhereClauseContext or nil
-stmt.ArrayJoinClause()   // IArrayJoinClauseContext or nil
-stmt.WindowClause()      // IWindowClauseContext or nil
-```
-
-All clause accessors return interfaces. Cast to concrete types: `stmt.WhereClause().(*grammar.WhereClauseContext)`.
+Scope names are stored decoded; compare decoded-to-decoded, re-encode on write.
 
 ## SelectScope Reference
 
 ```go
+scopes, err := nanopass.BuildScopes(pr, "production")  // one root per top-level UNION member; errors on unexpected shapes
+for _, scope := range nanopass.FlattenScopes(scopes) { // dedup'd: CTE defs are shared between UNION members
+    for _, ts := range scope.Tables {
+        db := ts.ResolvedDatabase(scope)               // explicit db, else scope.DefaultDatabase
+    }
+}
+
 type SelectScope struct {
-    Node       *grammar.SelectStmtContext  // the SELECT statement
-    Tables     []TableSource               // FROM/JOIN sources
-    Parent     *SelectScope                // enclosing scope (nil for outermost)
-    CTEDefs    []CTEDef                    // WITH clause definitions
-    UnionPeers []*SelectScope              // all branches including self
-    Subqueries []*SelectScope              // expression subqueries (WHERE, SELECT list, HAVING)
+    Node            *grammar1.SelectStmtContext
+    Tables          []TableSource   // FROM/JOIN sources
+    Parent          *SelectScope    // enclosing scope (nil at top level)
+    CTEDefs         []CTEDef        // visible CTEs: own WITH first (shadows), then inherited
+    UnionMembers    []*SelectScope  // every SELECT of the enclosing UNION chain incl. self
+    Subqueries      []*SelectScope  // expression-level subqueries (projection/WHERE/HAVING/IN/args), one per UNION branch
+    DefaultDatabase string
 }
 
 type TableSource struct {
-    Node       antlr.ParserRuleContext     // TableIdentifierContext or TableExprSubqueryContext
-    Database   string                      // empty if unqualified
-    Table      string                      // table name
-    Alias      string                      // AS alias, empty if none
-    IsCTE      bool                        // references a CTE name
-    IsSubquery bool                        // FROM (SELECT ...)
-    Scope      *SelectScope                // inner scope for subqueries
+    Node       antlr.ParserRuleContext
+    Database   string  // decoded; empty if unqualified
+    Table      string  // decoded; for IsFunction holds the function name (diagnostics only)
+    Alias      string  // decoded; from both `t x` and `t AS x`
+    IsCTE      bool    // references a CTE name
+    IsSubquery bool    // FROM (SELECT …)
+    IsFunction bool    // table function: numbers(10), remote(…) — leave its args alone
+    Scopes     []*SelectScope  // inner scopes of a FROM subquery, one per UNION branch
 }
 
-// Key methods:
-scope.ResolveAlias(name) → (TableSource, bool)  // alias or unaliased table name lookup
-scope.ResolveCTE(name) → (CTEDef, bool)          // walks ancestors
-scope.AllScopes() → []*SelectScope               // depth-first flattened
+type CTEDef struct { Name string; Node antlr.ParserRuleContext; Scopes []*SelectScope }  // Scopes: one per UNION branch of the body
+
+// Methods:
+scope.ResolveAlias(name) (TableSource, bool)  // alias hides table name; name may be quoted or bare
+scope.ResolveCTE(name)   (CTEDef, bool)        // walks ancestors
+scope.AllScopes()        []*SelectScope        // this scope + descendants, deduped
+ts.ResolvedDatabase(scope) string              // meaningless for IsCTE/IsSubquery/IsFunction
 ```
+
+Database resolution matches ClickHouse: each table resolves independently against
+the connection default; there is no ambient inheritance from sibling tables.
+
+## Included Passes
+
+| Pass / factory | Purpose | Properties |
+|---|---|---|
+| `StripComments` | remove `--` and `/* */` comments | Idempotent |
+| `CanonicalizeKeywordCase` | uppercase keywords; preserve identifier case | Idempotent |
+| `CanonicalizeWhitespace` / `CanonicalizeWhitespaceSingleLine` | collapse whitespace (preserve / drop newlines) | Idempotent |
+| `CanonicalizeEquals` | `==` → `=` | Idempotent |
+| `CanonicalizeIdentifiers` | double-quote identifiers (param slots & type exprs stay bare) | Idempotent |
+| `CanonicalizeSugar` | DATE/TIMESTAMP/EXTRACT/SUBSTRING/TRIM → function calls | NeedsFixedPoint |
+| `CanonicalizeConstructors(form)` | tuple/array between literal and function form | NeedsFixedPoint |
+| `CanonicalizeCaseConditionals` | CASE → `if`/`multiIf`/`caseWithExpression` | NeedsFixedPoint |
+| `CanonicalizeMultiIf` | 3-arg `multiIf` → `if` | Idempotent |
+| `CanonicalizeCasts` | `x::T`, `CAST(x AS T)` → `CAST(x, 'T')` | NeedsFixedPoint |
+| `CanonicalizeJoin` | strictness-before-direction, drop OUTER, comma→CROSS, parenthesise USING | Idempotent |
+| `CanonicalizeTernary` | `c ? a : b` → `if(c, a, b)` | NeedsFixedPoint |
+| `RemoveRedundantParens` | drop parens unneeded given operator precedence | Idempotent |
+| `CanonicalizeFull(maxIter)` | the full canonicalisation `Sequence` (see above) | — |
+| `QualifyTables(defaultDB)` | prefix unqualified tables with a default database; skip CTEs | Idempotent |
+| `ExpandColumns(schema, defaultDB)` | expand `*`, `t.*`, `COLUMNS('regex')` via a `SchemaProviderI` | Idempotent |
+| `WrapColumnsWithDynamic(pattern)` | wrap matching column names in `COLUMNS('^name$')` | Idempotent |
+| `SetFormat(name)` / `RemoveFormat` | set/replace/remove the FORMAT clause; mirror into `env.Format` | Idempotent |
+| `WriteSettings(map)` / `ModifySettings(fn)` | set / read-modify-write the SETTINGS clause; mirror into `env.StatementSettings` | Idempotent / factory |
+| `ExtractLiterals(config)` | replace literals with `{name: Type}` slots; write Raw to `env.Params` | factory |
+| `InjectParamsAsCTE(prefix, predicate, mapper)` | turn selected params into WITH-clause CTE defs | Idempotent |
+| `PruneUnreferencedParams(prefix)` | drop `env.Params` entries no longer referenced by body | Idempotent |
+| `ValidateColumnNames(pattern)` | error if any projected column name fails a regex | Idempotent |
+| `MacroExpander.Pass()` | expand registered string macros (literal args) | NeedsFixedPoint |
+| `FunctionEvaluator.Pass()` | evaluate registered Go functions; partial/recursive eval; param-slot resolution | NeedsFixedPoint |
+| `nanopass.ValidateGrammar1` / `ValidateGrammar2` | parse-validate the body; pass it through unchanged | Idempotent |
+
+Supporting types: `SchemaProviderI` (`GetColumns(db, table) (iter.Seq[string], int, bool)`),
+`NewStaticSchemaProvider(map[string][]string)`, `NewCachingSchemaProvider(maxAge, delegate, maxSize)`;
+`ExtractLiteralsConfig` (builder via `NewExtractLiteralsConfig(minLength)` + `SetPrefix`/`Blacklist`/…);
+`ConstructorFormE` (`ConstructorFormLiteral`=1, `ConstructorFormFunction`=2);
+`EvalFuncI = func([]any) (any, error)`; `ColumnNameValidationError` + `GetColumnNameViolations(err)`.
+
+## Analysis Functions (`analysis/`)
+
+Purely syntactic CST walks — no scope resolution. CTE references look like table
+references and ARE included; resolve against `BuildScopes` (`TableSource.IsCTE`)
+when you must distinguish real tables.
+
+```go
+analysis.ExtractTables(pr)    // []TableRef{Database, Table}
+analysis.ExtractColumns(pr)   // []ColumnRef{Table, Column}   (Column may be a nested path "a.b")
+analysis.ExtractFunctions(pr) // []FunctionRef{Name, IsParametric, IsWindow}
+```
+
+## Highlight Package (`highlight/`)
+
+Two-phase semantic highlighter: lex for a baseline category, then parse and walk
+the CST to refine identifiers into roles. Falls back to lexical-only if the parse
+fails.
+
+```go
+spans := highlight.Highlight(sql)   // []Span{Start, Stop, Text, Category}  (byte offsets, half-open)
+highlight.RenderANSI(spans)         // terminal output
+highlight.RenderHTML(spans)         // <code> fragment; pair with highlight.HighlightCSS()
+highlight.CategoryName(cat)         // human-readable category name
+```
+
+`CategoryE` has 18 values: `CatPlain, CatKeyword, CatOperator, CatIdentifier,
+CatTableName, CatTableAlias, CatColumnName, CatColumnAlias, CatCTEName,
+CatFunctionName, CatDatabaseName, CatTypeName, CatStringLit, CatNumberLit,
+CatPunctuation, CatComment, CatWhitespace, CatParamSlot`.
+
+## Key Grammar Types
+
+Concrete CST types live in `grammar1` (for `Parse` results) and `grammar2` (for
+`ParseCanonical` results). Both packages share one lexer, so token *values* match;
+the constant *names* differ by package prefix.
+
+### Token type constants (use the named constants, not the numbers)
+
+```go
+// grammar1.ClickHouseLexer<NAME> — keyword tokens occupy the low range (< 200):
+grammar1.ClickHouseLexerIDENTIFIER          // 200
+grammar1.ClickHouseLexerSTRING_LITERAL      // 205
+grammar1.ClickHouseLexerMULTI_LINE_COMMENT  // 238   (hidden channel)
+grammar1.ClickHouseLexerSINGLE_LINE_COMMENT // 239   (hidden channel)
+grammar1.ClickHouseLexerWHITESPACE          // 240   (hidden channel)
+```
+
+The token stream includes **EOF** as the last token (`antlr.TokenEOF`, type `-1`)
+— guard against it when iterating `pr.TokenStream`.
+
+### `columnExpr` alternatives (all `GetRuleIndex() == grammar1.ClickHouseParserGrammar1RULE_columnExpr`)
+
+```go
+*grammar1.ColumnExprOrContext            // a OR b
+*grammar1.ColumnExprAndContext           // a AND b
+*grammar1.ColumnExprNotContext           // NOT a (only WITHOUT parens; NOT(x) is a function call)
+*grammar1.ColumnExprIsNullContext        // a IS [NOT] NULL
+*grammar1.ColumnExprPrecedence3Context   // =, !=, <, >, <=, >=, [NOT] IN, [NOT] LIKE, GLOBAL [NOT] IN
+*grammar1.ColumnExprBetweenContext       // a [NOT] BETWEEN b AND c
+*grammar1.ColumnExprPrecedence2Context   // +, -, ||
+*grammar1.ColumnExprPrecedence1Context   // *, /, %
+*grammar1.ColumnExprNegateContext        // -a (unary)
+*grammar1.ColumnExprTernaryOpContext     // a ? b : c
+*grammar1.ColumnExprLiteralContext       // 42, 'hello', NULL
+*grammar1.ColumnExprIdentifierContext    // column_name
+*grammar1.ColumnExprFunctionContext      // func(args) — includes NOT(x)!
+*grammar1.ColumnExprParensContext        // (expr) — single expression in parens
+*grammar1.ColumnExprTupleContext         // (expr, expr, …) — 2+ expressions
+*grammar1.ColumnExprArrayContext         // [1, 2, 3]
+*grammar1.ColumnExprSubqueryContext      // (SELECT …)
+*grammar1.ColumnExprCaseContext          // CASE WHEN … END
+*grammar1.ColumnExprCastContext          // CAST(x AS T)
+*grammar1.ColumnExprAliasContext         // expr AS alias
+*grammar1.ColumnExprArrayAccessContext   // arr[i]
+*grammar1.ColumnExprTupleAccessContext   // t.1
+*grammar1.ColumnExprWinFunctionContext   // func() OVER (…)
+*grammar1.ColumnExprParamSlotContext     // {name: Type}
+*grammar1.ColumnExprAsteriskContext      // *
+*grammar1.ColumnExprDynamicContext       // COLUMNS('regex')
+// Sugar forms (rewritten away by CanonicalizeSugar; present in Grammar1, absent from Grammar2):
+*grammar1.ColumnExprDateContext          // DATE 'YYYY-MM-DD'
+*grammar1.ColumnExprTimestampContext     // TIMESTAMP '…'
+*grammar1.ColumnExprIntervalContext      // INTERVAL expr unit
+*grammar1.ColumnExprExtractContext       // EXTRACT(unit FROM expr)
+*grammar1.ColumnExprSubstringContext     // SUBSTRING(s FROM a FOR b)
+*grammar1.ColumnExprTrimContext          // TRIM(… FROM s)
+```
+
+### `tableExpr` / `joinExpr` alternatives
+
+```go
+*grammar1.TableExprIdentifierContext  // table or db.table
+*grammar1.TableExprAliasContext       // tableExpr AS alias  (or bare `tableExpr alias`)
+*grammar1.TableExprSubqueryContext    // (SELECT …) in FROM
+*grammar1.TableExprFunctionContext    // table_function(args)
+
+*grammar1.JoinExprTableContext        // single table source
+*grammar1.JoinExprOpContext           // left JOIN right ON …
+*grammar1.JoinExprCrossOpContext      // CROSS JOIN / comma join
+*grammar1.JoinExprParensContext       // (joinExpr)
+```
+
+### `SelectStmtContext` clause accessors (all return an interface or nil)
+
+```go
+stmt.WithClause()        stmt.FromClause()       stmt.WhereClause()
+stmt.ProjectionClause()  stmt.GroupByClause()    stmt.HavingClause()
+stmt.OrderByClause()     stmt.LimitClause()      stmt.LimitByClause()
+stmt.SettingsClause()    stmt.PrewhereClause()   stmt.ArrayJoinClause()
+stmt.WindowClause()      stmt.QualifyClause()
+```
+
+Cast to the concrete type to walk into them, e.g.
+`stmt.WhereClause().(*grammar1.WhereClauseContext)`.
 
 ## Operator Precedence Table
 
 Used by `RemoveRedundantParens`. Higher number = tighter binding.
 
-| Level | Operators | CST Context |
-|-------|-----------|-------------|
+| Level | Operators | CST context |
+|---|---|---|
 | 1 | OR | `ColumnExprOr` |
 | 2 | AND | `ColumnExprAnd` |
 | 3 | NOT (unary) | `ColumnExprNot` |
@@ -519,53 +766,88 @@ Used by `RemoveRedundantParens`. Higher number = tighter binding.
 | 7 | *, /, % | `ColumnExprPrecedence1` |
 | 8 | unary - | `ColumnExprNegate` |
 | 9 | ?: ternary | `ColumnExprTernaryOp` |
-| 99 | atoms | literals, identifiers, functions, etc. |
+| 99 | atoms | literals, identifiers, functions, … |
+
+Caveat: in ClickHouse's grammar ladder, `BETWEEN` and `?:` bind *looser* than
+`OR`, so parens around them — and around BETWEEN operands — can be load-bearing.
+
+## Input Guards & Robustness
+
+```go
+nanopass.CheckInputGuards(sql)   // Parse/ParseCanonical call this first; callers may pre-validate
+const MaxInputBytes   = 1 << 20  // 1 MiB
+const MaxNestingDepth = 128      // brackets ((,[,{) and CASE…END counted separately; quote/comment-aware
+```
+
+Measured pathologies the guards bound: deep parenthesis nesting drives
+adaptive-prediction lookahead roughly quadratic (depth 400 ≈ 20 s, CPU not
+stack); deep CASE nesting exhausts the goroutine stack (fatal) between depth 16k
+and 64k. Invalid UTF-8 is rejected because the ANTLR runtime decodes to runes —
+undecodable bytes become U+FFFD, silently corrupting string literals on any
+rewrite. Escape binary data instead of embedding it raw.
+
+The DFA cache (ADR-0084) replaces ANTLR's unbounded package-global with a bounded
+process-local cache: `MaxDFAStates` (8192, ≈40–90 MB/grammar) triggers a rebuild,
+checked every `DFACheckInterval` (256) parses. `nanopass.DFACacheStats()` returns
+per-grammar `DFACacheStat{States, Resets}` — a rising `Resets` count means the
+workload's structural diversity exceeds the cap and the cache is sawtoothing.
 
 ## Common Pitfalls
 
-1. **Don't use `rw.GetTextDefault()` directly.** Use `nanopass.GetText(rw)` which wraps it.
-2. **Don't modify the CST.** Only use the `TokenStreamRewriter`. The CST is read-only after parsing.
-3. **`WalkCST` returns `false` to skip a subtree**, not to stop the walk. There is no "stop early" mechanism — set a flag and check it.
-4. **`GetChild(i)` returns `antlr.Tree`**, not `antlr.ParserRuleContext`. Always type-assert: `if stmt, ok := node.GetChild(i).(*grammar.SelectStmtContext); ok { ... }`.
-5. **Go generics don't work reliably with ANTLR types** for `findFirstChild`-style helpers. Use explicit `GetChild` + type assertion loops.
-6. **`IN (expr)` with a single value** — the `(expr)` is parsed as `ColumnExprParens`, not `ColumnExprTuple`. If your pass removes parens, guard against removing IN's right-operand parens.
-7. **`ColumnExprAliasContext`** can appear anywhere in the select list. Don't confuse it with `TableExprAliasContext`.
-8. **The token stream includes EOF** as the last token with type `-1`. Always check `tok.GetTokenType() == antlr.TokenEOF` or `tok.GetTokenType() == -1` when iterating.
-9. **Overlapping `ReplaceDefault` calls** — the later one silently wins. Use `TrackedRewriter` during development to detect this.
-10. **The `NamedQueryContext` inside CTEs** has an `Identifier()` method for the CTE name and a `Query()` for the body. Access the body's `SelectUnionStmtContext` by walking children of the `QueryContext`.
+1. **Don't call `rw.GetTextDefault()` directly** — use `nanopass.GetText(rw)`.
+2. **Don't mutate the CST.** It's read-only after parsing; all edits go through
+   the `TokenStreamRewriter`.
+3. **`WalkCST` returns `false` to skip a subtree, not to stop the walk.** There
+   is no early-stop — set a flag and check it (`FindFirst` exists for "first
+   match").
+4. **`GetChild(i)` returns `antlr.Tree`**, not `ParserRuleContext` — always type
+   assert: `if s, ok := node.GetChild(i).(*grammar1.SelectStmtContext); ok {…}`.
+5. **`NOT(x)` is a function call** (`ColumnExprFunctionContext`); only `NOT x`
+   (no parens) is `ColumnExprNotContext`.
+6. **`IN (expr)` with a single value** parses the `(expr)` as
+   `ColumnExprParens`, not `ColumnExprTuple` — guard paren-removal against IN's
+   right operand.
+7. **Don't `FindAll` `TableIdentifierContext`** to locate tables — it also
+   matches column qualifiers (`t1.id`). Use `BuildScopes`.
+8. **`BuildScopes` returns an error now** — handle it; an error means the tree
+   shape was not produced by `Parse`.
+9. **Iterate scopes with `FlattenScopes`**, not per-root `AllScopes` — CTE defs
+   are shared between UNION members and would be visited once per member.
+10. **Overlapping rewriter edits** silently drop/merge or panic at `GetText`.
+    Use `TrackedRewriter` while developing to surface them at the offending call.
+11. **The token stream includes hidden-channel tokens and EOF.** Check
+    `tok.GetTokenType() == antlr.TokenEOF` (`-1`) when iterating.
+12. **`go doc`/build need the repo build tags** (`GOFLAGS=-tags="$(cat ./tags)"`)
+    or symbols read as "undefined".
 
-## Pipeline Composition
+## Grammar Modifications
 
-```go
-// Sequential pipeline
-result, err := nanopass.Pipeline(sql,
-    passes.StripComments,
-    passes.NormalizeKeywordCase,
-    passes.QualifyTables("mydb"),
-    passes.AddWhereCondition("tenant_id = 1"),
-    nanopass.Validate,
-)
+The upstream ClickHouse ANTLR4 grammar carries these required local changes (full
+detail in the package README and
+[`../EXPLANATION.md`](../../../public/db/clickhouse/dsl/EXPLANATION.md)):
 
-// Fixed-point (repeat until stable)
-pass := nanopass.FixedPoint(passes.RemoveRedundantParens, 10)
-
-// Fixed-point pipeline
-pass := nanopass.FixedPointPipeline(5,
-    expander.Pass(),
-    passes.NormalizeKeywordCase,
-)
-
-// Logging wrapper
-debugPass := nanopass.LoggingPass(logger, "my_pass", passes.MyPass)
-```
+- **Whitespace/comments** moved from `-> skip` to `-> channel(HIDDEN)` for
+  `WHITESPACE`, `SINGLE_LINE_COMMENT`, `MULTI_LINE_COMMENT` — without this the
+  rewriter cannot preserve formatting.
+- **Setting values** — `settingExpr` extended with a `settingValue` rule
+  admitting arrays (`[1,2]`), tuples (`(1,2)`), and function-form constructors.
+- **Grammar2 `typeName`** accepts the lexer keywords that double as type names
+  (`Array`, `Date`, `Interval`, `Timestamp`, `UUID`) so canonicalisation can
+  close `{d: Array(UInt8)}` / `CAST(x, 'Date')` into Grammar2.
 
 ## Known Grammar Limitations
 
-These ClickHouse features are NOT supported by the parser:
+These parse-fail at `Parse()` (add a `.sql` to `testdata/corpus/unsupported/`
+if/when support lands):
 
 - `FROM t SELECT a` (FROM-first syntax)
-- `WITH (SELECT x) AS name` (scalar subquery CTE)
-- `SET param = {'key': [1,2]}` (complex SET literal values)
-- `EXISTS (SELECT ...)` (EXISTS predicate)
+- `WITH (SELECT x) AS name` (scalar-subquery CTE)
+- `EXISTS (SELECT …)` (EXISTS predicate)
+- `* EXCEPT(col)`, `COLUMNS('…') APPLY(func)`, `REPLACE(…)` (column modifiers)
+- `SET param = {'key': [1,2]}` (map literals in SET)
+- Param slots with keyword names (`{date: UInt64}`) parse in Grammar1 but not
+  Grammar2 (slot names there are bare `IDENTIFIER`).
 
-Queries using these features will fail at `Parse()` with a syntax error. Add them to the corpus as `.sql` files if/when grammar support is added.
+Grammar1 also *over-accepts* a few shapes ClickHouse itself rejects (empty quoted
+identifiers, non-type param-slot type expressions, `INTERVAL <expr> <non-unit>`);
+the AST converter rejects them at its boundary.
