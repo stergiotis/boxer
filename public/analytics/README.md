@@ -13,7 +13,6 @@ status: draft
 ```
 analytics/
   stats/                                  Streaming statistics (Welford/Kahan) + convergence detection
-  processor/                              Generic entity-grouped stream processing
   similarity/
     compression/                          Compression-based similarity (NCD, CCC) — compressor-agnostic
       stylometry/                         Authorship analysis with convergence-aware streaming on top of compression/
@@ -24,12 +23,6 @@ analytics/
 Online (single-pass) streaming statistics using Compensated Welford's Algorithm with Kahan summation.
 Mean, Variance, StdDev, Skewness, Kurtosis, Min, Max. Merge via Pébay's parallel formulas.
 Convergence detection via sliding-window variance stability.
-
-## `processor`
-
-Generic stream processor for entity-grouped batched data.
-Partitions rows by entity key, streams to consumers via `iter.Seq`, manages memory via typed `sync.Pool`.
-Supports read-ahead prefetching.
 
 ## `similarity/compression`
 
