@@ -235,6 +235,56 @@ v1 semantics to internalise:
 
 ## How to Write a New Pass
 
+### Local-rewrite passes: the combinator core (preferred for `Canonicalize*`)
+
+Most `Canonicalize*` passes are **local term rewrites** — "match a CST node shape,
+replace it with text built from the original spans of the children you keep." For
+those, do **not** hand-roll the parse/walk/emit skeleton; use the unexported
+combinator core in `passes/nanopass_passes_rewrite_core.go` (ADR-0098). A pass
+body becomes just its rule(s):
+
+```go
+var CanonicalizeTernary = nanopass.LiftBodyPass(
+    "CanonicalizeTernary",
+    func(sql string) (string, error) { return rewriteNodes(sql, "CanonicalizeTernary", ternaryRule) },
+    nanopass.PassProperties{NeedsFixedPoint: true, Reads: nanopass.RegionBody, Writes: nanopass.RegionBody},
+)
+
+// cond ? then : else → if(cond, then, else)
+func ternaryRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+    c, ok := node.(*grammar1.ColumnExprTernaryOpContext)
+    if !ok {
+        return "", false
+    }
+    ops := columnExprOperands(pr, c) // spans of the columnExpr children
+    if len(ops) != 3 {
+        return "", false
+    }
+    return callForm("if", ops[0], ops[1], ops[2]), true // "if(<cond>, <then>, <else>)"
+}
+```
+
+The core:
+
+- `rewriteNodes(sql, name, rules...)` — top-down walk; the first matching
+  `nodeRule` (`func(pr, node) (replacement string, ok bool)`) replaces the node
+  and the walk skips its subtree, so edits never overlap. Declare the pass
+  `NeedsFixedPoint` and the runner re-applies until nested matches converge.
+- `rewriteTokens(sql, name, rule)` — the same for per-token rewrites
+  (`tokenRule = func(tok) (replacement string, ok bool)`), e.g. `==` → `=`.
+- Helpers: `spanOf(pr, node)`, `columnExprOperands(pr, node)`,
+  `terminalText(node, tokenType)`, `callForm(fn, args...)`.
+
+**The bright line (ADR-0098):** a rule returns replacement **text** assembled from
+original child spans — never a tree. Mutation stays in the `TokenStreamRewriter`,
+so hidden-channel trivia is preserved automatically.
+
+**When NOT to use it** (write a plain `LiftBodyPass` instead): the pass needs
+cross-token state (whitespace-run or quote-fusion handling), structural token
+reordering (JOIN normalisation), a node-conditional token *rename* rather than a
+whole-node replacement (`CanonicalizeMultiIf`), or a precedence engine
+(`RemoveRedundantParens`). Forcing those onto the combinator adds code.
+
 ### Template: pure body pass (no env) via `LiftBodyPass`
 
 For token-level or CST-node rewrites that never touch settings/params/format —

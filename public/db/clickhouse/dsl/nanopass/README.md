@@ -124,6 +124,15 @@ Database resolution matches ClickHouse behavior: each table resolves independent
 
 All passes live in [`passes/`](passes). Properties shown reflect declared `PassProperties` and are corpus-checked by `AssertProperties`.
 
+The local-rewrite `Canonicalize*` passes share an unexported combinator core
+(`passes/nanopass_passes_rewrite_core.go`, [ADR-0098](../../../../../doc/adr/0098-nanopass-local-rewrite-combinator-core.md)):
+each is a `nodeRule` / `tokenRule` returning replacement text built from original
+child spans, while `rewriteNodes` / `rewriteTokens` own the walk, the
+skip-subtree + fixpoint contract, and the emit. Passes that need cross-token
+state, structural reordering, or a node-conditional token rename
+(`CanonicalizeMultiIf`, `CanonicalizeKeywordCase`, `CanonicalizeIdentifiers`,
+`RemoveRedundantParens`, `CanonicalizeJoin`) stay hand-written.
+
 ### Lexical (token-level)
 
 | Pass | Description | Idempotent |
