@@ -255,7 +255,7 @@ Out of scope of this ADR (deferred):
 
 ## Status
 
-Proposed. Promote to `accepted` and fill `reviewed-by` + `reviewed-date` after review by a code owner of [`public/db/clickhouse/dsl/nanopass`](../../public/db/clickhouse/dsl/nanopass).
+Accepted — 2026-05-01 (reviewed by p@stergiotis). The Pass / Environment design described here is implemented in [`public/db/clickhouse/dsl/nanopass`](../../public/db/clickhouse/dsl/nanopass) and [`public/db/clickhouse/dsl/env`](../../public/db/clickhouse/dsl/env): the `Pass` struct and `PassProperties`, the combinators, `Pass.Run`, `AssertProperties`, and the `env` package. The items under "Out of scope of this ADR" remain deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
