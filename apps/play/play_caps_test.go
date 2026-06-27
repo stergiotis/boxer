@@ -45,8 +45,8 @@ func setupPlayWithCaps(t *testing.T) (inst *PlayApp, fsSvc *fsbroker.Service, cl
 	storage, err := persist.NewClient(busC, id)
 	require.NoError(t, err)
 
-	store := NewQueryStore(nil, memory.NewGoAllocator(), 10)
-	inst = NewPlayApp(nil, store, "-- initial")
+	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
+	inst = NewPlayApp(nil, graph, "-- initial")
 	inst.SetCapabilities(busC, storage, zerolog.Nop())
 
 	fsSvc = fs
@@ -101,8 +101,8 @@ func TestPlayApp_LoadFromPicker_RoundTrip(t *testing.T) {
 }
 
 func TestPlayApp_LoadFromPicker_NilBus_NoOp(t *testing.T) {
-	store := NewQueryStore(nil, memory.NewGoAllocator(), 10)
-	inst := NewPlayApp(nil, store, "-- initial")
+	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
+	inst := NewPlayApp(nil, graph, "-- initial")
 	// No SetCapabilities call → inst.bus stays nil.
 
 	inst.loadFromPicker() // must not panic
@@ -119,7 +119,7 @@ func TestPlayApp_PersistSql_SetGetRoundTrip(t *testing.T) {
 	// Build a sibling PlayApp on the same bus + storage so the
 	// Restore path sees the saved value (simulates a process
 	// restart where the storage backend was durable).
-	inst2 := NewPlayApp(nil, NewQueryStore(nil, memory.NewGoAllocator(), 10), "-- default")
+	inst2 := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- default")
 	inst2.SetCapabilities(inst.bus, inst.storage, zerolog.Nop())
 	inst2.RestorePersistedSql()
 	assert.Equal(t, "SELECT 1 AS persisted", inst2.sql,
@@ -127,8 +127,8 @@ func TestPlayApp_PersistSql_SetGetRoundTrip(t *testing.T) {
 }
 
 func TestPlayApp_PersistSql_NilStorage_NoOp(t *testing.T) {
-	store := NewQueryStore(nil, memory.NewGoAllocator(), 10)
-	inst := NewPlayApp(nil, store, "-- initial")
+	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
+	inst := NewPlayApp(nil, graph, "-- initial")
 	// No SetCapabilities → inst.storage stays nil.
 	inst.PersistSql() // must not panic / error
 	inst.RestorePersistedSql()

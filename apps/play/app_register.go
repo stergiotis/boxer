@@ -135,8 +135,8 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		Password: clickhouseenv.Password.Get(),
 	}
 	client := NewClient(cfg, nil)
-	store := NewQueryStore(client, memory.NewGoAllocator(), 100)
-	inner := NewPlayApp(client, store, initSQL)
+	graph := newLiveQueryGraph(client, memory.NewGoAllocator(), 100)
+	inner := NewPlayApp(client, graph, initSQL)
 	inner.AutoRun = AutoRun.Get() != ""
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""

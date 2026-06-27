@@ -79,8 +79,8 @@ func NewCliCommand() *cli.Command {
 				initSQL = "SELECT 1 AS hello, now() AS ts;"
 			}
 
-			store := NewQueryStore(client, memory.NewGoAllocator(), 100)
-			playApp := NewPlayApp(client, store, initSQL)
+			graph := newLiveQueryGraph(client, memory.NewGoAllocator(), 100)
+			playApp := NewPlayApp(client, graph, initSQL)
 
 			unm := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 			app, err := application.NewApplication(appCfg, unm)

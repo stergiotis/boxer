@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"sync"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -124,6 +125,12 @@ type queryGraph struct {
 	results  map[NodeID]*nodeResult
 	demanded map[NodeID]bool
 	sig      *signalEnv
+
+	// mainLane is the `main` node's async execution lane (ADR-0097): the
+	// Run-triggered node whose SQL is the editor buffer. nil for the bare
+	// test runtime (newQueryGraph); set by newLiveQueryGraph. See the live
+	// runtime facade at the bottom of this file.
+	mainLane *QueryStore
 }
 
 func newQueryGraph(exec nodeExecutorI, alloc memory.Allocator) (inst *queryGraph) {
@@ -274,4 +281,43 @@ func fingerprintRecord(rec arrow.RecordBatch) (fp uint64) {
 	}
 	fp = h.Sum64()
 	return
+}
+
+// --- ADR-0097 live runtime: the `main` node's async execution lane ---
+//
+// `main` is the Run-triggered node — its SQL is the editor buffer, executed when
+// the user runs. Its lane reuses the proven QueryStore async / single-flight /
+// cancel / history machinery, now OWNED by the graph and reached only through
+// this facade. PlayApp holds the graph, not a standalone store, so the panels and
+// chrome read `main` through the graph (main is a graph node). Demand-triggered,
+// self-executed nodes (the splitter's, slice 3) use the executor + memo path
+// above instead.
+
+// newLiveQueryGraph builds the graph for the live app: a clientExecutor over the
+// client for self-executed nodes, plus the `main` node's QueryStore lane.
+func newLiveQueryGraph(client *Client, alloc memory.Allocator, maxHistory int) (inst *queryGraph) {
+	if alloc == nil {
+		alloc = memory.NewGoAllocator()
+	}
+	inst = newQueryGraph(clientExecutor{client: client}, alloc)
+	inst.mainLane = NewQueryStore(client, alloc, maxHistory)
+	return
+}
+
+// RunMain executes the `main` node's SQL (the editor buffer) on its async lane.
+func (inst *queryGraph) RunMain(sql string) { inst.mainLane.Execute(sql) }
+
+// CancelMain aborts an in-flight `main` execution.
+func (inst *queryGraph) CancelMain() { inst.mainLane.Cancel() }
+
+// MainLoading reports whether `main` is executing.
+func (inst *queryGraph) MainLoading() bool { return inst.mainLane.IsLoading() }
+
+// MainHistory returns the `main` lane's run history.
+func (inst *queryGraph) MainHistory() []HistoryEntry { return inst.mainLane.History() }
+
+// MainSnapshot returns the `main` node's current result + metadata. The caller
+// MUST Release the returned record (nil-safe), exactly as for QueryStore.Snapshot.
+func (inst *queryGraph) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+	return inst.mainLane.Snapshot()
 }

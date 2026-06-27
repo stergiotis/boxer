@@ -66,7 +66,7 @@ const (
 
 type PlayApp struct {
 	ids    *c.WidgetIdStack
-	store  *QueryStore
+	graph  *queryGraph
 	client *Client
 
 	// endpointDraft is the editable URL in the toolbar endpoint switcher;
@@ -365,7 +365,7 @@ func (inst *PlayApp) setLoadErr(s string) {
 	inst.pickMu.Unlock()
 }
 
-func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
+func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	cardIds := c.NewWidgetIdStack()
 	pagerIds := c.NewWidgetIdStack()
 	projectorIds := c.NewWidgetIdStack()
@@ -384,7 +384,7 @@ func NewPlayApp(client *Client, store *QueryStore, initialSQL string) *PlayApp {
 	}
 	inst := &PlayApp{
 		ids:           c.NewWidgetIdStack(),
-		store:         store,
+		graph:         graph,
 		client:        client,
 		endpointDraft: launchURL,
 		launchURL:     launchURL,
@@ -484,7 +484,7 @@ func (inst *PlayApp) Render() error {
 	// state syncs (selection clamp, pager configure, projector
 	// invalidate) must run here, before any tab body executes, so the
 	// values the tab callees observe are consistent.
-	rec, schema, numRows, loading, elapsed, summary, executed, err := inst.store.Snapshot()
+	rec, schema, numRows, loading, elapsed, summary, executed, err := inst.graph.MainSnapshot()
 	if rec != nil {
 		defer rec.Release()
 		if inst.selectedRow < 0 || inst.selectedRow >= rec.NumRows() {
@@ -569,12 +569,12 @@ func (inst *PlayApp) Render() error {
 	}
 
 	// Execute after rendering — keeps the UI responsive on the submit frame.
-	if inst.requestRun && !inst.store.IsLoading() {
+	if inst.requestRun && !inst.graph.MainLoading() {
 		inst.requestRun = false
 		sql := strings.TrimSpace(inst.sql)
 		if sql != "" {
 			inst.lastSentSql = sql
-			inst.store.Execute(sql)
+			inst.graph.RunMain(sql)
 			// Persist on Run: the user's intent is "this is the SQL I
 			// want to keep around". Save-on-Unmount is the fallback
 			// for sessions that never Run; doing both keeps the
@@ -625,8 +625,8 @@ func (inst *PlayApp) autoShotTick() {
 	switch inst.shotPhase {
 	case 0:
 		// Wait until a query has completed with results.
-		if inst.didAutoRun && !inst.store.IsLoading() {
-			rec, _, _, _, _, _, _, _ := inst.store.Snapshot()
+		if inst.didAutoRun && !inst.graph.MainLoading() {
+			rec, _, _, _, _, _, _, _ := inst.graph.MainSnapshot()
 			if rec != nil {
 				rec.Release()
 				inst.shotPhase = 1
@@ -684,11 +684,11 @@ func (inst *PlayApp) autoShotTick() {
 func (inst *PlayApp) renderTopBar() {
 	ids := inst.ids
 	for range c.Horizontal().KeepIter() {
-		if inst.store.IsLoading() {
+		if inst.graph.MainLoading() {
 			c.Spinner().Size(16).Send()
 			if c.Button(ids.PrepareStr("cancel"), c.Atoms().Text("Cancel").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.store.Cancel()
+				inst.graph.CancelMain()
 			}
 		} else {
 			if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
@@ -1035,7 +1035,7 @@ func (inst *PlayApp) renderStatus(numRows int64, elapsed time.Duration, summary 
 // the outer ScrollArea wrap lives in Render().
 func (inst *PlayApp) renderHistoryTab() {
 	ids := inst.ids
-	hist := inst.store.History()
+	hist := inst.graph.MainHistory()
 	// Newest first.
 	for i := len(hist) - 1; i >= 0; i-- {
 		entry := hist[i]
@@ -1055,7 +1055,7 @@ func (inst *PlayApp) renderHistoryTab() {
 // renderTableTab is the Table dock tab body: pager strip atop the master
 // table, with a centred empty-state when there is no result yet.
 func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, err error) {
-	if inst.store.IsLoading() && rec == nil {
+	if inst.graph.MainLoading() && rec == nil {
 		inst.renderResultsLoading()
 		return
 	}
@@ -1090,7 +1090,7 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 // renderProjectionTab is the Projection dock tab body: the UMAP scatter
 // with its own toolbar/status. Same empty/error guards as the Table tab.
 func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, err error) {
-	if inst.store.IsLoading() && rec == nil {
+	if inst.graph.MainLoading() && rec == nil {
 		inst.renderResultsLoading()
 		return
 	}
@@ -1115,7 +1115,7 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, err error) {
 // debug from the panel) or, on a claim, the panel body. Same empty/error guards
 // as the other result tabs.
 func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Schema, err error) {
-	if inst.store.IsLoading() && rec == nil {
+	if inst.graph.MainLoading() && rec == nil {
 		inst.renderResultsLoading()
 		return
 	}
