@@ -3,9 +3,9 @@ package passes
 import (
 	"strings"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // CanonicalizeWhitespace collapses all whitespace sequences between tokens to
@@ -34,59 +34,47 @@ var CanonicalizeWhitespaceSingleLine = nanopass.LiftBodyPass(
 )
 
 func canonicalizeWhitespaceImpl(sql string) (result string, err error) {
-	pr, err := nanopass.Parse(sql)
+	result, err = rewriteTokens(sql, "CanonicalizeWhitespace", whitespaceRule)
 	if err != nil {
-		err = eh.Errorf("CanonicalizeWhitespace: %w", err)
 		return
 	}
-	rw := nanopass.NewRewriter(pr)
-
-	for i := 0; i < pr.TokenStream.Size(); i++ {
-		tok := pr.TokenStream.Get(i)
-		if tok.GetTokenType() != grammar1.ClickHouseLexerWHITESPACE {
-			continue
-		}
-
-		text := tok.GetText()
-
-		{ // Collapse to a single space
-			var replacement string
-			if strings.ContainsAny(text, "\n\r") {
-				replacement = "\n"
-			} else {
-				replacement = " "
-			}
-			if text != replacement {
-				nanopass.ReplaceToken(rw, tok.GetTokenIndex(), replacement)
-			}
-		}
-	}
-
-	result = nanopass.GetText(rw)
 	result = strings.TrimSpace(result)
 	return
 }
 
+// whitespaceRule collapses one WHITESPACE token to a single newline (if it
+// spans a line break) or a single space.
+func whitespaceRule(tok antlr.Token) (string, bool) {
+	if tok.GetTokenType() != grammar1.ClickHouseLexerWHITESPACE {
+		return "", false
+	}
+	text := tok.GetText()
+	replacement := " "
+	if strings.ContainsAny(text, "\n\r") {
+		replacement = "\n"
+	}
+	if text == replacement {
+		return "", false
+	}
+	return replacement, true
+}
+
 func canonicalizeWhitespaceSingleLineImpl(sql string) (result string, err error) {
-	pr, err := nanopass.Parse(sql)
+	result, err = rewriteTokens(sql, "CanonicalizeWhitespaceSingleLine", whitespaceSingleLineRule)
 	if err != nil {
-		err = eh.Errorf("CanonicalizeWhitespaceSingleLine: %w", err)
 		return
 	}
-	rw := nanopass.NewRewriter(pr)
-
-	for i := 0; i < pr.TokenStream.Size(); i++ {
-		tok := pr.TokenStream.Get(i)
-		if tok.GetTokenType() != grammar1.ClickHouseLexerWHITESPACE {
-			continue
-		}
-		text := tok.GetText()
-		if text != " " {
-			nanopass.ReplaceToken(rw, tok.GetTokenIndex(), " ")
-		}
-	}
-
-	result = nanopass.GetText(rw)
 	result = strings.TrimSpace(result)
 	return
+}
+
+// whitespaceSingleLineRule collapses one WHITESPACE token to a single space.
+func whitespaceSingleLineRule(tok antlr.Token) (string, bool) {
+	if tok.GetTokenType() != grammar1.ClickHouseLexerWHITESPACE {
+		return "", false
+	}
+	if tok.GetText() == " " {
+		return "", false
+	}
+	return " ", true
 }

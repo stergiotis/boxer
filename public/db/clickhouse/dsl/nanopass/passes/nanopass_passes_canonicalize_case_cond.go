@@ -39,7 +39,9 @@ import (
 // EXPLAIN SYNTAX.
 var CanonicalizeCaseConditionals = nanopass.LiftBodyPass(
 	"CanonicalizeCaseConditionals",
-	canonicalizeCaseConditionalsImpl,
+	func(sql string) (string, error) {
+		return rewriteNodes(sql, "CanonicalizeCaseConditionals", caseConditionalRule)
+	},
 	nanopass.PassProperties{
 		NeedsFixedPoint: true,
 		Reads:           nanopass.RegionBody,
@@ -47,37 +49,20 @@ var CanonicalizeCaseConditionals = nanopass.LiftBodyPass(
 	},
 )
 
-func canonicalizeCaseConditionalsImpl(sql string) (result string, err error) {
-	pr, err := nanopass.Parse(sql)
-	if err != nil {
-		err = eh.Errorf("CanonicalizeCaseConditionals: %w", err)
-		return
+// caseConditionalRule rewrites one leaf-level CASE expression to its function
+// form (if / multiIf / caseWithExpression). A CASE still containing a nested
+// CASE is left unmatched so the walk descends into it; the fixpoint converges
+// from the innermost layer outward. multiIf(c, r, d) with exactly three
+// arguments is narrowed to if() by the separate CanonicalizeMultiIf pass.
+func caseConditionalRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+	c, ok := node.(*grammar1.ColumnExprCaseContext)
+	if !ok {
+		return "", false
 	}
-	rw := nanopass.NewRewriter(pr)
-
-	// Phase 1: Rewrite leaf-level CASE expressions
-	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		c, ok := ctx.(*grammar1.ColumnExprCaseContext)
-		if !ok {
-			return true
-		}
-		if containsInnerCase(c) {
-			return true // descend to find leaf CASEs
-		}
-		rewriteCase(rw, pr, c)
-		return false
-	})
-
-	// Phase 2: Normalize multiIf(c, r, d) → if(c, r, d)
-	// This catches both pre-existing multiIf calls and those just created by Phase 1.
-	// We do this on a second parse to avoid interfering with Phase 1 rewrites.
-	// However, since Phase 1 emits text and Phase 2 needs to count args,
-	// Phase 2 runs on the next pipeline invocation (or a separate pass).
-	// For simplicity, we include it here by emitting "if" directly for single-branch
-	// searched CASEs in rewriteCase, and handle pre-existing multiIf in a separate function.
-
-	result = nanopass.GetText(rw)
-	return
+	if containsInnerCase(c) {
+		return "", false
+	}
+	return buildCaseReplacement(pr, c), true
 }
 
 // CanonicalizeMultiIf normalizes multiIf(c, r, d) with exactly 3 arguments to
@@ -187,7 +172,10 @@ func containsInnerCase(ctx *grammar1.ColumnExprCaseContext) bool {
 	return found
 }
 
-func rewriteCase(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprCaseContext) {
+// buildCaseReplacement renders the function-call form of a single (leaf) CASE
+// expression. Returned as text for the rewrite driver to splice; operand and
+// branch expressions are carried verbatim from their original spans.
+func buildCaseReplacement(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprCaseContext) (replacement string) {
 	type stateE int
 	const (
 		stateStart stateE = iota
@@ -293,5 +281,6 @@ func rewriteCase(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *g
 		b.WriteByte(')')
 	}
 
-	nanopass.ReplaceNode(rw, ctx, b.String())
+	replacement = b.String()
+	return
 }

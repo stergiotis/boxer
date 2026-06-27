@@ -6,7 +6,6 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // CanonicalizeSugar converts SQL syntactic sugar to canonical function call form.
@@ -32,7 +31,10 @@ import (
 // NeedsFixedPoint and converges layer by layer.
 var CanonicalizeSugar = nanopass.LiftBodyPass(
 	"CanonicalizeSugar",
-	canonicalizeSugarImpl,
+	func(sql string) (string, error) {
+		return rewriteNodes(sql, "CanonicalizeSugar",
+			sugarDateRule, sugarTimestampRule, sugarExtractRule, sugarSubstringRule, sugarTrimRule)
+	},
 	nanopass.PassProperties{
 		NeedsFixedPoint: true,
 		Reads:           nanopass.RegionBody,
@@ -40,61 +42,30 @@ var CanonicalizeSugar = nanopass.LiftBodyPass(
 	},
 )
 
-func canonicalizeSugarImpl(sql string) (result string, err error) {
-	pr, err := nanopass.Parse(sql)
-	if err != nil {
-		err = eh.Errorf("CanonicalizeSugar: %w", err)
-		return
-	}
-	rw := nanopass.NewRewriter(pr)
-
-	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		switch c := ctx.(type) {
-		case *grammar1.ColumnExprDateContext:
-			rewriteDate(rw, pr, c)
-			return false
-		case *grammar1.ColumnExprTimestampContext:
-			rewriteTimestamp(rw, pr, c)
-			return false
-		case *grammar1.ColumnExprExtractContext:
-			rewriteExtract(rw, pr, c)
-			return false
-		case *grammar1.ColumnExprSubstringContext:
-			rewriteSubstring(rw, pr, c)
-			return false
-		case *grammar1.ColumnExprTrimContext:
-			rewriteTrim(rw, pr, c)
-			return false
-		}
-		return true
-	})
-
-	result = nanopass.GetText(rw)
-	return
-}
-
 // DATE 'str' → toDate('str')
-func rewriteDate(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprDateContext) {
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		if term, ok := ctx.GetChild(i).(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerSTRING_LITERAL {
-				nanopass.ReplaceNode(rw, ctx, "toDate("+term.GetText()+")")
-				return
-			}
-		}
+func sugarDateRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+	c, ok := node.(*grammar1.ColumnExprDateContext)
+	if !ok {
+		return "", false
 	}
+	lit := terminalText(c, grammar1.ClickHouseLexerSTRING_LITERAL)
+	if lit == "" {
+		return "", false
+	}
+	return callForm("toDate", lit), true
 }
 
 // TIMESTAMP 'str' → toDateTime('str')
-func rewriteTimestamp(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprTimestampContext) {
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		if term, ok := ctx.GetChild(i).(*antlr.TerminalNodeImpl); ok {
-			if term.GetSymbol().GetTokenType() == grammar1.ClickHouseLexerSTRING_LITERAL {
-				nanopass.ReplaceNode(rw, ctx, "toDateTime("+term.GetText()+")")
-				return
-			}
-		}
+func sugarTimestampRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+	c, ok := node.(*grammar1.ColumnExprTimestampContext)
+	if !ok {
+		return "", false
 	}
+	lit := terminalText(c, grammar1.ClickHouseLexerSTRING_LITERAL)
+	if lit == "" {
+		return "", false
+	}
+	return callForm("toDateTime", lit), true
 }
 
 // extractUnitFunction maps an EXTRACT unit to the ClickHouse function the
@@ -112,54 +83,57 @@ var extractUnitFunction = map[string]string{
 
 // EXTRACT(unit FROM expr) → <unitFunction>(expr)
 // Grammar: EXTRACT LPAREN interval FROM columnExpr RPAREN
-func rewriteExtract(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprExtractContext) {
-	var intervalText string
-	var exprText string
-
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		child := ctx.GetChild(i)
+func sugarExtractRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+	c, ok := node.(*grammar1.ColumnExprExtractContext)
+	if !ok {
+		return "", false
+	}
+	var unit, expr string
+	for i := 0; i < c.GetChildCount(); i++ {
+		child := c.GetChild(i)
 		if iv, ok := child.(*grammar1.IntervalContext); ok {
-			intervalText = strings.ToUpper(iv.GetText())
+			unit = strings.ToUpper(iv.GetText())
 		}
 		if ce, ok := child.(grammar1.IColumnExprContext); ok {
-			exprText = nanopass.NodeText(pr, ce.(antlr.ParserRuleContext))
+			expr = spanOf(pr, ce.(antlr.ParserRuleContext))
 		}
 	}
-
-	fn, known := extractUnitFunction[intervalText]
+	fn, known := extractUnitFunction[unit]
 	if !known {
 		// Unknown unit — leave the sugar in place rather than invent a call.
-		return
+		return "", false
 	}
-	nanopass.ReplaceNode(rw, ctx, fn+"("+exprText+")")
+	return callForm(fn, expr), true
 }
 
 // SUBSTRING(expr FROM expr [FOR expr]) → substring(expr, expr [, expr])
 // Grammar: SUBSTRING LPAREN columnExpr FROM columnExpr (FOR columnExpr)? RPAREN
-func rewriteSubstring(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprSubstringContext) {
-	exprs := make([]string, 0, 3)
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		if ce, ok := ctx.GetChild(i).(grammar1.IColumnExprContext); ok {
-			exprs = append(exprs, nanopass.NodeText(pr, ce.(antlr.ParserRuleContext)))
-		}
+func sugarSubstringRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+	c, ok := node.(*grammar1.ColumnExprSubstringContext)
+	if !ok {
+		return "", false
 	}
-
-	nanopass.ReplaceNode(rw, ctx, "substring("+strings.Join(exprs, ", ")+")")
+	ops := columnExprOperands(pr, c)
+	if len(ops) < 2 {
+		return "", false
+	}
+	return callForm("substring", ops...), true
 }
 
 // TRIM(BOTH|LEADING|TRAILING str FROM expr) → trimBoth|trimLeft|trimRight(expr, str)
 // (the server's own canonical functions; trimLeading/trimTrailing do not exist)
 // Grammar: TRIM LPAREN (BOTH|LEADING|TRAILING) STRING_LITERAL FROM columnExpr RPAREN
-func rewriteTrim(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *grammar1.ColumnExprTrimContext) {
+func sugarTrimRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {
+	c, ok := node.(*grammar1.ColumnExprTrimContext)
+	if !ok {
+		return "", false
+	}
 	funcName := "trimBoth" // default
-	var strLit string
-	var exprText string
-
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		child := ctx.GetChild(i)
+	var strLit, expr string
+	for i := 0; i < c.GetChildCount(); i++ {
+		child := c.GetChild(i)
 		if term, ok := child.(*antlr.TerminalNodeImpl); ok {
-			tt := term.GetSymbol().GetTokenType()
-			switch tt {
+			switch term.GetSymbol().GetTokenType() {
 			case grammar1.ClickHouseLexerLEADING:
 				funcName = "trimLeft"
 			case grammar1.ClickHouseLexerTRAILING:
@@ -171,9 +145,8 @@ func rewriteTrim(rw *antlr.TokenStreamRewriter, pr *nanopass.ParseResult, ctx *g
 			}
 		}
 		if ce, ok := child.(grammar1.IColumnExprContext); ok {
-			exprText = nanopass.NodeText(pr, ce.(antlr.ParserRuleContext))
+			expr = spanOf(pr, ce.(antlr.ParserRuleContext))
 		}
 	}
-
-	nanopass.ReplaceNode(rw, ctx, funcName+"("+exprText+", "+strLit+")")
+	return callForm(funcName, expr, strLit), true
 }
