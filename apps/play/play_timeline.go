@@ -81,9 +81,9 @@ type TimelineDriver struct {
 	bandsSQLPtr *string
 	nowLinePtr  *bool
 
-	seenSchema   *arrow.Schema
-	seenExecuted time.Time
-	contract     timelineContract
+	seenRec      arrow.RecordBatch
+	seenContract timelineContract
+	emit         SignalEmitterI
 
 	dataMinMS       int64
 	dataMaxMS       int64
@@ -129,13 +129,6 @@ func NewTimelineDriver(ids *c.WidgetIdStack, selectedRow *int64, client *Client,
 		selectedRow: selectedRow,
 		bandsSQLPtr: bandsSQLPtr,
 		nowLinePtr:  nowLinePtr,
-		contract: timelineContract{
-			ColTime:      -1,
-			ColTimeEnd:   -1,
-			ColLabel:     -1,
-			ColLane:      -1,
-			ColIntensity: -1,
-		},
 	}
 	inst.tl = timeline.New(ids, "play-timeline", nil,
 		timeline.WithOnSelection(inst.onSelect),
@@ -144,31 +137,47 @@ func NewTimelineDriver(ids *c.WidgetIdStack, selectedRow *int64, client *Client,
 }
 
 func (inst *TimelineDriver) onSelect(sel timeline.SelectionInfo) {
+	row := int64(-1)
 	switch sel.Kind {
 	case timeline.SelectionInterval:
 		if sel.Interval != nil {
-			*inst.selectedRow = int64(sel.Interval.KindID)
+			row = int64(sel.Interval.KindID)
 		}
 	case timeline.SelectionAnnotation:
 		if sel.Annotation != nil {
-			*inst.selectedRow = int64(sel.Annotation.Number)
+			row = int64(sel.Annotation.Number)
 		}
 	}
-	// SelectionBucket: Points-mode rug aggregates 1+ events per cell; no
-	// authoritative per-row id is available without re-scanning. Leave
-	// selectedRow alone and let the user browse via the Table tab.
-	// SelectionNone: user cleared the previous click; preserve selectedRow.
+	// SelectionBucket (Points-mode rug aggregates 1+ events per cell, no
+	// authoritative per-row id) and SelectionNone (user cleared the click) carry
+	// no row: leave the current selection unchanged.
+	if row < 0 {
+		return
+	}
+	// ADR-0097 SD8: selection is published as a param mutation. emit is set per
+	// frame by renderContract; the legacy selectedRow pointer is the fallback
+	// until the signal graph owns the selection sink.
+	if inst.emit != nil {
+		inst.emit.Emit(signalSelection, row)
+		return
+	}
+	if inst.selectedRow != nil {
+		*inst.selectedRow = row
+	}
 }
 
-// Render paints the Timeline dock tab body. Caller is responsible for the
-// nil-rec / loading / query-failed guards (see renderTimelineTab); this
-// method assumes a non-nil record and a non-nil schema.
-func (inst *TimelineDriver) Render(rec arrow.RecordBatch, schema *arrow.Schema, executed time.Time) {
-	if schema != inst.seenSchema || !executed.Equal(inst.seenExecuted) {
-		inst.seenSchema = schema
-		inst.seenExecuted = executed
-		inst.contract = resolveContract(schema)
-		ivs, pts, anns := buildEvents(rec, inst.contract)
+// renderContract paints the Timeline body for a pre-resolved, renderable
+// contract (Mode != None — Accept rejected the rest; see timelinePanel). Events
+// are rebuilt only when the result record identity or the contract changes — the
+// ADR-0097 early-cutoff property at the panel: a stable result reuses the built
+// event slices frame to frame. The caller owns the nil-rec / loading / reject
+// empty states. Selection is published through emit (ADR-0097 SD8).
+func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineContract, emit SignalEmitterI) {
+	inst.emit = emit
+	if rec != inst.seenRec || ct != inst.seenContract {
+		inst.seenRec = rec
+		inst.seenContract = ct
+		ivs, pts, anns := buildEvents(rec, ct)
 		inst.tl.SetIntervals(ivs)
 		inst.tl.SetPoints(pts)
 		inst.tl.SetAnnotations(anns)
@@ -177,18 +186,8 @@ func (inst *TimelineDriver) Render(rec arrow.RecordBatch, schema *arrow.Schema, 
 		// and the sequential colormap collapses to its near-invisible dark end
 		// against the dark canvas. Without intensity, the widget paints flat
 		// legible accent fills instead.
-		inst.tl.SetIntensityEncoding(inst.contract.ColIntensity >= 0)
+		inst.tl.SetIntensityEncoding(ct.ColIntensity >= 0)
 		inst.dataMinMS, inst.dataMaxMS, inst.dataExtentValid = extentOfEvents(ivs, pts, anns)
-	}
-	if inst.contract.Mode == timelineModeNone {
-		for range c.Vertical().KeepIter() {
-			for rt := range c.RichTextLabel(inst.contract.Reject) {
-				rt.Strong()
-			}
-			c.AddSpace(8)
-			inst.RenderContractHelp()
-		}
-		return
 	}
 	inst.renderToolbar()
 	inst.renderBandsControls()

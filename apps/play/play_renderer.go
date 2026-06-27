@@ -554,7 +554,7 @@ func (inst *PlayApp) Render() error {
 				inst.renderProjectionTab(rec, err)
 			}
 			for range dock.Tab(dockTabTimeline, "Timeline") {
-				inst.renderTimelineTab(rec, schema, executed, err)
+				inst.renderTimelineTab(rec, schema, err)
 			}
 			for range dock.Tab(dockTabSnippets, "Snippets") {
 				inst.renderSnippetsTab()
@@ -1105,10 +1105,12 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, err error) {
 
 // renderTimelineTab is the Timeline dock tab body: the calendar-axis
 // interval/point/annotation widget driven by the strict `_tl_*` column
-// contract. Same empty/error guards as the other result tabs; the contract
-// rejection hint is rendered inside TimelineDriver.Render so the SQL
-// author can debug from the panel without leaving it.
-func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Schema, executed time.Time, err error) {
+// contract. The Timeline is an ADR-0097 PanelI observer of the `main` node:
+// this method runs the panel's Accept (the column-contract negotiation) and
+// renders either its reject reason (+ the contract help, so the SQL author can
+// debug from the panel) or, on a claim, the panel body. Same empty/error guards
+// as the other result tabs.
+func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Schema, err error) {
 	if inst.store.IsLoading() && rec == nil {
 		inst.renderResultsLoading()
 		return
@@ -1128,7 +1130,21 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		}
 		return
 	}
-	inst.timeline.Render(rec, schema, executed)
+	panel := timelinePanel{driver: inst.timeline}
+	claim, reason := panel.Accept(schema, emptySignals{})
+	if reason != "" {
+		// Contract rejected: show the reason + the help, the same debug-in-panel
+		// affordance the driver used to render itself.
+		for range c.Vertical().KeepIter() {
+			for rt := range c.RichTextLabel(reason) {
+				rt.Strong()
+			}
+			c.AddSpace(8)
+			inst.timeline.RenderContractHelp()
+		}
+		return
+	}
+	panel.Render(rec, claim, selectedRowEmitter{target: &inst.selectedRow})
 }
 
 // renderDetailTab is the Detail dock tab body: the leeway card stack for
