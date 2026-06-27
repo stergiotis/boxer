@@ -1082,7 +1082,9 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		return
 	}
 	inst.pager.Render()
-	inst.renderMasterTable(rec, schema, numRows)
+	panel := tablePanel{app: inst}
+	claim, _ := panel.Accept(schema, playSignals{selectedRow: inst.selectedRow})
+	panel.Render(rec, claim, selectedRowEmitter{target: &inst.selectedRow})
 }
 
 // renderProjectionTab is the Projection dock tab body: the UMAP scatter
@@ -1100,7 +1102,9 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, err error) {
 		inst.renderResultsEmpty()
 		return
 	}
-	inst.renderProjection(rec)
+	panel := projectionPanel{app: inst}
+	claim, _ := panel.Accept(rec.Schema(), playSignals{selectedRow: inst.selectedRow})
+	panel.Render(rec, claim, selectedRowEmitter{target: &inst.selectedRow})
 }
 
 // renderTimelineTab is the Timeline dock tab body: the calendar-axis
@@ -1199,7 +1203,7 @@ func (inst *PlayApp) renderResultsZeroRows() {
 	}
 }
 
-func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64) {
+func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, selectedRow int64, emit SignalEmitterI) {
 	ids := inst.ids
 	ncols := int(rec.NumCols())
 	totalRows := rec.NumRows()
@@ -1237,8 +1241,8 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		Striped(true)
 	// Selection is stored as an absolute row index; translate to the
 	// page-local row when highlighting so the stripe lands on the right line.
-	if inst.selectedRow >= pageStart && inst.selectedRow < pageEnd {
-		et = et.SelectedRow(uint64(inst.selectedRow - pageStart))
+	if selectedRow >= pageStart && selectedRow < pageEnd {
+		et = et.SelectedRow(uint64(selectedRow - pageStart))
 	}
 
 	// Visibility prefetch: the previous frame's egui_table::prepare pushed
@@ -1291,7 +1295,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	}
 	for local := rowLo; local < rowHi; local++ {
 		absRow := pageStart + int64(local)
-		selected := absRow == inst.selectedRow
+		selected := absRow == selectedRow
 		rowBase := cellIdBase + uint64(absRow)*cellColStride
 
 		if vis, _ := et.ColVisible(0); vis {
@@ -1303,7 +1307,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 					Selected(selected).
 					Truncate().
 					SendResp().HasPrimaryClicked() {
-					inst.selectedRow = absRow
+					emit.Emit(signalSelection, absRow)
 				}
 			}
 		}
@@ -1320,7 +1324,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 					Selected(selected).
 					Truncate().
 					SendResp().HasPrimaryClicked() {
-					inst.selectedRow = absRow
+					emit.Emit(signalSelection, absRow)
 				}
 			}
 		}

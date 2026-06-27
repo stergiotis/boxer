@@ -473,7 +473,7 @@ const projectionViridisBuckets = 8
 // (idle / running / done / failed) from the Projector's snapshot. Caller
 // is responsible for the surrounding container; this function emits widgets
 // directly into the current ui scope.
-func (inst *PlayApp) renderProjection(rec arrow.RecordBatch) {
+func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, emit SignalEmitterI) {
 	ids := inst.ids
 	snap := inst.projector.Snapshot()
 	nRows := rec.NumRows()
@@ -581,8 +581,8 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch) {
 	}
 
 	if snap.status == projectorStatusDone && len(snap.coords) > 0 {
-		if newRow, ok := renderProjectionPlot(ids, snap, inst.selectedRow, inst.colorByFeature); ok {
-			inst.selectedRow = newRow
+		if newRow, ok := renderProjectionPlot(ids, snap, selectedRow, inst.colorByFeature); ok {
+			emit.Emit(signalSelection, newRow)
 		}
 	}
 }
