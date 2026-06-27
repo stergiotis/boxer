@@ -560,7 +560,7 @@ func (inst *PlayApp) Render() error {
 				inst.renderSnippetsTab()
 			}
 			for range dock.Tab(dockTabDetail, "Detail") {
-				inst.renderDetailTab(rec, schema, inst.selectedRow)
+				inst.renderDetailTab(rec, schema)
 			}
 			for range dock.Tab(dockTabMap, "Map") {
 				inst.mapDriver.Render()
@@ -1147,26 +1147,31 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 	panel.Render(rec, claim, selectedRowEmitter{target: &inst.selectedRow})
 }
 
-// renderDetailTab is the Detail dock tab body: the leeway card stack for
-// the currently selected row. renderDetailPane scrolls its own content (the
-// leeway card table owns its scroll; the JSON and ad-hoc fallbacks each add
-// one), so the dock tab must NOT add an outer ScrollArea — wrapping the
-// self-scrolling card table hands it unbounded height and crops its tail
-// (tagged) sections.
-func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema, row int64) {
+// renderDetailTab is the Detail dock tab body: the leeway card stack for the
+// currently selected row. Detail is an ADR-0097 PanelI observer of the `main`
+// node and the consumer of the `selection` signal the Timeline/Table/Projection
+// publish — this method runs the panel's Accept (which reads the selection from
+// the signal env) and renders its reject reason or the card body. renderDetailPane
+// scrolls its own content (the leeway card table owns its scroll; the JSON and
+// ad-hoc fallbacks each add one), so the dock tab must NOT add an outer
+// ScrollArea — wrapping the self-scrolling card table hands it unbounded height
+// and crops its tail (tagged) sections.
+func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema) {
 	if rec == nil {
 		for rt := range c.RichTextLabel("Run a query, then select a row to see its detail.") {
 			rt.Small().Weak()
 		}
 		return
 	}
-	if row < 0 || row >= rec.NumRows() {
-		for rt := range c.RichTextLabel("Select a row in the Table tab to see its detail.") {
+	panel := detailPanel{app: inst}
+	claim, reason := panel.Accept(schema, playSignals{selectedRow: inst.selectedRow})
+	if reason != "" {
+		for rt := range c.RichTextLabel(reason) {
 			rt.Small().Weak()
 		}
 		return
 	}
-	inst.renderDetailPane(rec, schema, row)
+	panel.Render(rec, claim, nil)
 }
 
 func (inst *PlayApp) renderResultsLoading() {
