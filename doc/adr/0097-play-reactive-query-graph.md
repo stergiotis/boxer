@@ -479,6 +479,38 @@ Descoped items (SD12) carry explicit triggers.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-06-28 — Slices 1–2 shipped; slice-3 first cut landed
+
+Implemented on `main`, behaviour-verified live against ClickHouse:
+
+- **Slice 1** — the `Node`/`Signal`/`PanelI` contract and a demand-driven,
+  memoised, revision-based runtime (`apps/play/play_graph.go`), with the law
+  tests (minimality, demand, early cutoff).
+- **Slice 2** — all four result panels (Timeline, Detail, Table, Projection) are
+  `PanelI` observers with the typed `Accept`/reject contract (SD6); selection is a
+  panel-written signal (SD8, producer Timeline/Table/Projection → consumer
+  Detail). The graph owns the `main` node's execution: the standalone
+  `QueryStore` is retired into a graph-internal lane reached through a facade
+  (`RunMain`/`MainSnapshot`/…), so the top bar, status bar, History tab and FSM
+  read `main` through the graph. Smoke-tested end to end.
+- **Slice-3 first cut** (3a+3b+3c, *fuse-to-sink*, *split-all-CTEs*) — the split
+  contract `splitGraph` (statement-split + CTE-lift, data/signal edges,
+  acyclicity); the suspending async node lane `nodeLane` (SD5: non-blocking
+  demand, generation-tagged supersession, last-good retention — built and
+  `-race`-tested, not yet on the live path); and the live Run path routed through
+  `fuseToSink` (for a single statement the fused SQL is the original, so it is
+  behaviour-identical — verified with a CTE query rendering 50 rows). The `main`
+  node's lane stays `QueryStore` (Run-triggered, with history); `nodeLane` +
+  `clientExecutor` go live when intermediate nodes execute separately (3d).
+
+Deferred (with triggers, per SD12): **3d** fusion/materialization policy (where
+`nodeLane` becomes load-bearing); **3e** the node Graph view + per-node
+"view compiled" chrome (Hex-validated, the implicit-graph-surprise mitigation);
+**3f** re-expressing the ADR-0096 Map as a node (retiring the first bespoke
+panel-local lane).
+
 ## References
 
 Internal:
