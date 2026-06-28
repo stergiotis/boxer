@@ -29,6 +29,9 @@ func (inst *PlayApp) renderGraphTab() {
 		for rt := range c.RichTextLabel(fmt.Sprintf("%d node(s) · sink: %s", len(split.Nodes), split.Sink)) {
 			rt.Small().Weak()
 		}
+		for rt := range c.RichTextLabel(inst.channelInventory()) {
+			rt.Small().Weak()
+		}
 		c.Separator().Horizontal().Send()
 		for i := range split.Nodes {
 			inst.renderGraphNode(ids, split.Nodes[i])
@@ -60,6 +63,14 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 				SendResp().HasPrimaryClicked() {
 				inst.observedNode = n.ID
 			}
+			// Channel eligibility (4c): observing fills the main channels
+			// (Table/Projection/Detail); a _tl_*-shaped node also fills the
+			// Timeline's events/bands channels.
+			if elig := nodeChannelEligibility(n); len(elig) > 0 {
+				for rt := range c.RichTextLabel("also fills: " + strings.Join(elig, ", ")) {
+					rt.Small().Weak()
+				}
+			}
 			if len(n.DependsOn) > 0 {
 				for rt := range c.RichTextLabel("reads nodes: " + joinNodeIDs(n.DependsOn)) {
 					rt.Small().Weak().Monospace()
@@ -82,4 +93,48 @@ func joinNodeIDs(ids []NodeID) string {
 		ss[i] = string(id)
 	}
 	return strings.Join(ss, ", ")
+}
+
+// resultPanels lists the PanelI result panels, for the channel inventory +
+// eligibility (4c). Editor/Preview/History/Snippets/Graph are chrome (SD7), not
+// panels. Constructed cheaply; Channels() needs no live data (the timeline
+// driver may be nil here — Channels() does not touch it).
+func (inst *PlayApp) resultPanels() []PanelI {
+	return []PanelI{
+		tablePanel{app: inst},
+		projectionPanel{app: inst},
+		detailPanel{app: inst},
+		timelinePanel{driver: inst.timeline},
+	}
+}
+
+// channelInventory is the one-line panel × channel summary atop the Graph view
+// (4c) — the channel model made visible, read straight off Channels().
+func (inst *PlayApp) channelInventory() string {
+	parts := make([]string, 0, 4)
+	for _, p := range inst.resultPanels() {
+		chs := make([]string, 0, 2)
+		for _, spec := range p.Channels() {
+			chs = append(chs, string(spec.ID))
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", p.ID(), strings.Join(chs, "+")))
+	}
+	return "channels — " + strings.Join(parts, " · ")
+}
+
+// nodeChannelEligibility returns the notable channels a node could fill, inferred
+// statically from its SQL (4c): a _tl_time projection ⇒ Timeline events, a
+// _tl_band_from projection ⇒ Timeline bands. Every node fills the universal main
+// channel (Table/Projection/Detail) when observed, so that is omitted. This is a
+// heuristic on the SQL text — no execution — so a contract column named only in a
+// WHERE could false-positive; the accurate check is AcceptForChannel at render.
+func nodeChannelEligibility(n splitNode) []string {
+	out := make([]string, 0, 2)
+	if strings.Contains(n.SQL, timelineSlotTime) {
+		out = append(out, "Timeline·events")
+	}
+	if strings.Contains(n.SQL, timelineSlotBandFrom) {
+		out = append(out, "Timeline·bands")
+	}
+	return out
 }
