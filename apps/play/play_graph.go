@@ -60,7 +60,8 @@ type ChannelID string
 
 const (
 	chMain   ChannelID = "main"   // the lone channel of single-input panels (Table, Projection, Detail)
-	chEvents ChannelID = "events" // the Timeline's foreground marks (the Timeline's bands channel arrives in slice 4b)
+	chEvents ChannelID = "events" // the Timeline's foreground marks
+	chBands  ChannelID = "bands"  // the Timeline's background bands (slice 4b-2)
 )
 
 // ChannelSpec declares one of a panel's input channels. A panel is renderable iff

@@ -64,10 +64,26 @@ func TestTimelinePanelAcceptRejectsWithReason(t *testing.T) {
 	}
 }
 
-func TestTimelinePanelDeclaresEventsChannel(t *testing.T) {
+func TestTimelinePanelDeclaresEventsAndBandsChannels(t *testing.T) {
 	var p PanelI = timelinePanel{}
 	require.Equal(t, PanelID("timeline"), p.ID())
-	require.Equal(t, []ChannelSpec{{ID: chEvents, Required: true, Label: "events"}}, p.Channels())
+	require.Equal(t, []ChannelSpec{
+		{ID: chEvents, Required: true, Label: "events"},
+		{ID: chBands, Required: false, Label: "bands"},
+	}, p.Channels())
+}
+
+// The bands channel accepts any non-nil result (the _tl_band_* contract is
+// validated downstream in setBands); a nil schema leaves the optional channel
+// unfilled.
+func TestTimelinePanelBandsChannelAccepts(t *testing.T) {
+	p := timelinePanel{}
+	claim, reason := p.AcceptForChannel(chBands, schemaWith(tsField(timelineSlotBandFrom)), emptySignals{})
+	require.Empty(t, reason)
+	require.Equal(t, true, claim)
+
+	_, reason = p.AcceptForChannel(chBands, nil, emptySignals{})
+	require.NotEmpty(t, reason, "absent bands result → optional channel unfilled")
 }
 
 // The selection emitter bridges signalSelection writes to the legacy

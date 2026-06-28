@@ -217,44 +217,58 @@ func (inst *TimelineDriver) bandsProducer(viewMinMS, viewMaxMS int64) iter.Seq[l
 	}
 }
 
-// updateBands demands the bands node lane with the bands SQL substituted for the
-// current (dataMinMS, dataMaxMS) extent, re-mapping the Arrow result into
-// inst.bands only when the served SQL changes (the Map's repack idiom). The lane
-// supplies async + supersession + last-good; an unchanged (extent, SQL) is a memo
-// hit. Empty SQL / invalid extent / no client clears the bands.
-func (inst *TimelineDriver) updateBands() {
+// demandBands demands the bands node lane with the bands SQL substituted for the
+// current (dataMinMS, dataMaxMS) extent, returning the retained _tl_band_* result
+// for the Timeline's chBands channel (4b-2; the caller MUST Release rec). Empty
+// SQL / invalid extent / no client yields (nil, nil). The lane supplies async +
+// supersession + last-good; an unchanged (extent, SQL) is a memo hit. The result
+// is mapped into inst.bands by setBands, called from the panel's Render.
+func (inst *TimelineDriver) demandBands() (rec arrow.RecordBatch, schema *arrow.Schema) {
 	if inst.bandsSQLPtr == nil {
 		return
 	}
 	sql := strings.TrimSpace(*inst.bandsSQLPtr)
 	if sql == "" || !inst.dataExtentValid || inst.client == nil {
-		inst.bands = nil
-		inst.bandsErr = nil
-		inst.bandsSkipped = 0
 		inst.bandsLoading = false
-		inst.bandsMappedSQL = ""
+		inst.bandsErr = nil
+		inst.bandsServedSQL = ""
 		return
 	}
 	compiled := substituteBandsRange(sql, inst.dataMinMS, inst.dataMaxMS)
-	rec, _, servedSQL, loading, err := inst.bandsLane.demand(compiled)
+	r, sc, served, loading, err := inst.bandsLane.demand(compiled)
 	inst.bandsLoading = loading
 	if err != nil {
 		inst.bandsErr = err
 	}
-	if rec != nil {
-		if servedSQL != inst.bandsMappedSQL {
-			bands, skipped, mapErr := mapBandsRecord(rec)
-			if mapErr != nil {
-				inst.bandsErr = mapErr
-			} else {
-				inst.bands = bands
-				inst.bandsSkipped = skipped
-				inst.bandsErr = nil
-				inst.bandsMappedSQL = servedSQL
-			}
-		}
-		rec.Release()
+	inst.bandsServedSQL = served
+	return r, sc
+}
+
+// setBands maps the chBands result into inst.bands, re-mapping only when the
+// served SQL changes (the Map's repack idiom). Called from the Timeline panel's
+// Render before the events render — the band producer reads inst.bands.
+func (inst *TimelineDriver) setBands(rec arrow.RecordBatch) {
+	if rec == nil || inst.bandsServedSQL == inst.bandsMappedSQL {
+		return
 	}
+	bands, skipped, mapErr := mapBandsRecord(rec)
+	if mapErr != nil {
+		inst.bandsErr = mapErr
+		return
+	}
+	inst.bands = bands
+	inst.bandsSkipped = skipped
+	inst.bandsErr = nil
+	inst.bandsMappedSQL = inst.bandsServedSQL
+}
+
+// clearBands resets the band data when the chBands channel is unfilled (empty
+// bands SQL or no result). It leaves bandsErr alone — demandBands owns the lane
+// error (so a failing bands query still surfaces its error in the status).
+func (inst *TimelineDriver) clearBands() {
+	inst.bands = nil
+	inst.bandsSkipped = 0
+	inst.bandsMappedSQL = ""
 }
 
 // renderBandsControls emits the collapsible bands-SQL editor + Run

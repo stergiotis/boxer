@@ -153,9 +153,9 @@ func bandRec(fromMS, toMS int64, color string) arrow.RecordBatch {
 	return rec
 }
 
-// updateBands demands the bands node lane and maps its _tl_band_* result into
-// inst.bands (ADR-0097 4b: the retired async lane's behaviour, via nodeLane).
-func TestUpdateBandsDemandsLaneAndMaps(t *testing.T) {
+// demandBands demands the bands node lane (4b-2); setBands maps its _tl_band_*
+// result into inst.bands (the chBands channel path).
+func TestDemandBandsLaneAndSetBandsMaps(t *testing.T) {
 	exec := &mockExecutor{build: func(string) arrow.RecordBatch { return bandRec(1000, 2000, "info.subtle") }}
 	sql := "SELECT _time_data_min AS _tl_band_from, _time_data_max AS _tl_band_to, 'info.subtle' AS _tl_band_color"
 	drv := &TimelineDriver{
@@ -170,7 +170,11 @@ func TestUpdateBandsDemandsLaneAndMaps(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		drv.updateBands() // non-blocking demand; the lane lands the result async
+		rec, _ := drv.demandBands() // non-blocking; the lane lands the result async
+		if rec != nil {
+			drv.setBands(rec)
+			rec.Release()
+		}
 		if len(drv.bands) > 0 {
 			break
 		}
@@ -182,6 +186,9 @@ func TestUpdateBandsDemandsLaneAndMaps(t *testing.T) {
 	require.NoError(t, drv.bandsErr)
 
 	// An unchanged (extent, SQL) is a memo hit — no second wire call.
-	drv.updateBands()
+	rec, _ := drv.demandBands()
+	if rec != nil {
+		rec.Release()
+	}
 	assert.Equal(t, 1, exec.calls, "unchanged compiled SQL must be a lane memo hit")
 }

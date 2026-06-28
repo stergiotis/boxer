@@ -1221,9 +1221,20 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		}
 		return
 	}
-	reject := dispatchPanel(timelinePanel{driver: inst.timeline}, map[ChannelID]channelInput{
+	// Demand the bands node (its own lane) for the chBands channel; it lags the
+	// events extent by a frame (it reads the previous frame's extent), absorbed
+	// by the fetch latency. nil when the bands SQL is empty → chBands unfilled.
+	bandsRec, bandsSchema := inst.timeline.demandBands()
+	if bandsRec != nil {
+		defer bandsRec.Release()
+	}
+	inputs := map[ChannelID]channelInput{
 		chEvents: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: emptySignals{}},
-	}, selectedRowEmitter{target: &inst.selectedRow})
+	}
+	if bandsRec != nil {
+		inputs[chBands] = channelInput{node: bandsNodeID, rec: bandsRec, schema: bandsSchema, sig: emptySignals{}}
+	}
+	reject := dispatchPanel(timelinePanel{driver: inst.timeline}, inputs, selectedRowEmitter{target: &inst.selectedRow})
 	if reject != "" {
 		// Contract rejected: show the reason + the help, the same debug-in-panel
 		// affordance the driver used to render itself.

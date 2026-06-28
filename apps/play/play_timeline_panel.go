@@ -20,6 +20,11 @@ const mainNodeID NodeID = "main"
 // (ADR-0097 SD8: selection is just a panel-written signal, shared by name).
 const signalSelection SignalID = "selection"
 
+// bandsNodeID is the id of the Timeline's bands node — the bands-editor SQL run
+// on the driver's bands lane (4b). It is the chBands channel's fixed source
+// (option a): a panel-authored node, not one of the split-graph nodes.
+const bandsNodeID NodeID = "timeline-bands"
+
 // timelinePanel adapts the Timeline to PanelI. It is a thin value over the
 // existing *TimelineDriver, constructed per frame in renderTimelineTab.
 type timelinePanel struct {
@@ -28,16 +33,28 @@ type timelinePanel struct {
 
 func (inst timelinePanel) ID() PanelID { return "timeline" }
 
-// Channels: the required "events" channel (foreground marks). The optional
-// "bands" channel is added in slice 4b, when bands become a node.
+// Channels: the required "events" channel (foreground marks) + the optional
+// "bands" channel (background shaded ranges), filled by the bands node (4b-2).
 func (inst timelinePanel) Channels() []ChannelSpec {
-	return []ChannelSpec{{ID: chEvents, Required: true, Label: "events"}}
+	return []ChannelSpec{
+		{ID: chEvents, Required: true, Label: "events"},
+		{ID: chBands, Required: false, Label: "bands"},
+	}
 }
 
-// AcceptForChannel lifts resolveContract for the events channel: a renderable
-// contract (Mode != None) becomes the claim; otherwise the contract's Reject is
-// the empty-state reason. Pure — it reads no signals yet (schema-only).
+// AcceptForChannel lifts resolveContract for the events channel (Mode/Reject);
+// for chBands it accepts any bands-node result — the _tl_band_* contract is
+// validated in mapBandsRecord (setBands), which reports column errors via the
+// bands status line rather than as a channel reject. Pure (schema-only).
 func (inst timelinePanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
+	if ch == chBands {
+		if schema == nil {
+			reason = "no bands result"
+			return
+		}
+		claim = true
+		return
+	}
 	ct := resolveContract(schema)
 	if ct.Mode == timelineModeNone {
 		reason = ct.Reject
@@ -47,8 +64,14 @@ func (inst timelinePanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, s
 	return
 }
 
-// Render delegates to the driver with the events contract AcceptForChannel resolved.
+// Render sets the bands (mapped by the driver) before the events render — the
+// band producer reads inst.bands during renderContract — then paints the events.
 func (inst timelinePanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
+	if b, ok := filled[chBands]; ok {
+		inst.driver.setBands(b.Rec)
+	} else {
+		inst.driver.clearBands()
+	}
 	ev := filled[chEvents]
 	ct, ok := ev.Claim.(timelineContract)
 	if !ok {

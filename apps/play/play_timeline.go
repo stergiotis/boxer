@@ -96,7 +96,8 @@ type TimelineDriver struct {
 	// inst.bands directly.
 	bandsLane      *nodeLane
 	bands          []layout.BackgroundBand
-	bandsMappedSQL string
+	bandsServedSQL string // the SQL the lane's last result was for (set by demandBands)
+	bandsMappedSQL string // the SQL inst.bands was mapped from (setBands re-maps on change)
 	bandsErr       error
 	bandsSkipped   int
 	bandsLoading   bool
@@ -183,9 +184,8 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 	}
 	inst.renderToolbar()
 	inst.renderBandsControls()
-	// Demand the bands node lane for the current extent (4b); bands are
-	// render-thread-only now, so bandsProducer reads inst.bands directly.
-	inst.updateBands()
+	// Bands are set via the chBands channel (4b-2) before this render, so
+	// bandsProducer reads inst.bands directly; renderContract just paints.
 	inst.tl.Render()
 }
 
