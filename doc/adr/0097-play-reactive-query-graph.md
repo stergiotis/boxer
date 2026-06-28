@@ -517,11 +517,22 @@ Implemented on `main`, behaviour-verified live against ClickHouse:
   for the future many-node / streaming case). Smoke-tested: observing an
   intermediate CTE renders its 50 full leeway rows in Table/Detail, not the
   sink's aggregation.
+- **Slice 3 — Map as a node (3f)** — the ADR-0096 geo-raster Map is now a graph
+  node executed on a `nodeLane`; its bespoke panel-local fetch (`runFetch` /
+  `maybeFetch` / `inFlight` + staleness guard) — a reimplementation of the lane's
+  non-blocking demand / supersession / last-good — is retired, the first bespoke
+  lane folded into the graph runtime. The Map keeps its specialised parts
+  (viewport→bbox SQL, RGBA packing, the `mapRaster` overlay); only the async
+  machinery moved. This makes `nodeLane` (3b) live. `nodeLane` gained a
+  per-execution timeout (remote sources need ~60s). Smoke-tested against a
+  synthetic mercator table — a 960×560 raster overlay rendered end to end. **With
+  3f, slice 3 (the splitter, lanes, fusion, Graph view, observe-a-node, Map-as-
+  node) is complete.**
 
-Deferred (with triggers, per SD12): **3f** re-expressing the ADR-0096 Map as a
-node (retiring the first bespoke panel-local lane); operator-level IVM (SD1);
-cross-query materialization of shared intermediates over HTTP (SD13's hard part —
-the first cut recomputes per observer); explicit multi-cell authoring (SD12).
+Still deferred (with triggers, per SD12): operator-level IVM (SD1);
+cross-query materialization of *shared* intermediates over HTTP (SD13's hard
+part — the first cut recomputes per observer); explicit multi-cell authoring
+(SD12).
 
 ## References
 
