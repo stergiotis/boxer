@@ -62,7 +62,7 @@ func (inst *gatedExecutor) callCount() int {
 func TestNodeLaneExecutesOnDemand(t *testing.T) {
 	srv, hits := arrowServer(t, []int64{1, 2, 3})
 	defer srv.Close()
-	lane := newNodeLane(clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}, memory.NewGoAllocator())
+	lane := newNodeLane(clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
 	rec, _, _, loading, _ := lane.demand("SELECT n FROM t")
@@ -92,7 +92,7 @@ func TestNodeLaneExecutesOnDemand(t *testing.T) {
 func TestNodeLaneReExecutesOnSqlChange(t *testing.T) {
 	srv, hits := arrowServer(t, []int64{7})
 	defer srv.Close()
-	lane := newNodeLane(clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}, memory.NewGoAllocator())
+	lane := newNodeLane(clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
 	r, _, _, _, _ := lane.demand("SELECT 1")
@@ -119,7 +119,7 @@ func TestNodeLaneReExecutesOnSqlChange(t *testing.T) {
 // prior result immediately (no flicker).
 func TestNodeLaneNonBlockingAndLastGood(t *testing.T) {
 	g := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch { return int64Rec("n", 1) }}
-	lane := newNodeLane(g, memory.NewGoAllocator())
+	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
 	rec, _, _, loading, _ := lane.demand("sql1")
@@ -153,7 +153,7 @@ func TestNodeLaneNonBlockingAndLastGood(t *testing.T) {
 // result is discarded and the new one wins.
 func TestNodeLaneSupersedesInFlight(t *testing.T) {
 	g := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch { return int64Rec("n", 9) }}
-	lane := newNodeLane(g, memory.NewGoAllocator())
+	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
 	r, _, _, _, _ := lane.demand("sql1") // in flight (gated)

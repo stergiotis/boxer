@@ -1,11 +1,14 @@
 package play
 
 import (
+	"context"
 	"image"
 	"image/png"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/apache/arrow-go/v18/arrow/memory"
 )
 
 // TestMapRasterLive exercises the Map driver's real data path — buildRasterSQL
@@ -31,7 +34,7 @@ func TestMapRasterLive(t *testing.T) {
 	// round-trip ample headroom for the test.
 	mapFetchTimeout = 150 * time.Second
 
-	drv := &MapDriver{client: NewClient(ClientConfig{URL: url, User: "default"}, nil)}
+	client := NewClient(ClientConfig{URL: url, User: "default"}, nil)
 
 	const w, h uint32 = 384, 384
 	b, ok := bboxFromLatLon(51.3, 51.7, -0.6, 0.3) // Greater London — dense airspace
@@ -39,9 +42,16 @@ func TestMapRasterLive(t *testing.T) {
 		t.Fatal("degenerate bbox")
 	}
 	sql := buildRasterSQL(b, w, h, sanitizeTable(table), 100)
-	pixels, err := drv.fetchRaster(sql, w, h)
+	ctx, cancel := context.WithTimeout(context.Background(), mapFetchTimeout)
+	defer cancel()
+	rec, _, exErr := clientExecutor{client: client}.execute(ctx, sql, memory.NewGoAllocator())
+	if exErr != nil {
+		t.Fatalf("execute: %v", exErr)
+	}
+	defer rec.Release()
+	pixels, err := packRaster(rec, w, h)
 	if err != nil {
-		t.Fatalf("fetchRaster: %v", err)
+		t.Fatalf("packRaster: %v", err)
 	}
 	if got := uint32(len(pixels)); got != w*h {
 		t.Fatalf("pixel count = %d, want %d", got, w*h)

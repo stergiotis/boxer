@@ -1,15 +1,14 @@
 package play
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -55,20 +54,33 @@ type MapDriver struct {
 	lastRequestedKey mapFetchKey
 	lastSentVersion uint64
 
-	// Lane state — written by the fetch goroutine, read on the render thread
-	// under mu. Mirrors TimelineDriver's bands lane (staleness-guarded publish).
-	mu          sync.Mutex
-	inFlight    bool
-	inFlightKey mapFetchKey
-	haveResult  bool
-	resultKey   mapFetchKey
-	pixels      []uint32 // packed 0xRRGGBBAA, row-major, row 0 = north
-	resW        uint32
-	resH        uint32
-	bounds      [4]float64 // minLat, minLon, maxLat, maxLon the pixels cover
-	version     uint64     // bumped per published result → mapRaster contentVersion
-	lastErr     error
-	lastDur     time.Duration
+	// lane runs the raster query off the render thread (ADR-0097 3f): the
+	// node-graph nodeLane replaces the former bespoke fetch goroutine + staleness
+	// guard (non-blocking demand, supersession, last-good — all reused). demandedSQL
+	// is what the lane is asked for; sqlMeta maps each demanded SQL to the
+	// bounds/dims it covers, so a last-good result (served during a supersede) draws
+	// with its own bounds.
+	lane        *nodeLane
+	demandedSQL string
+	sqlMeta     map[string]rasterMeta
+
+	// Packed result (render-thread only): re-packed when the served SQL changes.
+	lastPackedSQL string
+	pixels        []uint32 // packed 0xRRGGBBAA, row-major, row 0 = north
+	packW         uint32
+	packH         uint32
+	packBounds    [4]float64 // minLat, minLon, maxLat, maxLon the pixels cover
+	version       uint64     // bumped per re-pack → mapRaster contentVersion
+
+	loading    bool
+	laneErr    error
+	controlErr string
+}
+
+// rasterMeta is the geographic bounds + pixel dims a demanded raster SQL covers.
+type rasterMeta struct {
+	bounds [4]float64
+	w, h   uint32
 }
 
 const (
@@ -102,6 +114,8 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	d := &MapDriver{
 		ids:       ids,
 		client:    client,
+		lane:      newNodeLane(clientExecutor{client: client}, memory.NewGoAllocator(), mapFetchTimeout),
+		sqlMeta:   make(map[string]rasterMeta),
 		table:     "planes_mercator_sample100",
 		sampling:  100,
 		opacity:   0.9,
@@ -177,30 +191,42 @@ func (inst *MapDriver) Render() {
 		settled := !inst.viewStableAt.IsZero() && time.Since(inst.viewStableAt) >= mapDebounce
 		if (inst.live && settled) || inst.forceRefresh {
 			inst.forceRefresh = false
-			inst.tryFetch(cam.ViewHash, cam.MinLat, cam.MaxLat, cam.MinLon, cam.MaxLon,
+			inst.updateDemand(cam.ViewHash, cam.MinLat, cam.MaxLat, cam.MinLon, cam.MaxLon,
 				cam.ScreenWidthPx, cam.ScreenHeightPx)
+		}
+	}
+
+	// Demand the raster on the node lane (non-blocking; supersedes the in-flight
+	// run on a new view; returns the last-good while a new one is loading). Re-pack
+	// only when the served SQL changes.
+	if inst.demandedSQL != "" {
+		rec, _, servedSQL, loading, err := inst.lane.demand(inst.demandedSQL)
+		inst.loading = loading
+		if err != nil {
+			inst.laneErr = err
+		} else if rec != nil {
+			inst.laneErr = nil
+		}
+		if rec != nil {
+			if servedSQL != inst.lastPackedSQL {
+				inst.repack(rec, servedSQL)
+			}
+			rec.Release()
 		}
 	}
 
 	// Draw the last-good raster, pinned to the bounds it was computed for, so it
 	// pans/zooms correctly under the camera until the next result lands.
-	inst.mu.Lock()
-	have := inst.haveResult
-	pixels := inst.pixels
-	w, h := inst.resW, inst.resH
-	bounds := inst.bounds
-	version := inst.version
-	inst.mu.Unlock()
-	if have && w > 0 && h > 0 {
-		toSend := pixels
-		if version == inst.lastSentVersion {
+	if inst.packW > 0 && inst.packH > 0 {
+		toSend := inst.pixels
+		if inst.version == inst.lastSentVersion {
 			toSend = []uint32{} // unchanged → reuse the cached texture (empty, NOT nil)
 		}
 		c.MapRaster(mapRasterID,
-			bounds[0], bounds[1], bounds[2], bounds[3],
-			w, h, version, toSend,
+			inst.packBounds[0], inst.packBounds[1], inst.packBounds[2], inst.packBounds[3],
+			inst.packW, inst.packH, inst.version, toSend,
 		).Opacity(float32(inst.opacity)).Send()
-		inst.lastSentVersion = version
+		inst.lastSentVersion = inst.version
 	}
 
 	// The map (drains the overlay, reports the next camera). noTiles keeps it
@@ -241,15 +267,17 @@ func (inst *MapDriver) renderControls() {
 	c.Label(inst.statusLine()).Send()
 }
 
-// tryFetch builds the bbox query for the current viewport and hands it to the
-// lane, deduped by mapFetchKey. Degenerate viewports and bad table names are
-// skipped (the latter surfaces in the status line).
-func (inst *MapDriver) tryFetch(viewHash uint64, minLat, maxLat, minLon, maxLon float64, screenW, screenH float32) {
+// updateDemand builds the bbox raster query for the current viewport and makes
+// it the lane's desired SQL, deduped by mapFetchKey (so a still map doesn't
+// re-demand). The lane runs it off the render thread. Bad table names surface in
+// the status line; degenerate viewports are skipped.
+func (inst *MapDriver) updateDemand(viewHash uint64, minLat, maxLat, minLon, maxLon float64, screenW, screenH float32) {
 	table := sanitizeTable(inst.table)
 	if table == "" {
-		inst.setErr(fmt.Errorf("invalid or empty table name (allowed: letters, digits, '_', '.')"))
+		inst.controlErr = "invalid or empty table name (allowed: letters, digits, '_', '.', and table functions)"
 		return
 	}
+	inst.controlErr = ""
 	b, ok := bboxFromLatLon(minLat, maxLat, minLon, maxLon)
 	if !ok {
 		return
@@ -266,101 +294,69 @@ func (inst *MapDriver) tryFetch(viewHash uint64, minLat, maxLat, minLon, maxLon 
 	}
 	inst.lastRequestedKey = key
 	sql := buildRasterSQL(b, w, h, table, sampling)
-	bounds := [4]float64{minLat, minLon, maxLat, maxLon}
-	inst.maybeFetch(key, sql, bounds, w, h)
+	inst.demandedSQL = sql
+	inst.sqlMeta[sql] = rasterMeta{bounds: [4]float64{minLat, minLon, maxLat, maxLon}, w: w, h: h}
+	inst.pruneSqlMeta()
 }
 
-// maybeFetch spawns the fetch goroutine unless this exact key is already in
-// flight or already the published result.
-func (inst *MapDriver) maybeFetch(key mapFetchKey, sql string, bounds [4]float64, w, h uint32) {
-	inst.mu.Lock()
-	if inst.inFlight && inst.inFlightKey == key {
-		inst.mu.Unlock()
-		return
+// pruneSqlMeta bounds the sql→bounds map: only the currently-demanded view and
+// the currently-packed one (a last-good candidate) must stay drawable.
+func (inst *MapDriver) pruneSqlMeta() {
+	const maxMeta = 4
+	for k := range inst.sqlMeta {
+		if len(inst.sqlMeta) <= maxMeta {
+			return
+		}
+		if k != inst.demandedSQL && k != inst.lastPackedSQL {
+			delete(inst.sqlMeta, k)
+		}
 	}
-	if inst.haveResult && inst.resultKey == key {
-		inst.mu.Unlock()
-		return
-	}
-	inst.inFlight = true
-	inst.inFlightKey = key
-	inst.mu.Unlock()
-	go inst.runFetch(key, sql, bounds, w, h)
 }
 
-// runFetch performs one raster round-trip off the render thread and publishes
-// it under mu — but only if it is still the current in-flight key (a newer
-// viewport supersedes us; the staleness guard discards the stale result,
-// mirroring runBandsFetch).
-func (inst *MapDriver) runFetch(key mapFetchKey, sql string, bounds [4]float64, w, h uint32) {
-	start := time.Now()
-	pixels, err := inst.fetchRaster(sql, w, h)
-	dur := time.Since(start)
-
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if !inst.inFlight || inst.inFlightKey != key {
-		return // superseded while fetching
+// repack packs the lane's record into the RGBA texture, pinned to the bounds the
+// served SQL was computed for. Called only when the served SQL changes.
+func (inst *MapDriver) repack(rec arrow.RecordBatch, servedSQL string) {
+	meta, ok := inst.sqlMeta[servedSQL]
+	if !ok {
+		return // bounds evicted — keep the prior pack rather than mis-pin
 	}
-	inst.inFlight = false
-	inst.lastDur = dur
+	pixels, err := packRaster(rec, meta.w, meta.h)
 	if err != nil {
-		inst.lastErr = err
+		inst.laneErr = err
 		return
 	}
-	inst.lastErr = nil
 	inst.pixels = pixels
-	inst.resW = w
-	inst.resH = h
-	inst.bounds = bounds
+	inst.packW = meta.w
+	inst.packH = meta.h
+	inst.packBounds = meta.bounds
 	inst.version++
-	inst.haveResult = true
-	inst.resultKey = key
+	inst.lastPackedSQL = servedSQL
 }
 
-// fetchRaster runs the SQL and packs the dense 4×UInt8 (r,g,b,a) result into a
-// row-major []uint32 of 0xRRGGBBAA. WITH FILL yields exactly w*h rows; the
-// length is padded/truncated defensively so the texture upload always matches.
-func (inst *MapDriver) fetchRaster(sql string, w, h uint32) (pixels []uint32, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), mapFetchTimeout)
-	defer cancel()
-	rdr, body, _, fErr := inst.client.ExecuteArrowStream(ctx, sql, memory.NewGoAllocator())
-	if fErr != nil {
-		err = fErr
+// packRaster packs a dense 4×UInt8 (r,g,b,a) raster record into a row-major
+// []uint32 of 0xRRGGBBAA. WITH FILL yields exactly w*h rows; the length is
+// padded/truncated defensively so the texture upload always matches.
+func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error) {
+	if rec.NumCols() < 4 {
+		err = fmt.Errorf("raster query must SELECT 4 columns (r,g,b,a); got %d", rec.NumCols())
 		return
 	}
-	defer func() {
-		rdr.Release()
-		_ = body.Close()
-	}()
-
+	ra, ok1 := rec.Column(0).(*array.Uint8)
+	ga, ok2 := rec.Column(1).(*array.Uint8)
+	ba, ok3 := rec.Column(2).(*array.Uint8)
+	aa, ok4 := rec.Column(3).(*array.Uint8)
+	if !ok1 || !ok2 || !ok3 || !ok4 {
+		err = fmt.Errorf("raster columns must be UInt8 (got %s, %s, %s, %s)",
+			rec.Column(0).DataType(), rec.Column(1).DataType(),
+			rec.Column(2).DataType(), rec.Column(3).DataType())
+		return
+	}
 	n := int(w) * int(h)
+	rows := int(rec.NumRows())
 	pixels = make([]uint32, 0, n)
-	for rdr.Next() {
-		rec := rdr.Record()
-		if rec.NumCols() < 4 {
-			err = fmt.Errorf("raster query must SELECT 4 columns (r,g,b,a); got %d", rec.NumCols())
-			return
-		}
-		ra, ok1 := rec.Column(0).(*array.Uint8)
-		ga, ok2 := rec.Column(1).(*array.Uint8)
-		ba, ok3 := rec.Column(2).(*array.Uint8)
-		aa, ok4 := rec.Column(3).(*array.Uint8)
-		if !ok1 || !ok2 || !ok3 || !ok4 {
-			err = fmt.Errorf("raster columns must be UInt8 (got %s, %s, %s, %s)",
-				rec.Column(0).DataType(), rec.Column(1).DataType(),
-				rec.Column(2).DataType(), rec.Column(3).DataType())
-			return
-		}
-		rows := int(rec.NumRows())
-		for i := 0; i < rows; i++ {
-			pixels = append(pixels, (uint32(ra.Value(i))<<24)|
-				(uint32(ga.Value(i))<<16)|(uint32(ba.Value(i))<<8)|uint32(aa.Value(i)))
-		}
-	}
-	if rdr.Err() != nil {
-		err = rdr.Err()
-		return
+	for i := 0; i < rows; i++ {
+		pixels = append(pixels, (uint32(ra.Value(i))<<24)|
+			(uint32(ga.Value(i))<<16)|(uint32(ba.Value(i))<<8)|uint32(aa.Value(i)))
 	}
 	if len(pixels) < n {
 		pixels = append(pixels, make([]uint32, n-len(pixels))...)
@@ -370,27 +366,16 @@ func (inst *MapDriver) fetchRaster(sql string, w, h uint32) (pixels []uint32, er
 	return
 }
 
-func (inst *MapDriver) setErr(err error) {
-	inst.mu.Lock()
-	inst.lastErr = err
-	inst.mu.Unlock()
-}
-
 func (inst *MapDriver) statusLine() string {
-	inst.mu.Lock()
-	inFlight := inst.inFlight
-	have := inst.haveResult
-	err := inst.lastErr
-	w, h := inst.resW, inst.resH
-	dur := inst.lastDur
-	inst.mu.Unlock()
 	switch {
-	case err != nil:
-		return "query error: " + err.Error()
-	case inFlight:
+	case inst.controlErr != "":
+		return "config: " + inst.controlErr
+	case inst.laneErr != nil:
+		return "query error: " + inst.laneErr.Error()
+	case inst.loading:
 		return "rendering tile…"
-	case have:
-		return fmt.Sprintf("%d×%d raster · %s", w, h, dur.Round(time.Millisecond))
+	case inst.packW > 0:
+		return fmt.Sprintf("%d×%d raster", inst.packW, inst.packH)
 	default:
 		return "pan/zoom over a ClickHouse table with mercator_x/mercator_y (e.g. planes_mercator)"
 	}

@@ -3,6 +3,7 @@ package play
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -19,8 +20,9 @@ import (
 // and is exercised by tests until then.
 
 type nodeLane struct {
-	exec  nodeExecutorI
-	alloc memory.Allocator
+	exec    nodeExecutorI
+	alloc   memory.Allocator
+	timeout time.Duration // per-execution timeout (0 = none); the Map's remote sources need ~60s
 
 	mu        sync.Mutex
 	result    *nodeResult // last-good (owned); retained across a successful supersede
@@ -31,11 +33,11 @@ type nodeLane struct {
 	cancel    context.CancelFunc
 }
 
-func newNodeLane(exec nodeExecutorI, alloc memory.Allocator) (inst *nodeLane) {
+func newNodeLane(exec nodeExecutorI, alloc memory.Allocator, timeout time.Duration) (inst *nodeLane) {
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
-	inst = &nodeLane{exec: exec, alloc: alloc}
+	inst = &nodeLane{exec: exec, alloc: alloc, timeout: timeout}
 	return
 }
 
@@ -73,7 +75,13 @@ func (inst *nodeLane) startLocked(sql string) {
 	}
 	inst.gen++
 	gen := inst.gen
-	ctx, cancel := context.WithCancel(context.Background())
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if inst.timeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), inst.timeout)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 	inst.cancel = cancel
 	inst.loading = true
 	go inst.run(ctx, gen, sql)
