@@ -116,6 +116,39 @@ func TestFuseToSinkErrorsOnUnparseable(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestFuseNodeLeafCTEIsItsBody(t *testing.T) {
+	_, res, err := fuseToSink("WITH recent AS (SELECT 1 AS x), bk AS (SELECT x FROM recent) SELECT * FROM bk")
+	require.NoError(t, err)
+	exec := fuseNode(res, "recent")
+	require.Contains(t, exec, "SELECT 1")
+	require.NotContains(t, exec, "WITH", "a leaf CTE has no deps, so no WITH clause")
+}
+
+func TestFuseNodeDependentCTEAssemblesWith(t *testing.T) {
+	_, res, err := fuseToSink("WITH recent AS (SELECT 1 AS x), bk AS (SELECT x, count() AS n FROM recent GROUP BY x) SELECT * FROM bk")
+	require.NoError(t, err)
+	exec := fuseNode(res, "bk")
+	require.Contains(t, exec, "WITH recent AS")
+	require.Contains(t, exec, "FROM recent")
+}
+
+func TestFuseNodePrependsPrelude(t *testing.T) {
+	_, res, err := fuseToSink("SET param_x = 1; WITH a AS (SELECT {x:UInt8} AS v) SELECT v FROM a")
+	require.NoError(t, err)
+	exec := fuseNode(res, "a")
+	require.Contains(t, exec, "SET param_x = 1")
+	require.Contains(t, exec, "{x:UInt8}")
+}
+
+func TestTransitiveDepsTopoOrder(t *testing.T) {
+	res := splitResult{Nodes: []splitNode{
+		{ID: "a"},
+		{ID: "b", DependsOn: []NodeID{"a"}},
+		{ID: "c", DependsOn: []NodeID{"b"}},
+	}}
+	require.Equal(t, []NodeID{"a", "b"}, transitiveDeps(res, "c"))
+}
+
 func TestCheckAcyclic(t *testing.T) {
 	require.NoError(t, checkAcyclic([]splitNode{
 		{ID: "a"},

@@ -37,8 +37,9 @@ type splitNode struct {
 
 // splitResult is the recovered node graph for an editor buffer.
 type splitResult struct {
-	Nodes []splitNode
-	Sink  NodeID // the node panels bind to — the last statement's terminal SELECT
+	Nodes   []splitNode
+	Sink    NodeID   // the node panels bind to — the last statement's terminal SELECT
+	Prelude []string // the SET statements (param bindings), prepended when fusing any node
 }
 
 // splitGraph recovers the node graph from an editor buffer (ADR-0097 3a). The
@@ -58,6 +59,11 @@ func splitGraph(sql string) (res splitResult, err error) {
 		return
 	}
 	stmt := stmts[sinkIdx]
+	for _, s := range stmts {
+		if isSetStatement(s) {
+			res.Prelude = append(res.Prelude, s)
+		}
+	}
 
 	pr, pErr := nanopass.Parse(stmt)
 	if pErr != nil {
@@ -114,19 +120,72 @@ func fuseToSink(sql string) (executable string, res splitResult, err error) {
 	if err != nil {
 		return
 	}
-	parts := make([]string, 0, 2)
-	for _, s := range statementSplit(sql) {
-		if isSetStatement(s) {
-			parts = append(parts, s)
-		}
+	executable = fuseNode(res, res.Sink)
+	return
+}
+
+// fuseNode assembles the executable SQL for one node (ADR-0097 3d): the SET
+// prelude, then — for the sink — the whole statement (CTEs inline), or for a CTE
+// node a `WITH <transitive dep CTEs, topologically ordered> <node body>`. The
+// client's ExtractParams re-lifts the prelude to URL params at execution.
+func fuseNode(res splitResult, nodeID NodeID) (executable string) {
+	parts := make([]string, 0, len(res.Prelude)+1)
+	parts = append(parts, res.Prelude...)
+	node, ok := findSplitNode(res, nodeID)
+	if !ok {
+		return strings.Join(parts, ";\n")
 	}
+	if node.Kind == splitNodeStatement {
+		parts = append(parts, node.SQL)
+		return strings.Join(parts, ";\n")
+	}
+	deps := transitiveDeps(res, nodeID)
+	if len(deps) == 0 {
+		parts = append(parts, node.SQL)
+		return strings.Join(parts, ";\n")
+	}
+	withDefs := make([]string, 0, len(deps))
+	for _, d := range deps {
+		dn, found := findSplitNode(res, d)
+		if !found {
+			continue
+		}
+		withDefs = append(withDefs, string(d)+" AS (\n"+dn.SQL+"\n)")
+	}
+	parts = append(parts, "WITH "+strings.Join(withDefs, ",\n")+"\n"+node.SQL)
+	return strings.Join(parts, ";\n")
+}
+
+func findSplitNode(res splitResult, id NodeID) (node splitNode, ok bool) {
 	for i := range res.Nodes {
-		if res.Nodes[i].ID == res.Sink {
-			parts = append(parts, res.Nodes[i].SQL)
-			break
+		if res.Nodes[i].ID == id {
+			return res.Nodes[i], true
 		}
 	}
-	executable = strings.Join(parts, ";\n")
+	return splitNode{}, false
+}
+
+// transitiveDeps returns the transitive data dependencies of a node in
+// topological order (a dependency before anything that reads it), excluding the
+// node itself — the order a WITH clause requires.
+func transitiveDeps(res splitResult, nodeID NodeID) (ordered []NodeID) {
+	seen := make(map[NodeID]bool, 4)
+	var visit func(id NodeID)
+	visit = func(id NodeID) {
+		n, ok := findSplitNode(res, id)
+		if !ok {
+			return
+		}
+		for _, d := range n.DependsOn {
+			if seen[d] {
+				continue
+			}
+			seen[d] = true
+			visit(d)
+			ordered = append(ordered, d)
+		}
+	}
+	visit(nodeID)
 	return
 }
 
