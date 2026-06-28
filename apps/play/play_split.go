@@ -103,6 +103,33 @@ func splitGraph(sql string) (res splitResult, err error) {
 	return
 }
 
+// fuseToSink produces the executable SQL for the fuse-to-sink first cut
+// (ADR-0097 3c): the SET prelude followed by the sink statement. For a single
+// statement this is the original query (the client's ExtractParams re-lifts the
+// SET prelude to URL params either way, so the residual ClickHouse runs is
+// unchanged — behaviour-identical). Materialized intermediates (3d) will instead
+// rewrite the sink to read their results rather than inlining the CTEs.
+func fuseToSink(sql string) (executable string, res splitResult, err error) {
+	res, err = splitGraph(sql)
+	if err != nil {
+		return
+	}
+	parts := make([]string, 0, 2)
+	for _, s := range statementSplit(sql) {
+		if isSetStatement(s) {
+			parts = append(parts, s)
+		}
+	}
+	for i := range res.Nodes {
+		if res.Nodes[i].ID == res.Sink {
+			parts = append(parts, res.Nodes[i].SQL)
+			break
+		}
+	}
+	executable = strings.Join(parts, ";\n")
+	return
+}
+
 // statementSplit splits sql on top-level `;` that are not inside a string
 // literal, a quoted identifier, or a comment — ADR-0097 SD3's one new primitive,
 // mirroring the quote-aware discard-marker scan. Whitespace-only fragments drop.

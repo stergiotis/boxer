@@ -69,6 +69,11 @@ type PlayApp struct {
 	graph  *queryGraph
 	client *Client
 
+	// currentSplit is the ADR-0097 node graph recovered from the last-run
+	// buffer (3a/3c). The sink node is what the panels observe; it backs the
+	// Graph-view chrome (3e) and the materialization policy (3d).
+	currentSplit splitResult
+
 	// endpointDraft is the editable URL in the toolbar endpoint switcher;
 	// launchURL is the original target restored by "External (reset)". See
 	// renderEndpointSwitcher and Client.SetURL (ADR-0094 §SD6).
@@ -573,8 +578,19 @@ func (inst *PlayApp) Render() error {
 		inst.requestRun = false
 		sql := strings.TrimSpace(inst.sql)
 		if sql != "" {
+			// ADR-0097 3c: split the buffer into the node graph and fuse to the
+			// sink for execution. For a single statement the fused SQL is the
+			// original (the client re-lifts the SET prelude either way), so this
+			// is behaviour-identical. On a split/parse failure, fall back to the
+			// raw buffer so ClickHouse reports the error exactly as before.
+			executable, split, fErr := fuseToSink(sql)
+			if fErr != nil {
+				executable = sql
+				split = splitResult{}
+			}
+			inst.currentSplit = split
 			inst.lastSentSql = sql
-			inst.graph.RunMain(sql)
+			inst.graph.RunMain(executable)
 			// Persist on Run: the user's intent is "this is the SQL I
 			// want to keep around". Save-on-Unmount is the fallback
 			// for sessions that never Run; doing both keeps the

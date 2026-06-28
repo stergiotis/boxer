@@ -89,6 +89,33 @@ func TestSplitGraphRejectsSetOnlyBuffer(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestFuseToSinkPlainQueryIsTheOriginal(t *testing.T) {
+	exec, res, err := fuseToSink("SELECT * FROM t")
+	require.NoError(t, err)
+	require.Equal(t, "SELECT * FROM t", exec)
+	require.Equal(t, mainNodeID, res.Sink)
+}
+
+func TestFuseToSinkPreservesSetPrelude(t *testing.T) {
+	exec, _, err := fuseToSink("SET param_x = 1; SELECT {x:UInt8} AS v")
+	require.NoError(t, err)
+	require.Contains(t, exec, "SET param_x = 1")
+	require.Contains(t, exec, "{x:UInt8}")
+}
+
+func TestFuseToSinkCTEQueryInlinesCTEs(t *testing.T) {
+	exec, res, err := fuseToSink("WITH a AS (SELECT 1 AS x) SELECT x FROM a")
+	require.NoError(t, err)
+	require.Len(t, res.Nodes, 2) // a + main
+	require.Contains(t, exec, "WITH a")
+	require.Contains(t, exec, "FROM a")
+}
+
+func TestFuseToSinkErrorsOnUnparseable(t *testing.T) {
+	_, _, err := fuseToSink("this is not sql ;;;")
+	require.Error(t, err)
+}
+
 func TestCheckAcyclic(t *testing.T) {
 	require.NoError(t, checkAcyclic([]splitNode{
 		{ID: "a"},
