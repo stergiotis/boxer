@@ -12,7 +12,7 @@ func TestDetailPanelAcceptClaimsWithSelection(t *testing.T) {
 	p := detailPanel{}
 	schema := schemaWith(strField("id:naturalKey:x"))
 
-	claim, reason := p.Accept(schema, playSignals{selectedRow: 3})
+	claim, reason := p.AcceptForChannel(chMain, schema, playSignals{selectedRow: 3})
 	require.Empty(t, reason)
 	dc, ok := claim.(detailClaim)
 	require.True(t, ok)
@@ -24,19 +24,19 @@ func TestDetailPanelAcceptClaimsWithSelection(t *testing.T) {
 func TestDetailPanelAcceptRejects(t *testing.T) {
 	p := detailPanel{}
 
-	claim, reason := p.Accept(nil, playSignals{selectedRow: 0})
+	claim, reason := p.AcceptForChannel(chMain, nil, playSignals{selectedRow: 0})
 	require.Nil(t, claim)
 	require.NotEmpty(t, reason, "no schema → run-a-query empty state")
 
-	claim, reason = p.Accept(schemaWith(strField("c")), playSignals{selectedRow: -1})
+	claim, reason = p.AcceptForChannel(chMain, schemaWith(strField("c")), playSignals{selectedRow: -1})
 	require.Nil(t, claim)
 	require.NotEmpty(t, reason, "no selection → select-a-row empty state")
 }
 
-func TestDetailPanelBindsMainNode(t *testing.T) {
+func TestDetailPanelDeclaresMainChannel(t *testing.T) {
 	var p PanelI = detailPanel{}
-	require.Equal(t, mainNodeID, p.BoundNode())
 	require.Equal(t, PanelID("detail"), p.ID())
+	require.Equal(t, []ChannelSpec{{ID: chMain, Required: true, Label: "row detail"}}, p.Channels())
 }
 
 // The selection signal round-trips through the legacy selectedRow store: the

@@ -27,14 +27,18 @@ type detailPanel struct {
 	app *PlayApp
 }
 
-func (inst detailPanel) ID() PanelID       { return "detail" }
-func (inst detailPanel) BoundNode() NodeID { return mainNodeID }
+func (inst detailPanel) ID() PanelID { return "detail" }
 
-// Accept gates on a result schema and a valid selection read from the signal
-// env: no schema → "run a query"; no selected row → "select a row". Detail
+// Channels: one required "main" channel — the row whose detail is shown.
+func (inst detailPanel) Channels() []ChannelSpec {
+	return []ChannelSpec{{ID: chMain, Required: true, Label: "row detail"}}
+}
+
+// AcceptForChannel gates on a result schema and a valid selection read from the
+// signal env: no schema → "run a query"; no selected row → "select a row". Detail
 // renders any schema — leeway card vs ad-hoc grouping is decided inside
 // renderDetailPane, so there is no schema-shape rejection (unlike the Timeline).
-func (inst detailPanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim PanelClaim, reason string) {
+func (inst detailPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
 	if schema == nil {
 		reason = "Run a query, then select a row to see its detail."
 		return
@@ -51,18 +55,19 @@ func (inst detailPanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim Pane
 // Render draws the detail card for the claimed row. emit is unused — Detail is a
 // pure consumer. A row past the result's end (a stale selection across a shrunk
 // or empty result) falls back to the "select a row" empty-state.
-func (inst detailPanel) Render(rec arrow.RecordBatch, claim PanelClaim, emit SignalEmitterI) {
-	dc, ok := claim.(detailClaim)
+func (inst detailPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
+	main := filled[chMain]
+	dc, ok := main.Claim.(detailClaim)
 	if !ok {
 		return
 	}
-	if dc.row < 0 || dc.row >= rec.NumRows() {
+	if dc.row < 0 || dc.row >= main.Rec.NumRows() {
 		for rt := range c.RichTextLabel("Select a row in the Table tab to see its detail.") {
 			rt.Small().Weak()
 		}
 		return
 	}
-	inst.app.renderDetailPane(rec, dc.schema, dc.row)
+	inst.app.renderDetailPane(main.Rec, dc.schema, dc.row)
 }
 
 // selectionParam encodes a selected row index as the `selection` signal's value —

@@ -24,18 +24,18 @@ func strField(name string) arrow.Field {
 func TestTimelinePanelAcceptClaimsRenderableSchema(t *testing.T) {
 	p := timelinePanel{}
 
-	claim, reason := p.Accept(schemaWith(tsField(timelineSlotTime)), emptySignals{})
+	claim, reason := p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime)), emptySignals{})
 	require.Empty(t, reason)
 	ct, ok := claim.(timelineContract)
 	require.True(t, ok)
 	require.Equal(t, timelineModePoints, ct.Mode)
 
-	claim, reason = p.Accept(schemaWith(tsField(timelineSlotTime), tsField(timelineSlotTimeEnd)), emptySignals{})
+	claim, reason = p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime), tsField(timelineSlotTimeEnd)), emptySignals{})
 	require.Empty(t, reason)
 	ct, _ = claim.(timelineContract)
 	require.Equal(t, timelineModeIntervals, ct.Mode)
 
-	claim, reason = p.Accept(schemaWith(tsField(timelineSlotTime), strField(timelineSlotLabel)), emptySignals{})
+	claim, reason = p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime), strField(timelineSlotLabel)), emptySignals{})
 	require.Empty(t, reason)
 	ct, _ = claim.(timelineContract)
 	require.Equal(t, timelineModeAnnotations, ct.Mode)
@@ -57,17 +57,17 @@ func TestTimelinePanelAcceptRejectsWithReason(t *testing.T) {
 		{"no contract columns", schemaWith(strField("whatever"))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			claim, reason := p.Accept(tc.schema, emptySignals{})
+			claim, reason := p.AcceptForChannel(chEvents, tc.schema, emptySignals{})
 			require.Nil(t, claim, "reject must carry no claim")
 			require.NotEmpty(t, reason, "reject must carry an empty-state reason")
 		})
 	}
 }
 
-func TestTimelinePanelBindsMainNode(t *testing.T) {
+func TestTimelinePanelDeclaresEventsChannel(t *testing.T) {
 	var p PanelI = timelinePanel{}
-	require.Equal(t, mainNodeID, p.BoundNode())
 	require.Equal(t, PanelID("timeline"), p.ID())
+	require.Equal(t, []ChannelSpec{{ID: chEvents, Required: true, Label: "events"}}, p.Channels())
 }
 
 // The selection emitter bridges signalSelection writes to the legacy

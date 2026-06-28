@@ -13,14 +13,18 @@ type tablePanel struct {
 	app *PlayApp
 }
 
-func (inst tablePanel) ID() PanelID       { return "table" }
-func (inst tablePanel) BoundNode() NodeID { return mainNodeID }
+func (inst tablePanel) ID() PanelID { return "table" }
 
-// Accept claims any non-nil result; the claim is the row to highlight, read from
-// the selection signal (-1 ⇒ nothing highlighted). The loading / error / empty /
-// zero-row states stay in renderTableTab — they depend on the query FSM and the
-// row count, not the schema shape.
-func (inst tablePanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim PanelClaim, reason string) {
+// Channels: one required "main" channel — the result rows.
+func (inst tablePanel) Channels() []ChannelSpec {
+	return []ChannelSpec{{ID: chMain, Required: true, Label: "rows"}}
+}
+
+// AcceptForChannel claims any non-nil result; the claim is the row to highlight,
+// read from the selection signal (-1 ⇒ nothing highlighted). The loading / error
+// / empty / zero-row states stay in renderTableTab — they depend on the query FSM
+// and the row count, not the schema shape.
+func (inst tablePanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
 	if schema == nil {
 		reason = "Run a query to see results."
 		return
@@ -32,7 +36,8 @@ func (inst tablePanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim Panel
 
 // Render draws the master table for the claimed selection, publishing row clicks
 // through emit (the producer side of the viewof duality).
-func (inst tablePanel) Render(rec arrow.RecordBatch, claim PanelClaim, emit SignalEmitterI) {
-	row, _ := claim.(int64)
-	inst.app.renderMasterTable(rec, rec.Schema(), rec.NumRows(), row, emit)
+func (inst tablePanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
+	main := filled[chMain]
+	row, _ := main.Claim.(int64)
+	inst.app.renderMasterTable(main.Rec, main.Rec.Schema(), main.Rec.NumRows(), row, emit)
 }

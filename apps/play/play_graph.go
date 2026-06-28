@@ -34,13 +34,13 @@ type SignalID = string
 // PanelID identifies a panel (a dock tab that observes a node).
 type PanelID string
 
-// PanelClaim is a panel's interpretation of its node's output schema, opaque to
-// the runtime — Timeline's Mode+slots, Detail's leeway-vs-ad-hoc choice, the
-// Map's framebuffer mapping. Computed once in Accept, consumed in Render.
-type PanelClaim any
+// ChannelClaim is a panel's interpretation of one channel's node output schema,
+// opaque to the runtime — Timeline's Mode+slots, Detail's leeway-vs-ad-hoc
+// choice. Computed in AcceptForChannel, consumed in Render.
+type ChannelClaim any
 
 // SignalEnvI is the read-only view of the graph's signal (unbound-param) values
-// at a single consistent revision (ADR-0097 SD4). Panels read it in Accept.
+// at a single consistent revision (ADR-0097 SD4). Panels read it in AcceptForChannel.
 type SignalEnvI interface {
 	Get(id SignalID) (param env.Param, ok bool)
 	Revision() uint64
@@ -53,19 +53,48 @@ type SignalEmitterI interface {
 	Emit(id SignalID, value any)
 }
 
-// PanelI is the rigorous panel contract (ADR-0097 interface, SD6/SD7): an
-// observer bound to exactly one node, with a typed accept/reject negotiation
-// generalising the Timeline Mode/Reject pattern.
+// ChannelID identifies a typed input channel of a panel (ADR-0097 SD6/SD7,
+// amended slice 4): the slot an eligible node fills. Single-input panels declare
+// one channel; the Timeline declares events + bands.
+type ChannelID string
+
+const (
+	chMain   ChannelID = "main"   // the lone channel of single-input panels (Table, Projection, Detail)
+	chEvents ChannelID = "events" // the Timeline's foreground marks (the Timeline's bands channel arrives in slice 4b)
+)
+
+// ChannelSpec declares one of a panel's input channels. A panel is renderable iff
+// all its Required channels are filled.
+type ChannelSpec struct {
+	ID       ChannelID
+	Required bool
+	Label    string // human label for the Graph-view channel UI (slice 4c)
+}
+
+// ChannelResult is the node result bound to a channel, with the panel's resolved
+// per-channel claim. Passed to Render in the filled map.
+type ChannelResult struct {
+	Node  NodeID
+	Rec   arrow.RecordBatch
+	Claim ChannelClaim
+}
+
+// PanelI is the panel contract (ADR-0097 SD6/SD7, amended slice 4): a panel
+// declares typed input channels, each filled by an eligible node. The
+// single-channel case is the pre-slice-4 single-node observer, unchanged.
 type PanelI interface {
 	ID() PanelID
-	BoundNode() NodeID
-	// Accept is the capability check: given the bound node's output schema and
-	// the current signal env, return a claim (non-nil ⇒ render) or a human-facing
-	// reason (the empty-state text). Pure: no side effects, no rendering.
-	Accept(schema *arrow.Schema, sig SignalEnvI) (claim PanelClaim, reason string)
-	// Render draws the node's result. Called only when Accept returned a claim
-	// and the panel is visible (demand). May publish signal mutations via emit.
-	Render(rec arrow.RecordBatch, claim PanelClaim, emit SignalEmitterI)
+	// Channels declares the panel's input channels in render/assignment order.
+	Channels() []ChannelSpec
+	// AcceptForChannel is the per-channel capability check (SD6): given a candidate
+	// node's output schema for ch and the signal env, return a claim (non-nil ⇒
+	// eligible) or a human-facing reason (the empty-state text). Pure: no side
+	// effects, no rendering.
+	AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string)
+	// Render draws the panel from its filled channels — called when every Required
+	// channel is filled (and the panel is visible). May publish signal mutations
+	// via emit.
+	Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI)
 }
 
 // nodeExecutorI runs a compiled query and returns its single, concatenated Arrow

@@ -138,10 +138,13 @@ func TestGraphSignalRevisionAdvancesOnlyOnChange(t *testing.T) {
 // claims the field count. It proves the accept/reject contract end to end.
 type countPanel struct{}
 
-func (countPanel) ID() PanelID       { return "count" }
-func (countPanel) BoundNode() NodeID { return "main" }
+func (countPanel) ID() PanelID { return "count" }
 
-func (countPanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim PanelClaim, reason string) {
+func (countPanel) Channels() []ChannelSpec {
+	return []ChannelSpec{{ID: chMain, Required: true}}
+}
+
+func (countPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
 	if schema == nil {
 		reason = "no result yet — run a query"
 		return
@@ -150,7 +153,7 @@ func (countPanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim PanelClaim
 	return
 }
 
-func (countPanel) Render(rec arrow.RecordBatch, claim PanelClaim, emit SignalEmitterI) {}
+func (countPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {}
 
 func TestPanelAcceptRejectContract(t *testing.T) {
 	exec := &mockExecutor{build: func(string) arrow.RecordBatch { return int64Rec("n", 1) }}
@@ -159,15 +162,15 @@ func TestPanelAcceptRejectContract(t *testing.T) {
 	g.addNode(&Node{ID: "main", Compile: func(SignalEnvI) (string, error) { return "SELECT 1", nil }})
 
 	var p PanelI = countPanel{}
-	require.Equal(t, NodeID("main"), p.BoundNode())
+	require.Equal(t, []ChannelSpec{{ID: chMain, Required: true}}, p.Channels())
 
-	claim, reason := p.Accept(nil, g.signals())
+	claim, reason := p.AcceptForChannel(chMain, nil, g.signals())
 	require.Nil(t, claim)
 	require.NotEmpty(t, reason, "no schema ⇒ reject with an empty-state reason")
 
-	r, err := g.demand(context.Background(), p.BoundNode())
+	r, err := g.demand(context.Background(), "main")
 	require.NoError(t, err)
-	claim, reason = p.Accept(r.schema, g.signals())
+	claim, reason = p.AcceptForChannel(chMain, r.schema, g.signals())
 	require.Empty(t, reason, "a real schema ⇒ accept, no reason")
 	require.Equal(t, 1, claim)
 }

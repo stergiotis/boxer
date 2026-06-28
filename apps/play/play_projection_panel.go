@@ -15,10 +15,14 @@ type projectionPanel struct {
 	app *PlayApp
 }
 
-func (inst projectionPanel) ID() PanelID       { return "projection" }
-func (inst projectionPanel) BoundNode() NodeID { return mainNodeID }
+func (inst projectionPanel) ID() PanelID { return "projection" }
 
-func (inst projectionPanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim PanelClaim, reason string) {
+// Channels: one required "main" channel — the points to scatter.
+func (inst projectionPanel) Channels() []ChannelSpec {
+	return []ChannelSpec{{ID: chMain, Required: true, Label: "points"}}
+}
+
+func (inst projectionPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
 	if schema == nil {
 		reason = "Run a query to see results."
 		return
@@ -28,7 +32,8 @@ func (inst projectionPanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim 
 	return
 }
 
-func (inst projectionPanel) Render(rec arrow.RecordBatch, claim PanelClaim, emit SignalEmitterI) {
-	row, _ := claim.(int64)
-	inst.app.renderProjection(rec, row, emit)
+func (inst projectionPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
+	main := filled[chMain]
+	row, _ := main.Claim.(int64)
+	inst.app.renderProjection(main.Rec, row, emit)
 }

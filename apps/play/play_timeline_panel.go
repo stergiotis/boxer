@@ -26,13 +26,18 @@ type timelinePanel struct {
 	driver *TimelineDriver
 }
 
-func (inst timelinePanel) ID() PanelID       { return "timeline" }
-func (inst timelinePanel) BoundNode() NodeID { return mainNodeID }
+func (inst timelinePanel) ID() PanelID { return "timeline" }
 
-// Accept lifts resolveContract: a renderable contract (Mode != None) becomes the
-// claim; otherwise the contract's Reject is the empty-state reason. Pure — it
-// reads no signals yet (the Timeline contract is schema-only).
-func (inst timelinePanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim PanelClaim, reason string) {
+// Channels: the required "events" channel (foreground marks). The optional
+// "bands" channel is added in slice 4b, when bands become a node.
+func (inst timelinePanel) Channels() []ChannelSpec {
+	return []ChannelSpec{{ID: chEvents, Required: true, Label: "events"}}
+}
+
+// AcceptForChannel lifts resolveContract for the events channel: a renderable
+// contract (Mode != None) becomes the claim; otherwise the contract's Reject is
+// the empty-state reason. Pure — it reads no signals yet (schema-only).
+func (inst timelinePanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
 	ct := resolveContract(schema)
 	if ct.Mode == timelineModeNone {
 		reason = ct.Reject
@@ -42,13 +47,14 @@ func (inst timelinePanel) Accept(schema *arrow.Schema, sig SignalEnvI) (claim Pa
 	return
 }
 
-// Render delegates to the driver with the contract Accept already resolved.
-func (inst timelinePanel) Render(rec arrow.RecordBatch, claim PanelClaim, emit SignalEmitterI) {
-	ct, ok := claim.(timelineContract)
+// Render delegates to the driver with the events contract AcceptForChannel resolved.
+func (inst timelinePanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
+	ev := filled[chEvents]
+	ct, ok := ev.Claim.(timelineContract)
 	if !ok {
 		return
 	}
-	inst.driver.renderContract(rec, ct, emit)
+	inst.driver.renderContract(ev.Rec, ct, emit)
 }
 
 // selectedRowEmitter bridges a panel's selection signal to PlayApp.selectedRow —

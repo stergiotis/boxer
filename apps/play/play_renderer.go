@@ -1165,9 +1165,9 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		return
 	}
 	inst.pager.Render()
-	panel := tablePanel{app: inst}
-	claim, _ := panel.Accept(schema, playSignals{selectedRow: inst.selectedRow})
-	panel.Render(rec, claim, selectedRowEmitter{target: &inst.selectedRow})
+	dispatchPanel(tablePanel{app: inst}, map[ChannelID]channelInput{
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: playSignals{selectedRow: inst.selectedRow}},
+	}, selectedRowEmitter{target: &inst.selectedRow})
 }
 
 // renderProjectionTab is the Projection dock tab body: the UMAP scatter
@@ -1185,9 +1185,9 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, err error) {
 		inst.renderResultsEmpty()
 		return
 	}
-	panel := projectionPanel{app: inst}
-	claim, _ := panel.Accept(rec.Schema(), playSignals{selectedRow: inst.selectedRow})
-	panel.Render(rec, claim, selectedRowEmitter{target: &inst.selectedRow})
+	dispatchPanel(projectionPanel{app: inst}, map[ChannelID]channelInput{
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: rec.Schema(), sig: playSignals{selectedRow: inst.selectedRow}},
+	}, selectedRowEmitter{target: &inst.selectedRow})
 }
 
 // renderTimelineTab is the Timeline dock tab body: the calendar-axis
@@ -1217,13 +1217,14 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		}
 		return
 	}
-	panel := timelinePanel{driver: inst.timeline}
-	claim, reason := panel.Accept(schema, emptySignals{})
-	if reason != "" {
+	reject := dispatchPanel(timelinePanel{driver: inst.timeline}, map[ChannelID]channelInput{
+		chEvents: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: emptySignals{}},
+	}, selectedRowEmitter{target: &inst.selectedRow})
+	if reject != "" {
 		// Contract rejected: show the reason + the help, the same debug-in-panel
 		// affordance the driver used to render itself.
 		for range c.Vertical().KeepIter() {
-			for rt := range c.RichTextLabel(reason) {
+			for rt := range c.RichTextLabel(reject) {
 				rt.Strong()
 			}
 			c.AddSpace(8)
@@ -1231,7 +1232,6 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		}
 		return
 	}
-	panel.Render(rec, claim, selectedRowEmitter{target: &inst.selectedRow})
 }
 
 // renderDetailTab is the Detail dock tab body: the leeway card stack for the
@@ -1250,15 +1250,15 @@ func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema
 		}
 		return
 	}
-	panel := detailPanel{app: inst}
-	claim, reason := panel.Accept(schema, playSignals{selectedRow: inst.selectedRow})
-	if reason != "" {
-		for rt := range c.RichTextLabel(reason) {
+	reject := dispatchPanel(detailPanel{app: inst}, map[ChannelID]channelInput{
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: playSignals{selectedRow: inst.selectedRow}},
+	}, nil)
+	if reject != "" {
+		for rt := range c.RichTextLabel(reject) {
 			rt.Small().Weak()
 		}
 		return
 	}
-	panel.Render(rec, claim, nil)
 }
 
 func (inst *PlayApp) renderResultsLoading() {

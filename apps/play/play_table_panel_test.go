@@ -10,7 +10,7 @@ import (
 // signal env.
 func TestTablePanelAcceptClaimsSelectionRow(t *testing.T) {
 	p := tablePanel{}
-	claim, reason := p.Accept(schemaWith(strField("c")), playSignals{selectedRow: 4})
+	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), playSignals{selectedRow: 4})
 	require.Empty(t, reason)
 	row, ok := claim.(int64)
 	require.True(t, ok)
@@ -21,7 +21,7 @@ func TestTablePanelAcceptClaimsSelectionRow(t *testing.T) {
 // highlighted), so Accept claims rather than rejecting.
 func TestTablePanelClaimsWithoutSelection(t *testing.T) {
 	p := tablePanel{}
-	claim, reason := p.Accept(schemaWith(strField("c")), playSignals{selectedRow: -1})
+	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), playSignals{selectedRow: -1})
 	require.Empty(t, reason)
 	row, _ := claim.(int64)
 	require.Equal(t, int64(-1), row)
@@ -29,13 +29,13 @@ func TestTablePanelClaimsWithoutSelection(t *testing.T) {
 
 func TestTablePanelRejectsNilSchema(t *testing.T) {
 	p := tablePanel{}
-	claim, reason := p.Accept(nil, playSignals{selectedRow: 0})
+	claim, reason := p.AcceptForChannel(chMain, nil, playSignals{selectedRow: 0})
 	require.Nil(t, claim)
 	require.NotEmpty(t, reason)
 }
 
-func TestTablePanelBindsMainNode(t *testing.T) {
+func TestTablePanelDeclaresMainChannel(t *testing.T) {
 	var p PanelI = tablePanel{}
-	require.Equal(t, mainNodeID, p.BoundNode())
 	require.Equal(t, PanelID("table"), p.ID())
+	require.Equal(t, []ChannelSpec{{ID: chMain, Required: true, Label: "rows"}}, p.Channels())
 }
