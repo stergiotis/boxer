@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-06-26T22:14:21Z
+generated-at: 2026-06-28T12:45:47Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -120,7 +120,7 @@ generated-at: 2026-06-26T22:14:21Z
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
-| `SWISSTOPO_TILES_DIR` | path | — | — |  | directory containing swissALTI3D 2m COG tiles for the elevation-profile demo |
+| `SWISSTOPO_TILES_DIR` | path | `~/data/swisstopo` | — |  | directory containing swissALTI3D 2m COG tiles for the terrainscope app |
 
 ## system (20)
 
@@ -230,5 +230,5 @@ generated-at: 2026-06-26T22:14:21Z
 | `SPINNAKER_PLAY_SCREENSHOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `SPINNAKER_PLAY_SQL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `SPINNAKER_PLAY_TIMELINE_BANDS_SQL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SWISSTOPO_TILES_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets` |
+| `SWISSTOPO_TILES_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/terrainscope` |
 | `WINDOWHOST_DEBUG_RENDER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/windowhost` |

@@ -235,22 +235,6 @@ func init() {
 		SourceFunc:  renderColorsStylingDemo,
 		Render:      func(ids *c.WidgetIdStack) { renderColorsStylingDemo(ids) },
 	})
-	registry.Register(registry.Demo{
-		Name:        "elevation-profile",
-		Category:    "Charts & plots",
-		Title:       icons.IconMap + " elevation profile",
-		Stage:       [2]float32{1024, 860},
-		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic, // walkers tile uploads race the 8-frame settle; a missing tile renders as a black square in one run
-		Kind:        registry.DemoKindMixed,
-		Description: "Click two points on a slippy map of Switzerland to compute and display the terrain elevation profile between them.",
-		Init: func(_ *c.WidgetIdStack) (state any) {
-			return &elevationProfileState{}
-		},
-		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			demoElevationProfile(ids, state.(*elevationProfileState))
-		},
-		SourceFunc: demoElevationProfile,
-	})
 }
 
 // renderColorsStylingDemo is the body of the "Colors & Styling" window in

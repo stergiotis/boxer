@@ -33,6 +33,7 @@ import (
 	// Side-effect imports: each app's init() registers into app.DefaultRegistry.
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"
+	_ "github.com/stergiotis/boxer/apps/terrainscope"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/leewaywidgets"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
