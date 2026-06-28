@@ -51,16 +51,19 @@ plus the sweep computation in the library. Phased, descope-over-gate:
 - **Phase 4 (deferred)** — extract a headless elevation service (sole tile reader,
   answers profile / LOS / sweep over the bus); `terrainscope` becomes a zero-fs-cap
   bus client (ADR-0090 shape).
-- **Phase 5 (landed)** — center-position uncertainty.
-  `ElevationSampler.LineOfSightSweepEnsemble` Monte-Carlo samples the observer from
-  an isotropic 2D Gaussian (controllable σ + sample count, seeded for
-  reproducibility) and reduces the ensemble to a per-bearing visibility probability
-  and a per-(bearing, distance) terrain envelope (`LOSEnsembleResult`; pure
-  `aggregateEnsemble` is unit-tested without tiles). The app renders both — the map
-  fan is coloured by visibility probability, the plot adds the elevation envelope
-  band, the legend carries per-ray visibility percentages. Every analysis parameter
-  (heights, sweep range/step, σ, samples) is now a **live control** that recomputes
-  reactively, coalesced to at most one in-flight worker (leading + trailing).
+- **Phase 5 (landed)** — input uncertainty. `ElevationSampler.LineOfSightSweepEnsemble`
+  takes an `EnsembleSpec` and Monte-Carlo samples **each non-angle input from its own
+  Gaussian** — observer position, target position, observer height, target height
+  (the bearing fan stays deterministic) — seeded for reproducibility. It reduces the
+  ensemble to a per-bearing visibility probability and a per-(bearing, distance)
+  terrain envelope, and records each variable's realised draws (`LOSEnsembleResult`;
+  pure `aggregateEnsemble` is unit-tested without tiles). The app renders: the map
+  fan coloured by visibility probability; the sweep plot's elevation envelope band +
+  per-ray visibility percentages; and a **distributions pane** — the empirical CDF
+  (one step-line per variable) of the recorded draws. Every analysis parameter
+  (heights, sweep range/step, the four σ, samples) is a **live control** that
+  recomputes reactively, coalesced to at most one in-flight worker (leading +
+  trailing).
 
 **Tile access:** Phase 1–3 read tiles directly from `$SWISSTOPO_TILES_DIR` (the env
 var moves from the demo package to the app), matching the demo. This is the chosen

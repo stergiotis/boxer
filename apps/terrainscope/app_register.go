@@ -27,7 +27,7 @@ var manifest = app.Manifest{
 		// Sized to fit the slippy map plus the sweep plot (and its legend)
 		// below it without clipping the window body.
 		PreferredWidth:  960,
-		PreferredHeight: 960,
+		PreferredHeight: 1000,
 	},
 }
 

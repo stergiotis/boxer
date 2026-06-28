@@ -25,6 +25,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -45,9 +46,10 @@ const (
 	swissCenterLon   = 8.2275
 	swissTilesDirEnv = "SWISSTOPO_TILES_DIR"
 	mapStageW        = float32(900)
-	mapStageH        = float32(420)
+	mapStageH        = float32(380)
 	plotHeight       = float32(290)
-	plotMargin       = float32(12) // vertical breathing room around the plot
+	ecdfHeight       = float32(220) // distribution-pane plot height
+	plotMargin       = float32(12)  // vertical breathing room around the plot
 	markerIdPt1      = uint64(100)
 	markerIdPt2      = uint64(200)
 
@@ -65,7 +67,10 @@ const (
 	defaultTargetH      = 0.0
 	defaultSweepHalfDeg = 2.0
 	defaultSweepStepDeg = 0.5
-	defaultSigmaM       = 10.0 // observer-position uncertainty (1σ, metres)
+	defaultSigmaObsPos  = 10.0 // observer-position uncertainty (1σ, metres)
+	defaultSigmaTgtPos  = 5.0  // target-position uncertainty (1σ, metres)
+	defaultSigmaObsH    = 1.0  // observer-height uncertainty (1σ, metres)
+	defaultSigmaTgtH    = 1.0  // target-height uncertainty (1σ, metres)
 	defaultSamples      = 16.0
 )
 
@@ -111,16 +116,19 @@ const (
 // sweepParams is the comparable snapshot of every input that affects the
 // result. The reactive recompute fires whenever it changes.
 type sweepParams struct {
-	fromLat  float64
-	fromLon  float64
-	toLat    float64
-	toLon    float64
-	observer float64
-	target   float64
-	halfDeg  float64
-	stepDeg  float64
-	sigmaM   float64
-	samples  int64
+	fromLat     float64
+	fromLon     float64
+	toLat       float64
+	toLon       float64
+	observer    float64
+	target      float64
+	halfDeg     float64
+	stepDeg     float64
+	sigmaObsPos float64
+	sigmaTgtPos float64
+	sigmaObsH   float64
+	sigmaTgtH   float64
+	samples     int64
 }
 
 // sweepResult is the worker's output, published atomically under App.mu.
@@ -146,7 +154,10 @@ type App struct {
 	targetH      float64
 	sweepHalfDeg float64
 	sweepStepDeg float64
-	sigmaM       float64
+	sigmaObsPos  float64
+	sigmaTgtPos  float64
+	sigmaObsH    float64
+	sigmaTgtH    float64
 	samples      float64
 
 	// Reactive-recompute bookkeeping. lastLaunched is the params snapshot of
@@ -187,7 +198,10 @@ func newApp() (inst *App) {
 		targetH:      defaultTargetH,
 		sweepHalfDeg: defaultSweepHalfDeg,
 		sweepStepDeg: defaultSweepStepDeg,
-		sigmaM:       defaultSigmaM,
+		sigmaObsPos:  defaultSigmaObsPos,
+		sigmaTgtPos:  defaultSigmaTgtPos,
+		sigmaObsH:    defaultSigmaObsH,
+		sigmaTgtH:    defaultSigmaTgtH,
 		samples:      defaultSamples,
 	}
 	return
@@ -229,8 +243,12 @@ func (inst *App) renderBody() {
 		inst.renderControls()
 	}
 	for range c.PanelCentralInside().KeepIter() {
+		// Map stays fixed (it owns drag); the result panes scroll beneath it so
+		// the sweep plot + the distribution pane fit any window height.
 		inst.renderMap()
-		inst.renderResult()
+		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+			inst.renderResult()
+		}
 	}
 	// Single launch site: react to control edits / a fresh selection after
 	// the controls and click have been processed this frame.
@@ -259,9 +277,21 @@ func (inst *App) renderControls() {
 		_ = c.SliderF64(ids.PrepareStr("step"), inst.sweepStepDeg, 0.1, 5).
 			Text("step").Suffix("°").FixedDecimals(2).SendRespVal(&inst.sweepStepDeg)
 	}
+	// Per-input uncertainty (1σ Gaussian); 0 pins that input. The bearing
+	// fan stays deterministic.
 	for range c.Horizontal().KeepIter() {
-		_ = c.SliderF64(ids.PrepareStr("sigma"), inst.sigmaM, 0, 50).
-			Text("centre σ").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaM)
+		_ = c.SliderF64(ids.PrepareStr("sigObsPos"), inst.sigmaObsPos, 0, 50).
+			Text("σ obs pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsPos)
+		_ = c.SliderF64(ids.PrepareStr("sigTgtPos"), inst.sigmaTgtPos, 0, 50).
+			Text("σ tgt pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtPos)
+	}
+	for range c.Horizontal().KeepIter() {
+		_ = c.SliderF64(ids.PrepareStr("sigObsH"), inst.sigmaObsH, 0, 30).
+			Text("σ obs ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsH)
+		_ = c.SliderF64(ids.PrepareStr("sigTgtH"), inst.sigmaTgtH, 0, 30).
+			Text("σ tgt ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtH)
+	}
+	for range c.Horizontal().KeepIter() {
 		_ = c.SliderF64(ids.PrepareStr("samples"), inst.samples, 0, 64).
 			Text("samples").FixedDecimals(0).SendRespVal(&inst.samples)
 	}
@@ -298,16 +328,19 @@ func (inst *App) maybeRecompute() {
 
 func (inst *App) currentParams() (p sweepParams) {
 	return sweepParams{
-		fromLat:  inst.pt1Lat,
-		fromLon:  inst.pt1Lon,
-		toLat:    inst.pt2Lat,
-		toLon:    inst.pt2Lon,
-		observer: inst.observerH,
-		target:   inst.targetH,
-		halfDeg:  inst.sweepHalfDeg,
-		stepDeg:  inst.sweepStepDeg,
-		sigmaM:   inst.sigmaM,
-		samples:  int64(inst.samples + 0.5),
+		fromLat:     inst.pt1Lat,
+		fromLon:     inst.pt1Lon,
+		toLat:       inst.pt2Lat,
+		toLon:       inst.pt2Lon,
+		observer:    inst.observerH,
+		target:      inst.targetH,
+		halfDeg:     inst.sweepHalfDeg,
+		stepDeg:     inst.sweepStepDeg,
+		sigmaObsPos: inst.sigmaObsPos,
+		sigmaTgtPos: inst.sigmaTgtPos,
+		sigmaObsH:   inst.sigmaObsH,
+		sigmaTgtH:   inst.sigmaTgtH,
+		samples:     int64(inst.samples + 0.5),
 	}
 }
 
@@ -385,6 +418,7 @@ func (inst *App) renderResult() {
 	switch {
 	case inst.stage == selectionStagePt2 && res != nil && len(res.ens.Nominal.Rays) > 0:
 		inst.renderSweepPanel(res)
+		inst.renderDistPane(res)
 	case inst.stage == selectionStagePt2 && res == nil:
 		c.Label("Computing line-of-sight sweep ensemble… this may take a moment.").Send()
 	case inst.stage == selectionStagePt1:
@@ -426,8 +460,9 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 
 	c.Label(fmt.Sprintf("Observer %s (+%.1f m)  →  target %s (+%.1f m)",
 		res.fromLV.String(), inst.observerH, res.toLV.String(), inst.targetH)).Send()
-	c.Label(fmt.Sprintf("Range %.0f m  |  rays %d (±%.1f° @ %.2f°)  |  centre uncertainty σ=%.1f m, %d samples",
-		totalDist, len(rays), inst.sweepHalfDeg, inst.sweepStepDeg, ens.SigmaM, ens.Samples)).Send()
+	c.Label(fmt.Sprintf("Range %.0f m  |  rays %d (±%.1f° @ %.2f°)  |  %d samples  |  σ pos %.0f/%.0f m · ht %.0f/%.0f m (obs/tgt)",
+		totalDist, len(rays), inst.sweepHalfDeg, inst.sweepStepDeg, ens.Samples,
+		ens.Spec.SigmaObsPosM, ens.Spec.SigmaTgtPosM, ens.Spec.SigmaObsHeightM, ens.Spec.SigmaTgtHeightM)).Send()
 	c.Label(fmt.Sprintf("Nominal: visible %d / obstructed %d  |  mean visibility under uncertainty: %.0f%%  |  centre %.0f%%",
 		visible, len(rays)-visible, meanProb*100, ens.VisProb[centerIdx]*100)).Send()
 
@@ -482,8 +517,60 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 	c.Plot(ids.PrepareStr(fmt.Sprintf("sweep-plot-%d", inst.plotEpoch))).
 		Width(mapStageW).Height(plotHeight).
 		XAxisLabel("Distance along ray (m)").YAxisLabel("Elevation (m a.s.l.)").
-		Legend().AllowZoom(true).AllowDrag(true).Send()
+		Legend().AllowZoom(true).AllowDrag(true).AllowScroll(false).Send()
 	c.AddSpace(plotMargin)
+}
+
+// renderDistPane shows the empirical CDF of every randomised input variable —
+// the realised draws (deviation from nominal, metres) of each Gaussian we
+// sampled. One step-line per variable on a shared [0,1] axis so the different
+// distributions read side by side.
+func (inst *App) renderDistPane(res *sweepResult) {
+	ens := res.ens
+	c.Separator().Send()
+	if len(ens.Inputs) == 0 {
+		c.Label("Input distributions — raise a σ above to randomise observer/target position or height.").Send()
+		return
+	}
+	c.Label(fmt.Sprintf("Input distributions — empirical CDF of %d samples (deviation from nominal)", ens.Samples)).Send()
+	for i, in := range ens.Inputs {
+		xs, ys := ecdfStep(in.Dev)
+		c.PlotLine(in.Name, xs, ys).Color(distColorAt(i)).Width(1.8).Send()
+	}
+	c.AddSpace(plotMargin)
+	c.Plot(ids.PrepareStr(fmt.Sprintf("dist-plot-%d", inst.plotEpoch))).
+		Width(mapStageW).Height(ecdfHeight).
+		XAxisLabel("deviation from nominal (m)").YAxisLabel("cumulative probability").
+		Legend().AllowZoom(true).AllowDrag(true).AllowScroll(false).
+		IncludeY(0).IncludeY(1).Send()
+	c.AddSpace(plotMargin)
+}
+
+// ecdfStep returns the staircase (xs, ys) of the empirical CDF of vals: a copy
+// is sorted, and F jumps by 1/n at each sample. Connecting the points with
+// straight segments yields the conventional step plot.
+func ecdfStep(vals []float64) (xs []float64, ys []float64) {
+	n := len(vals)
+	if n == 0 {
+		return
+	}
+	s := append([]float64(nil), vals...)
+	sort.Float64s(s)
+	xs = make([]float64, 0, 2*n)
+	ys = make([]float64, 0, 2*n)
+	for i, x := range s {
+		xs = append(xs, x)
+		ys = append(ys, float64(i)/float64(n))
+		xs = append(xs, x)
+		ys = append(ys, float64(i+1)/float64(n))
+	}
+	return
+}
+
+// distColorAt is a small categorical palette for the per-variable ECDF lines.
+func distColorAt(i int) (col color.Color) {
+	palette := []uint32{0x4488ffff, 0xff8844ff, 0x44cc66ff, 0xcc55ccff, 0xddcc44ff}
+	return color.Hex(palette[i%len(palette)])
 }
 
 func statusLabel(stage selectionStageE, computing bool) (label string) {
@@ -559,13 +646,22 @@ func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepPara
 	fromLV := swisstopo.WGS84ToLV95(swisstopo.WGS84Coord{Lat: p.fromLat, Lon: p.fromLon})
 	toLV := swisstopo.WGS84ToLV95(swisstopo.WGS84Coord{Lat: p.toLat, Lon: p.toLon})
 
-	ens, err := s.LineOfSightSweepEnsemble(fromLV, p.observer, toLV, p.target,
-		p.halfDeg, p.stepDeg, p.sigmaM, int(p.samples), sweepSeed)
+	spec := swisstopo.EnsembleSpec{
+		HalfRangeDeg:    p.halfDeg,
+		StepDeg:         p.stepDeg,
+		Samples:         int(p.samples),
+		Seed:            sweepSeed,
+		SigmaObsPosM:    p.sigmaObsPos,
+		SigmaTgtPosM:    p.sigmaTgtPos,
+		SigmaObsHeightM: p.sigmaObsH,
+		SigmaTgtHeightM: p.sigmaTgtH,
+	}
+	ens, err := s.LineOfSightSweepEnsemble(fromLV, p.observer, toLV, p.target, spec)
 	if err != nil {
 		inst.logger.Error().Err(err).
 			Float64("fromLat", p.fromLat).Float64("fromLon", p.fromLon).
 			Float64("toLat", p.toLat).Float64("toLon", p.toLon).
-			Float64("sigmaM", p.sigmaM).Int64("samples", p.samples).
+			Int64("samples", p.samples).
 			Msg("terrainscope: line-of-sight sweep ensemble failed")
 		inst.finishWorker(myEpoch, nil)
 		return
