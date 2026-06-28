@@ -28,6 +28,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -113,6 +114,15 @@ const (
 	selectionStagePt2
 )
 
+// Dock tab ids — stable across frames (they name entries in egui_dock's
+// persistent layout state). The map and the two plots open as tabs in one
+// leaf; the user can drag a tab to split them into side-by-side panes.
+const (
+	dockTabMap   = uint64(1)
+	dockTabSweep = uint64(2)
+	dockTabDist  = uint64(3)
+)
+
 // sweepParams is the comparable snapshot of every input that affects the
 // result. The reactive recompute fires whenever it changes.
 type sweepParams struct {
@@ -133,9 +143,10 @@ type sweepParams struct {
 
 // sweepResult is the worker's output, published atomically under App.mu.
 type sweepResult struct {
-	ens    swisstopo.LOSEnsembleResult
-	fromLV swisstopo.LV95Coord
-	toLV   swisstopo.LV95Coord
+	ens        swisstopo.LOSEnsembleResult
+	fromLV     swisstopo.LV95Coord
+	toLV       swisstopo.LV95Coord
+	computeDur time.Duration // wall-clock of the ensemble simulation
 }
 
 // App is the per-window terrainscope instance.
@@ -243,11 +254,23 @@ func (inst *App) renderBody() {
 		inst.renderControls()
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		// Map stays fixed (it owns drag); the result panes scroll beneath it so
-		// the sweep plot + the distribution pane fit any window height.
-		inst.renderMap()
-		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-			inst.renderResult()
+		for dock := range c.DockArea(ids.PrepareStr("ts-dock")) {
+			// Map + the two plots open as tabs in one leaf; drag a tab to
+			// split them into side-by-side panes.
+			dock.InitRoot(dockTabMap, dockTabSweep, dockTabDist)
+			for range dock.Tab(dockTabMap, "Map") {
+				inst.renderMap()
+			}
+			for range dock.Tab(dockTabSweep, "Sweep") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderSweepTab()
+				}
+			}
+			for range dock.Tab(dockTabDist, "Distributions") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderDistTab()
+				}
+			}
 		}
 	}
 	// Single launch site: react to control edits / a fresh selection after
@@ -258,9 +281,21 @@ func (inst *App) renderBody() {
 func (inst *App) renderControls() {
 	inst.mu.Lock()
 	inFlight := inst.inFlight
+	var dur time.Duration
+	var samples int
+	if inst.result != nil {
+		dur = inst.result.computeDur
+		samples = inst.result.ens.Samples
+	}
 	inst.mu.Unlock()
 
-	c.Label(statusLabel(inst.stage, inFlight)).Send()
+	for range c.Horizontal().KeepIter() {
+		c.Label(statusLabel(inst.stage, inFlight)).Send()
+		if dur > 0 {
+			c.AddSpace(plotMargin)
+			c.Label(fmt.Sprintf("simulation: %s (%d samples)", fmtDur(dur), samples)).Send()
+		}
+	}
 	if samplerErr != nil {
 		c.Label(fmt.Sprintf("tiles not available (%s=%q): %v", swissTilesDirEnv, tilesDir(), samplerErr)).Send()
 	}
@@ -410,20 +445,37 @@ func (inst *App) renderFanOverlay(res *sweepResult) {
 	}
 }
 
-func (inst *App) renderResult() {
+func (inst *App) renderSweepTab() {
 	inst.mu.Lock()
 	res := inst.result
 	inst.mu.Unlock()
-
-	switch {
-	case inst.stage == selectionStagePt2 && res != nil && len(res.ens.Nominal.Rays) > 0:
+	if res != nil && len(res.ens.Nominal.Rays) > 0 {
 		inst.renderSweepPanel(res)
+		return
+	}
+	inst.renderPending()
+}
+
+func (inst *App) renderDistTab() {
+	inst.mu.Lock()
+	res := inst.result
+	inst.mu.Unlock()
+	if res != nil && len(res.ens.Nominal.Rays) > 0 {
 		inst.renderDistPane(res)
-	case inst.stage == selectionStagePt2 && res == nil:
-		c.Label("Computing line-of-sight sweep ensemble… this may take a moment.").Send()
-	case inst.stage == selectionStagePt1:
-		c.Label(fmt.Sprintf("Observer: (%.6f, %.6f)", inst.pt1Lat, inst.pt1Lon)).Send()
-		c.Label("Click a second point to set the target bearing; the sweep runs automatically.").Send()
+		return
+	}
+	inst.renderPending()
+}
+
+// renderPending is the placeholder the plot tabs show before a sweep exists.
+func (inst *App) renderPending() {
+	switch inst.stage {
+	case selectionStageNone:
+		c.Label("Click the observer point on the Map tab.").Send()
+	case selectionStagePt1:
+		c.Label("Click the target point on the Map tab to run the sweep.").Send()
+	default:
+		c.Label("Computing line-of-sight sweep ensemble…").Send()
 	}
 }
 
@@ -463,8 +515,8 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 	c.Label(fmt.Sprintf("Range %.0f m  |  rays %d (±%.1f° @ %.2f°)  |  %d samples  |  σ pos %.0f/%.0f m · ht %.0f/%.0f m (obs/tgt)",
 		totalDist, len(rays), inst.sweepHalfDeg, inst.sweepStepDeg, ens.Samples,
 		ens.Spec.SigmaObsPosM, ens.Spec.SigmaTgtPosM, ens.Spec.SigmaObsHeightM, ens.Spec.SigmaTgtHeightM)).Send()
-	c.Label(fmt.Sprintf("Nominal: visible %d / obstructed %d  |  mean visibility under uncertainty: %.0f%%  |  centre %.0f%%",
-		visible, len(rays)-visible, meanProb*100, ens.VisProb[centerIdx]*100)).Send()
+	c.Label(fmt.Sprintf("Nominal: visible %d / obstructed %d  |  mean visibility under uncertainty: %.0f%%  |  centre %.0f%%  |  compute %s",
+		visible, len(rays)-visible, meanProb*100, ens.VisProb[centerIdx]*100, fmtDur(res.computeDur))).Send()
 
 	// Elevation envelope bands behind the profiles (only meaningful with a
 	// non-degenerate ensemble). All bands share one legend entry to keep it
@@ -656,7 +708,9 @@ func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepPara
 		SigmaObsHeightM: p.sigmaObsH,
 		SigmaTgtHeightM: p.sigmaTgtH,
 	}
+	t0 := time.Now()
 	ens, err := s.LineOfSightSweepEnsemble(fromLV, p.observer, toLV, p.target, spec)
+	computeDur := time.Since(t0)
 	if err != nil {
 		inst.logger.Error().Err(err).
 			Float64("fromLat", p.fromLat).Float64("fromLon", p.fromLon).
@@ -666,7 +720,16 @@ func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepPara
 		inst.finishWorker(myEpoch, nil)
 		return
 	}
-	inst.finishWorker(myEpoch, &sweepResult{ens: ens, fromLV: fromLV, toLV: toLV})
+	inst.finishWorker(myEpoch, &sweepResult{ens: ens, fromLV: fromLV, toLV: toLV, computeDur: computeDur})
+}
+
+// fmtDur renders a simulation wall-clock as milliseconds (microsecond
+// resolution), or an em dash when unmeasured.
+func fmtDur(d time.Duration) (s string) {
+	if d <= 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.1f ms", float64(d.Microseconds())/1000.0)
 }
 
 // finishWorker publishes the result and clears the in-flight flag, but only

@@ -13,6 +13,7 @@ package terrainscope
 import (
 	"math"
 	"math/rand/v2"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/science/geo/swisstopo"
@@ -190,7 +191,8 @@ func synthSweepResult() *sweepResult {
 			Spec:       spec,
 			Inputs:     inputs,
 		},
-		fromLV: swisstopo.LV95Coord{E: 2_600_000, N: 1_200_000},
-		toLV:   swisstopo.LV95Coord{E: 2_600_849, N: 1_200_849},
+		fromLV:     swisstopo.LV95Coord{E: 2_600_000, N: 1_200_000},
+		toLV:       swisstopo.LV95Coord{E: 2_600_849, N: 1_200_849},
+		computeDur: 18500 * time.Microsecond, // illustrative simulation time
 	}
 }
