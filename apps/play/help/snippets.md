@@ -34,6 +34,31 @@ WHERE hasAny(`tv:symbol:value:val:s:m:0:24:0::data`,
              ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
 ```
 
+## Query graph (CTEs become nodes)
+
+Each top-level CTE splits into its own node of the reactive query-graph
+(ADR-0097): `recent` and `by_kind` below become nodes — `by_kind` reads
+`recent`, and the final `SELECT` reads `by_kind`. Today the chain fuses back into
+a single query (identical to running it inline) and the panels observe the final
+(sink) node; a forthcoming graph view surfaces the structure.
+
+```sql
+WITH
+  recent AS (
+    SELECT * FROM anchor.facts LIMIT 50
+  ),
+  by_kind AS (
+    SELECT
+      `tv:symbol:value:val:s:m:0:24:0::data`[1] AS event_type,
+      count()                                   AS n
+    FROM recent
+    GROUP BY event_type
+  )
+SELECT event_type, n
+FROM by_kind
+ORDER BY n DESC
+```
+
 ## One entity by id
 
 The ids 10005, 10010, 10015, 10020, 500003 carry the sparse `geoArea` section.
