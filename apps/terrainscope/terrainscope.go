@@ -123,6 +123,23 @@ const (
 	dockTabDist  = uint64(3)
 )
 
+// Hover-help for each control. Shown as a tooltip via c.HoverText.
+const (
+	tipObserverH = "Observer eye height above the terrain (metres) — the near end of every sight line (e.g. 1.7 for a standing person)."
+	tipTargetH   = "Target height above the terrain (metres) — the height that must be visible at the far end."
+	tipSweepHalf = "Half-range of the bearing fan (degrees): rays span ±this either side of the observer→target line."
+	tipSweepStep = "Angular spacing between adjacent rays in the fan (degrees). Fewer degrees = denser fan = more rays."
+	tipSigObsPos = "1σ Gaussian uncertainty of the observer's horizontal position (metres). 0 pins the observer."
+	tipSigTgtPos = "1σ Gaussian uncertainty of the target's horizontal position (metres). 0 pins the target."
+	tipSigObsH   = "1σ Gaussian uncertainty of the observer height (metres). 0 pins the height."
+	tipSigTgtH   = "1σ Gaussian uncertainty of the target height (metres). 0 pins the height."
+	tipSamples   = "Number of Monte-Carlo ensemble members drawn from the input distributions (0 = nominal sweep only)."
+	tipSimTime   = "Wall-clock time of the last ensemble simulation (nominal sweep + all Monte-Carlo members)."
+)
+
+// sepStr separates inline metric chips in a summary row.
+const sepStr = "  ·  "
+
 // sweepParams is the comparable snapshot of every input that affects the
 // result. The reactive recompute fires whenever it changes.
 type sweepParams struct {
@@ -293,7 +310,7 @@ func (inst *App) renderControls() {
 		c.Label(statusLabel(inst.stage, inFlight)).Send()
 		if dur > 0 {
 			c.AddSpace(plotMargin)
-			c.Label(fmt.Sprintf("simulation: %s (%d samples)", fmtDur(dur), samples)).Send()
+			metric(fmt.Sprintf("simulation: %s (%d samples)", fmtDur(dur), samples), tipSimTime)
 		}
 	}
 	if samplerErr != nil {
@@ -301,34 +318,52 @@ func (inst *App) renderControls() {
 	}
 
 	for range c.Horizontal().KeepIter() {
-		_ = c.SliderF64(ids.PrepareStr("obsH"), inst.observerH, 0, 100).
-			Text("observer").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.observerH)
-		_ = c.SliderF64(ids.PrepareStr("tgtH"), inst.targetH, 0, 100).
-			Text("target").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.targetH)
+		for range c.HoverText(tipObserverH).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("obsH"), inst.observerH, 0, 100).
+				Text("observer").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.observerH)
+		}
+		for range c.HoverText(tipTargetH).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("tgtH"), inst.targetH, 0, 100).
+				Text("target").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.targetH)
+		}
 	}
 	for range c.Horizontal().KeepIter() {
-		_ = c.SliderF64(ids.PrepareStr("half"), inst.sweepHalfDeg, 0, 30).
-			Text("sweep ±").Suffix("°").FixedDecimals(1).SendRespVal(&inst.sweepHalfDeg)
-		_ = c.SliderF64(ids.PrepareStr("step"), inst.sweepStepDeg, 0.1, 5).
-			Text("step").Suffix("°").FixedDecimals(2).SendRespVal(&inst.sweepStepDeg)
+		for range c.HoverText(tipSweepHalf).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("half"), inst.sweepHalfDeg, 0, 30).
+				Text("sweep ±").Suffix("°").FixedDecimals(1).SendRespVal(&inst.sweepHalfDeg)
+		}
+		for range c.HoverText(tipSweepStep).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("step"), inst.sweepStepDeg, 0.1, 5).
+				Text("step").Suffix("°").FixedDecimals(2).SendRespVal(&inst.sweepStepDeg)
+		}
 	}
 	// Per-input uncertainty (1σ Gaussian); 0 pins that input. The bearing
 	// fan stays deterministic.
 	for range c.Horizontal().KeepIter() {
-		_ = c.SliderF64(ids.PrepareStr("sigObsPos"), inst.sigmaObsPos, 0, 50).
-			Text("σ obs pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsPos)
-		_ = c.SliderF64(ids.PrepareStr("sigTgtPos"), inst.sigmaTgtPos, 0, 50).
-			Text("σ tgt pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtPos)
+		for range c.HoverText(tipSigObsPos).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("sigObsPos"), inst.sigmaObsPos, 0, 50).
+				Text("σ obs pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsPos)
+		}
+		for range c.HoverText(tipSigTgtPos).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("sigTgtPos"), inst.sigmaTgtPos, 0, 50).
+				Text("σ tgt pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtPos)
+		}
 	}
 	for range c.Horizontal().KeepIter() {
-		_ = c.SliderF64(ids.PrepareStr("sigObsH"), inst.sigmaObsH, 0, 30).
-			Text("σ obs ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsH)
-		_ = c.SliderF64(ids.PrepareStr("sigTgtH"), inst.sigmaTgtH, 0, 30).
-			Text("σ tgt ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtH)
+		for range c.HoverText(tipSigObsH).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("sigObsH"), inst.sigmaObsH, 0, 30).
+				Text("σ obs ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsH)
+		}
+		for range c.HoverText(tipSigTgtH).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("sigTgtH"), inst.sigmaTgtH, 0, 30).
+				Text("σ tgt ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtH)
+		}
 	}
 	for range c.Horizontal().KeepIter() {
-		_ = c.SliderF64(ids.PrepareStr("samples"), inst.samples, 0, 64).
-			Text("samples").FixedDecimals(0).SendRespVal(&inst.samples)
+		for range c.HoverText(tipSamples).KeepIter() {
+			_ = c.SliderF64(ids.PrepareStr("samples"), inst.samples, 0, 64).
+				Text("samples").FixedDecimals(0).SendRespVal(&inst.samples)
+		}
 	}
 	if c.Button(ids.PrepareStr("reset"), c.Atoms().Text(icons.IconClose+" Reset").Keep()).
 		SendResp().HasPrimaryClicked() {
@@ -510,13 +545,40 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 		}
 	}
 
-	c.Label(fmt.Sprintf("Observer %s (+%.1f m)  →  target %s (+%.1f m)",
-		res.fromLV.String(), inst.observerH, res.toLV.String(), inst.targetH)).Send()
-	c.Label(fmt.Sprintf("Range %.0f m  |  rays %d (±%.1f° @ %.2f°)  |  %d samples  |  σ pos %.0f/%.0f m · ht %.0f/%.0f m (obs/tgt)",
-		totalDist, len(rays), inst.sweepHalfDeg, inst.sweepStepDeg, ens.Samples,
-		ens.Spec.SigmaObsPosM, ens.Spec.SigmaTgtPosM, ens.Spec.SigmaObsHeightM, ens.Spec.SigmaTgtHeightM)).Send()
-	c.Label(fmt.Sprintf("Nominal: visible %d / obstructed %d  |  mean visibility under uncertainty: %.0f%%  |  centre %.0f%%  |  compute %s",
-		visible, len(rays)-visible, meanProb*100, ens.VisProb[centerIdx]*100, fmtDur(res.computeDur))).Send()
+	for range c.Horizontal().KeepIter() {
+		metric(fmt.Sprintf("observer %s (+%.1f m)", res.fromLV.String(), inst.observerH),
+			"Observer position (LV95 grid E/N) and eye height above terrain — the near end of every sight line.")
+		c.Label("  →  ").Send()
+		metric(fmt.Sprintf("target %s (+%.1f m)", res.toLV.String(), inst.targetH),
+			"Target position (LV95 grid E/N) and height above terrain — the far end of the nominal bearing.")
+	}
+	for range c.Horizontal().KeepIter() {
+		metric(fmt.Sprintf("range %.0f m", totalDist),
+			"Observer→target ground distance (m). Every swept ray spans this same range.")
+		c.Label(sepStr).Send()
+		metric(fmt.Sprintf("rays %d", len(rays)),
+			fmt.Sprintf("Bearings in the deterministic fan: ±%.1f° at %.2f° spacing.", inst.sweepHalfDeg, inst.sweepStepDeg))
+		c.Label(sepStr).Send()
+		metric(fmt.Sprintf("%d samples", ens.Samples), tipSamples)
+		c.Label(sepStr).Send()
+		metric(fmt.Sprintf("σ pos %.0f/%.0f m", ens.Spec.SigmaObsPosM, ens.Spec.SigmaTgtPosM),
+			"1σ horizontal position uncertainty, observer / target (m).")
+		c.Label(sepStr).Send()
+		metric(fmt.Sprintf("σ ht %.0f/%.0f m", ens.Spec.SigmaObsHeightM, ens.Spec.SigmaTgtHeightM),
+			"1σ height uncertainty, observer / target (m).")
+	}
+	for range c.Horizontal().KeepIter() {
+		metric(fmt.Sprintf("visible %d / obstructed %d", visible, len(rays)-visible),
+			"Nominal (un-jittered) line-of-sight verdict per ray: clear vs blocked by terrain.")
+		c.Label(sepStr).Send()
+		metric(fmt.Sprintf("mean vis %.0f%%", meanProb*100),
+			"Mean over all rays of the fraction of ensemble samples with a clear sight line — overall robustness to input uncertainty.")
+		c.Label(sepStr).Send()
+		metric(fmt.Sprintf("centre %.0f%%", ens.VisProb[centerIdx]*100),
+			"Visibility probability of the centre ray (the observer→target bearing) across the ensemble.")
+		c.Label(sepStr).Send()
+		metric(fmt.Sprintf("compute %s", fmtDur(res.computeDur)), tipSimTime)
+	}
 
 	// Elevation envelope bands behind the profiles (only meaningful with a
 	// non-degenerate ensemble). All bands share one legend entry to keep it
@@ -584,7 +646,9 @@ func (inst *App) renderDistPane(res *sweepResult) {
 		c.Label("Input distributions — raise a σ above to randomise observer/target position or height.").Send()
 		return
 	}
-	c.Label(fmt.Sprintf("Input distributions — empirical CDF of %d samples (deviation from nominal)", ens.Samples)).Send()
+	metric(fmt.Sprintf("Input distributions — empirical CDF of %d samples (deviation from nominal)", ens.Samples),
+		"Each randomised input is drawn from its own Gaussian; this is the empirical CDF (fraction of samples ≤ x) of the realised "+
+			"deviations from the nominal value, in metres. Position deviations are radial offsets (≥0); height deviations are signed.")
 	for i, in := range ens.Inputs {
 		xs, ys := ecdfStep(in.Dev)
 		c.PlotLine(in.Name, xs, ys).Color(distColorAt(i)).Width(1.8).Send()
@@ -617,6 +681,14 @@ func ecdfStep(vals []float64) (xs []float64, ys []float64) {
 		ys = append(ys, float64(i+1)/float64(n))
 	}
 	return
+}
+
+// metric renders a label carrying a hover tooltip — used for each measured /
+// displayed quantity so the reader can learn what every number means.
+func metric(text string, tip string) {
+	for range c.HoverText(tip).KeepIter() {
+		c.Label(text).Send()
+	}
 }
 
 // distColorAt is a small categorical palette for the per-variable ECDF lines.

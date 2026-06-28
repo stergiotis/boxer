@@ -64,8 +64,9 @@ plus the sweep computation in the library. Phased, descope-over-gate:
   (heights, sweep range/step, the four σ, samples) is a **live control** that
   recomputes reactively, coalesced to at most one in-flight worker (leading +
   trailing). The map and each plot live in **dockable panes** (egui_dock tabs the
-  user can split), and the ensemble's wall-clock is measured and shown (controls +
-  sweep summary).
+  user can split), the ensemble's wall-clock is measured and shown (controls +
+  sweep summary), and every control and summary metric carries a hover-help
+  tooltip explaining what it measures.
 
 **Tile access:** Phase 1–3 read tiles directly from `$SWISSTOPO_TILES_DIR` (the env
 var moves from the demo package to the app), matching the demo. This is the chosen
