@@ -32,8 +32,6 @@
 package gauge
 
 import (
-	"strconv"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -284,8 +282,11 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, value float64) {
 			color.Hex(styletokens.NeutralTextSecondary.AsHex())).Send()
 	}
 
-	canvasID := c.MakeAbsoluteIdStr(inst.idPrefix + "#" + strconv.FormatUint(callId, 16) + "-gauge")
-	c.PaintCanvas(canvasID, d, d).Send()
+	// Drain into a regular stack-derived canvas id scoped under this call.
+	wis := c.NewWidgetIdStack()
+	for range c.IdScope(wis.PrepareHighEntropy(callId)) {
+		c.PaintCanvas(wis.PrepareStr("canvas"), d, d).Send()
+	}
 }
 
 // paintBands draws the zone arcs (or a single neutral track when no zones are
