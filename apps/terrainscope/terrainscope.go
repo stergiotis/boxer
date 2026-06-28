@@ -46,9 +46,14 @@ const (
 	swissTilesDirEnv = "SWISSTOPO_TILES_DIR"
 	mapStageW        = float32(900)
 	mapStageH        = float32(420)
-	plotHeight       = float32(260)
+	plotHeight       = float32(290)
+	plotMargin       = float32(12) // vertical breathing room around the plot
 	markerIdPt1      = uint64(100)
 	markerIdPt2      = uint64(200)
+
+	// envelopeBandAlpha keeps the per-ray uncertainty polygons faint, so the
+	// overlapping bands read as a haze rather than a wall of colour.
+	envelopeBandAlpha = uint8(0x10)
 
 	// sweepSeed fixes the Monte-Carlo draw so identical parameters yield an
 	// identical ensemble — the band and probabilities don't flicker between
@@ -432,7 +437,7 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 	if ens.Samples > 0 && len(ens.Distance) > 1 {
 		for j := range rays {
 			xs, ys := envelopePolygon(ens.Distance, ens.TerrainMax[j], ens.TerrainMin[j])
-			c.PlotPolygon("± uncertainty", xs, ys, rayFillRGBA(j, len(rays), 0x26), 0x00000000, 0).Send()
+			c.PlotPolygon("± uncertainty", xs, ys, rayFillRGBA(j, len(rays), envelopeBandAlpha), 0x00000000, 0).Send()
 		}
 	}
 
@@ -470,10 +475,15 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 			Color(color.Hex(0xff2222ff)).Radius(4.0).Shape(2).Filled(true).Send()
 	}
 
+	// Margin around the plot so a legend taller than the plot body (many
+	// rays → many entries) has room to overflow without colliding with the
+	// labels above or the panel edge below.
+	c.AddSpace(plotMargin)
 	c.Plot(ids.PrepareStr(fmt.Sprintf("sweep-plot-%d", inst.plotEpoch))).
 		Width(mapStageW).Height(plotHeight).
 		XAxisLabel("Distance along ray (m)").YAxisLabel("Elevation (m a.s.l.)").
 		Legend().AllowZoom(true).AllowDrag(true).Send()
+	c.AddSpace(plotMargin)
 }
 
 func statusLabel(stage selectionStageE, computing bool) (label string) {

@@ -24,10 +24,10 @@ var manifest = app.Manifest{
 	Category: "Science",
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
-		// Sized to fit the 900×500 slippy map plus the elevation-profile
-		// plot below it without clipping the window body.
+		// Sized to fit the slippy map plus the sweep plot (and its legend)
+		// below it without clipping the window body.
 		PreferredWidth:  960,
-		PreferredHeight: 900,
+		PreferredHeight: 960,
 	},
 }
 
