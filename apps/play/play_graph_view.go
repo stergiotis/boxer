@@ -47,6 +47,19 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 	for range c.CollapsingHeader(ids.PrepareStr("graphNode-"+string(n.ID)),
 		c.WidgetText().Text(header).Keep()).DefaultOpen(true).KeepIter() {
 		for range c.Vertical().KeepIter() {
+			// Observe this node in the result panels (3d): clicking materialises
+			// it on the intermediate lane and the panels render its result.
+			observed := inst.observedNode == n.ID
+			obsLabel := "observe in panels"
+			if observed {
+				obsLabel = "● observing in panels"
+			}
+			if c.Button(ids.PrepareStr("graphObs-"+string(n.ID)),
+				c.Atoms().Text(obsLabel).Keep()).
+				Selected(observed).
+				SendResp().HasPrimaryClicked() {
+				inst.observedNode = n.ID
+			}
 			if len(n.DependsOn) > 0 {
 				for rt := range c.RichTextLabel("reads nodes: " + joinNodeIDs(n.DependsOn)) {
 					rt.Small().Weak().Monospace()

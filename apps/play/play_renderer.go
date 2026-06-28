@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
@@ -74,6 +75,16 @@ type PlayApp struct {
 	// buffer (3a/3c). The sink node is what the panels observe; it backs the
 	// Graph-view chrome (3e) and the materialization policy (3d).
 	currentSplit splitResult
+
+	// observedNode is the graph node whose result the result panels show (3d) —
+	// the sink by default, switchable from the Graph view. When it is an
+	// intermediate, intermediateStore materialises its fused SQL on its own lane
+	// (a QueryStore, like main's; the lean nodeLane is reserved for the future
+	// many-node / streaming case). want/sent drive a latest-wins re-execute.
+	observedNode        NodeID
+	intermediateStore   *QueryStore
+	intermediateWantSQL string
+	intermediateSentSQL string
 
 	// endpointDraft is the editable URL in the toolbar endpoint switcher;
 	// launchURL is the original target restored by "External (reset)". See
@@ -389,17 +400,18 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		launchURL = client.URL()
 	}
 	inst := &PlayApp{
-		ids:           c.NewWidgetIdStack(),
-		graph:         graph,
-		client:        client,
-		endpointDraft: launchURL,
-		launchURL:     launchURL,
-		density:       styletokens.DensityFromEnv(),
-		sql:           initialSQL,
-		selectedRow: -1,
-		cards:       cards,
-		projector:   NewProjector(projectorIds, cards),
-		projFSM:     projFSM,
+		ids:               c.NewWidgetIdStack(),
+		graph:             graph,
+		client:            client,
+		intermediateStore: NewQueryStore(client, memory.NewGoAllocator(), 1),
+		endpointDraft:     launchURL,
+		launchURL:         launchURL,
+		density:           styletokens.DensityFromEnv(),
+		sql:               initialSQL,
+		selectedRow:       -1,
+		cards:             cards,
+		projector:         NewProjector(projectorIds, cards),
+		projFSM:           projFSM,
 		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
 			Title("UMAP projector").
 			ShowSubscript(true).
@@ -480,6 +492,38 @@ func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
 	return m
 }
 
+// activeSnapshot returns the result the panels should render: the observed
+// node's (ADR-0097 3d). By default that is the sink (the main lane); when the
+// user observes an intermediate node from the Graph view, its fused SQL runs on
+// the intermediate lane and that result drives the panels instead. The caller
+// MUST Release the returned record (nil-safe), exactly as for MainSnapshot.
+func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+	split := inst.currentSplit
+	if inst.observedNode != "" && inst.observedNode != split.Sink && len(split.Nodes) > 0 {
+		if _, ok := findSplitNode(split, inst.observedNode); ok {
+			inst.driveIntermediate(fuseNode(split, inst.observedNode))
+			return inst.intermediateStore.Snapshot()
+		}
+	}
+	return inst.graph.MainSnapshot()
+}
+
+// driveIntermediate runs the observed intermediate node's fused SQL on the
+// intermediate lane, latest-wins: a changed SQL supersedes the in-flight run and
+// re-executes once the lane is free.
+func (inst *PlayApp) driveIntermediate(sql string) {
+	if sql != inst.intermediateWantSQL {
+		inst.intermediateWantSQL = sql
+		if inst.intermediateStore.IsLoading() {
+			inst.intermediateStore.Cancel()
+		}
+	}
+	if inst.intermediateWantSQL != "" && inst.intermediateWantSQL != inst.intermediateSentSQL && !inst.intermediateStore.IsLoading() {
+		inst.intermediateSentSQL = inst.intermediateWantSQL
+		inst.intermediateStore.Execute(inst.intermediateSentSQL)
+	}
+}
+
 func (inst *PlayApp) Render() error {
 	ids := inst.ids
 	ids.Reset()
@@ -490,7 +534,7 @@ func (inst *PlayApp) Render() error {
 	// state syncs (selection clamp, pager configure, projector
 	// invalidate) must run here, before any tab body executes, so the
 	// values the tab callees observe are consistent.
-	rec, schema, numRows, loading, elapsed, summary, executed, err := inst.graph.MainSnapshot()
+	rec, schema, numRows, loading, elapsed, summary, executed, err := inst.activeSnapshot()
 	if rec != nil {
 		defer rec.Release()
 		if inst.selectedRow < 0 || inst.selectedRow >= rec.NumRows() {
@@ -599,6 +643,19 @@ func (inst *PlayApp) Render() error {
 				split = splitResult{}
 			}
 			inst.currentSplit = split
+			// A fresh run resets the observed node to the new sink and clears
+			// the intermediate lane's drive state (3d).
+			inst.observedNode = split.Sink
+			inst.intermediateWantSQL = ""
+			inst.intermediateSentSQL = ""
+			// Scripted-screenshot affordance: observe a named node on run so a
+			// capture can show the panels rendering an intermediate (mirrors
+			// SPINNAKER_PLAY_FOCUS_*). Ignored when the node is absent.
+			if obs := os.Getenv("SPINNAKER_PLAY_OBSERVE"); obs != "" {
+				if _, ok := findSplitNode(split, NodeID(obs)); ok {
+					inst.observedNode = NodeID(obs)
+				}
+			}
 			inst.lastSentSql = sql
 			inst.graph.RunMain(executable)
 			// Persist on Run: the user's intent is "this is the SQL I
