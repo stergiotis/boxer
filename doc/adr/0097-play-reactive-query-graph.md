@@ -502,14 +502,26 @@ Implemented on `main`, behaviour-verified live against ClickHouse:
   `-race`-tested, not yet on the live path); and the live Run path routed through
   `fuseToSink` (for a single statement the fused SQL is the original, so it is
   behaviour-identical — verified with a CTE query rendering 50 rows). The `main`
-  node's lane stays `QueryStore` (Run-triggered, with history); `nodeLane` +
-  `clientExecutor` go live when intermediate nodes execute separately (3d).
+  node's lane stays `QueryStore` (Run-triggered, with history).
+- **Slice 3 — Graph view (3e)** — a Graph dock tab (chrome, not a panel, SD7)
+  renders the split graph from the last-run buffer: each node as a default-open
+  header with its data edges, signal edges, and compiled SQL. The implicit graph
+  is now visible (the Hex-validated implicit-graph-surprise mitigation). Smoke-
+  tested on the CTE-chain snippet.
+- **Slice 3 — observe-a-node (3d)** — generalized `fuseNode` (any node → its
+  fused executable: the sink's whole statement, or a CTE's `WITH <transitive
+  deps> <body>`); clicking "observe in panels" on a Graph-view node makes the
+  result panels render THAT node's result — the canonical "a panel observes a
+  node" model. An observed intermediate materialises its fused SQL on its own
+  lane: a second `QueryStore` (like main's; the lean `nodeLane` stays reserved
+  for the future many-node / streaming case). Smoke-tested: observing an
+  intermediate CTE renders its 50 full leeway rows in Table/Detail, not the
+  sink's aggregation.
 
-Deferred (with triggers, per SD12): **3d** fusion/materialization policy (where
-`nodeLane` becomes load-bearing); **3e** the node Graph view + per-node
-"view compiled" chrome (Hex-validated, the implicit-graph-surprise mitigation);
-**3f** re-expressing the ADR-0096 Map as a node (retiring the first bespoke
-panel-local lane).
+Deferred (with triggers, per SD12): **3f** re-expressing the ADR-0096 Map as a
+node (retiring the first bespoke panel-local lane); operator-level IVM (SD1);
+cross-query materialization of shared intermediates over HTTP (SD13's hard part —
+the first cut recomputes per observer); explicit multi-cell authoring (SD12).
 
 ## References
 
