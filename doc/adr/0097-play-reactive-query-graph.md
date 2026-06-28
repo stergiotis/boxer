@@ -603,7 +603,7 @@ three trivially single-channel; behaviour-identical); **4b** bands as a node + t
 `tl_extent` signal (retire the bands lane); **4c** Graph-view channel UI (per-node
 eligibility badges + assignment, generalizing "observe in panels").
 
-### 2026-06-28 — Slice 4a + 4b shipped (channels; the Timeline is multi-channel)
+### 2026-06-28 — Slice 4 shipped (channels; the Timeline is multi-channel; the model is visible)
 
 - **4a — the channel contract.** `PanelI` is now `Channels()` +
   `AcceptForChannel(ch, schema, sig)` + `Render(filled map[ChannelID]ChannelResult,
@@ -626,7 +626,20 @@ eligibility badges + assignment, generalizing "observe in panels").
   (events + bands render through the 2-channel dispatch). The bands SQL keeps its
   editor (option (a) — a panel-authored node, not folded into the main buffer).
 
-Remaining: **4c** the Graph-view channel UI.
+- **4c — the Graph-view channel UI.** The Graph view shows a panel × channel
+  inventory (read off `Channels()`) and a per-node eligibility badge (`also fills:
+  Timeline·events`), inferred statically from the node's SQL (a `_tl_time`
+  projection ⇒ events, `_tl_band_from` ⇒ bands; the universal main channel
+  omitted — a text heuristic, not an executed-schema check). The 3d "observe"
+  gesture stays the assignment.
+
+With 4c, **slice 4 is complete** — panels declare typed input channels, the
+Timeline composes events + bands, and the channel model is visible. ADR-0097
+(slices 1–4) is shipped end to end. The remaining items are the long-horizon
+deferrals: SD1 operator-level IVM; SD13 materialization of *shared* intermediates
+over HTTP; the SD8 global signal store (which a global `tl_extent` other nodes
+could read awaits); explicit multi-cell authoring (SD12); and per-channel
+independent reassignment (a lane per bound node — beyond the 4c UI slice).
 
 ## References
 
