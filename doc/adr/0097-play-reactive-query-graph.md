@@ -603,6 +603,31 @@ three trivially single-channel; behaviour-identical); **4b** bands as a node + t
 `tl_extent` signal (retire the bands lane); **4c** Graph-view channel UI (per-node
 eligibility badges + assignment, generalizing "observe in panels").
 
+### 2026-06-28 — Slice 4a + 4b shipped (channels; the Timeline is multi-channel)
+
+- **4a — the channel contract.** `PanelI` is now `Channels()` +
+  `AcceptForChannel(ch, schema, sig)` + `Render(filled map[ChannelID]ChannelResult,
+  emit)` (`PanelClaim` → `ChannelClaim`); a `dispatchPanel` helper runs the
+  per-channel accept and renders when every required channel is filled. All four
+  panels are single-channel (Table/Projection/Detail `main`, Timeline `events`),
+  so behaviour-identical. Smoke-tested (Table + Detail render through the dispatch).
+- **4b — the Timeline is the first multi-channel panel.** *4b-1*: the bands'
+  bespoke async (fetch goroutine, LRU cache, staleness guard, `bandsView` + mutex)
+  retired into a `nodeLane` — the second and last panel-local lane folded into the
+  graph runtime, after 3f's Map (net −138 lines). *4b-2*: the Timeline declares
+  `{events, required}` + `{bands, optional}`; `renderTimelineTab` demands the bands
+  node and offers its `_tl_band_*` result as the `chBands` input, `Render(filled)`
+  maps it before the events render. Bands lag the events extent by one frame
+  (absorbed by the fetch latency). The `tl_extent` coupling is handled by
+  substituting the driver's live extent into the bands node's compiled SQL; a
+  *global* `tl_extent` signal other nodes could read awaits the SD8 signal store
+  (the current `playSignals` is a `selection` strangler). Unit-tested (the
+  demand/map path + memo-hit, the 2-channel contract; `-race` clean); smoke-tested
+  (events + bands render through the 2-channel dispatch). The bands SQL keeps its
+  editor (option (a) — a panel-authored node, not folded into the main buffer).
+
+Remaining: **4c** the Graph-view channel UI.
+
 ## References
 
 Internal:
