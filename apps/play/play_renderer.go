@@ -62,6 +62,7 @@ const (
 	dockTabTimeline   uint64 = 7
 	dockTabSnippets   uint64 = 8
 	dockTabMap        uint64 = 9
+	dockTabGraph      uint64 = 10
 )
 
 type PlayApp struct {
@@ -530,10 +531,14 @@ func (inst *PlayApp) Render() error {
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
-			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap}
+			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph}
 			if os.Getenv("SPINNAKER_PLAY_FOCUS_MAP") != "" {
 				// Scripted-screenshot focus: make Map the default-active body tab.
 				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets}
+			}
+			if os.Getenv("SPINNAKER_PLAY_FOCUS_GRAPH") != "" {
+				// Scripted-screenshot focus: make Graph the default-active body tab.
+				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap}
 			}
 			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45, bodyTabs...)
 			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
@@ -569,6 +574,11 @@ func (inst *PlayApp) Render() error {
 			}
 			for range dock.Tab(dockTabMap, "Map") {
 				inst.mapDriver.Render()
+			}
+			for range dock.Tab(dockTabGraph, "Graph") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderGraphTab()
+				}
 			}
 		}
 	}
