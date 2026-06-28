@@ -116,130 +116,125 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 	}
 
 	sm := c.CurrentApplicationState.StateManager
-	// Derive canvas + per-node sense-region ids under an IdScope so the XOR
-	// chain prevents cross-instance collisions without arithmetic overflow risk.
-	wis := c.NewWidgetIdStack()
-	senseIDs := make([]c.AbsoluteWidgetId, len(lay.Nodes))
-	var canvasID c.AbsoluteWidgetId
-	for range c.IdScope(wis.PrepareHighEntropy(idBase)) {
-		canvasID = c.MakeAbsoluteIdHighEntropy(wis.PrepareStr("canvas").Derive())
-		for i, n := range lay.Nodes {
-			senseIDs[i] = c.MakeAbsoluteIdHighEntropy(wis.PrepareStr(n.ID).Derive())
-		}
-	}
 	scale, offX, offY, canvasW, canvasH := fit(lay, opts.CanvasW, opts.CanvasH)
 
-	// User pan/zoom (opt-in via opts.State) composes on top of fit-to-view as a
-	// single affine: screen = p*(scale*zoom) + offset, zoom about the canvas
-	// centre, then panned. Input is read from the previous frame's canvas
-	// response (drag) and the zoom-gesture register, both scoped to the canvas.
-	zoom, panX, panY := 1.0, 0.0, 0.0
-	if vs := opts.State; vs != nil {
-		resp := sm.GetResponse(widgethandle.Make(canvasID.Derive()))
-		// Zoom only while the pointer is over this canvas (don't hijack a scroll
-		// meant for something else). GetZoomDelta is egui's combined gesture
-		// (Ctrl+scroll / pinch / +-).
-		if resp.HasContainsPointer() {
-			if zd := sm.GetZoomDelta().Zoom; zd > 0 && zd != 1 {
-				z := vs.Zoom
-				if z <= 0 {
-					z = 1
-				}
-				vs.Zoom = min(max(z*float64(zd), 0.2), 5.0)
-			}
-		}
-		// Pan while the primary button is held after a press that began on this
-		// canvas. HasIsPointerButtonDown stays true even once the cursor leaves
-		// the rect, and we track the GLOBAL pointer (GetPointer) — not the
-		// per-canvas hover register — so the drag continues past the canvas edge
-		// and isn't clobbered by another canvas drained later in the frame.
-		gp := sm.GetPointer()
-		if resp.HasIsPointerButtonDown() && gp.Valid {
-			if vs.dragging {
-				vs.PanX += float64(gp.X - vs.lastPtrX)
-				vs.PanY += float64(gp.Y - vs.lastPtrY)
-			}
-			vs.dragging = true
-			vs.lastPtrX, vs.lastPtrY = gp.X, gp.Y
-		} else {
-			vs.dragging = false
-		}
-		if vs.Zoom <= 0 {
-			vs.Zoom = 1
-		}
-		zoom, panX, panY = vs.Zoom, vs.PanX, vs.PanY
-	}
-	ccx, ccy := float64(canvasW)/2, float64(canvasH)/2
-	escale := scale * zoom
-	ox := (offX-ccx)*zoom + ccx + panX
-	oy := (offY-ccy)*zoom + ccy + panY
-	tf := func(p layeredgraph.Point) (x, y float32) {
-		return float32(p.X*escale + ox), float32(p.Y*escale + oy)
-	}
-	// Read previous-frame node interaction; it drives this frame's highlight.
-	hovered := make(map[string]bool, len(lay.Nodes))
+	// Wrap the whole render pass in an IdScope so canvas + per-node ids are
+	// regular stack-derived ids (not absolute ids). PaintCanvas/PaintSenseRegion
+	// consume a *WidgetIdStack directly and call Derive() themselves.
+	wis := c.NewWidgetIdStack()
 	var res RenderResult
-	for i, n := range lay.Nodes {
-		resp := sm.GetResponse(widgethandle.Make(senseIDs[i].Derive()))
-		if resp.HasHovered() {
-			hovered[n.ID] = true
-			res.Hovered = n.ID
+	for range c.IdScope(wis.PrepareHighEntropy(idBase)) {
+		// User pan/zoom (opt-in via opts.State) composes on top of fit-to-view as a
+		// single affine: screen = p*(scale*zoom) + offset, zoom about the canvas
+		// centre, then panned. Input is read from the previous frame's canvas
+		// response (drag) and the zoom-gesture register, both scoped to the canvas.
+		zoom, panX, panY := 1.0, 0.0, 0.0
+		if vs := opts.State; vs != nil {
+			resp := sm.GetResponse(widgethandle.Make(wis.PrepareStr("canvas").Derive()))
+			// Zoom only while the pointer is over this canvas (don't hijack a scroll
+			// meant for something else). GetZoomDelta is egui's combined gesture
+			// (Ctrl+scroll / pinch / +-).
+			if resp.HasContainsPointer() {
+				if zd := sm.GetZoomDelta().Zoom; zd > 0 && zd != 1 {
+					z := vs.Zoom
+					if z <= 0 {
+						z = 1
+					}
+					vs.Zoom = min(max(z*float64(zd), 0.2), 5.0)
+				}
+			}
+			// Pan while the primary button is held after a press that began on this
+			// canvas. HasIsPointerButtonDown stays true even once the cursor leaves
+			// the rect, and we track the GLOBAL pointer (GetPointer) — not the
+			// per-canvas hover register — so the drag continues past the canvas edge
+			// and isn't clobbered by another canvas drained later in the frame.
+			gp := sm.GetPointer()
+			if resp.HasIsPointerButtonDown() && gp.Valid {
+				if vs.dragging {
+					vs.PanX += float64(gp.X - vs.lastPtrX)
+					vs.PanY += float64(gp.Y - vs.lastPtrY)
+				}
+				vs.dragging = true
+				vs.lastPtrX, vs.lastPtrY = gp.X, gp.Y
+			} else {
+				vs.dragging = false
+			}
+			if vs.Zoom <= 0 {
+				vs.Zoom = 1
+			}
+			zoom, panX, panY = vs.Zoom, vs.PanX, vs.PanY
 		}
-		if resp.HasPrimaryClicked() {
-			res.Clicked = n.ID
+		ccx, ccy := float64(canvasW)/2, float64(canvasH)/2
+		escale := scale * zoom
+		ox := (offX-ccx)*zoom + ccx + panX
+		oy := (offY-ccy)*zoom + ccy + panY
+		tf := func(p layeredgraph.Point) (x, y float32) {
+			return float32(p.X*escale + ox), float32(p.Y*escale + oy)
 		}
-	}
-
-	// Edges first, so nodes paint over the spline ends.
-	for _, e := range lay.Edges {
-		col := st.EdgeStroke
-		if opts.EdgeStroke != nil {
-			if c2, ok := opts.EdgeStroke(e.From, e.To); ok {
-				col = c2
+		// Read previous-frame node interaction; it drives this frame's highlight.
+		hovered := make(map[string]bool, len(lay.Nodes))
+		for _, n := range lay.Nodes {
+			resp := sm.GetResponse(widgethandle.Make(wis.PrepareStr(n.ID).Derive()))
+			if resp.HasHovered() {
+				hovered[n.ID] = true
+				res.Hovered = n.ID
+			}
+			if resp.HasPrimaryClicked() {
+				res.Clicked = n.ID
 			}
 		}
-		drawEdge(e, tf, col, st.EdgeStrokeW)
-		if e.LabelPos != nil && e.Label != "" {
-			lx, ly := tf(*e.LabelPos)
-			c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
-		}
-	}
 
-	// Nodes. Paint node labels at the layout's font size when the engine
-	// reported one, so the text matches the boxes it was sized to fit;
-	// Style.NodeFontSize is the fallback for a Layout without one.
-	nodeFontPt := st.NodeFontSize
-	if lay.FontSize > 0 {
-		nodeFontPt = float32(lay.FontSize)
-	}
-	for i, n := range lay.Nodes {
-		cx, cy := tf(n.Center)
-		w := float32(n.W * escale)
-		h := float32(n.H * escale)
-		fill := st.NodeFill
-		if opts.NodeFill != nil {
-			if c2, ok := opts.NodeFill(n.ID); ok {
-				fill = c2
+		// Edges first, so nodes paint over the spline ends.
+		for _, e := range lay.Edges {
+			col := st.EdgeStroke
+			if opts.EdgeStroke != nil {
+				if c2, ok := opts.EdgeStroke(e.From, e.To); ok {
+					col = c2
+				}
+			}
+			drawEdge(e, tf, col, st.EdgeStrokeW)
+			if e.LabelPos != nil && e.Label != "" {
+				lx, ly := tf(*e.LabelPos)
+				c.PaintText(lx, ly, 1, 1, e.Label, st.EdgeFontSize*float32(escale), st.EdgeText).Send()
 			}
 		}
-		txt := st.NodeText
-		if opts.NodeText != nil {
-			if c2, ok := opts.NodeText(n.ID); ok {
-				txt = c2
-			}
-		}
-		drawNode(n.Shape, cx, cy, w, h, st, fill, hovered[n.ID])
-		c.PaintText(cx, cy, 1, 1, n.Label, nodeFontPt*float32(escale), txt).Send()
-		c.PaintSenseRegion(senseIDs[i], cx-w/2, cy-h/2, w, h).Send()
-	}
 
-	// Drain into the canvas. Sense click/drag/hover only when pan/zoom is
-	// enabled, so Render can read drag + zoom over the canvas.
-	cv := c.PaintCanvas(canvasID, canvasW, canvasH).Background(st.Background)
-	if opts.State != nil {
-		cv = cv.Sense(true, true, true)
+		// Nodes. Paint node labels at the layout's font size when the engine
+		// reported one, so the text matches the boxes it was sized to fit;
+		// Style.NodeFontSize is the fallback for a Layout without one.
+		nodeFontPt := st.NodeFontSize
+		if lay.FontSize > 0 {
+			nodeFontPt = float32(lay.FontSize)
+		}
+		for _, n := range lay.Nodes {
+			cx, cy := tf(n.Center)
+			w := float32(n.W * escale)
+			h := float32(n.H * escale)
+			fill := st.NodeFill
+			if opts.NodeFill != nil {
+				if c2, ok := opts.NodeFill(n.ID); ok {
+					fill = c2
+				}
+			}
+			txt := st.NodeText
+			if opts.NodeText != nil {
+				if c2, ok := opts.NodeText(n.ID); ok {
+					txt = c2
+				}
+			}
+			drawNode(n.Shape, cx, cy, w, h, st, fill, hovered[n.ID])
+			c.PaintText(cx, cy, 1, 1, n.Label, nodeFontPt*float32(escale), txt).Send()
+			c.PaintSenseRegion(wis.PrepareStr(n.ID), cx-w/2, cy-h/2, w, h).Send()
+		}
+
+		// Drain into the canvas. Sense click/drag/hover only when pan/zoom is
+		// enabled, so Render can read drag + zoom over the canvas.
+		cv := c.PaintCanvas(wis.PrepareStr("canvas"), canvasW, canvasH).Background(st.Background)
+		if opts.State != nil {
+			cv = cv.Sense(true, true, true)
+		}
+		cv.Send()
 	}
-	cv.Send()
 
 	return res
 }
