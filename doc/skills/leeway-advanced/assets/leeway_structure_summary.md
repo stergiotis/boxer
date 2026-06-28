@@ -21,7 +21,7 @@ Leeway represents semi-structured tables with:
 ## Core Table Descriptor Types
 
 ### TableDesc (In-Memory Representation)
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:111-122`
+**Location**: `public/semistructured/leeway/common/lw_types.go:111-122`
 
 ```
 struct TableDesc {
@@ -41,7 +41,7 @@ struct TableDesc {
 ```
 
 ### TableDescDto (CBOR Serialization)
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:124-157`
+**Location**: `public/semistructured/leeway/common/lw_types.go:124-157`
 
 Flattens PlainItemTypeE into separate arrays:
 - EntityId{Names,Types,EncodingHints,ValueSemantics}
@@ -53,7 +53,7 @@ Flattens PlainItemTypeE into separate arrays:
 - TaggedValuesSections: []TaggedValuesSectionDto
 
 ### TableDictionaryEntryDescDto
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:107-110`
+**Location**: `public/semistructured/leeway/common/lw_types.go:107-110`
 
 ```
 struct TableDictionaryEntryDescDto {
@@ -67,7 +67,7 @@ struct TableDictionaryEntryDescDto {
 ## Tagged Value Section Types
 
 ### TaggedValuesSection (In-Memory)
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:171-182`
+**Location**: `public/semistructured/leeway/common/lw_types.go:171-182`
 
 ```
 struct TaggedValuesSection {
@@ -91,7 +91,7 @@ struct TaggedValuesSection {
 - Each column has valid type and non-empty name
 
 ### TaggedValuesSectionDto (CBOR)
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:159-169`
+**Location**: `public/semistructured/leeway/common/lw_types.go:159-169`
 
 ```
 struct TaggedValuesSectionDto {
@@ -110,7 +110,7 @@ struct TaggedValuesSectionDto {
 ---
 
 ## Plain Item Types Enum
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_enums.go:379-419`
+**Location**: `public/semistructured/leeway/common/lw_enums.go:379-419`
 
 ```
 PlainItemTypeE (uint8):
@@ -129,7 +129,7 @@ MaxPlainItemTypeExcl = 7 (count of AllMembershipSpecs)
 ---
 
 ## Membership Specification Enum
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_enums.go:171-330`
+**Location**: `public/semistructured/leeway/common/lw_enums.go:171-330`
 
 Bitfield (uint8) for composable membership types:
 
@@ -163,7 +163,7 @@ AllMembershipSpecs = [all above]
 ---
 
 ## Column Role Enum
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_enums.go:17-74`
+**Location**: `public/semistructured/leeway/common/lw_enums.go:17-74`
 
 String enum (ColumnRoleE = string):
 
@@ -209,7 +209,7 @@ Special:
 ---
 
 ## Table Row Configuration Enum
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_enums.go:355-377`
+**Location**: `public/semistructured/leeway/common/lw_enums.go:355-377`
 
 ```
 TableRowConfigE (uint8):
@@ -225,7 +225,7 @@ AllTableRowConfigs = [TableRowConfigMultiAttributesPerRow]
 ---
 
 ## Implementation Status Enum
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_enums.go:331-353`
+**Location**: `public/semistructured/leeway/common/lw_enums.go:331-353`
 
 ```
 ImplementationStatusE (uint8):
@@ -244,7 +244,7 @@ AllImplementationStatus = [all above]
 ## Intermediate Representation Types
 
 ### IntermediateTableRepresentation (CBOR)
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:70-73`
+**Location**: `public/semistructured/leeway/common/lw_types.go:70-73`
 
 ```
 struct IntermediateTableRepresentation {
@@ -254,7 +254,7 @@ struct IntermediateTableRepresentation {
 ```
 
 ### IntermediatePlainValuesDesc
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:60-68`
+**Location**: `public/semistructured/leeway/common/lw_types.go:60-68`
 
 ```
 struct IntermediatePlainValuesDesc {
@@ -270,7 +270,7 @@ struct IntermediatePlainValuesDesc {
 ```
 
 ### IntermediateTaggedValuesDesc
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:47-59`
+**Location**: `public/semistructured/leeway/common/lw_types.go:47-59`
 
 ```
 struct IntermediateTaggedValuesDesc {
@@ -291,7 +291,7 @@ struct IntermediateTaggedValuesDesc {
 ```
 
 ### IntermediateColumnProps
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:39-46`
+**Location**: `public/semistructured/leeway/common/lw_types.go:39-46`
 
 ```
 struct IntermediateColumnProps {
@@ -306,7 +306,7 @@ struct IntermediateColumnProps {
 **Co-array invariant**: all slices must have equal length
 
 ### IntermediateColumnContext
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:22-37`
+**Location**: `public/semistructured/leeway/common/lw_types.go:22-37`
 
 ```
 struct IntermediateColumnContext {
@@ -328,7 +328,7 @@ struct IntermediateColumnContext {
 ## Intermediate Column Scopes & Subtypes
 
 ### IntermediateColumnScopeE (String enum)
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_enums.go:421-452`
+**Location**: `public/semistructured/leeway/common/lw_enums.go:421-452`
 
 ```
 IntermediateColumnScopeE (string):
@@ -341,7 +341,7 @@ AllIntermediateColumnScopes = [all above]
 ```
 
 ### IntermediateColumnSubTypeE (String enum)
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_enums.go:454-494`
+**Location**: `public/semistructured/leeway/common/lw_enums.go:454-494`
 
 ```
 IntermediateColumnSubTypeE (string):
@@ -367,7 +367,7 @@ AllIntermediateColumnsSubTypes = [all above]
 ## Supporting Types
 
 ### StylableName
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/naming/lw_naming_types.go:6`
+**Location**: `public/semistructured/leeway/naming/lw_naming_types.go:6`
 
 ```
 type StylableName string
@@ -376,7 +376,7 @@ type StylableName string
 A name that can be transformed to different naming styles without losing descriptive/referencing/uniqueness properties.
 
 ### Key
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/naming/lw_naming_types.go:10`
+**Location**: `public/semistructured/leeway/naming/lw_naming_types.go:10`
 
 ```
 type Key string
@@ -387,7 +387,7 @@ For CoSectionGroup and StreamingGroup identifiers. Must be valid per `Key.Valida
 ### Aspect Sets (String-based encoding)
 
 #### encodingaspects.AspectSet
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/encodingaspects/lw_encodinghints_types.go:5`
+**Location**: `public/semistructured/leeway/encodingaspects/lw_encodinghints_types.go:5`
 
 ```
 type AspectSet string
@@ -399,7 +399,7 @@ Encodes encoding hints (compression strategies, optimization hints). Has methods
 - `IterateAspects()`
 
 #### useaspects.AspectSet
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/useaspects/lw_useaspects_types.go:5`
+**Location**: `public/semistructured/leeway/useaspects/lw_useaspects_types.go:5`
 
 ```
 type AspectSet string
@@ -408,7 +408,7 @@ type AspectSet string
 Encodes use context/semantics.
 
 #### valueaspects.AspectSet
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/valueaspects/lw_valueaspects_types.go:5`
+**Location**: `public/semistructured/leeway/valueaspects/lw_valueaspects_types.go:5`
 
 ```
 type AspectSet string
@@ -417,7 +417,7 @@ type AspectSet string
 Encodes value semantics.
 
 ### PrimitiveAstNodeI
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/canonicaltypes/canonicaltypes_types.go:42-50`
+**Location**: `public/semistructured/leeway/canonicaltypes/canonicaltypes_types.go:42-50`
 
 ```
 interface PrimitiveAstNodeI {
@@ -438,7 +438,7 @@ Represents canonical types as AST nodes (String, Temporal, MachineNumeric, Netwo
 ## Physical Column Descriptor (Bridge to Physical Schema)
 
 ### PhysicalColumnDesc
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:183-188`
+**Location**: `public/semistructured/leeway/common/lw_types.go:183-188`
 
 ```
 struct PhysicalColumnDesc {
@@ -464,7 +464,7 @@ struct PhysicalColumnDesc {
 ## Naming Convention Interfaces
 
 ### NamingConventionI
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:238-241`
+**Location**: `public/semistructured/leeway/common/lw_types.go:238-241`
 
 Combines forward and backward mapping:
 
@@ -498,7 +498,7 @@ interface NamingConventionI {
 ## Table Manipulation (Fluent API)
 
 ### TableManipulator
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:253-262`
+**Location**: `public/semistructured/leeway/common/lw_types.go:253-262`
 
 ```
 struct TableManipulator {
@@ -534,7 +534,7 @@ struct TableManipulator {
 ## Validation (Constraints)
 
 ### TableValidator
-**Location**: `/home/spx/repo/boxer/public/semistructured/leeway/common/lw_types.go:242-247`
+**Location**: `public/semistructured/leeway/common/lw_types.go:242-247`
 
 ```
 struct TableValidator {

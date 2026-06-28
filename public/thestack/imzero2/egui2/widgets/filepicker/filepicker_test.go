@@ -111,8 +111,8 @@ func TestSplitBreadcrumbs(t *testing.T) {
 		{"root-dot", ".", nil, nil},
 		{"empty", "", nil, nil},
 		{"shallow", "home", []string{"home"}, []string{"home"}},
-		{"deep", "home/spx/repo", []string{"home", "spx", "repo"}, []string{"home", "home/spx", "home/spx/repo"}},
-		{"trailing-slash", "home/spx/", []string{"home", "spx"}, []string{"home", "home/spx"}},
+		{"deep", "home/test-user/repo", []string{"home", "test-user", "repo"}, []string{"home", "home/test-user", "home/test-user/repo"}},
+		{"trailing-slash", "home/test-user/", []string{"home", "test-user"}, []string{"home", "home/test-user"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -332,9 +332,9 @@ func TestCommitPaths(t *testing.T) {
 	})
 	t.Run("open-applies-os-display-root", func(t *testing.T) {
 		inst := New("a", ModeOpen, WithDisplayRoot("/"))
-		inst.pickFile("home/spx/file.go")
+		inst.pickFile("home/test-user/file.go")
 		got := inst.commitPaths()
-		want := []string{"/home/spx/file.go"}
+		want := []string{"/home/test-user/file.go"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
@@ -361,18 +361,18 @@ func TestCommitPaths(t *testing.T) {
 	})
 	t.Run("pickfolder-returns-cwd", func(t *testing.T) {
 		inst := New("a", ModePickFolder)
-		inst.cwd = "home/spx/repo"
+		inst.cwd = "home/test-user/repo"
 		got := inst.commitPaths()
-		want := []string{"home/spx/repo"}
+		want := []string{"home/test-user/repo"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	})
 	t.Run("pickfolder-applies-display-root", func(t *testing.T) {
 		inst := New("a", ModePickFolder, WithDisplayRoot("/"))
-		inst.cwd = "home/spx/repo"
+		inst.cwd = "home/test-user/repo"
 		got := inst.commitPaths()
-		want := []string{"/home/spx/repo"}
+		want := []string{"/home/test-user/repo"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}

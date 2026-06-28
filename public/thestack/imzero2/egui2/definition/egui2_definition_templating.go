@@ -3,6 +3,7 @@ package definition
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -66,7 +67,12 @@ func rustClientCode(s string) *templatedRustClientCode {
 	c := ir.NewStackCapture(1, 1)
 	var caller string
 	if len(c.Files) > 0 {
-		caller = fmt.Sprintf("// generating location: %s:%d %s(...)\n", c.Files[0], c.Lines[0], c.Funcs[0])
+		// Emit only the file basename, not the absolute build-machine path:
+		// the build runs without -trimpath, so c.Files[0] is an absolute
+		// path that would leak the builder's home directory into committed
+		// generated code. c.Funcs[0] already carries the full package import
+		// path, so basename + line locates the source unambiguously.
+		caller = fmt.Sprintf("// generating location: %s:%d %s(...)\n", filepath.Base(c.Files[0]), c.Lines[0], c.Funcs[0])
 	}
 	if strings.Contains(s, "{{") {
 		t, err := fasttemplate.NewTemplate(s, "{{", "}}")

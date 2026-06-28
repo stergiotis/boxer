@@ -12,7 +12,7 @@ import (
 // readDirSorted returns dir's children from fsys, sorted via
 // sortDirEntries (directories first, then case-insensitive name order).
 //
-// dir is an io/fs path: "." for the FS root, "home/spx" for nested,
+// dir is an io/fs path: "." for the FS root, "home/test-user" for nested,
 // no leading "/", forward slashes, no "..". The fs.ReadDir helper
 // dispatches to fsys's ReadDirFS implementation when present and falls
 // back to Open + ReadDir otherwise, so any [fs.FS] works — including
@@ -113,7 +113,7 @@ func removeOrdered(xs []string, victim string) (out []string) {
 // path prefix at each segment, suitable for rendering a clickable
 // breadcrumb bar.
 //
-// Example: "home/spx" → (["home","spx"], ["home","home/spx"]).
+// Example: "home/test-user" → (["home","test-user"], ["home","home/test-user"]).
 // The FS root ("." or "") returns empty slices — the caller is at root.
 func splitBreadcrumbs(cwd string) (segs, prefixes []string) {
 	clean := path.Clean(cwd)

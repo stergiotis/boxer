@@ -10,20 +10,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testTilesDir = "/home/spx/data/swisstopo"
+// testTilesDir resolves the swissALTI3D tile directory from
+// $SWISSTOPO_TILES_DIR, falling back to ~/data/swisstopo. Tests skip when
+// the directory is absent, so the fallback only matters on a machine that
+// has tiles staged there.
+func testTilesDir() (dir string) {
+	if d := os.Getenv("SWISSTOPO_TILES_DIR"); d != "" {
+		return d
+	}
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		return ""
+	}
+	return filepath.Join(home, "data", "swisstopo")
+}
 
 func tilesAvailable(t *testing.T) {
 	t.Helper()
-	_, statErr := os.Stat(testTilesDir)
+	dir := testTilesDir()
+	_, statErr := os.Stat(dir)
 	if statErr != nil {
-		t.Skipf("test tiles not available at %s", testTilesDir)
+		t.Skipf("test tiles not available at %s", dir)
 	}
 }
 
 func tilePath(t *testing.T, eKm int32, nKm int32) string {
 	t.Helper()
 	// Filename pattern: swissalti3d_YYYY_EEEE-NNNN_2_2056_5728.tif — year varies.
-	pattern := filepath.Join(testTilesDir, fmt.Sprintf("swissalti3d_*_%d-%d_2_2056_5728.tif", eKm, nKm))
+	pattern := filepath.Join(testTilesDir(), fmt.Sprintf("swissalti3d_*_%d-%d_2_2056_5728.tif", eKm, nKm))
 	matches, err := filepath.Glob(pattern)
 	if err != nil || len(matches) == 0 {
 		t.Skipf("tile %d-%d not found", eKm, nKm)

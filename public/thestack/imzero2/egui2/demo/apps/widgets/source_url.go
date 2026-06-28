@@ -21,7 +21,7 @@ import (
 // Build is not run with -trimpath (verified scripts/ci/*.sh and src/rust/hmi.sh),
 // so file paths arrive absolute. We strip everything up to and including the
 // last "/<repoName>/" segment, which works for both worktree layouts
-// (/home/.../pebble2impl/...) and CI checkouts.
+// (/home/.../<repoName>/...) and CI checkouts.
 func buildSourceURL(absFile string, line int) (url string) {
 	var revision string
 	// Under IMZERO2_SCREENSHOT_DIR substitute "main" for the build's

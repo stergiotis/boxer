@@ -187,7 +187,7 @@ func buildFvLongValueFixture() (out []fieldview.Field) {
 		{Name: "url", Kind: fieldview.KindString,
 			Str: "https://example.com/api/v1/cards?owner=alice&since=2026-01-01&until=2026-12-31&include=tags,scores,history&format=json&limit=100"},
 		{Name: "stack_excerpt", Kind: fieldview.KindString,
-			Str: "panic: runtime error: index out of range [42] with length 7\n\tgoroutine 1 [running]:\n\tmain.processCards(0xc000180000?, 0x2a)\n\t/home/spx/repo/pebble2impl/cmd/example/main.go:128 +0xa4\n\tmain.main()\n\t/home/spx/repo/pebble2impl/cmd/example/main.go:42 +0x18"},
+			Str: "panic: runtime error: index out of range [42] with length 7\n\tgoroutine 1 [running]:\n\tmain.processCards(0xc000180000?, 0x2a)\n\t/app/cmd/example/main.go:128 +0xa4\n\tmain.main()\n\t/app/cmd/example/main.go:42 +0x18"},
 		{Name: "blob_long", Kind: fieldview.KindBytes, Bytes: long},
 	}
 	return

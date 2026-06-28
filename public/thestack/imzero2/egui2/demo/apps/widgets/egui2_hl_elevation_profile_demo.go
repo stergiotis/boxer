@@ -23,30 +23,30 @@ import (
 // cancellable background goroutine and renders the result as an egui_plot
 // line.
 //
-// Tile directory comes from $SWISSTOPO_TILES_DIR (fallback /home/spx/data/
-// swisstopo); when the directory is absent, the demo still renders the map
-// and the markers but shows a "tiles not available" label instead of the
-// profile.
+// Tile directory comes from $SWISSTOPO_TILES_DIR (default ~/data/swisstopo);
+// when the directory is absent, the demo still renders the map and the
+// markers but shows a "tiles not available" label instead of the profile.
 // =============================================================================
 
 const (
-	swissCenterLat       = 46.8182
-	swissCenterLon       = 8.2275
-	swissTilesDirEnv     = "SWISSTOPO_TILES_DIR"
-	swissTilesDirDefault = "/home/spx/data/swisstopo"
-	elevMapStageW        = float32(900)
-	elevMapStageH        = float32(500)
-	elevProfileSampleM   = 50.0
-	elevMarkerIdPt1      = uint64(100)
-	elevMarkerIdPt2      = uint64(200)
+	swissCenterLat     = 46.8182
+	swissCenterLon     = 8.2275
+	swissTilesDirEnv   = "SWISSTOPO_TILES_DIR"
+	elevMapStageW      = float32(900)
+	elevMapStageH      = float32(500)
+	elevProfileSampleM = 50.0
+	elevMarkerIdPt1    = uint64(100)
+	elevMarkerIdPt2    = uint64(200)
 )
 
 // SwissTilesDir is the swissALTI3D tile directory consumed by the
-// elevation-profile demo. Empty falls back to swissTilesDirDefault.
+// elevation-profile demo. Defaults to ~/data/swisstopo (home-expanded by
+// the env layer) when $SWISSTOPO_TILES_DIR is unset.
 var SwissTilesDir = env.NewPath(env.Spec{
 	Name:        swissTilesDirEnv,
 	Description: "directory containing swissALTI3D 2m COG tiles for the elevation-profile demo",
 	Category:    env.CategoryE("swisstopo"),
+	Default:     "~/data/swisstopo",
 })
 
 // selectionStageE is the click-placement FSM. "Computing" vs "Done" is
@@ -128,11 +128,7 @@ func ensureSampler() (s *swisstopo.ElevationSampler, err error) {
 }
 
 func tilesDir() (dir string) {
-	dir = SwissTilesDir.Get()
-	if dir == "" {
-		dir = swissTilesDirDefault
-	}
-	return
+	return SwissTilesDir.Get()
 }
 
 func demoElevationProfile(ids *c.WidgetIdStack, st *elevationProfileState) {

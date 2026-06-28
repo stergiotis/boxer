@@ -34,9 +34,9 @@ func TestNewBridge_DefaultsRootedAtSlash(t *testing.T) {
 }
 
 func TestNewBridge_CustomRoot(t *testing.T) {
-	b, _, cleanup := newBridge(t, Config{FsRoot: "/home/spx"})
+	b, _, cleanup := newBridge(t, Config{FsRoot: "/home/test-user"})
 	defer cleanup()
-	assert.Equal(t, "/home/spx", b.cfg.FsRoot)
+	assert.Equal(t, "/home/test-user", b.cfg.FsRoot)
 }
 
 func TestBridge_Render_IdleWhenNoPending(t *testing.T) {
@@ -51,14 +51,14 @@ func TestBridge_Render_IdleWhenNoPending(t *testing.T) {
 
 func TestBridge_ToAbsolute_RootedAtSlash(t *testing.T) {
 	b := &Bridge{cfg: Config{FsRoot: "/"}}
-	assert.Equal(t, "/home/spx/foo.txt", b.toAbsolute("home/spx/foo.txt"))
+	assert.Equal(t, "/home/test-user/foo.txt", b.toAbsolute("home/test-user/foo.txt"))
 	assert.Equal(t, "/etc/passwd", b.toAbsolute("etc/passwd"))
 }
 
 func TestBridge_ToAbsolute_RootedElsewhere(t *testing.T) {
-	b := &Bridge{cfg: Config{FsRoot: "/home/spx"}}
-	assert.Equal(t, "/home/spx/foo.txt", b.toAbsolute("foo.txt"))
-	assert.Equal(t, "/home/spx/a/b/c", b.toAbsolute("a/b/c"))
+	b := &Bridge{cfg: Config{FsRoot: "/home/test-user"}}
+	assert.Equal(t, "/home/test-user/foo.txt", b.toAbsolute("foo.txt"))
+	assert.Equal(t, "/home/test-user/a/b/c", b.toAbsolute("a/b/c"))
 }
 
 func TestBridge_ToAbsolute_AlreadyAbsolute(t *testing.T) {

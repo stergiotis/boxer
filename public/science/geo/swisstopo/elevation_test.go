@@ -12,7 +12,7 @@ import (
 func newTestSampler(t *testing.T) *ElevationSampler {
 	t.Helper()
 	tilesAvailable(t)
-	sampler, err := NewElevationSampler(context.Background(), testTilesDir)
+	sampler, err := NewElevationSampler(context.Background(), testTilesDir())
 	require.NoError(t, err)
 	return sampler
 }
@@ -134,9 +134,9 @@ func TestElevationSampler_SampleProfile_SamePoint(t *testing.T) {
 
 func TestTileGridKey(t *testing.T) {
 	tests := []struct {
-		lv95     LV95Coord
-		expectE  int32
-		expectN  int32
+		lv95    LV95Coord
+		expectE int32
+		expectN int32
 	}{
 		{LV95Coord{E: 2_600_000, N: 1_200_000}, 2600, 1200},
 		{LV95Coord{E: 2_600_999, N: 1_200_999}, 2600, 1200},

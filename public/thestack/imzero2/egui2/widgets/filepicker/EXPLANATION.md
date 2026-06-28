@@ -72,8 +72,8 @@ intermediate result all live in this domain. The `path` package (not
 
 The `WithDisplayRoot(prefix)` option introduces a presentation-layer
 prefix that is prepended only at commit time. `WithStartAtOsHome()`
-auto-sets it to `"/"` so OS-backed pickers return `"/home/spx/file.go"`
-to the host even though the picker walked `home/spx/file.go`
+auto-sets it to `"/"` so OS-backed pickers return `"/home/test-user/file.go"`
+to the host even though the picker walked `home/test-user/file.go`
 internally.
 
 ### Per-instance ID isolation
