@@ -534,6 +534,75 @@ cross-query materialization of *shared* intermediates over HTTP (SD13's hard
 part — the first cut recomputes per observer); explicit multi-cell authoring
 (SD12).
 
+### 2026-06-28 — Slice 4 (design): panels gain typed input channels (amends SD6, SD7, the interface)
+
+A design amendment ratified for implementation; the slices land as their own
+shipped-milestone Updates. Exploring how the Timeline really works surfaced a
+refinement of the panel contract. The Timeline already has two data inputs —
+foreground **events** (`_tl_*`) and background **bands** (`_tl_band_*`, a disjoint
+contract authored as a separate SQL on a bespoke panel-local lane). SD6/SD7
+modelled a panel as an observer of *one* node, which cannot express this; the
+bands stayed a hand-rolled lane — the twin of the Map lane retired in 3f.
+
+**Decision: a panel declares one or more typed input _channels_; each is filled
+by an eligible node.** This amends two SDs and the interface:
+
+- **SD6 (accept/reject) → per-channel.** `Accept(schema, sig)` becomes
+  `AcceptForChannel(channel, schema, sig)`: eligibility is asked per (node ×
+  channel); a node may be eligible for zero, one, or several channels. The claim
+  (Timeline `Mode`, Detail's leeway-vs-ad-hoc, …) is per-channel; the Points/
+  Intervals/Annotations modes stay claims *within* the events channel — channels
+  are the higher axis.
+- **SD7 (one node per panel) → a binding per channel.** A panel binds a node per
+  channel, not one total. Single-channel panels (Table, Detail, Projection: one
+  `{main, required}` channel) are behaviour-identical to the shipped versions. The
+  Timeline declares `{events, required}` + `{bands, optional}`; *renderable* = all
+  required channels filled (bands missing → events still draw).
+
+Revised interface (supersedes the single-`BoundNode` shape above):
+
+```go
+type PanelI interface {
+    ID() PanelID
+    Channels() []ChannelSpec
+    AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (ChannelClaim, reason string)
+    Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI)
+}
+type ChannelSpec   struct{ ID ChannelID; Required bool; Label string }
+type ChannelResult struct{ Node NodeID; Rec arrow.RecordBatch; Claim ChannelClaim }
+```
+
+**Assignment is hybrid (auto-suggest + override).** Eligibility auto-fills each
+channel — the disjoint `_tl_band_*` contract makes a bands node an unambiguous
+auto-match — and the binding is overridable from the Graph view. The binding
+generalizes 3d's single global `observedNode` into a `(panel, channel) → node`
+map; the first cut keeps `observedNode` driving every main/events channel (no
+regression) and *adds* the bands channel, with per-channel reassignment of the
+main/events channels as a later generalization.
+
+**The Timeline's events→bands coupling becomes a signal.** Today the bands SQL
+carries `_time_data_min` / `_time_data_max` placeholders textually replaced with
+the events result's time extent. In the channel model the Timeline `emit`s
+`tl_extent` when it renders the events channel (it already computes that extent
+for the axis); the bands node reads it as bound params and re-runs reactively. The
+placeholder hack retires into the SD8 signal path — no new mechanism.
+
+So three bespoke mechanisms fold into the model already built: the bands become a
+**node** (retiring the last panel-local lane, after 3f's Map), the panel contract
+generalizes to **multi-channel**, and the events→bands coupling becomes a
+**signal→param** edge.
+
+**Terminology — "channel", not "role".** `play` is downstream of leeway, where
+*role* already means membership-role (ADR-0073); a panel-input "role" would
+collide nominally across the two domains. "Layer" fit the Timeline's z-order but
+was weak for non-stacking panels. "Channel" carries no such collision and reads as
+a typed data feed.
+
+Delivery: **4a** the channel contract (redefine `PanelI`; migrate all four panels,
+three trivially single-channel; behaviour-identical); **4b** bands as a node + the
+`tl_extent` signal (retire the bands lane); **4c** Graph-view channel UI (per-node
+eligibility badges + assignment, generalizing "observe in panels").
+
 ## References
 
 Internal:
