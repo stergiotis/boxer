@@ -1,19 +1,24 @@
 // Package terrainscope is a keelson app for swissALTI3D terrain
-// line-of-sight analysis. Two clicks on a slippy map pick an observer and
-// a target; the app then interprets that sight line in polar coordinates
-// about the observer and sweeps the bearing by ±range degrees, evaluating
-// the terrain line-of-sight of every ray and recording all the resulting
-// height profiles (swisstopo.LineOfSightSweep). A half-range of 0 reduces
-// the fan to the single observer→target ray.
+// line-of-sight analysis. Two clicks on a slippy map pick an observer and a
+// target; the app interprets that sight line in polar coordinates about the
+// observer and sweeps the bearing by ±range degrees, evaluating the terrain
+// line-of-sight of every ray. The observer position is treated as uncertain:
+// a Monte-Carlo ensemble jitters the sweep centre by a Gaussian and the app
+// records, per bearing, the visibility probability and, per (bearing,
+// distance), the terrain-elevation envelope (swisstopo.LineOfSightSweepEnsemble).
 //
-// Ported from the former imzero2 "elevation-profile" demo scene
-// (ADR-0099). Tile reading is a direct filesystem read of
-// $SWISSTOPO_TILES_DIR for now — the ADR-0090-style headless elevation
-// service (which would make this app a zero-fs-cap bus client) is deferred
-// to Phase 4.
+// All analysis parameters are live controls — editing a slider recomputes
+// the ensemble (coalesced so at most one worker runs at a time). A half-range
+// of 0 reduces the fan to a single ray; σ or samples of 0 reduces the
+// ensemble to the nominal sweep.
 //
-// Lifecycle: Mount captures the logger; Frame renders inside the
-// host-owned window; Unmount cancels any in-flight sweep worker.
+// Ported from the former imzero2 "elevation-profile" demo scene (ADR-0099).
+// Tile reading is a direct filesystem read of $SWISSTOPO_TILES_DIR for now —
+// the ADR-0090-style headless elevation service (which would make this app a
+// zero-fs-cap bus client) is deferred to Phase 4.
+//
+// Lifecycle: Mount captures the logger; Frame renders inside the host-owned
+// window; Unmount cancels any in-flight sweep worker.
 package terrainscope
 
 import (
@@ -40,16 +45,23 @@ const (
 	swissCenterLon   = 8.2275
 	swissTilesDirEnv = "SWISSTOPO_TILES_DIR"
 	mapStageW        = float32(900)
-	mapStageH        = float32(440)
+	mapStageH        = float32(420)
 	plotHeight       = float32(260)
 	markerIdPt1      = uint64(100)
 	markerIdPt2      = uint64(200)
+
+	// sweepSeed fixes the Monte-Carlo draw so identical parameters yield an
+	// identical ensemble — the band and probabilities don't flicker between
+	// recomputes of the same selection.
+	sweepSeed = uint64(0x7e44a1)
 
 	// Default analysis parameters, editable via the controls panel.
 	defaultObserverH    = 1.7 // eye height, metres above terrain
 	defaultTargetH      = 0.0
 	defaultSweepHalfDeg = 2.0
 	defaultSweepStepDeg = 0.5
+	defaultSigmaM       = 10.0 // observer-position uncertainty (1σ, metres)
+	defaultSamples      = 16.0
 )
 
 // SwissTilesDir is the swissALTI3D tile directory consumed by the app.
@@ -63,20 +75,18 @@ var SwissTilesDir = env.NewPath(env.Spec{
 	Default:     "~/data/swisstopo",
 })
 
-// ids is the package-level WidgetIdStack. Each frame's render wraps the
-// body in c.IdScope(ids.PrepareSeq(inst.seed)) so two open windows
-// produce disjoint Go-side widget ids even though the stack is shared.
+// ids is the package-level WidgetIdStack. Each frame's render wraps the body
+// in c.IdScope(ids.PrepareSeq(inst.seed)) so two open windows produce
+// disjoint Go-side widget ids even though the stack is shared.
 var ids = c.NewWidgetIdStack()
 
-// instanceCounter feeds per-instance seeds. Every newApp() increments
-// and the post-increment value is the App's stable salt for the
-// lifetime of that window.
+// instanceCounter feeds per-instance seeds.
 var instanceCounter atomic.Uint64
 
 // Package-shared sampler, built lazily on first request. Shared across
-// windows because it is read-only after construction and the tile-index
-// scan is expensive; context.Background() because sampler init must
-// outlive any individual window's worker context.
+// windows because it is read-only after construction and the tile-index scan
+// is expensive; context.Background() because sampler init must outlive any
+// individual window's worker context.
 var (
 	samplerOnce sync.Once
 	sampler     *swisstopo.ElevationSampler
@@ -84,8 +94,7 @@ var (
 )
 
 // selectionStageE is the click-placement FSM. "Computing" vs "Done" is
-// derived from result presence, not encoded here — keeps the FSM owned
-// exclusively by the render goroutine.
+// derived from result/worker state, not encoded here.
 type selectionStageE uint8
 
 const (
@@ -94,10 +103,24 @@ const (
 	selectionStagePt2
 )
 
-// sweepResult is the worker's output, published atomically under App.mu
-// so reset/republish never races with a render read.
+// sweepParams is the comparable snapshot of every input that affects the
+// result. The reactive recompute fires whenever it changes.
+type sweepParams struct {
+	fromLat  float64
+	fromLon  float64
+	toLat    float64
+	toLon    float64
+	observer float64
+	target   float64
+	halfDeg  float64
+	stepDeg  float64
+	sigmaM   float64
+	samples  int64
+}
+
+// sweepResult is the worker's output, published atomically under App.mu.
 type sweepResult struct {
-	sweep  swisstopo.LOSSweepResult
+	ens    swisstopo.LOSEnsembleResult
 	fromLV swisstopo.LV95Coord
 	toLV   swisstopo.LV95Coord
 }
@@ -113,35 +136,39 @@ type App struct {
 	pt2Lat float64
 	pt2Lon float64
 
-	// Analysis parameters, edited via the controls panel and snapshotted
-	// into each worker launch.
+	// Analysis parameters, edited via the controls panel.
 	observerH    float64
 	targetH      float64
 	sweepHalfDeg float64
 	sweepStepDeg float64
+	sigmaM       float64
+	samples      float64
+
+	// Reactive-recompute bookkeeping. lastLaunched is the params snapshot of
+	// the in-flight/last worker; the frame loop relaunches (coalesced) when
+	// the current params diverge.
+	haveLaunched bool
+	lastLaunched sweepParams
 
 	// Sticky-once override flags for SetZoom / CenterAt — see
-	// doc/skills/imzero2/SKILLS.md §16.3. Flipped on the discrete event
-	// that should retarget the view; cleared after one frame so the user
-	// can pan/zoom freely afterwards.
+	// doc/skills/imzero2/SKILLS.md §16.3.
 	overrideZoom   float64
 	overrideCenter [2]float64
 	applyZoom      bool
 	applyCenter    bool
 
-	// plotEpoch is folded into the profile-plot widget id; bumping it on
-	// reset gives egui_plot fresh widget state so its cached axis
-	// transform from the previous selection doesn't dominate the new
-	// data's auto-bounds fit.
+	// plotEpoch is folded into the plot widget id; bumping it on reset gives
+	// egui_plot fresh widget state so its cached axis transform doesn't
+	// dominate the next selection's auto-bounds fit.
 	plotEpoch uint64
 
-	// Worker state. mu serialises {epoch, cancelFn, result} writes against
-	// reads in the render goroutine; epoch ensures late-arriving worker
-	// results from a cancelled compute are dropped instead of overwriting
-	// post-reset state.
+	// Worker state. mu serialises {epoch, cancelFn, inFlight, result} writes
+	// against render-goroutine reads; epoch drops late results from a
+	// superseded/cancelled compute.
 	mu       sync.Mutex
 	epoch    uint64
 	cancelFn context.CancelFunc
+	inFlight bool
 	result   *sweepResult
 }
 
@@ -155,6 +182,8 @@ func newApp() (inst *App) {
 		targetH:      defaultTargetH,
 		sweepHalfDeg: defaultSweepHalfDeg,
 		sweepStepDeg: defaultSweepStepDeg,
+		sigmaM:       defaultSigmaM,
+		samples:      defaultSamples,
 	}
 	return
 }
@@ -166,12 +195,13 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	return
 }
 
-// Unmount cancels any in-flight sweep worker so a closed window does not
-// leave a goroutine sampling tiles into a result nobody reads.
+// Unmount cancels any in-flight worker so a closed window does not leave a
+// goroutine sampling tiles into a result nobody reads.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.mu.Lock()
 	cancel := inst.cancelFn
 	inst.cancelFn = nil
+	inst.inFlight = false
 	inst.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -179,8 +209,8 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	return
 }
 
-// Frame renders the app body. Wrapped in IdScope(seed) so per-instance
-// widget ids stay disjoint across multiple open windows.
+// Frame renders the app body. Wrapped in IdScope(seed) so per-instance widget
+// ids stay disjoint across multiple open windows.
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	ids.Reset()
 	for range c.IdScope(ids.PrepareSeq(inst.seed)) {
@@ -197,14 +227,17 @@ func (inst *App) renderBody() {
 		inst.renderMap()
 		inst.renderResult()
 	}
+	// Single launch site: react to control edits / a fresh selection after
+	// the controls and click have been processed this frame.
+	inst.maybeRecompute()
 }
 
 func (inst *App) renderControls() {
 	inst.mu.Lock()
-	haveResult := inst.result != nil
+	inFlight := inst.inFlight
 	inst.mu.Unlock()
 
-	c.Label(statusLabel(inst.stage, haveResult)).Send()
+	c.Label(statusLabel(inst.stage, inFlight)).Send()
 	if samplerErr != nil {
 		c.Label(fmt.Sprintf("tiles not available (%s=%q): %v", swissTilesDirEnv, tilesDir(), samplerErr)).Send()
 	}
@@ -222,20 +255,54 @@ func (inst *App) renderControls() {
 			Text("step").Suffix("°").FixedDecimals(2).SendRespVal(&inst.sweepStepDeg)
 	}
 	for range c.Horizontal().KeepIter() {
-		if c.Button(ids.PrepareStr("reset"), c.Atoms().Text(icons.IconClose+" Reset").Keep()).
-			SendResp().HasPrimaryClicked() {
-			inst.resetSelection()
-		}
-		// Once both points are placed, the analysis parameters can be
-		// re-applied without re-picking. Recompute is the explicit apply:
-		// slider edits update the params but do not spawn a worker until
-		// clicked, so dragging a slider does not flood the tile sampler.
-		if inst.stage == selectionStagePt2 {
-			if c.Button(ids.PrepareStr("recompute"), c.Atoms().Text(icons.IconPlay+" Recompute").Keep()).
-				SendResp().HasPrimaryClicked() {
-				inst.launchSweepWorker()
-			}
-		}
+		_ = c.SliderF64(ids.PrepareStr("sigma"), inst.sigmaM, 0, 50).
+			Text("centre σ").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaM)
+		_ = c.SliderF64(ids.PrepareStr("samples"), inst.samples, 0, 64).
+			Text("samples").FixedDecimals(0).SendRespVal(&inst.samples)
+	}
+	if c.Button(ids.PrepareStr("reset"), c.Atoms().Text(icons.IconClose+" Reset").Keep()).
+		SendResp().HasPrimaryClicked() {
+		inst.resetSelection()
+	}
+}
+
+// maybeRecompute is the reactive, coalesced launch. While a worker is in
+// flight it keeps frames flowing (so the result paints when ready) and never
+// starts a second; once idle it (re)launches if the live params have diverged
+// from the last launch — leading + trailing coalescing, at most one worker.
+func (inst *App) maybeRecompute() {
+	if inst.stage != selectionStagePt2 {
+		return
+	}
+	inst.mu.Lock()
+	inFlight := inst.inFlight
+	inst.mu.Unlock()
+
+	if inFlight {
+		c.RequestRepaint()
+		return
+	}
+	cur := inst.currentParams()
+	if !inst.haveLaunched || cur != inst.lastLaunched {
+		inst.launchSweepWorker(cur)
+		inst.lastLaunched = cur
+		inst.haveLaunched = true
+		c.RequestRepaint()
+	}
+}
+
+func (inst *App) currentParams() (p sweepParams) {
+	return sweepParams{
+		fromLat:  inst.pt1Lat,
+		fromLon:  inst.pt1Lon,
+		toLat:    inst.pt2Lat,
+		toLon:    inst.pt2Lon,
+		observer: inst.observerH,
+		target:   inst.targetH,
+		halfDeg:  inst.sweepHalfDeg,
+		stepDeg:  inst.sweepStepDeg,
+		sigmaM:   inst.sigmaM,
+		samples:  int64(inst.samples + 0.5),
 	}
 }
 
@@ -246,9 +313,6 @@ func (inst *App) renderMap() {
 
 	sm := c.CurrentApplicationState.StateManager
 
-	// Capture our own WalkersMap widget id so we can ignore clicks on
-	// sibling walkers maps. PrepareStr + Derive consumes the stack frame;
-	// we re-prepare immediately before the WalkersMap.Send().
 	ids.PrepareStr("ts-map")
 	mapId := ids.Derive()
 
@@ -269,14 +333,10 @@ func (inst *App) renderMap() {
 			Label(fmt.Sprintf("target (%.5f, %.5f)", inst.pt2Lat, inst.pt2Lon)).
 			Color(color.Hex(0xff4444ff)).Radius(8).Send()
 	}
-	// The swept fan: one polyline per ray, observer → rotated target.
 	if res != nil {
 		inst.renderFanOverlay(res)
 	}
 
-	// Map. Sticky overrides are applied via the apply-once flag pattern
-	// (SKILLS.md §16.3); unconditional per-frame SetZoom/CenterAt would
-	// lock the user out of pan/zoom after the second click.
 	ids.PrepareStr("ts-map")
 	mw := c.WalkersMap(ids, swissCenterLat, swissCenterLon, false).
 		Width(mapStageW).Height(mapStageH)
@@ -291,18 +351,18 @@ func (inst *App) renderMap() {
 	mw.Send()
 }
 
-// renderFanOverlay draws the swept rays as map polylines from the observer
-// to each ray's rotated target. The centre ray (offset 0) is drawn strong;
-// the rest are hairlines coloured along a blue→red ramp by bearing.
+// renderFanOverlay draws the swept rays as map polylines from the observer to
+// each ray's nominal rotated target, coloured by visibility probability
+// (green = clear from every sampled centre, red = blocked from all). The
+// centre ray is drawn strong.
 func (inst *App) renderFanOverlay(res *sweepResult) {
-	n := len(res.sweep.Targets)
-	for i := range n {
-		tgtWGS := swisstopo.LV95ToWGS84(res.sweep.Targets[i])
-		isCenter := math.Abs(res.sweep.AngleDeg[i]) < 1e-9
-		col := rayColorAt(i, n)
+	tgts := res.ens.Nominal.Targets
+	for i := range tgts {
+		tgtWGS := swisstopo.LV95ToWGS84(tgts[i])
+		isCenter := math.Abs(res.ens.AngleDeg[i]) < 1e-9
+		col := visProbColor(res.ens.VisProb[i])
 		width := styletokens.StrokeHair
 		if isCenter {
-			col = color.Hex(0xffee44ff)
 			width = styletokens.StrokeStrong
 		}
 		c.MapPolyline(
@@ -318,29 +378,35 @@ func (inst *App) renderResult() {
 	inst.mu.Unlock()
 
 	switch {
-	case inst.stage == selectionStagePt2 && res != nil && len(res.sweep.Rays) > 0:
+	case inst.stage == selectionStagePt2 && res != nil && len(res.ens.Nominal.Rays) > 0:
 		inst.renderSweepPanel(res)
 	case inst.stage == selectionStagePt2 && res == nil:
-		c.Label("Computing line-of-sight sweep… this may take a moment.").Send()
+		c.Label("Computing line-of-sight sweep ensemble… this may take a moment.").Send()
 	case inst.stage == selectionStagePt1:
 		c.Label(fmt.Sprintf("Observer: (%.6f, %.6f)", inst.pt1Lat, inst.pt1Lon)).Send()
-		c.Label("Click a second point to set the target bearing, then the sweep runs.").Send()
+		c.Label("Click a second point to set the target bearing; the sweep runs automatically.").Send()
 	}
 }
 
 func (inst *App) renderSweepPanel(res *sweepResult) {
 	c.Separator().Send()
 
-	rays := res.sweep.Rays
-	centerIdx := centerRayIndex(res.sweep.AngleDeg)
+	ens := res.ens
+	rays := ens.Nominal.Rays
+	centerIdx := centerRayIndex(ens.AngleDeg)
 	center := rays[centerIdx]
 	totalDist := center.ProfileDist[len(center.ProfileDist)-1]
 
 	visible := 0
-	for _, ray := range rays {
+	meanProb := 0.0
+	for i, ray := range rays {
 		if ray.Visible {
 			visible++
 		}
+		meanProb += ens.VisProb[i]
+	}
+	if len(rays) > 0 {
+		meanProb /= float64(len(rays))
 	}
 
 	var minE, maxE float32 = math.MaxFloat32, -math.MaxFloat32
@@ -355,12 +421,24 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 
 	c.Label(fmt.Sprintf("Observer %s (+%.1f m)  →  target %s (+%.1f m)",
 		res.fromLV.String(), inst.observerH, res.toLV.String(), inst.targetH)).Send()
-	c.Label(fmt.Sprintf("Range: %.0f m  |  rays: %d (±%.1f° @ %.2f°)  |  visible: %d  |  obstructed: %d",
-		totalDist, len(rays), inst.sweepHalfDeg, inst.sweepStepDeg, visible, len(rays)-visible)).Send()
-	c.Label(fmt.Sprintf("Centre ray min elev: %.0f m  |  max elev: %.0f m", minE, maxE)).Send()
+	c.Label(fmt.Sprintf("Range %.0f m  |  rays %d (±%.1f° @ %.2f°)  |  centre uncertainty σ=%.1f m, %d samples",
+		totalDist, len(rays), inst.sweepHalfDeg, inst.sweepStepDeg, ens.SigmaM, ens.Samples)).Send()
+	c.Label(fmt.Sprintf("Nominal: visible %d / obstructed %d  |  mean visibility under uncertainty: %.0f%%  |  centre %.0f%%",
+		visible, len(rays)-visible, meanProb*100, ens.VisProb[centerIdx]*100)).Send()
 
-	// Overlay every ray's terrain profile (the recorded height profiles),
-	// the centre sight-line, and a scatter of obstruction points.
+	// Elevation envelope bands behind the profiles (only meaningful with a
+	// non-degenerate ensemble). All bands share one legend entry to keep it
+	// readable; each is a closed max-forward / min-backward polygon.
+	if ens.Samples > 0 && len(ens.Distance) > 1 {
+		for j := range rays {
+			xs, ys := envelopePolygon(ens.Distance, ens.TerrainMax[j], ens.TerrainMin[j])
+			c.PlotPolygon("± uncertainty", xs, ys, rayFillRGBA(j, len(rays), 0x26), 0x00000000, 0).Send()
+		}
+	}
+
+	// Nominal terrain profiles (bearing-ramp coloured, centre highlighted),
+	// the centre sight-line, then the obstruction scatter — drawn last so the
+	// markers sit on top.
 	for i, ray := range rays {
 		isCenter := i == centerIdx
 		col := rayColorAt(i, len(rays))
@@ -369,7 +447,11 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 			col = color.Hex(0xffee44ff)
 			width = 2.5
 		}
-		c.PlotLine(fmt.Sprintf("%+.1f°", res.sweep.AngleDeg[i]), ray.ProfileDist, f32sToF64(ray.ProfileElev)).
+		name := fmt.Sprintf("%+.1f°", ens.AngleDeg[i])
+		if ens.Samples > 0 {
+			name = fmt.Sprintf("%+.1f° %.0f%%", ens.AngleDeg[i], ens.VisProb[i]*100)
+		}
+		c.PlotLine(name, ray.ProfileDist, f32sToF64(ray.ProfileElev)).
 			Color(col).Width(width).Highlight(isCenter).Send()
 	}
 	c.PlotLine("sight line", center.ProfileDist, f32sToF64(center.LOSElev)).
@@ -394,16 +476,16 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 		Legend().AllowZoom(true).AllowDrag(true).Send()
 }
 
-func statusLabel(stage selectionStageE, haveResult bool) (label string) {
+func statusLabel(stage selectionStageE, computing bool) (label string) {
 	switch {
 	case stage == selectionStageNone:
 		label = "Selection: 0/2 — click the observer point on the map"
 	case stage == selectionStagePt1:
 		label = "Selection: 1/2 — click the target point on the map"
-	case stage == selectionStagePt2 && !haveResult:
-		label = "Computing line-of-sight sweep…"
+	case stage == selectionStagePt2 && computing:
+		label = "Computing line-of-sight sweep ensemble…"
 	default:
-		label = "Selection: 2/2 — sweep computed (adjust sliders + Recompute)"
+		label = "Selection: 2/2 — drag the sliders to re-run live"
 	}
 	return
 }
@@ -417,85 +499,80 @@ func (inst *App) handleClick(lat float64, lon float64) {
 		inst.pt2Lat, inst.pt2Lon = lat, lon
 		inst.stage = selectionStagePt2
 		inst.armRecenter()
-		inst.launchSweepWorker()
+		// The reactive loop (maybeRecompute) launches the first sweep this
+		// frame now that the stage is Pt2.
 	}
 }
 
 func (inst *App) resetSelection() {
 	inst.mu.Lock()
-	inst.epoch++ // late-arriving worker writes from before the bump are dropped
+	inst.epoch++ // late worker writes from before the bump are dropped
 	prev := inst.cancelFn
 	inst.cancelFn = nil
+	inst.inFlight = false
 	inst.result = nil
 	inst.mu.Unlock()
 	if prev != nil {
 		prev()
 	}
 	inst.stage = selectionStageNone
-	inst.plotEpoch++ // force egui_plot to allocate fresh widget state next render
+	inst.haveLaunched = false
+	inst.plotEpoch++ // fresh egui_plot widget state next render
 }
 
-func (inst *App) launchSweepWorker() {
+func (inst *App) launchSweepWorker(p sweepParams) {
 	ctx, cancel := context.WithCancel(context.Background())
 	inst.mu.Lock()
 	inst.epoch++
 	myEpoch := inst.epoch
 	prev := inst.cancelFn
 	inst.cancelFn = cancel
+	inst.inFlight = true
 	inst.result = nil
 	inst.mu.Unlock()
 	if prev != nil {
 		prev()
 	}
-
-	params := sweepParams{
-		fromLat:  inst.pt1Lat,
-		fromLon:  inst.pt1Lon,
-		toLat:    inst.pt2Lat,
-		toLon:    inst.pt2Lon,
-		observer: inst.observerH,
-		target:   inst.targetH,
-		halfDeg:  inst.sweepHalfDeg,
-		stepDeg:  inst.sweepStepDeg,
-	}
-	go inst.runSweepWorker(ctx, myEpoch, params)
-}
-
-type sweepParams struct {
-	fromLat  float64
-	fromLon  float64
-	toLat    float64
-	toLon    float64
-	observer float64
-	target   float64
-	halfDeg  float64
-	stepDeg  float64
+	go inst.runSweepWorker(ctx, myEpoch, p)
 }
 
 func (inst *App) runSweepWorker(ctx context.Context, myEpoch uint64, p sweepParams) {
 	s, err := ensureSampler()
 	if err != nil {
+		inst.finishWorker(myEpoch, nil)
 		return
 	}
 	if ctx.Err() != nil {
+		inst.finishWorker(myEpoch, nil)
 		return
 	}
 	fromLV := swisstopo.WGS84ToLV95(swisstopo.WGS84Coord{Lat: p.fromLat, Lon: p.fromLon})
 	toLV := swisstopo.WGS84ToLV95(swisstopo.WGS84Coord{Lat: p.toLat, Lon: p.toLon})
 
-	sweep, err := s.LineOfSightSweep(fromLV, p.observer, toLV, p.target, p.halfDeg, p.stepDeg)
+	ens, err := s.LineOfSightSweepEnsemble(fromLV, p.observer, toLV, p.target,
+		p.halfDeg, p.stepDeg, p.sigmaM, int(p.samples), sweepSeed)
 	if err != nil {
 		inst.logger.Error().Err(err).
 			Float64("fromLat", p.fromLat).Float64("fromLon", p.fromLon).
 			Float64("toLat", p.toLat).Float64("toLon", p.toLon).
-			Float64("halfDeg", p.halfDeg).Float64("stepDeg", p.stepDeg).
-			Msg("terrainscope: line-of-sight sweep failed")
+			Float64("sigmaM", p.sigmaM).Int64("samples", p.samples).
+			Msg("terrainscope: line-of-sight sweep ensemble failed")
+		inst.finishWorker(myEpoch, nil)
 		return
 	}
+	inst.finishWorker(myEpoch, &sweepResult{ens: ens, fromLV: fromLV, toLV: toLV})
+}
 
+// finishWorker publishes the result and clears the in-flight flag, but only
+// when this worker is still the current one (epoch match) — a superseded or
+// reset worker drops its result and leaves the live worker's flag alone.
+func (inst *App) finishWorker(myEpoch uint64, res *sweepResult) {
 	inst.mu.Lock()
-	if inst.epoch == myEpoch && ctx.Err() == nil {
-		inst.result = &sweepResult{sweep: sweep, fromLV: fromLV, toLV: toLV}
+	if inst.epoch == myEpoch {
+		inst.inFlight = false
+		if res != nil {
+			inst.result = res
+		}
 	}
 	inst.mu.Unlock()
 }
@@ -520,9 +597,8 @@ func (inst *App) armRecenter() {
 }
 
 // centerRayIndex returns the index of the offset-0 ray (the original
-// observer→target bearing). Offsets are symmetric and ascending, so this
-// is the middle index, but searching for the zero crossing keeps it robust
-// to any future asymmetry.
+// observer→target bearing) — the nearest-to-zero offset, robust to any future
+// asymmetry.
 func centerRayIndex(angleDeg []float64) (idx int) {
 	best := math.MaxFloat64
 	for i, a := range angleDeg {
@@ -534,16 +610,59 @@ func centerRayIndex(angleDeg []float64) (idx int) {
 	return
 }
 
-// rayColorAt returns a blue→red ramp colour for ray i of n, used for the
-// non-centre rays in both the map fan and the profile overlay.
+// envelopePolygon returns the closed (xs, ys) ring of an elevation band:
+// max curve left→right, then min curve right→left.
+func envelopePolygon(dist []float64, hi []float32, lo []float32) (xs []float64, ys []float64) {
+	n := len(dist)
+	xs = make([]float64, 0, 2*n)
+	ys = make([]float64, 0, 2*n)
+	for k := range n {
+		xs = append(xs, dist[k])
+		ys = append(ys, float64(hi[k]))
+	}
+	for k := n - 1; k >= 0; k-- {
+		xs = append(xs, dist[k])
+		ys = append(ys, float64(lo[k]))
+	}
+	return
+}
+
+// rayColorAt returns a blue→red ramp colour for ray i of n (the profile-line
+// colour, so bearings stay distinguishable).
 func rayColorAt(i int, n int) (col color.Color) {
 	if n <= 1 {
 		return color.Hex(0xffee44ff)
 	}
-	frac := float64(i) / float64(n-1) // 0 (most negative) … 1 (most positive)
+	frac := float64(i) / float64(n-1)
 	r := lerpByte(0x33, 0xff, frac)
 	b := lerpByte(0xff, 0x33, frac)
 	return color.RGBA(r, 0x55, b, 0xcc)
+}
+
+// rayFillRGBA is rayColorAt as a packed 0xRRGGBBAA with an explicit alpha,
+// for the translucent envelope polygons.
+func rayFillRGBA(i int, n int, alpha uint8) (rgba uint32) {
+	var r, b uint8 = 0xee, 0x44
+	if n > 1 {
+		frac := float64(i) / float64(n-1)
+		r = lerpByte(0x33, 0xff, frac)
+		b = lerpByte(0xff, 0x33, frac)
+	}
+	return uint32(r)<<24 | uint32(0x55)<<16 | uint32(b)<<8 | uint32(alpha)
+}
+
+// visProbColor maps a visibility probability in [0,1] to a red→amber→green
+// ramp for the map fan (0 = blocked from every sampled centre, 1 = clear).
+func visProbColor(p float64) (col color.Color) {
+	if p < 0 {
+		p = 0
+	}
+	if p > 1 {
+		p = 1
+	}
+	r := lerpByte(0xdd, 0x33, p)
+	g := lerpByte(0x33, 0xdd, p)
+	return color.RGBA(r, g, 0x44, 0xee)
 }
 
 func lerpByte(lo float64, hi float64, frac float64) (out uint8) {

@@ -51,6 +51,16 @@ plus the sweep computation in the library. Phased, descope-over-gate:
 - **Phase 4 (deferred)** — extract a headless elevation service (sole tile reader,
   answers profile / LOS / sweep over the bus); `terrainscope` becomes a zero-fs-cap
   bus client (ADR-0090 shape).
+- **Phase 5 (landed)** — center-position uncertainty.
+  `ElevationSampler.LineOfSightSweepEnsemble` Monte-Carlo samples the observer from
+  an isotropic 2D Gaussian (controllable σ + sample count, seeded for
+  reproducibility) and reduces the ensemble to a per-bearing visibility probability
+  and a per-(bearing, distance) terrain envelope (`LOSEnsembleResult`; pure
+  `aggregateEnsemble` is unit-tested without tiles). The app renders both — the map
+  fan is coloured by visibility probability, the plot adds the elevation envelope
+  band, the legend carries per-ray visibility percentages. Every analysis parameter
+  (heights, sweep range/step, σ, samples) is now a **live control** that recomputes
+  reactively, coalesced to at most one in-flight worker (leading + trailing).
 
 **Tile access:** Phase 1–3 read tiles directly from `$SWISSTOPO_TILES_DIR` (the env
 var moves from the demo package to the app), matching the demo. This is the chosen
