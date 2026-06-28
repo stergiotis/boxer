@@ -584,6 +584,10 @@ func (inst *PlayApp) Render() error {
 				// Scripted-screenshot focus: make Graph the default-active body tab.
 				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap}
 			}
+			if os.Getenv("SPINNAKER_PLAY_FOCUS_TIMELINE") != "" {
+				// Scripted-screenshot focus: make Timeline the default-active body tab.
+				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabGraph}
+			}
 			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45, bodyTabs...)
 			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
 			_ = dock.Split(editLeaf, c.DockRight, 0.55, dockTabPreview)

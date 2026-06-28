@@ -3,7 +3,11 @@ package play
 import (
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 	"github.com/stretchr/testify/assert"
@@ -121,40 +125,63 @@ func TestExtentOfEvents_SkipsNils(t *testing.T) {
 	assert.Equal(t, int64(100), mx)
 }
 
-func TestBandsCacheStore_LRUEviction(t *testing.T) {
-	inst := &TimelineDriver{}
-	for i := range bandsCacheSize + 3 {
-		key := bandsCacheKey{MinMS: int64(i), MaxMS: int64(i + 1), SQL: "x"}
-		inst.bandsCacheStoreLocked(key, []layout.BackgroundBand{{FromMS: int64(i)}})
-	}
-	assert.Equal(t, bandsCacheSize, len(inst.bandsCache),
-		"cache should be bounded to bandsCacheSize")
-	// Most-recent insertion is at index 0.
-	assert.Equal(t, int64(bandsCacheSize+2), inst.bandsCache[0].Key.MinMS)
+// The LRU cache retired in 4b — the bands node lane memoizes by compiled SQL
+// (extent + bands SQL), so an unchanged (extent, SQL) is a memo hit on the lane.
+
+func bandRec(fromMS, toMS int64, color string) arrow.RecordBatch {
+	mem := memory.NewGoAllocator()
+	ts := &arrow.TimestampType{Unit: arrow.Millisecond}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: timelineSlotBandFrom, Type: ts},
+		{Name: timelineSlotBandTo, Type: ts},
+		{Name: timelineSlotBandColor, Type: arrow.BinaryTypes.String},
+	}, nil)
+	fb := array.NewTimestampBuilder(mem, ts)
+	fb.Append(arrow.Timestamp(fromMS))
+	tb := array.NewTimestampBuilder(mem, ts)
+	tb.Append(arrow.Timestamp(toMS))
+	cb := array.NewStringBuilder(mem)
+	cb.Append(color)
+	fa, ta, ca := fb.NewArray(), tb.NewArray(), cb.NewArray()
+	rec := array.NewRecord(schema, []arrow.Array{fa, ta, ca}, 1)
+	fb.Release()
+	tb.Release()
+	cb.Release()
+	fa.Release()
+	ta.Release()
+	ca.Release()
+	return rec
 }
 
-func TestBandsCacheLookup_MoveToFront(t *testing.T) {
-	inst := &TimelineDriver{}
-	keys := []bandsCacheKey{
-		{MinMS: 1, MaxMS: 2, SQL: "a"},
-		{MinMS: 3, MaxMS: 4, SQL: "b"},
-		{MinMS: 5, MaxMS: 6, SQL: "c"},
+// updateBands demands the bands node lane and maps its _tl_band_* result into
+// inst.bands (ADR-0097 4b: the retired async lane's behaviour, via nodeLane).
+func TestUpdateBandsDemandsLaneAndMaps(t *testing.T) {
+	exec := &mockExecutor{build: func(string) arrow.RecordBatch { return bandRec(1000, 2000, "info.subtle") }}
+	sql := "SELECT _time_data_min AS _tl_band_from, _time_data_max AS _tl_band_to, 'info.subtle' AS _tl_band_color"
+	drv := &TimelineDriver{
+		client:          &Client{},
+		bandsLane:       newNodeLane(exec, memory.NewGoAllocator(), 0),
+		bandsSQLPtr:     &sql,
+		dataMinMS:       1000,
+		dataMaxMS:       2000,
+		dataExtentValid: true,
 	}
-	for _, k := range keys {
-		inst.bandsCacheStoreLocked(k, nil)
+	defer drv.bandsLane.close()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		drv.updateBands() // non-blocking demand; the lane lands the result async
+		if len(drv.bands) > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
-	// Most-recent first: c, b, a.
-	require.Equal(t, keys[2], inst.bandsCache[0].Key)
+	require.Len(t, drv.bands, 1, "the bands node's result is mapped into inst.bands")
+	assert.Equal(t, int64(1000), drv.bands[0].FromMS)
+	assert.Equal(t, int64(2000), drv.bands[0].ToMS)
+	require.NoError(t, drv.bandsErr)
 
-	// Looking up `a` should move it to front.
-	_, ok := inst.bandsCacheLookupLocked(keys[0])
-	require.True(t, ok)
-	assert.Equal(t, keys[0], inst.bandsCache[0].Key)
-}
-
-func TestBandsCacheLookup_Miss(t *testing.T) {
-	inst := &TimelineDriver{}
-	inst.bandsCacheStoreLocked(bandsCacheKey{MinMS: 1, MaxMS: 2, SQL: "a"}, nil)
-	_, ok := inst.bandsCacheLookupLocked(bandsCacheKey{MinMS: 99, MaxMS: 100, SQL: "z"})
-	assert.False(t, ok)
+	// An unchanged (extent, SQL) is a memo hit — no second wire call.
+	drv.updateBands()
+	assert.Equal(t, 1, exec.calls, "unchanged compiled SQL must be a lane memo hit")
 }

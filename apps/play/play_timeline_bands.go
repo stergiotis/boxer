@@ -1,7 +1,6 @@
 package play
 
 import (
-	"context"
 	"fmt"
 	"iter"
 	"math"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
@@ -102,70 +100,8 @@ func substituteBandsRange(sql string, minMS, maxMS int64) (out string) {
 	return
 }
 
-// bandsCacheKey identifies a fetched bands batch. Two SELECTs with the
-// same SQL but different (min, max) substitutions produce different
-// results, so all three components participate in the key.
-type bandsCacheKey struct {
-	MinMS int64
-	MaxMS int64
-	SQL   string
-}
-
-// bandsCacheSize bounds the in-memory LRU of fetched band batches. Each
-// entry is small (a handful of bands times the BackgroundBand struct);
-// the cap exists so a user rapidly cycling through ranges doesn't pin
-// stale results forever.
-const bandsCacheSize = 8
-
-// bandsCacheEntry is one LRU slot: the key (min, max, sql) and the
-// materialised band slice. The slice is shared, not copied — the band
-// data is immutable once published, so the producer closure can yield
-// from it directly without further allocation.
-type bandsCacheEntry struct {
-	Key   bandsCacheKey
-	Bands []layout.BackgroundBand
-}
-
-// bandsFetchTimeout bounds a single bands round-trip. The fetch runs on a
-// background goroutine (see runBandsFetch) so this is defence-in-depth — a
-// wedged ClickHouse can no longer pin a goroutine indefinitely.
+// bandsFetchTimeout bounds a single bands round-trip on the bands node lane.
 const bandsFetchTimeout = 10 * time.Second
-
-// fetchBands runs the bands SQL through the existing play *Client,
-// substituting the (min, max) scalars, and returns the resulting
-// background bands. Called from a background goroutine (runBandsFetch), never
-// the render thread. Unknown color names are dropped silently from the band
-// list; the count of skipped rows surfaces in skipped so the UI can flag them.
-func fetchBands(client *Client, sql string, minMS, maxMS int64) (bands []layout.BackgroundBand, skipped int, err error) {
-	rewritten := substituteBandsRange(sql, minMS, maxMS)
-	ctx, cancel := context.WithTimeout(context.Background(), bandsFetchTimeout)
-	defer cancel()
-	rdr, body, _, fErr := client.ExecuteArrowStream(ctx, rewritten, memory.NewGoAllocator())
-	if fErr != nil {
-		err = fErr
-		return
-	}
-	defer func() {
-		rdr.Release()
-		_ = body.Close()
-	}()
-
-	for rdr.Next() {
-		rec := rdr.Record()
-		bs, sk, mapErr := mapBandsRecord(rec)
-		if mapErr != nil {
-			err = mapErr
-			return
-		}
-		bands = append(bands, bs...)
-		skipped += sk
-	}
-	if rdr.Err() != nil {
-		err = rdr.Err()
-		return
-	}
-	return
-}
 
 // mapBandsRecord projects a single Arrow RecordBatch into
 // []BackgroundBand by walking the schema once for column indices, then
@@ -265,12 +201,12 @@ func fieldNames(schema *arrow.Schema) (names []string) {
 // composite widget at construction. It filters inst.bandsView (the
 // render-thread snapshot refreshed each frame by refreshBandsView) by the
 // per-frame view range — bands fully outside the visible window are
-// silently dropped, so the widget never paints offscreen geometry. Reading
-// bandsView (not the shared bands) keeps this off the lock and clear of the
-// fetch goroutine.
+// silently dropped, so the widget never paints offscreen geometry. inst.bands
+// is render-thread-only now (4b: the lane is the sole async part), so this
+// reads it directly.
 func (inst *TimelineDriver) bandsProducer(viewMinMS, viewMaxMS int64) iter.Seq[layout.BackgroundBand] {
 	return func(yield func(layout.BackgroundBand) bool) {
-		for _, b := range inst.bandsView {
+		for _, b := range inst.bands {
 			if b.ToMS < viewMinMS || b.FromMS > viewMaxMS {
 				continue
 			}
@@ -281,141 +217,44 @@ func (inst *TimelineDriver) bandsProducer(viewMinMS, viewMaxMS int64) iter.Seq[l
 	}
 }
 
-// maybeFetchBands runs the panel-local bands SQL against the current
-// (dataMinMS, dataMaxMS) extent and refreshes inst.bands. The cache is
-// consulted first so re-running the same main query (same extent + same
-// SQL) is a no-op. force bypasses the cache (used by the "Run bands"
-// button to re-execute against an externally-changed source table).
-func (inst *TimelineDriver) maybeFetchBands(force bool) {
+// updateBands demands the bands node lane with the bands SQL substituted for the
+// current (dataMinMS, dataMaxMS) extent, re-mapping the Arrow result into
+// inst.bands only when the served SQL changes (the Map's repack idiom). The lane
+// supplies async + supersession + last-good; an unchanged (extent, SQL) is a memo
+// hit. Empty SQL / invalid extent / no client clears the bands.
+func (inst *TimelineDriver) updateBands() {
 	if inst.bandsSQLPtr == nil {
 		return
 	}
 	sql := strings.TrimSpace(*inst.bandsSQLPtr)
 	if sql == "" || !inst.dataExtentValid || inst.client == nil {
-		inst.clearBands()
-		return
-	}
-
-	key := bandsCacheKey{MinMS: inst.dataMinMS, MaxMS: inst.dataMaxMS, SQL: sql}
-
-	inst.bandsMu.Lock()
-	if !force {
-		// Already showing this key, a fetch for it is in flight, or it's
-		// cached — nothing new to do.
-		if inst.bandsHaveFetched && key == inst.bandsLastFetchKey {
-			inst.bandsMu.Unlock()
-			return
-		}
-		if inst.bandsInFlight && key == inst.bandsInFlightKey {
-			inst.bandsMu.Unlock()
-			return
-		}
-		if cached, hit := inst.bandsCacheLookupLocked(key); hit {
-			inst.bands = cached
-			inst.bandsErr = nil
-			inst.bandsSkipped = 0
-			inst.bandsLastFetchKey = key
-			inst.bandsHaveFetched = true
-			inst.bandsMu.Unlock()
-			return
-		}
-	}
-	// Spawn the fetch on a background goroutine; the render loop repaints
-	// every frame (PlayApp.Render), so the result is picked up next frame.
-	inst.bandsInFlight = true
-	inst.bandsInFlightKey = key
-	inst.bandsMu.Unlock()
-
-	go inst.runBandsFetch(key)
-}
-
-// runBandsFetch performs one bands round-trip off the render thread and
-// publishes the result under bandsMu — but only if it is still the current
-// in-flight key. A newer query extent or bands-SQL edit (or a clearBands)
-// supersedes us: the staleness guard then discards this result, mirroring
-// Projector.run's `inst.cancel == cancel` check.
-func (inst *TimelineDriver) runBandsFetch(key bandsCacheKey) {
-	start := time.Now()
-	bands, skipped, err := fetchBands(inst.client, key.SQL, key.MinMS, key.MaxMS)
-	dur := time.Since(start)
-
-	inst.bandsMu.Lock()
-	defer inst.bandsMu.Unlock()
-	if !inst.bandsInFlight || inst.bandsInFlightKey != key {
-		return // superseded or cleared while we were fetching
-	}
-	inst.bandsInFlight = false
-	inst.bandsFetchDur = dur
-	inst.bandsFetchedAt = time.Now()
-	inst.bandsSkipped = skipped
-	inst.bandsLastFetchKey = key
-	inst.bandsHaveFetched = true
-	if err != nil {
 		inst.bands = nil
+		inst.bandsErr = nil
+		inst.bandsSkipped = 0
+		inst.bandsLoading = false
+		inst.bandsMappedSQL = ""
+		return
+	}
+	compiled := substituteBandsRange(sql, inst.dataMinMS, inst.dataMaxMS)
+	rec, _, servedSQL, loading, err := inst.bandsLane.demand(compiled)
+	inst.bandsLoading = loading
+	if err != nil {
 		inst.bandsErr = err
-		return
 	}
-	inst.bands = bands
-	inst.bandsErr = nil
-	inst.bandsCacheStoreLocked(key, bands)
-}
-
-// clearBands resets all band state (the SQL went empty, the extent became
-// invalid, or there's no client). Flipping bandsInFlight off makes any
-// in-flight goroutine's publish a no-op via the staleness guard.
-func (inst *TimelineDriver) clearBands() {
-	inst.bandsMu.Lock()
-	inst.bands = nil
-	inst.bandsErr = nil
-	inst.bandsSkipped = 0
-	inst.bandsHaveFetched = false
-	inst.bandsInFlight = false
-	inst.bandsMu.Unlock()
-}
-
-// refreshBandsView copies the shared (goroutine-written) band slice into the
-// render-thread-only bandsView under the lock. Called once per frame in
-// TimelineDriver.Render before tl.Render(); bandsProducer then reads bandsView
-// lock-free. The slice is immutable once published, so sharing the header is safe.
-func (inst *TimelineDriver) refreshBandsView() {
-	inst.bandsMu.Lock()
-	inst.bandsView = inst.bands
-	inst.bandsMu.Unlock()
-}
-
-// bandsCacheLookupLocked returns the cached band slice for key, if any.
-// Caller must hold bandsMu. Lookups touch the entry (move-to-front) so the
-// LRU eviction is recency-ordered. The slice is shared with the caller —
-// bands are immutable once published.
-func (inst *TimelineDriver) bandsCacheLookupLocked(key bandsCacheKey) (bands []layout.BackgroundBand, ok bool) {
-	for i, e := range inst.bandsCache {
-		if e.Key == key {
-			bands = e.Bands
-			ok = true
-			if i > 0 {
-				moved := inst.bandsCache[i]
-				copy(inst.bandsCache[1:i+1], inst.bandsCache[:i])
-				inst.bandsCache[0] = moved
+	if rec != nil {
+		if servedSQL != inst.bandsMappedSQL {
+			bands, skipped, mapErr := mapBandsRecord(rec)
+			if mapErr != nil {
+				inst.bandsErr = mapErr
+			} else {
+				inst.bands = bands
+				inst.bandsSkipped = skipped
+				inst.bandsErr = nil
+				inst.bandsMappedSQL = servedSQL
 			}
-			return
 		}
+		rec.Release()
 	}
-	return
-}
-
-// bandsCacheStoreLocked inserts (key, bands) at the front of the LRU,
-// evicting the oldest entry when the cap is exceeded. Caller must hold
-// bandsMu. A forced refetch can leave a superseded duplicate key behind;
-// the lookup path returns the front (newest) one and the stale duplicate
-// ages out.
-func (inst *TimelineDriver) bandsCacheStoreLocked(key bandsCacheKey, bands []layout.BackgroundBand) {
-	entry := bandsCacheEntry{Key: key, Bands: bands}
-	if len(inst.bandsCache) < bandsCacheSize {
-		inst.bandsCache = append([]bandsCacheEntry{entry}, inst.bandsCache...)
-		return
-	}
-	copy(inst.bandsCache[1:], inst.bandsCache[:len(inst.bandsCache)-1])
-	inst.bandsCache[0] = entry
 }
 
 // renderBandsControls emits the collapsible bands-SQL editor + Run
@@ -439,7 +278,10 @@ func (inst *TimelineDriver) renderBandsControls() {
 			if c.Button(inst.ids.PrepareStr("bands-run"),
 				c.Atoms().Text("Run bands").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.maybeFetchBands(true)
+				// Force a re-fetch against a possibly-changed source: clear the
+				// lane memo + the mapped-SQL guard so updateBands re-demands.
+				inst.bandsLane.forget()
+				inst.bandsMappedSQL = ""
 			}
 			c.Separator().Vertical().Send()
 			for rt := range c.RichTextLabel(inst.bandsStatusLine()) {
@@ -449,37 +291,25 @@ func (inst *TimelineDriver) renderBandsControls() {
 	}
 }
 
-// bandsStatusLine formats the one-line summary shown next to the Run
-// button. Order of precedence: error > empty > populated. Skipped-row
-// count and fetch duration only render when non-trivial.
+// bandsStatusLine formats the one-line summary shown next to the Run button.
+// Order of precedence: loading > error > pending > populated. The skipped-row
+// count renders only when non-trivial. Render-thread-only state (4b).
 func (inst *TimelineDriver) bandsStatusLine() (s string) {
 	if inst.bandsSQLPtr == nil || strings.TrimSpace(*inst.bandsSQLPtr) == "" {
 		return "no bands SQL — fill in to overlay shaded ranges"
 	}
-	inst.bandsMu.Lock()
-	inFlight := inst.bandsInFlight
-	err := inst.bandsErr
-	haveFetched := inst.bandsHaveFetched
-	n := len(inst.bands)
-	dur := inst.bandsFetchDur
-	skipped := inst.bandsSkipped
-	inst.bandsMu.Unlock()
-
 	switch {
-	case inFlight:
+	case inst.bandsLoading && len(inst.bands) == 0:
 		return "fetching bands…"
-	case err != nil:
-		return "bands error: " + err.Error()
-	case !haveFetched:
+	case inst.bandsErr != nil:
+		return "bands error: " + inst.bandsErr.Error()
+	case inst.bandsMappedSQL == "":
 		return "bands pending — run a query above"
 	}
-	parts := []string{
-		fmt.Sprintf("%d bands", n),
-		fmt.Sprintf("fetched in %s", dur.Round(time.Millisecond)),
-	}
-	if skipped > 0 {
+	parts := []string{fmt.Sprintf("%d bands", len(inst.bands))}
+	if inst.bandsSkipped > 0 {
 		parts = append(parts,
-			fmt.Sprintf("%d skipped (unknown color or to<from)", skipped))
+			fmt.Sprintf("%d skipped (unknown color or to<from)", inst.bandsSkipped))
 	}
 	return strings.Join(parts, " · ")
 }

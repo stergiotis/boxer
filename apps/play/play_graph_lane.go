@@ -67,6 +67,16 @@ func (inst *nodeLane) demand(compiledSQL string) (rec arrow.RecordBatch, schema 
 	return
 }
 
+// forget clears the memo so the next demand re-executes even for an unchanged
+// SQL (the Timeline's "Run bands" force — re-fetch against a changed source
+// table). The last-good result is retained until the re-run lands.
+func (inst *nodeLane) forget() {
+	inst.mu.Lock()
+	inst.servedSQL = ""
+	inst.wantSQL = ""
+	inst.mu.Unlock()
+}
+
 // startLocked supersedes any in-flight run and kicks a new one. Caller holds mu.
 func (inst *nodeLane) startLocked(sql string) {
 	inst.wantSQL = sql

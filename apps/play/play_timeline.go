@@ -2,11 +2,10 @@ package play
 
 import (
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
@@ -89,26 +88,18 @@ type TimelineDriver struct {
 	dataMaxMS       int64
 	dataExtentValid bool
 
-	// Bands concurrency model (mirrors Projector in play_projection.go): the
-	// fetch runs on a background goroutine so a slow ClickHouse never blocks
-	// the render thread. bandsMu guards every field written by that goroutine
-	// (and by the render-thread cache-hit path). bandsView is the
-	// render-thread-only copy that bandsProducer reads each frame — refreshed
-	// from the shared state under the lock in Render, so the producer never
-	// touches a slice the goroutine might be replacing.
-	bandsMu           sync.Mutex
-	bands             []layout.BackgroundBand
-	bandsCache        []bandsCacheEntry
-	bandsLastFetchKey bandsCacheKey
-	bandsHaveFetched  bool
-	bandsErr          error
-	bandsSkipped      int
-	bandsFetchedAt    time.Time
-	bandsFetchDur     time.Duration
-	bandsInFlight     bool
-	bandsInFlightKey  bandsCacheKey
-
-	bandsView []layout.BackgroundBand
+	// Bands (ADR-0097 4b): the bands SQL runs on a node lane — the former
+	// bespoke fetch goroutine + LRU + staleness guard retired into the graph
+	// runtime, the twin of the Map lane (3f). Bands are render-thread-only now
+	// (the lane is the sole async part): updateBands demands the lane each frame
+	// and re-maps only when the served SQL changes; bandsProducer reads
+	// inst.bands directly.
+	bandsLane      *nodeLane
+	bands          []layout.BackgroundBand
+	bandsMappedSQL string
+	bandsErr       error
+	bandsSkipped   int
+	bandsLoading   bool
 }
 
 // NewTimelineDriver constructs the driver and the underlying composite
@@ -129,6 +120,7 @@ func NewTimelineDriver(ids *c.WidgetIdStack, selectedRow *int64, client *Client,
 		selectedRow: selectedRow,
 		bandsSQLPtr: bandsSQLPtr,
 		nowLinePtr:  nowLinePtr,
+		bandsLane:   newNodeLane(clientExecutor{client: client}, memory.NewGoAllocator(), bandsFetchTimeout),
 	}
 	inst.tl = timeline.New(ids, "play-timeline", nil,
 		timeline.WithOnSelection(inst.onSelect),
@@ -191,10 +183,9 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 	}
 	inst.renderToolbar()
 	inst.renderBandsControls()
-	inst.maybeFetchBands(false)
-	// Refresh the render-thread-only band slice from the shared (goroutine-
-	// written) state, so bandsProducer reads a stable snapshot for this frame.
-	inst.refreshBandsView()
+	// Demand the bands node lane for the current extent (4b); bands are
+	// render-thread-only now, so bandsProducer reads inst.bands directly.
+	inst.updateBands()
 	inst.tl.Render()
 }
 
