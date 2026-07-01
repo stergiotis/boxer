@@ -1,0 +1,170 @@
+package internalized
+
+import (
+	"errors"
+	"math/rand/v2"
+	"testing"
+
+	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNewMemIdInternalizer_RejectsOutOfRangeTagValue(t *testing.T) {
+	_, err := NewMemIdInternalizer(identifier.MaxTagValue+1, 0)
+	require.Error(t, err)
+}
+
+func TestMemIdInternalizer_AssignsDenseMonotonicIds(t *testing.T) {
+	s, err := NewMemIdInternalizer(identifier.TagValue(3), 4)
+	require.NoError(t, err)
+	for i := range 5 {
+		id, fresh, err := s.GetId([]byte{byte('a' + i)})
+		require.NoError(t, err)
+		require.True(t, fresh)
+		require.True(t, id.IsValid())
+		_, untagged := id.Split()
+		require.EqualValues(t, i+1, untagged) // body counter starts at 1; 0 stays reserved
+		require.EqualValues(t, 3, id.GetTag().GetValue())
+	}
+	require.Equal(t, 5, s.Len())
+}
+
+func TestMemIdInternalizer_ReStampIsIdempotent(t *testing.T) {
+	s, err := NewMemIdInternalizer(identifier.TagValue(1), 0)
+	require.NoError(t, err)
+	k := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
+	id1, fresh1, err := s.GetId(k)
+	require.NoError(t, err)
+	require.True(t, fresh1)
+	id2, fresh2, err := s.GetId(k)
+	require.NoError(t, err)
+	require.False(t, fresh2)
+	require.Equal(t, id1, id2)
+	require.Equal(t, 1, s.Len())
+}
+
+func TestMemIdInternalizer_ResolveRoundtrip(t *testing.T) {
+	s, err := NewMemIdInternalizer(identifier.TagValue(5), 0)
+	require.NoError(t, err)
+	id, _, err := s.GetId([]byte("hello"))
+	require.NoError(t, err)
+
+	got, found := s.Resolve(id)
+	require.True(t, found)
+	require.Equal(t, "hello", got)
+
+	_, untagged := id.Split()
+	gotU, foundU := s.ResolveUntagged(untagged)
+	require.True(t, foundU)
+	require.Equal(t, "hello", gotU)
+
+	// Unknown body id -> not found.
+	_, found = s.ResolveUntagged(9999)
+	require.False(t, found)
+
+	// Same body value under a different tag must not resolve here.
+	other := identifier.TagValue(6).GetTag().ComposeId(untagged)
+	_, found = s.Resolve(other)
+	require.False(t, found)
+}
+
+func TestMemIdInternalizer_AllYieldsAssignmentOrder(t *testing.T) {
+	s, err := NewMemIdInternalizer(identifier.TagValue(2), 0)
+	require.NoError(t, err)
+	keys := []string{"one", "two", "three"}
+	want := make([]identifier.TaggedId, 0, len(keys))
+	for _, k := range keys {
+		id, _, err := s.GetId([]byte(k))
+		require.NoError(t, err)
+		want = append(want, id)
+	}
+	i := 0
+	for id, k := range s.All() {
+		require.Equal(t, want[i], id)
+		require.Equal(t, keys[i], k)
+		i++
+	}
+	require.Equal(t, len(keys), i)
+}
+
+func TestMemIdInternalizer_LookupDoesNotAllocate(t *testing.T) {
+	s, err := NewMemIdInternalizer(identifier.TagValue(1), 0)
+	require.NoError(t, err)
+	key := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
+	_, _, err = s.GetId(key)
+	require.NoError(t, err)
+	allocs := testing.AllocsPerRun(1000, func() {
+		_, _, _ = s.GetId(key) // existing key: the string(key) map lookup must not allocate
+	})
+	require.Zero(t, allocs, "GetId of an existing key must not allocate")
+}
+
+func TestMemIdInternalizedGenerator_CreatesWorkingGenerator(t *testing.T) {
+	f := NewMemIdInternalizedGenerator()
+	gen, err := f.Create(identifier.TagValue(9), 128)
+	require.NoError(t, err)
+
+	id, fresh, err := gen.GetId([]byte("k"))
+	require.NoError(t, err)
+	require.True(t, fresh)
+	require.True(t, id.IsValid())
+	require.EqualValues(t, 9, id.GetTag().GetValue())
+
+	require.NoError(t, f.Close())
+	require.NoError(t, gen.Release())
+
+	// Usable after Release, and the mapping is retained.
+	id2, fresh2, err := gen.GetId([]byte("k"))
+	require.NoError(t, err)
+	require.False(t, fresh2)
+	require.Equal(t, id, id2)
+}
+
+// TestMemIdInternalizer_PropertyConsistency mirrors the identifier package's own
+// randomized round-trip test: internalize a stream of random keys and check the
+// core invariants against a shadow map.
+func TestMemIdInternalizer_PropertyConsistency(t *testing.T) {
+	r := rand.New(rand.NewPCG(0x1234, 0x5678))
+	const tagVal = identifier.TagValue(7)
+	s, err := NewMemIdInternalizer(tagVal, 16)
+	require.NoError(t, err)
+
+	keyPool := make([][]byte, 0, 64)
+	for range 64 {
+		k := make([]byte, 1+r.IntN(20))
+		for j := range k {
+			k[j] = byte(r.Uint64())
+		}
+		keyPool = append(keyPool, k)
+	}
+
+	shadow := make(map[string]identifier.TaggedId)
+	n := 20000
+	if testing.Short() {
+		n = 2000
+	}
+	for range n {
+		k := keyPool[r.IntN(len(keyPool))]
+		id, fresh, err := s.GetId(k)
+		require.NoError(t, err)
+		require.True(t, id.IsValid())
+		require.EqualValues(t, tagVal, id.GetTag().GetValue())
+
+		if prev, seen := shadow[string(k)]; seen {
+			require.False(t, fresh)
+			require.Equal(t, prev, id)
+		} else {
+			require.True(t, fresh)
+			shadow[string(k)] = id
+		}
+
+		got, found := s.Resolve(id)
+		require.True(t, found)
+		require.Equal(t, string(k), got)
+	}
+	require.Equal(t, len(shadow), s.Len())
+}
+
+func TestErrIdSpaceExhausted_IsWrapped(t *testing.T) {
+	require.True(t, errors.Is(ErrIdSpaceExhausted, ErrIdSpaceExhausted))
+}
