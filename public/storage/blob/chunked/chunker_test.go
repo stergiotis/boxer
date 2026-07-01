@@ -9,8 +9,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// recordingWriter is a ChunkedWriterI that reassembles the payload and tracks
-// the id delivered across the interrelated chunks.
+// chunkEvent captures one ChunkedWriterI callback with its metadata arguments.
+type chunkEvent struct {
+	kind        string // first | intermediate | last | firstAndLast
+	id          identifier.TaggedId
+	payload     []byte
+	chunkIndex  uint32
+	sizeSoFar   int64
+	totalChunks uint32
+	totalSize   int64
+}
+
+// recordingWriter is a ChunkedWriterI that reassembles the payload, tracks the
+// id delivered across the interrelated chunks, and records each callback so the
+// per-chunk metadata can be asserted.
 type recordingWriter struct {
 	id           identifier.TaggedId
 	idSet        bool
@@ -20,6 +32,7 @@ type recordingWriter struct {
 	first        int
 	intermediate int
 	last         int
+	events       []chunkEvent
 }
 
 func (inst *recordingWriter) note(id identifier.TaggedId) {
@@ -37,24 +50,28 @@ func (inst *recordingWriter) note(id identifier.TaggedId) {
 func (inst *recordingWriter) WriteFirstChunk(id identifier.TaggedId, p []byte) (n int, err error) {
 	inst.note(id)
 	inst.first++
+	inst.events = append(inst.events, chunkEvent{kind: "first", id: id, payload: append([]byte(nil), p...)})
 	return inst.payload.Write(p)
 }
 
 func (inst *recordingWriter) WriteIntermediateChunk(id identifier.TaggedId, p []byte, chunkIndex uint32, sizeSoFar int64) (n int, err error) {
 	inst.note(id)
 	inst.intermediate++
+	inst.events = append(inst.events, chunkEvent{kind: "intermediate", id: id, payload: append([]byte(nil), p...), chunkIndex: chunkIndex, sizeSoFar: sizeSoFar})
 	return inst.payload.Write(p)
 }
 
 func (inst *recordingWriter) WriteLastChunk(id identifier.TaggedId, p []byte, totalChunks uint32, totalSize int64) (n int, err error) {
 	inst.note(id)
 	inst.last++
+	inst.events = append(inst.events, chunkEvent{kind: "last", id: id, payload: append([]byte(nil), p...), totalChunks: totalChunks, totalSize: totalSize})
 	return inst.payload.Write(p)
 }
 
 func (inst *recordingWriter) WriteFirstAndLastChunk(id identifier.TaggedId, p []byte) (n int, err error) {
 	inst.note(id)
 	inst.firstAndLast++
+	inst.events = append(inst.events, chunkEvent{kind: "firstAndLast", id: id, payload: append([]byte(nil), p...)})
 	return inst.payload.Write(p)
 }
 
@@ -118,6 +135,45 @@ func TestChunkerMultiChunk_WithMemInternalizer(t *testing.T) {
 	require.Equal(t, payload, rec.payload.Bytes())
 	require.Zero(t, rec.firstAndLast, "multi-chunk stream must not use the first-and-last path")
 	require.Greater(t, rec.first+rec.intermediate+rec.last, 1, "expected more than one chunk")
+}
+
+// TestChunkerMultiChunk_Metadata pins the exact chunk indices and sizes reported
+// to the writer for a deterministic 4-chunk stream (regression for the previous
+// off-by-one chunkIndex / inflated totalChunks / double-counted totalSize).
+func TestChunkerMultiChunk_Metadata(t *testing.T) {
+	gen, err := internalized.NewMemIdInternalizer(identifier.TagValue(9), 4)
+	require.NoError(t, err)
+
+	rec := &recordingWriter{}
+	ch := NewChunker(4)
+	require.NoError(t, ch.Prepare(gen, []byte("blob"), rec))
+	for _, b := range []byte("0123456789abcdef") { // 16 bytes -> 4 chunks of 4
+		_, err = ch.Write([]byte{b})
+		require.NoError(t, err)
+	}
+	require.NoError(t, ch.Close())
+
+	require.Len(t, rec.events, 4)
+
+	require.Equal(t, "first", rec.events[0].kind)
+	require.Equal(t, []byte("0123"), rec.events[0].payload)
+
+	require.Equal(t, "intermediate", rec.events[1].kind)
+	require.Equal(t, []byte("4567"), rec.events[1].payload)
+	require.EqualValues(t, 1, rec.events[1].chunkIndex)
+	require.EqualValues(t, 8, rec.events[1].sizeSoFar)
+
+	require.Equal(t, "intermediate", rec.events[2].kind)
+	require.Equal(t, []byte("89ab"), rec.events[2].payload)
+	require.EqualValues(t, 2, rec.events[2].chunkIndex)
+	require.EqualValues(t, 12, rec.events[2].sizeSoFar)
+
+	require.Equal(t, "last", rec.events[3].kind)
+	require.Equal(t, []byte("cdef"), rec.events[3].payload)
+	require.EqualValues(t, 4, rec.events[3].totalChunks)
+	require.EqualValues(t, 16, rec.events[3].totalSize)
+
+	require.Equal(t, []byte("0123456789abcdef"), rec.payload.Bytes())
 }
 
 // TestChunkerEmpty_SuppressesChunksAndId verifies an empty blob emits no chunks

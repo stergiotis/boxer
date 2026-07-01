@@ -51,10 +51,8 @@ func (inst *wrapper) nextWriteIsLastWrite() {
 	switch inst.state {
 	case stateChunkInitial:
 		inst.state = stateChunkFirstIsLast
-		break
 	case stateChunkFirstBuffered:
 		inst.state = stateChunkFirstAndLast
-		break
 	case stateChunkIntermediate:
 		inst.state = stateChunkLast
 	default:
@@ -75,8 +73,13 @@ func (inst *wrapper) ensureId() (err error) {
 	return
 }
 
+// Write drives the chunk state machine. nextIdx and total track chunks actually
+// emitted (not Write calls): nextIdx is the 0-based index of the next chunk to
+// emit, total the cumulative bytes of chunks already emitted. Both advance only
+// at an emit site, so the chunkIndex / sizeSoFar / totalChunks / totalSize
+// reported to the ChunkedWriterI are exact.
 func (inst *wrapper) Write(p []byte) (n int, err error) {
-	if p == nil || len(p) == 0 {
+	if len(p) == 0 {
 		switch inst.state {
 		case stateChunkFirstIsLast:
 			log.Debug().Uint64("id", uint64(inst.id)).Msg("suppressed completely empty chunk set")
@@ -87,15 +90,12 @@ func (inst *wrapper) Write(p []byte) (n int, err error) {
 				err = eh.Errorf("unable to generate id: %w", err)
 				return
 			}
-			p = inst.buf.Bytes()
-			n, err = inst.cw.WriteFirstAndLastChunk(inst.id, p)
+			n, err = inst.cw.WriteFirstAndLastChunk(inst.id, inst.buf.Bytes())
 			inst.state = stateChunkCompleted
-			break
 		case stateChunkLast:
-			p = inst.buf.Bytes()
-			n, err = inst.cw.WriteLastChunk(inst.id, p, inst.nextIdx+1, inst.total+int64(len(p)))
+			chunk := inst.buf.Bytes()
+			n, err = inst.cw.WriteLastChunk(inst.id, chunk, inst.nextIdx+1, inst.total+int64(len(chunk)))
 			inst.state = stateChunkCompleted
-			break
 		default:
 			// skipping empty chunk
 			return
@@ -105,66 +105,75 @@ func (inst *wrapper) Write(p []byte) (n int, err error) {
 		case stateChunkInitial:
 			n, err = inst.buf.Write(p)
 			inst.state = stateChunkFirstBuffered
-			break
 		case stateChunkFirstBuffered:
 			err = inst.ensureId()
 			if err != nil {
 				err = eh.Errorf("unable to generate id: %w", err)
 				return
 			}
-			_, err = inst.cw.WriteFirstChunk(inst.id, inst.buf.Bytes())
+			first := inst.buf.Bytes()
+			_, err = inst.cw.WriteFirstChunk(inst.id, first)
 			if err != nil {
 				inst.state = stateChunkError
 				err = eh.Errorf("unable to flush buffered chunk: %w", err)
 				inst.err = err
 				return
 			}
+			inst.nextIdx++
+			inst.total += int64(len(first))
 
 			inst.buf.Reset() // the buffered chunk was just emitted; stage only the next one
 			n, err = inst.buf.Write(p)
 			inst.state = stateChunkIntermediate
-			break
 		case stateChunkIntermediate:
-			n, err = inst.cw.WriteIntermediateChunk(inst.id, inst.buf.Bytes(), inst.nextIdx, inst.total)
+			chunk := inst.buf.Bytes()
+			sizeSoFar := inst.total + int64(len(chunk))
+			_, err = inst.cw.WriteIntermediateChunk(inst.id, chunk, inst.nextIdx, sizeSoFar)
 			if err != nil {
 				inst.state = stateChunkError
 				err = eh.Errorf("unable to write intermediate chunk: %w", err)
 				inst.err = err
 				return
 			}
+			inst.nextIdx++
+			inst.total = sizeSoFar
 
 			inst.buf.Reset() // the buffered chunk was just emitted; stage only the next one
 			n, err = inst.buf.Write(p)
-			break
 		case stateChunkLast:
-			n, err = inst.cw.WriteIntermediateChunk(inst.id, inst.buf.Bytes(), inst.nextIdx, inst.total)
+			chunk := inst.buf.Bytes()
+			sizeSoFar := inst.total + int64(len(chunk))
+			_, err = inst.cw.WriteIntermediateChunk(inst.id, chunk, inst.nextIdx, sizeSoFar)
 			if err != nil {
 				inst.state = stateChunkError
 				err = eh.Errorf("unable to write intermediate chunk: %w", err)
 				inst.err = err
 				return
 			}
+			inst.nextIdx++
+			inst.total = sizeSoFar
 
 			n, err = inst.cw.WriteLastChunk(inst.id, p, inst.nextIdx+1, inst.total+int64(len(p)))
 			inst.state = stateChunkCompleted
-			break
 		case stateChunkFirstAndLast:
 			err = inst.ensureId()
 			if err != nil {
 				err = eh.Errorf("unable to generate id: %w", err)
 				return
 			}
-			n, err = inst.cw.WriteFirstChunk(inst.id, inst.buf.Bytes())
+			first := inst.buf.Bytes()
+			_, err = inst.cw.WriteFirstChunk(inst.id, first)
 			if err != nil {
 				inst.state = stateChunkError
 				err = eh.Errorf("unable to write first chunk: %w", err)
 				inst.err = err
 				return
 			}
+			inst.nextIdx++
+			inst.total += int64(len(first))
 
 			n, err = inst.cw.WriteLastChunk(inst.id, p, inst.nextIdx+1, inst.total+int64(len(p)))
 			inst.state = stateChunkCompleted
-			break
 		case stateChunkFirstIsLast:
 			err = inst.ensureId()
 			if err != nil {
@@ -179,20 +188,17 @@ func (inst *wrapper) Write(p []byte) (n int, err error) {
 				return
 			}
 			inst.state = stateChunkCompleted
-			break
 		case stateChunkCompleted:
 			err = eh.Errorf("write to completed chunk stream")
 			return
 		case stateChunkError:
-			err = eh.Errorf("chunk writer is in errneous state: %w", inst.err)
+			err = eh.Errorf("chunk writer is in erroneous state: %w", inst.err)
 			return
 		}
 	}
-	inst.total += int64(n)
-	inst.nextIdx++
 	if err != nil {
 		inst.state = stateChunkError
-		err = eh.Errorf("unable to write intermediate chunk: %w", err)
+		err = eh.Errorf("unable to write chunk: %w", err)
 		inst.err = err
 		return
 	}
