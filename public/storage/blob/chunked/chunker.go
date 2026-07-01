@@ -120,6 +120,7 @@ func (inst *wrapper) Write(p []byte) (n int, err error) {
 				return
 			}
 
+			inst.buf.Reset() // the buffered chunk was just emitted; stage only the next one
 			n, err = inst.buf.Write(p)
 			inst.state = stateChunkIntermediate
 			break
@@ -132,6 +133,7 @@ func (inst *wrapper) Write(p []byte) (n int, err error) {
 				return
 			}
 
+			inst.buf.Reset() // the buffered chunk was just emitted; stage only the next one
 			n, err = inst.buf.Write(p)
 			break
 		case stateChunkLast:
@@ -229,7 +231,7 @@ func (inst *Chunker) WriteString(s string) (n int, err error) {
 
 func NewChunker(chunkSize int) *Chunker {
 	bw := bufio.NewWriterSize(nil, chunkSize)
-	wra := &wrapper{}
+	wra := &wrapper{buf: &bytes.Buffer{}}
 	wra.prepare(nil, nil, nil)
 	return &Chunker{
 		bw:      bw,
