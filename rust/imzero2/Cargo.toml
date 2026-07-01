@@ -36,6 +36,13 @@ headless = [
     "dep:prost",
     "dep:futures-util",
 ]
+# GPU-less, SVG-only host (headless_svg.rs). Drives the shared FFFI2
+# interpreter with `ctx.run_ui` and lets the always-registered SVG-export
+# plugin (apphost::init_common) write files on ExportSvg / ExportSvgWindow.
+# No wgpu/winit/ffmpeg — SVG export reads egui's pre-tessellation shapes, so
+# no GPU device is needed. Adds no dependencies (egui + svgexport are core).
+# Intended client binary for serving imzero2 views as SVG over HTTP.
+headless_svg = []
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
 wayland = ["eframe?/wayland"]

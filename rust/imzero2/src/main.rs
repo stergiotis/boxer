@@ -52,9 +52,22 @@ fn start_puffin_server() {
 ///
 /// - Build with only `desktop` (the default) → eframe host.
 /// - Build with only `headless` → headless render host.
+/// - Build with only `headless_svg` → GPU-less SVG-only host.
 /// - Build with both → desktop by default; `IMZERO2_HEADLESS=1` (or `on`)
-///   selects the headless host at runtime.
+///   selects the headless host at runtime, `IMZERO2_HEADLESS_SVG=1` the
+///   SVG-only host.
 fn run_imzero2(cfg: imzero2::appconfig::AppConfig) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "headless_svg")]
+    {
+        let env_pick = std::env::var("IMZERO2_HEADLESS_SVG")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("on"))
+            .unwrap_or(false);
+        // Built alone (no other host), this is the only choice; built
+        // alongside another host, an explicit env flag selects it.
+        if env_pick || (!cfg!(feature = "desktop") && !cfg!(feature = "headless")) {
+            return imzero2::run_imzero2_svg_loop(cfg).map_err(Into::into);
+        }
+    }
     #[cfg(feature = "headless")]
     {
         let env_pick = std::env::var("IMZERO2_HEADLESS")

@@ -23,6 +23,8 @@ pub mod inputproto;
 pub mod inputmap;
 #[cfg(feature = "headless")]
 pub mod wscarrier;
+#[cfg(feature = "headless_svg")]
+pub mod headless_svg;
 pub mod code_view;
 pub mod scrolling_texture;
 pub mod image;
