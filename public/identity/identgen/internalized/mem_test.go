@@ -14,6 +14,22 @@ func TestNewMemIdInternalizer_RejectsOutOfRangeTagValue(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestMemIdInternalizer_RejectsEmptyKey pins the contract shared with the Badger
+// backend: a nil or zero-length natural key is rejected, not assigned an id.
+func TestMemIdInternalizer_RejectsEmptyKey(t *testing.T) {
+	s, err := NewMemIdInternalizer(identifier.TagValue(1), 0)
+	require.NoError(t, err)
+
+	_, _, err = s.GetId(nil)
+	require.ErrorIs(t, err, ErrEmptyNaturalKey)
+	_, _, err = s.GetId([]byte{})
+	require.ErrorIs(t, err, ErrEmptyNaturalKey)
+	_, _, err = s.GetUntaggedId(nil)
+	require.ErrorIs(t, err, ErrEmptyNaturalKey)
+
+	require.Equal(t, 0, s.Len())
+}
+
 func TestMemIdInternalizer_AssignsDenseMonotonicIds(t *testing.T) {
 	s, err := NewMemIdInternalizer(identifier.TagValue(3), 4)
 	require.NoError(t, err)

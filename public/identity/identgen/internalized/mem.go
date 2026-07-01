@@ -64,6 +64,10 @@ func NewMemIdInternalizer(tagValue identifier.TagValue, estSize int) (inst *MemI
 }
 
 func (inst *MemIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
+	if len(naturalKey) == 0 {
+		err = ErrEmptyNaturalKey
+		return
+	}
 	if u, has := inst.forward[string(naturalKey)]; has {
 		untagged = u
 		return
