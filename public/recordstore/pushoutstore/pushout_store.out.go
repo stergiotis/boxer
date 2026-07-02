@@ -20,7 +20,6 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/recordstore"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
@@ -398,74 +397,70 @@ const (
 )
 
 // ScanEnvelope returns the entities whose rows carry a conforming Envelope
-// component, in Order-column order. extraPredicate (raw SQL over the
-// physical columns; empty for none) further restricts the scan. The
-// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
-// executor must accept a multi-statement script whose last statement
-// yields the result.
+// component, ordered by (Order, Key) — deterministic across ties.
+// extraPredicate (raw SQL over the physical columns; empty for none)
+// further restricts the scan. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract).
 func (inst *PushoutStore[W]) ScanEnvelope(ctx context.Context, extraPredicate string) (ents []*PushoutEntity, err error) {
 	where := pushoutScanEnvelopeFilter
 	if extraPredicate != "" {
 		where = "(" + where + ") AND (" + extraPredicate + ")"
 	}
-	sql := readback.HelperUDFsSQL() +
-		"\nSELECT * FROM " + pushoutTableName +
+	sql := "SELECT * FROM " + pushoutTableName +
 		" WHERE " + where +
-		" ORDER BY " + pushoutColOrder + " ASC" + pushoutArrowOutputSettings
+		" ORDER BY " + pushoutColOrder + " ASC, " + pushoutColKey + " ASC" + pushoutArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanLogEntry returns the entities whose rows carry a conforming LogEntry
-// component, in Order-column order. extraPredicate (raw SQL over the
-// physical columns; empty for none) further restricts the scan. The
-// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
-// executor must accept a multi-statement script whose last statement
-// yields the result.
+// component, ordered by (Order, Key) — deterministic across ties.
+// extraPredicate (raw SQL over the physical columns; empty for none)
+// further restricts the scan. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract).
 func (inst *PushoutStore[W]) ScanLogEntry(ctx context.Context, extraPredicate string) (ents []*PushoutEntity, err error) {
 	where := pushoutScanLogEntryFilter
 	if extraPredicate != "" {
 		where = "(" + where + ") AND (" + extraPredicate + ")"
 	}
-	sql := readback.HelperUDFsSQL() +
-		"\nSELECT * FROM " + pushoutTableName +
+	sql := "SELECT * FROM " + pushoutTableName +
 		" WHERE " + where +
-		" ORDER BY " + pushoutColOrder + " ASC" + pushoutArrowOutputSettings
+		" ORDER BY " + pushoutColOrder + " ASC, " + pushoutColKey + " ASC" + pushoutArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanSnapshot returns the entities whose rows carry a conforming Snapshot
-// component, in Order-column order. extraPredicate (raw SQL over the
-// physical columns; empty for none) further restricts the scan. The
-// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
-// executor must accept a multi-statement script whose last statement
-// yields the result.
+// component, ordered by (Order, Key) — deterministic across ties.
+// extraPredicate (raw SQL over the physical columns; empty for none)
+// further restricts the scan. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract).
 func (inst *PushoutStore[W]) ScanSnapshot(ctx context.Context, extraPredicate string) (ents []*PushoutEntity, err error) {
 	where := pushoutScanSnapshotFilter
 	if extraPredicate != "" {
 		where = "(" + where + ") AND (" + extraPredicate + ")"
 	}
-	sql := readback.HelperUDFsSQL() +
-		"\nSELECT * FROM " + pushoutTableName +
+	sql := "SELECT * FROM " + pushoutTableName +
 		" WHERE " + where +
-		" ORDER BY " + pushoutColOrder + " ASC" + pushoutArrowOutputSettings
+		" ORDER BY " + pushoutColOrder + " ASC, " + pushoutColKey + " ASC" + pushoutArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanRetention returns the entities whose rows carry a conforming Retention
-// component, in Order-column order. extraPredicate (raw SQL over the
-// physical columns; empty for none) further restricts the scan. The
-// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
-// executor must accept a multi-statement script whose last statement
-// yields the result.
+// component, ordered by (Order, Key) — deterministic across ties.
+// extraPredicate (raw SQL over the physical columns; empty for none)
+// further restricts the scan. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract).
 func (inst *PushoutStore[W]) ScanRetention(ctx context.Context, extraPredicate string) (ents []*PushoutEntity, err error) {
 	where := pushoutScanRetentionFilter
 	if extraPredicate != "" {
 		where = "(" + where + ") AND (" + extraPredicate + ")"
 	}
-	sql := readback.HelperUDFsSQL() +
-		"\nSELECT * FROM " + pushoutTableName +
+	sql := "SELECT * FROM " + pushoutTableName +
 		" WHERE " + where +
-		" ORDER BY " + pushoutColOrder + " ASC" + pushoutArrowOutputSettings
+		" ORDER BY " + pushoutColOrder + " ASC, " + pushoutColKey + " ASC" + pushoutArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 

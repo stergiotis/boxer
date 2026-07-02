@@ -19,7 +19,6 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/recordstore"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
@@ -397,74 +396,70 @@ const (
 )
 
 // ScanIdentity returns the entities whose rows carry a conforming Identity
-// component, in Order-column order. extraPredicate (raw SQL over the
-// physical columns; empty for none) further restricts the scan. The
-// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
-// executor must accept a multi-statement script whose last statement
-// yields the result.
+// component, ordered by (Order, Key) — deterministic across ties.
+// extraPredicate (raw SQL over the physical columns; empty for none)
+// further restricts the scan. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract).
 func (inst *DeviceStore[W]) ScanIdentity(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
 	where := deviceScanIdentityFilter
 	if extraPredicate != "" {
 		where = "(" + where + ") AND (" + extraPredicate + ")"
 	}
-	sql := readback.HelperUDFsSQL() +
-		"\nSELECT * FROM " + deviceTableName +
+	sql := "SELECT * FROM " + deviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC" + deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanBattery returns the entities whose rows carry a conforming Battery
-// component, in Order-column order. extraPredicate (raw SQL over the
-// physical columns; empty for none) further restricts the scan. The
-// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
-// executor must accept a multi-statement script whose last statement
-// yields the result.
+// component, ordered by (Order, Key) — deterministic across ties.
+// extraPredicate (raw SQL over the physical columns; empty for none)
+// further restricts the scan. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract).
 func (inst *DeviceStore[W]) ScanBattery(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
 	where := deviceScanBatteryFilter
 	if extraPredicate != "" {
 		where = "(" + where + ") AND (" + extraPredicate + ")"
 	}
-	sql := readback.HelperUDFsSQL() +
-		"\nSELECT * FROM " + deviceTableName +
+	sql := "SELECT * FROM " + deviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC" + deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanTagged returns the entities whose rows carry a conforming Tagged
-// component, in Order-column order. extraPredicate (raw SQL over the
-// physical columns; empty for none) further restricts the scan. The
-// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
-// executor must accept a multi-statement script whose last statement
-// yields the result.
+// component, ordered by (Order, Key) — deterministic across ties.
+// extraPredicate (raw SQL over the physical columns; empty for none)
+// further restricts the scan. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract).
 func (inst *DeviceStore[W]) ScanTagged(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
 	where := deviceScanTaggedFilter
 	if extraPredicate != "" {
 		where = "(" + where + ") AND (" + extraPredicate + ")"
 	}
-	sql := readback.HelperUDFsSQL() +
-		"\nSELECT * FROM " + deviceTableName +
+	sql := "SELECT * FROM " + deviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC" + deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanLocated returns the entities whose rows carry a conforming Located
-// component, in Order-column order. extraPredicate (raw SQL over the
-// physical columns; empty for none) further restricts the scan. The
-// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
-// executor must accept a multi-statement script whose last statement
-// yields the result.
+// component, ordered by (Order, Key) — deterministic across ties.
+// extraPredicate (raw SQL over the physical columns; empty for none)
+// further restricts the scan. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract).
 func (inst *DeviceStore[W]) ScanLocated(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
 	where := deviceScanLocatedFilter
 	if extraPredicate != "" {
 		where = "(" + where + ") AND (" + extraPredicate + ")"
 	}
-	sql := readback.HelperUDFsSQL() +
-		"\nSELECT * FROM " + deviceTableName +
+	sql := "SELECT * FROM " + deviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC" + deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
