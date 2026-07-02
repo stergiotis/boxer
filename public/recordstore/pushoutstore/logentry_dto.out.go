@@ -16,7 +16,7 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindHash uint64 = 1
+	kindPushoutHash uint64 = 1
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -115,7 +115,7 @@ func LogEntryBuildEntities[
 		// --- logHash. ---
 		logHashSec := dml.GetSectionLogHash()
 		logHashSecAttr_Hash := logHashSec.BeginAttribute(c.Hash[i])
-		logHashSecAttr_Hash.AddMembershipLowCardRefP(kindHash)
+		logHashSecAttr_Hash.AddMembershipLowCardRefP(kindPushoutHash)
 		logHashSecAttr_Hash.EndAttributeP()
 		logHashSec.EndSection()
 		err = dml.CommitEntity()
@@ -142,7 +142,7 @@ func LogEntryAddSections[
 	// --- logHash. ---
 	logHashSec := dml.GetSectionLogHash()
 	logHashSecAttr_Hash := logHashSec.BeginAttribute(row.Hash)
-	logHashSecAttr_Hash.AddMembershipLowCardRefP(kindHash)
+	logHashSecAttr_Hash.AddMembershipLowCardRefP(kindPushoutHash)
 	logHashSecAttr_Hash.EndAttributeP()
 	logHashSec.EndSection()
 	return
@@ -189,7 +189,7 @@ func LogEntryFillFromArrow[
 		for attrJ := int64(0); attrJ < nlogHash; attrJ++ {
 			for membID := range logHashMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindHash:
+				case kindPushoutHash:
 					val := logHashAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					logHashHashVal = val
 					logHashHashCount++
@@ -226,7 +226,7 @@ func LogEntryReadRow[
 	for attrJ := int64(0); attrJ < nlogHash; attrJ++ {
 		for membID := range logHashMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindHash:
+			case kindPushoutHash:
 				val := logHashAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				logHashHashVal = val
 				logHashHashCount++

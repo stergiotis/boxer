@@ -15,7 +15,7 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindTags uint64 = 1
+	kindDeviceTags uint64 = 1
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -119,7 +119,7 @@ func TaggedBuildEntities[
 			for _, v := range c.Tags[i] {
 				symbolArraySecAttr_Tags.AddToContainerP(v)
 			}
-			symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindTags)
+			symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDeviceTags)
 			symbolArraySecAttr_Tags.EndAttributeP()
 		}
 		symbolArraySec.EndSection()
@@ -151,7 +151,7 @@ func TaggedAddSections[
 		for _, v := range row.Tags {
 			symbolArraySecAttr_Tags.AddToContainerP(v)
 		}
-		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindTags)
+		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDeviceTags)
 		symbolArraySecAttr_Tags.EndAttributeP()
 	}
 	symbolArraySec.EndSection()
@@ -198,7 +198,7 @@ func TaggedFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindTags:
+				case kindDeviceTags:
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
 					}
@@ -230,7 +230,7 @@ func TaggedReadRow[
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindTags:
+			case kindDeviceTags:
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
 				}

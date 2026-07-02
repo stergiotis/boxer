@@ -17,11 +17,11 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindStatus      uint64 = 1
-	kindBattery     uint64 = 2
-	kindTags        uint64 = 3
-	kindLat         uint64 = 4
-	kindWindowBegin uint64 = 5
+	kindDroneStatus  uint64 = 1
+	kindDroneBattery uint64 = 2
+	kindDroneTags    uint64 = 3
+	kindDroneLoc     uint64 = 4
+	kindDroneWindow  uint64 = 5
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -226,13 +226,13 @@ func DroneEntityBuildEntities[
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Status := symbolSec.BeginAttribute(c.Status[i])
-		symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
+		symbolSecAttr_Status.AddMembershipLowCardRefP(kindDroneStatus)
 		symbolSecAttr_Status.EndAttributeP()
 		symbolSec.EndSection()
 		// --- u64Array. ---
 		u64ArraySec := dml.GetSectionU64Array()
 		u64ArraySecAttr_Battery := u64ArraySec.BeginAttributeSingle(c.Battery[i])
-		u64ArraySecAttr_Battery.AddMembershipLowCardRefP(kindBattery)
+		u64ArraySecAttr_Battery.AddMembershipLowCardRefP(kindDroneBattery)
 		u64ArraySecAttr_Battery.EndAttributeP()
 		u64ArraySec.EndSection()
 		// --- symbolArray. ---
@@ -242,20 +242,20 @@ func DroneEntityBuildEntities[
 			for _, v := range c.Tags[i] {
 				symbolArraySecAttr_Tags.AddToContainerP(v)
 			}
-			symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindTags)
+			symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDroneTags)
 			symbolArraySecAttr_Tags.EndAttributeP()
 		}
 		symbolArraySec.EndSection()
 		// --- geoPoint. ---
 		geoPointSec := dml.GetSectionGeoPoint()
 		geoPointSecAttr := geoPointSec.BeginAttribute(c.Lat[i], c.Lng[i], c.Cell[i])
-		geoPointSecAttr.AddMembershipLowCardRefP(kindLat)
+		geoPointSecAttr.AddMembershipLowCardRefP(kindDroneLoc)
 		geoPointSecAttr.EndAttributeP()
 		geoPointSec.EndSection()
 		// --- timeRange. ---
 		timeRangeSec := dml.GetSectionTimeRange()
 		timeRangeSecAttr := timeRangeSec.BeginAttribute(c.WindowBegin[i], c.WindowEnd[i])
-		timeRangeSecAttr.AddMembershipLowCardRefP(kindWindowBegin)
+		timeRangeSecAttr.AddMembershipLowCardRefP(kindDroneWindow)
 		timeRangeSecAttr.EndAttributeP()
 		timeRangeSec.EndSection()
 		err = dml.CommitEntity()
@@ -294,13 +294,13 @@ func DroneEntityAddSections[
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
 	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
-	symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
+	symbolSecAttr_Status.AddMembershipLowCardRefP(kindDroneStatus)
 	symbolSecAttr_Status.EndAttributeP()
 	symbolSec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
 	u64ArraySecAttr_Battery := u64ArraySec.BeginAttributeSingle(row.Battery)
-	u64ArraySecAttr_Battery.AddMembershipLowCardRefP(kindBattery)
+	u64ArraySecAttr_Battery.AddMembershipLowCardRefP(kindDroneBattery)
 	u64ArraySecAttr_Battery.EndAttributeP()
 	u64ArraySec.EndSection()
 	// --- symbolArray. ---
@@ -310,20 +310,20 @@ func DroneEntityAddSections[
 		for _, v := range row.Tags {
 			symbolArraySecAttr_Tags.AddToContainerP(v)
 		}
-		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindTags)
+		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDroneTags)
 		symbolArraySecAttr_Tags.EndAttributeP()
 	}
 	symbolArraySec.EndSection()
 	// --- geoPoint. ---
 	geoPointSec := dml.GetSectionGeoPoint()
 	geoPointSecAttr := geoPointSec.BeginAttribute(row.Lat, row.Lng, row.Cell)
-	geoPointSecAttr.AddMembershipLowCardRefP(kindLat)
+	geoPointSecAttr.AddMembershipLowCardRefP(kindDroneLoc)
 	geoPointSecAttr.EndAttributeP()
 	geoPointSec.EndSection()
 	// --- timeRange. ---
 	timeRangeSec := dml.GetSectionTimeRange()
 	timeRangeSecAttr := timeRangeSec.BeginAttribute(row.WindowBegin, row.WindowEnd)
-	timeRangeSecAttr.AddMembershipLowCardRefP(kindWindowBegin)
+	timeRangeSecAttr.AddMembershipLowCardRefP(kindDroneWindow)
 	timeRangeSecAttr.EndAttributeP()
 	timeRangeSec.EndSection()
 	return
@@ -433,7 +433,7 @@ func DroneEntityFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindStatus:
+				case kindDroneStatus:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolStatusVal = val
 					symbolStatusCount++
@@ -452,7 +452,7 @@ func DroneEntityFillFromArrow[
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindBattery:
+				case kindDroneBattery:
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayBatteryVal = val
 					u64ArrayBatteryCount++
@@ -470,7 +470,7 @@ func DroneEntityFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindTags:
+				case kindDroneTags:
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
 					}
@@ -489,7 +489,7 @@ func DroneEntityFillFromArrow[
 			geoPointLngLocal := geoPointAttrs.GetAttrValuePointLng(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 			geoPointCellLocal := geoPointAttrs.GetAttrValueH3(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 			for membID := range geoPointMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				if membID == kindLat {
+				if membID == kindDroneLoc {
 					geoPointLatVal = geoPointLatLocal
 					geoPointLngVal = geoPointLngLocal
 					geoPointCellVal = geoPointCellLocal
@@ -513,7 +513,7 @@ func DroneEntityFillFromArrow[
 			timeRangeWindowBeginLocal := timeRangeAttrs.GetAttrValueBeginIncl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 			timeRangeWindowEndLocal := timeRangeAttrs.GetAttrValueEndExcl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 			for membID := range timeRangeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				if membID == kindWindowBegin {
+				if membID == kindDroneWindow {
 					timeRangeWindowBeginVal = timeRangeWindowBeginLocal
 					timeRangeWindowEndVal = timeRangeWindowEndLocal
 					timeRangeWindowBeginCount++
@@ -567,7 +567,7 @@ func DroneEntityReadRow[
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindStatus:
+			case kindDroneStatus:
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolStatusVal = val
 				symbolStatusCount++
@@ -589,7 +589,7 @@ func DroneEntityReadRow[
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindBattery:
+			case kindDroneBattery:
 				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u64ArrayBatteryVal = val
 				u64ArrayBatteryCount++
@@ -610,7 +610,7 @@ func DroneEntityReadRow[
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindTags:
+			case kindDroneTags:
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
 				}
@@ -632,7 +632,7 @@ func DroneEntityReadRow[
 		geoPointLngLocal := geoPointAttrs.GetAttrValuePointLng(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 		geoPointCellLocal := geoPointAttrs.GetAttrValueH3(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 		for membID := range geoPointMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			if membID == kindLat {
+			if membID == kindDroneLoc {
 				geoPointLatVal = geoPointLatLocal
 				geoPointLngVal = geoPointLngLocal
 				geoPointCellVal = geoPointCellLocal
@@ -659,7 +659,7 @@ func DroneEntityReadRow[
 		timeRangeWindowBeginLocal := timeRangeAttrs.GetAttrValueBeginIncl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 		timeRangeWindowEndLocal := timeRangeAttrs.GetAttrValueEndExcl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 		for membID := range timeRangeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			if membID == kindWindowBegin {
+			if membID == kindDroneWindow {
 				timeRangeWindowBeginVal = timeRangeWindowBeginLocal
 				timeRangeWindowEndVal = timeRangeWindowEndLocal
 				timeRangeWindowBeginCount++

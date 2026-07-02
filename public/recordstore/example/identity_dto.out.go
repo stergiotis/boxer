@@ -16,8 +16,8 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindStatus uint64 = 1
-	kindNick   uint64 = 2
+	kindDeviceStatus uint64 = 1
+	kindDeviceNick   uint64 = 2
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -122,11 +122,11 @@ func IdentityBuildEntities[
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Status := symbolSec.BeginAttribute(c.Status[i])
-		symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
+		symbolSecAttr_Status.AddMembershipLowCardRefP(kindDeviceStatus)
 		symbolSecAttr_Status.EndAttributeP()
 		if c.NickHas[i] {
 			symbolSecAttr_Nick := symbolSec.BeginAttribute(c.NickVal[i])
-			symbolSecAttr_Nick.AddMembershipLowCardRefP(kindNick)
+			symbolSecAttr_Nick.AddMembershipLowCardRefP(kindDeviceNick)
 			symbolSecAttr_Nick.EndAttributeP()
 		}
 		symbolSec.EndSection()
@@ -154,11 +154,11 @@ func IdentityAddSections[
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
 	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
-	symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
+	symbolSecAttr_Status.AddMembershipLowCardRefP(kindDeviceStatus)
 	symbolSecAttr_Status.EndAttributeP()
 	if row.Nick.Has {
 		symbolSecAttr_Nick := symbolSec.BeginAttribute(row.Nick.Val)
-		symbolSecAttr_Nick.AddMembershipLowCardRefP(kindNick)
+		symbolSecAttr_Nick.AddMembershipLowCardRefP(kindDeviceNick)
 		symbolSecAttr_Nick.EndAttributeP()
 	}
 	symbolSec.EndSection()
@@ -208,11 +208,11 @@ func IdentityFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindStatus:
+				case kindDeviceStatus:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolStatusVal = val
 					symbolStatusCount++
-				case kindNick:
+				case kindDeviceNick:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolNickVal = val
 					symbolNickCount++
@@ -259,11 +259,11 @@ func IdentityReadRow[
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindStatus:
+			case kindDeviceStatus:
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolStatusVal = val
 				symbolStatusCount++
-			case kindNick:
+			case kindDeviceNick:
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolNickVal = val
 				symbolNickCount++

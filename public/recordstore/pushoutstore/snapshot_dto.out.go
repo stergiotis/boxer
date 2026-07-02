@@ -16,8 +16,8 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindApplied uint64 = 1
-	kindGraggle uint64 = 2
+	kindPushoutApplied uint64 = 1
+	kindPushoutGraggle uint64 = 2
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -145,14 +145,14 @@ func SnapshotBuildEntities[
 			for _, v := range c.Applied[i] {
 				snapAppliedSecAttr_Applied.AddToContainerP(v)
 			}
-			snapAppliedSecAttr_Applied.AddMembershipLowCardRefP(kindApplied)
+			snapAppliedSecAttr_Applied.AddMembershipLowCardRefP(kindPushoutApplied)
 			snapAppliedSecAttr_Applied.EndAttributeP()
 		}
 		snapAppliedSec.EndSection()
 		// --- snapGraggle. ---
 		snapGraggleSec := dml.GetSectionSnapGraggle()
 		snapGraggleSecAttr_Graggle := snapGraggleSec.BeginAttribute(c.Graggle[i])
-		snapGraggleSecAttr_Graggle.AddMembershipLowCardRefP(kindGraggle)
+		snapGraggleSecAttr_Graggle.AddMembershipLowCardRefP(kindPushoutGraggle)
 		snapGraggleSecAttr_Graggle.EndAttributeP()
 		snapGraggleSec.EndSection()
 		err = dml.CommitEntity()
@@ -186,14 +186,14 @@ func SnapshotAddSections[
 		for _, v := range row.Applied {
 			snapAppliedSecAttr_Applied.AddToContainerP(v)
 		}
-		snapAppliedSecAttr_Applied.AddMembershipLowCardRefP(kindApplied)
+		snapAppliedSecAttr_Applied.AddMembershipLowCardRefP(kindPushoutApplied)
 		snapAppliedSecAttr_Applied.EndAttributeP()
 	}
 	snapAppliedSec.EndSection()
 	// --- snapGraggle. ---
 	snapGraggleSec := dml.GetSectionSnapGraggle()
 	snapGraggleSecAttr_Graggle := snapGraggleSec.BeginAttribute(row.Graggle)
-	snapGraggleSecAttr_Graggle.AddMembershipLowCardRefP(kindGraggle)
+	snapGraggleSecAttr_Graggle.AddMembershipLowCardRefP(kindPushoutGraggle)
 	snapGraggleSecAttr_Graggle.EndAttributeP()
 	snapGraggleSec.EndSection()
 	return
@@ -254,7 +254,7 @@ func SnapshotFillFromArrow[
 		for attrJ := int64(0); attrJ < nsnapApplied; attrJ++ {
 			for membID := range snapAppliedMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindApplied:
+				case kindPushoutApplied:
 					for v := range snapAppliedAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						snapAppliedAppliedSlice = append(snapAppliedAppliedSlice, v)
 					}
@@ -269,7 +269,7 @@ func SnapshotFillFromArrow[
 		for attrJ := int64(0); attrJ < nsnapGraggle; attrJ++ {
 			for membID := range snapGraggleMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindGraggle:
+				case kindPushoutGraggle:
 					val := snapGraggleAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					cp := make([]byte, len(val))
 					copy(cp, val)
@@ -311,7 +311,7 @@ func SnapshotReadRow[
 	for attrJ := int64(0); attrJ < nsnapApplied; attrJ++ {
 		for membID := range snapAppliedMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindApplied:
+			case kindPushoutApplied:
 				for v := range snapAppliedAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					snapAppliedAppliedSlice = append(snapAppliedAppliedSlice, v)
 				}
@@ -329,7 +329,7 @@ func SnapshotReadRow[
 	for attrJ := int64(0); attrJ < nsnapGraggle; attrJ++ {
 		for membID := range snapGraggleMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindGraggle:
+			case kindPushoutGraggle:
 				val := snapGraggleAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				cp := make([]byte, len(val))
 				copy(cp, val)

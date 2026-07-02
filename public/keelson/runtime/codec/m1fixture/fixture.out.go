@@ -34,37 +34,37 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindSource       uint64
-	kindSeverity     uint64
-	kindMajorVer     uint64
-	kindSequence     uint64
-	kindLatencyNanos uint64
-	kindCpuPct       uint64
-	kindLoadAvg1     uint64
-	kindHealthy      uint64
-	kindPeerV4       uint64
-	kindPeerV6       uint64
-	kindLastSuccess  uint64
-	kindOperatorName uint64
-	kindTags         uint64
-	kindCapBits      uint64
+	kindM1Source       uint64
+	kindM1Severity     uint64
+	kindM1MajorVer     uint64
+	kindM1Sequence     uint64
+	kindM1LatencyNanos uint64
+	kindM1CpuPct       uint64
+	kindM1LoadAvg1     uint64
+	kindM1Healthy      uint64
+	kindM1PeerV4       uint64
+	kindM1PeerV6       uint64
+	kindM1LastSuccess  uint64
+	kindM1OperatorName uint64
+	kindM1Tags         uint64
+	kindM1CapBits      uint64
 )
 
 func init() {
-	kindSource = vdd.MembM1Source.GetId().Value()
-	kindSeverity = vdd.MembM1Severity.GetId().Value()
-	kindMajorVer = vdd.MembM1MajorVer.GetId().Value()
-	kindSequence = vdd.MembM1Sequence.GetId().Value()
-	kindLatencyNanos = vdd.MembM1LatencyNanos.GetId().Value()
-	kindCpuPct = vdd.MembM1CpuPct.GetId().Value()
-	kindLoadAvg1 = vdd.MembM1LoadAvg1.GetId().Value()
-	kindHealthy = vdd.MembM1Healthy.GetId().Value()
-	kindPeerV4 = vdd.MembM1PeerV4.GetId().Value()
-	kindPeerV6 = vdd.MembM1PeerV6.GetId().Value()
-	kindLastSuccess = vdd.MembM1LastSuccess.GetId().Value()
-	kindOperatorName = vdd.MembM1OperatorName.GetId().Value()
-	kindTags = vdd.MembM1Tags.GetId().Value()
-	kindCapBits = vdd.MembM1CapBits.GetId().Value()
+	kindM1Source = vdd.MembM1Source.GetId().Value()
+	kindM1Severity = vdd.MembM1Severity.GetId().Value()
+	kindM1MajorVer = vdd.MembM1MajorVer.GetId().Value()
+	kindM1Sequence = vdd.MembM1Sequence.GetId().Value()
+	kindM1LatencyNanos = vdd.MembM1LatencyNanos.GetId().Value()
+	kindM1CpuPct = vdd.MembM1CpuPct.GetId().Value()
+	kindM1LoadAvg1 = vdd.MembM1LoadAvg1.GetId().Value()
+	kindM1Healthy = vdd.MembM1Healthy.GetId().Value()
+	kindM1PeerV4 = vdd.MembM1PeerV4.GetId().Value()
+	kindM1PeerV6 = vdd.MembM1PeerV6.GetId().Value()
+	kindM1LastSuccess = vdd.MembM1LastSuccess.GetId().Value()
+	kindM1OperatorName = vdd.MembM1OperatorName.GetId().Value()
+	kindM1Tags = vdd.MembM1Tags.GetId().Value()
+	kindM1CapBits = vdd.MembM1CapBits.GetId().Value()
 	buscodec.Register[M1Sample](m1SampleBusCodec)
 }
 
@@ -502,25 +502,25 @@ func M1SampleBuildEntities[
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Source := symbolSec.BeginAttribute(c.Source[i])
-		symbolSecAttr_Source.AddMembershipLowCardRefP(kindSource)
+		symbolSecAttr_Source.AddMembershipLowCardRefP(kindM1Source)
 		symbolSecAttr_Source.EndAttributeP()
 		symbolSec.EndSection()
 		// --- u8Array. ---
 		u8ArraySec := dml.GetSectionU8Array()
 		u8ArraySecAttr_Severity := u8ArraySec.BeginAttributeSingle(c.Severity[i])
-		u8ArraySecAttr_Severity.AddMembershipLowCardRefP(kindSeverity)
+		u8ArraySecAttr_Severity.AddMembershipLowCardRefP(kindM1Severity)
 		u8ArraySecAttr_Severity.EndAttributeP()
 		u8ArraySec.EndSection()
 		// --- u16Array. ---
 		u16ArraySec := dml.GetSectionU16Array()
 		u16ArraySecAttr_MajorVer := u16ArraySec.BeginAttributeSingle(c.MajorVer[i])
-		u16ArraySecAttr_MajorVer.AddMembershipLowCardRefP(kindMajorVer)
+		u16ArraySecAttr_MajorVer.AddMembershipLowCardRefP(kindM1MajorVer)
 		u16ArraySecAttr_MajorVer.EndAttributeP()
 		u16ArraySec.EndSection()
 		// --- u32Array. ---
 		u32ArraySec := dml.GetSectionU32Array()
 		u32ArraySecAttr_Sequence := u32ArraySec.BeginAttributeSingle(c.Sequence[i])
-		u32ArraySecAttr_Sequence.AddMembershipLowCardRefP(kindSequence)
+		u32ArraySecAttr_Sequence.AddMembershipLowCardRefP(kindM1Sequence)
 		u32ArraySecAttr_Sequence.EndAttributeP()
 		if c.CapBits[i] != nil && !c.CapBits[i].IsEmpty() {
 			u32ArraySecAttr_CapBits := u32ArraySec.BeginAttribute()
@@ -528,48 +528,48 @@ func M1SampleBuildEntities[
 			for it.HasNext() {
 				u32ArraySecAttr_CapBits.AddToContainerP(it.Next())
 			}
-			u32ArraySecAttr_CapBits.AddMembershipLowCardRefP(kindCapBits)
+			u32ArraySecAttr_CapBits.AddMembershipLowCardRefP(kindM1CapBits)
 			u32ArraySecAttr_CapBits.EndAttributeP()
 		}
 		u32ArraySec.EndSection()
 		// --- u64Array. ---
 		u64ArraySec := dml.GetSectionU64Array()
 		u64ArraySecAttr_LatencyNanos := u64ArraySec.BeginAttributeSingle(c.LatencyNanos[i])
-		u64ArraySecAttr_LatencyNanos.AddMembershipLowCardRefP(kindLatencyNanos)
+		u64ArraySecAttr_LatencyNanos.AddMembershipLowCardRefP(kindM1LatencyNanos)
 		u64ArraySecAttr_LatencyNanos.EndAttributeP()
 		u64ArraySec.EndSection()
 		// --- f32Array. ---
 		f32ArraySec := dml.GetSectionF32Array()
 		f32ArraySecAttr_CpuPct := f32ArraySec.BeginAttributeSingle(c.CpuPct[i])
-		f32ArraySecAttr_CpuPct.AddMembershipLowCardRefP(kindCpuPct)
+		f32ArraySecAttr_CpuPct.AddMembershipLowCardRefP(kindM1CpuPct)
 		f32ArraySecAttr_CpuPct.EndAttributeP()
 		f32ArraySec.EndSection()
 		// --- f64Array. ---
 		f64ArraySec := dml.GetSectionF64Array()
 		f64ArraySecAttr_LoadAvg1 := f64ArraySec.BeginAttributeSingle(c.LoadAvg1[i])
-		f64ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindLoadAvg1)
+		f64ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindM1LoadAvg1)
 		f64ArraySecAttr_LoadAvg1.EndAttributeP()
 		f64ArraySec.EndSection()
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Healthy := boolSec.BeginAttribute(c.Healthy[i])
-		boolSecAttr_Healthy.AddMembershipLowCardRefP(kindHealthy)
+		boolSecAttr_Healthy.AddMembershipLowCardRefP(kindM1Healthy)
 		boolSecAttr_Healthy.EndAttributeP()
 		boolSec.EndSection()
 		// --- blobArray. ---
 		blobArraySec := dml.GetSectionBlobArray()
 		blobArraySecAttr_PeerV4 := blobArraySec.BeginAttributeSingle(c.PeerV4[i][:])
-		blobArraySecAttr_PeerV4.AddMembershipLowCardRefP(kindPeerV4)
+		blobArraySecAttr_PeerV4.AddMembershipLowCardRefP(kindM1PeerV4)
 		blobArraySecAttr_PeerV4.EndAttributeP()
 		blobArraySecAttr_PeerV6 := blobArraySec.BeginAttributeSingle(c.PeerV6[i][:])
-		blobArraySecAttr_PeerV6.AddMembershipLowCardRefP(kindPeerV6)
+		blobArraySecAttr_PeerV6.AddMembershipLowCardRefP(kindM1PeerV6)
 		blobArraySecAttr_PeerV6.EndAttributeP()
 		blobArraySec.EndSection()
 		// --- timeArray. ---
 		timeArraySec := dml.GetSectionTimeArray()
 		if c.LastSuccessHas[i] {
 			timeArraySecAttr_LastSuccess := timeArraySec.BeginAttributeSingle(c.LastSuccessVal[i])
-			timeArraySecAttr_LastSuccess.AddMembershipLowCardRefP(kindLastSuccess)
+			timeArraySecAttr_LastSuccess.AddMembershipLowCardRefP(kindM1LastSuccess)
 			timeArraySecAttr_LastSuccess.EndAttributeP()
 		}
 		timeArraySec.EndSection()
@@ -577,7 +577,7 @@ func M1SampleBuildEntities[
 		stringArraySec := dml.GetSectionStringArray()
 		if c.OperatorNameHas[i] {
 			stringArraySecAttr_OperatorName := stringArraySec.BeginAttributeSingle(c.OperatorNameVal[i])
-			stringArraySecAttr_OperatorName.AddMembershipLowCardRefP(kindOperatorName)
+			stringArraySecAttr_OperatorName.AddMembershipLowCardRefP(kindM1OperatorName)
 			stringArraySecAttr_OperatorName.EndAttributeP()
 		}
 		stringArraySec.EndSection()
@@ -588,7 +588,7 @@ func M1SampleBuildEntities[
 			for _, v := range c.Tags[i] {
 				textArraySecAttr_Tags.AddToContainerP(v)
 			}
-			textArraySecAttr_Tags.AddMembershipLowCardRefP(kindTags)
+			textArraySecAttr_Tags.AddMembershipLowCardRefP(kindM1Tags)
 			textArraySecAttr_Tags.EndAttributeP()
 		}
 		textArraySec.EndSection()
@@ -649,25 +649,25 @@ func M1SampleAddSections[
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
 	symbolSecAttr_Source := symbolSec.BeginAttribute(row.Source)
-	symbolSecAttr_Source.AddMembershipLowCardRefP(kindSource)
+	symbolSecAttr_Source.AddMembershipLowCardRefP(kindM1Source)
 	symbolSecAttr_Source.EndAttributeP()
 	symbolSec.EndSection()
 	// --- u8Array. ---
 	u8ArraySec := dml.GetSectionU8Array()
 	u8ArraySecAttr_Severity := u8ArraySec.BeginAttributeSingle(row.Severity)
-	u8ArraySecAttr_Severity.AddMembershipLowCardRefP(kindSeverity)
+	u8ArraySecAttr_Severity.AddMembershipLowCardRefP(kindM1Severity)
 	u8ArraySecAttr_Severity.EndAttributeP()
 	u8ArraySec.EndSection()
 	// --- u16Array. ---
 	u16ArraySec := dml.GetSectionU16Array()
 	u16ArraySecAttr_MajorVer := u16ArraySec.BeginAttributeSingle(row.MajorVer)
-	u16ArraySecAttr_MajorVer.AddMembershipLowCardRefP(kindMajorVer)
+	u16ArraySecAttr_MajorVer.AddMembershipLowCardRefP(kindM1MajorVer)
 	u16ArraySecAttr_MajorVer.EndAttributeP()
 	u16ArraySec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
 	u32ArraySecAttr_Sequence := u32ArraySec.BeginAttributeSingle(row.Sequence)
-	u32ArraySecAttr_Sequence.AddMembershipLowCardRefP(kindSequence)
+	u32ArraySecAttr_Sequence.AddMembershipLowCardRefP(kindM1Sequence)
 	u32ArraySecAttr_Sequence.EndAttributeP()
 	if row.CapBits != nil && !row.CapBits.IsEmpty() {
 		u32ArraySecAttr_CapBits := u32ArraySec.BeginAttribute()
@@ -675,48 +675,48 @@ func M1SampleAddSections[
 		for it.HasNext() {
 			u32ArraySecAttr_CapBits.AddToContainerP(it.Next())
 		}
-		u32ArraySecAttr_CapBits.AddMembershipLowCardRefP(kindCapBits)
+		u32ArraySecAttr_CapBits.AddMembershipLowCardRefP(kindM1CapBits)
 		u32ArraySecAttr_CapBits.EndAttributeP()
 	}
 	u32ArraySec.EndSection()
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
 	u64ArraySecAttr_LatencyNanos := u64ArraySec.BeginAttributeSingle(row.LatencyNanos)
-	u64ArraySecAttr_LatencyNanos.AddMembershipLowCardRefP(kindLatencyNanos)
+	u64ArraySecAttr_LatencyNanos.AddMembershipLowCardRefP(kindM1LatencyNanos)
 	u64ArraySecAttr_LatencyNanos.EndAttributeP()
 	u64ArraySec.EndSection()
 	// --- f32Array. ---
 	f32ArraySec := dml.GetSectionF32Array()
 	f32ArraySecAttr_CpuPct := f32ArraySec.BeginAttributeSingle(row.CpuPct)
-	f32ArraySecAttr_CpuPct.AddMembershipLowCardRefP(kindCpuPct)
+	f32ArraySecAttr_CpuPct.AddMembershipLowCardRefP(kindM1CpuPct)
 	f32ArraySecAttr_CpuPct.EndAttributeP()
 	f32ArraySec.EndSection()
 	// --- f64Array. ---
 	f64ArraySec := dml.GetSectionF64Array()
 	f64ArraySecAttr_LoadAvg1 := f64ArraySec.BeginAttributeSingle(row.LoadAvg1)
-	f64ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindLoadAvg1)
+	f64ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindM1LoadAvg1)
 	f64ArraySecAttr_LoadAvg1.EndAttributeP()
 	f64ArraySec.EndSection()
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
 	boolSecAttr_Healthy := boolSec.BeginAttribute(row.Healthy)
-	boolSecAttr_Healthy.AddMembershipLowCardRefP(kindHealthy)
+	boolSecAttr_Healthy.AddMembershipLowCardRefP(kindM1Healthy)
 	boolSecAttr_Healthy.EndAttributeP()
 	boolSec.EndSection()
 	// --- blobArray. ---
 	blobArraySec := dml.GetSectionBlobArray()
 	blobArraySecAttr_PeerV4 := blobArraySec.BeginAttributeSingle(row.PeerV4[:])
-	blobArraySecAttr_PeerV4.AddMembershipLowCardRefP(kindPeerV4)
+	blobArraySecAttr_PeerV4.AddMembershipLowCardRefP(kindM1PeerV4)
 	blobArraySecAttr_PeerV4.EndAttributeP()
 	blobArraySecAttr_PeerV6 := blobArraySec.BeginAttributeSingle(row.PeerV6[:])
-	blobArraySecAttr_PeerV6.AddMembershipLowCardRefP(kindPeerV6)
+	blobArraySecAttr_PeerV6.AddMembershipLowCardRefP(kindM1PeerV6)
 	blobArraySecAttr_PeerV6.EndAttributeP()
 	blobArraySec.EndSection()
 	// --- timeArray. ---
 	timeArraySec := dml.GetSectionTimeArray()
 	if row.LastSuccess.Has {
 		timeArraySecAttr_LastSuccess := timeArraySec.BeginAttributeSingle(row.LastSuccess.Val)
-		timeArraySecAttr_LastSuccess.AddMembershipLowCardRefP(kindLastSuccess)
+		timeArraySecAttr_LastSuccess.AddMembershipLowCardRefP(kindM1LastSuccess)
 		timeArraySecAttr_LastSuccess.EndAttributeP()
 	}
 	timeArraySec.EndSection()
@@ -724,7 +724,7 @@ func M1SampleAddSections[
 	stringArraySec := dml.GetSectionStringArray()
 	if row.OperatorName.Has {
 		stringArraySecAttr_OperatorName := stringArraySec.BeginAttributeSingle(row.OperatorName.Val)
-		stringArraySecAttr_OperatorName.AddMembershipLowCardRefP(kindOperatorName)
+		stringArraySecAttr_OperatorName.AddMembershipLowCardRefP(kindM1OperatorName)
 		stringArraySecAttr_OperatorName.EndAttributeP()
 	}
 	stringArraySec.EndSection()
@@ -735,7 +735,7 @@ func M1SampleAddSections[
 		for _, v := range row.Tags {
 			textArraySecAttr_Tags.AddToContainerP(v)
 		}
-		textArraySecAttr_Tags.AddMembershipLowCardRefP(kindTags)
+		textArraySecAttr_Tags.AddMembershipLowCardRefP(kindM1Tags)
 		textArraySecAttr_Tags.EndAttributeP()
 	}
 	textArraySec.EndSection()
@@ -958,7 +958,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindSource:
+				case kindM1Source:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolSourceVal = val
 					symbolSourceCount++
@@ -977,7 +977,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nu8Array; attrJ++ {
 			for membID := range u8ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindSeverity:
+				case kindM1Severity:
 					val := u8ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u8ArraySeverityVal = val
 					u8ArraySeverityCount++
@@ -996,7 +996,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nu16Array; attrJ++ {
 			for membID := range u16ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindMajorVer:
+				case kindM1MajorVer:
 					val := u16ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u16ArrayMajorVerVal = val
 					u16ArrayMajorVerCount++
@@ -1016,11 +1016,11 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 			for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindSequence:
+				case kindM1Sequence:
 					val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u32ArraySequenceVal = val
 					u32ArraySequenceCount++
-				case kindCapBits:
+				case kindM1CapBits:
 					for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						if u32ArrayCapBitsBitmap == nil {
 							u32ArrayCapBitsBitmap = roaring.New()
@@ -1043,7 +1043,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindLatencyNanos:
+				case kindM1LatencyNanos:
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayLatencyNanosVal = val
 					u64ArrayLatencyNanosCount++
@@ -1062,7 +1062,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nf32Array; attrJ++ {
 			for membID := range f32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindCpuPct:
+				case kindM1CpuPct:
 					val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					f32ArrayCpuPctVal = val
 					f32ArrayCpuPctCount++
@@ -1081,7 +1081,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nf64Array; attrJ++ {
 			for membID := range f64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindLoadAvg1:
+				case kindM1LoadAvg1:
 					val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					f64ArrayLoadAvg1Val = val
 					f64ArrayLoadAvg1Count++
@@ -1100,7 +1100,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindHealthy:
+				case kindM1Healthy:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolHealthyVal = val
 					boolHealthyCount++
@@ -1121,11 +1121,11 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindPeerV4:
+				case kindM1PeerV4:
 					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					copy(blobArrayPeerV4Val[:], val)
 					blobArrayPeerV4Count++
-				case kindPeerV6:
+				case kindM1PeerV6:
 					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					copy(blobArrayPeerV6Val[:], val)
 					blobArrayPeerV6Count++
@@ -1149,7 +1149,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < ntimeArray; attrJ++ {
 			for membID := range timeArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindLastSuccess:
+				case kindM1LastSuccess:
 					val := timeArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					timeArrayLastSuccessVal = val
 					timeArrayLastSuccessCount++
@@ -1171,7 +1171,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindOperatorName:
+				case kindM1OperatorName:
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayOperatorNameVal = val
 					stringArrayOperatorNameCount++
@@ -1192,7 +1192,7 @@ func M1SampleFillFromArrow[
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindTags:
+				case kindM1Tags:
 					for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						textArrayTagsSlice = append(textArrayTagsSlice, v)
 					}
@@ -1269,7 +1269,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindSource:
+			case kindM1Source:
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolSourceVal = val
 				symbolSourceCount++
@@ -1291,7 +1291,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nu8Array; attrJ++ {
 		for membID := range u8ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindSeverity:
+			case kindM1Severity:
 				val := u8ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u8ArraySeverityVal = val
 				u8ArraySeverityCount++
@@ -1313,7 +1313,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nu16Array; attrJ++ {
 		for membID := range u16ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindMajorVer:
+			case kindM1MajorVer:
 				val := u16ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u16ArrayMajorVerVal = val
 				u16ArrayMajorVerCount++
@@ -1336,11 +1336,11 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindSequence:
+			case kindM1Sequence:
 				val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u32ArraySequenceVal = val
 				u32ArraySequenceCount++
-			case kindCapBits:
+			case kindM1CapBits:
 				for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					if u32ArrayCapBitsBitmap == nil {
 						u32ArrayCapBitsBitmap = roaring.New()
@@ -1369,7 +1369,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindLatencyNanos:
+			case kindM1LatencyNanos:
 				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u64ArrayLatencyNanosVal = val
 				u64ArrayLatencyNanosCount++
@@ -1391,7 +1391,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nf32Array; attrJ++ {
 		for membID := range f32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindCpuPct:
+			case kindM1CpuPct:
 				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				f32ArrayCpuPctVal = val
 				f32ArrayCpuPctCount++
@@ -1413,7 +1413,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nf64Array; attrJ++ {
 		for membID := range f64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindLoadAvg1:
+			case kindM1LoadAvg1:
 				val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				f64ArrayLoadAvg1Val = val
 				f64ArrayLoadAvg1Count++
@@ -1435,7 +1435,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindHealthy:
+			case kindM1Healthy:
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolHealthyVal = val
 				boolHealthyCount++
@@ -1459,11 +1459,11 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindPeerV4:
+			case kindM1PeerV4:
 				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				copy(blobArrayPeerV4Val[:], val)
 				blobArrayPeerV4Count++
-			case kindPeerV6:
+			case kindM1PeerV6:
 				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				copy(blobArrayPeerV6Val[:], val)
 				blobArrayPeerV6Count++
@@ -1493,7 +1493,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < ntimeArray; attrJ++ {
 		for membID := range timeArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindLastSuccess:
+			case kindM1LastSuccess:
 				val := timeArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				timeArrayLastSuccessVal = val
 				timeArrayLastSuccessCount++
@@ -1516,7 +1516,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindOperatorName:
+			case kindM1OperatorName:
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayOperatorNameVal = val
 				stringArrayOperatorNameCount++
@@ -1538,7 +1538,7 @@ func M1SampleReadRow[
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindTags:
+			case kindM1Tags:
 				for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					textArrayTagsSlice = append(textArrayTagsSlice, v)
 				}

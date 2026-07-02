@@ -264,14 +264,14 @@ func TestPlanBuilder_MembershipColonNoFalseCollision(t *testing.T) {
 	require.Len(t, p.Fields, 3)
 }
 
-// TestPlanBuilder_ConstRefMembershipMustBeIdentifier pins the 2026-06-14
-// hardening at the shared (both-front-end) level: a CONST ref-channel field's
-// membership becomes kind<Upper(memb)> in the marshallgen core emit, so a
-// non-identifier name is rejected at plan-build. Value ref fields key kindXxx
-// on the Go field name (the membership is a lookup key), so they stay valid
-// here — that case is the facts target's concern. Verbatim memberships are wire
+// TestPlanBuilder_RefMembershipMustBeIdentifier pins the identifier rule
+// at the shared (both-front-end) level: EVERY ref-channel field's
+// membership becomes kind<Upper(memb)> in the marshallgen core emit
+// (membership-keyed so kind vars stay unique across kinds generated into
+// one package — ADR-0100 stores), so a non-identifier name is rejected at
+// plan-build, const and value fields alike. Verbatim memberships are wire
 // labels, never identifiers, so they are unrestricted.
-func TestPlanBuilder_ConstRefMembershipMustBeIdentifier(t *testing.T) {
+func TestPlanBuilder_RefMembershipMustBeIdentifier(t *testing.T) {
 	// const ref membership with an illegal identifier char → rejected.
 	for _, bad := range []string{"bad-name", "foo.bar", "foo bar", "a:b"} {
 		_, err := buildPlan(kindUS, idCol,
@@ -282,13 +282,11 @@ func TestPlanBuilder_ConstRefMembershipMustBeIdentifier(t *testing.T) {
 		}
 	}
 
-	// A value ref field keys kindXxx on the Go field name, so an arbitrary
-	// membership (a lookup key) is accepted by the shared builder — anchor emits
-	// kind<Field>, reflect uses it as a map key. (TestEmit_HighCardRef relies on
-	// exactly this; the facts target validates value ref memberships itself.)
+	// A value ref field's membership mints the same kind<Upper(memb)>
+	// symbol, so it is held to the same rule.
 	_, err := buildPlan(kindUS, idCol,
 		fld{name: "App", lw: "my-app,symbol,highCardRef", shape: shp("string")})
-	require.NoError(t, err, "value ref membership is a lookup key, not an identifier")
+	require.Error(t, err, "value ref membership must be a Go identifier too")
 
 	// A verbatim const membership is a wire label, not an identifier — OK.
 	_, err = buildPlan(kindUS, idCol,

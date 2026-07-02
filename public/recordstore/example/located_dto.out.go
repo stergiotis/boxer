@@ -16,7 +16,7 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindLat uint64 = 1
+	kindDeviceLoc uint64 = 1
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -121,7 +121,7 @@ func LocatedBuildEntities[
 		// --- geoPoint. ---
 		geoPointSec := dml.GetSectionGeoPoint()
 		geoPointSecAttr := geoPointSec.BeginAttribute(c.Lat[i], c.Lng[i], c.Cell[i])
-		geoPointSecAttr.AddMembershipLowCardRefP(kindLat)
+		geoPointSecAttr.AddMembershipLowCardRefP(kindDeviceLoc)
 		geoPointSecAttr.EndAttributeP()
 		geoPointSec.EndSection()
 		err = dml.CommitEntity()
@@ -148,7 +148,7 @@ func LocatedAddSections[
 	// --- geoPoint. ---
 	geoPointSec := dml.GetSectionGeoPoint()
 	geoPointSecAttr := geoPointSec.BeginAttribute(row.Lat, row.Lng, row.Cell)
-	geoPointSecAttr.AddMembershipLowCardRefP(kindLat)
+	geoPointSecAttr.AddMembershipLowCardRefP(kindDeviceLoc)
 	geoPointSecAttr.EndAttributeP()
 	geoPointSec.EndSection()
 	return
@@ -201,7 +201,7 @@ func LocatedFillFromArrow[
 			geoPointLngLocal := geoPointAttrs.GetAttrValuePointLng(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 			geoPointCellLocal := geoPointAttrs.GetAttrValueH3(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 			for membID := range geoPointMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				if membID == kindLat {
+				if membID == kindDeviceLoc {
 					geoPointLatVal = geoPointLatLocal
 					geoPointLngVal = geoPointLngLocal
 					geoPointCellVal = geoPointCellLocal
@@ -245,7 +245,7 @@ func LocatedReadRow[
 		geoPointLngLocal := geoPointAttrs.GetAttrValuePointLng(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 		geoPointCellLocal := geoPointAttrs.GetAttrValueH3(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 		for membID := range geoPointMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			if membID == kindLat {
+			if membID == kindDeviceLoc {
 				geoPointLatVal = geoPointLatLocal
 				geoPointLngVal = geoPointLngLocal
 				geoPointCellVal = geoPointCellLocal

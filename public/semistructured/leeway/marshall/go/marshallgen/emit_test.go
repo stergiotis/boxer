@@ -273,8 +273,11 @@ type MyDTO struct {
 }
 `)
 	mustContain(t, out, "const (")
-	mustContain(t, out, "kindA uint64 = 1")
-	mustContain(t, out, "kindB uint64 = 2")
+	// Keyed on the membership name (schema-global), not the Go field name,
+	// so kind vars stay unique across kinds generated into one package.
+	mustContain(t, out, "kindAlpha uint64 = 1")
+	mustContain(t, out, "kindBeta")
+	mustContain(t, out, "uint64 = 2")
 	mustNotContain(t, out, "func init() {")
 	mustNotContain(t, out, "vdd.Memb")
 	mustNotContain(t, out, "buscodec.Register")
@@ -315,15 +318,15 @@ type MyDTO struct {
 	_   struct{}  `+"`kind:\"my\"`"+`
 	Id  uint64    `+"`lw:\",id\"`"+`
 	Ts  time.Time `+"`lw:\",ts\"`"+`
-	App string    `+"`lw:\"my-app,symbol,highCardRef\"`"+`
+	App string    `+"`lw:\"myApp,symbol,highCardRef\"`"+`
 }
 `)
 	parseGo(t, out)
 	mustContain(t, out, "dmlruntime.InAttributeMembershipHighCardRefPI")
-	mustContain(t, out, ".AddMembershipHighCardRefP(kindApp)")
+	mustContain(t, out, ".AddMembershipHighCardRefP(kindMyApp)")
 	mustContain(t, out, "GetMembValueHighCardRef")
 	mustContain(t, out, "iter.Seq[uint64]")
-	mustContain(t, out, "kindApp uint64 = 1")
+	mustContain(t, out, "kindMyApp uint64 = 1")
 }
 
 // TestEmit_HighCardVerbatim confirms ADR-0008 D3's HighCardVerbatim

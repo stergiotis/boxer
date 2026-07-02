@@ -16,7 +16,7 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindCharge uint64 = 1
+	kindDeviceCharge uint64 = 1
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -115,7 +115,7 @@ func BatteryBuildEntities[
 		// --- u64Array. ---
 		u64ArraySec := dml.GetSectionU64Array()
 		u64ArraySecAttr_Charge := u64ArraySec.BeginAttributeSingle(c.Charge[i])
-		u64ArraySecAttr_Charge.AddMembershipLowCardRefP(kindCharge)
+		u64ArraySecAttr_Charge.AddMembershipLowCardRefP(kindDeviceCharge)
 		u64ArraySecAttr_Charge.EndAttributeP()
 		u64ArraySec.EndSection()
 		err = dml.CommitEntity()
@@ -142,7 +142,7 @@ func BatteryAddSections[
 	// --- u64Array. ---
 	u64ArraySec := dml.GetSectionU64Array()
 	u64ArraySecAttr_Charge := u64ArraySec.BeginAttributeSingle(row.Charge)
-	u64ArraySecAttr_Charge.AddMembershipLowCardRefP(kindCharge)
+	u64ArraySecAttr_Charge.AddMembershipLowCardRefP(kindDeviceCharge)
 	u64ArraySecAttr_Charge.EndAttributeP()
 	u64ArraySec.EndSection()
 	return
@@ -189,7 +189,7 @@ func BatteryFillFromArrow[
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindCharge:
+				case kindDeviceCharge:
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayChargeVal = val
 					u64ArrayChargeCount++
@@ -226,7 +226,7 @@ func BatteryReadRow[
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindCharge:
+			case kindDeviceCharge:
 				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u64ArrayChargeVal = val
 				u64ArrayChargeCount++

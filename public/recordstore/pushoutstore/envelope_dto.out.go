@@ -16,7 +16,7 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindFramed uint64 = 1
+	kindPushoutFramed uint64 = 1
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -115,7 +115,7 @@ func EnvelopeBuildEntities[
 		// --- envBlob. ---
 		envBlobSec := dml.GetSectionEnvBlob()
 		envBlobSecAttr_Framed := envBlobSec.BeginAttribute(c.Framed[i])
-		envBlobSecAttr_Framed.AddMembershipLowCardRefP(kindFramed)
+		envBlobSecAttr_Framed.AddMembershipLowCardRefP(kindPushoutFramed)
 		envBlobSecAttr_Framed.EndAttributeP()
 		envBlobSec.EndSection()
 		err = dml.CommitEntity()
@@ -142,7 +142,7 @@ func EnvelopeAddSections[
 	// --- envBlob. ---
 	envBlobSec := dml.GetSectionEnvBlob()
 	envBlobSecAttr_Framed := envBlobSec.BeginAttribute(row.Framed)
-	envBlobSecAttr_Framed.AddMembershipLowCardRefP(kindFramed)
+	envBlobSecAttr_Framed.AddMembershipLowCardRefP(kindPushoutFramed)
 	envBlobSecAttr_Framed.EndAttributeP()
 	envBlobSec.EndSection()
 	return
@@ -189,7 +189,7 @@ func EnvelopeFillFromArrow[
 		for attrJ := int64(0); attrJ < nenvBlob; attrJ++ {
 			for membID := range envBlobMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindFramed:
+				case kindPushoutFramed:
 					val := envBlobAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					cp := make([]byte, len(val))
 					copy(cp, val)
@@ -228,7 +228,7 @@ func EnvelopeReadRow[
 	for attrJ := int64(0); attrJ < nenvBlob; attrJ++ {
 		for membID := range envBlobMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindFramed:
+			case kindPushoutFramed:
 				val := envBlobAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				cp := make([]byte, len(val))
 				copy(cp, val)

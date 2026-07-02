@@ -526,20 +526,21 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 		return
 	}
 
-	// A const ref-channel field's membership becomes a Go identifier
-	// kind<UpperFirst(memb)> in the marshallgen core emit (for every target), so
-	// a non-identifier name there yields code that does not compile. The reflect
+	// A ref-channel field's membership becomes a Go identifier
+	// kind<UpperFirst(memb)> in the marshallgen core emit (for every target;
+	// membership-keyed so kind vars stay unique when several kinds are
+	// generated into one package — see mappingplan.TaggedField.KindVar), so
+	// a non-identifier name yields code that does not compile. The reflect
 	// front-end would instead accept it (it resolves the membership as a
 	// lookup-map key, never an identifier), so rejecting it in this shared
-	// builder keeps the two front-ends accepting the same DTOs. Value ref fields
-	// key their kindXxx on the Go field name, not the membership, so they are
-	// exempt here — the facts target, which does map every ref membership to
-	// vdd.Memb<memb>, validates those itself (factswrapper). Verbatim / carrier
-	// memberships are never identifiers (literal wire label / per-row carrier
-	// data), so their names may be arbitrary.
+	// builder keeps the two front-ends accepting the same DTOs. The facts
+	// target additionally maps every ref membership to vdd.Memb<memb> and
+	// re-validates itself (factswrapper). Verbatim / carrier memberships are
+	// never identifiers (literal wire label / per-row carrier data), so
+	// their names may be arbitrary.
 	for _, f := range b.plan.Fields {
-		if f.IsConst && f.Flags.Channel.NeedsKindVar() && !mappingplan.IsIdentifierLike(f.LWMembership) {
-			err = eb.Build().Str("membership", f.LWMembership).Errorf("const ref-channel membership must be a Go identifier (ASCII letters, digits, underscores) — it becomes the emitted kindXxx symbol; use a verbatim channel for an arbitrary wire label")
+		if f.Flags.Channel.NeedsKindVar() && !mappingplan.IsIdentifierLike(f.LWMembership) {
+			err = eb.Build().Str("membership", f.LWMembership).Errorf("ref-channel membership must be a Go identifier (ASCII letters, digits, underscores) — it becomes the emitted kindXxx symbol; use a verbatim channel for an arbitrary wire label")
 			return
 		}
 	}

@@ -15,9 +15,9 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindHashes  uint64 = 1
-	kindIndices uint64 = 2
-	kindTimes   uint64 = 3
+	kindPushoutRetHash uint64 = 1
+	kindPushoutRetIdx  uint64 = 2
+	kindPushoutRetTime uint64 = 3
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -171,7 +171,7 @@ func RetentionBuildEntities[
 			for _, v := range c.Hashes[i] {
 				retHashSecAttr_Hashes.AddToContainerP(v)
 			}
-			retHashSecAttr_Hashes.AddMembershipLowCardRefP(kindHashes)
+			retHashSecAttr_Hashes.AddMembershipLowCardRefP(kindPushoutRetHash)
 			retHashSecAttr_Hashes.EndAttributeP()
 		}
 		retHashSec.EndSection()
@@ -182,7 +182,7 @@ func RetentionBuildEntities[
 			for _, v := range c.Indices[i] {
 				retIndexSecAttr_Indices.AddToContainerP(v)
 			}
-			retIndexSecAttr_Indices.AddMembershipLowCardRefP(kindIndices)
+			retIndexSecAttr_Indices.AddMembershipLowCardRefP(kindPushoutRetIdx)
 			retIndexSecAttr_Indices.EndAttributeP()
 		}
 		retIndexSec.EndSection()
@@ -193,7 +193,7 @@ func RetentionBuildEntities[
 			for _, v := range c.Times[i] {
 				retTimeSecAttr_Times.AddToContainerP(v)
 			}
-			retTimeSecAttr_Times.AddMembershipLowCardRefP(kindTimes)
+			retTimeSecAttr_Times.AddMembershipLowCardRefP(kindPushoutRetTime)
 			retTimeSecAttr_Times.EndAttributeP()
 		}
 		retTimeSec.EndSection()
@@ -231,7 +231,7 @@ func RetentionAddSections[
 		for _, v := range row.Hashes {
 			retHashSecAttr_Hashes.AddToContainerP(v)
 		}
-		retHashSecAttr_Hashes.AddMembershipLowCardRefP(kindHashes)
+		retHashSecAttr_Hashes.AddMembershipLowCardRefP(kindPushoutRetHash)
 		retHashSecAttr_Hashes.EndAttributeP()
 	}
 	retHashSec.EndSection()
@@ -242,7 +242,7 @@ func RetentionAddSections[
 		for _, v := range row.Indices {
 			retIndexSecAttr_Indices.AddToContainerP(v)
 		}
-		retIndexSecAttr_Indices.AddMembershipLowCardRefP(kindIndices)
+		retIndexSecAttr_Indices.AddMembershipLowCardRefP(kindPushoutRetIdx)
 		retIndexSecAttr_Indices.EndAttributeP()
 	}
 	retIndexSec.EndSection()
@@ -253,7 +253,7 @@ func RetentionAddSections[
 		for _, v := range row.Times {
 			retTimeSecAttr_Times.AddToContainerP(v)
 		}
-		retTimeSecAttr_Times.AddMembershipLowCardRefP(kindTimes)
+		retTimeSecAttr_Times.AddMembershipLowCardRefP(kindPushoutRetTime)
 		retTimeSecAttr_Times.EndAttributeP()
 	}
 	retTimeSec.EndSection()
@@ -330,7 +330,7 @@ func RetentionFillFromArrow[
 		for attrJ := int64(0); attrJ < nretHash; attrJ++ {
 			for membID := range retHashMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindHashes:
+				case kindPushoutRetHash:
 					for v := range retHashAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						retHashHashesSlice = append(retHashHashesSlice, v)
 					}
@@ -344,7 +344,7 @@ func RetentionFillFromArrow[
 		for attrJ := int64(0); attrJ < nretIndex; attrJ++ {
 			for membID := range retIndexMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindIndices:
+				case kindPushoutRetIdx:
 					for v := range retIndexAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						retIndexIndicesSlice = append(retIndexIndicesSlice, v)
 					}
@@ -358,7 +358,7 @@ func RetentionFillFromArrow[
 		for attrJ := int64(0); attrJ < nretTime; attrJ++ {
 			for membID := range retTimeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindTimes:
+				case kindPushoutRetTime:
 					for v := range retTimeAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						retTimeTimesSlice = append(retTimeTimesSlice, v)
 					}
@@ -398,7 +398,7 @@ func RetentionReadRow[
 	for attrJ := int64(0); attrJ < nretHash; attrJ++ {
 		for membID := range retHashMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindHashes:
+			case kindPushoutRetHash:
 				for v := range retHashAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					retHashHashesSlice = append(retHashHashesSlice, v)
 				}
@@ -415,7 +415,7 @@ func RetentionReadRow[
 	for attrJ := int64(0); attrJ < nretIndex; attrJ++ {
 		for membID := range retIndexMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindIndices:
+			case kindPushoutRetIdx:
 				for v := range retIndexAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					retIndexIndicesSlice = append(retIndexIndicesSlice, v)
 				}
@@ -432,7 +432,7 @@ func RetentionReadRow[
 	for attrJ := int64(0); attrJ < nretTime; attrJ++ {
 		for membID := range retTimeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindTimes:
+			case kindPushoutRetTime:
 				for v := range retTimeAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					retTimeTimesSlice = append(retTimeTimesSlice, v)
 				}

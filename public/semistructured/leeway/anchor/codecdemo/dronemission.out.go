@@ -16,8 +16,8 @@ import (
 // --- Package-local membership ids (schema-agnostic target). ---
 
 const (
-	kindStatus  uint64 = 1
-	kindBattery uint64 = 2
+	kindDroneStatus uint64 = 1
+	kindBattery     uint64 = 2
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -143,7 +143,7 @@ func DroneMissionBuildEntities[
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Status := symbolSec.BeginAttribute(c.Status[i])
-		symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
+		symbolSecAttr_Status.AddMembershipLowCardRefP(kindDroneStatus)
 		symbolSecAttr_Status.EndAttributeP()
 		symbolSec.EndSection()
 		// --- u64Array. ---
@@ -179,7 +179,7 @@ func DroneMissionAddSections[
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
 	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
-	symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
+	symbolSecAttr_Status.AddMembershipLowCardRefP(kindDroneStatus)
 	symbolSecAttr_Status.EndAttributeP()
 	symbolSec.EndSection()
 	// --- u64Array. ---
@@ -254,7 +254,7 @@ func DroneMissionFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindStatus:
+				case kindDroneStatus:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolStatusVal = val
 					symbolStatusCount++
@@ -314,7 +314,7 @@ func DroneMissionReadRow[
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindStatus:
+			case kindDroneStatus:
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolStatusVal = val
 				symbolStatusCount++

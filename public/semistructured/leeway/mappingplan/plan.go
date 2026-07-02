@@ -563,21 +563,21 @@ func (f TaggedField) IsMulti() bool {
 // The generated BuildEntities references it by name. Multi-sub-column
 // sections share a single KindVar per membership.
 //
-// For const fields the identifier is keyed on LWMembership (no Go field
-// name), so several consts on one membership share a single symbol; value
-// fields key on the Go field name instead. PlanBuilder.Finish rejects a
-// const and a value field sharing one ref-channel membership, because the
-// two keyings would mint colliding kindXxx symbols. Channels that do not
-// consult the registry (Verbatim and Parametrized non-mixed) return "" —
-// no kindXxx is declared.
+// The identifier is keyed on LWMembership for every field shape: the
+// symbol semantically is the membership's id, and membership names are
+// schema-global — so kind vars stay unique when several kinds sharing Go
+// field names (Amount, Owner, …) are generated into one package (the
+// ADR-0100 store generator emits one codec per component into the
+// store's package). Several consts on one membership share a single
+// symbol; PlanBuilder.Finish still rejects a const and a value field
+// sharing one ref-channel membership (one membership, one meaning).
+// Channels that do not consult the registry (Verbatim and Parametrized
+// non-mixed) return "" — no kindXxx is declared.
 func (f TaggedField) KindVar() string {
 	if !f.Flags.Channel.NeedsKindVar() {
 		return ""
 	}
-	if f.IsConst {
-		return "kind" + UpperFirst(f.LWMembership)
-	}
-	return "kind" + f.GoFieldName
+	return "kind" + UpperFirst(f.LWMembership)
 }
 
 // Section returns the trusted section name from the lw: tag — the

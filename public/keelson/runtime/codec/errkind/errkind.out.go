@@ -33,25 +33,25 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindMessages    uint64
-	kindSources     uint64
-	kindFuncs       uint64
-	kindStreamNames uint64
-	kindLines       uint64
-	kindFactIds     uint64
-	kindParentIds   uint64
-	kindData        uint64
+	kindErrorMsg        uint64
+	kindErrorSource     uint64
+	kindErrorFunc       uint64
+	kindErrorStreamName uint64
+	kindErrorLine       uint64
+	kindErrorFactId     uint64
+	kindErrorParentId   uint64
+	kindErrorData       uint64
 )
 
 func init() {
-	kindMessages = vdd.MembErrorMsg.GetId().Value()
-	kindSources = vdd.MembErrorSource.GetId().Value()
-	kindFuncs = vdd.MembErrorFunc.GetId().Value()
-	kindStreamNames = vdd.MembErrorStreamName.GetId().Value()
-	kindLines = vdd.MembErrorLine.GetId().Value()
-	kindFactIds = vdd.MembErrorFactId.GetId().Value()
-	kindParentIds = vdd.MembErrorParentId.GetId().Value()
-	kindData = vdd.MembErrorData.GetId().Value()
+	kindErrorMsg = vdd.MembErrorMsg.GetId().Value()
+	kindErrorSource = vdd.MembErrorSource.GetId().Value()
+	kindErrorFunc = vdd.MembErrorFunc.GetId().Value()
+	kindErrorStreamName = vdd.MembErrorStreamName.GetId().Value()
+	kindErrorLine = vdd.MembErrorLine.GetId().Value()
+	kindErrorFactId = vdd.MembErrorFactId.GetId().Value()
+	kindErrorParentId = vdd.MembErrorParentId.GetId().Value()
+	kindErrorData = vdd.MembErrorData.GetId().Value()
 	buscodec.Register[Error](errorBusCodec)
 }
 
@@ -324,7 +324,7 @@ func ErrorBuildEntities[
 			for _, v := range c.Messages[i] {
 				stringArraySecAttr_Messages.AddToContainerP(v)
 			}
-			stringArraySecAttr_Messages.AddMembershipLowCardRefP(kindMessages)
+			stringArraySecAttr_Messages.AddMembershipLowCardRefP(kindErrorMsg)
 			stringArraySecAttr_Messages.EndAttributeP()
 		}
 		if len(c.Sources[i]) > 0 {
@@ -332,7 +332,7 @@ func ErrorBuildEntities[
 			for _, v := range c.Sources[i] {
 				stringArraySecAttr_Sources.AddToContainerP(v)
 			}
-			stringArraySecAttr_Sources.AddMembershipLowCardRefP(kindSources)
+			stringArraySecAttr_Sources.AddMembershipLowCardRefP(kindErrorSource)
 			stringArraySecAttr_Sources.EndAttributeP()
 		}
 		stringArraySec.EndSection()
@@ -343,7 +343,7 @@ func ErrorBuildEntities[
 			for _, v := range c.Funcs[i] {
 				symbolArraySecAttr_Funcs.AddToContainerP(v)
 			}
-			symbolArraySecAttr_Funcs.AddMembershipLowCardRefP(kindFuncs)
+			symbolArraySecAttr_Funcs.AddMembershipLowCardRefP(kindErrorFunc)
 			symbolArraySecAttr_Funcs.EndAttributeP()
 		}
 		if len(c.StreamNames[i]) > 0 {
@@ -351,7 +351,7 @@ func ErrorBuildEntities[
 			for _, v := range c.StreamNames[i] {
 				symbolArraySecAttr_StreamNames.AddToContainerP(v)
 			}
-			symbolArraySecAttr_StreamNames.AddMembershipLowCardRefP(kindStreamNames)
+			symbolArraySecAttr_StreamNames.AddMembershipLowCardRefP(kindErrorStreamName)
 			symbolArraySecAttr_StreamNames.EndAttributeP()
 		}
 		symbolArraySec.EndSection()
@@ -362,7 +362,7 @@ func ErrorBuildEntities[
 			for _, v := range c.Lines[i] {
 				u32ArraySecAttr_Lines.AddToContainerP(v)
 			}
-			u32ArraySecAttr_Lines.AddMembershipLowCardRefP(kindLines)
+			u32ArraySecAttr_Lines.AddMembershipLowCardRefP(kindErrorLine)
 			u32ArraySecAttr_Lines.EndAttributeP()
 		}
 		u32ArraySec.EndSection()
@@ -373,7 +373,7 @@ func ErrorBuildEntities[
 			for _, v := range c.FactIds[i] {
 				u64ArraySecAttr_FactIds.AddToContainerP(v)
 			}
-			u64ArraySecAttr_FactIds.AddMembershipLowCardRefP(kindFactIds)
+			u64ArraySecAttr_FactIds.AddMembershipLowCardRefP(kindErrorFactId)
 			u64ArraySecAttr_FactIds.EndAttributeP()
 		}
 		if len(c.ParentIds[i]) > 0 {
@@ -381,7 +381,7 @@ func ErrorBuildEntities[
 			for _, v := range c.ParentIds[i] {
 				u64ArraySecAttr_ParentIds.AddToContainerP(v)
 			}
-			u64ArraySecAttr_ParentIds.AddMembershipLowCardRefP(kindParentIds)
+			u64ArraySecAttr_ParentIds.AddMembershipLowCardRefP(kindErrorParentId)
 			u64ArraySecAttr_ParentIds.EndAttributeP()
 		}
 		u64ArraySec.EndSection()
@@ -392,7 +392,7 @@ func ErrorBuildEntities[
 			for _, v := range c.Data[i] {
 				blobArraySecAttr_Data.AddToContainerP(v)
 			}
-			blobArraySecAttr_Data.AddMembershipLowCardRefP(kindData)
+			blobArraySecAttr_Data.AddMembershipLowCardRefP(kindErrorData)
 			blobArraySecAttr_Data.EndAttributeP()
 		}
 		blobArraySec.EndSection()
@@ -436,7 +436,7 @@ func ErrorAddSections[
 		for _, v := range row.Messages {
 			stringArraySecAttr_Messages.AddToContainerP(v)
 		}
-		stringArraySecAttr_Messages.AddMembershipLowCardRefP(kindMessages)
+		stringArraySecAttr_Messages.AddMembershipLowCardRefP(kindErrorMsg)
 		stringArraySecAttr_Messages.EndAttributeP()
 	}
 	if len(row.Sources) > 0 {
@@ -444,7 +444,7 @@ func ErrorAddSections[
 		for _, v := range row.Sources {
 			stringArraySecAttr_Sources.AddToContainerP(v)
 		}
-		stringArraySecAttr_Sources.AddMembershipLowCardRefP(kindSources)
+		stringArraySecAttr_Sources.AddMembershipLowCardRefP(kindErrorSource)
 		stringArraySecAttr_Sources.EndAttributeP()
 	}
 	stringArraySec.EndSection()
@@ -455,7 +455,7 @@ func ErrorAddSections[
 		for _, v := range row.Funcs {
 			symbolArraySecAttr_Funcs.AddToContainerP(v)
 		}
-		symbolArraySecAttr_Funcs.AddMembershipLowCardRefP(kindFuncs)
+		symbolArraySecAttr_Funcs.AddMembershipLowCardRefP(kindErrorFunc)
 		symbolArraySecAttr_Funcs.EndAttributeP()
 	}
 	if len(row.StreamNames) > 0 {
@@ -463,7 +463,7 @@ func ErrorAddSections[
 		for _, v := range row.StreamNames {
 			symbolArraySecAttr_StreamNames.AddToContainerP(v)
 		}
-		symbolArraySecAttr_StreamNames.AddMembershipLowCardRefP(kindStreamNames)
+		symbolArraySecAttr_StreamNames.AddMembershipLowCardRefP(kindErrorStreamName)
 		symbolArraySecAttr_StreamNames.EndAttributeP()
 	}
 	symbolArraySec.EndSection()
@@ -474,7 +474,7 @@ func ErrorAddSections[
 		for _, v := range row.Lines {
 			u32ArraySecAttr_Lines.AddToContainerP(v)
 		}
-		u32ArraySecAttr_Lines.AddMembershipLowCardRefP(kindLines)
+		u32ArraySecAttr_Lines.AddMembershipLowCardRefP(kindErrorLine)
 		u32ArraySecAttr_Lines.EndAttributeP()
 	}
 	u32ArraySec.EndSection()
@@ -485,7 +485,7 @@ func ErrorAddSections[
 		for _, v := range row.FactIds {
 			u64ArraySecAttr_FactIds.AddToContainerP(v)
 		}
-		u64ArraySecAttr_FactIds.AddMembershipLowCardRefP(kindFactIds)
+		u64ArraySecAttr_FactIds.AddMembershipLowCardRefP(kindErrorFactId)
 		u64ArraySecAttr_FactIds.EndAttributeP()
 	}
 	if len(row.ParentIds) > 0 {
@@ -493,7 +493,7 @@ func ErrorAddSections[
 		for _, v := range row.ParentIds {
 			u64ArraySecAttr_ParentIds.AddToContainerP(v)
 		}
-		u64ArraySecAttr_ParentIds.AddMembershipLowCardRefP(kindParentIds)
+		u64ArraySecAttr_ParentIds.AddMembershipLowCardRefP(kindErrorParentId)
 		u64ArraySecAttr_ParentIds.EndAttributeP()
 	}
 	u64ArraySec.EndSection()
@@ -504,7 +504,7 @@ func ErrorAddSections[
 		for _, v := range row.Data {
 			blobArraySecAttr_Data.AddToContainerP(v)
 		}
-		blobArraySecAttr_Data.AddMembershipLowCardRefP(kindData)
+		blobArraySecAttr_Data.AddMembershipLowCardRefP(kindErrorData)
 		blobArraySecAttr_Data.EndAttributeP()
 	}
 	blobArraySec.EndSection()
@@ -621,11 +621,11 @@ func ErrorFillFromArrow[
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindMessages:
+				case kindErrorMsg:
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArrayMessagesSlice = append(stringArrayMessagesSlice, v)
 					}
-				case kindSources:
+				case kindErrorSource:
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArraySourcesSlice = append(stringArraySourcesSlice, v)
 					}
@@ -641,11 +641,11 @@ func ErrorFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindFuncs:
+				case kindErrorFunc:
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayFuncsSlice = append(symbolArrayFuncsSlice, v)
 					}
-				case kindStreamNames:
+				case kindErrorStreamName:
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayStreamNamesSlice = append(symbolArrayStreamNamesSlice, v)
 					}
@@ -660,7 +660,7 @@ func ErrorFillFromArrow[
 		for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 			for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindLines:
+				case kindErrorLine:
 					for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u32ArrayLinesSlice = append(u32ArrayLinesSlice, v)
 					}
@@ -675,11 +675,11 @@ func ErrorFillFromArrow[
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindFactIds:
+				case kindErrorFactId:
 					for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u64ArrayFactIdsSlice = append(u64ArrayFactIdsSlice, v)
 					}
-				case kindParentIds:
+				case kindErrorParentId:
 					for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u64ArrayParentIdsSlice = append(u64ArrayParentIdsSlice, v)
 					}
@@ -694,7 +694,7 @@ func ErrorFillFromArrow[
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindData:
+				case kindErrorData:
 					for v := range blobArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						cp := make([]byte, len(v))
 						copy(cp, v)
@@ -745,11 +745,11 @@ func ErrorReadRow[
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindMessages:
+			case kindErrorMsg:
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayMessagesSlice = append(stringArrayMessagesSlice, v)
 				}
-			case kindSources:
+			case kindErrorSource:
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArraySourcesSlice = append(stringArraySourcesSlice, v)
 				}
@@ -771,11 +771,11 @@ func ErrorReadRow[
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindFuncs:
+			case kindErrorFunc:
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayFuncsSlice = append(symbolArrayFuncsSlice, v)
 				}
-			case kindStreamNames:
+			case kindErrorStreamName:
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayStreamNamesSlice = append(symbolArrayStreamNamesSlice, v)
 				}
@@ -796,7 +796,7 @@ func ErrorReadRow[
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindLines:
+			case kindErrorLine:
 				for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u32ArrayLinesSlice = append(u32ArrayLinesSlice, v)
 				}
@@ -814,11 +814,11 @@ func ErrorReadRow[
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindFactIds:
+			case kindErrorFactId:
 				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u64ArrayFactIdsSlice = append(u64ArrayFactIdsSlice, v)
 				}
-			case kindParentIds:
+			case kindErrorParentId:
 				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u64ArrayParentIdsSlice = append(u64ArrayParentIdsSlice, v)
 				}
@@ -839,7 +839,7 @@ func ErrorReadRow[
 	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindData:
+			case kindErrorData:
 				for v := range blobArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					cp := make([]byte, len(v))
 					copy(cp, v)

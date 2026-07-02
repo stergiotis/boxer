@@ -11,11 +11,11 @@ import (
 // component extraction all use it, so the ids in the Arrow batch, the SQL, and
 // the typed reads line up.
 var droneLookup = marshallreflect.MapLookup{
-	"droneStatus":  kindStatus,
-	"droneBattery": kindBattery,
-	"droneTags":    kindTags,
-	"droneLoc":     kindLat,
-	"droneWindow":  kindWindowBegin,
+	"droneStatus":  kindDroneStatus,
+	"droneBattery": kindDroneBattery,
+	"droneTags":    kindDroneTags,
+	"droneLoc":     kindDroneLoc,
+	"droneWindow":  kindDroneWindow,
 }
 
 // sectionReaderI is the slice of the generated read-access readers FatRow drives

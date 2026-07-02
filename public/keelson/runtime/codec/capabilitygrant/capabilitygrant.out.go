@@ -33,19 +33,19 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindSubject       uint64
-	kindCapability    uint64
-	kindValidityBegin uint64
-	kindActive        uint64
-	kindGranterFact   uint64
+	kindCgSubject    uint64
+	kindCgCapability uint64
+	kindCgValidity   uint64
+	kindCgActive     uint64
+	kindCgGranter    uint64
 )
 
 func init() {
-	kindSubject = vdd.MembCgSubject.GetId().Value()
-	kindCapability = vdd.MembCgCapability.GetId().Value()
-	kindValidityBegin = vdd.MembCgValidity.GetId().Value()
-	kindActive = vdd.MembCgActive.GetId().Value()
-	kindGranterFact = vdd.MembCgGranter.GetId().Value()
+	kindCgSubject = vdd.MembCgSubject.GetId().Value()
+	kindCgCapability = vdd.MembCgCapability.GetId().Value()
+	kindCgValidity = vdd.MembCgValidity.GetId().Value()
+	kindCgActive = vdd.MembCgActive.GetId().Value()
+	kindCgGranter = vdd.MembCgGranter.GetId().Value()
 	buscodec.Register[CapabilityGrant](capabilityGrantBusCodec)
 }
 
@@ -311,32 +311,32 @@ func CapabilityGrantBuildEntities[
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_Subject := stringArraySec.BeginAttributeSingle(c.Subject[i])
-		stringArraySecAttr_Subject.AddMembershipLowCardRefP(kindSubject)
+		stringArraySecAttr_Subject.AddMembershipLowCardRefP(kindCgSubject)
 		stringArraySecAttr_Subject.EndAttributeP()
 		stringArraySec.EndSection()
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Capability := symbolSec.BeginAttribute(c.Capability[i])
-		symbolSecAttr_Capability.AddMembershipLowCardRefP(kindCapability)
+		symbolSecAttr_Capability.AddMembershipLowCardRefP(kindCgCapability)
 		symbolSecAttr_Capability.EndAttributeP()
 		symbolSec.EndSection()
 		// --- u32Range. ---
 		u32RangeSec := dml.GetSectionU32Range()
 		u32RangeSecAttr := u32RangeSec.BeginAttribute(c.ValidityBegin[i], c.ValidityEnd[i])
-		u32RangeSecAttr.AddMembershipLowCardRefP(kindValidityBegin)
+		u32RangeSecAttr.AddMembershipLowCardRefP(kindCgValidity)
 		u32RangeSecAttr.EndAttributeP()
 		u32RangeSec.EndSection()
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Active := boolSec.BeginAttribute(c.Active[i])
-		boolSecAttr_Active.AddMembershipLowCardRefP(kindActive)
+		boolSecAttr_Active.AddMembershipLowCardRefP(kindCgActive)
 		boolSecAttr_Active.EndAttributeP()
 		boolSec.EndSection()
 		// --- foreignKey. ---
 		foreignKeySec := dml.GetSectionForeignKey()
 		if c.GranterFactHas[i] {
 			foreignKeySecAttr_GranterFact := foreignKeySec.BeginAttribute(c.GranterFactVal[i])
-			foreignKeySecAttr_GranterFact.AddMembershipLowCardRefP(kindGranterFact)
+			foreignKeySecAttr_GranterFact.AddMembershipLowCardRefP(kindCgGranter)
 			foreignKeySecAttr_GranterFact.EndAttributeP()
 		}
 		foreignKeySec.EndSection()
@@ -376,32 +376,32 @@ func CapabilityGrantAddSections[
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
 	stringArraySecAttr_Subject := stringArraySec.BeginAttributeSingle(row.Subject)
-	stringArraySecAttr_Subject.AddMembershipLowCardRefP(kindSubject)
+	stringArraySecAttr_Subject.AddMembershipLowCardRefP(kindCgSubject)
 	stringArraySecAttr_Subject.EndAttributeP()
 	stringArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
 	symbolSecAttr_Capability := symbolSec.BeginAttribute(row.Capability)
-	symbolSecAttr_Capability.AddMembershipLowCardRefP(kindCapability)
+	symbolSecAttr_Capability.AddMembershipLowCardRefP(kindCgCapability)
 	symbolSecAttr_Capability.EndAttributeP()
 	symbolSec.EndSection()
 	// --- u32Range. ---
 	u32RangeSec := dml.GetSectionU32Range()
 	u32RangeSecAttr := u32RangeSec.BeginAttribute(row.ValidityBegin, row.ValidityEnd)
-	u32RangeSecAttr.AddMembershipLowCardRefP(kindValidityBegin)
+	u32RangeSecAttr.AddMembershipLowCardRefP(kindCgValidity)
 	u32RangeSecAttr.EndAttributeP()
 	u32RangeSec.EndSection()
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
 	boolSecAttr_Active := boolSec.BeginAttribute(row.Active)
-	boolSecAttr_Active.AddMembershipLowCardRefP(kindActive)
+	boolSecAttr_Active.AddMembershipLowCardRefP(kindCgActive)
 	boolSecAttr_Active.EndAttributeP()
 	boolSec.EndSection()
 	// --- foreignKey. ---
 	foreignKeySec := dml.GetSectionForeignKey()
 	if row.GranterFact.Has {
 		foreignKeySecAttr_GranterFact := foreignKeySec.BeginAttribute(row.GranterFact.Val)
-		foreignKeySecAttr_GranterFact.AddMembershipLowCardRefP(kindGranterFact)
+		foreignKeySecAttr_GranterFact.AddMembershipLowCardRefP(kindCgGranter)
 		foreignKeySecAttr_GranterFact.EndAttributeP()
 	}
 	foreignKeySec.EndSection()
@@ -521,7 +521,7 @@ func CapabilityGrantFillFromArrow[
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindSubject:
+				case kindCgSubject:
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArraySubjectVal = val
 					stringArraySubjectCount++
@@ -540,7 +540,7 @@ func CapabilityGrantFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindCapability:
+				case kindCgCapability:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolCapabilityVal = val
 					symbolCapabilityCount++
@@ -561,7 +561,7 @@ func CapabilityGrantFillFromArrow[
 			u32RangeValidityBeginLocal := u32RangeAttrs.GetAttrValueBeginIncl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 			u32RangeValidityEndLocal := u32RangeAttrs.GetAttrValueEndExcl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 			for membID := range u32RangeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				if membID == kindValidityBegin {
+				if membID == kindCgValidity {
 					u32RangeValidityBeginVal = u32RangeValidityBeginLocal
 					u32RangeValidityEndVal = u32RangeValidityEndLocal
 					u32RangeValidityBeginCount++
@@ -581,7 +581,7 @@ func CapabilityGrantFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindActive:
+				case kindCgActive:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolActiveVal = val
 					boolActiveCount++
@@ -600,7 +600,7 @@ func CapabilityGrantFillFromArrow[
 		for attrJ := int64(0); attrJ < nforeignKey; attrJ++ {
 			for membID := range foreignKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindGranterFact:
+				case kindCgGranter:
 					val := foreignKeyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					foreignKeyGranterFactVal = val
 					foreignKeyGranterFactCount++
@@ -656,7 +656,7 @@ func CapabilityGrantReadRow[
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindSubject:
+			case kindCgSubject:
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArraySubjectVal = val
 				stringArraySubjectCount++
@@ -678,7 +678,7 @@ func CapabilityGrantReadRow[
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindCapability:
+			case kindCgCapability:
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolCapabilityVal = val
 				symbolCapabilityCount++
@@ -702,7 +702,7 @@ func CapabilityGrantReadRow[
 		u32RangeValidityBeginLocal := u32RangeAttrs.GetAttrValueBeginIncl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 		u32RangeValidityEndLocal := u32RangeAttrs.GetAttrValueEndExcl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 		for membID := range u32RangeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			if membID == kindValidityBegin {
+			if membID == kindCgValidity {
 				u32RangeValidityBeginVal = u32RangeValidityBeginLocal
 				u32RangeValidityEndVal = u32RangeValidityEndLocal
 				u32RangeValidityBeginCount++
@@ -725,7 +725,7 @@ func CapabilityGrantReadRow[
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindActive:
+			case kindCgActive:
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolActiveVal = val
 				boolActiveCount++
@@ -747,7 +747,7 @@ func CapabilityGrantReadRow[
 	for attrJ := int64(0); attrJ < nforeignKey; attrJ++ {
 		for membID := range foreignKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
-			case kindGranterFact:
+			case kindCgGranter:
 				val := foreignKeyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				foreignKeyGranterFactVal = val
 				foreignKeyGranterFactCount++
