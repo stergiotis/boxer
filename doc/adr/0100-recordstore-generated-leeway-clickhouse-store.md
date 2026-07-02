@@ -129,11 +129,18 @@ Adopt **O4**. Specific decisions:
   `uint64` and `string`, emitting a per-store SQL-literal renderer),
   `Order` (optional; numeric/time; enables `Latest` and `Replay`) and
   `Lifecycle` (optional; carries the live/tombstone marker; together with
-  Key and Order it enables the state-view verbs). Roles default from
-  `PlainItemTypeE` where unambiguous (`EntityId` → Key,
-  `EntityTimestamp` → Order, `EntityLifecycle` → Lifecycle) and are
-  explicit otherwise. Remaining plain columns pass through as ordinary
-  envelope fields.
+  Key and Order it enables the state-view verbs). Roles bind from
+  `PlainItemTypeE` (`EntityId` → Key, `EntityTimestamp` → Order,
+  `EntityLifecycle` → Lifecycle); a schema in which two plain columns
+  claim one role is a generation error, not a silent last-wins (explicit
+  role configuration is deferred). The generator also gates the role
+  column shapes it hard-assumes: Key must derive to `uint64` or `string`,
+  Order to the z64 timestamp lane (`DateTime64(9)` — `Replay` compares
+  in nanoseconds), Lifecycle to `uint8`. Remaining plain columns pass
+  through as ordinary envelope fields. Callers must keep Order values
+  **strictly monotonic per key**: `Latest`, `GetLatest` and the cached
+  fetch pick one row among equal-Order ties arbitrarily (`Scan` alone is
+  tie-deterministic — it orders by (Order, Key)).
 - **SD3 — Append-only primitive.** Rows are immutable once committed.
   `Latest` and `Replay` are query verbs; duplicates are legal (idempotent
   re-puts of identical bytes are harmless by construction). Overwrite and
@@ -144,19 +151,21 @@ Adopt **O4**. Specific decisions:
   running example):
 
   ```go
-  st := NewDroneStore(exec, alloc, cfg)      // cfg: cache capacity, FetchCriteria, flush thresholds, DDL tail
+  st := NewDroneStore(exec, alloc, cfg)      // cfg: cache capacity, FetchCriteria, DDL tail
   st.EnsureTable(ctx)                        // DDL via ddl/clickhouse + cfg.DDLTail
 
   b := st.Begin(id, ts)                      // envelope roles → typed args
   b.AddIdentity(Identity{...})               // component appenders, same entity frame
   b.AddBattery(Battery{...})
   b.Raw()                                    // *InEntityDroneTable: direct attribute manipulation
-  b.Commit()                                 // CommitEntity; buffered
+  b.Commit()                                 // CommitEntity; buffered (rolls back on error)
+  b.Rollback()                               // abandon the open frame instead
 
-  st.IngestIdentity(rows []Identity)         // whole-entity batches per kind (BuildEntities)
-  st.IngestArrow(recs)                       // schema-checked passthrough
+  st.IngestIdentity(ts, rows []Identity)     // whole-entity batches per kind
   st.Flush(ctx)                              // TransferRecords → Arrow IPC → InsertArrow;
-                                             // durable when it returns (synchronous insert)
+                                             // durable when it returns (synchronous insert);
+                                             // retryable — a failed insert retains the records
+  st.DiscardPending()                        // …or drop everything unflushed ("never happened")
 
   has, ent := st.Get(k)                      // batched KV via caching.ReadThroughCache
   for range st.WorkItem(w) { ... }           // caching's suspend/replay contract, re-exposed
@@ -178,9 +187,15 @@ Adopt **O4**. Specific decisions:
   `Get` (the cached path) is intended for **immutable-by-key** access —
   content-addressed or unique-keyed records — where cache entries can never
   go stale. Local writes are coherent regardless: `Commit`, `Put` and
-  `Delete` invalidate the written key's cache entry, so only **external**
-  writers can leave `Get` stale. `Latest` and `GetLatest` stay uncached in
-  v1 (see Deferred).
+  `Delete` invalidate the written key's cache entry, and the key stays
+  uncacheable (fetched but not retained) until the write flushes, so a
+  fetch inside the dirty window cannot resurrect the pre-write row. Only
+  **external** writers can leave `Get` stale. `Latest` and `GetLatest`
+  stay uncached in v1 (see Deferred). `Flush` is retryable — a failed
+  insert retains the transferred records for the next attempt — and
+  `DiscardPending` drops every buffered row instead, for callers whose
+  per-operation contract is "a failed operation never happened" (the
+  pushout adapter and the CQRS command path both use it).
 
   The **state view** (`Put`/`Delete`/`GetLatest`) supplies the
   update/delete ergonomics of a data-management hub without breaking the
@@ -191,9 +206,12 @@ Adopt **O4**. Specific decisions:
   state view → consumer layers (CQRS, pushout), all on one substrate.
 - **SD5 — Cache wiring.** The generator emits an
   `caching.ItemFetcherI[K, *DroneEntity]` implementation: one
-  `SELECT <needed physical columns> FROM t WHERE <key> IN (…) FORMAT Arrow`
-  per partition via the executor, decoded client-side through the generated
-  read-access classes into the **entity bag**:
+  `SELECT * FROM t WHERE <key> IN (…) FORMAT Arrow` per partition via the
+  executor, decoded client-side through the generated read-access classes
+  into the **entity bag**. (`SELECT *`, not a projection: the RA readers
+  bake schema-order column indices, so the fetch must return every column
+  in schema order; a needed-columns projection with index rebinding is
+  deferred.)
 
   ```go
   type DroneEntity struct {
@@ -245,11 +263,21 @@ Adopt **O4**. Specific decisions:
   `<Kind>ReadRow(i, attrs, membs, …) (row, present, err)` — the
   FillFromArrow decode middles (accumulators, membership-match loops)
   shared, with presence-tolerant tails (a row carrying none of the kind's
-  memberships is `present=false`, never an error; duplicates error). The
-  store generator's decode is one `ReadRow` call per component; kinds
-  whose shapes ReadRow does not cover are skipped at emission and
-  rejected by the store generator through the same exported gate
-  (`marshallgen.ReadRowSupported`), so the two cannot disagree.
+  memberships is `present=false`, never an error; a duplicated **scalar**
+  field errors, while duplicated container memberships concatenate). Two
+  write/read asymmetries are inherited from marshallgen and worth knowing:
+  an **empty container** field writes no membership (len-gated) and reads
+  back as if absent — "present with empty list" is unrepresentable — and
+  a row carrying only some of a kind's fields still decodes as `present`
+  with the missing fields zero-valued (only the `Scan` filter enforces
+  full conformance). The store generator's decode is one `ReadRow` call
+  per component; kinds whose shapes ReadRow does not cover are skipped at
+  emission and rejected by the store generator through the same exported
+  gate (`marshallgen.ReadRowSupported`), so the two cannot disagree.
+  Components must own **disjoint sections** — membership ids are assigned
+  per kind, so two kinds writing one section would alias each other's
+  memberships and silently cross-decode; the generator enforces the
+  invariant at generation time.
 - **SD7 — Executor seam.** `ExecutorI { Exec(ctx, sql) error;
   QueryArrow(ctx, sql) ([]arrow.RecordBatch, error); InsertArrow(ctx, table,
   recs) error }` (exact shape to be settled during implementation; a
@@ -296,17 +324,23 @@ reads become trivially safe.
 
 ### CQRS event sourcing
 
+Implemented as `recordstore/cqrsexample` (slice S4), documentation-grade:
+an event-sourced account ledger whose lifecycle test is the executable
+walkthrough. The ledger schema deliberately binds no Lifecycle role —
+closing an account is a domain event, not a storage tombstone — which
+also exercises the generator's no-state-view emission path.
+
 | ES concept | store concept |
 | --- | --- |
-| aggregate id | envelope `Key` |
-| event sequence | envelope `Order`, caller-assigned (single-writer per aggregate in v1) |
-| event type | archetype (set of populated components) |
+| aggregate id | envelope `Key` (string, e.g. `"acct/7"`) |
+| event sequence | envelope `Order`, caller-assigned synthetic nanos (single-writer per aggregate in v1) |
+| event type | archetype (the one populated component names the event) |
 | event payload | components |
-| append events | `Begin(id, seq).Add*(…).Commit()` |
-| rehydrate | `Replay(id, fromSeq)` + fold |
-| snapshot | a snapshot component + `Latest` |
+| append events | `Begin(id, seqTs).Add*(…).Commit()` + `Flush` per command |
+| rehydrate | newest snapshot via `Latest` on the sibling key `"acct/7/snap"`, then `Replay(id, afterSnapshot)` + fold — the short-circuit is observable (the example counts folded events) |
+| snapshot | a state component under the derived sibling key + `Latest` (outside the event stream, so `Replay` never sees it) |
 | optimistic concurrency | **not provided** — needs CAS the substrate lacks; deferred (see below) |
-| projections / read models | out of scope; separate leeway tables fed by `Replay`/`Scan` |
+| projections / read models | out of scope as a framework; the example feeds a cross-aggregate projection straight from `Scan<Kind>` |
 
 ## Consequences
 
@@ -403,6 +437,21 @@ The QOC options above carry the rankings; notes below record nuance.
 - **Caching `Latest`/`GetLatest`.** Requires write-through invalidation
   (`MarkAsStale`/`Delete` on local appends to the same key) and a staleness
   story for external writers. Deferred until a consumer needs it.
+- **Negative caching.** Absent keys are never recorded, so every `Get` of
+  a missing key re-queries — the pushout adapter's `HasEnvelope(absent)`
+  pays a forced fetch plus the authoritative `Latest` on every probe.
+  Needs a `public/caching` feature (absent-entries with a TTL), not a
+  store-side hack.
+- **Explicit role configuration** (SD2). Role binding is by
+  `PlainItemTypeE` only; a schema needing to pick among several
+  same-typed columns cannot express it. Ambiguity is a generation error
+  today.
+- **Projection fetch.** Point lookups are `SELECT *` (SD5); a
+  needed-columns projection requires rebinding the RA readers' column
+  indices at generation time.
+- **`IngestArrow`** (schema-checked Arrow passthrough, sketched in early
+  SD4 drafts). Needs a key-column decode for cache invalidation and a
+  buffered-count story; no consumer asked yet.
 - **Optimistic concurrency / CAS** for the event-store expected-sequence
   check. ClickHouse inserts cannot express it; a serializing layer (e.g. a
   single-writer bus owner per aggregate) is the likely answer, above this
@@ -436,9 +485,10 @@ The QOC options above carry the rankings; notes below record nuance.
   example's cache tests cover Min-threshold batching across work items
   (one `IN (…)` query serves several frames), the fetch-error circuit
   breaker, and local-write invalidation; per-kind `Scan<Kind>` verbs embed
-  the generation-time Filter artefacts (helper UDFs prepended,
-  `CREATE OR REPLACE` — the executor must accept a multi-statement
-  script); `<Kind>ReadRow` upstreamed lifted the shape limits to
+  the generation-time Filter artefacts (a single SELECT — the Filter uses
+  ClickHouse built-ins only, so the initially-prepended helper UDFs were
+  dropped post-review and the executor contract stays "one statement");
+  `<Kind>ReadRow` upstreamed lifted the shape limits to
   everything non-carrier/non-explode, proven by a multi-sub-column
   `Located` component and an Option scalar in the example.
 - **S3** — pushout `StorageI` adapter passing `repo/storagetest` against
@@ -450,7 +500,16 @@ The QOC options above carry the rankings; notes below record nuance.
   the state-view tombstone replaces the sketched generation-marker
   pattern for both the applied log and the retention ledger.
 - **S4** — minimal CQRS worked example (commands → events → replay-fold →
-  state), documentation-grade.
+  state), documentation-grade. **Done** (`recordstore/cqrsexample`): the
+  account-ledger lifecycle test covers guarded commands (overdraw and
+  closed-account rejections), snapshot-accelerated rehydration with the
+  replay short-circuit asserted, close-as-domain-event, the ordered
+  archetype history, and a cross-aggregate `Scan` projection. The slice
+  fed back once more: kind consts are now keyed on the membership name
+  (schema-global) instead of the Go field name, so several kinds sharing
+  field names (`Amount`, `Owner`) generate into one package without
+  collisions — with the corollary, validated in the shared PlanBuilder,
+  that ref-channel membership names must be Go identifiers.
 
 ## Status
 
