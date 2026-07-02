@@ -46,6 +46,10 @@ type Input struct {
 	ComponentPaths []string
 	// OutDir receives the emitted files.
 	OutDir string
+
+	// keyGoType is the Key column's derived Go type ("uint64" or
+	// "string"), resolved by emitStore from the schema.
+	keyGoType string
 }
 
 // Generate emits the store package: <table>_dml.out.go, <table>_ra.out.go,

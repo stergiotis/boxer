@@ -32,10 +32,12 @@ type secUse struct {
 	varN   string
 }
 
-// envelopeCol is one plain envelope column: its physical (encoded) name
-// and the fixed DML setter the PlainItemTypeE lane provides.
+// envelopeCol is one plain envelope column: its physical (encoded) name,
+// its derived Go type, and the fixed DML setter the PlainItemTypeE lane
+// provides.
 type envelopeCol struct {
 	physical string
+	goType   string
 }
 
 // emitStore renders the store glue file: entity bag, builder (Add* over
@@ -67,6 +69,13 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	}
 	if order.physical == "" {
 		err = eh.Errorf("schema has no EntityTimestamp plain column — Latest/Replay need the Order role")
+		return
+	}
+	switch key.goType {
+	case "uint64", "string":
+		inst.keyGoType = key.goType
+	default:
+		err = eh.Errorf("Key column Go type %q not supported (uint64 and string are; ADR-0100 SD2)", key.goType)
 		return
 	}
 	stateView := lifecycle.physical != ""
@@ -117,6 +126,11 @@ func (inst Input) envelope(info *readback.InformationRetrieval, conv common.Nami
 		switch itemType {
 		case common.PlainItemTypeEntityId:
 			key.physical = cr.PhysicalColumn.String()
+			key.goType, _, _, err = mappingplan.DeriveGoShape(cr.CanonicalType)
+			if err != nil {
+				err = eh.Errorf("derive Key column Go type: %w", err)
+				return
+			}
 		case common.PlainItemTypeEntityTimestamp:
 			order.physical = cr.PhysicalColumn.String()
 		case common.PlainItemTypeEntityLifecycle:
@@ -187,6 +201,9 @@ func (inst Input) emitStoreHeader(sb *strings.Builder, key, order, lifecycle env
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow")
 	p("\t%q", "github.com/apache/arrow-go/v18/arrow/memory")
 	p("\t%q", "github.com/stergiotis/boxer/public/caching")
+	if inst.keyGoType == "string" {
+		p("\t%q", "github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling")
+	}
 	p("\t%q", "github.com/stergiotis/boxer/public/functional")
 	p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
 	p("\t%q", "github.com/stergiotis/boxer/public/observability/eh")
@@ -218,6 +235,13 @@ func (inst Input) emitStoreHeader(sb *strings.Builder, key, order, lifecycle env
 	p("// Arrow output shape the read-access classes expect.")
 	p("const %sArrowOutputSettings = \" SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0\"", inst.TableName)
 	p("")
+	p("// %sKeyLiteral renders a Key value as a ClickHouse SQL literal.", inst.TableName)
+	if inst.keyGoType == "string" {
+		p("func %sKeyLiteral(k string) string { return marshalling.EscapeString(k) }", inst.TableName)
+	} else {
+		p("func %sKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }", inst.TableName)
+	}
+	p("")
 	if stateView {
 		p("const (")
 		p("\t%sLifecycleLive uint8 = 0", inst.TableName)
@@ -232,7 +256,7 @@ func (inst Input) emitEntityBag(sb *strings.Builder, comps []storeComponent, sta
 	p("// %s is the entity bag (ADR-0100 SD5): the envelope plus one option", inst.entityType())
 	p("// per bound component. Arrow-free — safe to hold in the cache.")
 	p("type %s struct {", inst.entityType())
-	p("\tID uint64")
+	p("\tID %s", inst.keyGoType)
 	p("\tTs time.Time")
 	if stateView {
 		p("\tLifecycle uint8")
@@ -273,7 +297,7 @@ func (inst Input) emitStoreType(sb *strings.Builder) {
 	p("\tcfg %sStoreConfig", inst.StoreName)
 	p("\tdml *%s", inst.dmlType())
 	p("\tbuffered int")
-	p("\tcache *caching.ReadThroughCache[uint64, *%s, W]", inst.entityType())
+	p("\tcache *caching.ReadThroughCache[%s, *%s, W]", inst.keyGoType, inst.entityType())
 	p("}")
 	p("")
 	p("func New%s[W comparable](exec recordstore.ExecutorI, alloc memory.Allocator, cfg %sStoreConfig) (inst *%s[W]) {", inst.storeType(), inst.StoreName, inst.storeType())
@@ -284,7 +308,7 @@ func (inst Input) emitStoreType(sb *strings.Builder) {
 	p("\t\tcfg.CacheCapacity = 1024")
 	p("\t}")
 	p("\tinst = &%s[W]{exec: exec, alloc: alloc, cfg: cfg, dml: New%s(alloc, 64)}", inst.storeType(), inst.dmlType())
-	p("\tinst.cache = caching.NewReadThroughCache[uint64, *%s, W](cfg.CacheCapacity, inst, cfg.FetchCriteria)", inst.entityType())
+	p("\tinst.cache = caching.NewReadThroughCache[%s, *%s, W](cfg.CacheCapacity, inst, cfg.FetchCriteria)", inst.keyGoType, inst.entityType())
 	p("\treturn")
 	p("}")
 	p("")
@@ -310,12 +334,12 @@ func (inst Input) emitBuilder(sb *strings.Builder, comps []storeComponent, state
 	p("// via Add*, direct attribute manipulation via Raw, then Commit.")
 	p("type %s[W comparable] struct {", inst.builderType())
 	p("\tstore *%s[W]", inst.storeType())
-	p("\tkey uint64")
+	p("\tkey %s", inst.keyGoType)
 	p("}")
 	p("")
 	p("// Begin opens one entity with the envelope roles as typed arguments")
 	p("// (Key, Order)%s.", map[bool]string{true: " and a live lifecycle", false: ""}[stateView])
-	p("func (inst *%s[W]) Begin(id uint64, ts time.Time) *%s[W] {", inst.storeType(), inst.builderType())
+	p("func (inst *%s[W]) Begin(id %s, ts time.Time) *%s[W] {", inst.storeType(), inst.keyGoType, inst.builderType())
 	if stateView {
 		p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(%sLifecycleLive)", inst.TableName)
 	} else {
@@ -415,7 +439,7 @@ func (inst Input) emitCacheVerbs(sb *strings.Builder) {
 	p("// Get retrieves an entity by Key through the cache. A miss queues the")
 	p("// key for the next batch fetch (the caching suspend/replay contract);")
 	p("// Get is intended for immutable-by-key access — see ADR-0100 SD4.")
-	p("func (inst *%s[W]) Get(key uint64) (has bool, ent *%s) {", inst.storeType(), inst.entityType())
+	p("func (inst *%s[W]) Get(key %s) (has bool, ent *%s) {", inst.storeType(), inst.keyGoType, inst.entityType())
 	p("\treturn inst.cache.Get(key)")
 	p("}")
 	p("")
@@ -444,11 +468,11 @@ func (inst Input) emitCacheVerbs(sb *strings.Builder) {
 	p("")
 	p("// DeterminePartition implements caching.ItemFetcherI. Single partition")
 	p("// in v1 (one table, one server).")
-	p("func (inst *%s[W]) DeterminePartition(key uint64) uint64 { return 0 }", inst.storeType())
+	p("func (inst *%s[W]) DeterminePartition(key %s) uint64 { return 0 }", inst.storeType(), inst.keyGoType)
 	p("")
 	p("// FetchItemSinglePartition implements caching.ItemFetcherI: one batched")
 	p("// point lookup per fetch. Duplicate versions collapse newest-first.")
-	p("func (inst *%s[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []uint64, target caching.ItemTargetI[uint64, *%s]) (err error) {", inst.storeType(), inst.entityType())
+	p("func (inst *%s[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []%s, target caching.ItemTargetI[%s, *%s]) (err error) {", inst.storeType(), inst.keyGoType, inst.keyGoType, inst.entityType())
 	p("\tvar sb strings.Builder")
 	p("\tsb.WriteString(\"SELECT * FROM \")")
 	p("\tsb.WriteString(%sTableName)", inst.TableName)
@@ -457,7 +481,7 @@ func (inst Input) emitCacheVerbs(sb *strings.Builder) {
 	p("\t\tif i > 0 {")
 	p("\t\t\tsb.WriteByte(',')")
 	p("\t\t}")
-	p("\t\tsb.WriteString(strconv.FormatUint(k, 10))")
+	p("\t\tsb.WriteString(%sKeyLiteral(k))", inst.TableName)
 	p("\t}")
 	p("\tsb.WriteString(\") ORDER BY \" + %sColOrder + \" DESC LIMIT 1 BY \" + %sColKey)", inst.TableName, inst.TableName)
 	p("\tsb.WriteString(%sArrowOutputSettings)", inst.TableName)
@@ -509,9 +533,9 @@ func (inst Input) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, st
 	}
 	p("// Latest returns the newest row for key, tombstone-blind (the raw")
 	p("// primitive).")
-	p("func (inst *%s[W]) Latest(ctx context.Context, key uint64) (ent *%s, found bool, err error) {", inst.storeType(), inst.entityType())
+	p("func (inst *%s[W]) Latest(ctx context.Context, key %s) (ent *%s, found bool, err error) {", inst.storeType(), inst.keyGoType, inst.entityType())
 	p("\tsql := \"SELECT * FROM \" + %sTableName +", inst.TableName)
-	p("\t\t\" WHERE \" + %sColKey + \" = \" + strconv.FormatUint(key, 10) +", inst.TableName)
+	p("\t\t\" WHERE \" + %sColKey + \" = \" + %sKeyLiteral(key) +", inst.TableName, inst.TableName)
 	p("\t\t\" ORDER BY \" + %sColOrder + \" DESC LIMIT 1\" + %sArrowOutputSettings", inst.TableName, inst.TableName)
 	p("\tents, err := inst.queryEntities(ctx, sql)")
 	p("\tif err != nil || len(ents) == 0 {")
@@ -524,9 +548,9 @@ func (inst Input) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, st
 	p("")
 	p("// Replay returns the rows for key with the order column >= fromOrder in")
 	p("// ascending order — the event-replay primitive. Buffered in v1.")
-	p("func (inst *%s[W]) Replay(ctx context.Context, key uint64, fromOrder time.Time) (ents []*%s, err error) {", inst.storeType(), inst.entityType())
+	p("func (inst *%s[W]) Replay(ctx context.Context, key %s, fromOrder time.Time) (ents []*%s, err error) {", inst.storeType(), inst.keyGoType, inst.entityType())
 	p("\tsql := \"SELECT * FROM \" + %sTableName +", inst.TableName)
-	p("\t\t\" WHERE \" + %sColKey + \" = \" + strconv.FormatUint(key, 10) +", inst.TableName)
+	p("\t\t\" WHERE \" + %sColKey + \" = \" + %sKeyLiteral(key) +", inst.TableName, inst.TableName)
 	p("\t\t\" AND \" + %sColOrder + \" >= fromUnixTimestamp64Nano(\" + strconv.FormatInt(fromOrder.UnixNano(), 10) + \")\" +", inst.TableName)
 	p("\t\t\" ORDER BY \" + %sColOrder + \" ASC\" + %sArrowOutputSettings", inst.TableName, inst.TableName)
 	p("\treturn inst.queryEntities(ctx, sql)")
@@ -539,14 +563,14 @@ func (inst Input) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, st
 	p("")
 	p("// Put appends a new version of the entity — Begin under its state-view")
 	p("// name.")
-	p("func (inst *%s[W]) Put(id uint64, ts time.Time) *%s[W] {", inst.storeType(), inst.builderType())
+	p("func (inst *%s[W]) Put(id %s, ts time.Time) *%s[W] {", inst.storeType(), inst.keyGoType, inst.builderType())
 	p("\treturn inst.Begin(id, ts)")
 	p("}")
 	p("")
 	p("// Delete appends a tombstone row for id (no components; lifecycle marks")
 	p("// the deletion) and invalidates the cache entry. GetLatest reads it as")
 	p("// absent.")
-	p("func (inst *%s[W]) Delete(id uint64, ts time.Time) (err error) {", inst.storeType())
+	p("func (inst *%s[W]) Delete(id %s, ts time.Time) (err error) {", inst.storeType(), inst.keyGoType)
 	p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(%sLifecycleTombstone)", inst.TableName)
 	p("\terr = inst.dml.CommitEntity()")
 	p("\tif err != nil {")
@@ -559,7 +583,7 @@ func (inst Input) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, st
 	p("")
 	p("// GetLatest is Latest plus tombstone interpretation: newest row wins, a")
 	p("// tombstone reads as absent. Uncached in v1 (ADR-0100 Deferred).")
-	p("func (inst *%s[W]) GetLatest(ctx context.Context, key uint64) (ent *%s, found bool, err error) {", inst.storeType(), inst.entityType())
+	p("func (inst *%s[W]) GetLatest(ctx context.Context, key %s) (ent *%s, found bool, err error) {", inst.storeType(), inst.keyGoType, inst.entityType())
 	p("\tent, found, err = inst.Latest(ctx, key)")
 	p("\tif err != nil || !found {")
 	p("\t\treturn")

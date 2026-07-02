@@ -43,6 +43,9 @@ const deviceDefaultDDLTail = "ENGINE = MergeTree() ORDER BY (" + deviceColKey + 
 // Arrow output shape the read-access classes expect.
 const deviceArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
 
+// deviceKeyLiteral renders a Key value as a ClickHouse SQL literal.
+func deviceKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
+
 const (
 	deviceLifecycleLive      uint8 = 0
 	deviceLifecycleTombstone uint8 = 1
@@ -323,7 +326,7 @@ func (inst *DeviceStore[W]) FetchItemSinglePartition(ctx context.Context, partit
 		if i > 0 {
 			sb.WriteByte(',')
 		}
-		sb.WriteString(strconv.FormatUint(k, 10))
+		sb.WriteString(deviceKeyLiteral(k))
 	}
 	sb.WriteString(") ORDER BY " + deviceColOrder + " DESC LIMIT 1 BY " + deviceColKey)
 	sb.WriteString(deviceArrowOutputSettings)
@@ -422,7 +425,7 @@ func (inst *DeviceStore[W]) ScanLocated(ctx context.Context, extraPredicate stri
 // primitive).
 func (inst *DeviceStore[W]) Latest(ctx context.Context, key uint64) (ent *DeviceEntity, found bool, err error) {
 	sql := "SELECT * FROM " + deviceTableName +
-		" WHERE " + deviceColKey + " = " + strconv.FormatUint(key, 10) +
+		" WHERE " + deviceColKey + " = " + deviceKeyLiteral(key) +
 		" ORDER BY " + deviceColOrder + " DESC LIMIT 1" + deviceArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
 	if err != nil || len(ents) == 0 {
@@ -437,7 +440,7 @@ func (inst *DeviceStore[W]) Latest(ctx context.Context, key uint64) (ent *Device
 // ascending order — the event-replay primitive. Buffered in v1.
 func (inst *DeviceStore[W]) Replay(ctx context.Context, key uint64, fromOrder time.Time) (ents []*DeviceEntity, err error) {
 	sql := "SELECT * FROM " + deviceTableName +
-		" WHERE " + deviceColKey + " = " + strconv.FormatUint(key, 10) +
+		" WHERE " + deviceColKey + " = " + deviceKeyLiteral(key) +
 		" AND " + deviceColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")" +
 		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
