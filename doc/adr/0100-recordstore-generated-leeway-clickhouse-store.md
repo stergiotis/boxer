@@ -158,9 +158,12 @@ Adopt **O4**. Specific decisions:
 
   has, ent := st.Get(k)                      // batched KV via caching.ReadThroughCache
   for range st.WorkItem(w) { ... }           // caching's suspend/replay contract, re-exposed
+  st.AdvanceEpoch()                          // cache pinning epoch, once per frame/batch
   ent, ok := st.Latest(ctx, k)               // ORDER BY order DESC LIMIT 1 BY key; uncached v1
   for ent := range st.Replay(ctx, k, from)   // ordered rows for key, order ≥ from
-  rows := st.Scan(ctx, filter)               // ADR-0066 artefacts: Presence/Filter + decode
+  rows := st.ScanIdentity(ctx, extra)        // per-kind: baked ADR-0066 Filter artefact
+                                             // (presence AND validator, ids as literals)
+                                             // + optional raw extra predicate
 
   // State view — emitted only when Key, Order AND Lifecycle roles are bound:
   b := st.Put(id, ts)                        // append a new version (Begin, lifecycle=live)
@@ -172,8 +175,10 @@ Adopt **O4**. Specific decisions:
 
   `Get` (the cached path) is intended for **immutable-by-key** access —
   content-addressed or unique-keyed records — where cache entries can never
-  go stale. `Latest` and `GetLatest` stay uncached in v1 (invalidation is a
-  real problem; see Deferred).
+  go stale. Local writes are coherent regardless: `Commit`, `Put` and
+  `Delete` invalidate the written key's cache entry, so only **external**
+  writers can leave `Get` stale. `Latest` and `GetLatest` stay uncached in
+  v1 (see Deferred).
 
   The **state view** (`Put`/`Delete`/`GetLatest`) supplies the
   update/delete ergonomics of a data-management hub without breaking the
@@ -233,10 +238,16 @@ Adopt **O4**. Specific decisions:
   one entity frame the way `RowComposer` does reflectively (ADR-0070) —
   was upstreamed into `marshallgen` itself during S1 (a value-source
   refactor lets the same section drivers render SoA-at-row-i and
-  single-row access), so every marshallgen kind now carries it. The
-  presence-gated read twin (`<Kind>ReadRow`) is not upstreamed yet; the
-  store generator emits specialized decode for the v1 shapes and rejects
-  the rest at generation time (see Deferred).
+  single-row access), so every marshallgen kind now carries it. S2
+  upstreamed the presence-gated read twin the same way:
+  `<Kind>ReadRow(i, attrs, membs, …) (row, present, err)` — the
+  FillFromArrow decode middles (accumulators, membership-match loops)
+  shared, with presence-tolerant tails (a row carrying none of the kind's
+  memberships is `present=false`, never an error; duplicates error). The
+  store generator's decode is one `ReadRow` call per component; kinds
+  whose shapes ReadRow does not cover are skipped at emission and
+  rejected by the store generator through the same exported gate
+  (`marshallgen.ReadRowSupported`), so the two cannot disagree.
 - **SD7 — Executor seam.** `ExecutorI { Exec(ctx, sql) error;
   QueryArrow(ctx, sql) ([]arrow.RecordBatch, error); InsertArrow(ctx, table,
   recs) error }` (exact shape to be settled during implementation; a
@@ -392,12 +403,12 @@ The QOC options above carry the rankings; notes below record nuance.
   give cheap idempotence for retried flushes; not relied on in v1.
 - **Streaming `Replay`** (chunked Arrow decode) — v1 buffers whole
   results; the executor seam is where streaming lands.
-- **Generator shape coverage.** v1 store decode supports scalar,
-  scalar-single (`unit`) and slice-container fields on the LowCardRef
-  channel; multi-sub-column sections, carriers, options, roaring and
-  explode shapes are a generation-time error. Upstreaming a presence-gated
-  `<Kind>ReadRow` into `marshallgen` (beside `AddSections`) is the S2 move
-  that closes this without duplicating shape logic.
+- **Generator shape coverage.** With `<Kind>ReadRow` upstreamed (S2), the
+  store decode covers scalar, scalar-single (`unit`), slice-container,
+  Option-scalar, roaring and multi-sub-column shapes on the non-carrier
+  channels. Carrier (mixed / parametrized) channels and exploded fields
+  remain uncovered — `marshallgen.ReadRowSupported` is the single gate —
+  pending a consumer (the keelson facts kinds would be the trigger).
 - **Projections / read models**, multi-table stores, nested component
   structs (blocked on the deferred marshallreflect nested-struct feature),
   and a CLI wrapper for the generator.
@@ -413,7 +424,15 @@ The QOC options above carry the rankings; notes below record nuance.
   passes unchanged against the generated store. v1 shape limits recorded
   under Deferred.
 - **S2** — cache integration exercised end-to-end (miss → batch fetch →
-  replay work items), plus `Scan` via readback artefacts.
+  replay work items), plus `Scan` via readback artefacts. **Done**: the
+  example's cache tests cover Min-threshold batching across work items
+  (one `IN (…)` query serves several frames), the fetch-error circuit
+  breaker, and local-write invalidation; per-kind `Scan<Kind>` verbs embed
+  the generation-time Filter artefacts (helper UDFs prepended,
+  `CREATE OR REPLACE` — the executor must accept a multi-statement
+  script); `<Kind>ReadRow` upstreamed lifted the shape limits to
+  everything non-carrier/non-explode, proven by a multi-sub-column
+  `Located` component and an Option scalar in the example.
 - **S3** — pushout `StorageI` adapter passing `repo/storagetest` against
   clickhouse-local. Feedback from this slice may amend SD2–SD4 in place
   (this ADR is pre-acceptance).
