@@ -179,3 +179,48 @@ the tool:
   failing the probe as `undefined: probe.X`.
 - `generate` must skip `packageprops` itself: writing a `package_props.go` into
   the vocabulary package makes it import itself (an import cycle).
+
+### 2026-07-02 — `Kind`: a package-role classification field
+
+Added the first non-wasm field to `Props` (the growth SD4 anticipated): `Kind`,
+classifying a package's *primary role* when it is not ordinary library code —
+`KindDemo`, `KindExample`, `KindIntegrationTest`, with the zero `KindUnspecified`
+asserting nothing. A single enum (mutually-exclusive roles), not a bitset: a
+package reads as one thing, and the enum stays open for later roles.
+
+Kind differs from the WASM* verdicts in one way that shaped the tooling: **there
+is no survey that computes it**, so it is pure curated intent.
+
+- **Not reconciled.** `props verify` checks only the WASM* verdicts (which have a
+  computable oracle); it never flags Kind.
+- **Preserved across re-seed.** `props generate --overwrite` rewrites a file from
+  the survey verdict, which would wipe a hand-set Kind. Generate now reads the
+  existing declaration first and carries its Kind through; a curated value always
+  wins. Only when nothing is declared does it fall back to a directory-name
+  **heuristic** (`demo`/`demos` → Demo, `example`/`examples` → Example).
+- **Emitted only when set.** `renderPropsFile` and the `--emit go` table write a
+  `Kind` field only for a classified package, so ordinary declarations stay
+  byte-identical and the zero value keeps asserting nothing. `harvest --emit
+  table` gains a `kind` column (blank for the common case).
+
+`KindIntegrationTest` was applied by hand — never by the heuristic — because no
+reliable automatable signal exists: the `test` dir-name suffix over-includes a
+code-generation tool (`dsl/genbuildertest`), and "non-test source imports
+`testing`" over-includes production libraries that merely ship a test helper
+(`config/env`, `dsl/nanopass`, `leeway/dml`). Selecting by *inspection* of role,
+the tagged set is the three executable conformance contracts that drive real
+implementations end-to-end — `pushout/{envelope/codectest, exchange/exchangetest,
+repo/storagetest}`. Deliberately left `KindUnspecified`: `unittest` (unit-test
+assertion/mocks, not an integration harness) and `genbuildertest` (a codegen
+tool). The many `*_integration_test.go` *files* inside library packages have no
+package to carry the mark and stay unclassified.
+
+Example packages were seeded by hand too
+(`semistructured/leeway/{dml,readaccess}/example` → `KindExample`); the
+directory-name heuristic covers future `demo`/`example` dirs. Hand tags survive a
+re-seed because `generate` preserves them.
+
+The static `proptable` regen was deferred: a full `harvest --emit go` currently
+folds in an untracked in-flight `package_props.go` from concurrent work, and no
+consumer reads Kind from the static table yet (the source declarations and the
+runtime registry already carry it). A later regen on a settled tree picks it up.
