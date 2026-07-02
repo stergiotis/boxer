@@ -1,0 +1,729 @@
+package gen
+
+import (
+	"fmt"
+	"go/format"
+	"strings"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
+)
+
+// storeComponent is the per-component emission model: the parsed plan plus
+// the derived names the template needs.
+type storeComponent struct {
+	Kind   string // Go type, e.g. "Identity"
+	groups []goplan.SectionGroup
+}
+
+// secUse is one distinct tagged section a component set touches: its
+// PascalCase method name and the decode-side reader variable.
+type secUse struct {
+	method string
+	varN   string
+}
+
+// envelopeCol is one plain envelope column: its physical (encoded) name
+// and the fixed DML setter the PlainItemTypeE lane provides.
+type envelopeCol struct {
+	physical string
+}
+
+// emitStore renders the store glue file: entity bag, builder (Add* over
+// the generated <Kind>AddSections), verbs, cache fetcher and
+// presence-gated decode — the shape pinned by the hand-written reference
+// recordstore/example/device_store.go and its round-trip test.
+//
+// v1 scope (ADR-0100 S1): the Key role must be a u64 EntityId plain
+// column; Order = EntityTimestamp; the state view emits only when an
+// EntityLifecycle column exists. Component decode supports the scalar,
+// scalar-single (unit) and slice-container shapes; other shapes
+// (multi-sub-column, carriers, options, roaring, explode) are a
+// generation-time error until the presence-gated read helpers move into
+// marshallgen (S2).
+func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, plans []*mappingplan.Plan) (code []byte, err error) {
+	key, order, lifecycle, err := inst.envelope(ir, conv)
+	if err != nil {
+		return
+	}
+	if key.physical == "" {
+		err = eh.Errorf("schema has no EntityId plain column — the Key role is required")
+		return
+	}
+	if order.physical == "" {
+		err = eh.Errorf("schema has no EntityTimestamp plain column — Latest/Replay need the Order role")
+		return
+	}
+	stateView := lifecycle.physical != ""
+
+	comps := make([]storeComponent, 0, len(plans))
+	for _, plan := range plans {
+		var sc storeComponent
+		sc, err = classifyComponent(plan)
+		if err != nil {
+			return
+		}
+		comps = append(comps, sc)
+	}
+
+	var sb strings.Builder
+	inst.emitStoreHeader(&sb, key, order, lifecycle, stateView)
+	inst.emitEntityBag(&sb, comps, stateView)
+	inst.emitStoreType(&sb)
+	inst.emitBuilder(&sb, comps, stateView)
+	inst.emitIngest(&sb, comps)
+	inst.emitFlush(&sb)
+	inst.emitCacheVerbs(&sb)
+	inst.emitQueryVerbs(&sb, stateView)
+	err = inst.emitDecode(&sb, comps, stateView)
+	if err != nil {
+		return
+	}
+
+	raw := []byte(sb.String())
+	code, err = format.Source(raw)
+	if err != nil {
+		err = eh.Errorf("gofmt rejected store output: %w; emitted:\n%s", err, string(raw))
+	}
+	return
+}
+
+// envelope finds the physical (encoded) names of the role-bearing plain
+// columns by walking the Plan⋈IR join readback maintains.
+func (inst Input) envelope(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI) (key, order, lifecycle envelopeCol, err error) {
+	info := readback.NewInformationRetrieval(conv)
+	err = info.LoadTable(ir, inst.RowConfig)
+	if err != nil {
+		err = eh.Errorf("load readback IR: %w", err)
+		return
+	}
+	for cr := range info.IterateAll() {
+		var itemType common.PlainItemTypeE
+		itemType, err = conv.ExtractPlainItemType(cr.PhysicalColumn)
+		if err != nil {
+			// Not a plain column under this convention; skip.
+			err = nil
+			continue
+		}
+		switch itemType {
+		case common.PlainItemTypeEntityId:
+			key.physical = cr.PhysicalColumn.String()
+		case common.PlainItemTypeEntityTimestamp:
+			order.physical = cr.PhysicalColumn.String()
+		case common.PlainItemTypeEntityLifecycle:
+			lifecycle.physical = cr.PhysicalColumn.String()
+		}
+	}
+	return
+}
+
+func classifyComponent(plan *mappingplan.Plan) (sc storeComponent, err error) {
+	sc.Kind = plan.KindType
+	sc.groups = goplan.ComputeGroups(plan)
+	for _, g := range sc.groups {
+		if len(g.SubColumns) > 1 {
+			err = eh.Errorf("component %s: multi-sub-column section %q not supported by the store decode yet (ADR-0100 S2)", sc.Kind, g.Section)
+			return
+		}
+		for _, f := range g.SubColumns[0].Fields {
+			if f.IsConst {
+				continue
+			}
+			if f.IsOption || f.IsRoaring() || f.CarrierField != "" {
+				err = eh.Errorf("component %s field %s: option/roaring/carrier shapes not supported by the store decode yet (ADR-0100 S2)", sc.Kind, f.GoFieldName)
+				return
+			}
+			switch goplan.ClassifyBegin(f) {
+			case goplan.ShapeScalarBegin, goplan.ShapeScalarBeginSingle, goplan.ShapeContainer:
+			default:
+				err = eh.Errorf("component %s field %s: shape not supported by the store decode yet (ADR-0100 S2)", sc.Kind, f.GoFieldName)
+				return
+			}
+			if f.Flags.Channel != mappingplan.MembershipChannelLowCardRef {
+				err = eh.Errorf("component %s field %s: only the LowCardRef membership channel is supported by the store decode yet (ADR-0100 S2)", sc.Kind, f.GoFieldName)
+				return
+			}
+		}
+	}
+	return
+}
+
+// --- emission helpers. The emitted shapes mirror example/device_store.go. ---
+
+func (inst Input) dmlType() string     { return "InEntity" + upperFirst(inst.TableName) + "Table" }
+func (inst Input) raPrefix() string    { return "ReadAccess" + upperFirst(inst.TableName) + "Table" }
+func (inst Input) entityType() string  { return inst.StoreName + "Entity" }
+func (inst Input) storeType() string   { return inst.StoreName + "Store" }
+func (inst Input) builderType() string { return inst.StoreName + "EntityBuilder" }
+
+func (inst Input) emitStoreHeader(sb *strings.Builder, key, order, lifecycle envelopeCol, stateView bool) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// Code generated by github.com/stergiotis/boxer/public/recordstore/gen — DO NOT EDIT.")
+	p("//")
+	p("// %s composes the generated %s building blocks per ADR-0100:", inst.storeType(), inst.TableName)
+	p("// append-only primitives plus batched cached retrieval%s.", map[bool]string{true: " and the state view", false: ""}[stateView])
+	p("package %s", inst.PackageName)
+	p("")
+	p("import (")
+	p("\t%q", "context")
+	p("\t_ %q", "embed")
+	p("\t%q", "iter")
+	p("\t%q", "strconv")
+	p("\t%q", "strings")
+	p("\t%q", "time")
+	p("")
+	p("\t%q", "github.com/apache/arrow-go/v18/arrow")
+	p("\t%q", "github.com/apache/arrow-go/v18/arrow/memory")
+	p("\t%q", "github.com/stergiotis/boxer/public/caching")
+	p("\t%q", "github.com/stergiotis/boxer/public/functional")
+	p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
+	p("\t%q", "github.com/stergiotis/boxer/public/observability/eh")
+	p("\t%q", "github.com/stergiotis/boxer/public/recordstore")
+	p("\traruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime")
+	p(")")
+	p("")
+	p("//go:embed %s_ddl_clickhouse.out.sql", inst.TableName)
+	p("var %sDDLColumnBody string", inst.TableName)
+	p("")
+	p("const %sTableName = %q", inst.TableName, inst.TableName)
+	p("")
+	p("// Physical (encoded) plain-column names, derived from the IR at")
+	p("// generation time.")
+	p("const (")
+	p("\t%sColKey = `\"%s\"`", inst.TableName, key.physical)
+	p("\t%sColOrder = `\"%s\"`", inst.TableName, order.physical)
+	if stateView {
+		p("\t%sColLifecycle = `\"%s\"`", inst.TableName, lifecycle.physical)
+	}
+	p(")")
+	p("")
+	p("// Default DDL tail: durable engine, Key leading ORDER BY (point-lookup")
+	p("// guidance), Order second. Override via %sStoreConfig.DDLTail.", inst.StoreName)
+	p("const %sDefaultDDLTail = \"ENGINE = MergeTree() ORDER BY (\" + %sColKey + \", \" + %sColOrder + \") SETTINGS allow_suspicious_low_cardinality_types=1\"",
+		inst.TableName, inst.TableName, inst.TableName)
+	p("")
+	p("// Arrow output shape the read-access classes expect.")
+	p("const %sArrowOutputSettings = \" SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0\"", inst.TableName)
+	p("")
+	if stateView {
+		p("const (")
+		p("\t%sLifecycleLive uint8 = 0", inst.TableName)
+		p("\t%sLifecycleTombstone uint8 = 1", inst.TableName)
+		p(")")
+		p("")
+	}
+}
+
+func (inst Input) emitEntityBag(sb *strings.Builder, comps []storeComponent, stateView bool) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// %s is the entity bag (ADR-0100 SD5): the envelope plus one option", inst.entityType())
+	p("// per bound component. Arrow-free — safe to hold in the cache.")
+	p("type %s struct {", inst.entityType())
+	p("\tID uint64")
+	p("\tTs time.Time")
+	if stateView {
+		p("\tLifecycle uint8")
+	}
+	for _, c := range comps {
+		p("\t%s option.Option[%s]", c.Kind, c.Kind)
+	}
+	p("}")
+	p("")
+	p("// Archetype reports which components the entity carries, in schema order.")
+	p("func (inst *%s) Archetype() (a []string) {", inst.entityType())
+	for _, c := range comps {
+		p("\tif inst.%s.Has {", c.Kind)
+		p("\t\ta = append(a, %q)", lowerFirst(c.Kind))
+		p("\t}")
+	}
+	p("\treturn")
+	p("}")
+	p("")
+}
+
+func (inst Input) emitStoreType(sb *strings.Builder) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("type %sStoreConfig struct {", inst.StoreName)
+	p("\t// DDLTail is appended after the generated column body at EnsureTable")
+	p("\t// time (engine, ORDER BY, SETTINGS). Empty selects the default.")
+	p("\tDDLTail string")
+	p("\t// CacheCapacity is the L1 capacity of the read-through cache.")
+	p("\tCacheCapacity int")
+	p("\t// FetchCriteria are the cache's batch-flush thresholds.")
+	p("\tFetchCriteria caching.FetchCriteria")
+	p("}")
+	p("")
+	p("// %s is single-goroutine, like every part it composes.", inst.storeType())
+	p("type %s[W comparable] struct {", inst.storeType())
+	p("\texec recordstore.ExecutorI")
+	p("\talloc memory.Allocator")
+	p("\tcfg %sStoreConfig", inst.StoreName)
+	p("\tdml *%s", inst.dmlType())
+	p("\tbuffered int")
+	p("\tcache *caching.ReadThroughCache[uint64, *%s, W]", inst.entityType())
+	p("}")
+	p("")
+	p("func New%s[W comparable](exec recordstore.ExecutorI, alloc memory.Allocator, cfg %sStoreConfig) (inst *%s[W]) {", inst.storeType(), inst.StoreName, inst.storeType())
+	p("\tif alloc == nil {")
+	p("\t\talloc = memory.NewGoAllocator()")
+	p("\t}")
+	p("\tif cfg.CacheCapacity <= 0 {")
+	p("\t\tcfg.CacheCapacity = 1024")
+	p("\t}")
+	p("\tinst = &%s[W]{exec: exec, alloc: alloc, cfg: cfg, dml: New%s(alloc, 64)}", inst.storeType(), inst.dmlType())
+	p("\tinst.cache = caching.NewReadThroughCache[uint64, *%s, W](cfg.CacheCapacity, inst, cfg.FetchCriteria)", inst.entityType())
+	p("\treturn")
+	p("}")
+	p("")
+	p("// EnsureTable applies the generated DDL column body plus the configured")
+	p("// tail. Idempotent (CREATE TABLE IF NOT EXISTS).")
+	p("func (inst *%s[W]) EnsureTable(ctx context.Context) (err error) {", inst.storeType())
+	p("\ttail := inst.cfg.DDLTail")
+	p("\tif tail == \"\" {")
+	p("\t\ttail = %sDefaultDDLTail", inst.TableName)
+	p("\t}")
+	p("\terr = inst.exec.Exec(ctx, %sDDLColumnBody+\" \"+tail)", inst.TableName)
+	p("\tif err != nil {")
+	p("\t\terr = eh.Errorf(\"ensure table %%s: %%w\", %sTableName, err)", inst.TableName)
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+}
+
+func (inst Input) emitBuilder(sb *strings.Builder, comps []storeComponent, stateView bool) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// %s assembles one entity: envelope from Begin, components", inst.builderType())
+	p("// via Add*, direct attribute manipulation via Raw, then Commit.")
+	p("type %s[W comparable] struct {", inst.builderType())
+	p("\tstore *%s[W]", inst.storeType())
+	p("}")
+	p("")
+	p("// Begin opens one entity with the envelope roles as typed arguments")
+	p("// (Key, Order)%s.", map[bool]string{true: " and a live lifecycle", false: ""}[stateView])
+	p("func (inst *%s[W]) Begin(id uint64, ts time.Time) *%s[W] {", inst.storeType(), inst.builderType())
+	if stateView {
+		p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(%sLifecycleLive)", inst.TableName)
+	} else {
+		p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts)")
+	}
+	p("\treturn &%s[W]{store: inst}", inst.builderType())
+	p("}")
+	p("")
+	for _, c := range comps {
+		p("// Add%s contributes the %s component to the open entity via the", c.Kind, c.Kind)
+		p("// generated entity-frame-free section driver (ADR-0100 SD6).")
+		p("func (inst *%s[W]) Add%s(row %s) *%s[W] {", inst.builderType(), c.Kind, c.Kind, inst.builderType())
+		p("\terr := %sAddSections(inst.store.dml, row)", c.Kind)
+		p("\tif err != nil {")
+		p("\t\tinst.store.dml.AppendError(err)")
+		p("\t}")
+		p("\treturn inst")
+		p("}")
+		p("")
+	}
+	p("// Raw exposes the underlying DML entity for direct attribute")
+	p("// manipulation within the same entity frame.")
+	p("func (inst *%s[W]) Raw() *%s {", inst.builderType(), inst.dmlType())
+	p("\treturn inst.store.dml")
+	p("}")
+	p("")
+	p("// Commit finishes the open entity and buffers the row.")
+	p("func (inst *%s[W]) Commit() (err error) {", inst.builderType())
+	p("\terr = inst.store.dml.CommitEntity()")
+	p("\tif err != nil {")
+	p("\t\treturn")
+	p("\t}")
+	p("\tinst.store.buffered++")
+	p("\treturn")
+	p("}")
+	p("")
+}
+
+func (inst Input) emitIngest(sb *strings.Builder, comps []storeComponent) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	for _, c := range comps {
+		p("// Ingest%s appends one whole entity per row carrying only the", c.Kind)
+		p("// %s component, all stamped with ts.", c.Kind)
+		p("func (inst *%s[W]) Ingest%s(ts time.Time, rows []%s) (err error) {", inst.storeType(), c.Kind, c.Kind)
+		p("\tfor i := range rows {")
+		p("\t\terr = inst.Begin(rows[i].ID, ts).Add%s(rows[i]).Commit()", c.Kind)
+		p("\t\tif err != nil {")
+		p("\t\t\terr = eh.Errorf(\"ingest %s row %%d: %%w\", i, err)", lowerFirst(c.Kind))
+		p("\t\t\treturn")
+		p("\t\t}")
+		p("\t}")
+		p("\treturn")
+		p("}")
+		p("")
+	}
+}
+
+func (inst Input) emitFlush(sb *strings.Builder) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// Buffered reports the number of committed-but-unflushed rows.")
+	p("func (inst *%s[W]) Buffered() int { return inst.buffered }", inst.storeType())
+	p("")
+	p("// Flush drains the buffered rows to ClickHouse (Arrow IPC, ADR-0089")
+	p("// pivot). Rows are durable when Flush returns, engine permitting.")
+	p("func (inst *%s[W]) Flush(ctx context.Context) (n int, err error) {", inst.storeType())
+	p("\tif inst.buffered == 0 {")
+	p("\t\treturn")
+	p("\t}")
+	p("\trecords, err := inst.dml.TransferRecords(nil)")
+	p("\tif err != nil {")
+	p("\t\terr = eh.Errorf(\"transfer records: %%w\", err)")
+	p("\t\treturn")
+	p("\t}")
+	p("\tdefer func() {")
+	p("\t\tfor _, rec := range records {")
+	p("\t\t\trec.Release()")
+	p("\t\t}")
+	p("\t}()")
+	p("\terr = inst.exec.InsertArrow(ctx, %sTableName, records)", inst.TableName)
+	p("\tif err != nil {")
+	p("\t\terr = eh.Errorf(\"insert into %%s: %%w\", %sTableName, err)", inst.TableName)
+	p("\t\treturn")
+	p("\t}")
+	p("\tn = inst.buffered")
+	p("\tinst.buffered = 0")
+	p("\treturn")
+	p("}")
+	p("")
+}
+
+func (inst Input) emitCacheVerbs(sb *strings.Builder) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// Get retrieves an entity by Key through the cache. A miss queues the")
+	p("// key for the next batch fetch (the caching suspend/replay contract);")
+	p("// Get is intended for immutable-by-key access — see ADR-0100 SD4.")
+	p("func (inst *%s[W]) Get(key uint64) (has bool, ent *%s) {", inst.storeType(), inst.entityType())
+	p("\treturn inst.cache.Get(key)")
+	p("}")
+	p("")
+	p("// WorkItem marks the current work item for the cache's miss bookkeeping.")
+	p("func (inst *%s[W]) WorkItem(w W) iter.Seq[functional.NilIteratorValueType] {", inst.storeType())
+	p("\treturn inst.cache.WorkItem(w)")
+	p("}")
+	p("")
+	p("// IterateReadyWorkItems flushes the queued keys when the fetch criteria")
+	p("// are met and replays the work items that had misses.")
+	p("func (inst *%s[W]) IterateReadyWorkItems(ctx context.Context) iter.Seq[W] {", inst.storeType())
+	p("\treturn inst.cache.IterateReadyWorkItems(ctx)")
+	p("}")
+	p("")
+	p("// IterateRestWorkItems forces a fetch of all queued keys and replays")
+	p("// the pending work items.")
+	p("func (inst *%s[W]) IterateRestWorkItems(ctx context.Context) iter.Seq[W] {", inst.storeType())
+	p("\treturn inst.cache.IterateRestWorkItems(ctx)")
+	p("}")
+	p("")
+	p("// DeterminePartition implements caching.ItemFetcherI. Single partition")
+	p("// in v1 (one table, one server).")
+	p("func (inst *%s[W]) DeterminePartition(key uint64) uint64 { return 0 }", inst.storeType())
+	p("")
+	p("// FetchItemSinglePartition implements caching.ItemFetcherI: one batched")
+	p("// point lookup per fetch. Duplicate versions collapse newest-first.")
+	p("func (inst *%s[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []uint64, target caching.ItemTargetI[uint64, *%s]) (err error) {", inst.storeType(), inst.entityType())
+	p("\tvar sb strings.Builder")
+	p("\tsb.WriteString(\"SELECT * FROM \")")
+	p("\tsb.WriteString(%sTableName)", inst.TableName)
+	p("\tsb.WriteString(\" WHERE \" + %sColKey + \" IN (\")", inst.TableName)
+	p("\tfor i, k := range keys {")
+	p("\t\tif i > 0 {")
+	p("\t\t\tsb.WriteByte(',')")
+	p("\t\t}")
+	p("\t\tsb.WriteString(strconv.FormatUint(k, 10))")
+	p("\t}")
+	p("\tsb.WriteString(\") ORDER BY \" + %sColOrder + \" DESC LIMIT 1 BY \" + %sColKey)", inst.TableName, inst.TableName)
+	p("\tsb.WriteString(%sArrowOutputSettings)", inst.TableName)
+	p("\tents, err := inst.queryEntities(ctx, sb.String())")
+	p("\tif err != nil {")
+	p("\t\treturn")
+	p("\t}")
+	p("\tfor _, ent := range ents {")
+	p("\t\ttarget.AddItem(ent.ID, ent)")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+}
+
+func (inst Input) emitQueryVerbs(sb *strings.Builder, stateView bool) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// Latest returns the newest row for key, tombstone-blind (the raw")
+	p("// primitive).")
+	p("func (inst *%s[W]) Latest(ctx context.Context, key uint64) (ent *%s, found bool, err error) {", inst.storeType(), inst.entityType())
+	p("\tsql := \"SELECT * FROM \" + %sTableName +", inst.TableName)
+	p("\t\t\" WHERE \" + %sColKey + \" = \" + strconv.FormatUint(key, 10) +", inst.TableName)
+	p("\t\t\" ORDER BY \" + %sColOrder + \" DESC LIMIT 1\" + %sArrowOutputSettings", inst.TableName, inst.TableName)
+	p("\tents, err := inst.queryEntities(ctx, sql)")
+	p("\tif err != nil || len(ents) == 0 {")
+	p("\t\treturn")
+	p("\t}")
+	p("\tent = ents[0]")
+	p("\tfound = true")
+	p("\treturn")
+	p("}")
+	p("")
+	p("// Replay returns the rows for key with the order column >= fromOrder in")
+	p("// ascending order — the event-replay primitive. Buffered in v1.")
+	p("func (inst *%s[W]) Replay(ctx context.Context, key uint64, fromOrder time.Time) (ents []*%s, err error) {", inst.storeType(), inst.entityType())
+	p("\tsql := \"SELECT * FROM \" + %sTableName +", inst.TableName)
+	p("\t\t\" WHERE \" + %sColKey + \" = \" + strconv.FormatUint(key, 10) +", inst.TableName)
+	p("\t\t\" AND \" + %sColOrder + \" >= fromUnixTimestamp64Nano(\" + strconv.FormatInt(fromOrder.UnixNano(), 10) + \")\" +", inst.TableName)
+	p("\t\t\" ORDER BY \" + %sColOrder + \" ASC\" + %sArrowOutputSettings", inst.TableName, inst.TableName)
+	p("\treturn inst.queryEntities(ctx, sql)")
+	p("}")
+	p("")
+	if !stateView {
+		return
+	}
+	p("// --- state view (Put / Delete / GetLatest; ADR-0100 SD4). ---")
+	p("")
+	p("// Put appends a new version of the entity — Begin under its state-view")
+	p("// name.")
+	p("func (inst *%s[W]) Put(id uint64, ts time.Time) *%s[W] {", inst.storeType(), inst.builderType())
+	p("\treturn inst.Begin(id, ts)")
+	p("}")
+	p("")
+	p("// Delete appends a tombstone row for id (no components; lifecycle marks")
+	p("// the deletion). GetLatest reads it as absent.")
+	p("func (inst *%s[W]) Delete(id uint64, ts time.Time) (err error) {", inst.storeType())
+	p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(%sLifecycleTombstone)", inst.TableName)
+	p("\terr = inst.dml.CommitEntity()")
+	p("\tif err != nil {")
+	p("\t\treturn")
+	p("\t}")
+	p("\tinst.buffered++")
+	p("\treturn")
+	p("}")
+	p("")
+	p("// GetLatest is Latest plus tombstone interpretation: newest row wins, a")
+	p("// tombstone reads as absent. Uncached in v1 (ADR-0100 Deferred).")
+	p("func (inst *%s[W]) GetLatest(ctx context.Context, key uint64) (ent *%s, found bool, err error) {", inst.storeType(), inst.entityType())
+	p("\tent, found, err = inst.Latest(ctx, key)")
+	p("\tif err != nil || !found {")
+	p("\t\treturn")
+	p("\t}")
+	p("\tif ent.Lifecycle == %sLifecycleTombstone {", inst.TableName)
+	p("\t\tent = nil")
+	p("\t\tfound = false")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+}
+
+func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateView bool) (err error) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	ra := inst.raPrefix()
+
+	// Collect the distinct tagged sections the components use.
+	seen := map[string]secUse{}
+	order := []string{}
+	for _, c := range comps {
+		for _, g := range c.groups {
+			m := mappingplan.UpperFirst(g.Section)
+			if _, ok := seen[m]; !ok {
+				seen[m] = secUse{method: m, varN: lowerFirst(m) + "R"}
+				order = append(order, m)
+			}
+		}
+	}
+
+	p("// --- decode (Arrow → entity bags). ---")
+	p("")
+	p("// %sSectionReaderI is the uniform slice of the generated read-access", inst.TableName)
+	p("// readers.")
+	p("type %sSectionReaderI interface {", inst.TableName)
+	p("\tGetColumnIndices() []uint32")
+	p("\tSetColumnIndices([]uint32) []uint32")
+	p("\tLoadFromRecord(raruntime.RecordI) error")
+	p("\tRelease()")
+	p("}")
+	p("")
+	p("func (inst *%s[W]) queryEntities(ctx context.Context, sql string) (ents []*%s, err error) {", inst.storeType(), inst.entityType())
+	p("\trecords, err := inst.exec.QueryArrow(ctx, sql)")
+	p("\tif err != nil {")
+	p("\t\terr = eh.Errorf(\"query entities: %%w\", err)")
+	p("\t\treturn")
+	p("\t}")
+	p("\tdefer func() {")
+	p("\t\tfor _, rec := range records {")
+	p("\t\t\trec.Release()")
+	p("\t\t}")
+	p("\t}()")
+	p("\tfor _, rec := range records {")
+	p("\t\tvar batch []*%s", inst.entityType())
+	p("\t\tbatch, err = decode%sRecord(rec)", inst.StoreName)
+	p("\t\tif err != nil {")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t\tents = append(ents, batch...)")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+	p("// decode%sRecord reads one fetched Arrow record into entity bags:", inst.StoreName)
+	p("// envelope from the plain readers, components via presence-gated,")
+	p("// membership-matched reads (fat rows carry optional components — the")
+	p("// kind-homogeneous helpers cannot decode them).")
+	p("func decode%sRecord(rec arrow.RecordBatch) (ents []*%s, err error) {", inst.StoreName, inst.entityType())
+	p("\tidR := New%sPlainEntityIdAttributes()", ra)
+	p("\ttsR := New%sPlainEntityTimestampAttributes()", ra)
+	if stateView {
+		p("\tlcR := New%sPlainEntityLifecycleAttributes()", ra)
+	}
+	for _, m := range order {
+		p("\t%s := New%sTagged%s()", seen[m].varN, ra, m)
+	}
+	readerVars := []string{"idR", "tsR"}
+	if stateView {
+		readerVars = append(readerVars, "lcR")
+	}
+	for _, m := range order {
+		readerVars = append(readerVars, seen[m].varN)
+	}
+	p("\treaders := []%sSectionReaderI{%s}", inst.TableName, strings.Join(readerVars, ", "))
+	p("\tfor _, r := range readers {")
+	p("\t\tr.SetColumnIndices(r.GetColumnIndices())")
+	p("\t\terr = r.LoadFromRecord(rec)")
+	p("\t\tif err != nil {")
+	p("\t\t\terr = eh.Errorf(\"load %s reader from record: %%w\", err)", inst.TableName)
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t}")
+	p("\tdefer func() {")
+	p("\t\tfor _, r := range readers {")
+	p("\t\t\tr.Release()")
+	p("\t\t}")
+	p("\t}()")
+	p("")
+	p("\tn := idR.ValueId.Len()")
+	p("\ttsType, ok := tsR.ValueTs.DataType().(*arrow.TimestampType)")
+	p("\tif !ok {")
+	p("\t\terr = eh.Errorf(\"order column is not a timestamp (got %%s)\", tsR.ValueTs.DataType())")
+	p("\t\treturn")
+	p("\t}")
+	p("\tents = make([]*%s, 0, n)", inst.entityType())
+	p("\tfor i := range n {")
+	p("\t\tei := raruntime.EntityIdx(i)")
+	p("\t\tent := &%s{", inst.entityType())
+	p("\t\t\tID: idR.ValueId.Value(i),")
+	p("\t\t\tTs: tsR.ValueTs.Value(i).ToTime(tsType.Unit).UTC(),")
+	if stateView {
+		p("\t\t\tLifecycle: lcR.ValueLifecycle.Value(i),")
+	}
+	p("\t\t}")
+	for _, c := range comps {
+		p("\t\terr = decode%s%s(ent, ei, %s)", inst.StoreName, c.Kind, componentReaderArgs(c, seen))
+		p("\t\tif err != nil {")
+		p("\t\t\treturn")
+		p("\t\t}")
+	}
+	p("\t\tents = append(ents, ent)")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+
+	for _, c := range comps {
+		err = inst.emitComponentDecode(sb, c, seen)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+// componentReaderArgs renders the section-reader arguments a component's
+// decode function needs, in group order.
+func componentReaderArgs(c storeComponent, seen map[string]secUse) string {
+	args := make([]string, 0, len(c.groups))
+	for _, g := range c.groups {
+		args = append(args, seen[mappingplan.UpperFirst(g.Section)].varN)
+	}
+	return strings.Join(args, ", ")
+}
+
+// emitComponentDecode renders the presence-gated, membership-matched
+// per-row decode for one component (the decodeDeviceComponents pattern).
+func (inst Input) emitComponentDecode(sb *strings.Builder, c storeComponent, seen map[string]secUse) (err error) {
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	ra := inst.raPrefix()
+
+	params := make([]string, 0, len(c.groups))
+	for _, g := range c.groups {
+		m := mappingplan.UpperFirst(g.Section)
+		params = append(params, fmt.Sprintf("%s *%sTagged%s", seen[m].varN, ra, m))
+	}
+	p("func decode%s%s(ent *%s, ei raruntime.EntityIdx, %s) (err error) {", inst.StoreName, c.Kind, inst.entityType(), strings.Join(params, ", "))
+	p("\tvar row %s", c.Kind)
+	p("\tpresent := false")
+	for _, g := range c.groups {
+		m := mappingplan.UpperFirst(g.Section)
+		rv := seen[m].varN
+		attrsVar := lowerFirst(m) + "Attrs"
+		p("\t%s := %s.GetAttributes()", attrsVar, rv)
+		p("\tfor aj := int64(0); aj < %s.GetNumberOfAttributes(ei); aj++ {", attrsVar)
+		p("\t\tfor memb := range %s.GetMemberships().GetMembValueLowCardRef(ei, raruntime.AttributeIdx(aj)) {", rv)
+		p("\t\t\tswitch memb {")
+		for _, f := range c.groups[indexOfGroup(c.groups, g.Section)].SubColumns[0].Fields {
+			if f.IsConst {
+				continue
+			}
+			p("\t\t\tcase %s:", f.KindVar())
+			switch goplan.ClassifyBegin(f) {
+			case goplan.ShapeScalarBegin:
+				p("\t\t\t\trow.%s = %s.GetAttrValueValue(ei, raruntime.AttributeIdx(aj))", f.GoFieldName, attrsVar)
+			case goplan.ShapeScalarBeginSingle:
+				p("\t\t\t\trow.%s, err = %s.GetAttrValueSingle(ei, raruntime.AttributeIdx(aj))", f.GoFieldName, attrsVar)
+				p("\t\t\t\tif err != nil {")
+				p("\t\t\t\t\terr = eh.Errorf(\"%s.%s is unit-valued: %%w\", err)", c.Kind, f.GoFieldName)
+				p("\t\t\t\t\treturn")
+				p("\t\t\t\t}")
+			case goplan.ShapeContainer:
+				p("\t\t\t\trow.%s = row.%s[:0]", f.GoFieldName, f.GoFieldName)
+				p("\t\t\t\tfor v := range %s.GetAttrValueValue(ei, raruntime.AttributeIdx(aj)) {", attrsVar)
+				p("\t\t\t\t\trow.%s = append(row.%s, v)", f.GoFieldName, f.GoFieldName)
+				p("\t\t\t\t}")
+			}
+			p("\t\t\t\tpresent = true")
+		}
+		p("\t\t\t}")
+		p("\t\t}")
+		p("\t}")
+	}
+	// Plain id column: set from the envelope key when the component
+	// declares it.
+	p("\tif present {")
+	p("\t\trow.ID = ent.ID")
+	p("\t\tent.%s = option.Some(row)", c.Kind)
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+	return
+}
+
+func indexOfGroup(groups []goplan.SectionGroup, section string) int {
+	for i, g := range groups {
+		if g.Section == section {
+			return i
+		}
+	}
+	return -1
+}
+
+func upperFirst(s string) string { return mappingplan.UpperFirst(s) }
+
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
+}
