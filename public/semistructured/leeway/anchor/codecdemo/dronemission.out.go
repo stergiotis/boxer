@@ -161,6 +161,36 @@ func DroneMissionBuildEntities[
 	return
 }
 
+// DroneMissionAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func DroneMissionAddSections[
+	SymbolAttr DroneMissionSymbolAttrI,
+	SymbolSec DroneMissionSymbolSecI[SymbolAttr, Ent],
+	U64ArrayAttr DroneMissionU64ArrayAttrI,
+	U64ArraySec DroneMissionU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+	DML DroneMissionEntityI[
+		SymbolAttr, SymbolSec,
+		U64ArrayAttr, U64ArraySec,
+		Ent,
+	],
+](dml DML, row DroneMission) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
+	symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
+	symbolSecAttr_Status.EndAttributeP()
+	symbolSec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	u64ArraySecAttr_Battery := u64ArraySec.BeginAttributeSingle(row.Battery)
+	u64ArraySecAttr_Battery.AddMembershipLowCardRefP(kindBattery)
+	u64ArraySecAttr_Battery.EndAttributeP()
+	u64ArraySec.EndSection()
+	return
+}
+
 // --- Composed-interface FillFromArrow helper (schema-agnostic). ---
 //
 // DroneMissionFillFromArrow walks the Arrow record row-by-row and appends

@@ -349,6 +349,65 @@ func CapabilityGrantBuildEntities[
 	return
 }
 
+// CapabilityGrantAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func CapabilityGrantAddSections[
+	StringArrayAttr CapabilityGrantStringArrayAttrI,
+	StringArraySec CapabilityGrantStringArraySecI[StringArrayAttr, Ent],
+	SymbolAttr CapabilityGrantSymbolAttrI,
+	SymbolSec CapabilityGrantSymbolSecI[SymbolAttr, Ent],
+	U32RangeAttr CapabilityGrantU32RangeAttrI,
+	U32RangeSec CapabilityGrantU32RangeSecI[U32RangeAttr, Ent],
+	BoolAttr CapabilityGrantBoolAttrI,
+	BoolSec CapabilityGrantBoolSecI[BoolAttr, Ent],
+	ForeignKeyAttr CapabilityGrantForeignKeyAttrI,
+	ForeignKeySec CapabilityGrantForeignKeySecI[ForeignKeyAttr, Ent],
+	Ent any,
+	DML CapabilityGrantEntityI[
+		StringArrayAttr, StringArraySec,
+		SymbolAttr, SymbolSec,
+		U32RangeAttr, U32RangeSec,
+		BoolAttr, BoolSec,
+		ForeignKeyAttr, ForeignKeySec,
+		Ent,
+	],
+](dml DML, row CapabilityGrant) (err error) {
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_Subject := stringArraySec.BeginAttributeSingle(row.Subject)
+	stringArraySecAttr_Subject.AddMembershipLowCardRefP(kindSubject)
+	stringArraySecAttr_Subject.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Capability := symbolSec.BeginAttribute(row.Capability)
+	symbolSecAttr_Capability.AddMembershipLowCardRefP(kindCapability)
+	symbolSecAttr_Capability.EndAttributeP()
+	symbolSec.EndSection()
+	// --- u32Range. ---
+	u32RangeSec := dml.GetSectionU32Range()
+	u32RangeSecAttr := u32RangeSec.BeginAttribute(row.ValidityBegin, row.ValidityEnd)
+	u32RangeSecAttr.AddMembershipLowCardRefP(kindValidityBegin)
+	u32RangeSecAttr.EndAttributeP()
+	u32RangeSec.EndSection()
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_Active := boolSec.BeginAttribute(row.Active)
+	boolSecAttr_Active.AddMembershipLowCardRefP(kindActive)
+	boolSecAttr_Active.EndAttributeP()
+	boolSec.EndSection()
+	// --- foreignKey. ---
+	foreignKeySec := dml.GetSectionForeignKey()
+	if row.GranterFact.Has {
+		foreignKeySecAttr_GranterFact := foreignKeySec.BeginAttribute(row.GranterFact.Val)
+		foreignKeySecAttr_GranterFact.AddMembershipLowCardRefP(kindGranterFact)
+		foreignKeySecAttr_GranterFact.EndAttributeP()
+	}
+	foreignKeySec.EndSection()
+	return
+}
+
 // --- Composed-interface FillFromArrow helper (schema-agnostic). ---
 //
 // CapabilityGrantFillFromArrow walks the Arrow record row-by-row and appends

@@ -42,37 +42,43 @@ func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI) (out []byte, err 
 	if wrapper == nil {
 		wrapper = NoOpWrapper{}
 	}
-	var sb strings.Builder
-	writeHeader(&sb, plan)
-	writeImports(&sb, plan, wrapper)
-	wrapper.KindVars(&sb, plan)
-	wrapper.Init(&sb, plan)
-	err = wrapper.BeforeCore(&sb, plan)
+	// The body is emitted before the imports so the import set can be gated
+	// on what the emitted code actually uses (the eb import varies by field
+	// shapes; predicating it on plan properties drifted once already).
+	var body strings.Builder
+	wrapper.KindVars(&body, plan)
+	wrapper.Init(&body, plan)
+	err = wrapper.BeforeCore(&body, plan)
 	if err != nil {
 		err = eb.Build().Errorf("wrapper BeforeCore: %w", err)
 		return
 	}
 
-	writeColumnsStruct(&sb, plan)
-	writeLenAndAppend(&sb, plan)
-	writeRowExtract(&sb, plan)
+	writeColumnsStruct(&body, plan)
+	writeLenAndAppend(&body, plan)
+	writeRowExtract(&body, plan)
 
-	err = writeBuildHelper(&sb, plan)
+	err = writeBuildHelper(&body, plan)
 	if err != nil {
 		err = eb.Build().Errorf("emit BuildEntities: %w", err)
 		return
 	}
-	err = writeFillHelper(&sb, plan)
+	err = writeFillHelper(&body, plan)
 	if err != nil {
 		err = eb.Build().Errorf("emit FillFromArrow: %w", err)
 		return
 	}
 
-	err = wrapper.AfterCore(&sb, plan)
+	err = wrapper.AfterCore(&body, plan)
 	if err != nil {
 		err = eb.Build().Errorf("wrapper AfterCore: %w", err)
 		return
 	}
+
+	var sb strings.Builder
+	writeHeader(&sb, plan)
+	writeImports(&sb, plan, wrapper, strings.Contains(body.String(), "eb.Build("))
+	sb.WriteString(body.String())
 
 	raw := []byte(sb.String())
 	out, err = format.Source(raw)
@@ -129,7 +135,7 @@ func writeHeader(sb *strings.Builder, plan *mappingplan.Plan) {
 	linef(sb, 0, "package %s\n", plan.PackageName)
 }
 
-func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEmitterI) {
+func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEmitterI, bodyUsesEB bool) {
 	needsRoaring := false
 	needsTime := false
 	needsMarshalltypes := false
@@ -157,8 +163,9 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	// (e.g. both may declare eb — it collapses to one, no duplicate-import
 	// error and no need for either to mirror the other's gating). Section-only
 	// imports (iter Seq accessors, the dml/ra runtimes) are gated on the plan
-	// actually having a tagged field; eb on it having a non-const field (the
-	// only thing that emits an occurrence / carrier-count check). array + eh
+	// actually having a tagged field; eb on the already-emitted body actually
+	// using it (the occurrence / carrier-count checks appear only for
+	// scalar-decoded shapes — an array-only kind emits none). array + eh
 	// are unconditional — plain reads use array, BuildEntities's commit wrap
 	// uses eh.
 	hasTagged := len(plan.Fields) > 0
@@ -182,7 +189,7 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	imps.group(thirdParty...)
 
 	boxer := []string{`"github.com/stergiotis/boxer/public/observability/eh"`}
-	if plan.HasNonConstField() {
+	if bodyUsesEB {
 		boxer = append(boxer, `"github.com/stergiotis/boxer/public/observability/eh/eb"`)
 	}
 	if hasTagged {
@@ -460,6 +467,10 @@ func writeBuildHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 		return
 	}
 	err = writeBuildEntitiesFunc(sb, plan, groups)
+	if err != nil {
+		return
+	}
+	err = writeAddSectionsFunc(sb, plan, groups)
 	return
 }
 
@@ -678,7 +689,7 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 	}
 
 	for _, g := range groups {
-		err = writeSectionDriver(sb, g)
+		err = writeSectionDriver(sb, g, soaValueSrc())
 		if err != nil {
 			return
 		}
@@ -695,14 +706,85 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 	return
 }
 
-func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup) (err error) {
+// writeAddSectionsFunc emits the entity-frame-free variant of
+// BuildEntities (ADR-0100 SD6): the same section drivers over one row
+// value, without BeginEntity / plain setters / CommitEntity. A composer
+// that owns the entity frame (e.g. a recordstore builder assembling one
+// entity from several components) calls it between BeginEntity and
+// CommitEntity; sections from several kinds stack on one row the way
+// marshallreflect's RowComposer stacks DTOs (ADR-0070).
+func writeAddSectionsFunc(sb *strings.Builder, plan *mappingplan.Plan, groups []goplan.SectionGroup) (err error) {
+	kind := plan.KindType
+
+	linef(sb, 0, "// %sAddSections contributes this kind's tagged sections to the OPEN", kind)
+	line(sb, 0, "// entity on dml — the BuildEntities body without the entity frame.")
+	line(sb, 0, "// The caller owns BeginEntity / plain setters / CommitEntity.")
+	linef(sb, 0, "func %sAddSections[", kind)
+	for _, g := range groups {
+		method := methodFor(g.Section)
+		linef(sb, 1, "%sAttr %s%sAttrI,", method, kind, method)
+		linef(sb, 1, "%sSec %s%sSecI[%sAttr, Ent],", method, kind, method, method)
+	}
+	line(sb, 1, "Ent any,")
+	linef(sb, 1, "DML %sEntityI[", kind)
+	for _, g := range groups {
+		method := methodFor(g.Section)
+		linef(sb, 2, "%sAttr, %sSec,", method, method)
+	}
+	line(sb, 2, "Ent,")
+	line(sb, 1, "],")
+	linef(sb, 0, "](dml DML, row %s) (err error) {", kind)
+
+	for _, g := range groups {
+		err = writeSectionDriver(sb, g, rowValueSrc())
+		if err != nil {
+			return
+		}
+	}
+
+	line(sb, 1, "return")
+	line(sb, 0, "}\n")
+	return
+}
+
+// valueSrc renders access to a kind's field values in emitted driver code.
+// BuildEntities reads the SoA columns at row i (`c.X[i]`, options split
+// into `c.XVal[i]` / `c.XHas[i]`); AddSections reads a single row value
+// (`row.X`, options nested as `row.X.Val` / `row.X.Has`).
+type valueSrc struct {
+	field     func(goField string) string
+	optionVal func(goField string) string
+	optionHas func(goField string) string
+	// rowErrCtx is the eb context fragment naming the row in error
+	// messages — `.Int("row", i)` for the SoA loop, empty for row shape.
+	rowErrCtx string
+}
+
+func soaValueSrc() valueSrc {
+	return valueSrc{
+		field:     func(goField string) string { return "c." + goField + "[i]" },
+		optionVal: func(goField string) string { return "c." + goField + "Val[i]" },
+		optionHas: func(goField string) string { return "c." + goField + "Has[i]" },
+		rowErrCtx: `.Int("row", i)`,
+	}
+}
+
+func rowValueSrc() valueSrc {
+	return valueSrc{
+		field:     func(goField string) string { return "row." + goField },
+		optionVal: func(goField string) string { return "row." + goField + ".Val" },
+		optionHas: func(goField string) string { return "row." + goField + ".Has" },
+	}
+}
+
+func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup, src valueSrc) (err error) {
 	method := methodFor(g.Section)
 	secVar := lowerFirst(method) + "Sec"
 	linef(sb, 2, "// --- %s. ---", g.Section)
 	linef(sb, 2, "%s := dml.GetSection%s()", secVar, method)
 
 	if len(g.SubColumns) > 1 {
-		err = writeMultiSubColumnDriver(sb, g, secVar)
+		err = writeMultiSubColumnDriver(sb, g, secVar, src)
 		if err != nil {
 			return
 		}
@@ -710,7 +792,7 @@ func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup) (err error) 
 		return
 	}
 	for _, f := range g.SubColumns[0].Fields {
-		err = writeFieldDriver(sb, f, secVar)
+		err = writeFieldDriver(sb, f, secVar, src)
 		if err != nil {
 			return
 		}
@@ -719,7 +801,7 @@ func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup) (err error) 
 	return
 }
 
-func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVar string) (err error) {
+func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVar string, src valueSrc) (err error) {
 	if len(g.Memberships) != 1 {
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
@@ -727,11 +809,11 @@ func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVa
 	args := make([]string, 0, len(g.SubColumns))
 	for _, sc := range g.SubColumns {
 		f := sc.Fields[0]
-		args = append(args, fmt.Sprintf("c.%s[i]", f.GoFieldName))
+		args = append(args, src.field(f.GoFieldName))
 	}
 	memb := g.Memberships[0]
 	linef(sb, 2, "%sAttr := %s.BeginAttribute(%s)", secVar, secVar, strings.Join(args, ", "))
-	writeMembershipAdd(sb, "\t\t", secVar+"Attr", memb, "")
+	writeMembershipAdd(sb, "\t\t", secVar+"Attr", memb, "", src)
 	linef(sb, 2, "%sAttr.EndAttributeP()", secVar)
 	return
 }
@@ -743,16 +825,16 @@ func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVa
 // membership data from the sibling carrier column. carrierIdx is "" for a
 // scalar carrier (`c.<C>[i]`) and the explode loop variable (e.g. "k") for a
 // slice carrier paired element-wise with an exploded value (`c.<C>[i][k]`).
-func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingplan.TaggedField, carrierIdx string) {
+func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingplan.TaggedField, carrierIdx string, src valueSrc) {
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
 	if ch.UsesCarrier() {
 		// Cut-2: per-row membership data from the sibling carrier column.
 		// Mixed channels pass (value field Id/Name, Params); parametrized
 		// channels pass (Params) only. The method suffix selects the channel.
-		carrier := fmt.Sprintf("c.%s[i]", f.CarrierField)
+		carrier := src.field(f.CarrierField)
 		if carrierIdx != "" {
-			carrier = fmt.Sprintf("c.%s[i][%s]", f.CarrierField, carrierIdx)
+			carrier = fmt.Sprintf("%s[%s]", src.field(f.CarrierField), carrierIdx)
 		}
 		if vf := ch.CarrierValueField(); vf != "" {
 			linef(sb, 0, "%s%s.%s(%s.%s, %s.Params)", indent, attrVar, method, carrier, vf, carrier)
@@ -772,7 +854,7 @@ func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingpl
 // field of a single-sub-column section. Flag-driven; never inspects
 // section name. Const fields (IsConst) emit a literal-valued attribute
 // per row instead of reading from a Go-side slot.
-func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar string) (err error) {
+func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar string, src valueSrc) (err error) {
 	tag := f.GoFieldName
 	if tag == "" {
 		tag = mappingplan.UpperFirst(f.LWMembership) // const fields have no Go name
@@ -782,31 +864,31 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 
 	switch shape {
 	case goplan.ShapeScalarBegin:
-		valExpr := scalarValueExpr(f)
+		valExpr := scalarValueExpr(f, src)
 		if f.IsOption {
-			linef(sb, 2, "if c.%sHas[i] {", f.GoFieldName)
+			linef(sb, 2, "if %s {", src.optionHas(f.GoFieldName))
 			linef(sb, 3, "%s := %s.BeginAttribute(%s)", attrVar, secVar, valExpr)
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 			return
 		}
 		linef(sb, 2, "%s := %s.BeginAttribute(%s)", attrVar, secVar, valExpr)
-		writeMembershipAdd(sb, "\t\t", attrVar, f, "")
+		writeMembershipAdd(sb, "\t\t", attrVar, f, "", src)
 		linef(sb, 2, "%s.EndAttributeP()", attrVar)
 
 	case goplan.ShapeScalarBeginSingle:
-		valExpr := scalarValueExpr(f)
+		valExpr := scalarValueExpr(f, src)
 		if f.IsOption {
-			linef(sb, 2, "if c.%sHas[i] {", f.GoFieldName)
+			linef(sb, 2, "if %s {", src.optionHas(f.GoFieldName))
 			linef(sb, 3, "%s := %s.BeginAttributeSingle(%s)", attrVar, secVar, valExpr)
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 			return
 		}
 		linef(sb, 2, "%s := %s.BeginAttributeSingle(%s)", attrVar, secVar, valExpr)
-		writeMembershipAdd(sb, "\t\t", attrVar, f, "")
+		writeMembershipAdd(sb, "\t\t", attrVar, f, "", src)
 		linef(sb, 2, "%s.EndAttributeP()", attrVar)
 
 	case goplan.ShapeContainer:
@@ -815,22 +897,22 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 		// carrier of an empty container is therefore not emitted).
 		switch {
 		case f.IsRoaring():
-			linef(sb, 2, "if c.%s[i] != nil && !c.%s[i].IsEmpty() {", f.GoFieldName, f.GoFieldName)
+			linef(sb, 2, "if %s != nil && !%s.IsEmpty() {", src.field(f.GoFieldName), src.field(f.GoFieldName))
 			linef(sb, 3, "%s := %s.BeginAttribute()", attrVar, secVar)
-			linef(sb, 3, "it := c.%s[i].Iterator()", f.GoFieldName)
+			linef(sb, 3, "it := %s.Iterator()", src.field(f.GoFieldName))
 			line(sb, 3, "for it.HasNext() {")
 			linef(sb, 4, "%s.AddToContainerP(it.Next())", attrVar)
 			line(sb, 3, "}")
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		case f.IsSlice():
-			linef(sb, 2, "if len(c.%s[i]) > 0 {", f.GoFieldName)
+			linef(sb, 2, "if len(%s) > 0 {", src.field(f.GoFieldName))
 			linef(sb, 3, "%s := %s.BeginAttribute()", attrVar, secVar)
-			linef(sb, 3, "for _, v := range c.%s[i] {", f.GoFieldName)
+			linef(sb, 3, "for _, v := range %s {", src.field(f.GoFieldName))
 			linef(sb, 4, "%s.AddToContainerP(%s)", attrVar, sliceElemExpr(f, "v"))
 			line(sb, 3, "}")
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		default:
@@ -844,30 +926,30 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 		}
 		switch {
 		case f.IsRoaring():
-			linef(sb, 2, "if c.%s[i] != nil {", f.GoFieldName)
-			linef(sb, 3, "it := c.%s[i].Iterator()", f.GoFieldName)
+			linef(sb, 2, "if %s != nil {", src.field(f.GoFieldName))
+			linef(sb, 3, "it := %s.Iterator()", src.field(f.GoFieldName))
 			line(sb, 3, "for it.HasNext() {")
 			linef(sb, 4, "%s := %s.%s(it.Next())", attrVar, secVar, beginMethod)
-			writeMembershipAdd(sb, "\t\t\t\t", attrVar, f, "")
+			writeMembershipAdd(sb, "\t\t\t\t", attrVar, f, "", src)
 			linef(sb, 4, "%s.EndAttributeP()", attrVar)
 			line(sb, 3, "}")
 			line(sb, 2, "}")
 		case f.IsSlice() && f.CarrierField != "":
 			// Exploded value with a slice carrier: one attribute per element,
 			// each pairing value[k] with carrier[k]. Lengths must agree.
-			linef(sb, 2, "if len(c.%s[i]) != len(c.%s[i]) {", f.CarrierField, f.GoFieldName)
-			linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"explode value and carrier slices have different lengths\")", f.GoFieldName)
+			linef(sb, 2, "if len(%s) != len(%s) {", src.field(f.CarrierField), src.field(f.GoFieldName))
+			linef(sb, 3, "err = eb.Build()%s.Str(\"field\", %q).Errorf(\"explode value and carrier slices have different lengths\")", src.rowErrCtx, f.GoFieldName)
 			line(sb, 3, "return")
 			line(sb, 2, "}")
-			linef(sb, 2, "for k, v := range c.%s[i] {", f.GoFieldName)
+			linef(sb, 2, "for k, v := range %s {", src.field(f.GoFieldName))
 			linef(sb, 3, "%s := %s.%s(%s)", attrVar, secVar, beginMethod, sliceElemExpr(f, "v"))
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "k")
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "k", src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		case f.IsSlice():
-			linef(sb, 2, "for _, v := range c.%s[i] {", f.GoFieldName)
+			linef(sb, 2, "for _, v := range %s {", src.field(f.GoFieldName))
 			linef(sb, 3, "%s := %s.%s(%s)", attrVar, secVar, beginMethod, sliceElemExpr(f, "v"))
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "")
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		default:
@@ -878,19 +960,17 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 }
 
 // scalarValueExpr renders the BeginAttribute(value) argument for a
-// scalar / Option field at row i. For Option fields, the Has guard is
-// emitted separately; this returns the raw value access. For const
-// fields, returns the constant's Go literal (always a quoted string).
-func scalarValueExpr(f mappingplan.TaggedField) string {
+// scalar / Option field. For Option fields, the Has guard is emitted
+// separately; this returns the raw value access. For const fields,
+// returns the constant's Go literal (always a quoted string).
+func scalarValueExpr(f mappingplan.TaggedField, src valueSrc) string {
 	if f.IsConst {
 		return fmt.Sprintf("%q", f.ConstValue)
 	}
 	if f.IsOption {
-		base := fmt.Sprintf("c.%sVal[i]", f.GoFieldName)
-		return blobSliceMaybe(f, base)
+		return blobSliceMaybe(f, src.optionVal(f.GoFieldName))
 	}
-	base := fmt.Sprintf("c.%s[i]", f.GoFieldName)
-	return blobSliceMaybe(f, base)
+	return blobSliceMaybe(f, src.field(f.GoFieldName))
 }
 
 // sliceElemExpr renders the per-element expression inside an explode

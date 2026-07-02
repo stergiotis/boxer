@@ -267,6 +267,68 @@ func DroneEntityBuildEntities[
 	return
 }
 
+// DroneEntityAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func DroneEntityAddSections[
+	SymbolAttr DroneEntitySymbolAttrI,
+	SymbolSec DroneEntitySymbolSecI[SymbolAttr, Ent],
+	U64ArrayAttr DroneEntityU64ArrayAttrI,
+	U64ArraySec DroneEntityU64ArraySecI[U64ArrayAttr, Ent],
+	SymbolArrayAttr DroneEntitySymbolArrayAttrI,
+	SymbolArraySec DroneEntitySymbolArraySecI[SymbolArrayAttr, Ent],
+	GeoPointAttr DroneEntityGeoPointAttrI,
+	GeoPointSec DroneEntityGeoPointSecI[GeoPointAttr, Ent],
+	TimeRangeAttr DroneEntityTimeRangeAttrI,
+	TimeRangeSec DroneEntityTimeRangeSecI[TimeRangeAttr, Ent],
+	Ent any,
+	DML DroneEntityEntityI[
+		SymbolAttr, SymbolSec,
+		U64ArrayAttr, U64ArraySec,
+		SymbolArrayAttr, SymbolArraySec,
+		GeoPointAttr, GeoPointSec,
+		TimeRangeAttr, TimeRangeSec,
+		Ent,
+	],
+](dml DML, row DroneEntity) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
+	symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
+	symbolSecAttr_Status.EndAttributeP()
+	symbolSec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	u64ArraySecAttr_Battery := u64ArraySec.BeginAttributeSingle(row.Battery)
+	u64ArraySecAttr_Battery.AddMembershipLowCardRefP(kindBattery)
+	u64ArraySecAttr_Battery.EndAttributeP()
+	u64ArraySec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	if len(row.Tags) > 0 {
+		symbolArraySecAttr_Tags := symbolArraySec.BeginAttribute()
+		for _, v := range row.Tags {
+			symbolArraySecAttr_Tags.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindTags)
+		symbolArraySecAttr_Tags.EndAttributeP()
+	}
+	symbolArraySec.EndSection()
+	// --- geoPoint. ---
+	geoPointSec := dml.GetSectionGeoPoint()
+	geoPointSecAttr := geoPointSec.BeginAttribute(row.Lat, row.Lng, row.Cell)
+	geoPointSecAttr.AddMembershipLowCardRefP(kindLat)
+	geoPointSecAttr.EndAttributeP()
+	geoPointSec.EndSection()
+	// --- timeRange. ---
+	timeRangeSec := dml.GetSectionTimeRange()
+	timeRangeSecAttr := timeRangeSec.BeginAttribute(row.WindowBegin, row.WindowEnd)
+	timeRangeSecAttr.AddMembershipLowCardRefP(kindWindowBegin)
+	timeRangeSecAttr.EndAttributeP()
+	timeRangeSec.EndSection()
+	return
+}
+
 // --- Composed-interface FillFromArrow helper (schema-agnostic). ---
 //
 // DroneEntityFillFromArrow walks the Arrow record row-by-row and appends

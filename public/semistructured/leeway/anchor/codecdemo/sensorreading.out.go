@@ -132,6 +132,27 @@ func SensorReadingBuildEntities[
 	return
 }
 
+// SensorReadingAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func SensorReadingAddSections[
+	SymbolAttr SensorReadingSymbolAttrI,
+	SymbolSec SensorReadingSymbolSecI[SymbolAttr, Ent],
+	Ent any,
+	DML SensorReadingEntityI[
+		SymbolAttr, SymbolSec,
+		Ent,
+	],
+](dml DML, row SensorReading) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Reading := symbolSec.BeginAttribute(row.Reading)
+	symbolSecAttr_Reading.AddMembershipMixedLowCardRefP(row.ReadingC.Id, row.ReadingC.Params)
+	symbolSecAttr_Reading.EndAttributeP()
+	symbolSec.EndSection()
+	return
+}
+
 // --- Composed-interface FillFromArrow helper (schema-agnostic). ---
 //
 // SensorReadingFillFromArrow walks the Arrow record row-by-row and appends

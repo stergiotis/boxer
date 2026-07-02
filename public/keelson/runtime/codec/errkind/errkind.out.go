@@ -405,6 +405,112 @@ func ErrorBuildEntities[
 	return
 }
 
+// ErrorAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func ErrorAddSections[
+	StringArrayAttr ErrorStringArrayAttrI,
+	StringArraySec ErrorStringArraySecI[StringArrayAttr, Ent],
+	SymbolArrayAttr ErrorSymbolArrayAttrI,
+	SymbolArraySec ErrorSymbolArraySecI[SymbolArrayAttr, Ent],
+	U32ArrayAttr ErrorU32ArrayAttrI,
+	U32ArraySec ErrorU32ArraySecI[U32ArrayAttr, Ent],
+	U64ArrayAttr ErrorU64ArrayAttrI,
+	U64ArraySec ErrorU64ArraySecI[U64ArrayAttr, Ent],
+	BlobArrayAttr ErrorBlobArrayAttrI,
+	BlobArraySec ErrorBlobArraySecI[BlobArrayAttr, Ent],
+	Ent any,
+	DML ErrorEntityI[
+		StringArrayAttr, StringArraySec,
+		SymbolArrayAttr, SymbolArraySec,
+		U32ArrayAttr, U32ArraySec,
+		U64ArrayAttr, U64ArraySec,
+		BlobArrayAttr, BlobArraySec,
+		Ent,
+	],
+](dml DML, row Error) (err error) {
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	if len(row.Messages) > 0 {
+		stringArraySecAttr_Messages := stringArraySec.BeginAttribute()
+		for _, v := range row.Messages {
+			stringArraySecAttr_Messages.AddToContainerP(v)
+		}
+		stringArraySecAttr_Messages.AddMembershipLowCardRefP(kindMessages)
+		stringArraySecAttr_Messages.EndAttributeP()
+	}
+	if len(row.Sources) > 0 {
+		stringArraySecAttr_Sources := stringArraySec.BeginAttribute()
+		for _, v := range row.Sources {
+			stringArraySecAttr_Sources.AddToContainerP(v)
+		}
+		stringArraySecAttr_Sources.AddMembershipLowCardRefP(kindSources)
+		stringArraySecAttr_Sources.EndAttributeP()
+	}
+	stringArraySec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	if len(row.Funcs) > 0 {
+		symbolArraySecAttr_Funcs := symbolArraySec.BeginAttribute()
+		for _, v := range row.Funcs {
+			symbolArraySecAttr_Funcs.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Funcs.AddMembershipLowCardRefP(kindFuncs)
+		symbolArraySecAttr_Funcs.EndAttributeP()
+	}
+	if len(row.StreamNames) > 0 {
+		symbolArraySecAttr_StreamNames := symbolArraySec.BeginAttribute()
+		for _, v := range row.StreamNames {
+			symbolArraySecAttr_StreamNames.AddToContainerP(v)
+		}
+		symbolArraySecAttr_StreamNames.AddMembershipLowCardRefP(kindStreamNames)
+		symbolArraySecAttr_StreamNames.EndAttributeP()
+	}
+	symbolArraySec.EndSection()
+	// --- u32Array. ---
+	u32ArraySec := dml.GetSectionU32Array()
+	if len(row.Lines) > 0 {
+		u32ArraySecAttr_Lines := u32ArraySec.BeginAttribute()
+		for _, v := range row.Lines {
+			u32ArraySecAttr_Lines.AddToContainerP(v)
+		}
+		u32ArraySecAttr_Lines.AddMembershipLowCardRefP(kindLines)
+		u32ArraySecAttr_Lines.EndAttributeP()
+	}
+	u32ArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	if len(row.FactIds) > 0 {
+		u64ArraySecAttr_FactIds := u64ArraySec.BeginAttribute()
+		for _, v := range row.FactIds {
+			u64ArraySecAttr_FactIds.AddToContainerP(v)
+		}
+		u64ArraySecAttr_FactIds.AddMembershipLowCardRefP(kindFactIds)
+		u64ArraySecAttr_FactIds.EndAttributeP()
+	}
+	if len(row.ParentIds) > 0 {
+		u64ArraySecAttr_ParentIds := u64ArraySec.BeginAttribute()
+		for _, v := range row.ParentIds {
+			u64ArraySecAttr_ParentIds.AddToContainerP(v)
+		}
+		u64ArraySecAttr_ParentIds.AddMembershipLowCardRefP(kindParentIds)
+		u64ArraySecAttr_ParentIds.EndAttributeP()
+	}
+	u64ArraySec.EndSection()
+	// --- blobArray. ---
+	blobArraySec := dml.GetSectionBlobArray()
+	if len(row.Data) > 0 {
+		blobArraySecAttr_Data := blobArraySec.BeginAttribute()
+		for _, v := range row.Data {
+			blobArraySecAttr_Data.AddToContainerP(v)
+		}
+		blobArraySecAttr_Data.AddMembershipLowCardRefP(kindData)
+		blobArraySecAttr_Data.EndAttributeP()
+	}
+	blobArraySec.EndSection()
+	return
+}
+
 // --- Composed-interface FillFromArrow helper (schema-agnostic). ---
 //
 // ErrorFillFromArrow walks the Arrow record row-by-row and appends

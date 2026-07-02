@@ -601,6 +601,147 @@ func M1SampleBuildEntities[
 	return
 }
 
+// M1SampleAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func M1SampleAddSections[
+	SymbolAttr M1SampleSymbolAttrI,
+	SymbolSec M1SampleSymbolSecI[SymbolAttr, Ent],
+	U8ArrayAttr M1SampleU8ArrayAttrI,
+	U8ArraySec M1SampleU8ArraySecI[U8ArrayAttr, Ent],
+	U16ArrayAttr M1SampleU16ArrayAttrI,
+	U16ArraySec M1SampleU16ArraySecI[U16ArrayAttr, Ent],
+	U32ArrayAttr M1SampleU32ArrayAttrI,
+	U32ArraySec M1SampleU32ArraySecI[U32ArrayAttr, Ent],
+	U64ArrayAttr M1SampleU64ArrayAttrI,
+	U64ArraySec M1SampleU64ArraySecI[U64ArrayAttr, Ent],
+	F32ArrayAttr M1SampleF32ArrayAttrI,
+	F32ArraySec M1SampleF32ArraySecI[F32ArrayAttr, Ent],
+	F64ArrayAttr M1SampleF64ArrayAttrI,
+	F64ArraySec M1SampleF64ArraySecI[F64ArrayAttr, Ent],
+	BoolAttr M1SampleBoolAttrI,
+	BoolSec M1SampleBoolSecI[BoolAttr, Ent],
+	BlobArrayAttr M1SampleBlobArrayAttrI,
+	BlobArraySec M1SampleBlobArraySecI[BlobArrayAttr, Ent],
+	TimeArrayAttr M1SampleTimeArrayAttrI,
+	TimeArraySec M1SampleTimeArraySecI[TimeArrayAttr, Ent],
+	StringArrayAttr M1SampleStringArrayAttrI,
+	StringArraySec M1SampleStringArraySecI[StringArrayAttr, Ent],
+	TextArrayAttr M1SampleTextArrayAttrI,
+	TextArraySec M1SampleTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+	DML M1SampleEntityI[
+		SymbolAttr, SymbolSec,
+		U8ArrayAttr, U8ArraySec,
+		U16ArrayAttr, U16ArraySec,
+		U32ArrayAttr, U32ArraySec,
+		U64ArrayAttr, U64ArraySec,
+		F32ArrayAttr, F32ArraySec,
+		F64ArrayAttr, F64ArraySec,
+		BoolAttr, BoolSec,
+		BlobArrayAttr, BlobArraySec,
+		TimeArrayAttr, TimeArraySec,
+		StringArrayAttr, StringArraySec,
+		TextArrayAttr, TextArraySec,
+		Ent,
+	],
+](dml DML, row M1Sample) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Source := symbolSec.BeginAttribute(row.Source)
+	symbolSecAttr_Source.AddMembershipLowCardRefP(kindSource)
+	symbolSecAttr_Source.EndAttributeP()
+	symbolSec.EndSection()
+	// --- u8Array. ---
+	u8ArraySec := dml.GetSectionU8Array()
+	u8ArraySecAttr_Severity := u8ArraySec.BeginAttributeSingle(row.Severity)
+	u8ArraySecAttr_Severity.AddMembershipLowCardRefP(kindSeverity)
+	u8ArraySecAttr_Severity.EndAttributeP()
+	u8ArraySec.EndSection()
+	// --- u16Array. ---
+	u16ArraySec := dml.GetSectionU16Array()
+	u16ArraySecAttr_MajorVer := u16ArraySec.BeginAttributeSingle(row.MajorVer)
+	u16ArraySecAttr_MajorVer.AddMembershipLowCardRefP(kindMajorVer)
+	u16ArraySecAttr_MajorVer.EndAttributeP()
+	u16ArraySec.EndSection()
+	// --- u32Array. ---
+	u32ArraySec := dml.GetSectionU32Array()
+	u32ArraySecAttr_Sequence := u32ArraySec.BeginAttributeSingle(row.Sequence)
+	u32ArraySecAttr_Sequence.AddMembershipLowCardRefP(kindSequence)
+	u32ArraySecAttr_Sequence.EndAttributeP()
+	if row.CapBits != nil && !row.CapBits.IsEmpty() {
+		u32ArraySecAttr_CapBits := u32ArraySec.BeginAttribute()
+		it := row.CapBits.Iterator()
+		for it.HasNext() {
+			u32ArraySecAttr_CapBits.AddToContainerP(it.Next())
+		}
+		u32ArraySecAttr_CapBits.AddMembershipLowCardRefP(kindCapBits)
+		u32ArraySecAttr_CapBits.EndAttributeP()
+	}
+	u32ArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	u64ArraySecAttr_LatencyNanos := u64ArraySec.BeginAttributeSingle(row.LatencyNanos)
+	u64ArraySecAttr_LatencyNanos.AddMembershipLowCardRefP(kindLatencyNanos)
+	u64ArraySecAttr_LatencyNanos.EndAttributeP()
+	u64ArraySec.EndSection()
+	// --- f32Array. ---
+	f32ArraySec := dml.GetSectionF32Array()
+	f32ArraySecAttr_CpuPct := f32ArraySec.BeginAttributeSingle(row.CpuPct)
+	f32ArraySecAttr_CpuPct.AddMembershipLowCardRefP(kindCpuPct)
+	f32ArraySecAttr_CpuPct.EndAttributeP()
+	f32ArraySec.EndSection()
+	// --- f64Array. ---
+	f64ArraySec := dml.GetSectionF64Array()
+	f64ArraySecAttr_LoadAvg1 := f64ArraySec.BeginAttributeSingle(row.LoadAvg1)
+	f64ArraySecAttr_LoadAvg1.AddMembershipLowCardRefP(kindLoadAvg1)
+	f64ArraySecAttr_LoadAvg1.EndAttributeP()
+	f64ArraySec.EndSection()
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_Healthy := boolSec.BeginAttribute(row.Healthy)
+	boolSecAttr_Healthy.AddMembershipLowCardRefP(kindHealthy)
+	boolSecAttr_Healthy.EndAttributeP()
+	boolSec.EndSection()
+	// --- blobArray. ---
+	blobArraySec := dml.GetSectionBlobArray()
+	blobArraySecAttr_PeerV4 := blobArraySec.BeginAttributeSingle(row.PeerV4[:])
+	blobArraySecAttr_PeerV4.AddMembershipLowCardRefP(kindPeerV4)
+	blobArraySecAttr_PeerV4.EndAttributeP()
+	blobArraySecAttr_PeerV6 := blobArraySec.BeginAttributeSingle(row.PeerV6[:])
+	blobArraySecAttr_PeerV6.AddMembershipLowCardRefP(kindPeerV6)
+	blobArraySecAttr_PeerV6.EndAttributeP()
+	blobArraySec.EndSection()
+	// --- timeArray. ---
+	timeArraySec := dml.GetSectionTimeArray()
+	if row.LastSuccess.Has {
+		timeArraySecAttr_LastSuccess := timeArraySec.BeginAttributeSingle(row.LastSuccess.Val)
+		timeArraySecAttr_LastSuccess.AddMembershipLowCardRefP(kindLastSuccess)
+		timeArraySecAttr_LastSuccess.EndAttributeP()
+	}
+	timeArraySec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	if row.OperatorName.Has {
+		stringArraySecAttr_OperatorName := stringArraySec.BeginAttributeSingle(row.OperatorName.Val)
+		stringArraySecAttr_OperatorName.AddMembershipLowCardRefP(kindOperatorName)
+		stringArraySecAttr_OperatorName.EndAttributeP()
+	}
+	stringArraySec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	if len(row.Tags) > 0 {
+		textArraySecAttr_Tags := textArraySec.BeginAttribute()
+		for _, v := range row.Tags {
+			textArraySecAttr_Tags.AddToContainerP(v)
+		}
+		textArraySecAttr_Tags.AddMembershipLowCardRefP(kindTags)
+		textArraySecAttr_Tags.EndAttributeP()
+	}
+	textArraySec.EndSection()
+	return
+}
+
 // --- Composed-interface FillFromArrow helper (schema-agnostic). ---
 //
 // M1SampleFillFromArrow walks the Arrow record row-by-row and appends
