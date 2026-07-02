@@ -98,18 +98,25 @@ func hashFromHex(s string) (h types.PatchHash, err error) {
 	return
 }
 
-// nextTs hands out the key's next synthetic order timestamp, deriving
-// the sequence from the stored row count on first use after Open.
+// nextTs hands out the key's next synthetic order timestamp. On first
+// use after Open the sequence derives from the newest stored row's ts —
+// never from a row count: failed operations burn sequence numbers
+// without leaving rows, and a count-derived restart would reuse a taken
+// ts, making the Replay order of the colliding rows ambiguous.
 func (inst *Storage) nextTs(ctx context.Context, key string) (ts time.Time, err error) {
 	n, ok := inst.seqs[key]
 	if !ok {
-		var rows []*PushoutEntity
-		rows, err = inst.st.Replay(ctx, key, beginning)
+		var ent *PushoutEntity
+		var found bool
+		ent, found, err = inst.st.Latest(ctx, key)
 		if err != nil {
 			err = eh.Errorf("derive sequence for %q: %w", key, err)
 			return
 		}
-		n = uint64(len(rows)) + 1
+		n = 1
+		if found {
+			n = uint64(ent.Ts.UnixNano()) + 1
+		}
 	}
 	inst.seqs[key] = n + 1
 	ts = time.Unix(0, int64(n)).UTC()
@@ -142,10 +149,10 @@ func (inst *Storage) PutEnvelope(ctx context.Context, h types.PatchHash, framed 
 	if found {
 		return
 	}
-	ts, err := inst.nextTs(ctx, key)
-	if err != nil {
-		return
-	}
+	// Envelopes are immutable single-row keys: the row always carries
+	// sequence 1 (the Latest check above just said the key is empty), so
+	// no per-key sequence derivation — and no second query — is needed.
+	ts := time.Unix(0, 1).UTC()
 	b := inst.st.Begin(key, ts)
 	b.AddEnvelope(Envelope{ID: key, Framed: framed})
 	err = b.Commit()
@@ -229,6 +236,14 @@ func (inst *Storage) AppendApplied(ctx context.Context, h types.PatchHash) (err 
 func (inst *Storage) ReplaceApplied(ctx context.Context, hs []types.PatchHash) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	// Multi-commit operation: an error between the tombstone and the last
+	// entry leaves earlier rows buffered — flush()'s own discard only
+	// covers flush failures, so drop them here (idempotent with it).
+	defer func() {
+		if err != nil {
+			inst.st.DiscardPending()
+		}
+	}()
 	ts, err := inst.nextTs(ctx, logKey)
 	if err != nil {
 		return
@@ -285,8 +300,9 @@ func (inst *Storage) LoadApplied(ctx context.Context) (hs []types.PatchHash, err
 		}
 		hs = append(hs, h)
 	}
-	// The row count is the sequence high-water mark — refresh for free.
-	inst.seqs[logKey] = uint64(len(rows)) + 1
+	// Deliberately no sequence refresh here: the row count is NOT the
+	// high-water mark once a failed operation has burned a sequence
+	// number (nextTs derives from the newest row's ts instead).
 	return
 }
 
@@ -325,8 +341,10 @@ func (inst *Storage) LoadSnapshot(ctx context.Context) (snap repo.Snapshot, ok b
 		err = eh.Errorf("load snapshot: %w", err)
 		return
 	}
-	// A snapshot with no applied prefix and an empty graggle would read
-	// back as component-absent; the engine always carries graggle bytes.
+	// Graggle is a scalar blob and writes unconditionally (even empty),
+	// so a saved snapshot always reads back component-present; only the
+	// Applied container is elided when empty (nil round-trips as nil).
+	// The Has check stays as a defensive guard.
 	if !found || !ent.Snapshot.Has {
 		return
 	}
