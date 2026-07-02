@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
@@ -78,7 +79,15 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		err = eh.Errorf("Key column Go type %q not supported (uint64 and string are; ADR-0100 SD2)", key.goType)
 		return
 	}
+	if order.goType != "time.Time" {
+		err = eh.Errorf("Order column Go type %q not supported — Replay and the decode assume the z64 timestamp lane (DateTime64(9)); declare the EntityTimestamp column as ctabb.Z64", order.goType)
+		return
+	}
 	stateView := lifecycle.physical != ""
+	if stateView && lifecycle.goType != "uint8" {
+		err = eh.Errorf("Lifecycle column Go type %q not supported — the state view assumes a u8 live/tombstone marker (ctabb.U8)", lifecycle.goType)
+		return
+	}
 
 	comps := make([]storeComponent, 0, len(plans))
 	for _, plan := range plans {
@@ -89,13 +98,30 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		}
 		comps = append(comps, sc)
 	}
+	// Components must own disjoint sections: membership ids are assigned
+	// per kind (each numbering from 1), so two kinds writing the same
+	// section would alias each other's memberships — the presence-gated
+	// decode and the baked Scan filters would silently cross-read them.
+	sectionOwner := map[string]string{}
+	for _, sc := range comps {
+		for _, g := range sc.groups {
+			if owner, taken := sectionOwner[g.Section]; taken && owner != sc.Kind {
+				err = eh.Errorf("components %s and %s both bind section %q — components must own disjoint sections (ADR-0100 SD6)", owner, sc.Kind, g.Section)
+				return
+			}
+			sectionOwner[g.Section] = sc.Kind
+		}
+	}
 
 	var sb strings.Builder
 	inst.emitStoreHeader(&sb, key, order, lifecycle, stateView)
 	inst.emitEntityBag(&sb, comps, stateView)
 	inst.emitStoreType(&sb)
 	inst.emitBuilder(&sb, comps, stateView)
-	inst.emitIngest(&sb, comps)
+	err = inst.emitIngest(&sb, comps)
+	if err != nil {
+		return
+	}
 	inst.emitFlush(&sb)
 	inst.emitCacheVerbs(&sb)
 	inst.emitQueryVerbs(&sb, comps, stateView)
@@ -113,8 +139,22 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 }
 
 // envelope finds the physical (encoded) names of the role-bearing plain
-// columns by walking the Plan⋈IR join readback maintains.
+// columns by walking the Plan⋈IR join readback maintains. Each role binds
+// at most once — a second matching column is a schema error, not a silent
+// override (ADR-0100 SD2; explicit role configuration stays deferred).
 func (inst Input) envelope(info *readback.InformationRetrieval, conv common.NamingConventionI) (key, order, lifecycle envelopeCol, err error) {
+	bind := func(dst *envelopeCol, role string, physical string, ct canonicaltypes.PrimitiveAstNodeI) error {
+		if dst.physical != "" {
+			return eh.Errorf("plain columns %s and %s both carry the %s role — roles must be unambiguous (ADR-0100 SD2)", dst.physical, physical, role)
+		}
+		dst.physical = physical
+		gt, _, _, derr := mappingplan.DeriveGoShape(ct)
+		if derr != nil {
+			return eh.Errorf("derive %s column Go type: %w", role, derr)
+		}
+		dst.goType = gt
+		return nil
+	}
 	for cr := range info.IterateAll() {
 		var itemType common.PlainItemTypeE
 		itemType, err = conv.ExtractPlainItemType(cr.PhysicalColumn)
@@ -125,16 +165,14 @@ func (inst Input) envelope(info *readback.InformationRetrieval, conv common.Nami
 		}
 		switch itemType {
 		case common.PlainItemTypeEntityId:
-			key.physical = cr.PhysicalColumn.String()
-			key.goType, _, _, err = mappingplan.DeriveGoShape(cr.CanonicalType)
-			if err != nil {
-				err = eh.Errorf("derive Key column Go type: %w", err)
-				return
-			}
+			err = bind(&key, "Key", cr.PhysicalColumn.String(), cr.CanonicalType)
 		case common.PlainItemTypeEntityTimestamp:
-			order.physical = cr.PhysicalColumn.String()
+			err = bind(&order, "Order", cr.PhysicalColumn.String(), cr.CanonicalType)
 		case common.PlainItemTypeEntityLifecycle:
-			lifecycle.physical = cr.PhysicalColumn.String()
+			err = bind(&lifecycle, "Lifecycle", cr.PhysicalColumn.String(), cr.CanonicalType)
+		}
+		if err != nil {
+			return
 		}
 	}
 	return
@@ -398,14 +436,29 @@ func (inst Input) emitBuilder(sb *strings.Builder, comps []storeComponent, state
 	p("")
 }
 
-func (inst Input) emitIngest(sb *strings.Builder, comps []storeComponent) {
+// emitIngest renders the per-kind whole-entity ingest verbs. A kind that
+// does not bind the plain id column gets no Ingest verb (the Begin
+// builder with an explicit key still ingests it); a kind whose id field
+// type disagrees with the Key column is a generation error.
+func (inst Input) emitIngest(sb *strings.Builder, comps []storeComponent) (err error) {
 	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
 	for _, c := range comps {
+		idCol := goplan.FindPlainCol(c.plan, "id")
+		if idCol == nil {
+			p("// Ingest%s is not emitted: %s does not bind the plain id column;", c.Kind, c.Kind)
+			p("// ingest rows through Begin(key, ts).Add%s(row).Commit() instead.", c.Kind)
+			p("")
+			continue
+		}
+		if gt := idCol.GoType(); gt != inst.keyGoType {
+			err = eh.Errorf("component %s: plain id field %s has Go type %s but the Key column is %s — Ingest%s cannot be emitted", c.Kind, idCol.GoField, gt, inst.keyGoType, c.Kind)
+			return
+		}
 		p("// Ingest%s appends one whole entity per row carrying only the", c.Kind)
 		p("// %s component, all stamped with ts.", c.Kind)
 		p("func (inst *%s[W]) Ingest%s(ts time.Time, rows []%s) (err error) {", inst.storeType(), c.Kind, c.Kind)
 		p("\tfor i := range rows {")
-		p("\t\terr = inst.Begin(rows[i].ID, ts).Add%s(rows[i]).Commit()", c.Kind)
+		p("\t\terr = inst.Begin(rows[i].%s, ts).Add%s(rows[i]).Commit()", idCol.GoField, c.Kind)
 		p("\t\tif err != nil {")
 		p("\t\t\terr = eh.Errorf(\"ingest %s row %%d: %%w\", i, err)", lowerFirst(c.Kind))
 		p("\t\t\treturn")
@@ -415,6 +468,7 @@ func (inst Input) emitIngest(sb *strings.Builder, comps []storeComponent) {
 		p("}")
 		p("")
 	}
+	return
 }
 
 func (inst Input) emitFlush(sb *strings.Builder) {
