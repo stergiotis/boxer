@@ -7,6 +7,7 @@ package internalized
 import (
 	"encoding/binary"
 	"errors"
+	"slices"
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
@@ -19,6 +20,7 @@ import (
 
 var _ identifier.IdGeneratorFactoryI = (*BadgerIdInternalizedGenerator)(nil)
 var _ identifier.IdGeneratorI = (*BadgerIdInternalizer)(nil)
+var _ identgen.BatchInternalizerI = (*BadgerIdInternalizer)(nil)
 
 // BadgerIdInternalizedGenerator is a Badger-backed factory for per-tag
 // internalizing id generators; a single embedded store may host many tags.
@@ -38,6 +40,17 @@ type BadgerIdInternalizer struct {
 	lock   sync.Mutex
 }
 
+// mappingKey returns the tag-scoped Badger key for naturalKey: prefix ++
+// naturalKey. Tag-scoping keeps distinct tags sharing one store from colliding;
+// the sequence counter lives at the 8-byte prefix alone, which is length-disjoint
+// from every (non-empty) mapping key.
+func (inst *BadgerIdInternalizer) mappingKey(naturalKey []byte) (key []byte) {
+	key = make([]byte, 0, len(inst.prefix)+len(naturalKey))
+	key = append(key, inst.prefix...)
+	key = append(key, naturalKey...)
+	return
+}
+
 func (inst *BadgerIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
 	if len(naturalKey) == 0 {
 		err = identgen.ErrEmptyNaturalKey
@@ -46,12 +59,7 @@ func (inst *BadgerIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged ide
 	inst.lock.Lock()
 	defer inst.lock.Unlock()
 
-	// Mapping keys are tag-scoped (prefix ++ naturalKey) so distinct tags sharing
-	// one store never collide; the sequence counter lives at the 8-byte prefix
-	// alone, which is length-disjoint from every (non-empty) mapping key.
-	key := make([]byte, 0, len(inst.prefix)+len(naturalKey))
-	key = append(key, inst.prefix...)
-	key = append(key, naturalKey...)
+	key := inst.mappingKey(naturalKey)
 
 	var u uint64
 	err = inst.gen.kv.View(func(txn *badger.Txn) (e error) {
@@ -119,6 +127,120 @@ func (inst *BadgerIdInternalizer) Release() (err error) {
 
 func (inst *BadgerIdInternalizer) GetTag() (tag identifier.IdTag) {
 	tag = inst.tag
+	return
+}
+
+// AppendIds resolves a whole column of natural keys under this generator's tag in
+// two transactions (one read, one write) regardless of batch size, amortising the
+// per-call Badger transaction overhead. See identgen.BatchInternalizerI.
+func (inst *BadgerIdInternalizer) AppendIds(dst []identifier.TaggedId, keys identgen.KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error) {
+	n := keys.Len()
+	for i := range n {
+		if len(keys.At(i)) == 0 {
+			err = identgen.ErrEmptyNaturalKey
+			return dst, fresh, err
+		}
+	}
+
+	inst.lock.Lock()
+	defer inst.lock.Unlock()
+
+	// Build the tag-scoped mapping keys once and reuse them across both txns.
+	// Badger retains the key/value slices passed to Set until commit, so each must
+	// be distinct — mappingKey and the per-entry value windows below guarantee that.
+	mks := make([][]byte, n)
+	for i := range n {
+		mks[i] = inst.mappingKey(keys.At(i))
+	}
+	bodies := make([]uint64, n)
+	freshMark := make([]bool, n)
+
+	// Read phase: resolve existing mappings in one transaction.
+	err = inst.gen.kv.View(func(txn *badger.Txn) (e error) {
+		for i := range n {
+			item, ge := txn.Get(mks[i])
+			if ge == nil {
+				e = item.Value(func(val []byte) error {
+					bodies[i] = binary.LittleEndian.Uint64(val)
+					return nil
+				})
+				if e != nil {
+					return
+				}
+			} else if errors.Is(ge, badger.ErrKeyNotFound) {
+				freshMark[i] = true
+			} else {
+				e = ge
+				return
+			}
+		}
+		return
+	})
+	if err != nil {
+		err = eh.Errorf("unable to read id batch: %w", err)
+		return dst, fresh, err
+	}
+
+	// Mint phase: assign fresh ids for the misses, deduplicating keys that repeat
+	// within this batch (the first occurrence mints; later ones reuse it, matching
+	// single-key GetId). A leased badger.Sequence must not be advanced inside a
+	// transaction, so this runs between the read and write phases.
+	minted := make(map[string]uint64)
+	vals := make([]byte, 8*n)
+	for i := range n {
+		if !freshMark[i] {
+			continue
+		}
+		if b, ok := minted[string(keys.At(i))]; ok {
+			bodies[i] = b
+			freshMark[i] = false // repeat of a key already minted in this batch
+			continue
+		}
+		var raw uint64
+		raw, err = inst.seq.Next()
+		if err != nil {
+			err = eh.Errorf("unable to obtain next sequence value: %w", err)
+			return dst, fresh, err
+		}
+		u := raw + 1 // body 0 is reserved as invalid/NULL
+		if u > inst.maxId {
+			err = eb.Build().Uint64("tagValue", uint64(inst.tag.GetValue())).Uint64("untaggedId", u).Errorf("cannot mint a fresh id: %w", identgen.ErrIdSpaceExhausted)
+			return dst, fresh, err
+		}
+		bodies[i] = u
+		minted[string(keys.At(i))] = u
+		binary.LittleEndian.PutUint64(vals[i*8:i*8+8], u)
+	}
+
+	// Write phase: persist all fresh mappings in one transaction.
+	err = inst.gen.kv.Update(func(txn *badger.Txn) (e error) {
+		for i := range n {
+			if !freshMark[i] {
+				continue
+			}
+			e = txn.Set(mks[i], vals[i*8:i*8+8])
+			if e != nil {
+				return
+			}
+		}
+		return
+	})
+	if err != nil {
+		err = eh.Errorf("unable to persist id batch: %w", err)
+		return dst, fresh, err
+	}
+
+	// Assemble the output columns.
+	ids = slices.Grow(dst, n)
+	if fresh != nil {
+		freshOut = slices.Grow(fresh, n)
+	}
+	for i := range n {
+		ids = append(ids, inst.tag.ComposeId(identifier.UntaggedId(bodies[i])))
+		if freshOut != nil {
+			freshOut = append(freshOut, freshMark[i])
+		}
+	}
 	return
 }
 

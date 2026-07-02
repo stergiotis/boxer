@@ -7,6 +7,7 @@ package mem
 
 import (
 	"iter"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/identity/identgen"
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -18,6 +19,7 @@ import (
 const maxPreallocHint = 1 << 20
 
 var _ identifier.IdGeneratorI = (*IdInternalizer)(nil)
+var _ identgen.BatchInternalizerI = (*IdInternalizer)(nil)
 var _ identifier.IdGeneratorFactoryI = (*IdInternalizedGenerator)(nil)
 
 // IdInternalizer assigns dense, monotonic surrogate ids to distinct natural keys
@@ -145,6 +147,46 @@ func (inst *IdInternalizer) All() iter.Seq2[identifier.TaggedId, string] {
 			}
 		}
 	}
+}
+
+// AppendIds resolves a whole column of natural keys under this generator's tag,
+// appending the ids to dst. See identgen.BatchInternalizerI. In memory this is a
+// plain loop, but it validates the batch up front (empty keys, id-space capacity)
+// so a bad batch assigns nothing.
+func (inst *IdInternalizer) AppendIds(dst []identifier.TaggedId, keys identgen.KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error) {
+	n := keys.Len()
+	for i := range n {
+		if len(keys.At(i)) == 0 {
+			err = identgen.ErrEmptyNaturalKey
+			return dst, fresh, err
+		}
+	}
+	// Worst case every key is fresh; reject up front if that would exhaust the tag.
+	remaining := inst.maxId - inst.offset + 1 - identifier.UntaggedId(len(inst.forward))
+	if identifier.UntaggedId(n) > remaining {
+		err = eb.Build().
+			Uint64("remaining", uint64(remaining)).
+			Int("batch", n).
+			Errorf("cannot mint id batch: %w", identgen.ErrIdSpaceExhausted)
+		return dst, fresh, err
+	}
+	ids = slices.Grow(dst, n)
+	if fresh != nil {
+		freshOut = slices.Grow(fresh, n)
+	}
+	for i := range n {
+		var id identifier.TaggedId
+		var f bool
+		id, f, err = inst.GetId(keys.At(i))
+		if err != nil {
+			return dst, fresh, err
+		}
+		ids = append(ids, id)
+		if freshOut != nil {
+			freshOut = append(freshOut, f)
+		}
+	}
+	return
 }
 
 // IdInternalizedGenerator is a stateless factory for in-memory internalizing

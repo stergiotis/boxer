@@ -182,6 +182,74 @@ func TestIdInternalizer_PropertyConsistency(t *testing.T) {
 	require.Equal(t, len(shadow), s.Len())
 }
 
+func TestIdInternalizer_AppendIds(t *testing.T) {
+	const tagVal = identifier.TagValue(5)
+	gen, err := NewIdInternalizer(tagVal, 8)
+	require.NoError(t, err)
+
+	seq := []string{"a", "b", "a", "c", "b"}
+	var keys identgen.KeysColumn
+	for _, k := range seq {
+		keys = keys.AppendKey([]byte(k))
+	}
+
+	ids, fresh, err := gen.AppendIds(nil, keys, make([]bool, 0))
+	require.NoError(t, err)
+	require.Len(t, ids, 5)
+	require.Len(t, fresh, 5)
+
+	// Alignment + dedup: a,b,a,c,b.
+	require.Equal(t, ids[0], ids[2])
+	require.Equal(t, ids[1], ids[4])
+	require.NotEqual(t, ids[0], ids[1])
+	require.NotEqual(t, ids[0], ids[3])
+	require.Equal(t, []bool{true, true, false, true, false}, fresh)
+	for _, id := range ids {
+		require.True(t, id.IsValid())
+		require.EqualValues(t, tagVal, id.GetTag().GetValue())
+	}
+	require.Equal(t, 3, gen.Len())
+
+	// The batch agrees with single GetId for the same keys.
+	for i, k := range seq {
+		gotID, _, err := gen.GetId([]byte(k))
+		require.NoError(t, err)
+		require.Equal(t, ids[i], gotID)
+	}
+}
+
+func TestIdInternalizer_AppendIds_NilFreshAndDstReuse(t *testing.T) {
+	gen, err := NewIdInternalizer(identifier.TagValue(1), 0)
+	require.NoError(t, err)
+	keys := identgen.KeysColumn{}.AppendKey([]byte("x")).AppendKey([]byte("y"))
+
+	// nil fresh -> flags not tracked.
+	ids, freshOut, err := gen.AppendIds(nil, keys, nil)
+	require.NoError(t, err)
+	require.Nil(t, freshOut)
+	require.Len(t, ids, 2)
+
+	// dst reuse: results are appended after existing elements.
+	dst := []identifier.TaggedId{0xdead}
+	out, _, err := gen.AppendIds(dst, keys, nil)
+	require.NoError(t, err)
+	require.Len(t, out, 3)
+	require.EqualValues(t, 0xdead, out[0])
+	require.Equal(t, ids[0], out[1])
+	require.Equal(t, ids[1], out[2])
+}
+
+func TestIdInternalizer_AppendIds_RejectsEmptyKeyAtomically(t *testing.T) {
+	gen, err := NewIdInternalizer(identifier.TagValue(1), 0)
+	require.NoError(t, err)
+	keys := identgen.KeysColumn{}.AppendKey([]byte("ok")).AppendKey([]byte("")).AppendKey([]byte("also"))
+
+	out, _, err := gen.AppendIds([]identifier.TaggedId{}, keys, nil)
+	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
+	require.Empty(t, out, "dst returned unmodified")
+	require.Equal(t, 0, gen.Len(), "nothing minted on a bad batch")
+}
+
 func BenchmarkIdInternalizer_GetId(b *testing.B) {
 	key := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
 

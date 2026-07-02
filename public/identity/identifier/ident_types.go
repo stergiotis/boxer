@@ -13,17 +13,6 @@ type IdTag uint64
 
 type TagValue uint32
 
-type IdBatchedGeneratorI interface {
-	GetIdBatch(tagValues []TagValue, naturalKeys [][][]byte, resolvedIn [][]TaggedId, freshIn [][]bool) (resolvedOut [][]TaggedId, freshOut [][]bool, err error)
-	Release(tagValues []TagValue) (err error)
-	GetTags() []IdTag
-}
-
-type IdBatchedGeneratorFactoryI interface {
-	Create(tagValues []TagValue, generationBandwidths []uint64) (gen IdBatchedGeneratorI, err error)
-	Close() (err error)
-}
-
 type IdGeneratorI interface {
 	GetId(naturalKey []byte) (id TaggedId, fresh bool, err error)
 	GetUntaggedId(naturalKey []byte) (untagged UntaggedId, fresh bool, err error)

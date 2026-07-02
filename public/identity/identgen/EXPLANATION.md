@@ -58,6 +58,18 @@ The three packages are therefore `seq/` (sequential, Badger), `internalized/`
 - **Tag values are validated at `Create`.** An out-of-range `TagValue` is
   rejected up front rather than silently producing a malformed id.
 
+## Batch resolution
+
+Both interners implement `identgen.BatchInternalizerI.AppendIds`, which resolves a
+whole column of natural keys under the tag in one shot and appends the ids to a
+caller-provided slice. Keys arrive columnar (`KeysColumn`: concatenated bytes plus
+end offsets — the Arrow/Leeway varbinary layout) and the output aligns
+positionally, so `ids[i]` is the id of `keys.At(i)`. The Badger backend resolves
+the whole column in two transactions (one read, one write) regardless of size,
+amortising the per-call transaction overhead; keys that repeat within one batch
+resolve to the same id, matching single-key `GetId`. This is the seam for columnar
+bulk ingest.
+
 ## Trade-offs and rough edges
 
 - **Reverse resolution is `mem`-only.** `mem.IdInternalizer` additionally offers

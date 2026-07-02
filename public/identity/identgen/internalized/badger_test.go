@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/identity/identgen"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stretchr/testify/require"
 )
@@ -165,6 +166,67 @@ func TestBadgerIdInternalizer_ConcurrentGetId(t *testing.T) {
 	require.Len(t, seen, workers*perWorker, "every distinct key must get a distinct id")
 }
 
+func TestBadgerIdInternalizer_AppendIds(t *testing.T) {
+	genFac, err := NewBadgerIdInternalizedGenerator(t.TempDir())
+	require.NoError(t, err)
+	defer func() { _ = genFac.Close() }()
+	gen, err := genFac.Create(identifier.TagValue(5), 16)
+	require.NoError(t, err)
+	defer func() { _ = gen.Release() }()
+
+	bgen := gen.(identgen.BatchInternalizerI)
+
+	var keys identgen.KeysColumn
+	for _, k := range []string{"a", "b", "a", "c", "b"} {
+		keys = keys.AppendKey([]byte(k))
+	}
+
+	ids, fresh, err := bgen.AppendIds(nil, keys, make([]bool, 0))
+	require.NoError(t, err)
+	require.Len(t, ids, 5)
+	require.Equal(t, ids[0], ids[2]) // dedup + alignment
+	require.Equal(t, ids[1], ids[4])
+	require.NotEqual(t, ids[0], ids[3])
+	require.Equal(t, []bool{true, true, false, true, false}, fresh)
+	for _, id := range ids {
+		require.True(t, id.IsValid())
+		require.True(t, id.RemoveTag().IsValid(), "body 0 is reserved")
+		require.EqualValues(t, 5, id.GetTag().GetValue())
+	}
+
+	// The mapping persisted: single GetId returns the same id, not fresh.
+	gotA, freshA, err := bgen.GetId([]byte("a"))
+	require.NoError(t, err)
+	require.False(t, freshA)
+	require.Equal(t, ids[0], gotA)
+
+	// Re-batching the same column resolves everything to the same ids, none fresh.
+	ids2, fresh2, err := bgen.AppendIds(nil, keys, make([]bool, 0))
+	require.NoError(t, err)
+	require.Equal(t, ids, ids2)
+	require.Equal(t, []bool{false, false, false, false, false}, fresh2)
+}
+
+func TestBadgerIdInternalizer_AppendIds_RejectsEmptyKey(t *testing.T) {
+	genFac, err := NewBadgerIdInternalizedGenerator(t.TempDir())
+	require.NoError(t, err)
+	defer func() { _ = genFac.Close() }()
+	gen, err := genFac.Create(identifier.TagValue(1), 16)
+	require.NoError(t, err)
+	defer func() { _ = gen.Release() }()
+	bgen := gen.(identgen.BatchInternalizerI)
+
+	keys := identgen.KeysColumn{}.AppendKey([]byte("ok")).AppendKey([]byte(""))
+	out, _, err := bgen.AppendIds(nil, keys, nil)
+	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
+	require.Empty(t, out)
+
+	// The rejected batch persisted nothing: "ok" is still fresh.
+	_, fresh, err := bgen.GetId([]byte("ok"))
+	require.NoError(t, err)
+	require.True(t, fresh)
+}
+
 // BenchmarkBadgerIdInternalizer_GetId_Hit measures the read path (a Badger View
 // txn) for an already-internalized key.
 func BenchmarkBadgerIdInternalizer_GetId_Hit(b *testing.B) {
@@ -182,4 +244,31 @@ func BenchmarkBadgerIdInternalizer_GetId_Hit(b *testing.B) {
 	for b.Loop() {
 		_, _, _ = gen.GetId(key)
 	}
+}
+
+// BenchmarkBadgerIdInternalizer_AppendIds resolves a whole column of
+// already-internalized keys in two transactions, amortising the per-op txn
+// overhead that BenchmarkBadgerIdInternalizer_GetId_Hit pays per key.
+func BenchmarkBadgerIdInternalizer_AppendIds(b *testing.B) {
+	genFac, err := NewBadgerIdInternalizedGenerator(b.TempDir())
+	require.NoError(b, err)
+	defer func() { _ = genFac.Close() }()
+	gen, err := genFac.Create(identifier.TagValue(1), 4096)
+	require.NoError(b, err)
+	defer func() { _ = gen.Release() }()
+	bgen := gen.(identgen.BatchInternalizerI)
+
+	const batch = 256
+	var keys identgen.KeysColumn
+	for i := range batch {
+		keys = keys.AppendKey(fmt.Appendf(nil, "k%d", i))
+	}
+	_, _, _ = bgen.AppendIds(nil, keys, nil) // prime
+
+	var dst []identifier.TaggedId
+	b.ReportAllocs()
+	for b.Loop() {
+		dst, _, _ = bgen.AppendIds(dst[:0], keys, nil)
+	}
+	b.ReportMetric(batch, "keys/op")
 }
