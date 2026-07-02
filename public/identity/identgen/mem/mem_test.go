@@ -1,37 +1,38 @@
-package internalized
+package mem
 
 import (
 	"encoding/binary"
 	"math/rand/v2"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/identity/identgen"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewMemIdInternalizer_RejectsOutOfRangeTagValue(t *testing.T) {
-	_, err := NewMemIdInternalizer(identifier.MaxTagValue+1, 0)
+func TestNewIdInternalizer_RejectsOutOfRangeTagValue(t *testing.T) {
+	_, err := NewIdInternalizer(identifier.MaxTagValue+1, 0)
 	require.Error(t, err)
 }
 
-// TestMemIdInternalizer_RejectsEmptyKey pins the contract shared with the Badger
+// TestIdInternalizer_RejectsEmptyKey pins the contract shared with the Badger
 // backend: a nil or zero-length natural key is rejected, not assigned an id.
-func TestMemIdInternalizer_RejectsEmptyKey(t *testing.T) {
-	s, err := NewMemIdInternalizer(identifier.TagValue(1), 0)
+func TestIdInternalizer_RejectsEmptyKey(t *testing.T) {
+	s, err := NewIdInternalizer(identifier.TagValue(1), 0)
 	require.NoError(t, err)
 
 	_, _, err = s.GetId(nil)
-	require.ErrorIs(t, err, ErrEmptyNaturalKey)
+	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
 	_, _, err = s.GetId([]byte{})
-	require.ErrorIs(t, err, ErrEmptyNaturalKey)
+	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
 	_, _, err = s.GetUntaggedId(nil)
-	require.ErrorIs(t, err, ErrEmptyNaturalKey)
+	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
 
 	require.Equal(t, 0, s.Len())
 }
 
-func TestMemIdInternalizer_AssignsDenseMonotonicIds(t *testing.T) {
-	s, err := NewMemIdInternalizer(identifier.TagValue(3), 4)
+func TestIdInternalizer_AssignsDenseMonotonicIds(t *testing.T) {
+	s, err := NewIdInternalizer(identifier.TagValue(3), 4)
 	require.NoError(t, err)
 	for i := range 5 {
 		id, fresh, err := s.GetId([]byte{byte('a' + i)})
@@ -45,8 +46,8 @@ func TestMemIdInternalizer_AssignsDenseMonotonicIds(t *testing.T) {
 	require.Equal(t, 5, s.Len())
 }
 
-func TestMemIdInternalizer_ReStampIsIdempotent(t *testing.T) {
-	s, err := NewMemIdInternalizer(identifier.TagValue(1), 0)
+func TestIdInternalizer_ReStampIsIdempotent(t *testing.T) {
+	s, err := NewIdInternalizer(identifier.TagValue(1), 0)
 	require.NoError(t, err)
 	k := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
 	id1, fresh1, err := s.GetId(k)
@@ -59,8 +60,8 @@ func TestMemIdInternalizer_ReStampIsIdempotent(t *testing.T) {
 	require.Equal(t, 1, s.Len())
 }
 
-func TestMemIdInternalizer_ResolveRoundtrip(t *testing.T) {
-	s, err := NewMemIdInternalizer(identifier.TagValue(5), 0)
+func TestIdInternalizer_ResolveRoundtrip(t *testing.T) {
+	s, err := NewIdInternalizer(identifier.TagValue(5), 0)
 	require.NoError(t, err)
 	id, _, err := s.GetId([]byte("hello"))
 	require.NoError(t, err)
@@ -84,8 +85,8 @@ func TestMemIdInternalizer_ResolveRoundtrip(t *testing.T) {
 	require.False(t, found)
 }
 
-func TestMemIdInternalizer_AllYieldsAssignmentOrder(t *testing.T) {
-	s, err := NewMemIdInternalizer(identifier.TagValue(2), 0)
+func TestIdInternalizer_AllYieldsAssignmentOrder(t *testing.T) {
+	s, err := NewIdInternalizer(identifier.TagValue(2), 0)
 	require.NoError(t, err)
 	keys := []string{"one", "two", "three"}
 	want := make([]identifier.TaggedId, 0, len(keys))
@@ -103,8 +104,8 @@ func TestMemIdInternalizer_AllYieldsAssignmentOrder(t *testing.T) {
 	require.Equal(t, len(keys), i)
 }
 
-func TestMemIdInternalizer_LookupDoesNotAllocate(t *testing.T) {
-	s, err := NewMemIdInternalizer(identifier.TagValue(1), 0)
+func TestIdInternalizer_LookupDoesNotAllocate(t *testing.T) {
+	s, err := NewIdInternalizer(identifier.TagValue(1), 0)
 	require.NoError(t, err)
 	key := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
 	_, _, err = s.GetId(key)
@@ -115,8 +116,8 @@ func TestMemIdInternalizer_LookupDoesNotAllocate(t *testing.T) {
 	require.Zero(t, allocs, "GetId of an existing key must not allocate")
 }
 
-func TestMemIdInternalizedGenerator_CreatesWorkingGenerator(t *testing.T) {
-	f := NewMemIdInternalizedGenerator()
+func TestIdInternalizedGenerator_CreatesWorkingGenerator(t *testing.T) {
+	f := NewIdInternalizedGenerator()
 	gen, err := f.Create(identifier.TagValue(9), 128)
 	require.NoError(t, err)
 
@@ -136,13 +137,13 @@ func TestMemIdInternalizedGenerator_CreatesWorkingGenerator(t *testing.T) {
 	require.Equal(t, id, id2)
 }
 
-// TestMemIdInternalizer_PropertyConsistency mirrors the identifier package's own
+// TestIdInternalizer_PropertyConsistency mirrors the identifier package's own
 // randomized round-trip test: internalize a stream of random keys and check the
 // core invariants against a shadow map.
-func TestMemIdInternalizer_PropertyConsistency(t *testing.T) {
+func TestIdInternalizer_PropertyConsistency(t *testing.T) {
 	r := rand.New(rand.NewPCG(0x1234, 0x5678))
 	const tagVal = identifier.TagValue(7)
-	s, err := NewMemIdInternalizer(tagVal, 16)
+	s, err := NewIdInternalizer(tagVal, 16)
 	require.NoError(t, err)
 
 	keyPool := make([][]byte, 0, 64)
@@ -181,12 +182,12 @@ func TestMemIdInternalizer_PropertyConsistency(t *testing.T) {
 	require.Equal(t, len(shadow), s.Len())
 }
 
-func BenchmarkMemIdInternalizer_GetId(b *testing.B) {
+func BenchmarkIdInternalizer_GetId(b *testing.B) {
 	key := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
 
 	// hit: an already-internalized key; the map lookup must not allocate.
 	b.Run("hit", func(b *testing.B) {
-		gen, err := NewMemIdInternalizer(identifier.TagValue(1), 16)
+		gen, err := NewIdInternalizer(identifier.TagValue(1), 16)
 		require.NoError(b, err)
 		_, _, _ = gen.GetId(key) // prime
 		b.ReportAllocs()
@@ -198,7 +199,7 @@ func BenchmarkMemIdInternalizer_GetId(b *testing.B) {
 	// miss: a fresh key each time; the working set is capped so memory stays bounded.
 	b.Run("miss", func(b *testing.B) {
 		const workingSet = 1 << 20
-		gen, err := NewMemIdInternalizer(identifier.TagValue(1), workingSet)
+		gen, err := NewIdInternalizer(identifier.TagValue(1), workingSet)
 		require.NoError(b, err)
 		buf := make([]byte, 8)
 		var i uint64
@@ -206,7 +207,7 @@ func BenchmarkMemIdInternalizer_GetId(b *testing.B) {
 		for b.Loop() {
 			if gen.Len() >= workingSet {
 				b.StopTimer()
-				gen, _ = NewMemIdInternalizer(identifier.TagValue(1), workingSet)
+				gen, _ = NewIdInternalizer(identifier.TagValue(1), workingSet)
 				b.StartTimer()
 			}
 			binary.LittleEndian.PutUint64(buf, i)

@@ -9,3 +9,8 @@ import "github.com/stergiotis/boxer/public/observability/eh"
 // range has been assigned. Backends wrap it with structured context, so callers
 // can match it with errors.Is regardless of which implementation produced it.
 var ErrIdSpaceExhausted = eh.Errorf("surrogate id space exhausted for tag")
+
+// ErrEmptyNaturalKey is returned by an internalizing generator when a nil or
+// zero-length natural key is passed; an interner must dedupe by key. Sequential
+// generators ignore the key and never return this.
+var ErrEmptyNaturalKey = eh.Errorf("natural key is empty")

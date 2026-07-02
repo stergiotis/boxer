@@ -1,10 +1,9 @@
-// Package internalized provides get-or-assign identifier.IdGeneratorI
-// implementations: each maps a natural key to a stable surrogate id under one
-// tag, minting a fresh id on first sight. The Badger backend persists the
-// mapping in an embedded store; the in-memory (Mem) backend keeps it in a map
-// and needs no external service. For key-agnostic monotonic ids use the sibling
-// seq package instead.
-package internalized
+// Package mem is the dependency-free, in-memory get-or-assign
+// identifier.IdGeneratorI: it maps a natural key to a stable surrogate id in a
+// Go map and resolves ids back to keys. It pulls in no storage engine, so unlike
+// the Badger-backed internalized/seq packages it stays WASM-compilable. For a
+// durable mapping use identgen/internalized instead.
+package mem
 
 import (
 	"iter"
@@ -18,15 +17,15 @@ import (
 // bandwidth, so a hint value cannot force a pathological map allocation.
 const maxPreallocHint = 1 << 20
 
-var _ identifier.IdGeneratorI = (*MemIdInternalizer)(nil)
-var _ identifier.IdGeneratorFactoryI = (*MemIdInternalizedGenerator)(nil)
+var _ identifier.IdGeneratorI = (*IdInternalizer)(nil)
+var _ identifier.IdGeneratorFactoryI = (*IdInternalizedGenerator)(nil)
 
-// MemIdInternalizer assigns dense, monotonic surrogate ids to distinct natural
-// keys under a single tag, entirely in memory, and resolves ids back to keys.
-// Ids are minted from body value 1 so the zero id stays reserved as
-// invalid/NULL. It is not safe for concurrent use; guard it with a sync.Mutex
-// when shared across goroutines.
-type MemIdInternalizer struct {
+// IdInternalizer assigns dense, monotonic surrogate ids to distinct natural keys
+// under a single tag, entirely in memory, and resolves ids back to keys. Ids are
+// minted from body value 1 so the zero id stays reserved as invalid/NULL. It is
+// not safe for concurrent use; guard it with a sync.Mutex when shared across
+// goroutines.
+type IdInternalizer struct {
 	tag     identifier.IdTag
 	maxId   identifier.UntaggedId // largest body value the tag can hold (inclusive)
 	offset  identifier.UntaggedId // body value of the first assigned id
@@ -34,10 +33,10 @@ type MemIdInternalizer struct {
 	reverse []string // body value (offset+i) -> natural key; shares storage with the forward keys
 }
 
-// NewMemIdInternalizer returns an in-memory internalizer that mints ids under
+// NewIdInternalizer returns an in-memory internalizer that mints ids under
 // tagValue. estSize is a best-effort capacity hint for the number of distinct
 // keys. It errors when tagValue is out of range for the active tag width.
-func NewMemIdInternalizer(tagValue identifier.TagValue, estSize int) (inst *MemIdInternalizer, err error) {
+func NewIdInternalizer(tagValue identifier.TagValue, estSize int) (inst *IdInternalizer, err error) {
 	if !tagValue.IsValid() {
 		err = eb.Build().
 			Uint64("tagValue", uint64(tagValue)).
@@ -49,7 +48,7 @@ func NewMemIdInternalizer(tagValue identifier.TagValue, estSize int) (inst *MemI
 		estSize = 0
 	}
 	tag := tagValue.GetTag()
-	inst = &MemIdInternalizer{
+	inst = &IdInternalizer{
 		tag:     tag,
 		maxId:   tag.GetMaxPossibleIdIncl(),
 		offset:  1, // 0 is reserved as invalid/NULL
@@ -59,9 +58,9 @@ func NewMemIdInternalizer(tagValue identifier.TagValue, estSize int) (inst *MemI
 	return
 }
 
-func (inst *MemIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
+func (inst *IdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
 	if len(naturalKey) == 0 {
-		err = ErrEmptyNaturalKey
+		err = identgen.ErrEmptyNaturalKey
 		return
 	}
 	if u, has := inst.forward[string(naturalKey)]; has {
@@ -83,7 +82,7 @@ func (inst *MemIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identi
 	return
 }
 
-func (inst *MemIdInternalizer) GetId(naturalKey []byte) (id identifier.TaggedId, fresh bool, err error) {
+func (inst *IdInternalizer) GetId(naturalKey []byte) (id identifier.TaggedId, fresh bool, err error) {
 	var untagged identifier.UntaggedId
 	untagged, fresh, err = inst.GetUntaggedId(naturalKey)
 	if err != nil {
@@ -93,19 +92,19 @@ func (inst *MemIdInternalizer) GetId(naturalKey []byte) (id identifier.TaggedId,
 	return
 }
 
-func (inst *MemIdInternalizer) GetTag() (tag identifier.IdTag) {
+func (inst *IdInternalizer) GetTag() (tag identifier.IdTag) {
 	tag = inst.tag
 	return
 }
 
 // Release satisfies identifier.IdGeneratorI. The in-memory internalizer holds no
 // external resources, so it retains its mapping and stays usable afterwards.
-func (inst *MemIdInternalizer) Release() (err error) {
+func (inst *IdInternalizer) Release() (err error) {
 	return
 }
 
 // Len reports the number of distinct keys internalized so far.
-func (inst *MemIdInternalizer) Len() (n int) {
+func (inst *IdInternalizer) Len() (n int) {
 	n = len(inst.forward)
 	return
 }
@@ -113,7 +112,7 @@ func (inst *MemIdInternalizer) Len() (n int) {
 // Resolve maps a tagged id from this internalizer back to its natural key. found
 // is false when the id carries a different tag or was never assigned. The key is
 // the interned immutable string; use []byte(key) when a mutable copy is needed.
-func (inst *MemIdInternalizer) Resolve(id identifier.TaggedId) (naturalKey string, found bool) {
+func (inst *IdInternalizer) Resolve(id identifier.TaggedId) (naturalKey string, found bool) {
 	tag, untagged := id.Split()
 	if tag != inst.tag {
 		return
@@ -123,7 +122,7 @@ func (inst *MemIdInternalizer) Resolve(id identifier.TaggedId) (naturalKey strin
 }
 
 // ResolveUntagged maps a body (untagged) id back to its natural key.
-func (inst *MemIdInternalizer) ResolveUntagged(untagged identifier.UntaggedId) (naturalKey string, found bool) {
+func (inst *IdInternalizer) ResolveUntagged(untagged identifier.UntaggedId) (naturalKey string, found bool) {
 	if untagged < inst.offset {
 		return
 	}
@@ -137,7 +136,7 @@ func (inst *MemIdInternalizer) ResolveUntagged(untagged identifier.UntaggedId) (
 }
 
 // All iterates every (id, naturalKey) pair in assignment order.
-func (inst *MemIdInternalizer) All() iter.Seq2[identifier.TaggedId, string] {
+func (inst *IdInternalizer) All() iter.Seq2[identifier.TaggedId, string] {
 	return func(yield func(identifier.TaggedId, string) bool) {
 		for i, s := range inst.reverse {
 			id := inst.tag.ComposeId(inst.offset + identifier.UntaggedId(i))
@@ -148,23 +147,23 @@ func (inst *MemIdInternalizer) All() iter.Seq2[identifier.TaggedId, string] {
 	}
 }
 
-// MemIdInternalizedGenerator is a stateless factory for in-memory internalizing
+// IdInternalizedGenerator is a stateless factory for in-memory internalizing
 // generators. Its zero value is ready to use.
-type MemIdInternalizedGenerator struct{}
+type IdInternalizedGenerator struct{}
 
-// NewMemIdInternalizedGenerator returns a MemIdInternalizedGenerator.
-func NewMemIdInternalizedGenerator() (inst *MemIdInternalizedGenerator) {
-	inst = &MemIdInternalizedGenerator{}
+// NewIdInternalizedGenerator returns an IdInternalizedGenerator.
+func NewIdInternalizedGenerator() (inst *IdInternalizedGenerator) {
+	inst = &IdInternalizedGenerator{}
 	return
 }
 
-// Create returns a fresh MemIdInternalizer for tagValue. generationBandwidth is
+// Create returns a fresh IdInternalizer for tagValue. generationBandwidth is
 // treated as a best-effort capacity hint (an in-memory generator reserves no id
 // ranges), clamped to avoid a pathological pre-allocation.
-func (inst *MemIdInternalizedGenerator) Create(tagValue identifier.TagValue, generationBandwidth uint64) (gen identifier.IdGeneratorI, err error) {
+func (inst *IdInternalizedGenerator) Create(tagValue identifier.TagValue, generationBandwidth uint64) (gen identifier.IdGeneratorI, err error) {
 	est := min(generationBandwidth, maxPreallocHint)
-	var m *MemIdInternalizer
-	m, err = NewMemIdInternalizer(tagValue, int(est))
+	var m *IdInternalizer
+	m, err = NewIdInternalizer(tagValue, int(est))
 	if err != nil {
 		return
 	}
@@ -173,6 +172,6 @@ func (inst *MemIdInternalizedGenerator) Create(tagValue identifier.TagValue, gen
 }
 
 // Close satisfies identifier.IdGeneratorFactoryI; the factory holds no resources.
-func (inst *MemIdInternalizedGenerator) Close() (err error) {
+func (inst *IdInternalizedGenerator) Close() (err error) {
 	return
 }

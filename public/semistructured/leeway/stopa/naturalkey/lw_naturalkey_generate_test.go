@@ -3,7 +3,7 @@ package naturalkey
 import (
 	"testing"
 
-	"github.com/stergiotis/boxer/public/identity/identgen/internalized"
+	"github.com/stergiotis/boxer/public/identity/identgen/mem"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +22,7 @@ func buildAcctKey() *Encoder {
 // in-memory generator, which previously had no implementation to test against.
 func TestEncoderEndAndGenerate_WithMemInternalizer(t *testing.T) {
 	const tagVal = identifier.TagValue(5)
-	gen, err := internalized.NewMemIdInternalizer(tagVal, 8)
+	gen, err := mem.NewIdInternalizer(tagVal, 8)
 	require.NoError(t, err)
 
 	// First generation mints a fresh, valid, correctly-tagged id.

@@ -29,14 +29,16 @@ Two orthogonal choices.
     same id thereafter. Use it to deduplicate high-entropy keys (UUIDs, hashes)
     to compact surrogates.
 - **Backend** — where the state lives.
-  - `mem` — in-memory (a Go map): no external dependency, not safe for concurrent
-    use. Only `internalized` has an in-memory backend; the in-memory sequential
-    case is a trivial atomic counter and is not provided here.
+  - `mem/` — in-memory (a Go map): no external dependency and WASM-compilable,
+    not safe for concurrent use. Only the internalizing flavour has an in-memory
+    backend; the in-memory sequential case is a trivial atomic counter and is not
+    provided here.
   - `badger` — an embedded Badger key-value store: durable, and safe for
-    concurrent use within one process.
+    concurrent use within one process. Backs both the `seq/` and `internalized/`
+    packages.
 
-The Redis (distributed) backend for both flavours lives out-of-tree in
-`pebble2impl`, to keep a `go-redis` dependency out of boxer.
+The three packages are therefore `seq/` (sequential, Badger), `internalized/`
+(internalizing, Badger) and `mem/` (internalizing, in-memory).
 
 ## Invariants shared across backends
 
@@ -50,22 +52,18 @@ The Redis (distributed) backend for both flavours lives out-of-tree in
 - **Exhaustion is matchable.** When a tag's body range is spent, every backend
   returns an error wrapping `identgen.ErrIdSpaceExhausted`, so callers can
   `errors.Is` it regardless of implementation.
-- **Interners reject empty keys.** `internalized` backends reject a nil or empty
-  natural key with `ErrEmptyNaturalKey` (an interner must dedupe by key); `seq`
-  ignores the key entirely.
+- **Interners reject empty keys.** The `internalized` and `mem` interners reject a
+  nil or empty natural key with `identgen.ErrEmptyNaturalKey` (an interner must
+  dedupe by key); `seq` ignores the key entirely.
 - **Tag values are validated at `Create`.** An out-of-range `TagValue` is
   rejected up front rather than silently producing a malformed id.
 
 ## Trade-offs and rough edges
 
-- **`mem` is co-located with `badger` in `internalized`.** Importing the package
-  for the in-memory generator therefore links Badger and marks the package
-  WASM-blocked. Badger is already a boxer dependency so the cost is small, but a
-  split into a dependency-free package would restore WASM-compilability.
-- **Reverse resolution is `mem`-only.** `MemIdInternalizer` additionally offers
+- **Reverse resolution is `mem`-only.** `mem.IdInternalizer` additionally offers
   `Resolve` / `ResolveUntagged` / `All` (a full dictionary); the Badger backends
   do not, because a reverse index would roughly double their on-disk footprint.
-  Code that needs decoding should type-assert to the concrete in-memory type.
+  Code that needs decoding should use the concrete `mem.IdInternalizer` type.
 - **Compaction is caller-driven.** The Badger factories expose `Compact()` (one
   value-log GC pass); generators no longer compact implicitly, so long-lived
   stores should schedule it.

@@ -1,3 +1,7 @@
+// Package internalized is the Badger-backed get-or-assign identifier.IdGeneratorI:
+// it maps a natural key to a stable surrogate id, persisting the mapping in an
+// embedded store. The dependency-free in-memory backend lives in the sibling mem
+// package; for key-agnostic monotonic ids use the seq package.
 package internalized
 
 import (
@@ -12,10 +16,6 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
-
-// ErrEmptyNaturalKey is returned when a nil or zero-length natural key is passed
-// to an internalizing generator (an internalizer must dedupe by key).
-var ErrEmptyNaturalKey = eh.Errorf("natural key is empty")
 
 var _ identifier.IdGeneratorFactoryI = (*BadgerIdInternalizedGenerator)(nil)
 var _ identifier.IdGeneratorI = (*BadgerIdInternalizer)(nil)
@@ -40,7 +40,7 @@ type BadgerIdInternalizer struct {
 
 func (inst *BadgerIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
 	if len(naturalKey) == 0 {
-		err = ErrEmptyNaturalKey
+		err = identgen.ErrEmptyNaturalKey
 		return
 	}
 	inst.lock.Lock()

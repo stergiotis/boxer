@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/identity/identgen/internalized"
+	"github.com/stergiotis/boxer/public/identity/identgen/mem"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stretchr/testify/require"
 )
@@ -82,7 +82,7 @@ var _ ChunkedWriterI = (*recordingWriter)(nil)
 // first-and-last path and gets a single generated id.
 func TestChunkerSingleChunk_WithMemInternalizer(t *testing.T) {
 	const tagVal = identifier.TagValue(5)
-	gen, err := internalized.NewMemIdInternalizer(tagVal, 4)
+	gen, err := mem.NewIdInternalizer(tagVal, 4)
 	require.NoError(t, err)
 
 	rec := &recordingWriter{}
@@ -113,7 +113,7 @@ func TestChunkerSingleChunk_WithMemInternalizer(t *testing.T) {
 // TestChunkerMultiChunk_WithMemInternalizer forces several chunks and checks the
 // same generated id is carried across all of them and the payload round-trips.
 func TestChunkerMultiChunk_WithMemInternalizer(t *testing.T) {
-	gen, err := internalized.NewMemIdInternalizer(identifier.TagValue(9), 4)
+	gen, err := mem.NewIdInternalizer(identifier.TagValue(9), 4)
 	require.NoError(t, err)
 
 	rec := &recordingWriter{}
@@ -141,7 +141,7 @@ func TestChunkerMultiChunk_WithMemInternalizer(t *testing.T) {
 // to the writer for a deterministic 4-chunk stream (regression for the previous
 // off-by-one chunkIndex / inflated totalChunks / double-counted totalSize).
 func TestChunkerMultiChunk_Metadata(t *testing.T) {
-	gen, err := internalized.NewMemIdInternalizer(identifier.TagValue(9), 4)
+	gen, err := mem.NewIdInternalizer(identifier.TagValue(9), 4)
 	require.NoError(t, err)
 
 	rec := &recordingWriter{}
@@ -179,7 +179,7 @@ func TestChunkerMultiChunk_Metadata(t *testing.T) {
 // TestChunkerEmpty_SuppressesChunksAndId verifies an empty blob emits no chunks
 // and never mints an id (the generator is only consulted on real output).
 func TestChunkerEmpty_SuppressesChunksAndId(t *testing.T) {
-	gen, err := internalized.NewMemIdInternalizer(identifier.TagValue(1), 4)
+	gen, err := mem.NewIdInternalizer(identifier.TagValue(1), 4)
 	require.NoError(t, err)
 
 	rec := &recordingWriter{}
@@ -195,7 +195,7 @@ func TestChunkerEmpty_SuppressesChunksAndId(t *testing.T) {
 // for several blobs: distinct keys get distinct ids, and re-chunking a key
 // reuses its id (generator dedup).
 func TestChunkerReuseAcrossBlobs_WithMemInternalizer(t *testing.T) {
-	gen, err := internalized.NewMemIdInternalizer(identifier.TagValue(2), 8)
+	gen, err := mem.NewIdInternalizer(identifier.TagValue(2), 8)
 	require.NoError(t, err)
 	ch := NewChunker(64)
 
