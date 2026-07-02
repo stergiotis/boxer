@@ -288,3 +288,68 @@ func DroneMissionFillFromArrow[
 	}
 	return
 }
+
+// DroneMissionReadRow reads row i as one optional DroneMission component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched, erroring only when a field
+// occurs more than once. Plain-bound fields stay zero — the caller
+// owns the envelope. The Attrs/Membs readers bind by type inference
+// at the call site, as with FillFromArrow.
+func DroneMissionReadRow[
+	SymbolAttrs DroneMissionSymbolAttrsReadI,
+	SymbolMembs DroneMissionSymbolMembsReadI,
+	U64ArrayAttrs DroneMissionU64ArrayAttrsReadI,
+	U64ArrayMembs DroneMissionU64ArrayMembsReadI,
+](
+	i int,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+) (row DroneMission, present bool, err error) {
+	// --- symbol. ---
+	var symbolStatusVal string
+	var symbolStatusCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindStatus:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolStatusVal = val
+				symbolStatusCount++
+			}
+		}
+	}
+	if symbolStatusCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Status").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolStatusCount == 1 {
+		row.Status = symbolStatusVal
+		present = true
+	}
+	// --- u64Array. ---
+	var u64ArrayBatteryVal uint64
+	var u64ArrayBatteryCount int
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindBattery:
+				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u64ArrayBatteryVal = val
+				u64ArrayBatteryCount++
+			}
+		}
+	}
+	if u64ArrayBatteryCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Battery").Errorf("occurs more than once on the row")
+		return
+	}
+	if u64ArrayBatteryCount == 1 {
+		row.Battery = u64ArrayBatteryVal
+		present = true
+	}
+	return
+}

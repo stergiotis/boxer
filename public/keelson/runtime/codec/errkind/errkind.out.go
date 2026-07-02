@@ -708,6 +708,153 @@ func ErrorFillFromArrow[
 	return
 }
 
+// ErrorReadRow reads row i as one optional Error component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched, erroring only when a field
+// occurs more than once. Plain-bound fields stay zero — the caller
+// owns the envelope. The Attrs/Membs readers bind by type inference
+// at the call site, as with FillFromArrow.
+func ErrorReadRow[
+	StringArrayAttrs ErrorStringArrayAttrsReadI,
+	StringArrayMembs ErrorStringArrayMembsReadI,
+	SymbolArrayAttrs ErrorSymbolArrayAttrsReadI,
+	SymbolArrayMembs ErrorSymbolArrayMembsReadI,
+	U32ArrayAttrs ErrorU32ArrayAttrsReadI,
+	U32ArrayMembs ErrorU32ArrayMembsReadI,
+	U64ArrayAttrs ErrorU64ArrayAttrsReadI,
+	U64ArrayMembs ErrorU64ArrayMembsReadI,
+	BlobArrayAttrs ErrorBlobArrayAttrsReadI,
+	BlobArrayMembs ErrorBlobArrayMembsReadI,
+](
+	i int,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	symbolArrayAttrs SymbolArrayAttrs,
+	symbolArrayMembs SymbolArrayMembs,
+	u32ArrayAttrs U32ArrayAttrs,
+	u32ArrayMembs U32ArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+	blobArrayAttrs BlobArrayAttrs,
+	blobArrayMembs BlobArrayMembs,
+) (row Error, present bool, err error) {
+	// --- stringArray. ---
+	var stringArrayMessagesSlice []string
+	var stringArraySourcesSlice []string
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindMessages:
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayMessagesSlice = append(stringArrayMessagesSlice, v)
+				}
+			case kindSources:
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArraySourcesSlice = append(stringArraySourcesSlice, v)
+				}
+			}
+		}
+	}
+	if stringArrayMessagesSlice != nil {
+		row.Messages = stringArrayMessagesSlice
+		present = true
+	}
+	if stringArraySourcesSlice != nil {
+		row.Sources = stringArraySourcesSlice
+		present = true
+	}
+	// --- symbolArray. ---
+	var symbolArrayFuncsSlice []string
+	var symbolArrayStreamNamesSlice []string
+	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
+		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindFuncs:
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayFuncsSlice = append(symbolArrayFuncsSlice, v)
+				}
+			case kindStreamNames:
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayStreamNamesSlice = append(symbolArrayStreamNamesSlice, v)
+				}
+			}
+		}
+	}
+	if symbolArrayFuncsSlice != nil {
+		row.Funcs = symbolArrayFuncsSlice
+		present = true
+	}
+	if symbolArrayStreamNamesSlice != nil {
+		row.StreamNames = symbolArrayStreamNamesSlice
+		present = true
+	}
+	// --- u32Array. ---
+	var u32ArrayLinesSlice []uint32
+	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
+		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindLines:
+				for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u32ArrayLinesSlice = append(u32ArrayLinesSlice, v)
+				}
+			}
+		}
+	}
+	if u32ArrayLinesSlice != nil {
+		row.Lines = u32ArrayLinesSlice
+		present = true
+	}
+	// --- u64Array. ---
+	var u64ArrayFactIdsSlice []uint64
+	var u64ArrayParentIdsSlice []uint64
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindFactIds:
+				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u64ArrayFactIdsSlice = append(u64ArrayFactIdsSlice, v)
+				}
+			case kindParentIds:
+				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u64ArrayParentIdsSlice = append(u64ArrayParentIdsSlice, v)
+				}
+			}
+		}
+	}
+	if u64ArrayFactIdsSlice != nil {
+		row.FactIds = u64ArrayFactIdsSlice
+		present = true
+	}
+	if u64ArrayParentIdsSlice != nil {
+		row.ParentIds = u64ArrayParentIdsSlice
+		present = true
+	}
+	// --- blobArray. ---
+	var blobArrayDataSlice [][]byte
+	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
+		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindData:
+				for v := range blobArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					cp := make([]byte, len(v))
+					copy(cp, v)
+					blobArrayDataSlice = append(blobArrayDataSlice, cp)
+				}
+			}
+		}
+	}
+	if blobArrayDataSlice != nil {
+		row.Data = blobArrayDataSlice
+		present = true
+	}
+	return
+}
+
 // --- Sparse-CBOR write (ADR-0042 driver path). ---
 
 // Marshal writes the SoA buffer to w as the sparse-CBOR wire

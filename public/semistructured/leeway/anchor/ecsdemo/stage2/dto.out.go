@@ -529,3 +529,151 @@ func DroneEntityFillFromArrow[
 	}
 	return
 }
+
+// DroneEntityReadRow reads row i as one optional DroneEntity component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched, erroring only when a field
+// occurs more than once. Plain-bound fields stay zero — the caller
+// owns the envelope. The Attrs/Membs readers bind by type inference
+// at the call site, as with FillFromArrow.
+func DroneEntityReadRow[
+	SymbolAttrs DroneEntitySymbolAttrsReadI,
+	SymbolMembs DroneEntitySymbolMembsReadI,
+	U64ArrayAttrs DroneEntityU64ArrayAttrsReadI,
+	U64ArrayMembs DroneEntityU64ArrayMembsReadI,
+	SymbolArrayAttrs DroneEntitySymbolArrayAttrsReadI,
+	SymbolArrayMembs DroneEntitySymbolArrayMembsReadI,
+	GeoPointAttrs DroneEntityGeoPointAttrsReadI,
+	GeoPointMembs DroneEntityGeoPointMembsReadI,
+	TimeRangeAttrs DroneEntityTimeRangeAttrsReadI,
+	TimeRangeMembs DroneEntityTimeRangeMembsReadI,
+](
+	i int,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+	symbolArrayAttrs SymbolArrayAttrs,
+	symbolArrayMembs SymbolArrayMembs,
+	geoPointAttrs GeoPointAttrs,
+	geoPointMembs GeoPointMembs,
+	timeRangeAttrs TimeRangeAttrs,
+	timeRangeMembs TimeRangeMembs,
+) (row DroneEntity, present bool, err error) {
+	// --- symbol. ---
+	var symbolStatusVal string
+	var symbolStatusCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindStatus:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolStatusVal = val
+				symbolStatusCount++
+			}
+		}
+	}
+	if symbolStatusCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Status").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolStatusCount == 1 {
+		row.Status = symbolStatusVal
+		present = true
+	}
+	// --- u64Array. ---
+	var u64ArrayBatteryVal uint64
+	var u64ArrayBatteryCount int
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindBattery:
+				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u64ArrayBatteryVal = val
+				u64ArrayBatteryCount++
+			}
+		}
+	}
+	if u64ArrayBatteryCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Battery").Errorf("occurs more than once on the row")
+		return
+	}
+	if u64ArrayBatteryCount == 1 {
+		row.Battery = u64ArrayBatteryVal
+		present = true
+	}
+	// --- symbolArray. ---
+	var symbolArrayTagsSlice []string
+	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
+		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTags:
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
+				}
+			}
+		}
+	}
+	if symbolArrayTagsSlice != nil {
+		row.Tags = symbolArrayTagsSlice
+		present = true
+	}
+	// --- geoPoint. ---
+	var geoPointLatVal float32
+	var geoPointLngVal float32
+	var geoPointCellVal uint64
+	var geoPointLatCount int
+	ngeoPoint := geoPointAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ngeoPoint; attrJ++ {
+		geoPointLatLocal := geoPointAttrs.GetAttrValuePointLat(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		geoPointLngLocal := geoPointAttrs.GetAttrValuePointLng(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		geoPointCellLocal := geoPointAttrs.GetAttrValueH3(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		for membID := range geoPointMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			if membID == kindLat {
+				geoPointLatVal = geoPointLatLocal
+				geoPointLngVal = geoPointLngLocal
+				geoPointCellVal = geoPointCellLocal
+				geoPointLatCount++
+			}
+		}
+	}
+	if geoPointLatCount > 1 {
+		err = eb.Build().Int("row", i).Str("membership", "droneLoc").Errorf("occurs more than once on the row")
+		return
+	}
+	if geoPointLatCount == 1 {
+		row.Lat = geoPointLatVal
+		row.Lng = geoPointLngVal
+		row.Cell = geoPointCellVal
+		present = true
+	}
+	// --- timeRange. ---
+	var timeRangeWindowBeginVal time.Time
+	var timeRangeWindowEndVal time.Time
+	var timeRangeWindowBeginCount int
+	ntimeRange := timeRangeAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntimeRange; attrJ++ {
+		timeRangeWindowBeginLocal := timeRangeAttrs.GetAttrValueBeginIncl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		timeRangeWindowEndLocal := timeRangeAttrs.GetAttrValueEndExcl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		for membID := range timeRangeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			if membID == kindWindowBegin {
+				timeRangeWindowBeginVal = timeRangeWindowBeginLocal
+				timeRangeWindowEndVal = timeRangeWindowEndLocal
+				timeRangeWindowBeginCount++
+			}
+		}
+	}
+	if timeRangeWindowBeginCount > 1 {
+		err = eb.Build().Int("row", i).Str("membership", "droneWindow").Errorf("occurs more than once on the row")
+		return
+	}
+	if timeRangeWindowBeginCount == 1 {
+		row.WindowBegin = timeRangeWindowBeginVal
+		row.WindowEnd = timeRangeWindowEndVal
+		present = true
+	}
+	return
+}

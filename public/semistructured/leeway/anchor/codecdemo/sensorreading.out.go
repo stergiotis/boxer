@@ -215,3 +215,5 @@ func SensorReadingFillFromArrow[
 	}
 	return
 }
+
+// SensorReadingReadRow is not emitted: field Reading uses a carrier channel.

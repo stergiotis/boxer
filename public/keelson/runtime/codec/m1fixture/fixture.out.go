@@ -1204,6 +1204,354 @@ func M1SampleFillFromArrow[
 	return
 }
 
+// M1SampleReadRow reads row i as one optional M1Sample component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched, erroring only when a field
+// occurs more than once. Plain-bound fields stay zero — the caller
+// owns the envelope. The Attrs/Membs readers bind by type inference
+// at the call site, as with FillFromArrow.
+func M1SampleReadRow[
+	SymbolAttrs M1SampleSymbolAttrsReadI,
+	SymbolMembs M1SampleSymbolMembsReadI,
+	U8ArrayAttrs M1SampleU8ArrayAttrsReadI,
+	U8ArrayMembs M1SampleU8ArrayMembsReadI,
+	U16ArrayAttrs M1SampleU16ArrayAttrsReadI,
+	U16ArrayMembs M1SampleU16ArrayMembsReadI,
+	U32ArrayAttrs M1SampleU32ArrayAttrsReadI,
+	U32ArrayMembs M1SampleU32ArrayMembsReadI,
+	U64ArrayAttrs M1SampleU64ArrayAttrsReadI,
+	U64ArrayMembs M1SampleU64ArrayMembsReadI,
+	F32ArrayAttrs M1SampleF32ArrayAttrsReadI,
+	F32ArrayMembs M1SampleF32ArrayMembsReadI,
+	F64ArrayAttrs M1SampleF64ArrayAttrsReadI,
+	F64ArrayMembs M1SampleF64ArrayMembsReadI,
+	BoolAttrs M1SampleBoolAttrsReadI,
+	BoolMembs M1SampleBoolMembsReadI,
+	BlobArrayAttrs M1SampleBlobArrayAttrsReadI,
+	BlobArrayMembs M1SampleBlobArrayMembsReadI,
+	TimeArrayAttrs M1SampleTimeArrayAttrsReadI,
+	TimeArrayMembs M1SampleTimeArrayMembsReadI,
+	StringArrayAttrs M1SampleStringArrayAttrsReadI,
+	StringArrayMembs M1SampleStringArrayMembsReadI,
+	TextArrayAttrs M1SampleTextArrayAttrsReadI,
+	TextArrayMembs M1SampleTextArrayMembsReadI,
+](
+	i int,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	u8ArrayAttrs U8ArrayAttrs,
+	u8ArrayMembs U8ArrayMembs,
+	u16ArrayAttrs U16ArrayAttrs,
+	u16ArrayMembs U16ArrayMembs,
+	u32ArrayAttrs U32ArrayAttrs,
+	u32ArrayMembs U32ArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+	f32ArrayAttrs F32ArrayAttrs,
+	f32ArrayMembs F32ArrayMembs,
+	f64ArrayAttrs F64ArrayAttrs,
+	f64ArrayMembs F64ArrayMembs,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+	blobArrayAttrs BlobArrayAttrs,
+	blobArrayMembs BlobArrayMembs,
+	timeArrayAttrs TimeArrayAttrs,
+	timeArrayMembs TimeArrayMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+) (row M1Sample, present bool, err error) {
+	// --- symbol. ---
+	var symbolSourceVal string
+	var symbolSourceCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindSource:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolSourceVal = val
+				symbolSourceCount++
+			}
+		}
+	}
+	if symbolSourceCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Source").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolSourceCount == 1 {
+		row.Source = symbolSourceVal
+		present = true
+	}
+	// --- u8Array. ---
+	var u8ArraySeverityVal uint8
+	var u8ArraySeverityCount int
+	nu8Array := u8ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu8Array; attrJ++ {
+		for membID := range u8ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindSeverity:
+				val := u8ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u8ArraySeverityVal = val
+				u8ArraySeverityCount++
+			}
+		}
+	}
+	if u8ArraySeverityCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Severity").Errorf("occurs more than once on the row")
+		return
+	}
+	if u8ArraySeverityCount == 1 {
+		row.Severity = u8ArraySeverityVal
+		present = true
+	}
+	// --- u16Array. ---
+	var u16ArrayMajorVerVal uint16
+	var u16ArrayMajorVerCount int
+	nu16Array := u16ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu16Array; attrJ++ {
+		for membID := range u16ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindMajorVer:
+				val := u16ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u16ArrayMajorVerVal = val
+				u16ArrayMajorVerCount++
+			}
+		}
+	}
+	if u16ArrayMajorVerCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "MajorVer").Errorf("occurs more than once on the row")
+		return
+	}
+	if u16ArrayMajorVerCount == 1 {
+		row.MajorVer = u16ArrayMajorVerVal
+		present = true
+	}
+	// --- u32Array. ---
+	var u32ArraySequenceVal uint32
+	var u32ArraySequenceCount int
+	var u32ArrayCapBitsBitmap *roaring.Bitmap
+	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
+		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindSequence:
+				val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u32ArraySequenceVal = val
+				u32ArraySequenceCount++
+			case kindCapBits:
+				for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					if u32ArrayCapBitsBitmap == nil {
+						u32ArrayCapBitsBitmap = roaring.New()
+					}
+					u32ArrayCapBitsBitmap.Add(v)
+				}
+			}
+		}
+	}
+	if u32ArraySequenceCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Sequence").Errorf("occurs more than once on the row")
+		return
+	}
+	if u32ArraySequenceCount == 1 {
+		row.Sequence = u32ArraySequenceVal
+		present = true
+	}
+	if u32ArrayCapBitsBitmap != nil {
+		row.CapBits = u32ArrayCapBitsBitmap
+		present = true
+	}
+	// --- u64Array. ---
+	var u64ArrayLatencyNanosVal uint64
+	var u64ArrayLatencyNanosCount int
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindLatencyNanos:
+				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u64ArrayLatencyNanosVal = val
+				u64ArrayLatencyNanosCount++
+			}
+		}
+	}
+	if u64ArrayLatencyNanosCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "LatencyNanos").Errorf("occurs more than once on the row")
+		return
+	}
+	if u64ArrayLatencyNanosCount == 1 {
+		row.LatencyNanos = u64ArrayLatencyNanosVal
+		present = true
+	}
+	// --- f32Array. ---
+	var f32ArrayCpuPctVal float32
+	var f32ArrayCpuPctCount int
+	nf32Array := f32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nf32Array; attrJ++ {
+		for membID := range f32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindCpuPct:
+				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				f32ArrayCpuPctVal = val
+				f32ArrayCpuPctCount++
+			}
+		}
+	}
+	if f32ArrayCpuPctCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "CpuPct").Errorf("occurs more than once on the row")
+		return
+	}
+	if f32ArrayCpuPctCount == 1 {
+		row.CpuPct = f32ArrayCpuPctVal
+		present = true
+	}
+	// --- f64Array. ---
+	var f64ArrayLoadAvg1Val float64
+	var f64ArrayLoadAvg1Count int
+	nf64Array := f64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nf64Array; attrJ++ {
+		for membID := range f64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindLoadAvg1:
+				val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				f64ArrayLoadAvg1Val = val
+				f64ArrayLoadAvg1Count++
+			}
+		}
+	}
+	if f64ArrayLoadAvg1Count > 1 {
+		err = eb.Build().Int("row", i).Str("field", "LoadAvg1").Errorf("occurs more than once on the row")
+		return
+	}
+	if f64ArrayLoadAvg1Count == 1 {
+		row.LoadAvg1 = f64ArrayLoadAvg1Val
+		present = true
+	}
+	// --- bool. ---
+	var boolHealthyVal bool
+	var boolHealthyCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindHealthy:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolHealthyVal = val
+				boolHealthyCount++
+			}
+		}
+	}
+	if boolHealthyCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Healthy").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolHealthyCount == 1 {
+		row.Healthy = boolHealthyVal
+		present = true
+	}
+	// --- blobArray. ---
+	var blobArrayPeerV4Val [4]byte
+	var blobArrayPeerV4Count int
+	var blobArrayPeerV6Val [16]byte
+	var blobArrayPeerV6Count int
+	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
+		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindPeerV4:
+				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				copy(blobArrayPeerV4Val[:], val)
+				blobArrayPeerV4Count++
+			case kindPeerV6:
+				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				copy(blobArrayPeerV6Val[:], val)
+				blobArrayPeerV6Count++
+			}
+		}
+	}
+	if blobArrayPeerV4Count > 1 {
+		err = eb.Build().Int("row", i).Str("field", "PeerV4").Errorf("occurs more than once on the row")
+		return
+	}
+	if blobArrayPeerV4Count == 1 {
+		row.PeerV4 = blobArrayPeerV4Val
+		present = true
+	}
+	if blobArrayPeerV6Count > 1 {
+		err = eb.Build().Int("row", i).Str("field", "PeerV6").Errorf("occurs more than once on the row")
+		return
+	}
+	if blobArrayPeerV6Count == 1 {
+		row.PeerV6 = blobArrayPeerV6Val
+		present = true
+	}
+	// --- timeArray. ---
+	var timeArrayLastSuccessVal time.Time
+	var timeArrayLastSuccessCount int
+	ntimeArray := timeArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntimeArray; attrJ++ {
+		for membID := range timeArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindLastSuccess:
+				val := timeArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				timeArrayLastSuccessVal = val
+				timeArrayLastSuccessCount++
+			}
+		}
+	}
+	if timeArrayLastSuccessCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "LastSuccess").Errorf("occurs more than once on the row")
+		return
+	}
+	if timeArrayLastSuccessCount == 1 {
+		row.LastSuccess.Val = timeArrayLastSuccessVal
+		row.LastSuccess.Has = true
+		present = true
+	}
+	// --- stringArray. ---
+	var stringArrayOperatorNameVal string
+	var stringArrayOperatorNameCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindOperatorName:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayOperatorNameVal = val
+				stringArrayOperatorNameCount++
+			}
+		}
+	}
+	if stringArrayOperatorNameCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "OperatorName").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayOperatorNameCount == 1 {
+		row.OperatorName.Val = stringArrayOperatorNameVal
+		row.OperatorName.Has = true
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayTagsSlice []string
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTags:
+				for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					textArrayTagsSlice = append(textArrayTagsSlice, v)
+				}
+			}
+		}
+	}
+	if textArrayTagsSlice != nil {
+		row.Tags = textArrayTagsSlice
+		present = true
+	}
+	return
+}
+
 // --- Sparse-CBOR write (ADR-0042 driver path). ---
 
 // Marshal writes the SoA buffer to w as the sparse-CBOR wire

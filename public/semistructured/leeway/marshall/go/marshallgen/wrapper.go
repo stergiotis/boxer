@@ -117,6 +117,20 @@ func (NoOpWrapper) AfterCore(_ *strings.Builder, _ *mappingplan.Plan) error { re
 // call site, or the params-blob channels carry the wire payload
 // directly). Multi-sub-column sections share one membership across
 // two fields; KindVars decl per membership, not per field.
+// MembershipIds reports the package-local membership-id assignment the
+// NoOpWrapper KindVars block emits: one id per unique ref-channel
+// membership, 1-based, in declaration order. Exposed so downstream
+// generators (e.g. recordstore/gen resolving read-back memberships for
+// baked Scan SQL) reproduce exactly the ids the generated codec writes.
+// Verbatim channels carry no id and are absent from the map.
+func MembershipIds(plan *mappingplan.Plan) map[string]uint64 {
+	out := make(map[string]uint64)
+	for i, f := range uniqueMemberships(plan) {
+		out[f.LWMembership] = uint64(i + 1)
+	}
+	return out
+}
+
 func uniqueMemberships(plan *mappingplan.Plan) (out []mappingplan.TaggedField) {
 	seen := map[string]bool{}
 	for _, f := range plan.Fields {

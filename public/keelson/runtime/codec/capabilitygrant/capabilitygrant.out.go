@@ -619,6 +619,153 @@ func CapabilityGrantFillFromArrow[
 	return
 }
 
+// CapabilityGrantReadRow reads row i as one optional CapabilityGrant component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched, erroring only when a field
+// occurs more than once. Plain-bound fields stay zero — the caller
+// owns the envelope. The Attrs/Membs readers bind by type inference
+// at the call site, as with FillFromArrow.
+func CapabilityGrantReadRow[
+	StringArrayAttrs CapabilityGrantStringArrayAttrsReadI,
+	StringArrayMembs CapabilityGrantStringArrayMembsReadI,
+	SymbolAttrs CapabilityGrantSymbolAttrsReadI,
+	SymbolMembs CapabilityGrantSymbolMembsReadI,
+	U32RangeAttrs CapabilityGrantU32RangeAttrsReadI,
+	U32RangeMembs CapabilityGrantU32RangeMembsReadI,
+	BoolAttrs CapabilityGrantBoolAttrsReadI,
+	BoolMembs CapabilityGrantBoolMembsReadI,
+	ForeignKeyAttrs CapabilityGrantForeignKeyAttrsReadI,
+	ForeignKeyMembs CapabilityGrantForeignKeyMembsReadI,
+](
+	i int,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	u32RangeAttrs U32RangeAttrs,
+	u32RangeMembs U32RangeMembs,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+	foreignKeyAttrs ForeignKeyAttrs,
+	foreignKeyMembs ForeignKeyMembs,
+) (row CapabilityGrant, present bool, err error) {
+	// --- stringArray. ---
+	var stringArraySubjectVal string
+	var stringArraySubjectCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindSubject:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArraySubjectVal = val
+				stringArraySubjectCount++
+			}
+		}
+	}
+	if stringArraySubjectCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Subject").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArraySubjectCount == 1 {
+		row.Subject = stringArraySubjectVal
+		present = true
+	}
+	// --- symbol. ---
+	var symbolCapabilityVal string
+	var symbolCapabilityCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindCapability:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolCapabilityVal = val
+				symbolCapabilityCount++
+			}
+		}
+	}
+	if symbolCapabilityCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Capability").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolCapabilityCount == 1 {
+		row.Capability = symbolCapabilityVal
+		present = true
+	}
+	// --- u32Range. ---
+	var u32RangeValidityBeginVal uint32
+	var u32RangeValidityEndVal uint32
+	var u32RangeValidityBeginCount int
+	nu32Range := u32RangeAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu32Range; attrJ++ {
+		u32RangeValidityBeginLocal := u32RangeAttrs.GetAttrValueBeginIncl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		u32RangeValidityEndLocal := u32RangeAttrs.GetAttrValueEndExcl(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		for membID := range u32RangeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			if membID == kindValidityBegin {
+				u32RangeValidityBeginVal = u32RangeValidityBeginLocal
+				u32RangeValidityEndVal = u32RangeValidityEndLocal
+				u32RangeValidityBeginCount++
+			}
+		}
+	}
+	if u32RangeValidityBeginCount > 1 {
+		err = eb.Build().Int("row", i).Str("membership", "cgValidity").Errorf("occurs more than once on the row")
+		return
+	}
+	if u32RangeValidityBeginCount == 1 {
+		row.ValidityBegin = u32RangeValidityBeginVal
+		row.ValidityEnd = u32RangeValidityEndVal
+		present = true
+	}
+	// --- bool. ---
+	var boolActiveVal bool
+	var boolActiveCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindActive:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolActiveVal = val
+				boolActiveCount++
+			}
+		}
+	}
+	if boolActiveCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Active").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolActiveCount == 1 {
+		row.Active = boolActiveVal
+		present = true
+	}
+	// --- foreignKey. ---
+	var foreignKeyGranterFactVal uint64
+	var foreignKeyGranterFactCount int
+	nforeignKey := foreignKeyAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nforeignKey; attrJ++ {
+		for membID := range foreignKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindGranterFact:
+				val := foreignKeyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				foreignKeyGranterFactVal = val
+				foreignKeyGranterFactCount++
+			}
+		}
+	}
+	if foreignKeyGranterFactCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "GranterFact").Errorf("occurs more than once on the row")
+		return
+	}
+	if foreignKeyGranterFactCount == 1 {
+		row.GranterFact.Val = foreignKeyGranterFactVal
+		row.GranterFact.Has = true
+		present = true
+	}
+	return
+}
+
 // --- Sparse-CBOR write (ADR-0042 driver path). ---
 
 // Marshal writes the SoA buffer to w as the sparse-CBOR wire
