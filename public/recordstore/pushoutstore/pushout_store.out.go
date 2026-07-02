@@ -101,7 +101,11 @@ type PushoutStore[W comparable] struct {
 	// pending holds transferred-but-uninserted records after a failed
 	// Flush; the next Flush ships them (DiscardPending drops them).
 	pending []arrow.RecordBatch
-	cache   *caching.ReadThroughCache[string, *PushoutEntity, W]
+	// dirty tracks locally-written keys between Commit/Delete and the
+	// next successful Flush (or DiscardPending); the fetcher refuses to
+	// cache them so a fetch can never re-cache the pre-write row.
+	dirty map[string]struct{}
+	cache *caching.ReadThroughCache[string, *PushoutEntity, W]
 }
 
 func NewPushoutStore[W comparable](exec recordstore.ExecutorI, alloc memory.Allocator, cfg PushoutStoreConfig) (inst *PushoutStore[W]) {
@@ -111,7 +115,7 @@ func NewPushoutStore[W comparable](exec recordstore.ExecutorI, alloc memory.Allo
 	if cfg.CacheCapacity <= 0 {
 		cfg.CacheCapacity = 1024
 	}
-	inst = &PushoutStore[W]{exec: exec, alloc: alloc, cfg: cfg, dml: NewInEntityPushoutTable(alloc, 64)}
+	inst = &PushoutStore[W]{exec: exec, alloc: alloc, cfg: cfg, dml: NewInEntityPushoutTable(alloc, 64), dirty: make(map[string]struct{})}
 	inst.cache = caching.NewReadThroughCache[string, *PushoutEntity, W](cfg.CacheCapacity, inst, cfg.FetchCriteria)
 	return
 }
@@ -202,6 +206,7 @@ func (inst *PushoutEntityBuilder[W]) Commit() (err error) {
 		return
 	}
 	inst.store.buffered++
+	inst.store.dirty[inst.key] = struct{}{}
 	inst.store.cache.Delete(inst.key)
 	return
 }
@@ -296,6 +301,7 @@ func (inst *PushoutStore[W]) Flush(ctx context.Context) (n int, err error) {
 	}
 	n = inst.buffered
 	inst.buffered = 0
+	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	return
 }
 
@@ -315,6 +321,7 @@ func (inst *PushoutStore[W]) DiscardPending() {
 	}
 	inst.pending = nil
 	inst.buffered = 0
+	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
 }
 
 // Get retrieves an entity by Key through the cache. A miss queues the
@@ -353,6 +360,8 @@ func (inst *PushoutStore[W]) DeterminePartition(key string) uint64 { return 0 }
 
 // FetchItemSinglePartition implements caching.ItemFetcherI: one batched
 // point lookup per fetch. Duplicate versions collapse newest-first.
+// Dirty keys (written locally, not yet flushed) are fetched but not
+// cached — caching them would resurrect the pre-write row.
 func (inst *PushoutStore[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *PushoutEntity]) (err error) {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
@@ -371,6 +380,9 @@ func (inst *PushoutStore[W]) FetchItemSinglePartition(ctx context.Context, parti
 		return
 	}
 	for _, ent := range ents {
+		if _, d := inst.dirty[ent.ID]; d {
+			continue
+		}
 		target.AddItem(ent.ID, ent)
 	}
 	return
@@ -501,6 +513,7 @@ func (inst *PushoutStore[W]) Delete(id string, ts time.Time) (err error) {
 		return
 	}
 	inst.buffered++
+	inst.dirty[id] = struct{}{}
 	inst.cache.Delete(id)
 	return
 }
