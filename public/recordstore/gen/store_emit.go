@@ -26,11 +26,10 @@ type storeComponent struct {
 	filter string
 }
 
-// secUse is one distinct tagged section a component set touches: its
-// PascalCase method name and the decode-side reader variable.
+// secUse is one distinct tagged section a component set touches: the
+// decode-side reader variable it binds to.
 type secUse struct {
-	method string
-	varN   string
+	varN string
 }
 
 // envelopeCol is one plain envelope column: its physical (encoded) name,
@@ -125,10 +124,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	inst.emitFlush(&sb)
 	inst.emitCacheVerbs(&sb)
 	inst.emitQueryVerbs(&sb, comps, stateView)
-	err = inst.emitDecode(&sb, comps, stateView)
-	if err != nil {
-		return
-	}
+	inst.emitDecode(&sb, comps, stateView)
 
 	raw := []byte(sb.String())
 	code, err = format.Source(raw)
@@ -698,7 +694,7 @@ func (inst Input) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, st
 	p("")
 }
 
-func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateView bool) (err error) {
+func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateView bool) {
 	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
 	ra := inst.raPrefix()
 
@@ -709,7 +705,7 @@ func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateV
 		for _, g := range c.groups {
 			m := mappingplan.UpperFirst(g.Section)
 			if _, ok := seen[m]; !ok {
-				seen[m] = secUse{method: m, varN: lowerFirst(m) + "R"}
+				seen[m] = secUse{varN: lowerFirst(m) + "R"}
 				order = append(order, m)
 			}
 		}
@@ -718,10 +714,9 @@ func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateV
 	p("// --- decode (Arrow → entity bags). ---")
 	p("")
 	p("// %sSectionReaderI is the uniform slice of the generated read-access", inst.TableName)
-	p("// readers.")
+	p("// readers. Column indices stay at their constructor defaults — the")
+	p("// schema order a SELECT * returns.")
 	p("type %sSectionReaderI interface {", inst.TableName)
-	p("\tGetColumnIndices() []uint32")
-	p("\tSetColumnIndices([]uint32) []uint32")
 	p("\tLoadFromRecord(raruntime.RecordI) error")
 	p("\tRelease()")
 	p("}")
@@ -770,7 +765,6 @@ func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateV
 	}
 	p("\treaders := []%sSectionReaderI{%s}", inst.TableName, strings.Join(readerVars, ", "))
 	p("\tfor _, r := range readers {")
-	p("\t\tr.SetColumnIndices(r.GetColumnIndices())")
 	p("\t\terr = r.LoadFromRecord(rec)")
 	p("\t\tif err != nil {")
 	p("\t\t\terr = eh.Errorf(\"load %s reader from record: %%w\", err)", inst.TableName)
@@ -830,7 +824,6 @@ func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateV
 	p("\treturn")
 	p("}")
 	p("")
-	return
 }
 
 func upperFirst(s string) string { return mappingplan.UpperFirst(s) }

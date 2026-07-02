@@ -19,11 +19,7 @@ import (
 	"context"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
-
-// ErrNoRows reports that a point query (e.g. Latest) matched no row.
-var ErrNoRows = eh.Errorf("recordstore: no rows")
 
 // ExecutorI is the seam between a generated store and ClickHouse. The store
 // emits SQL text and Arrow batches; the executor moves them. Implementations

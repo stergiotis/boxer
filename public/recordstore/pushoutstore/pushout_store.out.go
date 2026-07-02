@@ -530,10 +530,9 @@ func (inst *PushoutStore[W]) GetLatest(ctx context.Context, key string) (ent *Pu
 // --- decode (Arrow → entity bags). ---
 
 // pushoutSectionReaderI is the uniform slice of the generated read-access
-// readers.
+// readers. Column indices stay at their constructor defaults — the
+// schema order a SELECT * returns.
 type pushoutSectionReaderI interface {
-	GetColumnIndices() []uint32
-	SetColumnIndices([]uint32) []uint32
 	LoadFromRecord(raruntime.RecordI) error
 	Release()
 }
@@ -577,7 +576,6 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 	retTimeR := NewReadAccessPushoutTableTaggedRetTime()
 	readers := []pushoutSectionReaderI{idR, tsR, lcR, envBlobR, logHashR, snapAppliedR, snapGraggleR, retHashR, retIndexR, retTimeR}
 	for _, r := range readers {
-		r.SetColumnIndices(r.GetColumnIndices())
 		err = r.LoadFromRecord(rec)
 		if err != nil {
 			err = eh.Errorf("load pushout reader from record: %w", err)

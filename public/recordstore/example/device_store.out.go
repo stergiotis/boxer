@@ -529,10 +529,9 @@ func (inst *DeviceStore[W]) GetLatest(ctx context.Context, key uint64) (ent *Dev
 // --- decode (Arrow → entity bags). ---
 
 // deviceSectionReaderI is the uniform slice of the generated read-access
-// readers.
+// readers. Column indices stay at their constructor defaults — the
+// schema order a SELECT * returns.
 type deviceSectionReaderI interface {
-	GetColumnIndices() []uint32
-	SetColumnIndices([]uint32) []uint32
 	LoadFromRecord(raruntime.RecordI) error
 	Release()
 }
@@ -573,7 +572,6 @@ func decodeDeviceRecord(rec arrow.RecordBatch) (ents []*DeviceEntity, err error)
 	geoPointR := NewReadAccessDeviceTableTaggedGeoPoint()
 	readers := []deviceSectionReaderI{idR, tsR, lcR, symbolR, u64ArrayR, symbolArrayR, geoPointR}
 	for _, r := range readers {
-		r.SetColumnIndices(r.GetColumnIndices())
 		err = r.LoadFromRecord(rec)
 		if err != nil {
 			err = eh.Errorf("load device reader from record: %w", err)
