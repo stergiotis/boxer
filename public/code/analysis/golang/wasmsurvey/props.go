@@ -65,6 +65,51 @@ func parseStateToken(tok string) (s packageprops.WASMState) {
 	}
 }
 
+// kindToken is the packageprops identifier for a Kind, used in generated source
+// and to compare against harvested tokens (mirrors stateToken).
+func kindToken(k packageprops.Kind) (tok string) {
+	switch k {
+	case packageprops.KindDemo:
+		return "KindDemo"
+	case packageprops.KindExample:
+		return "KindExample"
+	case packageprops.KindIntegrationTest:
+		return "KindIntegrationTest"
+	default:
+		return "KindUnspecified"
+	}
+}
+
+// parseKindToken is the inverse of kindToken.
+func parseKindToken(tok string) (k packageprops.Kind) {
+	switch tok {
+	case "KindDemo":
+		return packageprops.KindDemo
+	case "KindExample":
+		return packageprops.KindExample
+	case "KindIntegrationTest":
+		return packageprops.KindIntegrationTest
+	default:
+		return packageprops.KindUnspecified
+	}
+}
+
+// heuristicKind guesses a package's Kind from its leaf directory name, used only
+// to seed a fresh declaration. demo/example directory names are high-precision;
+// integration tests are file-level (`*_integration_test.go`) in this repo, not
+// package-level, so this never returns KindIntegrationTest. GenerateProps only
+// consults it when no curated Kind already exists, so a hand-set value always
+// wins on re-seed.
+func heuristicKind(pr PackageReport) (k packageprops.Kind) {
+	switch filepath.Base(pr.Dir) {
+	case "demo", "demos":
+		return packageprops.KindDemo
+	case "example", "examples":
+		return packageprops.KindExample
+	}
+	return packageprops.KindUnspecified
+}
+
 // stateFor returns a package's verdict state for one target.
 func stateFor(pr PackageReport, target TargetID) (s packageprops.WASMState) {
 	for _, v := range pr.Targets {
@@ -138,8 +183,20 @@ func GenerateProps(ctx context.Context, opts Options, overwrite bool) (res Gener
 			res.Skipped++
 			continue // never clobber a curated declaration
 		}
+		// Kind is human-owned, not survey-computable: preserve a curated value
+		// across a re-seed, and only fall back to the directory-name heuristic
+		// when nothing is declared yet (ADR-0080 §SD3 hybrid lifecycle).
+		kind := packageprops.KindUnspecified
+		if exists {
+			if fields, e := parsePropsFile(path); e == nil {
+				kind = parseKindToken(fields["Kind"])
+			}
+		}
+		if kind == packageprops.KindUnspecified {
+			kind = heuristicKind(pr)
+		}
 		var src []byte
-		src, err = renderPropsFile(pr)
+		src, err = renderPropsFile(pr, kind)
 		if err != nil {
 			return
 		}
@@ -157,8 +214,11 @@ func GenerateProps(ctx context.Context, opts Options, overwrite bool) (res Gener
 	return
 }
 
-// renderPropsFile emits the gofmt-clean source of a package's props file.
-func renderPropsFile(pr PackageReport) (src []byte, err error) {
+// renderPropsFile emits the gofmt-clean source of a package's props file. kind
+// is the package's declared role (KindUnspecified for ordinary code, in which
+// case no Kind field is emitted so the common case stays terse and the zero
+// value keeps asserting nothing).
+func renderPropsFile(pr PackageReport, kind packageprops.Kind) (src []byte, err error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "package %s\n\n", pr.Name)
 	fmt.Fprintf(&b, "import %q\n\n", propsImportPath)
@@ -168,6 +228,9 @@ func renderPropsFile(pr PackageReport) (src []byte, err error) {
 	fmt.Fprintf(&b, "WASMWASI: packageprops.%s,\n", stateToken(stateFor(pr, TargetWASI)))
 	fmt.Fprintf(&b, "WASMJS: packageprops.%s,\n", stateToken(stateFor(pr, TargetJS)))
 	fmt.Fprintf(&b, "WASMFreestanding: packageprops.%s,\n", stateToken(stateFor(pr, TargetWasmUnknown)))
+	if kind != packageprops.KindUnspecified {
+		fmt.Fprintf(&b, "Kind: packageprops.%s,\n", kindToken(kind))
+	}
 	b.WriteString("}\n\n")
 	// Self-register from init so packageprops.All() enumerates this package
 	// when it is linked into a binary (ADR-0080 registry surface).
@@ -191,8 +254,12 @@ func renderHarvestGo(rows []HarvestRow, pkgName string) (src []byte, err error) 
 	b.WriteString("// Table is every package's declared PackageProps, harvested from source.\n")
 	b.WriteString("var Table = packageprops.Table{\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "{ImportPath: %q, Props: packageprops.Props{WASMWASI: packageprops.%s, WASMJS: packageprops.%s, WASMFreestanding: packageprops.%s}},\n",
-			r.ImportPath, stateToken(r.WASMWASI), stateToken(r.WASMJS), stateToken(r.WASMFreestanding))
+		props := fmt.Sprintf("WASMWASI: packageprops.%s, WASMJS: packageprops.%s, WASMFreestanding: packageprops.%s",
+			stateToken(r.WASMWASI), stateToken(r.WASMJS), stateToken(r.WASMFreestanding))
+		if r.Kind != packageprops.KindUnspecified {
+			props += fmt.Sprintf(", Kind: packageprops.%s", kindToken(r.Kind))
+		}
+		fmt.Fprintf(&b, "{ImportPath: %q, Props: packageprops.Props{%s}},\n", r.ImportPath, props)
 	}
 	b.WriteString("}\n")
 	src, err = format.Source([]byte(b.String()))
@@ -208,6 +275,7 @@ type HarvestRow struct {
 	WASMWASI         packageprops.WASMState
 	WASMJS           packageprops.WASMState
 	WASMFreestanding packageprops.WASMState
+	Kind             packageprops.Kind
 }
 
 // HarvestProps walks root for package_props.go files and parses their
@@ -240,6 +308,7 @@ func HarvestProps(root string, rootModule string) (rows []HarvestRow, err error)
 			WASMWASI:         parseStateToken(fields["WASMWASI"]),
 			WASMJS:           parseStateToken(fields["WASMJS"]),
 			WASMFreestanding: parseStateToken(fields["WASMFreestanding"]),
+			Kind:             parseKindToken(fields["Kind"]),
 		})
 		return nil
 	})
@@ -345,6 +414,9 @@ func VerifyProps(ctx context.Context, opts Options, root string) (mismatches []M
 		if !ok {
 			continue // declared but not in this survey's scope/closure
 		}
+		// Only the WASM* verdicts are reconciled: the survey computes them, so a
+		// declaration can regress against reality. Kind has no computable oracle
+		// (it is pure curated intent), so verify never flags it.
 		for _, td := range []struct {
 			target   TargetID
 			declared packageprops.WASMState

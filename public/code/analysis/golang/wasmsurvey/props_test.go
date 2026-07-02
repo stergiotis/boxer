@@ -83,12 +83,15 @@ func TestPropsRenderParseRoundTrip(t *testing.T) {
 			{Target: TargetWasmUnknown, Static: TierUnknown},
 		},
 	}
-	src, err := renderPropsFile(pr)
+	src, err := renderPropsFile(pr, packageprops.KindUnspecified)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(src), "package foo") {
 		t.Errorf("missing package clause:\n%s", src)
+	}
+	if strings.Contains(string(src), "Kind:") {
+		t.Errorf("KindUnspecified must not emit a Kind field:\n%s", src)
 	}
 
 	dir := t.TempDir()
@@ -107,6 +110,91 @@ func TestPropsRenderParseRoundTrip(t *testing.T) {
 	} {
 		if fields[field] != want {
 			t.Errorf("%s: parsed %q, want %q", field, fields[field], want)
+		}
+	}
+}
+
+func TestKindTokenRoundTrip(t *testing.T) {
+	for _, k := range []packageprops.Kind{
+		packageprops.KindUnspecified,
+		packageprops.KindDemo,
+		packageprops.KindExample,
+		packageprops.KindIntegrationTest,
+	} {
+		if got := parseKindToken(kindToken(k)); got != k {
+			t.Errorf("round-trip %v: token %q parsed back as %v", k, kindToken(k), got)
+		}
+	}
+	if got := parseKindToken("bogus"); got != packageprops.KindUnspecified {
+		t.Errorf("unknown token should parse to KindUnspecified, got %v", got)
+	}
+}
+
+func TestHeuristicKind(t *testing.T) {
+	for dir, want := range map[string]packageprops.Kind{
+		"/x/demo":      packageprops.KindDemo,
+		"/x/demos":     packageprops.KindDemo,
+		"/x/example":   packageprops.KindExample,
+		"/x/examples":  packageprops.KindExample,
+		"/x/recordsto": packageprops.KindUnspecified,
+		"/x/test":      packageprops.KindUnspecified, // integration tests are file-level, never seeded
+	} {
+		if got := heuristicKind(PackageReport{Dir: dir}); got != want {
+			t.Errorf("heuristicKind(%q) = %v, want %v", dir, got, want)
+		}
+	}
+}
+
+// TestRenderPropsFileKind renders and re-parses a declaration carrying a Kind,
+// covering the seed/preserve path (a curated Kind must survive a re-render).
+func TestRenderPropsFileKind(t *testing.T) {
+	pr := PackageReport{
+		ImportPath: "example.com/foo",
+		Name:       "foo",
+		Targets:    []TargetVerdict{{Target: TargetWASI, Static: TierGreen}},
+	}
+	src, err := renderPropsFile(pr, packageprops.KindExample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// gofmt aligns the struct's colons, so match the field and value loosely
+	// (the re-parse below is the exact check).
+	if !strings.Contains(string(src), "Kind:") || !strings.Contains(string(src), "packageprops.KindExample") {
+		t.Errorf("missing Kind field:\n%s", src)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, propsFileName)
+	if err = os.WriteFile(path, src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fields, err := parsePropsFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parseKindToken(fields["Kind"]); got != packageprops.KindExample {
+		t.Errorf("harvested Kind = %v, want KindExample", got)
+	}
+}
+
+// TestRenderHarvestGoKind checks the static Table emits Kind only when set, so
+// the overwhelmingly-common unspecified rows stay unchanged.
+func TestRenderHarvestGoKind(t *testing.T) {
+	rows := []HarvestRow{
+		{ImportPath: "example.com/plain", WASMWASI: packageprops.WASMCompiles},
+		{ImportPath: "example.com/ex", WASMWASI: packageprops.WASMBlocked, Kind: packageprops.KindExample},
+	}
+	src, err := renderHarvestGo(rows, "proptable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(src)
+	if !strings.Contains(s, `ImportPath: "example.com/ex"`) || !strings.Contains(s, "Kind: packageprops.KindExample") {
+		t.Errorf("classified row must carry its Kind:\n%s", s)
+	}
+	// The plain row's segment must not carry a Kind field.
+	for line := range strings.SplitSeq(s, "\n") {
+		if strings.Contains(line, `"example.com/plain"`) && strings.Contains(line, "Kind:") {
+			t.Errorf("unspecified row must not emit Kind:\n%s", line)
 		}
 	}
 }

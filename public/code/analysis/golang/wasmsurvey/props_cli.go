@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep/godepcollect"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/packageprops"
 	cli "github.com/urfave/cli/v2"
 )
 
@@ -113,10 +114,14 @@ func runPropsHarvest(c *cli.Context) (err error) {
 		return nil
 	case "table", "":
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "package\twasi\tjs\tfreestanding")
+		fmt.Fprintln(tw, "package\twasi\tjs\tfreestanding\tkind")
 		for _, r := range scoped {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
-				strings.TrimPrefix(r.ImportPath, modPath+"/"), r.WASMWASI, r.WASMJS, r.WASMFreestanding)
+			kind := "" // blank for the common ordinary-code case
+			if r.Kind != packageprops.KindUnspecified {
+				kind = r.Kind.String()
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+				strings.TrimPrefix(r.ImportPath, modPath+"/"), r.WASMWASI, r.WASMJS, r.WASMFreestanding, kind)
 		}
 		_ = tw.Flush()
 		fmt.Fprintf(os.Stdout, "%d declared package(s)\n", len(scoped))
