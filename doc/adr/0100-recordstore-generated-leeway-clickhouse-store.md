@@ -124,7 +124,9 @@ Adopt **O4**. Specific decisions:
     Isolated in a subpackage so the root stays dependency-light.
 - **SD2 — Envelope roles.** A store binds one `TableDesc`. Its plain columns
   form the **envelope**; generator config names up to three roles among
-  them: `Key` (required; the KV access key; Go type must be comparable),
+  them: `Key` (required; the KV access key; Go type must be comparable —
+  the generator derives it from the column's canonical type and supports
+  `uint64` and `string`, emitting a per-store SQL-literal renderer),
   `Order` (optional; numeric/time; enables `Latest` and `Replay`) and
   `Lifecycle` (optional; carries the live/tombstone marker; together with
   Key and Order it enables the state-view verbs). Roles default from
@@ -268,23 +270,29 @@ Adopt **O4**. Specific decisions:
 
 ### pushout `repo.StorageI` (ADR-0079)
 
-One store, one fact table; envelope `Key` is a string (or fixed-byte hash)
-column; payload components: a framed-blob component for envelopes, a
-hash-list component for log entries, blob components for snapshot/retention.
+Implemented as `recordstore/pushoutstore` (slice S3), passing
+`repo/storagetest` against clickhouse-local. One store, one fact table;
+the envelope `Key` is a string column carrying namespaces —
+`"env/<hex hash>"`, `"log"`, `"snapshot"`, `"retention"` — and the Order
+column carries a synthetic per-key sequence (Unix nanos 1, 2, 3, …), so
+append order is total without wall clocks. As-implemented mapping (the
+pre-S3 sketch differed in two places, corrected below):
 
 | `StorageI` method | store verbs | notes |
 | --- | --- | --- |
-| `PutEnvelope(h, framed)` | `Begin(key=h).AddEnvelope(blob).Commit()` + `Flush` | idempotent: equal bytes for equal hash, duplicate rows harmless; durable-on-return = synchronous `Flush` per op |
-| `GetEnvelope(h)` / `HasEnvelope(h)` | `Get` (cached) | immutable-by-key — the ideal cache case; batched closure walks amortize |
-| `AppendApplied(h)` | `Begin(key="applied/"+gen, order=seq).AddLogEntry(h).Commit()` + `Flush` | torn tail = row never inserted = "never acknowledged", matching the contract |
-| `LoadApplied()` | `Replay(key="applied/"+gen, 0)` | gen = current log generation |
-| `ReplaceApplied(hs)` | append full list under gen+1, then a generation-marker row; readers resolve gen via `Latest` | atomic-enough: readers see old gen until the marker row lands (single-block insert) |
-| `SaveSnapshot` / `LoadSnapshot` | append + `Latest` | prefix-gating stays in the engine |
-| `SaveRetention` / `LoadRetention` | same generation pattern as `ReplaceApplied` | ledger is replica-local; one store per replica |
+| `PutEnvelope(h, framed)` | existence check via `Latest`, then `Begin("env/"+hex).AddEnvelope(…).Commit()` + `Flush` | first-write-wins must hold even for **different** bytes under the same hash (the suite tests it), so read-before-insert — race-free because StorageI writes are engine-locked; "duplicate rows are harmless" was not enough |
+| `GetEnvelope(h)` / `HasEnvelope(h)` | cached `Get` (miss → one forced batch fetch → hit), falling back to uncached `Latest` | the fallback gives the authoritative absent-vs-error answer (cache misses swallow fetch errors); immutable-by-key — the ideal cache case |
+| `AppendApplied(h)` | `Begin("log", seqTs).AddLogEntry(hex).Commit()` + `Flush` | torn tail = row never inserted = "never acknowledged" |
+| `LoadApplied()` | `Replay("log", 0)`, keeping entries after the **last tombstone** | no generation marker needed — the state-view tombstone is the log reset |
+| `ReplaceApplied(hs)` | `Delete("log", seqTs)` (tombstone) + new entries, **one** `Flush` | a single Arrow insert: readers observe the old or the new log, never a mixture |
+| `SaveSnapshot` / `LoadSnapshot` | append one row + `Latest` | prefix-gating stays in the engine |
+| `SaveRetention` / `LoadRetention` | the whole ledger as one row of three aligned arrays (hash, index, nanos) + `Latest` | whole-set replace needs no generation pattern either |
 
-Durability caveat: this mapping is honest only over a durable engine
-(MergeTree with synchronous inserts), not `ENGINE = Memory`, and the adapter
-must run with async inserts off.
+Durability: honest only over a durable engine (MergeTree with synchronous
+inserts), not `ENGINE = Memory`; every mutating method flushes before
+returning. The adapter serializes all methods behind one mutex — the
+store and cache are single-goroutine, and the contract's concurrent
+reads become trivially safe.
 
 ### CQRS event sourcing
 
@@ -434,8 +442,13 @@ The QOC options above carry the rankings; notes below record nuance.
   everything non-carrier/non-explode, proven by a multi-sub-column
   `Located` component and an Option scalar in the example.
 - **S3** — pushout `StorageI` adapter passing `repo/storagetest` against
-  clickhouse-local. Feedback from this slice may amend SD2–SD4 in place
-  (this ADR is pre-acceptance).
+  clickhouse-local. **Done** (`recordstore/pushoutstore`): all five
+  conformance checks pass, including reopen durability across executor
+  processes. The slice fed back as anticipated: SD2 gained string keys
+  (with the generator-emitted SQL-literal renderer), and the consumer
+  mapping was corrected — first-write-wins needs read-before-insert, and
+  the state-view tombstone replaces the sketched generation-marker
+  pattern for both the applied log and the retention ledger.
 - **S4** — minimal CQRS worked example (commands → events → replay-fold →
   state), documentation-grade.
 
