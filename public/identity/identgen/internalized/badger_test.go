@@ -1,6 +1,8 @@
 package internalized
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -21,6 +23,7 @@ func TestBadgerIdInternalizer_RoundtripAndIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, fresh1)
 	require.True(t, id1.IsValid())
+	require.True(t, id1.RemoveTag().IsValid(), "body 0 is reserved as invalid/NULL")
 	require.EqualValues(t, 3, id1.GetTag().GetValue())
 
 	id2, fresh2, err := gen.GetId(k)
@@ -98,4 +101,66 @@ func TestBadgerIdInternalizer_PersistsAcrossReopen(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, fresh2, "mapping should have persisted across reopen")
 	require.Equal(t, id1, id2)
+}
+
+// TestBadgerIdInternalizedGenerator_RejectsOutOfRangeTag checks Create validates
+// the tag value against the active tag width.
+func TestBadgerIdInternalizedGenerator_RejectsOutOfRangeTag(t *testing.T) {
+	genFac, err := NewBadgerIdInternalizedGenerator(t.TempDir())
+	require.NoError(t, err)
+	defer func() { _ = genFac.Close() }()
+
+	_, err = genFac.Create(identifier.MaxTagValue+1, 8)
+	require.Error(t, err)
+}
+
+// TestBadgerIdInternalizer_ConcurrentGetId hammers one internalizer from many
+// goroutines (run with -race) to exercise the mutex: distinct keys must map to
+// distinct ids and every mapping must survive the race.
+func TestBadgerIdInternalizer_ConcurrentGetId(t *testing.T) {
+	genFac, err := NewBadgerIdInternalizedGenerator(t.TempDir())
+	require.NoError(t, err)
+	defer func() { _ = genFac.Close() }()
+	gen, err := genFac.Create(identifier.TagValue(7), 256)
+	require.NoError(t, err)
+	defer func() { _ = gen.Release() }()
+
+	const workers = 8
+	const perWorker = 64
+
+	var mu sync.Mutex
+	seen := make(map[identifier.TaggedId]string)
+	errs := make(chan error, workers)
+
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := range perWorker {
+				key := fmt.Sprintf("w%d-k%d", w, i)
+				id, _, e := gen.GetId([]byte(key))
+				if e != nil {
+					errs <- e
+					return
+				}
+				mu.Lock()
+				if prev, ok := seen[id]; ok && prev != key {
+					e = fmt.Errorf("id %d assigned to both %q and %q", uint64(id), prev, key)
+				}
+				seen[id] = key
+				mu.Unlock()
+				if e != nil {
+					errs <- e
+					return
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		require.NoError(t, e)
+	}
+	require.Len(t, seen, workers*perWorker, "every distinct key must get a distinct id")
 }

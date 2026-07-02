@@ -9,18 +9,14 @@ package internalized
 import (
 	"iter"
 
+	"github.com/stergiotis/boxer/public/identity/identgen"
 	"github.com/stergiotis/boxer/public/identity/identifier"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // maxPreallocHint caps the pre-allocation implied by an oversized generation
 // bandwidth, so a hint value cannot force a pathological map allocation.
 const maxPreallocHint = 1 << 20
-
-// ErrIdSpaceExhausted is returned once every id in a tag's body range has been
-// assigned. It is wrapped with structured context, so match it with errors.Is.
-var ErrIdSpaceExhausted = eh.Errorf("surrogate id space exhausted for tag")
 
 var _ identifier.IdGeneratorI = (*MemIdInternalizer)(nil)
 var _ identifier.IdGeneratorFactoryI = (*MemIdInternalizedGenerator)(nil)
@@ -77,7 +73,7 @@ func (inst *MemIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identi
 		err = eb.Build().
 			Uint64("maxIdIncl", uint64(inst.maxId)).
 			Uint64("tagValue", uint64(inst.tag.GetValue())).
-			Errorf("cannot mint a fresh id: %w", ErrIdSpaceExhausted)
+			Errorf("cannot mint a fresh id: %w", identgen.ErrIdSpaceExhausted)
 		return
 	}
 	s := string(naturalKey)

@@ -8,11 +8,11 @@ package seq
 import (
 	"encoding/binary"
 	"errors"
-	"math/rand/v2"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/rs/zerolog/log"
 	badger2 "github.com/stergiotis/boxer/public/db/badger"
+	"github.com/stergiotis/boxer/public/identity/identgen"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -51,21 +51,14 @@ func (inst *BadgerIdSequence) GetUntaggedId(naturalKey []byte) (untagged identif
 	if naturalKey != nil {
 		log.Warn().Msg("natural key is ignored for sequential ids")
 	}
-	// Opportunistically reclaim value-log space (~1 in 65536 calls).
-	if rand.Uint32()&0xffff == 0 {
-		err = inst.gen.Compact()
-		if err != nil {
-			err = eh.Errorf("unable to compact generator: %w", err)
-			return
-		}
-	}
-	var u uint64
-	u, err = inst.seq.Next()
+	var raw uint64
+	raw, err = inst.seq.Next()
 	if err != nil {
 		return
 	}
+	u := raw + 1 // body 0 is reserved as invalid/NULL
 	if u > inst.maxId {
-		err = eb.Build().Uint64("tagValue", uint64(inst.tag.GetValue())).Uint64("untaggedId", u).Errorf("sequence value exceeds the capacity of the given tag")
+		err = eb.Build().Uint64("tagValue", uint64(inst.tag.GetValue())).Uint64("untaggedId", u).Errorf("cannot mint a fresh id: %w", identgen.ErrIdSpaceExhausted)
 		return
 	}
 	untagged = identifier.UntaggedId(u)
@@ -83,6 +76,10 @@ func (inst *BadgerIdSequence) GetTag() (tag identifier.IdTag) {
 }
 
 func (inst *BadgerIdSequenceGenerator) Create(tagValue identifier.TagValue, generationBandwidth uint64) (gen identifier.IdGeneratorI, err error) {
+	if !tagValue.IsValid() {
+		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Uint64("maxTagValue", uint64(identifier.MaxTagValue)).Errorf("tag value out of range for the active tag width")
+		return
+	}
 	if generationBandwidth == 0 {
 		err = eh.Errorf("generation bandwidth is zero")
 		return
@@ -119,6 +116,9 @@ func NewBadgerIdSequenceGenerator(storePath string) (inst *BadgerIdSequenceGener
 	return
 }
 
+// Compact runs one value-log GC pass to reclaim space. Generators no longer
+// compact implicitly, so callers should invoke this periodically for long-lived
+// stores.
 func (inst *BadgerIdSequenceGenerator) Compact() (err error) {
 	err = inst.kv.RunValueLogGC(0.5)
 	if errors.Is(err, badger.ErrNoRewrite) {

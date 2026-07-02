@@ -33,6 +33,7 @@ func TestBadgerIdSequence_MonotonicAndIgnoresKey(t *testing.T) {
 		require.True(t, id.IsValid())
 		require.EqualValues(t, tagVal, id.GetTag().GetValue())
 		b := bodyOf(id)
+		require.NotZero(t, b, "body 0 is reserved as invalid/NULL")
 		if i > 0 {
 			require.Greater(t, b, prev, "sequence must be strictly increasing")
 		}
@@ -93,4 +94,15 @@ func TestBadgerIdSequence_PersistsAcrossReopen(t *testing.T) {
 	id, _, err := gen2.GetId(nil)
 	require.NoError(t, err)
 	require.Greater(t, bodyOf(id), last, "sequence must not regress or repeat across reopen")
+}
+
+// TestBadgerIdSequenceGenerator_RejectsOutOfRangeTag checks Create validates the
+// tag value against the active tag width.
+func TestBadgerIdSequenceGenerator_RejectsOutOfRangeTag(t *testing.T) {
+	genFac, err := NewBadgerIdSequenceGenerator(t.TempDir())
+	require.NoError(t, err)
+	defer func() { _ = genFac.Close() }()
+
+	_, err = genFac.Create(identifier.MaxTagValue+1, 8)
+	require.Error(t, err)
 }

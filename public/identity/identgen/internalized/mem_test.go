@@ -1,7 +1,6 @@
 package internalized
 
 import (
-	"errors"
 	"math/rand/v2"
 	"testing"
 
@@ -179,8 +178,4 @@ func TestMemIdInternalizer_PropertyConsistency(t *testing.T) {
 		require.Equal(t, string(k), got)
 	}
 	require.Equal(t, len(shadow), s.Len())
-}
-
-func TestErrIdSpaceExhausted_IsWrapped(t *testing.T) {
-	require.True(t, errors.Is(ErrIdSpaceExhausted, ErrIdSpaceExhausted))
 }
