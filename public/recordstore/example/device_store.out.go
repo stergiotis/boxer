@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/recordstore"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
@@ -56,6 +57,7 @@ type DeviceEntity struct {
 	Identity  option.Option[Identity]
 	Battery   option.Option[Battery]
 	Tagged    option.Option[Tagged]
+	Located   option.Option[Located]
 }
 
 // Archetype reports which components the entity carries, in schema order.
@@ -68,6 +70,9 @@ func (inst *DeviceEntity) Archetype() (a []string) {
 	}
 	if inst.Tagged.Has {
 		a = append(a, "tagged")
+	}
+	if inst.Located.Has {
+		a = append(a, "located")
 	}
 	return
 }
@@ -122,13 +127,14 @@ func (inst *DeviceStore[W]) EnsureTable(ctx context.Context) (err error) {
 // via Add*, direct attribute manipulation via Raw, then Commit.
 type DeviceEntityBuilder[W comparable] struct {
 	store *DeviceStore[W]
+	key   uint64
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order) and a live lifecycle.
 func (inst *DeviceStore[W]) Begin(id uint64, ts time.Time) *DeviceEntityBuilder[W] {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(deviceLifecycleLive)
-	return &DeviceEntityBuilder[W]{store: inst}
+	return &DeviceEntityBuilder[W]{store: inst, key: id}
 }
 
 // AddIdentity contributes the Identity component to the open entity via the
@@ -161,19 +167,33 @@ func (inst *DeviceEntityBuilder[W]) AddTagged(row Tagged) *DeviceEntityBuilder[W
 	return inst
 }
 
+// AddLocated contributes the Located component to the open entity via the
+// generated entity-frame-free section driver (ADR-0100 SD6).
+func (inst *DeviceEntityBuilder[W]) AddLocated(row Located) *DeviceEntityBuilder[W] {
+	err := LocatedAddSections(inst.store.dml, row)
+	if err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	return inst
+}
+
 // Raw exposes the underlying DML entity for direct attribute
 // manipulation within the same entity frame.
 func (inst *DeviceEntityBuilder[W]) Raw() *InEntityDeviceTable {
 	return inst.store.dml
 }
 
-// Commit finishes the open entity and buffers the row.
+// Commit finishes the open entity and buffers the row. The cache
+// entry for the entity's key, if any, is invalidated — a local write
+// never leaves a stale L1 value behind (external writers remain the
+// caller's problem; see ADR-0100 Deferred).
 func (inst *DeviceEntityBuilder[W]) Commit() (err error) {
 	err = inst.store.dml.CommitEntity()
 	if err != nil {
 		return
 	}
 	inst.store.buffered++
+	inst.store.cache.Delete(inst.key)
 	return
 }
 
@@ -210,6 +230,19 @@ func (inst *DeviceStore[W]) IngestTagged(ts time.Time, rows []Tagged) (err error
 		err = inst.Begin(rows[i].ID, ts).AddTagged(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest tagged row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestLocated appends one whole entity per row carrying only the
+// Located component, all stamped with ts.
+func (inst *DeviceStore[W]) IngestLocated(ts time.Time, rows []Located) (err error) {
+	for i := range rows {
+		err = inst.Begin(rows[i].ID, ts).AddLocated(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest located row %d: %w", i, err)
 			return
 		}
 	}
@@ -269,6 +302,12 @@ func (inst *DeviceStore[W]) IterateRestWorkItems(ctx context.Context) iter.Seq[W
 	return inst.cache.IterateRestWorkItems(ctx)
 }
 
+// AdvanceEpoch advances the cache's pinning epoch — call once per
+// frame / batch so untouched L1 entries become evictable.
+func (inst *DeviceStore[W]) AdvanceEpoch() {
+	inst.cache.AdvanceEpoch()
+}
+
 // DeterminePartition implements caching.ItemFetcherI. Single partition
 // in v1 (one table, one server).
 func (inst *DeviceStore[W]) DeterminePartition(key uint64) uint64 { return 0 }
@@ -296,6 +335,87 @@ func (inst *DeviceStore[W]) FetchItemSinglePartition(ctx context.Context, partit
 		target.AddItem(ent.ID, ent)
 	}
 	return
+}
+
+// Baked ADR-0066 Filter artefacts: rows carrying a conforming
+// component. Generated from Plan ⋈ IR; membership ids are literals.
+const (
+	deviceScanIdentityFilter = "has(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 2) <= 1"
+	deviceScanBatteryFilter  = "has(\"tv:u64Array:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:u64Array:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
+	deviceScanTaggedFilter   = "has(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
+	deviceScanLocatedFilter  = "has(\"tv:geoPoint:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:geoPoint:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
+)
+
+// ScanIdentity returns the entities whose rows carry a conforming Identity
+// component, in Order-column order. extraPredicate (raw SQL over the
+// physical columns; empty for none) further restricts the scan. The
+// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
+// executor must accept a multi-statement script whose last statement
+// yields the result.
+func (inst *DeviceStore[W]) ScanIdentity(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
+	where := deviceScanIdentityFilter
+	if extraPredicate != "" {
+		where = "(" + where + ") AND (" + extraPredicate + ")"
+	}
+	sql := readback.HelperUDFsSQL() +
+		"\nSELECT * FROM " + deviceTableName +
+		" WHERE " + where +
+		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+	return inst.queryEntities(ctx, sql)
+}
+
+// ScanBattery returns the entities whose rows carry a conforming Battery
+// component, in Order-column order. extraPredicate (raw SQL over the
+// physical columns; empty for none) further restricts the scan. The
+// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
+// executor must accept a multi-statement script whose last statement
+// yields the result.
+func (inst *DeviceStore[W]) ScanBattery(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
+	where := deviceScanBatteryFilter
+	if extraPredicate != "" {
+		where = "(" + where + ") AND (" + extraPredicate + ")"
+	}
+	sql := readback.HelperUDFsSQL() +
+		"\nSELECT * FROM " + deviceTableName +
+		" WHERE " + where +
+		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+	return inst.queryEntities(ctx, sql)
+}
+
+// ScanTagged returns the entities whose rows carry a conforming Tagged
+// component, in Order-column order. extraPredicate (raw SQL over the
+// physical columns; empty for none) further restricts the scan. The
+// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
+// executor must accept a multi-statement script whose last statement
+// yields the result.
+func (inst *DeviceStore[W]) ScanTagged(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
+	where := deviceScanTaggedFilter
+	if extraPredicate != "" {
+		where = "(" + where + ") AND (" + extraPredicate + ")"
+	}
+	sql := readback.HelperUDFsSQL() +
+		"\nSELECT * FROM " + deviceTableName +
+		" WHERE " + where +
+		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+	return inst.queryEntities(ctx, sql)
+}
+
+// ScanLocated returns the entities whose rows carry a conforming Located
+// component, in Order-column order. extraPredicate (raw SQL over the
+// physical columns; empty for none) further restricts the scan. The
+// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the
+// executor must accept a multi-statement script whose last statement
+// yields the result.
+func (inst *DeviceStore[W]) ScanLocated(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
+	where := deviceScanLocatedFilter
+	if extraPredicate != "" {
+		where = "(" + where + ") AND (" + extraPredicate + ")"
+	}
+	sql := readback.HelperUDFsSQL() +
+		"\nSELECT * FROM " + deviceTableName +
+		" WHERE " + where +
+		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+	return inst.queryEntities(ctx, sql)
 }
 
 // Latest returns the newest row for key, tombstone-blind (the raw
@@ -332,7 +452,8 @@ func (inst *DeviceStore[W]) Put(id uint64, ts time.Time) *DeviceEntityBuilder[W]
 }
 
 // Delete appends a tombstone row for id (no components; lifecycle marks
-// the deletion). GetLatest reads it as absent.
+// the deletion) and invalidates the cache entry. GetLatest reads it as
+// absent.
 func (inst *DeviceStore[W]) Delete(id uint64, ts time.Time) (err error) {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(deviceLifecycleTombstone)
 	err = inst.dml.CommitEntity()
@@ -340,6 +461,7 @@ func (inst *DeviceStore[W]) Delete(id uint64, ts time.Time) (err error) {
 		return
 	}
 	inst.buffered++
+	inst.cache.Delete(id)
 	return
 }
 
@@ -401,7 +523,8 @@ func decodeDeviceRecord(rec arrow.RecordBatch) (ents []*DeviceEntity, err error)
 	symbolR := NewReadAccessDeviceTableTaggedSymbol()
 	u64ArrayR := NewReadAccessDeviceTableTaggedU64Array()
 	symbolArrayR := NewReadAccessDeviceTableTaggedSymbolArray()
-	readers := []deviceSectionReaderI{idR, tsR, lcR, symbolR, u64ArrayR, symbolArrayR}
+	geoPointR := NewReadAccessDeviceTableTaggedGeoPoint()
+	readers := []deviceSectionReaderI{idR, tsR, lcR, symbolR, u64ArrayR, symbolArrayR, geoPointR}
 	for _, r := range readers {
 		r.SetColumnIndices(r.GetColumnIndices())
 		err = r.LoadFromRecord(rec)
@@ -424,92 +547,56 @@ func decodeDeviceRecord(rec arrow.RecordBatch) (ents []*DeviceEntity, err error)
 	}
 	ents = make([]*DeviceEntity, 0, n)
 	for i := range n {
-		ei := raruntime.EntityIdx(i)
 		ent := &DeviceEntity{
 			ID:        idR.ValueId.Value(i),
 			Ts:        tsR.ValueTs.Value(i).ToTime(tsType.Unit).UTC(),
 			Lifecycle: lcR.ValueLifecycle.Value(i),
 		}
-		err = decodeDeviceIdentity(ent, ei, symbolR)
-		if err != nil {
-			return
+		{
+			row, ok, e := IdentityReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read identity component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.Identity = option.Some(row)
+			}
 		}
-		err = decodeDeviceBattery(ent, ei, u64ArrayR)
-		if err != nil {
-			return
+		{
+			row, ok, e := BatteryReadRow(i, u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read battery component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.Battery = option.Some(row)
+			}
 		}
-		err = decodeDeviceTagged(ent, ei, symbolArrayR)
-		if err != nil {
-			return
+		{
+			row, ok, e := TaggedReadRow(i, symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read tagged component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.Tagged = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := LocatedReadRow(i, geoPointR.GetAttributes(), geoPointR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read located component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.Located = option.Some(row)
+			}
 		}
 		ents = append(ents, ent)
-	}
-	return
-}
-
-func decodeDeviceIdentity(ent *DeviceEntity, ei raruntime.EntityIdx, symbolR *ReadAccessDeviceTableTaggedSymbol) (err error) {
-	var row Identity
-	present := false
-	symbolAttrs := symbolR.GetAttributes()
-	for aj := int64(0); aj < symbolAttrs.GetNumberOfAttributes(ei); aj++ {
-		for memb := range symbolR.GetMemberships().GetMembValueLowCardRef(ei, raruntime.AttributeIdx(aj)) {
-			switch memb {
-			case kindStatus:
-				row.Status = symbolAttrs.GetAttrValueValue(ei, raruntime.AttributeIdx(aj))
-				present = true
-			}
-		}
-	}
-	if present {
-		row.ID = ent.ID
-		ent.Identity = option.Some(row)
-	}
-	return
-}
-
-func decodeDeviceBattery(ent *DeviceEntity, ei raruntime.EntityIdx, u64ArrayR *ReadAccessDeviceTableTaggedU64Array) (err error) {
-	var row Battery
-	present := false
-	u64ArrayAttrs := u64ArrayR.GetAttributes()
-	for aj := int64(0); aj < u64ArrayAttrs.GetNumberOfAttributes(ei); aj++ {
-		for memb := range u64ArrayR.GetMemberships().GetMembValueLowCardRef(ei, raruntime.AttributeIdx(aj)) {
-			switch memb {
-			case kindCharge:
-				row.Charge, err = u64ArrayAttrs.GetAttrValueSingle(ei, raruntime.AttributeIdx(aj))
-				if err != nil {
-					err = eh.Errorf("Battery.Charge is unit-valued: %w", err)
-					return
-				}
-				present = true
-			}
-		}
-	}
-	if present {
-		row.ID = ent.ID
-		ent.Battery = option.Some(row)
-	}
-	return
-}
-
-func decodeDeviceTagged(ent *DeviceEntity, ei raruntime.EntityIdx, symbolArrayR *ReadAccessDeviceTableTaggedSymbolArray) (err error) {
-	var row Tagged
-	present := false
-	symbolArrayAttrs := symbolArrayR.GetAttributes()
-	for aj := int64(0); aj < symbolArrayAttrs.GetNumberOfAttributes(ei); aj++ {
-		for memb := range symbolArrayR.GetMemberships().GetMembValueLowCardRef(ei, raruntime.AttributeIdx(aj)) {
-			switch memb {
-			case kindTags:
-				row.Tags = row.Tags[:0]
-				for v := range symbolArrayAttrs.GetAttrValueValue(ei, raruntime.AttributeIdx(aj)) {
-					row.Tags = append(row.Tags, v)
-				}
-				present = true
-			}
-		}
-	}
-	if present {
-		row.ID = ent.ID
-		ent.Tagged = option.Some(row)
 	}
 	return
 }

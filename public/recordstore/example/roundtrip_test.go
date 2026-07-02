@@ -28,12 +28,14 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	t1 := t0.Add(time.Hour)
 	t2 := t0.Add(2 * time.Hour)
 
-	// Entity 1: all three components; entity 2: identity only; entity 3:
-	// battery + tags via the per-kind ingest verbs.
+	// Entity 1: all four components (Identity carries the optional Nick);
+	// entity 2: identity only, Nick absent; entity 3: battery + tags via
+	// the per-kind ingest verbs.
 	require.NoError(t, st.Begin(1, t0).
-		AddIdentity(Identity{ID: 1, Status: "IDLE"}).
+		AddIdentity(Identity{ID: 1, Status: "IDLE", Nick: option.Some("alpha")}).
 		AddBattery(Battery{ID: 1, Charge: 9000}).
 		AddTagged(Tagged{ID: 1, Tags: []string{"survey", "urgent"}}).
+		AddLocated(Located{ID: 1, Lat: 47.5, Lng: 8.5, Cell: 12345}).
 		Commit())
 	require.NoError(t, st.IngestIdentity(t0, []Identity{{ID: 2, Status: "CHARGING"}}))
 	require.NoError(t, st.IngestBattery(t0, []Battery{{ID: 3, Charge: 150}}))
@@ -57,15 +59,17 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 		replayed++
 		has, e1 := st.Get(1)
 		require.True(t, has)
-		require.Equal(t, []string{"identity", "battery", "tagged"}, e1.Archetype())
-		require.Equal(t, option.Some(Identity{ID: 1, Status: "IDLE"}), e1.Identity)
+		require.Equal(t, []string{"identity", "battery", "tagged", "located"}, e1.Archetype())
+		require.Equal(t, option.Some(Identity{ID: 1, Status: "IDLE", Nick: option.Some("alpha")}), e1.Identity)
 		require.Equal(t, option.Some(Battery{ID: 1, Charge: 9000}), e1.Battery)
 		require.Equal(t, option.Some(Tagged{ID: 1, Tags: []string{"survey", "urgent"}}), e1.Tagged)
+		require.Equal(t, option.Some(Located{ID: 1, Lat: 47.5, Lng: 8.5, Cell: 12345}), e1.Located)
 		require.Equal(t, t0, e1.Ts)
 
 		has, e2 := st.Get(2)
 		require.True(t, has)
 		require.Equal(t, []string{"identity"}, e2.Archetype())
+		require.False(t, e2.Identity.Val.Nick.Has, "absent Option scalar reads back as None")
 		require.False(t, e2.Battery.Has)
 	}
 	require.Equal(t, 1, replayed)

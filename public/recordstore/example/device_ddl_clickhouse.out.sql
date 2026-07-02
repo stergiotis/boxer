@@ -33,5 +33,17 @@ CREATE TABLE IF NOT EXISTS device (
 	"tv:symbolArray:hrcard:hrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:symbolArray:lrcard:lrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:symbolArray:lvcard:lvcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
-	"tv:symbolArray:lmrcard:lmrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3))
+	"tv:symbolArray:lmrcard:lmrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:geoPoint:pointLat:val:f32:g:0:0:0::data" Array(Float32) CODEC(ZSTD(3)),
+	"tv:geoPoint:pointLng:val:f32:g:0:0:0::data" Array(Float32) CODEC(ZSTD(3)),
+	"tv:geoPoint:h3:val:u64:g:0:0:0::data" Array(UInt64) CODEC(ZSTD(3)),
+	"tv:geoPoint:hr:hr:u64:2k:0:0:0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
+	"tv:geoPoint:lr:lr:u64:2q:0:0:0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:geoPoint:lv:lv:y:m:0:0:0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:geoPoint:lmr:lmr:u64:2q:0:0:0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:geoPoint:mrhp:mrhp:y:g:0:0:0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:geoPoint:lvcard:lvcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3))
 )

@@ -204,3 +204,42 @@ func BatteryFillFromArrow[
 	}
 	return
 }
+
+// BatteryReadRow reads row i as one optional Battery component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched, erroring only when a field
+// occurs more than once. Plain-bound fields stay zero — the caller
+// owns the envelope. The Attrs/Membs readers bind by type inference
+// at the call site, as with FillFromArrow.
+func BatteryReadRow[
+	U64ArrayAttrs BatteryU64ArrayAttrsReadI,
+	U64ArrayMembs BatteryU64ArrayMembsReadI,
+](
+	i int,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+) (row Battery, present bool, err error) {
+	// --- u64Array. ---
+	var u64ArrayChargeVal uint64
+	var u64ArrayChargeCount int
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindCharge:
+				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u64ArrayChargeVal = val
+				u64ArrayChargeCount++
+			}
+		}
+	}
+	if u64ArrayChargeCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Charge").Errorf("occurs more than once on the row")
+		return
+	}
+	if u64ArrayChargeCount == 1 {
+		row.Charge = u64ArrayChargeVal
+		present = true
+	}
+	return
+}

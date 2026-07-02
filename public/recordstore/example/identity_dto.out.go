@@ -17,6 +17,7 @@ import (
 
 const (
 	kindStatus uint64 = 1
+	kindNick   uint64 = 2
 )
 
 // --- SoA columns + AoS Append adapter. ---
@@ -26,7 +27,9 @@ const (
 type IdentityColumns struct {
 	ID []uint64
 
-	Status []string
+	Status  []string
+	NickVal []string
+	NickHas []bool
 }
 
 // Len returns the number of rows currently in the batch.
@@ -41,6 +44,8 @@ func (c *IdentityColumns) Len() int { return len(c.ID) }
 func (c *IdentityColumns) Append(row Identity) {
 	c.ID = append(c.ID, row.ID)
 	c.Status = append(c.Status, row.Status)
+	c.NickVal = append(c.NickVal, row.Nick.Val)
+	c.NickHas = append(c.NickHas, row.Nick.Has)
 }
 
 // Row reconstructs entity i as an AoS Identity record. Inverse of
@@ -49,6 +54,8 @@ func (c *IdentityColumns) Append(row Identity) {
 func (c *IdentityColumns) Row(i int) (row Identity) {
 	row.ID = c.ID[i]
 	row.Status = c.Status[i]
+	row.Nick.Val = c.NickVal[i]
+	row.Nick.Has = c.NickHas[i]
 	return
 }
 
@@ -117,6 +124,11 @@ func IdentityBuildEntities[
 		symbolSecAttr_Status := symbolSec.BeginAttribute(c.Status[i])
 		symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
 		symbolSecAttr_Status.EndAttributeP()
+		if c.NickHas[i] {
+			symbolSecAttr_Nick := symbolSec.BeginAttribute(c.NickVal[i])
+			symbolSecAttr_Nick.AddMembershipLowCardRefP(kindNick)
+			symbolSecAttr_Nick.EndAttributeP()
+		}
 		symbolSec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
@@ -144,6 +156,11 @@ func IdentityAddSections[
 	symbolSecAttr_Status := symbolSec.BeginAttribute(row.Status)
 	symbolSecAttr_Status.AddMembershipLowCardRefP(kindStatus)
 	symbolSecAttr_Status.EndAttributeP()
+	if row.Nick.Has {
+		symbolSecAttr_Nick := symbolSec.BeginAttribute(row.Nick.Val)
+		symbolSecAttr_Nick.AddMembershipLowCardRefP(kindNick)
+		symbolSecAttr_Nick.EndAttributeP()
+	}
 	symbolSec.EndSection()
 	return
 }
@@ -185,6 +202,8 @@ func IdentityFillFromArrow[
 		// --- symbol. ---
 		var symbolStatusVal string
 		var symbolStatusCount int
+		var symbolNickVal string
+		var symbolNickCount int
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -193,6 +212,10 @@ func IdentityFillFromArrow[
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolStatusVal = val
 					symbolStatusCount++
+				case kindNick:
+					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					symbolNickVal = val
+					symbolNickCount++
 				}
 			}
 		}
@@ -201,6 +224,68 @@ func IdentityFillFromArrow[
 			return
 		}
 		c.Status = append(c.Status, symbolStatusVal)
+		if symbolNickCount == 1 {
+			c.NickVal = append(c.NickVal, symbolNickVal)
+			c.NickHas = append(c.NickHas, true)
+		} else {
+			var zero string
+			c.NickVal = append(c.NickVal, zero)
+			c.NickHas = append(c.NickHas, false)
+		}
+	}
+	return
+}
+
+// IdentityReadRow reads row i as one optional Identity component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched, erroring only when a field
+// occurs more than once. Plain-bound fields stay zero — the caller
+// owns the envelope. The Attrs/Membs readers bind by type inference
+// at the call site, as with FillFromArrow.
+func IdentityReadRow[
+	SymbolAttrs IdentitySymbolAttrsReadI,
+	SymbolMembs IdentitySymbolMembsReadI,
+](
+	i int,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+) (row Identity, present bool, err error) {
+	// --- symbol. ---
+	var symbolStatusVal string
+	var symbolStatusCount int
+	var symbolNickVal string
+	var symbolNickCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindStatus:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolStatusVal = val
+				symbolStatusCount++
+			case kindNick:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolNickVal = val
+				symbolNickCount++
+			}
+		}
+	}
+	if symbolStatusCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Status").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolStatusCount == 1 {
+		row.Status = symbolStatusVal
+		present = true
+	}
+	if symbolNickCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Nick").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolNickCount == 1 {
+		row.Nick.Val = symbolNickVal
+		row.Nick.Has = true
+		present = true
 	}
 	return
 }

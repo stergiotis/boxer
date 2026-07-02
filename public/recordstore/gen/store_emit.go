@@ -10,13 +10,19 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 )
 
 // storeComponent is the per-component emission model: the parsed plan plus
-// the derived names the template needs.
+// the derived names and generation-time artefacts the template needs.
 type storeComponent struct {
 	Kind   string // Go type, e.g. "Identity"
+	plan   *mappingplan.Plan
 	groups []goplan.SectionGroup
+	// filter is the baked ADR-0066 Filter artefact (presence prefilter AND
+	// exact validator) identifying rows that carry a conforming component —
+	// the WHERE body of the Scan verb.
+	filter string
 }
 
 // secUse is one distinct tagged section a component set touches: its
@@ -45,7 +51,13 @@ type envelopeCol struct {
 // generation-time error until the presence-gated read helpers move into
 // marshallgen (S2).
 func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, plans []*mappingplan.Plan) (code []byte, err error) {
-	key, order, lifecycle, err := inst.envelope(ir, conv)
+	info := readback.NewInformationRetrieval(conv)
+	err = info.LoadTable(ir, inst.RowConfig)
+	if err != nil {
+		err = eh.Errorf("load readback IR: %w", err)
+		return
+	}
+	key, order, lifecycle, err := inst.envelope(info, conv)
 	if err != nil {
 		return
 	}
@@ -62,7 +74,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	comps := make([]storeComponent, 0, len(plans))
 	for _, plan := range plans {
 		var sc storeComponent
-		sc, err = classifyComponent(plan)
+		sc, err = classifyComponent(plan, info)
 		if err != nil {
 			return
 		}
@@ -77,7 +89,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	inst.emitIngest(&sb, comps)
 	inst.emitFlush(&sb)
 	inst.emitCacheVerbs(&sb)
-	inst.emitQueryVerbs(&sb, stateView)
+	inst.emitQueryVerbs(&sb, comps, stateView)
 	err = inst.emitDecode(&sb, comps, stateView)
 	if err != nil {
 		return
@@ -93,13 +105,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 
 // envelope finds the physical (encoded) names of the role-bearing plain
 // columns by walking the Plan⋈IR join readback maintains.
-func (inst Input) envelope(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI) (key, order, lifecycle envelopeCol, err error) {
-	info := readback.NewInformationRetrieval(conv)
-	err = info.LoadTable(ir, inst.RowConfig)
-	if err != nil {
-		err = eh.Errorf("load readback IR: %w", err)
-		return
-	}
+func (inst Input) envelope(info *readback.InformationRetrieval, conv common.NamingConventionI) (key, order, lifecycle envelopeCol, err error) {
 	for cr := range info.IterateAll() {
 		var itemType common.PlainItemTypeE
 		itemType, err = conv.ExtractPlainItemType(cr.PhysicalColumn)
@@ -120,33 +126,36 @@ func (inst Input) envelope(ir *common.IntermediateTableRepresentation, conv comm
 	return
 }
 
-func classifyComponent(plan *mappingplan.Plan) (sc storeComponent, err error) {
+// classifyComponent validates a component against the store's decode
+// coverage — exactly marshallgen's ReadRow gate, so the store generator
+// and the codec emission cannot disagree — and bakes the component's
+// ADR-0066 Filter artefact for the Scan verb.
+func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetrieval) (sc storeComponent, err error) {
 	sc.Kind = plan.KindType
+	sc.plan = plan
 	sc.groups = goplan.ComputeGroups(plan)
-	for _, g := range sc.groups {
-		if len(g.SubColumns) > 1 {
-			err = eh.Errorf("component %s: multi-sub-column section %q not supported by the store decode yet (ADR-0100 S2)", sc.Kind, g.Section)
-			return
-		}
-		for _, f := range g.SubColumns[0].Fields {
-			if f.IsConst {
-				continue
-			}
-			if f.IsOption || f.IsRoaring() || f.CarrierField != "" {
-				err = eh.Errorf("component %s field %s: option/roaring/carrier shapes not supported by the store decode yet (ADR-0100 S2)", sc.Kind, f.GoFieldName)
-				return
-			}
-			switch goplan.ClassifyBegin(f) {
-			case goplan.ShapeScalarBegin, goplan.ShapeScalarBeginSingle, goplan.ShapeContainer:
-			default:
-				err = eh.Errorf("component %s field %s: shape not supported by the store decode yet (ADR-0100 S2)", sc.Kind, f.GoFieldName)
-				return
-			}
-			if f.Flags.Channel != mappingplan.MembershipChannelLowCardRef {
-				err = eh.Errorf("component %s field %s: only the LowCardRef membership channel is supported by the store decode yet (ADR-0100 S2)", sc.Kind, f.GoFieldName)
-				return
-			}
-		}
+	if ok, reason := marshallgen.ReadRowSupported(plan); !ok {
+		err = eh.Errorf("component %s: %s — <Kind>ReadRow is not emitted for this shape (ADR-0100 Deferred)", sc.Kind, reason)
+		return
+	}
+	g := readback.NewGenerator(info, readback.NewLookupResolver(mapIdLookup(marshallgen.MembershipIds(plan))))
+	artefacts, err := g.Generate(plan)
+	if err != nil {
+		err = eh.Errorf("component %s: generate read-back artefacts: %w", sc.Kind, err)
+		return
+	}
+	sc.filter = artefacts.Filter
+	return
+}
+
+// mapIdLookup adapts marshallgen's package-local membership-id assignment
+// to the readback resolver's IdLookup.
+type mapIdLookup map[string]uint64
+
+func (inst mapIdLookup) LookupMembership(name string) (id uint64, err error) {
+	id, ok := inst[name]
+	if !ok {
+		err = eh.Errorf("membership %q not found in the generated kind-id assignment", name)
 	}
 	return
 }
@@ -182,6 +191,7 @@ func (inst Input) emitStoreHeader(sb *strings.Builder, key, order, lifecycle env
 	p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
 	p("\t%q", "github.com/stergiotis/boxer/public/observability/eh")
 	p("\t%q", "github.com/stergiotis/boxer/public/recordstore")
+	p("\t%q", "github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback")
 	p("\traruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime")
 	p(")")
 	p("")
@@ -300,6 +310,7 @@ func (inst Input) emitBuilder(sb *strings.Builder, comps []storeComponent, state
 	p("// via Add*, direct attribute manipulation via Raw, then Commit.")
 	p("type %s[W comparable] struct {", inst.builderType())
 	p("\tstore *%s[W]", inst.storeType())
+	p("\tkey uint64")
 	p("}")
 	p("")
 	p("// Begin opens one entity with the envelope roles as typed arguments")
@@ -310,7 +321,7 @@ func (inst Input) emitBuilder(sb *strings.Builder, comps []storeComponent, state
 	} else {
 		p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts)")
 	}
-	p("\treturn &%s[W]{store: inst}", inst.builderType())
+	p("\treturn &%s[W]{store: inst, key: id}", inst.builderType())
 	p("}")
 	p("")
 	for _, c := range comps {
@@ -331,13 +342,17 @@ func (inst Input) emitBuilder(sb *strings.Builder, comps []storeComponent, state
 	p("\treturn inst.store.dml")
 	p("}")
 	p("")
-	p("// Commit finishes the open entity and buffers the row.")
+	p("// Commit finishes the open entity and buffers the row. The cache")
+	p("// entry for the entity's key, if any, is invalidated — a local write")
+	p("// never leaves a stale L1 value behind (external writers remain the")
+	p("// caller's problem; see ADR-0100 Deferred).")
 	p("func (inst *%s[W]) Commit() (err error) {", inst.builderType())
 	p("\terr = inst.store.dml.CommitEntity()")
 	p("\tif err != nil {")
 	p("\t\treturn")
 	p("\t}")
 	p("\tinst.store.buffered++")
+	p("\tinst.store.cache.Delete(inst.key)")
 	p("\treturn")
 	p("}")
 	p("")
@@ -421,6 +436,12 @@ func (inst Input) emitCacheVerbs(sb *strings.Builder) {
 	p("\treturn inst.cache.IterateRestWorkItems(ctx)")
 	p("}")
 	p("")
+	p("// AdvanceEpoch advances the cache's pinning epoch — call once per")
+	p("// frame / batch so untouched L1 entries become evictable.")
+	p("func (inst *%s[W]) AdvanceEpoch() {", inst.storeType())
+	p("\tinst.cache.AdvanceEpoch()")
+	p("}")
+	p("")
 	p("// DeterminePartition implements caching.ItemFetcherI. Single partition")
 	p("// in v1 (one table, one server).")
 	p("func (inst *%s[W]) DeterminePartition(key uint64) uint64 { return 0 }", inst.storeType())
@@ -452,8 +473,40 @@ func (inst Input) emitCacheVerbs(sb *strings.Builder) {
 	p("")
 }
 
-func (inst Input) emitQueryVerbs(sb *strings.Builder, stateView bool) {
+func (inst Input) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, stateView bool) {
 	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+
+	// Scan (ADR-0100 SD4 / ADR-0066): per component, the Filter artefact —
+	// presence prefilter AND exact validator, membership ids baked as SQL
+	// literals at generation time — is the WHERE body.
+	p("// Baked ADR-0066 Filter artefacts: rows carrying a conforming")
+	p("// component. Generated from Plan ⋈ IR; membership ids are literals.")
+	p("const (")
+	for _, c := range comps {
+		p("\t%sScan%sFilter = %q", inst.TableName, c.Kind, c.filter)
+	}
+	p(")")
+	p("")
+	for _, c := range comps {
+		p("// Scan%s returns the entities whose rows carry a conforming %s", c.Kind, c.Kind)
+		p("// component, in Order-column order. extraPredicate (raw SQL over the")
+		p("// physical columns; empty for none) further restricts the scan. The")
+		p("// helper UDFs are prepended (CREATE OR REPLACE — idempotent); the")
+		p("// executor must accept a multi-statement script whose last statement")
+		p("// yields the result.")
+		p("func (inst *%s[W]) Scan%s(ctx context.Context, extraPredicate string) (ents []*%s, err error) {", inst.storeType(), c.Kind, inst.entityType())
+		p("\twhere := %sScan%sFilter", inst.TableName, c.Kind)
+		p("\tif extraPredicate != \"\" {")
+		p("\t\twhere = \"(\" + where + \") AND (\" + extraPredicate + \")\"")
+		p("\t}")
+		p("\tsql := readback.HelperUDFsSQL() +")
+		p("\t\t\"\\nSELECT * FROM \" + %sTableName +", inst.TableName)
+		p("\t\t\" WHERE \" + where +")
+		p("\t\t\" ORDER BY \" + %sColOrder + \" ASC\" + %sArrowOutputSettings", inst.TableName, inst.TableName)
+		p("\treturn inst.queryEntities(ctx, sql)")
+		p("}")
+		p("")
+	}
 	p("// Latest returns the newest row for key, tombstone-blind (the raw")
 	p("// primitive).")
 	p("func (inst *%s[W]) Latest(ctx context.Context, key uint64) (ent *%s, found bool, err error) {", inst.storeType(), inst.entityType())
@@ -491,7 +544,8 @@ func (inst Input) emitQueryVerbs(sb *strings.Builder, stateView bool) {
 	p("}")
 	p("")
 	p("// Delete appends a tombstone row for id (no components; lifecycle marks")
-	p("// the deletion). GetLatest reads it as absent.")
+	p("// the deletion) and invalidates the cache entry. GetLatest reads it as")
+	p("// absent.")
 	p("func (inst *%s[W]) Delete(id uint64, ts time.Time) (err error) {", inst.storeType())
 	p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(%sLifecycleTombstone)", inst.TableName)
 	p("\terr = inst.dml.CommitEntity()")
@@ -499,6 +553,7 @@ func (inst Input) emitQueryVerbs(sb *strings.Builder, stateView bool) {
 	p("\t\treturn")
 	p("\t}")
 	p("\tinst.buffered++")
+	p("\tinst.cache.Delete(id)")
 	p("\treturn")
 	p("}")
 	p("")
@@ -611,7 +666,6 @@ func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateV
 	p("\t}")
 	p("\tents = make([]*%s, 0, n)", inst.entityType())
 	p("\tfor i := range n {")
-	p("\t\tei := raruntime.EntityIdx(i)")
 	p("\t\tent := &%s{", inst.entityType())
 	p("\t\t\tID: idR.ValueId.Value(i),")
 	p("\t\t\tTs: tsR.ValueTs.Value(i).ToTime(tsType.Unit).UTC(),")
@@ -619,10 +673,31 @@ func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateV
 		p("\t\t\tLifecycle: lcR.ValueLifecycle.Value(i),")
 	}
 	p("\t\t}")
+	// One presence-gated <Kind>ReadRow call per component (the generated
+	// twin of FillFromArrow; the Attrs/Membs readers bind by inference).
+	// Fields bound to plain columns come from the envelope afterwards.
 	for _, c := range comps {
-		p("\t\terr = decode%s%s(ent, ei, %s)", inst.StoreName, c.Kind, componentReaderArgs(c, seen))
-		p("\t\tif err != nil {")
-		p("\t\t\treturn")
+		args := make([]string, 0, 2*len(c.groups)+1)
+		args = append(args, "i")
+		for _, g := range c.groups {
+			rv := seen[mappingplan.UpperFirst(g.Section)].varN
+			args = append(args, rv+".GetAttributes()", rv+".GetMemberships()")
+		}
+		p("\t\t{")
+		p("\t\t\trow, ok, e := %sReadRow(%s)", c.Kind, strings.Join(args, ", "))
+		p("\t\t\tif e != nil {")
+		p("\t\t\t\terr = eh.Errorf(\"read %s component: %%w\", e)", lowerFirst(c.Kind))
+		p("\t\t\t\treturn")
+		p("\t\t\t}")
+		p("\t\t\tif ok {")
+		if idCol := goplan.FindPlainCol(c.plan, "id"); idCol != nil {
+			p("\t\t\t\trow.%s = ent.ID", idCol.GoField)
+		}
+		if tsCol := goplan.FindPlainCol(c.plan, "ts"); tsCol != nil {
+			p("\t\t\t\trow.%s = ent.Ts", tsCol.GoField)
+		}
+		p("\t\t\t\tent.%s = option.Some(row)", c.Kind)
+		p("\t\t\t}")
 		p("\t\t}")
 	}
 	p("\t\tents = append(ents, ent)")
@@ -630,93 +705,7 @@ func (inst Input) emitDecode(sb *strings.Builder, comps []storeComponent, stateV
 	p("\treturn")
 	p("}")
 	p("")
-
-	for _, c := range comps {
-		err = inst.emitComponentDecode(sb, c, seen)
-		if err != nil {
-			return
-		}
-	}
 	return
-}
-
-// componentReaderArgs renders the section-reader arguments a component's
-// decode function needs, in group order.
-func componentReaderArgs(c storeComponent, seen map[string]secUse) string {
-	args := make([]string, 0, len(c.groups))
-	for _, g := range c.groups {
-		args = append(args, seen[mappingplan.UpperFirst(g.Section)].varN)
-	}
-	return strings.Join(args, ", ")
-}
-
-// emitComponentDecode renders the presence-gated, membership-matched
-// per-row decode for one component (the decodeDeviceComponents pattern).
-func (inst Input) emitComponentDecode(sb *strings.Builder, c storeComponent, seen map[string]secUse) (err error) {
-	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
-	ra := inst.raPrefix()
-
-	params := make([]string, 0, len(c.groups))
-	for _, g := range c.groups {
-		m := mappingplan.UpperFirst(g.Section)
-		params = append(params, fmt.Sprintf("%s *%sTagged%s", seen[m].varN, ra, m))
-	}
-	p("func decode%s%s(ent *%s, ei raruntime.EntityIdx, %s) (err error) {", inst.StoreName, c.Kind, inst.entityType(), strings.Join(params, ", "))
-	p("\tvar row %s", c.Kind)
-	p("\tpresent := false")
-	for _, g := range c.groups {
-		m := mappingplan.UpperFirst(g.Section)
-		rv := seen[m].varN
-		attrsVar := lowerFirst(m) + "Attrs"
-		p("\t%s := %s.GetAttributes()", attrsVar, rv)
-		p("\tfor aj := int64(0); aj < %s.GetNumberOfAttributes(ei); aj++ {", attrsVar)
-		p("\t\tfor memb := range %s.GetMemberships().GetMembValueLowCardRef(ei, raruntime.AttributeIdx(aj)) {", rv)
-		p("\t\t\tswitch memb {")
-		for _, f := range c.groups[indexOfGroup(c.groups, g.Section)].SubColumns[0].Fields {
-			if f.IsConst {
-				continue
-			}
-			p("\t\t\tcase %s:", f.KindVar())
-			switch goplan.ClassifyBegin(f) {
-			case goplan.ShapeScalarBegin:
-				p("\t\t\t\trow.%s = %s.GetAttrValueValue(ei, raruntime.AttributeIdx(aj))", f.GoFieldName, attrsVar)
-			case goplan.ShapeScalarBeginSingle:
-				p("\t\t\t\trow.%s, err = %s.GetAttrValueSingle(ei, raruntime.AttributeIdx(aj))", f.GoFieldName, attrsVar)
-				p("\t\t\t\tif err != nil {")
-				p("\t\t\t\t\terr = eh.Errorf(\"%s.%s is unit-valued: %%w\", err)", c.Kind, f.GoFieldName)
-				p("\t\t\t\t\treturn")
-				p("\t\t\t\t}")
-			case goplan.ShapeContainer:
-				p("\t\t\t\trow.%s = row.%s[:0]", f.GoFieldName, f.GoFieldName)
-				p("\t\t\t\tfor v := range %s.GetAttrValueValue(ei, raruntime.AttributeIdx(aj)) {", attrsVar)
-				p("\t\t\t\t\trow.%s = append(row.%s, v)", f.GoFieldName, f.GoFieldName)
-				p("\t\t\t\t}")
-			}
-			p("\t\t\t\tpresent = true")
-		}
-		p("\t\t\t}")
-		p("\t\t}")
-		p("\t}")
-	}
-	// Plain id column: set from the envelope key when the component
-	// declares it.
-	p("\tif present {")
-	p("\t\trow.ID = ent.ID")
-	p("\t\tent.%s = option.Some(row)", c.Kind)
-	p("\t}")
-	p("\treturn")
-	p("}")
-	p("")
-	return
-}
-
-func indexOfGroup(groups []goplan.SectionGroup, section string) int {
-	for i, g := range groups {
-		if g.Section == section {
-			return i
-		}
-	}
-	return -1
 }
 
 func upperFirst(s string) string { return mappingplan.UpperFirst(s) }

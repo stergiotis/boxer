@@ -209,3 +209,37 @@ func TaggedFillFromArrow[
 	}
 	return
 }
+
+// TaggedReadRow reads row i as one optional Tagged component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched, erroring only when a field
+// occurs more than once. Plain-bound fields stay zero — the caller
+// owns the envelope. The Attrs/Membs readers bind by type inference
+// at the call site, as with FillFromArrow.
+func TaggedReadRow[
+	SymbolArrayAttrs TaggedSymbolArrayAttrsReadI,
+	SymbolArrayMembs TaggedSymbolArrayMembsReadI,
+](
+	i int,
+	symbolArrayAttrs SymbolArrayAttrs,
+	symbolArrayMembs SymbolArrayMembs,
+) (row Tagged, present bool, err error) {
+	// --- symbolArray. ---
+	var symbolArrayTagsSlice []string
+	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
+		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTags:
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
+				}
+			}
+		}
+	}
+	if symbolArrayTagsSlice != nil {
+		row.Tags = symbolArrayTagsSlice
+		present = true
+	}
+	return
+}

@@ -28,6 +28,7 @@ func TestGenerateDeviceStore(t *testing.T) {
 			"./identity_dto.go",
 			"./battery_dto.go",
 			"./tagged_dto.go",
+			"./located_dto.go",
 		},
 		OutDir: ".",
 	}.Generate())

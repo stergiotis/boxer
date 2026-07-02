@@ -58,6 +58,18 @@ func CreateSchemaDeviceTable() (schema *arrow.Schema) {
 		/* 032 */ arrow.Field{Name: "tv:symbolArray:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 033 */ arrow.Field{Name: "tv:symbolArray:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 034 */ arrow.Field{Name: "tv:symbolArray:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 035 */ arrow.Field{Name: "tv:geoPoint:pointLat:val:f32:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 036 */ arrow.Field{Name: "tv:geoPoint:pointLng:val:f32:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 037 */ arrow.Field{Name: "tv:geoPoint:h3:val:u64:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 038 */ arrow.Field{Name: "tv:geoPoint:hr:hr:u64:2k:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 039 */ arrow.Field{Name: "tv:geoPoint:lr:lr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 040 */ arrow.Field{Name: "tv:geoPoint:lv:lv:y:m:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 041 */ arrow.Field{Name: "tv:geoPoint:lmr:lmr:u64:2q:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 042 */ arrow.Field{Name: "tv:geoPoint:mrhp:mrhp:y:g:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 043 */ arrow.Field{Name: "tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 044 */ arrow.Field{Name: "tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 045 */ arrow.Field{Name: "tv:geoPoint:lvcard:lvcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 046 */ arrow.Field{Name: "tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -73,13 +85,15 @@ type InEntityDeviceTable struct {
 	allocator      memory.Allocator
 	builder        *array.RecordBuilder
 	records        []arrow.RecordBatch
-	section00Inst  *InEntityDeviceTableSectionSymbol
+	section00Inst  *InEntityDeviceTableSectionGeoPoint
 	section00State runtime.EntityStateE
-	section01Inst  *InEntityDeviceTableSectionSymbolArray
+	section01Inst  *InEntityDeviceTableSectionSymbol
 	section01State runtime.EntityStateE
-	section02Inst  *InEntityDeviceTableSectionU64Array
+	section02Inst  *InEntityDeviceTableSectionSymbolArray
 	section02State runtime.EntityStateE
-	activeSections *[3]bool
+	section03Inst  *InEntityDeviceTableSectionU64Array
+	section03State runtime.EntityStateE
+	activeSections *[4]bool
 	plainId0       uint64
 
 	plainTs1 time.Time
@@ -118,7 +132,7 @@ func (inst *InEntityDeviceTable) SetActiveSections(idxs []int) {
 		inst.activeSections = nil
 		return
 	}
-	var mask [3]bool
+	var mask [4]bool
 	for _, i := range idxs {
 		if i >= 0 && i < len(mask) {
 			mask[i] = true
@@ -137,9 +151,10 @@ func (inst *InEntityDeviceTable) Builder() *array.RecordBuilder { return inst.bu
 // SetActiveSections inputs from section names — for example, the
 // marshallgen-driven keelson codec wrappers.
 var InEntityDeviceTableSectionIndices = map[string]int{
-	"symbol":      0,
-	"symbolArray": 1,
-	"u64Array":    2,
+	"geoPoint":    0,
+	"symbol":      1,
+	"symbolArray": 2,
+	"u64Array":    3,
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -201,9 +216,10 @@ func (inst *InEntityDeviceTable) resetPlainValues() {
 	inst.plainLifecycle2 = uint8(0)
 }
 func (inst *InEntityDeviceTable) initSections(builder *array.RecordBuilder) {
-	inst.section00Inst = NewInEntityDeviceTableSectionSymbol(builder, inst)
-	inst.section01Inst = NewInEntityDeviceTableSectionSymbolArray(builder, inst)
-	inst.section02Inst = NewInEntityDeviceTableSectionU64Array(builder, inst)
+	inst.section00Inst = NewInEntityDeviceTableSectionGeoPoint(builder, inst)
+	inst.section01Inst = NewInEntityDeviceTableSectionSymbol(builder, inst)
+	inst.section02Inst = NewInEntityDeviceTableSectionSymbolArray(builder, inst)
+	inst.section03Inst = NewInEntityDeviceTableSectionU64Array(builder, inst)
 }
 func (inst *InEntityDeviceTable) beginSections() {
 	if mask := inst.activeSections; mask != nil {
@@ -216,33 +232,42 @@ func (inst *InEntityDeviceTable) beginSections() {
 		if mask[2] {
 			inst.section02Inst.beginSection()
 		}
+		if mask[3] {
+			inst.section03Inst.beginSection()
+		}
 		return
 	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
+	inst.section03Inst.beginSection()
 }
 func (inst *InEntityDeviceTable) resetSections() {
 	inst.section00Inst.resetSection()
 	inst.section01Inst.resetSection()
 	inst.section02Inst.resetSection()
+	inst.section03Inst.resetSection()
 }
 func (inst *InEntityDeviceTable) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
 	err = errors.Join(err, inst.section00Inst.CheckErrors())
 	err = errors.Join(err, inst.section01Inst.CheckErrors())
 	err = errors.Join(err, inst.section02Inst.CheckErrors())
+	err = errors.Join(err, inst.section03Inst.CheckErrors())
 
 	return
 }
-func (inst *InEntityDeviceTable) GetSectionSymbol() *InEntityDeviceTableSectionSymbol {
+func (inst *InEntityDeviceTable) GetSectionGeoPoint() *InEntityDeviceTableSectionGeoPoint {
 	return inst.section00Inst
 }
-func (inst *InEntityDeviceTable) GetSectionSymbolArray() *InEntityDeviceTableSectionSymbolArray {
+func (inst *InEntityDeviceTable) GetSectionSymbol() *InEntityDeviceTableSectionSymbol {
 	return inst.section01Inst
 }
-func (inst *InEntityDeviceTable) GetSectionU64Array() *InEntityDeviceTableSectionU64Array {
+func (inst *InEntityDeviceTable) GetSectionSymbolArray() *InEntityDeviceTableSectionSymbolArray {
 	return inst.section02Inst
+}
+func (inst *InEntityDeviceTable) GetSectionU64Array() *InEntityDeviceTableSectionU64Array {
+	return inst.section03Inst
 }
 func (inst *InEntityDeviceTable) BeginEntity() *InEntityDeviceTable {
 	switch inst.state {
@@ -262,7 +287,7 @@ func (inst *InEntityDeviceTable) validateEntity() {
 		state := inst.section00Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "geoPoint").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -270,12 +295,20 @@ func (inst *InEntityDeviceTable) validateEntity() {
 		state := inst.section01Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "symbolArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
 	{
 		state := inst.section02Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "symbolArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section03Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
 			inst.AppendError(eb.Build().Str("section", "u64Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
@@ -356,6 +389,332 @@ func (inst *InEntityDeviceTable) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityDeviceTable) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityDeviceTableSectionGeoPoint struct {
+	errs                  []error
+	inAttr                *InEntityDeviceTableSectionGeoPointInAttr
+	state                 runtime.EntityStateE
+	attributeCount        int
+	parent                *InEntityDeviceTable
+	scalarFieldBuilder035 *array.Float32Builder
+	scalarListBuilder035  *array.ListBuilder
+	scalarFieldBuilder036 *array.Float32Builder
+	scalarListBuilder036  *array.ListBuilder
+	scalarFieldBuilder037 *array.Uint64Builder
+	scalarListBuilder037  *array.ListBuilder
+}
+
+func NewInEntityDeviceTableSectionGeoPoint(builder *array.RecordBuilder, parent *InEntityDeviceTable) (inst *InEntityDeviceTableSectionGeoPoint) {
+	inst = &InEntityDeviceTableSectionGeoPoint{}
+	inAttr := NewInEntityDeviceTableSectionGeoPointInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder035 = builder.Field(35).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder035 = builder.Field(35).(*array.ListBuilder)
+	inst.scalarFieldBuilder036 = builder.Field(36).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder036 = builder.Field(36).(*array.ListBuilder)
+	inst.scalarFieldBuilder037 = builder.Field(37).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder037 = builder.Field(37).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityDeviceTableSectionGeoPoint) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityDeviceTableSectionGeoPoint) BeginAttribute(pointLat35 float32, pointLng36 float32, h337 uint64) *InEntityDeviceTableSectionGeoPointInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder035.Append(pointLat35)
+	inst.scalarFieldBuilder036.Append(pointLng36)
+	inst.scalarFieldBuilder037.Append(h337)
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityDeviceTableSectionGeoPoint) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityDeviceTableSectionGeoPoint) EndSection() *InEntityDeviceTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityDeviceTableSectionGeoPoint) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityDeviceTableSectionGeoPoint) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityDeviceTableSectionGeoPoint) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityDeviceTableSectionGeoPoint) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityDeviceTableSectionGeoPointInAttr struct {
+	errs                             []error
+	state                            runtime.EntityStateE
+	parent                           *InEntityDeviceTableSectionGeoPoint
+	scalarFieldBuilder035            *array.Float32Builder
+	scalarListBuilder035             *array.ListBuilder
+	scalarFieldBuilder036            *array.Float32Builder
+	scalarListBuilder036             *array.ListBuilder
+	scalarFieldBuilder037            *array.Uint64Builder
+	scalarListBuilder037             *array.ListBuilder
+	membershipFieldBuilder038        *array.Uint64Builder
+	membershipListBuilder038         *array.ListBuilder
+	membershipFieldBuilder039        *array.Uint64Builder
+	membershipListBuilder039         *array.ListBuilder
+	membershipFieldBuilder040        *array.BinaryBuilder
+	membershipListBuilder040         *array.ListBuilder
+	membershipFieldBuilder041        *array.Uint64Builder
+	membershipListBuilder041         *array.ListBuilder
+	membershipFieldBuilder042        *array.BinaryBuilder
+	membershipListBuilder042         *array.ListBuilder
+	membershipSupportFieldBuilder043 *array.Uint64Builder
+	membershipSupportListBuilder043  *array.ListBuilder
+	membershipSupportFieldBuilder044 *array.Uint64Builder
+	membershipSupportListBuilder044  *array.ListBuilder
+	membershipSupportFieldBuilder045 *array.Uint64Builder
+	membershipSupportListBuilder045  *array.ListBuilder
+	membershipSupportFieldBuilder046 *array.Uint64Builder
+	membershipSupportListBuilder046  *array.ListBuilder
+
+	membershipContainerLength038 int
+
+	membershipContainerLength039 int
+
+	membershipContainerLength040 int
+
+	membershipContainerLength041 int
+
+	membershipContainerLength042 int
+}
+
+func NewInEntityDeviceTableSectionGeoPointInAttr(builder *array.RecordBuilder, parent *InEntityDeviceTableSectionGeoPoint) (inst *InEntityDeviceTableSectionGeoPointInAttr) {
+	inst = &InEntityDeviceTableSectionGeoPointInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.scalarFieldBuilder035 = builder.Field(35).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder035 = builder.Field(35).(*array.ListBuilder)
+	inst.scalarFieldBuilder036 = builder.Field(36).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.scalarListBuilder036 = builder.Field(36).(*array.ListBuilder)
+	inst.scalarFieldBuilder037 = builder.Field(37).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder037 = builder.Field(37).(*array.ListBuilder)
+	inst.membershipFieldBuilder038 = builder.Field(38).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder038 = builder.Field(38).(*array.ListBuilder)
+	inst.membershipFieldBuilder039 = builder.Field(39).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder039 = builder.Field(39).(*array.ListBuilder)
+	inst.membershipFieldBuilder040 = builder.Field(40).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder040 = builder.Field(40).(*array.ListBuilder)
+	inst.membershipFieldBuilder041 = builder.Field(41).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder041 = builder.Field(41).(*array.ListBuilder)
+	inst.membershipFieldBuilder042 = builder.Field(42).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder042 = builder.Field(42).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder043 = builder.Field(43).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder043 = builder.Field(43).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder044 = builder.Field(44).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder044 = builder.Field(44).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder045 = builder.Field(45).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder045 = builder.Field(45).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder046 = builder.Field(46).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder046 = builder.Field(46).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) beginAttribute() {
+	inst.membershipListBuilder038.Append(true)
+	inst.membershipListBuilder039.Append(true)
+	inst.membershipListBuilder040.Append(true)
+	inst.membershipListBuilder041.Append(true)
+	inst.membershipListBuilder042.Append(true)
+	inst.membershipContainerLength038 = 0
+	inst.membershipContainerLength039 = 0
+	inst.membershipContainerLength040 = 0
+	inst.membershipContainerLength041 = 0
+	inst.membershipContainerLength042 = 0
+	inst.scalarListBuilder035.Append(true)
+	inst.scalarListBuilder036.Append(true)
+	inst.scalarListBuilder037.Append(true)
+	inst.membershipSupportListBuilder043.Append(true)
+	inst.membershipSupportListBuilder044.Append(true)
+	inst.membershipSupportListBuilder045.Append(true)
+	inst.membershipSupportListBuilder046.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AddMembershipHighCardRef(hr38 uint64) *InEntityDeviceTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder038.Append(hr38)
+	inst.membershipContainerLength038++
+	return inst
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AddMembershipHighCardRefP(hr38 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder038.Append(hr38)
+	inst.membershipContainerLength038++
+	return
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AddMembershipLowCardRef(lr39 uint64) *InEntityDeviceTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder039.Append(lr39)
+	inst.membershipContainerLength039++
+	return inst
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AddMembershipLowCardRefP(lr39 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder039.Append(lr39)
+	inst.membershipContainerLength039++
+	return
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AddMembershipLowCardVerbatim(lv40 []byte) *InEntityDeviceTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder040.Append(lv40)
+	inst.membershipContainerLength040++
+	return inst
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AddMembershipLowCardVerbatimP(lv40 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder040.Append(lv40)
+	inst.membershipContainerLength040++
+	return
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AddMembershipMixedLowCardRef(lmr41 uint64, mrhp42 []byte) *InEntityDeviceTableSectionGeoPointInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder041.Append(lmr41)
+	inst.membershipFieldBuilder042.Append(mrhp42)
+	inst.membershipContainerLength041++
+	inst.membershipContainerLength042++
+	return inst
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AddMembershipMixedLowCardRefP(lmr41 uint64, mrhp42 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder041.Append(lmr41)
+	inst.membershipFieldBuilder042.Append(mrhp42)
+	inst.membershipContainerLength041++
+	inst.membershipContainerLength042++
+	return
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength038
+	inst.membershipContainerLength038 = 0
+	inst.membershipSupportFieldBuilder043.Append(uint64(l))
+	l = inst.membershipContainerLength039
+	inst.membershipContainerLength039 = 0
+	inst.membershipSupportFieldBuilder044.Append(uint64(l))
+	l = inst.membershipContainerLength040
+	inst.membershipContainerLength040 = 0
+	inst.membershipSupportFieldBuilder045.Append(uint64(l))
+	l = inst.membershipContainerLength041
+	inst.membershipContainerLength041 = 0
+	inst.membershipSupportFieldBuilder046.Append(uint64(l))
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) EndSection() *InEntityDeviceTable {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) EndAttribute() *InEntityDeviceTableSectionGeoPoint {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 

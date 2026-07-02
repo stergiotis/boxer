@@ -171,6 +171,26 @@ func NewMembershipPackDeviceTableShared1SymbolArray() (inst *MembershipPackDevic
 	return
 }
 
+func NewMembershipPackDeviceTableShared1GeoPoint() (inst *MembershipPackDeviceTableShared1) {
+	inst = &MembershipPackDeviceTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 38
+	inst.ColumnIndexHighCardRefAccel = 43
+	inst.ColumnIndexLowCardRef = 39
+	inst.ColumnIndexLowCardRefAccel = 44
+	inst.ColumnIndexLowCardVerbatim = 40
+	inst.ColumnIndexLowCardVerbatimAccel = 45
+	inst.ColumnIndexMixedLowCardRef = 41
+	inst.ColumnIndexMixedLowCardRefAccel = 46
+	inst.ColumnIndexMixedRefHighCardParameters = 42
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 46
+	return
+}
+
 func (inst *MembershipPackDeviceTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRef)
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRefElements)
@@ -415,6 +435,18 @@ type ReadAccessDeviceTablePlainEntityTimestampAttributes struct {
 	ColumnIndexTs uint32
 }
 
+type ReadAccessDeviceTableTaggedGeoPointAttributes struct {
+	ValuePointLat         *array.List
+	ColumnIndexPointLat   uint32
+	ValuePointLatElements *array.Float32
+	ValuePointLng         *array.List
+	ColumnIndexPointLng   uint32
+	ValuePointLngElements *array.Float32
+	ValueH3               *array.List
+	ColumnIndexH3         uint32
+	ValueH3Elements       *array.Uint64
+}
+
 type ReadAccessDeviceTableTaggedSymbolArrayAttributes struct {
 	ValueValue                 *array.List
 	ColumnIndexValue           uint32
@@ -523,6 +555,43 @@ func (inst *ReadAccessDeviceTablePlainEntityTimestampAttributes) SetColumnIndice
 }
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessDeviceTablePlainEntityTimestampAttributes)(nil)
+
+func NewReadAccessDeviceTableTaggedGeoPointAttributes() (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) {
+	inst = &ReadAccessDeviceTableTaggedGeoPointAttributes{}
+	inst.ColumnIndexPointLat = 35
+	inst.ColumnIndexPointLng = 36
+	inst.ColumnIndexH3 = 37
+	return
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexPointLat,
+		inst.ColumnIndexPointLng,
+		inst.ColumnIndexH3,
+	}
+	return
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessDeviceTableTaggedGeoPointAttributes.ColumnIndexPointLat",
+		"ReadAccessDeviceTableTaggedGeoPointAttributes.ColumnIndexPointLng",
+		"ReadAccessDeviceTableTaggedGeoPointAttributes.ColumnIndexH3",
+	}
+	return
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexPointLat = indices[0]
+	inst.ColumnIndexPointLng = indices[1]
+	inst.ColumnIndexH3 = indices[2]
+
+	rest = indices[3:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessDeviceTableTaggedGeoPointAttributes)(nil)
 
 func NewReadAccessDeviceTableTaggedSymbolArrayAttributes() (inst *ReadAccessDeviceTableTaggedSymbolArrayAttributes) {
 	inst = &ReadAccessDeviceTableTaggedSymbolArrayAttributes{}
@@ -638,6 +707,15 @@ func (inst *ReadAccessDeviceTablePlainEntityTimestampAttributes) Reset() {
 	inst.ValueTs = nil
 }
 
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) Reset() {
+	inst.ValuePointLat = nil
+	inst.ValuePointLatElements = nil
+	inst.ValuePointLng = nil
+	inst.ValuePointLngElements = nil
+	inst.ValueH3 = nil
+	inst.ValueH3Elements = nil
+}
+
 func (inst *ReadAccessDeviceTableTaggedSymbolArrayAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
@@ -680,6 +758,17 @@ var _ runtime.ReleasableI = (*ReadAccessDeviceTablePlainEntityTimestampAttribute
 
 func (inst *ReadAccessDeviceTablePlainEntityTimestampAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueTs)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessDeviceTableTaggedGeoPointAttributes)(nil)
+
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValuePointLat)
+	runtime.ReleaseIfNotNil(inst.ValuePointLatElements)
+	runtime.ReleaseIfNotNil(inst.ValuePointLng)
+	runtime.ReleaseIfNotNil(inst.ValuePointLngElements)
+	runtime.ReleaseIfNotNil(inst.ValueH3)
+	runtime.ReleaseIfNotNil(inst.ValueH3Elements)
 }
 
 var _ runtime.ReleasableI = (*ReadAccessDeviceTableTaggedSymbolArrayAttributes)(nil)
@@ -731,6 +820,13 @@ func (inst *ReadAccessDeviceTablePlainEntityTimestampAttributes) Len() (nEntitie
 	return
 }
 
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) Len() (nEntities int) {
+	if inst.ValuePointLat != nil {
+		nEntities = inst.ValuePointLat.Len()
+	}
+	return
+}
+
 func (inst *ReadAccessDeviceTableTaggedSymbolArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
@@ -775,6 +871,22 @@ func (inst *ReadAccessDeviceTablePlainEntityLifecycleAttributes) LoadFromRecord(
 
 func (inst *ReadAccessDeviceTablePlainEntityTimestampAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexTs, arrow.TIMESTAMP, rec, &inst.ValueTs, array.NewTimestampData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexPointLat, arrow.FLOAT32, rec, &inst.ValuePointLat, &inst.ValuePointLatElements, array.NewFloat32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexPointLng, arrow.FLOAT32, rec, &inst.ValuePointLng, &inst.ValuePointLngElements, array.NewFloat32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexH3, arrow.UINT64, rec, &inst.ValueH3, &inst.ValueH3Elements, array.NewUint64Data)
 	if err != nil {
 		return
 	}
@@ -887,6 +999,30 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArrayAttributes) GetAttrValueSingle
 	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
 	return
 }
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) GetAttrValuePointLat(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
+	b, e := inst.ValuePointLat.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "PointLat").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValuePointLatElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) GetAttrValuePointLng(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue float32) {
+	b, e := inst.ValuePointLng.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "PointLng").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValuePointLngElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) GetAttrValueH3(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint64) {
+	b, e := inst.ValueH3.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "H3").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueH3Elements.Value(int(b) + int(attrIdx))
+	return
+}
 func (inst *ReadAccessDeviceTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
@@ -918,6 +1054,11 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArrayAttributes) GetNumberOfAttribu
 	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
 	return
 }
+func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValuePointLat.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
+	return
+}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
@@ -945,6 +1086,13 @@ type ReadAccessDeviceTableTaggedSymbolArray struct {
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessDeviceTableTaggedSymbolArray)(nil)
 
+type ReadAccessDeviceTableTaggedGeoPoint struct {
+	Attributes  *ReadAccessDeviceTableTaggedGeoPointAttributes
+	Memberships *MembershipPackDeviceTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessDeviceTableTaggedGeoPoint)(nil)
+
 func NewReadAccessDeviceTableTaggedSymbol() (inst *ReadAccessDeviceTableTaggedSymbol) {
 	inst = &ReadAccessDeviceTableTaggedSymbol{}
 	inst.Attributes = NewReadAccessDeviceTableTaggedSymbolAttributes()
@@ -963,6 +1111,13 @@ func NewReadAccessDeviceTableTaggedSymbolArray() (inst *ReadAccessDeviceTableTag
 	inst = &ReadAccessDeviceTableTaggedSymbolArray{}
 	inst.Attributes = NewReadAccessDeviceTableTaggedSymbolArrayAttributes()
 	inst.Memberships = NewMembershipPackDeviceTableShared1SymbolArray()
+	return
+}
+
+func NewReadAccessDeviceTableTaggedGeoPoint() (inst *ReadAccessDeviceTableTaggedGeoPoint) {
+	inst = &ReadAccessDeviceTableTaggedGeoPoint{}
+	inst.Attributes = NewReadAccessDeviceTableTaggedGeoPointAttributes()
+	inst.Memberships = NewMembershipPackDeviceTableShared1GeoPoint()
 	return
 }
 
@@ -987,6 +1142,13 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArray) SetColumnIndices(indices []u
 	return
 }
 
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
 func (inst *ReadAccessDeviceTableTaggedSymbol) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
@@ -1000,6 +1162,12 @@ func (inst *ReadAccessDeviceTableTaggedU64Array) GetColumnIndices() (columnIndic
 }
 
 func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
@@ -1023,6 +1191,12 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetColumnIndexFieldNames() (
 	return
 }
 
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
 func (inst *ReadAccessDeviceTableTaggedSymbol) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
@@ -1034,6 +1208,11 @@ func (inst *ReadAccessDeviceTableTaggedU64Array) Release() {
 }
 
 func (inst *ReadAccessDeviceTableTaggedSymbolArray) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
@@ -1080,6 +1259,20 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArray) LoadFromRecord(rec runtime.R
 	return
 }
 
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessDeviceTableTaggedSymbol) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
@@ -1091,6 +1284,11 @@ func (inst *ReadAccessDeviceTableTaggedU64Array) Len() (nEntities int) {
 }
 
 func (inst *ReadAccessDeviceTableTaggedSymbolArray) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
@@ -1107,6 +1305,10 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetAttributes() *ReadAccessD
 	return inst.Attributes
 }
 
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetAttributes() *ReadAccessDeviceTableTaggedGeoPointAttributes {
+	return inst.Attributes
+}
+
 func (inst *ReadAccessDeviceTableTaggedSymbol) GetMemberships() *MembershipPackDeviceTableShared1 {
 	return inst.Memberships
 }
@@ -1116,6 +1318,10 @@ func (inst *ReadAccessDeviceTableTaggedU64Array) GetMemberships() *MembershipPac
 }
 
 func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetMemberships() *MembershipPackDeviceTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetMemberships() *MembershipPackDeviceTableShared1 {
 	return inst.Memberships
 }
 
@@ -1137,6 +1343,12 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetSectionName() naming.Styl
 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessDeviceTableTaggedSymbolArray)(nil)
 
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetSectionName() naming.StylableName {
+	return "geo-point"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessDeviceTableTaggedGeoPoint)(nil)
+
 func (inst *ReadAccessDeviceTableTaggedSymbol) GetSectionUseAspects() useaspects.AspectSet {
 	return "0"
 }
@@ -1146,6 +1358,10 @@ func (inst *ReadAccessDeviceTableTaggedU64Array) GetSectionUseAspects() useaspec
 }
 
 func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetSectionUseAspects() useaspects.AspectSet {
+	return "0"
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetSectionUseAspects() useaspects.AspectSet {
 	return "0"
 }
 
@@ -1161,6 +1377,10 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetSectionStreamingGroup() n
 	return "data"
 }
 
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
 func (inst *ReadAccessDeviceTableTaggedSymbol) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
@@ -1170,6 +1390,10 @@ func (inst *ReadAccessDeviceTableTaggedU64Array) GetSectionCoSectionGroup() nami
 }
 
 func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
@@ -1185,6 +1409,10 @@ func (inst *ReadAccessDeviceTableTaggedSymbolArray) GetSectionMembershipSpec() c
 	return 0b111001
 }
 
+func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
@@ -1197,6 +1425,7 @@ type ReadAccessDeviceTable struct {
 	Symbol          *ReadAccessDeviceTableTaggedSymbol
 	U64Array        *ReadAccessDeviceTableTaggedU64Array
 	SymbolArray     *ReadAccessDeviceTableTaggedSymbolArray
+	GeoPoint        *ReadAccessDeviceTableTaggedGeoPoint
 }
 
 func NewReadAccessDeviceTable() (inst *ReadAccessDeviceTable) {
@@ -1207,6 +1436,7 @@ func NewReadAccessDeviceTable() (inst *ReadAccessDeviceTable) {
 	inst.Symbol = NewReadAccessDeviceTableTaggedSymbol()
 	inst.U64Array = NewReadAccessDeviceTableTaggedU64Array()
 	inst.SymbolArray = NewReadAccessDeviceTableTaggedSymbolArray()
+	inst.GeoPoint = NewReadAccessDeviceTableTaggedGeoPoint()
 	return
 }
 
@@ -1217,6 +1447,7 @@ func (inst *ReadAccessDeviceTable) Release() {
 	runtime.ReleaseIfNotNil(inst.Symbol)
 	runtime.ReleaseIfNotNil(inst.U64Array)
 	runtime.ReleaseIfNotNil(inst.SymbolArray)
+	runtime.ReleaseIfNotNil(inst.GeoPoint)
 }
 
 func (inst *ReadAccessDeviceTable) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -1262,6 +1493,13 @@ func (inst *ReadAccessDeviceTable) LoadFromRecord(rec runtime.RecordI) (err erro
 			return
 		}
 	}
+	if inst.GeoPoint != nil {
+		err = inst.GeoPoint.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "device-table").Str("fieldName", "GeoPoint").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
 	return
 }
 
@@ -1285,6 +1523,9 @@ func (inst *ReadAccessDeviceTable) SetColumnIndices(indices []uint32) (rest []ui
 	if inst.SymbolArray != nil {
 		rest = inst.SymbolArray.SetColumnIndices(rest)
 	}
+	if inst.GeoPoint != nil {
+		rest = inst.GeoPoint.SetColumnIndices(rest)
+	}
 	return
 }
 
@@ -1307,6 +1548,9 @@ func (inst *ReadAccessDeviceTable) GetColumnIndices() (columnIndices []uint32) {
 	if inst.SymbolArray != nil {
 		columnIndices = slices.Concat(columnIndices, inst.SymbolArray.GetColumnIndices())
 	}
+	if inst.GeoPoint != nil {
+		columnIndices = slices.Concat(columnIndices, inst.GeoPoint.GetColumnIndices())
+	}
 	return
 }
 
@@ -1328,6 +1572,9 @@ func (inst *ReadAccessDeviceTable) GetColumnIndexFieldNames() (fieldNames []stri
 	}
 	if inst.SymbolArray != nil {
 		fieldNames = slices.Concat(fieldNames, inst.SymbolArray.GetColumnIndexFieldNames())
+	}
+	if inst.GeoPoint != nil {
+		fieldNames = slices.Concat(fieldNames, inst.GeoPoint.GetColumnIndexFieldNames())
 	}
 	return
 }

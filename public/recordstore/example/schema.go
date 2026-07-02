@@ -22,8 +22,10 @@ const TableRowConfig = common.TableRowConfigMultiAttributesPerRow
 // GetDeviceSchemaInManipulator builds the device fact table. The three
 // envelope plain columns carry the ADR-0100 roles — id (Key), ts (Order),
 // lifecycle (Lifecycle; 0 = live, 1 = tombstone) — and each component owns
-// one tagged section: symbol (Identity.Status), u64Array (Battery.Charge,
-// single-valued via the unit modifier) and symbolArray (Tagged.Tags).
+// one tagged section: symbol (Identity.Status + the optional
+// Identity.Nick), u64Array (Battery.Charge, single-valued via the unit
+// modifier), symbolArray (Tagged.Tags) and the multi-sub-column geoPoint
+// (Located.Lat/Lng/Cell).
 func GetDeviceSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	manip, err = common.NewTableManipulator()
 	if err != nil {
@@ -72,5 +74,18 @@ func loadDeviceSchema(manip common.TableManipulatorFluidI) {
 		AddSectionMembership(channels...)
 	secSymArray.TaggedValueColumn("value", ctabb.Sh).
 		AddColumnValueSemantics(valueaspects.AspectCanonicalizedValue).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+
+	// geoPoint is a multi-sub-column scalar section: one membership per
+	// entity carrying several aligned value columns. Sub-column declaration
+	// order must match the DTO's field order (see located_dto.go).
+	secGeo := manip.TaggedValueSection("geoPoint").
+		SectionStreamingGroup("data").
+		AddSectionMembership(channels...)
+	secGeo.TaggedValueColumn("pointLat", ctabb.F32).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+	secGeo.TaggedValueColumn("pointLng", ctabb.F32).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+	secGeo.TaggedValueColumn("h3", ctabb.U64).
 		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
 }
