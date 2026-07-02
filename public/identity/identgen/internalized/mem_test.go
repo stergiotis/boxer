@@ -1,6 +1,7 @@
 package internalized
 
 import (
+	"encoding/binary"
 	"math/rand/v2"
 	"testing"
 
@@ -178,4 +179,39 @@ func TestMemIdInternalizer_PropertyConsistency(t *testing.T) {
 		require.Equal(t, string(k), got)
 	}
 	require.Equal(t, len(shadow), s.Len())
+}
+
+func BenchmarkMemIdInternalizer_GetId(b *testing.B) {
+	key := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
+
+	// hit: an already-internalized key; the map lookup must not allocate.
+	b.Run("hit", func(b *testing.B) {
+		gen, err := NewMemIdInternalizer(identifier.TagValue(1), 16)
+		require.NoError(b, err)
+		_, _, _ = gen.GetId(key) // prime
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _, _ = gen.GetId(key)
+		}
+	})
+
+	// miss: a fresh key each time; the working set is capped so memory stays bounded.
+	b.Run("miss", func(b *testing.B) {
+		const workingSet = 1 << 20
+		gen, err := NewMemIdInternalizer(identifier.TagValue(1), workingSet)
+		require.NoError(b, err)
+		buf := make([]byte, 8)
+		var i uint64
+		b.ReportAllocs()
+		for b.Loop() {
+			if gen.Len() >= workingSet {
+				b.StopTimer()
+				gen, _ = NewMemIdInternalizer(identifier.TagValue(1), workingSet)
+				b.StartTimer()
+			}
+			binary.LittleEndian.PutUint64(buf, i)
+			i++
+			_, _, _ = gen.GetId(buf)
+		}
+	})
 }

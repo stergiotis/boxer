@@ -164,3 +164,22 @@ func TestBadgerIdInternalizer_ConcurrentGetId(t *testing.T) {
 	}
 	require.Len(t, seen, workers*perWorker, "every distinct key must get a distinct id")
 }
+
+// BenchmarkBadgerIdInternalizer_GetId_Hit measures the read path (a Badger View
+// txn) for an already-internalized key.
+func BenchmarkBadgerIdInternalizer_GetId_Hit(b *testing.B) {
+	genFac, err := NewBadgerIdInternalizedGenerator(b.TempDir())
+	require.NoError(b, err)
+	defer func() { _ = genFac.Close() }()
+	gen, err := genFac.Create(identifier.TagValue(1), 1024)
+	require.NoError(b, err)
+	defer func() { _ = gen.Release() }()
+
+	key := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
+	_, _, _ = gen.GetId(key) // prime
+
+	b.ReportAllocs()
+	for b.Loop() {
+		_, _, _ = gen.GetId(key)
+	}
+}
