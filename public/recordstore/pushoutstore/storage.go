@@ -37,8 +37,9 @@ import (
 //
 // Durability: every mutating method Commits and Flushes before returning
 // (one synchronous Arrow insert per operation) — durable-on-return over
-// a durable engine, per the StorageI contract. A failed Flush leaves the
-// committed rows buffered; the next successful Flush ships them.
+// a durable engine, per the StorageI contract. A failed Flush discards
+// the operation's rows (DiscardPending), so a failed operation stays
+// "never happened" — it must not ship behind a later operation's back.
 //
 // Concurrency: the embedded store and cache are single-goroutine, so one
 // mutex serializes every method — writes are engine-locked anyway, and
@@ -117,6 +118,11 @@ func (inst *Storage) nextTs(ctx context.Context, key string) (ts time.Time, err 
 
 func (inst *Storage) flush(ctx context.Context) (err error) {
 	_, err = inst.st.Flush(ctx)
+	if err != nil {
+		// Per-op contract: a failed operation "never happened". Drop the
+		// buffered rows rather than let a later operation ship them.
+		inst.st.DiscardPending()
+	}
 	return
 }
 

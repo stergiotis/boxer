@@ -98,7 +98,10 @@ type PushoutStore[W comparable] struct {
 	cfg      PushoutStoreConfig
 	dml      *InEntityPushoutTable
 	buffered int
-	cache    *caching.ReadThroughCache[string, *PushoutEntity, W]
+	// pending holds transferred-but-uninserted records after a failed
+	// Flush; the next Flush ships them (DiscardPending drops them).
+	pending []arrow.RecordBatch
+	cache   *caching.ReadThroughCache[string, *PushoutEntity, W]
 }
 
 func NewPushoutStore[W comparable](exec recordstore.ExecutorI, alloc memory.Allocator, cfg PushoutStoreConfig) (inst *PushoutStore[W]) {
@@ -190,15 +193,23 @@ func (inst *PushoutEntityBuilder[W]) Raw() *InEntityPushoutTable {
 // Commit finishes the open entity and buffers the row. The cache
 // entry for the entity's key, if any, is invalidated — a local write
 // never leaves a stale L1 value behind (external writers remain the
-// caller's problem; see ADR-0100 Deferred).
+// caller's problem; see ADR-0100 Deferred). A failed Commit rolls the
+// frame back — the entity is discarded and the store stays usable.
 func (inst *PushoutEntityBuilder[W]) Commit() (err error) {
 	err = inst.store.dml.CommitEntity()
 	if err != nil {
+		_ = inst.store.dml.RollbackEntity() // no-op error when no frame is open
 		return
 	}
 	inst.store.buffered++
 	inst.store.cache.Delete(inst.key)
 	return
+}
+
+// Rollback abandons the open entity frame without committing it;
+// already-buffered rows and the store remain usable.
+func (inst *PushoutEntityBuilder[W]) Rollback() (err error) {
+	return inst.store.dml.RollbackEntity()
 }
 
 // IngestEnvelope appends one whole entity per row carrying only the
@@ -257,9 +268,12 @@ func (inst *PushoutStore[W]) IngestRetention(ts time.Time, rows []Retention) (er
 func (inst *PushoutStore[W]) Buffered() int { return inst.buffered }
 
 // Flush drains the buffered rows to ClickHouse (Arrow IPC, ADR-0089
-// pivot). Rows are durable when Flush returns, engine permitting.
+// pivot). Rows are durable when Flush returns, engine permitting. On
+// insert failure the transferred records are retained and the next
+// Flush ships them — Flush is retryable; DiscardPending drops them
+// instead. An open (uncommitted) entity frame makes Flush error.
 func (inst *PushoutStore[W]) Flush(ctx context.Context) (n int, err error) {
-	if inst.buffered == 0 {
+	if inst.buffered == 0 && len(inst.pending) == 0 {
 		return
 	}
 	records, err := inst.dml.TransferRecords(nil)
@@ -267,19 +281,40 @@ func (inst *PushoutStore[W]) Flush(ctx context.Context) (n int, err error) {
 		err = eh.Errorf("transfer records: %w", err)
 		return
 	}
-	defer func() {
-		for _, rec := range records {
-			rec.Release()
+	records = append(inst.pending, records...)
+	inst.pending = nil
+	if len(records) > 0 {
+		err = inst.exec.InsertArrow(ctx, pushoutTableName, records)
+		if err != nil {
+			inst.pending = records
+			err = eh.Errorf("insert into %s: %w", pushoutTableName, err)
+			return
 		}
-	}()
-	err = inst.exec.InsertArrow(ctx, pushoutTableName, records)
-	if err != nil {
-		err = eh.Errorf("insert into %s: %w", pushoutTableName, err)
-		return
+	}
+	for _, rec := range records {
+		rec.Release()
 	}
 	n = inst.buffered
 	inst.buffered = 0
 	return
+}
+
+// DiscardPending drops every committed-but-unflushed row: records
+// retained by a failed Flush, rows still in the DML builder, and an
+// open (uncommitted) entity frame. It gives a failed Flush "never
+// happened" semantics — ClickHouse state is the truth afterwards.
+func (inst *PushoutStore[W]) DiscardPending() {
+	_ = inst.dml.RollbackEntity() // no-op error when no frame is open
+	if records, err := inst.dml.TransferRecords(nil); err == nil {
+		for _, rec := range records {
+			rec.Release()
+		}
+	}
+	for _, rec := range inst.pending {
+		rec.Release()
+	}
+	inst.pending = nil
+	inst.buffered = 0
 }
 
 // Get retrieves an entity by Key through the cache. A miss queues the
@@ -462,6 +497,7 @@ func (inst *PushoutStore[W]) Delete(id string, ts time.Time) (err error) {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(pushoutLifecycleTombstone)
 	err = inst.dml.CommitEntity()
 	if err != nil {
+		_ = inst.dml.RollbackEntity() // discard the failed frame; the store stays usable
 		return
 	}
 	inst.buffered++
