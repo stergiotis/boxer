@@ -51,8 +51,9 @@ so none of it is spent where it does not pay (P7).
 ### P1 — Dependencies are owned
 
 Every load-bearing dependency is treated as a liability the project must be
-able to carry alone: vendored and license-vetted, ported into the tree, or
-reimplemented. Parts that cannot be owned on those terms are avoided.
+able to carry alone: referenced while it stays cheap to trust, and vendored,
+ported into the tree, or reimplemented when it does not. Parts that can be
+neither trusted nor owned are avoided.
 
 The premise has legal, technical, and human faces. Legally, the EU's
 revised product-liability regime (Directive (EU) 2024/2853) treats software
@@ -67,6 +68,21 @@ payload in release tarballs, delivered through a years-long pressure
 campaign on a single overloaded maintainer. A minimal dependency set with
 known, homogeneous incentives keeps trust tractable; whatever cannot be
 trusted at the incentive level must be owned at the source level.
+
+The working rule is about coupling, not code volume. A dependency is
+referenced when it is boring in the load-bearing sense — a stable surface, a
+vetted license, no cgo, no service tether, no wire format or callback shape
+that binds boxer's internals to it — because such a dependency bills little
+ongoing verification attention. It is vendored, ported, or reimplemented
+when any of that fails, or when one of two boxer-specific tests eliminates
+it: the part must work on both sides of the UI ⇄ data-engineering boundary
+(one isomorphic implementation rather than two ecosystem ones), and its
+surface must be introspectable by the observability loop (P4) — errors,
+schemas, and metrics as machine-readable facts, not opaque strings. The
+result is directional, not absolute: the module graph still references parts
+that pass (Apache Arrow, embedded storage engines, a Markdown core, CLI
+plumbing); the aim is a minimized, audited trust surface, not zero
+dependencies.
 
 - **Buys:** end-to-end auditability; reproducible offline builds; immunity to
   upstream drift, license changes, and service shutdowns; trust grounded in
