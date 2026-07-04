@@ -35,7 +35,7 @@ func newAffordanceEvaluator(sink *[]nanopass.Observation) *passes.FunctionEvalua
 	}
 
 	eval.OnObservation(func(obs nanopass.Observation) {
-		log.Info().
+		log.Debug().
 			Str("name", obs.Name).
 			Bool("evaluated", obs.Evaluated).
 			Int("src.start", obs.Src.Start).

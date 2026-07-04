@@ -1236,6 +1236,14 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		}
 		return
 	}
+	// Negotiate the events contract BEFORE demanding the bands node (SD2 at
+	// the margin: a rejected timeline must not run the bands query).
+	// resolveContract is the same pure, schema-only check AcceptForChannel
+	// runs during dispatch below.
+	if ct := resolveContract(schema); ct.Mode == timelineModeNone {
+		inst.renderTimelineReject(ct.Reject)
+		return
+	}
 	// Demand the bands node (its own lane) for the chBands channel; it lags the
 	// events extent by a frame (it reads the previous frame's extent), absorbed
 	// by the fetch latency. Both nil (empty bands SQL / no result yet) →
@@ -1251,18 +1259,22 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 	if bandsRec != nil || bandsSchema != nil {
 		inputs[chBands] = channelInput{node: bandsNodeID, rec: bandsRec, schema: bandsSchema, sig: emptySignals{}}
 	}
-	reject := dispatchPanel(timelinePanel{driver: inst.timeline}, inputs, selectedRowEmitter{target: &inst.selectedRow})
-	if reject != "" {
-		// Contract rejected: show the reason + the help, the same debug-in-panel
-		// affordance the driver used to render itself.
-		for range c.Vertical().KeepIter() {
-			for rt := range c.RichTextLabel(reject) {
-				rt.Strong()
-			}
-			c.AddSpace(8)
-			inst.timeline.RenderContractHelp()
-		}
+	if reject := dispatchPanel(timelinePanel{driver: inst.timeline}, inputs, selectedRowEmitter{target: &inst.selectedRow}); reject != "" {
+		inst.renderTimelineReject(reject)
 		return
+	}
+}
+
+// renderTimelineReject shows a contract-reject reason + the contract help —
+// the debug-in-panel affordance, shared by the pre-negotiation and dispatch
+// reject paths.
+func (inst *PlayApp) renderTimelineReject(reason string) {
+	for range c.Vertical().KeepIter() {
+		for rt := range c.RichTextLabel(reason) {
+			rt.Strong()
+		}
+		c.AddSpace(8)
+		inst.timeline.RenderContractHelp()
 	}
 }
 

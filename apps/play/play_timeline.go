@@ -80,9 +80,10 @@ type TimelineDriver struct {
 	bandsSQLPtr *string
 	nowLinePtr  *bool
 
-	seenRec      arrow.RecordBatch
-	seenContract timelineContract
-	emit         SignalEmitterI
+	seenRec       arrow.RecordBatch
+	seenContract  timelineContract
+	eventsSkipped int // rows dropped by buildEvents (nulls, inverted intervals)
+	emit          SignalEmitterI
 
 	dataMinMS       int64
 	dataMaxMS       int64
@@ -176,7 +177,8 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 	if rec != inst.seenRec || ct != inst.seenContract {
 		inst.seenRec = rec
 		inst.seenContract = ct
-		ivs, pts, anns := buildEvents(rec, ct)
+		ivs, pts, anns, skipped := buildEvents(rec, ct)
+		inst.eventsSkipped = skipped
 		inst.tl.SetIntervals(ivs)
 		inst.tl.SetPoints(pts)
 		inst.tl.SetAnnotations(anns)
@@ -238,6 +240,15 @@ func (inst *TimelineDriver) renderToolbar() {
 		c.Checkbox(inst.ids.PrepareStr("tl-toolbar-nowline"),
 			*inst.nowLinePtr, "Now line").
 			SendRespVal(inst.nowLinePtr)
+		// Skipped-row visibility, matching the bands' skipped counter: rows
+		// dropped for a null required slot or an inverted interval would
+		// otherwise vanish without a trace.
+		if inst.eventsSkipped > 0 {
+			c.Separator().Vertical().Send()
+			for rt := range c.RichTextLabel(fmt.Sprintf("%d row(s) skipped (null or end<start)", inst.eventsSkipped)) {
+				rt.Small().Weak()
+			}
+		}
 	}
 	inst.tl.SetNowLine(*inst.nowLinePtr)
 }
@@ -379,9 +390,10 @@ func resolveContract(schema *arrow.Schema) (ct timelineContract) {
 // buildEvents materialises the per-mode event slice from rec. Returns the
 // populated slice for the active mode and nil for the others — callers feed
 // all three into the widget so swapping modes between queries clears stale
-// data. Rows with a null in any required slot for the active mode are
-// skipped silently.
-func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.IntervalEvent, pts []*layout.PointEvent, anns []*layout.Annotation) {
+// data. Rows with a null in any required slot for the active mode (or an
+// inverted interval) are skipped and counted, so the toolbar can surface the
+// drop instead of losing rows silently.
+func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.IntervalEvent, pts []*layout.PointEvent, anns []*layout.Annotation, skipped int) {
 	if rec == nil || ct.Mode == timelineModeNone {
 		return
 	}
@@ -418,6 +430,7 @@ func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.Inte
 		pts = make([]*layout.PointEvent, 0, n)
 		for i := range n {
 			if timeArr.IsNull(int(i)) {
+				skipped++
 				continue
 			}
 			ev := &layout.PointEvent{
@@ -434,6 +447,7 @@ func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.Inte
 		ivs = make([]*layout.IntervalEvent, 0, n)
 		for i := range n {
 			if timeArr.IsNull(int(i)) || endArr.IsNull(int(i)) {
+				skipped++
 				continue
 			}
 			ev := &layout.IntervalEvent{
@@ -444,6 +458,7 @@ func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.Inte
 				LaneHint:  readStringCell(laneArr, int(i)),
 			}
 			if ev.ToMS < ev.FromMS {
+				skipped++
 				continue
 			}
 			ivs = append(ivs, ev)
@@ -455,6 +470,7 @@ func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.Inte
 		anns = make([]*layout.Annotation, 0, n)
 		for i := range n {
 			if timeArr.IsNull(int(i)) || labelArr.IsNull(int(i)) {
+				skipped++
 				continue
 			}
 			ev := &layout.Annotation{

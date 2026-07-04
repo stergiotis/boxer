@@ -15,11 +15,13 @@ import (
 
 // play_graph.go is slice 1 of ADR-0097 (`play` as a reactive query-graph): the
 // Node / Signal / Panel contract plus a demand-driven, memoised, revision-based
-// runtime for a SINGLE node. It proves the runtime laws — minimality, early
-// cutoff, and demand — on a mock executor, without splitting (slice 3) or
-// touching the live render path (slice 2). The full Node (DependsOn / Reads /
-// nanopass Pipeline), the suspending async scheduler, and the real *Client
-// executor adapter land in later slices.
+// runtime for a SINGLE node, proving the runtime laws — minimality, early
+// cutoff, and demand — on a mock executor. Live-path status: the queryGraph
+// memo runtime (demand/setSignal/beginFrame) is exercised by the law tests and
+// stands ready for the many-node scheduler; the LIVE graph flows through the
+// facade below (the `main` QueryStore lane) and the nodeLane instances
+// (map/bands/intermediate). Early cutoff is live at the lane observers: the
+// content fingerprint computed here guards the Map repack and bands re-map.
 //
 // See doc/adr/0097-play-reactive-query-graph.md.
 
@@ -88,9 +90,11 @@ type PanelI interface {
 	// Channels declares the panel's input channels in render/assignment order.
 	Channels() []ChannelSpec
 	// AcceptForChannel is the per-channel capability check (SD6): given a candidate
-	// node's output schema for ch and the signal env, return a claim (non-nil ⇒
-	// eligible) or a human-facing reason (the empty-state text). Pure: no side
-	// effects, no rendering.
+	// node's output schema for ch and the signal env, return a claim or a
+	// human-facing reason (the empty-state text). Eligibility is reason == ""
+	// — the dispatcher keys on the reason, and the claim may be any value the
+	// panel wants back in Render (including nil). Pure: no side effects, no
+	// rendering.
 	AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string)
 	// Render draws the panel from its filled channels — called when every Required
 	// channel is filled (and the panel is visible). May publish signal mutations

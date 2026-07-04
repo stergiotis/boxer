@@ -47,6 +47,17 @@ func TestExtractParamsStringEscapes(t *testing.T) {
 	}
 }
 
+func TestExtractParamsDoubledQuoteEscape(t *testing.T) {
+	// The SQL-standard doubling escape, hand-typed: `''` decodes to `'`.
+	_, params, err := ExtractParams(`SET param_quoted = 'it''s'; SELECT 1`)
+	if err != nil {
+		t.Fatalf("ExtractParams: %v", err)
+	}
+	if got, want := params["param_quoted"], "it's"; got != want {
+		t.Errorf("params[param_quoted] = %q, want %q", got, want)
+	}
+}
+
 func TestExtractParamsArrayPassthrough(t *testing.T) {
 	_, params, err := ExtractParams(`SET param_arr = [1, 2, 3]; SELECT 1`)
 	if err != nil {

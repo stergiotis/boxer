@@ -126,6 +126,9 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// PlayApp's Storage handle is set via SetCapabilities below;
 	// RestorePersistedSql replaces inst.sql in place.
 	initSQL, envProvided := SQLOverride.Lookup()
+	// Per the env var's description, only a NON-EMPTY override wins over the
+	// persisted restore; set-but-empty behaves like unset.
+	envOverride := envProvided && initSQL != ""
 	if initSQL == "" {
 		initSQL = "SELECT * FROM spinnaker.facts"
 	}
@@ -141,7 +144,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""
 	inner.SetCapabilities(ctx.Bus(), ctx.Storage(), ctx.Log())
-	if !envProvided {
+	if !envOverride {
 		// Storage restore is best-effort — silent miss leaves the
 		// default literal in place.
 		inner.RestorePersistedSql()

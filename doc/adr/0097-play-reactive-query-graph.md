@@ -641,6 +641,63 @@ over HTTP; the SD8 global signal store (which a global `tl_extent` other nodes
 could read awaits); explicit multi-cell authoring (SD12); and per-channel
 independent reassignment (a lane per bound node — beyond the 4c UI slice).
 
+### 2026-07-05 — Adversarial-review remediation (split contract, forces, SD5 server half, teardown)
+
+A deep adversarial review of `apps/play` (2026-07-04) confirmed six defects by
+repro test plus several promise-vs-implementation gaps; all were remediated in
+six commits. The corrections that amend this ADR's record:
+
+- **Split contract hardened (3a).** The synthetic sink id steps aside when a
+  user CTE claims the default name (`main (sink)`, …): a CTE literally named
+  `main` previously aliased the sink — unreferenced, `fuseToSink` executed the
+  CTE body instead of the statement (wrong results); referenced, the duplicate
+  id read as a bogus "dependency cycle". Duplicate node ids are an explicit
+  reject now. Buffers with more than one non-SET statement are rejected at
+  split — previously only the last statement ran, silently; the Run path falls
+  back to the raw buffer (the server reports its native multi-statement error)
+  and the Graph tab surfaces the split failure instead of silently degrading.
+  Statements-as-sibling-nodes stays the SD3 future slice.
+- **The lane forces actually force.** `nodeLane.forget` now supersedes an
+  in-flight run (generation bump + cancel): a completion landing after the
+  force used to restore the memo, and the forced re-fetch never ran. The Map's
+  Refresh reset only its request-dedup key, not the lane memo — a no-op since
+  3f; it now forgets the lane too.
+- **Early cutoff is live at the observers (SD4).** The Map repack and bands
+  re-map guards key on the served result's content fingerprint instead of its
+  SQL text: identical bytes re-derive nothing, and a same-SQL re-fetch with
+  new data — the case the SQL-text guard missed — always re-derives.
+- **Empty results keep their schema.** Zero-batch streams lost the stream
+  schema in both `QueryStore` and `clientExecutor`; "ran, empty" is now
+  distinguishable from "no result", and an empty bands fetch reads "0 bands"
+  instead of "pending". Status lines stopped latching stale errors: lane
+  errors are mirrored on every demand (nil clears), mapping/packing errors
+  live in their own field.
+- **SD5's server half shipped.** Supersession was client-side only (context
+  cancel); ClickHouse does not kill read-only HTTP queries on connection close
+  by default, so superseded raster/bands queries piled up server-side. Every
+  lane/store now sends a stable labelled `query_id`
+  (main/intermediate/map/bands) with `replace_running_query=1` — the promised
+  ADR-0096 SD9 semantics, generalized. (The 2026-06-28 entry's
+  "generation-tagged supersession — built and -race-tested" described the
+  client half only.)
+- **Teardown exists.** Unmount closes the graph (including the main lane), the
+  intermediate/map/bands lanes, and detaches the projector; `QueryStore`
+  gained `Close` (a late finish on a closed store is dropped); lane/store
+  contexts are cancelled on completion (armed-timer leak).
+- **One fewer bespoke mechanism.** The observed-intermediate drive
+  (`driveIntermediate` + a dedicated `QueryStore` — a third hand-rolled
+  supersession machine) folded onto a `nodeLane`; node results carry
+  `Summary`/`executedAt`/`elapsed` so the status bar keeps parity. Two
+  mechanisms remain by design: `QueryStore` for the Run-triggered `main` node
+  (history), `nodeLane` for every demand-driven node.
+- **Deliberate non-fixes.** Memoized failures do not auto-retry: demand runs
+  per frame, so auto-retry would hammer the engine; the recovery affordances
+  are the (now working) explicit forces plus a changed input. The
+  `playSignals` strangler and the SD8 global signal store remain this ADR's
+  standing deferral. The statement splitter stays unaware of dollar-quoted
+  strings — grammar1 does not parse them, and the nanopass discipline says fix
+  the grammar first, not the consumer.
+
 ## References
 
 Internal:

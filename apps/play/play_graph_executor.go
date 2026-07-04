@@ -11,11 +11,10 @@ import (
 // play_graph_executor.go (ADR-0097): the real nodeExecutorI. clientExecutor
 // runs a compiled query over HTTP and concatenates the Arrow IPC stream into a
 // single record, mirroring QueryStore.Execute's reader→concat path. It is the
-// executor the queryGraph runs SELF-EXECUTED nodes through — the splitter's
-// nodes and the panel-local lanes (bands, map) land on it in slice 3. The live
-// `main` node is still backed by QueryStore today (its async / loading /
-// history / cancel / FSM machinery), so clientExecutor is not yet on the live
-// render path; it is exercised by tests and ready for the self-executed nodes.
+// executor behind every demand-driven node lane on the live render path — the
+// Map raster (3f), the Timeline bands (4b), and observed intermediates (3d) —
+// each with its own ExecOptions (stable query_id, SD5). The `main` node stays
+// on QueryStore (Run-triggered, with history).
 
 type clientExecutor struct {
 	client *Client
