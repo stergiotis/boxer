@@ -18,10 +18,26 @@ package recordstore
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 )
+
+// Lifecycle marker values of the envelope Lifecycle column (the state
+// view; ADR-0100 SD2/SD4). Generated stores write LifecycleLive on Begin
+// and LifecycleTombstone on Delete; readers of the raw tombstone-blind
+// verbs compare against these (or use the generated IsTombstone helper).
+const (
+	LifecycleLive      uint8 = 0
+	LifecycleTombstone uint8 = 1
+)
+
+// ErrDuplicateIngestKey reports two rows sharing a key within one
+// Ingest<Kind> call — they would tie on Order (all rows of a call share
+// ts) and Latest would pick among them arbitrarily. Match with
+// errors.Is.
+var ErrDuplicateIngestKey = errors.New("duplicate key within one ingest batch")
 
 // ExecutorI is the seam between a generated store and ClickHouse. The store
 // emits SQL text and Arrow batches; the executor moves them. Implementations

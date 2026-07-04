@@ -470,6 +470,8 @@ func (inst *InEntityPushoutTable) TransferRecords(recordsIn []arrow.RecordBatch)
 	rec := inst.builder.NewRecord()
 	if rec.NumRows() > 0 {
 		recordsOut = append(recordsOut, rec)
+	} else {
+		rec.Release() // an empty snapshot is nobody's to keep
 	}
 	return
 }

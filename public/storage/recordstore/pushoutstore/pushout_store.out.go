@@ -2,7 +2,9 @@
 //
 // PushoutStore composes the generated pushout building blocks per ADR-0100:
 // append-only primitives and iterator query verbs plus the state view; batched
-// cached retrieval is the attachable PushoutCache view.
+// cached retrieval is the attachable PushoutCache view. Reads see only
+// flushed rows: buffered writes are invisible until Flush returns.
+
 package pushoutstore
 
 import (
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
@@ -32,14 +35,16 @@ import (
 //go:embed pushout_ddl_clickhouse.out.sql
 var pushoutDDLCreate string
 
-const pushoutTableName = "pushout"
+// PushoutTableName is the ClickHouse table this store binds.
+const PushoutTableName = "pushout"
 
-// Physical (encoded) plain-column names, derived from the IR at
-// generation time.
+// Physical (encoded, quoted) names of the envelope role columns,
+// derived from the IR at generation time — exported so consumers can
+// address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	pushoutColKey       = `"id:id:s:g:0:0:"`
-	pushoutColOrder     = `"ts:ts:z64:2k:0:0:"`
-	pushoutColLifecycle = `"lc:lifecycle:u8:g:0:0:"`
+	PushoutColKey       = `"id:id:s:g:0:0:"`
+	PushoutColOrder     = `"ts:ts:z64:2k:0:0:"`
+	PushoutColLifecycle = `"lc:lifecycle:u8:g:0:0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -48,13 +53,10 @@ const pushoutArrowOutputSettings = " SETTINGS output_format_arrow_string_as_stri
 // pushoutKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func pushoutKeyLiteral(k string) string { return marshalling.EscapeString(k) }
 
-const (
-	pushoutLifecycleLive      uint8 = 0
-	pushoutLifecycleTombstone uint8 = 1
-)
-
 // PushoutEntity is the entity bag (ADR-0100 SD5): the envelope plus one option
 // per bound component. Arrow-free — safe to hold in the cache.
+// Entities returned by cached reads are shared with the cache (and
+// every later reader): treat them as immutable.
 type PushoutEntity struct {
 	ID        string
 	Ts        time.Time
@@ -80,6 +82,13 @@ func (inst *PushoutEntity) Archetype() (a []string) {
 		a = append(a, "retention")
 	}
 	return
+}
+
+// IsTombstone reports whether this row is a state-view deletion
+// marker — what the tombstone-blind verbs (Latest, Replay, the
+// cache's Get) hand back for a deleted key.
+func (inst *PushoutEntity) IsTombstone() bool {
+	return inst.Lifecycle == recordstore.LifecycleTombstone
 }
 
 type PushoutStoreConfig struct {
@@ -137,7 +146,49 @@ func (inst *PushoutStore) EnsureTable(ctx context.Context) (err error) {
 	}
 	err = inst.exec.Exec(ctx, sql)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", pushoutTableName, err)
+		err = eh.Errorf("ensure table %s: %w", PushoutTableName, err)
+	}
+	return
+}
+
+// VerifySchema compares the live table's columns — names and order —
+// against the generated schema. EnsureTable alone cannot detect drift
+// on an existing table (IF NOT EXISTS succeeds against any old shape),
+// and the decode is positional, so drift fails late or, for same-typed
+// column swaps, silently: run VerifySchema at startup after
+// EnsureTable.
+func (inst *PushoutStore) VerifySchema(ctx context.Context) (err error) {
+	records, err := inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+PushoutTableName+pushoutArrowOutputSettings)
+	if err != nil {
+		err = eh.Errorf("describe table %s: %w", PushoutTableName, err)
+		return
+	}
+	defer func() {
+		for _, rec := range records {
+			rec.Release()
+		}
+	}()
+	live := make([]string, 0, 64)
+	for _, rec := range records {
+		names, ok := rec.Column(0).(*array.String)
+		if !ok {
+			err = eh.Errorf("describe table %s: name column is %s, not a string", PushoutTableName, rec.Column(0).DataType())
+			return
+		}
+		for i := range int(rec.NumRows()) {
+			live = append(live, names.Value(i))
+		}
+	}
+	want := lowlevel.CreateSchemaPushoutTable().Fields()
+	if len(live) != len(want) {
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", PushoutTableName, len(live), len(want))
+		return
+	}
+	for i, f := range want {
+		if live[i] != f.Name {
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", PushoutTableName, i, live[i], f.Name)
+			return
+		}
 	}
 	return
 }
@@ -152,7 +203,7 @@ type PushoutEntityBuilder struct {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order) and a live lifecycle.
 func (inst *PushoutStore) Begin(id string, ts time.Time) *PushoutEntityBuilder {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(pushoutLifecycleLive)
+	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleLive)
 	return &PushoutEntityBuilder{store: inst, key: id}
 }
 
@@ -228,12 +279,21 @@ func (inst *PushoutEntityBuilder) Rollback() (err error) {
 	return inst.store.dml.RollbackEntity()
 }
 
-// IngestEnvelope appends one whole entity per row carrying only the
-// Envelope component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestEnvelope buffers one whole entity per row carrying only the
+// Envelope component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *PushoutStore) IngestEnvelope(ts time.Time, rows []Envelope) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest envelope row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddEnvelope(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest envelope row %d: %w", i, err)
@@ -243,12 +303,21 @@ func (inst *PushoutStore) IngestEnvelope(ts time.Time, rows []Envelope) (err err
 	return
 }
 
-// IngestLogEntry appends one whole entity per row carrying only the
-// LogEntry component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestLogEntry buffers one whole entity per row carrying only the
+// LogEntry component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *PushoutStore) IngestLogEntry(ts time.Time, rows []LogEntry) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest logEntry row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddLogEntry(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest logEntry row %d: %w", i, err)
@@ -258,12 +327,21 @@ func (inst *PushoutStore) IngestLogEntry(ts time.Time, rows []LogEntry) (err err
 	return
 }
 
-// IngestSnapshot appends one whole entity per row carrying only the
-// Snapshot component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestSnapshot buffers one whole entity per row carrying only the
+// Snapshot component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *PushoutStore) IngestSnapshot(ts time.Time, rows []Snapshot) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest snapshot row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddSnapshot(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest snapshot row %d: %w", i, err)
@@ -273,12 +351,21 @@ func (inst *PushoutStore) IngestSnapshot(ts time.Time, rows []Snapshot) (err err
 	return
 }
 
-// IngestRetention appends one whole entity per row carrying only the
-// Retention component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestRetention buffers one whole entity per row carrying only the
+// Retention component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *PushoutStore) IngestRetention(ts time.Time, rows []Retention) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest retention row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddRetention(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest retention row %d: %w", i, err)
@@ -308,10 +395,10 @@ func (inst *PushoutStore) Flush(ctx context.Context) (n int, err error) {
 	records = append(inst.pending, records...)
 	inst.pending = nil
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, pushoutTableName, records)
+		err = inst.exec.InsertArrow(ctx, PushoutTableName, records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", pushoutTableName, err)
+			err = eh.Errorf("insert into %s: %w", PushoutTableName, err)
 			return
 		}
 	}
@@ -343,11 +430,20 @@ func (inst *PushoutStore) DiscardPending() {
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
 }
 
+// Close discards everything unflushed and releases the store's Arrow
+// builder; the store must not be used afterwards. Required for a
+// clean shutdown under tracking/checked allocators — the default Go
+// allocator needs no Close.
+func (inst *PushoutStore) Close() {
+	inst.DiscardPending()
+	inst.dml.Builder().Release()
+}
+
 // PushoutCacheConfig parameterizes an attached read-through cache view.
 type PushoutCacheConfig struct {
-	// Capacity is the L1 capacity in entries (not bytes) — size it for
-	// the largest expected entity payloads. Zero or negative selects
-	// the default (1024).
+	// Capacity is the L1 capacity in entries, not bytes — budget
+	// memory as Capacity × the largest expected entity payload. Zero
+	// or negative selects the default (1024).
 	Capacity int
 	// FetchCriteria are the cache's batch-flush thresholds.
 	FetchCriteria caching.FetchCriteria
@@ -371,7 +467,8 @@ type PushoutCache[W comparable] struct {
 }
 
 // NewPushoutCache attaches a read-through cache view to st, registering its
-// local-write invalidation hook with the store.
+// local-write invalidation hook with the store. Views attach for the
+// store's lifetime — there is no detach.
 func NewPushoutCache[W comparable](st *PushoutStore, cfg PushoutCacheConfig) (inst *PushoutCache[W]) {
 	if cfg.Capacity <= 0 {
 		cfg.Capacity = 1024
@@ -391,10 +488,43 @@ func (inst *PushoutCache[W]) rebuild() {
 // Get retrieves an entity by Key through the cache. A miss queues the
 // key for the next batch fetch (the caching suspend/replay contract).
 // A miss can also mean the batched fetch errored (misses swallow
-// fetch errors; the circuit breaker backs off) — the store's Latest
-// is the authoritative existence check.
+// fetch errors; the circuit breaker backs off) — GetFetch surfaces
+// the error instead, and the store's Latest stays the authoritative
+// check. The returned entity is shared with the cache: treat it as
+// immutable.
 func (inst *PushoutCache[W]) Get(key string) (ent *PushoutEntity, found bool) {
 	return inst.cache.Get(key)
+}
+
+// GetFetch is the single-lookup read: the cached entity when present,
+// otherwise one immediate batched point fetch — fetch errors surface
+// instead of reading as misses, so found=false with err=nil is the
+// authoritative absent. The fetched row is cached unless the key is
+// in the dirty write window. Prefer Get plus the work-item protocol
+// when batching lookups across a frame; the initial miss here also
+// queues the key, so a later batch fetch may include it redundantly
+// (harmless).
+func (inst *PushoutCache[W]) GetFetch(ctx context.Context, key string) (ent *PushoutEntity, found bool, err error) {
+	ent, found = inst.cache.Get(key)
+	if found {
+		return
+	}
+	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]string{key}))
+	if err != nil {
+		err = eh.Errorf("get-fetch: %w", err)
+		return
+	}
+	for _, e := range ents {
+		if e.ID != key {
+			continue
+		}
+		ent = e
+		found = true
+		if _, d := inst.st.dirty[key]; !d {
+			inst.cache.AddItem(key, e)
+		}
+	}
+	return
 }
 
 // WorkItem marks the current work item for the cache's miss bookkeeping.
@@ -447,7 +577,7 @@ func (inst *PushoutCache[W]) InvalidateAll() {
 // the authoritative read. A miss queues the batch fetch like Get.
 func (inst *PushoutCache[W]) GetLatest(key string) (ent *PushoutEntity, found bool) {
 	ent, found = inst.cache.Get(key)
-	if found && ent.Lifecycle == pushoutLifecycleTombstone {
+	if found && ent.IsTombstone() {
 		ent = nil
 		found = false
 	}
@@ -461,11 +591,29 @@ func (inst *PushoutCache[W]) GetLatest(key string) (ent *PushoutEntity, found bo
 // came from a stale entry.
 func (inst *PushoutCache[W]) GetLatestAcceptStale(key string) (ent *PushoutEntity, found bool, stale bool) {
 	ent, found, stale = inst.cache.GetAcceptStale(key)
-	if found && ent.Lifecycle == pushoutLifecycleTombstone {
+	if found && ent.IsTombstone() {
 		ent = nil
 		found = false
 	}
 	return
+}
+
+// fetchLatestSQL is the batched newest-row-per-key point lookup shared
+// by the cache fetcher and GetFetch.
+func (inst *PushoutStore) fetchLatestSQL(keys []string) string {
+	var sb strings.Builder
+	sb.WriteString("SELECT * FROM ")
+	sb.WriteString(PushoutTableName)
+	sb.WriteString(" WHERE " + PushoutColKey + " IN (")
+	for i, k := range keys {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(pushoutKeyLiteral(k))
+	}
+	sb.WriteString(") ORDER BY " + PushoutColOrder + " DESC LIMIT 1 BY " + PushoutColKey)
+	sb.WriteString(pushoutArrowOutputSettings)
+	return sb.String()
 }
 
 // pushoutFetcher implements caching.ItemFetcherI for attached cache views —
@@ -484,19 +632,7 @@ func (inst *pushoutFetcher) DeterminePartition(key string) uint64 { return 0 }
 // Dirty keys (written locally, not yet flushed) are fetched but not
 // cached — caching them would resurrect the pre-write row.
 func (inst *pushoutFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *PushoutEntity]) (err error) {
-	var sb strings.Builder
-	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(pushoutTableName)
-	sb.WriteString(" WHERE " + pushoutColKey + " IN (")
-	for i, k := range keys {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteString(pushoutKeyLiteral(k))
-	}
-	sb.WriteString(") ORDER BY " + pushoutColOrder + " DESC LIMIT 1 BY " + pushoutColKey)
-	sb.WriteString(pushoutArrowOutputSettings)
-	ents, err := inst.st.queryEntities(ctx, sb.String())
+	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL(keys))
 	if err != nil {
 		return
 	}
@@ -526,15 +662,16 @@ const (
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *PushoutStore) ScanEnvelope(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
 	where := pushoutScanEnvelopeFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + pushoutTableName +
+	sql := "SELECT * FROM " + PushoutTableName +
 		" WHERE " + where +
-		" ORDER BY " + pushoutColOrder + " ASC, " + pushoutColKey + " ASC"
+		" ORDER BY " + PushoutColOrder + " ASC, " + PushoutColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -550,15 +687,16 @@ func (inst *PushoutStore) ScanEnvelope(ctx context.Context, opts recordstore.Sca
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *PushoutStore) ScanLogEntry(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
 	where := pushoutScanLogEntryFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + pushoutTableName +
+	sql := "SELECT * FROM " + PushoutTableName +
 		" WHERE " + where +
-		" ORDER BY " + pushoutColOrder + " ASC, " + pushoutColKey + " ASC"
+		" ORDER BY " + PushoutColOrder + " ASC, " + PushoutColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -574,15 +712,16 @@ func (inst *PushoutStore) ScanLogEntry(ctx context.Context, opts recordstore.Sca
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *PushoutStore) ScanSnapshot(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
 	where := pushoutScanSnapshotFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + pushoutTableName +
+	sql := "SELECT * FROM " + PushoutTableName +
 		" WHERE " + where +
-		" ORDER BY " + pushoutColOrder + " ASC, " + pushoutColKey + " ASC"
+		" ORDER BY " + PushoutColOrder + " ASC, " + PushoutColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -598,15 +737,16 @@ func (inst *PushoutStore) ScanSnapshot(ctx context.Context, opts recordstore.Sca
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *PushoutStore) ScanRetention(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
 	where := pushoutScanRetentionFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + pushoutTableName +
+	sql := "SELECT * FROM " + PushoutTableName +
 		" WHERE " + where +
-		" ORDER BY " + pushoutColOrder + " ASC, " + pushoutColKey + " ASC"
+		" ORDER BY " + PushoutColOrder + " ASC, " + PushoutColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -615,11 +755,11 @@ func (inst *PushoutStore) ScanRetention(ctx context.Context, opts recordstore.Sc
 }
 
 // Latest returns the newest row for key, tombstone-blind (the raw
-// primitive).
+// primitive). Reads see only flushed rows.
 func (inst *PushoutStore) Latest(ctx context.Context, key string) (ent *PushoutEntity, found bool, err error) {
-	sql := "SELECT * FROM " + pushoutTableName +
-		" WHERE " + pushoutColKey + " = " + pushoutKeyLiteral(key) +
-		" ORDER BY " + pushoutColOrder + " DESC LIMIT 1" + pushoutArrowOutputSettings
+	sql := "SELECT * FROM " + PushoutTableName +
+		" WHERE " + PushoutColKey + " = " + pushoutKeyLiteral(key) +
+		" ORDER BY " + PushoutColOrder + " DESC LIMIT 1" + pushoutArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
 	if err != nil || len(ents) == 0 {
 		return
@@ -630,16 +770,21 @@ func (inst *PushoutStore) Latest(ctx context.Context, key string) (ent *PushoutE
 }
 
 // Replay iterates the rows for key with the order column >= fromOrder
-// in ascending order — the event-replay primitive. The sequence is
-// single-use; ctx must stay valid until iteration completes; the
-// query may execute at call time or lazily during iteration (buffered
-// in v1 — a streaming executor changes nothing visible); an error
-// ends the sequence as a final (nil, err) pair.
+// in ascending order — the event-replay primitive. A zero fromOrder
+// replays everything (zero time.Time has no defined UnixNano;
+// recordstore.SeqTs(0) is the equivalent explicit bound). The
+// sequence is single-use; ctx must stay valid until iteration
+// completes; the query may execute at call time or lazily during
+// iteration (buffered in v1 — a streaming executor changes nothing
+// visible); an error ends the sequence as a final (nil, err) pair.
+// Reads see only flushed rows.
 func (inst *PushoutStore) Replay(ctx context.Context, key string, fromOrder time.Time) iter.Seq2[*PushoutEntity, error] {
-	sql := "SELECT * FROM " + pushoutTableName +
-		" WHERE " + pushoutColKey + " = " + pushoutKeyLiteral(key) +
-		" AND " + pushoutColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")" +
-		" ORDER BY " + pushoutColOrder + " ASC" + pushoutArrowOutputSettings
+	sql := "SELECT * FROM " + PushoutTableName +
+		" WHERE " + PushoutColKey + " = " + pushoutKeyLiteral(key)
+	if !fromOrder.IsZero() {
+		sql += " AND " + PushoutColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
+	}
+	sql += " ORDER BY " + PushoutColOrder + " ASC" + pushoutArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
 }
 
@@ -655,7 +800,7 @@ func (inst *PushoutStore) Put(id string, ts time.Time) *PushoutEntityBuilder {
 // the deletion); attached cache views evict the key. GetLatest reads
 // it as absent.
 func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(pushoutLifecycleTombstone)
+	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleTombstone)
 	err = inst.dml.CommitEntity()
 	if err != nil {
 		_ = inst.dml.RollbackEntity() // discard the failed frame; the store stays usable
@@ -674,7 +819,7 @@ func (inst *PushoutStore) GetLatest(ctx context.Context, key string) (ent *Pusho
 	if err != nil || !found {
 		return
 	}
-	if ent.Lifecycle == pushoutLifecycleTombstone {
+	if ent.IsTombstone() {
 		ent = nil
 		found = false
 	}

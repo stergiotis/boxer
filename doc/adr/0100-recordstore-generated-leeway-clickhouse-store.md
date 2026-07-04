@@ -689,6 +689,53 @@ remains the recorded follow-up — it belongs in `public/caching` and
 wants a clock seam there for testability; the trigger is the first
 multi-writer deployment that cannot arrange explicit signals.
 
+### 2026-07-04 — external-review batch 1: additive surface fixes
+
+Two independent surface reviews (one over the worked examples, one over
+a prototypical description) converged on a set of additive gaps, all
+rooted in one blind spot: every consumer so far lives inside the
+generated package. This batch closes the additive part; the breaking
+candidates the reviews raised (verb renames, the `Put` alias,
+`ReplayOpts`, a streaming executor seam) are a separate decision.
+
+- **Zero-time `Replay` fixed.** `time.Time{}.UnixNano()` is undefined
+  (int64 overflow) and the emitted SQL rode it; a zero `fromOrder` now
+  omits the Order predicate and is the documented replay-everything
+  bound. Found independently by both reviewers; the round-trip test had
+  been passing by accident.
+- **Cross-package handles.** The lifecycle marker values move to the
+  runtime as `recordstore.LifecycleLive`/`LifecycleTombstone`; entities
+  of state-view stores gain `IsTombstone()`; the table name and the
+  envelope role column names are exported per store
+  (`<Store>TableName`, `<Store>ColKey`/`ColOrder`/`ColLifecycle`) so
+  `ScanOpts.ExtraPredicate` and external SQL can address them.
+- **`GetFetch` on the cache view.** The single-lookup read: cached hit,
+  or one immediate batched point fetch with the fetch error surfaced —
+  `found=false, err=nil` is the authoritative absent. The pushout
+  adapter's four-step Get/force/Get/Latest ritual collapses onto it.
+  The batched lookup SQL is now a shared `fetchLatestSQL` used by the
+  fetcher and `GetFetch`.
+- **`Ingest<Kind>` gates duplicates.** A duplicate key within one call
+  returns `recordstore.ErrDuplicateIngestKey` instead of silently tying
+  on Order; the docs now state buffering (Flush ships) and
+  partial-buffer-on-error semantics.
+- **`Close()`.** DiscardPending plus builder release — required under
+  tracking allocators. The checked-allocator test for it exposed a
+  genuine leak in the leeway DML generator's `TransferRecords` (an
+  empty snapshot record was neither returned nor released); fixed in
+  the generator and regenerated across all nine emitted DML classes
+  repo-wide.
+- **`VerifySchema(ctx)`.** Compares the live table's column names and
+  order (`DESCRIBE TABLE`) against the generated Arrow schema —
+  `EnsureTable` is `IF NOT EXISTS` and the decode is positional, so
+  drift otherwise fails late or, for same-typed column swaps, silently.
+  The pushout adapter runs it at `Open`.
+- **Documented contracts.** Reads see only flushed rows (stated on the
+  read verbs and the package header); cached entities are shared —
+  treat as immutable; `Capacity` is entries-not-bytes with the memory
+  budget spelled out; cache views attach for the store's lifetime; the
+  generated file no longer claims the package doc slot.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

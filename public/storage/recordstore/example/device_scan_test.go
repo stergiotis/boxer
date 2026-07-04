@@ -65,7 +65,7 @@ func TestDeviceStoreScan(t *testing.T) {
 
 	// ExtraPredicate narrows over the physical columns.
 	one := make([]*DeviceEntity, 0, 1)
-	for ent, rerr := range st.ScanIdentity(ctx, recordstore.ScanOpts{ExtraPredicate: deviceColKey + " = 2"}) {
+	for ent, rerr := range st.ScanIdentity(ctx, recordstore.ScanOpts{ExtraPredicate: DeviceColKey + " = 2"}) {
 		require.NoError(t, rerr)
 		one = append(one, ent)
 	}

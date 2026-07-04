@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stretchr/testify/require"
@@ -195,4 +196,53 @@ func TestDeviceStoreNoStaleRecacheBetweenCommitAndFlush(t *testing.T) {
 	require.True(t, has)
 	require.Equal(t, uint64(2), ent.Battery.Val.Charge, "post-flush fetch must serve the new version")
 	require.Equal(t, t1, ent.Ts)
+}
+
+// TestDeviceStoreIngestRejectsDuplicateKeys: duplicates within one call
+// would tie on Order — the gate returns ErrDuplicateIngestKey; the rows
+// buffered before the duplicate stay buffered (DiscardPending drops
+// them).
+func TestDeviceStoreIngestRejectsDuplicateKeys(t *testing.T) {
+	st, _ := newFlakyStore(t, 0)
+	defer st.Close()
+	err := st.IngestBattery(time.Unix(1_600_000_000, 0).UTC(), []Battery{
+		{ID: 1, Charge: 1}, {ID: 2, Charge: 2}, {ID: 1, Charge: 3},
+	})
+	require.ErrorIs(t, err, recordstore.ErrDuplicateIngestKey)
+	require.Equal(t, 2, st.Buffered(), "rows before the duplicate stay buffered")
+	st.DiscardPending()
+}
+
+// TestDeviceStoreVerifySchemaDetectsDrift: EnsureTable is IF NOT EXISTS
+// and the decode is positional, so drift between regenerated code and a
+// live table must be caught explicitly — VerifySchema is that gate.
+func TestDeviceStoreVerifySchemaDetectsDrift(t *testing.T) {
+	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse-local unavailable: %v", err)
+	}
+	ctx := context.Background()
+	st := NewDeviceStore(local, nil, DeviceStoreConfig{})
+	defer st.Close()
+	require.NoError(t, st.EnsureTable(ctx))
+	require.NoError(t, st.VerifySchema(ctx))
+
+	require.NoError(t, local.Exec(ctx, "ALTER TABLE "+DeviceTableName+" ADD COLUMN drift UInt8"))
+	require.ErrorContains(t, st.VerifySchema(ctx), "schema drift")
+}
+
+// TestDeviceStoreCloseReleases: under a checked allocator the store's
+// long-lived Arrow builder and any retained pending records must be
+// fully released by Close.
+func TestDeviceStoreCloseReleases(t *testing.T) {
+	alloc := memory.NewCheckedAllocator(memory.NewGoAllocator())
+	// failFirst with no inner: the insert fails before any backend is
+	// touched, retaining the transferred records for Close to release.
+	st := NewDeviceStore(&flakyExecutor{failFirst: 1}, alloc, DeviceStoreConfig{})
+	t0 := time.Unix(1_600_000_000, 0).UTC()
+	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 1}).Commit())
+	_, err := st.Flush(context.Background())
+	require.Error(t, err, "synthetic insert failure retains the records")
+	st.Close()
+	alloc.AssertSize(t, 0)
 }

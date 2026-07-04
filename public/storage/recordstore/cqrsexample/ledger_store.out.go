@@ -2,7 +2,9 @@
 //
 // LedgerStore composes the generated ledger building blocks per ADR-0100:
 // append-only primitives and iterator query verbs; batched
-// cached retrieval is the attachable LedgerCache view.
+// cached retrieval is the attachable LedgerCache view. Reads see only
+// flushed rows: buffered writes are invisible until Flush returns.
+
 package cqrsexample
 
 import (
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
@@ -32,13 +35,15 @@ import (
 //go:embed ledger_ddl_clickhouse.out.sql
 var ledgerDDLCreate string
 
-const ledgerTableName = "ledger"
+// LedgerTableName is the ClickHouse table this store binds.
+const LedgerTableName = "ledger"
 
-// Physical (encoded) plain-column names, derived from the IR at
-// generation time.
+// Physical (encoded, quoted) names of the envelope role columns,
+// derived from the IR at generation time — exported so consumers can
+// address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	ledgerColKey   = `"id:id:s:g:0:0:"`
-	ledgerColOrder = `"ts:ts:z64:2k:0:0:"`
+	LedgerColKey   = `"id:id:s:g:0:0:"`
+	LedgerColOrder = `"ts:ts:z64:2k:0:0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -49,6 +54,8 @@ func ledgerKeyLiteral(k string) string { return marshalling.EscapeString(k) }
 
 // LedgerEntity is the entity bag (ADR-0100 SD5): the envelope plus one option
 // per bound component. Arrow-free — safe to hold in the cache.
+// Entities returned by cached reads are shared with the cache (and
+// every later reader): treat them as immutable.
 type LedgerEntity struct {
 	ID           string
 	Ts           time.Time
@@ -134,7 +141,49 @@ func (inst *LedgerStore) EnsureTable(ctx context.Context) (err error) {
 	}
 	err = inst.exec.Exec(ctx, sql)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", ledgerTableName, err)
+		err = eh.Errorf("ensure table %s: %w", LedgerTableName, err)
+	}
+	return
+}
+
+// VerifySchema compares the live table's columns — names and order —
+// against the generated schema. EnsureTable alone cannot detect drift
+// on an existing table (IF NOT EXISTS succeeds against any old shape),
+// and the decode is positional, so drift fails late or, for same-typed
+// column swaps, silently: run VerifySchema at startup after
+// EnsureTable.
+func (inst *LedgerStore) VerifySchema(ctx context.Context) (err error) {
+	records, err := inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+LedgerTableName+ledgerArrowOutputSettings)
+	if err != nil {
+		err = eh.Errorf("describe table %s: %w", LedgerTableName, err)
+		return
+	}
+	defer func() {
+		for _, rec := range records {
+			rec.Release()
+		}
+	}()
+	live := make([]string, 0, 64)
+	for _, rec := range records {
+		names, ok := rec.Column(0).(*array.String)
+		if !ok {
+			err = eh.Errorf("describe table %s: name column is %s, not a string", LedgerTableName, rec.Column(0).DataType())
+			return
+		}
+		for i := range int(rec.NumRows()) {
+			live = append(live, names.Value(i))
+		}
+	}
+	want := lowlevel.CreateSchemaLedgerTable().Fields()
+	if len(live) != len(want) {
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", LedgerTableName, len(live), len(want))
+		return
+	}
+	for i, f := range want {
+		if live[i] != f.Name {
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", LedgerTableName, i, live[i], f.Name)
+			return
+		}
 	}
 	return
 }
@@ -235,12 +284,21 @@ func (inst *LedgerEntityBuilder) Rollback() (err error) {
 	return inst.store.dml.RollbackEntity()
 }
 
-// IngestOpened appends one whole entity per row carrying only the
-// Opened component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestOpened buffers one whole entity per row carrying only the
+// Opened component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *LedgerStore) IngestOpened(ts time.Time, rows []Opened) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest opened row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddOpened(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest opened row %d: %w", i, err)
@@ -250,12 +308,21 @@ func (inst *LedgerStore) IngestOpened(ts time.Time, rows []Opened) (err error) {
 	return
 }
 
-// IngestDeposited appends one whole entity per row carrying only the
-// Deposited component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestDeposited buffers one whole entity per row carrying only the
+// Deposited component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *LedgerStore) IngestDeposited(ts time.Time, rows []Deposited) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest deposited row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddDeposited(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest deposited row %d: %w", i, err)
@@ -265,12 +332,21 @@ func (inst *LedgerStore) IngestDeposited(ts time.Time, rows []Deposited) (err er
 	return
 }
 
-// IngestWithdrawn appends one whole entity per row carrying only the
-// Withdrawn component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestWithdrawn buffers one whole entity per row carrying only the
+// Withdrawn component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *LedgerStore) IngestWithdrawn(ts time.Time, rows []Withdrawn) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest withdrawn row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddWithdrawn(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest withdrawn row %d: %w", i, err)
@@ -280,12 +356,21 @@ func (inst *LedgerStore) IngestWithdrawn(ts time.Time, rows []Withdrawn) (err er
 	return
 }
 
-// IngestClosed appends one whole entity per row carrying only the
-// Closed component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestClosed buffers one whole entity per row carrying only the
+// Closed component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *LedgerStore) IngestClosed(ts time.Time, rows []Closed) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest closed row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddClosed(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest closed row %d: %w", i, err)
@@ -295,12 +380,21 @@ func (inst *LedgerStore) IngestClosed(ts time.Time, rows []Closed) (err error) {
 	return
 }
 
-// IngestAccountState appends one whole entity per row carrying only the
-// AccountState component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestAccountState buffers one whole entity per row carrying only the
+// AccountState component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *LedgerStore) IngestAccountState(ts time.Time, rows []AccountState) (err error) {
+	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest accountState row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddAccountState(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest accountState row %d: %w", i, err)
@@ -330,10 +424,10 @@ func (inst *LedgerStore) Flush(ctx context.Context) (n int, err error) {
 	records = append(inst.pending, records...)
 	inst.pending = nil
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, ledgerTableName, records)
+		err = inst.exec.InsertArrow(ctx, LedgerTableName, records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", ledgerTableName, err)
+			err = eh.Errorf("insert into %s: %w", LedgerTableName, err)
 			return
 		}
 	}
@@ -365,11 +459,20 @@ func (inst *LedgerStore) DiscardPending() {
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
 }
 
+// Close discards everything unflushed and releases the store's Arrow
+// builder; the store must not be used afterwards. Required for a
+// clean shutdown under tracking/checked allocators — the default Go
+// allocator needs no Close.
+func (inst *LedgerStore) Close() {
+	inst.DiscardPending()
+	inst.dml.Builder().Release()
+}
+
 // LedgerCacheConfig parameterizes an attached read-through cache view.
 type LedgerCacheConfig struct {
-	// Capacity is the L1 capacity in entries (not bytes) — size it for
-	// the largest expected entity payloads. Zero or negative selects
-	// the default (1024).
+	// Capacity is the L1 capacity in entries, not bytes — budget
+	// memory as Capacity × the largest expected entity payload. Zero
+	// or negative selects the default (1024).
 	Capacity int
 	// FetchCriteria are the cache's batch-flush thresholds.
 	FetchCriteria caching.FetchCriteria
@@ -393,7 +496,8 @@ type LedgerCache[W comparable] struct {
 }
 
 // NewLedgerCache attaches a read-through cache view to st, registering its
-// local-write invalidation hook with the store.
+// local-write invalidation hook with the store. Views attach for the
+// store's lifetime — there is no detach.
 func NewLedgerCache[W comparable](st *LedgerStore, cfg LedgerCacheConfig) (inst *LedgerCache[W]) {
 	if cfg.Capacity <= 0 {
 		cfg.Capacity = 1024
@@ -413,10 +517,43 @@ func (inst *LedgerCache[W]) rebuild() {
 // Get retrieves an entity by Key through the cache. A miss queues the
 // key for the next batch fetch (the caching suspend/replay contract).
 // A miss can also mean the batched fetch errored (misses swallow
-// fetch errors; the circuit breaker backs off) — the store's Latest
-// is the authoritative existence check.
+// fetch errors; the circuit breaker backs off) — GetFetch surfaces
+// the error instead, and the store's Latest stays the authoritative
+// check. The returned entity is shared with the cache: treat it as
+// immutable.
 func (inst *LedgerCache[W]) Get(key string) (ent *LedgerEntity, found bool) {
 	return inst.cache.Get(key)
+}
+
+// GetFetch is the single-lookup read: the cached entity when present,
+// otherwise one immediate batched point fetch — fetch errors surface
+// instead of reading as misses, so found=false with err=nil is the
+// authoritative absent. The fetched row is cached unless the key is
+// in the dirty write window. Prefer Get plus the work-item protocol
+// when batching lookups across a frame; the initial miss here also
+// queues the key, so a later batch fetch may include it redundantly
+// (harmless).
+func (inst *LedgerCache[W]) GetFetch(ctx context.Context, key string) (ent *LedgerEntity, found bool, err error) {
+	ent, found = inst.cache.Get(key)
+	if found {
+		return
+	}
+	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]string{key}))
+	if err != nil {
+		err = eh.Errorf("get-fetch: %w", err)
+		return
+	}
+	for _, e := range ents {
+		if e.ID != key {
+			continue
+		}
+		ent = e
+		found = true
+		if _, d := inst.st.dirty[key]; !d {
+			inst.cache.AddItem(key, e)
+		}
+	}
+	return
 }
 
 // WorkItem marks the current work item for the cache's miss bookkeeping.
@@ -462,6 +599,24 @@ func (inst *LedgerCache[W]) InvalidateAll() {
 	inst.rebuild()
 }
 
+// fetchLatestSQL is the batched newest-row-per-key point lookup shared
+// by the cache fetcher and GetFetch.
+func (inst *LedgerStore) fetchLatestSQL(keys []string) string {
+	var sb strings.Builder
+	sb.WriteString("SELECT * FROM ")
+	sb.WriteString(LedgerTableName)
+	sb.WriteString(" WHERE " + LedgerColKey + " IN (")
+	for i, k := range keys {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(ledgerKeyLiteral(k))
+	}
+	sb.WriteString(") ORDER BY " + LedgerColOrder + " DESC LIMIT 1 BY " + LedgerColKey)
+	sb.WriteString(ledgerArrowOutputSettings)
+	return sb.String()
+}
+
 // ledgerFetcher implements caching.ItemFetcherI for attached cache views —
 // an unexported shim so the fetch plumbing stays off the store's
 // public method set.
@@ -478,19 +633,7 @@ func (inst *ledgerFetcher) DeterminePartition(key string) uint64 { return 0 }
 // Dirty keys (written locally, not yet flushed) are fetched but not
 // cached — caching them would resurrect the pre-write row.
 func (inst *ledgerFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *LedgerEntity]) (err error) {
-	var sb strings.Builder
-	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(ledgerTableName)
-	sb.WriteString(" WHERE " + ledgerColKey + " IN (")
-	for i, k := range keys {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteString(ledgerKeyLiteral(k))
-	}
-	sb.WriteString(") ORDER BY " + ledgerColOrder + " DESC LIMIT 1 BY " + ledgerColKey)
-	sb.WriteString(ledgerArrowOutputSettings)
-	ents, err := inst.st.queryEntities(ctx, sb.String())
+	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL(keys))
 	if err != nil {
 		return
 	}
@@ -521,15 +664,16 @@ const (
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *LedgerStore) ScanOpened(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
 	where := ledgerScanOpenedFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + ledgerTableName +
+	sql := "SELECT * FROM " + LedgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -545,15 +689,16 @@ func (inst *LedgerStore) ScanOpened(ctx context.Context, opts recordstore.ScanOp
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *LedgerStore) ScanDeposited(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
 	where := ledgerScanDepositedFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + ledgerTableName +
+	sql := "SELECT * FROM " + LedgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -569,15 +714,16 @@ func (inst *LedgerStore) ScanDeposited(ctx context.Context, opts recordstore.Sca
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *LedgerStore) ScanWithdrawn(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
 	where := ledgerScanWithdrawnFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + ledgerTableName +
+	sql := "SELECT * FROM " + LedgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -593,15 +739,16 @@ func (inst *LedgerStore) ScanWithdrawn(ctx context.Context, opts recordstore.Sca
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *LedgerStore) ScanClosed(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
 	where := ledgerScanClosedFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + ledgerTableName +
+	sql := "SELECT * FROM " + LedgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -617,15 +764,16 @@ func (inst *LedgerStore) ScanClosed(ctx context.Context, opts recordstore.ScanOp
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *LedgerStore) ScanAccountState(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
 	where := ledgerScanAccountStateFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + ledgerTableName +
+	sql := "SELECT * FROM " + LedgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -634,11 +782,11 @@ func (inst *LedgerStore) ScanAccountState(ctx context.Context, opts recordstore.
 }
 
 // Latest returns the newest row for key, tombstone-blind (the raw
-// primitive).
+// primitive). Reads see only flushed rows.
 func (inst *LedgerStore) Latest(ctx context.Context, key string) (ent *LedgerEntity, found bool, err error) {
-	sql := "SELECT * FROM " + ledgerTableName +
-		" WHERE " + ledgerColKey + " = " + ledgerKeyLiteral(key) +
-		" ORDER BY " + ledgerColOrder + " DESC LIMIT 1" + ledgerArrowOutputSettings
+	sql := "SELECT * FROM " + LedgerTableName +
+		" WHERE " + LedgerColKey + " = " + ledgerKeyLiteral(key) +
+		" ORDER BY " + LedgerColOrder + " DESC LIMIT 1" + ledgerArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
 	if err != nil || len(ents) == 0 {
 		return
@@ -649,16 +797,21 @@ func (inst *LedgerStore) Latest(ctx context.Context, key string) (ent *LedgerEnt
 }
 
 // Replay iterates the rows for key with the order column >= fromOrder
-// in ascending order — the event-replay primitive. The sequence is
-// single-use; ctx must stay valid until iteration completes; the
-// query may execute at call time or lazily during iteration (buffered
-// in v1 — a streaming executor changes nothing visible); an error
-// ends the sequence as a final (nil, err) pair.
+// in ascending order — the event-replay primitive. A zero fromOrder
+// replays everything (zero time.Time has no defined UnixNano;
+// recordstore.SeqTs(0) is the equivalent explicit bound). The
+// sequence is single-use; ctx must stay valid until iteration
+// completes; the query may execute at call time or lazily during
+// iteration (buffered in v1 — a streaming executor changes nothing
+// visible); an error ends the sequence as a final (nil, err) pair.
+// Reads see only flushed rows.
 func (inst *LedgerStore) Replay(ctx context.Context, key string, fromOrder time.Time) iter.Seq2[*LedgerEntity, error] {
-	sql := "SELECT * FROM " + ledgerTableName +
-		" WHERE " + ledgerColKey + " = " + ledgerKeyLiteral(key) +
-		" AND " + ledgerColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")" +
-		" ORDER BY " + ledgerColOrder + " ASC" + ledgerArrowOutputSettings
+	sql := "SELECT * FROM " + LedgerTableName +
+		" WHERE " + LedgerColKey + " = " + ledgerKeyLiteral(key)
+	if !fromOrder.IsZero() {
+		sql += " AND " + LedgerColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
+	}
+	sql += " ORDER BY " + LedgerColOrder + " ASC" + ledgerArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
 }
 

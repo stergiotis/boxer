@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stretchr/testify/require"
 )
@@ -22,8 +23,10 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	}
 	ctx := context.Background()
 	st := NewDeviceStore(exec, nil, DeviceStoreConfig{})
+	defer st.Close()
 	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
 	require.NoError(t, st.EnsureTable(ctx))
+	require.NoError(t, st.VerifySchema(ctx), "fresh table must match the generated schema")
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 	t1 := t0.Add(time.Hour)
@@ -116,7 +119,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	tomb, found, err := st.Latest(ctx, 1)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, deviceLifecycleTombstone, tomb.Lifecycle)
+	require.Equal(t, recordstore.LifecycleTombstone, tomb.Lifecycle)
 	require.Empty(t, tomb.Archetype())
 
 	// Replay: the full ordered history of entity 1 (v1, v2, tombstone).
@@ -129,7 +132,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	require.Equal(t, []time.Time{t0, t1, t2}, []time.Time{history[0].Ts, history[1].Ts, history[2].Ts})
 	require.True(t, history[0].Identity.Has)
 	require.False(t, history[1].Identity.Has)
-	require.Equal(t, deviceLifecycleTombstone, history[2].Lifecycle)
+	require.Equal(t, recordstore.LifecycleTombstone, history[2].Lifecycle)
 
 	// Replay from t1 skips the first version.
 	tail := 0

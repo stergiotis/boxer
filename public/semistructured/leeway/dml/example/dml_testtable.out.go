@@ -356,6 +356,8 @@ func (inst *InEntityTesttable) TransferRecords(recordsIn []arrow.RecordBatch) (r
 	rec := inst.builder.NewRecord()
 	if rec.NumRows() > 0 {
 		recordsOut = append(recordsOut, rec)
+	} else {
+		rec.Release() // an empty snapshot is nobody's to keep
 	}
 	return
 }

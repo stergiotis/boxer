@@ -70,6 +70,11 @@ func Open(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocato
 		err = eh.Errorf("open pushout storage: %w", err)
 		return
 	}
+	err = st.VerifySchema(ctx)
+	if err != nil {
+		err = eh.Errorf("open pushout storage: %w", err)
+		return
+	}
 	inst = &Storage{st: st, pc: NewPushoutCache[struct{}](st, cacheCfg), seqs: make(map[string]uint64)}
 	return
 }
@@ -165,19 +170,11 @@ func (inst *Storage) PutEnvelope(ctx context.Context, h types.PatchHash, framed 
 	return
 }
 
-// getEnvelopeLocked serves an envelope through the cache (miss → one
-// forced batch fetch → hit), with an uncached Latest as the
-// authoritative absent-vs-error fallback.
+// getEnvelopeLocked serves an envelope through the cache view's
+// single-lookup read: cached hit, or one immediate batched fetch with
+// the fetch error surfaced — the authoritative absent-vs-error answer.
 func (inst *Storage) getEnvelopeLocked(ctx context.Context, key string) (ent *PushoutEntity, found bool, err error) {
-	if e, found := inst.pc.Get(key); found {
-		return e, true, nil
-	}
-	for range inst.pc.IterateRestWorkItems(ctx) {
-	}
-	if e, found := inst.pc.Get(key); found {
-		return e, true, nil
-	}
-	return inst.st.Latest(ctx, key)
+	return inst.pc.GetFetch(ctx, key)
 }
 
 func (inst *Storage) GetEnvelope(ctx context.Context, h types.PatchHash) (framed []byte, err error) {
@@ -283,7 +280,7 @@ func (inst *Storage) LoadApplied(ctx context.Context) (hs []types.PatchHash, err
 			err = eh.Errorf("load applied: %w", rerr)
 			return
 		}
-		if row.Lifecycle == pushoutLifecycleTombstone {
+		if row.Lifecycle == recordstore.LifecycleTombstone {
 			hs = nil // a ReplaceApplied reset — keep only what follows
 			continue
 		}

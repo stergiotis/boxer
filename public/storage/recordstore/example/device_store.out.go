@@ -2,7 +2,9 @@
 //
 // DeviceStore composes the generated device building blocks per ADR-0100:
 // append-only primitives and iterator query verbs plus the state view; batched
-// cached retrieval is the attachable DeviceCache view.
+// cached retrieval is the attachable DeviceCache view. Reads see only
+// flushed rows: buffered writes are invisible until Flush returns.
+
 package example
 
 import (
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/functional"
@@ -31,14 +34,16 @@ import (
 //go:embed device_ddl_clickhouse.out.sql
 var deviceDDLCreate string
 
-const deviceTableName = "device"
+// DeviceTableName is the ClickHouse table this store binds.
+const DeviceTableName = "device"
 
-// Physical (encoded) plain-column names, derived from the IR at
-// generation time.
+// Physical (encoded, quoted) names of the envelope role columns,
+// derived from the IR at generation time — exported so consumers can
+// address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	deviceColKey       = `"id:id:u64:2k:0:0:"`
-	deviceColOrder     = `"ts:ts:z64:2k:0:0:"`
-	deviceColLifecycle = `"lc:lifecycle:u8:g:0:0:"`
+	DeviceColKey       = `"id:id:u64:2k:0:0:"`
+	DeviceColOrder     = `"ts:ts:z64:2k:0:0:"`
+	DeviceColLifecycle = `"lc:lifecycle:u8:g:0:0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -47,13 +52,10 @@ const deviceArrowOutputSettings = " SETTINGS output_format_arrow_string_as_strin
 // deviceKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func deviceKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
-const (
-	deviceLifecycleLive      uint8 = 0
-	deviceLifecycleTombstone uint8 = 1
-)
-
 // DeviceEntity is the entity bag (ADR-0100 SD5): the envelope plus one option
 // per bound component. Arrow-free — safe to hold in the cache.
+// Entities returned by cached reads are shared with the cache (and
+// every later reader): treat them as immutable.
 type DeviceEntity struct {
 	ID        uint64
 	Ts        time.Time
@@ -79,6 +81,13 @@ func (inst *DeviceEntity) Archetype() (a []string) {
 		a = append(a, "located")
 	}
 	return
+}
+
+// IsTombstone reports whether this row is a state-view deletion
+// marker — what the tombstone-blind verbs (Latest, Replay, the
+// cache's Get) hand back for a deleted key.
+func (inst *DeviceEntity) IsTombstone() bool {
+	return inst.Lifecycle == recordstore.LifecycleTombstone
 }
 
 type DeviceStoreConfig struct {
@@ -136,7 +145,49 @@ func (inst *DeviceStore) EnsureTable(ctx context.Context) (err error) {
 	}
 	err = inst.exec.Exec(ctx, sql)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", deviceTableName, err)
+		err = eh.Errorf("ensure table %s: %w", DeviceTableName, err)
+	}
+	return
+}
+
+// VerifySchema compares the live table's columns — names and order —
+// against the generated schema. EnsureTable alone cannot detect drift
+// on an existing table (IF NOT EXISTS succeeds against any old shape),
+// and the decode is positional, so drift fails late or, for same-typed
+// column swaps, silently: run VerifySchema at startup after
+// EnsureTable.
+func (inst *DeviceStore) VerifySchema(ctx context.Context) (err error) {
+	records, err := inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+DeviceTableName+deviceArrowOutputSettings)
+	if err != nil {
+		err = eh.Errorf("describe table %s: %w", DeviceTableName, err)
+		return
+	}
+	defer func() {
+		for _, rec := range records {
+			rec.Release()
+		}
+	}()
+	live := make([]string, 0, 64)
+	for _, rec := range records {
+		names, ok := rec.Column(0).(*array.String)
+		if !ok {
+			err = eh.Errorf("describe table %s: name column is %s, not a string", DeviceTableName, rec.Column(0).DataType())
+			return
+		}
+		for i := range int(rec.NumRows()) {
+			live = append(live, names.Value(i))
+		}
+	}
+	want := lowlevel.CreateSchemaDeviceTable().Fields()
+	if len(live) != len(want) {
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", DeviceTableName, len(live), len(want))
+		return
+	}
+	for i, f := range want {
+		if live[i] != f.Name {
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", DeviceTableName, i, live[i], f.Name)
+			return
+		}
 	}
 	return
 }
@@ -151,7 +202,7 @@ type DeviceEntityBuilder struct {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order) and a live lifecycle.
 func (inst *DeviceStore) Begin(id uint64, ts time.Time) *DeviceEntityBuilder {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(deviceLifecycleLive)
+	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleLive)
 	return &DeviceEntityBuilder{store: inst, key: id}
 }
 
@@ -227,12 +278,21 @@ func (inst *DeviceEntityBuilder) Rollback() (err error) {
 	return inst.store.dml.RollbackEntity()
 }
 
-// IngestIdentity appends one whole entity per row carrying only the
-// Identity component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestIdentity buffers one whole entity per row carrying only the
+// Identity component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest identity row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddIdentity(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest identity row %d: %w", i, err)
@@ -242,12 +302,21 @@ func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err erro
 	return
 }
 
-// IngestBattery appends one whole entity per row carrying only the
-// Battery component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestBattery buffers one whole entity per row carrying only the
+// Battery component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest battery row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddBattery(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest battery row %d: %w", i, err)
@@ -257,12 +326,21 @@ func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error)
 	return
 }
 
-// IngestTagged appends one whole entity per row carrying only the
-// Tagged component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestTagged buffers one whole entity per row carrying only the
+// Tagged component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest tagged row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddTagged(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest tagged row %d: %w", i, err)
@@ -272,12 +350,21 @@ func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
 	return
 }
 
-// IngestLocated appends one whole entity per row carrying only the
-// Located component, all stamped with ts. Keys must be distinct within
-// one call: rows share ts, so duplicate keys tie on Order and
-// Latest picks among them arbitrarily (ADR-0100 SD2).
+// IngestLocated buffers one whole entity per row carrying only the
+// Located component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
 func (inst *DeviceStore) IngestLocated(ts time.Time, rows []Located) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest located row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
 		err = inst.Begin(rows[i].ID, ts).AddLocated(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest located row %d: %w", i, err)
@@ -307,10 +394,10 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 	records = append(inst.pending, records...)
 	inst.pending = nil
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, deviceTableName, records)
+		err = inst.exec.InsertArrow(ctx, DeviceTableName, records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", deviceTableName, err)
+			err = eh.Errorf("insert into %s: %w", DeviceTableName, err)
 			return
 		}
 	}
@@ -342,11 +429,20 @@ func (inst *DeviceStore) DiscardPending() {
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
 }
 
+// Close discards everything unflushed and releases the store's Arrow
+// builder; the store must not be used afterwards. Required for a
+// clean shutdown under tracking/checked allocators — the default Go
+// allocator needs no Close.
+func (inst *DeviceStore) Close() {
+	inst.DiscardPending()
+	inst.dml.Builder().Release()
+}
+
 // DeviceCacheConfig parameterizes an attached read-through cache view.
 type DeviceCacheConfig struct {
-	// Capacity is the L1 capacity in entries (not bytes) — size it for
-	// the largest expected entity payloads. Zero or negative selects
-	// the default (1024).
+	// Capacity is the L1 capacity in entries, not bytes — budget
+	// memory as Capacity × the largest expected entity payload. Zero
+	// or negative selects the default (1024).
 	Capacity int
 	// FetchCriteria are the cache's batch-flush thresholds.
 	FetchCriteria caching.FetchCriteria
@@ -370,7 +466,8 @@ type DeviceCache[W comparable] struct {
 }
 
 // NewDeviceCache attaches a read-through cache view to st, registering its
-// local-write invalidation hook with the store.
+// local-write invalidation hook with the store. Views attach for the
+// store's lifetime — there is no detach.
 func NewDeviceCache[W comparable](st *DeviceStore, cfg DeviceCacheConfig) (inst *DeviceCache[W]) {
 	if cfg.Capacity <= 0 {
 		cfg.Capacity = 1024
@@ -390,10 +487,43 @@ func (inst *DeviceCache[W]) rebuild() {
 // Get retrieves an entity by Key through the cache. A miss queues the
 // key for the next batch fetch (the caching suspend/replay contract).
 // A miss can also mean the batched fetch errored (misses swallow
-// fetch errors; the circuit breaker backs off) — the store's Latest
-// is the authoritative existence check.
+// fetch errors; the circuit breaker backs off) — GetFetch surfaces
+// the error instead, and the store's Latest stays the authoritative
+// check. The returned entity is shared with the cache: treat it as
+// immutable.
 func (inst *DeviceCache[W]) Get(key uint64) (ent *DeviceEntity, found bool) {
 	return inst.cache.Get(key)
+}
+
+// GetFetch is the single-lookup read: the cached entity when present,
+// otherwise one immediate batched point fetch — fetch errors surface
+// instead of reading as misses, so found=false with err=nil is the
+// authoritative absent. The fetched row is cached unless the key is
+// in the dirty write window. Prefer Get plus the work-item protocol
+// when batching lookups across a frame; the initial miss here also
+// queues the key, so a later batch fetch may include it redundantly
+// (harmless).
+func (inst *DeviceCache[W]) GetFetch(ctx context.Context, key uint64) (ent *DeviceEntity, found bool, err error) {
+	ent, found = inst.cache.Get(key)
+	if found {
+		return
+	}
+	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]uint64{key}))
+	if err != nil {
+		err = eh.Errorf("get-fetch: %w", err)
+		return
+	}
+	for _, e := range ents {
+		if e.ID != key {
+			continue
+		}
+		ent = e
+		found = true
+		if _, d := inst.st.dirty[key]; !d {
+			inst.cache.AddItem(key, e)
+		}
+	}
+	return
 }
 
 // WorkItem marks the current work item for the cache's miss bookkeeping.
@@ -446,7 +576,7 @@ func (inst *DeviceCache[W]) InvalidateAll() {
 // the authoritative read. A miss queues the batch fetch like Get.
 func (inst *DeviceCache[W]) GetLatest(key uint64) (ent *DeviceEntity, found bool) {
 	ent, found = inst.cache.Get(key)
-	if found && ent.Lifecycle == deviceLifecycleTombstone {
+	if found && ent.IsTombstone() {
 		ent = nil
 		found = false
 	}
@@ -460,11 +590,29 @@ func (inst *DeviceCache[W]) GetLatest(key uint64) (ent *DeviceEntity, found bool
 // came from a stale entry.
 func (inst *DeviceCache[W]) GetLatestAcceptStale(key uint64) (ent *DeviceEntity, found bool, stale bool) {
 	ent, found, stale = inst.cache.GetAcceptStale(key)
-	if found && ent.Lifecycle == deviceLifecycleTombstone {
+	if found && ent.IsTombstone() {
 		ent = nil
 		found = false
 	}
 	return
+}
+
+// fetchLatestSQL is the batched newest-row-per-key point lookup shared
+// by the cache fetcher and GetFetch.
+func (inst *DeviceStore) fetchLatestSQL(keys []uint64) string {
+	var sb strings.Builder
+	sb.WriteString("SELECT * FROM ")
+	sb.WriteString(DeviceTableName)
+	sb.WriteString(" WHERE " + DeviceColKey + " IN (")
+	for i, k := range keys {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(deviceKeyLiteral(k))
+	}
+	sb.WriteString(") ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey)
+	sb.WriteString(deviceArrowOutputSettings)
+	return sb.String()
 }
 
 // deviceFetcher implements caching.ItemFetcherI for attached cache views —
@@ -483,19 +631,7 @@ func (inst *deviceFetcher) DeterminePartition(key uint64) uint64 { return 0 }
 // Dirty keys (written locally, not yet flushed) are fetched but not
 // cached — caching them would resurrect the pre-write row.
 func (inst *deviceFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []uint64, target caching.ItemTargetI[uint64, *DeviceEntity]) (err error) {
-	var sb strings.Builder
-	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(deviceTableName)
-	sb.WriteString(" WHERE " + deviceColKey + " IN (")
-	for i, k := range keys {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteString(deviceKeyLiteral(k))
-	}
-	sb.WriteString(") ORDER BY " + deviceColOrder + " DESC LIMIT 1 BY " + deviceColKey)
-	sb.WriteString(deviceArrowOutputSettings)
-	ents, err := inst.st.queryEntities(ctx, sb.String())
+	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL(keys))
 	if err != nil {
 		return
 	}
@@ -525,15 +661,16 @@ const (
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *DeviceStore) ScanIdentity(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*DeviceEntity, error] {
 	where := deviceScanIdentityFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + deviceTableName +
+	sql := "SELECT * FROM " + DeviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC"
+		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -549,15 +686,16 @@ func (inst *DeviceStore) ScanIdentity(ctx context.Context, opts recordstore.Scan
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *DeviceStore) ScanBattery(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*DeviceEntity, error] {
 	where := deviceScanBatteryFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + deviceTableName +
+	sql := "SELECT * FROM " + DeviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC"
+		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -573,15 +711,16 @@ func (inst *DeviceStore) ScanBattery(ctx context.Context, opts recordstore.ScanO
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *DeviceStore) ScanTagged(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*DeviceEntity, error] {
 	where := deviceScanTaggedFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + deviceTableName +
+	sql := "SELECT * FROM " + DeviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC"
+		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -597,15 +736,16 @@ func (inst *DeviceStore) ScanTagged(ctx context.Context, opts recordstore.ScanOp
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract). The sequence is
 // single-use; ctx must stay valid until iteration completes; an
-// error ends it as a final (nil, err) pair.
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
 func (inst *DeviceStore) ScanLocated(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*DeviceEntity, error] {
 	where := deviceScanLocatedFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + deviceTableName +
+	sql := "SELECT * FROM " + DeviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC"
+		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -614,11 +754,11 @@ func (inst *DeviceStore) ScanLocated(ctx context.Context, opts recordstore.ScanO
 }
 
 // Latest returns the newest row for key, tombstone-blind (the raw
-// primitive).
+// primitive). Reads see only flushed rows.
 func (inst *DeviceStore) Latest(ctx context.Context, key uint64) (ent *DeviceEntity, found bool, err error) {
-	sql := "SELECT * FROM " + deviceTableName +
-		" WHERE " + deviceColKey + " = " + deviceKeyLiteral(key) +
-		" ORDER BY " + deviceColOrder + " DESC LIMIT 1" + deviceArrowOutputSettings
+	sql := "SELECT * FROM " + DeviceTableName +
+		" WHERE " + DeviceColKey + " = " + deviceKeyLiteral(key) +
+		" ORDER BY " + DeviceColOrder + " DESC LIMIT 1" + deviceArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
 	if err != nil || len(ents) == 0 {
 		return
@@ -629,16 +769,21 @@ func (inst *DeviceStore) Latest(ctx context.Context, key uint64) (ent *DeviceEnt
 }
 
 // Replay iterates the rows for key with the order column >= fromOrder
-// in ascending order — the event-replay primitive. The sequence is
-// single-use; ctx must stay valid until iteration completes; the
-// query may execute at call time or lazily during iteration (buffered
-// in v1 — a streaming executor changes nothing visible); an error
-// ends the sequence as a final (nil, err) pair.
+// in ascending order — the event-replay primitive. A zero fromOrder
+// replays everything (zero time.Time has no defined UnixNano;
+// recordstore.SeqTs(0) is the equivalent explicit bound). The
+// sequence is single-use; ctx must stay valid until iteration
+// completes; the query may execute at call time or lazily during
+// iteration (buffered in v1 — a streaming executor changes nothing
+// visible); an error ends the sequence as a final (nil, err) pair.
+// Reads see only flushed rows.
 func (inst *DeviceStore) Replay(ctx context.Context, key uint64, fromOrder time.Time) iter.Seq2[*DeviceEntity, error] {
-	sql := "SELECT * FROM " + deviceTableName +
-		" WHERE " + deviceColKey + " = " + deviceKeyLiteral(key) +
-		" AND " + deviceColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")" +
-		" ORDER BY " + deviceColOrder + " ASC" + deviceArrowOutputSettings
+	sql := "SELECT * FROM " + DeviceTableName +
+		" WHERE " + DeviceColKey + " = " + deviceKeyLiteral(key)
+	if !fromOrder.IsZero() {
+		sql += " AND " + DeviceColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
+	}
+	sql += " ORDER BY " + DeviceColOrder + " ASC" + deviceArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
 }
 
@@ -654,7 +799,7 @@ func (inst *DeviceStore) Put(id uint64, ts time.Time) *DeviceEntityBuilder {
 // the deletion); attached cache views evict the key. GetLatest reads
 // it as absent.
 func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(deviceLifecycleTombstone)
+	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleTombstone)
 	err = inst.dml.CommitEntity()
 	if err != nil {
 		_ = inst.dml.RollbackEntity() // discard the failed frame; the store stays usable
@@ -673,7 +818,7 @@ func (inst *DeviceStore) GetLatest(ctx context.Context, key uint64) (ent *Device
 	if err != nil || !found {
 		return
 	}
-	if ent.Lifecycle == deviceLifecycleTombstone {
+	if ent.IsTombstone() {
 		ent = nil
 		found = false
 	}

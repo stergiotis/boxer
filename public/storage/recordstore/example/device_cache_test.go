@@ -193,7 +193,7 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 	}
 	ent, has = c.Get(1)
 	require.True(t, has)
-	require.Equal(t, deviceLifecycleTombstone, ent.Lifecycle)
+	require.Equal(t, recordstore.LifecycleTombstone, ent.Lifecycle)
 	require.Empty(t, ent.Archetype())
 	_, found, err := st.GetLatest(ctx, 1)
 	require.NoError(t, err)
@@ -275,7 +275,7 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	}
 	row, found := c.Get(1)
 	require.True(t, found)
-	require.Equal(t, deviceLifecycleTombstone, row.Lifecycle)
+	require.Equal(t, recordstore.LifecycleTombstone, row.Lifecycle)
 	_, found = c.GetLatest(1)
 	require.False(t, found, "tombstone reads as absent through the state view")
 	_, found, _ = c.GetLatestAcceptStale(1)
@@ -296,4 +296,64 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	}
 	_, found = c.Get(1)
 	require.True(t, found, "the rebuilt cache fetches and serves again")
+}
+
+// TestDeviceCacheGetFetch pins the single-lookup read: a miss fetches
+// immediately and caches, an absent key is found=false with err=nil
+// (authoritative), and a dirty-window fetch serves the flushed row
+// without re-caching it.
+func TestDeviceCacheGetFetch(t *testing.T) {
+	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse-local unavailable: %v", err)
+	}
+	counting := &countingExecutor{inner: local}
+	ctx := context.Background()
+	st := NewDeviceStore(counting, nil, DeviceStoreConfig{})
+	defer st.Close()
+	c := NewDeviceCache[struct{}](st, DeviceCacheConfig{Capacity: 8})
+	require.NoError(t, st.EnsureTable(ctx))
+
+	t0 := time.Unix(1_600_000_000, 0).UTC()
+	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 7}).Commit())
+	_, err = st.Flush(ctx)
+	require.NoError(t, err)
+
+	// Miss → immediate fetch → cached.
+	ent, found, err := c.GetFetch(ctx, 1)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, uint64(7), ent.Battery.Val.Charge)
+	queries := counting.queryCalls
+	_, hit := c.Get(1)
+	require.True(t, hit, "GetFetch must have cached the fetched row")
+	require.Equal(t, queries, counting.queryCalls, "the follow-up Get must not query")
+
+	// Absent key: authoritative found=false with err=nil.
+	_, found, err = c.GetFetch(ctx, 99)
+	require.NoError(t, err)
+	require.False(t, found)
+
+	// Dirty window: the flushed row is served but must not re-enter the
+	// cache while the key has an unflushed local write.
+	require.NoError(t, st.Put(1, t0.Add(time.Hour)).AddBattery(Battery{ID: 1, Charge: 8}).Commit())
+	ent, found, err = c.GetFetch(ctx, 1)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, uint64(7), ent.Battery.Val.Charge, "reads see only flushed rows")
+	_, hit = c.Get(1)
+	require.False(t, hit, "a dirty key must not re-enter the cache")
+	st.DiscardPending()
+}
+
+// TestDeviceCacheGetFetchError: fetch failures surface as errors instead
+// of reading as authoritative misses (the plain Get swallows them).
+func TestDeviceCacheGetFetchError(t *testing.T) {
+	failing := &failingExecutor{}
+	ctx := context.Background()
+	st := NewDeviceStore(failing, nil, DeviceStoreConfig{})
+	defer st.Close()
+	c := NewDeviceCache[struct{}](st, DeviceCacheConfig{Capacity: 8})
+	_, _, err := c.GetFetch(ctx, 7)
+	require.Error(t, err)
 }
