@@ -3,6 +3,7 @@ package example
 import (
 	"context"
 	"errors"
+	"iter"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func (inst *flakyExecutor) Exec(ctx context.Context, sql string) error {
 	return inst.inner.Exec(ctx, sql)
 }
 
-func (inst *flakyExecutor) QueryArrow(ctx context.Context, sql string) ([]arrow.RecordBatch, error) {
+func (inst *flakyExecutor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error] {
 	return inst.inner.QueryArrow(ctx, sql)
 }
 
@@ -180,7 +181,7 @@ func TestDeviceStoreNoStaleRecacheBetweenCommitAndFlush(t *testing.T) {
 
 	// New version committed but not flushed; a fetch in this window sees
 	// the old row in ClickHouse and must refuse to cache it.
-	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 2}).Commit())
+	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 2}).Commit())
 	_, has := c.Get(1)
 	require.False(t, has)
 	for range c.IterateRestWorkItems(ctx) {

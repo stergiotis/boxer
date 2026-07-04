@@ -153,26 +153,22 @@ func (inst *LedgerStore) EnsureTable(ctx context.Context) (err error) {
 // column swaps, silently: run VerifySchema at startup after
 // EnsureTable.
 func (inst *LedgerStore) VerifySchema(ctx context.Context) (err error) {
-	records, err := inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+LedgerTableName+ledgerArrowOutputSettings)
-	if err != nil {
-		err = eh.Errorf("describe table %s: %w", LedgerTableName, err)
-		return
-	}
-	defer func() {
-		for _, rec := range records {
-			rec.Release()
-		}
-	}()
 	live := make([]string, 0, 64)
-	for _, rec := range records {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+LedgerTableName+ledgerArrowOutputSettings) {
+		if rerr != nil {
+			err = eh.Errorf("describe table %s: %w", LedgerTableName, rerr)
+			return
+		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
 			err = eh.Errorf("describe table %s: name column is %s, not a string", LedgerTableName, rec.Column(0).DataType())
+			rec.Release()
 			return
 		}
 		for i := range int(rec.NumRows()) {
 			live = append(live, names.Value(i))
 		}
+		rec.Release()
 	}
 	want := lowlevel.CreateSchemaLedgerTable().Fields()
 	if len(live) != len(want) {
@@ -782,7 +778,9 @@ func (inst *LedgerStore) ScanAccountState(ctx context.Context, opts recordstore.
 }
 
 // Latest returns the newest row for key, tombstone-blind (the raw
-// primitive). Reads see only flushed rows.
+// row-level primitive — a deleted key still returns its tombstone
+// row; GetLive is the interpreted state-view read). Reads see only
+// flushed rows.
 func (inst *LedgerStore) Latest(ctx context.Context, key string) (ent *LedgerEntity, found bool, err error) {
 	sql := "SELECT * FROM " + LedgerTableName +
 		" WHERE " + LedgerColKey + " = " + ledgerKeyLiteral(key) +
@@ -799,19 +797,27 @@ func (inst *LedgerStore) Latest(ctx context.Context, key string) (ent *LedgerEnt
 // Replay iterates the rows for key with the order column >= fromOrder
 // in ascending order — the event-replay primitive. A zero fromOrder
 // replays everything (zero time.Time has no defined UnixNano;
-// recordstore.SeqTs(0) is the equivalent explicit bound). The
-// sequence is single-use; ctx must stay valid until iteration
-// completes; the query may execute at call time or lazily during
-// iteration (buffered in v1 — a streaming executor changes nothing
-// visible); an error ends the sequence as a final (nil, err) pair.
-// Reads see only flushed rows.
-func (inst *LedgerStore) Replay(ctx context.Context, key string, fromOrder time.Time) iter.Seq2[*LedgerEntity, error] {
+// recordstore.SeqTs(0) is the equivalent explicit bound);
+// opts.To bounds the replay exclusively ("state as of To") and
+// opts.Limit caps the row count. The sequence is single-use; ctx
+// must stay valid until iteration completes; the query may execute
+// at call time or lazily during iteration (buffered in v1 — a
+// streaming executor changes nothing visible); an error ends the
+// sequence as a final (nil, err) pair. Reads see only flushed rows.
+func (inst *LedgerStore) Replay(ctx context.Context, key string, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*LedgerEntity, error] {
 	sql := "SELECT * FROM " + LedgerTableName +
 		" WHERE " + LedgerColKey + " = " + ledgerKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + LedgerColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
 	}
-	sql += " ORDER BY " + LedgerColOrder + " ASC" + ledgerArrowOutputSettings
+	if !opts.To.IsZero() {
+		sql += " AND " + LedgerColOrder + " < fromUnixTimestamp64Nano(" + strconv.FormatInt(opts.To.UnixNano(), 10) + ")"
+	}
+	sql += " ORDER BY " + LedgerColOrder + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += ledgerArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
 }
 
@@ -826,20 +832,15 @@ type ledgerSectionReaderI interface {
 }
 
 func (inst *LedgerStore) queryEntities(ctx context.Context, sql string) (ents []*LedgerEntity, err error) {
-	records, err := inst.exec.QueryArrow(ctx, sql)
-	if err != nil {
-		err = eh.Errorf("query entities: %w", err)
-		return
-	}
-	defer func() {
-		for _, rec := range records {
-			rec.Release()
+	for rec, rerr := range inst.exec.QueryArrow(ctx, sql) {
+		if rerr != nil {
+			err = eh.Errorf("query entities: %w", rerr)
+			return
 		}
-	}()
-	for _, rec := range records {
-		var batch []*LedgerEntity
-		batch, err = decodeLedgerRecord(rec)
-		if err != nil {
+		batch, derr := decodeLedgerRecord(rec)
+		rec.Release()
+		if derr != nil {
+			err = derr
 			return
 		}
 		ents = append(ents, batch...)

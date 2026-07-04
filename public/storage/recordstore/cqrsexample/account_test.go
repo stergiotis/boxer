@@ -70,7 +70,7 @@ func TestAccountLifecycle(t *testing.T) {
 	// The full history stays readable: six events in sequence order, the
 	// archetype naming the event type.
 	types := make([]string, 0, 6)
-	for row, rerr := range st.Replay(ctx, id, recordstore.SeqTs(0)) {
+	for row, rerr := range st.Replay(ctx, id, recordstore.SeqTs(0), recordstore.ReplayOpts{}) {
 		require.NoError(t, rerr)
 		archetype := row.Archetype()
 		require.Len(t, archetype, 1, "an event row carries exactly one component")

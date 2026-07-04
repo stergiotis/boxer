@@ -274,7 +274,7 @@ func (inst *Storage) ReplaceApplied(ctx context.Context, hs []types.PatchHash) (
 func (inst *Storage) LoadApplied(ctx context.Context) (hs []types.PatchHash, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	for row, rerr := range inst.st.Replay(ctx, logKey, recordstore.SeqTs(0)) {
+	for row, rerr := range inst.st.Replay(ctx, logKey, recordstore.SeqTs(0), recordstore.ReplayOpts{}) {
 		if rerr != nil {
 			hs = nil
 			err = eh.Errorf("load applied: %w", rerr)

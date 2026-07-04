@@ -3,7 +3,7 @@
 // (the fact table), a set of component mappingplans, the batching
 // read-through cache (public/caching) and a ClickHouse executor into a
 // high-level API: ingest, create, retrieve (batched KV), persist — with an
-// optional state view (Put/Delete/GetLatest) layered over the append-only
+// optional state view (Delete/GetLive) layered over the append-only
 // substrate.
 //
 // This package holds only what generated code and adapters share: the
@@ -19,6 +19,7 @@ package recordstore
 import (
 	"context"
 	"errors"
+	"iter"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -47,16 +48,36 @@ var ErrDuplicateIngestKey = errors.New("duplicate key within one ingest batch")
 // Contract:
 //   - Exec runs a statement for its side effect (DDL, admin). It returns
 //     after the server acknowledged the statement.
-//   - QueryArrow runs a SELECT with FORMAT Arrow semantics and returns the
-//     decoded record batches. The caller must Release every returned batch.
-//   - InsertArrow appends the given batches to table. It returns after the
-//     insert is acknowledged; over a durable engine (with asynchronous
-//     inserts disabled) the rows are durable when it returns — the property
-//     the ADR-0100 state view and the pushout adapter rely on.
+//   - QueryArrow runs a SELECT with FORMAT Arrow semantics and streams the
+//     decoded record batches: the sequence is single-use, an error ends it
+//     as a final (nil, err) pair (the convention the generated stores'
+//     iterator verbs share), and ownership of each yielded batch transfers
+//     to the consumer — the consumer must Release every batch it receives,
+//     including one it breaks on; batches never yielded stay the
+//     implementation's to release. A buffered implementation trivially
+//     satisfies the shape by iterating a materialized slice; the shape
+//     exists so a streaming implementation needs no interface change.
+//   - InsertArrow appends the given batches to table. The executor does
+//     not retain the records — the caller releases them after return. It
+//     returns after the insert is acknowledged; over a durable engine
+//     (with asynchronous inserts disabled) the rows are durable when it
+//     returns — the property the ADR-0100 state view and the pushout
+//     adapter rely on.
 type ExecutorI interface {
 	Exec(ctx context.Context, sql string) error
-	QueryArrow(ctx context.Context, sql string) (records []arrow.RecordBatch, err error)
+	QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error]
 	InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) error
+}
+
+// ReplayOpts parameterizes the generated Replay verb beyond its
+// positional lower bound. The zero value replays everything from
+// fromOrder on.
+type ReplayOpts struct {
+	// To is the exclusive upper Order bound — "state as of To" folds
+	// replay rows with Order < To. Zero means unbounded.
+	To time.Time
+	// Limit caps the number of returned rows; zero means no limit.
+	Limit int
 }
 
 // ScanOpts parameterizes the generated Scan<Kind> verbs. The zero value

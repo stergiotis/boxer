@@ -736,6 +736,48 @@ candidates the reviews raised (verb renames, the `Put` alias,
   budget spelled out; cache views attach for the store's lifetime; the
   generated file no longer claims the package doc slot.
 
+### 2026-07-04 — external-review batch 2: the breaking set
+
+The review's breaking candidates, decided and landed while all
+consumers are in-repo. Where the SD4/SD7 text above disagrees, this
+update supersedes it.
+
+- **The state-view read is `GetLive`** — store `GetLatest` → `GetLive`,
+  cache view `GetLatest`/`GetLatestAcceptStale` →
+  `GetLive`/`GetLiveAcceptStale`. Both reviewers flagged that
+  `Latest`/`GetLatest`/`Get` encode three tombstone semantics in names
+  that communicate none of it. Direction chosen: `Live` is the domain's
+  own vocabulary (`LifecycleLive`/`LifecycleTombstone`), so the name
+  states the semantics; the raw `Latest` keeps a truthful name
+  everywhere ("newest row") and its deliberate raw uses (the pushout
+  adapter throughout) don't churn; one rename instead of two. The
+  family rule: unmarked verbs (`Latest`, `Get`) are row-level, the
+  `Live`-marked verbs are the interpreted state reads. The alternative
+  (`GetLatest` → `Latest`, raw → `LatestRaw`) was rejected because it
+  renames the primitive every consumer already uses and makes the short
+  name's result-set differ between store flavors.
+- **`Put` is gone.** A pure alias of `Begin` — two names for one
+  operation; both reviewers called it the textbook orthogonality
+  violation, outvoting the original chstore-symmetry rationale.
+  Versioned writes go through `Begin`: appending the new version IS the
+  update.
+- **`Replay` takes `recordstore.ReplayOpts{To, Limit}`** after the
+  positional lower bound — `To` is the exclusive upper Order bound
+  ("state as of"), `Limit` caps rows. Bounded rehydration was otherwise
+  inexpressible except by client-side break, which pays for the whole
+  tail under the buffered v1 executor.
+- **`ExecutorI.QueryArrow` streams**:
+  `iter.Seq2[arrow.RecordBatch, error]` with the same error-as-final-
+  pair convention as the store verbs; ownership of each yielded batch
+  transfers to the consumer (release-on-break stated), and `InsertArrow`
+  documents that the executor does not retain records. The materializing
+  seam was the one shape that could not be fixed after external adapters
+  exist — a buffered adapter satisfies the streaming shape trivially
+  (chexec does exactly that), the reverse retrofit is impossible. The
+  generated decode now releases each batch as it is consumed, so
+  record-level memory is bounded as soon as a streaming executor
+  exists; the SD7 sketch's slice-returning `QueryArrow` is superseded.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

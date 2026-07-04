@@ -158,26 +158,22 @@ func (inst *PushoutStore) EnsureTable(ctx context.Context) (err error) {
 // column swaps, silently: run VerifySchema at startup after
 // EnsureTable.
 func (inst *PushoutStore) VerifySchema(ctx context.Context) (err error) {
-	records, err := inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+PushoutTableName+pushoutArrowOutputSettings)
-	if err != nil {
-		err = eh.Errorf("describe table %s: %w", PushoutTableName, err)
-		return
-	}
-	defer func() {
-		for _, rec := range records {
-			rec.Release()
-		}
-	}()
 	live := make([]string, 0, 64)
-	for _, rec := range records {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+PushoutTableName+pushoutArrowOutputSettings) {
+		if rerr != nil {
+			err = eh.Errorf("describe table %s: %w", PushoutTableName, rerr)
+			return
+		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
 			err = eh.Errorf("describe table %s: name column is %s, not a string", PushoutTableName, rec.Column(0).DataType())
+			rec.Release()
 			return
 		}
 		for i := range int(rec.NumRows()) {
 			live = append(live, names.Value(i))
 		}
+		rec.Release()
 	}
 	want := lowlevel.CreateSchemaPushoutTable().Fields()
 	if len(live) != len(want) {
@@ -570,12 +566,12 @@ func (inst *PushoutCache[W]) InvalidateAll() {
 	inst.rebuild()
 }
 
-// GetLatest is the cached state-view read: the cache's newest row for
+// GetLive is the cached state-view read: the cache's newest row for
 // the key with the tombstone read as absent — exact under this
 // process's single writer (local writes invalidate); external writers
-// need MarkStale / Invalidate. The store's uncached GetLatest stays
+// need MarkStale / Invalidate. The store's uncached GetLive stays
 // the authoritative read. A miss queues the batch fetch like Get.
-func (inst *PushoutCache[W]) GetLatest(key string) (ent *PushoutEntity, found bool) {
+func (inst *PushoutCache[W]) GetLive(key string) (ent *PushoutEntity, found bool) {
 	ent, found = inst.cache.Get(key)
 	if found && ent.IsTombstone() {
 		ent = nil
@@ -584,12 +580,12 @@ func (inst *PushoutCache[W]) GetLatest(key string) (ent *PushoutEntity, found bo
 	return
 }
 
-// GetLatestAcceptStale is the stale-while-revalidate state-view read:
+// GetLiveAcceptStale is the stale-while-revalidate state-view read:
 // a stale entry is served immediately (stale=true) while the refetch
 // queues in the background — pair with the work-item replay loop.
 // Tombstones read as absent; stale then reports whether that verdict
 // came from a stale entry.
-func (inst *PushoutCache[W]) GetLatestAcceptStale(key string) (ent *PushoutEntity, found bool, stale bool) {
+func (inst *PushoutCache[W]) GetLiveAcceptStale(key string) (ent *PushoutEntity, found bool, stale bool) {
 	ent, found, stale = inst.cache.GetAcceptStale(key)
 	if found && ent.IsTombstone() {
 		ent = nil
@@ -755,7 +751,9 @@ func (inst *PushoutStore) ScanRetention(ctx context.Context, opts recordstore.Sc
 }
 
 // Latest returns the newest row for key, tombstone-blind (the raw
-// primitive). Reads see only flushed rows.
+// row-level primitive — a deleted key still returns its tombstone
+// row; GetLive is the interpreted state-view read). Reads see only
+// flushed rows.
 func (inst *PushoutStore) Latest(ctx context.Context, key string) (ent *PushoutEntity, found bool, err error) {
 	sql := "SELECT * FROM " + PushoutTableName +
 		" WHERE " + PushoutColKey + " = " + pushoutKeyLiteral(key) +
@@ -772,32 +770,35 @@ func (inst *PushoutStore) Latest(ctx context.Context, key string) (ent *PushoutE
 // Replay iterates the rows for key with the order column >= fromOrder
 // in ascending order — the event-replay primitive. A zero fromOrder
 // replays everything (zero time.Time has no defined UnixNano;
-// recordstore.SeqTs(0) is the equivalent explicit bound). The
-// sequence is single-use; ctx must stay valid until iteration
-// completes; the query may execute at call time or lazily during
-// iteration (buffered in v1 — a streaming executor changes nothing
-// visible); an error ends the sequence as a final (nil, err) pair.
-// Reads see only flushed rows.
-func (inst *PushoutStore) Replay(ctx context.Context, key string, fromOrder time.Time) iter.Seq2[*PushoutEntity, error] {
+// recordstore.SeqTs(0) is the equivalent explicit bound);
+// opts.To bounds the replay exclusively ("state as of To") and
+// opts.Limit caps the row count. The sequence is single-use; ctx
+// must stay valid until iteration completes; the query may execute
+// at call time or lazily during iteration (buffered in v1 — a
+// streaming executor changes nothing visible); an error ends the
+// sequence as a final (nil, err) pair. Reads see only flushed rows.
+func (inst *PushoutStore) Replay(ctx context.Context, key string, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*PushoutEntity, error] {
 	sql := "SELECT * FROM " + PushoutTableName +
 		" WHERE " + PushoutColKey + " = " + pushoutKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + PushoutColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
 	}
-	sql += " ORDER BY " + PushoutColOrder + " ASC" + pushoutArrowOutputSettings
+	if !opts.To.IsZero() {
+		sql += " AND " + PushoutColOrder + " < fromUnixTimestamp64Nano(" + strconv.FormatInt(opts.To.UnixNano(), 10) + ")"
+	}
+	sql += " ORDER BY " + PushoutColOrder + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += pushoutArrowOutputSettings
 	return inst.iterateEntities(ctx, sql)
 }
 
-// --- state view (Put / Delete / GetLatest; ADR-0100 SD4). ---
-
-// Put appends a new version of the entity — Begin under its state-view
-// name.
-func (inst *PushoutStore) Put(id string, ts time.Time) *PushoutEntityBuilder {
-	return inst.Begin(id, ts)
-}
+// --- state view (Delete / GetLive; ADR-0100 SD4). Versioned writes
+// go through Begin — appending a new version IS the update. ---
 
 // Delete appends a tombstone row for id (no components; lifecycle marks
-// the deletion); attached cache views evict the key. GetLatest reads
+// the deletion); attached cache views evict the key. GetLive reads
 // it as absent.
 func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleTombstone)
@@ -812,9 +813,10 @@ func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
 	return
 }
 
-// GetLatest is Latest plus tombstone interpretation: newest row wins, a
-// tombstone reads as absent. Uncached in v1 (ADR-0100 Deferred).
-func (inst *PushoutStore) GetLatest(ctx context.Context, key string) (ent *PushoutEntity, found bool, err error) {
+// GetLive is Latest plus tombstone interpretation: newest row wins, a
+// tombstone reads as absent — the state-view read (the cache view
+// carries the cached twin).
+func (inst *PushoutStore) GetLive(ctx context.Context, key string) (ent *PushoutEntity, found bool, err error) {
 	ent, found, err = inst.Latest(ctx, key)
 	if err != nil || !found {
 		return
@@ -837,20 +839,15 @@ type pushoutSectionReaderI interface {
 }
 
 func (inst *PushoutStore) queryEntities(ctx context.Context, sql string) (ents []*PushoutEntity, err error) {
-	records, err := inst.exec.QueryArrow(ctx, sql)
-	if err != nil {
-		err = eh.Errorf("query entities: %w", err)
-		return
-	}
-	defer func() {
-		for _, rec := range records {
-			rec.Release()
+	for rec, rerr := range inst.exec.QueryArrow(ctx, sql) {
+		if rerr != nil {
+			err = eh.Errorf("query entities: %w", rerr)
+			return
 		}
-	}()
-	for _, rec := range records {
-		var batch []*PushoutEntity
-		batch, err = decodePushoutRecord(rec)
-		if err != nil {
+		batch, derr := decodePushoutRecord(rec)
+		rec.Release()
+		if derr != nil {
+			err = derr
 			return
 		}
 		ents = append(ents, batch...)

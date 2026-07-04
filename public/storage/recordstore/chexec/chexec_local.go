@@ -10,6 +10,7 @@ package chexec
 import (
 	"bytes"
 	"context"
+	"iter"
 	"os/exec"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -70,7 +71,30 @@ func (inst *LocalExecutor) Exec(ctx context.Context, sql string) (err error) {
 	return
 }
 
-func (inst *LocalExecutor) QueryArrow(ctx context.Context, sql string) (records []arrow.RecordBatch, err error) {
+// QueryArrow implements the streaming shape over a one-shot process:
+// the whole result is materialized (the process has exited by the time
+// bytes are readable), then yielded batch by batch — ownership of each
+// yielded batch transfers to the consumer; on an early break the
+// remaining batches are released here.
+func (inst *LocalExecutor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error] {
+	return func(yield func(arrow.RecordBatch, error) bool) {
+		records, err := inst.queryArrowBuffered(ctx, sql)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		for i, rec := range records {
+			if !yield(rec, nil) {
+				for _, r := range records[i+1:] {
+					r.Release()
+				}
+				return
+			}
+		}
+	}
+}
+
+func (inst *LocalExecutor) queryArrowBuffered(ctx context.Context, sql string) (records []arrow.RecordBatch, err error) {
 	raw, err := inst.run(ctx, sql, "Arrow", nil)
 	if err != nil {
 		return

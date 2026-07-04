@@ -3,6 +3,7 @@ package example
 import (
 	"context"
 	"errors"
+	"iter"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func (inst *countingExecutor) Exec(ctx context.Context, sql string) error {
 	return inst.inner.Exec(ctx, sql)
 }
 
-func (inst *countingExecutor) QueryArrow(ctx context.Context, sql string) ([]arrow.RecordBatch, error) {
+func (inst *countingExecutor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error] {
 	inst.queryCalls++
 	return inst.inner.QueryArrow(ctx, sql)
 }
@@ -41,9 +42,11 @@ type failingExecutor struct {
 
 func (inst *failingExecutor) Exec(ctx context.Context, sql string) error { return nil }
 
-func (inst *failingExecutor) QueryArrow(ctx context.Context, sql string) ([]arrow.RecordBatch, error) {
-	inst.queryCalls++
-	return nil, errors.New("synthetic fetch failure")
+func (inst *failingExecutor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error] {
+	return func(yield func(arrow.RecordBatch, error) bool) {
+		inst.queryCalls++
+		yield(nil, errors.New("synthetic fetch failure"))
+	}
 }
 
 func (inst *failingExecutor) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) error {
@@ -169,7 +172,7 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 	}
 
 	// A new version invalidates the entry; the refetch sees the new row.
-	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
+	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
 	_, has := c.Get(1)
 	require.False(t, has, "local Put must invalidate the cached entry")
 	_, err = st.Flush(ctx)
@@ -182,7 +185,7 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 	require.Equal(t, t1, ent.Ts)
 
 	// A tombstone invalidates too; the refetched row is the tombstone
-	// (Get is row-level and tombstone-blind by design — GetLatest is the
+	// (Get is row-level and tombstone-blind by design — GetLive is the
 	// state-view read).
 	require.NoError(t, st.Delete(1, t2))
 	_, has = c.Get(1)
@@ -195,15 +198,15 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 	require.True(t, has)
 	require.Equal(t, recordstore.LifecycleTombstone, ent.Lifecycle)
 	require.Empty(t, ent.Archetype())
-	_, found, err := st.GetLatest(ctx, 1)
+	_, found, err := st.GetLive(ctx, 1)
 	require.NoError(t, err)
 	require.False(t, found)
 }
 
 // TestDeviceCacheLatestAndStaleness pins the cached state-view reads and
-// the external-writer staleness controls (ADR-0100 Update): GetLatest is
+// the external-writer staleness controls (ADR-0100 Update): GetLive is
 // exact under the local single writer, tombstones read as absent,
-// MarkStale enables stale-while-revalidate via GetLatestAcceptStale, and
+// MarkStale enables stale-while-revalidate via GetLiveAcceptStale, and
 // Invalidate / InvalidateAll drop entries on the caller's signal.
 func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
@@ -220,7 +223,7 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	t1 := t0.Add(time.Hour)
 	t2 := t0.Add(2 * time.Hour)
 
-	require.NoError(t, st.Put(1, t0).AddBattery(Battery{ID: 1, Charge: 9000}).Commit())
+	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 9000}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
@@ -230,20 +233,20 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	}
 	for range c.IterateRestWorkItems(ctx) {
 	}
-	ent, found := c.GetLatest(1)
+	ent, found := c.GetLive(1)
 	require.True(t, found)
 	require.Equal(t, uint64(9000), ent.Battery.Val.Charge)
 
 	// Local single writer: the write hook evicts, the refetch serves the
-	// new version — GetLatest is exact without any staleness signal.
-	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
+	// new version — GetLive is exact without any staleness signal.
+	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
-	_, found = c.GetLatest(1)
+	_, found = c.GetLive(1)
 	require.False(t, found, "local write must evict the cached entry")
 	for range c.IterateRestWorkItems(ctx) {
 	}
-	ent, found = c.GetLatest(1)
+	ent, found = c.GetLive(1)
 	require.True(t, found)
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
 
@@ -251,14 +254,14 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	// the accept-stale read while the strict read queues the refetch.
 	before := counting.queryCalls
 	c.MarkStale(1)
-	ent, found, stale := c.GetLatestAcceptStale(1)
+	ent, found, stale := c.GetLiveAcceptStale(1)
 	require.True(t, found)
 	require.True(t, stale)
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
 	for range c.IterateRestWorkItems(ctx) {
 	}
 	require.Equal(t, before+1, counting.queryCalls, "MarkStale must force exactly one refetch")
-	ent, found, stale = c.GetLatestAcceptStale(1)
+	ent, found, stale = c.GetLiveAcceptStale(1)
 	require.True(t, found)
 	require.False(t, stale, "refetched entry is fresh again")
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
@@ -276,9 +279,9 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	row, found := c.Get(1)
 	require.True(t, found)
 	require.Equal(t, recordstore.LifecycleTombstone, row.Lifecycle)
-	_, found = c.GetLatest(1)
+	_, found = c.GetLive(1)
 	require.False(t, found, "tombstone reads as absent through the state view")
-	_, found, _ = c.GetLatestAcceptStale(1)
+	_, found, _ = c.GetLiveAcceptStale(1)
 	require.False(t, found)
 
 	// Invalidate / InvalidateAll drop entries on the caller's signal.
@@ -336,7 +339,7 @@ func TestDeviceCacheGetFetch(t *testing.T) {
 
 	// Dirty window: the flushed row is served but must not re-enter the
 	// cache while the key has an unflushed local write.
-	require.NoError(t, st.Put(1, t0.Add(time.Hour)).AddBattery(Battery{ID: 1, Charge: 8}).Commit())
+	require.NoError(t, st.Begin(1, t0.Add(time.Hour)).AddBattery(Battery{ID: 1, Charge: 8}).Commit())
 	ent, found, err = c.GetFetch(ctx, 1)
 	require.NoError(t, err)
 	require.True(t, found)

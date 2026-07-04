@@ -96,7 +96,7 @@ func (inst *Service) Load(ctx context.Context, id string) (acct *Account, err er
 		acct.nextSeq = state.AsOf + 1
 		from = recordstore.SeqTs(state.AsOf + 1)
 	}
-	for ev, rerr := range inst.st.Replay(ctx, id, from) {
+	for ev, rerr := range inst.st.Replay(ctx, id, from, recordstore.ReplayOpts{}) {
 		if rerr != nil {
 			err = eh.Errorf("replay %s: %w", id, rerr)
 			return

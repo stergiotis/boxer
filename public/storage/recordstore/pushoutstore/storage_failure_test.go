@@ -3,6 +3,7 @@ package pushoutstore
 import (
 	"context"
 	"errors"
+	"iter"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -24,7 +25,7 @@ func (inst *flakyExecutor) Exec(ctx context.Context, sql string) error {
 	return inst.inner.Exec(ctx, sql)
 }
 
-func (inst *flakyExecutor) QueryArrow(ctx context.Context, sql string) ([]arrow.RecordBatch, error) {
+func (inst *flakyExecutor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error] {
 	return inst.inner.QueryArrow(ctx, sql)
 }
 
@@ -75,7 +76,7 @@ func TestAppendAppliedFailureLeavesOrderUnambiguous(t *testing.T) {
 	require.NoError(t, stor2.AppendApplied(ctx, ph(5)))
 
 	seen := map[int64]bool{}
-	for r, rerr := range stor2.st.Replay(ctx, logKey, recordstore.SeqTs(0)) {
+	for r, rerr := range stor2.st.Replay(ctx, logKey, recordstore.SeqTs(0), recordstore.ReplayOpts{}) {
 		require.NoError(t, rerr)
 		ns := r.Ts.UnixNano()
 		require.False(t, seen[ns], "two log rows share order ts=%d — replay order ambiguous", ns)

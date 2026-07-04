@@ -14,7 +14,7 @@ import (
 // TestDeviceStoreRoundTrip is the ADR-0100 slice-S1 acceptance: build →
 // flush → clickhouse-local → Get (cached, via the work-item replay
 // contract) / Latest / Replay, plus the state view (Put versions, Delete
-// tombstone, GetLatest). MergeTree under a --path directory keeps the data
+// tombstone, GetLive). MergeTree under a --path directory keeps the data
 // durable across the executor's one-shot processes.
 func TestDeviceStoreRoundTrip(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
@@ -91,7 +91,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	}
 
 	// State view: a new version for entity 1 carrying only Battery.
-	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 8500}).Commit())
+	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 8500}).Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
@@ -102,17 +102,17 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	require.Equal(t, option.Some(Battery{ID: 1, Charge: 8500}), latest.Battery)
 	require.False(t, latest.Identity.Has, "a version is a whole row; the new one carries no Identity")
 
-	got, found, err := st.GetLatest(ctx, 1)
+	got, found, err := st.GetLive(ctx, 1)
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, latest.Ts, got.Ts)
 
-	// Delete = tombstone: GetLatest reads absent, Latest still sees the row.
+	// Delete = tombstone: GetLive reads absent, Latest still sees the row.
 	require.NoError(t, st.Delete(1, t2))
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
-	_, found, err = st.GetLatest(ctx, 1)
+	_, found, err = st.GetLive(ctx, 1)
 	require.NoError(t, err)
 	require.False(t, found)
 
@@ -124,7 +124,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 
 	// Replay: the full ordered history of entity 1 (v1, v2, tombstone).
 	history := make([]*DeviceEntity, 0, 3)
-	for ent, rerr := range st.Replay(ctx, 1, time.Time{}) {
+	for ent, rerr := range st.Replay(ctx, 1, time.Time{}, recordstore.ReplayOpts{}) {
 		require.NoError(t, rerr)
 		history = append(history, ent)
 	}
@@ -136,11 +136,26 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 
 	// Replay from t1 skips the first version.
 	tail := 0
-	for _, rerr := range st.Replay(ctx, 1, t1) {
+	for _, rerr := range st.Replay(ctx, 1, t1, recordstore.ReplayOpts{}) {
 		require.NoError(t, rerr)
 		tail++
 	}
 	require.Equal(t, 2, tail)
+
+	// Bounded replay: To is exclusive ("state as of t2" excludes the
+	// tombstone), Limit caps the row count.
+	bounded := 0
+	for _, rerr := range st.Replay(ctx, 1, time.Time{}, recordstore.ReplayOpts{To: t2}) {
+		require.NoError(t, rerr)
+		bounded++
+	}
+	require.Equal(t, 2, bounded)
+	capped := 0
+	for _, rerr := range st.Replay(ctx, 1, time.Time{}, recordstore.ReplayOpts{Limit: 1}) {
+		require.NoError(t, rerr)
+		capped++
+	}
+	require.Equal(t, 1, capped)
 
 	// Latest of a never-written key reports not-found.
 	_, found, err = st.Latest(ctx, 99)
