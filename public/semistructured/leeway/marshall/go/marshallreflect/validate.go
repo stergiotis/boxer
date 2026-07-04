@@ -104,11 +104,14 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 	beginArgs := -1         // BeginAttribute arity; -1 skips the check
 	coContainerMethod := "" // multi-sub-column container append (AddTo(Co)Container(s)P)
 	coContainerArgs := 0
-	if len(g.SubColumns) > 1 {
-		// Multi-sub-column: BeginAttribute(<scalars…>) with checked arity,
-		// plus the container-class append when containers are present
-		// (ADR-0101 D3) — a container DTO against a scalar-tuple DML fails
-		// here instead of panicking mid-marshal.
+	_, isTuple := g.TupleSpec()
+	if isTuple || len(g.SubColumns) > 1 {
+		// Multi-sub-column or dynamic-membership tuple (ADR-0103 — the
+		// same per-element call shape, at any sub-column count):
+		// BeginAttribute(<scalars…>) with checked arity, plus the
+		// container-class append when containers are present (ADR-0101 D3)
+		// — a container DTO against a scalar-tuple DML fails here instead
+		// of panicking mid-marshal.
 		needBegin["BeginAttribute"] = true
 		beginArgs = len(g.ScalarSubColumns())
 		if containers := g.ContainerSubColumns(); len(containers) > 0 {

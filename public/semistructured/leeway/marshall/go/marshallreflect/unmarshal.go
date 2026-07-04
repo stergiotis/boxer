@@ -251,6 +251,10 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 		return
 	}
 
+	if ts, ok := g.TupleSpec(); ok {
+		return unmarshalTupleSection(row, g, ts, attrs, membs, i)
+	}
+
 	if len(g.SubColumns) > 1 {
 		return unmarshalMultiSubColumn(row, g, attrs, membs, i, membIDs)
 	}
@@ -528,6 +532,87 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 		row.FieldByName(s.Field.GoFieldName).Set(s.Val)
 	}
 	return
+}
+
+// unmarshalTupleSection decodes a dynamic-membership tuple section
+// (ADR-0103). Every attribute of the row belongs to the tuple field —
+// PlanBuilder.Finish guarantees the section carries no other field — so
+// there is no membership matching: each attribute yields one element per
+// membership value it carries (codec-written wire carries exactly one),
+// in wire order, with the membership value decoded into the element's
+// membership field. Zero attributes decode to a nil slice.
+func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, attrs, membs reflect.Value, i int) (err error) {
+	outFld := row.FieldByName(ts.GoField)
+	elemType := outFld.Type().Elem()
+	membMethod := "GetMembValue" + ts.Channel.AddMethodSuffix()
+
+	var out reflect.Value // lazily allocated — zero attributes keep the nil slice
+	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
+	locals := make([]reflect.Value, len(g.SubColumns))
+	for attrJ := int64(0); attrJ < n; attrJ++ {
+		for k := range g.SubColumns {
+			sc := &g.SubColumns[k]
+			f := &sc.Fields[0]
+			v := mustCall(attrs, "GetAttrValue"+mappingplan.UpperFirst(sc.Name), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+			if f.IsSlice() {
+				// Container sub-column: drain the Seq; an N = 0 container
+				// leaves the local invalid so the element field stays nil.
+				locals[k] = sliceFromSeq(v, f)
+			} else {
+				locals[k] = copiedTupleScalar(v, f)
+			}
+		}
+		seq := mustCall(membs, membMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+		for _, mv := range collectIterSeq(seq) {
+			elem := reflect.New(elemType).Elem()
+			setTupleMembValue(elem, ts, mv)
+			for k := range g.SubColumns {
+				if !locals[k].IsValid() {
+					continue
+				}
+				elem.FieldByName(g.SubColumns[k].Fields[0].GoFieldName).Set(locals[k])
+			}
+			if !out.IsValid() {
+				out = reflect.MakeSlice(outFld.Type(), 0, int(n))
+			}
+			out = reflect.Append(out, elem)
+		}
+	}
+	if out.IsValid() {
+		outFld.Set(out)
+	}
+	return
+}
+
+// copiedTupleScalar lifts one scalar sub-column value out of its Arrow
+// buffer with the field's copy strategy — the same per-type rule
+// consumeValue applies (a []byte scalar must not alias the reused Arrow
+// buffer once it is retained inside a tuple element).
+func copiedTupleScalar(v reflect.Value, f *mappingplan.TaggedField) reflect.Value {
+	switch goplan.CopyStrategy(f.GoType()) {
+	case goplan.CopyFixedByte:
+		arr := reflect.New(goTypeReflect(f.GoType())).Elem()
+		src := v.Bytes()
+		for k := 0; k < arr.Len() && k < len(src); k++ {
+			arr.Index(k).SetUint(uint64(src[k]))
+		}
+		return arr
+	case goplan.CopyBytes:
+		return reflect.ValueOf(append([]byte(nil), v.Bytes()...))
+	default:
+		return v
+	}
+}
+
+// setTupleMembValue decodes one wire membership value (a verbatim []byte)
+// into the element's membership field, copying it out of the Arrow buffer.
+func setTupleMembValue(elem reflect.Value, ts goplan.TupleSpec, mv reflect.Value) {
+	fld := elem.FieldByName(ts.MembField)
+	if ts.MembGoType == "[]byte" {
+		fld.SetBytes(append([]byte(nil), mv.Bytes()...))
+		return
+	}
+	fld.SetString(string(mv.Bytes()))
 }
 
 // sliceFromSeq drains a reflected iter.Seq[T] into a []T value,

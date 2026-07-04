@@ -104,6 +104,18 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 			return
 		}
 
+		// Dynamic-membership tuple field (ADR-0103): a slice of a named
+		// plain struct — not one of the special struct types the classifier
+		// owns (marshalltypes carrier, option.Option, time.Time). The
+		// element struct's fields are classified individually and validated
+		// by the shared builder.
+		if isTupleSliceType(f.Type) {
+			if err = addReflectTupleField(b, rt, f.Name, lwTag, f.Type.Elem()); err != nil {
+				return
+			}
+			continue
+		}
+
 		var shape goplan.FieldShape
 		shape, err = classifyReflectType(f.Type)
 		if err != nil {
@@ -117,6 +129,64 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 	}
 
 	return b.Finish()
+}
+
+// isTupleSliceType reports whether ft is `[]S` for a named plain struct S
+// — the shape selecting the dynamic-membership tuple interpretation. The
+// struct types with dedicated classifier lanes (marshalltypes carriers,
+// option.Option, time.Time) are excluded and keep their existing paths.
+func isTupleSliceType(ft reflect.Type) bool {
+	if ft.Kind() != reflect.Slice {
+		return false
+	}
+	e := ft.Elem()
+	if e.Kind() != reflect.Struct || e.Name() == "" {
+		return false
+	}
+	switch e.PkgPath() {
+	case marshalltypesPkgPath, optionPkgPath, "time":
+		return false
+	}
+	return true
+}
+
+// addReflectTupleField walks the tuple element struct's fields, classifies
+// each with the shared reflect classifier, and hands them to
+// goplan.PlanBuilder.AddTupleSliceField — the single home of the tuple
+// validation rules, shared with the go/ast front-end.
+func addReflectTupleField(b *goplan.PlanBuilder, dto reflect.Type, goFieldName, lwTag string, elemType reflect.Type) (err error) {
+	if elemType.PkgPath() != dto.PkgPath() {
+		// Front-end parity: the go/ast front-end resolves the element struct
+		// from the DTO's own file, so a foreign-package element type would be
+		// reflect-only. Reject it here with the reason.
+		err = eb.Build().Str("field", goFieldName).Str("elemType", elemType.String()).Errorf("tuple element struct must be declared in the DTO's package (the marshallgen front-end resolves it from the DTO's file)")
+		return
+	}
+	elems := make([]goplan.TupleElem, 0, elemType.NumField())
+	for j := 0; j < elemType.NumField(); j++ {
+		ef := elemType.Field(j)
+		if ef.Name == "_" {
+			err = eb.Build().Str("field", goFieldName).Errorf("`_` fields are not supported inside a tuple element struct — entity metadata belongs on the DTO")
+			return
+		}
+		lw := ef.Tag.Get("lw")
+		if lw == "" {
+			err = eb.Build().Str("field", goFieldName).Str("elemField", ef.Name).Errorf("tuple element field missing `lw:` tag")
+			return
+		}
+		if !ef.IsExported() {
+			err = eb.Build().Str("field", goFieldName).Str("elemField", ef.Name).Errorf("unexported tuple element field carries an `lw:` tag; tagged fields must be exported")
+			return
+		}
+		var shape goplan.FieldShape
+		shape, err = classifyReflectType(ef.Type)
+		if err != nil {
+			err = eb.Build().Str("field", goFieldName).Str("elemField", ef.Name).Errorf("classify tuple element field type: %w", err)
+			return
+		}
+		elems = append(elems, goplan.TupleElem{GoFieldName: ef.Name, LWTag: lw, Shape: shape})
+	}
+	return b.AddTupleSliceField(goFieldName, lwTag, elemType.Name(), elems)
 }
 
 func pkgLastSegment(pkg string) string {

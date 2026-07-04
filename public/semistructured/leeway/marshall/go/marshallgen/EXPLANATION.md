@@ -121,6 +121,46 @@ read side pairs a direct accessor per scalar sub-column with an
 are rejected in such sections at plan time (`goplan.PlanBuilder.Finish`),
 so both front-ends and `marshallreflect.Validate` refuse the same DTOs.
 
+### Dynamic-membership tuple sections
+
+A static multi-sub-column section carries a **single** membership; a
+DTO needing MANY attributes in one section — each with its own
+membership — declares a **dynamic-membership tuple**
+([ADR-0103](../../../../../../doc/adr/0103-leeway-marshall-dynamic-membership-tuples.md)):
+a slice of a named element struct, tagged with the bare section name.
+The element struct spells one `@membership` field (string or []byte
+scalar; an explicit verbatim channel flag is mandatory) plus one value
+field per sub-column as `<section>:<column>`:
+
+```go
+type LabeledText struct {
+    Label      string   `lw:"@membership,verbatim"`
+    Text       string   `lw:"text:text"`
+    WordLength []uint32 `lw:"text:wordLength"`
+    WordBag    []string `lw:"text:wordBag"`
+}
+Texts []LabeledText `lw:"text"` // N elements → N attributes
+```
+
+Each element emits one attribute — the multi-sub-column call sequence
+above with `AddMembership<Verbatim>P(<element's membership field>)` —
+in slice order; the zip-length guard applies per element; an element
+always emits (no per-element splice) and zero elements emit zero
+attributes. The element struct must live in the DTO's file (the go/ast
+front-end resolves it there; a file may declare the DTO plus its tuple
+element structs — the DTO is the one carrying the `_` kind field). The
+tuple owns its section exclusively, works at any sub-column count
+(S + C ≥ 1), and rejects ref/carrier channels — a ref membership is a
+compile-time `kindXxx` symbol `BuildEntities` cannot parameterise per
+element. The SoA column is the outer `[][]Elem` slice — jagged like
+every `[][]T` container column, with a struct leaf, so within one row's
+attribute list the sub-column values are interleaved per element (AoS
+at attribute grain; the wire stays one Arrow array per physical
+sub-column, and columnar scans belong on the Arrow record, not on the
+staging `Columns`). `FillFromArrow`
+appends one element per (attribute, membership value) in wire order;
+`ReadRow` does not cover tuple kinds (like carriers and explode).
+
 ### Membership channel
 
 Default `LowCardRef` emits a uint64 id via `AddMembershipLowCardRefP`;

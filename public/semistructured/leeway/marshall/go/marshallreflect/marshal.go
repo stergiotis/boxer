@@ -92,6 +92,18 @@ func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup Lookup
 	method := mappingplan.UpperFirst(g.Section)
 	sec := mustCall(dml, "GetSection"+method)[0]
 
+	if ts, ok := g.TupleSpec(); ok {
+		// Dynamic-membership tuple: one attribute per element of the outer
+		// slice, each with its own membership (ADR-0103). Dispatched before
+		// the sub-column-count split — a tuple may have any S + C ≥ 1.
+		err = marshalTupleSection(sec, row, g, ts, filter)
+		if err != nil {
+			return
+		}
+		mustCall(sec, "EndSection")
+		return
+	}
+
 	if len(g.SubColumns) > 1 {
 		// One tuple attribute per row; the shared container length drives
 		// the cardinality pass (N ≤ 1 single-value, N > 1 multi-value) and
@@ -172,6 +184,93 @@ func marshalMultiSubColumn(sec, row reflect.Value, g goplan.SectionGroup, lookup
 	}
 	mustCall(attr, "EndAttributeP")
 	return
+}
+
+// marshalTupleSection emits a dynamic-membership tuple section (ADR-0103):
+// one attribute per element of the outer slice, in element order —
+// BeginAttribute(<scalar sub-columns…>), the zipped co-containers, the
+// element's own membership via the verbatim channel, EndAttributeP. The
+// call sequence per element is the multi-sub-column sequence (ADR-0101
+// D4) and mirrors marshallgen's writeTupleSectionDriver exactly — the
+// byte-identity invariant between the two front-ends rests on it. An
+// element always emits (its presence in the slice is the signal — there
+// is no per-element splice); zero elements emit zero attributes.
+func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, filter cardFilter) (err error) {
+	scalars := g.ScalarSubColumns()
+	containers := g.ContainerSubColumns()
+	addMethod := ""
+	if len(containers) > 0 {
+		addMethod = goplan.ContainerAddMethod(len(containers)) + "P"
+	}
+	membMethod := "AddMembership" + ts.Channel.AddMethodSuffix() + "P"
+
+	elems := row.FieldByName(ts.GoField)
+	containerVals := make([]reflect.Value, len(containers))
+	args := make([]reflect.Value, 0, len(scalars))
+	elemArgs := make([]reflect.Value, len(containers))
+	for e := 0; e < elems.Len(); e++ {
+		elem := elems.Index(e)
+		// Zip-length agreement across the container class, per element —
+		// checked before the cardinality filter so a mis-zipped element is
+		// an error on every RowComposer pass, not only the one it emits in.
+		n := 0
+		for j, sc := range containers {
+			containerVals[j] = elem.FieldByName(sc.Fields[0].GoFieldName)
+			if j == 0 {
+				n = containerVals[0].Len()
+				continue
+			}
+			if containerVals[j].Len() != n {
+				err = eb.Build().Str("section", g.Section).Str("field", sc.Fields[0].GoFieldName).Int("element", e).Int("len", containerVals[j].Len()).Int("firstLen", n).Errorf("co-container slices have different lengths")
+				return
+			}
+		}
+		if !tupleElemCardMatches(n, filter) {
+			continue
+		}
+		args = args[:0]
+		for _, sc := range scalars {
+			args = append(args, reslicedIfFixedByte(elem.FieldByName(sc.Fields[0].GoFieldName), sc.Fields[0]))
+		}
+		attr := mustCall(sec, "BeginAttribute", args...)[0]
+		// n > 0 implies at least one container sub-column exists.
+		for k := 0; k < n; k++ {
+			for j := range containerVals {
+				elemArgs[j] = reslicedIfFixedByte(containerVals[j].Index(k), containers[j].Fields[0])
+			}
+			mustCall(attr, addMethod, elemArgs...)
+		}
+		mustCall(attr, membMethod, reflect.ValueOf(tupleMembBytes(elem, ts)))
+		mustCall(attr, "EndAttributeP")
+	}
+	return
+}
+
+// tupleMembBytes reads a tuple element's membership value as the []byte
+// the verbatim AddMembership…P methods take.
+func tupleMembBytes(elem reflect.Value, ts goplan.TupleSpec) []byte {
+	v := elem.FieldByName(ts.MembField)
+	if ts.MembGoType == "[]byte" {
+		return v.Bytes()
+	}
+	return []byte(v.String())
+}
+
+// tupleElemCardMatches classifies one tuple element by its shared
+// container length n for the RowComposer cardinality passes: n ≤ 1
+// single-value, n > 1 multi-value — the runtime-cardinality rule the
+// static mixed-shape tuple already follows (ADR-0101 D7), applied at
+// element grain. All-scalar tuple elements have n = 0, always
+// single-value.
+func tupleElemCardMatches(n int, filter cardFilter) bool {
+	switch filter {
+	case cardFilterSingleValue:
+		return n <= 1
+	case cardFilterMultiValue:
+		return n > 1
+	default:
+		return true
+	}
 }
 
 // multiSubColumnEmitsForFilter reports whether the section's tuple

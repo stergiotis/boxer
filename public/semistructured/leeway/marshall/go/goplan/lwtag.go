@@ -54,7 +54,16 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 	if len(parts) < 3 {
 		return
 	}
-	for _, raw := range parts[2:] {
+	err = parseFlagTokens(parts[2:], &out.Flags)
+	return
+}
+
+// parseFlagTokens parses the trailing comma-separated flag tokens of an
+// lw: tag (everything after the membership and section slots) into
+// flags. Shared by SplitLW and the tuple-grammar parsers (SplitTupleLW)
+// so the flag vocabulary cannot drift between the two tag forms.
+func parseFlagTokens(tokens []string, flags *mappingplan.FieldFlags) (err error) {
+	for _, raw := range tokens {
 		token := strings.TrimSpace(raw)
 		if token == "" {
 			continue
@@ -65,14 +74,14 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 			val := token[eq+1:]
 			switch key {
 			case "const":
-				if out.Flags.HasConst {
+				if flags.HasConst {
 					err = eb.Build().Str("flag", key).Errorf("flag declared twice")
 					return
 				}
-				out.Flags.HasConst = true
-				out.Flags.ConstValue = val
+				flags.HasConst = true
+				flags.ConstValue = val
 			case "ct":
-				if out.Flags.CanonicalType != "" {
+				if flags.CanonicalType != "" {
 					err = eb.Build().Str("flag", key).Errorf("flag declared twice")
 					return
 				}
@@ -80,7 +89,7 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 					err = eb.Build().Str("flag", key).Errorf("ct= requires a canonical-type string (e.g. ct=v for IPv4)")
 					return
 				}
-				out.Flags.CanonicalType = val
+				flags.CanonicalType = val
 			default:
 				err = eb.Build().Str("flag", key).Errorf("unknown key=value flag (recognised: const=<value>, ct=<canonical>)")
 				return
@@ -89,55 +98,55 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 		}
 		switch token {
 		case "unit":
-			if out.Flags.Unit {
+			if flags.Unit {
 				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
 				return
 			}
-			out.Flags.Unit = true
+			flags.Unit = true
 		case "explode":
-			if out.Flags.Explode {
+			if flags.Explode {
 				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
 				return
 			}
-			out.Flags.Explode = true
+			flags.Explode = true
 		case "verbatim", "lowCardVerbatim":
 			// `,verbatim` retained as alias for `,lowCardVerbatim` per
 			// ADR-0008 D3 SD9 — existing DTOs compile unchanged.
-			if err = setChannelFlag(&out.Flags, mappingplan.MembershipChannelLowCardVerbatim, token); err != nil {
+			if err = setChannelFlag(flags, mappingplan.MembershipChannelLowCardVerbatim, token); err != nil {
 				return
 			}
 		case "highCardRef":
-			if err = setChannelFlag(&out.Flags, mappingplan.MembershipChannelHighCardRef, token); err != nil {
+			if err = setChannelFlag(flags, mappingplan.MembershipChannelHighCardRef, token); err != nil {
 				return
 			}
 		case "highCardVerbatim":
-			if err = setChannelFlag(&out.Flags, mappingplan.MembershipChannelHighCardVerbatim, token); err != nil {
+			if err = setChannelFlag(flags, mappingplan.MembershipChannelHighCardVerbatim, token); err != nil {
 				return
 			}
 		case "mixedLowCardRef":
 			// ADR-0008 D3 Cut-2: the first carrier-paired channel. Pairs a
 			// value field with a marshalltypes.MixedLowCardRef sibling
 			// (id + params); see goplan.PlanBuilder + the Cut-2 update.
-			if err = setChannelFlag(&out.Flags, mappingplan.MembershipChannelMixedLowCardRef, token); err != nil {
+			if err = setChannelFlag(flags, mappingplan.MembershipChannelMixedLowCardRef, token); err != nil {
 				return
 			}
 		case "mixedLowCardVerbatim":
 			// ADR-0008 D3 Cut-2: the verbatim sibling of mixedLowCardRef —
 			// pairs a value field with a marshalltypes.MixedLowCardVerbatim
 			// sibling (name + params; the label embeds literally on the wire).
-			if err = setChannelFlag(&out.Flags, mappingplan.MembershipChannelMixedLowCardVerbatim, token); err != nil {
+			if err = setChannelFlag(flags, mappingplan.MembershipChannelMixedLowCardVerbatim, token); err != nil {
 				return
 			}
 		case "lowCardRefParametrized":
 			// ADR-0008 D3 Cut-2: opaque-blob membership — pairs with a
 			// marshalltypes.Parametrized sibling (params only; read via a
 			// single Seq[[]byte]).
-			if err = setChannelFlag(&out.Flags, mappingplan.MembershipChannelLowCardRefParametrized, token); err != nil {
+			if err = setChannelFlag(flags, mappingplan.MembershipChannelLowCardRefParametrized, token); err != nil {
 				return
 			}
 		case "highCardRefParametrized":
 			// ADR-0008 D3 Cut-2: high-card sibling of lowCardRefParametrized.
-			if err = setChannelFlag(&out.Flags, mappingplan.MembershipChannelHighCardRefParametrized, token); err != nil {
+			if err = setChannelFlag(flags, mappingplan.MembershipChannelHighCardRefParametrized, token); err != nil {
 				return
 			}
 		default:
@@ -145,5 +154,85 @@ func SplitLW(tag string) (out ParsedLWTag, err error) {
 			return
 		}
 	}
+	return
+}
+
+// TupleMembershipMarker is the reserved first token of the tag on a tuple
+// element's membership field (`lw:"@membership,verbatim"`). Top-level lw:
+// tags reject any `@`-prefixed membership so the marker cannot be mistaken
+// for a literal verbatim label (ADR-0103).
+const TupleMembershipMarker = "@membership"
+
+// SplitTupleOuterLW parses the tag of a tuple field — a slice-of-struct
+// DTO field mapping one section, e.g. `Texts []LabeledText` with
+// `lw:"string"`. The tag is the bare section name: a tuple field has no
+// static membership (each element carries its own) and no flags (the
+// channel is declared on the element's `@membership` field).
+func SplitTupleOuterLW(tag string) (section string, err error) {
+	parts := strings.Split(tag, ",")
+	section = strings.TrimSpace(parts[0])
+	if section == "" {
+		err = eb.Build().Str("tag", tag).Errorf("tuple field tag must name its section (`lw:\"<section>\"`)")
+		return
+	}
+	if strings.IndexByte(section, ':') >= 0 {
+		err = eb.Build().Str("tag", tag).Errorf("tuple field tag names the whole section, not a sub-column — element fields declare `<section>:<column>`")
+		return
+	}
+	for _, raw := range parts[1:] {
+		if strings.TrimSpace(raw) != "" {
+			err = eb.Build().Str("tag", tag).Str("token", strings.TrimSpace(raw)).Errorf("tuple field tag takes no flags — the membership channel belongs on the element's `@membership` field")
+			return
+		}
+	}
+	return
+}
+
+// ParsedTupleElemTag is the structured result of parsing the lw: tag on a
+// field INSIDE a tuple element struct (SplitTupleElemLW). Exactly one of
+// the two forms applies:
+//
+//   - `@membership[,<channel flag>]` — IsMembership true; the field holds
+//     each attribute's membership value (Section / Column empty).
+//   - `<section>[:<column>][,<flag>…]` — a value field mapping one
+//     sub-column of the tuple's section (column defaults to "value").
+type ParsedTupleElemTag struct {
+	IsMembership bool
+	Section      string
+	Column       string
+	Flags        mappingplan.FieldFlags
+}
+
+// SplitTupleElemLW parses the lw: tag on a tuple element struct's field.
+// Element tags have no static-membership slot — the membership is dynamic
+// per element — so the first token is either the `@membership` marker or
+// the `<section>[:<column>]` target directly; trailing tokens are the
+// shared flag vocabulary (parseFlagTokens). Which flags are legal on
+// which element field is PlanBuilder.AddTupleSliceField's concern.
+func SplitTupleElemLW(tag string) (out ParsedTupleElemTag, err error) {
+	parts := strings.Split(tag, ",")
+	head := strings.TrimSpace(parts[0])
+	switch {
+	case head == TupleMembershipMarker:
+		out.IsMembership = true
+	case strings.HasPrefix(head, "@"):
+		err = eb.Build().Str("tag", tag).Str("token", head).Errorf("unknown `@` marker in tuple element tag (recognised: %s)", TupleMembershipMarker)
+		return
+	case head == "":
+		err = eb.Build().Str("tag", tag).Errorf("tuple element tag must start with `%s` or `<section>:<column>`", TupleMembershipMarker)
+		return
+	default:
+		if colonIdx := strings.IndexByte(head, ':'); colonIdx >= 0 {
+			out.Section = head[:colonIdx]
+			out.Column = head[colonIdx+1:]
+		} else {
+			out.Section = head
+		}
+		if out.Section == "" {
+			err = eb.Build().Str("tag", tag).Errorf("tuple element tag must name its section (`<section>:<column>`)")
+			return
+		}
+	}
+	err = parseFlagTokens(parts[1:], &out.Flags)
 	return
 }

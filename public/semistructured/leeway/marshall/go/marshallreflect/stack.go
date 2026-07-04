@@ -203,6 +203,23 @@ func sectionHasMatchingField(row reflect.Value, g goplan.SectionGroup, filter ca
 	if filter == cardFilterAll {
 		return true
 	}
+	if ts, ok := g.TupleSpec(); ok {
+		// One attribute per element; each element classifies by its own
+		// shared container length (marshalTupleSection re-evaluates the
+		// same predicate per element).
+		containers := g.ContainerSubColumns()
+		elems := row.FieldByName(ts.GoField)
+		for e := 0; e < elems.Len(); e++ {
+			n := 0
+			if len(containers) > 0 {
+				n = elems.Index(e).FieldByName(containers[0].Fields[0].GoFieldName).Len()
+			}
+			if tupleElemCardMatches(n, filter) {
+				return true
+			}
+		}
+		return false
+	}
 	if len(g.SubColumns) > 1 {
 		// One tuple per row; the shared container length classifies the
 		// attribute's cardinality pass (ADR-0101 D7).

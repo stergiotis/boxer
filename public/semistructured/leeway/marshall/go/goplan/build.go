@@ -265,6 +265,9 @@ func (b *PlanBuilder) AddUnderscoreField(kindTag, plainTag, lwTag string) (err e
 		err = eb.Build().Str("tag", lwTag).Errorf("const declaration requires non-empty membership name")
 		return
 	}
+	if err = rejectReservedMembership(pt.Membership); err != nil {
+		return
+	}
 	if pt.Section == "" {
 		err = eb.Build().Str("tag", lwTag).Errorf("const declaration requires a section name")
 		return
@@ -299,6 +302,10 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		return
 	}
 	membership, section, column, flags := pt.Membership, pt.Section, pt.Column, pt.Flags
+	if err = rejectReservedMembership(membership); err != nil {
+		err = eb.Build().Str("field", goFieldName).Errorf("%w", err)
+		return
+	}
 
 	// Cut-2 carrier field — recognised by its Go type (a marshalltypes
 	// struct), not by the lw: tag. It rides alongside a value field sharing
@@ -389,15 +396,7 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 	// specific section compatibility is the Go compiler's job at the
 	// BuildEntities call site.
 	if isSlice {
-		switch goType {
-		case "string",
-			"uint8", "uint16", "uint32", "uint64",
-			"int8", "int16", "int32", "int64",
-			"float32", "float64", "bool",
-			"[]byte":
-			// OK — identity-conversion primitives, plus [][]byte.
-		default:
-			err = eb.Build().Str("field", goFieldName).Str("elemType", goType).Errorf("slice element type not yet supported")
+		if err = checkSliceElemType(goFieldName, goType); err != nil {
 			return
 		}
 	}
@@ -538,6 +537,209 @@ func (b *PlanBuilder) addCarrierField(goFieldName, membership, section, column s
 	return
 }
 
+// rejectReservedMembership errors on `@`-prefixed membership names in
+// top-level lw: tags. The prefix is reserved for the tuple element
+// grammar (`@membership`, SplitTupleElemLW) so a marker pasted onto a
+// top-level field fails loudly instead of silently becoming a literal
+// verbatim label (ADR-0103).
+func rejectReservedMembership(membership string) (err error) {
+	if strings.HasPrefix(membership, "@") {
+		err = eb.Build().Str("membership", membership).Errorf("membership names starting with `@` are reserved for the tuple element grammar (`%s` inside a slice-of-struct element)", TupleMembershipMarker)
+	}
+	return
+}
+
+// checkSliceElemType enforces the slice-element allowlist shared by
+// top-level `[]T` fields (AddField) and tuple element container fields
+// (AddTupleSliceField): identity-conversion primitives plus [][]byte.
+func checkSliceElemType(goFieldName, goType string) (err error) {
+	switch goType {
+	case "string",
+		"uint8", "uint16", "uint32", "uint64",
+		"int8", "int16", "int32", "int64",
+		"float32", "float64", "bool",
+		"[]byte":
+		// OK — identity-conversion primitives, plus [][]byte.
+	default:
+		err = eb.Build().Str("field", goFieldName).Str("elemType", goType).Errorf("slice element type not yet supported")
+	}
+	return
+}
+
+// TupleElem is one field of a tuple element struct as seen by a
+// front-end: the Go field name, its raw lw: tag, and the classified
+// FieldShape. The front-ends walk the element struct (go/ast or
+// reflect) and hand the fields here in declaration order; every
+// validation rule lives in AddTupleSliceField so the two front-ends
+// accept exactly the same tuple shapes.
+type TupleElem struct {
+	GoFieldName string
+	LWTag       string
+	Shape       FieldShape
+}
+
+// AddTupleSliceField validates a dynamic-membership tuple field
+// (ADR-0103): a slice-of-struct DTO field — `Texts []LabeledText` tagged
+// `lw:"<section>"` — whose elements each emit ONE attribute of that
+// section, carrying its own membership. structTypeName is the element
+// struct's type name (rendered by the codegen front-end); elems are the
+// element struct's fields in declaration order.
+//
+// Element grammar (SplitTupleElemLW): exactly one `@membership` field — a
+// string or []byte scalar with an explicit verbatim channel flag — plus
+// one value field per sub-column (`<section>:<column>`, scalars as T,
+// containers as []T, `,ct=` composes). Ref and carrier channels are
+// rejected: a dynamic membership embeds its value on the wire, while ref
+// ids resolve through compile-time kindXxx symbols the generated
+// BuildEntities cannot parameterise per element. Option / roaring / unit
+// / explode / const are rejected like in any multi-sub-column section
+// (ADR-0101 D2).
+func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName string, elems []TupleElem) (err error) {
+	section, err := SplitTupleOuterLW(lwTag)
+	if err != nil {
+		err = eb.Build().Str("field", goFieldName).Errorf("parse tuple field tag: %w", err)
+		return
+	}
+	if structTypeName == "" {
+		err = eb.Build().Str("field", goFieldName).Errorf("tuple element type must be a named struct type")
+		return
+	}
+	if len(elems) == 0 {
+		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct has no fields")
+		return
+	}
+
+	type valueField struct {
+		goField   string
+		column    string
+		canonical canonicaltypes.PrimitiveAstNodeI
+		flags     mappingplan.FieldFlags
+	}
+	membField := ""
+	membGoType := ""
+	membChannel := mappingplan.MembershipChannelLowCardRef
+	values := make([]valueField, 0, len(elems))
+	usedCols := map[string]string{}
+
+	for _, e := range elems {
+		ctx := eb.Build().Str("field", goFieldName).Str("elemField", e.GoFieldName)
+		var pt ParsedTupleElemTag
+		pt, err = SplitTupleElemLW(e.LWTag)
+		if err != nil {
+			err = ctx.Errorf("parse tuple element tag: %w", err)
+			return
+		}
+		if e.Shape.CarrierType != "" {
+			err = ctx.Errorf("marshalltypes carrier not supported inside a tuple element — carrier channels cannot reach a tuple section")
+			return
+		}
+		if e.Shape.IsOption {
+			err = ctx.Errorf("Option[T] not supported inside a tuple element — the tuple attribute has no per-sub-column presence (ADR-0101 D2)")
+			return
+		}
+		var goType string
+		var isSlice, isRoaring bool
+		goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(e.Shape.Canonical)
+		if err != nil {
+			err = ctx.Errorf("derive Go type from canonical: %w", err)
+			return
+		}
+
+		if pt.IsMembership {
+			if membField != "" {
+				err = ctx.Errorf("second `%s` field (first: %s) — a tuple element carries exactly one membership", TupleMembershipMarker, membField)
+				return
+			}
+			if pt.Flags.Unit || pt.Flags.Explode || pt.Flags.HasConst || pt.Flags.CanonicalType != "" {
+				err = ctx.Errorf("`%s` field takes only a channel flag (no unit / explode / const / ct=)", TupleMembershipMarker)
+				return
+			}
+			if !pt.Flags.Channel.EmbedsLiteralName() {
+				err = ctx.Str("channel", pt.Flags.Channel.String()).Errorf("`%s` requires an explicit verbatim channel flag (`,verbatim` / `,lowCardVerbatim` / `,highCardVerbatim`) — a dynamic membership embeds its value on the wire; ref and carrier channels are not supported", TupleMembershipMarker)
+				return
+			}
+			if isSlice || isRoaring || (goType != "string" && goType != "[]byte") {
+				err = ctx.Str("goType", goType).Errorf("`%s` field must be a string or []byte scalar", TupleMembershipMarker)
+				return
+			}
+			membField = e.GoFieldName
+			membGoType = goType
+			membChannel = pt.Flags.Channel
+			continue
+		}
+
+		// Value field — one sub-column of the tuple's section.
+		if pt.Section != section {
+			err = ctx.Str("tupleSection", section).Str("elemSection", pt.Section).Errorf("tuple element targets a different section than its tuple field")
+			return
+		}
+		col := pt.Column
+		if col == "" {
+			col = "value"
+		}
+		if prev, dup := usedCols[col]; dup {
+			err = ctx.Str("column", col).Str("first", prev).Errorf("sub-column appears on two tuple element fields")
+			return
+		}
+		usedCols[col] = e.GoFieldName
+		if pt.Flags.Unit || pt.Flags.Explode || pt.Flags.HasConst {
+			err = ctx.Errorf("`unit` / `explode` / `const` not supported inside a tuple element — each element is one tuple attribute plus zipped co-containers")
+			return
+		}
+		if pt.Flags.Channel != mappingplan.MembershipChannelLowCardRef {
+			err = ctx.Str("flag", pt.Flags.Channel.String()).Errorf("channel flag belongs on the `%s` field, not on a tuple value field", TupleMembershipMarker)
+			return
+		}
+		fieldCanonical := e.Shape.Canonical
+		if pt.Flags.CanonicalType != "" {
+			fieldCanonical, err = resolveCanonicalOverride(e.GoFieldName, pt.Flags.CanonicalType, goType, isSlice, isRoaring)
+			if err != nil {
+				return
+			}
+			goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(fieldCanonical)
+			if err != nil {
+				err = ctx.Errorf("derive Go type from `,ct=` canonical: %w", err)
+				return
+			}
+		}
+		if isRoaring {
+			err = ctx.Errorf("*roaring.Bitmap not supported inside a tuple element — no stable element index to zip with the co-containers; use []T")
+			return
+		}
+		if isSlice {
+			if err = checkSliceElemType(e.GoFieldName, goType); err != nil {
+				return
+			}
+		}
+		values = append(values, valueField{goField: e.GoFieldName, column: col, canonical: fieldCanonical, flags: pt.Flags})
+	}
+
+	if membField == "" {
+		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs exactly one `%s` field carrying the per-attribute membership", TupleMembershipMarker)
+		return
+	}
+	if len(values) == 0 {
+		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs at least one value field (`<section>:<column>`)")
+		return
+	}
+
+	for _, v := range values {
+		b.plan.Fields = append(b.plan.Fields, mappingplan.TaggedField{
+			GoFieldName:     v.goField,
+			Canonical:       v.canonical,
+			LWMembership:    "", // dynamic — per-element data, not a static tag
+			LWSection:       section,
+			LWColumn:        v.column,
+			Flags:           mappingplan.FieldFlags{Channel: membChannel, CanonicalType: v.flags.CanonicalType},
+			TupleField:      goFieldName,
+			TupleStructType: structTypeName,
+			TupleMembField:  membField,
+			TupleMembGoType: membGoType,
+		})
+	}
+	return
+}
+
 // Finish runs the whole-DTO completeness + per-section channel
 // uniformity checks and returns the assembled plan.
 func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
@@ -569,6 +771,39 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 	for _, f := range b.plan.Fields {
 		if f.Flags.Channel.NeedsKindVar() && !mappingplan.IsIdentifierLike(f.LWMembership) {
 			err = eb.Build().Str("membership", f.LWMembership).Errorf("ref-channel membership must be a Go identifier (ASCII letters, digits, underscores) — it becomes the emitted kindXxx symbol; use a verbatim channel for an arbitrary wire label")
+			return
+		}
+	}
+
+	// Tuple-section exclusivity (ADR-0103). A section mapped by a
+	// dynamic-membership tuple field belongs to it entirely: its attribute
+	// count and memberships are per-element data, so a static field, const
+	// or second tuple field on the same section could not be disambiguated
+	// on read (the same rationale as the carrier one-membership rule).
+	// Checked before the channel-uniformity rule so a shared section is
+	// reported as the sharing itself, not as a downstream channel mix.
+	tupleOwner := map[string]string{}
+	for _, f := range b.plan.Fields {
+		if f.TupleField == "" {
+			continue
+		}
+		if owner, ok := tupleOwner[f.LWSection]; ok && owner != f.TupleField {
+			err = eb.Build().Str("section", f.LWSection).Str("first", owner).Str("second", f.TupleField).Errorf("two tuple fields map one section")
+			return
+		}
+		tupleOwner[f.LWSection] = f.TupleField
+	}
+	if len(tupleOwner) > 0 {
+		for _, f := range b.plan.Fields {
+			owner, ok := tupleOwner[f.LWSection]
+			if !ok || f.TupleField == owner {
+				continue
+			}
+			name := f.GoFieldName
+			if f.IsConst {
+				name = "const " + f.LWMembership
+			}
+			err = eb.Build().Str("section", f.LWSection).Str("tupleField", owner).Str("field", name).Errorf("section is mapped by a tuple field — no other field may target it")
 			return
 		}
 	}

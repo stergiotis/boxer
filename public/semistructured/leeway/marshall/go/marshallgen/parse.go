@@ -50,8 +50,11 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 		return
 	}
 
-	var structType *ast.StructType
-	var kindType string
+	// Collect every top-level struct type. One is the DTO; the others may
+	// only be tuple element structs referenced by the DTO's slice-of-struct
+	// fields (ADR-0103) — anything else keeps the one-DTO-per-file error.
+	structDecls := map[string]*ast.StructType{}
+	var structOrder []string
 	for _, decl := range file.Decls {
 		gd, ok := decl.(*ast.GenDecl)
 		if !ok || gd.Tok != token.TYPE {
@@ -66,17 +69,37 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 			if !ok {
 				continue
 			}
-			if structType != nil {
-				err = eb.Build().Str("input", inputPath).Errorf("more than one struct type declared; only one DTO per file")
-				return
-			}
-			kindType = ts.Name.Name
-			structType = st
+			structDecls[ts.Name.Name] = st
+			structOrder = append(structOrder, ts.Name.Name)
 		}
 	}
-	if structType == nil {
+	if len(structOrder) == 0 {
 		err = eb.Build().Str("input", inputPath).Errorf("no struct type found in input")
 		return
+	}
+	var structType *ast.StructType
+	var kindType string
+	if len(structOrder) == 1 {
+		kindType = structOrder[0]
+		structType = structDecls[kindType]
+	} else {
+		// With several structs the DTO is the (single) one carrying the `_`
+		// entity-level kind field; the rest must be tuple element types.
+		for _, name := range structOrder {
+			if !structHasKindField(structDecls[name]) {
+				continue
+			}
+			if structType != nil {
+				err = eb.Build().Str("input", inputPath).Errorf("more than one struct carries a `_` kind field; only one DTO per file")
+				return
+			}
+			kindType = name
+			structType = structDecls[name]
+		}
+		if structType == nil {
+			err = eb.Build().Str("input", inputPath).Errorf("several structs declared but none carries the `_` kind field — with tuple element structs present, the DTO must declare `kind:`")
+			return
+		}
 	}
 
 	// Per-field validation + plan assembly is shared with the reflect
@@ -84,6 +107,7 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 	// only handles the go/ast-specific concerns (tag extraction, the
 	// multi-name/anonymous-field check, type classification).
 	b := goplan.NewPlanBuilder(inputPath, file.Name.Name, kindType)
+	usedTupleStructs := map[string]bool{}
 
 	for _, field := range structType.Fields.List {
 		if field.Tag == nil {
@@ -114,6 +138,23 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 		}
 		goFieldName := field.Names[0].Name
 
+		// Dynamic-membership tuple field (ADR-0103): `[]X` where X is a
+		// struct declared in this file. The element struct's fields are
+		// classified individually; validation lives in the shared builder.
+		if elemName, elemStruct, isTuple := tupleElemStruct(field.Type, structDecls, kindType); isTuple {
+			usedTupleStructs[elemName] = true
+			var elems []goplan.TupleElem
+			elems, err = buildAstTupleElems(elemStruct)
+			if err != nil {
+				err = eb.Build().Str("field", goFieldName).Str("elemStruct", elemName).Errorf("%w", err)
+				return
+			}
+			if err = b.AddTupleSliceField(goFieldName, lwTag, elemName, elems); err != nil {
+				return
+			}
+			continue
+		}
+
 		var shape goplan.FieldShape
 		shape, err = classifyType(field.Type)
 		if err != nil {
@@ -126,7 +167,91 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 		}
 	}
 
+	// Every non-DTO struct in the file must have been consumed as a tuple
+	// element type — otherwise the file layout is ambiguous (the historical
+	// one-DTO-per-file rule, relaxed exactly for tuple elements).
+	for _, name := range structOrder {
+		if name == kindType || usedTupleStructs[name] {
+			continue
+		}
+		err = eb.Build().Str("input", inputPath).Str("struct", name).Errorf("struct is neither the DTO nor referenced as a tuple element type; only one DTO per file")
+		return
+	}
+
 	return b.Finish()
+}
+
+// structHasKindField reports whether the struct declares a `_` field
+// carrying a `kind:"…"` tag — the marker identifying the DTO struct when
+// a file also declares tuple element structs.
+func structHasKindField(st *ast.StructType) bool {
+	for _, field := range st.Fields.List {
+		if len(field.Names) != 1 || field.Names[0].Name != "_" || field.Tag == nil {
+			continue
+		}
+		if reflect.StructTag(stripQuotes(field.Tag.Value)).Get("kind") != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// tupleElemStruct reports whether expr is `[]X` for a struct X declared in
+// the same file (excluding the DTO struct itself — a self-referential DTO
+// slice is not a tuple).
+func tupleElemStruct(expr ast.Expr, structDecls map[string]*ast.StructType, kindType string) (name string, st *ast.StructType, ok bool) {
+	at, isArr := expr.(*ast.ArrayType)
+	if !isArr || at.Len != nil {
+		return
+	}
+	id, isIdent := at.Elt.(*ast.Ident)
+	if !isIdent || id.Name == kindType {
+		return
+	}
+	st, ok = structDecls[id.Name]
+	name = id.Name
+	return
+}
+
+// buildAstTupleElems walks a tuple element struct's fields and classifies
+// each with the shared go/ast classifier; the validation rules live in
+// goplan.PlanBuilder.AddTupleSliceField, shared with the reflect
+// front-end.
+func buildAstTupleElems(st *ast.StructType) (elems []goplan.TupleElem, err error) {
+	for _, field := range st.Fields.List {
+		if len(field.Names) != 1 {
+			err = eb.Build().Errorf("multi-name or anonymous tuple element field forbidden — declare one field per line")
+			return
+		}
+		name := field.Names[0].Name
+		if name == "_" {
+			err = eb.Build().Errorf("`_` fields are not supported inside a tuple element struct — entity metadata belongs on the DTO")
+			return
+		}
+		if !ast.IsExported(name) {
+			// The reflect front-end cannot read or set unexported fields, so
+			// the go/ast front-end rejects them too (front-end parity).
+			err = eb.Build().Str("elemField", name).Errorf("unexported tuple element field; tagged fields must be exported")
+			return
+		}
+		if field.Tag == nil {
+			err = eb.Build().Str("elemField", name).Errorf("tuple element field missing `lw:` tag")
+			return
+		}
+		lw := reflect.StructTag(stripQuotes(field.Tag.Value)).Get("lw")
+		if lw == "" {
+			err = eb.Build().Str("elemField", name).Errorf("tuple element field missing `lw:` tag")
+			return
+		}
+		var shape goplan.FieldShape
+		shape, err = classifyType(field.Type)
+		if err != nil {
+			err = eb.Build().Str("elemField", name).Errorf("classify tuple element field type: %w", err)
+			return
+		}
+		elems = append(elems, goplan.TupleElem{GoFieldName: name, LWTag: lw, Shape: shape})
+	}
+	return
 }
 
 func stripQuotes(s string) (out string) {

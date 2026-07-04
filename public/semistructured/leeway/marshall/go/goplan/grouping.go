@@ -174,6 +174,43 @@ func (g SectionGroup) ContainerSubColumns() (out []SubColumn) {
 	return
 }
 
+// TupleSpec describes a section driven by a dynamic-membership tuple
+// field (ADR-0103): the outer slice-of-struct DTO field, its element
+// struct type, the element field carrying each attribute's membership
+// (with its Go type), and the (verbatim) membership channel. Derived
+// from the sub-column fields' shared Tuple* metadata — every sub-field
+// of one tuple carries identical copies (PlanBuilder.AddTupleSliceField).
+type TupleSpec struct {
+	GoField    string // outer DTO field, e.g. "Strings"
+	StructType string // element struct type name, e.g. "LabeledText"
+	MembField  string // element field holding the membership value
+	MembGoType string // "string" or "[]byte"
+	Channel    mappingplan.MembershipChannel
+}
+
+// TupleSpec reports whether the section is tuple-driven, and its spec.
+// A tuple section emits N attributes per row — one per element of the
+// outer slice, each with its own membership — instead of the static
+// shapes' fixed per-field attribute layout. Every emit / drive /
+// validate / read site must dispatch on this BEFORE the sub-column-count
+// shape split, so both front-ends route tuples identically.
+func (g SectionGroup) TupleSpec() (ts TupleSpec, ok bool) {
+	if len(g.SubColumns) == 0 || len(g.SubColumns[0].Fields) == 0 {
+		return
+	}
+	f := g.SubColumns[0].Fields[0]
+	if f.TupleField == "" {
+		return
+	}
+	return TupleSpec{
+		GoField:    f.TupleField,
+		StructType: f.TupleStructType,
+		MembField:  f.TupleMembField,
+		MembGoType: f.TupleMembGoType,
+		Channel:    f.Flags.Channel,
+	}, true
+}
+
 // ContainerAddMethod returns the DML container-append method name for a
 // section with containerCount container sub-columns, mirroring the DML
 // generator's count rule (lw_dml_generator.go): "AddToContainer" for

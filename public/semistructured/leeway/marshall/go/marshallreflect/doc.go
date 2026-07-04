@@ -95,6 +95,38 @@
 // container empty is spliced. Option / roaring / `unit` / `explode` / const /
 // carrier channels are rejected at plan time in such sections.
 //
+// Dynamic-membership tuple contract (ADR-0103): a slice-of-struct field maps
+// MANY attributes into ONE section, each element carrying its own membership —
+// the shape the static grammar rejects as "multi-sub-column section with
+// multiple memberships". The outer field's tag is the bare section name; the
+// element struct (a named struct in the DTO's package; for marshallgen, in the
+// DTO's file) declares exactly one `@membership` field — a string or []byte
+// scalar with a mandatory verbatim channel flag — plus one value field per
+// sub-column, spelled `<section>:<column>` (`,ct=` composes; column defaults
+// to "value"):
+//
+//	type LabeledText struct {
+//	    Label      string   `lw:"@membership,verbatim"` // per-attribute membership
+//	    Text       string   `lw:"text:text"`
+//	    WordLength []uint32 `lw:"text:wordLength"`
+//	    WordBag    []string `lw:"text:wordBag"`
+//	}
+//	Texts []LabeledText `lw:"text"` // N elements → N attributes
+//
+// Elements emit in slice order, one attribute each: the multi-sub-column call
+// sequence with the membership taken from the element's field. The zip rule
+// applies per element; an element always emits (its presence in the slice is
+// the signal — there is no per-element splice), and zero elements emit zero
+// attributes. Ref and carrier channels are rejected (a ref membership is a
+// compile-time kindXxx symbol the generated BuildEntities cannot parameterise
+// per element); the section belongs to the tuple field exclusively — no other
+// field, const or second tuple may target it. On read, every attribute of the
+// section yields one element per membership value it carries (codec-written
+// wire carries exactly one), in wire order; zero attributes decode to a nil
+// slice. The multi-sub-column shape rejections (Option / roaring / unit /
+// explode / const) apply to element fields identically. Membership names
+// starting with `@` are reserved in top-level tags.
+//
 // Attribute frame, on the Attr from a Begin call:
 //   - AddToContainerP(v) — append one container value.
 //   - AddToCoContainersP(c1, c2, …) — multi-sub-column co-containers: append

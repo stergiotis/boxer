@@ -511,6 +511,24 @@ type TaggedField struct {
 	// field; false for a scalar carrier paired with a scalar / Option /
 	// container value (one carrier per attribute). Set by PlanBuilder.Finish.
 	CarrierIsSlice bool
+
+	// TupleField / TupleStructType / TupleMembField / TupleMembGoType wire a
+	// sub-column field of a dynamic-membership tuple section (ADR-0103): the
+	// DTO declares one slice-of-struct field (`Texts []LabeledText` with
+	// `lw:"text"`) whose elements each emit one attribute carrying its own
+	// membership. TupleField names that outer DTO field, TupleStructType the
+	// element struct type (the codegen front-end renders `[][]<T>` SoA
+	// columns from it), TupleMembField the element field holding the
+	// per-attribute membership value, and TupleMembGoType its Go type
+	// ("string" or "[]byte"). GoFieldName then names the field INSIDE the
+	// element struct. All sub-fields of one tuple carry identical copies
+	// (set by PlanBuilder.AddTupleSliceField); LWMembership is "" — the
+	// membership is per-element data, not a static tag. All four are "" for
+	// non-tuple fields.
+	TupleField      string
+	TupleStructType string
+	TupleMembField  string
+	TupleMembGoType string
 }
 
 // GoType returns the field's value type in Go source form (e.g. "uint64",

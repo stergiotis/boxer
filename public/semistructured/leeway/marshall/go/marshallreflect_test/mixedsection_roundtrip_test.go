@@ -344,6 +344,9 @@ func TestPlanFor_MixedSectionRejections(t *testing.T) {
 		require.ErrorContains(t, err, "multi-field sub-column in multi-sub-column section not supported")
 	})
 	t.Run("multiple memberships", func(t *testing.T) {
+		// Static form: separate fields with differing memberships on one
+		// multi-sub-column section stay rejected — which membership pairs
+		// with which sub-column tuple is genuinely ambiguous.
 		type bad struct {
 			_    struct{} `kind:"bad"`
 			ID   uint64   `lw:",id"`
@@ -353,6 +356,28 @@ func TestPlanFor_MixedSectionRejections(t *testing.T) {
 		_, err := marshallreflect.PlanFor[bad]()
 		require.Error(t, err)
 		require.ErrorContains(t, err, "multi-sub-column section with multiple memberships not supported")
+
+		// Tuple form (ADR-0103): many memberships on one multi-sub-column
+		// section ARE expressible — one per element of a slice-of-struct
+		// field, each element one attribute. The same intent, accepted.
+		type textElem struct {
+			Label      string   `lw:"@membership,verbatim"`
+			Text       string   `lw:"text:text"`
+			WordLength []uint32 `lw:"text:wordLength"`
+			WordBag    []string `lw:"text:wordBag"`
+		}
+		type good struct {
+			_     struct{}   `kind:"good"`
+			ID    uint64     `lw:",id"`
+			Texts []textElem `lw:"text"`
+		}
+		plan, err := marshallreflect.PlanFor[good]()
+		require.NoError(t, err)
+		require.Len(t, plan.Fields, 3) // one TaggedField per sub-column
+		for _, f := range plan.Fields {
+			require.Equal(t, "Texts", f.TupleField)
+			require.Equal(t, "Label", f.TupleMembField)
+		}
 	})
 	t.Run("const", func(t *testing.T) {
 		// Verbatim channel throughout so the earlier kindXxx-collision rule
