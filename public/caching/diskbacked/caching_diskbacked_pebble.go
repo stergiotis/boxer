@@ -22,6 +22,9 @@ var _ caching.StashBackendI[string, []byte] = (*PebbleStash[string, []byte])(nil
 // Pebble's first-row iterator is used to pick the victim, which is
 // effectively random (LSM ordering is by sorted key bytes, but for a cache
 // of unrelated keys this is a reasonable approximation of uniform).
+//
+// Per the StashBackendI contract the stash is best-effort: storage and
+// codec errors degrade into misses (GetAndRemove) or dropped writes (Add).
 type PebbleStash[K comparable, V any] struct {
 	db      *pebble.DB
 	path    string
@@ -41,8 +44,12 @@ func NewPebbleStash[K comparable, V any](path string, softCap int, cleanStart bo
 		_ = os.RemoveAll(path)
 	}
 
+	// Pebble takes its own reference on the block cache; release ours after
+	// Open so the cache memory dies with the DB instead of leaking.
+	blockCache := pebble.NewCache(8 << 20) // 8 MB block cache for Pebble's own use.
+	defer blockCache.Unref()
 	opts := &pebble.Options{
-		Cache: pebble.NewCache(8 << 20), // 8 MB block cache for Pebble's own use.
+		Cache: blockCache,
 	}
 
 	db, err := pebble.Open(path, opts)
@@ -78,46 +85,42 @@ func (inst *PebbleStash[K, V]) Close() error {
 	return inst.db.Close()
 }
 
-func (inst *PebbleStash[K, V]) GetAndRemove(key K) (V, bool) {
-	var zero V
-
+func (inst *PebbleStash[K, V]) GetAndRemove(key K) (value V, stale bool, found bool) {
 	keyBytes, err := keyEncMode.Marshal(key)
 	if err != nil {
-		return zero, false
+		return value, false, false
 	}
 
 	valBytes, closer, err := inst.db.Get(keyBytes)
 	if err != nil {
-		if err == pebble.ErrNotFound {
-			return zero, false
-		}
-		return zero, false
+		return value, false, false
 	}
 	defer closer.Close()
 
-	var val V
-	if err := cbor.Unmarshal(valBytes, &val); err != nil {
-		return zero, false
+	var rec stashRecord[V]
+	if err := cbor.Unmarshal(valBytes, &rec); err != nil {
+		return value, false, false
 	}
 
 	if err := inst.db.Delete(keyBytes, pebble.NoSync); err == nil {
 		inst.count.Add(-1)
 	}
 
-	return val, true
+	return rec.Value, rec.Stale, true
 }
 
-func (inst *PebbleStash[K, V]) Add(key K, value V) (evicted bool) {
+func (inst *PebbleStash[K, V]) Add(key K, value V, stale bool) (evicted bool) {
 	kBytes, err := keyEncMode.Marshal(key)
 	if err != nil {
 		return false
 	}
-	vBytes, err := cbor.Marshal(value)
+	vBytes, err := cbor.Marshal(stashRecord[V]{Value: value, Stale: stale})
 	if err != nil {
 		return false
 	}
 
-	// Updating an existing key does not change the count; check first.
+	// Updating an existing key does not change the count and never evicts
+	// (contract); check first.
 	_, closer, err := inst.db.Get(kBytes)
 	updating := err == nil
 	if closer != nil {
@@ -169,6 +172,22 @@ func (inst *PebbleStash[K, V]) Delete(key K) {
 	_ = closer.Close()
 	if err := inst.db.Delete(kBytes, pebble.NoSync); err == nil {
 		inst.count.Add(-1)
+	}
+}
+
+// Clear removes every entry. Failures leave a partial clear behind
+// (best-effort contract); the counter tracks the deletes that succeeded.
+func (inst *PebbleStash[K, V]) Clear() {
+	it, err := inst.db.NewIter(nil)
+	if err != nil {
+		return
+	}
+	defer it.Close()
+	for valid := it.First(); valid; valid = it.Next() {
+		victim := append([]byte(nil), it.Key()...)
+		if err := inst.db.Delete(victim, pebble.NoSync); err == nil {
+			inst.count.Add(-1)
+		}
 	}
 }
 

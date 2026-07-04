@@ -2,11 +2,15 @@ package caching
 
 import (
 	"context"
-	"iter"
 	"time"
 )
 
 // MetricsCollectorI defines the observability hooks.
+//
+// RecordHit semantics:
+//   - l1: true for a Primary (L1) hit, false for a Stash (L2) hit.
+//   - stale: true when the served value was marked stale (only possible via
+//     GetAcceptStale; strict Get treats stale as a miss).
 //
 // RecordEviction semantics:
 //   - toStash=true:  an L1 item was demoted to L2 (preserved, no data loss).
@@ -18,25 +22,43 @@ import (
 // full: one (true) for the demoted L1 item, one (false) for the displaced
 // stash item.
 type MetricsCollectorI interface {
-	RecordHit(l1 bool)                   // l1=true (Primary), l1=false (Stash)
-	RecordMiss()                         // Item not found, fetch triggered
+	RecordHit(l1 bool, stale bool)       // See interface doc for semantics.
+	RecordMiss()                         // Item not found, fetch queued (or suppressed)
 	RecordFetchError(count int)          // Number of keys failed
 	RecordEviction(toStash bool)         // See interface doc for semantics.
 	RecordFetchDuration(d time.Duration) // Time taken by fetcher
 }
 
+// ItemFetcherI retrieves values from the backing source (L3) in
+// partition-grouped batches.
+//
+// Contract:
+//   - keys never contains duplicates; every key was queued by a miss (or a
+//     stale refresh) since the previous flush.
+//   - The fetcher may retain the keys slice after returning; the cache does
+//     not reuse it.
+//   - The fetcher may call target.AddItem for some keys and then return an
+//     error for the rest: delivered keys keep their fresh values, only the
+//     undelivered ones enter the circuit-breaker backoff.
+//   - Keys the fetcher does not deliver on a nil-error return are treated as
+//     absent upstream (recorded only when negative caching is enabled).
+//   - DeterminePartition is evaluated once, at queue time — a key's
+//     partition is frozen until it is fetched.
+//   - The fetcher may read the cache (Get/GetAcceptStale) re-entrantly;
+//     misses queued during a flush are fetched on the NEXT flush (a nested
+//     flush is a no-op). It must not call Iterate*WorkItems or Clear.
 type ItemFetcherI[K comparable, V any] interface {
 	DeterminePartition(key K) uint64
 	FetchItemSinglePartition(ctx context.Context, partition uint64, keys []K, target ItemTargetI[K, V]) error
 }
 
+// ItemTargetI is the sink a fetcher delivers values into.
 type ItemTargetI[K comparable, V any] interface {
 	AddItem(k K, v V)
-	AddItemSlice(k []K, v []V)
-	AddItemIter2(it iter.Seq2[K, V])
 }
 
-// ReadThroughCache V2: Production-Ready, Context-Aware, Batching Cache.
+// ReadThroughCache is a single-goroutine, batching, read-through cache with
+// work-item suspend/replay bookkeeping (see the package README).
 type ReadThroughCache[K comparable, V any, W comparable] struct {
 	fetcher      ItemFetcherI[K, V]
 	metrics      MetricsCollectorI
@@ -54,6 +76,22 @@ type ReadThroughCache[K comparable, V any, W comparable] struct {
 	// stash (L2/Victim).
 	stash StashBackendI[K, V]
 
+	// Circuit breaker: key → retry-allowed deadline. Value-free side table,
+	// bounded by sideTableBound; overflow drops a random entry, which merely
+	// allows an early retry.
+	errorUntil map[K]time.Time
+
+	// Negative cache: key → absent-mark expiry. nil when negative caching
+	// is disabled (the default); bounded like errorUntil, and an overflow
+	// drop merely allows an early refetch.
+	absentUntil map[K]time.Time
+
+	// Per-flush bookkeeping: guards against nested flushes and records the
+	// keys the fetcher actually delivered (fetchAdded is non-nil only while
+	// a flush is running).
+	fetching   bool
+	fetchAdded map[K]struct{}
+
 	// Context
 	currentWorkItem W
 	hasCurrentWork  bool
@@ -61,26 +99,35 @@ type ReadThroughCache[K comparable, V any, W comparable] struct {
 	// Configuration
 	fetchCriteria   FetchCriteria
 	errorBackoffDur time.Duration
+	absentTTL       time.Duration
+	sideTableBound  int
+	nowFn           func() time.Time // seam for deterministic tests
 }
 
-// ItemStateE describes the state of an item in the cache.
-type ItemStateE uint8
-
 // StashBackendI acts as the L2/Victim cache storage.
-// Implementations handle their own storage layout, eviction policy, and capacity management.
+// Implementations handle their own storage layout, eviction policy, and
+// capacity management.
+//
+// The interface is infallible: disk-backed implementations must degrade a
+// storage or codec error into a miss (GetAndRemove) or a silent no-op (Add,
+// Delete) — the stash is best-effort by contract, the fetcher remains the
+// source of truth.
 type StashBackendI[K comparable, V any] interface {
 	// GetAndRemove attempts to retrieve a value.
 	// If found, the item MUST be removed from the stash (atomic promote).
 	// Returns:
 	//   value: The data
+	//   stale: The stale flag the item was stored with
 	//   found: true if it existed
-	GetAndRemove(key K) (value V, found bool)
+	GetAndRemove(key K) (value V, stale bool, found bool)
 
-	// Add inserts a value into the stash.
-	// If the stash is full, the implementation MUST evict an item to make room.
+	// Add inserts a value into the stash, carrying its stale flag.
+	// An existing key MUST be updated in place — never duplicated — and an
+	// update MUST NOT evict. If the stash is full and the key is new, the
+	// implementation MUST evict an item to make room.
 	// Returns:
 	//   evicted: true if a valid item was dropped to make space (Data Loss).
-	Add(key K, value V) (evicted bool)
+	Add(key K, value V, stale bool) (evicted bool)
 
 	// Delete removes the item if it exists (invalidation).
 	Delete(key K)
@@ -88,18 +135,24 @@ type StashBackendI[K comparable, V any] interface {
 	// Len returns the current number of items.
 	Len() int
 
-	// Cap returns the maximum capacity.
+	// Cap returns the maximum capacity (0 = unbounded, disk-backed only).
 	Cap() int
+
+	// Clear removes every item.
+	Clear()
 }
 
 // FetchCriteria controls when a queued batch is flushed to the fetcher.
 //
 // All Min and Max thresholds are evaluated independently and **OR'd**: any
 // single threshold being reached triggers a fetch. Max thresholds fire
-// synchronously from inside Get (so a single oversized work item still gets
-// chunked); Min thresholds are checked by IterateReadyWorkItems and require
-// a follow-up call. IterateRestWorkItems always flushes regardless of
-// criteria.
+// synchronously from inside Get / GetAcceptStale on every queueing path
+// (cold miss and stale refresh alike), so a single oversized work item
+// still gets chunked. Min thresholds are checked by IterateReadyWorkItems
+// and require a follow-up call; when nothing is queued but work items are
+// pending (their keys already flushed synchronously), IterateReadyWorkItems
+// replays them without fetching. IterateRestWorkItems always flushes
+// regardless of criteria.
 //
 // A zero value on a threshold disables it. If all three Min fields are zero,
 // IterateReadyWorkItems treats any non-empty queue as ready.

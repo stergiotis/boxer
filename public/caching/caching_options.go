@@ -29,3 +29,18 @@ func WithErrorBackoff[K comparable, V any, W comparable](d time.Duration) CacheO
 		c.errorBackoffDur = d
 	}
 }
+
+// WithNegativeCaching enables absent-key marking: after a clean fetch,
+// requested keys the fetcher did not deliver are treated as absent upstream
+// for ttl. A Get on an absent-marked key misses without queueing a fetch
+// and without suspending the current work item, so replay loops over keys
+// that do not exist terminate instead of re-fetching forever.
+//
+// Disabled by default (ttl <= 0 keeps it off): misses on absent keys then
+// re-queue on every discovery pass, and distinguishing "absent" from
+// "not fetched yet" is the caller's job.
+func WithNegativeCaching[K comparable, V any, W comparable](ttl time.Duration) CacheOption[K, V, W] {
+	return func(c *ReadThroughCache[K, V, W]) {
+		c.absentTTL = ttl
+	}
+}

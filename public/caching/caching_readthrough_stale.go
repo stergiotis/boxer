@@ -2,6 +2,7 @@ package caching
 
 import (
 	"context"
+	"io"
 	"iter"
 	"time"
 
@@ -9,73 +10,101 @@ import (
 	"github.com/stergiotis/boxer/public/functional"
 )
 
-const (
-	// ItemStateInCache marks an item as valid and ready to use.
-	ItemStateInCache ItemStateE = 1
-	// ItemStateStale marks an item as expired; reading it queues a background refresh.
-	ItemStateStale ItemStateE = 2
-	// ItemStateError marks the last fetch as failed; the item is in the circuit-breaker
-	// cooling-off window until errorUntil.
-	ItemStateError ItemStateE = 3
-)
-
 // primaryItem is optimized for memory padding.
 type primaryItem[V any] struct {
-	value      V
-	errorUntil time.Time  // Used if State == ItemStateError
-	lastSeen   uint64     // Epoch for pinning
-	state      ItemStateE // uint8
+	value    V
+	lastSeen uint64 // Epoch for pinning
+	stale    bool   // Set by MarkAsStale; reading a stale entry queues a refresh.
+}
+
+// putBounded inserts into a side table, dropping a random entry when the
+// bound is reached. Dropping is benign: a lost breaker entry allows an
+// early retry, a lost absent mark an early refetch.
+func putBounded[K comparable](m map[K]time.Time, k K, deadline time.Time, bound int) {
+	if _, exists := m[k]; !exists && len(m) >= bound {
+		for victim := range m {
+			delete(m, victim)
+			break
+		}
+	}
+	m[k] = deadline
+}
+
+// stillBlocked reports whether the side table holds an unexpired deadline
+// for k, deleting expired entries as it goes.
+func stillBlocked[K comparable](m map[K]time.Time, k K, now time.Time) bool {
+	deadline, ok := m[k]
+	if !ok {
+		return false
+	}
+	if now.After(deadline) {
+		delete(m, k)
+		return false
+	}
+	return true
 }
 
 // NewReadThroughCache creates a new dependency-aware batching cache.
 //
 // Parameters:
 //   - capacity: The maximum number of items in the Primary (L1) store.
+//     Must be >= 1.
 //   - fetcher: The implementation for partition-aware data retrieval.
+//     Must not be nil.
 //   - criteria: The batching thresholds (Min/Max keys, partitions, etc.).
-//   - opts: Optional configurations (Stash, Metrics, Logger, etc.).
+//   - opts: Optional configuration (WithStash, WithMetrics,
+//     WithErrorBackoff, WithNegativeCaching).
 func NewReadThroughCache[K comparable, V any, W comparable](
 	capacity int,
 	fetcher ItemFetcherI[K, V],
 	criteria FetchCriteria,
 	opts ...CacheOption[K, V, W],
 ) *ReadThroughCache[K, V, W] {
+	if capacity < 1 {
+		log.Panic().Int("capacity", capacity).Msg("caching: NewReadThroughCache requires capacity >= 1")
+	}
+	if fetcher == nil {
+		log.Panic().Msg("caching: NewReadThroughCache requires a non-nil fetcher")
+	}
 
-	// 1. Initialize with Defaults
 	c := &ReadThroughCache[K, V, W]{
 		fetcher:       fetcher,
 		cap:           capacity,
 		currentEpoch:  1,
 		fetchCriteria: criteria,
 
-		// Map Initialization
 		primaryStore:     make(map[K]primaryItem[V], capacity),
 		keysToFetch:      make(map[uint64][]K),
 		keysToFetchSet:   make(map[K]struct{}),
 		pendingWorkItems: make(map[W]struct{}),
+		errorUntil:       make(map[K]time.Time),
 
-		// Safe Defaults
 		metrics:         &noopMetrics{}, // Avoid nil checks
 		errorBackoffDur: 5 * time.Second,
+		sideTableBound:  max(capacity, 64),
+		nowFn:           time.Now,
 	}
 
-	// 2. Apply Options
 	for _, opt := range opts {
 		opt(c)
 	}
 
-	// 3. Post-Configuration Defaults
-	// If the user did not provide a Stash via WithStash, we initialize a default one.
+	if c.absentTTL > 0 {
+		c.absentUntil = make(map[K]time.Time)
+	}
+
+	// If the user did not provide a Stash via WithStash, initialize a
+	// default one: SliceStash (memory dense) at 50% of L1 capacity.
 	if c.stash == nil {
-		// Default Strategy: SliceStash (Memory Dense).
-		// Default Size: 50% of L1 Capacity (Arbitrary heuristic, but safe).
-		defaultStashSize := max(1, capacity/2)
-		c.stash = NewSliceStash[K, V](defaultStashSize)
+		c.stash = NewSliceStash[K, V](max(1, capacity/2))
 	}
 
 	return c
 }
 
+// SetErrorBackoff adjusts the circuit-breaker window at runtime; it is the
+// mutable twin of WithErrorBackoff (kept deliberately — useful for tests
+// and live tuning).
 func (inst *ReadThroughCache[K, V, W]) SetErrorBackoff(d time.Duration) {
 	inst.errorBackoffDur = d
 }
@@ -84,97 +113,132 @@ func (inst *ReadThroughCache[K, V, W]) AdvanceEpoch() {
 	inst.currentEpoch++
 }
 
+// WorkItem marks wk as the active work item for the duration of the loop
+// body; misses inside it register wk as pending. The previous context is
+// restored on exit — including early break and panic — so nesting is safe.
 func (inst *ReadThroughCache[K, V, W]) WorkItem(wk W) iter.Seq[functional.NilIteratorValueType] {
 	return func(yield func(functional.NilIteratorValueType) bool) {
+		prevW, prevHas := inst.currentWorkItem, inst.hasCurrentWork
 		inst.currentWorkItem = wk
 		inst.hasCurrentWork = true
-		if !yield(functional.NilIteratorValueType{}) {
-			return
-		}
-		inst.hasCurrentWork = false
+		defer func() {
+			inst.currentWorkItem = prevW
+			inst.hasCurrentWork = prevHas
+		}()
+		yield(functional.NilIteratorValueType{})
 	}
 }
 
 // Get retrieves an item. Lookup order: L1 → L2 → miss. On miss the key is
 // queued for the next batch fetch and the current work item (if any) is
-// marked pending.
+// marked pending. A stale entry is a miss (the refresh is queued); a key
+// inside the circuit-breaker or negative-cache window misses without
+// queueing.
 func (inst *ReadThroughCache[K, V, W]) Get(k K) (v V, has bool) {
-	return inst.getInternal(k, false)
+	v, has, _ = inst.getInternal(k, false)
+	return
 }
 
-// GetAcceptStale retrieves an item, allowing stale data (soft hit).
+// GetAcceptStale retrieves an item, allowing stale data (soft hit). A stale
+// entry is served with stale=true while its refresh queues in the
+// background — including while the circuit breaker holds the refresh back.
 func (inst *ReadThroughCache[K, V, W]) GetAcceptStale(k K) (v V, has bool, stale bool) {
-	val, h := inst.getInternal(k, true)
-	if !h {
-		return val, false, false
-	}
-	// Check if it was stale
-	if item, ok := inst.primaryStore[k]; ok {
-		if item.state == ItemStateStale {
-			return val, true, true
-		}
-	}
-	return val, true, false
+	return inst.getInternal(k, true)
 }
 
-func (inst *ReadThroughCache[K, V, W]) getInternal(k K, acceptStale bool) (v V, has bool) {
-	// 1. Check Primary (L1)
-	if item, ok := inst.primaryStore[k]; ok {
-		// Optimization: Avoid Write-Back if already pinned
-		if item.lastSeen != inst.currentEpoch {
+func (inst *ReadThroughCache[K, V, W]) getInternal(k K, acceptStale bool) (v V, has bool, stale bool) {
+	return inst.lookup(k, acceptStale, true)
+}
+
+// lookup implements Get/GetAcceptStale. mayFlush allows one synchronous
+// Max-criteria flush: when the flush fires, the lookup re-routes ONCE on
+// the post-flush state — the refresh (or an absent verdict) that landed
+// within this very call must win over the pre-flush snapshot. The retry
+// pass runs with mayFlush=false, bounding the recursion at depth two.
+// Every terminal path records exactly one hit or miss.
+func (inst *ReadThroughCache[K, V, W]) lookup(k K, acceptStale bool, mayFlush bool) (v V, has bool, stale bool) {
+	now := inst.nowFn()
+
+	item, inL1 := inst.primaryStore[k]
+	fromStash := false
+	if !inL1 {
+		// Check Stash (L2). A hit is promoted into L1 — preserving the
+		// stale flag — and then routed exactly like a native L1 entry.
+		if val, wasStale, found := inst.stash.GetAndRemove(k); found {
+			inst.insert(k, val, wasStale) // may spill back to L2 if L1 is pinned-full
+			item = primaryItem[V]{value: val, stale: wasStale, lastSeen: inst.currentEpoch}
+			inL1, fromStash = true, true
+		}
+	}
+
+	if inL1 {
+		// Pin to the current epoch. Write back only when it changes and the
+		// entry was not just (re-)inserted by the promotion above.
+		if !fromStash && item.lastSeen != inst.currentEpoch {
 			item.lastSeen = inst.currentEpoch
-			inst.primaryStore[k] = item // Write back only when necessary
+			inst.primaryStore[k] = item
 		}
 
-		switch item.state {
-		case ItemStateInCache:
-			inst.metrics.RecordHit(true)
-			return item.value, true
-		case ItemStateStale:
+		if !item.stale {
+			inst.metrics.RecordHit(!fromStash, false)
+			return item.value, true, false
+		}
+
+		// Stale entry: queue a refresh unless the circuit breaker is open.
+		if !stillBlocked(inst.errorUntil, k, now) {
 			inst.queueForFetch(k)
-			if acceptStale {
-				inst.metrics.RecordHit(true)
-				return item.value, true
-			}
-			// Strict mode: Stale is a miss
-		case ItemStateError:
-			// Circuit Breaker: Check if backoff expired
-			if time.Now().After(item.errorUntil) {
-				// Retry allowed
-				inst.queueForFetch(k)
-			} else {
-				// Still cooling off. Treat as missing, but do NOT queue.
-				// Just register work item as blocked.
-				inst.registerPendingWork()
-				inst.metrics.RecordMiss()
-				return v, false
+			if mayFlush && inst.checkCriteria(context.Background(), true) {
+				return inst.lookup(k, acceptStale, false)
 			}
 		}
-
+		if acceptStale {
+			inst.metrics.RecordHit(!fromStash, true)
+			return item.value, true, true
+		}
+		// Strict mode: stale is a miss.
 		inst.registerPendingWork()
 		inst.metrics.RecordMiss()
-		return v, false
+		return v, false, false
 	}
 
-	// 2. Check Stash (L2) via Interface
-	if val, found := inst.stash.GetAndRemove(k); found {
-		inst.metrics.RecordHit(false) // L2 Hit
-		inst.AddItem(k, val)          // Promote to L1
-		return val, true
+	// Full miss. Negative cache first: a key known to be absent upstream
+	// misses without queueing and without suspending the work item —
+	// nothing will arrive, so a replay would loop forever.
+	if inst.absentUntil != nil && stillBlocked(inst.absentUntil, k, now) {
+		inst.metrics.RecordMiss()
+		return v, false, false
 	}
 
-	// 3. Miss
+	// Circuit breaker: within the backoff window the work item suspends,
+	// but no fetch is queued.
+	if stillBlocked(inst.errorUntil, k, now) {
+		inst.registerPendingWork()
+		inst.metrics.RecordMiss()
+		return v, false, false
+	}
+
 	inst.queueForFetch(k)
+	if mayFlush && inst.checkCriteria(context.Background(), true) {
+		return inst.lookup(k, acceptStale, false)
+	}
 	inst.registerPendingWork()
 	inst.metrics.RecordMiss()
-	inst.checkCriteria(context.Background(), true) // Check Max criteria (optimistic ctx)
-	return v, false
+	return v, false, false
 }
 
+// MarkAsStale flags a cached entry as stale in whichever tier it resides:
+// the next strict Get misses and queues a refresh, while GetAcceptStale
+// keeps serving the old value until fresh data lands. Unknown keys are a
+// no-op.
 func (inst *ReadThroughCache[K, V, W]) MarkAsStale(k K) {
 	if item, ok := inst.primaryStore[k]; ok {
-		item.state = ItemStateStale
+		item.stale = true
 		inst.primaryStore[k] = item
+		return
+	}
+	// Stash-resident entries round-trip with the flag set.
+	if val, _, found := inst.stash.GetAndRemove(k); found {
+		inst.stash.Add(k, val, true)
 	}
 }
 
@@ -193,10 +257,18 @@ func (inst *ReadThroughCache[K, V, W]) registerPendingWork() {
 	}
 }
 
-// IterateReadyWorkItems yields work items that are ready for retry.
+// IterateReadyWorkItems yields work items that are ready for replay. With a
+// non-empty queue this means the fetch criteria are met (the flush happens
+// first); with an empty queue any pending items are replayed directly —
+// their keys were already flushed synchronously by a Max threshold. (Items
+// pending on an open circuit breaker replay too and re-suspend; that is
+// bounded by the backoff window.)
 func (inst *ReadThroughCache[K, V, W]) IterateReadyWorkItems(ctx context.Context) iter.Seq[W] {
 	return func(yield func(W) bool) {
-		// Attempt fetch
+		if len(inst.keysToFetchSet) == 0 {
+			inst.yieldPending(yield)
+			return
+		}
 		if !inst.checkCriteria(ctx, false) {
 			return
 		}
@@ -204,7 +276,8 @@ func (inst *ReadThroughCache[K, V, W]) IterateReadyWorkItems(ctx context.Context
 	}
 }
 
-// IterateRestWorkItems forces a fetch of all pending keys and yields remaining work.
+// IterateRestWorkItems forces a fetch of all pending keys and yields
+// remaining work.
 func (inst *ReadThroughCache[K, V, W]) IterateRestWorkItems(ctx context.Context) iter.Seq[W] {
 	return func(yield func(W) bool) {
 		inst.performFetch(ctx)
@@ -217,7 +290,8 @@ func (inst *ReadThroughCache[K, V, W]) IterateRestWorkItems(ctx context.Context)
 // work-item context (currentWorkItem / hasCurrentWork) so that a cascading
 // Get miss inside the replay re-queues the same item via registerPendingWork
 // rather than being silently dropped. The context is reset when the
-// iterator exits.
+// iterator exits; on an early break the not-yet-yielded items are re-queued
+// as pending so they are not lost.
 func (inst *ReadThroughCache[K, V, W]) yieldPending(yield func(W) bool) {
 	if len(inst.pendingWorkItems) == 0 {
 		return
@@ -234,10 +308,13 @@ func (inst *ReadThroughCache[K, V, W]) yieldPending(yield func(W) bool) {
 		inst.hasCurrentWork = prevHas
 	}()
 
-	for _, w := range items {
+	for i, w := range items {
 		inst.currentWorkItem = w
 		inst.hasCurrentWork = true
 		if !yield(w) {
+			for _, rest := range items[i+1:] {
+				inst.pendingWorkItems[rest] = struct{}{}
+			}
 			return
 		}
 	}
@@ -279,89 +356,132 @@ func (inst *ReadThroughCache[K, V, W]) checkCriteria(ctx context.Context, onlyMa
 }
 
 func (inst *ReadThroughCache[K, V, W]) performFetch(ctx context.Context) {
+	if inst.fetching {
+		// Re-entrant flush: a fetcher called back into the cache and
+		// tripped a Max threshold. Keys queued during a flush are fetched
+		// on the next flush instead of corrupting the running one.
+		return
+	}
 	if len(inst.keysToFetch) == 0 {
 		return
 	}
 
-	start := time.Now()
+	inst.fetching = true
+	inst.fetchAdded = make(map[K]struct{})
+	defer func() {
+		inst.fetching = false
+		inst.fetchAdded = nil
+	}()
+
+	start := inst.nowFn()
 
 	for p, keys := range inst.keysToFetch {
-		if len(keys) == 0 {
-			continue
+		if ctx.Err() != nil {
+			// Unprocessed partitions stay queued for the next flush;
+			// nothing is silently dropped.
+			log.Warn().Msg("caching: context cancelled during batch fetch")
+			break
 		}
 
-		if ctx.Err() != nil {
-			log.Warn().Msg("Context cancelled during batch fetch")
-			break
+		// Filter against the live set: Delete may have dequeued keys, and
+		// re-queues after a Delete may have produced slice duplicates.
+		// Consuming set entries as we go also dedups.
+		live := keys[:0]
+		for _, k := range keys {
+			if _, ok := inst.keysToFetchSet[k]; ok {
+				delete(inst.keysToFetchSet, k)
+				live = append(live, k)
+			}
+		}
+		delete(inst.keysToFetch, p)
+		if len(live) == 0 {
+			continue
 		}
 
 		// Panic Recovery & Error Handling Wrapper
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Error().Interface("panic", r).Msg("Panic in ItemFetcher")
-					inst.markKeysAsError(keys)
-					inst.metrics.RecordFetchError(len(keys))
+					log.Error().Interface("panic", r).Msg("caching: panic in ItemFetcher")
+					inst.markKeysFailed(live)
+					inst.metrics.RecordFetchError(len(live))
 				}
 			}()
 
-			err := inst.fetcher.FetchItemSinglePartition(ctx, p, keys, inst)
+			err := inst.fetcher.FetchItemSinglePartition(ctx, p, live, inst)
 			if err != nil {
-				log.Error().Err(err).Uint64("partition", p).Msg("Fetch failed")
-				inst.markKeysAsError(keys)
-				inst.metrics.RecordFetchError(len(keys))
+				log.Error().Err(err).Uint64("partition", p).Msg("caching: fetch failed")
+				inst.markKeysFailed(live)
+				inst.metrics.RecordFetchError(len(live))
+				return
+			}
+
+			// Negative caching: requested keys the fetcher did not deliver
+			// on a clean return are authoritatively absent for the TTL.
+			// Unlike a fetch FAILURE (which preserves a stale value for
+			// stale-while-revalidate), the absent verdict also drops any
+			// cached remnant — otherwise a surviving stale entry would
+			// re-queue the key on every read, defeating the mark.
+			if inst.absentUntil != nil {
+				until := inst.nowFn().Add(inst.absentTTL)
+				for _, k := range live {
+					if _, delivered := inst.fetchAdded[k]; !delivered {
+						putBounded(inst.absentUntil, k, until, inst.sideTableBound)
+						delete(inst.primaryStore, k)
+						inst.stash.Delete(k)
+					}
+				}
 			}
 		}()
 	}
 
-	inst.metrics.RecordFetchDuration(time.Since(start))
+	inst.metrics.RecordFetchDuration(inst.nowFn().Sub(start))
+}
 
-	// Clean up queues
-	for k := range inst.keysToFetch {
-		delete(inst.keysToFetch, k)
-	}
-	for k := range inst.keysToFetchSet {
-		delete(inst.keysToFetchSet, k)
+// markKeysFailed opens the circuit breaker for queued keys the fetcher did
+// not deliver. Keys the fetcher populated before erroring (recorded in
+// fetchAdded) keep their fresh values — a fetcher may legitimately AddItem
+// some keys and then fail on the rest, and that partial progress must be
+// preserved. A stale value whose refresh failed stays resident and stale:
+// GetAcceptStale keeps serving it while the breaker suppresses re-queues.
+func (inst *ReadThroughCache[K, V, W]) markKeysFailed(keys []K) {
+	until := inst.nowFn().Add(inst.errorBackoffDur)
+	for _, k := range keys {
+		if _, delivered := inst.fetchAdded[k]; delivered {
+			continue
+		}
+		putBounded(inst.errorUntil, k, until, inst.sideTableBound)
 	}
 }
 
-// markKeysAsError flips queued keys to ItemStateError for the backoff window.
-// Keys that the fetcher already populated (state == ItemStateInCache) are
-// left alone — a fetcher may legitimately AddItem some keys and then return
-// an error for the rest, and that partial progress must be preserved.
-func (inst *ReadThroughCache[K, V, W]) markKeysAsError(keys []K) {
-	until := time.Now().Add(inst.errorBackoffDur)
-	for _, k := range keys {
-		if item, exists := inst.primaryStore[k]; exists {
-			if item.state == ItemStateInCache {
-				// Fetcher succeeded for this key before erroring elsewhere.
-				continue
-			}
-			item.state = ItemStateError
-			item.errorUntil = until
-			inst.primaryStore[k] = item
-		} else {
-			inst.primaryStore[k] = primaryItem[V]{
-				state:      ItemStateError,
-				errorUntil: until,
-				lastSeen:   inst.currentEpoch,
-			}
+// AddItem inserts a fresh value, clearing any breaker or absent mark for
+// the key.
+func (inst *ReadThroughCache[K, V, W]) AddItem(k K, v V) {
+	inst.insert(k, v, false)
+}
+
+// insert places a value into L1 — or spills it to the stash when L1 is full
+// of pinned entries — carrying the stale flag through either path.
+func (inst *ReadThroughCache[K, V, W]) insert(k K, v V, stale bool) {
+	if !stale {
+		// Fresh data supersedes failure and absence bookkeeping.
+		delete(inst.errorUntil, k)
+		if inst.absentUntil != nil {
+			delete(inst.absentUntil, k)
+		}
+		if inst.fetchAdded != nil {
+			inst.fetchAdded[k] = struct{}{}
 		}
 	}
-}
 
-func (inst *ReadThroughCache[K, V, W]) AddItem(k K, v V) {
-	// 1. Check Primary Store existence
 	if _, exists := inst.primaryStore[k]; !exists {
-		// 2. If Primary is full, try to make space
 		if len(inst.primaryStore) >= inst.cap {
-			useStash := inst.ensureSpaceByEvictingOne()
-			if useStash {
-				// 3. Primary is full of pinned items; spill the new value
-				// directly to L2. No L1 item was demoted here, so the
-				// (toStash=true) eviction metric does NOT fire — only a
-				// (toStash=false) if the stash itself displaced something.
-				if dropped := inst.stash.Add(k, v); dropped {
+			if inst.ensureSpaceByEvictingOne() {
+				// L1 is full of pinned items; spill the new value directly
+				// to L2. No L1 item was demoted here, so the (toStash=true)
+				// eviction metric does NOT fire — only a (toStash=false) if
+				// the stash itself displaced something.
+				if dropped := inst.stash.Add(k, v, stale); dropped {
 					inst.metrics.RecordEviction(false)
 				}
 				return
@@ -369,29 +489,34 @@ func (inst *ReadThroughCache[K, V, W]) AddItem(k K, v V) {
 		}
 	}
 
-	// Insert into Primary
 	inst.primaryStore[k] = primaryItem[V]{
 		value:    v,
-		state:    ItemStateInCache,
+		stale:    stale,
 		lastSeen: inst.currentEpoch,
 	}
 }
 
+// AddItemSlice inserts parallel key/value slices; the lengths must match.
 func (inst *ReadThroughCache[K, V, W]) AddItemSlice(k []K, v []V) {
+	if len(k) != len(v) {
+		log.Panic().Int("keys", len(k)).Int("values", len(v)).Msg("caching: AddItemSlice length mismatch")
+	}
 	for i := range k {
 		inst.AddItem(k[i], v[i])
 	}
 }
+
 func (inst *ReadThroughCache[K, V, W]) AddItemIter2(it iter.Seq2[K, V]) {
 	for k, v := range it {
 		inst.AddItem(k, v)
 	}
 }
 
-// ensureSpaceByEvictingOne demotes at most one unpinned L1 victim to L2.
-// Returns useStash=true if every L1 entry is pinned to the current epoch
-// (the caller must then route the new value directly to the stash), and
-// false if a slot was freed (or L1 was already under capacity).
+// ensureSpaceByEvictingOne demotes at most one unpinned L1 victim to L2,
+// carrying its stale flag. Returns useStash=true if every L1 entry is
+// pinned to the current epoch (the caller must then route the new value
+// directly to the stash), and false if a slot was freed (or L1 was already
+// under capacity).
 func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingOne() (useStash bool) {
 	for k, v := range inst.primaryStore {
 		// Pinning Protection
@@ -399,14 +524,13 @@ func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingOne() (useStash bool
 			continue
 		}
 
-		// Found a victim in L1. Demote to L2.
-		dropped := inst.stash.Add(k, v.value)
+		// Found a victim in L1. Demote to L2 with its state.
+		dropped := inst.stash.Add(k, v.value, v.stale)
 		inst.metrics.RecordEviction(true) // L1 -> L2 demotion (preserved).
 		if dropped {
 			inst.metrics.RecordEviction(false) // Stash displaced an older item (data loss).
 		}
 
-		// Remove from Primary
 		delete(inst.primaryStore, k)
 		return false
 	}
@@ -415,15 +539,60 @@ func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingOne() (useStash bool
 	return true
 }
 
+// Delete removes the key from both tiers, clears its breaker and absent
+// marks, and dequeues any pending fetch for it — a deleted key must not be
+// resurrected by an in-flight batch.
 func (inst *ReadThroughCache[K, V, W]) Delete(k K) {
 	delete(inst.primaryStore, k)
 	inst.stash.Delete(k)
+	delete(inst.errorUntil, k)
+	if inst.absentUntil != nil {
+		delete(inst.absentUntil, k)
+	}
+	delete(inst.keysToFetchSet, k) // performFetch filters slices against the set
 }
+
+// Clear drops every cached entry and all in-flight bookkeeping (queued
+// keys, pending work items, breaker and absent marks). Call it between
+// frames, not with suspended work items.
+func (inst *ReadThroughCache[K, V, W]) Clear() {
+	clear(inst.primaryStore)
+	clear(inst.keysToFetch)
+	clear(inst.keysToFetchSet)
+	clear(inst.pendingWorkItems)
+	clear(inst.errorUntil)
+	if inst.absentUntil != nil {
+		clear(inst.absentUntil)
+	}
+	inst.stash.Clear()
+}
+
+// Close releases resources held by the stash (disk-backed stashes hold
+// file locks); in-memory stashes make it a no-op. The cache must not be
+// used afterwards.
+func (inst *ReadThroughCache[K, V, W]) Close() error {
+	if closer, ok := inst.stash.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+// Len returns the number of entries resident in the primary (L1) store.
+func (inst *ReadThroughCache[K, V, W]) Len() int { return len(inst.primaryStore) }
+
+// StashLen returns the number of entries resident in the stash (L2).
+func (inst *ReadThroughCache[K, V, W]) StashLen() int { return inst.stash.Len() }
+
+// QueuedKeys returns the number of keys queued for the next batch fetch.
+func (inst *ReadThroughCache[K, V, W]) QueuedKeys() int { return len(inst.keysToFetchSet) }
+
+// PendingWorkItems returns the number of work items suspended on misses.
+func (inst *ReadThroughCache[K, V, W]) PendingWorkItems() int { return len(inst.pendingWorkItems) }
 
 // No-op implementation for metrics
 type noopMetrics struct{}
 
-func (n *noopMetrics) RecordHit(l1 bool)                   {}
+func (n *noopMetrics) RecordHit(l1 bool, stale bool)       {}
 func (n *noopMetrics) RecordMiss()                         {}
 func (n *noopMetrics) RecordFetchError(count int)          {}
 func (n *noopMetrics) RecordEviction(toStash bool)         {}

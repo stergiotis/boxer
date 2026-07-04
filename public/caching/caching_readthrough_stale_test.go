@@ -14,14 +14,17 @@ import (
 // --- Mocks ---
 
 type MockMetrics struct {
-	HitsL1, HitsL2, Misses, Errors, EvictsStash, EvictsDrop int
+	HitsL1, HitsL2, HitsStale, Misses, Errors, EvictsStash, EvictsDrop int
 }
 
-func (inst *MockMetrics) RecordHit(l1 bool) {
+func (inst *MockMetrics) RecordHit(l1 bool, stale bool) {
 	if l1 {
 		inst.HitsL1++
 	} else {
 		inst.HitsL2++
+	}
+	if stale {
+		inst.HitsStale++
 	}
 }
 func (inst *MockMetrics) RecordMiss()            { inst.Misses++ }
@@ -35,7 +38,7 @@ func (inst *MockMetrics) RecordEviction(stash bool) {
 }
 func (inst *MockMetrics) RecordFetchDuration(d time.Duration) {}
 
-type MockFetcherV2 struct {
+type MockFetcher struct {
 	data              map[string]int
 	failKeys          map[string]bool // Keys that trigger error
 	panicKeys         map[string]bool // Keys that trigger panic
@@ -45,8 +48,8 @@ type MockFetcherV2 struct {
 	fetchedPartitions []uint64
 }
 
-func NewMockFetcherV2() *MockFetcherV2 {
-	return &MockFetcherV2{
+func NewMockFetcher() *MockFetcher {
+	return &MockFetcher{
 		data:              make(map[string]int),
 		failKeys:          make(map[string]bool),
 		panicKeys:         make(map[string]bool),
@@ -55,14 +58,14 @@ func NewMockFetcherV2() *MockFetcherV2 {
 	}
 }
 
-func (inst *MockFetcherV2) DeterminePartition(key string) uint64 {
+func (inst *MockFetcher) DeterminePartition(key string) uint64 {
 	if inst.partitionFn != nil {
 		return inst.partitionFn(key)
 	}
 	return 0
 }
 
-func (inst *MockFetcherV2) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target ItemTargetI[string, int]) error {
+func (inst *MockFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target ItemTargetI[string, int]) error {
 	inst.fetchCalls++
 	inst.fetchedBatches = append(inst.fetchedBatches, slices.Clone(keys))
 	inst.fetchedPartitions = append(inst.fetchedPartitions, partition)
@@ -96,12 +99,12 @@ func (inst *MockFetcherV2) FetchItemSinglePartition(ctx context.Context, partiti
 // --- Tests ---
 func TestCircuitBreaker(t *testing.T) {
 	// Scenario: Fetching "FailKey" fails.
-	// 1. First attempt: Fails, marks as Error. Backoff set.
+	// 1. First attempt: Fails, breaker opens. Backoff set.
 	// 2. Immediate retry: Should be blocked (No fetch call).
-	// 3. Wait Backoff.
+	// 3. Advance the clock past the backoff.
 	// 4. Retry: Should trigger fetch.
 
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.failKeys["Fail"] = true
 	m := &MockMetrics{}
 
@@ -109,6 +112,8 @@ func TestCircuitBreaker(t *testing.T) {
 		WithMetrics[string, int, int](m),
 		WithStash[string, int, int](NewSliceStash[string, int](10)))
 	c.SetErrorBackoff(100 * time.Millisecond)
+	now := time.Unix(1000, 0)
+	c.nowFn = func() time.Time { return now }
 
 	ctx := context.Background()
 
@@ -126,14 +131,14 @@ func TestCircuitBreaker(t *testing.T) {
 	for range c.WorkItem(1) {
 		c.Get("Fail")
 	}
-	// This iterate should NOT trigger a fetch because item is in Error state and backoff active
+	// This iterate should NOT trigger a fetch: the breaker is open.
 	for range c.IterateRestWorkItems(ctx) {
 	}
 
 	assert.Equal(t, 1, f.fetchCalls, "Should not fetch during backoff")
 
-	// 3. Wait
-	time.Sleep(150 * time.Millisecond)
+	// 3. Advance past the backoff window.
+	now = now.Add(150 * time.Millisecond)
 
 	// 4. Retry after backoff
 	for range c.WorkItem(1) {
@@ -147,7 +152,7 @@ func TestCircuitBreaker(t *testing.T) {
 }
 
 func TestPanicRecovery(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.panicKeys["Bomb"] = true
 	c := NewReadThroughCache[string, int, int](10, f, FetchCriteria{MinKeys: 0}, WithStash[string, int, int](NewSliceStash[string, int](10)))
 	c.SetErrorBackoff(time.Second)
@@ -172,7 +177,7 @@ func TestPanicRecovery(t *testing.T) {
 func TestContextCancellation(t *testing.T) {
 	// With ctx already cancelled before IterateRestWorkItems, performFetch's
 	// per-partition loop must break before invoking the fetcher.
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.data["A"] = 1
 	c := NewReadThroughCache[string, int, int](10, f, FetchCriteria{MinKeys: 0},
 		WithStash[string, int, int](NewSliceStash[string, int](10)))
@@ -201,8 +206,8 @@ func TestContextCancellation(t *testing.T) {
 	assert.Equal(t, 1, v)
 }
 
-func TestV2BasicReadThrough(t *testing.T) {
-	f := NewMockFetcherV2()
+func TestBasicReadThrough(t *testing.T) {
+	f := NewMockFetcher()
 	f.data["A"] = 10
 	m := &MockMetrics{}
 	c := NewReadThroughCache[string, int, int](10, f, FetchCriteria{MinKeys: 0}, WithMetrics[string, int, int](m), WithStash[string, int, int](NewSliceStash[string, int](10)))
@@ -232,7 +237,7 @@ func TestV2BasicReadThrough(t *testing.T) {
 
 func TestMemoryOptimizedEviction(t *testing.T) {
 	// Verify value-receiver map logic handles pinning correctly
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.data["New"] = 99
 	c := NewReadThroughCache[string, int, int](1, f, FetchCriteria{MinKeys: 0}, WithStash[string, int, int](NewSliceStash[string, int](10)))
 
@@ -246,9 +251,9 @@ func TestMemoryOptimizedEviction(t *testing.T) {
 	}
 
 	// Fetch New. Cache Cap=1. Old is Pinned.
-	// Expectation: New should go to Stash?
-	// Wait, "ensureSpace" removes unpinned. If everything is pinned, ensureSpace returns true (useStash).
-	// So "New" goes to Stash. "Old" stays in Primary.
+	// ensureSpaceByEvictingOne only demotes unpinned entries; with everything
+	// pinned it reports useStash, so "New" spills to the stash and "Old"
+	// stays in Primary.
 
 	for range c.WorkItem(1) {
 		c.Get("New")
@@ -273,7 +278,7 @@ func TestMemoryOptimizedEviction(t *testing.T) {
 // --- Coverage Tests ---
 
 func TestGetAcceptStale_Comprehensive(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.data["Fresh"] = 1
 	f.data["Stale"] = 2
 	f.data["Missing"] = 3
@@ -378,7 +383,7 @@ func TestOverstretchedCache_Livelock(t *testing.T) {
 	l1Size := 5
 	l2Size := 5
 
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 
 	// Create Mock Metrics to spy on Evictions
 	m := &MockMetrics{}
@@ -456,8 +461,6 @@ func TestOverstretchedCache_Livelock(t *testing.T) {
 	// 3. It should have fetched significantly more than the data size
 	// We needed 15 items. After 20 attempts, we likely fetched hundreds of times.
 	assert.Greater(t, f.fetchCalls, 10, "Cache should be thrashing (repeatedly fetching evicted items)")
-
-	fmt.Printf("Stats: Attempts=%d, Fetches=%d, StashDrops=%d\n", attempts, f.fetchCalls, m.EvictsDrop)
 }
 func TestMaxKeys_SmallerThanWorkItem_ChunkedFetch(t *testing.T) {
 	// Scenario:
@@ -472,7 +475,7 @@ func TestMaxKeys_SmallerThanWorkItem_ChunkedFetch(t *testing.T) {
 	// 4. User calls IterateRest: Fetch(C).
 	// 5. Pass 2: Get(A,B,C) -> All Hit. Success.
 
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.data["A"], f.data["B"], f.data["C"] = 1, 2, 3
 
 	// Criteria: MaxKeys=2 (Force chunking), MinKeys=100 (Prevent early flush)
@@ -543,9 +546,9 @@ func TestMaxKeys_SmallerThanWorkItem_ChunkedFetch(t *testing.T) {
 // TestEvictionMetric_L1DemotionCount verifies that when an unpinned L1 item is
 // evicted to a non-full stash, exactly one (toStash=true) is recorded and no
 // (toStash=false). This exercises the canonical demotion path through
-// ensureSpaceByEvictingRandomly.
+// ensureSpaceByEvictingOne.
 func TestEvictionMetric_L1DemotionCount(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	m := &MockMetrics{}
 	// Cap=1 forces a demotion on the second insert. Stash large enough to absorb.
 	c := NewReadThroughCache[string, int, int](1, f, FetchCriteria{MinKeys: 0},
@@ -564,7 +567,7 @@ func TestEvictionMetric_L1DemotionCount(t *testing.T) {
 // a full stash records both a (toStash=true) for the demoted L1 item and a
 // (toStash=false) for the stash item it displaces.
 func TestEvictionMetric_StashOverflowOnDemotion(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	m := &MockMetrics{}
 	c := NewReadThroughCache[string, int, int](1, f, FetchCriteria{MinKeys: 0},
 		WithMetrics[string, int, int](m),
@@ -589,7 +592,7 @@ func TestEvictionMetric_StashOverflowOnDemotion(t *testing.T) {
 // directly to the stash, we do NOT record a (toStash=true) — no L1 item was
 // demoted. A (toStash=false) still fires if the stash itself overflows.
 func TestEvictionMetric_DirectStashSpillDoesNotInflateStashCount(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	m := &MockMetrics{}
 	c := NewReadThroughCache[string, int, int](1, f, FetchCriteria{MinKeys: 0},
 		WithMetrics[string, int, int](m),
@@ -617,7 +620,7 @@ func TestEvictionMetric_DirectStashSpillDoesNotInflateStashCount(t *testing.T) {
 
 // TestDelete confirms Delete removes a key from both L1 and L2.
 func TestDelete(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	c := NewReadThroughCache[string, int, int](1, f, FetchCriteria{MinKeys: 0},
 		WithStash[string, int, int](NewSliceStash[string, int](4)))
 
@@ -647,7 +650,7 @@ func TestDelete(t *testing.T) {
 
 // TestAddItemSlice_AndIter2 covers the two helper insertion methods.
 func TestAddItemSlice_AndIter2(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	c := NewReadThroughCache[string, int, int](10, f, FetchCriteria{MinKeys: 0},
 		WithStash[string, int, int](NewSliceStash[string, int](4)))
 
@@ -675,7 +678,7 @@ func TestAddItemSlice_AndIter2(t *testing.T) {
 // after marking, strict Get queues a fetch and returns miss; GetAcceptStale
 // returns the stale value AND queues; a successful fetch restores Fresh state.
 func TestMarkAsStale_DirectStateTransitions(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.data["K"] = 100
 	c := NewReadThroughCache[string, int, int](4, f, FetchCriteria{MinKeys: 0},
 		WithStash[string, int, int](NewSliceStash[string, int](4)))
@@ -704,7 +707,7 @@ func TestMarkAsStale_DirectStateTransitions(t *testing.T) {
 // TestPartitionedFetch_OnePerPartition: keys spread across N partitions cause
 // exactly N FetchItemSinglePartition calls, each with its own subset.
 func TestPartitionedFetch_OnePerPartition(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.partitionFn = func(k string) uint64 {
 		// "p0-x" → 0, "p1-x" → 1, ...
 		var p uint64
@@ -754,7 +757,7 @@ func TestPartitionedFetch_OnePerPartition(t *testing.T) {
 // not satisfied. The flush dispatches one FetchItemSinglePartition call per
 // queued partition.
 func TestMaxPartitions_TriggersFetch(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.partitionFn = func(k string) uint64 {
 		if k == "alpha" {
 			return 0
@@ -791,7 +794,7 @@ func TestMaxPartitions_TriggersFetch(t *testing.T) {
 // TestMinPartitions_DoesNotTriggerWhenBelow: when only Min thresholds are set
 // and none are met, IterateReadyWorkItems must not fetch.
 func TestMinPartitions_DoesNotTriggerWhenBelow(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.partitionFn = func(k string) uint64 { return 0 }
 	f.data["a"] = 1
 
@@ -816,21 +819,21 @@ func TestMinPartitions_DoesNotTriggerWhenBelow(t *testing.T) {
 // preserves insertion-order positions modulo capacity.
 func TestSliceStash_Eviction(t *testing.T) {
 	s := NewSliceStash[string, int](2)
-	assert.False(t, s.Add("a", 1))
-	assert.False(t, s.Add("b", 2))
+	assert.False(t, s.Add("a", 1, false))
+	assert.False(t, s.Add("b", 2, false))
 	assert.Equal(t, 2, s.Len())
 	assert.Equal(t, 2, s.Cap())
 
 	// Full; next Add evicts via round-robin (slot 0 → "a").
-	assert.True(t, s.Add("c", 3))
-	_, hasA := s.GetAndRemove("a")
+	assert.True(t, s.Add("c", 3, false))
+	_, _, hasA := s.GetAndRemove("a")
 	assert.False(t, hasA, "a should be the round-robin victim")
 
 	// "b" and "c" remain.
-	v, has := s.GetAndRemove("b")
+	v, _, has := s.GetAndRemove("b")
 	assert.True(t, has)
 	assert.Equal(t, 2, v)
-	v, has = s.GetAndRemove("c")
+	v, _, has = s.GetAndRemove("c")
 	assert.True(t, has)
 	assert.Equal(t, 3, v)
 	assert.Equal(t, 0, s.Len())
@@ -839,17 +842,17 @@ func TestSliceStash_Eviction(t *testing.T) {
 // TestMapStash_Eviction verifies MapStash bounds itself: Add at cap drops one.
 func TestMapStash_Eviction(t *testing.T) {
 	s := NewMapStash[string, int](2)
-	assert.False(t, s.Add("a", 1))
-	assert.False(t, s.Add("b", 2))
+	assert.False(t, s.Add("a", 1, false))
+	assert.False(t, s.Add("b", 2, false))
 	// Updating existing key at cap does not evict.
-	assert.False(t, s.Add("a", 11))
-	v, has := s.GetAndRemove("a")
+	assert.False(t, s.Add("a", 11, false))
+	v, _, has := s.GetAndRemove("a")
 	assert.True(t, has)
 	assert.Equal(t, 11, v)
 
 	// Refill and overflow.
-	s.Add("a", 1)
-	assert.True(t, s.Add("c", 3), "Add beyond cap must evict")
+	s.Add("a", 1, false)
+	assert.True(t, s.Add("c", 3, false), "Add beyond cap must evict")
 	assert.Equal(t, 2, s.Len())
 }
 
@@ -925,7 +928,7 @@ func TestMarkAsError_PreservesAlreadyFetched(t *testing.T) {
 // dependency"), the cache must restore the work-item context so the new
 // miss re-queues this item rather than dropping it on the floor.
 func TestReplay_CascadingMiss_ReQueued(t *testing.T) {
-	f := NewMockFetcherV2()
+	f := NewMockFetcher()
 	f.data["root"] = 100
 	f.data["leaf"] = 200
 
@@ -974,7 +977,7 @@ func TestReplay_CascadingMiss_ReQueued(t *testing.T) {
 
 // --- Benchmarks ---
 
-// Minimal fetcher for benchmarks to avoid alloc overhead of the MockFetcherV2
+// Minimal fetcher for benchmarks to avoid alloc overhead of the MockFetcher
 type BenchFetcher struct{}
 
 func (inst *BenchFetcher) DeterminePartition(key string) uint64 { return 0 }

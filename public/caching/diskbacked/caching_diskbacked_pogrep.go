@@ -12,8 +12,11 @@ import (
 // Compile-time assertion that PogrebStash satisfies caching.StashBackendI.
 var _ caching.StashBackendI[string, []byte] = (*PogrebStash[string, []byte])(nil)
 
-// PogrebStash implements StashBackend using the Pogreb key-value store.
+// PogrebStash implements StashBackendI using the Pogreb key-value store.
 // It uses CBOR for serialization.
+//
+// Per the StashBackendI contract the stash is best-effort: storage and
+// codec errors degrade into misses (GetAndRemove) or dropped writes (Add).
 type PogrebStash[K comparable, V any] struct {
 	db      *pogreb.DB
 	path    string
@@ -52,46 +55,42 @@ func (s *PogrebStash[K, V]) Close() error {
 }
 
 // GetAndRemove attempts to retrieve a value and remove it from the stash (Promotion).
-func (s *PogrebStash[K, V]) GetAndRemove(key K) (V, bool) {
-	var zero V
-
+func (s *PogrebStash[K, V]) GetAndRemove(key K) (value V, stale bool, found bool) {
 	// 1. Serialize Key (Canonical CBOR)
 	kBytes, err := keyEncMode.Marshal(key)
 	if err != nil {
-		// In production, you might want to log this serialization error
-		return zero, false
+		return value, false, false
 	}
 
 	// 2. Get from Pogreb
 	vBytes, err := s.db.Get(kBytes)
 	if err != nil || vBytes == nil {
-		return zero, false
+		return value, false, false
 	}
 
-	// 3. Deserialize Value (Standard CBOR)
-	// We unmarshal directly into zero to avoid allocating if possible (though interface overhead applies)
-	err = cbor.Unmarshal(vBytes, &zero)
-	if err != nil {
-		return zero, false
+	// 3. Deserialize the record envelope
+	var rec stashRecord[V]
+	if err = cbor.Unmarshal(vBytes, &rec); err != nil {
+		return value, false, false
 	}
 
 	// 4. Remove (Atomic promotion)
 	// Pogreb deletes are fast (tombstones).
 	_ = s.db.Delete(kBytes)
 
-	return zero, true
+	return rec.Value, rec.Stale, true
 }
 
 // Add inserts a value. If softCap is exceeded by a NEW key, it evicts a
 // random item. Updates to an existing key never evict — they don't change
 // the count, so there is no reason to drop an unrelated entry.
-func (s *PogrebStash[K, V]) Add(key K, value V) (evicted bool) {
+func (s *PogrebStash[K, V]) Add(key K, value V, stale bool) (evicted bool) {
 	// 1. Serialize
 	kBytes, err := keyEncMode.Marshal(key)
 	if err != nil {
 		return false
 	}
-	vBytes, err := cbor.Marshal(value)
+	vBytes, err := cbor.Marshal(stashRecord[V]{Value: value, Stale: stale})
 	if err != nil {
 		return false
 	}
@@ -101,11 +100,11 @@ func (s *PogrebStash[K, V]) Add(key K, value V) (evicted bool) {
 	existing, err := s.db.Get(kBytes)
 	updating := err == nil && existing != nil
 
-	// 3. Evict only when inserting a brand-new key over the cap.
+	// 3. Evict only when inserting a brand-new key over the cap, and report
+	// an eviction only when one actually happened.
 	// Pogreb's Count() is O(1) (cached), so the probe is cheap.
 	if !updating && s.softCap > 0 && int(s.db.Count()) >= s.softCap {
-		s.evictOne()
-		evicted = true
+		evicted = s.evictOne()
 	}
 
 	// 4. Put
@@ -114,24 +113,41 @@ func (s *PogrebStash[K, V]) Add(key K, value V) (evicted bool) {
 	return evicted
 }
 
-// evictOne removes a single item to make space.
-// Since Pogreb is a hash index, iteration order is essentially random,
-// which is exactly what we want for "Random Eviction".
-func (s *PogrebStash[K, V]) evictOne() {
+// evictOne removes a single item to make space, reporting whether a delete
+// was actually performed. Since Pogreb is a hash index, iteration order is
+// essentially random, which is exactly what we want for "Random Eviction".
+func (s *PogrebStash[K, V]) evictOne() bool {
 	it := s.db.Items()
-	// We only need the first item yielded by the iterator
+	// We only need the first item yielded by the iterator.
 	k, _, err := it.Next()
-	if err == nil && k != nil {
-		_ = s.db.Delete(k)
+	if err != nil || k == nil {
+		return false
 	}
-	// We don't need to close the iterator explicitly in Pogreb,
-	// but we should stop iterating.
+	return s.db.Delete(k) == nil
 }
 
 func (s *PogrebStash[K, V]) Delete(key K) {
 	kBytes, err := keyEncMode.Marshal(key)
 	if err == nil {
 		_ = s.db.Delete(kBytes)
+	}
+}
+
+// Clear removes every entry. Keys are collected before deleting — Pogreb's
+// iterator does not guarantee stability under concurrent modification.
+// Failures leave a partial clear behind (best-effort contract).
+func (s *PogrebStash[K, V]) Clear() {
+	it := s.db.Items()
+	keys := make([][]byte, 0, s.db.Count())
+	for {
+		k, _, err := it.Next()
+		if err != nil || k == nil {
+			break
+		}
+		keys = append(keys, append([]byte(nil), k...))
+	}
+	for _, k := range keys {
+		_ = s.db.Delete(k)
 	}
 }
 

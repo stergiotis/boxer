@@ -1,40 +1,51 @@
 package caching
 
+import "github.com/rs/zerolog/log"
+
 /*
 This uses a Go map for O(1) access.
 To handle eviction without scanning, it uses a simplified random eviction (Go map iteration order is random).
 Best for: Large Stashes (> 1,000 items) where scan time is non-negotiable.
 */
 
+type mapStashEntry[V any] struct {
+	value V
+	stale bool
+}
+
 type MapStash[K comparable, V any] struct {
-	data     map[K]V
+	data     map[K]mapStashEntry[V]
 	capacity int
 }
 
 func NewMapStash[K comparable, V any](capacity int) *MapStash[K, V] {
+	if capacity < 1 {
+		log.Panic().Int("capacity", capacity).Msg("caching: NewMapStash requires capacity >= 1")
+	}
 	return &MapStash[K, V]{
-		data:     make(map[K]V, capacity),
+		data:     make(map[K]mapStashEntry[V], capacity),
 		capacity: capacity,
 	}
 }
 
-func (s *MapStash[K, V]) GetAndRemove(key K) (V, bool) {
-	val, ok := s.data[key]
-	if ok {
-		delete(s.data, key)
+func (s *MapStash[K, V]) GetAndRemove(key K) (value V, stale bool, found bool) {
+	e, ok := s.data[key]
+	if !ok {
+		return value, false, false
 	}
-	return val, ok
+	delete(s.data, key)
+	return e.value, e.stale, true
 }
 
-func (s *MapStash[K, V]) Add(key K, value V) bool {
-	if len(s.data) < s.capacity {
-		s.data[key] = value
+func (s *MapStash[K, V]) Add(key K, value V, stale bool) bool {
+	// Update-in-place: an existing key is overwritten and never evicts
+	// (contract), regardless of the fill level.
+	if _, exists := s.data[key]; exists {
+		s.data[key] = mapStashEntry[V]{value: value, stale: stale}
 		return false
 	}
-
-	// Check if updating existing
-	if _, exists := s.data[key]; exists {
-		s.data[key] = value
+	if len(s.data) < s.capacity {
+		s.data[key] = mapStashEntry[V]{value: value, stale: stale}
 		return false
 	}
 
@@ -45,12 +56,17 @@ func (s *MapStash[K, V]) Add(key K, value V) bool {
 		break // Evict one
 	}
 
-	s.data[key] = value
+	s.data[key] = mapStashEntry[V]{value: value, stale: stale}
 	return true
 }
 
 func (s *MapStash[K, V]) Delete(key K) {
 	delete(s.data, key)
 }
+
 func (s *MapStash[K, V]) Len() int { return len(s.data) }
 func (s *MapStash[K, V]) Cap() int { return s.capacity }
+
+func (s *MapStash[K, V]) Clear() {
+	clear(s.data)
+}
