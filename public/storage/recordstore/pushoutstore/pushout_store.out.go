@@ -355,13 +355,18 @@ type PushoutCacheConfig struct {
 
 // PushoutCache is the batched read-through KV view over a PushoutStore
 // (ADR-0100 SD5): misses queue under work items and flush as one
-// IN (…) lookup. Intended for immutable-by-key access — see SD4.
+// IN (…) lookup. Get is exact for immutable-by-key access — see SD4.
 // Local writes on the store evict the written key from every attached
-// view; only external writers can leave Get stale. Like the store it
-// wraps, a view is single-goroutine. W is the work-item type (use
-// struct{} when the suspend/replay machinery is not needed).
+// view, so under this process's single writer the cached entries are
+// also the latest state; only EXTERNAL writers can leave the view
+// stale, and they need a caller-provided signal: MarkStale /
+// Invalidate / InvalidateAll (a freshness TTL is a recorded
+// follow-up). Like the store it wraps, a view is single-goroutine.
+// W is the work-item type (use struct{} when the suspend/replay
+// machinery is not needed).
 type PushoutCache[W comparable] struct {
 	st    *PushoutStore
+	cfg   PushoutCacheConfig
 	cache *caching.ReadThroughCache[string, *PushoutEntity, W]
 }
 
@@ -371,10 +376,16 @@ func NewPushoutCache[W comparable](st *PushoutStore, cfg PushoutCacheConfig) (in
 	if cfg.Capacity <= 0 {
 		cfg.Capacity = 1024
 	}
-	inst = &PushoutCache[W]{st: st}
-	inst.cache = caching.NewReadThroughCache[string, *PushoutEntity, W](cfg.Capacity, &pushoutFetcher{st: st}, cfg.FetchCriteria)
-	st.onWrite = append(st.onWrite, inst.cache.Delete)
+	inst = &PushoutCache[W]{st: st, cfg: cfg}
+	inst.rebuild()
+	// The hook closes over the view, not the cache instance, so it
+	// stays correct across InvalidateAll's rebuild.
+	st.onWrite = append(st.onWrite, func(k string) { inst.cache.Delete(k) })
 	return
+}
+
+func (inst *PushoutCache[W]) rebuild() {
+	inst.cache = caching.NewReadThroughCache[string, *PushoutEntity, W](inst.cfg.Capacity, &pushoutFetcher{st: inst.st}, inst.cfg.FetchCriteria)
 }
 
 // Get retrieves an entity by Key through the cache. A miss queues the
@@ -407,6 +418,54 @@ func (inst *PushoutCache[W]) IterateRestWorkItems(ctx context.Context) iter.Seq[
 // frame / batch so untouched L1 entries become evictable.
 func (inst *PushoutCache[W]) AdvanceEpoch() {
 	inst.cache.AdvanceEpoch()
+}
+
+// MarkStale flags the key's cached entry as stale — the external-writer
+// signal: the next strict read misses and queues a refetch, while
+// accept-stale reads keep serving the old value until it lands.
+func (inst *PushoutCache[W]) MarkStale(key string) {
+	inst.cache.MarkAsStale(key)
+}
+
+// Invalidate drops the key's cached entry (L1 and stash).
+func (inst *PushoutCache[W]) Invalidate(key string) {
+	inst.cache.Delete(key)
+}
+
+// InvalidateAll drops every cached entry by rebuilding the underlying
+// cache — the bulk external-writer signal (e.g. after an import).
+// In-flight miss bookkeeping (queued keys, pending work items) is
+// dropped with it: call between frames, not with suspended work.
+func (inst *PushoutCache[W]) InvalidateAll() {
+	inst.rebuild()
+}
+
+// GetLatest is the cached state-view read: the cache's newest row for
+// the key with the tombstone read as absent — exact under this
+// process's single writer (local writes invalidate); external writers
+// need MarkStale / Invalidate. The store's uncached GetLatest stays
+// the authoritative read. A miss queues the batch fetch like Get.
+func (inst *PushoutCache[W]) GetLatest(key string) (ent *PushoutEntity, found bool) {
+	ent, found = inst.cache.Get(key)
+	if found && ent.Lifecycle == pushoutLifecycleTombstone {
+		ent = nil
+		found = false
+	}
+	return
+}
+
+// GetLatestAcceptStale is the stale-while-revalidate state-view read:
+// a stale entry is served immediately (stale=true) while the refetch
+// queues in the background — pair with the work-item replay loop.
+// Tombstones read as absent; stale then reports whether that verdict
+// came from a stale entry.
+func (inst *PushoutCache[W]) GetLatestAcceptStale(key string) (ent *PushoutEntity, found bool, stale bool) {
+	ent, found, stale = inst.cache.GetAcceptStale(key)
+	if found && ent.Lifecycle == pushoutLifecycleTombstone {
+		ent = nil
+		found = false
+	}
+	return
 }
 
 // pushoutFetcher implements caching.ItemFetcherI for attached cache views —

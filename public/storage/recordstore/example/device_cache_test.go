@@ -199,3 +199,101 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, found)
 }
+
+// TestDeviceCacheLatestAndStaleness pins the cached state-view reads and
+// the external-writer staleness controls (ADR-0100 Update): GetLatest is
+// exact under the local single writer, tombstones read as absent,
+// MarkStale enables stale-while-revalidate via GetLatestAcceptStale, and
+// Invalidate / InvalidateAll drop entries on the caller's signal.
+func TestDeviceCacheLatestAndStaleness(t *testing.T) {
+	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse-local unavailable: %v", err)
+	}
+	counting := &countingExecutor{inner: local}
+	ctx := context.Background()
+	st := NewDeviceStore(counting, nil, DeviceStoreConfig{})
+	require.NoError(t, st.EnsureTable(ctx))
+	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
+
+	t0 := time.Unix(1_600_000_000, 0).UTC()
+	t1 := t0.Add(time.Hour)
+	t2 := t0.Add(2 * time.Hour)
+
+	require.NoError(t, st.Put(1, t0).AddBattery(Battery{ID: 1, Charge: 9000}).Commit())
+	_, err = st.Flush(ctx)
+	require.NoError(t, err)
+
+	// Warm the entry, then read it through the cached state view.
+	for range c.WorkItem("warm") {
+		_, _ = c.Get(1)
+	}
+	for range c.IterateRestWorkItems(ctx) {
+	}
+	ent, found := c.GetLatest(1)
+	require.True(t, found)
+	require.Equal(t, uint64(9000), ent.Battery.Val.Charge)
+
+	// Local single writer: the write hook evicts, the refetch serves the
+	// new version — GetLatest is exact without any staleness signal.
+	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
+	_, err = st.Flush(ctx)
+	require.NoError(t, err)
+	_, found = c.GetLatest(1)
+	require.False(t, found, "local write must evict the cached entry")
+	for range c.IterateRestWorkItems(ctx) {
+	}
+	ent, found = c.GetLatest(1)
+	require.True(t, found)
+	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
+
+	// External-writer signal: MarkStale keeps serving the old value on
+	// the accept-stale read while the strict read queues the refetch.
+	before := counting.queryCalls
+	c.MarkStale(1)
+	ent, found, stale := c.GetLatestAcceptStale(1)
+	require.True(t, found)
+	require.True(t, stale)
+	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
+	for range c.IterateRestWorkItems(ctx) {
+	}
+	require.Equal(t, before+1, counting.queryCalls, "MarkStale must force exactly one refetch")
+	ent, found, stale = c.GetLatestAcceptStale(1)
+	require.True(t, found)
+	require.False(t, stale, "refetched entry is fresh again")
+	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
+
+	// Tombstone: the cached state view reads it as absent while the
+	// row-level Get still surfaces the tombstone row.
+	require.NoError(t, st.Delete(1, t2))
+	_, err = st.Flush(ctx)
+	require.NoError(t, err)
+	for range c.WorkItem("reload") {
+		_, _ = c.Get(1)
+	}
+	for range c.IterateRestWorkItems(ctx) {
+	}
+	row, found := c.Get(1)
+	require.True(t, found)
+	require.Equal(t, deviceLifecycleTombstone, row.Lifecycle)
+	_, found = c.GetLatest(1)
+	require.False(t, found, "tombstone reads as absent through the state view")
+	_, found, _ = c.GetLatestAcceptStale(1)
+	require.False(t, found)
+
+	// Invalidate / InvalidateAll drop entries on the caller's signal.
+	c.Invalidate(1)
+	_, found = c.Get(1)
+	require.False(t, found)
+	for range c.IterateRestWorkItems(ctx) {
+	}
+	_, found = c.Get(1)
+	require.True(t, found)
+	c.InvalidateAll()
+	_, found = c.Get(1)
+	require.False(t, found, "InvalidateAll drops every entry")
+	for range c.IterateRestWorkItems(ctx) {
+	}
+	_, found = c.Get(1)
+	require.True(t, found, "the rebuilt cache fetches and serves again")
+}

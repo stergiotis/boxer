@@ -377,13 +377,18 @@ type LedgerCacheConfig struct {
 
 // LedgerCache is the batched read-through KV view over a LedgerStore
 // (ADR-0100 SD5): misses queue under work items and flush as one
-// IN (…) lookup. Intended for immutable-by-key access — see SD4.
+// IN (…) lookup. Get is exact for immutable-by-key access — see SD4.
 // Local writes on the store evict the written key from every attached
-// view; only external writers can leave Get stale. Like the store it
-// wraps, a view is single-goroutine. W is the work-item type (use
-// struct{} when the suspend/replay machinery is not needed).
+// view, so under this process's single writer the cached entries are
+// also the latest state; only EXTERNAL writers can leave the view
+// stale, and they need a caller-provided signal: MarkStale /
+// Invalidate / InvalidateAll (a freshness TTL is a recorded
+// follow-up). Like the store it wraps, a view is single-goroutine.
+// W is the work-item type (use struct{} when the suspend/replay
+// machinery is not needed).
 type LedgerCache[W comparable] struct {
 	st    *LedgerStore
+	cfg   LedgerCacheConfig
 	cache *caching.ReadThroughCache[string, *LedgerEntity, W]
 }
 
@@ -393,10 +398,16 @@ func NewLedgerCache[W comparable](st *LedgerStore, cfg LedgerCacheConfig) (inst 
 	if cfg.Capacity <= 0 {
 		cfg.Capacity = 1024
 	}
-	inst = &LedgerCache[W]{st: st}
-	inst.cache = caching.NewReadThroughCache[string, *LedgerEntity, W](cfg.Capacity, &ledgerFetcher{st: st}, cfg.FetchCriteria)
-	st.onWrite = append(st.onWrite, inst.cache.Delete)
+	inst = &LedgerCache[W]{st: st, cfg: cfg}
+	inst.rebuild()
+	// The hook closes over the view, not the cache instance, so it
+	// stays correct across InvalidateAll's rebuild.
+	st.onWrite = append(st.onWrite, func(k string) { inst.cache.Delete(k) })
 	return
+}
+
+func (inst *LedgerCache[W]) rebuild() {
+	inst.cache = caching.NewReadThroughCache[string, *LedgerEntity, W](inst.cfg.Capacity, &ledgerFetcher{st: inst.st}, inst.cfg.FetchCriteria)
 }
 
 // Get retrieves an entity by Key through the cache. A miss queues the
@@ -429,6 +440,26 @@ func (inst *LedgerCache[W]) IterateRestWorkItems(ctx context.Context) iter.Seq[W
 // frame / batch so untouched L1 entries become evictable.
 func (inst *LedgerCache[W]) AdvanceEpoch() {
 	inst.cache.AdvanceEpoch()
+}
+
+// MarkStale flags the key's cached entry as stale — the external-writer
+// signal: the next strict read misses and queues a refetch, while
+// accept-stale reads keep serving the old value until it lands.
+func (inst *LedgerCache[W]) MarkStale(key string) {
+	inst.cache.MarkAsStale(key)
+}
+
+// Invalidate drops the key's cached entry (L1 and stash).
+func (inst *LedgerCache[W]) Invalidate(key string) {
+	inst.cache.Delete(key)
+}
+
+// InvalidateAll drops every cached entry by rebuilding the underlying
+// cache — the bulk external-writer signal (e.g. after an import).
+// In-flight miss bookkeeping (queued keys, pending work items) is
+// dropped with it: call between frames, not with suspended work.
+func (inst *LedgerCache[W]) InvalidateAll() {
+	inst.rebuild()
 }
 
 // ledgerFetcher implements caching.ItemFetcherI for attached cache views —
