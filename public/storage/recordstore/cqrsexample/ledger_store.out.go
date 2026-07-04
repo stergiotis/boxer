@@ -81,7 +81,9 @@ type LedgerStoreConfig struct {
 	// DDLTail is appended after the generated column body at EnsureTable
 	// time (engine, ORDER BY, SETTINGS). Empty selects the default.
 	DDLTail string
-	// CacheCapacity is the L1 capacity of the read-through cache.
+	// CacheCapacity is the L1 capacity of the read-through cache, in
+	// entries (not bytes) — size it for the largest expected entity
+	// payloads. Zero or negative selects the default (1024).
 	CacheCapacity int
 	// FetchCriteria are the cache's batch-flush thresholds.
 	FetchCriteria caching.FetchCriteria
@@ -104,6 +106,10 @@ type LedgerStore[W comparable] struct {
 	cache *caching.ReadThroughCache[string, *LedgerEntity, W]
 }
 
+// NewLedgerStore wires the store: DML builder, read-through cache and the
+// fetcher shim. A nil alloc selects the Go allocator; W is the cache's
+// work-item type (use struct{} when the suspend/replay machinery is
+// not needed).
 func NewLedgerStore[W comparable](exec recordstore.ExecutorI, alloc memory.Allocator, cfg LedgerStoreConfig) (inst *LedgerStore[W]) {
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
@@ -112,7 +118,7 @@ func NewLedgerStore[W comparable](exec recordstore.ExecutorI, alloc memory.Alloc
 		cfg.CacheCapacity = 1024
 	}
 	inst = &LedgerStore[W]{exec: exec, alloc: alloc, cfg: cfg, dml: NewInEntityLedgerTable(alloc, 64), dirty: make(map[string]struct{})}
-	inst.cache = caching.NewReadThroughCache[string, *LedgerEntity, W](cfg.CacheCapacity, inst, cfg.FetchCriteria)
+	inst.cache = caching.NewReadThroughCache[string, *LedgerEntity, W](cfg.CacheCapacity, &ledgerFetcher[W]{st: inst}, cfg.FetchCriteria)
 	return
 }
 
@@ -224,7 +230,9 @@ func (inst *LedgerEntityBuilder[W]) Rollback() (err error) {
 }
 
 // IngestOpened appends one whole entity per row carrying only the
-// Opened component, all stamped with ts.
+// Opened component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *LedgerStore[W]) IngestOpened(ts time.Time, rows []Opened) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddOpened(rows[i]).Commit()
@@ -237,7 +245,9 @@ func (inst *LedgerStore[W]) IngestOpened(ts time.Time, rows []Opened) (err error
 }
 
 // IngestDeposited appends one whole entity per row carrying only the
-// Deposited component, all stamped with ts.
+// Deposited component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *LedgerStore[W]) IngestDeposited(ts time.Time, rows []Deposited) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddDeposited(rows[i]).Commit()
@@ -250,7 +260,9 @@ func (inst *LedgerStore[W]) IngestDeposited(ts time.Time, rows []Deposited) (err
 }
 
 // IngestWithdrawn appends one whole entity per row carrying only the
-// Withdrawn component, all stamped with ts.
+// Withdrawn component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *LedgerStore[W]) IngestWithdrawn(ts time.Time, rows []Withdrawn) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddWithdrawn(rows[i]).Commit()
@@ -263,7 +275,9 @@ func (inst *LedgerStore[W]) IngestWithdrawn(ts time.Time, rows []Withdrawn) (err
 }
 
 // IngestClosed appends one whole entity per row carrying only the
-// Closed component, all stamped with ts.
+// Closed component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *LedgerStore[W]) IngestClosed(ts time.Time, rows []Closed) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddClosed(rows[i]).Commit()
@@ -276,7 +290,9 @@ func (inst *LedgerStore[W]) IngestClosed(ts time.Time, rows []Closed) (err error
 }
 
 // IngestAccountState appends one whole entity per row carrying only the
-// AccountState component, all stamped with ts.
+// AccountState component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *LedgerStore[W]) IngestAccountState(ts time.Time, rows []AccountState) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddAccountState(rows[i]).Commit()
@@ -346,8 +362,12 @@ func (inst *LedgerStore[W]) DiscardPending() {
 // Get retrieves an entity by Key through the cache. A miss queues the
 // key for the next batch fetch (the caching suspend/replay contract);
 // Get is intended for immutable-by-key access — see ADR-0100 SD4.
-func (inst *LedgerStore[W]) Get(key string) (has bool, ent *LedgerEntity) {
-	return inst.cache.Get(key)
+// A miss can also mean the batched fetch errored (misses swallow
+// fetch errors; the circuit breaker backs off) — Latest is the
+// authoritative existence check.
+func (inst *LedgerStore[W]) Get(key string) (ent *LedgerEntity, found bool) {
+	found, ent = inst.cache.Get(key)
+	return
 }
 
 // WorkItem marks the current work item for the cache's miss bookkeeping.
@@ -373,15 +393,22 @@ func (inst *LedgerStore[W]) AdvanceEpoch() {
 	inst.cache.AdvanceEpoch()
 }
 
+// ledgerFetcher implements caching.ItemFetcherI for the store's cache —
+// an unexported shim so the fetch plumbing stays off the store's
+// public method set.
+type ledgerFetcher[W comparable] struct{ st *LedgerStore[W] }
+
+var _ caching.ItemFetcherI[string, *LedgerEntity] = (*ledgerFetcher[struct{}])(nil)
+
 // DeterminePartition implements caching.ItemFetcherI. Single partition
 // in v1 (one table, one server).
-func (inst *LedgerStore[W]) DeterminePartition(key string) uint64 { return 0 }
+func (inst *ledgerFetcher[W]) DeterminePartition(key string) uint64 { return 0 }
 
 // FetchItemSinglePartition implements caching.ItemFetcherI: one batched
 // point lookup per fetch. Duplicate versions collapse newest-first.
 // Dirty keys (written locally, not yet flushed) are fetched but not
 // cached — caching them would resurrect the pre-write row.
-func (inst *LedgerStore[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *LedgerEntity]) (err error) {
+func (inst *ledgerFetcher[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *LedgerEntity]) (err error) {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
 	sb.WriteString(ledgerTableName)
@@ -394,12 +421,12 @@ func (inst *LedgerStore[W]) FetchItemSinglePartition(ctx context.Context, partit
 	}
 	sb.WriteString(") ORDER BY " + ledgerColOrder + " DESC LIMIT 1 BY " + ledgerColKey)
 	sb.WriteString(ledgerArrowOutputSettings)
-	ents, err := inst.queryEntities(ctx, sb.String())
+	ents, err := inst.st.queryEntities(ctx, sb.String())
 	if err != nil {
 		return
 	}
 	for _, ent := range ents {
-		if _, d := inst.dirty[ent.ID]; d {
+		if _, d := inst.st.dirty[ent.ID]; d {
 			continue
 		}
 		target.AddItem(ent.ID, ent)
@@ -419,86 +446,111 @@ const (
 
 // ScanOpened returns the entities whose rows carry a conforming Opened
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *LedgerStore[W]) ScanOpened(ctx context.Context, extraPredicate string) (ents []*LedgerEntity, err error) {
+func (inst *LedgerStore[W]) ScanOpened(ctx context.Context, opts recordstore.ScanOpts) (ents []*LedgerEntity, err error) {
 	where := ledgerScanOpenedFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + ledgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC" + ledgerArrowOutputSettings
+		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += ledgerArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanDeposited returns the entities whose rows carry a conforming Deposited
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *LedgerStore[W]) ScanDeposited(ctx context.Context, extraPredicate string) (ents []*LedgerEntity, err error) {
+func (inst *LedgerStore[W]) ScanDeposited(ctx context.Context, opts recordstore.ScanOpts) (ents []*LedgerEntity, err error) {
 	where := ledgerScanDepositedFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + ledgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC" + ledgerArrowOutputSettings
+		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += ledgerArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanWithdrawn returns the entities whose rows carry a conforming Withdrawn
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *LedgerStore[W]) ScanWithdrawn(ctx context.Context, extraPredicate string) (ents []*LedgerEntity, err error) {
+func (inst *LedgerStore[W]) ScanWithdrawn(ctx context.Context, opts recordstore.ScanOpts) (ents []*LedgerEntity, err error) {
 	where := ledgerScanWithdrawnFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + ledgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC" + ledgerArrowOutputSettings
+		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += ledgerArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanClosed returns the entities whose rows carry a conforming Closed
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *LedgerStore[W]) ScanClosed(ctx context.Context, extraPredicate string) (ents []*LedgerEntity, err error) {
+func (inst *LedgerStore[W]) ScanClosed(ctx context.Context, opts recordstore.ScanOpts) (ents []*LedgerEntity, err error) {
 	where := ledgerScanClosedFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + ledgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC" + ledgerArrowOutputSettings
+		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += ledgerArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanAccountState returns the entities whose rows carry a conforming AccountState
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *LedgerStore[W]) ScanAccountState(ctx context.Context, extraPredicate string) (ents []*LedgerEntity, err error) {
+func (inst *LedgerStore[W]) ScanAccountState(ctx context.Context, opts recordstore.ScanOpts) (ents []*LedgerEntity, err error) {
 	where := ledgerScanAccountStateFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + ledgerTableName +
 		" WHERE " + where +
-		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC" + ledgerArrowOutputSettings
+		" ORDER BY " + ledgerColOrder + " ASC, " + ledgerColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += ledgerArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 

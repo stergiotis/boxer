@@ -179,18 +179,18 @@ func TestDeviceStoreNoStaleRecacheBetweenCommitAndFlush(t *testing.T) {
 	// New version committed but not flushed; a fetch in this window sees
 	// the old row in ClickHouse and must refuse to cache it.
 	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 2}).Commit())
-	has, _ := st.Get(1)
+	_, has := st.Get(1)
 	require.False(t, has)
 	for range st.IterateRestWorkItems(ctx) {
 	}
-	has, _ = st.Get(1)
+	_, has = st.Get(1)
 	require.False(t, has, "the pre-write row must not enter the cache while the key is dirty")
 
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 	for range st.IterateRestWorkItems(ctx) {
 	}
-	has, ent := st.Get(1)
+	ent, has := st.Get(1)
 	require.True(t, has)
 	require.Equal(t, uint64(2), ent.Battery.Val.Charge, "post-flush fetch must serve the new version")
 	require.Equal(t, t1, ent.Ts)

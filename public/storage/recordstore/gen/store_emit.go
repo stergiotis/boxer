@@ -42,16 +42,16 @@ type envelopeCol struct {
 
 // emitStore renders the store glue file: entity bag, builder (Add* over
 // the generated <Kind>AddSections), verbs, cache fetcher and
-// presence-gated decode — the shape pinned by the hand-written reference
-// recordstore/example/device_store.go and its round-trip test.
+// presence-gated decode — the shape pinned by the recordstore/example
+// round-trip test.
 //
-// v1 scope (ADR-0100 S1): the Key role must be a u64 EntityId plain
-// column; Order = EntityTimestamp; the state view emits only when an
-// EntityLifecycle column exists. Component decode supports the scalar,
-// scalar-single (unit) and slice-container shapes; other shapes
-// (multi-sub-column, carriers, options, roaring, explode) are a
-// generation-time error until the presence-gated read helpers move into
-// marshallgen (S2).
+// Role gates (ADR-0100 SD2): Key = EntityId (u64 or string), Order =
+// EntityTimestamp (z64); the state view emits only when an
+// EntityLifecycle (u8) column exists; any other plain column is a
+// generation error — pass-through envelope fields are deferred (ADR-0100
+// Update 2026-07-04). Component decode coverage is gated by
+// marshallgen.ReadRowSupported (carrier channels and exploded fields
+// remain uncovered).
 func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, plans []*mappingplan.Plan) (code []byte, err error) {
 	info := readback.NewInformationRetrieval(conv)
 	err = info.LoadTable(ir, inst.RowConfig)
@@ -166,6 +166,16 @@ func (inst Input) envelope(info *readback.InformationRetrieval, conv common.Nami
 			err = bind(&order, "Order", cr.PhysicalColumn.String(), cr.CanonicalType)
 		case common.PlainItemTypeEntityLifecycle:
 			err = bind(&lifecycle, "Lifecycle", cr.PhysicalColumn.String(), cr.CanonicalType)
+		case common.PlainItemTypeNone:
+			// Tagged and other non-plain columns report None under this
+			// convention; plain columns always carry a concrete item type
+			// (the IR defines plain-ness as != None).
+		default:
+			// A non-role plain column would be silently zero-written by
+			// every Begin and dropped by the decode — refuse until
+			// pass-through envelope fields exist (ADR-0100 Update
+			// 2026-07-04).
+			err = eh.Errorf("plain column %s carries item type %v — only the role-bearing EntityId/EntityTimestamp/EntityLifecycle plain columns are supported; pass-through envelope fields are deferred (ADR-0100 Update 2026-07-04)", cr.PhysicalColumn.String(), itemType)
 		}
 		if err != nil {
 			return
@@ -317,7 +327,9 @@ func (inst Input) emitStoreType(sb *strings.Builder) {
 	p("\t// DDLTail is appended after the generated column body at EnsureTable")
 	p("\t// time (engine, ORDER BY, SETTINGS). Empty selects the default.")
 	p("\tDDLTail string")
-	p("\t// CacheCapacity is the L1 capacity of the read-through cache.")
+	p("\t// CacheCapacity is the L1 capacity of the read-through cache, in")
+	p("\t// entries (not bytes) — size it for the largest expected entity")
+	p("\t// payloads. Zero or negative selects the default (1024).")
 	p("\tCacheCapacity int")
 	p("\t// FetchCriteria are the cache's batch-flush thresholds.")
 	p("\tFetchCriteria caching.FetchCriteria")
@@ -340,6 +352,10 @@ func (inst Input) emitStoreType(sb *strings.Builder) {
 	p("\tcache *caching.ReadThroughCache[%s, *%s, W]", inst.keyGoType, inst.entityType())
 	p("}")
 	p("")
+	p("// New%s wires the store: DML builder, read-through cache and the", inst.storeType())
+	p("// fetcher shim. A nil alloc selects the Go allocator; W is the cache's")
+	p("// work-item type (use struct{} when the suspend/replay machinery is")
+	p("// not needed).")
 	p("func New%s[W comparable](exec recordstore.ExecutorI, alloc memory.Allocator, cfg %sStoreConfig) (inst *%s[W]) {", inst.storeType(), inst.StoreName, inst.storeType())
 	p("\tif alloc == nil {")
 	p("\t\talloc = memory.NewGoAllocator()")
@@ -348,7 +364,7 @@ func (inst Input) emitStoreType(sb *strings.Builder) {
 	p("\t\tcfg.CacheCapacity = 1024")
 	p("\t}")
 	p("\tinst = &%s[W]{exec: exec, alloc: alloc, cfg: cfg, dml: New%s(alloc, 64), dirty: make(map[%s]struct{})}", inst.storeType(), inst.dmlType(), inst.keyGoType)
-	p("\tinst.cache = caching.NewReadThroughCache[%s, *%s, W](cfg.CacheCapacity, inst, cfg.FetchCriteria)", inst.keyGoType, inst.entityType())
+	p("\tinst.cache = caching.NewReadThroughCache[%s, *%s, W](cfg.CacheCapacity, &%sFetcher[W]{st: inst}, cfg.FetchCriteria)", inst.keyGoType, inst.entityType(), inst.TableName)
 	p("\treturn")
 	p("}")
 	p("")
@@ -450,7 +466,9 @@ func (inst Input) emitIngest(sb *strings.Builder, comps []storeComponent) (err e
 			return
 		}
 		p("// Ingest%s appends one whole entity per row carrying only the", c.Kind)
-		p("// %s component, all stamped with ts.", c.Kind)
+		p("// %s component, all stamped with ts. Keys must be distinct within", c.Kind)
+		p("// one call: rows share ts, so duplicate keys tie on Order and")
+		p("// Latest picks among them arbitrarily (ADR-0100 SD2).")
 		p("func (inst *%s[W]) Ingest%s(ts time.Time, rows []%s) (err error) {", inst.storeType(), c.Kind, c.Kind)
 		p("\tfor i := range rows {")
 		p("\t\terr = inst.Begin(rows[i].%s, ts).Add%s(rows[i]).Commit()", idCol.GoField, c.Kind)
@@ -530,8 +548,12 @@ func (inst Input) emitCacheVerbs(sb *strings.Builder) {
 	p("// Get retrieves an entity by Key through the cache. A miss queues the")
 	p("// key for the next batch fetch (the caching suspend/replay contract);")
 	p("// Get is intended for immutable-by-key access — see ADR-0100 SD4.")
-	p("func (inst *%s[W]) Get(key %s) (has bool, ent *%s) {", inst.storeType(), inst.keyGoType, inst.entityType())
-	p("\treturn inst.cache.Get(key)")
+	p("// A miss can also mean the batched fetch errored (misses swallow")
+	p("// fetch errors; the circuit breaker backs off) — Latest is the")
+	p("// authoritative existence check.")
+	p("func (inst *%s[W]) Get(key %s) (ent *%s, found bool) {", inst.storeType(), inst.keyGoType, inst.entityType())
+	p("\tfound, ent = inst.cache.Get(key)")
+	p("\treturn")
 	p("}")
 	p("")
 	p("// WorkItem marks the current work item for the cache's miss bookkeeping.")
@@ -557,15 +579,22 @@ func (inst Input) emitCacheVerbs(sb *strings.Builder) {
 	p("\tinst.cache.AdvanceEpoch()")
 	p("}")
 	p("")
+	p("// %sFetcher implements caching.ItemFetcherI for the store's cache —", inst.TableName)
+	p("// an unexported shim so the fetch plumbing stays off the store's")
+	p("// public method set.")
+	p("type %sFetcher[W comparable] struct{ st *%s[W] }", inst.TableName, inst.storeType())
+	p("")
+	p("var _ caching.ItemFetcherI[%s, *%s] = (*%sFetcher[struct{}])(nil)", inst.keyGoType, inst.entityType(), inst.TableName)
+	p("")
 	p("// DeterminePartition implements caching.ItemFetcherI. Single partition")
 	p("// in v1 (one table, one server).")
-	p("func (inst *%s[W]) DeterminePartition(key %s) uint64 { return 0 }", inst.storeType(), inst.keyGoType)
+	p("func (inst *%sFetcher[W]) DeterminePartition(key %s) uint64 { return 0 }", inst.TableName, inst.keyGoType)
 	p("")
 	p("// FetchItemSinglePartition implements caching.ItemFetcherI: one batched")
 	p("// point lookup per fetch. Duplicate versions collapse newest-first.")
 	p("// Dirty keys (written locally, not yet flushed) are fetched but not")
 	p("// cached — caching them would resurrect the pre-write row.")
-	p("func (inst *%s[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []%s, target caching.ItemTargetI[%s, *%s]) (err error) {", inst.storeType(), inst.keyGoType, inst.keyGoType, inst.entityType())
+	p("func (inst *%sFetcher[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []%s, target caching.ItemTargetI[%s, *%s]) (err error) {", inst.TableName, inst.keyGoType, inst.keyGoType, inst.entityType())
 	p("\tvar sb strings.Builder")
 	p("\tsb.WriteString(\"SELECT * FROM \")")
 	p("\tsb.WriteString(%sTableName)", inst.TableName)
@@ -578,12 +607,12 @@ func (inst Input) emitCacheVerbs(sb *strings.Builder) {
 	p("\t}")
 	p("\tsb.WriteString(\") ORDER BY \" + %sColOrder + \" DESC LIMIT 1 BY \" + %sColKey)", inst.TableName, inst.TableName)
 	p("\tsb.WriteString(%sArrowOutputSettings)", inst.TableName)
-	p("\tents, err := inst.queryEntities(ctx, sb.String())")
+	p("\tents, err := inst.st.queryEntities(ctx, sb.String())")
 	p("\tif err != nil {")
 	p("\t\treturn")
 	p("\t}")
 	p("\tfor _, ent := range ents {")
-	p("\t\tif _, d := inst.dirty[ent.ID]; d {")
+	p("\t\tif _, d := inst.st.dirty[ent.ID]; d {")
 	p("\t\t\tcontinue")
 	p("\t\t}")
 	p("\t\ttarget.AddItem(ent.ID, ent)")
@@ -610,18 +639,23 @@ func (inst Input) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, st
 	for _, c := range comps {
 		p("// Scan%s returns the entities whose rows carry a conforming %s", c.Kind, c.Kind)
 		p("// component, ordered by (Order, Key) — deterministic across ties.")
-		p("// extraPredicate (raw SQL over the physical columns; empty for none)")
-		p("// further restricts the scan. The Filter artefact uses ClickHouse")
+		p("// opts.ExtraPredicate (trusted raw SQL over the physical columns —")
+		p("// never untrusted input) further restricts the scan; opts.Limit")
+		p("// caps the row count. The Filter artefact uses ClickHouse")
 		p("// built-ins only, so this is a single SELECT — no helper UDFs, no")
 		p("// multi-statement script (the ExecutorI contract).")
-		p("func (inst *%s[W]) Scan%s(ctx context.Context, extraPredicate string) (ents []*%s, err error) {", inst.storeType(), c.Kind, inst.entityType())
+		p("func (inst *%s[W]) Scan%s(ctx context.Context, opts recordstore.ScanOpts) (ents []*%s, err error) {", inst.storeType(), c.Kind, inst.entityType())
 		p("\twhere := %sScan%sFilter", inst.TableName, c.Kind)
-		p("\tif extraPredicate != \"\" {")
-		p("\t\twhere = \"(\" + where + \") AND (\" + extraPredicate + \")\"")
+		p("\tif opts.ExtraPredicate != \"\" {")
+		p("\t\twhere = \"(\" + where + \") AND (\" + opts.ExtraPredicate + \")\"")
 		p("\t}")
 		p("\tsql := \"SELECT * FROM \" + %sTableName +", inst.TableName)
 		p("\t\t\" WHERE \" + where +")
-		p("\t\t\" ORDER BY \" + %sColOrder + \" ASC, \" + %sColKey + \" ASC\" + %sArrowOutputSettings", inst.TableName, inst.TableName, inst.TableName)
+		p("\t\t\" ORDER BY \" + %sColOrder + \" ASC, \" + %sColKey + \" ASC\"", inst.TableName, inst.TableName)
+		p("\tif opts.Limit > 0 {")
+		p("\t\tsql += \" LIMIT \" + strconv.Itoa(opts.Limit)")
+		p("\t}")
+		p("\tsql += %sArrowOutputSettings", inst.TableName)
 		p("\treturn inst.queryEntities(ctx, sql)")
 		p("}")
 		p("")

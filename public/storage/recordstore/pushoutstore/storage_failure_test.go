@@ -74,7 +74,7 @@ func TestAppendAppliedFailureLeavesOrderUnambiguous(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, stor2.AppendApplied(ctx, ph(5)))
 
-	rows, err := stor2.st.Replay(ctx, logKey, beginning)
+	rows, err := stor2.st.Replay(ctx, logKey, recordstore.SeqTs(0))
 	require.NoError(t, err)
 	seen := map[int64]bool{}
 	for _, r := range rows {

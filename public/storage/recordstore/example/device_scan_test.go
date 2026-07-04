@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +14,7 @@ import (
 // ADR-0066 artefacts): the baked Filter — presence prefilter AND exact
 // validator with membership ids as literals — selects exactly the rows
 // carrying a conforming component, across the whole history (Scan is
-// row-level, not latest-collapsed), with extraPredicate narrowing further.
+// row-level, not latest-collapsed), with ScanOpts narrowing further.
 func TestDeviceStoreScan(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
@@ -36,7 +37,7 @@ func TestDeviceStoreScan(t *testing.T) {
 	require.NoError(t, err)
 
 	// Rows carrying Identity: entity 1's first version and entity 2.
-	idents, err := st.ScanIdentity(ctx, "")
+	idents, err := st.ScanIdentity(ctx, recordstore.ScanOpts{})
 	require.NoError(t, err)
 	require.Len(t, idents, 2)
 	for _, ent := range idents {
@@ -46,19 +47,24 @@ func TestDeviceStoreScan(t *testing.T) {
 	require.Equal(t, uint64(2), idents[1].ID)
 
 	// Rows carrying Battery: entity 1 (both versions) and entity 3.
-	batts, err := st.ScanBattery(ctx, "")
+	batts, err := st.ScanBattery(ctx, recordstore.ScanOpts{})
 	require.NoError(t, err)
 	require.Len(t, batts, 3)
 
-	// extraPredicate narrows over the physical columns.
-	one, err := st.ScanIdentity(ctx, deviceColKey+" = 2")
+	// Limit caps the row count (unlimited above: 3 rows).
+	capped, err := st.ScanBattery(ctx, recordstore.ScanOpts{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, capped, 2)
+
+	// ExtraPredicate narrows over the physical columns.
+	one, err := st.ScanIdentity(ctx, recordstore.ScanOpts{ExtraPredicate: deviceColKey + " = 2"})
 	require.NoError(t, err)
 	require.Len(t, one, 1)
 	require.Equal(t, uint64(2), one[0].ID)
 	require.Equal(t, "CHARGING", one[0].Identity.Val.Status)
 
 	// A component nobody wrote scans empty.
-	locs, err := st.ScanLocated(ctx, "")
+	locs, err := st.ScanLocated(ctx, recordstore.ScanOpts{})
 	require.NoError(t, err)
 	require.Empty(t, locs)
 }

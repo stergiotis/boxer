@@ -99,6 +99,26 @@ type KindA struct {
 	require.ErrorContains(t, err, "both carry the Key role")
 }
 
+// TestGenerateRejectsNonRolePlainColumn: a plain column outside the three
+// roles would be silently zero-written by every Begin and dropped by the
+// decode — the generator must refuse until pass-through envelope fields
+// exist (ADR-0100 Update 2026-07-04).
+func TestGenerateRejectsNonRolePlainColumn(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	manip := validationManipulator(t, "solo")
+	manip.PlainValueColumn(common.PlainItemTypeEntityRouting, "route", ctabb.U64)
+	err := generateInto(t, manip, a)
+	require.ErrorContains(t, err, "only the role-bearing")
+}
+
 // TestGenerateRejectsIngestIdTypeMismatch: an id field whose Go type
 // disagrees with the Key column would emit non-compiling Ingest code —
 // the generator must refuse instead.

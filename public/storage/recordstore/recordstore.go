@@ -7,8 +7,9 @@
 // substrate.
 //
 // This package holds only what generated code and adapters share: the
-// executor seam and common errors. The store types themselves are emitted
-// per schema by recordstore/gen; concrete ClickHouse executors live in
+// executor seam, the Scan options and the synthetic-sequence Order
+// helpers. The store types themselves are emitted per schema by
+// recordstore/gen; concrete ClickHouse executors live in
 // recordstore/chexec.
 //
 // A store instance — like the cache and the DML builders it composes — is
@@ -17,6 +18,7 @@ package recordstore
 
 import (
 	"context"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 )
@@ -39,4 +41,31 @@ type ExecutorI interface {
 	Exec(ctx context.Context, sql string) error
 	QueryArrow(ctx context.Context, sql string) (records []arrow.RecordBatch, err error)
 	InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) error
+}
+
+// ScanOpts parameterizes the generated Scan<Kind> verbs. The zero value
+// scans everything: no extra predicate, no limit.
+type ScanOpts struct {
+	// ExtraPredicate further restricts the scan: raw SQL over the physical
+	// (leeway-encoded) column names, ANDed with the store's baked Filter
+	// artefact. It is concatenated into the statement verbatim — trusted
+	// input only, never user-supplied text.
+	ExtraPredicate string
+	// Limit caps the number of returned rows; zero means no limit.
+	Limit int
+}
+
+// SeqTs renders a synthetic per-key sequence number (1, 2, 3, …) as the
+// envelope Order timestamp (Unix nanosecond seq, UTC) — a total append
+// order without wall clocks, the idiom the ADR-0100 consumer adapters
+// use. Callers own the SD2 contract: Order values must stay strictly
+// monotonic per key. SeqTs(0) is the "replay everything" lower bound.
+func SeqTs(seq uint64) time.Time {
+	return time.Unix(0, int64(seq)).UTC()
+}
+
+// SeqOf is the inverse of SeqTs: it recovers the synthetic sequence
+// number from an Order timestamp read back from the store.
+func SeqOf(ts time.Time) uint64 {
+	return uint64(ts.UnixNano())
 }

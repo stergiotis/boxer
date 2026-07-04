@@ -49,7 +49,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	// fetch batches one IN (…) lookup, the replay then hits.
 	for range st.WorkItem("frame-1") {
 		for _, key := range []uint64{1, 2} {
-			has, _ := st.Get(key)
+			_, has := st.Get(key)
 			require.False(t, has, "key %d must miss before the batch fetch", key)
 		}
 	}
@@ -57,7 +57,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	for w := range st.IterateRestWorkItems(ctx) {
 		require.Equal(t, "frame-1", w)
 		replayed++
-		has, e1 := st.Get(1)
+		e1, has := st.Get(1)
 		require.True(t, has)
 		require.Equal(t, []string{"identity", "battery", "tagged", "located"}, e1.Archetype())
 		require.Equal(t, option.Some(Identity{ID: 1, Status: "IDLE", Nick: option.Some("alpha")}), e1.Identity)
@@ -66,7 +66,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 		require.Equal(t, option.Some(Located{ID: 1, Lat: 47.5, Lng: 8.5, Cell: 12345}), e1.Located)
 		require.Equal(t, t0, e1.Ts)
 
-		has, e2 := st.Get(2)
+		e2, has := st.Get(2)
 		require.True(t, has)
 		require.Equal(t, []string{"identity"}, e2.Archetype())
 		require.False(t, e2.Identity.Val.Nick.Has, "absent Option scalar reads back as None")
@@ -81,7 +81,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 		_, _ = st.Get(3)
 	}
 	for range st.IterateRestWorkItems(ctx) {
-		has, e3 := st.Get(3)
+		e3, has := st.Get(3)
 		require.True(t, has)
 		require.Len(t, e3.Archetype(), 1)
 	}

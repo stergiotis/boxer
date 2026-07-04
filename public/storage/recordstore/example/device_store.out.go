@@ -83,7 +83,9 @@ type DeviceStoreConfig struct {
 	// DDLTail is appended after the generated column body at EnsureTable
 	// time (engine, ORDER BY, SETTINGS). Empty selects the default.
 	DDLTail string
-	// CacheCapacity is the L1 capacity of the read-through cache.
+	// CacheCapacity is the L1 capacity of the read-through cache, in
+	// entries (not bytes) — size it for the largest expected entity
+	// payloads. Zero or negative selects the default (1024).
 	CacheCapacity int
 	// FetchCriteria are the cache's batch-flush thresholds.
 	FetchCriteria caching.FetchCriteria
@@ -106,6 +108,10 @@ type DeviceStore[W comparable] struct {
 	cache *caching.ReadThroughCache[uint64, *DeviceEntity, W]
 }
 
+// NewDeviceStore wires the store: DML builder, read-through cache and the
+// fetcher shim. A nil alloc selects the Go allocator; W is the cache's
+// work-item type (use struct{} when the suspend/replay machinery is
+// not needed).
 func NewDeviceStore[W comparable](exec recordstore.ExecutorI, alloc memory.Allocator, cfg DeviceStoreConfig) (inst *DeviceStore[W]) {
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
@@ -114,7 +120,7 @@ func NewDeviceStore[W comparable](exec recordstore.ExecutorI, alloc memory.Alloc
 		cfg.CacheCapacity = 1024
 	}
 	inst = &DeviceStore[W]{exec: exec, alloc: alloc, cfg: cfg, dml: NewInEntityDeviceTable(alloc, 64), dirty: make(map[uint64]struct{})}
-	inst.cache = caching.NewReadThroughCache[uint64, *DeviceEntity, W](cfg.CacheCapacity, inst, cfg.FetchCriteria)
+	inst.cache = caching.NewReadThroughCache[uint64, *DeviceEntity, W](cfg.CacheCapacity, &deviceFetcher[W]{st: inst}, cfg.FetchCriteria)
 	return
 }
 
@@ -216,7 +222,9 @@ func (inst *DeviceEntityBuilder[W]) Rollback() (err error) {
 }
 
 // IngestIdentity appends one whole entity per row carrying only the
-// Identity component, all stamped with ts.
+// Identity component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *DeviceStore[W]) IngestIdentity(ts time.Time, rows []Identity) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddIdentity(rows[i]).Commit()
@@ -229,7 +237,9 @@ func (inst *DeviceStore[W]) IngestIdentity(ts time.Time, rows []Identity) (err e
 }
 
 // IngestBattery appends one whole entity per row carrying only the
-// Battery component, all stamped with ts.
+// Battery component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *DeviceStore[W]) IngestBattery(ts time.Time, rows []Battery) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddBattery(rows[i]).Commit()
@@ -242,7 +252,9 @@ func (inst *DeviceStore[W]) IngestBattery(ts time.Time, rows []Battery) (err err
 }
 
 // IngestTagged appends one whole entity per row carrying only the
-// Tagged component, all stamped with ts.
+// Tagged component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *DeviceStore[W]) IngestTagged(ts time.Time, rows []Tagged) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddTagged(rows[i]).Commit()
@@ -255,7 +267,9 @@ func (inst *DeviceStore[W]) IngestTagged(ts time.Time, rows []Tagged) (err error
 }
 
 // IngestLocated appends one whole entity per row carrying only the
-// Located component, all stamped with ts.
+// Located component, all stamped with ts. Keys must be distinct within
+// one call: rows share ts, so duplicate keys tie on Order and
+// Latest picks among them arbitrarily (ADR-0100 SD2).
 func (inst *DeviceStore[W]) IngestLocated(ts time.Time, rows []Located) (err error) {
 	for i := range rows {
 		err = inst.Begin(rows[i].ID, ts).AddLocated(rows[i]).Commit()
@@ -325,8 +339,12 @@ func (inst *DeviceStore[W]) DiscardPending() {
 // Get retrieves an entity by Key through the cache. A miss queues the
 // key for the next batch fetch (the caching suspend/replay contract);
 // Get is intended for immutable-by-key access — see ADR-0100 SD4.
-func (inst *DeviceStore[W]) Get(key uint64) (has bool, ent *DeviceEntity) {
-	return inst.cache.Get(key)
+// A miss can also mean the batched fetch errored (misses swallow
+// fetch errors; the circuit breaker backs off) — Latest is the
+// authoritative existence check.
+func (inst *DeviceStore[W]) Get(key uint64) (ent *DeviceEntity, found bool) {
+	found, ent = inst.cache.Get(key)
+	return
 }
 
 // WorkItem marks the current work item for the cache's miss bookkeeping.
@@ -352,15 +370,22 @@ func (inst *DeviceStore[W]) AdvanceEpoch() {
 	inst.cache.AdvanceEpoch()
 }
 
+// deviceFetcher implements caching.ItemFetcherI for the store's cache —
+// an unexported shim so the fetch plumbing stays off the store's
+// public method set.
+type deviceFetcher[W comparable] struct{ st *DeviceStore[W] }
+
+var _ caching.ItemFetcherI[uint64, *DeviceEntity] = (*deviceFetcher[struct{}])(nil)
+
 // DeterminePartition implements caching.ItemFetcherI. Single partition
 // in v1 (one table, one server).
-func (inst *DeviceStore[W]) DeterminePartition(key uint64) uint64 { return 0 }
+func (inst *deviceFetcher[W]) DeterminePartition(key uint64) uint64 { return 0 }
 
 // FetchItemSinglePartition implements caching.ItemFetcherI: one batched
 // point lookup per fetch. Duplicate versions collapse newest-first.
 // Dirty keys (written locally, not yet flushed) are fetched but not
 // cached — caching them would resurrect the pre-write row.
-func (inst *DeviceStore[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []uint64, target caching.ItemTargetI[uint64, *DeviceEntity]) (err error) {
+func (inst *deviceFetcher[W]) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []uint64, target caching.ItemTargetI[uint64, *DeviceEntity]) (err error) {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
 	sb.WriteString(deviceTableName)
@@ -373,12 +398,12 @@ func (inst *DeviceStore[W]) FetchItemSinglePartition(ctx context.Context, partit
 	}
 	sb.WriteString(") ORDER BY " + deviceColOrder + " DESC LIMIT 1 BY " + deviceColKey)
 	sb.WriteString(deviceArrowOutputSettings)
-	ents, err := inst.queryEntities(ctx, sb.String())
+	ents, err := inst.st.queryEntities(ctx, sb.String())
 	if err != nil {
 		return
 	}
 	for _, ent := range ents {
-		if _, d := inst.dirty[ent.ID]; d {
+		if _, d := inst.st.dirty[ent.ID]; d {
 			continue
 		}
 		target.AddItem(ent.ID, ent)
@@ -397,69 +422,89 @@ const (
 
 // ScanIdentity returns the entities whose rows carry a conforming Identity
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *DeviceStore[W]) ScanIdentity(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
+func (inst *DeviceStore[W]) ScanIdentity(ctx context.Context, opts recordstore.ScanOpts) (ents []*DeviceEntity, err error) {
 	where := deviceScanIdentityFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + deviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC" + deviceArrowOutputSettings
+		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanBattery returns the entities whose rows carry a conforming Battery
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *DeviceStore[W]) ScanBattery(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
+func (inst *DeviceStore[W]) ScanBattery(ctx context.Context, opts recordstore.ScanOpts) (ents []*DeviceEntity, err error) {
 	where := deviceScanBatteryFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + deviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC" + deviceArrowOutputSettings
+		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanTagged returns the entities whose rows carry a conforming Tagged
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *DeviceStore[W]) ScanTagged(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
+func (inst *DeviceStore[W]) ScanTagged(ctx context.Context, opts recordstore.ScanOpts) (ents []*DeviceEntity, err error) {
 	where := deviceScanTaggedFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + deviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC" + deviceArrowOutputSettings
+		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 
 // ScanLocated returns the entities whose rows carry a conforming Located
 // component, ordered by (Order, Key) — deterministic across ties.
-// extraPredicate (raw SQL over the physical columns; empty for none)
-// further restricts the scan. The Filter artefact uses ClickHouse
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
 // built-ins only, so this is a single SELECT — no helper UDFs, no
 // multi-statement script (the ExecutorI contract).
-func (inst *DeviceStore[W]) ScanLocated(ctx context.Context, extraPredicate string) (ents []*DeviceEntity, err error) {
+func (inst *DeviceStore[W]) ScanLocated(ctx context.Context, opts recordstore.ScanOpts) (ents []*DeviceEntity, err error) {
 	where := deviceScanLocatedFilter
-	if extraPredicate != "" {
-		where = "(" + where + ") AND (" + extraPredicate + ")"
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + deviceTableName +
 		" WHERE " + where +
-		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC" + deviceArrowOutputSettings
+		" ORDER BY " + deviceColOrder + " ASC, " + deviceColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += deviceArrowOutputSettings
 	return inst.queryEntities(ctx, sql)
 }
 

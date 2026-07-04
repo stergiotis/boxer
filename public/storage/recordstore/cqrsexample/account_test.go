@@ -3,8 +3,8 @@ package cqrsexample
 import (
 	"context"
 	"testing"
-	"time"
 
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +69,7 @@ func TestAccountLifecycle(t *testing.T) {
 
 	// The full history stays readable: six events in sequence order, the
 	// archetype naming the event type.
-	history, err := st.Replay(ctx, id, time.Unix(0, 0).UTC())
+	history, err := st.Replay(ctx, id, recordstore.SeqTs(0))
 	require.NoError(t, err)
 	types := make([]string, 0, len(history))
 	for _, row := range history {
@@ -89,7 +89,7 @@ func TestAccountLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(7), acct2.Balance)
 
-	deposits, err := st.ScanDeposited(ctx, "")
+	deposits, err := st.ScanDeposited(ctx, recordstore.ScanOpts{})
 	require.NoError(t, err)
 	var volume uint64
 	for _, row := range deposits {

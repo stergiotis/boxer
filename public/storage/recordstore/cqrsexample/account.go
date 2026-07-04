@@ -2,9 +2,9 @@ package cqrsexample
 
 import (
 	"context"
-	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // This file is the CQRS write model over the generated LedgerStore — the
@@ -35,11 +35,6 @@ type Account struct {
 // Replayed reports how many events the last Load folded.
 func (inst *Account) Replayed() int { return inst.replayed }
 
-// seqTs renders an event sequence as the synthetic Order timestamp
-// (Unix nanos 1, 2, 3, …) — total order without wall clocks, the
-// pushoutstore idiom.
-func seqTs(seq uint64) time.Time { return time.Unix(0, int64(seq)).UTC() }
-
 // snapKey is the aggregate's sibling snapshot key: snapshots live outside
 // the event stream so Replay never sees them and Latest finds the newest
 // one directly.
@@ -58,17 +53,17 @@ func (inst *Account) fold(row *LedgerEntity) (err error) {
 		inst.Balance += row.Deposited.Val.Amount
 	case row.Withdrawn.Has:
 		if row.Withdrawn.Val.Amount > inst.Balance {
-			err = eh.Errorf("event stream violates the balance invariant at seq %d", row.Ts.UnixNano())
+			err = eh.Errorf("event stream violates the balance invariant at seq %d", recordstore.SeqOf(row.Ts))
 			return
 		}
 		inst.Balance -= row.Withdrawn.Val.Amount
 	case row.Closed.Has:
 		inst.Closed = true
 	default:
-		err = eh.Errorf("ledger row at seq %d carries no known event component", row.Ts.UnixNano())
+		err = eh.Errorf("ledger row at seq %d carries no known event component", recordstore.SeqOf(row.Ts))
 		return
 	}
-	inst.nextSeq = uint64(row.Ts.UnixNano()) + 1
+	inst.nextSeq = recordstore.SeqOf(row.Ts) + 1
 	inst.replayed++
 	return
 }
@@ -86,7 +81,7 @@ func NewService(st *LedgerStore[struct{}]) *Service { return &Service{st: st} }
 // fold. A fresh aggregate replays everything from sequence 1.
 func (inst *Service) Load(ctx context.Context, id string) (acct *Account, err error) {
 	acct = &Account{ID: id, nextSeq: 1}
-	from := time.Unix(0, 0).UTC()
+	from := recordstore.SeqTs(0)
 	snap, found, err := inst.st.Latest(ctx, snapKey(id))
 	if err != nil {
 		err = eh.Errorf("load snapshot for %s: %w", id, err)
@@ -99,7 +94,7 @@ func (inst *Service) Load(ctx context.Context, id string) (acct *Account, err er
 		acct.Balance = state.Balance
 		acct.Closed = state.Closed
 		acct.nextSeq = state.AsOf + 1
-		from = seqTs(state.AsOf + 1)
+		from = recordstore.SeqTs(state.AsOf + 1)
 	}
 	events, err := inst.st.Replay(ctx, id, from)
 	if err != nil {
@@ -126,7 +121,7 @@ func (inst *Service) append(ctx context.Context, acct *Account, add func(b *Ledg
 			inst.st.DiscardPending()
 		}
 	}()
-	b := inst.st.Begin(acct.ID, seqTs(acct.nextSeq))
+	b := inst.st.Begin(acct.ID, recordstore.SeqTs(acct.nextSeq))
 	add(b)
 	err = b.Commit()
 	if err != nil {
@@ -229,7 +224,7 @@ func (inst *Service) Snapshot(ctx context.Context, id string) (err error) {
 		return
 	}
 	asOf := acct.nextSeq - 1
-	b := inst.st.Begin(snapKey(id), seqTs(asOf))
+	b := inst.st.Begin(snapKey(id), recordstore.SeqTs(asOf))
 	b.AddAccountState(AccountState{
 		ID:      snapKey(id),
 		Owner:   acct.Owner,

@@ -77,7 +77,7 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 
 	for range st.WorkItem("frame-A") {
 		for _, key := range []uint64{1, 2} {
-			has, _ := st.Get(key)
+			_, has := st.Get(key)
 			require.False(t, has)
 		}
 	}
@@ -88,7 +88,7 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 
 	for range st.WorkItem("frame-B") {
 		for _, key := range []uint64{3, 4} {
-			has, _ := st.Get(key)
+			_, has := st.Get(key)
 			require.False(t, has)
 		}
 	}
@@ -96,7 +96,7 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 	for w := range st.IterateReadyWorkItems(ctx) {
 		replayed = append(replayed, w)
 		for _, key := range []uint64{1, 2, 3, 4} {
-			has, ent := st.Get(key)
+			ent, has := st.Get(key)
 			require.True(t, has, "key %d must hit after the batch fetch", key)
 			require.Equal(t, key, ent.ID)
 		}
@@ -115,13 +115,13 @@ func TestDeviceStoreCacheFetchErrorBackoff(t *testing.T) {
 	st := NewDeviceStore[string](failing, nil, DeviceStoreConfig{CacheCapacity: 8})
 
 	for range st.WorkItem("w") {
-		has, _ := st.Get(7)
+		_, has := st.Get(7)
 		require.False(t, has)
 	}
 	replays := 0
 	for range st.IterateRestWorkItems(ctx) {
 		replays++
-		has, _ := st.Get(7) // still failing: error state, inside the backoff window
+		_, has := st.Get(7) // still failing: error state, inside the backoff window
 		require.False(t, has)
 	}
 	require.Equal(t, 1, replays)
@@ -130,7 +130,7 @@ func TestDeviceStoreCacheFetchErrorBackoff(t *testing.T) {
 	// The key sits in the circuit-breaker cooling-off window: forcing
 	// another round replays the pending work item but must not re-query.
 	for range st.IterateRestWorkItems(ctx) {
-		has, _ := st.Get(7)
+		_, has := st.Get(7)
 		require.False(t, has)
 	}
 	require.Equal(t, 1, failing.queryCalls, "no re-fetch inside the error backoff")
@@ -160,20 +160,20 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 		_, _ = st.Get(1)
 	}
 	for range st.IterateRestWorkItems(ctx) {
-		has, ent := st.Get(1)
+		ent, has := st.Get(1)
 		require.True(t, has)
 		require.Equal(t, uint64(9000), ent.Battery.Val.Charge)
 	}
 
 	// A new version invalidates the entry; the refetch sees the new row.
 	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
-	has, _ := st.Get(1)
+	_, has := st.Get(1)
 	require.False(t, has, "local Put must invalidate the cached entry")
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 	for range st.IterateRestWorkItems(ctx) {
 	}
-	has, ent := st.Get(1)
+	ent, has := st.Get(1)
 	require.True(t, has)
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
 	require.Equal(t, t1, ent.Ts)
@@ -182,13 +182,13 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 	// (Get is row-level and tombstone-blind by design — GetLatest is the
 	// state-view read).
 	require.NoError(t, st.Delete(1, t2))
-	has, _ = st.Get(1)
+	_, has = st.Get(1)
 	require.False(t, has, "local Delete must invalidate the cached entry")
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 	for range st.IterateRestWorkItems(ctx) {
 	}
-	has, ent = st.Get(1)
+	ent, has = st.Get(1)
 	require.True(t, has)
 	require.Equal(t, deviceLifecycleTombstone, ent.Lifecycle)
 	require.Empty(t, ent.Archetype())

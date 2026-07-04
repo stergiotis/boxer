@@ -528,6 +528,53 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 From acceptance on, this document changes only via dated `## Update`
 sections; see `doc/DOCUMENTATION_STANDARD.md` for the edit-policy tiers.
 
+## Updates
+
+### 2026-07-04 — API-surface corrections from the post-acceptance review
+
+A review of the generated surface (developer experience, homogeneity,
+future-proofing) landed five corrections while every consumer is still
+in-repo; where the SD2/SD4/SD5 text above disagrees in these details,
+this update supersedes it.
+
+- **SD2 correction — non-role plain columns are rejected, not passed
+  through.** "Remaining plain columns pass through as ordinary envelope
+  fields" was never implemented: the emitter silently ignored them, so a
+  non-role plain column (e.g. `EntityRouting`) would be zero-written by
+  every `Begin` and dropped by the decode. The generator now refuses
+  such schemas at generation time (pinned by
+  `TestGenerateRejectsNonRolePlainColumn`); pass-through envelope fields
+  move under Deferred, triggered by the first schema that needs one.
+- **`Get` returns value-first.** `Get(key) (ent, found)` — previously it
+  mirrored the cache's `(has, ent)` order, clashing with
+  `Latest`/`GetLatest` on the same generated type. The generated wrapper
+  flips the order; the `public/caching` signature is unchanged.
+- **`Scan<Kind>` takes options.** `Scan<Kind>(ctx, recordstore.ScanOpts)`
+  replaces the positional `extraPredicate string`. `ScanOpts` (one shared
+  type in the root package, not N generated copies) carries
+  `ExtraPredicate` (trusted SQL, never user input) and `Limit`, so future
+  knobs are non-breaking additions; `LIMIT` renders ahead of the
+  Arrow-output `SETTINGS`.
+- **SD5 note — the fetcher moved off the store's method set.**
+  `DeterminePartition`/`FetchItemSinglePartition` were public only
+  because the store passed itself to the cache as its
+  `caching.ItemFetcherI`; an unexported per-store shim
+  (`<table>Fetcher`) implements them now, so the store's public surface
+  is consumer verbs only.
+- **Root package — the synthetic-sequence idiom is canonical.**
+  `recordstore.SeqTs(seq)` / `SeqOf(ts)` replace the
+  `time.Unix(0, int64(n)).UTC()` helpers both consumer adapters had
+  duplicated (the pushout per-key sequences, the CQRS event sequence);
+  `SeqTs(0)` is the replay-everything bound. The package doc no longer
+  claims "common errors" the package never held.
+
+Generated-doc additions in the same pass: the constructor documents the
+nil-alloc and CacheCapacity defaults and the `W` work-item parameter
+(`struct{}` when unused); `CacheCapacity` is entries, not bytes;
+`Ingest<Kind>` requires distinct keys per call (rows share ts, so
+duplicate keys tie on Order); `Get` documents that a miss can mean a
+swallowed fetch error, with `Latest` as the authoritative check.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

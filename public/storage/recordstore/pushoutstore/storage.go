@@ -58,10 +58,6 @@ const (
 	retentionKey = "retention"
 )
 
-// beginning is the Replay from-order that includes every synthetic
-// sequence timestamp (they start at Unix nano 1).
-var beginning = time.Unix(0, 0).UTC()
-
 // Open builds the adapter over an executor and ensures the table exists.
 // Reopening the same location (executor state) resumes durably: the
 // per-key sequences re-derive lazily from storage.
@@ -115,11 +111,11 @@ func (inst *Storage) nextTs(ctx context.Context, key string) (ts time.Time, err 
 		}
 		n = 1
 		if found {
-			n = uint64(ent.Ts.UnixNano()) + 1
+			n = recordstore.SeqOf(ent.Ts) + 1
 		}
 	}
 	inst.seqs[key] = n + 1
-	ts = time.Unix(0, int64(n)).UTC()
+	ts = recordstore.SeqTs(n)
 	return
 }
 
@@ -152,7 +148,7 @@ func (inst *Storage) PutEnvelope(ctx context.Context, h types.PatchHash, framed 
 	// Envelopes are immutable single-row keys: the row always carries
 	// sequence 1 (the Latest check above just said the key is empty), so
 	// no per-key sequence derivation — and no second query — is needed.
-	ts := time.Unix(0, 1).UTC()
+	ts := recordstore.SeqTs(1)
 	b := inst.st.Begin(key, ts)
 	b.AddEnvelope(Envelope{ID: key, Framed: framed})
 	err = b.Commit()
@@ -171,12 +167,12 @@ func (inst *Storage) PutEnvelope(ctx context.Context, h types.PatchHash, framed 
 // forced batch fetch → hit), with an uncached Latest as the
 // authoritative absent-vs-error fallback.
 func (inst *Storage) getEnvelopeLocked(ctx context.Context, key string) (ent *PushoutEntity, found bool, err error) {
-	if has, e := inst.st.Get(key); has {
+	if e, found := inst.st.Get(key); found {
 		return e, true, nil
 	}
 	for range inst.st.IterateRestWorkItems(ctx) {
 	}
-	if has, e := inst.st.Get(key); has {
+	if e, found := inst.st.Get(key); found {
 		return e, true, nil
 	}
 	return inst.st.Latest(ctx, key)
@@ -279,7 +275,7 @@ func (inst *Storage) ReplaceApplied(ctx context.Context, hs []types.PatchHash) (
 func (inst *Storage) LoadApplied(ctx context.Context) (hs []types.PatchHash, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	rows, err := inst.st.Replay(ctx, logKey, beginning)
+	rows, err := inst.st.Replay(ctx, logKey, recordstore.SeqTs(0))
 	if err != nil {
 		err = eh.Errorf("load applied: %w", err)
 		return
