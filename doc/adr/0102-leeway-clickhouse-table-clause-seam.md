@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-04
+reviewed-by: "@spx"
+reviewed-date: 2026-07-04
 ---
-
-> **Status: proposed — pre-human-review.** The seam is implemented and its
-> consumers migrated; the decision text below records the design dialogue.
-> Do not cite as settled.
 
 # ADR-0102: ClickHouse table-clause seam for leeway DDL
 
@@ -144,9 +142,17 @@ The QOC options carry the rankings; nuance:
 
 ## Status
 
-Proposed — 2026-07-04. Implemented alongside this document (the
-composer, its tests, the recordstore migration and the example index);
-promote to `accepted` after review.
+Accepted — 2026-07-04 (reviewed by @spx). The decision in force:
+table-level ClickHouse clauses are generation-time `TableOptions` on the
+target (`ddl/clickhouse.ComposeCreateTable`) with typed, IR-resolved
+column references and an explicit index list — the neutral `TableDesc`
+carries no materialization policy. Implemented and landed with its
+consumers (the recordstore migration, the example bloom-filter index);
+structured PARTITION BY/TTL and index-selection defaults remain deferred
+with their triggers recorded above.
+
+From acceptance on, this document changes only via dated `## Update`
+sections.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 See `doc/DOCUMENTATION_STANDARD.md` for the edit-policy tiers.
