@@ -175,6 +175,9 @@ func (inst *PlayLauncher) Unmount(ctx app.MountContextI) (err error) {
 	if inst.inner != nil {
 		inst.inner.PersistSql()
 		inst.inner.PersistTimelineBandsSql()
+		// Tear down the async machinery: cancel in-flight queries and the
+		// projector, release held results, close every lane.
+		inst.inner.Close()
 	}
 	inst.inner = nil
 	return

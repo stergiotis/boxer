@@ -72,7 +72,7 @@ func TestQueryStoreExecuteRows(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100)
+	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100, "test")
 	store.Execute("SELECT n FROM t")
 	waitNotLoading(t, store)
 
@@ -111,7 +111,7 @@ func TestQueryStoreZeroBatchKeepsSchema(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100)
+	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100, "test")
 	store.Execute("SELECT n FROM t WHERE 0")
 	waitNotLoading(t, store)
 
@@ -141,7 +141,7 @@ func TestQueryStoreErrorStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100)
+	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100, "test")
 	store.Execute("SELECT bad")
 	waitNotLoading(t, store)
 
@@ -159,6 +159,35 @@ func TestQueryStoreErrorStatus(t *testing.T) {
 	}
 }
 
+// Close cancels the in-flight run and marks the store closed: a late finish()
+// must not resurrect a result on a torn-down store (Unmount teardown, review
+// finding: nothing closed the stores/lanes at all). Idempotent.
+func TestQueryStoreCloseDropsLateFinish(t *testing.T) {
+	gate := make(chan struct{})
+	stream := arrowStreamBytes(t, []int64{1})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-gate
+		_, _ = w.Write(stream)
+	}))
+
+	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 10, "test")
+	store.Execute("SELECT n FROM t")
+	store.Close() // torn down while the request is in flight
+	close(gate)   // let the handler answer; the goroutine's finish is late
+	waitNotLoading(t, store)
+	srv.Close()
+
+	rec, schema, _, _, _, _, _, _ := store.Snapshot()
+	if rec != nil {
+		rec.Release()
+		t.Error("a closed store must not resurrect a late result")
+	}
+	if schema != nil {
+		t.Error("a closed store must not hold a schema")
+	}
+	store.Close() // idempotent
+}
+
 // finish() trims history to maxHist; a session that runs more queries than the
 // cap keeps only the most recent.
 func TestQueryStoreHistoryCap(t *testing.T) {
@@ -168,7 +197,7 @@ func TestQueryStoreHistoryCap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 2)
+	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 2, "test")
 	for range 4 {
 		store.Execute("SELECT 1")
 		waitNotLoading(t, store)

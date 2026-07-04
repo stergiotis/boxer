@@ -7,9 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -42,6 +44,32 @@ func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 		httpClient = &http.Client{}
 	}
 	return &Client{cfg: cfg, http: httpClient, targetURL: cfg.URL}
+}
+
+// ExecOptions carries per-lane execution settings for ExecuteArrowStream.
+// QueryID is a stable per-lane ClickHouse query_id: combined with
+// ReplaceRunningQuery, a superseding run REPLACES its still-running
+// predecessor server-side (ADR-0097 SD5 / ADR-0096 SD9). Context cancel alone
+// only closes the HTTP connection, which ClickHouse by default does NOT treat
+// as a kill for read-only queries — without this, superseded raster/bands
+// queries pile up on the server. Endpoints that don't know these params
+// ignore them (the keelson introspection /query reads only cols/query/param_*).
+type ExecOptions struct {
+	QueryID             string
+	ReplaceRunningQuery bool
+}
+
+// execQueryIDSeq disambiguates lanes within one process; the pid disambiguates
+// processes sharing a server.
+var execQueryIDSeq atomic.Uint64
+
+// newExecOptions mints a lane's stable ExecOptions. The label names the lane
+// in server-side observability (system.processes / query_log).
+func newExecOptions(label string) *ExecOptions {
+	return &ExecOptions{
+		QueryID:             fmt.Sprintf("play-%s-%d-%d", label, os.Getpid(), execQueryIDSeq.Add(1)),
+		ReplaceRunningQuery: true,
+	}
 }
 
 // URL returns the current target endpoint.
@@ -94,7 +122,10 @@ func (inst *Client) SetURL(u string) {
 //
 // For a single value above the URL cap, stage it in a temp table or raise
 // `http_max_uri_size` server-side; there is no client-side fall-back.
-func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator) (rdr *ipc.Reader, body io.Closer, summary Summary, err error) {
+//
+// opts may be nil; when set, its query_id / replace_running_query ride the URL
+// alongside the params (see ExecOptions).
+func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions) (rdr *ipc.Reader, body io.Closer, summary Summary, err error) {
 	// Harvest top-level `SET param_*=...` statements so they can ride the
 	// HTTP `param_*` channel rather than being inlined into the body — values
 	// can be larger than fits comfortably in a single SQL literal, and the
@@ -124,11 +155,17 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	// query string. See the function doc for size limits. The target is read
 	// once here so a concurrent SetURL never tears a request mid-build.
 	reqURL := inst.URL()
-	if len(params) > 0 {
-		qs := url.Values{}
-		for k, v := range params {
-			qs.Set(k, v)
+	qs := url.Values{}
+	for k, v := range params {
+		qs.Set(k, v)
+	}
+	if opts != nil && opts.QueryID != "" {
+		qs.Set("query_id", opts.QueryID)
+		if opts.ReplaceRunningQuery {
+			qs.Set("replace_running_query", "1")
 		}
+	}
+	if len(qs) > 0 {
 		sep := "?"
 		if strings.Contains(reqURL, "?") {
 			sep = "&"

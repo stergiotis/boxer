@@ -127,7 +127,7 @@ func NewTimelineDriver(ids *c.WidgetIdStack, selectedRow *int64, client *Client,
 		selectedRow: selectedRow,
 		bandsSQLPtr: bandsSQLPtr,
 		nowLinePtr:  nowLinePtr,
-		bandsLane:   newNodeLane(clientExecutor{client: client}, memory.NewGoAllocator(), bandsFetchTimeout),
+		bandsLane:   newNodeLane(clientExecutor{client: client, opts: newExecOptions("bands")}, memory.NewGoAllocator(), bandsFetchTimeout),
 	}
 	inst.tl = timeline.New(ids, "play-timeline", nil,
 		timeline.WithOnSelection(inst.onSelect),

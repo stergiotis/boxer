@@ -59,6 +59,7 @@ func TestExecuteArrowStreamSendsParamsOnURLWhenPresent(t *testing.T) {
 		context.Background(),
 		`SET param_a = 1; SET param_b = 'hello world'; SELECT {param_a : UInt64}`,
 		memory.NewGoAllocator(),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
@@ -105,7 +106,7 @@ func TestExecuteArrowStreamPlainPostWhenNoParams(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c := NewClient(ClientConfig{URL: srv.URL}, nil)
-	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator())
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}
@@ -120,6 +121,45 @@ func TestExecuteArrowStreamPlainPostWhenNoParams(t *testing.T) {
 	}
 	if !strings.Contains(string(gotBody), "FORMAT ArrowStream") {
 		t.Errorf("body missing FORMAT clause: %q", gotBody)
+	}
+}
+
+// ExecOptions ride the URL: a stable query_id plus replace_running_query=1 —
+// the server half of SD5 supersession (context cancel alone does not kill a
+// read-only ClickHouse query; review finding). nil opts adds neither.
+func TestExecuteArrowStreamSendsQueryIDAndReplace(t *testing.T) {
+	body := emptyArrowStream(t)
+	var gotParams url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotParams = r.URL.Query()
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`,
+		memory.NewGoAllocator(), &ExecOptions{QueryID: "play-test-1", ReplaceRunningQuery: true})
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	rdr.Release()
+	_ = closer.Close()
+	if got := gotParams.Get("query_id"); got != "play-test-1" {
+		t.Errorf("query_id = %q, want play-test-1", got)
+	}
+	if got := gotParams.Get("replace_running_query"); got != "1" {
+		t.Errorf("replace_running_query = %q, want 1", got)
+	}
+
+	rdr, closer, _, err = c.ExecuteArrowStream(context.Background(), `SELECT 1`,
+		memory.NewGoAllocator(), nil)
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	rdr.Release()
+	_ = closer.Close()
+	if gotParams.Has("query_id") || gotParams.Has("replace_running_query") {
+		t.Errorf("nil opts must add no query settings, got %v", gotParams)
 	}
 }
 
@@ -155,7 +195,7 @@ func TestSetURLRoutesToNewTarget(t *testing.T) {
 		t.Fatalf("URL() after SetURL = %q, want %q", got, srvB.URL)
 	}
 
-	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator())
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}

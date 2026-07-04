@@ -119,10 +119,14 @@ func (inst *nodeLane) startLocked(sql string) {
 	}
 	inst.cancel = cancel
 	inst.loading = true
-	go inst.run(ctx, gen, sql)
+	go inst.run(ctx, cancel, gen, sql)
 }
 
-func (inst *nodeLane) run(ctx context.Context, gen uint64, sql string) {
+func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen uint64, sql string) {
+	// Release the context on every path (idempotent with the supersede /
+	// close cancels): a WithTimeout ctx left uncancelled keeps its timer
+	// armed until the deadline — 60s per map fetch (review finding).
+	defer cancel()
 	rec, schema, err := inst.exec.execute(ctx, sql, inst.alloc)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

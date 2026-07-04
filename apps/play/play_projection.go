@@ -232,6 +232,16 @@ func (inst *Projector) detachCurrentRunLocked() {
 	inst.cancel = nil
 }
 
+// Detach cancels any in-flight run and orphans it — Invalidate's semantics
+// without installing a new dataset. For app teardown (PlayApp.Close): the
+// winding-down goroutine's terminal writes become no-ops and it releases its
+// retained record on exit.
+func (inst *Projector) Detach() {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.detachCurrentRunLocked()
+}
+
 // Snapshot returns a value-copy of the current state. Safe to read on the
 // render thread without holding the mutex. The coords slice is shared (not
 // copied) — the goroutine treats it as immutable once published.

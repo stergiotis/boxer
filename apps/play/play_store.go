@@ -42,19 +42,31 @@ type QueryStore struct {
 	history []HistoryEntry
 	maxHist int
 
+	// closed (under mu) marks a torn-down store: a late finish() from an
+	// already-running goroutine is dropped instead of resurrecting state.
+	closed bool
+
+	// opts is the store's stable query_id + replace_running_query (SD5): a
+	// Run after a Cancel replaces the maybe-still-running predecessor
+	// server-side (ClickHouse does not kill read-only HTTP queries on
+	// connection close by default).
+	opts *ExecOptions
+
 	isLoading atomic.Bool
 	cancel    context.CancelFunc
 	cancelMu  sync.Mutex
 }
 
-func NewQueryStore(client *Client, alloc memory.Allocator, maxHistory int) *QueryStore {
+// NewQueryStore builds a store; label names its lane in server-side
+// observability (system.processes / query_log) via the stable query_id.
+func NewQueryStore(client *Client, alloc memory.Allocator, maxHistory int, label string) *QueryStore {
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
 	if maxHistory <= 0 {
 		maxHistory = 100
 	}
-	return &QueryStore{client: client, alloc: alloc, maxHist: maxHistory}
+	return &QueryStore{client: client, alloc: alloc, maxHist: maxHistory, opts: newExecOptions(label)}
 }
 
 func (inst *QueryStore) IsLoading() bool { return inst.isLoading.Load() }
@@ -99,6 +111,7 @@ func (inst *QueryStore) Execute(sql string) {
 	inst.cancelMu.Unlock()
 
 	go func() {
+		defer cancel() // release the context (and its resources) on every path
 		defer inst.isLoading.Store(false)
 		defer func() {
 			inst.cancelMu.Lock()
@@ -107,7 +120,7 @@ func (inst *QueryStore) Execute(sql string) {
 		}()
 
 		start := time.Now()
-		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc)
+		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, inst.opts)
 		if err != nil {
 			inst.finish(sql, start, nil, nil, 0, summary, err)
 			return
@@ -164,9 +177,31 @@ func (inst *QueryStore) Cancel() {
 	}
 }
 
+// Close cancels any in-flight query, releases the held result, and marks the
+// store closed so a late finish() is dropped rather than resurrecting state.
+// Idempotent; the store is unusable afterwards.
+func (inst *QueryStore) Close() {
+	inst.Cancel()
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.closed = true
+	if inst.record != nil {
+		inst.record.Release()
+		inst.record = nil
+	}
+	inst.schema = nil
+}
+
 func (inst *QueryStore) finish(sql string, start time.Time, rec arrow.RecordBatch, schema *arrow.Schema, rows int64, summary Summary, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	if inst.closed {
+		// Torn down while this run was in flight: drop the late result.
+		if rec != nil {
+			rec.Release()
+		}
+		return
+	}
 	if inst.record != nil {
 		inst.record.Release()
 	}

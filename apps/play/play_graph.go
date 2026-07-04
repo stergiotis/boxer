@@ -275,16 +275,21 @@ func (inst *queryGraph) isDemanded(id NodeID) (ok bool) {
 	return
 }
 
-// close releases every memoised result; the graph is unusable afterwards.
+// close releases every memoised result and closes the main lane (when the
+// graph owns one); the graph is unusable afterwards.
 func (inst *queryGraph) close() {
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
 	for _, r := range inst.results {
 		if r != nil && r.rec != nil {
 			r.rec.Release()
 		}
 	}
 	inst.results = make(map[NodeID]*nodeResult, 4)
+	lane := inst.mainLane
+	inst.mu.Unlock()
+	if lane != nil {
+		lane.Close()
+	}
 }
 
 // fingerprintRecord computes a content fingerprint over a record's schema, row
@@ -330,7 +335,7 @@ func newLiveQueryGraph(client *Client, alloc memory.Allocator, maxHistory int) (
 		alloc = memory.NewGoAllocator()
 	}
 	inst = newQueryGraph(clientExecutor{client: client}, alloc)
-	inst.mainLane = NewQueryStore(client, alloc, maxHistory)
+	inst.mainLane = NewQueryStore(client, alloc, maxHistory, "main")
 	return
 }
 

@@ -19,6 +19,9 @@ import (
 
 type clientExecutor struct {
 	client *Client
+	// opts carries the lane's stable query_id + replace_running_query (SD5
+	// server-side supersession). nil for callers that don't supersede.
+	opts *ExecOptions
 }
 
 var _ nodeExecutorI = clientExecutor{}
@@ -28,7 +31,7 @@ var _ nodeExecutorI = clientExecutor{}
 // an async lane; the synchronous form is correct for tests and for the
 // suspending scheduler's worker goroutine (SD5, slice 3).
 func (inst clientExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, err error) {
-	rdr, body, _, xErr := inst.client.ExecuteArrowStream(ctx, sql, alloc)
+	rdr, body, _, xErr := inst.client.ExecuteArrowStream(ctx, sql, alloc, inst.opts)
 	if xErr != nil {
 		err = eh.Errorf("clientExecutor.execute: %w", xErr)
 		return

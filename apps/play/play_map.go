@@ -121,9 +121,11 @@ type mercBox struct{ minX, maxX, minY, maxY uint32 }
 
 func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	d := &MapDriver{
-		ids:       ids,
-		client:    client,
-		lane:      newNodeLane(clientExecutor{client: client}, memory.NewGoAllocator(), mapFetchTimeout),
+		ids:    ids,
+		client: client,
+		// The stable query_id + replace_running_query make a superseding
+		// pan/zoom fetch replace its predecessor server-side (SD5).
+		lane:      newNodeLane(clientExecutor{client: client, opts: newExecOptions("map")}, memory.NewGoAllocator(), mapFetchTimeout),
 		sqlMeta:   make(map[string]rasterMeta),
 		table:     "planes_mercator_sample100",
 		sampling:  100,

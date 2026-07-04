@@ -407,7 +407,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		ids:               c.NewWidgetIdStack(),
 		graph:             graph,
 		client:            client,
-		intermediateStore: NewQueryStore(client, memory.NewGoAllocator(), 1),
+		intermediateStore: NewQueryStore(client, memory.NewGoAllocator(), 1, "intermediate"),
 		endpointDraft:     launchURL,
 		launchURL:         launchURL,
 		density:           styletokens.DensityFromEnv(),
@@ -449,6 +449,28 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	return inst
+}
+
+// Close tears down the app's async machinery (Unmount): cancels in-flight
+// work, releases held results, and closes every lane. Late completions from
+// still-running goroutines hit their generation/closed guards and are
+// dropped. Idempotent; the app is unusable afterwards.
+func (inst *PlayApp) Close() {
+	if inst.projector != nil {
+		inst.projector.Detach()
+	}
+	if inst.intermediateStore != nil {
+		inst.intermediateStore.Close()
+	}
+	if inst.mapDriver != nil && inst.mapDriver.lane != nil {
+		inst.mapDriver.lane.close()
+	}
+	if inst.timeline != nil && inst.timeline.bandsLane != nil {
+		inst.timeline.bandsLane.close()
+	}
+	if inst.graph != nil {
+		inst.graph.close() // also closes the main lane
+	}
 }
 
 // newProjectorFSM seeds the fsmview.Machine with every transition the
