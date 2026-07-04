@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-01
+reviewed-by: "@spx"
+reviewed-date: 2026-07-04
 ---
-
-> **Status: proposed — pre-human-review.** Design dialogue in progress: this
-> records the agreed direction and the reasoning; API surfaces below are
-> sketches to iterate on, not commitments. Do not cite as settled.
 
 # ADR-0100: recordstore — a generated store over leeway records in ClickHouse
 
@@ -517,13 +515,18 @@ The QOC options above carry the rankings; notes below record nuance.
 
 ## Status
 
-Proposed — 2026-07-01. The design dialogue is ongoing; this document is a
-living snapshot edited in place until acceptance. Promote to `accepted`
-after the open sketches (SD4 verb signatures, SD7 executor shape) settle
-and slice S1 demonstrates the generator end to end.
+Accepted — 2026-07-04 (reviewed by @spx). The decision in force:
+`public/storage/recordstore` is the generated, append-only store
+composing leeway, the read-through cache and ClickHouse — SD1–SD9 as
+written, with all four slices delivered and the two consumer adapters
+(pushout `StorageI` passing `repo/storagetest`, the CQRS ledger example)
+as the acceptance evidence. Deferred items (table-clause seam, cached
+`Latest`, CAS, carrier/explode ReadRow coverage, streaming `Replay`)
+remain open with their triggers recorded under Deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
-ADRs are append-only; supersession is recorded, not deleted.
+From acceptance on, this document changes only via dated `## Update`
+sections; see `doc/DOCUMENTATION_STANDARD.md` for the edit-policy tiers.
 
 ## References
 
