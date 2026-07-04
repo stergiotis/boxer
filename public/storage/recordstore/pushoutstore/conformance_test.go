@@ -23,6 +23,6 @@ func TestPushoutStorageConformance(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		return Open(context.Background(), exec, nil, PushoutStoreConfig{CacheCapacity: 64})
+		return Open(context.Background(), exec, nil, PushoutStoreConfig{}, PushoutCacheConfig{Capacity: 64})
 	})
 }

@@ -21,7 +21,8 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 		t.Skipf("clickhouse-local unavailable: %v", err)
 	}
 	ctx := context.Background()
-	st := NewDeviceStore[string](exec, nil, DeviceStoreConfig{CacheCapacity: 8})
+	st := NewDeviceStore(exec, nil, DeviceStoreConfig{})
+	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
 	require.NoError(t, st.EnsureTable(ctx))
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
@@ -47,17 +48,17 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 
 	// Get through the cache: misses queue under a work item, the forced
 	// fetch batches one IN (…) lookup, the replay then hits.
-	for range st.WorkItem("frame-1") {
+	for range c.WorkItem("frame-1") {
 		for _, key := range []uint64{1, 2} {
-			_, has := st.Get(key)
+			_, has := c.Get(key)
 			require.False(t, has, "key %d must miss before the batch fetch", key)
 		}
 	}
 	replayed := 0
-	for w := range st.IterateRestWorkItems(ctx) {
+	for w := range c.IterateRestWorkItems(ctx) {
 		require.Equal(t, "frame-1", w)
 		replayed++
-		e1, has := st.Get(1)
+		e1, has := c.Get(1)
 		require.True(t, has)
 		require.Equal(t, []string{"identity", "battery", "tagged", "located"}, e1.Archetype())
 		require.Equal(t, option.Some(Identity{ID: 1, Status: "IDLE", Nick: option.Some("alpha")}), e1.Identity)
@@ -66,7 +67,7 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 		require.Equal(t, option.Some(Located{ID: 1, Lat: 47.5, Lng: 8.5, Cell: 12345}), e1.Located)
 		require.Equal(t, t0, e1.Ts)
 
-		e2, has := st.Get(2)
+		e2, has := c.Get(2)
 		require.True(t, has)
 		require.Equal(t, []string{"identity"}, e2.Archetype())
 		require.False(t, e2.Identity.Val.Nick.Has, "absent Option scalar reads back as None")
@@ -77,11 +78,11 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	// Entity 3 got two single-component rows; the cached Get collapses
 	// newest-first to one row — battery and tags landed on separate rows,
 	// so the fetched version carries exactly one of them.
-	for range st.WorkItem("frame-2") {
-		_, _ = st.Get(3)
+	for range c.WorkItem("frame-2") {
+		_, _ = c.Get(3)
 	}
-	for range st.IterateRestWorkItems(ctx) {
-		e3, has := st.Get(3)
+	for range c.IterateRestWorkItems(ctx) {
+		e3, has := c.Get(3)
 		require.True(t, has)
 		require.Len(t, e3.Archetype(), 1)
 	}
@@ -119,8 +120,11 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	require.Empty(t, tomb.Archetype())
 
 	// Replay: the full ordered history of entity 1 (v1, v2, tombstone).
-	history, err := st.Replay(ctx, 1, time.Time{})
-	require.NoError(t, err)
+	history := make([]*DeviceEntity, 0, 3)
+	for ent, rerr := range st.Replay(ctx, 1, time.Time{}) {
+		require.NoError(t, rerr)
+		history = append(history, ent)
+	}
 	require.Len(t, history, 3)
 	require.Equal(t, []time.Time{t0, t1, t2}, []time.Time{history[0].Ts, history[1].Ts, history[2].Ts})
 	require.True(t, history[0].Identity.Has)
@@ -128,9 +132,12 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	require.Equal(t, deviceLifecycleTombstone, history[2].Lifecycle)
 
 	// Replay from t1 skips the first version.
-	tail, err := st.Replay(ctx, 1, t1)
-	require.NoError(t, err)
-	require.Len(t, tail, 2)
+	tail := 0
+	for _, rerr := range st.Replay(ctx, 1, t1) {
+		require.NoError(t, rerr)
+		tail++
+	}
+	require.Equal(t, 2, tail)
 
 	// Latest of a never-written key reports not-found.
 	_, found, err = st.Latest(ctx, 99)

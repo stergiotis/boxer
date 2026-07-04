@@ -53,6 +53,7 @@ func generateInto(t *testing.T, manip *common.TableManipulator, componentPaths .
 		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
 		ComponentPaths: componentPaths,
 		OutDir:         t.TempDir(),
+		ImportPath:     "example.invalid/tmp",
 	}.Generate()
 }
 
@@ -97,6 +98,105 @@ type KindA struct {
 	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id2", ctabb.U64)
 	err := generateInto(t, manip, a)
 	require.ErrorContains(t, err, "both carry the Key role")
+}
+
+// TestGenerateInternalLayout: the default layout places the DML/RA
+// scaffolding in internal/lowlevel and the store references it
+// qualified, so the generated package's public surface stays the store
+// family (ADR-0100 Update 2026-07-04).
+func TestGenerateInternalLayout(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	outDir := t.TempDir()
+	td, err := validationManipulator(t, "solo").BuildTableDesc()
+	require.NoError(t, err)
+	require.NoError(t, gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Valcheck",
+		TableName:      "valcheck",
+		Table:          td,
+		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
+		ComponentPaths: []string{a},
+		OutDir:         outDir,
+		ImportPath:     "example.invalid/tmp",
+	}.Generate())
+	for _, f := range []string{"valcheck_dml.out.go", "valcheck_ra.out.go"} {
+		_, serr := os.Stat(filepath.Join(outDir, "internal", "lowlevel", f))
+		require.NoError(t, serr, "%s must land in internal/lowlevel", f)
+	}
+	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(store), `"example.invalid/tmp/internal/lowlevel"`)
+	require.Contains(t, string(store), "lowlevel.NewInEntityValcheckTable")
+	scaffold, err := os.ReadFile(filepath.Join(outDir, "internal", "lowlevel", "valcheck_dml.out.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(scaffold), "package lowlevel")
+}
+
+// TestGenerateFlatLayout: Flat keeps everything in one package (the
+// pre-Update layout); ImportPath is then not needed.
+func TestGenerateFlatLayout(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	outDir := t.TempDir()
+	td, err := validationManipulator(t, "solo").BuildTableDesc()
+	require.NoError(t, err)
+	require.NoError(t, gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Valcheck",
+		TableName:      "valcheck",
+		Table:          td,
+		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
+		ComponentPaths: []string{a},
+		OutDir:         outDir,
+		Flat:           true,
+	}.Generate())
+	_, serr := os.Stat(filepath.Join(outDir, "valcheck_dml.out.go"))
+	require.NoError(t, serr, "Flat must keep the scaffolding beside the store")
+	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(store), "dml: NewInEntityValcheckTable(alloc, 64)")
+	require.NotContains(t, string(store), "lowlevel.")
+}
+
+// TestGenerateRequiresImportPath: the internal layout cannot write the
+// store's scaffolding import without the package's own import path.
+func TestGenerateRequiresImportPath(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	td, err := validationManipulator(t, "solo").BuildTableDesc()
+	require.NoError(t, err)
+	err = gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Valcheck",
+		TableName:      "valcheck",
+		Table:          td,
+		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
+		ComponentPaths: []string{a},
+		OutDir:         t.TempDir(),
+	}.Generate()
+	require.ErrorContains(t, err, "ImportPath is required")
 }
 
 // TestGenerateRejectsNonRolePlainColumn: a plain column outside the three
@@ -161,6 +261,7 @@ type KindA struct {
 		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
 		ComponentPaths: []string{a},
 		OutDir:         outDir,
+		ImportPath:     "example.invalid/tmp",
 	}.Generate())
 	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
 	require.NoError(t, err)

@@ -28,6 +28,7 @@ func TestGeneratePushoutStore(t *testing.T) {
 			"./snapshot_dto.go",
 			"./retention_dto.go",
 		},
-		OutDir: ".",
+		OutDir:     ".",
+		ImportPath: "github.com/stergiotis/boxer/public/storage/recordstore/pushoutstore",
 	}.Generate())
 }

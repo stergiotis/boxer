@@ -71,10 +71,10 @@ func (inst *Account) fold(row *LedgerEntity) (err error) {
 // Service is the command side: rehydrate, guard the invariant, append.
 // Like the store it wraps, a Service is single-goroutine.
 type Service struct {
-	st *LedgerStore[struct{}]
+	st *LedgerStore
 }
 
-func NewService(st *LedgerStore[struct{}]) *Service { return &Service{st: st} }
+func NewService(st *LedgerStore) *Service { return &Service{st: st} }
 
 // Load rehydrates the aggregate: restore the newest snapshot (Latest on
 // the sibling key), then Replay only the events strictly after it and
@@ -96,12 +96,11 @@ func (inst *Service) Load(ctx context.Context, id string) (acct *Account, err er
 		acct.nextSeq = state.AsOf + 1
 		from = recordstore.SeqTs(state.AsOf + 1)
 	}
-	events, err := inst.st.Replay(ctx, id, from)
-	if err != nil {
-		err = eh.Errorf("replay %s: %w", id, err)
-		return
-	}
-	for _, ev := range events {
+	for ev, rerr := range inst.st.Replay(ctx, id, from) {
+		if rerr != nil {
+			err = eh.Errorf("replay %s: %w", id, rerr)
+			return
+		}
 		err = acct.fold(ev)
 		if err != nil {
 			return
@@ -115,7 +114,7 @@ func (inst *Service) Load(ctx context.Context, id string) (acct *Account, err er
 // durable when Flush returns — one command, one Arrow insert). A failed
 // command discards its buffered row: it must not ship behind the next
 // command's flush.
-func (inst *Service) append(ctx context.Context, acct *Account, add func(b *LedgerEntityBuilder[struct{}])) (err error) {
+func (inst *Service) append(ctx context.Context, acct *Account, add func(b *LedgerEntityBuilder)) (err error) {
 	defer func() {
 		if err != nil {
 			inst.st.DiscardPending()
@@ -147,7 +146,7 @@ func (inst *Service) Open(ctx context.Context, id string, owner string) (err err
 		err = eh.Errorf("account %s is already open", id)
 		return
 	}
-	return inst.append(ctx, acct, func(b *LedgerEntityBuilder[struct{}]) {
+	return inst.append(ctx, acct, func(b *LedgerEntityBuilder) {
 		b.AddOpened(Opened{ID: id, Owner: owner})
 	})
 }
@@ -166,7 +165,7 @@ func (inst *Service) Deposit(ctx context.Context, id string, amount uint64) (err
 		err = eh.Errorf("deposit to %s: amount must be positive", id)
 		return
 	}
-	return inst.append(ctx, acct, func(b *LedgerEntityBuilder[struct{}]) {
+	return inst.append(ctx, acct, func(b *LedgerEntityBuilder) {
 		b.AddDeposited(Deposited{ID: id, Amount: amount})
 	})
 }
@@ -185,7 +184,7 @@ func (inst *Service) Withdraw(ctx context.Context, id string, amount uint64) (er
 		err = eh.Errorf("withdraw %d from %s: balance is %d", amount, id, acct.Balance)
 		return
 	}
-	return inst.append(ctx, acct, func(b *LedgerEntityBuilder[struct{}]) {
+	return inst.append(ctx, acct, func(b *LedgerEntityBuilder) {
 		b.AddWithdrawn(Withdrawn{ID: id, Amount: amount})
 	})
 }
@@ -201,7 +200,7 @@ func (inst *Service) CloseAccount(ctx context.Context, id string, reason string)
 	if err != nil {
 		return
 	}
-	return inst.append(ctx, acct, func(b *LedgerEntityBuilder[struct{}]) {
+	return inst.append(ctx, acct, func(b *LedgerEntityBuilder) {
 		b.AddClosed(Closed{ID: id, Reason: reason})
 	})
 }

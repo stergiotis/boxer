@@ -46,7 +46,8 @@ import (
 // the mutex makes concurrent reads safe as the contract requires.
 type Storage struct {
 	mu   sync.Mutex
-	st   *PushoutStore[struct{}]
+	st   *PushoutStore
+	pc   *PushoutCache[struct{}]
 	seqs map[string]uint64 // next per-key ts sequence, lazily derived
 }
 
@@ -60,15 +61,16 @@ const (
 
 // Open builds the adapter over an executor and ensures the table exists.
 // Reopening the same location (executor state) resumes durably: the
-// per-key sequences re-derive lazily from storage.
-func Open(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator, cfg PushoutStoreConfig) (inst *Storage, err error) {
-	st := NewPushoutStore[struct{}](exec, alloc, cfg)
+// per-key sequences re-derive lazily from storage. The attached cache
+// view serves the envelope reads (immutable-by-key — the ideal case).
+func Open(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator, storeCfg PushoutStoreConfig, cacheCfg PushoutCacheConfig) (inst *Storage, err error) {
+	st := NewPushoutStore(exec, alloc, storeCfg)
 	err = st.EnsureTable(ctx)
 	if err != nil {
 		err = eh.Errorf("open pushout storage: %w", err)
 		return
 	}
-	inst = &Storage{st: st, seqs: make(map[string]uint64)}
+	inst = &Storage{st: st, pc: NewPushoutCache[struct{}](st, cacheCfg), seqs: make(map[string]uint64)}
 	return
 }
 
@@ -167,12 +169,12 @@ func (inst *Storage) PutEnvelope(ctx context.Context, h types.PatchHash, framed 
 // forced batch fetch → hit), with an uncached Latest as the
 // authoritative absent-vs-error fallback.
 func (inst *Storage) getEnvelopeLocked(ctx context.Context, key string) (ent *PushoutEntity, found bool, err error) {
-	if e, found := inst.st.Get(key); found {
+	if e, found := inst.pc.Get(key); found {
 		return e, true, nil
 	}
-	for range inst.st.IterateRestWorkItems(ctx) {
+	for range inst.pc.IterateRestWorkItems(ctx) {
 	}
-	if e, found := inst.st.Get(key); found {
+	if e, found := inst.pc.Get(key); found {
 		return e, true, nil
 	}
 	return inst.st.Latest(ctx, key)
@@ -275,12 +277,12 @@ func (inst *Storage) ReplaceApplied(ctx context.Context, hs []types.PatchHash) (
 func (inst *Storage) LoadApplied(ctx context.Context) (hs []types.PatchHash, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	rows, err := inst.st.Replay(ctx, logKey, recordstore.SeqTs(0))
-	if err != nil {
-		err = eh.Errorf("load applied: %w", err)
-		return
-	}
-	for _, row := range rows {
+	for row, rerr := range inst.st.Replay(ctx, logKey, recordstore.SeqTs(0)) {
+		if rerr != nil {
+			hs = nil
+			err = eh.Errorf("load applied: %w", rerr)
+			return
+		}
 		if row.Lifecycle == pushoutLifecycleTombstone {
 			hs = nil // a ReplaceApplied reset — keep only what follows
 			continue

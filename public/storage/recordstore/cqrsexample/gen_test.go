@@ -29,6 +29,7 @@ func TestGenerateLedgerStore(t *testing.T) {
 			"./closed_dto.go",
 			"./accountstate_dto.go",
 		},
-		OutDir: ".",
+		OutDir:     ".",
+		ImportPath: "github.com/stergiotis/boxer/public/storage/recordstore/cqrsexample",
 	}.Generate())
 }

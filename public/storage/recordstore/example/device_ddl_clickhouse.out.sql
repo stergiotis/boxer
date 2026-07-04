@@ -45,5 +45,8 @@ CREATE TABLE IF NOT EXISTS device (
 	"tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:geoPoint:lvcard:lvcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
-	"tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3))
-)
+	"tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	INDEX idx_section_symbol_role_lr "tv:symbol:lr:lr:u64:2q:0:0:0::data" TYPE bloom_filter GRANULARITY 4
+) ENGINE = MergeTree()
+ORDER BY ("id:id:u64:2k:0:0:", "ts:ts:z64:2k:0:0:")
+SETTINGS allow_suspicious_low_cardinality_types=1

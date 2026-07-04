@@ -21,7 +21,7 @@ func TestDeviceStoreScan(t *testing.T) {
 		t.Skipf("clickhouse-local unavailable: %v", err)
 	}
 	ctx := context.Background()
-	st := NewDeviceStore[string](local, nil, DeviceStoreConfig{CacheCapacity: 8})
+	st := NewDeviceStore(local, nil, DeviceStoreConfig{})
 	require.NoError(t, st.EnsureTable(ctx))
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
@@ -37,34 +37,45 @@ func TestDeviceStoreScan(t *testing.T) {
 	require.NoError(t, err)
 
 	// Rows carrying Identity: entity 1's first version and entity 2.
-	idents, err := st.ScanIdentity(ctx, recordstore.ScanOpts{})
-	require.NoError(t, err)
-	require.Len(t, idents, 2)
-	for _, ent := range idents {
+	idents := make([]*DeviceEntity, 0, 2)
+	for ent, rerr := range st.ScanIdentity(ctx, recordstore.ScanOpts{}) {
+		require.NoError(t, rerr)
 		require.True(t, ent.Identity.Has)
+		idents = append(idents, ent)
 	}
+	require.Len(t, idents, 2)
 	require.Equal(t, uint64(1), idents[0].ID)
 	require.Equal(t, uint64(2), idents[1].ID)
 
 	// Rows carrying Battery: entity 1 (both versions) and entity 3.
-	batts, err := st.ScanBattery(ctx, recordstore.ScanOpts{})
-	require.NoError(t, err)
-	require.Len(t, batts, 3)
+	batts := 0
+	for _, rerr := range st.ScanBattery(ctx, recordstore.ScanOpts{}) {
+		require.NoError(t, rerr)
+		batts++
+	}
+	require.Equal(t, 3, batts)
 
 	// Limit caps the row count (unlimited above: 3 rows).
-	capped, err := st.ScanBattery(ctx, recordstore.ScanOpts{Limit: 2})
-	require.NoError(t, err)
-	require.Len(t, capped, 2)
+	capped := 0
+	for _, rerr := range st.ScanBattery(ctx, recordstore.ScanOpts{Limit: 2}) {
+		require.NoError(t, rerr)
+		capped++
+	}
+	require.Equal(t, 2, capped)
 
 	// ExtraPredicate narrows over the physical columns.
-	one, err := st.ScanIdentity(ctx, recordstore.ScanOpts{ExtraPredicate: deviceColKey + " = 2"})
-	require.NoError(t, err)
+	one := make([]*DeviceEntity, 0, 1)
+	for ent, rerr := range st.ScanIdentity(ctx, recordstore.ScanOpts{ExtraPredicate: deviceColKey + " = 2"}) {
+		require.NoError(t, rerr)
+		one = append(one, ent)
+	}
 	require.Len(t, one, 1)
 	require.Equal(t, uint64(2), one[0].ID)
 	require.Equal(t, "CHARGING", one[0].Identity.Val.Status)
 
 	// A component nobody wrote scans empty.
-	locs, err := st.ScanLocated(ctx, recordstore.ScanOpts{})
-	require.NoError(t, err)
-	require.Empty(t, locs)
+	for ent, rerr := range st.ScanLocated(ctx, recordstore.ScanOpts{}) {
+		require.NoError(t, rerr)
+		t.Fatalf("unexpected Located row for entity %d — scan must be empty", ent.ID)
+	}
 }

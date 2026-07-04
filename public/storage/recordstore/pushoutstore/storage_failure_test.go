@@ -55,7 +55,7 @@ func TestAppendAppliedFailureLeavesOrderUnambiguous(t *testing.T) {
 	}
 	ctx := context.Background()
 	flaky := &flakyExecutor{inner: local, failNth: 2}
-	stor, err := Open(ctx, flaky, nil, PushoutStoreConfig{CacheCapacity: 8})
+	stor, err := Open(ctx, flaky, nil, PushoutStoreConfig{}, PushoutCacheConfig{Capacity: 8})
 	require.NoError(t, err)
 
 	require.NoError(t, stor.AppendApplied(ctx, ph(1)))
@@ -70,14 +70,13 @@ func TestAppendAppliedFailureLeavesOrderUnambiguous(t *testing.T) {
 
 	// A reopen re-derives the sequence from storage; it must not collide
 	// either.
-	stor2, err := Open(ctx, flaky, nil, PushoutStoreConfig{CacheCapacity: 8})
+	stor2, err := Open(ctx, flaky, nil, PushoutStoreConfig{}, PushoutCacheConfig{Capacity: 8})
 	require.NoError(t, err)
 	require.NoError(t, stor2.AppendApplied(ctx, ph(5)))
 
-	rows, err := stor2.st.Replay(ctx, logKey, recordstore.SeqTs(0))
-	require.NoError(t, err)
 	seen := map[int64]bool{}
-	for _, r := range rows {
+	for r, rerr := range stor2.st.Replay(ctx, logKey, recordstore.SeqTs(0)) {
+		require.NoError(t, rerr)
 		ns := r.Ts.UnixNano()
 		require.False(t, seen[ns], "two log rows share order ts=%d — replay order ambiguous", ns)
 		seen[ns] = true

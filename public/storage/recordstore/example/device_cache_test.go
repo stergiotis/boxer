@@ -62,8 +62,9 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 	}
 	counting := &countingExecutor{inner: local}
 	ctx := context.Background()
-	st := NewDeviceStore[string](counting, nil, DeviceStoreConfig{
-		CacheCapacity: 16,
+	st := NewDeviceStore(counting, nil, DeviceStoreConfig{})
+	c := NewDeviceCache[string](st, DeviceCacheConfig{
+		Capacity:      16,
 		FetchCriteria: caching.FetchCriteria{MinKeys: 4},
 	})
 	require.NoError(t, st.EnsureTable(ctx))
@@ -75,28 +76,28 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
-	for range st.WorkItem("frame-A") {
+	for range c.WorkItem("frame-A") {
 		for _, key := range []uint64{1, 2} {
-			_, has := st.Get(key)
+			_, has := c.Get(key)
 			require.False(t, has)
 		}
 	}
-	for range st.IterateReadyWorkItems(ctx) {
+	for range c.IterateReadyWorkItems(ctx) {
 		t.Fatal("2 queued keys are below MinKeys=4 — nothing may be ready")
 	}
 	require.Equal(t, 0, counting.queryCalls, "no fetch below the Min threshold")
 
-	for range st.WorkItem("frame-B") {
+	for range c.WorkItem("frame-B") {
 		for _, key := range []uint64{3, 4} {
-			_, has := st.Get(key)
+			_, has := c.Get(key)
 			require.False(t, has)
 		}
 	}
 	var replayed []string
-	for w := range st.IterateReadyWorkItems(ctx) {
+	for w := range c.IterateReadyWorkItems(ctx) {
 		replayed = append(replayed, w)
 		for _, key := range []uint64{1, 2, 3, 4} {
-			ent, has := st.Get(key)
+			ent, has := c.Get(key)
 			require.True(t, has, "key %d must hit after the batch fetch", key)
 			require.Equal(t, key, ent.ID)
 		}
@@ -112,16 +113,17 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 func TestDeviceStoreCacheFetchErrorBackoff(t *testing.T) {
 	failing := &failingExecutor{}
 	ctx := context.Background()
-	st := NewDeviceStore[string](failing, nil, DeviceStoreConfig{CacheCapacity: 8})
+	st := NewDeviceStore(failing, nil, DeviceStoreConfig{})
+	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
 
-	for range st.WorkItem("w") {
-		_, has := st.Get(7)
+	for range c.WorkItem("w") {
+		_, has := c.Get(7)
 		require.False(t, has)
 	}
 	replays := 0
-	for range st.IterateRestWorkItems(ctx) {
+	for range c.IterateRestWorkItems(ctx) {
 		replays++
-		_, has := st.Get(7) // still failing: error state, inside the backoff window
+		_, has := c.Get(7) // still failing: error state, inside the backoff window
 		require.False(t, has)
 	}
 	require.Equal(t, 1, replays)
@@ -129,8 +131,8 @@ func TestDeviceStoreCacheFetchErrorBackoff(t *testing.T) {
 
 	// The key sits in the circuit-breaker cooling-off window: forcing
 	// another round replays the pending work item but must not re-query.
-	for range st.IterateRestWorkItems(ctx) {
-		_, has := st.Get(7)
+	for range c.IterateRestWorkItems(ctx) {
+		_, has := c.Get(7)
 		require.False(t, has)
 	}
 	require.Equal(t, 1, failing.queryCalls, "no re-fetch inside the error backoff")
@@ -145,7 +147,8 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 		t.Skipf("clickhouse-local unavailable: %v", err)
 	}
 	ctx := context.Background()
-	st := NewDeviceStore[string](local, nil, DeviceStoreConfig{CacheCapacity: 8})
+	st := NewDeviceStore(local, nil, DeviceStoreConfig{})
+	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
 	require.NoError(t, st.EnsureTable(ctx))
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
@@ -156,24 +159,24 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
-	for range st.WorkItem("warm") {
-		_, _ = st.Get(1)
+	for range c.WorkItem("warm") {
+		_, _ = c.Get(1)
 	}
-	for range st.IterateRestWorkItems(ctx) {
-		ent, has := st.Get(1)
+	for range c.IterateRestWorkItems(ctx) {
+		ent, has := c.Get(1)
 		require.True(t, has)
 		require.Equal(t, uint64(9000), ent.Battery.Val.Charge)
 	}
 
 	// A new version invalidates the entry; the refetch sees the new row.
 	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
-	_, has := st.Get(1)
+	_, has := c.Get(1)
 	require.False(t, has, "local Put must invalidate the cached entry")
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
-	for range st.IterateRestWorkItems(ctx) {
+	for range c.IterateRestWorkItems(ctx) {
 	}
-	ent, has := st.Get(1)
+	ent, has := c.Get(1)
 	require.True(t, has)
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
 	require.Equal(t, t1, ent.Ts)
@@ -182,13 +185,13 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 	// (Get is row-level and tombstone-blind by design — GetLatest is the
 	// state-view read).
 	require.NoError(t, st.Delete(1, t2))
-	_, has = st.Get(1)
+	_, has = c.Get(1)
 	require.False(t, has, "local Delete must invalidate the cached entry")
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
-	for range st.IterateRestWorkItems(ctx) {
+	for range c.IterateRestWorkItems(ctx) {
 	}
-	ent, has = st.Get(1)
+	ent, has = c.Get(1)
 	require.True(t, has)
 	require.Equal(t, deviceLifecycleTombstone, ent.Lifecycle)
 	require.Empty(t, ent.Archetype())

@@ -20,7 +20,7 @@ func TestAccountLifecycle(t *testing.T) {
 		t.Skipf("clickhouse-local unavailable: %v", err)
 	}
 	ctx := context.Background()
-	st := NewLedgerStore[struct{}](exec, nil, LedgerStoreConfig{CacheCapacity: 8})
+	st := NewLedgerStore(exec, nil, LedgerStoreConfig{})
 	require.NoError(t, st.EnsureTable(ctx))
 	svc := NewService(st)
 	const id = "acct/1"
@@ -69,10 +69,9 @@ func TestAccountLifecycle(t *testing.T) {
 
 	// The full history stays readable: six events in sequence order, the
 	// archetype naming the event type.
-	history, err := st.Replay(ctx, id, recordstore.SeqTs(0))
-	require.NoError(t, err)
-	types := make([]string, 0, len(history))
-	for _, row := range history {
+	types := make([]string, 0, 6)
+	for row, rerr := range st.Replay(ctx, id, recordstore.SeqTs(0)) {
+		require.NoError(t, rerr)
 		archetype := row.Archetype()
 		require.Len(t, archetype, 1, "an event row carries exactly one component")
 		types = append(types, archetype[0])
@@ -89,13 +88,14 @@ func TestAccountLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(7), acct2.Balance)
 
-	deposits, err := st.ScanDeposited(ctx, recordstore.ScanOpts{})
-	require.NoError(t, err)
 	var volume uint64
-	for _, row := range deposits {
+	deposits := 0
+	for row, rerr := range st.ScanDeposited(ctx, recordstore.ScanOpts{}) {
+		require.NoError(t, rerr)
 		require.True(t, row.Deposited.Has)
 		volume += row.Deposited.Val.Amount
+		deposits++
 	}
-	require.Len(t, deposits, 4)
+	require.Equal(t, 4, deposits)
 	require.Equal(t, uint64(100+50+5+7), volume)
 }

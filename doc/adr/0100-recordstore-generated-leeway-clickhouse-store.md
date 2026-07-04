@@ -575,6 +575,90 @@ nil-alloc and CacheCapacity defaults and the `W` work-item parameter
 duplicate keys tie on Order); `Get` documents that a miss can mean a
 swallowed fetch error, with `Latest` as the authoritative check.
 
+### 2026-07-04 — iterator query verbs; the cache becomes an attached view
+
+The two shape decisions the earlier review deferred to a design dialogue
+are now settled and built; where the SD4/SD5 sketches above disagree,
+this update supersedes them.
+
+- **`Replay` and `Scan<Kind>` iterate.** Both return
+  `iter.Seq2[*Entity, error]` — the repo's established fallible-iteration
+  idiom (gov/doclint, gov/codelint, gov/callsites). Converting `Scan`
+  too was a deliberate homogeneity choice: every multi-row verb shares
+  one shape (`Latest`/`GetLatest` stay value-shaped). The contract,
+  documented on the emitted verbs: the sequence is single-use; ctx must
+  stay valid until iteration completes; the query may execute at call
+  time or lazily during iteration; an error ends the sequence as a final
+  `(nil, err)` pair. v1 buffers internally (the Deferred streaming
+  `Replay` becomes an executor-seam change with no visible signature
+  impact — the reason the shape was fixed now, before external
+  consumers).
+- **The store is no longer generic; caching is an attached view.** The
+  `[W comparable]` parameter existed only for the cache's work-item
+  machinery, which both consumer adapters instantiated as `struct{}`.
+  The store now carries append/flush, the query verbs and the state
+  view; a generated `<Store>Cache[W]` view (constructed via
+  `New<Store>Cache[W](st, <Store>CacheConfig{Capacity, FetchCriteria})`)
+  owns the read-through cache, the fetcher shim and the cache verbs
+  (`Get`/`WorkItem`/`IterateReadyWorkItems`/`IterateRestWorkItems`/
+  `AdvanceEpoch`). Coherence is unchanged: the dirty map stays on the
+  store, and each view registers a local-write invalidation hook at
+  construction, so `Commit`/`Put`/`Delete` still evict the written key
+  from every attached view. `<Store>StoreConfig` sheds the cache fields
+  (`DDLTail` remains). Consumer effect: the CQRS example is
+  generics-free end to end; the pushout adapter holds a store plus one
+  view, and its `Open` takes the store and cache configs separately.
+
+### 2026-07-04 — table-clause seam lands (ADR-0102); DDLTail demoted
+
+The Deferred item "table-level DDL clauses" is resolved by the ADR-0102
+seam: `ddl/clickhouse.ComposeCreateTable` renders the complete CREATE
+TABLE with typed column references resolved to physical names. The store
+generator now composes the full statement at generation time — defaults
+derived from the envelope roles (IF NOT EXISTS, `MergeTree()`, ORDER BY
+Key then Order, the low-cardinality settings) merged with the new
+`gen.Input.DDL` overrides (engine, order, indexes, raw PARTITION BY/TTL)
+— and the emitted `.out.sql` is executed verbatim by `EnsureTable`. The
+runtime `DDLTail` survives only as a raw suffix appended after the
+composed statement. The example store declares a bloom-filter index on
+its symbol section's LowCardRef column — closing, for stores, the
+readback skip-index gap the ADR-0066 Filter artefacts were shaped for.
+Deferred here onward: index-selection defaults (which columns deserve
+indexes without being asked) and structured PARTITION BY/TTL, both with
+ADR-0102.
+
+### 2026-07-04 — DML/RA scaffolding moves to internal/lowlevel
+
+A generated package previously exported the whole composition — the
+store family plus ~280 DML/RA scaffolding identifiers (the `InEntity`
+builder and section classes, the `ReadAccess`/`MembershipPack`
+readers) that consumers were never meant to call directly. The
+generator now places `<table>_dml.out.go` and `<table>_ra.out.go` in
+`internal/lowlevel` beneath the output directory, emitted as their own
+package; the store file imports it through the new required
+`gen.Input.ImportPath` (the generated package's own import path) and
+qualifies every scaffolding reference. The example package's exported
+surface drops from roughly 320 identifiers to under 100.
+
+What stays in the parent package is forced by the dependency shape:
+the per-kind codecs name the hand-written DTO types (moving them would
+cycle) — and they reference no DML/RA concrete types at all, driving
+them through the structural generic constraints of ADR-0042/0070, so
+the dependency stays strictly parent → internal. The `.out.sql` stays
+beside the store (`//go:embed` is same-directory).
+
+`Raw()` now returns the internal `*lowlevel.InEntity<Table>`: Go's
+internal rule restricts imports, not use, so callers outside the
+generated package hold the value by inference and chain its methods
+but cannot name the type in their own signatures — the intended
+escape-hatch semantics, documented on the verb.
+
+`gen.Input.Flat` opts back into the single-package layout (everything
+beside the store, no ImportPath needed); it exists as an escape for a
+consumer that must name DML/RA types in its own declarations, is
+exercised by a generator validation test, and is not used by any
+in-repo package.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

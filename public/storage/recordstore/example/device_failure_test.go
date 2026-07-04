@@ -36,14 +36,14 @@ func (inst *flakyExecutor) InsertArrow(ctx context.Context, table string, record
 	return inst.inner.InsertArrow(ctx, table, records)
 }
 
-func newFlakyStore(t *testing.T, failFirst int) (st *DeviceStore[string], ctx context.Context) {
+func newFlakyStore(t *testing.T, failFirst int) (st *DeviceStore, ctx context.Context) {
 	t.Helper()
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
 		t.Skipf("clickhouse-local unavailable: %v", err)
 	}
 	ctx = context.Background()
-	st = NewDeviceStore[string](&flakyExecutor{inner: local, failFirst: failFirst}, nil, DeviceStoreConfig{CacheCapacity: 8})
+	st = NewDeviceStore(&flakyExecutor{inner: local, failFirst: failFirst}, nil, DeviceStoreConfig{})
 	require.NoError(t, st.EnsureTable(ctx))
 	return
 }
@@ -169,6 +169,7 @@ func TestDeviceStoreFlushOpenFrameKeepsPending(t *testing.T) {
 // pre-write row (the review's probe-3 scenario, inverted).
 func TestDeviceStoreNoStaleRecacheBetweenCommitAndFlush(t *testing.T) {
 	st, ctx := newFlakyStore(t, 0)
+	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
 	t0 := time.Unix(1_600_000_000, 0).UTC()
 	t1 := t0.Add(time.Hour)
 
@@ -179,18 +180,18 @@ func TestDeviceStoreNoStaleRecacheBetweenCommitAndFlush(t *testing.T) {
 	// New version committed but not flushed; a fetch in this window sees
 	// the old row in ClickHouse and must refuse to cache it.
 	require.NoError(t, st.Put(1, t1).AddBattery(Battery{ID: 1, Charge: 2}).Commit())
-	_, has := st.Get(1)
+	_, has := c.Get(1)
 	require.False(t, has)
-	for range st.IterateRestWorkItems(ctx) {
+	for range c.IterateRestWorkItems(ctx) {
 	}
-	_, has = st.Get(1)
+	_, has = c.Get(1)
 	require.False(t, has, "the pre-write row must not enter the cache while the key is dirty")
 
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
-	for range st.IterateRestWorkItems(ctx) {
+	for range c.IterateRestWorkItems(ctx) {
 	}
-	ent, has := st.Get(1)
+	ent, has := c.Get(1)
 	require.True(t, has)
 	require.Equal(t, uint64(2), ent.Battery.Val.Charge, "post-flush fetch must serve the new version")
 	require.Equal(t, t1, ent.Ts)

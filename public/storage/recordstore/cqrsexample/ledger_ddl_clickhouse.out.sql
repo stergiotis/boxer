@@ -85,4 +85,6 @@ CREATE TABLE IF NOT EXISTS ledger (
 	"tv:snapAsOf:lrcard:lrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:snapAsOf:lvcard:lvcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:snapAsOf:lmrcard:lmrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3))
-)
+) ENGINE = MergeTree()
+ORDER BY ("id:id:s:g:0:0:", "ts:ts:z64:2k:0:0:")
+SETTINGS allow_suspicious_low_cardinality_types=1
