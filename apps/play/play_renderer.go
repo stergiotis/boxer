@@ -82,13 +82,12 @@ type PlayApp struct {
 
 	// observedNode is the graph node whose result the result panels show (3d) —
 	// the sink by default, switchable from the Graph view. When it is an
-	// intermediate, intermediateStore materialises its fused SQL on its own lane
-	// (a QueryStore, like main's; the lean nodeLane is reserved for the future
-	// many-node / streaming case). want/sent drive a latest-wins re-execute.
-	observedNode        NodeID
-	intermediateStore   *QueryStore
-	intermediateWantSQL string
-	intermediateSentSQL string
+	// intermediate, its fused SQL runs on intermediateLane (a nodeLane:
+	// demand-driven, non-blocking, generation-tagged supersession, last-good
+	// retention — the same machinery as the map/bands lanes), and
+	// activeSnapshot maps the lane view into the snapshot tuple.
+	observedNode     NodeID
+	intermediateLane *nodeLane
 
 	// endpointDraft is the editable URL in the toolbar endpoint switcher;
 	// launchURL is the original target restored by "External (reset)". See
@@ -407,7 +406,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		ids:               c.NewWidgetIdStack(),
 		graph:             graph,
 		client:            client,
-		intermediateStore: NewQueryStore(client, memory.NewGoAllocator(), 1, "intermediate"),
+		intermediateLane: newNodeLane(clientExecutor{client: client, opts: newExecOptions("intermediate")}, memory.NewGoAllocator(), 0),
 		endpointDraft:     launchURL,
 		launchURL:         launchURL,
 		density:           styletokens.DensityFromEnv(),
@@ -459,8 +458,8 @@ func (inst *PlayApp) Close() {
 	if inst.projector != nil {
 		inst.projector.Detach()
 	}
-	if inst.intermediateStore != nil {
-		inst.intermediateStore.Close()
+	if inst.intermediateLane != nil {
+		inst.intermediateLane.close()
 	}
 	if inst.mapDriver != nil && inst.mapDriver.lane != nil {
 		inst.mapDriver.lane.close()
@@ -520,34 +519,23 @@ func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
 
 // activeSnapshot returns the result the panels should render: the observed
 // node's (ADR-0097 3d). By default that is the sink (the main lane); when the
-// user observes an intermediate node from the Graph view, its fused SQL runs on
-// the intermediate lane and that result drives the panels instead. The caller
-// MUST Release the returned record (nil-safe), exactly as for MainSnapshot.
+// user observes an intermediate node from the Graph view, its fused SQL is
+// demanded on the intermediate lane — non-blocking, latest-wins (a changed
+// fused SQL supersedes the in-flight run), last-good retained — and the lane
+// view maps into the snapshot tuple. The caller MUST Release the returned
+// record (nil-safe), exactly as for MainSnapshot.
 func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
 	split := inst.currentSplit
 	if inst.observedNode != "" && inst.observedNode != split.Sink && len(split.Nodes) > 0 {
 		if _, ok := findSplitNode(split, inst.observedNode); ok {
-			inst.driveIntermediate(fuseNode(split, inst.observedNode))
-			return inst.intermediateStore.Snapshot()
+			view := inst.intermediateLane.demand(fuseNode(split, inst.observedNode))
+			if view.rec != nil {
+				numRows = view.rec.NumRows()
+			}
+			return view.rec, view.schema, numRows, view.loading, view.elapsed, view.summary, view.executedAt, view.err
 		}
 	}
 	return inst.graph.MainSnapshot()
-}
-
-// driveIntermediate runs the observed intermediate node's fused SQL on the
-// intermediate lane, latest-wins: a changed SQL supersedes the in-flight run and
-// re-executes once the lane is free.
-func (inst *PlayApp) driveIntermediate(sql string) {
-	if sql != inst.intermediateWantSQL {
-		inst.intermediateWantSQL = sql
-		if inst.intermediateStore.IsLoading() {
-			inst.intermediateStore.Cancel()
-		}
-	}
-	if inst.intermediateWantSQL != "" && inst.intermediateWantSQL != inst.intermediateSentSQL && !inst.intermediateStore.IsLoading() {
-		inst.intermediateSentSQL = inst.intermediateWantSQL
-		inst.intermediateStore.Execute(inst.intermediateSentSQL)
-	}
 }
 
 func (inst *PlayApp) Render() error {
@@ -674,11 +662,11 @@ func (inst *PlayApp) Render() error {
 			}
 			inst.currentSplit = split
 			inst.splitErr = fErr
-			// A fresh run resets the observed node to the new sink and clears
-			// the intermediate lane's drive state (3d).
+			// A fresh run resets the observed node to the new sink and forgets
+			// the intermediate lane's memo (3d): re-observing an intermediate
+			// after a Run re-executes against the possibly-changed data.
 			inst.observedNode = split.Sink
-			inst.intermediateWantSQL = ""
-			inst.intermediateSentSQL = ""
+			inst.intermediateLane.forget()
 			// Scripted-screenshot affordance: observe a named node on run so a
 			// capture can show the panels rendering an intermediate (mirrors
 			// SPINNAKER_PLAY_FOCUS_*). Ignored when the node is absent.

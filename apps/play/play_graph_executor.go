@@ -26,12 +26,12 @@ type clientExecutor struct {
 
 var _ nodeExecutorI = clientExecutor{}
 
-// execute runs sql synchronously and returns the single concatenated record.
-// Callers that must not block the render thread (the live panels) wrap this in
-// an async lane; the synchronous form is correct for tests and for the
-// suspending scheduler's worker goroutine (SD5, slice 3).
-func (inst clientExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, err error) {
-	rdr, body, _, xErr := inst.client.ExecuteArrowStream(ctx, sql, alloc, inst.opts)
+// execute runs sql synchronously and returns the single concatenated record
+// plus the engine summary. Callers that must not block the render thread (the
+// live panels) wrap this in an async lane; the synchronous form is correct for
+// tests and for the suspending scheduler's worker goroutine (SD5, slice 3).
+func (inst clientExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	rdr, body, summary, xErr := inst.client.ExecuteArrowStream(ctx, sql, alloc, inst.opts)
 	if xErr != nil {
 		err = eh.Errorf("clientExecutor.execute: %w", xErr)
 		return

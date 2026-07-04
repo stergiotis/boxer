@@ -37,7 +37,7 @@ type gatedExecutor struct {
 	calls int
 }
 
-func (inst *gatedExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, err error) {
+func (inst *gatedExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
 	inst.mu.Lock()
 	inst.calls++
 	inst.mu.Unlock()

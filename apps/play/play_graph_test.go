@@ -20,7 +20,7 @@ type mockExecutor struct {
 	build func(sql string) arrow.RecordBatch
 }
 
-func (inst *mockExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, err error) {
+func (inst *mockExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
 	inst.calls++
 	inst.sqls = append(inst.sqls, sql)
 	rec = inst.build(sql)

@@ -52,6 +52,9 @@ type laneView struct {
 	schema      *arrow.Schema
 	sql         string
 	fingerprint uint64
+	summary     Summary
+	executedAt  time.Time     // when the served result's execution finished
+	elapsed     time.Duration // its wall-clock
 	loading     bool
 	err         error
 }
@@ -77,6 +80,9 @@ func (inst *nodeLane) demand(compiledSQL string) (view laneView) {
 		view.schema = inst.result.schema
 		view.sql = inst.result.sql
 		view.fingerprint = inst.result.fingerprint
+		view.summary = inst.result.summary
+		view.executedAt = inst.result.executedAt
+		view.elapsed = inst.result.elapsed
 		view.err = inst.result.err
 	}
 	view.loading = inst.loading
@@ -127,7 +133,8 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	// close cancels): a WithTimeout ctx left uncancelled keeps its timer
 	// armed until the deadline — 60s per map fetch (review finding).
 	defer cancel()
-	rec, schema, err := inst.exec.execute(ctx, sql, inst.alloc)
+	start := time.Now()
+	rec, schema, summary, err := inst.exec.execute(ctx, sql, inst.alloc)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if gen != inst.gen {
@@ -141,7 +148,14 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	inst.loading = false
 	inst.cancel = nil
 	prev := inst.result
-	inst.result = &nodeResult{rec: rec, schema: schema, sql: sql, fingerprint: fingerprintRecord(rec), err: err}
+	inst.result = &nodeResult{
+		rec: rec, schema: schema, sql: sql,
+		fingerprint: fingerprintRecord(rec),
+		summary:     summary,
+		executedAt:  time.Now(),
+		elapsed:     time.Since(start),
+		err:         err,
+	}
 	inst.servedSQL = sql
 	if prev != nil && prev.rec != nil {
 		prev.rec.Release()

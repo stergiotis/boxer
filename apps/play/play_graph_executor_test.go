@@ -30,12 +30,13 @@ func TestClientExecutorExecutesArrowStream(t *testing.T) {
 	defer srv.Close()
 
 	exec := clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}
-	rec, schema, err := exec.execute(context.Background(), "SELECT n FROM t", memory.NewGoAllocator())
+	rec, schema, summary, err := exec.execute(context.Background(), "SELECT n FROM t", memory.NewGoAllocator())
 	require.NoError(t, err)
 	require.NotNil(t, rec)
 	defer rec.Release()
 	require.Equal(t, int64(3), rec.NumRows())
 	require.Equal(t, "n", schema.Field(0).Name)
+	require.Equal(t, uint64(2), summary.ReadRows, "the engine summary rides along")
 	require.Equal(t, 1, *hits)
 }
 
@@ -48,7 +49,7 @@ func TestClientExecutorZeroBatchKeepsSchema(t *testing.T) {
 	defer srv.Close()
 
 	exec := clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}
-	rec, schema, err := exec.execute(context.Background(), "SELECT n FROM t WHERE 0", memory.NewGoAllocator())
+	rec, schema, _, err := exec.execute(context.Background(), "SELECT n FROM t WHERE 0", memory.NewGoAllocator())
 	require.NoError(t, err)
 	require.Nil(t, rec)
 	require.NotNil(t, schema, "schema must survive an empty result")

@@ -202,8 +202,8 @@ type schemaOnlyExecutor struct {
 	schema *arrow.Schema
 }
 
-func (inst *schemaOnlyExecutor) execute(context.Context, string, memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, err error) {
-	return nil, inst.schema, nil
+func (inst *schemaOnlyExecutor) execute(context.Context, string, memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	return nil, inst.schema, Summary{}, nil
 }
 
 // A successful empty bands fetch maps to ZERO bands ("0 bands"), clears a

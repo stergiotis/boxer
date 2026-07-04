@@ -24,13 +24,14 @@ func TestActiveSnapshotObservesIntermediateNode(t *testing.T) {
 		Sink: mainNodeID,
 	}
 
-	// Observe the intermediate: the first snapshot triggers its execution.
+	// Observe the intermediate: the first snapshot demands its fused SQL on
+	// the intermediate lane (non-blocking; the result lands async).
 	app.observedNode = "recent"
 	rec, _, _, _, _, _, _, _ := app.activeSnapshot()
 	if rec != nil {
 		rec.Release()
 	}
-	waitNotLoading(t, app.intermediateStore)
+	waitLaneReady(t, app.intermediateLane, "SELECT n FROM t")
 
 	rec, _, numRows, loading, _, _, _, err := app.activeSnapshot()
 	require.NoError(t, err)

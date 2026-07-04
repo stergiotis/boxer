@@ -99,10 +99,10 @@ type PanelI interface {
 }
 
 // nodeExecutorI runs a compiled query and returns its single, concatenated Arrow
-// result. The real impl wraps *Client.ExecuteArrowStream (slice 2); slice-1 tests
-// use a mock.
+// result plus the engine's execution summary. The real impl wraps
+// *Client.ExecuteArrowStream; tests use mocks (a zero Summary is fine).
 type nodeExecutorI interface {
-	execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, err error)
+	execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
 }
 
 // Node is a query node. Compile produces the pushed-down SQL from the current
@@ -126,6 +126,9 @@ type nodeResult struct {
 	sql         string
 	fingerprint uint64
 	revision    uint64
+	summary     Summary
+	executedAt  time.Time     // when the execution finished (zero = never ran)
+	elapsed     time.Duration // wall-clock of the execution
 	err         error
 }
 
@@ -249,13 +252,17 @@ func (inst *queryGraph) demand(ctx context.Context, id NodeID) (res *nodeResult,
 
 	// Stale ⇒ execute. An executor error is carried on the result (SD11), not
 	// returned, so the bound panel can render it as an empty-state.
-	rec, schema, xErr := inst.exec.execute(ctx, sql, inst.alloc)
+	start := time.Now()
+	rec, schema, summary, xErr := inst.exec.execute(ctx, sql, inst.alloc)
 	next := &nodeResult{
 		rec:         rec,
 		schema:      schema,
 		sql:         sql,
 		fingerprint: fingerprintRecord(rec),
 		revision:    inst.sig.revision,
+		summary:     summary,
+		executedAt:  time.Now(),
+		elapsed:     time.Since(start),
 		err:         xErr,
 	}
 	if prev != nil && prev.rec != nil {
