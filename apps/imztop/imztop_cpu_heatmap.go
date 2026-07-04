@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	egcolor "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
@@ -42,11 +42,12 @@ const cpuHeatmapCursorStripHeight float32 = 8
 // reservedBelow, slot_h, slot_h*maxStretch). A rough estimate is
 // fine — the clamp keeps the result sane even when the actual
 // content below is taller or shorter than expected.
-//   cursor strip   ~12 px
-//   tick labels    ~20 px
-//   hover label    ~20 px
-//   sparkline grid ~400 px (32 cores in 4 cols = 8 rows × ~50 px)
-//   gaps/padding   ~28 px
+//
+//	cursor strip   ~12 px
+//	tick labels    ~20 px
+//	hover label    ~20 px
+//	sparkline grid ~400 px (32 cores in 4 cols = 8 rows × ~50 px)
+//	gaps/padding   ~28 px
 const cpuHeatmapReservedBelowPx float32 = 480
 
 // cpuHeatmapMaxStretch is the maximum multiple of the slot-count
