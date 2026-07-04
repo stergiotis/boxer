@@ -1,6 +1,7 @@
 package play
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -43,27 +44,31 @@ type splitResult struct {
 }
 
 // splitGraph recovers the node graph from an editor buffer (ADR-0097 3a). The
-// last non-SET statement is the sink; its top-level CTEs become nodes. Pure: it
-// parses and analyses, it does not execute or rewrite SQL.
+// single non-SET statement is the sink; its top-level CTEs become nodes. A
+// buffer with more than one non-SET statement is rejected — executing only one
+// of them would silently drop the rest (statements-as-sibling-nodes is a future
+// slice of SD3). Pure: it parses and analyses, it does not execute or rewrite SQL.
 func splitGraph(sql string) (res splitResult, err error) {
 	stmts := statementSplit(sql)
 	sinkIdx := -1
-	for i := len(stmts) - 1; i >= 0; i-- {
-		if !isSetStatement(stmts[i]) {
-			sinkIdx = i
-			break
+	nonSet := 0
+	for i, s := range stmts {
+		if isSetStatement(s) {
+			res.Prelude = append(res.Prelude, s)
+			continue
 		}
+		nonSet++
+		sinkIdx = i
 	}
 	if sinkIdx < 0 {
 		err = eh.Errorf("splitGraph: no query statement to split")
 		return
 	}
-	stmt := stmts[sinkIdx]
-	for _, s := range stmts {
-		if isSetStatement(s) {
-			res.Prelude = append(res.Prelude, s)
-		}
+	if nonSet > 1 {
+		err = eh.Errorf("splitGraph: multi-statement buffers are not supported by the query graph (%d statements); write a SET prelude plus one statement", nonSet)
+		return
 	}
+	stmt := stmts[sinkIdx]
 
 	pr, pErr := nanopass.Parse(stmt)
 	if pErr != nil {
@@ -95,17 +100,64 @@ func splitGraph(sql string) (res splitResult, err error) {
 	}
 
 	// The sink node carries the whole statement; fuse-to-sink (3c) executes it
-	// verbatim, so a single statement round-trips to the original query.
+	// verbatim, so a single statement round-trips to the original query. Its id
+	// is synthetic (a lookup key and label — never emitted into SQL), so it
+	// steps aside when a user CTE claimed the default name: CTE ids must stay
+	// their SQL names (fuseNode emits `WITH <id> AS`), the sink key is free.
+	sinkID := uniqueSinkID(res.Nodes)
 	res.Nodes = append(res.Nodes, splitNode{
-		ID:        mainNodeID,
+		ID:        sinkID,
 		Kind:      splitNodeStatement,
 		SQL:       stmt,
 		DependsOn: cteRefs([]*nanopass.SelectScope{root}),
 		Reads:     paramSlotsOf(pr, root.Node),
 	})
-	res.Sink = mainNodeID
+	res.Sink = sinkID
 
+	err = checkUniqueIDs(res.Nodes)
+	if err != nil {
+		return
+	}
 	err = checkAcyclic(res.Nodes)
+	return
+}
+
+// uniqueSinkID returns the sink node's id: mainNodeID, disambiguated when a
+// user CTE claimed that name ("main (sink)", then "main (sink2)", …). Without
+// this, a CTE literally named "main" aliased the sink — fuseNode fused the CTE
+// body instead of the statement, or checkAcyclic saw a bogus self-cycle.
+func uniqueSinkID(nodes []splitNode) (id NodeID) {
+	taken := func(cand NodeID) bool {
+		for i := range nodes {
+			if nodes[i].ID == cand {
+				return true
+			}
+		}
+		return false
+	}
+	id = mainNodeID
+	if !taken(id) {
+		return
+	}
+	id = mainNodeID + " (sink)"
+	for n := 2; taken(id); n++ {
+		id = NodeID(fmt.Sprintf("%s (sink%d)", mainNodeID, n))
+	}
+	return
+}
+
+// checkUniqueIDs rejects duplicate node ids (two same-named CTEs — ClickHouse
+// rejects the query anyway). checkAcyclic keys its adjacency by id, so a
+// duplicate would otherwise be mis-diagnosed as a dependency cycle.
+func checkUniqueIDs(nodes []splitNode) (err error) {
+	seen := make(map[NodeID]struct{}, len(nodes))
+	for i := range nodes {
+		if _, dup := seen[nodes[i].ID]; dup {
+			err = eh.Errorf("splitGraph: duplicate node id %q", nodes[i].ID)
+			return
+		}
+		seen[nodes[i].ID] = struct{}{}
+	}
 	return
 }
 

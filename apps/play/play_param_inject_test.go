@@ -246,6 +246,23 @@ func TestRecomposeMirrorParseErrorReturnsNotOK(t *testing.T) {
 	}
 }
 
+func TestRecomposeMirrorNonLeadingParamSetReturnsNotOK(t *testing.T) {
+	// A non-param SET ahead of the param SET parses fine, but the param SET
+	// then sits mid-buffer: the residual is not a suffix of the canonical.
+	// Slicing must decline (OK=false) — recomposing prelude+mirror would
+	// duplicate the shared statements and corrupt the buffer (review finding:
+	// one keystroke in the residual editor doubled the buffer mid-token).
+	canonical := "SET max_threads = 4;\nSET param_a = 1;\nSELECT {a:UInt64} AS b"
+	out := recomposeMirror(canonical, "", "")
+	if out.OK {
+		t.Fatalf("OK should be false for a non-leading param prelude (mirror=%q prelude=%q)",
+			out.Mirror, out.Prelude)
+	}
+	if out.Canonical != canonical {
+		t.Errorf("Canonical should pass through, got %q", out.Canonical)
+	}
+}
+
 func TestSyncParamPreludeRoundTripsThroughExtractParams(t *testing.T) {
 	out, _ := SyncParamPrelude(
 		`SELECT {x : String} + {n : UInt64}`,

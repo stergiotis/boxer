@@ -168,8 +168,9 @@ func isDateTimeType(t string) bool {
 // MirrorSync is the result of one recomposeMirror call: the new
 // canonical SQL, the new mirror, the new syncedFrom snapshot, and
 // the prelude string sliced off for the read-only label render.
-// OK=false means ExtractParams failed and the caller should leave
-// state untouched and fall back to the unsliced editor.
+// OK=false means ExtractParams failed OR the param SETs are not a
+// leading prelude; the caller should leave state untouched and fall
+// back to the unsliced editor.
 type MirrorSync struct {
 	Canonical  string
 	Mirror     string
@@ -208,7 +209,18 @@ func recomposeMirror(canonical, mirror, syncedFrom string) (out MirrorSync) {
 		out.SyncedFrom = syncedFrom
 		return
 	}
-	out.Prelude = strings.TrimSuffix(canonical, residual)
+	if !strings.HasSuffix(canonical, residual) {
+		// A param SET that is not part of a leading prelude (e.g. sitting
+		// below a non-param SET) makes the residual a non-suffix. Slicing
+		// cannot represent that buffer — recomposing prelude+mirror would
+		// duplicate the shared statements and corrupt it. Decline; the
+		// caller falls back to the unsliced editor.
+		out.Canonical = canonical
+		out.Mirror = mirror
+		out.SyncedFrom = syncedFrom
+		return
+	}
+	out.Prelude = canonical[:len(canonical)-len(residual)]
 	out.OK = true
 
 	switch {

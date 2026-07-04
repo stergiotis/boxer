@@ -20,7 +20,11 @@ func (inst *PlayApp) renderGraphTab() {
 	ids := inst.ids
 	split := inst.currentSplit
 	if len(split.Nodes) == 0 {
-		for rt := range c.RichTextLabel("Run a query to see its node graph.") {
+		msg := "Run a query to see its node graph."
+		if inst.splitErr != nil {
+			msg = "split failed: " + inst.splitErr.Error() + " — the raw buffer was executed instead."
+		}
+		for rt := range c.RichTextLabel(msg) {
 			rt.Small().Weak()
 		}
 		return

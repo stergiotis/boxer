@@ -73,8 +73,12 @@ type PlayApp struct {
 
 	// currentSplit is the ADR-0097 node graph recovered from the last-run
 	// buffer (3a/3c). The sink node is what the panels observe; it backs the
-	// Graph-view chrome (3e) and the materialization policy (3d).
+	// Graph-view chrome (3e) and the materialization policy (3d). splitErr is
+	// the last Run's split failure (nil on success): the raw buffer was
+	// executed instead, and the Graph tab shows the reason rather than
+	// silently degrading to its empty-state.
 	currentSplit splitResult
+	splitErr     error
 
 	// observedNode is the graph node whose result the result panels show (3d) —
 	// the sink by default, switchable from the Graph view. When it is an
@@ -647,6 +651,7 @@ func (inst *PlayApp) Render() error {
 				split = splitResult{}
 			}
 			inst.currentSplit = split
+			inst.splitErr = fErr
 			// A fresh run resets the observed node to the new sink and clears
 			// the intermediate lane's drive state (3d).
 			inst.observedNode = split.Sink
