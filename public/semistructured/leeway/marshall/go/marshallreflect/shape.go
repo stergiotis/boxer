@@ -86,7 +86,10 @@ func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 
 	case reflect.Slice:
 		elem := rt.Elem()
-		// []byte: scalar blob lane.
+		// []byte: scalar blob lane (necessarily also []uint8 — the
+		// identical Go type; the u8 homogenous-array lane is selected
+		// explicitly via `,ct=u8h`, matching the go/ast front-end —
+		// ADR-0101 OQ2).
 		if elem.Kind() == reflect.Uint8 {
 			// A named []byte (e.g. json.RawMessage) is not a plain []byte; the
 			// AST front-end rejects its source spelling, so the reflect path

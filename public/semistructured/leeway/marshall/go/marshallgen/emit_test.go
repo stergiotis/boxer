@@ -718,13 +718,14 @@ type MyDTO struct {
 func TestEmit_MixedSubColumns_SingleContainer(t *testing.T) {
 	// facts11 canonical shape (S >= 1, C = 1): the DML method is
 	// AddToContainerP per the count rule (ADR-0101 SD3), and no zip guard
-	// is emitted for a lone container.
+	// is emitted for a lone container. `[]uint8` is `[]byte` (blob lane);
+	// `,ct=u8h` selects the u8-array lane explicitly (ADR-0101 OQ2).
 	out := generate(t, `package demo
 type MyDTO struct {
 	_        struct{} `+"`kind:\"my\"`"+`
 	Id       uint64   `+"`lw:\",id\"`"+`
 	Semantic string   `+"`lw:\"m,u8:semantic\"`"+`
-	Value    []uint8  `+"`lw:\"m,u8:value\"`"+`
+	Value    []uint8  `+"`lw:\"m,u8:value,ct=u8h\"`"+`
 }
 `)
 	parseGo(t, out)
@@ -774,5 +775,88 @@ type MyDTO struct {
 	}
 	if !strings.Contains(err.Error(), "roaring.Bitmap not supported in a multi-sub-column section") {
 		t.Fatalf("expected multi-sub-column roaring rejection, got: %v", err)
+	}
+}
+
+// --- []uint8 / []byte lane selection (ADR-0101 OQ2 resolution). ---
+
+func TestEmit_U8SliceSpelling_BlobByDefault_ArrayViaCt(t *testing.T) {
+	// Bare []uint8 is []byte — the scalar blob lane in BOTH front-ends
+	// (the reflect front-end cannot see the spelling, so the go/ast
+	// front-end no longer keys a lane off it).
+	out := generate(t, `package demo
+type MyDTO struct {
+	_    struct{} `+"`kind:\"my\"`"+`
+	Id   uint64   `+"`lw:\",id\"`"+`
+	Blob []uint8  `+"`lw:\"m,blob\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "BeginAttribute(value []byte) Attr")
+	mustNotContain(t, out, "AddToContainerP(value")
+
+	// `,ct=u8h` relabels the same Go type into the u8 homogenous-array
+	// lane: container open + per-element AddToContainerP(uint8).
+	out = generate(t, `package demo
+type MyDTO struct {
+	_    struct{} `+"`kind:\"my\"`"+`
+	Id   uint64   `+"`lw:\",id\"`"+`
+	Data []uint8  `+"`lw:\"m,u8Array,ct=u8h\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "BeginAttribute() Attr")
+	mustContain(t, out, "AddToContainerP(value uint8)")
+	mustContain(t, out, "for _, v := range c.Data[i] {")
+}
+
+func TestEmit_U8ArrayCt_ComposesWithExplode(t *testing.T) {
+	// The override resolves before the flag × shape checks, so
+	// `,ct=u8h,explode` sees a multi-element shape.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_    struct{} `+"`kind:\"my\"`"+`
+	Id   uint64   `+"`lw:\",id\"`"+`
+	Data []uint8  `+"`lw:\"m,u8Array,ct=u8h,explode\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "BeginAttribute(value uint8) Attr")
+	mustContain(t, out, "for _, v := range c.Data[i] {")
+	mustNotContain(t, out, "AddToContainerP(value")
+}
+
+func TestParse_RejectsCtReshape(t *testing.T) {
+	// The rendered-Go-type comparison still rejects genuine reshapes.
+	for name, src := range map[string]string{
+		"string→u8h": `package demo
+type MyDTO struct {
+	_  struct{} ` + "`kind:\"my\"`" + `
+	Id uint64   ` + "`lw:\",id\"`" + `
+	S  string   ` + "`lw:\"m,u8Array,ct=u8h\"`" + `
+}
+`,
+		"[]uint32→u8h": `package demo
+type MyDTO struct {
+	_  struct{} ` + "`kind:\"my\"`" + `
+	Id uint64   ` + "`lw:\",id\"`" + `
+	D  []uint32 ` + "`lw:\"m,u8Array,ct=u8h\"`" + `
+}
+`,
+		"[]byte→yh": `package demo
+type MyDTO struct {
+	_  struct{} ` + "`kind:\"my\"`" + `
+	Id uint64   ` + "`lw:\",id\"`" + `
+	B  []byte   ` + "`lw:\"m,blobArray,ct=yh\"`" + `
+}
+`,
+	} {
+		_, err := generateMay(t, src)
+		if err == nil {
+			t.Fatalf("%s: expected reshape rejection, got success", name)
+		}
+		if !strings.Contains(err.Error(), "may only relabel, not reshape") {
+			t.Fatalf("%s: expected reshape error, got: %v", name, err)
+		}
 	}
 }

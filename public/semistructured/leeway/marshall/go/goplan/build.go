@@ -362,6 +362,28 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		return
 	}
 
+	// Resolve the field's canonical, applying a `,ct=<canonical>` override if
+	// present. The override must reproduce the field's Go/wire shape — it
+	// relabels the canonical (e.g. a [N]byte field as IPv4, or a []byte blob
+	// as the u8 homogenous array — the same Go type) without changing the
+	// bytes, so Plan-consuming tooling sees the richer type and both
+	// front-ends stay wire-compatible. Resolved before the shape checks
+	// below so the allowlist and the flag × shape rules see the field's
+	// effective shape (e.g. `,ct=u8h,explode` composes: the override makes
+	// the field multi-element).
+	fieldCanonical := shape.Canonical
+	if flags.CanonicalType != "" {
+		fieldCanonical, err = resolveCanonicalOverride(goFieldName, flags.CanonicalType, goType, isSlice, isRoaring)
+		if err != nil {
+			return
+		}
+		goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(fieldCanonical)
+		if err != nil {
+			err = eb.Build().Str("field", goFieldName).Errorf("derive Go type from `,ct=` canonical: %w", err)
+			return
+		}
+	}
+
 	// Tagged-value field. Slice element allowlist is shape-level only
 	// (per-element identity conversion in the emitted code); schema-
 	// specific section compatibility is the Go compiler's job at the
@@ -427,19 +449,6 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		}
 	}
 
-	// Resolve the field's canonical, applying a `,ct=<canonical>` override if
-	// present. The override must reproduce the field's Go/wire shape — it
-	// relabels the canonical (e.g. a [N]byte field as IPv4) without changing the
-	// bytes, so Plan-consuming tooling sees the richer type and both front-ends
-	// stay wire-compatible.
-	fieldCanonical := shape.Canonical
-	if flags.CanonicalType != "" {
-		fieldCanonical, err = resolveCanonicalOverride(goFieldName, flags.CanonicalType, goType, isSlice, isRoaring)
-		if err != nil {
-			return
-		}
-	}
-
 	b.plan.Fields = append(b.plan.Fields, mappingplan.TaggedField{
 		GoFieldName:  goFieldName,
 		IsOption:     shape.IsOption,
@@ -453,10 +462,15 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 }
 
 // resolveCanonicalOverride parses a `,ct=<canonical>` string and checks it
-// reproduces the field's Go/wire shape (goType + multiplicity). It may only
-// relabel the canonical — e.g. a [4]byte field as IPv4 — never reshape it, so
-// the emitted bytes are unchanged and the codegen / reflect front-ends stay
-// wire-compatible.
+// reproduces the field's Go type. It may only relabel the canonical — e.g. a
+// [4]byte field as IPv4, or a []byte field as the u8 homogenous array
+// (`,ct=u8h`) — never reshape it, so the codegen / reflect front-ends stay
+// wire-compatible. The check compares the effective *rendered* Go types, not
+// the (element, multiplicity) components: a scalar blob and a u8 array are
+// distinct components but the identical Go type `[]byte` ≡ `[]uint8`, and the
+// override exists precisely to pick the wire lane for such ambiguous types
+// (ADR-0101 OQ2 resolution). The roaring axis stays strict — a bitmap is a
+// different Go type from any slice.
 func resolveCanonicalOverride(goFieldName, ctStr, goType string, isSlice, isRoaring bool) (out canonicaltypes.PrimitiveAstNodeI, err error) {
 	out, err = canonicaltypes.NewParser().ParsePrimitiveTypeAst(ctStr)
 	if err != nil {
@@ -468,12 +482,26 @@ func resolveCanonicalOverride(goFieldName, ctStr, goType string, isSlice, isRoar
 		err = eb.Build().Str("field", goFieldName).Str("ct", ctStr).Errorf("`,ct=` canonical has no Go representation: %w", derr)
 		return
 	}
-	if ovGoType != goType || ovIsSlice != isSlice || ovIsRoaring != isRoaring {
+	if effectiveGoType(ovGoType, ovIsSlice) != effectiveGoType(goType, isSlice) || ovIsRoaring != isRoaring {
 		out = nil
 		err = eb.Build().Str("field", goFieldName).Str("ct", ctStr).Str("ctGoType", ovGoType).Str("fieldGoType", goType).Errorf("`,ct=` canonical's Go shape does not match the field's — the override may only relabel, not reshape")
 		return
 	}
 	return
+}
+
+// effectiveGoType renders an (element type, multiplicity) pair to the field's
+// full Go type, folding the `[]uint8` alias: a scalar blob ("[]byte") and a
+// u8 homogenous array (element "uint8", slice) are the same Go type.
+func effectiveGoType(goType string, isSlice bool) string {
+	t := goType
+	if isSlice {
+		t = "[]" + t
+	}
+	if t == "[]uint8" {
+		return "[]byte"
+	}
+	return t
 }
 
 // addCarrierField records a Cut-2 carrier field (its Go type is a

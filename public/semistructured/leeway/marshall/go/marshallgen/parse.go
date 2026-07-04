@@ -163,13 +163,12 @@ func classifyType(expr ast.Expr) (shape goplan.FieldShape, err error) {
 		}
 		shape.IsOption = true
 		// Reject Option[[]T] — slice inside Option is forbidden except
-		// Option[[]byte] (the ZeroToOne scalar blob lane). `byte` is
-		// the blob spelling per boxer's coding standard; sized-integer
-		// arrays spell themselves `[]uint8` and stay in the multi-
-		// element lane.
+		// Option[[]byte] (the ZeroToOne scalar blob lane). `[]uint8` is
+		// the same Go type as `[]byte` and classifies identically (the
+		// reflect front-end cannot see the spelling — ADR-0101 OQ2).
 		if at, isArr := idx.Index.(*ast.ArrayType); isArr && at.Len == nil {
 			id, isIdent := at.Elt.(*ast.Ident)
-			if !isIdent || id.Name != "byte" {
+			if !isIdent || (id.Name != "byte" && id.Name != "uint8") {
 				err = eb.Build().Errorf("option.Option[[]T] is forbidden — use []T for multi-element membership (option.Option[[]byte] is allowed as a scalar blob)")
 				return
 			}
@@ -191,13 +190,16 @@ func classifyType(expr ast.Expr) (shape goplan.FieldShape, err error) {
 			err = eb.Build().Errorf("[]Option[T] is forbidden — Option[T] is only allowed as a scalar field")
 			return
 		}
-		// Special case: top-level `[]byte` is a SCALAR variable-length
-		// blob, not a slice of uint8. The `byte` spelling reserves
-		// itself for blobs; `[]uint8` stays in the multi-element u8
-		// lane. `[][]byte` keeps multi-blob semantics because the
-		// recursion only collapses to `*ast.Ident{byte}` when the top
-		// level is exactly `[]byte`.
-		if id, isIdent := at.Elt.(*ast.Ident); isIdent && id.Name == "byte" {
+		// Special case: top-level `[]byte` / `[]uint8` is a SCALAR
+		// variable-length blob, not a slice of uint8 — the two spellings
+		// are one Go type, and the reflect front-end cannot tell them
+		// apart, so both classify to the blob lane in both front-ends
+		// (the previous "[]uint8 spells the u8-array lane" textual
+		// convention is retired — ADR-0101 OQ2). The u8 homogenous-array
+		// lane is selected explicitly via `,ct=u8h`. `[][]byte` keeps
+		// multi-blob semantics because the recursion only collapses to
+		// `*ast.Ident` when the top level is exactly `[]byte`/`[]uint8`.
+		if id, isIdent := at.Elt.(*ast.Ident); isIdent && (id.Name == "byte" || id.Name == "uint8") {
 			shape.Canonical, err = goplan.ScalarCanonicalForGoType("[]byte")
 			return
 		}

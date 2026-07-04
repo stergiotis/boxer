@@ -398,16 +398,14 @@ spliced in both passes.
    subtype), but plan-derived schema generation (recordstore, ADR-0100)
    cannot emit a set sub-column from a slice field. Defer until a consumer
    needs plan-derived mixed DDL with sets.
-2. **`[]uint8` is `[]byte`.** The front-ends classify `[]uint8` as the
-   scalar blob canonical (`Y`), so a u8-array sub-column (facts11's `u8`
-   canonical section, or any lone `u8Array`) cannot be authored as
-   `[]uint8` — and the `,ct=u8h` relabel is rejected because
-   `resolveCanonicalOverride` compares `(goType, isSlice)` components,
-   which cannot see that blob-`[]byte` and slice-of-`uint8` are the same
-   Go type (verified against facts11 2026-07-04; the sibling `u16`…`i64` /
-   float / time / string sections marshal fine). Fix candidate: compare
-   the *rendered* Go types in the relabel check. Orthogonal to this ADR
-   (it equally affects lone u8 containers); track as its own change.
+2. **`[]uint8` is `[]byte`.** *(Resolved 2026-07-04 — see Updates.)* The
+   front-ends classify `[]uint8` as the scalar blob canonical (`Y`), so a
+   u8-array sub-column (facts11's `u8` canonical section, or any lone
+   `u8Array`) could not be authored as `[]uint8` — and the `,ct=u8h`
+   relabel was rejected because `resolveCanonicalOverride` compared
+   `(goType, isSlice)` components, which cannot see that blob-`[]byte`
+   and slice-of-`uint8` are the same Go type (the sibling `u16`…`i64` /
+   float / time / string sections marshalled fine).
 2. **Optional scalar sub-columns.** `Option[T]` in the tuple is rejected;
    facts11 marks `params` `AspectOptional` and carries `""`. If a consumer
    needs wire-level absent-vs-empty on a tuple scalar, that is a schema
@@ -427,6 +425,35 @@ consumer's generated DML (2026-07-04).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
+
+## Updates
+
+### 2026-07-04 — OQ2 resolved: `[]uint8` aliasing and the `,ct=u8h` lane selector
+
+`resolveCanonicalOverride` now compares the effective *rendered* Go type
+(folding the `[]uint8` ≡ `[]byte` alias) instead of the `(goType, isSlice)`
+components, so a blob-classified `[]byte` / `[]uint8` field may relabel to
+the u8 homogenous array via `,ct=u8h` — the same Go type, the container
+wire lane. Genuine reshapes (`string`→`u8h`, `[]uint32`→`u8h`,
+`[]byte`→`yh`) remain rejected; the roaring axis stays strict. The
+override now resolves *before* the shape-dependent checks in
+`PlanBuilder.AddField` (slice-element allowlist, `explode` / `unit`
+flag × shape rules), so flags compose with the field's effective shape
+(`,ct=u8h,explode` works).
+
+For front-end parity the go/ast classifier's textual convention —
+"`[]byte` spells the blob, `[]uint8` spells the u8-array lane" — is
+retired: the reflect front-end cannot see the spelling (one
+`reflect.Type`), so keying a wire lane off it made the same DTO produce
+different wire bytes per front-end. Bare `[]byte` **and** bare `[]uint8`
+now both classify as the scalar blob in both front-ends (including the
+`Option[[]uint8]` carve-out), and `,ct=u8h` is the single explicit
+selector for the u8-array lane. No in-tree DTO used the bare-`[]uint8`
+array lane. Verified: facts11's `u8` canonical section (S = 3, C = 1)
+marshals through `Validate` + `Marshal` against the consumer's generated
+DML; emit / plan / round-trip tests cover both lanes, the explode
+composition, and the reshape rejections; checked-in `.out.go` regenerate
+byte-stable.
 
 ## References
 
