@@ -659,6 +659,36 @@ consumer that must name DML/RA types in its own declarations, is
 exercised by a generator validation test, and is not used by any
 in-repo package.
 
+### 2026-07-04 — cached state-view reads; explicit staleness controls
+
+The Deferred item "Caching `Latest`/`GetLatest`" is resolved on the
+attached cache view, without new fetch machinery: the view's fetcher
+already retrieves the newest row per key, and the local-write
+invalidation hooks plus the dirty map already keep cached entries exact
+under this process's single writer. What lands:
+
+- `GetLatest(key)` on the view (schemas with the Lifecycle role only):
+  the cached lookup with the tombstone read as absent — the cached twin
+  of the store's uncached `GetLatest`, which remains the authoritative
+  read.
+- `GetLatestAcceptStale(key)` — stale-while-revalidate: a stale entry is
+  served immediately (`stale=true`) while the refetch queues, pairing
+  with the work-item replay loop for frame-shaped consumers.
+- Explicit external-writer signals: `MarkStale(key)` (next strict read
+  misses and queues a refetch; accept-stale reads bridge the gap),
+  `Invalidate(key)`, and `InvalidateAll()` (rebuilds the underlying
+  cache — bulk signal after e.g. an external import; drops in-flight
+  miss bookkeeping, so call between frames). The view's write hook now
+  closes over the view rather than binding the cache instance, so it
+  survives the rebuild.
+
+Coherence claim, stated precisely: cached state-view reads are exact
+under the single writer that owns the store; for external writers the
+caller supplies the signal. A freshness TTL (auto-stale after a bound)
+remains the recorded follow-up — it belongs in `public/caching` and
+wants a clock seam there for testability; the trigger is the first
+multi-writer deployment that cannot arrange explicit signals.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)
