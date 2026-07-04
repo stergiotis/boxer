@@ -95,22 +95,20 @@ sub-columns, C container sub-columns): single scalar = (1,0); lone container =
 
 ### Demand
 
-The downstream consumer that surfaced this (hackathon_2026) committed a schema
-with **12 mixed-shape sections**: facts11's ten canonical sections
-(`u8`…`i64`, `time`, `float32`, `float64`: `value` array + `semantic` /
-`models` / `params` scalar S columns), `string` (`short` Sh + `long` Sh +
-three scalars) and `location` (five arrays + `models` / `params`). The
-promoting commit (f781a04, "promote all values to homogenous arrays") states
-the goal: *"natively support slices when marshalling."* Its generated DML
-confirms the model above: `SectionU8.BeginAttribute(semantic, models, params)`
-+ `InAttr.AddToContainer(value uint8)`;
-`SectionLocation.BeginAttribute(models, params)` +
-`AddToCoContainers(latitude, longitude, h3Resolution3, h3Resolution6,
-h3Resolution15)`. Today the consumer works around the gap by avoidance: its
-round-trip tests marshal only the scalar `provenance` section, a facts12
-sibling schema downgrades every value to scalar (metadata demoted to
-memberships, `location` split into scalar co-sections), and a 65-DTO
-FollowTheMoney fleet only exercises `PlanFor[T]`, never `Marshal`.
+The downstream consumer that surfaced this (an external repository)
+committed a schema with **12 mixed-shape sections**: ten canonical
+numeric/temporal sections (a `value` array + three scalar metadata columns
+each), a string section (two Sh co-containers + three scalars) and a geo
+section (five arrays + two scalars). The schema was promoted to this shape
+precisely so slices marshal natively. Its generated DML confirms the model
+above: on the C = 1 sections, `BeginAttribute(<three metadata scalars>)` +
+`InAttr.AddToContainer(value)`; on the C = 5 one,
+`BeginAttribute(<two scalars>)` + `AddToCoContainers(<five geo arrays>)`.
+Today the consumer works around the gap by avoidance: its round-trip tests
+marshal only its one all-scalar section, a sibling schema downgrades every
+value to scalar (metadata demoted to memberships, the geo section split
+into scalar co-sections), and a large DTO fleet only exercises
+`PlanFor[T]`, never `Marshal`.
 
 ## Design space (QOC)
 
@@ -126,16 +124,16 @@ sections, and at what scope?
   reflect panic); document that consumers must split sections so arrays live
   alone.
 - **O3** — Narrow enablement: exactly one container plus at least one scalar
-  (C = 1, S ≥ 1) — the facts11 canonical shape; defer co-containers.
-- **O4** — No boxer change; consumers redesign schemas (the facts12 route:
-  scalar values, metadata as memberships / co-sections).
+  (C = 1, S ≥ 1) — the consumer's canonical shape; defer co-containers.
+- **O4** — No boxer change; consumers redesign schemas (the downgraded-
+  sibling route: scalar values, metadata as memberships / co-sections).
 
 **Criteria.**
 
 - **C1** — pipeline consistency: does the marshall pair speak the same section
   model as schema/DML/RA/readback?
-- **C2** — consumer fit: covers facts11's 12 sections (2 of which have C ≥ 2)
-  and the FtM fleet without schema contortion.
+- **C2** — consumer fit: covers the consumer's 12 sections (2 of which have
+  C ≥ 2) and its DTO fleet without schema contortion.
 - **C3** — implementation cost & regression risk against the byte-identity
   invariant (marshallgen `BuildEntities` ≡ `marshallreflect.Marshal`).
 - **C4** — authoring-contract clarity (positional ordering, zip lengths,
@@ -154,8 +152,8 @@ sections, and at what scope?
 | C5 | ++ | ++ | +  | −− |
 
 O3 saves almost nothing over O1 — the zip loop over one container and over K
-containers is the same driver, and it strands facts11's `string` / `location`
-(C ≥ 2). O2/O4 keep the marshall pair the only layer that cannot express a
+containers is the same driver, and it strands the consumer's two C ≥ 2
+sections. O2/O4 keep the marshall pair the only layer that cannot express a
 shape the rest of the pipeline (and a committed consumer schema) already
 carries. O1 wins.
 
@@ -208,8 +206,8 @@ EXPLANATION):
   (N = 0 on the wire). S = 0 (all-container, geoArea shape): the attribute is
   spliced (not emitted) when *every* container is empty — the lone-container
   splice rule generalised; emitted otherwise. Schema-`AspectOptional` scalar
-  sub-columns (e.g. facts11 `params`) carry their zero value; `Option[T]`
-  stays rejected in multi-sub-column sections.
+  sub-columns carry their zero value; `Option[T]` stays rejected in
+  multi-sub-column sections.
 - **Rejected in multi-sub-column sections** (now enforced at plan time, D3):
   `Option[T]`, `*roaring.Bitmap`, `,unit`, `,explode`, `,const`, carrier
   (mixed/parametrized) channels, more than one field per sub-column, more
@@ -317,8 +315,7 @@ spliced in both passes.
   gen-vs-reflect suites.
 - **SD3 — Method naming follows the DML generator's count rule** —
   `AddToContainerP` when the section has exactly one container sub-column
-  (even with scalars present, cf. facts11 `SectionU8`), `AddToCoContainersP`
-  for two or more.
+  (even with scalars present), `AddToCoContainersP` for two or more.
 
 ### Verification gates
 
@@ -339,15 +336,15 @@ spliced in both passes.
 ## Alternatives
 
 - **O2 — graceful rejection + section splitting.** Keeps the marshall pair
-  the odd layer out; forces facts11-style schemas to choose between losing
-  slice values (facts12's scalar downgrade) and losing per-attribute scalar
-  metadata (lone-container sections); co-section splits impose their own
+  the odd layer out; forces such schemas to choose between losing slice
+  values (the sibling schema's scalar downgrade) and losing per-attribute
+  scalar metadata (lone-container sections); co-section splits impose their own
   equal-attribute-count constraint (anchor deliberately keeps `geoPoint` /
   `geoArea` out of a co-section for exactly that reason,
   `card_anchor_schema.go:142-148`). Its one virtue — plan-time rejection —
   is subsumed by D3.
 - **O3 — C = 1 only.** Same machinery as O1 minus the multi-container zip;
-  strands facts11 `string` / `location` and anchor `text` / `geoArea`;
+  strands the consumer's C ≥ 2 sections and anchor `text` / `geoArea`;
   arbitrary boundary (why is a second array different?) violating C4.
 - **O4 — consumer schema redesign.** Entrenches the gap; the reflect panic
   remains for the next consumer; contradicts the pipeline's own read-side
@@ -364,9 +361,9 @@ spliced in both passes.
 
 ### Positive
 
-- The marshall pair speaks the DML's full section model; facts11's 12
-  sections and the FtM DTO fleet marshal natively ("natively support slices
-  when marshalling" lands).
+- The marshall pair speaks the DML's full section model; the consumer's 12
+  sections and its DTO fleet marshal natively — the goal its schema was
+  promoted for lands.
 - The `Validate[T]` / plan-time story becomes airtight for multi-sub-column
   sections — no reflect panics, contract failures name the field and the
   missing/mismatched method.
@@ -400,28 +397,31 @@ spliced in both passes.
    needs plan-derived mixed DDL with sets.
 2. **`[]uint8` is `[]byte`.** *(Resolved 2026-07-04 — see Updates.)* The
    front-ends classify `[]uint8` as the scalar blob canonical (`Y`), so a
-   u8-array sub-column (facts11's `u8` canonical section, or any lone
+   u8-array sub-column (a u8 canonical section, or any lone
    `u8Array`) could not be authored as `[]uint8` — and the `,ct=u8h`
    relabel was rejected because `resolveCanonicalOverride` compared
    `(goType, isSlice)` components, which cannot see that blob-`[]byte`
    and slice-of-`uint8` are the same Go type (the sibling `u16`…`i64` /
    float / time / string sections marshalled fine).
 2. **Optional scalar sub-columns.** `Option[T]` in the tuple is rejected;
-   facts11 marks `params` `AspectOptional` and carries `""`. If a consumer
-   needs wire-level absent-vs-empty on a tuple scalar, that is a schema
-   (nullable sub-column) question first, a codec question second.
-3. **Multi-membership mixed sections.** The single-membership rule predates
-   this ADR; facts11's `AspectEmulatedMembershipVerbatim` scalar columns are
-   value columns, not memberships, so no consumer currently needs it.
-   Revisit only with a concrete section.
+   the consumer marks its optional metadata column `AspectOptional` and
+   carries `""`. If a consumer needs wire-level absent-vs-empty on a tuple
+   scalar, that is a schema (nullable sub-column) question first, a codec
+   question second.
+3. **Multi-membership mixed sections.** *(Resolved 2026-07-04 — see
+   Updates and [ADR-0103](0103-leeway-marshall-dynamic-membership-tuples.md).)*
+   The single-membership rule predates this ADR; the consumer's
+   `AspectEmulatedMembershipVerbatim` scalar columns are value columns, not
+   memberships, so no consumer currently needed it. Revisit only with a
+   concrete section.
 
 ## Status
 
 Accepted (2026-07-04). Implemented in the accompanying change set
 (goplan + marshallgen + marshallreflect + tests + readback coverage);
 all verification gates green, existing `.out.go` regenerate byte-stable,
-and the facts11 canonical shape (S = 3, C = 1) smoke-verified against the
-consumer's generated DML (2026-07-04).
+and the consumer's canonical shape (S = 3, C = 1) smoke-verified against
+its generated DML (2026-07-04).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
@@ -449,11 +449,32 @@ different wire bytes per front-end. Bare `[]byte` **and** bare `[]uint8`
 now both classify as the scalar blob in both front-ends (including the
 `Option[[]uint8]` carve-out), and `,ct=u8h` is the single explicit
 selector for the u8-array lane. No in-tree DTO used the bare-`[]uint8`
-array lane. Verified: facts11's `u8` canonical section (S = 3, C = 1)
-marshals through `Validate` + `Marshal` against the consumer's generated
-DML; emit / plan / round-trip tests cover both lanes, the explode
+array lane. Verified: the consumer's u8 canonical section (S = 3, C = 1)
+marshals through `Validate` + `Marshal` against its generated DML;
+emit / plan / round-trip tests cover both lanes, the explode
 composition, and the reshape rejections; checked-in `.out.go` regenerate
 byte-stable.
+
+### 2026-07-04 — consumer references redacted
+
+Consumer-identifying details (repository, schema / section / column
+names, commit ids, file paths) are replaced with shape-level
+descriptions per the coding standard's privacy rule. Decisions and the
+evidence they rest on are unchanged.
+
+### 2026-07-04 — OQ "Multi-membership mixed sections" resolved by ADR-0103
+
+The deferred consumer materialised (an external schema mapping several
+same-typed properties per entity into one mixed-shape section, one
+attribute + verbatim membership each — a shape its DML probe already
+carries). [ADR-0103](0103-leeway-marshall-dynamic-membership-tuples.md)
+adds the dynamic-membership tuple form — a slice-of-struct field whose
+elements each emit one attribute of the section with its own membership
+(`@membership` element field) — reusing this ADR's class views, zip rule
+and call sequence per element. The static rule this ADR kept is
+unchanged: separate fields with differing memberships on one
+multi-sub-column section stay rejected (the field↔attribute grouping is
+ambiguous); the tuple form is the supported spelling.
 
 ## References
 
@@ -468,4 +489,4 @@ byte-stable.
 - [`anchor/card_anchor_schema.go`](../../public/semistructured/leeway/anchor/card_anchor_schema.go) — `text` `:80-85`, `geoArea` `:160-168`.
 - [`marshall/clickhouse/readback/EXPLANATION.md`](../../public/semistructured/leeway/marshall/clickhouse/readback/EXPLANATION.md) — per-sub-column model + "mixed-subtype section" coverage row.
 - History: `c1ee6eaa` (2026-05-24 import, both refusal sites + panic path), `0a245799` (2026-05-26, D2 partition), `644a9013` (2026-05-30, grouping hoist), `5f52781f` (2026-06-09, ADR-0074 path move — no semantic change).
-- Consumer (hackathon_2026): `src/go/public/semistructured/facts11/facts11_schema.go` (12 mixed sections), commit `f781a04` ("promote all values to homogenous arrays … natively support slices when marshalling"), `facts11_dml.out.go` (`SectionU8` / `SectionLocation` signatures), `factsftm/` (65 FtM DTOs, `PlanFor`-only today).
+- Consumer evidence (the 12-section schema, its promoting commit, the generated DML signatures, and the `PlanFor`-only DTO fleet) lives in the originating consumer's own repository.
