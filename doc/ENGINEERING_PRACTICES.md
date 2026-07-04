@@ -29,7 +29,7 @@ none combine multiple gates.
 | Workflow | Trigger | Entry point | Purpose |
 |---|---|---|---|
 | [lint.yaml](../.github/workflows/lint.yaml) | push to `main`, PRs | [scripts/ci/lint.sh](../scripts/ci/lint.sh) | `go vet`, staticcheck, errcheck, doclint, h3 wasm parity |
-| [test.yaml](../.github/workflows/test.yaml) | every push | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) | race + cover + JSON tests, tparse-formatted |
+| [test.yaml](../.github/workflows/test.yaml) | manual dispatch, `v*` tags | [scripts/ci/gotest.sh](../scripts/ci/gotest.sh) | race + cover + JSON tests, tparse-formatted; post-test drift gate (generator tests rewrite in place, so the tree must end clean) |
 | [vuln.yaml](../.github/workflows/vuln.yaml) | every push | [scripts/ci/govuln.sh](../scripts/ci/govuln.sh) | `govulncheck -show verbose ./public/...` |
 | [licenses.yaml](../.github/workflows/licenses.yaml) | every push | [scripts/ci/license_gate.sh](../scripts/ci/license_gate.sh) | CycloneDX SBOM → in-tree policy gate |
 | [codestat.yaml](../.github/workflows/codestat.yaml) | push, PR, weekly cron | inline | `scc` line counts split human vs. LLM, dependency inventory, authorship attribution |
