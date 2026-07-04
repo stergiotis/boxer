@@ -19,6 +19,7 @@ the linked document wins.
 | You want to… | Read |
 | --- | --- |
 | Know what boxer is | [README.md](./README.md) |
+| Know why it is shaped this way (the premises) | [doc/explanation/why-boxer.md](./doc/explanation/why-boxer.md) |
 | Write Go in the house style | [CODINGSTANDARDS.md](./CODINGSTANDARDS.md) |
 | Understand the toolchain (CI, lint, governance, supply-chain) | [doc/ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md) |
 | Write or edit a doc / ADR | [doc/DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md) |
