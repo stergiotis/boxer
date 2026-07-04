@@ -30,7 +30,8 @@ value had eroded:
   maintained per package and of unverified completeness.
 - **It taxed every invocation.** `-tags="$(cat ./tags)"` had to be threaded
   through every build/test/vet/generate/lint and the IDE/gopls; omitting it
-  produced misleading "undefined" errors. Cross-repo consumers (`hackathon_2026`) had to replicate `./tags`.
+  produced misleading "undefined" errors. Cross-repo consumers had to
+  replicate `./tags`.
 - **It was drifting.** The current authoring model, `opus48`, was never added to
   the tool's identity registry, so `gov llmtag` would have *stripped* the
   `opus48` tags that `./tags` and four files carried by hand.
@@ -95,7 +96,7 @@ model tag simultaneously, so their union was always co-compilable.
 - `gov llmtag` and its `KnownLLMIdentities` registry remain in-tree as the
   reversal path; a stale `llm_generated_*` mention survives in a commented-out
   nilaway block in `lint.sh`.
-- Cross-repo consumers (`hackathon_2026`) keep their own
+- Cross-repo consumers keep their own
   `llm_generated_*` governance until separately lifted; nothing here forces it.
 
 ## Alternatives considered
@@ -113,6 +114,11 @@ model tag simultaneously, so their union was always co-compilable.
 ## Status
 
 Accepted — 2026-06-21 (reviewed by @spx). Implemented tree-wide: the `llm_generated_*` directives were stripped and `gov llmtag` retired.
+
+## Update — 2026-07-04: consumer references redacted
+
+The cross-repo consumer is no longer named, per the coding standard's
+privacy rule. Decisions are unchanged.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See `doc/DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).

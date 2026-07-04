@@ -221,7 +221,7 @@ func TestSerializeRecordText_Roundtrip(t *testing.T) {
 }
 
 // TestFormatSplitCellLine_RoundTrip locks the exported single-cell
-// contract the pijuldemo draft-diff preview relies on: a value with
+// contract the external GUI demo's draft-diff preview relies on: a value with
 // quotes, backslashes, a tab and non-ASCII must round-trip through
 // FormatCellLine -> SplitKVLine unchanged, and SplitKVLine must tolerate
 // the trailing newline FormatCellLine appends. Non-conforming lines

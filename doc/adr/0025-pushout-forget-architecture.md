@@ -56,7 +56,7 @@ For this ADR, "personal data" is read in the GDPR / FADP sense: any information 
 
 5. **NodeID hash references** — `NodeID = (PatchHash, Index)`. Even after a patch envelope is removed, every NodeID derived from it still encodes the patch's hash. The hash itself is metadata about which patch a node came from, not the patch content, but it is a stable identifier that can be linked back to the original patch given a copy from elsewhere.
 
-6. **Audit log strings** — every operation in `pijul_pushout_backend.go` produces an `audit string` returned alongside its result and appended to the per-actor `CliLogs` ring buffer (`DemoStore`). Audit lines may contain author names, patch descriptions, and timestamps.
+6. **Audit log strings** — every operation in `pijul_pushout_backend.go` produces an `audit string` returned alongside its result and appended to the consumer's per-actor CLI-log ring buffer. Audit lines may contain author names, patch descriptions, and timestamps.
 
 7. **Demo cell representation** — `KVLine.Path`, `KVLine.Value`, `KVLine.Conflict.AliceValue` etc. (`pijul/pijul_types.go`). The demo's flat-KV schema turns paths and values into the substrate of patch content. A `customer.txt`-shaped fixture can carry email addresses, names, account statuses, IPs.
 

@@ -265,8 +265,8 @@ func splitKVLine(line string) (path string, value string, ok bool) {
 // FormatCellLine renders one [KVLine] to the canonical single-line
 // flat-KV text the backends store as a graggle node's content:
 // `<path> <quoted-value>\n` (value strconv.Quote'd, trailing newline
-// included). Exported so out-of-package tooling — notably the pijuldemo
-// draft-diff preview, which must format lines byte-identically to what
+// included). Exported so out-of-package tooling — notably the external
+// GUI demo's draft-diff preview, which must format lines byte-identically to what
 // the backend records or [patch.LineDiff] reports spurious changes —
 // can reference the canonical formatter instead of keeping a drift-prone
 // copy.

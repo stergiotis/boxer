@@ -38,16 +38,16 @@ External references:
   [ids](https://jneem.github.io/ids/) /
   [cycles](https://jneem.github.io/cycles/) blog series.
 - Pijul user manual: <https://pijul.org/manual/>.
-- GUI demo consumer: `hackathon_2026/src/go/public/pijuldemo`, which
-  imports this repo's pushout packages as a module dependency.
+- GUI demo consumer: an external repository, which imports this
+  repo's pushout packages as a module dependency.
 
 ## How it works
 
 This repo holds the *domain* half of the demo — backends, parsers, and
 the graggle engine — and is the canonical implementation. The
-GUI/orchestration half (`DemoStore`, the task worker, egui2 windows and
-playbooks) lives in `hackathon_2026/src/go/public/pijuldemo`, which
-depends on this repo.
+GUI/orchestration half (the demo store, the task worker, egui2 windows
+and playbooks) lives in the external GUI consumer, which depends on
+this repo.
 
 - **`pijul_backend.go`** — defines the *domain* seam: `BackendI` (a
   factory for `RepoI` handles) and `RepoI` (one actor's working copy).
@@ -104,9 +104,8 @@ acts conservatively and reports a conflict rather than guess.
 **Pattern:** ensure sufficient graph context.
 
 - In tests: pad the test fixture with extra lines between keys so the
-  algorithm has unambiguous anchor points. The demo fixture in
-  `DemoStore.InitSystem` does this implicitly (8 well-separated KV
-  rows).
+  algorithm has unambiguous anchor points. The external demo's init
+  fixture does this implicitly (8 well-separated KV rows).
 - In production: group volatile keys together and separate them from
   static rows with structural boundaries (section headers, empty
   lines) to give the patch graph robust anchors.
@@ -217,8 +216,8 @@ Demo-level invariants (visible to anyone using `BackendI`/`RepoI`):
   creating a brand-new cell is rejected with a clear error (no linear
   order means no reliable anchor for a new row).
 
-(UI-level invariants — `PendingOverrides` keying, the `CliLogs` ring
-buffer — belong to the GUI half in `hackathon_2026`'s `pijuldemo`.)
+(UI-level invariants — pending-override keying, the CLI-log ring
+buffer — belong to the GUI half in the external consumer.)
 
 Text-backend internal invariants (no longer visible to the demo, but
 still load-bearing for the `pijul-text` realisation):

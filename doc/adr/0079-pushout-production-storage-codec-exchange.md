@@ -27,7 +27,7 @@ shortcuts remain load-bearing and block production use:
 - **The engine is welded to the demo.** The reusable patch-log /
   dependency-gating / identity-disambiguation / sync logic lives inside
   `pijul/pijul_pushout_backend.go`, typed in terms of KV cells. The
-  demo's GUI consumer (`hackathon_2026/src/go/public/pijuldemo`) locks
+  demo's GUI consumer (an external repository) locks
   the exported `PushoutRepo.Mu` and walks `PushoutRepo.Graggle`
   directly — exported-internals coupling that taxes every backend
   change.
@@ -44,7 +44,7 @@ Forces:
   suite. The immediate forcing function: the next demonstrator uses
   **NATS as transport and a custom serialization format**. boxer itself
   must not grow a NATS dependency (transports live with their
-  demonstrators; NATS is already in hackathon_2026's module graph).
+  demonstrators; the consumer's module graph already carries NATS).
 - **Identity must survive re-serialization.** Patch identity
   (`patch.ComputeHash`, BLAKE3 over canonicalized deps + changes) is
   content-addressed and wire-format-independent today; mixed-codec
@@ -58,7 +58,7 @@ Forces:
   model oracle, differential references, goldens, and fault injection
   are the package's safety net; the refactor must land inside them, and
   recovery itself becomes a new verb under test.
-- **No consumers yet.** hackathon_2026's `pijuldemo` may be transformed
+- **No consumers yet.** The external GUI demo may be transformed
   freely; its capabilities (draft-diff preview, DOT visualizations,
   playbooks) must remain expressible through the new API.
 
@@ -165,7 +165,7 @@ pijul                demo KV adapter over repo + exchange/inproc (text backend u
 
 Layering: `repo` → graggle+envelope; `exchange` → repo; storage and
 transport implementations import only their seam package. The NATS
-transport and the custom codec are implemented in hackathon_2026
+transport and the custom codec are implemented consumer-side
 against `exchangetest`/`codectest`.
 
 ### Subsidiary design decisions
@@ -234,7 +234,7 @@ two very different storage shapes (files now, KV later, OQ-4).
 
 - The pijul demo keeps its `RepoI` surface; the text backend is
   untouched.
-- hackathon_2026's pijuldemo is rewritten onto `View`/`PatchInfo` —
+- The external GUI demo is rewritten onto `View`/`PatchInfo` —
   sanctioned by "no consumers yet".
 
 ### Derived practices
@@ -247,7 +247,7 @@ two very different storage shapes (files now, KV later, OQ-4).
 
 Accepted — 2026-06-12. Implementation phases P1–P7 landed, verified
 (full battery incl. race, conformance suites, state-machine soak with
-the reopen verb), and pushed; the hackathon_2026 pijuldemo consumes the
+the reopen verb), and pushed; the external GUI demo consumes the
 engine through the public read API.
 
 ## Update — 2026-06-25: retention-clock durability; conflict-ordering, identity-claim, and storage-lock fixes
@@ -398,6 +398,12 @@ battery (rapid state machine, conformance suites, goldens); it pins the
 protocol the seams will carry before a wire transport exists to constrain
 it. The retention-ledger durability added in the 2026-06-25 update is not
 part of this model. `README.md` in that tree is the index.
+
+## Update — 2026-07-04: consumer references redacted
+
+Consumer-identifying details (repository and application names, file
+paths) are replaced with generic descriptions per the coding standard's
+privacy rule. Decisions and the evidence they rest on are unchanged.
 
 ## Open questions
 

@@ -716,7 +716,7 @@ Widgets that accept pointer bindings (`*string`, `*float64`, `*bool`) must be bo
 ## Framework Data Race (Thread-Unsafe GUI APIs)
 * **The Symptom:** The Go race detector panics, or the app crashes randomly when background tasks finish and try to wake up the UI or trigger repaints.
 * **The Cause:** **All functions in the ImZero2 `c` package are strictly single-threaded** and belong exclusively to the main UI frame lifecycle. Calling *any* framework method (like `c.RequestRepaint()`, widget builders, or layout scopes) from a background `WorkerLoop` goroutine causes a severe data race with the main render thread.
-* **The Pattern:** **Main-Thread Handoffs**. Never invoke UI framework functions from background goroutines. If a background worker needs to trigger a repaint or an override, it must signal the main thread using thread-safe Go primitives (channels, atomic booleans, or a locked queue like our `PendingOverrides` map). The main `RenderWindow` loop must check this signal and call the `c.*` functions itself.
+* **The Pattern:** **Main-Thread Handoffs**. Never invoke UI framework functions from background goroutines. If a background worker needs to trigger a repaint or an override, it must signal the main thread using thread-safe Go primitives (channels, atomic booleans, or a locked pending-overrides map). The main `RenderWindow` loop must check this signal and call the `c.*` functions itself.
 
 ## FFFI2 Widget Definition Rules
 

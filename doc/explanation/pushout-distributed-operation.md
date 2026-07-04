@@ -43,7 +43,7 @@ Design space, deferred with reasons recorded in ADR-0079:
 
 - Difference-proportional sync (frontiers, set sketches) — OQ-1.
 - A closure-fetch verb for selective patch transfer (§5).
-- Broker-backed distribution (the NATS demonstrator, hackathon-side;
+- Broker-backed distribution (the NATS demonstrator, consumer-side;
   boxer itself takes no broker dependency).
 - Signatures and decode limits for untrusted fleets — OQ-3.
 
@@ -301,7 +301,7 @@ way.
   they land, and transports must keep sentinel classification intact
   across the carrier (`errors.Is` on `repo.ErrMissingDependency`).
 - Broker transports and custom codecs live with their demonstrators
-  (hackathon-side); boxer takes no broker dependency.
+  (consumer-side); boxer takes no broker dependency.
 - IBLT/RIBLT are a few hundred lines of dependency-free Go —
   comfortably self-implementable; minisketch needs GF(2^64)
   Berlekamp–Massey, feasible but real work. If OQ-1 graduates to an

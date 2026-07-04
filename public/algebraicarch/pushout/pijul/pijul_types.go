@@ -1,8 +1,8 @@
 // Package pijul is the domain half of a multi-actor patch-theory
 // event-store demo: four working copies (Server + Alice/Bob/Charlie)
 // backed by a [BackendI] and driven through the [RepoI] interface. The
-// imzero2/egui2 GUI consumer lives in hackathon_2026's pijuldemo
-// package, which imports this one.
+// imzero2/egui2 GUI consumer lives in an external repository, which
+// imports this package.
 //
 // The package is structured around two seams:
 //

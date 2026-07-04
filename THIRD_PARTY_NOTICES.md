@@ -365,9 +365,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   scheme, and the apply / unapply / reapply round-trip test pattern.
   The Go code is an independent re-implementation guided by Joe
   Neeman's blog series, not a line-by-line port of ojo's Rust source.
-  The package was first authored in a sister project (`hackathon_2026`)
-  and vendored here at commit `cd992b1`; see commit `c6b802a` for the
-  vendor record. The companion `pijul` subpackage shells out to the
+  The package was first authored in a sister project and vendored
+  here; see commit `c6b802a` for the vendor record. The companion `pijul` subpackage shells out to the
   Pijul VCS binary; see [`public/algebraicarch/pushout/pijul/EXPLANATION.md`](public/algebraicarch/pushout/pijul/EXPLANATION.md)
   for the conceptual lineage.
 

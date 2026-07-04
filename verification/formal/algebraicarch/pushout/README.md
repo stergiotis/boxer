@@ -14,8 +14,8 @@ status: draft
 A [Quint](https://quint-lang.org) model of the **distributed layer** of the
 boxer pushout engine — the package `public/algebraicarch/pushout`. This spec
 tree deliberately **mirrors that package path** under `verification/formal/`,
-so the model sits beside the code it constrains. The engine backs the
-`pijuldemo` app (a consumer, in the separate hackathon repo). The goal is to
+so the model sits beside the code it constrains. The engine backs an
+external demo app (a consumer, in a separate repository). The goal is to
 check the protocol's design **before** the real distribution
 (NATS / gRPC behind the `PeerI`/`AcceptorI` seam) is built, while the seams are
 still clean and there is no legacy wire protocol to preserve. The only carrier
