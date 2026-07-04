@@ -5,6 +5,9 @@
 ## Maturity
 Alpha, incomplete test coverage, unstable, API may still change heavily.
 
+## Why
+Boxer reimplements and vendors much of what mainstream practice imports or rents. The premises behind that trade — dependencies as owned liabilities with known incentives, problem-oriented description languages on a boring host, one machine-readable data model projected across memory / wire / storage, a toolkit that observes itself (runtime and code), mechanical sympathy as the efficiency posture, one machine-checked architect, and interfaces split by task complexity up to agentic operation — are stated, with their costs and failure modes, in [doc/explanation/why-boxer.md](doc/explanation/why-boxer.md).
+
 ## Installation
 ```
 go get github.com/stergiotis/boxer
