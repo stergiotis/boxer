@@ -39,6 +39,22 @@ func TestClientExecutorExecutesArrowStream(t *testing.T) {
 	require.Equal(t, 1, *hits)
 }
 
+// A zero-batch stream keeps its schema through the executor (review finding).
+func TestClientExecutorZeroBatchKeepsSchema(t *testing.T) {
+	stream := schemaOnlyStreamBytes(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(stream)
+	}))
+	defer srv.Close()
+
+	exec := clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}
+	rec, schema, err := exec.execute(context.Background(), "SELECT n FROM t WHERE 0", memory.NewGoAllocator())
+	require.NoError(t, err)
+	require.Nil(t, rec)
+	require.NotNil(t, schema, "schema must survive an empty result")
+	require.Equal(t, "n", schema.Field(0).Name)
+}
+
 // End to end: the queryGraph runs a real (httptest-served) query through
 // clientExecutor, and minimality holds over the real executor — demanding the
 // unchanged node twice hits the wire once.

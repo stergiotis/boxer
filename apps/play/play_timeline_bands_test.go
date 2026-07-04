@@ -1,6 +1,8 @@
 package play
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -183,7 +185,8 @@ func TestDemandBandsLaneAndSetBandsMaps(t *testing.T) {
 	require.Len(t, drv.bands, 1, "the bands node's result is mapped into inst.bands")
 	assert.Equal(t, int64(1000), drv.bands[0].FromMS)
 	assert.Equal(t, int64(2000), drv.bands[0].ToMS)
-	require.NoError(t, drv.bandsErr)
+	require.NoError(t, drv.bandsLaneErr)
+	require.NoError(t, drv.bandsMapErr)
 
 	// An unchanged (extent, SQL) is a memo hit — no second wire call.
 	rec, _ := drv.demandBands()
@@ -191,4 +194,75 @@ func TestDemandBandsLaneAndSetBandsMaps(t *testing.T) {
 		rec.Release()
 	}
 	assert.Equal(t, 1, exec.calls, "unchanged compiled SQL must be a lane memo hit")
+}
+
+// schemaOnlyExecutor mimics a query that succeeds with an EMPTY result: the
+// post-fix executor keeps the stream schema and returns a nil record.
+type schemaOnlyExecutor struct {
+	schema *arrow.Schema
+}
+
+func (inst *schemaOnlyExecutor) execute(context.Context, string, memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, err error) {
+	return nil, inst.schema, nil
+}
+
+// A successful empty bands fetch maps to ZERO bands ("0 bands"), clears a
+// stale map error, and is distinct from "pending" (review finding: a nil-rec
+// success left the previous error latched and read as no-result).
+func TestSetBandsEmptySuccessMapsToZeroBands(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: timelineSlotBandFrom, Type: &arrow.TimestampType{Unit: arrow.Millisecond}},
+	}, nil)
+	sql := "SELECT 1 AS _tl_band_from WHERE 0"
+	drv := &TimelineDriver{
+		client:          &Client{},
+		bandsLane:       newNodeLane(&schemaOnlyExecutor{schema: schema}, memory.NewGoAllocator(), 0),
+		bandsSQLPtr:     &sql,
+		dataMinMS:       1000,
+		dataMaxMS:       2000,
+		dataExtentValid: true,
+		bandsMapErr:     errors.New("stale mapping error"),
+		bands:           []layout.BackgroundBand{{FromMS: 1, ToMS: 2}},
+	}
+	defer drv.bandsLane.close()
+
+	var rec arrow.RecordBatch
+	var sc *arrow.Schema
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		rec, sc = drv.demandBands()
+		if !drv.bandsLoading && drv.bandsServedSQL != "" {
+			break
+		}
+		if rec != nil {
+			rec.Release()
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	require.Nil(t, rec, "empty result has no record")
+	require.NotNil(t, sc, "empty result keeps its schema")
+
+	drv.setBands(rec) // the chBands Render path with a schema-only fill
+	assert.Empty(t, drv.bands, "zero bands mapped")
+	assert.NoError(t, drv.bandsMapErr, "stale map error cleared by the empty success")
+	assert.Equal(t, drv.bandsServedSQL, drv.bandsMappedSQL)
+	assert.Equal(t, "0 bands", drv.bandsStatusLine())
+}
+
+// The lane error is mirrored every demand (nil clears), so the status line
+// cannot latch a stale error after the lane recovers (review finding).
+func TestBandsStatusLineDoesNotLatchErrors(t *testing.T) {
+	sql := "SELECT 1"
+	drv := &TimelineDriver{bandsSQLPtr: &sql}
+
+	drv.bandsLaneErr = errors.New("timeout")
+	require.Contains(t, drv.bandsStatusLine(), "bands error")
+
+	drv.bandsLaneErr = nil // the next demand mirrored a healthy lane
+	drv.bandsMapErr = errors.New("bad column")
+	require.Contains(t, drv.bandsStatusLine(), "bad column")
+
+	drv.bandsMapErr = nil
+	drv.bandsMappedSQL = "SELECT 1"
+	require.Equal(t, "0 bands", drv.bandsStatusLine())
 }

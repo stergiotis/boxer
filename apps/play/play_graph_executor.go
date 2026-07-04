@@ -59,5 +59,11 @@ func (inst clientExecutor) execute(ctx context.Context, sql string, alloc memory
 		err = eh.Errorf("clientExecutor.execute: %w", err)
 		return
 	}
+	if schema == nil {
+		// Zero batches: an empty result still has a schema (the stream
+		// header) — keep it so consumers can negotiate/show headers instead
+		// of confusing "ran, empty" with "no result" (review finding).
+		schema = rdr.Schema()
+	}
 	return
 }

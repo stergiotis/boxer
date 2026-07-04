@@ -141,6 +141,11 @@ func (inst *QueryStore) Execute(sql string) {
 			inst.finish(sql, start, nil, nil, 0, summary, cErr)
 			return
 		}
+		if schema == nil {
+			// Zero batches: keep the stream schema so an empty result still
+			// carries its column shape (review finding).
+			schema = rdr.Schema()
+		}
 		var rows int64
 		if rec != nil {
 			rows = rec.NumRows()

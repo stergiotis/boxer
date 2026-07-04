@@ -99,10 +99,14 @@ type TimelineDriver struct {
 	bandsServedSQL string // the SQL the lane's last result was for (set by demandBands)
 	bandsServedFP  uint64 // that result's content fingerprint (early-cutoff key)
 	bandsMappedFP  uint64 // the fingerprint inst.bands was mapped from (setBands re-maps on change)
-	bandsMappedSQL string // the SQL inst.bands was mapped from (status line only)
-	bandsErr       error
-	bandsSkipped   int
-	bandsLoading   bool
+	bandsMappedSQL string // the SQL inst.bands was mapped from (empty ⇒ nothing mapped yet)
+	// Two error owners, so neither can latch a stale message (review finding):
+	// bandsLaneErr mirrors the lane's error EVERY demand (nil clears it);
+	// bandsMapErr belongs to the last mapping attempt (cleared on success).
+	bandsLaneErr error
+	bandsMapErr  error
+	bandsSkipped int
+	bandsLoading bool
 }
 
 // NewTimelineDriver constructs the driver and the underlying composite

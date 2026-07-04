@@ -38,6 +38,20 @@ func arrowStreamBytes(t *testing.T, vals []int64) []byte {
 	return buf.Bytes()
 }
 
+// schemaOnlyStreamBytes encodes an Arrow IPC stream carrying a schema and ZERO
+// record batches — the wire shape of a query whose result is empty.
+func schemaOnlyStreamBytes(t *testing.T) []byte {
+	t.Helper()
+	mem := memory.NewGoAllocator()
+	schema := arrow.NewSchema([]arrow.Field{{Name: "n", Type: arrow.PrimitiveTypes.Int64}}, nil)
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema), ipc.WithAllocator(mem))
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
 func waitNotLoading(t *testing.T, s *QueryStore) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
@@ -84,6 +98,39 @@ func TestQueryStoreExecuteRows(t *testing.T) {
 	hist := store.History()
 	if len(hist) != 1 || hist[0].NumRows != 2 || hist[0].ErrorText != "" {
 		t.Errorf("history=%+v, want one 2-row entry with no error", hist)
+	}
+}
+
+// A zero-batch (schema-only) stream keeps its schema, so "ran, empty" stays
+// distinguishable from "no result" downstream (review finding: the schema was
+// dropped and empty results lost their column shape everywhere).
+func TestQueryStoreZeroBatchKeepsSchema(t *testing.T) {
+	stream := schemaOnlyStreamBytes(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(stream)
+	}))
+	defer srv.Close()
+
+	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100)
+	store.Execute("SELECT n FROM t WHERE 0")
+	waitNotLoading(t, store)
+
+	rec, schema, numRows, _, _, _, _, err := store.Snapshot()
+	if rec != nil {
+		rec.Release()
+		t.Error("rec should be nil for a zero-batch result")
+	}
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	if schema == nil {
+		t.Fatal("schema must survive an empty result")
+	}
+	if got := schema.Field(0).Name; got != "n" {
+		t.Errorf("schema field=%q, want n", got)
+	}
+	if numRows != 0 {
+		t.Errorf("numRows=%d, want 0", numRows)
 	}
 }
 

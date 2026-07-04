@@ -1,6 +1,7 @@
 package play
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -95,6 +96,24 @@ func TestMapDriverRequestRefreshForcesRefetch(t *testing.T) {
 	}
 	waitLaneReady(t, d.lane, d.demandedSQL)
 	require.Equal(t, 2, exec.callCount(), "Refresh must re-execute the unchanged SQL")
+}
+
+// The lane error is mirrored every demand and pack errors are owned by
+// repack, so neither can latch a stale message (review finding).
+func TestMapStatusLineDoesNotLatchErrors(t *testing.T) {
+	d := NewMapDriver(nil, nil)
+	defer d.lane.close()
+
+	d.laneErr = errors.New("boom")
+	require.Contains(t, d.statusLine(), "query error")
+
+	d.laneErr = nil // the next demand mirrored a healthy lane
+	d.packErr = errors.New("bad shape")
+	require.Contains(t, d.statusLine(), "raster error")
+
+	d.packErr = nil
+	d.packW, d.packH = 2, 2
+	require.Equal(t, "2×2 raster", d.statusLine())
 }
 
 // repack pins the packed state to the served fingerprint (the observers'

@@ -77,8 +77,12 @@ type MapDriver struct {
 	packBounds    [4]float64 // minLat, minLon, maxLat, maxLon the pixels cover
 	version       uint64     // bumped per re-pack → mapRaster contentVersion
 
-	loading    bool
+	loading bool
+	// Two error owners, so neither can latch a stale message (review finding):
+	// laneErr mirrors the lane's error EVERY demand (nil clears it); packErr
+	// belongs to the last repack attempt (cleared on success).
 	laneErr    error
+	packErr    error
 	controlErr string
 }
 
@@ -207,11 +211,7 @@ func (inst *MapDriver) Render() {
 	if inst.demandedSQL != "" {
 		view := inst.lane.demand(inst.demandedSQL)
 		inst.loading = view.loading
-		if view.err != nil {
-			inst.laneErr = view.err
-		} else if view.rec != nil {
-			inst.laneErr = nil
-		}
+		inst.laneErr = view.err // mirrored every demand — nil clears (no latch)
 		if view.rec != nil {
 			if view.fingerprint != inst.lastPackedFP {
 				inst.repack(view.rec, view.sql, view.fingerprint)
@@ -337,7 +337,7 @@ func (inst *MapDriver) repack(rec arrow.RecordBatch, servedSQL string, fingerpri
 	}
 	pixels, err := packRaster(rec, meta.w, meta.h)
 	if err != nil {
-		inst.laneErr = err
+		inst.packErr = err
 		return
 	}
 	inst.pixels = pixels
@@ -347,6 +347,7 @@ func (inst *MapDriver) repack(rec arrow.RecordBatch, servedSQL string, fingerpri
 	inst.version++
 	inst.lastPackedFP = fingerprint
 	inst.lastPackedSQL = servedSQL
+	inst.packErr = nil
 }
 
 // packRaster packs a dense 4×UInt8 (r,g,b,a) raster record into a row-major
@@ -388,6 +389,8 @@ func (inst *MapDriver) statusLine() string {
 		return "config: " + inst.controlErr
 	case inst.laneErr != nil:
 		return "query error: " + inst.laneErr.Error()
+	case inst.packErr != nil:
+		return "raster error: " + inst.packErr.Error()
 	case inst.loading:
 		return "rendering tile…"
 	case inst.packW > 0:

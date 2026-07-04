@@ -1228,7 +1228,9 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 	}
 	// Demand the bands node (its own lane) for the chBands channel; it lags the
 	// events extent by a frame (it reads the previous frame's extent), absorbed
-	// by the fetch latency. nil when the bands SQL is empty → chBands unfilled.
+	// by the fetch latency. Both nil (empty bands SQL / no result yet) →
+	// chBands unfilled; a schema-only view (successful empty fetch) still
+	// fills the channel so it maps to "0 bands" rather than "pending".
 	bandsRec, bandsSchema := inst.timeline.demandBands()
 	if bandsRec != nil {
 		defer bandsRec.Release()
@@ -1236,7 +1238,7 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 	inputs := map[ChannelID]channelInput{
 		chEvents: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: emptySignals{}},
 	}
-	if bandsRec != nil {
+	if bandsRec != nil || bandsSchema != nil {
 		inputs[chBands] = channelInput{node: bandsNodeID, rec: bandsRec, schema: bandsSchema, sig: emptySignals{}}
 	}
 	reject := dispatchPanel(timelinePanel{driver: inst.timeline}, inputs, selectedRowEmitter{target: &inst.selectedRow})

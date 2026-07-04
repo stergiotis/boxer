@@ -230,49 +230,62 @@ func (inst *TimelineDriver) demandBands() (rec arrow.RecordBatch, schema *arrow.
 	sql := strings.TrimSpace(*inst.bandsSQLPtr)
 	if sql == "" || !inst.dataExtentValid || inst.client == nil {
 		inst.bandsLoading = false
-		inst.bandsErr = nil
+		inst.bandsLaneErr = nil
+		inst.bandsMapErr = nil
 		inst.bandsServedSQL = ""
+		inst.bandsServedFP = 0
 		return
 	}
 	compiled := substituteBandsRange(sql, inst.dataMinMS, inst.dataMaxMS)
 	view := inst.bandsLane.demand(compiled)
 	inst.bandsLoading = view.loading
-	if view.err != nil {
-		inst.bandsErr = view.err
-	}
+	inst.bandsLaneErr = view.err // mirrored every demand — nil clears (no latch)
 	inst.bandsServedSQL = view.sql
 	inst.bandsServedFP = view.fingerprint
 	return view.rec, view.schema
 }
 
 // setBands maps the chBands result into inst.bands, re-mapping only when the
-// served result's fingerprint changes (the Map's repack idiom — ADR-0097 SD4
-// early cutoff at the observer: a forced re-fetch of the same SQL with
-// identical bytes re-maps nothing, but new data under the same SQL does).
-// Called from the Timeline panel's Render before the events render — the band
-// producer reads inst.bands.
+// served (fingerprint, SQL) pair changes (the Map's repack idiom — ADR-0097
+// SD4 early cutoff at the observer: a forced re-fetch of the same SQL with
+// identical bytes re-maps nothing, but new data under the same SQL does; the
+// SQL half keeps a first empty result — fingerprint 0, the zero value —
+// distinguishable from "nothing mapped yet"). A successful empty fetch (nil
+// rec with a schema) maps to ZERO bands — distinct from "pending" (review
+// finding). Called from the Timeline panel's Render before the events render —
+// the band producer reads inst.bands.
 func (inst *TimelineDriver) setBands(rec arrow.RecordBatch) {
-	if rec == nil || inst.bandsServedFP == inst.bandsMappedFP {
+	if inst.bandsServedFP == inst.bandsMappedFP && inst.bandsServedSQL == inst.bandsMappedSQL {
+		return
+	}
+	if rec == nil {
+		inst.bands = nil
+		inst.bandsSkipped = 0
+		inst.bandsMapErr = nil
+		inst.bandsMappedFP = inst.bandsServedFP
+		inst.bandsMappedSQL = inst.bandsServedSQL
 		return
 	}
 	bands, skipped, mapErr := mapBandsRecord(rec)
 	if mapErr != nil {
-		inst.bandsErr = mapErr
+		inst.bandsMapErr = mapErr
 		return
 	}
 	inst.bands = bands
 	inst.bandsSkipped = skipped
-	inst.bandsErr = nil
+	inst.bandsMapErr = nil
 	inst.bandsMappedFP = inst.bandsServedFP
 	inst.bandsMappedSQL = inst.bandsServedSQL
 }
 
 // clearBands resets the band data when the chBands channel is unfilled (empty
-// bands SQL or no result). It leaves bandsErr alone — demandBands owns the lane
-// error (so a failing bands query still surfaces its error in the status).
+// bands SQL or no result). It leaves bandsLaneErr alone — demandBands owns the
+// lane error (so a failing bands query still surfaces its error in the status);
+// the map error belongs to the retired mapping and clears with it.
 func (inst *TimelineDriver) clearBands() {
 	inst.bands = nil
 	inst.bandsSkipped = 0
+	inst.bandsMapErr = nil
 	inst.bandsMappedFP = 0
 	inst.bandsMappedSQL = ""
 }
@@ -321,8 +334,10 @@ func (inst *TimelineDriver) bandsStatusLine() (s string) {
 	switch {
 	case inst.bandsLoading && len(inst.bands) == 0:
 		return "fetching bands…"
-	case inst.bandsErr != nil:
-		return "bands error: " + inst.bandsErr.Error()
+	case inst.bandsLaneErr != nil:
+		return "bands error: " + inst.bandsLaneErr.Error()
+	case inst.bandsMapErr != nil:
+		return "bands error: " + inst.bandsMapErr.Error()
 	case inst.bandsMappedSQL == "":
 		return "bands pending — run a query above"
 	}
