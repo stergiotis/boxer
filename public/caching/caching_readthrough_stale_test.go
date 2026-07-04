@@ -165,7 +165,7 @@ func TestPanicRecovery(t *testing.T) {
 	assert.Equal(t, 1, f.fetchCalls)
 
 	// Verify item is in error state (check via behavior)
-	has, _ := c.Get("Bomb")
+	_, has := c.Get("Bomb")
 	assert.False(t, has)
 }
 
@@ -196,7 +196,7 @@ func TestContextCancellation(t *testing.T) {
 	for range c.IterateRestWorkItems(context.Background()) {
 	}
 	assert.Equal(t, 1, f.fetchCalls)
-	has, v := c.Get("A")
+	v, has := c.Get("A")
 	assert.True(t, has)
 	assert.Equal(t, 1, v)
 }
@@ -209,7 +209,7 @@ func TestV2BasicReadThrough(t *testing.T) {
 
 	done := false
 	for range c.WorkItem(1) {
-		h, v := c.Get("A")
+		v, h := c.Get("A")
 		if !h {
 			return
 		}
@@ -261,8 +261,8 @@ func TestMemoryOptimizedEviction(t *testing.T) {
 	// But our mock metrics are easier.
 
 	// Let's verify data presence
-	h1, v1 := c.Get("Old")
-	h2, v2 := c.Get("New")
+	v1, h1 := c.Get("Old")
+	v2, h2 := c.Get("New")
 
 	assert.True(t, h1)
 	assert.Equal(t, 1, v1)
@@ -299,7 +299,7 @@ func TestGetAcceptStale_Comprehensive(t *testing.T) {
 	// --- Case A: Fresh Item ---
 	// Should return (true, false, val), no fetch triggered
 	for range c.WorkItem(1) {
-		has, stale, val := c.GetAcceptStale("Fresh")
+		val, has, stale := c.GetAcceptStale("Fresh")
 		assert.True(t, has)
 		assert.False(t, stale)
 		assert.Equal(t, 1, val)
@@ -312,7 +312,7 @@ func TestGetAcceptStale_Comprehensive(t *testing.T) {
 	// --- Case B: Stale Item ---
 	// Should return (true, true, val), AND trigger background fetch
 	for range c.WorkItem(2) {
-		has, stale, val := c.GetAcceptStale("Stale")
+		val, has, stale := c.GetAcceptStale("Stale")
 		assert.True(t, has)
 		assert.True(t, stale)
 		assert.Equal(t, 2, val)
@@ -325,7 +325,7 @@ func TestGetAcceptStale_Comprehensive(t *testing.T) {
 
 	// Verify it is now Fresh
 	for range c.WorkItem(2) {
-		has, stale, val := c.GetAcceptStale("Stale")
+		val, has, stale := c.GetAcceptStale("Stale")
 		assert.True(t, has)
 		assert.False(t, stale)
 		assert.Equal(t, 200, val)
@@ -334,7 +334,7 @@ func TestGetAcceptStale_Comprehensive(t *testing.T) {
 	// --- Case C: Missing Item ---
 	// Should return (false, false, 0), trigger fetch
 	for range c.WorkItem(3) {
-		has, _, _ := c.GetAcceptStale("Missing")
+		_, has, _ := c.GetAcceptStale("Missing")
 		if !has {
 			return
 		} // Abort expected
@@ -346,7 +346,7 @@ func TestGetAcceptStale_Comprehensive(t *testing.T) {
 	assert.Equal(t, 2, f.fetchCalls)
 
 	// Check result
-	has, _, val := c.GetAcceptStale("Missing")
+	val, has, _ := c.GetAcceptStale("Missing")
 	assert.True(t, has)
 	assert.Equal(t, 3, val)
 
@@ -363,7 +363,7 @@ func TestGetAcceptStale_Comprehensive(t *testing.T) {
 	// Should return false, but NOT trigger new fetch
 	f.fetchCalls = 0
 	for range c.WorkItem(4) {
-		has, _, _ := c.GetAcceptStale("Error")
+		_, has, _ := c.GetAcceptStale("Error")
 		assert.False(t, has)
 	}
 	for range c.IterateRestWorkItems(ctx) {
@@ -422,7 +422,7 @@ func TestOverstretchedCache_Livelock(t *testing.T) {
 				key := fmt.Sprintf("key-%d", i)
 
 				// Accessing the key PINS it to the current Epoch.
-				has, _ := c.Get(key)
+				_, has := c.Get(key)
 				if !has {
 					missing = true
 				}
@@ -485,13 +485,13 @@ func TestMaxKeys_SmallerThanWorkItem_ChunkedFetch(t *testing.T) {
 	runWork := func() {
 		missing := false
 		// Accumulate all 3
-		if h, _ := c.Get("A"); !h {
+		if _, h := c.Get("A"); !h {
 			missing = true
 		}
-		if h, _ := c.Get("B"); !h {
+		if _, h := c.Get("B"); !h {
 			missing = true
 		}
-		if h, _ := c.Get("C"); !h {
+		if _, h := c.Get("C"); !h {
 			missing = true
 		}
 
@@ -624,7 +624,7 @@ func TestDelete(t *testing.T) {
 	// Put into L1
 	c.AddItem("L1Key", 10)
 	c.Delete("L1Key")
-	has, _ := c.Get("L1Key")
+	_, has := c.Get("L1Key")
 	assert.False(t, has, "L1 entry must be gone (Get queues a fresh fetch)")
 
 	// Put one into L2 by forcing a demotion.
@@ -633,7 +633,7 @@ func TestDelete(t *testing.T) {
 	c.AddItem("Other", 2) // demotes "InL1" into the stash
 
 	// Sanity: "InL1" can be promoted back from L2 via Get
-	has, v := c.Get("InL1")
+	v, has := c.Get("InL1")
 	assert.True(t, has)
 	assert.Equal(t, 1, v)
 
@@ -641,7 +641,7 @@ func TestDelete(t *testing.T) {
 	c.AdvanceEpoch()
 	c.AddItem("Filler", 99) // demote "InL1" again (it was promoted back to L1 by the Get)
 	c.Delete("InL1")
-	has, _ = c.Get("InL1")
+	_, has = c.Get("InL1")
 	assert.False(t, has, "L2 entry must be gone after Delete")
 }
 
@@ -653,7 +653,7 @@ func TestAddItemSlice_AndIter2(t *testing.T) {
 
 	c.AddItemSlice([]string{"a", "b", "c"}, []int{1, 2, 3})
 	for _, k := range []string{"a", "b", "c"} {
-		has, v := c.Get(k)
+		v, has := c.Get(k)
 		assert.True(t, has, "expected %q present after AddItemSlice", k)
 		assert.NotZero(t, v)
 	}
@@ -665,7 +665,7 @@ func TestAddItemSlice_AndIter2(t *testing.T) {
 		yield("e", 5)
 	})
 	for k, want := range map[string]int{"d": 4, "e": 5} {
-		has, v := c.Get(k)
+		v, has := c.Get(k)
 		assert.True(t, has, "expected %q present after AddItemIter2", k)
 		assert.Equal(t, want, v)
 	}
@@ -687,7 +687,7 @@ func TestMarkAsStale_DirectStateTransitions(t *testing.T) {
 	c.MarkAsStale("DoesNotExist")
 
 	// Strict Get: stale is a miss.
-	has, _ := c.Get("K")
+	_, has := c.Get("K")
 	assert.False(t, has, "strict Get on stale must be a miss")
 
 	// Stash-clear and let the queued fetch resolve.
@@ -696,7 +696,7 @@ func TestMarkAsStale_DirectStateTransitions(t *testing.T) {
 	assert.Equal(t, 1, f.fetchCalls)
 
 	// Now the item should be fresh again with the upstream value.
-	has, v := c.Get("K")
+	v, has := c.Get("K")
 	assert.True(t, has)
 	assert.Equal(t, 100, v)
 }
@@ -743,7 +743,7 @@ func TestPartitionedFetch_OnePerPartition(t *testing.T) {
 
 	// All values are now present.
 	for k, want := range f.data {
-		has, v := c.Get(k)
+		v, has := c.Get(k)
 		assert.True(t, has, "expected %q present", k)
 		assert.Equal(t, want, v)
 	}
@@ -780,10 +780,10 @@ func TestMaxPartitions_TriggersFetch(t *testing.T) {
 	assert.Equal(t, []uint64{0, 1}, f.fetchedPartitions)
 
 	// Both values are now in L1.
-	has, v := c.Get("alpha")
+	v, has := c.Get("alpha")
 	assert.True(t, has)
 	assert.Equal(t, 7, v)
-	has, v = c.Get("beta")
+	v, has = c.Get("beta")
 	assert.True(t, has)
 	assert.Equal(t, 8, v)
 }
@@ -899,11 +899,11 @@ func TestMarkAsError_PreservesAlreadyFetched(t *testing.T) {
 	}
 	assert.Equal(t, 1, f.fetchCalls)
 
-	has, v := c.Get("keepA")
+	v, has := c.Get("keepA")
 	assert.True(t, has, "keepA must survive partial-failure marking")
 	assert.Equal(t, 1, v)
 
-	has, v = c.Get("keepB")
+	v, has = c.Get("keepB")
 	assert.True(t, has, "keepB must survive partial-failure marking")
 	assert.Equal(t, 2, v)
 
@@ -911,7 +911,7 @@ func TestMarkAsError_PreservesAlreadyFetched(t *testing.T) {
 	// must suppress retries within the backoff window.
 	priorCalls := f.fetchCalls
 	for range c.WorkItem(2) {
-		has, _ = c.Get("failC")
+		_, has = c.Get("failC")
 		assert.False(t, has)
 	}
 	for range c.IterateRestWorkItems(context.Background()) {
@@ -934,12 +934,12 @@ func TestReplay_CascadingMiss_ReQueued(t *testing.T) {
 
 	completed := false
 	step := func() {
-		hasRoot, _ := c.Get("root")
+		_, hasRoot := c.Get("root")
 		if !hasRoot {
 			return
 		}
 		// Cascading dependency: only known once "root" is in hand.
-		hasLeaf, _ := c.Get("leaf")
+		_, hasLeaf := c.Get("leaf")
 		if !hasLeaf {
 			return
 		}

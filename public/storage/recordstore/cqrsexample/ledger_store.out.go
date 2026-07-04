@@ -405,8 +405,7 @@ func NewLedgerCache[W comparable](st *LedgerStore, cfg LedgerCacheConfig) (inst 
 // fetch errors; the circuit breaker backs off) — the store's Latest
 // is the authoritative existence check.
 func (inst *LedgerCache[W]) Get(key string) (ent *LedgerEntity, found bool) {
-	found, ent = inst.cache.Get(key)
-	return
+	return inst.cache.Get(key)
 }
 
 // WorkItem marks the current work item for the cache's miss bookkeeping.

@@ -11,6 +11,7 @@ package gen
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -26,6 +27,10 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess"
 )
 
+// tableNameRe is the shape TableName must have: a single lowercase word
+// (see the Input.TableName doc and the Generate gate).
+var tableNameRe = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
+
 // Input parameterizes one store generation.
 type Input struct {
 	// PackageName is the Go package the emitted files declare.
@@ -34,7 +39,10 @@ type Input struct {
 	// DeviceStore, DeviceEntity, DeviceEntityBuilder).
 	StoreName string
 	// TableName is the ClickHouse table (and naming.StylableName base for
-	// the generated DML/RA classes, suffixed "_table").
+	// the generated DML/RA classes, suffixed "_table"). It must be a
+	// single lowercase word ([a-z][a-z0-9]*) — the store emitter derives
+	// the generated class names from it — and must agree with the
+	// TableDesc's own name when that is set.
 	TableName string
 	// Table is the physical schema. Its plain columns form the envelope;
 	// the ADR-0100 roles are bound by PlainItemTypeE: EntityId → Key,
@@ -65,10 +73,6 @@ type Input struct {
 	// derived counterparts and Indexes are taken as given; the runtime
 	// DDLTail remains a raw suffix on top of whatever is composed here.
 	DDL *clickhouse.TableOptions
-
-	// keyGoType is the Key column's derived Go type ("uint64" or
-	// "string"), resolved by emitStore from the schema.
-	keyGoType string
 }
 
 // Generate emits the store package: <table>_ddl_clickhouse.out.sql, one
@@ -82,6 +86,17 @@ func (inst Input) Generate() (err error) {
 	}
 	if !inst.Flat && inst.ImportPath == "" {
 		err = eh.Errorf("ImportPath is required for the internal/lowlevel layout (set Flat for the single-package layout)")
+		return
+	}
+	// The store emitter derives the DML/RA class names by capitalizing
+	// TableName's first letter; a multi-word name would disagree with the
+	// generators' own style conversion and emit non-compiling references.
+	if !tableNameRe.MatchString(inst.TableName) {
+		err = eh.Errorf("TableName %q must be a single lowercase word ([a-z][a-z0-9]*) — the store emitter derives the generated class names from it", inst.TableName)
+		return
+	}
+	if n := string(inst.Table.DictionaryEntry.Name); n != "" && n != inst.TableName {
+		err = eh.Errorf("Input.TableName %q and the TableDesc's own name %q disagree — the emitted DDL and SQL use TableName; align the two", inst.TableName, n)
 		return
 	}
 	conv, err := ddl.NewHumanReadableNamingConvention(":")

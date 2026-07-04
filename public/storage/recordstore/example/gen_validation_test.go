@@ -199,6 +199,63 @@ type KindA struct {
 	require.ErrorContains(t, err, "ImportPath is required")
 }
 
+// TestGenerateRejectsMultiWordTableName: the store emitter derives the
+// DML/RA class names by capitalizing TableName's first letter, so a
+// multi-word name would emit non-compiling references — refuse at
+// generation time.
+func TestGenerateRejectsMultiWordTableName(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	td, err := validationManipulator(t, "solo").BuildTableDesc()
+	require.NoError(t, err)
+	err = gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Valcheck",
+		TableName:      "val_check",
+		Table:          td,
+		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
+		ComponentPaths: []string{a},
+		OutDir:         t.TempDir(),
+		ImportPath:     "example.invalid/tmp",
+	}.Generate()
+	require.ErrorContains(t, err, "single lowercase word")
+}
+
+// TestGenerateRejectsTableNameMismatch: Input.TableName and the
+// TableDesc's own name must agree — the emitted DDL and SQL use
+// TableName while the desc name is what schema tooling shows.
+func TestGenerateRejectsTableNameMismatch(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	td, err := validationManipulator(t, "solo").BuildTableDesc()
+	require.NoError(t, err)
+	err = gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Valcheck",
+		TableName:      "valchk",
+		Table:          td,
+		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
+		ComponentPaths: []string{a},
+		OutDir:         t.TempDir(),
+		ImportPath:     "example.invalid/tmp",
+	}.Generate()
+	require.ErrorContains(t, err, "disagree")
+}
+
 // TestGenerateRejectsNonRolePlainColumn: a plain column outside the three
 // roles would be silently zero-written by every Begin and dropped by the
 // decode — the generator must refuse until pass-through envelope fields

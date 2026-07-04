@@ -383,8 +383,7 @@ func NewPushoutCache[W comparable](st *PushoutStore, cfg PushoutCacheConfig) (in
 // fetch errors; the circuit breaker backs off) — the store's Latest
 // is the authoritative existence check.
 func (inst *PushoutCache[W]) Get(key string) (ent *PushoutEntity, found bool) {
-	found, ent = inst.cache.Get(key)
-	return
+	return inst.cache.Get(key)
 }
 
 // WorkItem marks the current work item for the cache's miss bookkeeping.

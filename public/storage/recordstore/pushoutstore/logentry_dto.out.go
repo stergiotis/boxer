@@ -207,10 +207,11 @@ func LogEntryFillFromArrow[
 
 // LogEntryReadRow reads row i as one optional LogEntry component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched, erroring only when a field
-// occurs more than once. Plain-bound fields stay zero — the caller
-// owns the envelope. The Attrs/Membs readers bind by type inference
-// at the call site, as with FillFromArrow.
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
 func LogEntryReadRow[
 	LogHashAttrs LogEntryLogHashAttrsReadI,
 	LogHashMembs LogEntryLogHashMembsReadI,

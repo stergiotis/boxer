@@ -382,8 +382,7 @@ func NewDeviceCache[W comparable](st *DeviceStore, cfg DeviceCacheConfig) (inst 
 // fetch errors; the circuit breaker backs off) — the store's Latest
 // is the authoritative existence check.
 func (inst *DeviceCache[W]) Get(key uint64) (ent *DeviceEntity, found bool) {
-	found, ent = inst.cache.Get(key)
-	return
+	return inst.cache.Get(key)
 }
 
 // WorkItem marks the current work item for the cache's miss bookkeeping.

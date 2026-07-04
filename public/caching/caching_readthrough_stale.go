@@ -98,26 +98,26 @@ func (inst *ReadThroughCache[K, V, W]) WorkItem(wk W) iter.Seq[functional.NilIte
 // Get retrieves an item. Lookup order: L1 → L2 → miss. On miss the key is
 // queued for the next batch fetch and the current work item (if any) is
 // marked pending.
-func (inst *ReadThroughCache[K, V, W]) Get(k K) (has bool, v V) {
+func (inst *ReadThroughCache[K, V, W]) Get(k K) (v V, has bool) {
 	return inst.getInternal(k, false)
 }
 
 // GetAcceptStale retrieves an item, allowing stale data (soft hit).
-func (inst *ReadThroughCache[K, V, W]) GetAcceptStale(k K) (has bool, stale bool, v V) {
-	h, val := inst.getInternal(k, true)
+func (inst *ReadThroughCache[K, V, W]) GetAcceptStale(k K) (v V, has bool, stale bool) {
+	val, h := inst.getInternal(k, true)
 	if !h {
-		return false, false, val
+		return val, false, false
 	}
 	// Check if it was stale
 	if item, ok := inst.primaryStore[k]; ok {
 		if item.state == ItemStateStale {
-			return true, true, val
+			return val, true, true
 		}
 	}
-	return true, false, val
+	return val, true, false
 }
 
-func (inst *ReadThroughCache[K, V, W]) getInternal(k K, acceptStale bool) (has bool, v V) {
+func (inst *ReadThroughCache[K, V, W]) getInternal(k K, acceptStale bool) (v V, has bool) {
 	// 1. Check Primary (L1)
 	if item, ok := inst.primaryStore[k]; ok {
 		// Optimization: Avoid Write-Back if already pinned
@@ -129,12 +129,12 @@ func (inst *ReadThroughCache[K, V, W]) getInternal(k K, acceptStale bool) (has b
 		switch item.state {
 		case ItemStateInCache:
 			inst.metrics.RecordHit(true)
-			return true, item.value
+			return item.value, true
 		case ItemStateStale:
 			inst.queueForFetch(k)
 			if acceptStale {
 				inst.metrics.RecordHit(true)
-				return true, item.value
+				return item.value, true
 			}
 			// Strict mode: Stale is a miss
 		case ItemStateError:
@@ -147,20 +147,20 @@ func (inst *ReadThroughCache[K, V, W]) getInternal(k K, acceptStale bool) (has b
 				// Just register work item as blocked.
 				inst.registerPendingWork()
 				inst.metrics.RecordMiss()
-				return false, v
+				return v, false
 			}
 		}
 
 		inst.registerPendingWork()
 		inst.metrics.RecordMiss()
-		return false, v
+		return v, false
 	}
 
 	// 2. Check Stash (L2) via Interface
 	if val, found := inst.stash.GetAndRemove(k); found {
 		inst.metrics.RecordHit(false) // L2 Hit
 		inst.AddItem(k, val)          // Promote to L1
-		return true, val
+		return val, true
 	}
 
 	// 3. Miss
@@ -168,7 +168,7 @@ func (inst *ReadThroughCache[K, V, W]) getInternal(k K, acceptStale bool) (has b
 	inst.registerPendingWork()
 	inst.metrics.RecordMiss()
 	inst.checkCriteria(context.Background(), true) // Check Max criteria (optimistic ctx)
-	return false, v
+	return v, false
 }
 
 func (inst *ReadThroughCache[K, V, W]) MarkAsStale(k K) {

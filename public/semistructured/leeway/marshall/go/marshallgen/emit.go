@@ -1705,9 +1705,9 @@ func ReadRowSupported(plan *mappingplan.Plan) (ok bool, reason string) {
 // batches (a row lacking a scalar/unit field is an error), ReadRow reads
 // one row of a FAT table on which the kind is an optional component
 // (ADR-0075): a row carrying none of the kind's memberships yields
-// present=false; a field occurring more than once is an error. Fields
-// bound to plain columns are left at their zero value — the caller owns
-// the envelope.
+// present=false; a duplicated scalar field is an error, while duplicated
+// container memberships concatenate. Fields bound to plain columns are
+// left at their zero value — the caller owns the envelope.
 func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	kind := plan.KindType
 	if ok, reason := ReadRowSupported(plan); !ok {
@@ -1718,10 +1718,11 @@ func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error)
 
 	linef(sb, 0, "// %sReadRow reads row i as one optional %s component: presence-", kind, kind)
 	line(sb, 0, "// gated (a row carrying none of the kind's memberships yields")
-	line(sb, 0, "// present=false), membership-matched, erroring only when a field")
-	line(sb, 0, "// occurs more than once. Plain-bound fields stay zero — the caller")
-	line(sb, 0, "// owns the envelope. The Attrs/Membs readers bind by type inference")
-	line(sb, 0, "// at the call site, as with FillFromArrow.")
+	line(sb, 0, "// present=false), membership-matched. A duplicated scalar field is")
+	line(sb, 0, "// an error; duplicated container memberships concatenate. Plain-")
+	line(sb, 0, "// bound fields stay zero — the caller owns the envelope. The")
+	line(sb, 0, "// Attrs/Membs readers bind by type inference at the call site, as")
+	line(sb, 0, "// with FillFromArrow.")
 	linef(sb, 0, "func %sReadRow[", kind)
 	for _, g := range groups {
 		method := methodFor(g.Section)
