@@ -97,7 +97,9 @@ type TimelineDriver struct {
 	bandsLane      *nodeLane
 	bands          []layout.BackgroundBand
 	bandsServedSQL string // the SQL the lane's last result was for (set by demandBands)
-	bandsMappedSQL string // the SQL inst.bands was mapped from (setBands re-maps on change)
+	bandsServedFP  uint64 // that result's content fingerprint (early-cutoff key)
+	bandsMappedFP  uint64 // the fingerprint inst.bands was mapped from (setBands re-maps on change)
+	bandsMappedSQL string // the SQL inst.bands was mapped from (status line only)
 	bandsErr       error
 	bandsSkipped   int
 	bandsLoading   bool

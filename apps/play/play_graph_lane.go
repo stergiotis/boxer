@@ -41,11 +41,26 @@ func newNodeLane(exec nodeExecutorI, alloc memory.Allocator, timeout time.Durati
 	return
 }
 
+// laneView is a demand-time snapshot of the lane: the last-good result
+// (retained for the caller — Release rec, nil-safe), the SQL and content
+// fingerprint it was computed for, and the in-flight flag. The fingerprint is
+// the early-cutoff hook (ADR-0097 SD4) for the lane's observers: repack/re-map
+// only when it changes, so a forced re-fetch that returns identical bytes
+// costs no downstream work.
+type laneView struct {
+	rec         arrow.RecordBatch
+	schema      *arrow.Schema
+	sql         string
+	fingerprint uint64
+	loading     bool
+	err         error
+}
+
 // demand requests the node's result for compiledSQL, non-blocking. It returns a
-// retained snapshot of the last-good result (caller MUST Release rec, nil-safe)
-// and ensures the lane converges to executing compiledSQL. While a run is in
-// flight, the prior result is returned (last-good) with loading=true.
-func (inst *nodeLane) demand(compiledSQL string) (rec arrow.RecordBatch, schema *arrow.Schema, sql string, loading bool, err error) {
+// retained snapshot of the last-good result (caller MUST Release view.rec,
+// nil-safe) and ensures the lane converges to executing compiledSQL. While a
+// run is in flight, the prior result is returned (last-good) with loading=true.
+func (inst *nodeLane) demand(compiledSQL string) (view laneView) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 
@@ -58,23 +73,33 @@ func (inst *nodeLane) demand(compiledSQL string) (rec arrow.RecordBatch, schema 
 		if inst.result.rec != nil {
 			inst.result.rec.Retain()
 		}
-		rec = inst.result.rec
-		schema = inst.result.schema
-		sql = inst.result.sql
-		err = inst.result.err
+		view.rec = inst.result.rec
+		view.schema = inst.result.schema
+		view.sql = inst.result.sql
+		view.fingerprint = inst.result.fingerprint
+		view.err = inst.result.err
 	}
-	loading = inst.loading
+	view.loading = inst.loading
 	return
 }
 
-// forget clears the memo so the next demand re-executes even for an unchanged
-// SQL (the Timeline's "Run bands" force — re-fetch against a changed source
-// table). The last-good result is retained until the re-run lands.
+// forget clears the memo AND discards any in-flight run, so the next demand
+// re-executes even for an unchanged SQL (the "Run bands" / Map-Refresh force —
+// re-fetch against a changed source table). Without the generation bump, an
+// in-flight completion landing after forget would restore servedSQL and the
+// next demand would memo-hit, silently dropping the force. The last-good
+// result is retained until the re-run lands.
 func (inst *nodeLane) forget() {
 	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	inst.servedSQL = ""
 	inst.wantSQL = ""
-	inst.mu.Unlock()
+	inst.gen++ // an in-flight completion is stale now
+	if inst.cancel != nil {
+		inst.cancel()
+		inst.cancel = nil
+	}
+	inst.loading = false
 }
 
 // startLocked supersedes any in-flight run and kicks a new one. Caller holds mu.

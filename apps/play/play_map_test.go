@@ -59,3 +59,56 @@ func TestPackRasterRejectsNonRGBAResult(t *testing.T) {
 	_, err := packRaster(rec, 1, 1)
 	require.Error(t, err)
 }
+
+// requestRefresh must clear the request-dedup key AND forget the lane memo:
+// without the forget, an unchanged viewport re-demands the identical SQL and
+// memo-hits — the Refresh button was a no-op (review finding).
+func TestMapDriverRequestRefreshForcesRefetch(t *testing.T) {
+	exec := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch {
+		return rgbaRec([]uint8{1}, []uint8{2}, []uint8{3}, []uint8{4})
+	}}
+	close(exec.gate) // never block
+	d := NewMapDriver(nil, nil)
+	d.lane.close()
+	d.lane = newNodeLane(exec, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+	d.demandedSQL = "SELECT raster"
+	d.lastRequestedKey = mapFetchKey{viewHash: 42}
+
+	d.lane.demand(d.demandedSQL)
+	waitLaneReady(t, d.lane, d.demandedSQL)
+	require.Equal(t, 1, exec.callCount())
+
+	v := d.lane.demand(d.demandedSQL) // unchanged view: memo hit
+	if v.rec != nil {
+		v.rec.Release()
+	}
+	require.Equal(t, 1, exec.callCount())
+
+	d.requestRefresh()
+	require.True(t, d.forceRefresh)
+	require.Equal(t, mapFetchKey{}, d.lastRequestedKey, "dedup key cleared so updateDemand re-fires")
+
+	v = d.lane.demand(d.demandedSQL) // the per-frame demand after Refresh
+	if v.rec != nil {
+		v.rec.Release()
+	}
+	waitLaneReady(t, d.lane, d.demandedSQL)
+	require.Equal(t, 2, exec.callCount(), "Refresh must re-execute the unchanged SQL")
+}
+
+// repack pins the packed state to the served fingerprint (the observers'
+// early-cutoff key) and keeps the served SQL for sqlMeta bounds pinning.
+func TestMapDriverRepackRecordsFingerprint(t *testing.T) {
+	d := NewMapDriver(nil, nil)
+	defer d.lane.close()
+	rec := rgbaRec([]uint8{1}, []uint8{2}, []uint8{3}, []uint8{4})
+	defer rec.Release()
+	d.sqlMeta["q"] = rasterMeta{bounds: [4]float64{1, 2, 3, 4}, w: 1, h: 1}
+
+	d.repack(rec, "q", 0xfeed)
+	require.Equal(t, uint64(0xfeed), d.lastPackedFP)
+	require.Equal(t, "q", d.lastPackedSQL)
+	require.Equal(t, uint64(1), d.version)
+	require.Equal(t, uint32(1), d.packW)
+}

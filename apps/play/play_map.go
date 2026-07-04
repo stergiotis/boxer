@@ -64,7 +64,12 @@ type MapDriver struct {
 	demandedSQL string
 	sqlMeta     map[string]rasterMeta
 
-	// Packed result (render-thread only): re-packed when the served SQL changes.
+	// Packed result (render-thread only): re-packed when the served result's
+	// content fingerprint changes (ADR-0097 SD4 early cutoff at the observer —
+	// a re-fetch returning identical bytes repacks nothing; a same-SQL re-fetch
+	// with NEW data does repack, which a served-SQL guard would miss).
+	// lastPackedSQL still pins the packed view's bounds in sqlMeta.
+	lastPackedFP  uint64
 	lastPackedSQL string
 	pixels        []uint32 // packed 0xRRGGBBAA, row-major, row 0 = north
 	packW         uint32
@@ -198,20 +203,20 @@ func (inst *MapDriver) Render() {
 
 	// Demand the raster on the node lane (non-blocking; supersedes the in-flight
 	// run on a new view; returns the last-good while a new one is loading). Re-pack
-	// only when the served SQL changes.
+	// only when the served result's fingerprint changes.
 	if inst.demandedSQL != "" {
-		rec, _, servedSQL, loading, err := inst.lane.demand(inst.demandedSQL)
-		inst.loading = loading
-		if err != nil {
-			inst.laneErr = err
-		} else if rec != nil {
+		view := inst.lane.demand(inst.demandedSQL)
+		inst.loading = view.loading
+		if view.err != nil {
+			inst.laneErr = view.err
+		} else if view.rec != nil {
 			inst.laneErr = nil
 		}
-		if rec != nil {
-			if servedSQL != inst.lastPackedSQL {
-				inst.repack(rec, servedSQL)
+		if view.rec != nil {
+			if view.fingerprint != inst.lastPackedFP {
+				inst.repack(view.rec, view.sql, view.fingerprint)
 			}
-			rec.Release()
+			view.rec.Release()
 		}
 	}
 
@@ -260,11 +265,21 @@ func (inst *MapDriver) renderControls() {
 			SendRespVal(&inst.noTiles)
 		if c.Button(inst.ids.PrepareStr("map-refresh"),
 			c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
-			inst.forceRefresh = true
-			inst.lastRequestedKey = mapFetchKey{} // re-fetch even if the view is unchanged
+			inst.requestRefresh()
 		}
 	}
 	c.Label(inst.statusLine()).Send()
+}
+
+// requestRefresh forces a re-fetch of the current view: the request-dedup key
+// is cleared AND the lane memo is forgotten. Without the forget, an unchanged
+// viewport re-demands the identical SQL and memo-hits — the Refresh button was
+// a no-op after the 3f lane migration (review finding); the fingerprint repack
+// guard then picks up whatever the re-fetch returns, changed or not.
+func (inst *MapDriver) requestRefresh() {
+	inst.forceRefresh = true
+	inst.lastRequestedKey = mapFetchKey{} // re-demand even if the view is unchanged
+	inst.lane.forget()                    // re-execute even for the identical SQL
 }
 
 // updateDemand builds the bbox raster query for the current viewport and makes
@@ -314,8 +329,8 @@ func (inst *MapDriver) pruneSqlMeta() {
 }
 
 // repack packs the lane's record into the RGBA texture, pinned to the bounds the
-// served SQL was computed for. Called only when the served SQL changes.
-func (inst *MapDriver) repack(rec arrow.RecordBatch, servedSQL string) {
+// served SQL was computed for. Called only when the served fingerprint changes.
+func (inst *MapDriver) repack(rec arrow.RecordBatch, servedSQL string, fingerprint uint64) {
 	meta, ok := inst.sqlMeta[servedSQL]
 	if !ok {
 		return // bounds evicted — keep the prior pack rather than mis-pin
@@ -330,6 +345,7 @@ func (inst *MapDriver) repack(rec arrow.RecordBatch, servedSQL string) {
 	inst.packH = meta.h
 	inst.packBounds = meta.bounds
 	inst.version++
+	inst.lastPackedFP = fingerprint
 	inst.lastPackedSQL = servedSQL
 }
 

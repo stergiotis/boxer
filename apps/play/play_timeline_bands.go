@@ -235,20 +235,24 @@ func (inst *TimelineDriver) demandBands() (rec arrow.RecordBatch, schema *arrow.
 		return
 	}
 	compiled := substituteBandsRange(sql, inst.dataMinMS, inst.dataMaxMS)
-	r, sc, served, loading, err := inst.bandsLane.demand(compiled)
-	inst.bandsLoading = loading
-	if err != nil {
-		inst.bandsErr = err
+	view := inst.bandsLane.demand(compiled)
+	inst.bandsLoading = view.loading
+	if view.err != nil {
+		inst.bandsErr = view.err
 	}
-	inst.bandsServedSQL = served
-	return r, sc
+	inst.bandsServedSQL = view.sql
+	inst.bandsServedFP = view.fingerprint
+	return view.rec, view.schema
 }
 
 // setBands maps the chBands result into inst.bands, re-mapping only when the
-// served SQL changes (the Map's repack idiom). Called from the Timeline panel's
-// Render before the events render — the band producer reads inst.bands.
+// served result's fingerprint changes (the Map's repack idiom — ADR-0097 SD4
+// early cutoff at the observer: a forced re-fetch of the same SQL with
+// identical bytes re-maps nothing, but new data under the same SQL does).
+// Called from the Timeline panel's Render before the events render — the band
+// producer reads inst.bands.
 func (inst *TimelineDriver) setBands(rec arrow.RecordBatch) {
-	if rec == nil || inst.bandsServedSQL == inst.bandsMappedSQL {
+	if rec == nil || inst.bandsServedFP == inst.bandsMappedFP {
 		return
 	}
 	bands, skipped, mapErr := mapBandsRecord(rec)
@@ -259,6 +263,7 @@ func (inst *TimelineDriver) setBands(rec arrow.RecordBatch) {
 	inst.bands = bands
 	inst.bandsSkipped = skipped
 	inst.bandsErr = nil
+	inst.bandsMappedFP = inst.bandsServedFP
 	inst.bandsMappedSQL = inst.bandsServedSQL
 }
 
@@ -268,6 +273,7 @@ func (inst *TimelineDriver) setBands(rec arrow.RecordBatch) {
 func (inst *TimelineDriver) clearBands() {
 	inst.bands = nil
 	inst.bandsSkipped = 0
+	inst.bandsMappedFP = 0
 	inst.bandsMappedSQL = ""
 }
 
@@ -292,10 +298,10 @@ func (inst *TimelineDriver) renderBandsControls() {
 			if c.Button(inst.ids.PrepareStr("bands-run"),
 				c.Atoms().Text("Run bands").Keep()).
 				SendResp().HasPrimaryClicked() {
-				// Force a re-fetch against a possibly-changed source: clear the
-				// lane memo + the mapped-SQL guard so updateBands re-demands.
+				// Force a re-fetch against a possibly-changed source. The
+				// fingerprint guard in setBands re-maps iff the re-fetched
+				// bytes actually differ — no mapped-state reset needed.
 				inst.bandsLane.forget()
-				inst.bandsMappedSQL = ""
 			}
 			c.Separator().Vertical().Send()
 			for rt := range c.RichTextLabel(inst.bandsStatusLine()) {
