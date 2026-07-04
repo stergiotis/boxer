@@ -95,6 +95,32 @@ The flag is the load-bearing signal — section names are not
 inspected. `,unit` alone on a multi-element shape and `,explode`
 alone on a scalar shape are rejected; everything else composes.
 
+### Multi-sub-column sections (incl. mixed shapes)
+
+Fields sharing one section under distinct `:<column>` suffixes form a
+**multi-sub-column section**: one tuple attribute per row, one Go field
+per sub-column, a single membership. The sub-columns partition into two
+classes ([ADR-0101](../../../../../../doc/adr/0101-leeway-marshall-mixed-shape-sections.md)):
+
+- **scalars** (`T` fields) become the `BeginAttribute(<scalars…>)`
+  arguments (an all-container section opens with `BeginAttribute()`);
+- **containers** (`[]T` fields) zip through
+  `AddToContainerP(v)` (exactly one container) or
+  `AddToCoContainersP(c1, …, cK)` (two or more), one call per element —
+  so every container of the section carries the same per-attribute
+  length, checked at marshal time.
+
+Within each class the DTO declaration order must match the schema's
+column order — the same positional contract the all-scalar tuple
+already carried. With S ≥ 1 scalars the attribute always emits (empty
+containers are legal, N = 0); an all-container tuple with every
+container empty is spliced, and its row decodes to nil slices. The
+read side pairs a direct accessor per scalar sub-column with an
+`iter.Seq` accessor per container sub-column. `Option[T]`,
+`*roaring.Bitmap`, `,unit`, `,explode`, consts and carrier channels
+are rejected in such sections at plan time (`goplan.PlanBuilder.Finish`),
+so both front-ends and `marshallreflect.Validate` refuse the same DTOs.
+
 ### Membership channel
 
 Default `LowCardRef` emits a uint64 id via `AddMembershipLowCardRefP`;

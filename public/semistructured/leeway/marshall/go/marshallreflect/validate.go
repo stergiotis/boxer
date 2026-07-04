@@ -101,8 +101,20 @@ func checkWriteContract(dmlType reflect.Type, plan *mappingplan.Plan, groups []g
 func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.SectionGroup, problems *[]string) {
 	needBegin := map[string]bool{}
 	needContainer := false
+	beginArgs := -1         // BeginAttribute arity; -1 skips the check
+	coContainerMethod := "" // multi-sub-column container append (AddTo(Co)Container(s)P)
+	coContainerArgs := 0
 	if len(g.SubColumns) > 1 {
-		needBegin["BeginAttribute"] = true // multi-sub-column: BeginAttribute(v1, …, vn)
+		// Multi-sub-column: BeginAttribute(<scalars…>) with checked arity,
+		// plus the container-class append when containers are present
+		// (ADR-0101 D3) — a container DTO against a scalar-tuple DML fails
+		// here instead of panicking mid-marshal.
+		needBegin["BeginAttribute"] = true
+		beginArgs = len(g.ScalarSubColumns())
+		if containers := g.ContainerSubColumns(); len(containers) > 0 {
+			coContainerMethod = goplan.ContainerAddMethod(len(containers)) + "P"
+			coContainerArgs = len(containers)
+		}
 	} else {
 		for _, f := range g.SubColumns[0].Fields {
 			switch goplan.ClassifyBegin(f) {
@@ -124,7 +136,11 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 		if !needBegin[name] {
 			continue
 		}
-		if ret, ok := requireMethod(secType, ctx, name, -1, problems); ok && attrType == nil {
+		wantArgs := -1
+		if name == "BeginAttribute" {
+			wantArgs = beginArgs
+		}
+		if ret, ok := requireMethod(secType, ctx, name, wantArgs, problems); ok && attrType == nil {
 			attrType = ret
 		}
 	}
@@ -134,6 +150,9 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 	attrCtx := ctx + " attribute"
 	if needContainer {
 		requireMethod(attrType, attrCtx, "AddToContainerP", -1, problems)
+	}
+	if coContainerMethod != "" {
+		requireMethod(attrType, attrCtx, coContainerMethod, coContainerArgs, problems)
 	}
 	requireMethod(attrType, attrCtx, "EndAttributeP", -1, problems)
 	requireMethod(attrType, attrCtx, "AddMembership"+g.Channel().AddMethodSuffix()+"P", -1, problems)

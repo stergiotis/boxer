@@ -80,11 +80,26 @@
 //   - BeginAttribute(v) Attr — scalar value (ShapeScalarBegin / exploded element).
 //   - BeginAttributeSingle(v) Attr — scalar value with `,unit`.
 //   - BeginAttribute() Attr — container open, no args (default multi shape).
-//   - BeginAttribute(v1, v2, …) Attr — multi-sub-column section: one arg per sub-column.
+//   - BeginAttribute(s1, s2, …) Attr — multi-sub-column section: one arg per
+//     *scalar* sub-column, in declaration order (none when every sub-column is
+//     a container). Container sub-columns append via AddTo(Co)Container(s)P on
+//     the attribute frame (ADR-0101).
 //   - EndSection() — close the section.
+//
+// Multi-sub-column DTO contract (ADR-0101): one Go field per sub-column —
+// scalars as T, containers as []T; within each class the DTO declaration order
+// must match the schema's column order. All container fields of one section
+// must have equal length per row (co-containers zip element-wise; checked at
+// marshal time). With at least one scalar sub-column the attribute always
+// emits (empty containers are legal, N = 0); an all-container tuple with every
+// container empty is spliced. Option / roaring / `unit` / `explode` / const /
+// carrier channels are rejected at plan time in such sections.
 //
 // Attribute frame, on the Attr from a Begin call:
 //   - AddToContainerP(v) — append one container value.
+//   - AddToCoContainersP(c1, c2, …) — multi-sub-column co-containers: append
+//     one element per container sub-column, zipped (named AddToContainerP when
+//     the section has exactly one container sub-column).
 //   - AddMembership<Suffix>P(…) — push the membership; the Suffix and argument
 //     list are the channel's (see mappingplan.MembershipChannel): Ref →
 //     …RefP(id uint64); Verbatim → …VerbatimP(name []byte); MixedLowCardRef →
@@ -108,7 +123,11 @@
 //   - GetAttrValueValue(e, a) iter.Seq[T] — container / multi values (also the
 //     scalar or exploded-element single value).
 //   - GetAttrValueSingleOrDefault(e, a) T — single value for HA / single-slot shapes.
-//   - GetAttrValue<Col>(e, a) T — multi-sub-column accessor; Col = UpperFirst(sub-column).
+//   - GetAttrValue<Col>(e, a) T — multi-sub-column scalar sub-column accessor;
+//     Col = UpperFirst(sub-column).
+//   - GetAttrValue<Col>(e, a) iter.Seq[T] — multi-sub-column container
+//     sub-column accessor (drained per attribute; an N = 0 attribute reads
+//     back as a nil slice).
 //
 // The single-value accessor is chosen by goplan.SingleValueReadAccessor, so the
 // reflect codec and the generated codec cannot diverge on the choice.

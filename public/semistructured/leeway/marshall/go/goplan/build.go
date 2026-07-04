@@ -647,6 +647,68 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 		return
 	}
 
+	// Multi-sub-column structural rules (ADR-0101 D3). A section whose
+	// fields target more than one sub-column emits one tuple attribute per
+	// row: BeginAttribute(<scalars…>) plus zipped co-containers via
+	// AddTo(Co)Container(s)P. Validating here (not at marshallgen emit time)
+	// means both front-ends and Validate[T] reject the same DTOs before any
+	// DML method is reflected — previously the reflect path panicked
+	// mid-marshal. Carrier channels cannot reach a multi-sub-column section
+	// (AddField rejects `:<col>` on value and carrier fields of such
+	// channels), so only the per-field shape/flag rules are checked.
+	colFields := map[string]map[string][]string{} // section → column → field names, declaration order
+	colCount := map[string]int{}                  // section → distinct column count
+	for _, f := range b.plan.Fields {
+		col := f.LWColumn
+		if col == "" {
+			col = "value"
+		}
+		if colFields[f.LWSection] == nil {
+			colFields[f.LWSection] = map[string][]string{}
+		}
+		if _, ok := colFields[f.LWSection][col]; !ok {
+			colCount[f.LWSection]++
+		}
+		colFields[f.LWSection][col] = append(colFields[f.LWSection][col], f.GoFieldName)
+	}
+	for _, f := range b.plan.Fields {
+		if colCount[f.LWSection] < 2 {
+			continue
+		}
+		col := f.LWColumn
+		if col == "" {
+			col = "value"
+		}
+		if len(colFields[f.LWSection][col]) > 1 {
+			err = eb.Build().Str("section", f.LWSection).Str("column", col).Errorf("multi-field sub-column in multi-sub-column section not supported")
+			return
+		}
+		if len(membsBySection[f.LWSection]) > 1 {
+			err = eb.Build().Str("section", f.LWSection).Errorf("multi-sub-column section with multiple memberships not supported")
+			return
+		}
+		if f.IsConst {
+			err = eb.Build().Str("section", f.LWSection).Str("membership", f.LWMembership).Errorf("const field cannot share a multi-sub-column section — the tuple attribute has no slot for it")
+			return
+		}
+		if f.IsOption {
+			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Errorf("Option[T] not supported in a multi-sub-column section — the tuple attribute has no per-sub-column presence")
+			return
+		}
+		if f.IsRoaring() {
+			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Errorf("*roaring.Bitmap not supported in a multi-sub-column section — no stable element index to zip with the co-containers; use []T")
+			return
+		}
+		if f.Flags.Unit {
+			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Errorf("`unit` not supported in a multi-sub-column section")
+			return
+		}
+		if f.Flags.Explode {
+			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Errorf("`explode` not supported in a multi-sub-column section — the attribute is one tuple plus zipped co-containers per row")
+			return
+		}
+	}
+
 	plan = b.plan
 	return
 }

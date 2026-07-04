@@ -93,9 +93,11 @@ func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup Lookup
 	sec := mustCall(dml, "GetSection"+method)[0]
 
 	if len(g.SubColumns) > 1 {
-		// Multi-sub-column attributes carry one tuple per row — treated
-		// as single-value attributes for the cardFilter partition.
-		if filter != cardFilterMultiValue {
+		// One tuple attribute per row; the shared container length drives
+		// the cardinality pass (N ≤ 1 single-value, N > 1 multi-value) and
+		// the S = 0 splice — ADR-0101 D7/D2. All-scalar tuples remain
+		// single-value.
+		if multiSubColumnEmitsForFilter(row, g, filter) {
 			err = marshalMultiSubColumn(sec, row, g, lookup)
 			if err != nil {
 				return
@@ -117,23 +119,92 @@ func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup Lookup
 	return
 }
 
+// marshalMultiSubColumn emits a multi-sub-column section's one tuple
+// attribute: BeginAttribute(<scalar sub-columns…>) plus the zipped
+// co-containers via AddToContainerP / AddToCoContainersP, one call per
+// element (ADR-0101 D1/D4). The call sequence mirrors marshallgen's
+// writeMultiSubColumnDriver exactly — the byte-identity invariant
+// between the two front-ends rests on it.
 func marshalMultiSubColumn(sec, row reflect.Value, g goplan.SectionGroup, lookup LookupI) (err error) {
 	if len(g.Memberships) != 1 {
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
 	}
-	args := make([]reflect.Value, 0, len(g.SubColumns))
-	for _, sc := range g.SubColumns {
-		f := sc.Fields[0]
-		args = append(args, row.FieldByName(f.GoFieldName))
+	scalars := g.ScalarSubColumns()
+	containers := g.ContainerSubColumns()
+
+	args := make([]reflect.Value, 0, len(scalars))
+	for _, sc := range scalars {
+		args = append(args, reslicedIfFixedByte(row.FieldByName(sc.Fields[0].GoFieldName), sc.Fields[0]))
 	}
+
+	// Zip-length agreement across the container class: every container
+	// advances in lockstep, so unequal lengths are a caller bug surfaced
+	// as an error, never silent truncation (ADR-0101 D2).
+	containerVals := make([]reflect.Value, len(containers))
+	n := 0
+	for j, sc := range containers {
+		containerVals[j] = row.FieldByName(sc.Fields[0].GoFieldName)
+		if j == 0 {
+			n = containerVals[0].Len()
+			continue
+		}
+		if containerVals[j].Len() != n {
+			err = eb.Build().Str("section", g.Section).Str("field", sc.Fields[0].GoFieldName).Int("len", containerVals[j].Len()).Int("firstLen", n).Errorf("co-container slices have different lengths")
+			return
+		}
+	}
+
 	attr := mustCall(sec, "BeginAttribute", args...)[0]
+	if len(containers) > 0 {
+		addMethod := goplan.ContainerAddMethod(len(containers)) + "P"
+		elemArgs := make([]reflect.Value, len(containers))
+		for k := 0; k < n; k++ {
+			for j := range containerVals {
+				elemArgs[j] = reslicedIfFixedByte(containerVals[j].Index(k), containers[j].Fields[0])
+			}
+			mustCall(attr, addMethod, elemArgs...)
+		}
+	}
 	err = addMembership(attr, row, g.Memberships[0], lookup, reflect.Value{})
 	if err != nil {
 		return
 	}
 	mustCall(attr, "EndAttributeP")
 	return
+}
+
+// multiSubColumnEmitsForFilter reports whether the section's tuple
+// attribute emits for the row under the cardinality filter. The shared
+// container length N classifies the attribute (N ≤ 1 single-value,
+// N > 1 multi-value; all-scalar tuples are N = 0); an all-container
+// tuple with every container empty is spliced entirely (ADR-0101 D2/D7).
+// sectionHasMatchingField and marshalSection both consult this one
+// predicate so the frame decision and the emit cannot drift.
+func multiSubColumnEmitsForFilter(row reflect.Value, g goplan.SectionGroup, filter cardFilter) bool {
+	containers := g.ContainerSubColumns()
+	n := 0
+	anyElems := false
+	for j, sc := range containers {
+		l := row.FieldByName(sc.Fields[0].GoFieldName).Len()
+		if j == 0 {
+			n = l
+		}
+		if l > 0 {
+			anyElems = true
+		}
+	}
+	if len(containers) > 0 && len(g.ScalarSubColumns()) == 0 && !anyElems {
+		return false // S = 0 splice — no attribute at all
+	}
+	switch filter {
+	case cardFilterSingleValue:
+		return n <= 1
+	case cardFilterMultiValue:
+		return n > 1
+	default:
+		return true
+	}
 }
 
 func marshalField(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {

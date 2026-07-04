@@ -146,6 +146,47 @@ func rebuildMemberships(g *SectionGroup) {
 	}
 }
 
+// ScalarSubColumns returns the section's sub-columns whose (single)
+// field is scalar-shaped, in declaration order. Meaningful for
+// multi-sub-column sections only (PlanBuilder.Finish enforces exactly
+// one field per sub-column there); the scalar class supplies the
+// BeginAttribute argument list. Per ADR-0101 D3.
+func (g SectionGroup) ScalarSubColumns() (out []SubColumn) {
+	for _, sc := range g.SubColumns {
+		if isScalarShape(sc.Fields[0]) {
+			out = append(out, sc)
+		}
+	}
+	return
+}
+
+// ContainerSubColumns returns the section's sub-columns whose (single)
+// field is container-shaped, in declaration order. The container class
+// supplies the AddToContainerP / AddToCoContainersP argument list — all
+// containers advance in lockstep (zipped co-containers, one shared
+// per-attribute length). Per ADR-0101 D1/D3.
+func (g SectionGroup) ContainerSubColumns() (out []SubColumn) {
+	for _, sc := range g.SubColumns {
+		if !isScalarShape(sc.Fields[0]) {
+			out = append(out, sc)
+		}
+	}
+	return
+}
+
+// ContainerAddMethod returns the DML container-append method name for a
+// section with containerCount container sub-columns, mirroring the DML
+// generator's count rule (lw_dml_generator.go): "AddToContainer" for
+// exactly one, "AddToCoContainers" for two or more. Callers append "P"
+// for the void sibling. Shared by the codegen emitter, the reflect
+// codec and Validate so the three cannot drift. Per ADR-0101 SD3.
+func ContainerAddMethod(containerCount int) string {
+	if containerCount == 1 {
+		return "AddToContainer"
+	}
+	return "AddToCoContainers"
+}
+
 // FieldBeginShape classifies how one field opens its attribute on the
 // wire — drives the SecI's exposed methods AND the per-field call
 // pattern in BuildEntities. Independent of any registry; derived from

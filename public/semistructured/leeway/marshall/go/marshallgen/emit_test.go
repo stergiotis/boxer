@@ -685,3 +685,94 @@ type MyDTO struct {
 	// Read accumulates parallel value + carrier slices.
 	mustContain(t, out, "c.ReadingsC = append(c.ReadingsC,")
 }
+
+// --- mixed-shape multi-sub-column sections (ADR-0101). ---
+
+func TestEmit_MixedSubColumns_ScalarPlusCoContainers(t *testing.T) {
+	out := generate(t, `package demo
+type MyDTO struct {
+	_    struct{} `+"`kind:\"my\"`"+`
+	Id   uint64   `+"`lw:\",id\"`"+`
+	Text string   `+"`lw:\"prose,text:text\"`"+`
+	WL   []uint32 `+"`lw:\"prose,text:wordLength\"`"+`
+	WB   []string `+"`lw:\"prose,text:wordBag\"`"+`
+}
+`)
+	parseGo(t, out)
+	// Write side: the scalar class opens the attribute; the container
+	// class zips through AddToCoContainersP behind a length guard.
+	mustContain(t, out, "BeginAttribute(text string) Attr")
+	mustContain(t, out, "AddToCoContainersP(wordLength uint32, wordBag string)")
+	mustContain(t, out, "if len(c.WB[i]) != len(c.WL[i]) {")
+	mustContain(t, out, "co-container slices have different lengths")
+	mustContain(t, out, "for k := range c.WL[i] {")
+	mustContain(t, out, ".AddToCoContainersP(c.WL[i][k], c.WB[i][k])")
+	// Read side: per-sub-column accessor shapes (scalar direct, container
+	// iter.Seq) instead of the previous all-scalar tuple interface.
+	mustContain(t, out, "GetAttrValueText(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string")
+	mustContain(t, out, "GetAttrValueWordLength(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint32]")
+	mustContain(t, out, "GetAttrValueWordBag(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[string]")
+	mustNotContain(t, out, "BeginAttributeSingle")
+}
+
+func TestEmit_MixedSubColumns_SingleContainer(t *testing.T) {
+	// facts11 canonical shape (S >= 1, C = 1): the DML method is
+	// AddToContainerP per the count rule (ADR-0101 SD3), and no zip guard
+	// is emitted for a lone container.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_        struct{} `+"`kind:\"my\"`"+`
+	Id       uint64   `+"`lw:\",id\"`"+`
+	Semantic string   `+"`lw:\"m,u8:semantic\"`"+`
+	Value    []uint8  `+"`lw:\"m,u8:value\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "BeginAttribute(semantic string) Attr")
+	mustContain(t, out, "AddToContainerP(value uint8)")
+	mustContain(t, out, "for k := range c.Value[i] {")
+	mustContain(t, out, ".AddToContainerP(c.Value[i][k])")
+	mustNotContain(t, out, "co-container slices have different lengths")
+	mustNotContain(t, out, "AddToCoContainersP")
+}
+
+func TestEmit_MixedSubColumns_AllContainers(t *testing.T) {
+	// S = 0 (geoArea shape): argless BeginAttribute plus the splice guard —
+	// an all-container tuple with every container empty emits no attribute.
+	out := generate(t, `package demo
+type MyDTO struct {
+	_   struct{}  `+"`kind:\"my\"`"+`
+	Id  uint64    `+"`lw:\",id\"`"+`
+	Lat []float32 `+"`lw:\"geo,geoArea:polyLat\"`"+`
+	Lng []float32 `+"`lw:\"geo,geoArea:polyLng\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "BeginAttribute() Attr")
+	mustContain(t, out, "AddToCoContainersP(polyLat float32, polyLng float32)")
+	mustContain(t, out, "if len(c.Lat[i]) > 0 {")
+	// Spliced rows decode to nil slices: the read tail tolerates zero
+	// occurrences and only rejects duplicates.
+	mustContain(t, out, "occurs more than once on the row")
+	mustNotContain(t, out, "expected exactly one occurrence per row")
+}
+
+func TestParse_RejectsRoaringInMultiSubColumn(t *testing.T) {
+	// The structural rules live in the shared PlanBuilder.Finish
+	// (ADR-0101 D3), so the gen front-end rejects at parse/plan time.
+	_, err := generateMay(t, `package demo
+import "github.com/RoaringBitmap/roaring"
+type MyDTO struct {
+	_    struct{}        `+"`kind:\"my\"`"+`
+	Id   uint64          `+"`lw:\",id\"`"+`
+	Text string          `+"`lw:\"prose,text:text\"`"+`
+	WL   *roaring.Bitmap `+"`lw:\"prose,text:wordLength\"`"+`
+}
+`)
+	if err == nil {
+		t.Fatalf("expected error for roaring in multi-sub-column section, got success")
+	}
+	if !strings.Contains(err.Error(), "roaring.Bitmap not supported in a multi-sub-column section") {
+		t.Fatalf("expected multi-sub-column roaring rejection, got: %v", err)
+	}
+}

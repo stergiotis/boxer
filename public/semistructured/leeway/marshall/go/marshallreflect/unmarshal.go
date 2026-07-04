@@ -465,7 +465,14 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 	for j := range g.SubColumns {
 		sc := &g.SubColumns[j]
 		f := &sc.Fields[0]
-		subs = append(subs, subAcc{Field: f, ColName: sc.Name, Val: reflect.New(goTypeReflect(f.GoType())).Elem()})
+		a := subAcc{Field: f, ColName: sc.Name}
+		if !f.IsSlice() {
+			a.Val = reflect.New(goTypeReflect(f.GoType())).Elem()
+		}
+		// Container sub-columns leave Val invalid until an attribute
+		// matches — an N = 0 attribute reads back as a nil slice
+		// (ADR-0101 D5).
+		subs = append(subs, a)
 	}
 
 	// Dispatch on the section's (uniform) channel like the single-membership
@@ -494,19 +501,57 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 				}
 			}
 			for k := range subs {
-				subs[k].Val = locals[k]
+				if subs[k].Field.IsSlice() {
+					// Container sub-column: the local holds the accessor's
+					// iter.Seq; drain it into a fresh slice (ADR-0101 D5).
+					subs[k].Val = sliceFromSeq(locals[k], subs[k].Field)
+				} else {
+					subs[k].Val = locals[k]
+				}
 			}
 			count++
 		}
 	}
-	if count != 1 {
-		err = eb.Build().Str("membership", memb.LWMembership).Errorf("expected exactly one occurrence per row")
+	// A tuple with scalar sub-columns must occur exactly once per row. An
+	// all-container tuple (S = 0) additionally admits zero occurrences: the
+	// write side splices the attribute when every container is empty, and
+	// the row decodes to nil slices (ADR-0101 D2/D5).
+	wantExactlyOne := len(g.ScalarSubColumns()) > 0
+	if count > 1 || (wantExactlyOne && count != 1) {
+		err = eb.Build().Str("membership", memb.LWMembership).Int("count", count).Errorf("expected exactly one occurrence per row")
 		return
 	}
 	for _, s := range subs {
+		if !s.Val.IsValid() {
+			continue // empty container / spliced row — the field stays a nil slice
+		}
 		row.FieldByName(s.Field.GoFieldName).Set(s.Val)
 	}
 	return
+}
+
+// sliceFromSeq drains a reflected iter.Seq[T] into a []T value,
+// defensively copying []byte elements out of the Arrow buffer (same
+// rule as consumeValue's slice arm). Returns an invalid Value for an
+// empty sequence so an N = 0 container attribute projects as nil.
+func sliceFromSeq(seq reflect.Value, f *mappingplan.TaggedField) reflect.Value {
+	vals := collectIterSeq(seq)
+	if len(vals) == 0 {
+		return reflect.Value{}
+	}
+	out := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType())), 0, len(vals))
+	copyBytes := goplan.CopyStrategy(f.GoType()) == goplan.CopyBytes
+	for _, v := range vals {
+		if copyBytes {
+			src := v.Bytes()
+			cp := make([]byte, len(src))
+			copy(cp, src)
+			out = reflect.Append(out, reflect.ValueOf(cp))
+			continue
+		}
+		out = reflect.Append(out, v)
+	}
+	return out
 }
 
 // unmarshalCarrierSection decodes a mixed / parametrized section (ADR-0008

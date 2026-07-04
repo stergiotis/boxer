@@ -150,3 +150,48 @@ func TestCoverage_HasAllAndFilter(t *testing.T) {
 		t.Errorf("phantom Filter selected %q rows, want 0", got)
 	}
 }
+
+// --- Mixed-shape multi-sub-column section (scalar + co-containers, ADR-0101) ---
+
+type cvMixedText struct {
+	_ struct{} `kind:"cvMixedText"`
+
+	ID       uint64 `lw:",id"`
+	Tracking []byte `lw:",naturalKey"`
+
+	Text       string   `lw:"prose,text:text"`
+	WordLength []uint32 `lw:"prose,text:wordLength"`
+	WordBag    []string `lw:"prose,text:wordBag"`
+}
+
+// TestCoverage_MixedScalarContainerSection drives anchor's `text` section
+// (scalar `text` + co-containers `wordLength`/`wordBag`) end-to-end: the
+// per-sub-column subtype dispatch pairs the VALUE_BY_TAG scalar read with
+// two LIST_BY_TAG array reads sharing the section's LEN support column.
+// Row 3 pins the N = 0 shape: the attribute emits (scalar present),
+// arrays come back empty.
+func TestCoverage_MixedScalarContainerSection(t *testing.T) {
+	rows := []cvMixedText{
+		{ID: 1, Tracking: []byte("A"), Text: "hello world", WordLength: []uint32{5, 5}, WordBag: []string{"hello", "world"}},
+		{ID: 2, Tracking: []byte("B"), Text: "one", WordLength: []uint32{3}, WordBag: []string{"one"}},
+		{ID: 3, Tracking: []byte("C"), Text: ""},
+	}
+	lookup := marshallreflect.MapLookup{"prose": 9}
+	a, _ := genArtefacts[cvMixedText](t, lookup)
+	arrowPath := rbMarshalArrow(t, rows, lookup)
+	lines := queryProjection(t, arrowPath, a, "p.ID, p.Text, toString(p.WordLength), toString(p.WordBag)")
+	if len(lines) != 3 {
+		t.Fatalf("got %d rows: %v", len(lines), lines)
+	}
+	// Single quotes inside array literals arrive TSV-escaped (\').
+	want := []string{
+		"1\thello world\t[5,5]\t[\\'hello\\',\\'world\\']\t1\t1\tX",
+		"2\tone\t[3]\t[\\'one\\']\t1\t1\tX",
+		"3\t\t[]\t[]\t1\t1\tX",
+	}
+	for i := range want {
+		if lines[i] != want[i] {
+			t.Errorf("row %d = %q, want %q", i, lines[i], want[i])
+		}
+	}
+}

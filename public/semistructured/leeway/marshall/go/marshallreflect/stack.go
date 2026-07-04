@@ -204,8 +204,9 @@ func sectionHasMatchingField(row reflect.Value, g goplan.SectionGroup, filter ca
 		return true
 	}
 	if len(g.SubColumns) > 1 {
-		// Multi-sub-column = one tuple per row, single-value attribute.
-		return filter == cardFilterSingleValue
+		// One tuple per row; the shared container length classifies the
+		// attribute's cardinality pass (ADR-0101 D7).
+		return multiSubColumnEmitsForFilter(row, g, filter)
 	}
 	for _, f := range g.SubColumns[0].Fields {
 		if fieldEmitsForFilter(row, f, filter) {

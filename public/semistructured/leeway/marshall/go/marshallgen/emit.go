@@ -515,23 +515,34 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 	needContainerOpen := false // shape: sec.BeginAttribute() (no args, opens container)
 	needBeginSingleVal := ""   // shape: sec.BeginAttributeSingle(value T) — element type
 	needBeginScalarVal := ""   // shape: sec.BeginAttribute(value T) — element type
-	needAddToContainer := ""   // attr.AddToContainerP(v T) — element type
-	multiSubColAttr := false   // multi-sub-column scalar (u32Range) — emit BeginAttribute(arg1, arg2, …)
-	multiSubColPairs := []argPair{}
+	needAddToContainer := ""   // attr.AddToContainerP(v T) — element type (single-sub-column container)
+	multiSubColAttr := false   // multi-sub-column — BeginAttribute(<scalars…>) + zipped co-containers (ADR-0101)
+	multiSubColScalars := []argPair{}
+	multiSubColContainers := []argPair{}
 
 	if len(g.SubColumns) > 1 {
 		multiSubColAttr = true
 		for _, sc := range g.SubColumns {
+			// Backstops only — PlanBuilder.Finish rejects these shapes for
+			// both front-ends (ADR-0101 D3); hand-built plans still hit them.
 			if len(sc.Fields) != 1 {
 				err = eb.Build().Str("section", g.Section).Str("column", sc.Name).Errorf("multi-field sub-column in multi-sub-column section not supported")
 				return
 			}
 			f := sc.Fields[0]
-			if f.IsOption || f.IsSlice() || f.IsRoaring() {
-				err = eb.Build().Str("section", g.Section).Str("field", f.GoFieldName).Errorf("non-scalar field in multi-sub-column section not supported")
+			if f.IsOption || f.IsRoaring() {
+				err = eb.Build().Str("section", g.Section).Str("field", f.GoFieldName).Errorf("Option / roaring field in multi-sub-column section not supported")
 				return
 			}
-			multiSubColPairs = append(multiSubColPairs, argPair{Name: sc.Name, Type: f.GoType()})
+		}
+		// Scalar class → BeginAttribute arguments; container class →
+		// AddToContainerP / AddToCoContainersP arguments (declaration order
+		// within each class, matching the DML generator's per-class rule).
+		for _, sc := range g.ScalarSubColumns() {
+			multiSubColScalars = append(multiSubColScalars, argPair{Name: sc.Name, Type: sc.Fields[0].GoType()})
+		}
+		for _, sc := range g.ContainerSubColumns() {
+			multiSubColContainers = append(multiSubColContainers, argPair{Name: sc.Name, Type: elemType(sc.Fields[0])})
 		}
 	} else {
 		for _, f := range g.SubColumns[0].Fields {
@@ -560,6 +571,13 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 	if needAddToContainer != "" {
 		linef(sb, 1, "AddToContainerP(value %s)", needAddToContainer)
 	}
+	if multiSubColAttr && len(multiSubColContainers) > 0 {
+		argDecls := make([]string, 0, len(multiSubColContainers))
+		for _, p := range multiSubColContainers {
+			argDecls = append(argDecls, fmt.Sprintf("%s %s", p.Name, p.Type))
+		}
+		linef(sb, 1, "%sP(%s)", goplan.ContainerAddMethod(len(multiSubColContainers)), strings.Join(argDecls, ", "))
+	}
 	line(sb, 1, "EndAttributeP()")
 	line(sb, 0, "}\n")
 
@@ -569,8 +587,8 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 	linef(sb, 0, "type %s%sSecI[Attr any, Ent any] interface {", kind, method)
 	switch {
 	case multiSubColAttr:
-		argDecls := make([]string, 0, len(multiSubColPairs))
-		for _, p := range multiSubColPairs {
+		argDecls := make([]string, 0, len(multiSubColScalars))
+		for _, p := range multiSubColScalars {
 			argDecls = append(argDecls, fmt.Sprintf("%s %s", p.Name, p.Type))
 		}
 		linef(sb, 1, "BeginAttribute(%s) Attr", strings.Join(argDecls, ", "))
@@ -811,15 +829,53 @@ func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVa
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
 	}
-	args := make([]string, 0, len(g.SubColumns))
-	for _, sc := range g.SubColumns {
-		f := sc.Fields[0]
-		args = append(args, src.field(f.GoFieldName))
+	scalars := g.ScalarSubColumns()
+	containers := g.ContainerSubColumns()
+	args := make([]string, 0, len(scalars))
+	for _, sc := range scalars {
+		args = append(args, src.field(sc.Fields[0].GoFieldName))
 	}
 	memb := g.Memberships[0]
-	linef(sb, 2, "%sAttr := %s.BeginAttribute(%s)", secVar, secVar, strings.Join(args, ", "))
-	writeMembershipAdd(sb, "\t\t", secVar+"Attr", memb, "", src)
-	linef(sb, 2, "%sAttr.EndAttributeP()", secVar)
+
+	// Zip-length agreement across the container class (ADR-0101 D2): all
+	// container sub-columns advance in lockstep through one
+	// AddTo(Co)Container(s)P call per element, so unequal lengths are a
+	// caller bug surfaced as an error, never silent truncation.
+	if len(containers) > 1 {
+		for _, sc := range containers[1:] {
+			linef(sb, 2, "if len(%s) != len(%s) {", src.field(sc.Fields[0].GoFieldName), src.field(containers[0].Fields[0].GoFieldName))
+			linef(sb, 3, "err = eb.Build()%s.Str(\"section\", %q).Str(\"field\", %q).Errorf(\"co-container slices have different lengths\")", src.rowErrCtx, g.Section, sc.Fields[0].GoFieldName)
+			line(sb, 3, "return")
+			line(sb, 2, "}")
+		}
+	}
+
+	// S = 0 splice: an all-container tuple with every container empty emits
+	// no attribute — the lone-container splice rule generalised. With S ≥ 1
+	// the scalar tuple is the presence signal and the attribute always
+	// emits, containers possibly empty (ADR-0101 D2).
+	depth := 2
+	if len(scalars) == 0 && len(containers) > 0 {
+		linef(sb, 2, "if len(%s) > 0 {", src.field(containers[0].Fields[0].GoFieldName))
+		depth = 3
+	}
+	indent := strings.Repeat("\t", depth)
+	linef(sb, depth, "%sAttr := %s.BeginAttribute(%s)", secVar, secVar, strings.Join(args, ", "))
+	if len(containers) > 0 {
+		elems := make([]string, 0, len(containers))
+		for _, sc := range containers {
+			f := sc.Fields[0]
+			elems = append(elems, sliceElemExpr(f, src.field(f.GoFieldName)+"[k]"))
+		}
+		linef(sb, depth, "for k := range %s {", src.field(containers[0].Fields[0].GoFieldName))
+		linef(sb, depth+1, "%sAttr.%sP(%s)", secVar, goplan.ContainerAddMethod(len(containers)), strings.Join(elems, ", "))
+		linef(sb, depth, "}")
+	}
+	writeMembershipAdd(sb, indent, secVar+"Attr", memb, "", src)
+	linef(sb, depth, "%sAttr.EndAttributeP()", secVar)
+	if depth == 3 {
+		line(sb, 2, "}")
+	}
 	return
 }
 
@@ -1048,7 +1104,11 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 			}
 		}
 	}
-	if hasScalarValue && (hasSingleVal || hasIterVal) {
+	if len(g.SubColumns) == 1 && hasScalarValue && (hasSingleVal || hasIterVal) {
+		// Single-sub-column only: two field shapes would contend for one
+		// GetAttrValueValue signature. A multi-sub-column section reads each
+		// sub-column through its own accessor, so mixed shapes are fine
+		// there (ADR-0101 D5).
 		err = eb.Build().Str("section", g.Section).Errorf("section mixes scalar-section field shape with non-scalar-section field shape — disambiguate via flags so the read API resolves to one method set")
 		return
 	}
@@ -1056,9 +1116,16 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 	linef(sb, 0, "// %s%sAttrsReadI is the Attributes-side view of the %s section.", kind, method, g.Section)
 	linef(sb, 0, "type %s%sAttrsReadI interface {", kind, method)
 	if len(g.SubColumns) > 1 {
+		// Per-sub-column accessor, each shaped to its own subtype: scalar
+		// sub-columns read the value directly, container sub-columns drain
+		// an iter.Seq (the RA generator emits exactly this pair of shapes).
 		for _, sc := range g.SubColumns {
 			f := sc.Fields[0]
-			linef(sb, 1, "GetAttrValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) %s", mappingplan.UpperFirst(sc.Name), f.GoType())
+			if f.IsSlice() {
+				linef(sb, 1, "GetAttrValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", mappingplan.UpperFirst(sc.Name), elemType(f))
+			} else {
+				linef(sb, 1, "GetAttrValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) %s", mappingplan.UpperFirst(sc.Name), f.GoType())
+			}
 		}
 	} else {
 		f := g.SubColumns[0].Fields[0]
@@ -1524,8 +1591,16 @@ func writeMultiSubColumnDecode(sb *strings.Builder, g goplan.SectionGroup, attrs
 	if err != nil {
 		return
 	}
-	linef(sb, 2, "if %s%sCount != 1 {", prefix, memb.GoFieldName)
-	linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"membership\", %q).Errorf(\"expected exactly one occurrence per row\")", memb.LWMembership)
+	if len(g.ScalarSubColumns()) > 0 {
+		linef(sb, 2, "if %s%sCount != 1 {", prefix, memb.GoFieldName)
+		linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"membership\", %q).Errorf(\"expected exactly one occurrence per row\")", memb.LWMembership)
+	} else {
+		// S = 0 tuple: a spliced row (every container empty on the write
+		// side) carries no attribute and decodes to nil slices — mirror the
+		// lone-container tolerance (ADR-0101 D2/D5).
+		linef(sb, 2, "if %s%sCount > 1 {", prefix, memb.GoFieldName)
+		linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"membership\", %q).Errorf(\"occurs more than once on the row\")", memb.LWMembership)
+	}
 	line(sb, 3, "return\n\t\t}")
 	for _, s := range subs {
 		linef(sb, 2, "c.%s = append(c.%s, %s%sVal)", s.Field.GoFieldName, s.Field.GoFieldName, prefix, s.Field.GoFieldName)
@@ -1555,13 +1630,35 @@ func writeMultiSubMatchLoops(sb *strings.Builder, g goplan.SectionGroup, attrsVa
 	}
 	memb = g.Memberships[0]
 	for _, s := range subs {
-		linef(sb, 2, "var %s%sVal %s", prefix, s.Field.GoFieldName, s.Field.GoType())
+		if s.Field.IsSlice() {
+			linef(sb, 2, "var %s%sVal []%s", prefix, s.Field.GoFieldName, s.Field.GoType())
+		} else {
+			linef(sb, 2, "var %s%sVal %s", prefix, s.Field.GoFieldName, s.Field.GoType())
+		}
 	}
 	linef(sb, 2, "var %s%sCount int", prefix, memb.GoFieldName)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
 	for _, s := range subs {
-		linef(sb, 3, "%s%sLocal := %s.GetAttrValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", prefix, s.Field.GoFieldName, attrsVar, mappingplan.UpperFirst(s.ColName))
+		if !s.Field.IsSlice() {
+			linef(sb, 3, "%s%sLocal := %s.GetAttrValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", prefix, s.Field.GoFieldName, attrsVar, mappingplan.UpperFirst(s.ColName))
+			continue
+		}
+		// Container sub-column: drain the per-attribute Seq into a fresh
+		// slice (nil for an empty container — an N=0 attribute reads back
+		// as a nil slice, ADR-0101 D5). []byte elements are copied out of
+		// the Arrow buffer like the lone-container fill path.
+		linef(sb, 3, "var %s%sLocal []%s", prefix, s.Field.GoFieldName, s.Field.GoType())
+		linef(sb, 3, "for v := range %s.GetAttrValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", attrsVar, mappingplan.UpperFirst(s.ColName))
+		switch goplan.CopyStrategy(s.Field.GoType()) {
+		case goplan.CopyBytes:
+			line(sb, 4, "cp := make([]byte, len(v))")
+			line(sb, 4, "copy(cp, v)")
+			linef(sb, 4, "%s%sLocal = append(%s%sLocal, cp)", prefix, s.Field.GoFieldName, prefix, s.Field.GoFieldName)
+		default:
+			linef(sb, 4, "%s%sLocal = append(%s%sLocal, v)", prefix, s.Field.GoFieldName, prefix, s.Field.GoFieldName)
+		}
+		line(sb, 3, "}")
 	}
 	if memb.Flags.Channel.EmbedsLiteralName() {
 		linef(sb, 3, "for membBytes := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, memb.Flags.Channel.AddMethodSuffix())
