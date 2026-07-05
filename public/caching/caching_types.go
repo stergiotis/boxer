@@ -96,12 +96,34 @@ type ReadThroughCache[K comparable, V any, W comparable] struct {
 	currentWorkItem W
 	hasCurrentWork  bool
 
+	// Versioning (WithVersioning). orderOf == nil selects the internal
+	// counter (verSeq), which degenerates to last-insert-wins.
+	orderOf func(V) int64
+	verSeq  int64
+
 	// Configuration
 	fetchCriteria   FetchCriteria
 	errorBackoffDur time.Duration
 	absentTTL       time.Duration
+	freshTTL        time.Duration // WithFreshnessTTL; 0 = age never stales
 	sideTableBound  int
 	nowFn           func() time.Time // seam for deterministic tests
+}
+
+// StashEntry is the record an entry carries through the L2 tier. Entry
+// state — the stale flag, the monotonic version, the freshness stamp —
+// must survive demotion and promotion intact (the tier-boundary law: a
+// state bit that does not travel with the entry is silently laundered at
+// the first demotion; see the formal specs under verification/formal/caching).
+type StashEntry[V any] struct {
+	Value V
+	// Ver is the entry's monotonic order (see WithVersioning); 0 in
+	// internal-counter mode is never compared across restarts.
+	Ver int64
+	// Stamp is the freshness stamp in nanoseconds on the cache clock
+	// (see WithFreshnessTTL).
+	Stamp int64
+	Stale bool
 }
 
 // StashBackendI acts as the L2/Victim cache storage.
@@ -113,21 +135,17 @@ type ReadThroughCache[K comparable, V any, W comparable] struct {
 // Delete) — the stash is best-effort by contract, the fetcher remains the
 // source of truth.
 type StashBackendI[K comparable, V any] interface {
-	// GetAndRemove attempts to retrieve a value.
+	// GetAndRemove attempts to retrieve an entry.
 	// If found, the item MUST be removed from the stash (atomic promote).
-	// Returns:
-	//   value: The data
-	//   stale: The stale flag the item was stored with
-	//   found: true if it existed
-	GetAndRemove(key K) (value V, stale bool, found bool)
+	GetAndRemove(key K) (e StashEntry[V], found bool)
 
-	// Add inserts a value into the stash, carrying its stale flag.
+	// Add inserts an entry into the stash, carrying its state intact.
 	// An existing key MUST be updated in place — never duplicated — and an
 	// update MUST NOT evict. If the stash is full and the key is new, the
 	// implementation MUST evict an item to make room.
 	// Returns:
 	//   evicted: true if a valid item was dropped to make space (Data Loss).
-	Add(key K, value V, stale bool) (evicted bool)
+	Add(key K, e StashEntry[V]) (evicted bool)
 
 	// Delete removes the item if it exists (invalidation).
 	Delete(key K)

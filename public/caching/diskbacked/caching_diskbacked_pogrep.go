@@ -55,42 +55,42 @@ func (s *PogrebStash[K, V]) Close() error {
 }
 
 // GetAndRemove attempts to retrieve a value and remove it from the stash (Promotion).
-func (s *PogrebStash[K, V]) GetAndRemove(key K) (value V, stale bool, found bool) {
+func (s *PogrebStash[K, V]) GetAndRemove(key K) (e caching.StashEntry[V], found bool) {
 	// 1. Serialize Key (Canonical CBOR)
 	kBytes, err := keyEncMode.Marshal(key)
 	if err != nil {
-		return value, false, false
+		return e, false
 	}
 
 	// 2. Get from Pogreb
 	vBytes, err := s.db.Get(kBytes)
 	if err != nil || vBytes == nil {
-		return value, false, false
+		return e, false
 	}
 
 	// 3. Deserialize the record envelope
 	var rec stashRecord[V]
 	if err = cbor.Unmarshal(vBytes, &rec); err != nil {
-		return value, false, false
+		return e, false
 	}
 
 	// 4. Remove (Atomic promotion)
 	// Pogreb deletes are fast (tombstones).
 	_ = s.db.Delete(kBytes)
 
-	return rec.Value, rec.Stale, true
+	return caching.StashEntry[V]{Value: rec.Value, Ver: rec.Ver, Stamp: rec.Stamp, Stale: rec.Stale}, true
 }
 
 // Add inserts a value. If softCap is exceeded by a NEW key, it evicts a
 // random item. Updates to an existing key never evict — they don't change
 // the count, so there is no reason to drop an unrelated entry.
-func (s *PogrebStash[K, V]) Add(key K, value V, stale bool) (evicted bool) {
+func (s *PogrebStash[K, V]) Add(key K, e caching.StashEntry[V]) (evicted bool) {
 	// 1. Serialize
 	kBytes, err := keyEncMode.Marshal(key)
 	if err != nil {
 		return false
 	}
-	vBytes, err := cbor.Marshal(stashRecord[V]{Value: value, Stale: stale})
+	vBytes, err := cbor.Marshal(stashRecord[V]{Value: e.Value, Ver: e.Ver, Stamp: e.Stamp, Stale: e.Stale})
 	if err != nil {
 		return false
 	}

@@ -13,8 +13,31 @@ import (
 // primaryItem is optimized for memory padding.
 type primaryItem[V any] struct {
 	value    V
+	ver      int64  // monotonic order (WithVersioning, or the internal counter)
+	stamp    int64  // freshness stamp, ns on the cache clock (WithFreshnessTTL)
 	lastSeen uint64 // Epoch for pinning
-	stale    bool   // Set by MarkAsStale; reading a stale entry queues a refresh.
+	stale    bool   // Set by MarkAsStale or by age; a stale read queues a refresh.
+	pinned   bool   // Sticky dirty-window pin (Pin/Unpin): immune to eviction.
+}
+
+// isStale reports the entry's effective staleness: the explicit flag, or —
+// under WithFreshnessTTL — an age beyond the TTL.
+func (inst *ReadThroughCache[K, V, W]) isStale(item primaryItem[V], now time.Time) bool {
+	if item.stale {
+		return true
+	}
+	return inst.freshTTL > 0 && now.UnixNano()-item.stamp > inst.freshTTL.Nanoseconds()
+}
+
+// versionOf assigns an insert's order: intrinsic via orderOf, or the
+// internal counter (strictly increasing, so every insert is "newest" —
+// exactly last-insert-wins).
+func (inst *ReadThroughCache[K, V, W]) versionOf(v V) int64 {
+	if inst.orderOf != nil {
+		return inst.orderOf(v)
+	}
+	inst.verSeq++
+	return inst.verSeq
 }
 
 // putBounded inserts into a side table, dropping a random entry when the
@@ -162,11 +185,17 @@ func (inst *ReadThroughCache[K, V, W]) lookup(k K, acceptStale bool, mayFlush bo
 	item, inL1 := inst.primaryStore[k]
 	fromStash := false
 	if !inL1 {
-		// Check Stash (L2). A hit is promoted into L1 — preserving the
-		// stale flag — and then routed exactly like a native L1 entry.
-		if val, wasStale, found := inst.stash.GetAndRemove(k); found {
-			inst.insert(k, val, wasStale) // may spill back to L2 if L1 is pinned-full
-			item = primaryItem[V]{value: val, stale: wasStale, lastSeen: inst.currentEpoch}
+		// Check Stash (L2). A hit is promoted into L1 with its state —
+		// version, freshness stamp, stale flag — intact, then routed
+		// exactly like a native L1 entry. Promotion bypasses the version
+		// gate: a tier move is not an upstream answer, so it must not
+		// count as an equal-version confirmation.
+		if e, found := inst.stash.GetAndRemove(k); found {
+			item = primaryItem[V]{
+				value: e.Value, ver: e.Ver, stamp: e.Stamp, stale: e.Stale,
+				lastSeen: inst.currentEpoch,
+			}
+			inst.place(k, item) // may spill back to L2 if L1 is pinned-full
 			inL1, fromStash = true, true
 		}
 	}
@@ -179,7 +208,7 @@ func (inst *ReadThroughCache[K, V, W]) lookup(k K, acceptStale bool, mayFlush bo
 			inst.primaryStore[k] = item
 		}
 
-		if !item.stale {
+		if !inst.isStale(item, now) {
 			inst.metrics.RecordHit(!fromStash, false)
 			return item.value, true, false
 		}
@@ -236,9 +265,76 @@ func (inst *ReadThroughCache[K, V, W]) MarkAsStale(k K) {
 		inst.primaryStore[k] = item
 		return
 	}
-	// Stash-resident entries round-trip with the flag set.
-	if val, _, found := inst.stash.GetAndRemove(k); found {
-		inst.stash.Add(k, val, true)
+	// Stash-resident entries round-trip with the flag set, state intact.
+	if e, found := inst.stash.GetAndRemove(k); found {
+		e.Stale = true
+		inst.stash.Add(k, e)
+	}
+}
+
+// MarkAsStaleIfOlder is the version-carrying external-writer signal: it
+// stales the cached entry only when its order is below ver, so a
+// redundant signal for data the cache already holds is free. Without
+// WithVersioning the cached orders are internal counters, incomparable to
+// the caller's domain, and the signal degrades to an unconditional
+// MarkAsStale.
+func (inst *ReadThroughCache[K, V, W]) MarkAsStaleIfOlder(k K, ver int64) {
+	if inst.orderOf == nil {
+		inst.MarkAsStale(k)
+		return
+	}
+	if item, ok := inst.primaryStore[k]; ok {
+		if item.ver < ver {
+			item.stale = true
+			inst.primaryStore[k] = item
+		}
+		return
+	}
+	if e, found := inst.stash.GetAndRemove(k); found {
+		if e.Ver < ver {
+			e.Stale = true
+		}
+		inst.stash.Add(k, e)
+	}
+}
+
+// Pin makes the key's entry immune to eviction and demotion until Unpin —
+// the write-through dirty-window latch: the writer pins at Commit and
+// unpins at Flush, so a written-but-unflushed version can never be
+// evicted and then shadowed by an older durable refetch (see the nopin
+// counterfactual in verification/formal/caching). A stash-resident entry
+// is hoisted into L1; pinned entries may hold L1 beyond its capacity,
+// bounded by the caller's flush cadence. Note that epoch pinning
+// compounds with this: while every resident entry is read within the
+// current epoch, the overshoot cannot drain — an AdvanceEpoch cadence is
+// what lets insert pressure bring L1 back to capacity. Pinning an
+// uncached key is a no-op. Idempotent.
+//
+// Delete and Clear remove pinned entries too: explicit invalidation
+// overrides the latch. Do not invalidate keys with unflushed local
+// writes.
+func (inst *ReadThroughCache[K, V, W]) Pin(k K) {
+	if item, ok := inst.primaryStore[k]; ok {
+		if !item.pinned {
+			item.pinned = true
+			inst.primaryStore[k] = item
+		}
+		return
+	}
+	if e, found := inst.stash.GetAndRemove(k); found {
+		inst.primaryStore[k] = primaryItem[V]{
+			value: e.Value, ver: e.Ver, stamp: e.Stamp, stale: e.Stale,
+			lastSeen: inst.currentEpoch, pinned: true,
+		}
+	}
+}
+
+// Unpin releases a Pin; the entry becomes ordinarily evictable again.
+// No-op for unpinned or uncached keys. Idempotent.
+func (inst *ReadThroughCache[K, V, W]) Unpin(k K) {
+	if item, ok := inst.primaryStore[k]; ok && item.pinned {
+		item.pinned = false
+		inst.primaryStore[k] = item
 	}
 }
 
@@ -454,34 +550,86 @@ func (inst *ReadThroughCache[K, V, W]) markKeysFailed(keys []K) {
 	}
 }
 
-// AddItem inserts a fresh value, clearing any breaker or absent mark for
-// the key.
+// AddItem inserts a value — a fetch delivery or a write-through
+// population. Under WithVersioning admission is gated by the value's
+// intrinsic order (see the option doc); without it, last insert wins.
+// Either way the delivery clears the key's breaker and absent marks.
 func (inst *ReadThroughCache[K, V, W]) AddItem(k K, v V) {
-	inst.insert(k, v, false)
+	inst.admit(k, v)
 }
 
-// insert places a value into L1 — or spills it to the stash when L1 is full
-// of pinned entries — carrying the stale flag through either path.
-func (inst *ReadThroughCache[K, V, W]) insert(k K, v V, stale bool) {
-	if !stale {
-		// Fresh data supersedes failure and absence bookkeeping.
-		delete(inst.errorUntil, k)
-		if inst.absentUntil != nil {
-			delete(inst.absentUntil, k)
-		}
-		if inst.fetchAdded != nil {
-			inst.fetchAdded[k] = struct{}{}
+// admit runs the three-outcome version gate and places the winner.
+func (inst *ReadThroughCache[K, V, W]) admit(k K, v V) {
+	// Delivery bookkeeping is unconditional: the upstream (or the writer)
+	// answered for this key, whatever the gate decides about the value —
+	// an absent mark or an open breaker must not survive a delivery, and
+	// a gate-rejected key was still delivered for the running flush.
+	delete(inst.errorUntil, k)
+	if inst.absentUntil != nil {
+		delete(inst.absentUntil, k)
+	}
+	if inst.fetchAdded != nil {
+		inst.fetchAdded[k] = struct{}{}
+	}
+
+	newVer := inst.versionOf(v)
+	now := inst.nowFn().UnixNano()
+
+	existing, have := inst.primaryStore[k]
+	if !have && inst.orderOf != nil {
+		// The gate must compare against ANY cached copy, including a stash
+		// shadow; pull it out — the winner lands in L1 either way. Skipped
+		// in internal-counter mode, where a fresh insert always wins.
+		if e, found := inst.stash.GetAndRemove(k); found {
+			existing = primaryItem[V]{value: e.Value, ver: e.Ver, stamp: e.Stamp, stale: e.Stale}
+			have = true
 		}
 	}
 
+	if have {
+		switch {
+		case newVer > existing.ver:
+			// Newer: replace, fresh. The sticky pin survives replacement —
+			// a second Commit before Flush keeps its dirty-window latch.
+			inst.place(k, primaryItem[V]{
+				value: v, ver: newVer, stamp: now,
+				lastSeen: inst.currentEpoch, pinned: existing.pinned,
+			})
+		case newVer == existing.ver:
+			// Equal: a revalidation confirmed the cached value is current —
+			// keep it, clear staleness, restart the freshness clock.
+			existing.stale = false
+			existing.stamp = now
+			existing.lastSeen = inst.currentEpoch
+			inst.place(k, existing)
+		default:
+			// Older: reject — the raced fetch returning a pre-write row
+			// bounces off. Re-place the existing entry (it may have been
+			// pulled out of the stash above).
+			existing.lastSeen = inst.currentEpoch
+			inst.place(k, existing)
+		}
+		return
+	}
+
+	inst.place(k, primaryItem[V]{value: v, ver: newVer, stamp: now, lastSeen: inst.currentEpoch})
+}
+
+// place puts an entry into L1 — or spills it to the stash when L1 is at
+// capacity with only pinned entries left. A sticky-pinned entry never
+// spills: the dirty window may exceed the configured capacity, bounded by
+// the writer's flush cadence.
+func (inst *ReadThroughCache[K, V, W]) place(k K, item primaryItem[V]) {
 	if _, exists := inst.primaryStore[k]; !exists {
 		if len(inst.primaryStore) >= inst.cap {
-			if inst.ensureSpaceByEvictingOne() {
+			if inst.ensureSpaceByEvictingOne() && !item.pinned {
 				// L1 is full of pinned items; spill the new value directly
 				// to L2. No L1 item was demoted here, so the (toStash=true)
 				// eviction metric does NOT fire — only a (toStash=false) if
 				// the stash itself displaced something.
-				if dropped := inst.stash.Add(k, v, stale); dropped {
+				if dropped := inst.stash.Add(k, StashEntry[V]{
+					Value: item.value, Ver: item.ver, Stamp: item.stamp, Stale: item.stale,
+				}); dropped {
 					inst.metrics.RecordEviction(false)
 				}
 				return
@@ -489,11 +637,7 @@ func (inst *ReadThroughCache[K, V, W]) insert(k K, v V, stale bool) {
 		}
 	}
 
-	inst.primaryStore[k] = primaryItem[V]{
-		value:    v,
-		stale:    stale,
-		lastSeen: inst.currentEpoch,
-	}
+	inst.primaryStore[k] = item
 }
 
 // AddItemSlice inserts parallel key/value slices; the lengths must match.
@@ -513,19 +657,22 @@ func (inst *ReadThroughCache[K, V, W]) AddItemIter2(it iter.Seq2[K, V]) {
 }
 
 // ensureSpaceByEvictingOne demotes at most one unpinned L1 victim to L2,
-// carrying its stale flag. Returns useStash=true if every L1 entry is
-// pinned to the current epoch (the caller must then route the new value
-// directly to the stash), and false if a slot was freed (or L1 was already
-// under capacity).
+// carrying its full state (version, freshness stamp, stale flag). Returns
+// useStash=true if every L1 entry is pinned — to the current epoch or
+// stickily (dirty window) — and false if a slot was freed (or L1 was
+// already under capacity).
 func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingOne() (useStash bool) {
 	for k, v := range inst.primaryStore {
-		// Pinning Protection
-		if v.lastSeen == inst.currentEpoch {
+		// Pinning Protection: the epoch's working set and the sticky
+		// dirty-window pins are both immune.
+		if v.lastSeen == inst.currentEpoch || v.pinned {
 			continue
 		}
 
 		// Found a victim in L1. Demote to L2 with its state.
-		dropped := inst.stash.Add(k, v.value, v.stale)
+		dropped := inst.stash.Add(k, StashEntry[V]{
+			Value: v.value, Ver: v.ver, Stamp: v.stamp, Stale: v.stale,
+		})
 		inst.metrics.RecordEviction(true) // L1 -> L2 demotion (preserved).
 		if dropped {
 			inst.metrics.RecordEviction(false) // Stash displaced an older item (data loss).

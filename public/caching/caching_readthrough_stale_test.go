@@ -819,21 +819,23 @@ func TestMinPartitions_DoesNotTriggerWhenBelow(t *testing.T) {
 // preserves insertion-order positions modulo capacity.
 func TestSliceStash_Eviction(t *testing.T) {
 	s := NewSliceStash[string, int](2)
-	assert.False(t, s.Add("a", 1, false))
-	assert.False(t, s.Add("b", 2, false))
+	assert.False(t, s.Add("a", StashEntry[int]{Value: 1}))
+	assert.False(t, s.Add("b", StashEntry[int]{Value: 2}))
 	assert.Equal(t, 2, s.Len())
 	assert.Equal(t, 2, s.Cap())
 
 	// Full; next Add evicts via round-robin (slot 0 → "a").
-	assert.True(t, s.Add("c", 3, false))
-	_, _, hasA := s.GetAndRemove("a")
+	assert.True(t, s.Add("c", StashEntry[int]{Value: 3}))
+	_, hasA := s.GetAndRemove("a")
 	assert.False(t, hasA, "a should be the round-robin victim")
 
 	// "b" and "c" remain.
-	v, _, has := s.GetAndRemove("b")
+	e, has := s.GetAndRemove("b")
+	v := e.Value
 	assert.True(t, has)
 	assert.Equal(t, 2, v)
-	v, _, has = s.GetAndRemove("c")
+	ee, has2 := s.GetAndRemove("c")
+	v, has = ee.Value, has2
 	assert.True(t, has)
 	assert.Equal(t, 3, v)
 	assert.Equal(t, 0, s.Len())
@@ -842,17 +844,18 @@ func TestSliceStash_Eviction(t *testing.T) {
 // TestMapStash_Eviction verifies MapStash bounds itself: Add at cap drops one.
 func TestMapStash_Eviction(t *testing.T) {
 	s := NewMapStash[string, int](2)
-	assert.False(t, s.Add("a", 1, false))
-	assert.False(t, s.Add("b", 2, false))
+	assert.False(t, s.Add("a", StashEntry[int]{Value: 1}))
+	assert.False(t, s.Add("b", StashEntry[int]{Value: 2}))
 	// Updating existing key at cap does not evict.
-	assert.False(t, s.Add("a", 11, false))
-	v, _, has := s.GetAndRemove("a")
+	assert.False(t, s.Add("a", StashEntry[int]{Value: 11}))
+	ea, has := s.GetAndRemove("a")
+	v := ea.Value
 	assert.True(t, has)
 	assert.Equal(t, 11, v)
 
 	// Refill and overflow.
-	s.Add("a", 1, false)
-	assert.True(t, s.Add("c", 3, false), "Add beyond cap must evict")
+	s.Add("a", StashEntry[int]{Value: 1})
+	assert.True(t, s.Add("c", StashEntry[int]{Value: 3}), "Add beyond cap must evict")
 	assert.Equal(t, 2, s.Len())
 }
 

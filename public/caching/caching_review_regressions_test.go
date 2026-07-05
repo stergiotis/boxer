@@ -1,6 +1,6 @@
 package caching
 
-// Regression suite for the 2026-07-04 adversarial review (ADR-0104). Each
+// Regression suite for the 2026-07-04 adversarial review. Each
 // test is the inverted form of a confirmed defect repro (R1–R15): it
 // asserts the remediated behavior, so a regression re-introducing the
 // defect fails here.
@@ -135,13 +135,13 @@ func TestRegressionR4_WorkItemContextRestoredOnBreak(t *testing.T) {
 // and served the OLDER value).
 func TestRegressionR5_SliceStashUpdateInPlace(t *testing.T) {
 	s := NewSliceStash[string, int](4)
-	s.Add("k", 1, false)
-	s.Add("k", 2, true)
+	s.Add("k", StashEntry[int]{Value: 1})
+	s.Add("k", StashEntry[int]{Value: 2, Stale: true})
 	assert.Equal(t, 1, s.Len(), "no duplicate entries")
-	v, stale, found := s.GetAndRemove("k")
+	e, found := s.GetAndRemove("k")
 	assert.True(t, found)
-	assert.Equal(t, 2, v, "newest value wins")
-	assert.True(t, stale, "newest stale flag wins")
+	assert.Equal(t, 2, e.Value, "newest value wins")
+	assert.True(t, e.Stale, "newest stale flag wins")
 	assert.Equal(t, 0, s.Len())
 }
 

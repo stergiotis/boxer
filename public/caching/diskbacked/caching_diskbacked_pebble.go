@@ -85,36 +85,36 @@ func (inst *PebbleStash[K, V]) Close() error {
 	return inst.db.Close()
 }
 
-func (inst *PebbleStash[K, V]) GetAndRemove(key K) (value V, stale bool, found bool) {
+func (inst *PebbleStash[K, V]) GetAndRemove(key K) (e caching.StashEntry[V], found bool) {
 	keyBytes, err := keyEncMode.Marshal(key)
 	if err != nil {
-		return value, false, false
+		return e, false
 	}
 
 	valBytes, closer, err := inst.db.Get(keyBytes)
 	if err != nil {
-		return value, false, false
+		return e, false
 	}
 	defer closer.Close()
 
 	var rec stashRecord[V]
 	if err := cbor.Unmarshal(valBytes, &rec); err != nil {
-		return value, false, false
+		return e, false
 	}
 
 	if err := inst.db.Delete(keyBytes, pebble.NoSync); err == nil {
 		inst.count.Add(-1)
 	}
 
-	return rec.Value, rec.Stale, true
+	return caching.StashEntry[V]{Value: rec.Value, Ver: rec.Ver, Stamp: rec.Stamp, Stale: rec.Stale}, true
 }
 
-func (inst *PebbleStash[K, V]) Add(key K, value V, stale bool) (evicted bool) {
+func (inst *PebbleStash[K, V]) Add(key K, e caching.StashEntry[V]) (evicted bool) {
 	kBytes, err := keyEncMode.Marshal(key)
 	if err != nil {
 		return false
 	}
-	vBytes, err := cbor.Marshal(stashRecord[V]{Value: value, Stale: stale})
+	vBytes, err := cbor.Marshal(stashRecord[V]{Value: e.Value, Ver: e.Ver, Stamp: e.Stamp, Stale: e.Stale})
 	if err != nil {
 		return false
 	}
