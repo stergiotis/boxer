@@ -276,8 +276,18 @@ Accepted — 2026-07-05 (reviewed by @spx). Implemented so far:
   the first time (`Uint32TagValueTagWidth = 45` was wrong under every
   convention; the constants are now `MinTagWidth`/`MaxTagWidthUint32`, with
   width 47's class clamped at the uint32 rim).
+- Slice 6 (SD7): `identcontainer` and `vlq` deleted (zero consumers,
+  re-verified at removal); the packageprops table re-harvested. The other
+  SD8 items had already landed with earlier slices: the vocabulary registry
+  base moved in slice 2, the identgen explanation rewrite and its
+  provenance-note removal in slice 3, and no demo data needed re-ingesting
+  because nothing pinned composed id bit patterns.
 
-Slice 6 is pending.
+All slices are implemented; the decision is fully in force. Beyond the ADR's
+own scope, the scheme gained a how-to
+(doc/howto/fibonacci-tagged-ids.md), a `leeway id udf` installer for the SD5
+UDFs, and pass-registry wiring into query executors (see the pass-registry
+update below).
 
 ## Update — 2026-07-05: SD5 delivered as `identsql`; names are upper snake case
 
