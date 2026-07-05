@@ -669,21 +669,26 @@ func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingOne() (useStash bool
 			continue
 		}
 
-		// Found a victim in L1. Demote to L2 with its state.
-		dropped := inst.stash.Add(k, StashEntry[V]{
-			Value: v.value, Ver: v.ver, Stamp: v.stamp, Stale: v.stale,
-		})
-		inst.metrics.RecordEviction(true) // L1 -> L2 demotion (preserved).
-		if dropped {
-			inst.metrics.RecordEviction(false) // Stash displaced an older item (data loss).
-		}
-
-		delete(inst.primaryStore, k)
+		inst.demoteToStash(k, v)
 		return false
 	}
 
 	// If we get here, everything in Primary was Pinned.
 	return true
+}
+
+// demoteToStash moves the L1 entry for k into the stash, carrying its
+// full state, and records the eviction metrics. The caller has
+// established that the entry exists and is unpinned.
+func (inst *ReadThroughCache[K, V, W]) demoteToStash(k K, v primaryItem[V]) {
+	dropped := inst.stash.Add(k, StashEntry[V]{
+		Value: v.value, Ver: v.ver, Stamp: v.stamp, Stale: v.stale,
+	})
+	inst.metrics.RecordEviction(true) // L1 -> L2 demotion (preserved).
+	if dropped {
+		inst.metrics.RecordEviction(false) // Stash displaced an older item (data loss).
+	}
+	delete(inst.primaryStore, k)
 }
 
 // Delete removes the key from both tiers, clears its breaker and absent
