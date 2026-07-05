@@ -65,6 +65,41 @@ func TestStringifyFrontmatterValue_NestedKV(t *testing.T) {
 	}
 }
 
+func TestStringifyFrontmatterValue_NestedEmptyKV(t *testing.T) {
+	// A nested empty YAML map (`key: {}`) converts to a typed-nil
+	// *BinarySearchGrowingKV inside the interface value, which still
+	// matches the nested-KV type-switch case. Reads on the nil receiver
+	// are the empty container (containers review 2026-07-05, D3) — this
+	// path used to panic.
+	kv := containers.NewBinarySearchGrowingKVFromAnyMap(map[string]interface{}{
+		"meta": map[string]interface{}{},
+	})
+	got := stringifyFrontmatterValue(kv)
+	want := "{meta: {}}"
+	if got != want {
+		t.Errorf("nested empty KV: got %q want %q", got, want)
+	}
+}
+
+func TestParse_FrontmatterNestedEmptyMap_StringifiesSafely(t *testing.T) {
+	// Full pipeline variant of TestStringifyFrontmatterValue_NestedEmptyKV:
+	// YAML `meta: {}` through goldmark-meta → FromAnyMap → typed-nil
+	// nested KV → stringify. Used to panic in RenderFrontmatter.
+	src := "---\ntitle: hello\nmeta: {}\n---\n\nbody\n"
+	doc := Parse([]byte(src))
+	fm := doc.Frontmatter()
+	if fm == nil {
+		t.Fatal("Frontmatter() is nil, want parsed frontmatter")
+	}
+	metaRaw, has := fm.Get("meta")
+	if !has {
+		t.Fatal("frontmatter key \"meta\" missing")
+	}
+	if got := stringifyFrontmatterValue(metaRaw); got != "{}" {
+		t.Errorf("empty nested map: got %q want %q", got, "{}")
+	}
+}
+
 func TestStringifyFrontmatterValue_RecursesIntoSliceOfSlices(t *testing.T) {
 	in := []interface{}{
 		[]interface{}{"a", "b"},

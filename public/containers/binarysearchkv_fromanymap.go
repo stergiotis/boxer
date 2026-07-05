@@ -15,9 +15,12 @@ import (
 // (string, int, bool, nil, …) pass through unchanged.
 //
 // Returns nil if m is nil or empty so callers can early-out on
-// `if kv == nil`. The bulk path uses [BinarySearchGrowingKV.UpsertBatch]
-// + a single [BinarySearchGrowingKV.ensureSorted] on first read, which
-// is O(N log N) instead of UpsertSingle's O(N²).
+// `if kv == nil`; the nil result is itself safe for all read methods,
+// which treat a nil receiver as an empty container (relevant for nested
+// empty maps, whose converted value is a typed-nil *BinarySearchGrowingKV
+// inside an interface). The bulk path uses
+// [BinarySearchGrowingKV.UpsertBatch] + a single flush on first read,
+// which is O(N log N) instead of UpsertSingle's O(N²).
 //
 // yaml.v2 sometimes produces map[any]any for nested maps; non-string
 // keys are stringified with fmt.Sprintf("%v", k) to match the

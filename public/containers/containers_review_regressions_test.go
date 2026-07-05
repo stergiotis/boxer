@@ -13,6 +13,11 @@ package containers
 //      when ranging began: a mutation between the two silently yielded an
 //      unsorted, duplicate-bearing view. The flush now happens at the
 //      start of each range.
+// D3 — NewBinarySearchGrowingKVFromAnyMap documents its nil return as an
+//      early-out value, but every method panicked on a nil receiver. A
+//      nested empty YAML map produced a typed-nil KV inside an interface
+//      and crashed the egui2 markdown frontmatter renderer. Reads are
+//      now nil-tolerant; writes still panic.
 
 import (
 	"cmp"
@@ -153,4 +158,44 @@ func TestD2_RangeTwiceWithInterveningMutation(t *testing.T) {
 	require.Equal(t, []string{"b"}, slices.Collect(seq))
 	kv.UpsertBatch("a", 1)
 	require.Equal(t, []string{"a", "b"}, slices.Collect(seq))
+}
+
+// TestD3_NilKV_ReadsAreSafe pins the nil-receiver read contract: a nil
+// *BinarySearchGrowingKV behaves as an empty container for every read
+// entry point.
+func TestD3_NilKV_ReadsAreSafe(t *testing.T) {
+	var kv *BinarySearchGrowingKV[string, int]
+	require.True(t, kv.IsEmpty())
+	require.Equal(t, 0, kv.Len())
+	require.False(t, kv.Has("x"))
+	v, has := kv.Get("x")
+	require.False(t, has)
+	require.Zero(t, v)
+	require.Equal(t, 42, kv.GetDefault("x", 42))
+	require.Empty(t, slices.Collect(kv.IterateKeys()))
+	require.Empty(t, slices.Collect(kv.IterateValues()))
+	for range kv.IteratePairs() {
+		t.Fatal("nil KV must yield nothing")
+	}
+}
+
+// TestD3_FromAnyMap_NestedEmptyMap_ReadsSafely pins the concrete crash
+// shape: a nested empty map converts to a typed-nil KV stored in an
+// interface value, and reads on it must behave as an empty container.
+func TestD3_FromAnyMap_NestedEmptyMap_ReadsSafely(t *testing.T) {
+	kv := NewBinarySearchGrowingKVFromAnyMap(map[string]interface{}{
+		"nested": map[string]interface{}{},
+		"flat":   1,
+	})
+	require.NotNil(t, kv)
+	nestedRaw, has := kv.Get("nested")
+	require.True(t, has)
+	nested, ok := nestedRaw.(*BinarySearchGrowingKV[string, interface{}])
+	require.True(t, ok, "nested empty map converts to a (typed-nil) KV")
+	require.Nil(t, nested)
+	require.True(t, nested.IsEmpty())
+	require.Equal(t, 0, nested.Len())
+	for range nested.IteratePairs() {
+		t.Fatal("typed-nil nested KV must yield nothing")
+	}
 }

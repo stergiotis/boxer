@@ -34,6 +34,14 @@ import (
 // Not safe for concurrent use. Even pure reads mutate the mode flags via
 // ensureSorted, so readers and writers must serialise externally.
 //
+// A nil *BinarySearchGrowingKV is a valid empty container for reads:
+// IsEmpty, Len, Has, Get, GetDefault and the Iterate* methods return
+// zero values or empty sequences on a nil receiver. Write methods
+// (UpsertSingle, UpsertBatch, MergeValue, Delete, Grow, Reset) panic on
+// nil. This makes the nil early-out of
+// [NewBinarySearchGrowingKVFromAnyMap] safe to hand to read-only
+// consumers.
+//
 // Compared to map[K]V: this container is preferred when iteration must be
 // deterministic and sorted, when K is not comparable (so map[K]V is not an
 // option), or when a custom cmpKey (case-insensitive, locale, byte-slice)
@@ -65,6 +73,9 @@ type BinarySearchGrowingKV[K any, V any] struct {
 // is in progress remains undefined behaviour.
 func (inst *BinarySearchGrowingKV[K, V]) IterateKeys() iter.Seq[K] {
 	return func(yield func(K) bool) {
+		if inst == nil {
+			return
+		}
 		inst.ensureSorted()
 		for _, k := range inst.keys {
 			if !yield(k) {
@@ -78,6 +89,9 @@ func (inst *BinarySearchGrowingKV[K, V]) IterateKeys() iter.Seq[K] {
 // semantics as in [BinarySearchGrowingKV.IterateKeys].
 func (inst *BinarySearchGrowingKV[K, V]) IterateValues() iter.Seq[V] {
 	return func(yield func(V) bool) {
+		if inst == nil {
+			return
+		}
 		inst.ensureSorted()
 		for _, v := range inst.vals {
 			if !yield(v) {
@@ -91,6 +105,9 @@ func (inst *BinarySearchGrowingKV[K, V]) IterateValues() iter.Seq[V] {
 // Flush semantics as in [BinarySearchGrowingKV.IterateKeys].
 func (inst *BinarySearchGrowingKV[K, V]) IteratePairs() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
+		if inst == nil {
+			return
+		}
 		inst.ensureSorted()
 		vals := inst.vals
 		for i, k := range inst.keys {
@@ -106,7 +123,7 @@ func (inst *BinarySearchGrowingKV[K, V]) IteratePairs() iter.Seq2[K, V] {
 // is zero the container is genuinely empty; if non-zero, at least one
 // entry survives any pending compaction.
 func (inst *BinarySearchGrowingKV[K, V]) IsEmpty() bool {
-	return len(inst.keys) == 0
+	return inst == nil || len(inst.keys) == 0
 }
 
 // Len returns the number of unique entries. It forces ensureSorted so
@@ -115,6 +132,9 @@ func (inst *BinarySearchGrowingKV[K, V]) IsEmpty() bool {
 // Without this flush, an UpsertBatch sequence with duplicate keys would
 // over-report by the number of shadowed duplicates.
 func (inst *BinarySearchGrowingKV[K, V]) Len() int {
+	if inst == nil {
+		return 0
+	}
 	inst.ensureSorted()
 	return len(inst.keys)
 }
@@ -230,12 +250,18 @@ func (inst *BinarySearchGrowingKV[K, V]) compactNewestWins() {
 }
 
 func (inst *BinarySearchGrowingKV[K, V]) Has(key K) (has bool) {
+	if inst == nil {
+		return
+	}
 	inst.ensureSorted()
 	_, has = inst.bsearch(inst.keys, key)
 	return
 }
 
 func (inst *BinarySearchGrowingKV[K, V]) Get(key K) (val V, has bool) {
+	if inst == nil {
+		return
+	}
 	inst.ensureSorted()
 	var idx int
 	idx, has = inst.bsearch(inst.keys, key)
@@ -246,6 +272,9 @@ func (inst *BinarySearchGrowingKV[K, V]) Get(key K) (val V, has bool) {
 }
 
 func (inst *BinarySearchGrowingKV[K, V]) GetDefault(key K, defaultV V) (val V) {
+	if inst == nil {
+		return defaultV
+	}
 	inst.ensureSorted()
 	idx, has := inst.bsearch(inst.keys, key)
 	if has {
