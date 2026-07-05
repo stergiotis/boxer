@@ -25,6 +25,7 @@ func (inst *HashSet[T]) AddEx(val T) (existed bool) {
 func (inst *HashSet[T]) Add(val T) {
 	inst.data[val] = struct{}{}
 }
+
 // AddMany inserts every value from the iterator and returns the number
 // of values that were not already present. Duplicate values within vals
 // count once.

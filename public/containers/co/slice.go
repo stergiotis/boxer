@@ -63,6 +63,7 @@ func SortUnstable(n int, less func(i, j int) bool, swap func(i, j int)) {
 		swap: swap,
 	})
 }
+
 // CoSortSlices sorts slice ascending, calling swap(i, j) on every
 // element exchange so co-indexed slices can be kept aligned. A nil swap
 // sorts the lead slice alone. The sort is unstable: the relative order
@@ -177,6 +178,7 @@ func InsertSliceSorted[K cmp.Ordered, V any](sortedSliceReadIn []K, coSliceWrite
 	}
 	return
 }
+
 // CoIterateFilter yields, for every element of s1 equal to v, the
 // source index i and the co-indexed value s2[i], in source order.
 // Requires len(s2) >= len(s1): a shorter s2 panics at the first match

@@ -58,9 +58,9 @@ func genDuplicatedKeys(unique, dup, keylen int, seed uint64) []string {
 var dupBenchMatrix = []struct {
 	Unique, Dup int
 }{
-	{64, 8},   // 512 total inserts, 8× duplication
-	{512, 8},  // 4096 total inserts, 8× duplication
-	{64, 64},  // 4096 total inserts, 64× duplication (extreme)
+	{64, 8},  // 512 total inserts, 8× duplication
+	{512, 8}, // 4096 total inserts, 8× duplication
+	{64, 64}, // 4096 total inserts, 64× duplication (extreme)
 }
 
 func dupBenchName(unique, dup int) string {
