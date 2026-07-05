@@ -25,8 +25,10 @@ import (
 // full cost model, invariants, and antipatterns.
 //
 // Iteration order is deterministic across runs and across the choice of
-// UpsertSingle vs UpsertBatch: cmpKey-ascending, with newest-wins among
-// equal-cmpKey entries.
+// UpsertSingle vs UpsertBatch: cmpKey-ascending. Among equal-cmpKey
+// entries the newest value wins while the first-inserted key spelling is
+// retained (relevant only for comparators that treat distinguishable
+// keys as equal).
 //
 // Not safe for concurrent use. Even pure reads mutate the mode flags via
 // ensureSorted, so readers and writers must serialise externally.
@@ -180,11 +182,15 @@ func (inst *BinarySearchGrowingKV[K, V]) ensureSorted() {
 }
 
 // compactNewestWins collapses runs of equal-cmpKey entries in a sorted
-// keys/vals pair, keeping the newest value within each run. sort.Stable
-// preserves insertion order among equal keys, so within a run the last
-// element is the newest UpsertBatch. The trailing tail is cleared so
-// pointer-valued K/V slots don't keep their referents reachable past the
-// entry's lifetime.
+// keys/vals pair. Within each run the newest value survives (sort.Stable
+// preserves insertion order among equal keys, so the run's last element
+// is the most recent UpsertBatch call), while the run's first key
+// spelling is retained — matching UpsertSingle and MergeValue, which
+// replace the value in place and never touch the resident key. The
+// distinction is observable only under comparators that treat
+// distinguishable keys as equal (case-insensitive, locale, …). The
+// trailing tail is cleared so pointer-valued K/V slots don't keep their
+// referents reachable past the entry's lifetime.
 func (inst *BinarySearchGrowingKV[K, V]) compactNewestWins() {
 	keys := inst.keys
 	vals := inst.vals
@@ -195,7 +201,6 @@ func (inst *BinarySearchGrowingKV[K, V]) compactNewestWins() {
 	w := 0
 	for r := 1; r < len(keys); r++ {
 		if c(keys[r], keys[w]) == 0 {
-			keys[w] = keys[r]
 			vals[w] = vals[r]
 			continue
 		}
@@ -291,9 +296,11 @@ func (inst *BinarySearchGrowingKV[K, V]) Grow(n int) {
 //     binary search.
 //   - On flush: sort.Stable orders entries by cmpKey-ascending, then
 //     compactNewestWins collapses each equal-key run to a single
-//     surviving entry whose value is the most recent UpsertBatch call.
-//     "Newest wins" relies on sort.Stable preserving insertion order
-//     among equal keys.
+//     surviving entry whose value is the most recent UpsertBatch call
+//     and whose key is the run's first-inserted spelling. "Newest value
+//     wins" relies on sort.Stable preserving insertion order among equal
+//     keys; keeping the first key spelling matches UpsertSingle's
+//     replace-in-place behaviour.
 //   - After flush, the container is in the same observable state as if
 //     the equivalent UpsertSingle sequence had been issued: same final
 //     entries, same iteration order, same Get results.

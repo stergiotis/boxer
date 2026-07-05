@@ -389,6 +389,116 @@ func TestDifferentialFuzz_AgainstMap(t *testing.T) {
 	check(steps)
 }
 
+// TestDifferentialFuzz_AgainstMap_EquivalenceComparator re-runs the
+// mixed-operation fuzz with a case-insensitive comparator, i.e. a cmpKey
+// that treats distinguishable keys as equal. The oracle tracks, per
+// canonical (lowercased) key, the first-inserted spelling and the newest
+// value: UpsertSingle, UpsertBatch and MergeValue must all keep the
+// resident spelling while replacing/merging the value; Delete erases the
+// entry so a re-insert adopts the new spelling.
+func TestDifferentialFuzz_AgainstMap_EquivalenceComparator(t *testing.T) {
+	const (
+		steps        = 4000
+		checkEvery   = 25
+		keyspaceSize = 6 // canonical keys; spellings vary per op
+	)
+	rnd := rand.New(rand.NewPCG(0xBADC0FFEE, 0xFACEFEED))
+
+	type entry struct {
+		spelling string
+		val      string
+	}
+	bskv := NewBinarySearchGrowingKV[string, string](16, ciCompare)
+	oracle := map[string]entry{}
+	merge := func(old, new string) string { return old + "|" + new }
+
+	canon := make([]string, keyspaceSize)
+	for i := range canon {
+		canon[i] = fmt.Sprintf("key%02d", i)
+	}
+	// spell returns a random-case spelling of canon[i].
+	spell := func(i int) string {
+		b := []byte(canon[i])
+		for j := range b {
+			if rnd.IntN(2) == 0 {
+				b[j] = byte(strings.ToUpper(string(b[j]))[0])
+			}
+		}
+		return string(b)
+	}
+
+	check := func(after int) {
+		t.Helper()
+		pairs := maps.Collect(bskv.IteratePairs())
+		require.Equal(t, len(oracle), len(pairs), "size mismatch after step %d", after)
+		for k, v := range pairs {
+			want, ok := oracle[strings.ToLower(k)]
+			require.True(t, ok, "extra key %q after step %d", k, after)
+			require.Equal(t, want.spelling, k, "resident spelling mismatch after step %d", after)
+			require.Equal(t, want.val, v, "value mismatch for %q after step %d", k, after)
+		}
+		keys := slices.Collect(bskv.IterateKeys())
+		require.True(t, slices.IsSortedFunc(keys, ciCompare), "keys not ci-sorted after step %d: %v", after, keys)
+	}
+
+	for step := range steps {
+		i := rnd.IntN(keyspaceSize)
+		k := spell(i)
+		ck := canon[i]
+		v := fmt.Sprintf("v%d", step)
+		switch rnd.IntN(10) {
+		case 0, 1:
+			bskv.UpsertSingle(k, v)
+			if e, ok := oracle[ck]; ok {
+				oracle[ck] = entry{spelling: e.spelling, val: v}
+			} else {
+				oracle[ck] = entry{spelling: k, val: v}
+			}
+		case 2, 3, 4:
+			bskv.UpsertBatch(k, v)
+			if e, ok := oracle[ck]; ok {
+				oracle[ck] = entry{spelling: e.spelling, val: v}
+			} else {
+				oracle[ck] = entry{spelling: k, val: v}
+			}
+		case 5:
+			wantExisted := false
+			if _, ok := oracle[ck]; ok {
+				wantExisted = true
+				delete(oracle, ck)
+			}
+			require.Equal(t, wantExisted, bskv.Delete(k), "delete existence mismatch at step %d", step)
+		case 6:
+			wantExisted := false
+			if e, ok := oracle[ck]; ok {
+				wantExisted = true
+				oracle[ck] = entry{spelling: e.spelling, val: merge(e.val, v)}
+			} else {
+				oracle[ck] = entry{spelling: k, val: v}
+			}
+			require.Equal(t, wantExisted, bskv.MergeValue(k, v, merge), "merge existence mismatch at step %d", step)
+		case 7, 8:
+			// Get probe with an independently randomized spelling.
+			q := spell(i)
+			want, wantOK := oracle[ck]
+			got, gotOK := bskv.Get(q)
+			require.Equal(t, wantOK, gotOK, "Get(%q) ok mismatch at step %d", q, step)
+			if wantOK {
+				require.Equal(t, want.val, got, "Get(%q) value mismatch at step %d", q, step)
+			}
+		case 9:
+			if rnd.IntN(20) == 0 { // rare full reset
+				bskv.Reset()
+				oracle = map[string]entry{}
+			}
+		}
+		if step%checkEvery == 0 {
+			check(step)
+		}
+	}
+	check(steps)
+}
+
 // --- Concurrency-stance guard ------------------------------------------
 
 // TestConcurrentReads_DocumentationGuard pins the current behaviour: even
