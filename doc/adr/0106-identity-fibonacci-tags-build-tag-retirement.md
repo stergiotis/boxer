@@ -248,8 +248,17 @@ pair becomes the committed cross-language test in slice 4.
 
 ## Status
 
-Accepted — 2026-07-05 (reviewed by @spx). Slice 1 (SD9 hardening, plus the
-fibonacci-package input validation and the class-bounds off-by-one fix that
-SD4 will later subsume) is implemented; slices 2–6 are pending. The SD2
-decoder and the defect inventory in Context were validated by an uncommitted
-review harness, to be recreated as committed tests by slice 4.
+Accepted — 2026-07-05 (reviewed by @spx). Implemented so far:
+
+- Slice 1 (SD9 hardening, plus the fibonacci-package input validation and
+  the class-bounds off-by-one fix that SD4 will later subsume).
+- Slice 2 (SD1–SD3): identifier v2 with fibonacci-coded tags, the
+  `identifier_tag_fixed*` files and the `./tags` entry deleted, the runtime
+  vocabulary registry base moved off tag value 0, and the tag-value registry
+  rejecting invalid effective tag values. The full-repo build and test suite
+  pass without the build tag; no goldens pinned composed id bit patterns, so
+  the SD8 clean break required no data regeneration.
+
+Slices 3–6 are pending. The SD2 decoder and the defect inventory in Context
+were validated by an uncommitted review harness, to be recreated as committed
+tests by slice 4.
