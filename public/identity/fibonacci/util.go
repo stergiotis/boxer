@@ -8,13 +8,14 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// maxAdvisedTagWidth caps the code width this advisor hands out. Width 46 is
-// the widest whose whole tag-value class still fits the uint32 TagValue
-// domain (width 47 straddles it, ADR-0106 SD4). Wider tags exist and are
-// valid; they are just never *advised*. Before this cap, a small
-// maxExpectedIds silently truncated the returned TagValues through the
-// uint32 conversion, and maxExpectedIds == 0 panicked via a negative shift.
-const maxAdvisedTagWidth = 46
+// maxAdvisedTagWidth caps the code width this advisor hands out at one below
+// MaxTagWidthUint32: width 47's class straddles the uint32 TagValue boundary
+// (WidthClassOf clamps it), so the half-open interval this advisor returns
+// could not represent its exclusive end. Width-47 tags exist and are valid;
+// they are just never *advised*. Before this cap, a small maxExpectedIds
+// silently truncated the returned TagValues through the uint32 conversion,
+// and maxExpectedIds == 0 panicked via a negative shift.
+const maxAdvisedTagWidth = MaxTagWidthUint32 - 1
 
 // SelectFittingTagValueRange returns the half-open tag-value interval
 // [minTagValIncl, maxTagValExcl) whose fibonacci codes have exactly the

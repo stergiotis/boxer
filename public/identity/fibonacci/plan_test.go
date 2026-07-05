@@ -12,7 +12,7 @@ import (
 
 // bruteForceTagValuesOfWidth enumerates tag values whose fibonacci code
 // (of tagValue-1) has exactly the given full width, by encoding every
-// candidate — a structural oracle independent of the Stats bounds.
+// candidate — a structural oracle independent of the planning bounds.
 func bruteForceTagValuesOfWidth(t *testing.T, width int, scanUpToExcl uint64) (vals []identifier.TagValue) {
 	t.Helper()
 	for i := uint64(1); i < scanUpToExcl; i++ {
@@ -24,12 +24,57 @@ func bruteForceTagValuesOfWidth(t *testing.T, width int, scanUpToExcl uint64) (v
 	return
 }
 
+// TestWidthClassOf_BruteForceOracle checks the class bounds against exhaustive
+// encoding for the small widths, and the uint32-domain edges literally.
+func TestWidthClassOf_BruteForceOracle(t *testing.T) {
+	scanUpToExcl := fibonaccicode.MaxRepresentableExclByWidth(15) + 1
+	for width := MinTagWidth; width <= 14; width++ {
+		want := bruteForceTagValuesOfWidth(t, width, scanUpToExcl)
+		cl, err := WidthClassOf(width)
+		require.NoError(t, err)
+		require.EqualValues(t, want[0], cl.TagValueMinIncl, "width %d", width)
+		require.EqualValues(t, want[len(want)-1], cl.TagValueMaxIncl, "width %d", width)
+		require.EqualValues(t, len(want), cl.TagValueCount, "width %d", width)
+		require.Equal(t, uint64(1)<<(64-width)-1, cl.MaxBodyIncl, "width %d", width)
+	}
+	// The widest uint32 tags: width 47's class is clamped at the uint32 rim.
+	top, err := WidthClassOf(MaxTagWidthUint32)
+	require.NoError(t, err)
+	require.EqualValues(t, 2971215073, top.TagValueMinIncl)
+	require.EqualValues(t, uint32(math.MaxUint32), top.TagValueMaxIncl)
+	require.EqualValues(t, 1<<17-1, top.MaxBodyIncl)
+	// Encoding the clamped bounds really yields width-47 codes.
+	for _, tv := range []identifier.TagValue{top.TagValueMinIncl, top.TagValueMaxIncl} {
+		_, nBits := fibonaccicode.EncodeFibonacciCode(uint64(tv) - 1)
+		require.Equal(t, MaxTagWidthUint32, nBits)
+	}
+}
+
+// TestWidthClasses_TileTheDomain: classes are ascending, contiguous, and
+// cover exactly the uint32 tag-value domain starting at 1.
+func TestWidthClasses_TileTheDomain(t *testing.T) {
+	classes := WidthClasses()
+	require.Len(t, classes, MaxTagWidthUint32-MinTagWidth+1)
+	require.EqualValues(t, 1, classes[0].TagValueMinIncl)
+	for i := 1; i < len(classes); i++ {
+		require.Equal(t, classes[i-1].Width+1, classes[i].Width)
+		require.EqualValues(t, uint64(classes[i-1].TagValueMaxIncl)+1, uint64(classes[i].TagValueMinIncl),
+			"width %d must start right above width %d", classes[i].Width, classes[i-1].Width)
+	}
+	require.EqualValues(t, uint32(math.MaxUint32), classes[len(classes)-1].TagValueMaxIncl)
+
+	for _, w := range []int{MinTagWidth - 1, 0, -3, MaxTagWidthUint32 + 1, 200} {
+		_, err := WidthClassOf(w)
+		require.Error(t, err, "width %d", w)
+	}
+}
+
 // TestIterateTagValues_MatchesBruteForce is the regression test for the
 // class-bounds off-by-one (ADR-0106 Context): the iterator used to warn on
 // the first member of every width class and silently drop the last one.
 func TestIterateTagValues_MatchesBruteForce(t *testing.T) {
 	scanUpToExcl := fibonaccicode.MaxRepresentableExclByWidth(15) + 1
-	for width := 2; width <= 14; width++ {
+	for width := MinTagWidth; width <= 14; width++ {
 		var got []identifier.TagValue
 		for tv := range IterateTagValuesWithGivenMinNumberOfLeadingZeros(uint8(width), 0) {
 			got = append(got, tv)
@@ -40,7 +85,7 @@ func TestIterateTagValues_MatchesBruteForce(t *testing.T) {
 }
 
 func TestIterateTagValues_InvalidWidthsYieldNothing(t *testing.T) {
-	for _, w := range []uint8{0, 1, Uint32TagValueTagWidth + 1, 200, 255} {
+	for _, w := range []uint8{0, 1, MaxTagWidthUint32 + 1, 200, 255} {
 		count := 0
 		for range IterateTagValuesWithGivenMinNumberOfLeadingZeros(w, 0) {
 			count++
@@ -80,36 +125,23 @@ func TestSelectFittingTagValueRange_Properties(t *testing.T) {
 
 		wantWidth := min(bits.LeadingZeros64(maxIds), maxAdvisedTagWidth)
 		for _, tv := range []identifier.TagValue{lo, hiExcl - 1} {
-			code, nBits := fibonaccicode.EncodeFibonacciCode(uint64(tv) - 1)
+			_, nBits := fibonaccicode.EncodeFibonacciCode(uint64(tv) - 1)
 			require.Equal(t, wantWidth, nBits, "maxIds=%d tv=%d", maxIds, tv)
 			bodyCapacityExcl := uint64(1) << (64 - nBits)
 			require.Greater(t, bodyCapacityExcl, maxIds, "body must hold maxExpectedIds")
-			_ = code
 		}
 		// The bound values did not wrap through the uint32 conversion.
 		require.LessOrEqual(t, uint64(hiExcl), uint64(math.MaxUint32)+1)
 
-		// Adjacent classes tile: the value below lo has a narrower code.
-		if lo > 1 {
-			_, nBitsBelow := fibonaccicode.EncodeFibonacciCode(uint64(lo) - 2)
-			require.Equal(t, wantWidth-1, nBitsBelow, "maxIds=%d", maxIds)
-		}
+		// The advisor and the width classes agree exactly.
+		cl, clErr := WidthClassOf(wantWidth)
+		require.NoError(t, clErr)
+		require.Equal(t, cl.TagValueMinIncl, lo, "maxIds=%d", maxIds)
+		require.EqualValues(t, uint64(cl.TagValueMaxIncl)+1, uint64(hiExcl), "maxIds=%d", maxIds)
 	}
 
 	for _, tooLarge := range []uint64{1 << 60, math.MaxUint64} {
 		_, _, err := SelectFittingTagValueRange(tooLarge)
 		require.Error(t, err, "maxIds=%d", tooLarge)
-	}
-}
-
-// TestStatsBoundsAgreeWithAdvisor guards against the two bound formulas
-// drifting apart again (they disagreed by one before ADR-0106 SD9).
-func TestStatsBoundsAgreeWithAdvisor(t *testing.T) {
-	for width := 4; width <= Uint32TagValueTagWidth; width++ {
-		maxIds := uint64(1)<<(64-width) - 1 // exactly `width` leading zeros
-		lo, hiExcl, err := SelectFittingTagValueRange(maxIds)
-		require.NoError(t, err)
-		require.Equal(t, Stats.TagValueMinIncl[width], lo, "width %d", width)
-		require.Equal(t, Stats.TagValueMaxIncl[width], hiExcl-1, "width %d", width)
 	}
 }

@@ -52,8 +52,8 @@ func NewCliCommandId() *cli.Command {
 								Name:  "tagWidth",
 								Value: 3,
 								Action: func(context *cli.Context, u uint) error {
-									if u < 2 || u > fibonacci.Uint32TagValueTagWidth {
-										return eb.Build().Uint64("maxTagWidth", fibonacci.Uint32TagValueTagWidth).Errorf("tagWidth is out of range")
+									if u < fibonacci.MinTagWidth || u > fibonacci.MaxTagWidthUint32 {
+										return eb.Build().Uint64("minTagWidth", fibonacci.MinTagWidth).Uint64("maxTagWidth", fibonacci.MaxTagWidthUint32).Errorf("tagWidth is out of range")
 									}
 									return nil
 								},
