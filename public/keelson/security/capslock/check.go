@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 
 	// Side-effect imports: each app's init() registers into app.DefaultRegistry.
+	_ "github.com/stergiotis/boxer/apps/fibscope"
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"
 	_ "github.com/stergiotis/boxer/apps/terrainscope"
