@@ -52,6 +52,18 @@ type FieldRow struct {
 	IsConst    bool   // declared on a `_` field as ,const=<value>
 	ConstValue string // the constant value
 
+	// IsTuple marks a dynamic-membership tuple row (ADR-0103): a
+	// slice-of-struct DTO field mapping N attributes into ONE section, each
+	// element carrying its own membership. The row's GoField / Section stay
+	// meaningful (the outer field + its section); Membership is unused (the
+	// membership is per-element data); TupleStructType names the element
+	// struct; TupleElems are the element struct's fields. One tuple row is
+	// one PlanBuilder call (AddTupleSliceField), so the per-field FSM chip
+	// carries the whole tuple's verdict.
+	IsTuple         bool
+	TupleStructType string
+	TupleElems      []*TupleElemRow
+
 	// fsm is this row's per-field validity state machine (Empty → … → Valid /
 	// Rejected / Conflicting / Blocked); fsmW is its tethered inspector chip,
 	// lazily built on first render (the [fsmview.Widget] needs the frame's id
@@ -63,12 +75,118 @@ type FieldRow struct {
 	reason string
 }
 
+// TupleElemRow is one field of a tuple row's element struct — either THE
+// `@membership` field (IsMembership) carrying each attribute's membership
+// value, or a value field mapping one sub-column of the tuple's section.
+// Mirrors goplan.TupleElem the way FieldRow mirrors AddField inputs, so the
+// host's Recompute hands the row straight to AddTupleSliceField.
+type TupleElemRow struct {
+	uid uint64 // stable per-element id (same uid space as FieldRow)
+
+	GoField      string
+	IsMembership bool
+	Column       string // value fields: sub-column ("" targets "value")
+
+	// Channel is the membership element's wire channel. ADR-0103 mandates an
+	// explicit verbatim channel (`,verbatim` / `,highCardVerbatim`) — ref and
+	// carrier channels cannot carry a per-element membership — so the picker
+	// offers exactly the verbatim pair.
+	Channel mappingplan.MembershipChannel
+	// MembBytes picks the membership field's Go type: string (false) or
+	// []byte (true) — the two shapes AddTupleSliceField accepts.
+	MembBytes bool
+
+	// typeModel authors a value element's canonical, exactly like a
+	// FieldRow's value type. Unused for the membership element (its type is
+	// string / []byte via MembBytes).
+	typeModel     *canonicaltypeedit.Model
+	lastCanonical string
+	lastBarErr    string
+}
+
+// ElemLWTag assembles the element's lw: tag for AddTupleSliceField
+// (SplitTupleElemLW grammar): `@membership,<channel flag>` for the
+// membership element, `<section>[:<column>]` for a value element. section is
+// the tuple row's section (value-element tags repeat it, ADR-0103 D1).
+func (e *TupleElemRow) ElemLWTag(section string) string {
+	if e.IsMembership {
+		if flag := e.Channel.String(); flag != "" {
+			return "@membership," + flag
+		}
+		// No flag spelling (LowCardRef default) — emit the bare marker and let
+		// the builder reject it with its explicit-verbatim-channel error.
+		return "@membership"
+	}
+	if e.Column != "" {
+		return section + ":" + e.Column
+	}
+	return section
+}
+
+// Shape returns the element's goplan.FieldShape: the authored canonical for
+// a value element (nil when the type editor does not parse, so the builder
+// rejects and the sequential build halts here — same contract as
+// FieldRow.Shape), or the membership field's string / []byte scalar.
+func (e *TupleElemRow) Shape() goplan.FieldShape {
+	if e.IsMembership {
+		goType := "string"
+		if e.MembBytes {
+			goType = "[]byte"
+		}
+		cn, err := goplan.ScalarCanonicalForGoType(goType)
+		if err != nil {
+			return goplan.FieldShape{}
+		}
+		return goplan.FieldShape{Canonical: cn}
+	}
+	if e.typeModel.BarError() != "" || !e.typeModel.Valid() {
+		return goplan.FieldShape{}
+	}
+	return goplan.FieldShape{Canonical: e.typeModel.Node()}
+}
+
+// SetGoType seeds a value element's canonical from a Go source-type
+// spelling — the same convenience FieldRow.SetGoType provides.
+func (e *TupleElemRow) SetGoType(goType string) {
+	cn, err := goplan.ScalarCanonicalForGoType(goType)
+	if err != nil {
+		return
+	}
+	e.SetCanonical(cn.String())
+}
+
+// SetCanonical seeds a value element's canonical directly (e.g. "u32h" for a
+// container sub-column) — hosts seeding example tuples need it because a
+// container type has no scalar Go spelling for SetGoType.
+func (e *TupleElemRow) SetCanonical(ct string) {
+	e.typeModel.SetCanonical(ct)
+	e.lastCanonical = e.typeModel.Canonical()
+}
+
+// TupleElemSpecs converts the row's elements into the goplan.TupleElem list
+// AddTupleSliceField takes, in declaration order.
+func (r *FieldRow) TupleElemSpecs() []goplan.TupleElem {
+	out := make([]goplan.TupleElem, 0, len(r.TupleElems))
+	for _, e := range r.TupleElems {
+		out = append(out, goplan.TupleElem{
+			GoFieldName: e.GoField,
+			LWTag:       e.ElemLWTag(r.Section),
+			Shape:       e.Shape(),
+		})
+	}
+	return out
+}
+
 // LWTag assembles the lw: struct-tag *value* this row represents — the string
 // PlanBuilder parses via SplitLW. Plain columns produce ",<col>"; const rows
 // produce "<memb>,<sec>,const=<value>"; value fields produce
 // "<memb>,<sec>[:<col>][,unit][,explode][,<channel>]". The default channel
 // (LowCardRef) contributes no flag, matching mappingplan.MembershipChannel.String.
+// A tuple row's outer tag is the bare section name (SplitTupleOuterLW).
 func (r *FieldRow) LWTag() string {
+	if r.IsTuple {
+		return r.Section
+	}
 	if r.Membership == "" {
 		return "," + r.Section
 	}
@@ -196,6 +314,47 @@ func (m *Model) removeByUID(uid uint64) {
 			return
 		}
 	}
+}
+
+// AddElem appends a fresh element to a tuple row (with a stable uid from the
+// model's shared counter) and returns it for the caller to populate. Marks
+// the model dirty. The element defaults to a value field; flip IsMembership
+// (and pick a verbatim Channel) for the membership element.
+func (m *Model) AddElem(r *FieldRow) *TupleElemRow {
+	m.nextUID++
+	e := &TupleElemRow{
+		uid:       m.nextUID,
+		Channel:   mappingplan.MembershipChannelLowCardVerbatim,
+		typeModel: canonicaltypeedit.NewModel(),
+	}
+	e.SetGoType("string") // sensible default element value type
+	r.TupleElems = append(r.TupleElems, e)
+	m.dirty = true
+	return e
+}
+
+// removeElemByUID drops the element with the given uid from the tuple row,
+// marking the model dirty.
+func (m *Model) removeElemByUID(r *FieldRow, uid uint64) {
+	for i, e := range r.TupleElems {
+		if e.uid == uid {
+			r.TupleElems = append(r.TupleElems[:i], r.TupleElems[i+1:]...)
+			m.dirty = true
+			return
+		}
+	}
+}
+
+// hasMembershipElem reports whether the tuple row already declares its
+// `@membership` element — gating the editor's add-membership affordance
+// (a tuple carries exactly one).
+func (r *FieldRow) hasMembershipElem() bool {
+	for _, e := range r.TupleElems {
+		if e.IsMembership {
+			return true
+		}
+	}
+	return false
 }
 
 // OutputLang selects the codeview syntax highlighter for an output pane.
@@ -459,6 +618,9 @@ func deriveState(row *FieldRow, idx int, r BuildResult) (FieldState, string) {
 // AddRow (whose only content is the seeded default value type) or one cleared
 // back out. The default canonical alone does not count as content.
 func rowIsEmpty(row *FieldRow) bool {
+	if row.IsTuple {
+		return row.GoField == "" && row.Section == "" && row.TupleStructType == "" && len(row.TupleElems) == 0
+	}
 	return row.GoField == "" && row.Membership == "" && row.Section == "" && row.ConstValue == ""
 }
 
@@ -466,7 +628,13 @@ func rowIsEmpty(row *FieldRow) bool {
 // own, or "" when it is ready to hand to the builder. These mirror prerequisites
 // PlanBuilder would reject, surfaced per-field and earlier so the chip reads
 // "incomplete: <why>" instead of the field going Blocked behind a builder error.
+// Only local *readiness* is decided here (missing names, unparsed types);
+// structural rules (one membership element, at least one value element, …)
+// stay with the genuine builder, whose rejection the chip then reports.
 func rowIncompleteReason(row *FieldRow) string {
+	if row.IsTuple {
+		return tupleIncompleteReason(row)
+	}
 	if _, err := goplan.SplitLW(row.LWTag()); err != nil {
 		return "lw tag does not parse"
 	}
@@ -496,6 +664,41 @@ func rowIncompleteReason(row *FieldRow) string {
 	}
 	if row.GoField == "" {
 		return "value field needs a Go field name"
+	}
+	return ""
+}
+
+// tupleIncompleteReason is rowIncompleteReason's tuple arm: the local
+// readiness prerequisites of a dynamic-membership tuple row (ADR-0103).
+func tupleIncompleteReason(row *FieldRow) string {
+	if row.GoField == "" {
+		return "tuple field needs a Go field name"
+	}
+	if row.Section == "" {
+		return "tuple needs a section"
+	}
+	if row.TupleStructType == "" {
+		return "tuple needs an element struct name"
+	}
+	if len(row.TupleElems) == 0 {
+		return "tuple needs elements (one @membership + value fields)"
+	}
+	for _, e := range row.TupleElems {
+		if e.GoField == "" {
+			if e.IsMembership {
+				return "@membership element needs a Go field name"
+			}
+			return "a value element needs a Go field name"
+		}
+		if e.IsMembership {
+			continue
+		}
+		if e.typeModel.BarError() != "" {
+			return "element " + e.GoField + ": value type does not parse"
+		}
+		if !e.typeModel.Valid() {
+			return "element " + e.GoField + ": value type is empty or invalid"
+		}
 	}
 	return ""
 }

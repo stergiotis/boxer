@@ -4,12 +4,17 @@
 // # What it is
 //
 // A dockable playground. The editor pane (left) edits a [Model] — the entity
-// kind, plain columns, and lw:-tagged value/const fields with their membership,
-// section, sub-column, channel and flags. The output panes (right, one dock tab
-// each) show what the resulting plan compiles to: the schema-agnostic Go codec
-// (marshallgen), the parsed Plan IR (JSON), and the dql SQL read-back artefacts
-// (presence / projection / validator, bound to a seeded schema). The whole plan
-// is re-validated through mappingplan.PlanBuilder on every edit; a status line
+// kind, plain columns, lw:-tagged value/const fields with their membership,
+// section, sub-column, channel and flags, and dynamic-membership tuple rows
+// (ADR-0103: a slice-of-struct field whose elements each emit one attribute
+// of ONE section, carrying its own verbatim membership — authored as an
+// `@membership` element plus one value element per sub-column). The output
+// panes (right, one dock tab each) show what the resulting plan compiles to:
+// the schema-agnostic Go codec (marshallgen), the parsed Plan IR (JSON), and
+// the dql SQL read-back artefacts (presence / projection / validator, bound
+// to a seeded schema; a tuple plan explains instead that membership-addressed
+// read-back does not apply to per-row memberships). The whole plan is
+// re-validated through mappingplan.PlanBuilder on every edit; a status line
 // reports the plan-level verdict plus a per-field roll-up.
 //
 // # Per-field validity

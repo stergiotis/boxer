@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypeedit"
 	"github.com/stretchr/testify/assert"
@@ -150,4 +151,97 @@ func TestStateRollup(t *testing.T) {
 	}}
 	// Order follows fieldStateOrder (valid before conflict before blocked).
 	assert.Equal(t, "2 valid · 1 conflict · 1 blocked", m.stateRollup())
+}
+
+// mkTupleElem builds a TupleElemRow fixture directly (no Model), defaulting to
+// the verbatim channel and a string value type.
+func mkTupleElem(goField string, memb bool) *TupleElemRow {
+	e := &TupleElemRow{
+		GoField:      goField,
+		IsMembership: memb,
+		Channel:      mappingplan.MembershipChannelLowCardVerbatim,
+		typeModel:    canonicaltypeedit.NewModel(),
+	}
+	e.SetGoType("string")
+	return e
+}
+
+// mkTupleRow builds a ready dynamic-membership tuple fixture (ADR-0103) over
+// an anchor-style mixed `text` section: one @membership element + the scalar
+// text sub-column + a container sub-column.
+func mkTupleRow() *FieldRow {
+	r := &FieldRow{IsTuple: true, fsm: newFieldFSM(), typeModel: canonicaltypeedit.NewModel()}
+	r.GoField, r.Section, r.TupleStructType = "Texts", "text", "LabeledText"
+	label := mkTupleElem("Label", true)
+	text := mkTupleElem("Text", false)
+	text.Column = "text"
+	bag := mkTupleElem("WordBag", false)
+	bag.Column = "wordBag"
+	bag.typeModel.SetCanonical("sh")
+	r.TupleElems = []*TupleElemRow{label, text, bag}
+	return r
+}
+
+func TestTupleRowReadiness(t *testing.T) {
+	fresh := &FieldRow{IsTuple: true, fsm: newFieldFSM(), typeModel: canonicaltypeedit.NewModel()}
+	assert.True(t, rowIsEmpty(fresh), "a bare tuple row is empty")
+
+	fresh.GoField = "Texts"
+	assert.Equal(t, "tuple needs a section", rowIncompleteReason(fresh))
+	fresh.Section = "text"
+	assert.Equal(t, "tuple needs an element struct name", rowIncompleteReason(fresh))
+	fresh.TupleStructType = "LabeledText"
+	assert.Contains(t, rowIncompleteReason(fresh), "tuple needs elements")
+
+	memb := mkTupleElem("", true)
+	fresh.TupleElems = []*TupleElemRow{memb}
+	assert.Equal(t, "@membership element needs a Go field name", rowIncompleteReason(fresh))
+	memb.GoField = "Label"
+	assert.Equal(t, "", rowIncompleteReason(fresh), "structural rules (value elements, single membership) stay with the builder")
+
+	ready := mkTupleRow()
+	assert.Equal(t, "", rowIncompleteReason(ready))
+}
+
+func TestTupleElemLWTag(t *testing.T) {
+	memb := mkTupleElem("Label", true)
+	assert.Equal(t, "@membership,lowCardVerbatim", memb.ElemLWTag("text"))
+	memb.Channel = mappingplan.MembershipChannelHighCardVerbatim
+	assert.Equal(t, "@membership,highCardVerbatim", memb.ElemLWTag("text"))
+
+	val := mkTupleElem("WordBag", false)
+	val.Column = "wordBag"
+	assert.Equal(t, "text:wordBag", val.ElemLWTag("text"))
+	val.Column = ""
+	assert.Equal(t, "text", val.ElemLWTag("text"))
+
+	r := mkTupleRow()
+	assert.Equal(t, "text", r.LWTag(), "the tuple's outer tag is the bare section name")
+}
+
+// TestTupleRow_realBuild is the drift guard for the tuple path: the row's
+// LWTag / TupleElemSpecs hand a REAL goplan.PlanBuilder a plan it accepts,
+// and a structurally bad tuple (second @membership) is rejected with the
+// builder's own error — a local rejection, not a cross-field conflict.
+func TestTupleRow_realBuild(t *testing.T) {
+	r := mkTupleRow()
+	b := goplan.NewPlanBuilder("t", "p", "T")
+	require.NoError(t, b.AddUnderscoreField("k", "", ""))
+	require.NoError(t, b.AddField("Id", ",id", shp(t, "uint64")))
+	require.NoError(t, b.AddTupleSliceField(r.GoField, r.LWTag(), r.TupleStructType, r.TupleElemSpecs()))
+	plan, err := b.Finish()
+	require.NoError(t, err)
+	for _, f := range plan.Fields {
+		assert.Equal(t, "Texts", f.TupleField)
+		assert.Equal(t, "Label", f.TupleMembField)
+	}
+
+	bad := mkTupleRow()
+	bad.TupleElems = append(bad.TupleElems, mkTupleElem("Label2", true))
+	b2 := goplan.NewPlanBuilder("t", "p", "T")
+	require.NoError(t, b2.AddUnderscoreField("k", "", ""))
+	rejErr := b2.AddTupleSliceField(bad.GoField, bad.LWTag(), bad.TupleStructType, bad.TupleElemSpecs())
+	require.Error(t, rejErr)
+	assert.Contains(t, rejErr.Error(), "second `@membership` field")
+	assert.False(t, classifyConflict(rejErr), "a tuple's own structural fault is a local reject")
 }

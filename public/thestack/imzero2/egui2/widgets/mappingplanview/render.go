@@ -224,6 +224,27 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 			r.GoField, r.Membership = "NewField", "newMembership"
 			m.pager.GoToLast()
 		}
+		c.AddSpace(6)
+		// Seeds a complete dynamic-membership tuple over the anchor example
+		// schema's mixed-shape `text` section (ADR-0103) — one click shows the
+		// whole shape working: scalar `text` + zipped co-containers
+		// `wordLength` / `wordBag`, each element carrying its own membership.
+		if c.Button(ids.PrepareStr("add-tuple"), c.Atoms().Text("+ tuple field").Keep()).SendResp().HasPrimaryClicked() {
+			r := m.AddRow()
+			r.IsTuple = true
+			r.GoField, r.Section, r.TupleStructType = "Texts", "text", "LabeledText"
+			memb := m.AddElem(r)
+			memb.IsMembership, memb.GoField = true, "Label"
+			val := m.AddElem(r)
+			val.GoField, val.Column = "Text", "text"
+			wl := m.AddElem(r)
+			wl.GoField, wl.Column = "WordLength", "wordLength"
+			wl.SetCanonical("u32h")
+			wb := m.AddElem(r)
+			wb.GoField, wb.Column = "WordBag", "wordBag"
+			wb.SetCanonical("sh")
+			m.pager.GoToLast()
+		}
 	}
 }
 
@@ -330,6 +351,11 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 					}
 				}
 
+				if r.IsTuple {
+					renderTupleRowBody(ids, m, r)
+					continue
+				}
+
 				// Value type — authored as a leeway canonical (ADR-0008) via the
 				// canonicaltypeedit bar/form, in place of a Go-type text box. Greyed
 				// for a const (a const carries a literal, not a value-type field).
@@ -364,6 +390,145 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 		}
 	}
 	return
+}
+
+// tupleMembChannelChoices is the membership-element channel picker set — the
+// verbatim pair ADR-0103 mandates (a dynamic membership embeds its value on
+// the wire; ref / carrier channels cannot carry per-element memberships).
+var tupleMembChannelChoices = []mappingplan.MembershipChannel{
+	mappingplan.MembershipChannelLowCardVerbatim,
+	mappingplan.MembershipChannelHighCardVerbatim,
+}
+
+// renderTupleRowBody draws the tuple-specific card body (ADR-0103): the
+// section + element-struct identity, the ordered element list (one
+// `@membership` element + one value element per sub-column), and the
+// add-element affordances. One tuple row is one AddTupleSliceField call, so
+// element-level problems surface through the row's chip / reason.
+func renderTupleRowBody(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
+	for range c.HorizontalTop().KeepIter() {
+		if editField(ids, "sec", "section", &r.Section, 110, true) {
+			m.dirty = true
+		}
+		if editField(ids, "elemtype", "element struct", &r.TupleStructType, 130, true) {
+			m.dirty = true
+		}
+	}
+	for rt := range c.RichTextLabel("elements — each one attribute; the @membership element carries its membership") {
+		rt.Weak().Small()
+	}
+
+	var removeElemUID uint64
+	hasRemoveElem := false
+	for _, e := range r.TupleElems {
+		for range c.IdScope(ids.PrepareSeq(e.uid)) {
+			if renderTupleElem(ids, m, e) {
+				removeElemUID = e.uid
+				hasRemoveElem = true
+			}
+		}
+	}
+	if hasRemoveElem {
+		m.removeElemByUID(r, removeElemUID)
+	}
+
+	// Add-element affordances: the membership button greys once the (single)
+	// membership element exists; value elements are unbounded (one per
+	// sub-column of the section).
+	for range c.HorizontalTop().KeepIter() {
+		for range c.Scope().KeepIter() {
+			if r.hasMembershipElem() {
+				c.UiDisable()
+			}
+			if c.Button(ids.PrepareStr("add-memb"), c.Atoms().Text("+ @membership").Keep()).Small().SendResp().HasPrimaryClicked() {
+				e := m.AddElem(r)
+				e.IsMembership = true
+				e.GoField = "Label"
+			}
+		}
+		c.AddSpace(6)
+		if c.Button(ids.PrepareStr("add-elem"), c.Atoms().Text("+ value element").Keep()).Small().SendResp().HasPrimaryClicked() {
+			e := m.AddElem(r)
+			e.GoField = "NewElem"
+		}
+	}
+}
+
+// renderTupleElem draws one element line — an indented mini-frame with the
+// element's kind glyph, Go field, and its kind-specific controls: the
+// membership element picks its verbatim channel + Go type (string / []byte);
+// a value element binds a sub-column and authors its canonical value type.
+// Returns true if the element's remove button fired.
+func renderTupleElem(ids *c.WidgetIdStack, m *Model, e *TupleElemRow) (remove bool) {
+	for range c.Horizontal().KeepIter() {
+		c.AddSpace(12) // indent under the tuple card
+		for range c.Frame(ids.PrepareStr("elem")).
+			Fill(color.Hex(styletokens.NeutralBgFaint.AsHex())).
+			Stroke(1, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
+			InnerMargin(4).
+			CornerRadius(3).
+			KeepIter() {
+			for range c.Vertical().KeepIter() {
+				for range c.HorizontalTop().KeepIter() {
+					kind := "◇ value"
+					if e.IsMembership {
+						kind = "⚑ @membership"
+					}
+					for rt := range c.RichTextLabel(kind) {
+						rt.Small().Monospace()
+					}
+					if editField(ids, "egofield", "Go field", &e.GoField, 100, true) {
+						m.dirty = true
+					}
+					if e.IsMembership {
+						renderTupleMembControls(ids, m, e)
+					} else if editField(ids, "ecol", "sub-col", &e.Column, 90, true) {
+						m.dirty = true
+					}
+					for range c.HoverText("remove element").KeepIter() {
+						if c.Button(ids.PrepareStr("erm"), c.Atoms().Text(icons.IconClose).Keep()).Small().SendResp().HasPrimaryClicked() {
+							remove = true
+						}
+					}
+				}
+				if !e.IsMembership {
+					// Value element's canonical type, watched for edits like the
+					// row-level editor (canonicaltypeedit has no change signal).
+					e.typeModel.Render(ids, "ectype")
+					cur, barErr := e.typeModel.Canonical(), e.typeModel.BarError()
+					if cur != e.lastCanonical || barErr != e.lastBarErr {
+						e.lastCanonical, e.lastBarErr = cur, barErr
+						m.dirty = true
+					}
+				}
+			}
+		}
+	}
+	return
+}
+
+// renderTupleMembControls draws the membership element's channel picker (the
+// verbatim pair) and its Go-type toggle (string / []byte).
+func renderTupleMembControls(ids *c.WidgetIdStack, m *Model, e *TupleElemRow) {
+	for range c.ComboBox(ids.PrepareStr("echan"),
+		c.WidgetText().Text("channel").Keep(),
+		c.WidgetText().Text(channelLabel(e.Channel)).Keep()).KeepIter() {
+		for i, ch := range tupleMembChannelChoices {
+			selected := ch == e.Channel
+			if c.Button(ids.PrepareSeq(uint64(0x74636800)+uint64(i)),
+				c.Atoms().Text(channelLabel(ch)).Keep()).
+				Selected(selected).
+				SendResp().HasPrimaryClicked() {
+				if e.Channel != ch {
+					e.Channel = ch
+					m.dirty = true
+				}
+			}
+		}
+	}
+	if toggle(ids, "ebytes", "[]byte", &e.MembBytes, true) {
+		m.dirty = true
+	}
 }
 
 // renderRowHeader draws the category glyph + word (coloured, echoing the
@@ -500,10 +665,14 @@ func renderRowFlags(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 // rowCategory classifies a row in leeway's own vocabulary: plain (◆) and
 // tagged (◇) are leeway's two membership categories — matching the schemaview
 // navigator's glyphs (◆ plain item-types, ◇ tagged sections) — while const (▪)
-// is a mappingplan refinement (a constant declared on a tagged `_` field). The
-// colour tints the header bar and category word.
+// is a mappingplan refinement (a constant declared on a tagged `_` field) and
+// tuple (⧉) is the ADR-0103 dynamic-membership slice-of-struct form (N
+// attributes in one section, one membership per element). The colour tints
+// the header bar and category word.
 func rowCategory(r *FieldRow) (glyph, word string, col styletokens.RGBA8) {
 	switch {
+	case r.IsTuple:
+		return "⧉", "tuple", styletokens.SuccessDefault
 	case r.IsConst:
 		return "▪", "const", styletokens.WarningDefault
 	case r.Membership == "":
