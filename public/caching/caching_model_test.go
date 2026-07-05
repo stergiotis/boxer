@@ -68,6 +68,7 @@ const (
 	modelStashCap   = 4
 	modelBackoff    = 15 * time.Second
 	modelAbsentTTL  = 60 * time.Second
+	modelFreshTTL   = 30 * time.Second
 )
 
 func modelKey(i int) string { return fmt.Sprintf("k%02d", i%modelKeys) }
@@ -81,41 +82,65 @@ func modelPartOf(k string) uint64 {
 type modelOracle struct {
 	t         testing.TB
 	negTTL    time.Duration // 0 = negative caching off
+	freshTTL  time.Duration // 0 = age staleness off
+	versioned bool          // versioned mode: values ARE their versions
 	everValue map[string]map[int]bool
 	admiss    map[string]map[int]bool
 	staleExp  map[string]bool
 	possibly  map[string]bool
 	failedAt  map[string]time.Time
 	absentAt  map[string]time.Time
+	// versioned-mode state
+	servedFloor map[string]int   // MonotoneServe: a key's serves never regress
+	lastFresh   map[string]int64 // truth freshness stamp (ns), mirrors the gate
 }
 
-func newModelOracle(t testing.TB, negTTL time.Duration) *modelOracle {
+func newModelOracle(t testing.TB, negTTL time.Duration, freshTTL time.Duration, versioned bool) *modelOracle {
 	return &modelOracle{
-		t:         t,
-		negTTL:    negTTL,
-		everValue: map[string]map[int]bool{},
-		admiss:    map[string]map[int]bool{},
-		staleExp:  map[string]bool{},
-		possibly:  map[string]bool{},
-		failedAt:  map[string]time.Time{},
-		absentAt:  map[string]time.Time{},
+		t:           t,
+		negTTL:      negTTL,
+		freshTTL:    freshTTL,
+		versioned:   versioned,
+		everValue:   map[string]map[int]bool{},
+		admiss:      map[string]map[int]bool{},
+		staleExp:    map[string]bool{},
+		possibly:    map[string]bool{},
+		failedAt:    map[string]time.Time{},
+		absentAt:    map[string]time.Time{},
+		servedFloor: map[string]int{},
+		lastFresh:   map[string]int64{},
 	}
 }
 
-// noteFreshValue records a delivery (fetcher) or manual AddItem: the new
-// value supersedes every earlier one (older values are never servable again
-// — demotion overwrites stash shadows in place), clears staleness and the
-// failure/absence bookkeeping.
-func (o *modelOracle) noteFreshValue(k string, v int) {
+// noteFreshValue records an ADMITTED delivery (fetcher) or write: in
+// counter mode the new value supersedes every earlier one (older values
+// are never servable again — demotion overwrites stash shadows in place);
+// in versioned mode admissibility is governed by the served floor instead,
+// so admissible values accumulate. Clears staleness and the
+// failure/absence bookkeeping and restarts the truth freshness stamp.
+func (o *modelOracle) noteFreshValue(k string, v int, now time.Time) {
 	if o.everValue[k] == nil {
 		o.everValue[k] = map[int]bool{}
 	}
 	o.everValue[k][v] = true
-	o.admiss[k] = map[int]bool{v: true}
+	if o.versioned {
+		if o.admiss[k] == nil {
+			o.admiss[k] = map[int]bool{}
+		}
+		o.admiss[k][v] = true
+	} else {
+		o.admiss[k] = map[int]bool{v: true}
+	}
 	o.staleExp[k] = false
 	o.possibly[k] = true
+	o.lastFresh[k] = now.UnixNano()
 	delete(o.failedAt, k)
 	delete(o.absentAt, k)
+}
+
+// ageStale reports whether the key's TRUE age exceeds the freshness TTL.
+func (o *modelOracle) ageStale(k string, now time.Time) bool {
+	return o.freshTTL > 0 && now.UnixNano()-o.lastFresh[k] > o.freshTTL.Nanoseconds()
 }
 
 func (o *modelOracle) noteMarkStale(k string) {
@@ -130,6 +155,7 @@ func (o *modelOracle) noteDelete(k string) {
 	o.possibly[k] = false
 	delete(o.failedAt, k)
 	delete(o.absentAt, k)
+	delete(o.servedFloor, k) // explicit invalidation resets the monotone floor
 }
 
 // noteAbsentVerdict mirrors the cache's authoritative-absence handling: the
@@ -139,6 +165,7 @@ func (o *modelOracle) noteAbsentVerdict(k string) {
 	o.staleExp[k] = false
 	o.possibly[k] = false
 	delete(o.failedAt, k)
+	delete(o.servedFloor, k)
 }
 
 func (o *modelOracle) noteClear() {
@@ -147,9 +174,10 @@ func (o *modelOracle) noteClear() {
 	o.possibly = map[string]bool{}
 	o.failedAt = map[string]time.Time{}
 	o.absentAt = map[string]time.Time{}
+	o.servedFloor = map[string]int{}
 }
 
-func (o *modelOracle) checkStrictHit(op int, k string, v int) {
+func (o *modelOracle) checkStrictHit(op int, k string, v int, now time.Time) {
 	if !o.everValue[k][v] {
 		o.t.Fatalf("op %d: phantom hit Get(%s)=%d — value was never delivered or added", op, k, v)
 	}
@@ -159,15 +187,34 @@ func (o *modelOracle) checkStrictHit(op int, k string, v int) {
 	if o.staleExp[k] {
 		o.t.Fatalf("op %d: strict Get(%s) hit but the key is stale-expected", op, k)
 	}
+	if o.ageStale(k, now) {
+		o.t.Fatalf("op %d: strict Get(%s) served as fresh past its true refresh age", op, k)
+	}
+	o.noteServe(op, k, v)
 }
 
-func (o *modelOracle) checkStaleHit(op int, k string, v int) {
+func (o *modelOracle) checkStaleHit(op int, k string, v int, now time.Time) {
 	if !o.everValue[k][v] {
 		o.t.Fatalf("op %d: phantom stale hit GetAcceptStale(%s)=%d", op, k, v)
 	}
-	if !o.staleExp[k] {
-		o.t.Fatalf("op %d: GetAcceptStale(%s) reported stale but the key was never marked", op, k)
+	if !o.staleExp[k] && !o.ageStale(k, now) {
+		o.t.Fatalf("op %d: GetAcceptStale(%s) reported stale but the key was neither marked nor aged out", op, k)
 	}
+	o.noteServe(op, k, v)
+}
+
+// noteServe enforces MonotoneServe in versioned mode: with the version
+// gate and the Commit-pin/Flush-unpin discipline, a key's served value
+// (== its version) never regresses. Explicit invalidation (Delete, Clear,
+// absent verdict) resets the floor — a sanctioned regression.
+func (o *modelOracle) noteServe(op int, k string, v int) {
+	if !o.versioned {
+		return
+	}
+	if floor, ok := o.servedFloor[k]; ok && v < floor {
+		o.t.Fatalf("op %d: MonotoneServe violated: %s served %d after %d", op, k, v, floor)
+	}
+	o.servedFloor[k] = v
 }
 
 type modelFetcher struct {
@@ -175,6 +222,7 @@ type modelFetcher struct {
 	o          *modelOracle
 	upstream   map[string]int
 	failPart   map[uint64]bool
+	dirty      map[string]int // written-not-flushed versions (versioned mode)
 	now        func() time.Time
 	fetchCalls int
 }
@@ -203,7 +251,16 @@ func (f *modelFetcher) FetchItemSinglePartition(_ context.Context, p uint64, key
 	for _, k := range keys {
 		if v, ok := f.upstream[k]; ok {
 			target.AddItem(k, v)
-			f.o.noteFreshValue(k, v)
+			// Mirror the version gate for the oracle's truth stamp: a
+			// delivery older than a pinned dirty version is REJECTED by
+			// the cache (the pin guarantees the newer copy is resident),
+			// so it must not count as a refresh. Every other delivery is
+			// admitted or equal-confirmed. Sound because AheadImpliesDirty:
+			// outside the dirty window the cache never runs ahead of the
+			// upstream, so a delivery is always >= the cached version.
+			if dv, isDirty := f.dirty[k]; !isDirty || v >= dv {
+				f.o.noteFreshValue(k, v, now)
+			}
 		} else if f.o.negTTL > 0 {
 			f.o.absentAt[k] = now
 			f.o.noteAbsentVerdict(k)
@@ -228,24 +285,46 @@ func runCacheModel(t testing.TB, src opSource) {
 	if !ok {
 		return
 	}
+	cfgVersioned, ok := src.next(2)
+	if !ok {
+		return
+	}
+	cfgFresh, ok := src.next(2)
+	if !ok {
+		return
+	}
 
 	negTTL := time.Duration(0)
 	if cfgNeg == 1 {
 		negTTL = modelAbsentTTL
 	}
+	freshTTL := time.Duration(0)
+	if cfgFresh == 1 {
+		freshTTL = modelFreshTTL
+	}
+	versioned := cfgVersioned == 1
 	criteria := [3]FetchCriteria{
 		{},
 		{MinKeys: 3},
 		{MaxKeys: 4},
 	}[cfgCrit]
 
-	oracle := newModelOracle(t, negTTL)
+	oracle := newModelOracle(t, negTTL, freshTTL, versioned)
 	now := time.Unix(10_000, 0)
+	dirty := map[string]int{} // written-not-flushed (versioned mode only)
+	// pinPlacementsOverCap counts Pin calls issued while L1 was at or over
+	// capacity. Each such pin may hoist (or hold) one entry beyond the
+	// capacity, and — when everything else is epoch-pinned — the overshoot
+	// accumulates until eviction pressure can drain it, so the sound L1
+	// bound is capacity + this monotone counter (over-counting pins on
+	// already-resident entries only loosens it).
+	pinPlacementsOverCap := 0
 	fetcher := &modelFetcher{
 		t:        t,
 		o:        oracle,
 		upstream: map[string]int{},
 		failPart: map[uint64]bool{},
+		dirty:    dirty,
 		now:      func() time.Time { return now },
 	}
 	// Seed some upstream data; the rest of the keyspace starts absent.
@@ -265,6 +344,14 @@ func runCacheModel(t testing.TB, src opSource) {
 	if negTTL > 0 {
 		opts = append(opts, WithNegativeCaching[string, int, int](negTTL))
 	}
+	if freshTTL > 0 {
+		opts = append(opts, WithFreshnessTTL[string, int, int](freshTTL))
+	}
+	if versioned {
+		// Values ARE their versions (globally increasing nextVal), exactly
+		// like the formal spec.
+		opts = append(opts, WithVersioning[string, int, int](func(v int) int64 { return int64(v) }))
+	}
 	c := NewReadThroughCache[string, int, int](modelCapacity, fetcher, criteria, opts...)
 	c.SetErrorBackoff(modelBackoff)
 	c.nowFn = func() time.Time { return now }
@@ -274,22 +361,22 @@ func runCacheModel(t testing.TB, src opSource) {
 		getCalls++
 		v, has := c.Get(k)
 		if has {
-			oracle.checkStrictHit(op, k, v)
+			oracle.checkStrictHit(op, k, v, now)
 		}
 	}
 	acceptStaleGet := func(op int, k string) {
 		getCalls++
 		v, has, stale := c.GetAcceptStale(k)
 		if has && !stale {
-			oracle.checkStrictHit(op, k, v)
+			oracle.checkStrictHit(op, k, v, now)
 		}
 		if has && stale {
-			oracle.checkStaleHit(op, k, v)
+			oracle.checkStaleHit(op, k, v, now)
 		}
 	}
 	checkGlobal := func(op int) {
-		if got := c.Len(); got > modelCapacity {
-			t.Fatalf("op %d: L1 len %d exceeds capacity %d", op, got, modelCapacity)
+		if got := c.Len(); got > modelCapacity+pinPlacementsOverCap {
+			t.Fatalf("op %d: L1 len %d exceeds capacity %d + over-cap pin placements %d", op, got, modelCapacity, pinPlacementsOverCap)
 		}
 		if got := c.StashLen(); got > modelStashCap {
 			t.Fatalf("op %d: stash len %d exceeds capacity %d", op, got, modelStashCap)
@@ -329,15 +416,29 @@ func runCacheModel(t testing.TB, src opSource) {
 		case 3:
 			acceptStaleGet(op, k)
 		case 4:
+			// Counter mode: a bare write into the cache (last-insert-wins).
+			// Versioned mode: a write-through Commit — populate + pin; the
+			// upstream catches up only at the flush op (the dirty window).
 			nextVal++
 			c.AddItem(k, nextVal)
-			oracle.noteFreshValue(k, nextVal)
+			if versioned {
+				if c.Len() >= modelCapacity {
+					pinPlacementsOverCap++
+				}
+				c.Pin(k)
+				dirty[k] = nextVal
+			}
+			oracle.noteFreshValue(k, nextVal, now)
 		case 5:
 			c.MarkAsStale(k)
 			oracle.noteMarkStale(k)
 		case 6:
-			c.Delete(k)
-			oracle.noteDelete(k)
+			// The documented write-through discipline forbids invalidating
+			// keys with unflushed local writes; the driver follows it.
+			if _, isDirty := dirty[k]; !isDirty {
+				c.Delete(k)
+				oracle.noteDelete(k)
+			}
 		case 7:
 			c.AdvanceEpoch()
 		case 8, 9:
@@ -372,20 +473,36 @@ func runCacheModel(t testing.TB, src opSource) {
 			step, _ := src.next(3)
 			now = now.Add([3]time.Duration{2 * time.Second, 20 * time.Second, 90 * time.Second}[step])
 		case 13:
-			// Mutate the upstream: new value, or make the key absent.
-			del, _ := src.next(4)
-			if del == 0 {
-				delete(fetcher.upstream, k)
+			if versioned {
+				// Flush: publish every dirty write upstream and release
+				// the pins (the recordstore Flush analog). The upstream
+				// moves only through here — single-writer discipline.
+				for dk, dv := range dirty {
+					fetcher.upstream[dk] = dv
+					c.Unpin(dk)
+					delete(dirty, dk)
+				}
 			} else {
-				nextVal++
-				fetcher.upstream[k] = nextVal
+				// Counter mode: an external writer mutates the upstream —
+				// new value, or the key disappears.
+				del, _ := src.next(4)
+				if del == 0 {
+					delete(fetcher.upstream, k)
+				} else {
+					nextVal++
+					fetcher.upstream[k] = nextVal
+				}
 			}
 		case 14:
 			p, _ := src.next(modelPartitions)
 			fetcher.failPart[uint64(p)] = !fetcher.failPart[uint64(p)]
 		case 15:
-			c.Clear()
-			oracle.noteClear()
+			// Clear drops pins too; the write-through discipline calls it
+			// only with no unflushed writes outstanding.
+			if len(dirty) == 0 {
+				c.Clear()
+				oracle.noteClear()
+			}
 		}
 		checkGlobal(op)
 	}
