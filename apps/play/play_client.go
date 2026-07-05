@@ -17,6 +17,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -31,6 +32,12 @@ type Client struct {
 	cfg  ClientConfig
 	http *http.Client
 
+	// passes supplies the registered pre-execute rewrites (ADR-0108 §SD6),
+	// e.g. LW_ID_* macro expansion. Defaults to passreg.Default — the host
+	// fills that at wiring time via passreg/defaults; tests inject their own
+	// registry here.
+	passes *passreg.Registry
+
 	// mu guards targetURL, the live endpoint. It starts at cfg.URL and can be
 	// switched at runtime via SetURL — e.g. play's endpoint switcher points at
 	// the in-process keelson introspection /query endpoint (ADR-0094 §SD6).
@@ -43,7 +50,7 @@ func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{}
 	}
-	return &Client{cfg: cfg, http: httpClient, targetURL: cfg.URL}
+	return &Client{cfg: cfg, http: httpClient, passes: passreg.Default, targetURL: cfg.URL}
 }
 
 // ExecOptions carries per-lane execution settings for ExecuteArrowStream.
@@ -138,6 +145,13 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		residual = sql
 		params = nil
 	}
+
+	// Apply the registered pre-execute rewrites (ADR-0108 §SD6) — e.g.
+	// LW_ID_* macro expansion. Best-effort, matching the fallbacks around
+	// it: a pass that fails is skipped and the SQL from before it ships
+	// instead. Only the shipped statement is rewritten; the editor and
+	// preview keep the user's original text.
+	residual = inst.passes.ApplyBestEffort(passreg.StagePreExecute, residual, log.Logger)
 
 	// Rewrite the query so it ends with `FORMAT ArrowStream`, replacing any
 	// existing FORMAT clause. Falls back to a textual append when the SQL can't

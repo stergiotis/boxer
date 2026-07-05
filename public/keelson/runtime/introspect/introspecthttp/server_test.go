@@ -22,8 +22,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -288,4 +290,63 @@ func TestServer_QuerySummaryHeader(t *testing.T) {
 	require.NoError(t, err, "result_bytes must be numeric: %q", kv["result_bytes"])
 	assert.Positive(t, rb, "result_bytes should reflect the ArrowStream size")
 	assert.Contains(t, kv, "elapsed_ns")
+}
+
+// TestServer_QueryAppliesPreExecutePasses: SQL posted to /query goes
+// through the registered pre-execute rewrites before the keelson-url
+// rewrite and the runner (ADR-0108 §SD6). A stub runner captures the SQL,
+// so no clickhouse-local is needed; the pass registry is injected so the
+// process-global passreg.Default stays untouched.
+func TestServer_QueryAppliesPreExecutePasses(t *testing.T) {
+	r := introspect.NewRegistry()
+	require.NoError(t, providers.RegisterStatic(r))
+	var gotSQL string
+	runner := RunnerFunc(func(_ context.Context, sql string) ([]byte, error) {
+		gotSQL = sql
+		return []byte("ok"), nil
+	})
+	pr := passreg.NewRegistry()
+	require.NoError(t, pr.Register(passreg.Entry{
+		Pass: nanopass.LiftBodyPass("TestRewrite", func(sql string) (string, error) {
+			return strings.Replace(sql, "SELECT 1", "SELECT 2", 1), nil
+		}, nanopass.PassProperties{Reads: nanopass.RegionBody, Writes: nanopass.RegionBody}),
+		Stage: passreg.StagePreExecute,
+	}))
+	s := New(Config{Registry: r, Runner: runner, Passes: pr}, zerolog.Nop())
+	require.NoError(t, s.Start())
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT 1"))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "SELECT 2", gotSQL)
+}
+
+// TestServer_QueryFailingPreExecutePassFallsBack: a broken registered pass
+// is skipped best-effort — the /query SQL from before it still runs.
+func TestServer_QueryFailingPreExecutePassFallsBack(t *testing.T) {
+	r := introspect.NewRegistry()
+	require.NoError(t, providers.RegisterStatic(r))
+	var gotSQL string
+	runner := RunnerFunc(func(_ context.Context, sql string) ([]byte, error) {
+		gotSQL = sql
+		return []byte("ok"), nil
+	})
+	pr := passreg.NewRegistry()
+	require.NoError(t, pr.Register(passreg.Entry{
+		Pass: nanopass.LiftBodyPass("Broken", func(string) (string, error) {
+			return "", errors.New("boom")
+		}, nanopass.PassProperties{Reads: nanopass.RegionBody, Writes: nanopass.RegionBody}),
+		Stage: passreg.StagePreExecute,
+	}))
+	s := New(Config{Registry: r, Runner: runner, Passes: pr}, zerolog.Nop())
+	require.NoError(t, s.Start())
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT 1"))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "SELECT 1", gotSQL)
 }

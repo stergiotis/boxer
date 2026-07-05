@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -350,6 +351,15 @@ func NewCommand() *cli.Command {
 				windowHostRef = host
 				renderers = append(renderers, r)
 				log.Info().Int("initialWindows", len(launchApps)).Msg("window host: started")
+			}
+
+			// ADR-0108 §SD4: register the standard SQL pass set (e.g. LW_ID_*
+			// macro expansion) into the process-wide pass registry — explicit
+			// aggregation at the wiring site, so what this process rewrites is
+			// reviewable here. Consumed by play's execute path and the
+			// introspection /query endpoint; best-effort, never blocks boot.
+			if passErr := passregdefaults.RegisterDefaults(); passErr != nil {
+				log.Warn().Err(passErr).Msg("passreg: standard pass registration failed")
 			}
 
 			// ADR-0094 §SD3/§SD4: expose keelson runtime state as ClickHouse-

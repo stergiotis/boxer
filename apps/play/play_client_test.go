@@ -3,6 +3,7 @@ package play
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,10 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 )
 
 // emptyArrowStream produces a minimal Arrow IPC byte stream so that the
@@ -207,5 +212,154 @@ func TestSetURLRoutesToNewTarget(t *testing.T) {
 	}
 	if !hitB {
 		t.Error("request did not hit the new target after SetURL")
+	}
+}
+
+// TestExecuteArrowStreamAppliesPreExecutePasses: a pass registered at
+// passreg.StagePreExecute rewrites the shipped statement (ADR-0108 §SD6),
+// composing with the FORMAT rewrite. The client's registry is injected so
+// the process-global passreg.Default stays untouched.
+func TestExecuteArrowStreamAppliesPreExecutePasses(t *testing.T) {
+	body := emptyArrowStream(t)
+
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	reg := passreg.NewRegistry()
+	if err := reg.Register(passreg.Entry{
+		Pass: nanopass.LiftBodyPass("TestRewrite", func(sql string) (string, error) {
+			return strings.Replace(sql, "SELECT 1", "SELECT 2", 1), nil
+		}, nanopass.PassProperties{Reads: nanopass.RegionBody, Writes: nanopass.RegionBody}),
+		Stage: passreg.StagePreExecute,
+	}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	c.passes = reg
+
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+
+	bs := string(gotBody)
+	if !strings.Contains(bs, "SELECT 2") {
+		t.Errorf("pre-execute pass not applied, body: %q", bs)
+	}
+	if strings.Contains(bs, "SELECT 1") {
+		t.Errorf("original statement leaked to the wire: %q", bs)
+	}
+	if !strings.Contains(bs, "FORMAT ArrowStream") {
+		t.Errorf("FORMAT rewrite lost after pre-execute pass: %q", bs)
+	}
+}
+
+// TestExecuteArrowStreamFailingPreExecutePassFallsBack: a broken registered
+// pass must not block execution — the SQL from before it ships instead.
+func TestExecuteArrowStreamFailingPreExecutePassFallsBack(t *testing.T) {
+	body := emptyArrowStream(t)
+
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	reg := passreg.NewRegistry()
+	if err := reg.Register(passreg.Entry{
+		Pass: nanopass.LiftBodyPass("Broken", func(string) (string, error) {
+			return "", errors.New("boom")
+		}, nanopass.PassProperties{Reads: nanopass.RegionBody, Writes: nanopass.RegionBody}),
+		Stage: passreg.StagePreExecute,
+	}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	c.passes = reg
+
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+
+	if !strings.Contains(string(gotBody), "SELECT 1") {
+		t.Errorf("fallback SQL missing from body: %q", string(gotBody))
+	}
+}
+
+// TestExecuteArrowStreamExpandsLwIdMacrosViaStandardSet drives the real
+// standard pass set (passreg/defaults) through the client: LW_ID_* macros
+// leave expanded, param slots survive the ExtractParams→expand ordering,
+// and a wrong-arity macro falls back to verbatim SQL (identsql→play
+// wiring, ADR-0106 §SD5 via ADR-0108 §SD6).
+func TestExecuteArrowStreamExpandsLwIdMacrosViaStandardSet(t *testing.T) {
+	body := emptyArrowStream(t)
+
+	var gotBody []byte
+	var gotURLParams url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		gotURLParams = r.URL.Query()
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	reg := passreg.NewRegistry()
+	if err := passregdefaults.RegisterStandard(reg); err != nil {
+		t.Fatalf("RegisterStandard: %v", err)
+	}
+	c.passes = reg
+
+	run := func(sql string) string {
+		t.Helper()
+		rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil)
+		if err != nil {
+			t.Fatalf("ExecuteArrowStream(%q): %v", sql, err)
+		}
+		t.Cleanup(func() { _ = closer.Close() })
+		t.Cleanup(rdr.Release)
+		return string(gotBody)
+	}
+
+	// (1) plain macro call: expanded, no LW_ID_ on the wire, still parseable.
+	bs := run(`SELECT LW_ID_BODY(id) FROM t`)
+	if strings.Contains(bs, "LW_ID_") {
+		t.Errorf("macro not expanded on the wire: %q", bs)
+	}
+	if _, err := nanopass.Parse(bs); err != nil {
+		t.Errorf("expanded wire SQL does not parse: %v (%q)", err, bs)
+	}
+
+	// (2) param slot survives: ExtractParams runs first, expansion sees the
+	// slot, and the value still rides the URL.
+	bs = run(`SET param_id = 7; SELECT LW_ID_BODY({id:UInt64})`)
+	if strings.Contains(bs, "LW_ID_") {
+		t.Errorf("macro around a param slot not expanded: %q", bs)
+	}
+	if !strings.Contains(bs, "{id") {
+		t.Errorf("param slot lost during expansion: %q", bs)
+	}
+	if got, want := gotURLParams.Get("param_id"), "7"; got != want {
+		t.Errorf("URL param_id = %q, want %q", got, want)
+	}
+
+	// (3) wrong arity is an ExpandPass error: best-effort falls back to the
+	// unexpanded SQL so the server reports the real problem to the user.
+	bs = run(`SELECT LW_ID_BODY(a, b) FROM t`)
+	if !strings.Contains(bs, "LW_ID_BODY(a, b)") {
+		t.Errorf("wrong-arity macro must ship verbatim, got: %q", bs)
 	}
 }

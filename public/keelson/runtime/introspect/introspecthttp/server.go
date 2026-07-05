@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -38,6 +39,7 @@ type Server struct {
 	log    zerolog.Logger
 	addr   string
 	runner QueryRunner
+	passes *passreg.Registry
 	srv    *http.Server
 	ln     net.Listener
 }
@@ -53,6 +55,9 @@ type Config struct {
 	// statement (FORMAT clause included) against clickhouse-local and
 	// returns the raw output. nil disables /query (it answers 503).
 	Runner QueryRunner
+	// Passes supplies the registered pre-execute rewrites applied to
+	// /query SQL (ADR-0108 §SD6); defaults to passreg.Default.
+	Passes *passreg.Registry
 }
 
 // QueryRunner executes SQL (the FORMAT clause is already part of sql) and
@@ -83,7 +88,11 @@ func New(cfg Config, log zerolog.Logger) (s *Server) {
 			addr = "127.0.0.1:0"
 		}
 	}
-	s = &Server{reg: reg, log: log, addr: addr, runner: cfg.Runner}
+	ps := cfg.Passes
+	if ps == nil {
+		ps = passreg.Default
+	}
+	s = &Server{reg: reg, log: log, addr: addr, runner: cfg.Runner, passes: ps}
 	s.srv = &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second}
 	return
 }
@@ -197,6 +206,11 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "empty query", http.StatusBadRequest)
 		return
 	}
+	// Registered pre-execute rewrites (ADR-0108 §SD6) — e.g. LW_ID_* macro
+	// expansion, which this path needs because chlocal has no LW_ID_* UDFs
+	// installed (identsql only emits them for real servers). Best-effort: a
+	// failing pass is skipped and the SQL from before it runs instead.
+	sql = s.passes.ApplyBestEffort(passreg.StagePreExecute, sql, s.log)
 	rewritten, err := keelsonsql.RewriteToURL(s.reg, s.BaseURL(), sql)
 	if err != nil {
 		// unknown keelson table / malformed macro — a client error.
