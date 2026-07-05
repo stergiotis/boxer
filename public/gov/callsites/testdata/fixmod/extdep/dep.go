@@ -1,0 +1,3 @@
+package extdep
+
+func ExtFunc() {}
