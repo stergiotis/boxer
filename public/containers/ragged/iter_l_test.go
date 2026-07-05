@@ -179,7 +179,7 @@ func TestIterate2R(t *testing.T) {
 		})
 	}
 }
-func TestIterate2RL(t *testing.T) {
+func TestIterate2LR(t *testing.T) {
 	type Pair struct {
 		ValA int
 		ValB string
@@ -244,7 +244,7 @@ func TestIterate2RL(t *testing.T) {
 			s2 := slices.Values(tt.seq2)
 
 			// Get the combined iterator
-			seq2 := Zip2RL(s1, s2)
+			seq2 := Zip2LR(s1, s2)
 
 			var result []Pair
 			count := 0

@@ -40,12 +40,12 @@ func Zip2R[A, B any](s1 []A, s2 iter.Seq[B]) iter.Seq2[A, B] {
 	}
 }
 
-// Zip2RL returns an iterator that yields pairs of values from two input iterators.
+// Zip2LR returns an iterator that yields pairs of values from two input iterators.
 // Iteration terminates when either of the input iterators is exhausted or the
 // consumer stops iteration.
-// Note that Zip2RL may be slower than Zip2L, Zip2R, Zip2 for small to medium iterators:
+// Note that Zip2LR may be slower than Zip2L, Zip2R, Zip2 for small to medium iterators:
 // you may want to use `Zip2L(seq1, slices.Collect(seq2))`.
-func Zip2RL[A, B any](s1 iter.Seq[A], s2 iter.Seq[B]) iter.Seq2[A, B] {
+func Zip2LR[A, B any](s1 iter.Seq[A], s2 iter.Seq[B]) iter.Seq2[A, B] {
 	return func(yield func(A, B) bool) {
 		next, stop := iter.Pull(s2)
 		defer stop()
