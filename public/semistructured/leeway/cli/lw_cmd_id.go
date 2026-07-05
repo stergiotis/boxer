@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/config"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/identity/fibonacci"
@@ -28,6 +29,19 @@ func NewCliCommandId() *cli.Command {
 	return &cli.Command{
 		Name: "id",
 		Subcommands: []*cli.Command{
+			{
+				Name:  "udf",
+				Usage: "print the LW_ID_* CREATE FUNCTION statements (ADR-0106 SD5) for installing the tagged-id decoders on a ClickHouse server",
+				Action: func(context *cli.Context) error {
+					for _, stmt := range identsql.UdfDdlStatements() {
+						_, err := os.Stdout.WriteString(stmt + ";\n")
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				},
+			},
 			{
 				Name: "tagvalue",
 				Subcommands: []*cli.Command{
