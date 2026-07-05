@@ -1,0 +1,5 @@
+node_modules/
+package-lock.json
+*.itf.json
+_apalache-out/
+states/
