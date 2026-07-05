@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -156,6 +157,16 @@ type PlayApp struct {
 	formatted    string
 	formattedFor string
 	formattedErr error
+
+	// "As sent" preview toggle (ADR-0108): when on, the Preview tab shows
+	// the statement Client.BuildStatement would ship — params harvested,
+	// pre-execute passes applied, FORMAT rewritten — instead of the
+	// canonical form. wireFor keys the debounced cache like formattedFor;
+	// wireParams holds the harvested URL params for the caption line.
+	previewAsSent bool
+	wireFor       string
+	wireBody      string
+	wireParams    map[string]string
 
 	// Results pagination. pagerSeenExecuted tracks the QueryStore's
 	// "executed" timestamp — when it advances, the pager snaps back to
@@ -1034,6 +1045,15 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 // so this helper just renders the latest cached output.
 func (inst *PlayApp) renderPreviewTab() {
 	ids := inst.ids
+	// The toggle renders unconditionally so the pane never reflows around
+	// it; the client-nil guard (tests, legacy CLI) only disables the wire
+	// view, not the checkbox row.
+	c.Checkbox(ids.PrepareStr("previewAsSent"), inst.previewAsSent, "As sent to server").
+		SendRespVal(&inst.previewAsSent)
+	if inst.previewAsSent {
+		inst.renderWirePreview()
+		return
+	}
 	switch {
 	case inst.formattedErr != nil:
 		for rt := range c.RichTextLabel("parse: " + inst.formattedErr.Error()) {
@@ -1051,6 +1071,40 @@ func (inst *PlayApp) renderPreviewTab() {
 	}
 }
 
+// renderWirePreview is the "as sent" body of the Preview tab: the exact
+// statement BuildStatement ships (ADR-0108 §SD6) — pre-execute passes
+// applied, FORMAT rewritten — plus a caption naming the params that ride
+// the URL instead of the body. Unlike the canonical view it renders even
+// for SQL outside Grammar1, because that is what would be POSTed.
+func (inst *PlayApp) renderWirePreview() {
+	ids := inst.ids
+	switch {
+	case inst.client == nil:
+		for rt := range c.RichTextLabel("No client in this session — the wire form is unavailable.") {
+			rt.Small().Weak()
+		}
+	case inst.wireBody == "":
+		for rt := range c.RichTextLabel("Type SQL in the Editor tab to see the statement as shipped.") {
+			rt.Small().Weak()
+		}
+	default:
+		if len(inst.wireParams) > 0 {
+			names := make([]string, 0, len(inst.wireParams))
+			for k := range inst.wireParams {
+				names = append(names, k)
+			}
+			sort.Strings(names)
+			for rt := range c.RichTextLabel("params on URL: " + strings.Join(names, ", ")) {
+				rt.Small().Weak()
+			}
+		}
+		c.CodeView(ids.PrepareStr("sqlWire"),
+			codeview.BuildSql(inst.wireBody)).
+			Wrap().
+			Send()
+	}
+}
+
 // updatePreview runs the nanopass formatting pipeline on inst.sql when the
 // buffer has been idle for previewDebounce. No-op if nothing changed or the
 // debounce window hasn't elapsed yet.
@@ -1059,6 +1113,7 @@ func (inst *PlayApp) updatePreview() {
 		inst.lastSeenSql = inst.sql
 		inst.lastEditAt = time.Now()
 	}
+	inst.updateWirePreview()
 	if inst.sql == inst.formattedFor {
 		return
 	}
@@ -1110,6 +1165,32 @@ func (inst *PlayApp) updatePreview() {
 	}
 	inst.formatted = out
 	inst.formattedErr = nil
+}
+
+// updateWirePreview keeps the "as sent" cache in sync with inst.sql on the
+// same debounce as the canonical preview. Computed only while the toggle
+// is on: BuildStatement re-parses per pass, and paying that per edit for a
+// hidden view would be waste. Toggling the checkbox on picks the current
+// buffer up on the next frame (wireFor is stale and the debounce window
+// has long elapsed).
+func (inst *PlayApp) updateWirePreview() {
+	if !inst.previewAsSent || inst.client == nil {
+		return
+	}
+	if inst.sql == inst.wireFor {
+		return
+	}
+	if time.Since(inst.lastEditAt) < previewDebounce {
+		return
+	}
+	inst.wireFor = inst.sql
+	raw := strings.TrimSpace(inst.sql)
+	if raw == "" {
+		inst.wireBody = ""
+		inst.wireParams = nil
+		return
+	}
+	inst.wireBody, inst.wireParams = inst.client.BuildStatement(raw)
 }
 
 // renderStatus is the bottom-bar status line. Per-frame snapshot values

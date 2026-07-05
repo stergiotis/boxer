@@ -224,3 +224,18 @@ Descoped, deliberately:
   the wire; with an empty registry the wire SQL is unchanged.
 - introspecthttp test: a `/query` request carrying an `LW_ID_*` call reaches
   the runner expanded, without UDFs being involved.
+
+## Update — 2026-07-05: play surfaces the "as sent" statement
+
+Play's Preview tab gained a checkbox ("As sent to server") that swaps the
+canonical-form view for the exact statement the client ships — pre-execute
+passes applied, `FORMAT` rewritten, params harvested to the URL (named in a
+caption). To guarantee the view can never drift from what executes, the
+client-side rewrite was factored into `Client.BuildStatement`, called by both
+`ExecuteArrowStream` and the preview. The wire view is computed on the same
+debounce as the canonical preview and only while the toggle is on (the rewrite
+re-parses per pass; paying that for a hidden view would be waste). Unlike the
+canonical view it renders even for SQL outside Grammar1, since that is what
+would be POSTed. `SPINNAKER_PLAY_PREVIEW_AS_SENT` starts the tab in this mode
+for scripted screenshots. This makes the otherwise-invisible pre-execute stage
+directly observable to the user, complementing the `sql_passes` catalog.

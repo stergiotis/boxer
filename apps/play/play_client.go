@@ -79,6 +79,44 @@ func newExecOptions(label string) *ExecOptions {
 	}
 }
 
+// BuildStatement performs the client-side rewrite of a raw editor buffer
+// into the statement body and URL params that ExecuteArrowStream ships:
+//
+//  1. Harvest top-level `SET param_*=...` statements (ExtractParams) so
+//     they can ride the HTTP `param_*` channel rather than being inlined —
+//     values can be larger than fits comfortably in a single SQL literal,
+//     and the typed substitution from `{name:Type}` placeholders is what
+//     ClickHouse expects this way.
+//  2. Apply the registered pre-execute rewrites (ADR-0108 §SD6) — e.g.
+//     LW_ID_* macro expansion — best-effort: a pass that fails is skipped
+//     and the SQL from before it ships instead.
+//  3. Rewrite the query so it ends with `FORMAT ArrowStream`, replacing
+//     any existing FORMAT clause; falls back to a textual append when the
+//     SQL is outside Grammar1.
+//
+// Every step degrades rather than fails, so a usable body always comes
+// back and the server reports the real problem to the user. The Preview
+// tab's "as sent" view calls this too, so what it shows can never drift
+// from what executes.
+func (inst *Client) BuildStatement(sql string) (body string, params map[string]string) {
+	residual, params, exErr := ExtractParams(sql)
+	if exErr != nil {
+		log.Debug().Err(exErr).Msg("play: ExtractParams failed, sending sql verbatim")
+		residual = sql
+		params = nil
+	}
+	residual = inst.passes.ApplyBestEffort(passreg.StagePreExecute, residual, log.Logger)
+	body, setErr := passes.SetFormat("ArrowStream").Run(residual)
+	if setErr != nil {
+		log.Debug().Err(setErr).Msg("play: SetFormat failed, falling back to textual append")
+		body = strings.TrimRight(residual, "; \t\n\r")
+		if !strings.Contains(strings.ToUpper(body), "FORMAT ") {
+			body += " FORMAT ArrowStream"
+		}
+	}
+	return
+}
+
 // URL returns the current target endpoint.
 func (inst *Client) URL() (u string) {
 	inst.mu.RLock()
@@ -133,38 +171,7 @@ func (inst *Client) SetURL(u string) {
 // opts may be nil; when set, its query_id / replace_running_query ride the URL
 // alongside the params (see ExecOptions).
 func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions) (rdr *ipc.Reader, body io.Closer, summary Summary, err error) {
-	// Harvest top-level `SET param_*=...` statements so they can ride the
-	// HTTP `param_*` channel rather than being inlined into the body — values
-	// can be larger than fits comfortably in a single SQL literal, and the
-	// typed substitution from `{name:Type}` placeholders is what ClickHouse
-	// expects this way. Failures here are non-fatal: we fall back to sending
-	// the SQL verbatim and let the server reject it if appropriate.
-	residual, params, exErr := ExtractParams(sql)
-	if exErr != nil {
-		log.Debug().Err(exErr).Msg("play: ExtractParams failed, sending sql verbatim")
-		residual = sql
-		params = nil
-	}
-
-	// Apply the registered pre-execute rewrites (ADR-0108 §SD6) — e.g.
-	// LW_ID_* macro expansion. Best-effort, matching the fallbacks around
-	// it: a pass that fails is skipped and the SQL from before it ships
-	// instead. Only the shipped statement is rewritten; the editor and
-	// preview keep the user's original text.
-	residual = inst.passes.ApplyBestEffort(passreg.StagePreExecute, residual, log.Logger)
-
-	// Rewrite the query so it ends with `FORMAT ArrowStream`, replacing any
-	// existing FORMAT clause. Falls back to a textual append when the SQL can't
-	// be parsed by the nanopass grammar — some ClickHouse surface features are
-	// outside Grammar1, and we still want to let the user POST the query.
-	q, setErr := passes.SetFormat("ArrowStream").Run(residual)
-	if setErr != nil {
-		log.Debug().Err(setErr).Msg("play: SetFormat failed, falling back to textual append")
-		q = strings.TrimRight(residual, "; \t\n\r")
-		if !strings.Contains(strings.ToUpper(q), "FORMAT ") {
-			q += " FORMAT ArrowStream"
-		}
-	}
+	q, params := inst.BuildStatement(sql)
 	// ClickHouse reads the body verbatim as SQL — params must ride the URL
 	// query string. See the function doc for size limits. The target is read
 	// once here so a concurrent SetURL never tears a request mid-build.

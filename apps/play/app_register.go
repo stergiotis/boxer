@@ -55,6 +55,12 @@ var (
 		Description: "non-empty exits the play HMI after writing SPINNAKER_PLAY_SCREENSHOT",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
+
+	PreviewAsSent = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_PREVIEW_AS_SENT",
+		Description: "non-empty starts the Preview tab in 'as sent to server' mode (post-pass wire SQL) for scripted screenshots",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
 )
 
 // PlayLauncher is the AppI wrapper for the SQL Playground. Late binding —
@@ -143,6 +149,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	inner.AutoRun = AutoRun.Get() != ""
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""
+	inner.previewAsSent = PreviewAsSent.Get() != ""
 	inner.SetCapabilities(ctx.Bus(), ctx.Storage(), ctx.Log())
 	if !envOverride {
 		// Storage restore is best-effort — silent miss leaves the
