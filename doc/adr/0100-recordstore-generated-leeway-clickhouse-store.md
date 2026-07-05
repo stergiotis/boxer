@@ -778,6 +778,33 @@ update supersedes it.
   record-level memory is bounded as soon as a streaming executor
   exists; the SD7 sketch's slice-returning `QueryArrow` is superseded.
 
+### 2026-07-04 — external-review batch 3: trimmed per-kind codec emission
+
+The last review finding: roughly half of a generated package's exported
+identifiers were per-kind marshallgen codec machinery no store consumer
+calls — and one piece of it was a live coherence bypass
+(`<Kind>BuildEntities` on `Raw()` drives entity frames past the store's
+buffered-count, dirty-key and cache-invalidation bookkeeping). The
+codec files cannot move to `internal/lowlevel` (they name the
+hand-written DTO types; the parent imports lowlevel — a cycle, the
+kill-reason recorded when lowlevel landed), so the fix is emission-side:
+
+- marshallgen gains `EmitOpts{Mode}` on `EmitPlan`/`Generate`. The zero
+  value (`EmitModeCodec`) is today's full exported codec — the product
+  for the keelson codecs and the anchor demos, whose goldens verify the
+  mode split byte-identically. `EmitModeStoreSupport` emits only what a
+  generated store consumes — `addSections`, `readRow` and their
+  constraint interfaces, kind prefix unexported (the DTO type itself
+  stays as written) — and none of `Columns`/`BuildEntities`/
+  `FillFromArrow`, so the bypass ceases to exist rather than hiding.
+- `gen.Input.FullCodecs` opts a store package back into the full
+  exported codec (the SoA batch / bus-wire path, ADR-0089 territory);
+  the default is trimmed, same polarity as `Flat`.
+
+The example package's exported surface ends at ~54 identifiers — store
+family, cache view, entity, builder and the hand-written DTOs — from
+roughly 320 before this review cycle began.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)
