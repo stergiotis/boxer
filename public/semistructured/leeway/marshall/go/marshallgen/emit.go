@@ -38,7 +38,39 @@ import (
 // / RA implementation whose method shapes satisfy the derived
 // interfaces; Go type inference at the BuildEntities / FillFromArrow
 // call site binds the type parameters from the concrete DML pointer.
-func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI) (out []byte, err error) {
+// EmitModeE selects which pieces EmitPlan renders.
+type EmitModeE uint8
+
+const (
+	// EmitModeCodec is the full exported codec — SoA <Kind>Columns,
+	// BuildEntities, FillFromArrow, AddSections, ReadRow and the
+	// constraint interfaces. The zero value; the product for the
+	// keelson codecs and the anchor demos.
+	EmitModeCodec EmitModeE = 0
+	// EmitModeStoreSupport emits only what a generated record store
+	// consumes — AddSections, ReadRow and their constraint interfaces —
+	// with the kind-derived identifier prefix unexported (the DTO type
+	// itself is the consumer's hand-written name and stays as written).
+	// No SoA Columns, no BuildEntities, no FillFromArrow (ADR-0100).
+	EmitModeStoreSupport EmitModeE = 1
+)
+
+// EmitOpts parameterizes EmitPlan. The zero value is the full codec.
+type EmitOpts struct {
+	Mode EmitModeE
+}
+
+// kindIdent renders the kind-derived identifier prefix for emitted
+// names: exported in codec mode, unexported in store-support mode.
+// Never use it for the DTO type itself.
+func kindIdent(kind string, mode EmitModeE) string {
+	if mode == EmitModeStoreSupport {
+		return lowerFirst(kind)
+	}
+	return kind
+}
+
+func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI, opts EmitOpts) (out []byte, err error) {
 	if wrapper == nil {
 		wrapper = NoOpWrapper{}
 	}
@@ -54,24 +86,60 @@ func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI) (out []byte, err 
 		return
 	}
 
-	writeColumnsStruct(&body, plan)
-	writeLenAndAppend(&body, plan)
-	writeRowExtract(&body, plan)
+	switch opts.Mode {
+	case EmitModeStoreSupport:
+		// Only what a generated record store consumes, kind prefix
+		// unexported: the constraint interfaces, AddSections and ReadRow.
+		// No SoA Columns, no BuildEntities, no FillFromArrow — driving
+		// entity frames past the store's bookkeeping is a coherence
+		// bypass there (ADR-0100).
+		groups := goplan.ComputeGroups(plan)
+		for _, g := range groups {
+			err = writeSectionInterfaces(&body, plan, g, opts.Mode)
+			if err != nil {
+				return
+			}
+		}
+		err = writeEntityInterface(&body, plan, groups, opts.Mode)
+		if err != nil {
+			return
+		}
+		err = writeAddSectionsFunc(&body, plan, groups, opts.Mode)
+		if err != nil {
+			err = eb.Build().Errorf("emit AddSections: %w", err)
+			return
+		}
+		for _, g := range groups {
+			err = writeSectionReadInterfaces(&body, plan, g, opts.Mode)
+			if err != nil {
+				return
+			}
+		}
+		err = writeReadRowHelper(&body, plan, opts.Mode)
+		if err != nil {
+			err = eb.Build().Errorf("emit ReadRow: %w", err)
+			return
+		}
+	default: // EmitModeCodec — the full exported codec.
+		writeColumnsStruct(&body, plan)
+		writeLenAndAppend(&body, plan)
+		writeRowExtract(&body, plan)
 
-	err = writeBuildHelper(&body, plan)
-	if err != nil {
-		err = eb.Build().Errorf("emit BuildEntities: %w", err)
-		return
-	}
-	err = writeFillHelper(&body, plan)
-	if err != nil {
-		err = eb.Build().Errorf("emit FillFromArrow: %w", err)
-		return
-	}
-	err = writeReadRowHelper(&body, plan)
-	if err != nil {
-		err = eb.Build().Errorf("emit ReadRow: %w", err)
-		return
+		err = writeBuildHelper(&body, plan)
+		if err != nil {
+			err = eb.Build().Errorf("emit BuildEntities: %w", err)
+			return
+		}
+		err = writeFillHelper(&body, plan)
+		if err != nil {
+			err = eb.Build().Errorf("emit FillFromArrow: %w", err)
+			return
+		}
+		err = writeReadRowHelper(&body, plan, opts.Mode)
+		if err != nil {
+			err = eb.Build().Errorf("emit ReadRow: %w", err)
+			return
+		}
 	}
 
 	err = wrapper.AfterCore(&body, plan)
@@ -82,7 +150,7 @@ func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI) (out []byte, err 
 
 	var sb strings.Builder
 	writeHeader(&sb, plan)
-	writeImports(&sb, plan, wrapper, strings.Contains(body.String(), "eb.Build("))
+	writeImports(&sb, plan, wrapper, strings.Contains(body.String(), "eb.Build("), opts.Mode)
 	sb.WriteString(body.String())
 
 	raw := []byte(sb.String())
@@ -97,13 +165,13 @@ func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI) (out []byte, err 
 // Generate is the one-call convenience: ParsePlan then EmitPlan then
 // writeFile. Returns the rendered bytes for callers that want to
 // byte-compare against a golden file.
-func Generate(inputPath, outputPath string, wrapper WrapperEmitterI) (out []byte, err error) {
+func Generate(inputPath, outputPath string, wrapper WrapperEmitterI, opts EmitOpts) (out []byte, err error) {
 	var plan *mappingplan.Plan
 	plan, err = ParsePlan(inputPath)
 	if err != nil {
 		return
 	}
-	out, err = EmitPlan(plan, wrapper)
+	out, err = EmitPlan(plan, wrapper, opts)
 	if err != nil {
 		return
 	}
@@ -140,7 +208,7 @@ func writeHeader(sb *strings.Builder, plan *mappingplan.Plan) {
 	linef(sb, 0, "package %s\n", plan.PackageName)
 }
 
-func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEmitterI, bodyUsesEB bool) {
+func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEmitterI, bodyUsesEB bool, mode EmitModeE) {
 	needsRoaring := false
 	needsTime := false
 	needsMarshalltypes := false
@@ -156,10 +224,11 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 		}
 	}
 	for _, p := range plan.PlainCols {
-		// A time.Time plain column needs the time import: read reconstructs
-		// it from Arrow nanos via time.Unix. Non-time columns (e.g. int64
-		// nanos) don't — strict 1:1 inserts no conversion.
-		if p.GoType() == "time.Time" {
+		// A time.Time plain column needs the time import: FillFromArrow
+		// reconstructs it from Arrow nanos via time.Unix — a codec-mode
+		// piece. Non-time columns (e.g. int64 nanos) don't — strict 1:1
+		// inserts no conversion.
+		if p.GoType() == "time.Time" && mode == EmitModeCodec {
 			needsTime = true
 		}
 	}
@@ -171,8 +240,9 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	// actually having a tagged field; eb on the already-emitted body actually
 	// using it (the occurrence / carrier-count checks appear only for
 	// scalar-decoded shapes — an array-only kind emits none). array + eh
-	// are unconditional — plain reads use array, BuildEntities's commit wrap
-	// uses eh.
+	// belong to codec-mode pieces only: plain reads (FillFromArrow) use
+	// array, BuildEntities's commit wrap uses eh — the store-support mode
+	// emits neither piece.
 	hasTagged := len(plan.Fields) > 0
 
 	imps := newImportSet()
@@ -190,10 +260,15 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	if needsRoaring {
 		thirdParty = append(thirdParty, `"github.com/RoaringBitmap/roaring"`)
 	}
-	thirdParty = append(thirdParty, `"github.com/apache/arrow-go/v18/arrow/array"`)
+	if mode == EmitModeCodec {
+		thirdParty = append(thirdParty, `"github.com/apache/arrow-go/v18/arrow/array"`)
+	}
 	imps.group(thirdParty...)
 
-	boxer := []string{`"github.com/stergiotis/boxer/public/observability/eh"`}
+	boxer := []string{}
+	if mode == EmitModeCodec {
+		boxer = append(boxer, `"github.com/stergiotis/boxer/public/observability/eh"`)
+	}
 	if bodyUsesEB {
 		boxer = append(boxer, `"github.com/stergiotis/boxer/public/observability/eh/eb"`)
 	}
@@ -308,9 +383,20 @@ func writeColumnsStruct(sb *strings.Builder, plan *mappingplan.Plan) {
 		linef(sb, 1, "%s []%s", p.GoField, p.GoType())
 	}
 	blank(sb)
+	seenTuple := map[string]bool{}
 	for _, f := range plan.Fields {
 		if f.IsConst {
 			continue // const fields have no Go-side storage
+		}
+		// A tuple's sub-column fields live inside the element struct; the
+		// SoA column is the outer slice-of-struct field, once per tuple
+		// (ADR-0103).
+		if f.TupleField != "" {
+			if !seenTuple[f.TupleField] {
+				seenTuple[f.TupleField] = true
+				linef(sb, 1, "%s [][]%s", f.TupleField, f.TupleStructType)
+			}
+			continue
 		}
 		switch {
 		case f.IsOption:
@@ -352,8 +438,16 @@ func writeLenAndAppend(sb *strings.Builder, plan *mappingplan.Plan) {
 	for _, p := range plan.PlainCols {
 		linef(sb, 1, "c.%s = append(c.%s, row.%s)", p.GoField, p.GoField, p.GoField)
 	}
+	seenTuple := map[string]bool{}
 	for _, f := range plan.Fields {
 		if f.IsConst {
+			continue
+		}
+		if f.TupleField != "" {
+			if !seenTuple[f.TupleField] {
+				seenTuple[f.TupleField] = true
+				linef(sb, 1, "c.%s = append(c.%s, row.%s)", f.TupleField, f.TupleField, f.TupleField)
+			}
 			continue
 		}
 		if f.IsOption {
@@ -377,8 +471,16 @@ func writeRowExtract(sb *strings.Builder, plan *mappingplan.Plan) {
 	for _, p := range plan.PlainCols {
 		linef(sb, 1, "row.%s = c.%s[i]", p.GoField, p.GoField)
 	}
+	seenTuple := map[string]bool{}
 	for _, f := range plan.Fields {
 		if f.IsConst {
+			continue
+		}
+		if f.TupleField != "" {
+			if !seenTuple[f.TupleField] {
+				seenTuple[f.TupleField] = true
+				linef(sb, 1, "row.%s = c.%s[i]", f.TupleField, f.TupleField)
+			}
 			continue
 		}
 		if f.IsOption {
@@ -462,12 +564,12 @@ func writeBuildHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	line(sb, 0, "// varies by target.\n")
 
 	for _, g := range groups {
-		err = writeSectionInterfaces(sb, plan, g)
+		err = writeSectionInterfaces(sb, plan, g, EmitModeCodec)
 		if err != nil {
 			return
 		}
 	}
-	err = writeEntityInterface(sb, plan, groups)
+	err = writeEntityInterface(sb, plan, groups, EmitModeCodec)
 	if err != nil {
 		return
 	}
@@ -475,7 +577,7 @@ func writeBuildHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	if err != nil {
 		return
 	}
-	err = writeAddSectionsFunc(sb, plan, groups)
+	err = writeAddSectionsFunc(sb, plan, groups, EmitModeCodec)
 	return
 }
 
@@ -506,8 +608,8 @@ func elemType(f mappingplan.TaggedField) string {
 // `[Self]` parameter is needed. SecI keeps `[Attr, Ent]` parameters
 // because BeginAttribute* still return Attr (caller needs the handle)
 // and EndSection returns Ent for the chain back to the entity.
-func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g goplan.SectionGroup) (err error) {
-	kind := plan.KindType
+func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g goplan.SectionGroup, mode EmitModeE) (err error) {
+	kind := kindIdent(plan.KindType, mode)
 	method := methodFor(g.Section)
 
 	// Survey which Begin* shapes and container-append the SecI / AttrI
@@ -520,7 +622,12 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 	multiSubColScalars := []argPair{}
 	multiSubColContainers := []argPair{}
 
-	if len(g.SubColumns) > 1 {
+	// A dynamic-membership tuple section (ADR-0103) drives the same
+	// per-attribute call shape — BeginAttribute(<scalars…>) + zipped
+	// co-containers — at ANY sub-column count, so it routes through the
+	// multi-sub-column survey even with a single sub-column.
+	_, isTuple := g.TupleSpec()
+	if isTuple || len(g.SubColumns) > 1 {
 		multiSubColAttr = true
 		for _, sc := range g.SubColumns {
 			// Backstops only — PlanBuilder.Finish rejects these shapes for
@@ -618,8 +725,8 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 // type parameter (no F-bounded recursion on Attr). Ent stays on the
 // EntityI (BeginEntity / SetId / SetTimestamp / SetLifecycle return
 // it; CommitEntity returns error).
-func writeEntityInterface(sb *strings.Builder, plan *mappingplan.Plan, groups []goplan.SectionGroup) (err error) {
-	kind := plan.KindType
+func writeEntityInterface(sb *strings.Builder, plan *mappingplan.Plan, groups []goplan.SectionGroup, mode EmitModeE) (err error) {
+	kind := kindIdent(plan.KindType, mode)
 
 	linef(sb, 0, "// %sEntityI lists exactly the entity-level methods %s uses.", kind, kind)
 	line(sb, 0, "// Type parameters compose the per-section Attr + Sec interfaces; Ent")
@@ -736,8 +843,8 @@ func writeBuildEntitiesFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 // entity from several components) calls it between BeginEntity and
 // CommitEntity; sections from several kinds stack on one row the way
 // marshallreflect's RowComposer stacks DTOs (ADR-0070).
-func writeAddSectionsFunc(sb *strings.Builder, plan *mappingplan.Plan, groups []goplan.SectionGroup) (err error) {
-	kind := plan.KindType
+func writeAddSectionsFunc(sb *strings.Builder, plan *mappingplan.Plan, groups []goplan.SectionGroup, mode EmitModeE) (err error) {
+	kind := kindIdent(plan.KindType, mode)
 
 	linef(sb, 0, "// %sAddSections contributes this kind's tagged sections to the OPEN", kind)
 	line(sb, 0, "// entity on dml — the BuildEntities body without the entity frame.")
@@ -756,7 +863,7 @@ func writeAddSectionsFunc(sb *strings.Builder, plan *mappingplan.Plan, groups []
 	}
 	line(sb, 2, "Ent,")
 	line(sb, 1, "],")
-	linef(sb, 0, "](dml DML, row %s) (err error) {", kind)
+	linef(sb, 0, "](dml DML, row %s) (err error) {", plan.KindType)
 
 	for _, g := range groups {
 		err = writeSectionDriver(sb, g, rowValueSrc())
@@ -806,6 +913,11 @@ func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup, src valueSrc
 	linef(sb, 2, "// --- %s. ---", g.Section)
 	linef(sb, 2, "%s := dml.GetSection%s()", secVar, method)
 
+	if ts, ok := g.TupleSpec(); ok {
+		writeTupleSectionDriver(sb, g, ts, secVar, src)
+		linef(sb, 2, "%s.EndSection()", secVar)
+		return
+	}
 	if len(g.SubColumns) > 1 {
 		err = writeMultiSubColumnDriver(sb, g, secVar, src)
 		if err != nil {
@@ -822,6 +934,62 @@ func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup, src valueSrc
 	}
 	linef(sb, 2, "%s.EndSection()", secVar)
 	return
+}
+
+// writeTupleSectionDriver emits the write driver for a dynamic-membership
+// tuple section (ADR-0103): one attribute per element of the outer slice,
+// in element order — BeginAttribute(<scalar sub-columns…>), the zipped
+// co-containers, the element's own membership via the verbatim channel,
+// EndAttributeP. The per-element call sequence is the multi-sub-column
+// sequence (ADR-0101 D4); marshallreflect.marshalTupleSection mirrors it
+// exactly (byte-identity). An element always emits — its presence in the
+// slice is the signal, there is no per-element splice — and the
+// per-element zip-length guard surfaces mis-zipped co-containers as an
+// error, never silent truncation.
+func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts goplan.TupleSpec, secVar string, src valueSrc) {
+	scalars := g.ScalarSubColumns()
+	containers := g.ContainerSubColumns()
+	elemVar := secVar + "Elem"
+	attrVar := secVar + "Attr"
+	// Element fields are reached through the loop variable; reusing the
+	// valueSrc contract lets the scalar / blob render helpers apply
+	// unchanged. Options cannot occur inside a tuple (PlanBuilder).
+	elemSrc := valueSrc{
+		field:     func(goField string) string { return elemVar + "." + goField },
+		rowErrCtx: src.rowErrCtx,
+	}
+
+	linef(sb, 2, "for _, %s := range %s {", elemVar, src.field(ts.GoField))
+	if len(containers) > 1 {
+		for _, sc := range containers[1:] {
+			linef(sb, 3, "if len(%s) != len(%s) {", elemSrc.field(sc.Fields[0].GoFieldName), elemSrc.field(containers[0].Fields[0].GoFieldName))
+			linef(sb, 4, "err = eb.Build()%s.Str(\"section\", %q).Str(\"field\", %q).Errorf(\"co-container slices have different lengths\")", src.rowErrCtx, g.Section, sc.Fields[0].GoFieldName)
+			line(sb, 4, "return")
+			line(sb, 3, "}")
+		}
+	}
+	args := make([]string, 0, len(scalars))
+	for _, sc := range scalars {
+		args = append(args, scalarValueExpr(sc.Fields[0], elemSrc))
+	}
+	linef(sb, 3, "%s := %s.BeginAttribute(%s)", attrVar, secVar, strings.Join(args, ", "))
+	if len(containers) > 0 {
+		elems := make([]string, 0, len(containers))
+		for _, sc := range containers {
+			f := sc.Fields[0]
+			elems = append(elems, sliceElemExpr(f, elemSrc.field(f.GoFieldName)+"[k]"))
+		}
+		linef(sb, 3, "for k := range %s {", elemSrc.field(containers[0].Fields[0].GoFieldName))
+		linef(sb, 4, "%s.%sP(%s)", attrVar, goplan.ContainerAddMethod(len(containers)), strings.Join(elems, ", "))
+		line(sb, 3, "}")
+	}
+	membExpr := elemSrc.field(ts.MembField)
+	if ts.MembGoType == "string" {
+		membExpr = "[]byte(" + membExpr + ")"
+	}
+	linef(sb, 3, "%s.AddMembership%sP(%s)", attrVar, ts.Channel.AddMethodSuffix(), membExpr)
+	linef(sb, 3, "%s.EndAttributeP()", attrVar)
+	line(sb, 2, "}")
 }
 
 func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVar string, src valueSrc) (err error) {
@@ -1068,7 +1236,7 @@ func writeFillHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	blank(sb)
 
 	for _, g := range groups {
-		err = writeSectionReadInterfaces(sb, plan, g)
+		err = writeSectionReadInterfaces(sb, plan, g, EmitModeCodec)
 		if err != nil {
 			return
 		}
@@ -1081,8 +1249,8 @@ func writeFillHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 // section read interfaces (one accessor per sub-column).
 type argPair struct{ Name, Type string }
 
-func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g goplan.SectionGroup) (err error) {
-	kind := plan.KindType
+func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g goplan.SectionGroup, mode EmitModeE) (err error) {
+	kind := kindIdent(plan.KindType, mode)
 	method := methodFor(g.Section)
 
 	// Classify which read-side accessors this DTO's fields require for
@@ -1115,7 +1283,11 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 
 	linef(sb, 0, "// %s%sAttrsReadI is the Attributes-side view of the %s section.", kind, method, g.Section)
 	linef(sb, 0, "type %s%sAttrsReadI interface {", kind, method)
-	if len(g.SubColumns) > 1 {
+	// A tuple section reads every sub-column through its own named
+	// accessor at any sub-column count (its decode addresses columns by
+	// name, and a lone sub-column may not be named "value") — ADR-0103.
+	_, isTuple := g.TupleSpec()
+	if isTuple || len(g.SubColumns) > 1 {
 		// Per-sub-column accessor, each shaped to its own subtype: scalar
 		// sub-columns read the value directly, container sub-columns drain
 		// an iter.Seq (the RA generator emits exactly this pair of shapes).
@@ -1247,6 +1419,11 @@ func writeSectionDecode(sb *strings.Builder, g goplan.SectionGroup) (err error) 
 
 	linef(sb, 2, "// --- %s. ---", g.Section)
 
+	if ts, ok := g.TupleSpec(); ok {
+		writeTupleSectionDecode(sb, g, ts, attrsVar, membsVar, prefix)
+		return
+	}
+
 	if len(g.SubColumns) > 1 {
 		return writeMultiSubColumnDecode(sb, g, attrsVar, membsVar, prefix)
 	}
@@ -1260,6 +1437,62 @@ func writeSectionDecode(sb *strings.Builder, g goplan.SectionGroup) (err error) 
 		writeFieldAppend(sb, f, prefix)
 	}
 	return
+}
+
+// writeTupleSectionDecode emits the FillFromArrow decode of a
+// dynamic-membership tuple section (ADR-0103). Every attribute of the row
+// belongs to the tuple field (PlanBuilder.Finish guarantees the section
+// carries no other field), so there is no membership match: each
+// attribute appends one element per membership value it carries
+// (codec-written wire carries exactly one), in wire order, with the
+// membership value decoded into the element's membership field. Zero
+// attributes decode to a nil element slice.
+func writeTupleSectionDecode(sb *strings.Builder, g goplan.SectionGroup, ts goplan.TupleSpec, attrsVar, membsVar, prefix string) {
+	elemsVar := prefix + ts.GoField + "Elems"
+	linef(sb, 2, "var %s []%s", elemsVar, ts.StructType)
+	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
+	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
+	for _, sc := range g.SubColumns {
+		f := sc.Fields[0]
+		localVar := prefix + f.GoFieldName + "Local"
+		accessor := fmt.Sprintf("%s.GetAttrValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.UpperFirst(sc.Name))
+		if !f.IsSlice() {
+			// Scalar sub-column: read with the field's copy strategy — the
+			// element is retained inside the tuple slice, so a []byte value
+			// must not alias the reused Arrow buffer.
+			linef(sb, 3, "var %s %s", localVar, f.GoType())
+			writeCarrierValueRead(sb, 3, f, localVar, accessor)
+			continue
+		}
+		// Container sub-column: drain the per-attribute Seq into a fresh
+		// slice (nil for an empty container — an N = 0 attribute reads
+		// back as a nil slice, ADR-0101 D5).
+		linef(sb, 3, "var %s []%s", localVar, f.GoType())
+		linef(sb, 3, "for v := range %s {", accessor)
+		if goplan.CopyStrategy(f.GoType()) == goplan.CopyBytes {
+			line(sb, 4, "cp := make([]byte, len(v))")
+			line(sb, 4, "copy(cp, v)")
+			linef(sb, 4, "%s = append(%s, cp)", localVar, localVar)
+		} else {
+			linef(sb, 4, "%s = append(%s, v)", localVar, localVar)
+		}
+		line(sb, 3, "}")
+	}
+	linef(sb, 3, "for membBytes := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, ts.Channel.AddMethodSuffix())
+	membConv := "string(membBytes)"
+	if ts.MembGoType == "[]byte" {
+		membConv = "append([]byte(nil), membBytes...)"
+	}
+	linef(sb, 4, "%s = append(%s, %s{", elemsVar, elemsVar, ts.StructType)
+	linef(sb, 5, "%s: %s,", ts.MembField, membConv)
+	for _, sc := range g.SubColumns {
+		f := sc.Fields[0]
+		linef(sb, 5, "%s: %s%sLocal,", f.GoFieldName, prefix, f.GoFieldName)
+	}
+	line(sb, 4, "})")
+	line(sb, 3, "}")
+	line(sb, 2, "}")
+	linef(sb, 2, "c.%s = append(c.%s, %s)", ts.GoField, ts.GoField, elemsVar)
 }
 
 // writeSectionMatchLoops emits the shared middle of a non-carrier
@@ -1690,6 +1923,9 @@ func ReadRowSupported(plan *mappingplan.Plan) (ok bool, reason string) {
 		return false, "plain-only kind (no tagged sections)"
 	}
 	for _, f := range plan.Fields {
+		if f.TupleField != "" {
+			return false, fmt.Sprintf("field %s is a dynamic-membership tuple", f.TupleField)
+		}
 		if f.Flags.Channel.UsesCarrier() {
 			return false, fmt.Sprintf("field %s uses a carrier channel", f.GoFieldName)
 		}
@@ -1708,15 +1944,15 @@ func ReadRowSupported(plan *mappingplan.Plan) (ok bool, reason string) {
 // present=false; a duplicated scalar field is an error, while duplicated
 // container memberships concatenate. Fields bound to plain columns are
 // left at their zero value — the caller owns the envelope.
-func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
-	kind := plan.KindType
+func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan, mode EmitModeE) (err error) {
+	kind := kindIdent(plan.KindType, mode)
 	if ok, reason := ReadRowSupported(plan); !ok {
 		linef(sb, 0, "// %sReadRow is not emitted: %s.\n", kind, reason)
 		return
 	}
 	groups := goplan.ComputeGroups(plan)
 
-	linef(sb, 0, "// %sReadRow reads row i as one optional %s component: presence-", kind, kind)
+	linef(sb, 0, "// %sReadRow reads row i as one optional %s component: presence-", kind, plan.KindType)
 	line(sb, 0, "// gated (a row carrying none of the kind's memberships yields")
 	line(sb, 0, "// present=false), membership-matched. A duplicated scalar field is")
 	line(sb, 0, "// an error; duplicated container memberships concatenate. Plain-")
@@ -1736,7 +1972,7 @@ func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan) (err error)
 		linef(sb, 1, "%sAttrs %sAttrs,", lowerFirst(method), method)
 		linef(sb, 1, "%sMembs %sMembs,", lowerFirst(method), method)
 	}
-	linef(sb, 0, ") (row %s, present bool, err error) {", kind)
+	linef(sb, 0, ") (row %s, present bool, err error) {", plan.KindType)
 
 	for _, g := range groups {
 		method := methodFor(g.Section)

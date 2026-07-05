@@ -72,7 +72,7 @@ func TestGenerateDroneDDL(t *testing.T) {
 
 // TestGenerateDroneDTOCodec emits the marshallgen codec for DroneEntity.
 func TestGenerateDroneDTOCodec(t *testing.T) {
-	_, err := marshallgen.Generate("./dto.go", "./dto.out.go", marshallgen.NoOpWrapper{})
+	_, err := marshallgen.Generate("./dto.go", "./dto.out.go", marshallgen.NoOpWrapper{}, marshallgen.EmitOpts{})
 	require.NoError(t, err)
 }
 

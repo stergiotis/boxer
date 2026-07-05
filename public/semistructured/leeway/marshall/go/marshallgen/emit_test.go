@@ -31,7 +31,7 @@ func generateMay(t *testing.T, src string) (string, error) {
 	if err := os.WriteFile(in, []byte(src), 0644); err != nil {
 		t.Fatal(err)
 	}
-	out, err := marshallgen.Generate(in, "", marshallgen.NoOpWrapper{})
+	out, err := marshallgen.Generate(in, "", marshallgen.NoOpWrapper{}, marshallgen.EmitOpts{})
 	return string(out), err
 }
 
@@ -716,10 +716,10 @@ type MyDTO struct {
 }
 
 func TestEmit_MixedSubColumns_SingleContainer(t *testing.T) {
-	// facts11 canonical shape (S >= 1, C = 1): the DML method is
-	// AddToContainerP per the count rule (ADR-0101 SD3), and no zip guard
-	// is emitted for a lone container. `[]uint8` is `[]byte` (blob lane);
-	// `,ct=u8h` selects the u8-array lane explicitly (ADR-0101 OQ2).
+	// The scalars-plus-one-container shape (S >= 1, C = 1): the DML method
+	// is AddToContainerP per the count rule (ADR-0101 SD3), and no zip
+	// guard is emitted for a lone container. `[]uint8` is `[]byte` (blob
+	// lane); `,ct=u8h` selects the u8-array lane explicitly (ADR-0101 OQ2).
 	out := generate(t, `package demo
 type MyDTO struct {
 	_        struct{} `+"`kind:\"my\"`"+`
@@ -858,5 +858,143 @@ type MyDTO struct {
 		if !strings.Contains(err.Error(), "may only relabel, not reshape") {
 			t.Fatalf("%s: expected reshape error, got: %v", name, err)
 		}
+	}
+}
+
+func TestEmit_TupleSection_MixedShape(t *testing.T) {
+	// Dynamic-membership tuple (ADR-0103) over a mixed-shape section: a
+	// slice-of-struct field emits one attribute per element, each with
+	// its own verbatim membership from the element's `@membership` field.
+	out := generate(t, `package demo
+type LabeledText struct {
+	Label string   `+"`lw:\"@membership,verbatim\"`"+`
+	Text  string   `+"`lw:\"text:text\"`"+`
+	WL    []uint32 `+"`lw:\"text:wordLength\"`"+`
+	WB    []string `+"`lw:\"text:wordBag\"`"+`
+}
+type MyDTO struct {
+	_     struct{}      `+"`kind:\"my\"`"+`
+	Id    uint64        `+"`lw:\",id\"`"+`
+	Texts []LabeledText `+"`lw:\"text\"`"+`
+}
+`)
+	parseGo(t, out)
+	// SoA storage: one outer column for the tuple, none per sub-field.
+	mustContain(t, out, "Texts [][]LabeledText")
+	mustNotContain(t, out, "WL [][]uint32")
+	// Write side: per-element loop, zip guard, per-element membership.
+	mustContain(t, out, "BeginAttribute(text string) Attr")
+	mustContain(t, out, "AddToCoContainersP(wordLength uint32, wordBag string)")
+	mustContain(t, out, "dmlruntime.InAttributeMembershipLowCardVerbatimPI")
+	mustContain(t, out, "for _, textSecElem := range c.Texts[i] {")
+	mustContain(t, out, "if len(textSecElem.WB) != len(textSecElem.WL) {")
+	mustContain(t, out, "co-container slices have different lengths")
+	mustContain(t, out, ".AddToCoContainersP(textSecElem.WL[k], textSecElem.WB[k])")
+	mustContain(t, out, ".AddMembershipLowCardVerbatimP([]byte(textSecElem.Label))")
+	// Read side: per-sub-column accessors + one element appended per
+	// membership value, membership decoded into the element field.
+	mustContain(t, out, "GetAttrValueText(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string")
+	mustContain(t, out, "GetAttrValueWordLength(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint32]")
+	mustContain(t, out, "for membBytes := range textMembs.GetMembValueLowCardVerbatim(")
+	mustContain(t, out, "Label: string(membBytes),")
+	mustContain(t, out, "c.Texts = append(c.Texts, textTextsElems)")
+	// ReadRow does not cover tuple kinds (like carriers / explode).
+	mustContain(t, out, "MyDTOReadRow is not emitted: field Texts is a dynamic-membership tuple")
+	// No static membership emit leaks into the tuple driver.
+	mustNotContain(t, out, `AddMembershipLowCardVerbatimP([]byte(""))`)
+}
+
+func TestEmit_TupleSection_SingleSubColumnAndBytesMembership(t *testing.T) {
+	// The tuple form is not bound to multi-sub-column sections (S + C >= 1
+	// suffices) and the membership field may be a []byte (no conversion
+	// on write, copied on read).
+	out := generate(t, `package demo
+type Tag struct {
+	Label []byte `+"`lw:\"@membership,verbatim\"`"+`
+	Value string `+"`lw:\"symbol\"`"+`
+}
+type MyDTO struct {
+	_    struct{} `+"`kind:\"my\"`"+`
+	Id   uint64   `+"`lw:\",id\"`"+`
+	Tags []Tag    `+"`lw:\"symbol\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "Tags [][]Tag")
+	mustContain(t, out, "BeginAttribute(value string) Attr")
+	mustContain(t, out, "for _, symbolSecElem := range c.Tags[i] {")
+	mustContain(t, out, ".AddMembershipLowCardVerbatimP(symbolSecElem.Label)")
+	// Single sub-column still reads through its named accessor.
+	mustContain(t, out, "GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string")
+	mustContain(t, out, "Label: append([]byte(nil), membBytes...),")
+	mustNotContain(t, out, ".AddToContainerP(")
+	mustNotContain(t, out, "co-container slices have different lengths")
+}
+
+func TestParse_TupleRejections_ASTFrontEnd(t *testing.T) {
+	// The go/ast front-end routes tuple element structs through the same
+	// shared builder as the reflect front-end — one representative
+	// rejection proves the wiring; the full matrix lives in
+	// marshallreflect_test (both front-ends share the rules).
+	_, err := generateMay(t, `package demo
+type Tag struct {
+	Label  string `+"`lw:\"@membership,verbatim\"`"+`
+	Label2 string `+"`lw:\"@membership,verbatim\"`"+`
+	Value  string `+"`lw:\"symbol\"`"+`
+}
+type MyDTO struct {
+	_    struct{} `+"`kind:\"my\"`"+`
+	Id   uint64   `+"`lw:\",id\"`"+`
+	Tags []Tag    `+"`lw:\"symbol\"`"+`
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "second `@membership` field") {
+		t.Fatalf("want second-membership rejection, got: %v", err)
+	}
+
+	// A struct that is neither the DTO nor a referenced tuple element
+	// keeps the one-DTO-per-file discipline.
+	_, err = generateMay(t, `package demo
+type Stray struct {
+	X string `+"`lw:\"m,symbol\"`"+`
+}
+type MyDTO struct {
+	_  struct{} `+"`kind:\"my\"`"+`
+	Id uint64   `+"`lw:\",id\"`"+`
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "neither the DTO nor referenced as a tuple element") {
+		t.Fatalf("want stray-struct rejection, got: %v", err)
+	}
+
+	// With several structs, exactly one must carry the kind field.
+	_, err = generateMay(t, `package demo
+type A struct {
+	_  struct{} `+"`kind:\"a\"`"+`
+	Id uint64   `+"`lw:\",id\"`"+`
+}
+type B struct {
+	_  struct{} `+"`kind:\"b\"`"+`
+	Id uint64   `+"`lw:\",id\"`"+`
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "more than one struct carries a `_` kind field") {
+		t.Fatalf("want two-kind rejection, got: %v", err)
+	}
+
+	// Unexported tuple element fields are rejected (reflect parity).
+	_, err = generateMay(t, `package demo
+type Tag struct {
+	Label string `+"`lw:\"@membership,verbatim\"`"+`
+	value string `+"`lw:\"symbol\"`"+`
+}
+type MyDTO struct {
+	_    struct{} `+"`kind:\"my\"`"+`
+	Id   uint64   `+"`lw:\",id\"`"+`
+	Tags []Tag    `+"`lw:\"symbol\"`"+`
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "unexported tuple element field") {
+		t.Fatalf("want unexported-element rejection, got: %v", err)
 	}
 }

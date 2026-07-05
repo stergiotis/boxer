@@ -47,7 +47,7 @@ func (FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err erro
 	if err = checkRefMembershipsAreIdentifiers(plan); err != nil {
 		return
 	}
-	out, err = marshallgen.EmitPlan(plan, FactsWrapper{})
+	out, err = marshallgen.EmitPlan(plan, FactsWrapper{}, marshallgen.EmitOpts{})
 	if err != nil {
 		return
 	}

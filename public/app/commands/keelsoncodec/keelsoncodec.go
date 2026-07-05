@@ -52,7 +52,7 @@ func NewCliCommand() *cli.Command {
 				case "", "facts":
 					_, gerr = factswrapper.FactsWrapper{}.Generate(inputPath, outputPath)
 				case "anchor":
-					_, gerr = marshallgen.Generate(inputPath, outputPath, marshallgen.NoOpWrapper{})
+					_, gerr = marshallgen.Generate(inputPath, outputPath, marshallgen.NoOpWrapper{}, marshallgen.EmitOpts{})
 				default:
 					return eh.Errorf("unknown target %q (want facts|anchor)", target)
 				}

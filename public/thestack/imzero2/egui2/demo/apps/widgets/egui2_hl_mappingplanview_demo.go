@@ -117,9 +117,14 @@ func (st *mappingPlanViewDemoState) recompute(m *mappingplanview.Model) {
 	br := mappingplanview.BuildResult{FirstFailIdx: -1}
 	for i, r := range m.Fields {
 		var err error
-		if r.IsConst {
+		switch {
+		case r.IsTuple:
+			// Dynamic-membership tuple (ADR-0103): the whole slice-of-struct
+			// field is ONE builder call, elements included.
+			err = b.AddTupleSliceField(r.GoField, r.LWTag(), r.TupleStructType, r.TupleElemSpecs())
+		case r.IsConst:
 			err = b.AddUnderscoreField("", "", r.LWTag())
-		} else {
+		default:
 			err = b.AddField(r.GoField, r.LWTag(), r.Shape())
 		}
 		if err != nil {
@@ -147,7 +152,7 @@ func (st *mappingPlanViewDemoState) recompute(m *mappingplanview.Model) {
 		m.SetInvalid(br.FinishErr)
 		return
 	}
-	goSrc, err := marshallgen.EmitPlan(plan, marshallgen.NoOpWrapper{})
+	goSrc, err := marshallgen.EmitPlan(plan, marshallgen.NoOpWrapper{}, marshallgen.EmitOpts{})
 	if err != nil {
 		m.SetInvalid(err)
 		return
@@ -179,6 +184,21 @@ func (st *mappingPlanViewDemoState) recompute(m *mappingplanview.Model) {
 // read-back generated (true) or is unavailable for this plan (false) — the
 // plan-level FSM's Queryable vs SchemaMismatch signal.
 func (st *mappingPlanViewDemoState) sqlOutputs(plan *mappingplan.Plan) ([]mappingplanview.Output, bool) {
+	// The dql read-back is membership-addressed (ADR-0066): it locates values
+	// by static membership. A dynamic-membership tuple (ADR-0103) carries its
+	// memberships as per-row data, so no static read-back SQL exists — say so
+	// precisely instead of surfacing the resolver's empty-membership error.
+	for _, f := range plan.Fields {
+		if f.TupleField != "" {
+			return []mappingplanview.Output{{
+				TabID: 3, Title: "SQL", Lang: mappingplanview.LangSQL,
+				Source: "-- SQL read-back is membership-addressed (ADR-0066): it locates values\n" +
+					"-- by their static membership. The dynamic-membership tuple field `" + f.TupleField + "`\n" +
+					"-- (ADR-0103) carries its memberships as per-row DATA, so no static\n" +
+					"-- read-back SQL exists for this plan.",
+			}}, false
+		}
+	}
 	if st.ir == nil {
 		msg := "-- SQL read-back preview unavailable: anchor example schema failed to load."
 		if st.irErr != nil {
