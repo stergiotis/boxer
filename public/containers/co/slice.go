@@ -177,28 +177,33 @@ func InsertSliceSorted[K cmp.Ordered, V any](sortedSliceReadIn []K, coSliceWrite
 	}
 	return
 }
+// CoIterateFilter yields, for every element of s1 equal to v, the
+// source index i and the co-indexed value s2[i], in source order.
+// Requires len(s2) >= len(s1): a shorter s2 panics at the first match
+// beyond its length.
 func CoIterateFilter[K comparable, V any](s1 []K, v K, s2 []V) iter.Seq2[int, V] {
 	return func(yield func(int, V) bool) {
-		n := 0
 		for i, u := range s1 {
 			if u == v {
-				if !yield(n, s2[i]) {
+				if !yield(i, s2[i]) {
 					return
 				}
-				n++
 			}
 		}
 	}
 }
+
+// CoIterateFilterFunc yields, for every element of s1 accepted by
+// filterFunc, the source index i and the co-indexed value s2[i], in
+// source order. Requires len(s2) >= len(s1): a shorter s2 panics at the
+// first match beyond its length.
 func CoIterateFilterFunc[K any, V any](s1 []K, filterFunc func(a K) (keep bool), s2 []V) iter.Seq2[int, V] {
 	return func(yield func(int, V) bool) {
-		n := 0
 		for i, u := range s1 {
 			if filterFunc(u) {
-				if !yield(n, s2[i]) {
+				if !yield(i, s2[i]) {
 					return
 				}
-				n++
 			}
 		}
 	}

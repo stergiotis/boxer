@@ -144,3 +144,28 @@ func TestCoIterateFilterFunc(t *testing.T) {
 		return
 	}, b))))
 }
+
+// The int component is the SOURCE index into s1/s2, not a match ordinal
+// (containers review 2026-07-05).
+func TestCoIterateFilter_YieldsSourceIndex(t *testing.T) {
+	keys := []int{7, 0, 7, 1, 7}
+	vals := []string{"a", "b", "c", "d", "e"}
+	var idxs []int
+	var vs []string
+	for i, v := range CoIterateFilter(keys, 7, vals) {
+		idxs = append(idxs, i)
+		vs = append(vs, v)
+	}
+	require.Equal(t, []int{0, 2, 4}, idxs)
+	require.Equal(t, []string{"a", "c", "e"}, vs)
+}
+
+func TestCoIterateFilterFunc_YieldsSourceIndex(t *testing.T) {
+	keys := []int{0, 1, 2, 3}
+	vals := []string{"zero", "one", "two", "three"}
+	var idxs []int
+	for i := range CoIterateFilterFunc(keys, func(a int) (keep bool) { return a%2 == 1 }, vals) {
+		idxs = append(idxs, i)
+	}
+	require.Equal(t, []int{1, 3}, idxs)
+}
