@@ -265,7 +265,45 @@ Accepted — 2026-07-05 (reviewed by @spx). Implemented so far:
   cannot be returned and an empty abort would burn the space unmapped; the
   in-memory backend still pre-checks exactly and assigns nothing. Exhaustion
   is tested end to end through the 2^17-1-body widest-uint32 tags.
+- Slice 4 (SD5): `public/identity/identsql` — the macro expansion pass and
+  the emitted UDFs, golden-locked against the Go split (see the 2026-07-05
+  update below for the naming change and the server quirks the harness
+  caught).
 
-Slices 4–6 are pending. The SD2 decoder and the defect inventory in Context
-were validated by an uncommitted review harness, to be recreated as committed
-tests by slice 4.
+Slices 5–6 are pending.
+
+## Update — 2026-07-05: SD5 delivered as `identsql`; names are upper snake case
+
+The macro/UDF family shipped in `public/identity/identsql` with the names in
+UPPER_SNAKE_CASE — `LW_ID_TAG_BITS`, `LW_ID_BODY`, `LW_ID_TAG_VALUE`,
+`LW_ID_TAG_WIDTH`, `LW_ID_HAS_TAG` — superseding SD5's lowerCamel spellings
+(reviewer decision). Matching in SQL stays case- and quoting-insensitive; the
+emitted `CREATE OR REPLACE FUNCTION` statements use the exact spellings. One
+name was added beyond SD5: `LW_ID_IS_VALID`, giving SQL the same invalid-id
+reporting SD2 requires of both implementations (every macro returns 0 for a
+comma-less id, matching the Go methods).
+
+Delivery notes:
+
+- The expansion targets arbitrary column expressions, so it is a dedicated
+  nanopass (`identsql.ExpandPass`, fixpoint for nested calls), not a
+  `MacroExpander` registration (which requires literal-reducible arguments).
+  `LW_ID_HAS_TAG` with a constant tag value folds at expansion time into the
+  sargable BETWEEN over the tag's id range — no bit arithmetic reaches the
+  query; with a non-constant tag value it falls back to decode-and-compare,
+  guarded so tag value 0 never matches an invalid id.
+- The width recovery uses `roundToExp2` + `bitCount` (verified integer-exact
+  at the 2^63 boundary) since ClickHouse has no leading-zeros builtin; the
+  Zeckendorf weight table carries all of F(2)..F(64) because out-of-range
+  `arrayElement` returns 0, which would decode adversarial wide-width ids to
+  a wrong non-zero value instead of tripping the >uint32 invalid guard.
+- The committed server-truth goldens (2,529 ids: every width class 2–47,
+  fibonacci boundaries, structured invalids, 500 random uint64s; macro and
+  UDF variants both) caught two ClickHouse 26.6 quirks the expressions now
+  design around: `UInt64 - 1` widens to Int64, whose `bitNot` goes negative
+  and flips value comparisons; and `bitShiftRight` silently returns its input
+  unshifted when the shift amount is a signed type. Masks are therefore built
+  shift-only with the shift amount forced to UInt8.
+- Wiring the `CREATE FUNCTION` emission into the leeway DDL generator is
+  deferred until a consumer applies DDL there; `identsql.UdfDdlStatements()`
+  is the seam.
