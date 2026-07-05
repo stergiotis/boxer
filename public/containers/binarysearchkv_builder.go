@@ -92,6 +92,10 @@ func (b *BinarySearchGrowingKVBuilder[K, V]) StageSeq(pairs iter.Seq2[K, V]) {
 // Len returns the raw count of staged inserts. Duplicate keys are not
 // collapsed at this point, so the value can exceed
 // Freeze().Len(). Useful for sizing decisions before Freeze.
+//
+// After Freeze the value is meaningless: it still reports the raw
+// staged count, but the backing slices belong to the frozen container,
+// which has compacted them.
 func (b *BinarySearchGrowingKVBuilder[K, V]) Len() int {
 	return len(b.keys)
 }

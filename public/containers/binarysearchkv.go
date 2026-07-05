@@ -329,6 +329,14 @@ func (inst *BinarySearchGrowingKV[K, V]) GetDefault(key K, defaultV V) (val V) {
 	}
 	return
 }
+
+// MergeValue combines an incoming value with the resident one: when key
+// is present, the stored value becomes merge(old, val) — old is the
+// resident value, val the incoming one — and the resident key spelling
+// is kept; when absent, (key, val) is inserted without calling merge.
+// Returns whether the key was already present. Any deferred UpsertBatch
+// state is flushed first, so merge sees the compacted (newest) resident
+// value. O(log N) lookup + O(N) shift on insert.
 func (inst *BinarySearchGrowingKV[K, V]) MergeValue(key K, val V, merge func(old V, new V) V) (existed bool) {
 	inst.ensureSorted()
 	_, existed, inst.keys, inst.vals = co.MergeSliceSorted(inst.keys, inst.vals, key, val, inst.cmpKey, merge)
@@ -467,6 +475,13 @@ func (inst *BinarySearchGrowingKV[K, V]) Reset() {
 	inst.keys = inst.keys[:0]
 	inst.vals = inst.vals[:0]
 }
+
+// IterateMergedBinarySearchGrowingKVKeys yields the union of both
+// containers' keys in ascending order, each key once (a's spelling wins
+// on ties). Both containers must be non-nil and must sort equivalently
+// under a's comparator — the merge walks both key slices with a.cmpKey,
+// so containers built with incompatible comparators produce meaningless
+// output. Flush semantics as in [BinarySearchGrowingKV.IterateKeys].
 func IterateMergedBinarySearchGrowingKVKeys[K any, V any, W any](a *BinarySearchGrowingKV[K, V], b *BinarySearchGrowingKV[K, W]) iter.Seq[K] {
 	return func(yield func(K) bool) {
 		a.ensureSorted()
@@ -477,9 +492,17 @@ func IterateMergedBinarySearchGrowingKVKeys[K any, V any, W any](a *BinarySearch
 
 var _ sort.Interface = bskvSortInterface[any, any]{}
 
+// IterateSortedUniqueOrderedUnique is [IterateSortedUniqueFuncUnique]
+// with the natural cmp.Compare ordering.
 func IterateSortedUniqueOrderedUnique[T cmp.Ordered](s1 []T, s2 []T) iter.Seq[T] {
 	return IterateSortedUniqueFuncUnique(s1, s2, cmp.Compare)
 }
+
+// IterateSortedUniqueFuncUnique merges two slices into one ascending
+// sequence with cross-slice duplicates collapsed (s1's element wins on
+// ties). Precondition — the "SortedUnique" in the name: each input must
+// already be sorted under compare and free of internal duplicates;
+// duplicates within one slice pass through undeduplicated.
 func IterateSortedUniqueFuncUnique[T any](s1 []T, s2 []T, compare func(a, b T) int) iter.Seq[T] {
 	return func(yield func(T) bool) {
 		i := 0

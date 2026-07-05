@@ -318,10 +318,9 @@ func TestDifferentialFuzz_AgainstMap(t *testing.T) {
 
 	check := func(after int) {
 		t.Helper()
-		// Use iteration count for size, not Len(): see
-		// TestLen_AfterDeferredBatchWithDuplicates_KnownInconsistency.
-		// Iteration also forces ensureSorted, so subsequent Get probes
-		// see compacted state.
+		// Iteration forces ensureSorted, so subsequent Get probes see
+		// compacted state; Len() would work equally (it flushes too —
+		// pinned by TestLen_FlushesDeferredBatchState).
 		iterated := maps.Collect(bskv.IteratePairs())
 		require.Equal(t, len(oracle), len(iterated), "size mismatch after step %d, log=%v", after, log)
 		for k, want := range oracle {

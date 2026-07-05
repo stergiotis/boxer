@@ -97,6 +97,12 @@ func coSortSlices[K cmp.Ordered](slice []K, swap func(i int, j int), desc bool) 
 	})
 }
 
+// IterateSliceGrouped yields, for each run of equal adjacent keys in
+// sortedSliceKeys, the key and the co-indexed sub-slice of coSliceVals
+// covering the run. Preconditions: equal keys must be adjacent (sorted
+// input satisfies this) and len(coSliceVals) >= len(sortedSliceKeys) —
+// a shorter coSliceVals panics. The yielded sub-slices alias
+// coSliceVals.
 func IterateSliceGrouped[K comparable, V any](sortedSliceKeys []K, coSliceVals []V) iter.Seq2[K, []V] {
 	return func(yield func(K, []V) bool) {
 		if len(sortedSliceKeys) == 0 {
@@ -119,6 +125,9 @@ func IterateSliceGrouped[K comparable, V any](sortedSliceKeys []K, coSliceVals [
 		}
 	}
 }
+
+// IterateSliceGroupedFunc is [IterateSliceGrouped] with key equality
+// decided by cmpKey(a, b) == 0 instead of ==. Same preconditions.
 func IterateSliceGroupedFunc[K any, V any](sortedSliceKeys []K, coSliceVals []V, cmpKey func(K, K) int) iter.Seq2[K, []V] {
 	return func(yield func(K, []V) bool) {
 		if len(sortedSliceKeys) == 0 {

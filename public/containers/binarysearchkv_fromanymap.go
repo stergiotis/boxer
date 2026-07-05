@@ -26,6 +26,9 @@ import (
 // keys are stringified with fmt.Sprintf("%v", k) to match the
 // renderer behaviour in
 // boxer/public/semistructured/markdown/obsidian/frontmatter.go.
+// Distinct keys can stringify to the same string (42 and "42" both
+// become "42"); exactly one entry survives such a collision, and which
+// one is unspecified — it follows Go's randomised map iteration order.
 func NewBinarySearchGrowingKVFromAnyMap(m map[string]interface{}) (kv *BinarySearchGrowingKV[string, interface{}]) {
 	if len(m) == 0 {
 		return

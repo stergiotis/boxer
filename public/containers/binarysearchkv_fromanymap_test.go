@@ -98,6 +98,24 @@ func TestNewBinarySearchGrowingKVFromAnyMap_NestedAnyKeyMap(t *testing.T) {
 	require.Equal(t, "answer", v)
 }
 
+// Distinct any-typed keys that stringify identically collapse to one
+// entry; which value survives is documented as unspecified, so only the
+// length is pinned here.
+func TestNewBinarySearchGrowingKVFromAnyMap_StringifyCollision(t *testing.T) {
+	in := map[string]interface{}{
+		"meta": map[interface{}]interface{}{42: "int-key", "42": "string-key"},
+	}
+	kv := NewBinarySearchGrowingKVFromAnyMap(in)
+	metaRaw, has := kv.Get("meta")
+	require.True(t, has)
+	meta, ok := metaRaw.(*BinarySearchGrowingKV[string, interface{}])
+	require.True(t, ok)
+	require.Equal(t, 1, meta.Len(), "42 and \"42\" collide on the stringified key")
+	v, has := meta.Get("42")
+	require.True(t, has)
+	require.Contains(t, []interface{}{"int-key", "string-key"}, v)
+}
+
 func TestNewBinarySearchGrowingKVFromAnyMap_NestedSlice(t *testing.T) {
 	in := map[string]interface{}{
 		"tags": []interface{}{"go", "yaml", "demo"},
