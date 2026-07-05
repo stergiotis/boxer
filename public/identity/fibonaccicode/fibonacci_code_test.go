@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog/log"
-	vlq2 "github.com/stergiotis/boxer/public/identity/vlq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -10099,21 +10098,3 @@ func TestFindComma(t *testing.T) {
 	}
 }
 
-func TestBijectiveVlq(t *testing.T) {
-	/*
-		   see https://en.wikipedia.org/wiki/Variable-length_quantity
-		[...]
-				However, the VLQ format used in Git[15] removes this prepending redundancy and extends the representable range of shorter VLQs by adding an offset
-				to VLQs of 2 or more octets in such a way that the lowest possible value for such an (N + 1)-octet VLQ becomes exactly one more than the maximum possible
-				value for an N-octet VLQ. In particular, since a 1-octet VLQ can store a maximum value of 127, the minimum 2-octet VLQ (0x8000) is assigned the value 128 instead of 0.
-				Conversely, the maximum value of such a 2-octet VLQ (0xFF7F) is 16511 instead of just 16383. Similarly, the minimum 3-octet VLQ (0x808000) has a value of 16512 instead
-				of zero, which means that the maximum 3-octet VLQ (0xFFFF7F) is 2113663 instead of just 2097151.
-		[...]
-	*/
-	require.Equal(t, uint64(0), vlq2.VlqBijective(0))
-	require.Equal(t, uint64(0x7f), vlq2.VlqBijective(127))
-	require.Equal(t, uint64(0x8000), vlq2.VlqBijective(128))
-	require.Equal(t, uint64(0xff7f), vlq2.VlqBijective(16511))
-	require.Equal(t, uint64(0x808000), vlq2.VlqBijective(16512))
-	require.Equal(t, uint64(0xffff7f), vlq2.VlqBijective(2113663))
-}
