@@ -76,6 +76,13 @@ To prevent cache thrashing (evicting data needed by the *current* batch to make 
 *   **Mechanism:** `lastSeen` timestamp on every item.
 *   **Invariant:** `ensureSpace` will **never** evict an item marked with the `currentEpoch`.
 *   **Usage:** The user calls `AdvanceEpoch()` between logical batches to unpin old data.
+*   **Victim selection** among unpinned entries follows **SIEVE**
+    (insertion ring + access bit + a persistent hand; NSDI '24): measured
+    +2pp hit ratio / ~7% fewer upstream fetches over the previous random
+    pick on a Zipf workload with a 200-op epoch cadence, and up to
+    +10-13pp without epoch shielding (caching_policy_study_test.go). Pins
+    are protection, not policy signals — the hand skips them without
+    touching their access bits.
 
 ### 3.2 Bounded Stash (L2)
 When the L1 cache is full of "Pinned" items (Working Set > L1 Capacity), items are spilled to the Stash.

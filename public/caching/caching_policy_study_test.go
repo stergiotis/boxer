@@ -51,7 +51,7 @@ func zipfTrace(seed int64) func() int {
 	return func() int { return int(z.Uint64()) }
 }
 
-func runStashStudy(t *testing.T, name string, stash StashBackendI[int, int]) (hitRatio float64) {
+func runStashStudy(t *testing.T, name string, epochEvery int, stash StashBackendI[int, int]) (hitRatio float64) {
 	f := &intFetcher{}
 	m := &MockMetrics{}
 	c := NewReadThroughCache[int, int, int](studyL1Cap, f, FetchCriteria{},
@@ -60,7 +60,7 @@ func runStashStudy(t *testing.T, name string, stash StashBackendI[int, int]) (hi
 	next := zipfTrace(42)
 
 	for i := 0; i < studyOps; i++ {
-		if i%200 == 0 {
+		if i%epochEvery == 0 {
 			c.AdvanceEpoch()
 		}
 		c.Get(next())
@@ -74,23 +74,27 @@ func runStashStudy(t *testing.T, name string, stash StashBackendI[int, int]) (hi
 
 	hits := m.HitsL1 + m.HitsL2
 	hitRatio = float64(hits) / float64(hits+m.Misses)
-	t.Logf("%-12s  L1 hits %7d   L2 hits %6d   misses %6d   hit%% %5.2f   upstream deliveries %6d",
-		name, m.HitsL1, m.HitsL2, m.Misses, 100*hitRatio, f.delivered)
+	t.Logf("epoch/%-5d %-12s  L1 hits %7d   L2 hits %6d   misses %6d   hit%% %5.2f   upstream deliveries %6d",
+		epochEvery, name, m.HitsL1, m.HitsL2, m.Misses, 100*hitRatio, f.delivered)
 	return hitRatio
 }
 
 // TestEvictionPolicyStudy_Stash compares L2 stash policies through the
 // full cache.
 func TestEvictionPolicyStudy_Stash(t *testing.T) {
-	t.Logf("Zipf(s=%.2f) keys=%d ops=%d L1=%d stash=%d, epoch/200 flush/50",
+	t.Logf("Zipf(s=%.2f) keys=%d ops=%d L1=%d stash=%d, flush/50",
 		studyZipfS, studyKeys, studyOps, studyL1Cap, studyStashCap)
-	rrr := runStashStudy(t, "slice-rr", NewSliceStash[int, int](studyStashCap))
-	rnd := runStashStudy(t, "map-random", NewMapStash[int, int](studyStashCap))
-	s3 := runStashStudy(t, "s3fifo", NewS3FIFOStash[int, int](studyStashCap))
-	// Sanity bounds only; the log table is the deliverable.
-	require.Greater(t, rrr, 0.5)
-	require.Greater(t, rnd, 0.5)
-	require.Greater(t, s3, 0.5)
+	// Two epoch cadences: heavy pinning (200) shields the hot set and
+	// dampens policy differences; light pinning (2000) exposes them.
+	for _, epochEvery := range []int{200, 2000} {
+		rrr := runStashStudy(t, "slice-rr", epochEvery, NewSliceStash[int, int](studyStashCap))
+		rnd := runStashStudy(t, "map-random", epochEvery, NewMapStash[int, int](studyStashCap))
+		s3 := runStashStudy(t, "s3fifo", epochEvery, NewS3FIFOStash[int, int](studyStashCap))
+		// Sanity bounds only; the log table is the deliverable.
+		require.Greater(t, rrr, 0.5)
+		require.Greater(t, rnd, 0.5)
+		require.Greater(t, s3, 0.5)
+	}
 }
 
 // --- single-tier policy simulators (the L1 headroom estimate) ------------

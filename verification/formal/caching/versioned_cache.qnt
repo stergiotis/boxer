@@ -21,7 +21,7 @@
 //
 // Eviction is ADVERSARIAL: demote / dropL1 / dropL2 may strike any
 // unpinned entry at any time. Every invariant therefore holds for ANY
-// eviction policy (random today, SIEVE/S3-FIFO tomorrow).
+// eviction policy (SIEVE in L1 today; any stash backend in L2).
 //
 //   quint run versioned_cache.qnt --invariant=Safety
 //

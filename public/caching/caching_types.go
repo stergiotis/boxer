@@ -92,6 +92,13 @@ type ReadThroughCache[K comparable, V any, W comparable] struct {
 	fetching   bool
 	fetchAdded map[K]struct{}
 
+	// SIEVE eviction state for L1: the insertion-order ring and the hand
+	// (see ensureSpaceByEvictingOne). A slot is stale once its entry left
+	// L1 (detected via primaryItem.slot) and is reclaimed by lazy
+	// compaction in placeL1.
+	order []K
+	hand  int
+
 	// Context
 	currentWorkItem W
 	hasCurrentWork  bool

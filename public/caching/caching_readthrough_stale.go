@@ -16,8 +16,10 @@ type primaryItem[V any] struct {
 	ver      int64  // monotonic order (WithVersioning, or the internal counter)
 	stamp    int64  // freshness stamp, ns on the cache clock (WithFreshnessTTL)
 	lastSeen uint64 // Epoch for pinning
+	slot     int    // this entry's slot in the SIEVE insertion ring
 	stale    bool   // Set by MarkAsStale or by age; a stale read queues a refresh.
 	pinned   bool   // Sticky dirty-window pin (Pin/Unpin): immune to eviction.
+	visited  bool   // SIEVE access bit: set on hit, cleared by the hand.
 }
 
 // isStale reports the entry's effective staleness: the explicit flag, or —
@@ -201,10 +203,12 @@ func (inst *ReadThroughCache[K, V, W]) lookup(k K, acceptStale bool, mayFlush bo
 	}
 
 	if inL1 {
-		// Pin to the current epoch. Write back only when it changes and the
-		// entry was not just (re-)inserted by the promotion above.
-		if !fromStash && item.lastSeen != inst.currentEpoch {
+		// Pin to the current epoch and mark the SIEVE access bit. Write
+		// back only when something changes and the entry was not just
+		// (re-)inserted by the promotion above.
+		if !fromStash && (item.lastSeen != inst.currentEpoch || !item.visited) {
 			item.lastSeen = inst.currentEpoch
+			item.visited = true
 			inst.primaryStore[k] = item
 		}
 
@@ -322,10 +326,10 @@ func (inst *ReadThroughCache[K, V, W]) Pin(k K) {
 		return
 	}
 	if e, found := inst.stash.GetAndRemove(k); found {
-		inst.primaryStore[k] = primaryItem[V]{
+		inst.placeL1(k, primaryItem[V]{
 			value: e.Value, ver: e.Ver, stamp: e.Stamp, stale: e.Stale,
 			lastSeen: inst.currentEpoch, pinned: true,
-		}
+		})
 	}
 }
 
@@ -637,7 +641,40 @@ func (inst *ReadThroughCache[K, V, W]) place(k K, item primaryItem[V]) {
 		}
 	}
 
+	inst.placeL1(k, item)
+}
+
+// placeL1 writes an entry into the primary store, giving a key that is new
+// to L1 a fresh SIEVE ring slot (an existing entry keeps its slot; its
+// access bit travels inside the item the caller derived from it). Stale
+// slots are reclaimed by lazy compaction once they outnumber live ones.
+func (inst *ReadThroughCache[K, V, W]) placeL1(k K, item primaryItem[V]) {
+	if old, exists := inst.primaryStore[k]; exists {
+		item.slot = old.slot
+	} else {
+		if len(inst.order) >= 8 && len(inst.order) >= 2*(len(inst.primaryStore)+1) {
+			inst.compactOrder()
+		}
+		item.slot = len(inst.order)
+		inst.order = append(inst.order, k)
+	}
 	inst.primaryStore[k] = item
+}
+
+// compactOrder rebuilds the SIEVE ring in place, keeping insertion order
+// and dropping stale slots. The hand restarts at the oldest entry — a
+// rare, bounded fairness blip.
+func (inst *ReadThroughCache[K, V, W]) compactOrder() {
+	live := inst.order[:0]
+	for idx, k := range inst.order {
+		if it, ok := inst.primaryStore[k]; ok && it.slot == idx {
+			it.slot = len(live)
+			inst.primaryStore[k] = it
+			live = append(live, k)
+		}
+	}
+	inst.order = live
+	inst.hand = 0
 }
 
 // AddItemSlice inserts parallel key/value slices; the lengths must match.
@@ -662,18 +699,39 @@ func (inst *ReadThroughCache[K, V, W]) AddItemIter2(it iter.Seq2[K, V]) {
 // stickily (dirty window) — and false if a slot was freed (or L1 was
 // already under capacity).
 func (inst *ReadThroughCache[K, V, W]) ensureSpaceByEvictingOne() (useStash bool) {
-	for k, v := range inst.primaryStore {
-		// Pinning Protection: the epoch's working set and the sticky
-		// dirty-window pins are both immune.
-		if v.lastSeen == inst.currentEpoch || v.pinned {
+	// SIEVE victim selection (Zhang et al., NSDI '24): the hand walks the
+	// insertion ring from older toward newer entries, clearing the access
+	// bit of visited entries (retaining them) and demoting the first
+	// unvisited one. Epoch- and sticky-pinned entries are immune and are
+	// skipped WITHOUT touching their bits — pins are protection, not
+	// policy signals. Two full passes suffice: the first may clear every
+	// access bit, the second must then find a victim — unless everything
+	// live is pinned.
+	n := len(inst.order)
+	for scanned := 0; scanned < 2*n; scanned++ {
+		if inst.hand >= len(inst.order) {
+			inst.hand = 0
+		}
+		idx := inst.hand
+		inst.hand++
+		k := inst.order[idx]
+		item, ok := inst.primaryStore[k]
+		if !ok || item.slot != idx {
+			continue // stale slot (the entry left L1)
+		}
+		if item.lastSeen == inst.currentEpoch || item.pinned {
+			continue // Pinning Protection: immune, bits untouched
+		}
+		if item.visited {
+			item.visited = false
+			inst.primaryStore[k] = item
 			continue
 		}
-
-		inst.demoteToStash(k, v)
+		inst.demoteToStash(k, item)
 		return false
 	}
 
-	// If we get here, everything in Primary was Pinned.
+	// A full double sweep found no victim: everything live is Pinned.
 	return true
 }
 
@@ -716,6 +774,8 @@ func (inst *ReadThroughCache[K, V, W]) Clear() {
 	if inst.absentUntil != nil {
 		clear(inst.absentUntil)
 	}
+	inst.order = inst.order[:0]
+	inst.hand = 0
 	inst.stash.Clear()
 }
 

@@ -34,8 +34,8 @@ code review because each mechanism looks correct in isolation.
 
 Eviction is modelled **adversarially**: `demote` / `dropL1` / `dropL2` may
 strike any unpinned entry at any time. Every invariant therefore holds for
-*any* eviction policy — the random policy shipped today and the SIEVE /
-S3-FIFO candidates postponed to a later round.
+*any* eviction policy — SIEVE ships in L1 and the stash backends vary,
+all refinements of the adversarial choice.
 
 ## Files
 
