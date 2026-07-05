@@ -91,6 +91,24 @@ func TestCoSortSlices(t *testing.T) {
 	require.Equal(t, []int{1}, a[:1])
 	require.Equal(t, []string{"1"}, b[:1])
 }
+
+func TestCoSortSlices_NilSwap(t *testing.T) {
+	a := []int{4, 1, 2, 3}
+	CoSortSlices(a, nil)
+	require.Equal(t, []int{1, 2, 3, 4}, a)
+}
+
+func TestCoSortSlicesReverse_NilSwap(t *testing.T) {
+	// Regression (containers review 2026-07-05): the reverse variant
+	// dereferenced the nil swap while the forward variant fell back to a
+	// plain sort.
+	a := []int{4, 1, 2, 3}
+	CoSortSlicesReverse(a, nil)
+	require.Equal(t, []int{4, 3, 2, 1}, a)
+
+	CoSortSlicesReverse([]int{}, nil)
+	CoSortSlicesReverse([]int{7}, nil)
+}
 func TestCoSortSlicesReverse(t *testing.T) {
 	a := []int{4, 1, 2, 3}
 	b := []string{"4", "1", "2", "3"}

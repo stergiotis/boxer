@@ -7,9 +7,13 @@ import (
 	"sort"
 )
 
+// coSorter adapts a lead slice plus a caller swap callback to
+// sort.Interface; desc flips the comparison direction so ascending and
+// descending co-sorts share one adapter.
 type coSorter[K cmp.Ordered] struct {
 	swap  func(i int, j int)
 	slice []K
+	desc  bool
 }
 
 func (inst *coSorter[T]) Len() int {
@@ -18,6 +22,9 @@ func (inst *coSorter[T]) Len() int {
 
 func (inst *coSorter[T]) Less(i, j int) bool {
 	slice := inst.slice
+	if inst.desc {
+		return slice[j] < slice[i]
+	}
 	return slice[i] < slice[j]
 }
 
@@ -28,28 +35,6 @@ func (inst *coSorter[T]) Swap(i, j int) {
 }
 
 var _ sort.Interface = (*coSorter[int])(nil)
-
-type coSorterReverse[K cmp.Ordered] struct {
-	swap  func(i int, j int)
-	slice []K
-}
-
-func (inst *coSorterReverse[T]) Len() int {
-	return len(inst.slice)
-}
-
-func (inst *coSorterReverse[T]) Less(i, j int) bool {
-	slice := inst.slice
-	return slice[i] > slice[j]
-}
-
-func (inst *coSorterReverse[T]) Swap(i, j int) {
-	inst.swap(i, j)
-	slice := inst.slice
-	slice[j], slice[i] = slice[i], slice[j]
-}
-
-var _ sort.Interface = (*coSorterReverse[int])(nil)
 
 type sorter struct {
 	less func(i, j int) bool
@@ -78,31 +63,37 @@ func SortUnstable(n int, less func(i, j int) bool, swap func(i, j int)) {
 		swap: swap,
 	})
 }
+// CoSortSlices sorts slice ascending, calling swap(i, j) on every
+// element exchange so co-indexed slices can be kept aligned. A nil swap
+// sorts the lead slice alone. The sort is unstable: the relative order
+// of co-values under equal keys is unspecified.
 func CoSortSlices[K cmp.Ordered](slice []K, swap func(i int, j int)) {
+	coSortSlices(slice, swap, false)
+}
+
+// CoSortSlicesReverse is [CoSortSlices] with descending order.
+func CoSortSlicesReverse[K cmp.Ordered](slice []K, swap func(i int, j int)) {
+	coSortSlices(slice, swap, true)
+}
+
+func coSortSlices[K cmp.Ordered](slice []K, swap func(i int, j int), desc bool) {
 	switch len(slice) {
 	case 0, 1:
 		return
 	}
 	if swap == nil {
-		slices.Sort(slice)
-	} else {
-		s := &coSorter[K]{
-			slice: slice,
-			swap:  swap,
+		if desc {
+			slices.SortFunc(slice, func(a, b K) int { return cmp.Compare(b, a) })
+		} else {
+			slices.Sort(slice)
 		}
-		sort.Sort(s)
-	}
-}
-func CoSortSlicesReverse[K cmp.Ordered](slice []K, swap func(i int, j int)) {
-	switch len(slice) {
-	case 0, 1:
 		return
 	}
-	s := &coSorterReverse[K]{
+	sort.Sort(&coSorter[K]{
 		slice: slice,
 		swap:  swap,
-	}
-	sort.Sort(s)
+		desc:  desc,
+	})
 }
 
 func IterateSliceGrouped[K comparable, V any](sortedSliceKeys []K, coSliceVals []V) iter.Seq2[K, []V] {
