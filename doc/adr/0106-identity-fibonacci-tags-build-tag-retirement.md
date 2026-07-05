@@ -258,7 +258,14 @@ Accepted — 2026-07-05 (reviewed by @spx). Implemented so far:
   rejecting invalid effective tag values. The full-repo build and test suite
   pass without the build tag; no goldens pinned composed id bit patterns, so
   the SD8 clean break required no data regeneration.
+- Slice 3 (SD6): per-tag factory exclusivity (`identgen.ErrTagInUse`),
+  chunked batch commits with one amendment to the SD6 text — a batch that
+  overruns the tag's id space persists the mappings minted before the
+  overrun instead of assigning nothing, because consumed sequence values
+  cannot be returned and an empty abort would burn the space unmapped; the
+  in-memory backend still pre-checks exactly and assigns nothing. Exhaustion
+  is tested end to end through the 2^17-1-body widest-uint32 tags.
 
-Slices 3–6 are pending. The SD2 decoder and the defect inventory in Context
+Slices 4–6 are pending. The SD2 decoder and the defect inventory in Context
 were validated by an uncommitted review harness, to be recreated as committed
 tests by slice 4.
