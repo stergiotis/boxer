@@ -117,6 +117,56 @@ func (inst *BinarySearchGrowingKV[K, V]) IteratePairs() iter.Seq2[K, V] {
 		}
 	}
 }
+// IterateFrom yields (key, value) pairs in cmpKey-ascending order,
+// starting at the first key not less than lo (under cmpKey). Flush
+// semantics as in [BinarySearchGrowingKV.IterateKeys]: the deferred
+// state is flushed and the start position located when ranging begins.
+func (inst *BinarySearchGrowingKV[K, V]) IterateFrom(lo K) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		if inst == nil {
+			return
+		}
+		inst.ensureSorted()
+		idx, _ := inst.bsearch(inst.keys, lo)
+		keys := inst.keys
+		vals := inst.vals
+		for i := idx; i < len(keys); i++ {
+			if !yield(keys[i], vals[i]) {
+				return
+			}
+		}
+	}
+}
+
+// IterateRange yields (key, value) pairs in cmpKey-ascending order over
+// the half-open interval [lo, hi): keys k with cmpKey(k, lo) >= 0 and
+// cmpKey(k, hi) < 0. When cmpKey(lo, hi) >= 0 the range is empty. Flush
+// semantics as in [BinarySearchGrowingKV.IterateKeys].
+func (inst *BinarySearchGrowingKV[K, V]) IterateRange(lo K, hi K) iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) {
+		if inst == nil {
+			return
+		}
+		if inst.cmpKey(lo, hi) >= 0 {
+			return
+		}
+		inst.ensureSorted()
+		idx, _ := inst.bsearch(inst.keys, lo)
+		keys := inst.keys
+		vals := inst.vals
+		c := inst.cmpKey
+		for i := idx; i < len(keys); i++ {
+			k := keys[i]
+			if c(k, hi) >= 0 {
+				return
+			}
+			if !yield(k, vals[i]) {
+				return
+			}
+		}
+	}
+}
+
 // IsEmpty reports whether the container holds zero entries. It does not
 // flush deferred UpsertBatch state because compaction can only remove
 // duplicates, never reduce a non-empty slice to empty: if len(inst.keys)
