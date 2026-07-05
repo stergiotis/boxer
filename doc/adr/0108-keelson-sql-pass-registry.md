@@ -1,18 +1,18 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-05
+reviewed-by: "@spx"
+reviewed-date: 2026-07-05
 ---
-
-> **Status: proposed — pre-human-review.** The v1 slice is implemented
-> alongside this record; treat the decision as open until reviewed.
 
 # ADR-0108: keelson SQL pass registry — a pre-execute seam with an introspectable catalog
 
 ## Status
 
-Proposed — 2026-07-05. v1 implemented: `public/keelson/data/passreg` (+
-`defaults`), the `sql_passes` provider, and both consumers.
+Accepted — 2026-07-05 (reviewed by @spx). v1 implemented:
+`public/keelson/data/passreg` (+ `defaults`), the `sql_passes` provider,
+and both consumers (a573c272, 811e0770).
 
 ## Context
 
