@@ -1,3 +1,13 @@
+// Package fibonaccicode encodes and decodes Fibonacci codes (Zeckendorf
+// representations terminated by a "11" comma) in a uint64, MSB-aligned.
+//
+// Width conventions (ADR-0106 SD9): a code's *full width* includes the
+// trailing comma-completing 1 bit; EncodeFibonacciCode returns the full
+// width. FindFibonacciCodeCommaMsb returns the bit count up to and including
+// the comma's UPPER bit, which is the full width minus one. Values are
+// biased by one on encode (0 is not representable in a bare Fibonacci code),
+// so EncodeFibonacciCode(n) emits the code of the Zeckendorf sum n+1 and
+// DecodeFibonacciCode undoes the bias.
 package fibonaccicode
 
 import (
@@ -6,6 +16,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// fibNumbers[i] is the Fibonacci number F(i+2): 1, 2, 3, 5, 8, …
+// fibNumbers[64] is used only as the EncodeZeckendorf range bound.
 var fibNumbers = [65]uint64{
 	1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597,
 	2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418,
@@ -21,40 +33,48 @@ var fibNumbers = [65]uint64{
 	27777890035288,
 }
 
-// MaxRepresentableFibonacciCodeNumberByNBits Tabulated values of `MaxFibonacciCodeRepresentableByWidth(nBits)` function
-// Values are inclusive i.e. with 5 Bits the numbers up to and including 7 can be represented
-var MaxRepresentableFibonacciCodeNumberByNBits = [64]uint64{
-	0, 0, 0, 2, 4, 7, 12, 20, 33, 54, 88, 143, 232, 376, 609, 986, 1596, 2583, 4180, 6764, 10945, 17710, 28656,
-	46367, 75024, 121392, 196417, 317810, 514228, 832039, 1346268, 2178308, 3524577, 5702886, 9227464,
-	14930351, 24157816, 39088168, 63245985, 102334154, 165580140, 267914295, 433494436, 701408732,
-	1134903169, 1836311902, 2971215072, /* uint32 representable */
-	4807526975, 7778742048, 12586269024, 20365011073, 32951280098,
-	53316291172, 86267571271, 139583862444, 225851433716, 365435296161, 591286729878, 956722026040,
-	1548008755919, 2504730781960, 4052739537880, 6557470319841, 10610209857722,
-}
+// MaxRepresentableExcl is the EXCLUSIVE upper bound of encodable values:
+// EncodeFibonacciCode accepts n in [0, MaxRepresentableExcl) and panics at or
+// above it (the code of MaxRepresentableExcl-1 fills all 64 bits). It equals
+// the count of values encodable in a uint64.
+var MaxRepresentableExcl = fibNumbers[64-1] - 1 // -1: bias to be able to represent 0
 
-func MaxFibonacciCodeRepresentableByWidth(nBits int) (maxRepresentableNumber uint64) {
-	switch nBits {
-	case 0, 1:
-		return 0
-	case 2:
+// MaxRepresentableExclByWidth is the EXCLUSIVE upper bound of the values
+// whose full code width (including the trailing comma bit) is at most nBits:
+// exactly the values in [0, MaxRepresentableExclByWidth(nBits)) fit in nBits
+// bits. Equivalently it is the first value that needs a wider code, so the
+// values whose width is exactly w form the half-open interval
+// [MaxRepresentableExclByWidth(w-1), MaxRepresentableExclByWidth(w)).
+// Defined for every int: nBits < 3 yields 0 (only the width-2 code "11",
+// value 0, exists below width 3) and nBits >= 64 saturates to
+// MaxRepresentableExcl.
+func MaxRepresentableExclByWidth(nBits int) (maxRepresentableNumberExcl uint64) {
+	if nBits < 3 {
+		if nBits == 2 {
+			return 1 // width 2 is the bare comma "11": exactly the value 0
+		}
 		return 0
 	}
+	if nBits >= 64 {
+		return MaxRepresentableExcl
+	}
 	rep := (uint64(1) << 63) | (uint64(0b11) << (64 - nBits - 1))
-	maxRepresentableNumber = DecodeFibonacciCode(rep) - 1
+	n, ok := DecodeFibonacciCode(rep)
+	if !ok {
+		// unreachable: rep always carries a comma
+		log.Panic().Int("nBits", nBits).Msg("constructed width probe did not decode")
+	}
+	// The probe decodes to fibNumbers[nBits-1]; the values encodable within
+	// nBits full bits are exactly [0, fibNumbers[nBits-1]-1), so the
+	// exclusive bound is one below the probe's value.
+	maxRepresentableNumberExcl = n - 1
 	return
 }
 
-func FindFibonacciCodeCommaLsb(f uint64) (nBits int) {
-	for i := 63; i >= 1; i-- {
-		if f&0b11 == 0b11 {
-			return i
-		}
-		f >>= 1
-	}
-	return -1
-}
-
+// FindFibonacciCodeCommaMsb scans from the MSB for the first adjacent "11"
+// pair and returns the number of bits up to and including the pair's upper
+// bit — the code's full width minus one. It returns -1 when no comma exists
+// (f is not an MSB-aligned Fibonacci code).
 func FindFibonacciCodeCommaMsb(f uint64) (nBits int) {
 	for i := 0; i <= 62; i++ {
 		t := uint64(0b11) << (64 - 2 - i)
@@ -65,6 +85,9 @@ func FindFibonacciCodeCommaMsb(f uint64) (nBits int) {
 	return -1
 }
 
+// DecodeZeckendorfV sums fibNumbers[i] over the set bits of the LSB-aligned
+// Zeckendorf representation z. It does not validate the no-consecutive-ones
+// property.
 func DecodeZeckendorfV(z uint64) (n uint64) {
 	for i := 0; i < 64; i++ {
 		n += fibNumbers[i] * ((z >> i) & 0b1)
@@ -72,6 +95,8 @@ func DecodeZeckendorfV(z uint64) (n uint64) {
 	return n
 }
 
+// EncodeZeckendorf writes n as an LSB-aligned Zeckendorf representation and
+// returns it with its width in bits. It panics when n >= fibNumbers[64].
 func EncodeZeckendorf(n uint64) (z uint64, nBits int) {
 	if n >= fibNumbers[64] {
 		log.Panic().Uint64("n", n).Msg("number is out of range representable range")
@@ -98,9 +123,8 @@ func EncodeZeckendorf(n uint64) (z uint64, nBits int) {
 	return
 }
 
-var MaxFibonacciCodeRepresentable = fibNumbers[64-1] - 1 // -1: bias to be able to represent 0
 func encodeFibonacciCodeNaive(n uint64) (f uint64, nBits int) {
-	if n >= MaxFibonacciCodeRepresentable {
+	if n >= MaxRepresentableExcl {
 		log.Panic().Uint64("n", n).Msg("number is out of range representable range")
 	}
 	var z uint64
@@ -112,17 +136,27 @@ func encodeFibonacciCodeNaive(n uint64) (f uint64, nBits int) {
 	return
 }
 
+// EncodeFibonacciCode returns the MSB-aligned Fibonacci code of n and its
+// full width in bits, including the trailing comma-completing 1. n must be
+// below MaxRepresentableExcl or the function panics.
 func EncodeFibonacciCode(n uint64) (r uint64, nBits int) {
 	return encodeFibonacciCodeNaive(n)
 }
 
-func DecodeFibonacciCode(f uint64) (n uint64) {
+// DecodeFibonacciCode reverses EncodeFibonacciCode. ok is false when f
+// carries no "11" comma and is therefore not a Fibonacci code; n is 0 then.
+// Bits below the comma are ignored, so a tagged id (code in the high bits,
+// payload below) decodes to its tag's value directly.
+func DecodeFibonacciCode(f uint64) (n uint64, ok bool) {
 	nBits := FindFibonacciCodeCommaMsb(f)
+	if nBits < 0 {
+		return 0, false
+	}
 	f >>= 64 - nBits
 	for i := 0; i < nBits; i++ {
 		n += fibNumbers[nBits-i-1] * (f & 0b1)
 		f >>= 1
 	}
 	n-- // remove bias (0 is not representable in Fibonacci code)
-	return
+	return n, true
 }

@@ -2,9 +2,7 @@ package fibonaccicode
 
 import (
 	"fmt"
-	"math"
 	"math/rand/v2"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,12 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMaxFibonacciCodeRepresentableByWidth(t *testing.T) {
-	assert.Equal(t, uint64(0), MaxFibonacciCodeRepresentableByWidth(2))
-	assert.Equal(t, uint64(2), MaxFibonacciCodeRepresentableByWidth(3))
-	assert.Equal(t, uint64(4), MaxFibonacciCodeRepresentableByWidth(4))
-	assert.Equal(t, uint64(7), MaxFibonacciCodeRepresentableByWidth(5))
-	assert.Equal(t, uint64(12), MaxFibonacciCodeRepresentableByWidth(6))
+func TestMaxRepresentableExclByWidth(t *testing.T) {
+	// Exclusive bounds: value 0 is the sole width-2 code ("11"), so the bound
+	// for nBits=2 is 1 (it was 0 before ADR-0106 SD9, which forced callers to
+	// special-case width 2).
+	assert.Equal(t, uint64(1), MaxRepresentableExclByWidth(2))
+	assert.Equal(t, uint64(2), MaxRepresentableExclByWidth(3))
+	assert.Equal(t, uint64(4), MaxRepresentableExclByWidth(4))
+	assert.Equal(t, uint64(7), MaxRepresentableExclByWidth(5))
+	assert.Equal(t, uint64(12), MaxRepresentableExclByWidth(6))
 }
 
 var b014417RefenceData = []uint64{
@@ -10054,59 +10055,6 @@ func TestEncodeZeckendorf(t *testing.T) {
 	}
 }
 
-func compareSmallNumbers() {
-	_ = os.Remove("/tmp/compare.tsv")
-	f, _ := os.Create("/tmp/compare.tsv")
-	defer f.Close()
-	enc := func(n uint64) {
-		z, mb := EncodeZeckendorf(n)
-		vlq, vlqBits := vlq2.VlqBijectiveV(uint32(n))
-		_ = vlq
-		_ = mb
-		_, _ = fmt.Fprintf(f, "%d\t%d\t%d\n", n, len(fmt.Sprintf("%b", z))+1, vlqBits)
-	}
-	for i := uint64(1); i < 2113663; i++ {
-		enc(i)
-	}
-	_ = os.WriteFile("/tmp/compare.gnuplot", []byte(`
-set logscale x
-plot "/tmp/compare.tsv" u 1:2 w steps t "fibonacci-codec", \
-     "" u 1:3 w steps t "vlq bij 8bits"
-`), 0600)
-}
-
-func compareWithUtf8Encoding() {
-	_ = os.Remove("/tmp/out.txt")
-	f, _ := os.Create("/tmp/out.txt")
-	defer f.Close()
-	enc := func(n uint64) {
-		z, mb := EncodeZeckendorf(n)
-		vlq, vlqBits := vlq2.VlqBijectiveV(uint32(n))
-		_, _ = fmt.Fprintf(f, "% 22d = % 10x --> 0b%064b = %d bits, mb =%d\n", n, n, z, len(fmt.Sprintf("%b", z)), mb)
-		_, _ = fmt.Fprintf(f, "% 22d = % 10x --> 0b%064b = %d bits, mb =%d    VLQ\n", n, n, vlq, vlqBits, vlqBits)
-	}
-	/*
-		U+0000  	U+007F 	0yyyzzzz
-		U+0080  	U+07FF 	110xxxyy 	10yyzzzz
-		U+0800 	    U+FFFF 	1110wwww 	10xxxxyy 	10yyzzzz
-		U+010000 	U+10FFFF 	11110uvv 	10vvwwww 	10xxxxyy 	10yyzzzz
-	*/
-	for i := uint32(0); i < uint32(math.Floor(math.Log2(27777890035288.0))); i++ {
-		n := uint64(1) << i
-		enc(n)
-	}
-	enc(0x000000)
-	fmt.Fprintf(f, "utf8 = 8 bits\n")
-	enc(0x00007f)
-	fmt.Fprintf(f, "utf8 = 16 bits\n")
-	enc(0x0007ff)
-	fmt.Fprintf(f, "utf8 = 24 bits\n")
-	enc(0x00ffff)
-	fmt.Fprintf(f, "utf8 = 32 bits\n")
-	enc(0x10ffff)
-	fmt.Fprintf(f, "utf8 = 32 bits\n")
-}
-
 func TestEncodeFibonacciCode(t *testing.T) {
 	zeros := strings.Repeat("0", 64)
 	check := func(n uint64, expected string, nBitsExpected int) {
@@ -10116,8 +10064,8 @@ func TestEncodeFibonacciCode(t *testing.T) {
 			log.Panic().Err(err).Str("s", expected).Msg("unable to parse reference value")
 		}
 		f, nBits := EncodeFibonacciCode(n)
-		nDec := DecodeFibonacciCode(f)
-		_ = nDec
+		nDec, okDec := DecodeFibonacciCode(f)
+		require.True(t, okDec)
 		require.Equal(t, expectedStr, fmt.Sprintf("0b%064b", f))
 		require.Equal(t, expectedN, f)
 		require.Equal(t, nBitsExpected, nBits)
@@ -10134,10 +10082,12 @@ func TestEncodeFibonacciCode(t *testing.T) {
 	check(11, "0b101011", 6)
 	check(13, "0b1000011", 7)
 	for i := 0; i < 100000; i++ {
-		u := uint64(rand.Uint64N(MaxFibonacciCodeRepresentable))
+		u := uint64(rand.Uint64N(MaxRepresentableExcl))
 		f, nBits := EncodeFibonacciCode(u)
 		require.Equal(t, nBits-1, FindFibonacciCodeCommaMsb(f))
-		require.Equal(t, u, DecodeFibonacciCode(f))
+		dec, ok := DecodeFibonacciCode(f)
+		require.True(t, ok)
+		require.Equal(t, u, dec)
 	}
 }
 
