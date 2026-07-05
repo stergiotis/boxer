@@ -4,8 +4,6 @@ import (
 	"cmp"
 	"iter"
 	"slices"
-
-	"golang.org/x/exp/constraints"
 )
 
 // BinarySearchGrowingKVBuilder accumulates (key, value) pairs in a
@@ -52,11 +50,11 @@ func NewBinarySearchGrowingKVBuilder[K any, V any](estSize int, cmpKey func(a K,
 	}
 }
 
-// NewBinarySearchGrowingKVBuilderOrdered is the constraints.Ordered
+// NewBinarySearchGrowingKVBuilderOrdered is the cmp.Ordered
 // convenience variant. The produced container dispatches point-lookups
 // (Has, Get, GetDefault, Delete) through an inlined-comparator binary
 // search — see [NewBinarySearchGrowingKVOrdered] for the rationale.
-func NewBinarySearchGrowingKVBuilderOrdered[K constraints.Ordered, V any](estSize int) *BinarySearchGrowingKVBuilder[K, V] {
+func NewBinarySearchGrowingKVBuilderOrdered[K cmp.Ordered, V any](estSize int) *BinarySearchGrowingKVBuilder[K, V] {
 	return &BinarySearchGrowingKVBuilder[K, V]{
 		keys:   make([]K, 0, estSize),
 		vals:   make([]V, 0, estSize),

@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/containers/co"
-	"golang.org/x/exp/constraints"
 )
 
 // BinarySearchGrowingKV is a sorted-iteration key-value container backed by
@@ -238,7 +237,7 @@ func NewBinarySearchGrowingKV[K any, V any](estSize int, cmpKey func(a K, b K) i
 // comparison. Typically 1.4×–3.5× faster than NewBinarySearchGrowingKV
 // for Get on string keys; see binarysearchkv_bench_test.go for measured
 // numbers across N.
-func NewBinarySearchGrowingKVOrdered[K constraints.Ordered, V any](estSize int) (inst *BinarySearchGrowingKV[K, V]) {
+func NewBinarySearchGrowingKVOrdered[K cmp.Ordered, V any](estSize int) (inst *BinarySearchGrowingKV[K, V]) {
 	inst = &BinarySearchGrowingKV[K, V]{
 		keys:   make([]K, 0, estSize),
 		vals:   make([]V, 0, estSize),
@@ -478,7 +477,7 @@ func IterateMergedBinarySearchGrowingKVKeys[K any, V any, W any](a *BinarySearch
 
 var _ sort.Interface = bskvSortInterface[any, any]{}
 
-func IterateSortedUniqueOrderedUnique[T constraints.Ordered](s1 []T, s2 []T) iter.Seq[T] {
+func IterateSortedUniqueOrderedUnique[T cmp.Ordered](s1 []T, s2 []T) iter.Seq[T] {
 	return IterateSortedUniqueFuncUnique(s1, s2, cmp.Compare)
 }
 func IterateSortedUniqueFuncUnique[T any](s1 []T, s2 []T, compare func(a, b T) int) iter.Seq[T] {
