@@ -52,6 +52,11 @@ type standardWidgetsDemoState struct {
 	dragF float64
 	dragU uint64
 
+	// U64Edit — exact wide integer (a tagged id, always > 2^53, which the
+	// f64-backed DragValue/Slider cannot represent). The side-by-side with a
+	// lossy DragValueU64 lives in the dedicated "u64-edit" demo.
+	wideId uint64
+
 	// TextEdit
 	textSingle    string
 	textHint      string
@@ -92,6 +97,7 @@ func init() {
 				sliderTrail:   0.7,
 				sliderHex:     float64(0xCAFE),
 				dragU:         100,
+				wideId:        0xDEADBEEFCAFEF00D,
 				textReadonly:  "this field is read-only",
 				textMultiline: "first line\nsecond line\nthird line",
 				textCode:      "fn main() {\n    println!(\"hello, imzero2\");\n}",
@@ -466,7 +472,7 @@ func swDragValueSection(ids *c.WidgetIdStack, st *standardWidgetsDemoState) {
 	}
 
 	stdSection("DragValue — unsigned integer with prefix/suffix",
-		"DragValueU64 covers integer use-cases; Prefix/Suffix wrap the rendered value")
+		"good for small magnitudes only: DragValue is f64-backed, so values > 2^53 round; Prefix/Suffix wrap the rendered value")
 	for range c.Horizontal().KeepIter() {
 		c.DragValueU64(ids.PrepareStr("dv-u"), st.dragU).
 			Speed(1.0).Prefix("⌀ ").Suffix(" px").
@@ -479,6 +485,15 @@ func swDragValueSection(ids *c.WidgetIdStack, st *standardWidgetsDemoState) {
 	c.DragValueF64(ids.PrepareStr("dv-hex"), st.dragF).
 		Hexadecimal(4, false, true).Speed(1.0).
 		SendRespVal(&st.dragF)
+
+	stdSection("U64Edit — exact 64-bit integer",
+		"for ids/hashes/bitmasks (always > 2^53): TextEdit-backed, parsed exactly. DragValue/Slider cannot — both are f64 scrubbers. See the dedicated \"u64-edit\" demo for the side-by-side.")
+	for range c.Horizontal().KeepIter() {
+		c.U64Edit(ids.PrepareStr("dv-wide"), st.wideId).
+			Hex().DesiredWidth(200).
+			SendRespVal(&st.wideId)
+		c.Label(fmt.Sprintf("= 0x%X (%d)", st.wideId, st.wideId)).Send()
+	}
 }
 
 // -----------------------------------------------------------------------------
