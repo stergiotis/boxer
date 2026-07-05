@@ -2,9 +2,8 @@ package containers
 
 import (
 	"iter"
+	"maps"
 	"slices"
-
-	"golang.org/x/exp/maps"
 )
 
 type HashSet[T comparable] struct {
@@ -26,10 +25,15 @@ func (inst *HashSet[T]) AddEx(val T) (existed bool) {
 func (inst *HashSet[T]) Add(val T) {
 	inst.data[val] = struct{}{}
 }
+// AddMany inserts every value from the iterator and returns the number
+// of values that were not already present. Duplicate values within vals
+// count once.
 func (inst *HashSet[T]) AddMany(vals iter.Seq[T]) (added int) {
 	for v := range vals {
-		inst.data[v] = struct{}{}
-		added++
+		if _, has := inst.data[v]; !has {
+			inst.data[v] = struct{}{}
+			added++
+		}
 	}
 	return
 }
@@ -70,7 +74,7 @@ func (inst *HashSet[T]) IterateAll() iter.Seq[T] {
 }
 
 func (inst *HashSet[T]) Clear() {
-	maps.Clear(inst.data)
+	clear(inst.data)
 }
 func (inst *HashSet[T]) Slice() []T {
 	return inst.SliceEx(nil)
@@ -110,11 +114,19 @@ func (inst *HashSet[T]) IntersectMod(other *HashSet[T]) {
 	inst.data = n
 }
 
-func (inst *HashSet[T]) Equal(other HashSet[T]) bool {
-	sa := inst.Size()
-	sb := other.Size()
-	if sa == sb {
-		return maps.Equal(inst.data, other.data)
+// Equal reports whether both sets hold exactly the same elements.
+// other must be non-nil.
+func (inst *HashSet[T]) Equal(other *HashSet[T]) bool {
+	if len(inst.data) != len(other.data) {
+		return false
 	}
-	return false
+	return maps.Equal(inst.data, other.data)
+}
+
+// Clone returns an independent copy of the set: mutations of the clone
+// do not affect the original and vice versa. Together with the *Mod set
+// operations it enables non-destructive set algebra
+// (a.Clone().IntersectMod(b)).
+func (inst *HashSet[T]) Clone() *HashSet[T] {
+	return &HashSet[T]{data: maps.Clone(inst.data)}
 }
