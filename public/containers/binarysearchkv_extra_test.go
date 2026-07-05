@@ -502,15 +502,15 @@ func TestDifferentialFuzz_AgainstMap_EquivalenceComparator(t *testing.T) {
 // --- Concurrency-stance guard ------------------------------------------
 
 // TestConcurrentReads_DocumentationGuard pins the current behaviour: even
-// pure reads mutate internal state (the sorted/compacted flags) via
-// ensureSorted. If concurrency safety is ever added, this test should fail
-// and be deleted along with this comment.
+// pure reads mutate internal state (the flushed flag) via ensureSorted.
+// If concurrency safety is ever added, this test should fail and be
+// deleted along with this comment.
 func TestConcurrentReads_NotSafe_DocumentationGuard(t *testing.T) {
 	dict := NewBinarySearchGrowingKVOrdered[string, int](4)
 	dict.UpsertBatch("a", 1)
-	require.False(t, dict.sorted, "fresh deferred state is unsorted — sanity")
+	require.False(t, dict.flushed, "fresh deferred state is unflushed — sanity")
 	_ = dict.Has("a")
-	require.True(t, dict.sorted, "Has mutated sorted flag — readers are not concurrent-safe")
+	require.True(t, dict.flushed, "Has mutated the flushed flag — readers are not concurrent-safe")
 }
 
 // --- Smoke test: long descending insert path ----------------------------

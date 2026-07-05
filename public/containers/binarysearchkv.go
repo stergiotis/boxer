@@ -17,11 +17,12 @@ import (
 // come in two flavours with very different cost profiles — see UpsertSingle
 // and UpsertBatch.
 //
-// The container internally tracks a (sorted, compacted) mode flag. Every
-// read entry point (Has, Get, GetDefault, Len, IterateKeys, IterateValues,
-// IteratePairs, MergeValue, UpsertSingle, Delete) transparently invokes
-// ensureSorted before operating — the Iterate* methods at the start of
-// each range — so callers never need to flush manually.
+// The container internally tracks a flushed flag (sorted + compacted).
+// Every read entry point (Has, Get, GetDefault, Len, IterateKeys,
+// IterateValues, IteratePairs, IterateFrom, IterateRange, MergeValue,
+// UpsertSingle, Delete) transparently invokes ensureSorted before
+// operating — the Iterate* methods at the start of each range — so
+// callers never need to flush manually.
 // UpsertBatch is the only writer that defers — see its docstring for the
 // full cost model, invariants, and antipatterns.
 //
@@ -31,8 +32,8 @@ import (
 // retained (relevant only for comparators that treat distinguishable
 // keys as equal).
 //
-// Not safe for concurrent use. Even pure reads mutate the mode flags via
-// ensureSorted, so readers and writers must serialise externally.
+// Not safe for concurrent use. Even pure reads mutate the flushed flag
+// via ensureSorted, so readers and writers must serialise externally.
 //
 // A nil *BinarySearchGrowingKV is a valid empty container for reads:
 // IsEmpty, Len, Has, Get, GetDefault and the Iterate* methods return
@@ -58,12 +59,11 @@ import (
 // indirect call per comparison. Construction-time dispatch keeps the public
 // API identical across both flavours.
 type BinarySearchGrowingKV[K any, V any] struct {
-	cmpKey    func(a K, b K) int
-	bsearch   func(keys []K, target K) (int, bool)
-	keys      []K
-	vals      []V
-	sorted    bool
-	compacted bool
+	cmpKey  func(a K, b K) int
+	bsearch func(keys []K, target K) (int, bool)
+	keys    []K
+	vals    []V
+	flushed bool
 }
 
 // IterateKeys yields the keys in cmpKey-ascending order. The container's
@@ -117,6 +117,7 @@ func (inst *BinarySearchGrowingKV[K, V]) IteratePairs() iter.Seq2[K, V] {
 		}
 	}
 }
+
 // IterateFrom yields (key, value) pairs in cmpKey-ascending order,
 // starting at the first key not less than lo (under cmpKey). Flush
 // semantics as in [BinarySearchGrowingKV.IterateKeys]: the deferred
@@ -225,8 +226,7 @@ func NewBinarySearchGrowingKV[K any, V any](estSize int, cmpKey func(a K, b K) i
 		bsearch: func(keys []K, target K) (int, bool) {
 			return slices.BinarySearchFunc(keys, target, cmpKey)
 		},
-		sorted:    true,
-		compacted: true,
+		flushed: true,
 	}
 	return
 }
@@ -246,20 +246,16 @@ func NewBinarySearchGrowingKVOrdered[K constraints.Ordered, V any](estSize int) 
 		bsearch: func(keys []K, target K) (int, bool) {
 			return slices.BinarySearch(keys, target)
 		},
-		sorted:    true,
-		compacted: true,
+		flushed: true,
 	}
 	return
 }
 
 func (inst *BinarySearchGrowingKV[K, V]) ensureSorted() {
-	if !inst.sorted {
+	if !inst.flushed {
 		sort.Stable(bskvSortInterface[K, V]{inst: inst})
-		inst.sorted = true
-	}
-	if !inst.compacted {
 		inst.compactNewestWins()
-		inst.compacted = true
+		inst.flushed = true
 	}
 }
 
@@ -462,13 +458,11 @@ func (inst *BinarySearchGrowingKV[K, V]) Grow(n int) {
 func (inst *BinarySearchGrowingKV[K, V]) UpsertBatch(key K, val V) {
 	inst.keys = append(inst.keys, key)
 	inst.vals = append(inst.vals, val)
-	inst.compacted = false
-	inst.sorted = false
+	inst.flushed = false
 }
 
 func (inst *BinarySearchGrowingKV[K, V]) Reset() {
-	inst.sorted = true
-	inst.compacted = true
+	inst.flushed = true
 	clear(inst.keys)
 	clear(inst.vals)
 	inst.keys = inst.keys[:0]

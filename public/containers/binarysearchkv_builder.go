@@ -115,12 +115,11 @@ func (b *BinarySearchGrowingKVBuilder[K, V]) Freeze() *BinarySearchGrowingKV[K, 
 	}
 	b.frozen = true
 	kv := &BinarySearchGrowingKV[K, V]{
-		keys:      b.keys,
-		vals:      b.vals,
-		cmpKey:    b.cmpKey,
-		bsearch:   b.bsearch,
-		sorted:    false,
-		compacted: false,
+		keys:    b.keys,
+		vals:    b.vals,
+		cmpKey:  b.cmpKey,
+		bsearch: b.bsearch,
+		flushed: false,
 	}
 	kv.ensureSorted()
 	return kv
