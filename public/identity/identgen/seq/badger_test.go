@@ -96,13 +96,13 @@ func TestBadgerIdSequence_PersistsAcrossReopen(t *testing.T) {
 	require.Greater(t, bodyOf(id), last, "sequence must not regress or repeat across reopen")
 }
 
-// TestBadgerIdSequenceGenerator_RejectsOutOfRangeTag checks Create validates the
-// tag value against the active tag width.
-func TestBadgerIdSequenceGenerator_RejectsOutOfRangeTag(t *testing.T) {
+// TestBadgerIdSequenceGenerator_RejectsInvalidTag checks Create rejects the
+// zero (invalid) tag value (ADR-0106: every non-zero uint32 is encodable).
+func TestBadgerIdSequenceGenerator_RejectsInvalidTag(t *testing.T) {
 	genFac, err := NewBadgerIdSequenceGenerator(t.TempDir())
 	require.NoError(t, err)
 	defer func() { _ = genFac.Close() }()
 
-	_, err = genFac.Create(identifier.MaxTagValue+1, 8)
+	_, err = genFac.Create(identifier.TagValue(0), 8)
 	require.Error(t, err)
 }

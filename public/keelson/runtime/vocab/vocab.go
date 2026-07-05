@@ -29,9 +29,11 @@ const NamingStyle = naming.LowerSpinalCase
 
 // TagValueRegistry allocates TagValues for runtime membership categories.
 // Lives in its own scope so it does not collide with spinnaker's
-// VcsTagValueRegistry — different binaries, different namespaces.
+// VcsTagValueRegistry — different binaries, different namespaces. The offset
+// is 2, not 0: fibonacci-coded tags reserve tag value 0 as invalid
+// (ADR-0106 SD8), and the vcs-managed convention keeps effective ids even.
 var TagValueRegistry = registry.MustNewTagValueRegistry[*contract.VcsManagedContract](
-	identifier.TagValue(0), NamingStyle, 4, Contract,
+	identifier.TagValue(2), NamingStyle, 4, Contract,
 )
 
 // MembersTagValue is the TagValue rooted at offset 0 of TagValueRegistry; it

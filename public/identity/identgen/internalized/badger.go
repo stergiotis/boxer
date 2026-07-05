@@ -246,7 +246,7 @@ func (inst *BadgerIdInternalizer) AppendIds(dst []identifier.TaggedId, keys iden
 
 func (inst *BadgerIdInternalizedGenerator) Create(tagValue identifier.TagValue, generationBandwidth uint64) (gen identifier.IdGeneratorI, err error) {
 	if !tagValue.IsValid() {
-		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Uint64("maxTagValue", uint64(identifier.MaxTagValue)).Errorf("tag value out of range for the active tag width")
+		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("invalid tag value (zero is reserved)")
 		return
 	}
 	if generationBandwidth == 0 {

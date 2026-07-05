@@ -37,13 +37,12 @@ type IdInternalizer struct {
 
 // NewIdInternalizer returns an in-memory internalizer that mints ids under
 // tagValue. estSize is a best-effort capacity hint for the number of distinct
-// keys. It errors when tagValue is out of range for the active tag width.
+// keys. It errors when tagValue is invalid (zero is reserved).
 func NewIdInternalizer(tagValue identifier.TagValue, estSize int) (inst *IdInternalizer, err error) {
 	if !tagValue.IsValid() {
 		err = eb.Build().
 			Uint64("tagValue", uint64(tagValue)).
-			Uint64("maxTagValue", uint64(identifier.MaxTagValue)).
-			Errorf("tag value out of range for the active tag width")
+			Errorf("invalid tag value (zero is reserved)")
 		return
 	}
 	if estSize < 0 {

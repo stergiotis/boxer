@@ -69,11 +69,16 @@ debuggability and individually-versioned tool pins.
 
 The file [./tags](../tags) is a single-line, comma-separated set of build tags
 read by every build, test, and lint script. Its active tags are
-`identifier_tag_fixed16`, `boxer_enable_profiling`, and `goexperiment.jsonv2`;
-packages that opt into one of these fail to type-check with misleading
-"undefined" errors when the tags are omitted.
+`boxer_enable_profiling` and `goexperiment.jsonv2`; packages that opt into one
+of these fail to type-check with misleading "undefined" errors when the tags
+are omitted.
 
-Until 2026-06 the set also carried per-model `llm_generated_*` author tags
+Until 2026-07 the set also carried an `identifier_tag_fixed<N>` tag selecting
+a compile-time identifier tag width; that axis was retired with the switch to
+self-describing fibonacci-coded tags
+([ADR-0106](adr/0106-identity-fibonacci-tags-build-tag-retirement.md)) — do
+not reintroduce scheme-selection tags. Until 2026-06 the set also carried
+per-model `llm_generated_*` author tags
 (`gemini3pro`, `opus46`, `opus47`, `opus48`) that gated every LLM-authored file
 so an AI-free build stayed possible. That scheme was retired
 ([ADR-0083](adr/0083-retire-llm-generated-build-tags.md)): authorship provenance

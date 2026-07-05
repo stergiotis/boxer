@@ -10,8 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewIdInternalizer_RejectsOutOfRangeTagValue(t *testing.T) {
-	_, err := NewIdInternalizer(identifier.MaxTagValue+1, 0)
+func TestNewIdInternalizer_RejectsInvalidTagValue(t *testing.T) {
+	// Zero is the one invalid TagValue under fibonacci-coded tags (ADR-0106).
+	_, err := NewIdInternalizer(identifier.TagValue(0), 0)
 	require.Error(t, err)
 }
 

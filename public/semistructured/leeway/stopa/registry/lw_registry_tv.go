@@ -119,6 +119,10 @@ func (inst *MembershipTagValueRegistry[C]) Begin(nk naming.StylableName, tv iden
 	// (review G-9). offset is constant per registry, so duplicate detection is
 	// unchanged.
 	etv := tv + inst.offset
+	if !etv.IsValid() {
+		err = eb.Build().Uint32("tagValue", tv.Value()).Uint32("offset", inst.offset.Value()).Errorf("effective tag value is invalid (zero is reserved, ADR-0106)")
+		return
+	}
 	tg := etv.GetTag()
 	var w RegisteredTagValue
 	w, has = inst.lookupTg.Get(tg)
