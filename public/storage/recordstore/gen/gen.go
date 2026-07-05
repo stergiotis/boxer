@@ -65,6 +65,14 @@ type Input struct {
 	// package's public surface stays the store family (ADR-0100 Update
 	// 2026-07-04).
 	Flat bool
+	// FullCodecs emits the complete exported marshallgen codec per kind
+	// (SoA <Kind>Columns, BuildEntities, FillFromArrow) as keelson and
+	// the anchor demos consume it. The default (false) emits the trimmed
+	// store-support codec — AddSections and ReadRow with unexported
+	// names — because nothing else is consumed by or safe around a
+	// store: BuildEntities on Raw() would drive entity frames past the
+	// store's bookkeeping (ADR-0100 Update 2026-07-04).
+	FullCodecs bool
 
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),
@@ -151,8 +159,12 @@ func (inst Input) Generate() (err error) {
 			err = eh.Errorf("parse component %s: %w", in, err)
 			return
 		}
+		mode := marshallgen.EmitModeStoreSupport
+		if inst.FullCodecs {
+			mode = marshallgen.EmitModeCodec
+		}
 		var rendered []byte
-		rendered, err = marshallgen.EmitPlan(plan, marshallgen.NoOpWrapper{})
+		rendered, err = marshallgen.EmitPlan(plan, marshallgen.NoOpWrapper{}, marshallgen.EmitOpts{Mode: mode})
 		if err != nil {
 			err = eh.Errorf("emit component codec %s: %w", in, err)
 			return

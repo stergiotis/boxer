@@ -5,9 +5,6 @@ package example
 import (
 	"iter"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
@@ -19,80 +16,28 @@ const (
 	kindDeviceLoc uint64 = 1
 )
 
-// --- SoA columns + AoS Append adapter. ---
-
-// LocatedColumns is the SoA storage for batches of Located rows.
-// All slices grow in lockstep — Len returns the row count.
-type LocatedColumns struct {
-	ID []uint64
-
-	Lat  []float32
-	Lng  []float32
-	Cell []uint64
-}
-
-// Len returns the number of rows currently in the batch.
-func (c *LocatedColumns) Len() int { return len(c.ID) }
-
-// Append pushes one AoS record into the SoA buffers.
-//
-// Aliasing: slice and pointer fields (`[]T`, `*roaring.Bitmap`) are
-// stored by reference, not copied. Callers must not mutate
-// row.<F> after Append unless they want Marshal to read the
-// mutation. Scalar fields (T, Option[T]) are copied by value.
-func (c *LocatedColumns) Append(row Located) {
-	c.ID = append(c.ID, row.ID)
-	c.Lat = append(c.Lat, row.Lat)
-	c.Lng = append(c.Lng, row.Lng)
-	c.Cell = append(c.Cell, row.Cell)
-}
-
-// Row reconstructs entity i as an AoS Located record. Inverse of
-// Append: slice / pointer fields are shared by reference (no
-// defensive copy); scalar fields and Option[T] are copied.
-func (c *LocatedColumns) Row(i int) (row Located) {
-	row.ID = c.ID[i]
-	row.Lat = c.Lat[i]
-	row.Lng = c.Lng[i]
-	row.Cell = c.Cell[i]
-	return
-}
-
-// --- Composed-interface BuildEntities helper (schema-agnostic). ---
-//
-// LocatedBuildEntities walks the SoA columns and emits one entity per
-// row through dml.BeginEntity / per-section BeginAttribute* /
-// AddMembershipLowCardRefP / AddToContainerP / EndAttributeP /
-// EndSection / CommitEntity. dml is generic — any leeway-DML class
-// whose method shapes satisfy the derived interfaces qualifies;
-// Go's type inference binds the type parameters at the call site.
-//
-// Callers drain via dml.TransferRecords (or schema-specific
-// equivalents) — left outside the helper because the record type
-// varies by target.
-
-// LocatedGeoPointAttrI is the InAttr-side view of the geoPoint section. P-variants only —
+// locatedGeoPointAttrI is the InAttr-side view of the geoPoint section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type LocatedGeoPointAttrI interface {
+type locatedGeoPointAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// LocatedGeoPointSecI is the Section-side view: opens an attribute and closes
+// locatedGeoPointSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type LocatedGeoPointSecI[Attr any, Ent any] interface {
+type locatedGeoPointSecI[Attr any, Ent any] interface {
 	BeginAttribute(pointLat float32, pointLng float32, h3 uint64) Attr
 	EndSection() Ent
 }
 
-// LocatedEntityI lists exactly the entity-level methods Located uses.
+// locatedEntityI lists exactly the entity-level methods located uses.
 // Type parameters compose the per-section Attr + Sec interfaces; Ent
 // is the entity type itself (return type of BeginEntity / SetId /
 // SetTimestamp / SetLifecycle — usually the DML pointer).
-type LocatedEntityI[
-	GeoPointAttr LocatedGeoPointAttrI,
-	GeoPointSec LocatedGeoPointSecI[GeoPointAttr, Ent],
+type locatedEntityI[
+	GeoPointAttr locatedGeoPointAttrI,
+	GeoPointSec locatedGeoPointSecI[GeoPointAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -101,46 +46,14 @@ type LocatedEntityI[
 	CommitEntity() (err error)
 }
 
-// LocatedBuildEntities walks c row-by-row, drives dml's entity / section
-// chain, and returns once every row has been committed. The dml
-// argument's concrete type binds every type parameter via Go's
-// type inference at the call site.
-func LocatedBuildEntities[
-	GeoPointAttr LocatedGeoPointAttrI,
-	GeoPointSec LocatedGeoPointSecI[GeoPointAttr, Ent],
-	Ent any,
-	DML LocatedEntityI[
-		GeoPointAttr, GeoPointSec,
-		Ent,
-	],
-](dml DML, c *LocatedColumns) (err error) {
-	n := c.Len()
-	for i := 0; i < n; i++ {
-		dml.BeginEntity()
-		dml.SetId(c.ID[i])
-		// --- geoPoint. ---
-		geoPointSec := dml.GetSectionGeoPoint()
-		geoPointSecAttr := geoPointSec.BeginAttribute(c.Lat[i], c.Lng[i], c.Cell[i])
-		geoPointSecAttr.AddMembershipLowCardRefP(kindDeviceLoc)
-		geoPointSecAttr.EndAttributeP()
-		geoPointSec.EndSection()
-		err = dml.CommitEntity()
-		if err != nil {
-			err = eh.Errorf("commit row %d: %w", i, err)
-			return
-		}
-	}
-	return
-}
-
-// LocatedAddSections contributes this kind's tagged sections to the OPEN
+// locatedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
-func LocatedAddSections[
-	GeoPointAttr LocatedGeoPointAttrI,
-	GeoPointSec LocatedGeoPointSecI[GeoPointAttr, Ent],
+func locatedAddSections[
+	GeoPointAttr locatedGeoPointAttrI,
+	GeoPointSec locatedGeoPointSecI[GeoPointAttr, Ent],
 	Ent any,
-	DML LocatedEntityI[
+	DML locatedEntityI[
 		GeoPointAttr, GeoPointSec,
 		Ent,
 	],
@@ -154,82 +67,29 @@ func LocatedAddSections[
 	return
 }
 
-// --- Composed-interface FillFromArrow helper (schema-agnostic). ---
-//
-// LocatedFillFromArrow walks the Arrow record row-by-row and appends
-// each entity's plain + tagged-section values into c. Plain columns
-// enter as concrete Arrow accessors (uniform across schemas);
-// per-section Attrs + Membs bind through type-parameter interfaces.
-
-// LocatedGeoPointAttrsReadI is the Attributes-side view of the geoPoint section.
-type LocatedGeoPointAttrsReadI interface {
+// locatedGeoPointAttrsReadI is the Attributes-side view of the geoPoint section.
+type locatedGeoPointAttrsReadI interface {
 	GetAttrValuePointLat(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float32
 	GetAttrValuePointLng(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) float32
 	GetAttrValueH3(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// LocatedGeoPointMembsReadI is the Memberships-side view of the geoPoint section.
-type LocatedGeoPointMembsReadI interface {
+// locatedGeoPointMembsReadI is the Memberships-side view of the geoPoint section.
+type locatedGeoPointMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// LocatedFillFromArrow walks rec row-by-row and appends each entity's
-// plain + tagged-section values into c. Plain columns enter as
-// concrete Arrow accessors; per-section Attrs + Membs bind through
-// type-parameter interfaces.
-func LocatedFillFromArrow[
-	GeoPointAttrs LocatedGeoPointAttrsReadI,
-	GeoPointMembs LocatedGeoPointMembsReadI,
-](
-	c *LocatedColumns,
-	n int,
-	idCol *array.Uint64,
-	geoPointAttrs GeoPointAttrs,
-	geoPointMembs GeoPointMembs,
-) (err error) {
-	for i := 0; i < n; i++ {
-		c.ID = append(c.ID, idCol.Value(i))
-		// --- geoPoint. ---
-		var geoPointLatVal float32
-		var geoPointLngVal float32
-		var geoPointCellVal uint64
-		var geoPointLatCount int
-		ngeoPoint := geoPointAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < ngeoPoint; attrJ++ {
-			geoPointLatLocal := geoPointAttrs.GetAttrValuePointLat(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-			geoPointLngLocal := geoPointAttrs.GetAttrValuePointLng(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-			geoPointCellLocal := geoPointAttrs.GetAttrValueH3(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-			for membID := range geoPointMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				if membID == kindDeviceLoc {
-					geoPointLatVal = geoPointLatLocal
-					geoPointLngVal = geoPointLngLocal
-					geoPointCellVal = geoPointCellLocal
-					geoPointLatCount++
-				}
-			}
-		}
-		if geoPointLatCount != 1 {
-			err = eb.Build().Int("row", i).Str("membership", "deviceLoc").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.Lat = append(c.Lat, geoPointLatVal)
-		c.Lng = append(c.Lng, geoPointLngVal)
-		c.Cell = append(c.Cell, geoPointCellVal)
-	}
-	return
-}
-
-// LocatedReadRow reads row i as one optional Located component: presence-
+// locatedReadRow reads row i as one optional Located component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A duplicated scalar field is
 // an error; duplicated container memberships concatenate. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
-func LocatedReadRow[
-	GeoPointAttrs LocatedGeoPointAttrsReadI,
-	GeoPointMembs LocatedGeoPointMembsReadI,
+func locatedReadRow[
+	GeoPointAttrs locatedGeoPointAttrsReadI,
+	GeoPointMembs locatedGeoPointMembsReadI,
 ](
 	i int,
 	geoPointAttrs GeoPointAttrs,

@@ -66,10 +66,6 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 	counting := &countingExecutor{inner: local}
 	ctx := context.Background()
 	st := NewDeviceStore(counting, nil, DeviceStoreConfig{})
-	c := NewDeviceCache[string](st, DeviceCacheConfig{
-		Capacity:      16,
-		FetchCriteria: caching.FetchCriteria{MinKeys: 4},
-	})
 	require.NoError(t, st.EnsureTable(ctx))
 
 	t0 := time.Unix(1_600_000_000, 0).UTC()
@@ -78,6 +74,14 @@ func TestDeviceStoreCacheBatchesFetches(t *testing.T) {
 	}
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
+
+	// Attach the view AFTER the writes: write-through populates attached
+	// views at Commit, and this test needs cold keys to exercise the
+	// miss-queue batching thresholds.
+	c := NewDeviceCache[string](st, DeviceCacheConfig{
+		Capacity:      16,
+		FetchCriteria: caching.FetchCriteria{MinKeys: 4},
+	})
 
 	for range c.WorkItem("frame-A") {
 		for _, key := range []uint64{1, 2} {
@@ -141,10 +145,11 @@ func TestDeviceStoreCacheFetchErrorBackoff(t *testing.T) {
 	require.Equal(t, 1, failing.queryCalls, "no re-fetch inside the error backoff")
 }
 
-// TestDeviceStoreLocalWritesInvalidateCache pins the SD4/SD5 hardening:
-// Put / Delete / Commit on a key drop its cache entry, so a local write
-// never leaves a stale L1 value behind.
-func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
+// TestDeviceStoreLocalWritesWriteThrough pins the write-through contract:
+// Commit / Delete populate every attached view with the new version
+// immediately (read-your-writes, before the flush), version-gated on the
+// Order timestamp so nothing older can shadow it.
+func TestDeviceStoreLocalWritesWriteThrough(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
 		t.Skipf("clickhouse-local unavailable: %v", err)
@@ -171,33 +176,31 @@ func TestDeviceStoreLocalWritesInvalidateCache(t *testing.T) {
 		require.Equal(t, uint64(9000), ent.Battery.Val.Charge)
 	}
 
-	// A new version invalidates the entry; the refetch sees the new row.
+	// A new version writes through: visible immediately, before the flush.
 	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
-	_, has := c.Get(1)
-	require.False(t, has, "local Put must invalidate the cached entry")
-	_, err = st.Flush(ctx)
-	require.NoError(t, err)
-	for range c.IterateRestWorkItems(ctx) {
-	}
 	ent, has := c.Get(1)
-	require.True(t, has)
+	require.True(t, has, "write-through: the local write must be visible immediately")
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
 	require.Equal(t, t1, ent.Ts)
-
-	// A tombstone invalidates too; the refetched row is the tombstone
-	// (Get is row-level and tombstone-blind by design — GetLive is the
-	// state-view read).
-	require.NoError(t, st.Delete(1, t2))
-	_, has = c.Get(1)
-	require.False(t, has, "local Delete must invalidate the cached entry")
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
-	for range c.IterateRestWorkItems(ctx) {
-	}
+	ent, has = c.Get(1)
+	require.True(t, has, "the entry survives the flush (pin released, value kept)")
+	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
+
+	// A tombstone writes through the same way — a versioned deletion (Get
+	// is row-level and tombstone-blind by design; GetLive is the
+	// state-view read).
+	require.NoError(t, st.Delete(1, t2))
+	ent, has = c.Get(1)
+	require.True(t, has, "the tombstone is visible immediately")
+	require.Equal(t, recordstore.LifecycleTombstone, ent.Lifecycle)
+	require.Empty(t, ent.Archetype())
+	_, err = st.Flush(ctx)
+	require.NoError(t, err)
 	ent, has = c.Get(1)
 	require.True(t, has)
 	require.Equal(t, recordstore.LifecycleTombstone, ent.Lifecycle)
-	require.Empty(t, ent.Archetype())
 	_, found, err := st.GetLive(ctx, 1)
 	require.NoError(t, err)
 	require.False(t, found)
@@ -237,15 +240,16 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 	require.True(t, found)
 	require.Equal(t, uint64(9000), ent.Battery.Val.Charge)
 
-	// Local single writer: the write hook evicts, the refetch serves the
-	// new version — GetLive is exact without any staleness signal.
+	// Local single writer, write-through: the new version is visible the
+	// moment Commit returns — no refetch, no invalidation miss — and it
+	// stays across the flush. GetLive is exact without any staleness
+	// signal.
 	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 100}).Commit())
+	ent, found = c.GetLive(1)
+	require.True(t, found, "write-through: visible before the flush")
+	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
-	_, found = c.GetLive(1)
-	require.False(t, found, "local write must evict the cached entry")
-	for range c.IterateRestWorkItems(ctx) {
-	}
 	ent, found = c.GetLive(1)
 	require.True(t, found)
 	require.Equal(t, uint64(100), ent.Battery.Val.Charge)
@@ -337,16 +341,22 @@ func TestDeviceCacheGetFetch(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, found)
 
-	// Dirty window: the flushed row is served but must not re-enter the
-	// cache while the key has an unflushed local write.
+	// Dirty window, write-through: the unflushed local write is what reads
+	// serve (read-your-writes); DiscardPending withdraws it — the cached
+	// entity never became durable, so the views invalidate — and reads
+	// fall back to the flushed row.
 	require.NoError(t, st.Begin(1, t0.Add(time.Hour)).AddBattery(Battery{ID: 1, Charge: 8}).Commit())
 	ent, found, err = c.GetFetch(ctx, 1)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, uint64(7), ent.Battery.Val.Charge, "reads see only flushed rows")
-	_, hit = c.Get(1)
-	require.False(t, hit, "a dirty key must not re-enter the cache")
+	require.Equal(t, uint64(8), ent.Battery.Val.Charge, "write-through serves the unflushed local write")
 	st.DiscardPending()
+	_, hit = c.Get(1)
+	require.False(t, hit, "a discarded write must not linger in the cache")
+	ent, found, err = c.GetFetch(ctx, 1)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, uint64(7), ent.Battery.Val.Charge, "after the discard the flushed row is the truth again")
 }
 
 // TestDeviceCacheGetFetchError: fetch failures surface as errors instead

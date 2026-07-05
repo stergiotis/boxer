@@ -5,9 +5,6 @@ package pushoutstore
 import (
 	"iter"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
@@ -19,74 +16,28 @@ const (
 	kindPushoutFramed uint64 = 1
 )
 
-// --- SoA columns + AoS Append adapter. ---
-
-// EnvelopeColumns is the SoA storage for batches of Envelope rows.
-// All slices grow in lockstep — Len returns the row count.
-type EnvelopeColumns struct {
-	ID []string
-
-	Framed [][]byte
-}
-
-// Len returns the number of rows currently in the batch.
-func (c *EnvelopeColumns) Len() int { return len(c.ID) }
-
-// Append pushes one AoS record into the SoA buffers.
-//
-// Aliasing: slice and pointer fields (`[]T`, `*roaring.Bitmap`) are
-// stored by reference, not copied. Callers must not mutate
-// row.<F> after Append unless they want Marshal to read the
-// mutation. Scalar fields (T, Option[T]) are copied by value.
-func (c *EnvelopeColumns) Append(row Envelope) {
-	c.ID = append(c.ID, row.ID)
-	c.Framed = append(c.Framed, row.Framed)
-}
-
-// Row reconstructs entity i as an AoS Envelope record. Inverse of
-// Append: slice / pointer fields are shared by reference (no
-// defensive copy); scalar fields and Option[T] are copied.
-func (c *EnvelopeColumns) Row(i int) (row Envelope) {
-	row.ID = c.ID[i]
-	row.Framed = c.Framed[i]
-	return
-}
-
-// --- Composed-interface BuildEntities helper (schema-agnostic). ---
-//
-// EnvelopeBuildEntities walks the SoA columns and emits one entity per
-// row through dml.BeginEntity / per-section BeginAttribute* /
-// AddMembershipLowCardRefP / AddToContainerP / EndAttributeP /
-// EndSection / CommitEntity. dml is generic — any leeway-DML class
-// whose method shapes satisfy the derived interfaces qualifies;
-// Go's type inference binds the type parameters at the call site.
-//
-// Callers drain via dml.TransferRecords (or schema-specific
-// equivalents) — left outside the helper because the record type
-// varies by target.
-
-// EnvelopeEnvBlobAttrI is the InAttr-side view of the envBlob section. P-variants only —
+// envelopeEnvBlobAttrI is the InAttr-side view of the envBlob section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type EnvelopeEnvBlobAttrI interface {
+type envelopeEnvBlobAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// EnvelopeEnvBlobSecI is the Section-side view: opens an attribute and closes
+// envelopeEnvBlobSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type EnvelopeEnvBlobSecI[Attr any, Ent any] interface {
+type envelopeEnvBlobSecI[Attr any, Ent any] interface {
 	BeginAttribute(value []byte) Attr
 	EndSection() Ent
 }
 
-// EnvelopeEntityI lists exactly the entity-level methods Envelope uses.
+// envelopeEntityI lists exactly the entity-level methods envelope uses.
 // Type parameters compose the per-section Attr + Sec interfaces; Ent
 // is the entity type itself (return type of BeginEntity / SetId /
 // SetTimestamp / SetLifecycle — usually the DML pointer).
-type EnvelopeEntityI[
-	EnvBlobAttr EnvelopeEnvBlobAttrI,
-	EnvBlobSec EnvelopeEnvBlobSecI[EnvBlobAttr, Ent],
+type envelopeEntityI[
+	EnvBlobAttr envelopeEnvBlobAttrI,
+	EnvBlobSec envelopeEnvBlobSecI[EnvBlobAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -95,46 +46,14 @@ type EnvelopeEntityI[
 	CommitEntity() (err error)
 }
 
-// EnvelopeBuildEntities walks c row-by-row, drives dml's entity / section
-// chain, and returns once every row has been committed. The dml
-// argument's concrete type binds every type parameter via Go's
-// type inference at the call site.
-func EnvelopeBuildEntities[
-	EnvBlobAttr EnvelopeEnvBlobAttrI,
-	EnvBlobSec EnvelopeEnvBlobSecI[EnvBlobAttr, Ent],
-	Ent any,
-	DML EnvelopeEntityI[
-		EnvBlobAttr, EnvBlobSec,
-		Ent,
-	],
-](dml DML, c *EnvelopeColumns) (err error) {
-	n := c.Len()
-	for i := 0; i < n; i++ {
-		dml.BeginEntity()
-		dml.SetId(c.ID[i])
-		// --- envBlob. ---
-		envBlobSec := dml.GetSectionEnvBlob()
-		envBlobSecAttr_Framed := envBlobSec.BeginAttribute(c.Framed[i])
-		envBlobSecAttr_Framed.AddMembershipLowCardRefP(kindPushoutFramed)
-		envBlobSecAttr_Framed.EndAttributeP()
-		envBlobSec.EndSection()
-		err = dml.CommitEntity()
-		if err != nil {
-			err = eh.Errorf("commit row %d: %w", i, err)
-			return
-		}
-	}
-	return
-}
-
-// EnvelopeAddSections contributes this kind's tagged sections to the OPEN
+// envelopeAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
-func EnvelopeAddSections[
-	EnvBlobAttr EnvelopeEnvBlobAttrI,
-	EnvBlobSec EnvelopeEnvBlobSecI[EnvBlobAttr, Ent],
+func envelopeAddSections[
+	EnvBlobAttr envelopeEnvBlobAttrI,
+	EnvBlobSec envelopeEnvBlobSecI[EnvBlobAttr, Ent],
 	Ent any,
-	DML EnvelopeEntityI[
+	DML envelopeEntityI[
 		EnvBlobAttr, EnvBlobSec,
 		Ent,
 	],
@@ -148,75 +67,27 @@ func EnvelopeAddSections[
 	return
 }
 
-// --- Composed-interface FillFromArrow helper (schema-agnostic). ---
-//
-// EnvelopeFillFromArrow walks the Arrow record row-by-row and appends
-// each entity's plain + tagged-section values into c. Plain columns
-// enter as concrete Arrow accessors (uniform across schemas);
-// per-section Attrs + Membs bind through type-parameter interfaces.
-
-// EnvelopeEnvBlobAttrsReadI is the Attributes-side view of the envBlob section.
-type EnvelopeEnvBlobAttrsReadI interface {
+// envelopeEnvBlobAttrsReadI is the Attributes-side view of the envBlob section.
+type envelopeEnvBlobAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) []byte
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// EnvelopeEnvBlobMembsReadI is the Memberships-side view of the envBlob section.
-type EnvelopeEnvBlobMembsReadI interface {
+// envelopeEnvBlobMembsReadI is the Memberships-side view of the envBlob section.
+type envelopeEnvBlobMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// EnvelopeFillFromArrow walks rec row-by-row and appends each entity's
-// plain + tagged-section values into c. Plain columns enter as
-// concrete Arrow accessors; per-section Attrs + Membs bind through
-// type-parameter interfaces.
-func EnvelopeFillFromArrow[
-	EnvBlobAttrs EnvelopeEnvBlobAttrsReadI,
-	EnvBlobMembs EnvelopeEnvBlobMembsReadI,
-](
-	c *EnvelopeColumns,
-	n int,
-	idCol *array.String,
-	envBlobAttrs EnvBlobAttrs,
-	envBlobMembs EnvBlobMembs,
-) (err error) {
-	for i := 0; i < n; i++ {
-		c.ID = append(c.ID, idCol.Value(i))
-		// --- envBlob. ---
-		var envBlobFramedVal []byte
-		var envBlobFramedCount int
-		nenvBlob := envBlobAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nenvBlob; attrJ++ {
-			for membID := range envBlobMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindPushoutFramed:
-					val := envBlobAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					cp := make([]byte, len(val))
-					copy(cp, val)
-					envBlobFramedVal = cp
-					envBlobFramedCount++
-				}
-			}
-		}
-		if envBlobFramedCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Framed").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.Framed = append(c.Framed, envBlobFramedVal)
-	}
-	return
-}
-
-// EnvelopeReadRow reads row i as one optional Envelope component: presence-
+// envelopeReadRow reads row i as one optional Envelope component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A duplicated scalar field is
 // an error; duplicated container memberships concatenate. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
-func EnvelopeReadRow[
-	EnvBlobAttrs EnvelopeEnvBlobAttrsReadI,
-	EnvBlobMembs EnvelopeEnvBlobMembsReadI,
+func envelopeReadRow[
+	EnvBlobAttrs envelopeEnvBlobAttrsReadI,
+	EnvBlobMembs envelopeEnvBlobMembsReadI,
 ](
 	i int,
 	envBlobAttrs EnvBlobAttrs,

@@ -105,13 +105,19 @@ type LedgerStore struct {
 	// Flush; the next Flush ships them (DiscardPending drops them).
 	pending []arrow.RecordBatch
 	// dirty tracks locally-written keys between Commit/Delete and the
-	// next successful Flush (or DiscardPending); attached cache views
-	// refuse to cache them so a fetch can never re-cache the pre-write
-	// row.
+	// next successful Flush (or DiscardPending). Attached cache views
+	// pin these keys until the flush lands (eviction cannot expose the
+	// pre-write row) and their fetchers refuse to cache them — the
+	// remaining guard for writes the views could not materialize (Raw
+	// commits) and for InvalidateAll inside a dirty window.
 	dirty map[string]struct{}
-	// onWrite holds the local-write invalidation hooks of attached
-	// cache views (NewLedgerCache registers one per view).
-	onWrite []func(string)
+	// onWrite/onFlush hold the write-through hooks of attached cache
+	// views (NewLedgerCache registers one pair per view): onWrite populates
+	// and pins the committed entity (nil = not materializable or a
+	// discarded write — invalidate instead); onFlush releases the pin
+	// once the row is durable.
+	onWrite []func(string, *LedgerEntity)
+	onFlush []func(string)
 }
 
 // NewLedgerStore wires the store. A nil alloc selects the Go allocator.
@@ -123,11 +129,21 @@ func NewLedgerStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Ledg
 	return
 }
 
-// invalidate fires the registered local-write hooks so attached cache
-// views evict the key — a local write never leaves a stale L1 value
-// behind.
-func (inst *LedgerStore) invalidate(key string) {
+// notifyWrite fires the write-through hooks of attached cache views:
+// ent is the just-committed entity (the views populate and pin it),
+// or nil when the row is not faithfully materializable (Raw commits)
+// or a buffered write is being discarded — the views then invalidate
+// the key instead.
+func (inst *LedgerStore) notifyWrite(key string, ent *LedgerEntity) {
 	for _, f := range inst.onWrite {
+		f(key, ent)
+	}
+}
+
+// notifyFlush releases the attached views' dirty-window pins after a
+// successful Flush made the key durable.
+func (inst *LedgerStore) notifyFlush(key string) {
+	for _, f := range inst.onFlush {
 		f(key)
 	}
 }
@@ -189,21 +205,32 @@ func (inst *LedgerStore) VerifySchema(ctx context.Context) (err error) {
 type LedgerEntityBuilder struct {
 	store *LedgerStore
 	key   string
+	// ent mirrors the typed Add* calls so Commit can write the entity
+	// through to attached cache views; raw marks commits that touched
+	// the DML directly (or double-added a component) — those cannot be
+	// materialized faithfully and invalidate the key instead.
+	ent LedgerEntity
+	raw bool
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order).
 func (inst *LedgerStore) Begin(id string, ts time.Time) *LedgerEntityBuilder {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts)
-	return &LedgerEntityBuilder{store: inst, key: id}
+	return &LedgerEntityBuilder{store: inst, key: id, ent: LedgerEntity{ID: id, Ts: ts}}
 }
 
 // AddOpened contributes the Opened component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *LedgerEntityBuilder) AddOpened(row Opened) *LedgerEntityBuilder {
-	err := OpenedAddSections(inst.store.dml, row)
+	err := openedAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Opened.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Opened = option.Some(row)
 	}
 	return inst
 }
@@ -211,9 +238,14 @@ func (inst *LedgerEntityBuilder) AddOpened(row Opened) *LedgerEntityBuilder {
 // AddDeposited contributes the Deposited component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *LedgerEntityBuilder) AddDeposited(row Deposited) *LedgerEntityBuilder {
-	err := DepositedAddSections(inst.store.dml, row)
+	err := depositedAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Deposited.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Deposited = option.Some(row)
 	}
 	return inst
 }
@@ -221,9 +253,14 @@ func (inst *LedgerEntityBuilder) AddDeposited(row Deposited) *LedgerEntityBuilde
 // AddWithdrawn contributes the Withdrawn component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *LedgerEntityBuilder) AddWithdrawn(row Withdrawn) *LedgerEntityBuilder {
-	err := WithdrawnAddSections(inst.store.dml, row)
+	err := withdrawnAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Withdrawn.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Withdrawn = option.Some(row)
 	}
 	return inst
 }
@@ -231,9 +268,14 @@ func (inst *LedgerEntityBuilder) AddWithdrawn(row Withdrawn) *LedgerEntityBuilde
 // AddClosed contributes the Closed component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *LedgerEntityBuilder) AddClosed(row Closed) *LedgerEntityBuilder {
-	err := ClosedAddSections(inst.store.dml, row)
+	err := closedAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Closed.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Closed = option.Some(row)
 	}
 	return inst
 }
@@ -241,9 +283,14 @@ func (inst *LedgerEntityBuilder) AddClosed(row Closed) *LedgerEntityBuilder {
 // AddAccountState contributes the AccountState component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *LedgerEntityBuilder) AddAccountState(row AccountState) *LedgerEntityBuilder {
-	err := AccountStateAddSections(inst.store.dml, row)
+	err := accountStateAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.AccountState.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.AccountState = option.Some(row)
 	}
 	return inst
 }
@@ -254,14 +301,18 @@ func (inst *LedgerEntityBuilder) AddAccountState(row AccountState) *LedgerEntity
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *LedgerEntityBuilder) Raw() *lowlevel.InEntityLedgerTable {
+	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
 
-// Commit finishes the open entity and buffers the row. Attached cache
-// views evict the entity's key — a local write never leaves a stale
-// L1 value behind (external writers remain the caller's problem; see
-// ADR-0100 Deferred). A failed Commit rolls the frame back — the
-// entity is discarded and the store stays usable.
+// Commit finishes the open entity, buffers the row, and writes it
+// through to attached cache views: the entity is populated and pinned
+// until the store's Flush makes it durable — reads after writes hit
+// immediately, and the caching version gate plus the pin make a raced
+// refetch of the pre-write row bounce off. A commit that touched
+// Raw() cannot be materialized faithfully and invalidates the key
+// instead. A failed Commit rolls the frame back — the entity is
+// discarded and the store stays usable.
 func (inst *LedgerEntityBuilder) Commit() (err error) {
 	err = inst.store.dml.CommitEntity()
 	if err != nil {
@@ -270,7 +321,12 @@ func (inst *LedgerEntityBuilder) Commit() (err error) {
 	}
 	inst.store.buffered++
 	inst.store.dirty[inst.key] = struct{}{}
-	inst.store.invalidate(inst.key)
+	if inst.raw {
+		inst.store.notifyWrite(inst.key, nil)
+	} else {
+		ent := inst.ent
+		inst.store.notifyWrite(inst.key, &ent)
+	}
 	return
 }
 
@@ -432,6 +488,9 @@ func (inst *LedgerStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	n = inst.buffered
 	inst.buffered = 0
+	for k := range inst.dirty {
+		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
+	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	return
 }
@@ -452,6 +511,9 @@ func (inst *LedgerStore) DiscardPending() {
 	}
 	inst.pending = nil
 	inst.buffered = 0
+	for k := range inst.dirty {
+		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
+	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
 }
 
@@ -472,51 +534,81 @@ type LedgerCacheConfig struct {
 	Capacity int
 	// FetchCriteria are the cache's batch-flush thresholds.
 	FetchCriteria caching.FetchCriteria
+	// FreshnessTTL enables age-based staleness onset (ADR-0100's
+	// external-writer staleness story): entries older than this read
+	// as stale — strict reads miss and queue a refetch, accept-stale
+	// reads keep serving. Zero disables (staleness stays signal-only).
+	FreshnessTTL time.Duration
+	// NegativeTTL enables absent-key marking: keys a clean fetch did
+	// not return are treated as absent for this long — misses on them
+	// neither queue nor suspend work items, so replay loops over keys
+	// that do not exist terminate. Zero disables.
+	NegativeTTL time.Duration
 }
 
-// LedgerCache is the batched read-through KV view over a LedgerStore
-// (ADR-0100 SD5): misses queue under work items and flush as one
-// IN (…) lookup. Get is exact for immutable-by-key access — see SD4.
-// Local writes on the store evict the written key from every attached
-// view, so under this process's single writer the cached entries are
-// also the latest state; only EXTERNAL writers can leave the view
-// stale, and they need a caller-provided signal: MarkStale /
-// Invalidate / InvalidateAll (a freshness TTL is a recorded
-// follow-up). Like the store it wraps, a view is single-goroutine.
-// W is the work-item type (use struct{} when the suspend/replay
-// machinery is not needed).
+// LedgerCache is the batched read-through, write-through KV view over a
+// LedgerStore (ADR-0100 SD5): misses queue under work items and flush
+// as one IN (…) lookup, and local writes populate the view at Commit —
+// pinned until the store's Flush makes them durable — so reads after
+// writes hit immediately. Admission is version-gated on the entity's
+// Order timestamp: a raced refetch of an older row bounces off. Only
+// EXTERNAL writers can leave the view stale; they need a caller-
+// provided signal: MarkStale / Invalidate / InvalidateAll (a freshness
+// TTL option exists on the underlying cache). Raw() commits and
+// discarded writes invalidate instead of populating. Like the store
+// it wraps, a view is single-goroutine. W is the work-item type (use
+// struct{} when the suspend/replay machinery is not needed).
 type LedgerCache[W comparable] struct {
 	st    *LedgerStore
 	cfg   LedgerCacheConfig
 	cache *caching.ReadThroughCache[string, *LedgerEntity, W]
 }
 
-// NewLedgerCache attaches a read-through cache view to st, registering its
-// local-write invalidation hook with the store. Views attach for the
-// store's lifetime — there is no detach.
+// NewLedgerCache attaches a read-through, write-through cache view to st,
+// registering its write-through and flush hooks with the store. Views
+// attach for the store's lifetime — there is no detach.
 func NewLedgerCache[W comparable](st *LedgerStore, cfg LedgerCacheConfig) (inst *LedgerCache[W]) {
 	if cfg.Capacity <= 0 {
 		cfg.Capacity = 1024
 	}
 	inst = &LedgerCache[W]{st: st, cfg: cfg}
 	inst.rebuild()
-	// The hook closes over the view, not the cache instance, so it
-	// stays correct across InvalidateAll's rebuild.
-	st.onWrite = append(st.onWrite, func(k string) { inst.cache.Delete(k) })
+	// The hooks close over the view, not the cache instance, keeping
+	// them correct if the cache is ever swapped out.
+	st.onWrite = append(st.onWrite, func(k string, ent *LedgerEntity) {
+		if ent == nil {
+			inst.cache.Delete(k) // not materializable or discarded: invalidate
+			return
+		}
+		inst.cache.AddItem(k, ent) // version-gated write-through
+		inst.cache.Pin(k)          // dirty-window latch, released by Flush
+	})
+	st.onFlush = append(st.onFlush, func(k string) { inst.cache.Unpin(k) })
 	return
 }
 
 func (inst *LedgerCache[W]) rebuild() {
-	inst.cache = caching.NewReadThroughCache[string, *LedgerEntity, W](inst.cfg.Capacity, &ledgerFetcher{st: inst.st}, inst.cfg.FetchCriteria)
+	opts := []caching.CacheOption[string, *LedgerEntity, W]{
+		// Admission mirrors the table's newest-row-per-key semantics:
+		// the Order timestamp is the entity's monotonic version.
+		caching.WithVersioning[string, *LedgerEntity, W](func(e *LedgerEntity) int64 { return e.Ts.UnixNano() }),
+	}
+	if inst.cfg.FreshnessTTL > 0 {
+		opts = append(opts, caching.WithFreshnessTTL[string, *LedgerEntity, W](inst.cfg.FreshnessTTL))
+	}
+	if inst.cfg.NegativeTTL > 0 {
+		opts = append(opts, caching.WithNegativeCaching[string, *LedgerEntity, W](inst.cfg.NegativeTTL))
+	}
+	inst.cache = caching.NewReadThroughCache[string, *LedgerEntity, W](inst.cfg.Capacity, &ledgerFetcher{st: inst.st}, inst.cfg.FetchCriteria, opts...)
 }
 
-// Get retrieves an entity by Key through the cache. A miss queues the
-// key for the next batch fetch (the caching suspend/replay contract).
-// A miss can also mean the batched fetch errored (misses swallow
-// fetch errors; the circuit breaker backs off) — GetFetch surfaces
-// the error instead, and the store's Latest stays the authoritative
-// check. The returned entity is shared with the cache: treat it as
-// immutable.
+// Get retrieves an entity by Key through the cache; local writes are
+// visible immediately (write-through). A miss queues the key for the
+// next batch fetch (the caching suspend/replay contract). A miss can
+// also mean the batched fetch errored (misses swallow fetch errors;
+// the circuit breaker backs off) — GetFetch surfaces the error
+// instead, and the store's Latest stays the authoritative check. The
+// returned entity is shared with the cache: treat it as immutable.
 func (inst *LedgerCache[W]) Get(key string) (ent *LedgerEntity, found bool) {
 	return inst.cache.Get(key)
 }
@@ -582,17 +674,28 @@ func (inst *LedgerCache[W]) MarkStale(key string) {
 	inst.cache.MarkAsStale(key)
 }
 
+// MarkStaleIfOlder is the version-carrying external-writer signal:
+// it stales the cached entry only if its Order is below order, so a
+// redundant signal for a version the view already holds is free —
+// the natural sink for an invalidation stream carrying (key, Order).
+func (inst *LedgerCache[W]) MarkStaleIfOlder(key string, order time.Time) {
+	inst.cache.MarkAsStaleIfOlder(key, order.UnixNano())
+}
+
 // Invalidate drops the key's cached entry (L1 and stash).
 func (inst *LedgerCache[W]) Invalidate(key string) {
 	inst.cache.Delete(key)
 }
 
-// InvalidateAll drops every cached entry by rebuilding the underlying
-// cache — the bulk external-writer signal (e.g. after an import).
-// In-flight miss bookkeeping (queued keys, pending work items) is
-// dropped with it: call between frames, not with suspended work.
+// InvalidateAll drops every cached entry — the bulk external-writer
+// signal (e.g. after an import). In-flight miss bookkeeping (queued
+// keys, pending work items) and the dirty-window pins are dropped
+// with it: call between frames, with no suspended work and no
+// unflushed local writes (the fetcher's dirty-guard keeps pre-write
+// rows out of the cleared cache until the next Flush, at the cost of
+// misses on those keys).
 func (inst *LedgerCache[W]) InvalidateAll() {
-	inst.rebuild()
+	inst.cache.Clear()
 }
 
 // fetchLatestSQL is the batched newest-row-per-key point lookup shared
@@ -627,7 +730,12 @@ func (inst *ledgerFetcher) DeterminePartition(key string) uint64 { return 0 }
 // FetchItemSinglePartition implements caching.ItemFetcherI: one batched
 // point lookup per fetch. Duplicate versions collapse newest-first.
 // Dirty keys (written locally, not yet flushed) are fetched but not
-// cached — caching them would resurrect the pre-write row.
+// cached. With write-through the version gate already rejects the
+// pre-write row while the newer entry is resident; this guard is the
+// remaining defense for dirty keys the views could NOT materialize
+// (Raw commits, discarded writes) and for InvalidateAll inside a
+// dirty window, where the cache is cold and the gate has nothing to
+// compare against.
 func (inst *ledgerFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *LedgerEntity]) (err error) {
 	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL(keys))
 	if err != nil {
@@ -909,7 +1017,7 @@ func decodeLedgerRecord(rec arrow.RecordBatch) (ents []*LedgerEntity, err error)
 			Ts: tsR.ValueTs.Value(i).ToTime(tsType.Unit).UTC(),
 		}
 		{
-			row, ok, e := OpenedReadRow(i, acctOwnerR.GetAttributes(), acctOwnerR.GetMemberships())
+			row, ok, e := openedReadRow(i, acctOwnerR.GetAttributes(), acctOwnerR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read opened component: %w", e)
 				return
@@ -920,7 +1028,7 @@ func decodeLedgerRecord(rec arrow.RecordBatch) (ents []*LedgerEntity, err error)
 			}
 		}
 		{
-			row, ok, e := DepositedReadRow(i, acctDepositR.GetAttributes(), acctDepositR.GetMemberships())
+			row, ok, e := depositedReadRow(i, acctDepositR.GetAttributes(), acctDepositR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read deposited component: %w", e)
 				return
@@ -931,7 +1039,7 @@ func decodeLedgerRecord(rec arrow.RecordBatch) (ents []*LedgerEntity, err error)
 			}
 		}
 		{
-			row, ok, e := WithdrawnReadRow(i, acctWithdrawR.GetAttributes(), acctWithdrawR.GetMemberships())
+			row, ok, e := withdrawnReadRow(i, acctWithdrawR.GetAttributes(), acctWithdrawR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read withdrawn component: %w", e)
 				return
@@ -942,7 +1050,7 @@ func decodeLedgerRecord(rec arrow.RecordBatch) (ents []*LedgerEntity, err error)
 			}
 		}
 		{
-			row, ok, e := ClosedReadRow(i, acctClosedR.GetAttributes(), acctClosedR.GetMemberships())
+			row, ok, e := closedReadRow(i, acctClosedR.GetAttributes(), acctClosedR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read closed component: %w", e)
 				return
@@ -953,7 +1061,7 @@ func decodeLedgerRecord(rec arrow.RecordBatch) (ents []*LedgerEntity, err error)
 			}
 		}
 		{
-			row, ok, e := AccountStateReadRow(i, snapOwnerR.GetAttributes(), snapOwnerR.GetMemberships(), snapBalanceR.GetAttributes(), snapBalanceR.GetMemberships(), snapClosedR.GetAttributes(), snapClosedR.GetMemberships(), snapAsOfR.GetAttributes(), snapAsOfR.GetMemberships())
+			row, ok, e := accountStateReadRow(i, snapOwnerR.GetAttributes(), snapOwnerR.GetMemberships(), snapBalanceR.GetAttributes(), snapBalanceR.GetMemberships(), snapClosedR.GetAttributes(), snapClosedR.GetMemberships(), snapAsOfR.GetAttributes(), snapAsOfR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read accountState component: %w", e)
 				return

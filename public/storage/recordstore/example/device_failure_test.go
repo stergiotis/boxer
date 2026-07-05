@@ -166,10 +166,13 @@ func TestDeviceStoreFlushOpenFrameKeepsPending(t *testing.T) {
 	require.True(t, found)
 }
 
-// TestDeviceStoreNoStaleRecacheBetweenCommitAndFlush pins the dirty-key
-// suppression: a Get between Commit and Flush must not re-cache the
-// pre-write row (the review's probe-3 scenario, inverted).
-func TestDeviceStoreNoStaleRecacheBetweenCommitAndFlush(t *testing.T) {
+// TestDeviceStoreDirtyWindowRacedFetchRejected pins the dirty-window
+// protection under write-through (the review's probe-3 scenario, now
+// closed by the caching version gate + pin — the unsafe_lww trace in
+// verification/formal/caching): a fetch queued BEFORE a Commit delivers
+// the pre-write row and must bounce off; reads serve the local write
+// throughout the window and past the flush.
+func TestDeviceStoreDirtyWindowRacedFetchRejected(t *testing.T) {
 	st, ctx := newFlakyStore(t, 0)
 	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
 	t0 := time.Unix(1_600_000_000, 0).UTC()
@@ -179,24 +182,35 @@ func TestDeviceStoreNoStaleRecacheBetweenCommitAndFlush(t *testing.T) {
 	_, err := st.Flush(ctx)
 	require.NoError(t, err)
 
-	// New version committed but not flushed; a fetch in this window sees
-	// the old row in ClickHouse and must refuse to cache it.
+	// Make the key cold and queue a fetch — the race window opens.
+	c.Invalidate(1)
+	for range c.WorkItem("race") {
+		_, has := c.Get(1)
+		require.False(t, has, "cold key queues the fetch")
+	}
+
+	// The write lands while the fetch is still queued: write-through makes
+	// it visible immediately, pinned until the flush.
 	require.NoError(t, st.Begin(1, t1).AddBattery(Battery{ID: 1, Charge: 2}).Commit())
-	_, has := c.Get(1)
-	require.False(t, has)
+	ent, has := c.Get(1)
+	require.True(t, has, "write-through: visible immediately")
+	require.Equal(t, uint64(2), ent.Battery.Val.Charge)
+
+	// The queued fetch now runs and delivers the PRE-write row (ClickHouse
+	// still holds charge=1) — the version gate must reject it.
 	for range c.IterateRestWorkItems(ctx) {
 	}
-	_, has = c.Get(1)
-	require.False(t, has, "the pre-write row must not enter the cache while the key is dirty")
+	ent, has = c.Get(1)
+	require.True(t, has)
+	require.Equal(t, uint64(2), ent.Battery.Val.Charge, "the raced pre-write row must bounce off the version gate")
+	require.Equal(t, t1, ent.Ts)
 
+	// Flush publishes; the entry keeps serving the written version.
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
-	for range c.IterateRestWorkItems(ctx) {
-	}
-	ent, has := c.Get(1)
+	ent, has = c.Get(1)
 	require.True(t, has)
-	require.Equal(t, uint64(2), ent.Battery.Val.Charge, "post-flush fetch must serve the new version")
-	require.Equal(t, t1, ent.Ts)
+	require.Equal(t, uint64(2), ent.Battery.Val.Charge)
 }
 
 // TestDeviceStoreIngestRejectsDuplicateKeys: duplicates within one call

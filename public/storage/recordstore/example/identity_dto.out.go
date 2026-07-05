@@ -5,9 +5,6 @@ package example
 import (
 	"iter"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
@@ -20,80 +17,28 @@ const (
 	kindDeviceNick   uint64 = 2
 )
 
-// --- SoA columns + AoS Append adapter. ---
-
-// IdentityColumns is the SoA storage for batches of Identity rows.
-// All slices grow in lockstep — Len returns the row count.
-type IdentityColumns struct {
-	ID []uint64
-
-	Status  []string
-	NickVal []string
-	NickHas []bool
-}
-
-// Len returns the number of rows currently in the batch.
-func (c *IdentityColumns) Len() int { return len(c.ID) }
-
-// Append pushes one AoS record into the SoA buffers.
-//
-// Aliasing: slice and pointer fields (`[]T`, `*roaring.Bitmap`) are
-// stored by reference, not copied. Callers must not mutate
-// row.<F> after Append unless they want Marshal to read the
-// mutation. Scalar fields (T, Option[T]) are copied by value.
-func (c *IdentityColumns) Append(row Identity) {
-	c.ID = append(c.ID, row.ID)
-	c.Status = append(c.Status, row.Status)
-	c.NickVal = append(c.NickVal, row.Nick.Val)
-	c.NickHas = append(c.NickHas, row.Nick.Has)
-}
-
-// Row reconstructs entity i as an AoS Identity record. Inverse of
-// Append: slice / pointer fields are shared by reference (no
-// defensive copy); scalar fields and Option[T] are copied.
-func (c *IdentityColumns) Row(i int) (row Identity) {
-	row.ID = c.ID[i]
-	row.Status = c.Status[i]
-	row.Nick.Val = c.NickVal[i]
-	row.Nick.Has = c.NickHas[i]
-	return
-}
-
-// --- Composed-interface BuildEntities helper (schema-agnostic). ---
-//
-// IdentityBuildEntities walks the SoA columns and emits one entity per
-// row through dml.BeginEntity / per-section BeginAttribute* /
-// AddMembershipLowCardRefP / AddToContainerP / EndAttributeP /
-// EndSection / CommitEntity. dml is generic — any leeway-DML class
-// whose method shapes satisfy the derived interfaces qualifies;
-// Go's type inference binds the type parameters at the call site.
-//
-// Callers drain via dml.TransferRecords (or schema-specific
-// equivalents) — left outside the helper because the record type
-// varies by target.
-
-// IdentitySymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
+// identitySymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type IdentitySymbolAttrI interface {
+type identitySymbolAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// IdentitySymbolSecI is the Section-side view: opens an attribute and closes
+// identitySymbolSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type IdentitySymbolSecI[Attr any, Ent any] interface {
+type identitySymbolSecI[Attr any, Ent any] interface {
 	BeginAttribute(value string) Attr
 	EndSection() Ent
 }
 
-// IdentityEntityI lists exactly the entity-level methods Identity uses.
+// identityEntityI lists exactly the entity-level methods identity uses.
 // Type parameters compose the per-section Attr + Sec interfaces; Ent
 // is the entity type itself (return type of BeginEntity / SetId /
 // SetTimestamp / SetLifecycle — usually the DML pointer).
-type IdentityEntityI[
-	SymbolAttr IdentitySymbolAttrI,
-	SymbolSec IdentitySymbolSecI[SymbolAttr, Ent],
+type identityEntityI[
+	SymbolAttr identitySymbolAttrI,
+	SymbolSec identitySymbolSecI[SymbolAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -102,51 +47,14 @@ type IdentityEntityI[
 	CommitEntity() (err error)
 }
 
-// IdentityBuildEntities walks c row-by-row, drives dml's entity / section
-// chain, and returns once every row has been committed. The dml
-// argument's concrete type binds every type parameter via Go's
-// type inference at the call site.
-func IdentityBuildEntities[
-	SymbolAttr IdentitySymbolAttrI,
-	SymbolSec IdentitySymbolSecI[SymbolAttr, Ent],
-	Ent any,
-	DML IdentityEntityI[
-		SymbolAttr, SymbolSec,
-		Ent,
-	],
-](dml DML, c *IdentityColumns) (err error) {
-	n := c.Len()
-	for i := 0; i < n; i++ {
-		dml.BeginEntity()
-		dml.SetId(c.ID[i])
-		// --- symbol. ---
-		symbolSec := dml.GetSectionSymbol()
-		symbolSecAttr_Status := symbolSec.BeginAttribute(c.Status[i])
-		symbolSecAttr_Status.AddMembershipLowCardRefP(kindDeviceStatus)
-		symbolSecAttr_Status.EndAttributeP()
-		if c.NickHas[i] {
-			symbolSecAttr_Nick := symbolSec.BeginAttribute(c.NickVal[i])
-			symbolSecAttr_Nick.AddMembershipLowCardRefP(kindDeviceNick)
-			symbolSecAttr_Nick.EndAttributeP()
-		}
-		symbolSec.EndSection()
-		err = dml.CommitEntity()
-		if err != nil {
-			err = eh.Errorf("commit row %d: %w", i, err)
-			return
-		}
-	}
-	return
-}
-
-// IdentityAddSections contributes this kind's tagged sections to the OPEN
+// identityAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
-func IdentityAddSections[
-	SymbolAttr IdentitySymbolAttrI,
-	SymbolSec IdentitySymbolSecI[SymbolAttr, Ent],
+func identityAddSections[
+	SymbolAttr identitySymbolAttrI,
+	SymbolSec identitySymbolSecI[SymbolAttr, Ent],
 	Ent any,
-	DML IdentityEntityI[
+	DML identityEntityI[
 		SymbolAttr, SymbolSec,
 		Ent,
 	],
@@ -165,87 +73,27 @@ func IdentityAddSections[
 	return
 }
 
-// --- Composed-interface FillFromArrow helper (schema-agnostic). ---
-//
-// IdentityFillFromArrow walks the Arrow record row-by-row and appends
-// each entity's plain + tagged-section values into c. Plain columns
-// enter as concrete Arrow accessors (uniform across schemas);
-// per-section Attrs + Membs bind through type-parameter interfaces.
-
-// IdentitySymbolAttrsReadI is the Attributes-side view of the symbol section.
-type IdentitySymbolAttrsReadI interface {
+// identitySymbolAttrsReadI is the Attributes-side view of the symbol section.
+type identitySymbolAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// IdentitySymbolMembsReadI is the Memberships-side view of the symbol section.
-type IdentitySymbolMembsReadI interface {
+// identitySymbolMembsReadI is the Memberships-side view of the symbol section.
+type identitySymbolMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// IdentityFillFromArrow walks rec row-by-row and appends each entity's
-// plain + tagged-section values into c. Plain columns enter as
-// concrete Arrow accessors; per-section Attrs + Membs bind through
-// type-parameter interfaces.
-func IdentityFillFromArrow[
-	SymbolAttrs IdentitySymbolAttrsReadI,
-	SymbolMembs IdentitySymbolMembsReadI,
-](
-	c *IdentityColumns,
-	n int,
-	idCol *array.Uint64,
-	symbolAttrs SymbolAttrs,
-	symbolMembs SymbolMembs,
-) (err error) {
-	for i := 0; i < n; i++ {
-		c.ID = append(c.ID, idCol.Value(i))
-		// --- symbol. ---
-		var symbolStatusVal string
-		var symbolStatusCount int
-		var symbolNickVal string
-		var symbolNickCount int
-		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
-			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindDeviceStatus:
-					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					symbolStatusVal = val
-					symbolStatusCount++
-				case kindDeviceNick:
-					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					symbolNickVal = val
-					symbolNickCount++
-				}
-			}
-		}
-		if symbolStatusCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Status").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.Status = append(c.Status, symbolStatusVal)
-		if symbolNickCount == 1 {
-			c.NickVal = append(c.NickVal, symbolNickVal)
-			c.NickHas = append(c.NickHas, true)
-		} else {
-			var zero string
-			c.NickVal = append(c.NickVal, zero)
-			c.NickHas = append(c.NickHas, false)
-		}
-	}
-	return
-}
-
-// IdentityReadRow reads row i as one optional Identity component: presence-
+// identityReadRow reads row i as one optional Identity component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A duplicated scalar field is
 // an error; duplicated container memberships concatenate. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
-func IdentityReadRow[
-	SymbolAttrs IdentitySymbolAttrsReadI,
-	SymbolMembs IdentitySymbolMembsReadI,
+func identityReadRow[
+	SymbolAttrs identitySymbolAttrsReadI,
+	SymbolMembs identitySymbolMembsReadI,
 ](
 	i int,
 	symbolAttrs SymbolAttrs,

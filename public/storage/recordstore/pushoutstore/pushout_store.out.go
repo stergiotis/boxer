@@ -110,13 +110,19 @@ type PushoutStore struct {
 	// Flush; the next Flush ships them (DiscardPending drops them).
 	pending []arrow.RecordBatch
 	// dirty tracks locally-written keys between Commit/Delete and the
-	// next successful Flush (or DiscardPending); attached cache views
-	// refuse to cache them so a fetch can never re-cache the pre-write
-	// row.
+	// next successful Flush (or DiscardPending). Attached cache views
+	// pin these keys until the flush lands (eviction cannot expose the
+	// pre-write row) and their fetchers refuse to cache them — the
+	// remaining guard for writes the views could not materialize (Raw
+	// commits) and for InvalidateAll inside a dirty window.
 	dirty map[string]struct{}
-	// onWrite holds the local-write invalidation hooks of attached
-	// cache views (NewPushoutCache registers one per view).
-	onWrite []func(string)
+	// onWrite/onFlush hold the write-through hooks of attached cache
+	// views (NewPushoutCache registers one pair per view): onWrite populates
+	// and pins the committed entity (nil = not materializable or a
+	// discarded write — invalidate instead); onFlush releases the pin
+	// once the row is durable.
+	onWrite []func(string, *PushoutEntity)
+	onFlush []func(string)
 }
 
 // NewPushoutStore wires the store. A nil alloc selects the Go allocator.
@@ -128,11 +134,21 @@ func NewPushoutStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Pus
 	return
 }
 
-// invalidate fires the registered local-write hooks so attached cache
-// views evict the key — a local write never leaves a stale L1 value
-// behind.
-func (inst *PushoutStore) invalidate(key string) {
+// notifyWrite fires the write-through hooks of attached cache views:
+// ent is the just-committed entity (the views populate and pin it),
+// or nil when the row is not faithfully materializable (Raw commits)
+// or a buffered write is being discarded — the views then invalidate
+// the key instead.
+func (inst *PushoutStore) notifyWrite(key string, ent *PushoutEntity) {
 	for _, f := range inst.onWrite {
+		f(key, ent)
+	}
+}
+
+// notifyFlush releases the attached views' dirty-window pins after a
+// successful Flush made the key durable.
+func (inst *PushoutStore) notifyFlush(key string) {
+	for _, f := range inst.onFlush {
 		f(key)
 	}
 }
@@ -194,21 +210,32 @@ func (inst *PushoutStore) VerifySchema(ctx context.Context) (err error) {
 type PushoutEntityBuilder struct {
 	store *PushoutStore
 	key   string
+	// ent mirrors the typed Add* calls so Commit can write the entity
+	// through to attached cache views; raw marks commits that touched
+	// the DML directly (or double-added a component) — those cannot be
+	// materialized faithfully and invalidate the key instead.
+	ent PushoutEntity
+	raw bool
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order) and a live lifecycle.
 func (inst *PushoutStore) Begin(id string, ts time.Time) *PushoutEntityBuilder {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleLive)
-	return &PushoutEntityBuilder{store: inst, key: id}
+	return &PushoutEntityBuilder{store: inst, key: id, ent: PushoutEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
 }
 
 // AddEnvelope contributes the Envelope component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *PushoutEntityBuilder) AddEnvelope(row Envelope) *PushoutEntityBuilder {
-	err := EnvelopeAddSections(inst.store.dml, row)
+	err := envelopeAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Envelope.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Envelope = option.Some(row)
 	}
 	return inst
 }
@@ -216,9 +243,14 @@ func (inst *PushoutEntityBuilder) AddEnvelope(row Envelope) *PushoutEntityBuilde
 // AddLogEntry contributes the LogEntry component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *PushoutEntityBuilder) AddLogEntry(row LogEntry) *PushoutEntityBuilder {
-	err := LogEntryAddSections(inst.store.dml, row)
+	err := logEntryAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.LogEntry.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.LogEntry = option.Some(row)
 	}
 	return inst
 }
@@ -226,9 +258,14 @@ func (inst *PushoutEntityBuilder) AddLogEntry(row LogEntry) *PushoutEntityBuilde
 // AddSnapshot contributes the Snapshot component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *PushoutEntityBuilder) AddSnapshot(row Snapshot) *PushoutEntityBuilder {
-	err := SnapshotAddSections(inst.store.dml, row)
+	err := snapshotAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Snapshot.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Snapshot = option.Some(row)
 	}
 	return inst
 }
@@ -236,9 +273,14 @@ func (inst *PushoutEntityBuilder) AddSnapshot(row Snapshot) *PushoutEntityBuilde
 // AddRetention contributes the Retention component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *PushoutEntityBuilder) AddRetention(row Retention) *PushoutEntityBuilder {
-	err := RetentionAddSections(inst.store.dml, row)
+	err := retentionAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Retention.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Retention = option.Some(row)
 	}
 	return inst
 }
@@ -249,14 +291,18 @@ func (inst *PushoutEntityBuilder) AddRetention(row Retention) *PushoutEntityBuil
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *PushoutEntityBuilder) Raw() *lowlevel.InEntityPushoutTable {
+	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
 
-// Commit finishes the open entity and buffers the row. Attached cache
-// views evict the entity's key — a local write never leaves a stale
-// L1 value behind (external writers remain the caller's problem; see
-// ADR-0100 Deferred). A failed Commit rolls the frame back — the
-// entity is discarded and the store stays usable.
+// Commit finishes the open entity, buffers the row, and writes it
+// through to attached cache views: the entity is populated and pinned
+// until the store's Flush makes it durable — reads after writes hit
+// immediately, and the caching version gate plus the pin make a raced
+// refetch of the pre-write row bounce off. A commit that touched
+// Raw() cannot be materialized faithfully and invalidates the key
+// instead. A failed Commit rolls the frame back — the entity is
+// discarded and the store stays usable.
 func (inst *PushoutEntityBuilder) Commit() (err error) {
 	err = inst.store.dml.CommitEntity()
 	if err != nil {
@@ -265,7 +311,12 @@ func (inst *PushoutEntityBuilder) Commit() (err error) {
 	}
 	inst.store.buffered++
 	inst.store.dirty[inst.key] = struct{}{}
-	inst.store.invalidate(inst.key)
+	if inst.raw {
+		inst.store.notifyWrite(inst.key, nil)
+	} else {
+		ent := inst.ent
+		inst.store.notifyWrite(inst.key, &ent)
+	}
 	return
 }
 
@@ -403,6 +454,9 @@ func (inst *PushoutStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	n = inst.buffered
 	inst.buffered = 0
+	for k := range inst.dirty {
+		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
+	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	return
 }
@@ -423,6 +477,9 @@ func (inst *PushoutStore) DiscardPending() {
 	}
 	inst.pending = nil
 	inst.buffered = 0
+	for k := range inst.dirty {
+		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
+	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
 }
 
@@ -443,51 +500,81 @@ type PushoutCacheConfig struct {
 	Capacity int
 	// FetchCriteria are the cache's batch-flush thresholds.
 	FetchCriteria caching.FetchCriteria
+	// FreshnessTTL enables age-based staleness onset (ADR-0100's
+	// external-writer staleness story): entries older than this read
+	// as stale — strict reads miss and queue a refetch, accept-stale
+	// reads keep serving. Zero disables (staleness stays signal-only).
+	FreshnessTTL time.Duration
+	// NegativeTTL enables absent-key marking: keys a clean fetch did
+	// not return are treated as absent for this long — misses on them
+	// neither queue nor suspend work items, so replay loops over keys
+	// that do not exist terminate. Zero disables.
+	NegativeTTL time.Duration
 }
 
-// PushoutCache is the batched read-through KV view over a PushoutStore
-// (ADR-0100 SD5): misses queue under work items and flush as one
-// IN (…) lookup. Get is exact for immutable-by-key access — see SD4.
-// Local writes on the store evict the written key from every attached
-// view, so under this process's single writer the cached entries are
-// also the latest state; only EXTERNAL writers can leave the view
-// stale, and they need a caller-provided signal: MarkStale /
-// Invalidate / InvalidateAll (a freshness TTL is a recorded
-// follow-up). Like the store it wraps, a view is single-goroutine.
-// W is the work-item type (use struct{} when the suspend/replay
-// machinery is not needed).
+// PushoutCache is the batched read-through, write-through KV view over a
+// PushoutStore (ADR-0100 SD5): misses queue under work items and flush
+// as one IN (…) lookup, and local writes populate the view at Commit —
+// pinned until the store's Flush makes them durable — so reads after
+// writes hit immediately. Admission is version-gated on the entity's
+// Order timestamp: a raced refetch of an older row bounces off. Only
+// EXTERNAL writers can leave the view stale; they need a caller-
+// provided signal: MarkStale / Invalidate / InvalidateAll (a freshness
+// TTL option exists on the underlying cache). Raw() commits and
+// discarded writes invalidate instead of populating. Like the store
+// it wraps, a view is single-goroutine. W is the work-item type (use
+// struct{} when the suspend/replay machinery is not needed).
 type PushoutCache[W comparable] struct {
 	st    *PushoutStore
 	cfg   PushoutCacheConfig
 	cache *caching.ReadThroughCache[string, *PushoutEntity, W]
 }
 
-// NewPushoutCache attaches a read-through cache view to st, registering its
-// local-write invalidation hook with the store. Views attach for the
-// store's lifetime — there is no detach.
+// NewPushoutCache attaches a read-through, write-through cache view to st,
+// registering its write-through and flush hooks with the store. Views
+// attach for the store's lifetime — there is no detach.
 func NewPushoutCache[W comparable](st *PushoutStore, cfg PushoutCacheConfig) (inst *PushoutCache[W]) {
 	if cfg.Capacity <= 0 {
 		cfg.Capacity = 1024
 	}
 	inst = &PushoutCache[W]{st: st, cfg: cfg}
 	inst.rebuild()
-	// The hook closes over the view, not the cache instance, so it
-	// stays correct across InvalidateAll's rebuild.
-	st.onWrite = append(st.onWrite, func(k string) { inst.cache.Delete(k) })
+	// The hooks close over the view, not the cache instance, keeping
+	// them correct if the cache is ever swapped out.
+	st.onWrite = append(st.onWrite, func(k string, ent *PushoutEntity) {
+		if ent == nil {
+			inst.cache.Delete(k) // not materializable or discarded: invalidate
+			return
+		}
+		inst.cache.AddItem(k, ent) // version-gated write-through
+		inst.cache.Pin(k)          // dirty-window latch, released by Flush
+	})
+	st.onFlush = append(st.onFlush, func(k string) { inst.cache.Unpin(k) })
 	return
 }
 
 func (inst *PushoutCache[W]) rebuild() {
-	inst.cache = caching.NewReadThroughCache[string, *PushoutEntity, W](inst.cfg.Capacity, &pushoutFetcher{st: inst.st}, inst.cfg.FetchCriteria)
+	opts := []caching.CacheOption[string, *PushoutEntity, W]{
+		// Admission mirrors the table's newest-row-per-key semantics:
+		// the Order timestamp is the entity's monotonic version.
+		caching.WithVersioning[string, *PushoutEntity, W](func(e *PushoutEntity) int64 { return e.Ts.UnixNano() }),
+	}
+	if inst.cfg.FreshnessTTL > 0 {
+		opts = append(opts, caching.WithFreshnessTTL[string, *PushoutEntity, W](inst.cfg.FreshnessTTL))
+	}
+	if inst.cfg.NegativeTTL > 0 {
+		opts = append(opts, caching.WithNegativeCaching[string, *PushoutEntity, W](inst.cfg.NegativeTTL))
+	}
+	inst.cache = caching.NewReadThroughCache[string, *PushoutEntity, W](inst.cfg.Capacity, &pushoutFetcher{st: inst.st}, inst.cfg.FetchCriteria, opts...)
 }
 
-// Get retrieves an entity by Key through the cache. A miss queues the
-// key for the next batch fetch (the caching suspend/replay contract).
-// A miss can also mean the batched fetch errored (misses swallow
-// fetch errors; the circuit breaker backs off) — GetFetch surfaces
-// the error instead, and the store's Latest stays the authoritative
-// check. The returned entity is shared with the cache: treat it as
-// immutable.
+// Get retrieves an entity by Key through the cache; local writes are
+// visible immediately (write-through). A miss queues the key for the
+// next batch fetch (the caching suspend/replay contract). A miss can
+// also mean the batched fetch errored (misses swallow fetch errors;
+// the circuit breaker backs off) — GetFetch surfaces the error
+// instead, and the store's Latest stays the authoritative check. The
+// returned entity is shared with the cache: treat it as immutable.
 func (inst *PushoutCache[W]) Get(key string) (ent *PushoutEntity, found bool) {
 	return inst.cache.Get(key)
 }
@@ -553,17 +640,28 @@ func (inst *PushoutCache[W]) MarkStale(key string) {
 	inst.cache.MarkAsStale(key)
 }
 
+// MarkStaleIfOlder is the version-carrying external-writer signal:
+// it stales the cached entry only if its Order is below order, so a
+// redundant signal for a version the view already holds is free —
+// the natural sink for an invalidation stream carrying (key, Order).
+func (inst *PushoutCache[W]) MarkStaleIfOlder(key string, order time.Time) {
+	inst.cache.MarkAsStaleIfOlder(key, order.UnixNano())
+}
+
 // Invalidate drops the key's cached entry (L1 and stash).
 func (inst *PushoutCache[W]) Invalidate(key string) {
 	inst.cache.Delete(key)
 }
 
-// InvalidateAll drops every cached entry by rebuilding the underlying
-// cache — the bulk external-writer signal (e.g. after an import).
-// In-flight miss bookkeeping (queued keys, pending work items) is
-// dropped with it: call between frames, not with suspended work.
+// InvalidateAll drops every cached entry — the bulk external-writer
+// signal (e.g. after an import). In-flight miss bookkeeping (queued
+// keys, pending work items) and the dirty-window pins are dropped
+// with it: call between frames, with no suspended work and no
+// unflushed local writes (the fetcher's dirty-guard keeps pre-write
+// rows out of the cleared cache until the next Flush, at the cost of
+// misses on those keys).
 func (inst *PushoutCache[W]) InvalidateAll() {
-	inst.rebuild()
+	inst.cache.Clear()
 }
 
 // GetLive is the cached state-view read: the cache's newest row for
@@ -626,7 +724,12 @@ func (inst *pushoutFetcher) DeterminePartition(key string) uint64 { return 0 }
 // FetchItemSinglePartition implements caching.ItemFetcherI: one batched
 // point lookup per fetch. Duplicate versions collapse newest-first.
 // Dirty keys (written locally, not yet flushed) are fetched but not
-// cached — caching them would resurrect the pre-write row.
+// cached. With write-through the version gate already rejects the
+// pre-write row while the newer entry is resident; this guard is the
+// remaining defense for dirty keys the views could NOT materialize
+// (Raw commits, discarded writes) and for InvalidateAll inside a
+// dirty window, where the cache is cold and the gate has nothing to
+// compare against.
 func (inst *pushoutFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *PushoutEntity]) (err error) {
 	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL(keys))
 	if err != nil {
@@ -798,8 +901,9 @@ func (inst *PushoutStore) Replay(ctx context.Context, key string, fromOrder time
 // go through Begin — appending a new version IS the update. ---
 
 // Delete appends a tombstone row for id (no components; lifecycle marks
-// the deletion); attached cache views evict the key. GetLive reads
-// it as absent.
+// the deletion). The tombstone writes through to attached cache views
+// like any commit — a versioned deletion, so GetLive reads the key as
+// absent immediately.
 func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleTombstone)
 	err = inst.dml.CommitEntity()
@@ -809,7 +913,7 @@ func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
 	}
 	inst.buffered++
 	inst.dirty[id] = struct{}{}
-	inst.invalidate(id)
+	inst.notifyWrite(id, &PushoutEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleTombstone})
 	return
 }
 
@@ -917,7 +1021,7 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 			Lifecycle: lcR.ValueLifecycle.Value(i),
 		}
 		{
-			row, ok, e := EnvelopeReadRow(i, envBlobR.GetAttributes(), envBlobR.GetMemberships())
+			row, ok, e := envelopeReadRow(i, envBlobR.GetAttributes(), envBlobR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read envelope component: %w", e)
 				return
@@ -928,7 +1032,7 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 			}
 		}
 		{
-			row, ok, e := LogEntryReadRow(i, logHashR.GetAttributes(), logHashR.GetMemberships())
+			row, ok, e := logEntryReadRow(i, logHashR.GetAttributes(), logHashR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read logEntry component: %w", e)
 				return
@@ -939,7 +1043,7 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 			}
 		}
 		{
-			row, ok, e := SnapshotReadRow(i, snapAppliedR.GetAttributes(), snapAppliedR.GetMemberships(), snapGraggleR.GetAttributes(), snapGraggleR.GetMemberships())
+			row, ok, e := snapshotReadRow(i, snapAppliedR.GetAttributes(), snapAppliedR.GetMemberships(), snapGraggleR.GetAttributes(), snapGraggleR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read snapshot component: %w", e)
 				return
@@ -950,7 +1054,7 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 			}
 		}
 		{
-			row, ok, e := RetentionReadRow(i, retHashR.GetAttributes(), retHashR.GetMemberships(), retIndexR.GetAttributes(), retIndexR.GetMemberships(), retTimeR.GetAttributes(), retTimeR.GetMemberships())
+			row, ok, e := retentionReadRow(i, retHashR.GetAttributes(), retHashR.GetMemberships(), retIndexR.GetAttributes(), retIndexR.GetMemberships(), retTimeR.GetAttributes(), retTimeR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read retention component: %w", e)
 				return

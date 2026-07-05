@@ -5,9 +5,6 @@ package cqrsexample
 import (
 	"iter"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
@@ -22,134 +19,79 @@ const (
 	kindLedgerSnapAsOf    uint64 = 4
 )
 
-// --- SoA columns + AoS Append adapter. ---
-
-// AccountStateColumns is the SoA storage for batches of AccountState rows.
-// All slices grow in lockstep — Len returns the row count.
-type AccountStateColumns struct {
-	ID []string
-
-	Owner   []string
-	Balance []uint64
-	Closed  []bool
-	AsOf    []uint64
-}
-
-// Len returns the number of rows currently in the batch.
-func (c *AccountStateColumns) Len() int { return len(c.ID) }
-
-// Append pushes one AoS record into the SoA buffers.
-//
-// Aliasing: slice and pointer fields (`[]T`, `*roaring.Bitmap`) are
-// stored by reference, not copied. Callers must not mutate
-// row.<F> after Append unless they want Marshal to read the
-// mutation. Scalar fields (T, Option[T]) are copied by value.
-func (c *AccountStateColumns) Append(row AccountState) {
-	c.ID = append(c.ID, row.ID)
-	c.Owner = append(c.Owner, row.Owner)
-	c.Balance = append(c.Balance, row.Balance)
-	c.Closed = append(c.Closed, row.Closed)
-	c.AsOf = append(c.AsOf, row.AsOf)
-}
-
-// Row reconstructs entity i as an AoS AccountState record. Inverse of
-// Append: slice / pointer fields are shared by reference (no
-// defensive copy); scalar fields and Option[T] are copied.
-func (c *AccountStateColumns) Row(i int) (row AccountState) {
-	row.ID = c.ID[i]
-	row.Owner = c.Owner[i]
-	row.Balance = c.Balance[i]
-	row.Closed = c.Closed[i]
-	row.AsOf = c.AsOf[i]
-	return
-}
-
-// --- Composed-interface BuildEntities helper (schema-agnostic). ---
-//
-// AccountStateBuildEntities walks the SoA columns and emits one entity per
-// row through dml.BeginEntity / per-section BeginAttribute* /
-// AddMembershipLowCardRefP / AddToContainerP / EndAttributeP /
-// EndSection / CommitEntity. dml is generic — any leeway-DML class
-// whose method shapes satisfy the derived interfaces qualifies;
-// Go's type inference binds the type parameters at the call site.
-//
-// Callers drain via dml.TransferRecords (or schema-specific
-// equivalents) — left outside the helper because the record type
-// varies by target.
-
-// AccountStateSnapOwnerAttrI is the InAttr-side view of the snapOwner section. P-variants only —
+// accountStateSnapOwnerAttrI is the InAttr-side view of the snapOwner section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type AccountStateSnapOwnerAttrI interface {
+type accountStateSnapOwnerAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// AccountStateSnapOwnerSecI is the Section-side view: opens an attribute and closes
+// accountStateSnapOwnerSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type AccountStateSnapOwnerSecI[Attr any, Ent any] interface {
+type accountStateSnapOwnerSecI[Attr any, Ent any] interface {
 	BeginAttribute(value string) Attr
 	EndSection() Ent
 }
 
-// AccountStateSnapBalanceAttrI is the InAttr-side view of the snapBalance section. P-variants only —
+// accountStateSnapBalanceAttrI is the InAttr-side view of the snapBalance section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type AccountStateSnapBalanceAttrI interface {
+type accountStateSnapBalanceAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// AccountStateSnapBalanceSecI is the Section-side view: opens an attribute and closes
+// accountStateSnapBalanceSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type AccountStateSnapBalanceSecI[Attr any, Ent any] interface {
+type accountStateSnapBalanceSecI[Attr any, Ent any] interface {
 	BeginAttributeSingle(value uint64) Attr
 	EndSection() Ent
 }
 
-// AccountStateSnapClosedAttrI is the InAttr-side view of the snapClosed section. P-variants only —
+// accountStateSnapClosedAttrI is the InAttr-side view of the snapClosed section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type AccountStateSnapClosedAttrI interface {
+type accountStateSnapClosedAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// AccountStateSnapClosedSecI is the Section-side view: opens an attribute and closes
+// accountStateSnapClosedSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type AccountStateSnapClosedSecI[Attr any, Ent any] interface {
+type accountStateSnapClosedSecI[Attr any, Ent any] interface {
 	BeginAttribute(value bool) Attr
 	EndSection() Ent
 }
 
-// AccountStateSnapAsOfAttrI is the InAttr-side view of the snapAsOf section. P-variants only —
+// accountStateSnapAsOfAttrI is the InAttr-side view of the snapAsOf section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type AccountStateSnapAsOfAttrI interface {
+type accountStateSnapAsOfAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// AccountStateSnapAsOfSecI is the Section-side view: opens an attribute and closes
+// accountStateSnapAsOfSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type AccountStateSnapAsOfSecI[Attr any, Ent any] interface {
+type accountStateSnapAsOfSecI[Attr any, Ent any] interface {
 	BeginAttributeSingle(value uint64) Attr
 	EndSection() Ent
 }
 
-// AccountStateEntityI lists exactly the entity-level methods AccountState uses.
+// accountStateEntityI lists exactly the entity-level methods accountState uses.
 // Type parameters compose the per-section Attr + Sec interfaces; Ent
 // is the entity type itself (return type of BeginEntity / SetId /
 // SetTimestamp / SetLifecycle — usually the DML pointer).
-type AccountStateEntityI[
-	SnapOwnerAttr AccountStateSnapOwnerAttrI,
-	SnapOwnerSec AccountStateSnapOwnerSecI[SnapOwnerAttr, Ent],
-	SnapBalanceAttr AccountStateSnapBalanceAttrI,
-	SnapBalanceSec AccountStateSnapBalanceSecI[SnapBalanceAttr, Ent],
-	SnapClosedAttr AccountStateSnapClosedAttrI,
-	SnapClosedSec AccountStateSnapClosedSecI[SnapClosedAttr, Ent],
-	SnapAsOfAttr AccountStateSnapAsOfAttrI,
-	SnapAsOfSec AccountStateSnapAsOfSecI[SnapAsOfAttr, Ent],
+type accountStateEntityI[
+	SnapOwnerAttr accountStateSnapOwnerAttrI,
+	SnapOwnerSec accountStateSnapOwnerSecI[SnapOwnerAttr, Ent],
+	SnapBalanceAttr accountStateSnapBalanceAttrI,
+	SnapBalanceSec accountStateSnapBalanceSecI[SnapBalanceAttr, Ent],
+	SnapClosedAttr accountStateSnapClosedAttrI,
+	SnapClosedSec accountStateSnapClosedSecI[SnapClosedAttr, Ent],
+	SnapAsOfAttr accountStateSnapAsOfAttrI,
+	SnapAsOfSec accountStateSnapAsOfSecI[SnapAsOfAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -161,79 +103,20 @@ type AccountStateEntityI[
 	CommitEntity() (err error)
 }
 
-// AccountStateBuildEntities walks c row-by-row, drives dml's entity / section
-// chain, and returns once every row has been committed. The dml
-// argument's concrete type binds every type parameter via Go's
-// type inference at the call site.
-func AccountStateBuildEntities[
-	SnapOwnerAttr AccountStateSnapOwnerAttrI,
-	SnapOwnerSec AccountStateSnapOwnerSecI[SnapOwnerAttr, Ent],
-	SnapBalanceAttr AccountStateSnapBalanceAttrI,
-	SnapBalanceSec AccountStateSnapBalanceSecI[SnapBalanceAttr, Ent],
-	SnapClosedAttr AccountStateSnapClosedAttrI,
-	SnapClosedSec AccountStateSnapClosedSecI[SnapClosedAttr, Ent],
-	SnapAsOfAttr AccountStateSnapAsOfAttrI,
-	SnapAsOfSec AccountStateSnapAsOfSecI[SnapAsOfAttr, Ent],
-	Ent any,
-	DML AccountStateEntityI[
-		SnapOwnerAttr, SnapOwnerSec,
-		SnapBalanceAttr, SnapBalanceSec,
-		SnapClosedAttr, SnapClosedSec,
-		SnapAsOfAttr, SnapAsOfSec,
-		Ent,
-	],
-](dml DML, c *AccountStateColumns) (err error) {
-	n := c.Len()
-	for i := 0; i < n; i++ {
-		dml.BeginEntity()
-		dml.SetId(c.ID[i])
-		// --- snapOwner. ---
-		snapOwnerSec := dml.GetSectionSnapOwner()
-		snapOwnerSecAttr_Owner := snapOwnerSec.BeginAttribute(c.Owner[i])
-		snapOwnerSecAttr_Owner.AddMembershipLowCardRefP(kindLedgerSnapOwner)
-		snapOwnerSecAttr_Owner.EndAttributeP()
-		snapOwnerSec.EndSection()
-		// --- snapBalance. ---
-		snapBalanceSec := dml.GetSectionSnapBalance()
-		snapBalanceSecAttr_Balance := snapBalanceSec.BeginAttributeSingle(c.Balance[i])
-		snapBalanceSecAttr_Balance.AddMembershipLowCardRefP(kindLedgerSnapBalance)
-		snapBalanceSecAttr_Balance.EndAttributeP()
-		snapBalanceSec.EndSection()
-		// --- snapClosed. ---
-		snapClosedSec := dml.GetSectionSnapClosed()
-		snapClosedSecAttr_Closed := snapClosedSec.BeginAttribute(c.Closed[i])
-		snapClosedSecAttr_Closed.AddMembershipLowCardRefP(kindLedgerSnapClosed)
-		snapClosedSecAttr_Closed.EndAttributeP()
-		snapClosedSec.EndSection()
-		// --- snapAsOf. ---
-		snapAsOfSec := dml.GetSectionSnapAsOf()
-		snapAsOfSecAttr_AsOf := snapAsOfSec.BeginAttributeSingle(c.AsOf[i])
-		snapAsOfSecAttr_AsOf.AddMembershipLowCardRefP(kindLedgerSnapAsOf)
-		snapAsOfSecAttr_AsOf.EndAttributeP()
-		snapAsOfSec.EndSection()
-		err = dml.CommitEntity()
-		if err != nil {
-			err = eh.Errorf("commit row %d: %w", i, err)
-			return
-		}
-	}
-	return
-}
-
-// AccountStateAddSections contributes this kind's tagged sections to the OPEN
+// accountStateAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
-func AccountStateAddSections[
-	SnapOwnerAttr AccountStateSnapOwnerAttrI,
-	SnapOwnerSec AccountStateSnapOwnerSecI[SnapOwnerAttr, Ent],
-	SnapBalanceAttr AccountStateSnapBalanceAttrI,
-	SnapBalanceSec AccountStateSnapBalanceSecI[SnapBalanceAttr, Ent],
-	SnapClosedAttr AccountStateSnapClosedAttrI,
-	SnapClosedSec AccountStateSnapClosedSecI[SnapClosedAttr, Ent],
-	SnapAsOfAttr AccountStateSnapAsOfAttrI,
-	SnapAsOfSec AccountStateSnapAsOfSecI[SnapAsOfAttr, Ent],
+func accountStateAddSections[
+	SnapOwnerAttr accountStateSnapOwnerAttrI,
+	SnapOwnerSec accountStateSnapOwnerSecI[SnapOwnerAttr, Ent],
+	SnapBalanceAttr accountStateSnapBalanceAttrI,
+	SnapBalanceSec accountStateSnapBalanceSecI[SnapBalanceAttr, Ent],
+	SnapClosedAttr accountStateSnapClosedAttrI,
+	SnapClosedSec accountStateSnapClosedSecI[SnapClosedAttr, Ent],
+	SnapAsOfAttr accountStateSnapAsOfAttrI,
+	SnapAsOfSec accountStateSnapAsOfSecI[SnapAsOfAttr, Ent],
 	Ent any,
-	DML AccountStateEntityI[
+	DML accountStateEntityI[
 		SnapOwnerAttr, SnapOwnerSec,
 		SnapBalanceAttr, SnapBalanceSec,
 		SnapClosedAttr, SnapClosedSec,
@@ -268,181 +151,66 @@ func AccountStateAddSections[
 	return
 }
 
-// --- Composed-interface FillFromArrow helper (schema-agnostic). ---
-//
-// AccountStateFillFromArrow walks the Arrow record row-by-row and appends
-// each entity's plain + tagged-section values into c. Plain columns
-// enter as concrete Arrow accessors (uniform across schemas);
-// per-section Attrs + Membs bind through type-parameter interfaces.
-
-// AccountStateSnapOwnerAttrsReadI is the Attributes-side view of the snapOwner section.
-type AccountStateSnapOwnerAttrsReadI interface {
+// accountStateSnapOwnerAttrsReadI is the Attributes-side view of the snapOwner section.
+type accountStateSnapOwnerAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// AccountStateSnapOwnerMembsReadI is the Memberships-side view of the snapOwner section.
-type AccountStateSnapOwnerMembsReadI interface {
+// accountStateSnapOwnerMembsReadI is the Memberships-side view of the snapOwner section.
+type accountStateSnapOwnerMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// AccountStateSnapBalanceAttrsReadI is the Attributes-side view of the snapBalance section.
-type AccountStateSnapBalanceAttrsReadI interface {
+// accountStateSnapBalanceAttrsReadI is the Attributes-side view of the snapBalance section.
+type accountStateSnapBalanceAttrsReadI interface {
 	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// AccountStateSnapBalanceMembsReadI is the Memberships-side view of the snapBalance section.
-type AccountStateSnapBalanceMembsReadI interface {
+// accountStateSnapBalanceMembsReadI is the Memberships-side view of the snapBalance section.
+type accountStateSnapBalanceMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// AccountStateSnapClosedAttrsReadI is the Attributes-side view of the snapClosed section.
-type AccountStateSnapClosedAttrsReadI interface {
+// accountStateSnapClosedAttrsReadI is the Attributes-side view of the snapClosed section.
+type accountStateSnapClosedAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) bool
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// AccountStateSnapClosedMembsReadI is the Memberships-side view of the snapClosed section.
-type AccountStateSnapClosedMembsReadI interface {
+// accountStateSnapClosedMembsReadI is the Memberships-side view of the snapClosed section.
+type accountStateSnapClosedMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// AccountStateSnapAsOfAttrsReadI is the Attributes-side view of the snapAsOf section.
-type AccountStateSnapAsOfAttrsReadI interface {
+// accountStateSnapAsOfAttrsReadI is the Attributes-side view of the snapAsOf section.
+type accountStateSnapAsOfAttrsReadI interface {
 	GetAttrValueSingleOrDefault(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// AccountStateSnapAsOfMembsReadI is the Memberships-side view of the snapAsOf section.
-type AccountStateSnapAsOfMembsReadI interface {
+// accountStateSnapAsOfMembsReadI is the Memberships-side view of the snapAsOf section.
+type accountStateSnapAsOfMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// AccountStateFillFromArrow walks rec row-by-row and appends each entity's
-// plain + tagged-section values into c. Plain columns enter as
-// concrete Arrow accessors; per-section Attrs + Membs bind through
-// type-parameter interfaces.
-func AccountStateFillFromArrow[
-	SnapOwnerAttrs AccountStateSnapOwnerAttrsReadI,
-	SnapOwnerMembs AccountStateSnapOwnerMembsReadI,
-	SnapBalanceAttrs AccountStateSnapBalanceAttrsReadI,
-	SnapBalanceMembs AccountStateSnapBalanceMembsReadI,
-	SnapClosedAttrs AccountStateSnapClosedAttrsReadI,
-	SnapClosedMembs AccountStateSnapClosedMembsReadI,
-	SnapAsOfAttrs AccountStateSnapAsOfAttrsReadI,
-	SnapAsOfMembs AccountStateSnapAsOfMembsReadI,
-](
-	c *AccountStateColumns,
-	n int,
-	idCol *array.String,
-	snapOwnerAttrs SnapOwnerAttrs,
-	snapOwnerMembs SnapOwnerMembs,
-	snapBalanceAttrs SnapBalanceAttrs,
-	snapBalanceMembs SnapBalanceMembs,
-	snapClosedAttrs SnapClosedAttrs,
-	snapClosedMembs SnapClosedMembs,
-	snapAsOfAttrs SnapAsOfAttrs,
-	snapAsOfMembs SnapAsOfMembs,
-) (err error) {
-	for i := 0; i < n; i++ {
-		c.ID = append(c.ID, idCol.Value(i))
-		// --- snapOwner. ---
-		var snapOwnerOwnerVal string
-		var snapOwnerOwnerCount int
-		nsnapOwner := snapOwnerAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nsnapOwner; attrJ++ {
-			for membID := range snapOwnerMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindLedgerSnapOwner:
-					val := snapOwnerAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					snapOwnerOwnerVal = val
-					snapOwnerOwnerCount++
-				}
-			}
-		}
-		if snapOwnerOwnerCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Owner").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.Owner = append(c.Owner, snapOwnerOwnerVal)
-		// --- snapBalance. ---
-		var snapBalanceBalanceVal uint64
-		var snapBalanceBalanceCount int
-		nsnapBalance := snapBalanceAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nsnapBalance; attrJ++ {
-			for membID := range snapBalanceMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindLedgerSnapBalance:
-					val := snapBalanceAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					snapBalanceBalanceVal = val
-					snapBalanceBalanceCount++
-				}
-			}
-		}
-		if snapBalanceBalanceCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Balance").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.Balance = append(c.Balance, snapBalanceBalanceVal)
-		// --- snapClosed. ---
-		var snapClosedClosedVal bool
-		var snapClosedClosedCount int
-		nsnapClosed := snapClosedAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nsnapClosed; attrJ++ {
-			for membID := range snapClosedMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindLedgerSnapClosed:
-					val := snapClosedAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					snapClosedClosedVal = val
-					snapClosedClosedCount++
-				}
-			}
-		}
-		if snapClosedClosedCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Closed").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.Closed = append(c.Closed, snapClosedClosedVal)
-		// --- snapAsOf. ---
-		var snapAsOfAsOfVal uint64
-		var snapAsOfAsOfCount int
-		nsnapAsOf := snapAsOfAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nsnapAsOf; attrJ++ {
-			for membID := range snapAsOfMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindLedgerSnapAsOf:
-					val := snapAsOfAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					snapAsOfAsOfVal = val
-					snapAsOfAsOfCount++
-				}
-			}
-		}
-		if snapAsOfAsOfCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "AsOf").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.AsOf = append(c.AsOf, snapAsOfAsOfVal)
-	}
-	return
-}
-
-// AccountStateReadRow reads row i as one optional AccountState component: presence-
+// accountStateReadRow reads row i as one optional AccountState component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A duplicated scalar field is
 // an error; duplicated container memberships concatenate. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
-func AccountStateReadRow[
-	SnapOwnerAttrs AccountStateSnapOwnerAttrsReadI,
-	SnapOwnerMembs AccountStateSnapOwnerMembsReadI,
-	SnapBalanceAttrs AccountStateSnapBalanceAttrsReadI,
-	SnapBalanceMembs AccountStateSnapBalanceMembsReadI,
-	SnapClosedAttrs AccountStateSnapClosedAttrsReadI,
-	SnapClosedMembs AccountStateSnapClosedMembsReadI,
-	SnapAsOfAttrs AccountStateSnapAsOfAttrsReadI,
-	SnapAsOfMembs AccountStateSnapAsOfMembsReadI,
+func accountStateReadRow[
+	SnapOwnerAttrs accountStateSnapOwnerAttrsReadI,
+	SnapOwnerMembs accountStateSnapOwnerMembsReadI,
+	SnapBalanceAttrs accountStateSnapBalanceAttrsReadI,
+	SnapBalanceMembs accountStateSnapBalanceMembsReadI,
+	SnapClosedAttrs accountStateSnapClosedAttrsReadI,
+	SnapClosedMembs accountStateSnapClosedMembsReadI,
+	SnapAsOfAttrs accountStateSnapAsOfAttrsReadI,
+	SnapAsOfMembs accountStateSnapAsOfMembsReadI,
 ](
 	i int,
 	snapOwnerAttrs SnapOwnerAttrs,

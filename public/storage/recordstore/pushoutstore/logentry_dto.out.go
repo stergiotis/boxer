@@ -5,9 +5,6 @@ package pushoutstore
 import (
 	"iter"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
@@ -19,74 +16,28 @@ const (
 	kindPushoutHash uint64 = 1
 )
 
-// --- SoA columns + AoS Append adapter. ---
-
-// LogEntryColumns is the SoA storage for batches of LogEntry rows.
-// All slices grow in lockstep — Len returns the row count.
-type LogEntryColumns struct {
-	ID []string
-
-	Hash []string
-}
-
-// Len returns the number of rows currently in the batch.
-func (c *LogEntryColumns) Len() int { return len(c.ID) }
-
-// Append pushes one AoS record into the SoA buffers.
-//
-// Aliasing: slice and pointer fields (`[]T`, `*roaring.Bitmap`) are
-// stored by reference, not copied. Callers must not mutate
-// row.<F> after Append unless they want Marshal to read the
-// mutation. Scalar fields (T, Option[T]) are copied by value.
-func (c *LogEntryColumns) Append(row LogEntry) {
-	c.ID = append(c.ID, row.ID)
-	c.Hash = append(c.Hash, row.Hash)
-}
-
-// Row reconstructs entity i as an AoS LogEntry record. Inverse of
-// Append: slice / pointer fields are shared by reference (no
-// defensive copy); scalar fields and Option[T] are copied.
-func (c *LogEntryColumns) Row(i int) (row LogEntry) {
-	row.ID = c.ID[i]
-	row.Hash = c.Hash[i]
-	return
-}
-
-// --- Composed-interface BuildEntities helper (schema-agnostic). ---
-//
-// LogEntryBuildEntities walks the SoA columns and emits one entity per
-// row through dml.BeginEntity / per-section BeginAttribute* /
-// AddMembershipLowCardRefP / AddToContainerP / EndAttributeP /
-// EndSection / CommitEntity. dml is generic — any leeway-DML class
-// whose method shapes satisfy the derived interfaces qualifies;
-// Go's type inference binds the type parameters at the call site.
-//
-// Callers drain via dml.TransferRecords (or schema-specific
-// equivalents) — left outside the helper because the record type
-// varies by target.
-
-// LogEntryLogHashAttrI is the InAttr-side view of the logHash section. P-variants only —
+// logEntryLogHashAttrI is the InAttr-side view of the logHash section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type LogEntryLogHashAttrI interface {
+type logEntryLogHashAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// LogEntryLogHashSecI is the Section-side view: opens an attribute and closes
+// logEntryLogHashSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type LogEntryLogHashSecI[Attr any, Ent any] interface {
+type logEntryLogHashSecI[Attr any, Ent any] interface {
 	BeginAttribute(value string) Attr
 	EndSection() Ent
 }
 
-// LogEntryEntityI lists exactly the entity-level methods LogEntry uses.
+// logEntryEntityI lists exactly the entity-level methods logEntry uses.
 // Type parameters compose the per-section Attr + Sec interfaces; Ent
 // is the entity type itself (return type of BeginEntity / SetId /
 // SetTimestamp / SetLifecycle — usually the DML pointer).
-type LogEntryEntityI[
-	LogHashAttr LogEntryLogHashAttrI,
-	LogHashSec LogEntryLogHashSecI[LogHashAttr, Ent],
+type logEntryEntityI[
+	LogHashAttr logEntryLogHashAttrI,
+	LogHashSec logEntryLogHashSecI[LogHashAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -95,46 +46,14 @@ type LogEntryEntityI[
 	CommitEntity() (err error)
 }
 
-// LogEntryBuildEntities walks c row-by-row, drives dml's entity / section
-// chain, and returns once every row has been committed. The dml
-// argument's concrete type binds every type parameter via Go's
-// type inference at the call site.
-func LogEntryBuildEntities[
-	LogHashAttr LogEntryLogHashAttrI,
-	LogHashSec LogEntryLogHashSecI[LogHashAttr, Ent],
-	Ent any,
-	DML LogEntryEntityI[
-		LogHashAttr, LogHashSec,
-		Ent,
-	],
-](dml DML, c *LogEntryColumns) (err error) {
-	n := c.Len()
-	for i := 0; i < n; i++ {
-		dml.BeginEntity()
-		dml.SetId(c.ID[i])
-		// --- logHash. ---
-		logHashSec := dml.GetSectionLogHash()
-		logHashSecAttr_Hash := logHashSec.BeginAttribute(c.Hash[i])
-		logHashSecAttr_Hash.AddMembershipLowCardRefP(kindPushoutHash)
-		logHashSecAttr_Hash.EndAttributeP()
-		logHashSec.EndSection()
-		err = dml.CommitEntity()
-		if err != nil {
-			err = eh.Errorf("commit row %d: %w", i, err)
-			return
-		}
-	}
-	return
-}
-
-// LogEntryAddSections contributes this kind's tagged sections to the OPEN
+// logEntryAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
-func LogEntryAddSections[
-	LogHashAttr LogEntryLogHashAttrI,
-	LogHashSec LogEntryLogHashSecI[LogHashAttr, Ent],
+func logEntryAddSections[
+	LogHashAttr logEntryLogHashAttrI,
+	LogHashSec logEntryLogHashSecI[LogHashAttr, Ent],
 	Ent any,
-	DML LogEntryEntityI[
+	DML logEntryEntityI[
 		LogHashAttr, LogHashSec,
 		Ent,
 	],
@@ -148,73 +67,27 @@ func LogEntryAddSections[
 	return
 }
 
-// --- Composed-interface FillFromArrow helper (schema-agnostic). ---
-//
-// LogEntryFillFromArrow walks the Arrow record row-by-row and appends
-// each entity's plain + tagged-section values into c. Plain columns
-// enter as concrete Arrow accessors (uniform across schemas);
-// per-section Attrs + Membs bind through type-parameter interfaces.
-
-// LogEntryLogHashAttrsReadI is the Attributes-side view of the logHash section.
-type LogEntryLogHashAttrsReadI interface {
+// logEntryLogHashAttrsReadI is the Attributes-side view of the logHash section.
+type logEntryLogHashAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// LogEntryLogHashMembsReadI is the Memberships-side view of the logHash section.
-type LogEntryLogHashMembsReadI interface {
+// logEntryLogHashMembsReadI is the Memberships-side view of the logHash section.
+type logEntryLogHashMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// LogEntryFillFromArrow walks rec row-by-row and appends each entity's
-// plain + tagged-section values into c. Plain columns enter as
-// concrete Arrow accessors; per-section Attrs + Membs bind through
-// type-parameter interfaces.
-func LogEntryFillFromArrow[
-	LogHashAttrs LogEntryLogHashAttrsReadI,
-	LogHashMembs LogEntryLogHashMembsReadI,
-](
-	c *LogEntryColumns,
-	n int,
-	idCol *array.String,
-	logHashAttrs LogHashAttrs,
-	logHashMembs LogHashMembs,
-) (err error) {
-	for i := 0; i < n; i++ {
-		c.ID = append(c.ID, idCol.Value(i))
-		// --- logHash. ---
-		var logHashHashVal string
-		var logHashHashCount int
-		nlogHash := logHashAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nlogHash; attrJ++ {
-			for membID := range logHashMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindPushoutHash:
-					val := logHashAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					logHashHashVal = val
-					logHashHashCount++
-				}
-			}
-		}
-		if logHashHashCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Hash").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.Hash = append(c.Hash, logHashHashVal)
-	}
-	return
-}
-
-// LogEntryReadRow reads row i as one optional LogEntry component: presence-
+// logEntryReadRow reads row i as one optional LogEntry component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A duplicated scalar field is
 // an error; duplicated container memberships concatenate. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
-func LogEntryReadRow[
-	LogHashAttrs LogEntryLogHashAttrsReadI,
-	LogHashMembs LogEntryLogHashMembsReadI,
+func logEntryReadRow[
+	LogHashAttrs logEntryLogHashAttrsReadI,
+	LogHashMembs logEntryLogHashMembsReadI,
 ](
 	i int,
 	logHashAttrs LogHashAttrs,

@@ -5,9 +5,6 @@ package example
 import (
 	"iter"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
@@ -18,75 +15,29 @@ const (
 	kindDeviceTags uint64 = 1
 )
 
-// --- SoA columns + AoS Append adapter. ---
-
-// TaggedColumns is the SoA storage for batches of Tagged rows.
-// All slices grow in lockstep — Len returns the row count.
-type TaggedColumns struct {
-	ID []uint64
-
-	Tags [][]string
-}
-
-// Len returns the number of rows currently in the batch.
-func (c *TaggedColumns) Len() int { return len(c.ID) }
-
-// Append pushes one AoS record into the SoA buffers.
-//
-// Aliasing: slice and pointer fields (`[]T`, `*roaring.Bitmap`) are
-// stored by reference, not copied. Callers must not mutate
-// row.<F> after Append unless they want Marshal to read the
-// mutation. Scalar fields (T, Option[T]) are copied by value.
-func (c *TaggedColumns) Append(row Tagged) {
-	c.ID = append(c.ID, row.ID)
-	c.Tags = append(c.Tags, row.Tags)
-}
-
-// Row reconstructs entity i as an AoS Tagged record. Inverse of
-// Append: slice / pointer fields are shared by reference (no
-// defensive copy); scalar fields and Option[T] are copied.
-func (c *TaggedColumns) Row(i int) (row Tagged) {
-	row.ID = c.ID[i]
-	row.Tags = c.Tags[i]
-	return
-}
-
-// --- Composed-interface BuildEntities helper (schema-agnostic). ---
-//
-// TaggedBuildEntities walks the SoA columns and emits one entity per
-// row through dml.BeginEntity / per-section BeginAttribute* /
-// AddMembershipLowCardRefP / AddToContainerP / EndAttributeP /
-// EndSection / CommitEntity. dml is generic — any leeway-DML class
-// whose method shapes satisfy the derived interfaces qualifies;
-// Go's type inference binds the type parameters at the call site.
-//
-// Callers drain via dml.TransferRecords (or schema-specific
-// equivalents) — left outside the helper because the record type
-// varies by target.
-
-// TaggedSymbolArrayAttrI is the InAttr-side view of the symbolArray section. P-variants only —
+// taggedSymbolArrayAttrI is the InAttr-side view of the symbolArray section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type TaggedSymbolArrayAttrI interface {
+type taggedSymbolArrayAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	AddToContainerP(value string)
 	EndAttributeP()
 }
 
-// TaggedSymbolArraySecI is the Section-side view: opens an attribute and closes
+// taggedSymbolArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type TaggedSymbolArraySecI[Attr any, Ent any] interface {
+type taggedSymbolArraySecI[Attr any, Ent any] interface {
 	BeginAttribute() Attr
 	EndSection() Ent
 }
 
-// TaggedEntityI lists exactly the entity-level methods Tagged uses.
+// taggedEntityI lists exactly the entity-level methods tagged uses.
 // Type parameters compose the per-section Attr + Sec interfaces; Ent
 // is the entity type itself (return type of BeginEntity / SetId /
 // SetTimestamp / SetLifecycle — usually the DML pointer).
-type TaggedEntityI[
-	SymbolArrayAttr TaggedSymbolArrayAttrI,
-	SymbolArraySec TaggedSymbolArraySecI[SymbolArrayAttr, Ent],
+type taggedEntityI[
+	SymbolArrayAttr taggedSymbolArrayAttrI,
+	SymbolArraySec taggedSymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -95,51 +46,14 @@ type TaggedEntityI[
 	CommitEntity() (err error)
 }
 
-// TaggedBuildEntities walks c row-by-row, drives dml's entity / section
-// chain, and returns once every row has been committed. The dml
-// argument's concrete type binds every type parameter via Go's
-// type inference at the call site.
-func TaggedBuildEntities[
-	SymbolArrayAttr TaggedSymbolArrayAttrI,
-	SymbolArraySec TaggedSymbolArraySecI[SymbolArrayAttr, Ent],
-	Ent any,
-	DML TaggedEntityI[
-		SymbolArrayAttr, SymbolArraySec,
-		Ent,
-	],
-](dml DML, c *TaggedColumns) (err error) {
-	n := c.Len()
-	for i := 0; i < n; i++ {
-		dml.BeginEntity()
-		dml.SetId(c.ID[i])
-		// --- symbolArray. ---
-		symbolArraySec := dml.GetSectionSymbolArray()
-		if len(c.Tags[i]) > 0 {
-			symbolArraySecAttr_Tags := symbolArraySec.BeginAttribute()
-			for _, v := range c.Tags[i] {
-				symbolArraySecAttr_Tags.AddToContainerP(v)
-			}
-			symbolArraySecAttr_Tags.AddMembershipLowCardRefP(kindDeviceTags)
-			symbolArraySecAttr_Tags.EndAttributeP()
-		}
-		symbolArraySec.EndSection()
-		err = dml.CommitEntity()
-		if err != nil {
-			err = eh.Errorf("commit row %d: %w", i, err)
-			return
-		}
-	}
-	return
-}
-
-// TaggedAddSections contributes this kind's tagged sections to the OPEN
+// taggedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
-func TaggedAddSections[
-	SymbolArrayAttr TaggedSymbolArrayAttrI,
-	SymbolArraySec TaggedSymbolArraySecI[SymbolArrayAttr, Ent],
+func taggedAddSections[
+	SymbolArrayAttr taggedSymbolArrayAttrI,
+	SymbolArraySec taggedSymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
-	DML TaggedEntityI[
+	DML taggedEntityI[
 		SymbolArrayAttr, SymbolArraySec,
 		Ent,
 	],
@@ -158,68 +72,27 @@ func TaggedAddSections[
 	return
 }
 
-// --- Composed-interface FillFromArrow helper (schema-agnostic). ---
-//
-// TaggedFillFromArrow walks the Arrow record row-by-row and appends
-// each entity's plain + tagged-section values into c. Plain columns
-// enter as concrete Arrow accessors (uniform across schemas);
-// per-section Attrs + Membs bind through type-parameter interfaces.
-
-// TaggedSymbolArrayAttrsReadI is the Attributes-side view of the symbolArray section.
-type TaggedSymbolArrayAttrsReadI interface {
+// taggedSymbolArrayAttrsReadI is the Attributes-side view of the symbolArray section.
+type taggedSymbolArrayAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[string]
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// TaggedSymbolArrayMembsReadI is the Memberships-side view of the symbolArray section.
-type TaggedSymbolArrayMembsReadI interface {
+// taggedSymbolArrayMembsReadI is the Memberships-side view of the symbolArray section.
+type taggedSymbolArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// TaggedFillFromArrow walks rec row-by-row and appends each entity's
-// plain + tagged-section values into c. Plain columns enter as
-// concrete Arrow accessors; per-section Attrs + Membs bind through
-// type-parameter interfaces.
-func TaggedFillFromArrow[
-	SymbolArrayAttrs TaggedSymbolArrayAttrsReadI,
-	SymbolArrayMembs TaggedSymbolArrayMembsReadI,
-](
-	c *TaggedColumns,
-	n int,
-	idCol *array.Uint64,
-	symbolArrayAttrs SymbolArrayAttrs,
-	symbolArrayMembs SymbolArrayMembs,
-) (err error) {
-	for i := 0; i < n; i++ {
-		c.ID = append(c.ID, idCol.Value(i))
-		// --- symbolArray. ---
-		var symbolArrayTagsSlice []string
-		nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
-			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindDeviceTags:
-					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-						symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
-					}
-				}
-			}
-		}
-		c.Tags = append(c.Tags, symbolArrayTagsSlice)
-	}
-	return
-}
-
-// TaggedReadRow reads row i as one optional Tagged component: presence-
+// taggedReadRow reads row i as one optional Tagged component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A duplicated scalar field is
 // an error; duplicated container memberships concatenate. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
-func TaggedReadRow[
-	SymbolArrayAttrs TaggedSymbolArrayAttrsReadI,
-	SymbolArrayMembs TaggedSymbolArrayMembsReadI,
+func taggedReadRow[
+	SymbolArrayAttrs taggedSymbolArrayAttrsReadI,
+	SymbolArrayMembs taggedSymbolArrayMembsReadI,
 ](
 	i int,
 	symbolArrayAttrs SymbolArrayAttrs,

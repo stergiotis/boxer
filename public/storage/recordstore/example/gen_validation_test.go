@@ -324,3 +324,77 @@ type KindA struct {
 	require.NoError(t, err)
 	require.Contains(t, string(store), "inst.Begin(rows[i].Node, ts)")
 }
+
+// TestGenerateTrimmedCodecs: the default emission is the store-support
+// codec — no exported per-kind machinery (no Columns/BuildEntities/
+// FillFromArrow), AddSections/ReadRow unexported (ADR-0100 Update
+// 2026-07-04).
+func TestGenerateTrimmedCodecs(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	outDir := t.TempDir()
+	td, err := validationManipulator(t, "solo").BuildTableDesc()
+	require.NoError(t, err)
+	require.NoError(t, gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Valcheck",
+		TableName:      "valcheck",
+		Table:          td,
+		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
+		ComponentPaths: []string{a},
+		OutDir:         outDir,
+		ImportPath:     "example.invalid/tmp",
+	}.Generate())
+	dto, err := os.ReadFile(filepath.Join(outDir, "kind_a.out.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(dto), "func kindAAddSections[")
+	require.Contains(t, string(dto), "func kindAReadRow[")
+	require.NotContains(t, string(dto), "KindAColumns")
+	require.NotContains(t, string(dto), "KindABuildEntities")
+	require.NotContains(t, string(dto), "KindAFillFromArrow")
+	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(store), "kindAAddSections(inst.store.dml, row)")
+}
+
+// TestGenerateFullCodecs: the opt-out restores the complete exported
+// codec for a package that genuinely needs the SoA batch path.
+func TestGenerateFullCodecs(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,solo\"`"+`
+}
+`)
+	outDir := t.TempDir()
+	td, err := validationManipulator(t, "solo").BuildTableDesc()
+	require.NoError(t, err)
+	require.NoError(t, gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Valcheck",
+		TableName:      "valcheck",
+		Table:          td,
+		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
+		ComponentPaths: []string{a},
+		OutDir:         outDir,
+		ImportPath:     "example.invalid/tmp",
+		FullCodecs:     true,
+	}.Generate())
+	dto, err := os.ReadFile(filepath.Join(outDir, "kind_a.out.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(dto), "type KindAColumns struct")
+	require.Contains(t, string(dto), "func KindAAddSections[")
+	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(store), "KindAAddSections(inst.store.dml, row)")
+}

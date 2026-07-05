@@ -24,7 +24,6 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	st := NewDeviceStore(exec, nil, DeviceStoreConfig{})
 	defer st.Close()
-	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
 	require.NoError(t, st.EnsureTable(ctx))
 	require.NoError(t, st.VerifySchema(ctx), "fresh table must match the generated schema")
 
@@ -48,6 +47,11 @@ func TestDeviceStoreRoundTrip(t *testing.T) {
 	n, err := st.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 4, n)
+
+	// Attach the view AFTER the writes: write-through populates attached
+	// views at Commit, and this section needs cold keys to exercise the
+	// miss-queue → batch-fetch → replay contract.
+	c := NewDeviceCache[string](st, DeviceCacheConfig{Capacity: 8})
 
 	// Get through the cache: misses queue under a work item, the forced
 	// fetch batches one IN (…) lookup, the replay then hits.

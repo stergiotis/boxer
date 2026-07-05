@@ -5,9 +5,6 @@ package cqrsexample
 import (
 	"iter"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
@@ -19,74 +16,28 @@ const (
 	kindLedgerOwner uint64 = 1
 )
 
-// --- SoA columns + AoS Append adapter. ---
-
-// OpenedColumns is the SoA storage for batches of Opened rows.
-// All slices grow in lockstep — Len returns the row count.
-type OpenedColumns struct {
-	ID []string
-
-	Owner []string
-}
-
-// Len returns the number of rows currently in the batch.
-func (c *OpenedColumns) Len() int { return len(c.ID) }
-
-// Append pushes one AoS record into the SoA buffers.
-//
-// Aliasing: slice and pointer fields (`[]T`, `*roaring.Bitmap`) are
-// stored by reference, not copied. Callers must not mutate
-// row.<F> after Append unless they want Marshal to read the
-// mutation. Scalar fields (T, Option[T]) are copied by value.
-func (c *OpenedColumns) Append(row Opened) {
-	c.ID = append(c.ID, row.ID)
-	c.Owner = append(c.Owner, row.Owner)
-}
-
-// Row reconstructs entity i as an AoS Opened record. Inverse of
-// Append: slice / pointer fields are shared by reference (no
-// defensive copy); scalar fields and Option[T] are copied.
-func (c *OpenedColumns) Row(i int) (row Opened) {
-	row.ID = c.ID[i]
-	row.Owner = c.Owner[i]
-	return
-}
-
-// --- Composed-interface BuildEntities helper (schema-agnostic). ---
-//
-// OpenedBuildEntities walks the SoA columns and emits one entity per
-// row through dml.BeginEntity / per-section BeginAttribute* /
-// AddMembershipLowCardRefP / AddToContainerP / EndAttributeP /
-// EndSection / CommitEntity. dml is generic — any leeway-DML class
-// whose method shapes satisfy the derived interfaces qualifies;
-// Go's type inference binds the type parameters at the call site.
-//
-// Callers drain via dml.TransferRecords (or schema-specific
-// equivalents) — left outside the helper because the record type
-// varies by target.
-
-// OpenedAcctOwnerAttrI is the InAttr-side view of the acctOwner section. P-variants only —
+// openedAcctOwnerAttrI is the InAttr-side view of the acctOwner section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type OpenedAcctOwnerAttrI interface {
+type openedAcctOwnerAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// OpenedAcctOwnerSecI is the Section-side view: opens an attribute and closes
+// openedAcctOwnerSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type OpenedAcctOwnerSecI[Attr any, Ent any] interface {
+type openedAcctOwnerSecI[Attr any, Ent any] interface {
 	BeginAttribute(value string) Attr
 	EndSection() Ent
 }
 
-// OpenedEntityI lists exactly the entity-level methods Opened uses.
+// openedEntityI lists exactly the entity-level methods opened uses.
 // Type parameters compose the per-section Attr + Sec interfaces; Ent
 // is the entity type itself (return type of BeginEntity / SetId /
 // SetTimestamp / SetLifecycle — usually the DML pointer).
-type OpenedEntityI[
-	AcctOwnerAttr OpenedAcctOwnerAttrI,
-	AcctOwnerSec OpenedAcctOwnerSecI[AcctOwnerAttr, Ent],
+type openedEntityI[
+	AcctOwnerAttr openedAcctOwnerAttrI,
+	AcctOwnerSec openedAcctOwnerSecI[AcctOwnerAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -95,46 +46,14 @@ type OpenedEntityI[
 	CommitEntity() (err error)
 }
 
-// OpenedBuildEntities walks c row-by-row, drives dml's entity / section
-// chain, and returns once every row has been committed. The dml
-// argument's concrete type binds every type parameter via Go's
-// type inference at the call site.
-func OpenedBuildEntities[
-	AcctOwnerAttr OpenedAcctOwnerAttrI,
-	AcctOwnerSec OpenedAcctOwnerSecI[AcctOwnerAttr, Ent],
-	Ent any,
-	DML OpenedEntityI[
-		AcctOwnerAttr, AcctOwnerSec,
-		Ent,
-	],
-](dml DML, c *OpenedColumns) (err error) {
-	n := c.Len()
-	for i := 0; i < n; i++ {
-		dml.BeginEntity()
-		dml.SetId(c.ID[i])
-		// --- acctOwner. ---
-		acctOwnerSec := dml.GetSectionAcctOwner()
-		acctOwnerSecAttr_Owner := acctOwnerSec.BeginAttribute(c.Owner[i])
-		acctOwnerSecAttr_Owner.AddMembershipLowCardRefP(kindLedgerOwner)
-		acctOwnerSecAttr_Owner.EndAttributeP()
-		acctOwnerSec.EndSection()
-		err = dml.CommitEntity()
-		if err != nil {
-			err = eh.Errorf("commit row %d: %w", i, err)
-			return
-		}
-	}
-	return
-}
-
-// OpenedAddSections contributes this kind's tagged sections to the OPEN
+// openedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
-func OpenedAddSections[
-	AcctOwnerAttr OpenedAcctOwnerAttrI,
-	AcctOwnerSec OpenedAcctOwnerSecI[AcctOwnerAttr, Ent],
+func openedAddSections[
+	AcctOwnerAttr openedAcctOwnerAttrI,
+	AcctOwnerSec openedAcctOwnerSecI[AcctOwnerAttr, Ent],
 	Ent any,
-	DML OpenedEntityI[
+	DML openedEntityI[
 		AcctOwnerAttr, AcctOwnerSec,
 		Ent,
 	],
@@ -148,73 +67,27 @@ func OpenedAddSections[
 	return
 }
 
-// --- Composed-interface FillFromArrow helper (schema-agnostic). ---
-//
-// OpenedFillFromArrow walks the Arrow record row-by-row and appends
-// each entity's plain + tagged-section values into c. Plain columns
-// enter as concrete Arrow accessors (uniform across schemas);
-// per-section Attrs + Membs bind through type-parameter interfaces.
-
-// OpenedAcctOwnerAttrsReadI is the Attributes-side view of the acctOwner section.
-type OpenedAcctOwnerAttrsReadI interface {
+// openedAcctOwnerAttrsReadI is the Attributes-side view of the acctOwner section.
+type openedAcctOwnerAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// OpenedAcctOwnerMembsReadI is the Memberships-side view of the acctOwner section.
-type OpenedAcctOwnerMembsReadI interface {
+// openedAcctOwnerMembsReadI is the Memberships-side view of the acctOwner section.
+type openedAcctOwnerMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// OpenedFillFromArrow walks rec row-by-row and appends each entity's
-// plain + tagged-section values into c. Plain columns enter as
-// concrete Arrow accessors; per-section Attrs + Membs bind through
-// type-parameter interfaces.
-func OpenedFillFromArrow[
-	AcctOwnerAttrs OpenedAcctOwnerAttrsReadI,
-	AcctOwnerMembs OpenedAcctOwnerMembsReadI,
-](
-	c *OpenedColumns,
-	n int,
-	idCol *array.String,
-	acctOwnerAttrs AcctOwnerAttrs,
-	acctOwnerMembs AcctOwnerMembs,
-) (err error) {
-	for i := 0; i < n; i++ {
-		c.ID = append(c.ID, idCol.Value(i))
-		// --- acctOwner. ---
-		var acctOwnerOwnerVal string
-		var acctOwnerOwnerCount int
-		nacctOwner := acctOwnerAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-		for attrJ := int64(0); attrJ < nacctOwner; attrJ++ {
-			for membID := range acctOwnerMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				switch membID {
-				case kindLedgerOwner:
-					val := acctOwnerAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-					acctOwnerOwnerVal = val
-					acctOwnerOwnerCount++
-				}
-			}
-		}
-		if acctOwnerOwnerCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Owner").Errorf("expected exactly one occurrence per row")
-			return
-		}
-		c.Owner = append(c.Owner, acctOwnerOwnerVal)
-	}
-	return
-}
-
-// OpenedReadRow reads row i as one optional Opened component: presence-
+// openedReadRow reads row i as one optional Opened component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A duplicated scalar field is
 // an error; duplicated container memberships concatenate. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
-func OpenedReadRow[
-	AcctOwnerAttrs OpenedAcctOwnerAttrsReadI,
-	AcctOwnerMembs OpenedAcctOwnerMembsReadI,
+func openedReadRow[
+	AcctOwnerAttrs openedAcctOwnerAttrsReadI,
+	AcctOwnerMembs openedAcctOwnerMembsReadI,
 ](
 	i int,
 	acctOwnerAttrs AcctOwnerAttrs,

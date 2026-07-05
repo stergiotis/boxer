@@ -109,13 +109,19 @@ type DeviceStore struct {
 	// Flush; the next Flush ships them (DiscardPending drops them).
 	pending []arrow.RecordBatch
 	// dirty tracks locally-written keys between Commit/Delete and the
-	// next successful Flush (or DiscardPending); attached cache views
-	// refuse to cache them so a fetch can never re-cache the pre-write
-	// row.
+	// next successful Flush (or DiscardPending). Attached cache views
+	// pin these keys until the flush lands (eviction cannot expose the
+	// pre-write row) and their fetchers refuse to cache them — the
+	// remaining guard for writes the views could not materialize (Raw
+	// commits) and for InvalidateAll inside a dirty window.
 	dirty map[uint64]struct{}
-	// onWrite holds the local-write invalidation hooks of attached
-	// cache views (NewDeviceCache registers one per view).
-	onWrite []func(uint64)
+	// onWrite/onFlush hold the write-through hooks of attached cache
+	// views (NewDeviceCache registers one pair per view): onWrite populates
+	// and pins the committed entity (nil = not materializable or a
+	// discarded write — invalidate instead); onFlush releases the pin
+	// once the row is durable.
+	onWrite []func(uint64, *DeviceEntity)
+	onFlush []func(uint64)
 }
 
 // NewDeviceStore wires the store. A nil alloc selects the Go allocator.
@@ -127,11 +133,21 @@ func NewDeviceStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Devi
 	return
 }
 
-// invalidate fires the registered local-write hooks so attached cache
-// views evict the key — a local write never leaves a stale L1 value
-// behind.
-func (inst *DeviceStore) invalidate(key uint64) {
+// notifyWrite fires the write-through hooks of attached cache views:
+// ent is the just-committed entity (the views populate and pin it),
+// or nil when the row is not faithfully materializable (Raw commits)
+// or a buffered write is being discarded — the views then invalidate
+// the key instead.
+func (inst *DeviceStore) notifyWrite(key uint64, ent *DeviceEntity) {
 	for _, f := range inst.onWrite {
+		f(key, ent)
+	}
+}
+
+// notifyFlush releases the attached views' dirty-window pins after a
+// successful Flush made the key durable.
+func (inst *DeviceStore) notifyFlush(key uint64) {
+	for _, f := range inst.onFlush {
 		f(key)
 	}
 }
@@ -193,21 +209,32 @@ func (inst *DeviceStore) VerifySchema(ctx context.Context) (err error) {
 type DeviceEntityBuilder struct {
 	store *DeviceStore
 	key   uint64
+	// ent mirrors the typed Add* calls so Commit can write the entity
+	// through to attached cache views; raw marks commits that touched
+	// the DML directly (or double-added a component) — those cannot be
+	// materialized faithfully and invalidate the key instead.
+	ent DeviceEntity
+	raw bool
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order) and a live lifecycle.
 func (inst *DeviceStore) Begin(id uint64, ts time.Time) *DeviceEntityBuilder {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleLive)
-	return &DeviceEntityBuilder{store: inst, key: id}
+	return &DeviceEntityBuilder{store: inst, key: id, ent: DeviceEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
 }
 
 // AddIdentity contributes the Identity component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *DeviceEntityBuilder) AddIdentity(row Identity) *DeviceEntityBuilder {
-	err := IdentityAddSections(inst.store.dml, row)
+	err := identityAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Identity.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Identity = option.Some(row)
 	}
 	return inst
 }
@@ -215,9 +242,14 @@ func (inst *DeviceEntityBuilder) AddIdentity(row Identity) *DeviceEntityBuilder 
 // AddBattery contributes the Battery component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *DeviceEntityBuilder) AddBattery(row Battery) *DeviceEntityBuilder {
-	err := BatteryAddSections(inst.store.dml, row)
+	err := batteryAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Battery.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Battery = option.Some(row)
 	}
 	return inst
 }
@@ -225,9 +257,14 @@ func (inst *DeviceEntityBuilder) AddBattery(row Battery) *DeviceEntityBuilder {
 // AddTagged contributes the Tagged component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *DeviceEntityBuilder) AddTagged(row Tagged) *DeviceEntityBuilder {
-	err := TaggedAddSections(inst.store.dml, row)
+	err := taggedAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Tagged.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Tagged = option.Some(row)
 	}
 	return inst
 }
@@ -235,9 +272,14 @@ func (inst *DeviceEntityBuilder) AddTagged(row Tagged) *DeviceEntityBuilder {
 // AddLocated contributes the Located component to the open entity via the
 // generated entity-frame-free section driver (ADR-0100 SD6).
 func (inst *DeviceEntityBuilder) AddLocated(row Located) *DeviceEntityBuilder {
-	err := LocatedAddSections(inst.store.dml, row)
+	err := locatedAddSections(inst.store.dml, row)
 	if err != nil {
 		inst.store.dml.AppendError(err)
+	}
+	if inst.ent.Located.Has {
+		inst.raw = true // double add: the read-back shape is undefined
+	} else {
+		inst.ent.Located = option.Some(row)
 	}
 	return inst
 }
@@ -248,14 +290,18 @@ func (inst *DeviceEntityBuilder) AddLocated(row Located) *DeviceEntityBuilder {
 // returned value by inference (raw := b.Raw()) and chain its
 // methods, but cannot name the type in their own signatures.
 func (inst *DeviceEntityBuilder) Raw() *lowlevel.InEntityDeviceTable {
+	inst.raw = true // direct DML writes cannot be mirrored into the entity
 	return inst.store.dml
 }
 
-// Commit finishes the open entity and buffers the row. Attached cache
-// views evict the entity's key — a local write never leaves a stale
-// L1 value behind (external writers remain the caller's problem; see
-// ADR-0100 Deferred). A failed Commit rolls the frame back — the
-// entity is discarded and the store stays usable.
+// Commit finishes the open entity, buffers the row, and writes it
+// through to attached cache views: the entity is populated and pinned
+// until the store's Flush makes it durable — reads after writes hit
+// immediately, and the caching version gate plus the pin make a raced
+// refetch of the pre-write row bounce off. A commit that touched
+// Raw() cannot be materialized faithfully and invalidates the key
+// instead. A failed Commit rolls the frame back — the entity is
+// discarded and the store stays usable.
 func (inst *DeviceEntityBuilder) Commit() (err error) {
 	err = inst.store.dml.CommitEntity()
 	if err != nil {
@@ -264,7 +310,12 @@ func (inst *DeviceEntityBuilder) Commit() (err error) {
 	}
 	inst.store.buffered++
 	inst.store.dirty[inst.key] = struct{}{}
-	inst.store.invalidate(inst.key)
+	if inst.raw {
+		inst.store.notifyWrite(inst.key, nil)
+	} else {
+		ent := inst.ent
+		inst.store.notifyWrite(inst.key, &ent)
+	}
 	return
 }
 
@@ -402,6 +453,9 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	n = inst.buffered
 	inst.buffered = 0
+	for k := range inst.dirty {
+		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
+	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	return
 }
@@ -422,6 +476,9 @@ func (inst *DeviceStore) DiscardPending() {
 	}
 	inst.pending = nil
 	inst.buffered = 0
+	for k := range inst.dirty {
+		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
+	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
 }
 
@@ -442,51 +499,81 @@ type DeviceCacheConfig struct {
 	Capacity int
 	// FetchCriteria are the cache's batch-flush thresholds.
 	FetchCriteria caching.FetchCriteria
+	// FreshnessTTL enables age-based staleness onset (ADR-0100's
+	// external-writer staleness story): entries older than this read
+	// as stale — strict reads miss and queue a refetch, accept-stale
+	// reads keep serving. Zero disables (staleness stays signal-only).
+	FreshnessTTL time.Duration
+	// NegativeTTL enables absent-key marking: keys a clean fetch did
+	// not return are treated as absent for this long — misses on them
+	// neither queue nor suspend work items, so replay loops over keys
+	// that do not exist terminate. Zero disables.
+	NegativeTTL time.Duration
 }
 
-// DeviceCache is the batched read-through KV view over a DeviceStore
-// (ADR-0100 SD5): misses queue under work items and flush as one
-// IN (…) lookup. Get is exact for immutable-by-key access — see SD4.
-// Local writes on the store evict the written key from every attached
-// view, so under this process's single writer the cached entries are
-// also the latest state; only EXTERNAL writers can leave the view
-// stale, and they need a caller-provided signal: MarkStale /
-// Invalidate / InvalidateAll (a freshness TTL is a recorded
-// follow-up). Like the store it wraps, a view is single-goroutine.
-// W is the work-item type (use struct{} when the suspend/replay
-// machinery is not needed).
+// DeviceCache is the batched read-through, write-through KV view over a
+// DeviceStore (ADR-0100 SD5): misses queue under work items and flush
+// as one IN (…) lookup, and local writes populate the view at Commit —
+// pinned until the store's Flush makes them durable — so reads after
+// writes hit immediately. Admission is version-gated on the entity's
+// Order timestamp: a raced refetch of an older row bounces off. Only
+// EXTERNAL writers can leave the view stale; they need a caller-
+// provided signal: MarkStale / Invalidate / InvalidateAll (a freshness
+// TTL option exists on the underlying cache). Raw() commits and
+// discarded writes invalidate instead of populating. Like the store
+// it wraps, a view is single-goroutine. W is the work-item type (use
+// struct{} when the suspend/replay machinery is not needed).
 type DeviceCache[W comparable] struct {
 	st    *DeviceStore
 	cfg   DeviceCacheConfig
 	cache *caching.ReadThroughCache[uint64, *DeviceEntity, W]
 }
 
-// NewDeviceCache attaches a read-through cache view to st, registering its
-// local-write invalidation hook with the store. Views attach for the
-// store's lifetime — there is no detach.
+// NewDeviceCache attaches a read-through, write-through cache view to st,
+// registering its write-through and flush hooks with the store. Views
+// attach for the store's lifetime — there is no detach.
 func NewDeviceCache[W comparable](st *DeviceStore, cfg DeviceCacheConfig) (inst *DeviceCache[W]) {
 	if cfg.Capacity <= 0 {
 		cfg.Capacity = 1024
 	}
 	inst = &DeviceCache[W]{st: st, cfg: cfg}
 	inst.rebuild()
-	// The hook closes over the view, not the cache instance, so it
-	// stays correct across InvalidateAll's rebuild.
-	st.onWrite = append(st.onWrite, func(k uint64) { inst.cache.Delete(k) })
+	// The hooks close over the view, not the cache instance, keeping
+	// them correct if the cache is ever swapped out.
+	st.onWrite = append(st.onWrite, func(k uint64, ent *DeviceEntity) {
+		if ent == nil {
+			inst.cache.Delete(k) // not materializable or discarded: invalidate
+			return
+		}
+		inst.cache.AddItem(k, ent) // version-gated write-through
+		inst.cache.Pin(k)          // dirty-window latch, released by Flush
+	})
+	st.onFlush = append(st.onFlush, func(k uint64) { inst.cache.Unpin(k) })
 	return
 }
 
 func (inst *DeviceCache[W]) rebuild() {
-	inst.cache = caching.NewReadThroughCache[uint64, *DeviceEntity, W](inst.cfg.Capacity, &deviceFetcher{st: inst.st}, inst.cfg.FetchCriteria)
+	opts := []caching.CacheOption[uint64, *DeviceEntity, W]{
+		// Admission mirrors the table's newest-row-per-key semantics:
+		// the Order timestamp is the entity's monotonic version.
+		caching.WithVersioning[uint64, *DeviceEntity, W](func(e *DeviceEntity) int64 { return e.Ts.UnixNano() }),
+	}
+	if inst.cfg.FreshnessTTL > 0 {
+		opts = append(opts, caching.WithFreshnessTTL[uint64, *DeviceEntity, W](inst.cfg.FreshnessTTL))
+	}
+	if inst.cfg.NegativeTTL > 0 {
+		opts = append(opts, caching.WithNegativeCaching[uint64, *DeviceEntity, W](inst.cfg.NegativeTTL))
+	}
+	inst.cache = caching.NewReadThroughCache[uint64, *DeviceEntity, W](inst.cfg.Capacity, &deviceFetcher{st: inst.st}, inst.cfg.FetchCriteria, opts...)
 }
 
-// Get retrieves an entity by Key through the cache. A miss queues the
-// key for the next batch fetch (the caching suspend/replay contract).
-// A miss can also mean the batched fetch errored (misses swallow
-// fetch errors; the circuit breaker backs off) — GetFetch surfaces
-// the error instead, and the store's Latest stays the authoritative
-// check. The returned entity is shared with the cache: treat it as
-// immutable.
+// Get retrieves an entity by Key through the cache; local writes are
+// visible immediately (write-through). A miss queues the key for the
+// next batch fetch (the caching suspend/replay contract). A miss can
+// also mean the batched fetch errored (misses swallow fetch errors;
+// the circuit breaker backs off) — GetFetch surfaces the error
+// instead, and the store's Latest stays the authoritative check. The
+// returned entity is shared with the cache: treat it as immutable.
 func (inst *DeviceCache[W]) Get(key uint64) (ent *DeviceEntity, found bool) {
 	return inst.cache.Get(key)
 }
@@ -552,17 +639,28 @@ func (inst *DeviceCache[W]) MarkStale(key uint64) {
 	inst.cache.MarkAsStale(key)
 }
 
+// MarkStaleIfOlder is the version-carrying external-writer signal:
+// it stales the cached entry only if its Order is below order, so a
+// redundant signal for a version the view already holds is free —
+// the natural sink for an invalidation stream carrying (key, Order).
+func (inst *DeviceCache[W]) MarkStaleIfOlder(key uint64, order time.Time) {
+	inst.cache.MarkAsStaleIfOlder(key, order.UnixNano())
+}
+
 // Invalidate drops the key's cached entry (L1 and stash).
 func (inst *DeviceCache[W]) Invalidate(key uint64) {
 	inst.cache.Delete(key)
 }
 
-// InvalidateAll drops every cached entry by rebuilding the underlying
-// cache — the bulk external-writer signal (e.g. after an import).
-// In-flight miss bookkeeping (queued keys, pending work items) is
-// dropped with it: call between frames, not with suspended work.
+// InvalidateAll drops every cached entry — the bulk external-writer
+// signal (e.g. after an import). In-flight miss bookkeeping (queued
+// keys, pending work items) and the dirty-window pins are dropped
+// with it: call between frames, with no suspended work and no
+// unflushed local writes (the fetcher's dirty-guard keeps pre-write
+// rows out of the cleared cache until the next Flush, at the cost of
+// misses on those keys).
 func (inst *DeviceCache[W]) InvalidateAll() {
-	inst.rebuild()
+	inst.cache.Clear()
 }
 
 // GetLive is the cached state-view read: the cache's newest row for
@@ -625,7 +723,12 @@ func (inst *deviceFetcher) DeterminePartition(key uint64) uint64 { return 0 }
 // FetchItemSinglePartition implements caching.ItemFetcherI: one batched
 // point lookup per fetch. Duplicate versions collapse newest-first.
 // Dirty keys (written locally, not yet flushed) are fetched but not
-// cached — caching them would resurrect the pre-write row.
+// cached. With write-through the version gate already rejects the
+// pre-write row while the newer entry is resident; this guard is the
+// remaining defense for dirty keys the views could NOT materialize
+// (Raw commits, discarded writes) and for InvalidateAll inside a
+// dirty window, where the cache is cold and the gate has nothing to
+// compare against.
 func (inst *deviceFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []uint64, target caching.ItemTargetI[uint64, *DeviceEntity]) (err error) {
 	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL(keys))
 	if err != nil {
@@ -797,8 +900,9 @@ func (inst *DeviceStore) Replay(ctx context.Context, key uint64, fromOrder time.
 // go through Begin — appending a new version IS the update. ---
 
 // Delete appends a tombstone row for id (no components; lifecycle marks
-// the deletion); attached cache views evict the key. GetLive reads
-// it as absent.
+// the deletion). The tombstone writes through to attached cache views
+// like any commit — a versioned deletion, so GetLive reads the key as
+// absent immediately.
 func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
 	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleTombstone)
 	err = inst.dml.CommitEntity()
@@ -808,7 +912,7 @@ func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
 	}
 	inst.buffered++
 	inst.dirty[id] = struct{}{}
-	inst.invalidate(id)
+	inst.notifyWrite(id, &DeviceEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleTombstone})
 	return
 }
 
@@ -913,7 +1017,7 @@ func decodeDeviceRecord(rec arrow.RecordBatch) (ents []*DeviceEntity, err error)
 			Lifecycle: lcR.ValueLifecycle.Value(i),
 		}
 		{
-			row, ok, e := IdentityReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships())
+			row, ok, e := identityReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read identity component: %w", e)
 				return
@@ -924,7 +1028,7 @@ func decodeDeviceRecord(rec arrow.RecordBatch) (ents []*DeviceEntity, err error)
 			}
 		}
 		{
-			row, ok, e := BatteryReadRow(i, u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			row, ok, e := batteryReadRow(i, u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read battery component: %w", e)
 				return
@@ -935,7 +1039,7 @@ func decodeDeviceRecord(rec arrow.RecordBatch) (ents []*DeviceEntity, err error)
 			}
 		}
 		{
-			row, ok, e := TaggedReadRow(i, symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships())
+			row, ok, e := taggedReadRow(i, symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read tagged component: %w", e)
 				return
@@ -946,7 +1050,7 @@ func decodeDeviceRecord(rec arrow.RecordBatch) (ents []*DeviceEntity, err error)
 			}
 		}
 		{
-			row, ok, e := LocatedReadRow(i, geoPointR.GetAttributes(), geoPointR.GetMemberships())
+			row, ok, e := locatedReadRow(i, geoPointR.GetAttributes(), geoPointR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read located component: %w", e)
 				return
