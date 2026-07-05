@@ -269,8 +269,15 @@ Accepted — 2026-07-05 (reviewed by @spx). Implemented so far:
   the emitted UDFs, golden-locked against the Go split (see the 2026-07-05
   update below for the naming change and the server quirks the harness
   caught).
+- Slice 5 (SD4): `fibonacci/plan.go` — `WidthClassOf`/`WidthClasses`
+  (inclusive per-width tag-value classes, counts, body capacity, encoding
+  overhead) replace the deleted `stats.go`; the leading-zeros iterator and
+  the CLI advisor sit on the exact bounds and reach widths 46 and 47 for
+  the first time (`Uint32TagValueTagWidth = 45` was wrong under every
+  convention; the constants are now `MinTagWidth`/`MaxTagWidthUint32`, with
+  width 47's class clamped at the uint32 rim).
 
-Slices 5–6 are pending.
+Slice 6 is pending.
 
 ## Update — 2026-07-05: SD5 delivered as `identsql`; names are upper snake case
 
@@ -307,3 +314,14 @@ Delivery notes:
 - Wiring the `CREATE FUNCTION` emission into the leeway DDL generator is
   deferred until a consumer applies DDL there; `identsql.UdfDdlStatements()`
   is the seam.
+
+## Update — 2026-07-05: expansion reaches executors via the pass registry
+
+The planned direct wiring of `identsql.ExpandPass` into `apps/play` was
+superseded by [ADR-0108](./0108-keelson-sql-pass-registry.md): the pass is
+registered once (in `passreg/defaults`, at `StagePreExecute`) and both
+executors of user-authored SQL — play's HTTP client and the keelson
+introspection `/query` endpoint — apply it best-effort before shipping.
+`identsql` itself stays registry-free. Preview surfaces keep the readable
+macro; only the shipped statement is expanded. The affordance-evaluator
+registration and an "install UDFs" action remain open follow-ups.
