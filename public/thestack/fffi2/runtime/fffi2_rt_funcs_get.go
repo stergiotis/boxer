@@ -201,6 +201,7 @@ func IterateUint64SliceRetr[D UnmarshallReaderI, T ~uint64](unmarshaller D) iter
 		var i int
 		for i = 0; i < l; i++ {
 			if !yield(T(unmarshaller.ReadUInt64())) {
+				i++ // element i was already read before yield aborted
 				break
 			}
 		}
@@ -218,6 +219,7 @@ func IterateUint32SliceRetr[D UnmarshallReaderI, T ~uint32](unmarshaller D) iter
 		var i int
 		for i = 0; i < l; i++ {
 			if !yield(T(unmarshaller.ReadUInt32())) {
+				i++ // element i was already read before yield aborted
 				break
 			}
 		}
@@ -235,6 +237,7 @@ func IterateFloat64SliceRetr[D UnmarshallReaderI, T ~float64](unmarshaller D) it
 		var i int
 		for i = 0; i < l; i++ {
 			if !yield(T(unmarshaller.ReadFloat64())) {
+				i++ // element i was already read before yield aborted
 				break
 			}
 		}
@@ -252,6 +255,7 @@ func IterateFloat32SliceRetr[D UnmarshallReaderI, T ~float32](unmarshaller D) it
 		var i int
 		for i = 0; i < l; i++ {
 			if !yield(T(unmarshaller.ReadFloat32())) {
+				i++ // element i was already read before yield aborted
 				break
 			}
 		}
@@ -269,6 +273,7 @@ func IterateInt64SliceRetr[D UnmarshallReaderI, T ~int64](unmarshaller D) iter.S
 		var i int
 		for i = 0; i < l; i++ {
 			if !yield(T(unmarshaller.ReadInt64())) {
+				i++ // element i was already read before yield aborted
 				break
 			}
 		}
@@ -286,6 +291,7 @@ func IterateStringSliceRetr[D UnmarshallReaderI, T ~string](unmarshaller D) iter
 		var i int
 		for i = 0; i < l; i++ {
 			if !yield(T(unmarshaller.ReadString())) {
+				i++ // element i was already read before yield aborted
 				break
 			}
 		}
