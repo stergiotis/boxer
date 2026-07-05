@@ -15,7 +15,7 @@ import (
 func TestRegisterStatic(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, RegisterStatic(r))
-	assert.Equal(t, []string{"apps", "build", "env", "sbom"}, r.Names())
+	assert.Equal(t, []string{"apps", "build", "env", "sbom", "sql_passes"}, r.Names())
 }
 
 func TestProvidersSnapshotWell(t *testing.T) {
