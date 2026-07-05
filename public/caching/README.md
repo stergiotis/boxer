@@ -104,7 +104,45 @@ To prevent cascading failures during outages:
     down.
 *   **Safety:** The fetcher is wrapped in `recover()` to prevent panics from crashing the pipeline.
 
-### 3.4 Negative caching (opt-in)
+### 3.4 Versioned admission and write-through (opt-in)
+`WithVersioning(orderOf)` makes every value carry a monotonic order
+(int64; intrinsic to the value, so it can never be mismatched) and turns
+admission into a three-outcome gate: **newer** replaces; **equal**
+confirms (staleness clears, the freshness clock restarts — the
+revalidation outcome); **older** is rejected, so a raced fetch returning
+a pre-write row bounces off instead of resurrecting it. int64 over
+uint64 is deliberate: the order must sort exactly like the source's
+ordering column (a signed timestamp in recordstore), and a uint64 cast
+of a pre-epoch or zero time would poison the key; the same input as
+int64 orders as "very old" and loses, matching the source's own ORDER BY.
+Without the option an internal counter reproduces last-insert-wins
+exactly.
+
+Write-through is a consumer pattern on top of the gate plus the
+**dirty-window pin**: the writer populates the cache at commit
+(`AddItem` + `Pin`) and releases at flush (`Unpin`). The pin makes the
+entry immune to eviction while the write is not yet durable — the gate
+alone cannot protect an *evicted* dirty entry, because a refetch then
+compares against nothing (the machine-checked `unsafe_nopin`
+counterfactual under `verification/formal/caching/`). Pinned entries may
+hold L1 beyond its capacity, bounded by the writer's flush cadence — and
+epoch pinning compounds with it: the overshoot drains only when an
+AdvanceEpoch cadence lets insert pressure evict again.
+Deletions write through as versioned tombstone values. Discarded
+(never-durable) writes must be invalidated by the writer (`Delete`).
+`MarkAsStaleIfOlder(k, ver)` is the version-carrying external-writer
+signal — redundant signals for data the cache already holds are free.
+
+### 3.5 Freshness TTL (opt-in)
+`WithFreshnessTTL(ttl)` adds age-based staleness onset for
+stale-while-revalidate: an entry older than ttl (since admission or the
+last equal-version confirmation) reads as stale — strict `Get` misses
+and queues the refresh, `GetAcceptStale` keeps serving. The age stamp
+travels through the stash, so a demotion round-trip cannot rejuvenate an
+entry (the `freshness_ttl_unsafe` counterfactual). `MarkAsStale` remains
+available either way.
+
+### 3.6 Negative caching (opt-in)
 `WithNegativeCaching(ttl)` records an *absent* verdict for requested keys a
 clean fetch did not deliver. Within the TTL a `Get` on such a key misses
 without queueing and without suspending the current work item, so
@@ -115,7 +153,7 @@ a guess, an absence is an answer). Off by default; without it, absent keys
 re-probe on every flush and distinguishing "absent" from "not fetched yet"
 is the caller's job.
 
-### 3.5 Partition-Aware Fetching
+### 3.7 Partition-Aware Fetching
 *   **Interface:** `ItemFetcherI.DeterminePartition(key)`.
 *   **Optimization:** Keys are grouped by partition before the fetch call. This allows for optimal connection pooling (e.g., one DB query per shard).
 *   **Contract:** batches never contain duplicates; a partition is frozen at
@@ -207,8 +245,16 @@ The `processItem` function:
 *   **`WithErrorBackoff(duration)`**: Circuit-breaker recovery window
     set at construction time. `SetErrorBackoff(duration)` does the
     same thing at runtime — useful for tests and for tuning live.
-*   **`WithNegativeCaching(ttl)`**: absent-key marking (§3.4). Off by
+*   **`WithVersioning(orderOf)`**: version-gated admission (§3.4). Off by
+    default (internal counter = last-insert-wins).
+*   **`WithFreshnessTTL(ttl)`**: age-based staleness onset (§3.5). Off by
     default.
+*   **`WithNegativeCaching(ttl)`**: absent-key marking (§3.6). Off by
+    default.
+
+Write-through verbs: `Pin(k)` / `Unpin(k)` latch the dirty window
+(§3.4); `MarkAsStaleIfOlder(k, ver)` is the version-carrying staleness
+signal.
 
 Lifecycle and introspection: `Clear()` drops every entry and all in-flight
 bookkeeping (call between frames, not with suspended work); `Close()`
