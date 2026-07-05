@@ -301,9 +301,12 @@ untagged element fields are rejected by both front-ends.
 
 ## Open questions
 
-1. **Dynamic ref memberships.** Needs a lookup surface in the generated
-   API (or per-element id fields à la carriers). Defer until a consumer
-   has a ref-channel section needing per-element memberships.
+1. **Dynamic ref memberships.** *(Resolved 2026-07-05 by
+   [ADR-0109](0109-leeway-marshall-multi-membership-ref-tuples.md).)* The
+   consumer materialised; the lookup-surface concern is dissolved by carrying
+   the ref id directly on the `@membership` field as a `uint64` (per-element
+   data — no `kindXxx` symbol, no `LookupI`, both front-ends byte-identical),
+   which also lifts the single-membership rule (D1/D5) to multi-membership.
 2. **`ReadRow` / recordstore coverage.** Tuple kinds are excluded from
    `<Kind>ReadRow` (and thus ADR-0100 store reads) like carriers and
    explode; lift when a store consumer needs a tuple component.
