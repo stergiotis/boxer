@@ -1,11 +1,111 @@
 package ragged
 
 import (
+	"iter"
 	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// countingSeq wraps a slice in an iter.Seq that records how many
+// elements were pulled. slices.Values is stateless, so only a counting
+// source can observe spurious consumption by the zip adapters.
+func countingSeq[T any](items []T, pulled *int) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for _, v := range items {
+			*pulled++
+			if !yield(v) {
+				return
+			}
+		}
+	}
+}
+
+// Pull-count contract of the lazy zips (containers review 2026-07-05):
+// the sequence side is ALWAYS invoked, and when it is strictly longer
+// than the slice side (including an empty slice) exactly one extra
+// element is pulled and discarded; at equal lengths nothing extra is
+// pulled. The extra pull is deliberate — fffi2 stream-backed sequences
+// perform mandatory reads when invoked and self-drain on early
+// termination, so the zips must enter the sequence rather than skip it
+// (see the Zip2L doc comment). These tests pin that contract; do not
+// "optimize" the pulls away without auditing the egui2 statemanagement
+// FFI call sites.
+func TestZipConsumption(t *testing.T) {
+	t.Run("Zip2L empty slice pulls exactly one", func(t *testing.T) {
+		pulled := 0
+		for range Zip2L(countingSeq([]int{1, 2, 3}, &pulled), []string{}) {
+			t.Fatal("must not yield")
+		}
+		assert.Equal(t, 1, pulled)
+	})
+	t.Run("Zip2L slice exhaustion pulls pair count plus one", func(t *testing.T) {
+		pulled := 0
+		n := 0
+		for range Zip2L(countingSeq([]int{1, 2, 3, 4}, &pulled), []string{"a", "b"}) {
+			n++
+		}
+		assert.Equal(t, 2, n)
+		assert.Equal(t, 3, pulled)
+	})
+	t.Run("Zip2L equal lengths pulls exactly the pair count", func(t *testing.T) {
+		pulled := 0
+		n := 0
+		for range Zip2L(countingSeq([]int{1, 2}, &pulled), []string{"a", "b"}) {
+			n++
+		}
+		assert.Equal(t, 2, n)
+		assert.Equal(t, 2, pulled)
+	})
+	t.Run("Zip2R empty slice pulls exactly one", func(t *testing.T) {
+		pulled := 0
+		for range Zip2R([]string{}, countingSeq([]int{1, 2, 3}, &pulled)) {
+			t.Fatal("must not yield")
+		}
+		assert.Equal(t, 1, pulled)
+	})
+	t.Run("Zip2R slice exhaustion pulls pair count plus one", func(t *testing.T) {
+		pulled := 0
+		n := 0
+		for range Zip2R([]string{"a", "b"}, countingSeq([]int{1, 2, 3, 4}, &pulled)) {
+			n++
+		}
+		assert.Equal(t, 2, n)
+		assert.Equal(t, 3, pulled)
+	})
+	t.Run("Zip2R equal lengths pulls exactly the pair count", func(t *testing.T) {
+		pulled := 0
+		n := 0
+		for range Zip2R([]string{"a", "b"}, countingSeq([]int{1, 2}, &pulled)) {
+			n++
+		}
+		assert.Equal(t, 2, n)
+		assert.Equal(t, 2, pulled)
+	})
+	t.Run("Zip2LR right exhaustion pulls one extra from left", func(t *testing.T) {
+		pulledL := 0
+		pulledR := 0
+		n := 0
+		for range Zip2LR(countingSeq([]int{1, 2, 3, 4}, &pulledL), countingSeq([]string{"a", "b"}, &pulledR)) {
+			n++
+		}
+		assert.Equal(t, 2, n)
+		assert.Equal(t, 3, pulledL, "documented: one extra pull from s1 discovers s2's end")
+		assert.Equal(t, 2, pulledR)
+	})
+	t.Run("Zip2LR left exhaustion pulls nothing extra from right", func(t *testing.T) {
+		pulledL := 0
+		pulledR := 0
+		n := 0
+		for range Zip2LR(countingSeq([]int{1, 2}, &pulledL), countingSeq([]string{"a", "b", "c", "d"}, &pulledR)) {
+			n++
+		}
+		assert.Equal(t, 2, n)
+		assert.Equal(t, 2, pulledL)
+		assert.Equal(t, 2, pulledR)
+	})
+}
 
 func TestIterate2L(t *testing.T) {
 	// Pair is a helper struct to capture the output of iter.Seq2 for comparison
