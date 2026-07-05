@@ -615,9 +615,7 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 		canonical canonicaltypes.PrimitiveAstNodeI
 		flags     mappingplan.FieldFlags
 	}
-	membField := ""
-	membGoType := ""
-	membChannel := mappingplan.MembershipChannelLowCardRef
+	memberships := make([]mappingplan.TupleMembership, 0, len(elems))
 	values := make([]valueField, 0, len(elems))
 	usedCols := map[string]string{}
 
@@ -646,25 +644,49 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 		}
 
 		if pt.IsMembership {
-			if membField != "" {
-				err = ctx.Errorf("second `%s` field (first: %s) — a tuple element carries exactly one membership", TupleMembershipMarker, membField)
-				return
-			}
+			// A tuple element may declare MORE THAN ONE `@membership` field
+			// (repeated fixed fields and/or one repeated slice field per
+			// channel) so an attribute carries several memberships
+			// (`membership-card > 1`), possibly on heterogeneous channels
+			// (ADR-0109 (a)). The channel is per-field.
 			if pt.Flags.Unit || pt.Flags.Explode || pt.Flags.HasConst || pt.Flags.CanonicalType != "" {
 				err = ctx.Errorf("`%s` field takes only a channel flag (no unit / explode / const / ct=)", TupleMembershipMarker)
 				return
 			}
-			if !pt.Flags.Channel.EmbedsLiteralName() {
-				err = ctx.Str("channel", pt.Flags.Channel.String()).Errorf("`%s` requires an explicit verbatim channel flag (`,verbatim` / `,lowCardVerbatim` / `,highCardVerbatim`) — a dynamic membership embeds its value on the wire; ref and carrier channels are not supported", TupleMembershipMarker)
+			if isRoaring {
+				err = ctx.Errorf("`%s` field cannot be a *roaring.Bitmap — use a scalar or a `[]T` for a repeated membership", TupleMembershipMarker)
 				return
 			}
-			if isSlice || isRoaring || (goType != "string" && goType != "[]byte") {
-				err = ctx.Str("goType", goType).Errorf("`%s` field must be a string or []byte scalar", TupleMembershipMarker)
+			ch := pt.Flags.Channel
+			if ch.UsesCarrier() {
+				err = ctx.Str("channel", ch.String()).Errorf("`%s` cannot use a carrier / parametrized channel — its identity is per-row carrier data, not an element field; use a verbatim or ref channel", TupleMembershipMarker)
 				return
 			}
-			membField = e.GoFieldName
-			membGoType = goType
-			membChannel = pt.Flags.Channel
+			// Type ↔ channel: a verbatim channel embeds the literal name
+			// (string / []byte); a ref channel carries the id directly as a
+			// uint64 — no lookup, no compile-time kindXxx symbol (ADR-0109 (b)).
+			// A repeated field ([]T) sets IsSlice; goType is then the element type.
+			switch goType {
+			case "string", "[]byte":
+				if !ch.EmbedsLiteralName() {
+					err = ctx.Str("channel", ch.String()).Errorf("`%s` on a string / []byte field requires an explicit verbatim channel flag (`,verbatim` / `,lowCardVerbatim` / `,highCardVerbatim`) — the literal name embeds on the wire; a ref channel takes a uint64 id", TupleMembershipMarker)
+					return
+				}
+			case "uint64":
+				if !ch.NeedsKindVar() {
+					err = ctx.Str("channel", ch.String()).Errorf("`%s` on a uint64 field requires a ref channel flag (`,lowCardRef` / `,highCardRef`) — the id is carried directly; a verbatim channel takes a string / []byte name", TupleMembershipMarker)
+					return
+				}
+			default:
+				err = ctx.Str("goType", goType).Errorf("`%s` field must be a string / []byte (verbatim) or uint64 (ref) value, or a `[]T` of them", TupleMembershipMarker)
+				return
+			}
+			memberships = append(memberships, mappingplan.TupleMembership{
+				GoField: e.GoFieldName,
+				GoType:  goType,
+				Channel: ch,
+				IsSlice: isSlice,
+			})
 			continue
 		}
 
@@ -714,8 +736,8 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 		values = append(values, valueField{goField: e.GoFieldName, column: col, canonical: fieldCanonical, flags: pt.Flags})
 	}
 
-	if membField == "" {
-		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs exactly one `%s` field carrying the per-attribute membership", TupleMembershipMarker)
+	if len(memberships) == 0 {
+		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs at least one `%s` field carrying a per-attribute membership", TupleMembershipMarker)
 		return
 	}
 	if len(values) == 0 {
@@ -723,18 +745,41 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 		return
 	}
 
+	// Per-channel arity (ADR-0109 D3). On one channel the memberships are read
+	// back by draining that channel's per-attribute Seq positionally, so it must
+	// carry EITHER any number of fixed (scalar) fields — each one membership,
+	// assigned in declaration order — OR exactly one repeated (slice) field that
+	// takes the whole Seq. A slice mixed with any other field on one channel (or
+	// two slices) could not be split back unambiguously; put them on different
+	// channels. Checked in declaration order for a deterministic error.
+	seenSliceOnChannel := map[mappingplan.MembershipChannel]bool{}
+	seenAnyOnChannel := map[mappingplan.MembershipChannel]bool{}
+	for _, m := range memberships {
+		if seenSliceOnChannel[m.Channel] || (m.IsSlice && seenAnyOnChannel[m.Channel]) {
+			err = eb.Build().Str("field", goFieldName).Str("channel", m.Channel.String()).Errorf("a repeated (slice) `%s` field must be the only membership on its channel — a slice cannot be split from other `%s` fields on one channel; put them on different channels", TupleMembershipMarker, TupleMembershipMarker)
+			return
+		}
+		if m.IsSlice {
+			seenSliceOnChannel[m.Channel] = true
+		}
+		seenAnyOnChannel[m.Channel] = true
+	}
+
 	for _, v := range values {
 		b.plan.Fields = append(b.plan.Fields, mappingplan.TaggedField{
-			GoFieldName:     v.goField,
-			Canonical:       v.canonical,
-			LWMembership:    "", // dynamic — per-element data, not a static tag
-			LWSection:       section,
-			LWColumn:        v.column,
-			Flags:           mappingplan.FieldFlags{Channel: membChannel, CanonicalType: v.flags.CanonicalType},
-			TupleField:      goFieldName,
-			TupleStructType: structTypeName,
-			TupleMembField:  membField,
-			TupleMembGoType: membGoType,
+			GoFieldName:  v.goField,
+			Canonical:    v.canonical,
+			LWMembership: "", // dynamic — per-element data, not a static tag
+			LWSection:    section,
+			LWColumn:     v.column,
+			// The value fields carry the first membership's channel only so
+			// g.Channel() and the per-section channel-uniformity check stay
+			// well-defined; every tuple channel site dispatches on
+			// TupleMemberships instead (the memberships may be heterogeneous).
+			Flags:            mappingplan.FieldFlags{Channel: memberships[0].Channel, CanonicalType: v.flags.CanonicalType},
+			TupleField:       goFieldName,
+			TupleStructType:  structTypeName,
+			TupleMemberships: memberships,
 		})
 	}
 	return
@@ -769,6 +814,13 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 	// never identifiers (literal wire label / per-row carrier data), so
 	// their names may be arbitrary.
 	for _, f := range b.plan.Fields {
+		// Tuple value fields carry a ref channel only to keep g.Channel()
+		// well-defined; their memberships are per-element ids (or names)
+		// declared on the element's `@membership` fields, not a static kindXxx
+		// symbol (ADR-0109), so this identifier rule does not apply to them.
+		if f.TupleField != "" {
+			continue
+		}
 		if f.Flags.Channel.NeedsKindVar() && !mappingplan.IsIdentifierLike(f.LWMembership) {
 			err = eb.Build().Str("membership", f.LWMembership).Errorf("ref-channel membership must be a Go identifier (ASCII letters, digits, underscores) — it becomes the emitted kindXxx symbol; use a verbatim channel for an arbitrary wire label")
 			return

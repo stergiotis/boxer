@@ -100,7 +100,11 @@ func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI) (err er
 	// and parametrized-only channels are matched by literal bytes.
 	membIDs := map[string]uint64{}
 	for _, f := range plan.Fields {
-		if !f.Flags.Channel.NeedsKindVar() || f.IsConst {
+		// Tuple value fields carry a ref channel only to keep g.Channel()
+		// well-defined; their memberships are per-element ids read directly off
+		// the wire (distributeTupleMemberships), never resolved via lookup —
+		// their LWMembership is "" and would fail the lookup (ADR-0109).
+		if !f.Flags.Channel.NeedsKindVar() || f.IsConst || f.TupleField != "" {
 			continue
 		}
 		var id uint64
@@ -535,21 +539,21 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 }
 
 // unmarshalTupleSection decodes a dynamic-membership tuple section
-// (ADR-0103). Every attribute of the row belongs to the tuple field —
-// PlanBuilder.Finish guarantees the section carries no other field — so
-// there is no membership matching: each attribute yields one element per
-// membership value it carries (codec-written wire carries exactly one),
-// in wire order, with the membership value decoded into the element's
-// membership field. Zero attributes decode to a nil slice.
+// (ADR-0103, extended by ADR-0109). Every attribute of the row belongs to
+// the tuple field — PlanBuilder.Finish guarantees the section carries no
+// other field — so there is no membership matching: each attribute decodes
+// to ONE element, its sub-column values read positionally and its
+// memberships distributed to the element's `@membership` fields per channel
+// (distributeTupleMemberships). Zero attributes decode to a nil slice.
 func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, attrs, membs reflect.Value, i int) (err error) {
 	outFld := row.FieldByName(ts.GoField)
 	elemType := outFld.Type().Elem()
-	membMethod := "GetMembValue" + ts.Channel.AddMethodSuffix()
 
 	var out reflect.Value // lazily allocated — zero attributes keep the nil slice
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	locals := make([]reflect.Value, len(g.SubColumns))
 	for attrJ := int64(0); attrJ < n; attrJ++ {
+		// One element per attribute (ADR-0109 D2). Read every sub-column value…
 		for k := range g.SubColumns {
 			sc := &g.SubColumns[k]
 			f := &sc.Fields[0]
@@ -562,24 +566,56 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 				locals[k] = copiedTupleScalar(v, f)
 			}
 		}
-		seq := mustCall(membs, membMethod, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-		for _, mv := range collectIterSeq(seq) {
-			elem := reflect.New(elemType).Elem()
-			setTupleMembValue(elem, ts, mv)
-			for k := range g.SubColumns {
-				if !locals[k].IsValid() {
-					continue
-				}
-				elem.FieldByName(g.SubColumns[k].Fields[0].GoFieldName).Set(locals[k])
+		elem := reflect.New(elemType).Elem()
+		for k := range g.SubColumns {
+			if !locals[k].IsValid() {
+				continue
 			}
-			if !out.IsValid() {
-				out = reflect.MakeSlice(outFld.Type(), 0, int(n))
-			}
-			out = reflect.Append(out, elem)
+			elem.FieldByName(g.SubColumns[k].Fields[0].GoFieldName).Set(locals[k])
 		}
+		// …then distribute the attribute's memberships into the element's
+		// `@membership` fields, one channel at a time.
+		if err = distributeTupleMemberships(elem, ts, g.Section, membs, i, attrJ); err != nil {
+			return
+		}
+		if !out.IsValid() {
+			out = reflect.MakeSlice(outFld.Type(), 0, int(n))
+		}
+		out = reflect.Append(out, elem)
 	}
 	if out.IsValid() {
 		outFld.Set(out)
+	}
+	return
+}
+
+// distributeTupleMemberships reads each membership channel's per-attribute Seq
+// once and assigns the values to the element's `@membership` fields on that
+// channel (ADR-0109 D3): a channel carrying a single repeated (slice) field
+// takes the whole Seq (nil when empty); otherwise its fixed fields each take
+// one value in declaration order and the Seq length must match exactly, else a
+// count mismatch is an error. Channels are independent — an element may mix
+// verbatim and ref channels (ADR-0109 D4).
+func distributeTupleMemberships(elem reflect.Value, ts goplan.TupleSpec, section string, membs reflect.Value, i int, attrJ int64) (err error) {
+	for _, ch := range ts.Channels() {
+		vals := collectIterSeq(mustCall(membs, "GetMembValue"+ch.AddMethodSuffix(), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0])
+		fields := make([]mappingplan.TupleMembership, 0, len(ts.Memberships))
+		for _, m := range ts.Memberships {
+			if m.Channel == ch {
+				fields = append(fields, m)
+			}
+		}
+		if len(fields) == 1 && fields[0].IsSlice {
+			setTupleMembSlice(elem, fields[0], vals)
+			continue
+		}
+		if len(vals) != len(fields) {
+			err = eb.Build().Str("section", section).Str("channel", ch.AddMethodSuffix()).Int("got", len(vals)).Int("want", len(fields)).Errorf("tuple attribute carries %d %s membership(s) but the element declares %d — membership count mismatch on read", len(vals), ch.AddMethodSuffix(), len(fields))
+			return
+		}
+		for idx, m := range fields {
+			setTupleMembScalar(elem, m, vals[idx])
+		}
 	}
 	return
 }
@@ -604,15 +640,42 @@ func copiedTupleScalar(v reflect.Value, f *mappingplan.TaggedField) reflect.Valu
 	}
 }
 
-// setTupleMembValue decodes one wire membership value (a verbatim []byte)
-// into the element's membership field, copying it out of the Arrow buffer.
-func setTupleMembValue(elem reflect.Value, ts goplan.TupleSpec, mv reflect.Value) {
-	fld := elem.FieldByName(ts.MembField)
-	if ts.MembGoType == "[]byte" {
-		fld.SetBytes(append([]byte(nil), mv.Bytes()...))
+// setTupleMembScalar decodes one wire membership value into a fixed
+// `@membership` field: a uint64 id for a ref channel, or a verbatim name
+// (copied out of the Arrow buffer) for a string / []byte field.
+func setTupleMembScalar(elem reflect.Value, m mappingplan.TupleMembership, v reflect.Value) {
+	fld := elem.FieldByName(m.GoField)
+	switch m.GoType {
+	case "uint64":
+		fld.SetUint(v.Uint())
+	case "[]byte":
+		fld.SetBytes(append([]byte(nil), v.Bytes()...))
+	default: // "string"
+		fld.SetString(string(v.Bytes()))
+	}
+}
+
+// setTupleMembSlice decodes a channel's whole membership Seq into a repeated
+// (slice) `@membership` field — []uint64 ids for a ref channel, or []string /
+// [][]byte verbatim names (copied out of the Arrow buffer). An empty Seq leaves
+// the field nil.
+func setTupleMembSlice(elem reflect.Value, m mappingplan.TupleMembership, vals []reflect.Value) {
+	if len(vals) == 0 {
 		return
 	}
-	fld.SetString(string(mv.Bytes()))
+	fld := elem.FieldByName(m.GoField)
+	out := reflect.MakeSlice(fld.Type(), 0, len(vals))
+	for _, v := range vals {
+		switch m.GoType {
+		case "uint64":
+			out = reflect.Append(out, v)
+		case "[]byte":
+			out = reflect.Append(out, reflect.ValueOf(append([]byte(nil), v.Bytes()...)))
+		default: // "string"
+			out = reflect.Append(out, reflect.ValueOf(string(v.Bytes())))
+		}
+	}
+	fld.Set(out)
 }
 
 // sliceFromSeq drains a reflected iter.Seq[T] into a []T value,

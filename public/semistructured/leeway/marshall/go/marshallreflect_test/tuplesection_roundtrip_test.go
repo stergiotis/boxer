@@ -462,21 +462,6 @@ func TestValidate_TupleContract(t *testing.T) {
 // grammar (ADR-0103): unrepresentable element structs fail at PlanFor /
 // Validate for both front-ends, never as a reflect panic mid-marshal.
 func TestPlanFor_TupleRejections(t *testing.T) {
-	t.Run("second membership field", func(t *testing.T) {
-		type elem struct {
-			Label  string `lw:"@membership,verbatim"`
-			Label2 string `lw:"@membership,verbatim"`
-			Text   string `lw:"text:text"`
-		}
-		type bad struct {
-			_     struct{} `kind:"bad"`
-			ID    uint64   `lw:",id"`
-			Texts []elem   `lw:"text"`
-		}
-		_, err := marshallreflect.PlanFor[bad]()
-		require.Error(t, err)
-		require.ErrorContains(t, err, "second `@membership` field")
-	})
 	t.Run("missing membership field", func(t *testing.T) {
 		type elem struct {
 			Text string `lw:"text:text"`
@@ -488,7 +473,7 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 		}
 		_, err := marshallreflect.PlanFor[bad]()
 		require.Error(t, err)
-		require.ErrorContains(t, err, "needs exactly one `@membership` field")
+		require.ErrorContains(t, err, "needs at least one `@membership` field")
 	})
 	t.Run("membership without channel flag", func(t *testing.T) {
 		type elem struct {
@@ -504,7 +489,9 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorContains(t, err, "requires an explicit verbatim channel flag")
 	})
-	t.Run("membership on a ref channel", func(t *testing.T) {
+	t.Run("verbatim-typed membership on a ref channel", func(t *testing.T) {
+		// A string / []byte `@membership` must name a verbatim channel — a ref
+		// channel (incl. the bare default) carries a uint64 id, not a name.
 		type elem struct {
 			Label string `lw:"@membership,highCardRef"`
 			Text  string `lw:"text:text"`
@@ -516,9 +503,11 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 		}
 		_, err := marshallreflect.PlanFor[bad]()
 		require.Error(t, err)
-		require.ErrorContains(t, err, "verbatim channel")
+		require.ErrorContains(t, err, "requires an explicit verbatim channel flag")
 	})
-	t.Run("membership with non-string type", func(t *testing.T) {
+	t.Run("ref-typed membership on a verbatim channel", func(t *testing.T) {
+		// A uint64 `@membership` must name a ref channel — a verbatim channel
+		// embeds a literal name, not an id.
 		type elem struct {
 			Label uint64 `lw:"@membership,verbatim"`
 			Text  string `lw:"text:text"`
@@ -530,7 +519,39 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 		}
 		_, err := marshallreflect.PlanFor[bad]()
 		require.Error(t, err)
-		require.ErrorContains(t, err, "must be a string or []byte scalar")
+		require.ErrorContains(t, err, "requires a ref channel flag")
+	})
+	t.Run("membership with unsupported type", func(t *testing.T) {
+		type elem struct {
+			Label float32 `lw:"@membership,verbatim"`
+			Text  string  `lw:"text:text"`
+		}
+		type bad struct {
+			_     struct{} `kind:"bad"`
+			ID    uint64   `lw:",id"`
+			Texts []elem   `lw:"text"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.Error(t, err)
+		require.ErrorContains(t, err, "must be a string / []byte (verbatim) or uint64 (ref)")
+	})
+	t.Run("slice membership mixed with another field on one channel", func(t *testing.T) {
+		// ADR-0109 D3: on one channel a repeated (slice) `@membership` must be
+		// the only membership — a fixed field on the same channel could not be
+		// split back off the shared per-attribute Seq.
+		type elem struct {
+			Kind uint64   `lw:"@membership,lowCardRef"`
+			Anc  []uint64 `lw:"@membership,lowCardRef"`
+			Text string   `lw:"text:text"`
+		}
+		type bad struct {
+			_     struct{} `kind:"bad"`
+			ID    uint64   `lw:",id"`
+			Texts []elem   `lw:"text"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.Error(t, err)
+		require.ErrorContains(t, err, "must be the only membership on its channel")
 	})
 	t.Run("element targets a different section", func(t *testing.T) {
 		type elem struct {

@@ -674,7 +674,15 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 	line(sb, 0, "// every method returns void so no F-bounded `[Self]` parameter is")
 	line(sb, 0, "// needed.")
 	linef(sb, 0, "type %s%sAttrI interface {", kind, method)
-	linef(sb, 1, "dmlruntime.InAttributeMembership%sPI", g.Channel().AddMethodSuffix())
+	if ts, ok := g.TupleSpec(); ok {
+		// A tuple element may carry memberships on several channels (ADR-0109
+		// D4); the AttrI embeds one InAttributeMembership<Channel>PI per channel.
+		for _, ch := range ts.Channels() {
+			linef(sb, 1, "dmlruntime.InAttributeMembership%sPI", ch.AddMethodSuffix())
+		}
+	} else {
+		linef(sb, 1, "dmlruntime.InAttributeMembership%sPI", g.Channel().AddMethodSuffix())
+	}
 	if needAddToContainer != "" {
 		linef(sb, 1, "AddToContainerP(value %s)", needAddToContainer)
 	}
@@ -937,15 +945,15 @@ func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup, src valueSrc
 }
 
 // writeTupleSectionDriver emits the write driver for a dynamic-membership
-// tuple section (ADR-0103): one attribute per element of the outer slice,
-// in element order — BeginAttribute(<scalar sub-columns…>), the zipped
-// co-containers, the element's own membership via the verbatim channel,
-// EndAttributeP. The per-element call sequence is the multi-sub-column
-// sequence (ADR-0101 D4); marshallreflect.marshalTupleSection mirrors it
-// exactly (byte-identity). An element always emits — its presence in the
-// slice is the signal, there is no per-element splice — and the
-// per-element zip-length guard surfaces mis-zipped co-containers as an
-// error, never silent truncation.
+// tuple section (ADR-0103, extended by ADR-0109): one attribute per element
+// of the outer slice, in element order — BeginAttribute(<scalar sub-columns…>),
+// the zipped co-containers, then the element's memberships (one
+// AddMembership<Channel>P per `@membership` field, one per slice element for a
+// repeated field, possibly on heterogeneous channels), EndAttributeP. The
+// per-element call sequence mirrors marshallreflect.marshalTupleSection exactly
+// (byte-identity). An element always emits — its presence in the slice is the
+// signal, there is no per-element splice — and the per-element zip-length guard
+// surfaces mis-zipped co-containers as an error, never silent truncation.
 func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts goplan.TupleSpec, secVar string, src valueSrc) {
 	scalars := g.ScalarSubColumns()
 	containers := g.ContainerSubColumns()
@@ -983,13 +991,29 @@ func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 		linef(sb, 4, "%s.%sP(%s)", attrVar, goplan.ContainerAddMethod(len(containers)), strings.Join(elems, ", "))
 		line(sb, 3, "}")
 	}
-	membExpr := elemSrc.field(ts.MembField)
-	if ts.MembGoType == "string" {
-		membExpr = "[]byte(" + membExpr + ")"
+	for _, m := range ts.Memberships {
+		suffix := m.Channel.AddMethodSuffix()
+		if m.IsSlice {
+			linef(sb, 3, "for _, mv := range %s {", elemSrc.field(m.GoField))
+			linef(sb, 4, "%s.AddMembership%sP(%s)", attrVar, suffix, tupleMembExpr("mv", m))
+			line(sb, 3, "}")
+		} else {
+			linef(sb, 3, "%s.AddMembership%sP(%s)", attrVar, suffix, tupleMembExpr(elemSrc.field(m.GoField), m))
+		}
 	}
-	linef(sb, 3, "%s.AddMembership%sP(%s)", attrVar, ts.Channel.AddMethodSuffix(), membExpr)
 	linef(sb, 3, "%s.EndAttributeP()", attrVar)
 	line(sb, 2, "}")
+}
+
+// tupleMembExpr renders the AddMembership<Channel>P argument from a tuple
+// element's membership value expression (a field access, or a slice-loop var):
+// `[]byte(x)` for a verbatim string field, the expression as-is for a []byte or
+// a ref uint64 field.
+func tupleMembExpr(valExpr string, m mappingplan.TupleMembership) string {
+	if m.Channel.EmbedsLiteralName() && m.GoType == "string" {
+		return "[]byte(" + valExpr + ")"
+	}
+	return valExpr
 }
 
 func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVar string, src valueSrc) (err error) {
@@ -1321,6 +1345,16 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 
 	linef(sb, 0, "// %s%sMembsReadI is the Memberships-side view of the %s section.", kind, method, g.Section)
 	linef(sb, 0, "type %s%sMembsReadI interface {", kind, method)
+	if ts, ok := g.TupleSpec(); ok {
+		// A tuple element may read memberships on several channels (ADR-0109
+		// D4); expose one GetMembValue<Channel> per channel (all simple
+		// channels — a plain Seq of the id / name).
+		for _, tch := range ts.Channels() {
+			linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", tch.AddMethodSuffix(), tch.ReadIterElemType())
+		}
+		line(sb, 0, "}\n")
+		return
+	}
 	ch := g.Channel()
 	switch {
 	case ch.UsesCarrier() && ch.CarrierValueField() != "":
@@ -1440,13 +1474,14 @@ func writeSectionDecode(sb *strings.Builder, g goplan.SectionGroup) (err error) 
 }
 
 // writeTupleSectionDecode emits the FillFromArrow decode of a
-// dynamic-membership tuple section (ADR-0103). Every attribute of the row
-// belongs to the tuple field (PlanBuilder.Finish guarantees the section
-// carries no other field), so there is no membership match: each
-// attribute appends one element per membership value it carries
-// (codec-written wire carries exactly one), in wire order, with the
-// membership value decoded into the element's membership field. Zero
-// attributes decode to a nil element slice.
+// dynamic-membership tuple section (ADR-0103, extended by ADR-0109). Every
+// attribute of the row belongs to the tuple field (PlanBuilder.Finish
+// guarantees the section carries no other field), so there is no membership
+// match: each attribute decodes to ONE element — its sub-column values read
+// positionally and its memberships distributed to the element's `@membership`
+// fields per channel (fixed fields positional, a repeated field taking the
+// whole channel Seq). Zero attributes decode to a nil element slice. Mirrors
+// marshallreflect.unmarshalTupleSection.
 func writeTupleSectionDecode(sb *strings.Builder, g goplan.SectionGroup, ts goplan.TupleSpec, attrsVar, membsVar, prefix string) {
 	elemsVar := prefix + ts.GoField + "Elems"
 	linef(sb, 2, "var %s []%s", elemsVar, ts.StructType)
@@ -1478,21 +1513,77 @@ func writeTupleSectionDecode(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 		}
 		line(sb, 3, "}")
 	}
-	linef(sb, 3, "for membBytes := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, ts.Channel.AddMethodSuffix())
-	membConv := "string(membBytes)"
-	if ts.MembGoType == "[]byte" {
-		membConv = "append([]byte(nil), membBytes...)"
+
+	// Memberships, one channel at a time (ADR-0109 D3). membExpr[goField] is the
+	// element-literal expression for each `@membership` field.
+	membExpr := map[string]string{}
+	for _, ch := range ts.Channels() {
+		suffix := ch.AddMethodSuffix()
+		accessor := fmt.Sprintf("%s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", membsVar, suffix)
+		var chFields []mappingplan.TupleMembership
+		for _, m := range ts.Memberships {
+			if m.Channel == ch {
+				chFields = append(chFields, m)
+			}
+		}
+		if len(chFields) == 1 && chFields[0].IsSlice {
+			// Slice-mode: the sole field on this channel takes the whole Seq.
+			f := chFields[0]
+			sliceVar := prefix + f.GoField + "Membs"
+			linef(sb, 3, "var %s []%s", sliceVar, f.GoType)
+			linef(sb, 3, "for mv := range %s {", accessor)
+			linef(sb, 4, "%s = append(%s, %s)", sliceVar, sliceVar, tupleMembDecodeElem("mv", f))
+			line(sb, 3, "}")
+			membExpr[f.GoField] = sliceVar
+			continue
+		}
+		// Fixed-mode: collect the channel's values, require the exact count, then
+		// index one per field in declaration order.
+		rawVar := prefix + suffix + "Membs"
+		wireElem := "uint64"
+		if ch.EmbedsLiteralName() {
+			wireElem = "[]byte"
+		}
+		linef(sb, 3, "var %s []%s", rawVar, wireElem)
+		linef(sb, 3, "for mv := range %s {", accessor)
+		linef(sb, 4, "%s = append(%s, mv)", rawVar, rawVar)
+		line(sb, 3, "}")
+		linef(sb, 3, "if len(%s) != %d {", rawVar, len(chFields))
+		linef(sb, 4, `err = eb.Build().Str("section", %q).Str("channel", %q).Int("got", len(%s)).Int("want", %d).Errorf("membership count mismatch on read")`, g.Section, suffix, rawVar, len(chFields))
+		line(sb, 4, "return")
+		line(sb, 3, "}")
+		for idx, f := range chFields {
+			membExpr[f.GoField] = tupleMembDecodeElem(fmt.Sprintf("%s[%d]", rawVar, idx), f)
+		}
 	}
-	linef(sb, 4, "%s = append(%s, %s{", elemsVar, elemsVar, ts.StructType)
-	linef(sb, 5, "%s: %s,", ts.MembField, membConv)
+
+	linef(sb, 3, "%s = append(%s, %s{", elemsVar, elemsVar, ts.StructType)
+	for _, m := range ts.Memberships {
+		linef(sb, 4, "%s: %s,", m.GoField, membExpr[m.GoField])
+	}
 	for _, sc := range g.SubColumns {
 		f := sc.Fields[0]
-		linef(sb, 5, "%s: %s%sLocal,", f.GoFieldName, prefix, f.GoFieldName)
+		linef(sb, 4, "%s: %s%sLocal,", f.GoFieldName, prefix, f.GoFieldName)
 	}
-	line(sb, 4, "})")
-	line(sb, 3, "}")
+	line(sb, 3, "})")
 	line(sb, 2, "}")
 	linef(sb, 2, "c.%s = append(c.%s, %s)", ts.GoField, ts.GoField, elemsVar)
+}
+
+// tupleMembDecodeElem renders the expression converting one wire membership
+// value (a loop var or an indexed raw value) to a tuple element field's element
+// type: the uint64 id verbatim for a ref channel; string(x) for a string field;
+// a defensive []byte copy for a []byte field (the value aliases the reused Arrow
+// buffer and is retained inside the tuple slice).
+func tupleMembDecodeElem(src string, m mappingplan.TupleMembership) string {
+	switch m.GoType {
+	case "uint64":
+		return src
+	case "[]byte":
+		return "append([]byte(nil), " + src + "...)"
+	default: // "string"
+		return "string(" + src + ")"
+	}
 }
 
 // writeSectionMatchLoops emits the shared middle of a non-carrier

@@ -220,11 +220,14 @@ func TestTupleElemLWTag(t *testing.T) {
 }
 
 // TestTupleRow_realBuild is the drift guard for the tuple path: the row's
-// LWTag / TupleElemSpecs hand a REAL goplan.PlanBuilder a plan it accepts,
-// and a structurally bad tuple (second @membership) is rejected with the
-// builder's own error — a local rejection, not a cross-field conflict.
+// LWTag / TupleElemSpecs hand a REAL goplan.PlanBuilder a plan it accepts. A
+// tuple may now carry MORE THAN ONE `@membership` (ADR-0109) — the second is
+// accepted, not rejected — while a structurally bad tuple (a duplicated
+// sub-column) is still rejected with the builder's own error, a local
+// rejection rather than a cross-field conflict.
 func TestTupleRow_realBuild(t *testing.T) {
 	r := mkTupleRow()
+	r.TupleElems = append(r.TupleElems, mkTupleElem("Label2", true)) // second membership — now valid
 	b := goplan.NewPlanBuilder("t", "p", "T")
 	require.NoError(t, b.AddUnderscoreField("k", "", ""))
 	require.NoError(t, b.AddField("Id", ",id", shp(t, "uint64")))
@@ -233,15 +236,19 @@ func TestTupleRow_realBuild(t *testing.T) {
 	require.NoError(t, err)
 	for _, f := range plan.Fields {
 		assert.Equal(t, "Texts", f.TupleField)
-		assert.Equal(t, "Label", f.TupleMembField)
+		require.Len(t, f.TupleMemberships, 2)
+		assert.Equal(t, "Label", f.TupleMemberships[0].GoField)
+		assert.Equal(t, "Label2", f.TupleMemberships[1].GoField)
 	}
 
 	bad := mkTupleRow()
-	bad.TupleElems = append(bad.TupleElems, mkTupleElem("Label2", true))
+	dup := mkTupleElem("WordBag2", false)
+	dup.Column = "wordBag" // duplicate of the existing WordBag sub-column
+	bad.TupleElems = append(bad.TupleElems, dup)
 	b2 := goplan.NewPlanBuilder("t", "p", "T")
 	require.NoError(t, b2.AddUnderscoreField("k", "", ""))
 	rejErr := b2.AddTupleSliceField(bad.GoField, bad.LWTag(), bad.TupleStructType, bad.TupleElemSpecs())
 	require.Error(t, rejErr)
-	assert.Contains(t, rejErr.Error(), "second `@membership` field")
+	assert.Contains(t, rejErr.Error(), "sub-column appears on two tuple element fields")
 	assert.False(t, classifyConflict(rejErr), "a tuple's own structural fault is a local reject")
 }

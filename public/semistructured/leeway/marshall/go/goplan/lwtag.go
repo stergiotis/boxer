@@ -115,6 +115,14 @@ func parseFlagTokens(tokens []string, flags *mappingplan.FieldFlags) (err error)
 			if err = setChannelFlag(flags, mappingplan.MembershipChannelLowCardVerbatim, token); err != nil {
 				return
 			}
+		case "lowCardRef":
+			// Explicit spelling of the default channel. Needed so a tuple
+			// `@membership` ref field can name its channel (`,lowCardRef`) at the
+			// declaration site (ADR-0109); on a top-level field it is a no-op
+			// alias for the empty default.
+			if err = setChannelFlag(flags, mappingplan.MembershipChannelLowCardRef, token); err != nil {
+				return
+			}
 		case "highCardRef":
 			if err = setChannelFlag(flags, mappingplan.MembershipChannelHighCardRef, token); err != nil {
 				return

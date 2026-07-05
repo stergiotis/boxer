@@ -512,23 +512,45 @@ type TaggedField struct {
 	// container value (one carrier per attribute). Set by PlanBuilder.Finish.
 	CarrierIsSlice bool
 
-	// TupleField / TupleStructType / TupleMembField / TupleMembGoType wire a
-	// sub-column field of a dynamic-membership tuple section (ADR-0103): the
-	// DTO declares one slice-of-struct field (`Texts []LabeledText` with
-	// `lw:"text"`) whose elements each emit one attribute carrying its own
-	// membership. TupleField names that outer DTO field, TupleStructType the
-	// element struct type (the codegen front-end renders `[][]<T>` SoA
-	// columns from it), TupleMembField the element field holding the
-	// per-attribute membership value, and TupleMembGoType its Go type
-	// ("string" or "[]byte"). GoFieldName then names the field INSIDE the
-	// element struct. All sub-fields of one tuple carry identical copies
-	// (set by PlanBuilder.AddTupleSliceField); LWMembership is "" — the
-	// membership is per-element data, not a static tag. All four are "" for
-	// non-tuple fields.
-	TupleField      string
-	TupleStructType string
-	TupleMembField  string
-	TupleMembGoType string
+	// TupleField / TupleStructType / TupleMemberships wire a sub-column field
+	// of a dynamic-membership tuple section (ADR-0103, extended by ADR-0109):
+	// the DTO declares one slice-of-struct field (`Texts []LabeledText` with
+	// `lw:"text"`) whose elements each emit one attribute carrying one or more
+	// memberships. TupleField names that outer DTO field, TupleStructType the
+	// element struct type (the codegen front-end renders `[][]<T>` SoA columns
+	// from it), and TupleMemberships lists the element's `@membership` fields —
+	// each an id-or-name value on a verbatim / ref channel (ADR-0109 (a)+(b)),
+	// in declaration order. GoFieldName then names a value field INSIDE the
+	// element struct. All sub-fields of one tuple carry identical copies (set
+	// by PlanBuilder.AddTupleSliceField); LWMembership is "" — the memberships
+	// are per-element data, not a static tag. All are zero for non-tuple fields.
+	TupleField       string
+	TupleStructType  string
+	TupleMemberships []TupleMembership
+}
+
+// TupleMembership describes one `@membership` field of a dynamic-membership
+// tuple element (ADR-0109). An element may declare more than one — repeated
+// fixed fields and/or one repeated (slice) field per channel — so each
+// attribute carries several memberships (`membership-card > 1`), possibly on
+// heterogeneous channels.
+type TupleMembership struct {
+	// GoField is the element struct field holding the membership value(s).
+	GoField string
+	// GoType is the (element) Go type: "uint64" for a ref channel (the id is
+	// carried directly, no lookup), "string" or "[]byte" for a verbatim channel
+	// (the literal name is embedded on the wire). For a repeated field it is the
+	// slice element type.
+	GoType string
+	// Channel is one of the four simple channels — LowCardRef / HighCardRef
+	// (ref, uint64 id) or LowCardVerbatim / HighCardVerbatim (verbatim, name).
+	// Carrier / parametrized channels are rejected (AddTupleSliceField): their
+	// membership identity is per-row carrier data, not an element field.
+	Channel MembershipChannel
+	// IsSlice is true for a repeated `@membership` field (`[]T`): one
+	// AddMembership<Channel>P call per slice element, in slice order. A slice
+	// field is the sole membership on its channel (ADR-0109 D3).
+	IsSlice bool
 }
 
 // GoType returns the field's value type in Go source form (e.g. "uint64",

@@ -891,12 +891,14 @@ type MyDTO struct {
 	mustContain(t, out, "co-container slices have different lengths")
 	mustContain(t, out, ".AddToCoContainersP(textSecElem.WL[k], textSecElem.WB[k])")
 	mustContain(t, out, ".AddMembershipLowCardVerbatimP([]byte(textSecElem.Label))")
-	// Read side: per-sub-column accessors + one element appended per
-	// membership value, membership decoded into the element field.
+	// Read side: per-sub-column accessors + one element per attribute, its
+	// membership collected per channel (count-guarded) and decoded into the
+	// element field (ADR-0109 D2).
 	mustContain(t, out, "GetAttrValueText(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string")
 	mustContain(t, out, "GetAttrValueWordLength(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint32]")
-	mustContain(t, out, "for membBytes := range textMembs.GetMembValueLowCardVerbatim(")
-	mustContain(t, out, "Label: string(membBytes),")
+	mustContain(t, out, "for mv := range textMembs.GetMembValueLowCardVerbatim(")
+	mustContain(t, out, "membership count mismatch on read")
+	mustContain(t, out, "Label: string(textLowCardVerbatimMembs[0]),")
 	mustContain(t, out, "c.Texts = append(c.Texts, textTextsElems)")
 	// ReadRow does not cover tuple kinds (like carriers / explode).
 	mustContain(t, out, "MyDTOReadRow is not emitted: field Texts is a dynamic-membership tuple")
@@ -926,7 +928,7 @@ type MyDTO struct {
 	mustContain(t, out, ".AddMembershipLowCardVerbatimP(symbolSecElem.Label)")
 	// Single sub-column still reads through its named accessor.
 	mustContain(t, out, "GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string")
-	mustContain(t, out, "Label: append([]byte(nil), membBytes...),")
+	mustContain(t, out, "Label: append([]byte(nil), symbolLowCardVerbatimMembs[0]...),")
 	mustNotContain(t, out, ".AddToContainerP(")
 	mustNotContain(t, out, "co-container slices have different lengths")
 }
@@ -935,12 +937,14 @@ func TestParse_TupleRejections_ASTFrontEnd(t *testing.T) {
 	// The go/ast front-end routes tuple element structs through the same
 	// shared builder as the reflect front-end — one representative
 	// rejection proves the wiring; the full matrix lives in
-	// marshallreflect_test (both front-ends share the rules).
+	// marshallreflect_test (both front-ends share the rules). A repeated
+	// (slice) `@membership` mixed with another field on one channel is an
+	// ADR-0109 D3 rejection.
 	_, err := generateMay(t, `package demo
 type Tag struct {
-	Label  string `+"`lw:\"@membership,verbatim\"`"+`
-	Label2 string `+"`lw:\"@membership,verbatim\"`"+`
-	Value  string `+"`lw:\"symbol\"`"+`
+	Kind  uint64   `+"`lw:\"@membership,lowCardRef\"`"+`
+	Anc   []uint64 `+"`lw:\"@membership,lowCardRef\"`"+`
+	Value string   `+"`lw:\"symbol\"`"+`
 }
 type MyDTO struct {
 	_    struct{} `+"`kind:\"my\"`"+`
@@ -948,8 +952,8 @@ type MyDTO struct {
 	Tags []Tag    `+"`lw:\"symbol\"`"+`
 }
 `)
-	if err == nil || !strings.Contains(err.Error(), "second `@membership` field") {
-		t.Fatalf("want second-membership rejection, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "must be the only membership on its channel") {
+		t.Fatalf("want slice-mix rejection, got: %v", err)
 	}
 
 	// A struct that is neither the DTO nor a referenced tuple element

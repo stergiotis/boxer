@@ -175,17 +175,32 @@ func (g SectionGroup) ContainerSubColumns() (out []SubColumn) {
 }
 
 // TupleSpec describes a section driven by a dynamic-membership tuple
-// field (ADR-0103): the outer slice-of-struct DTO field, its element
-// struct type, the element field carrying each attribute's membership
-// (with its Go type), and the (verbatim) membership channel. Derived
-// from the sub-column fields' shared Tuple* metadata — every sub-field
-// of one tuple carries identical copies (PlanBuilder.AddTupleSliceField).
+// field (ADR-0103, extended by ADR-0109): the outer slice-of-struct DTO
+// field, its element struct type, and the element's `@membership` fields —
+// one or more, each an id-or-name value on a verbatim / ref channel, in
+// declaration order. Derived from the sub-column fields' shared Tuple*
+// metadata — every sub-field of one tuple carries identical copies
+// (PlanBuilder.AddTupleSliceField).
 type TupleSpec struct {
-	GoField    string // outer DTO field, e.g. "Strings"
-	StructType string // element struct type name, e.g. "LabeledText"
-	MembField  string // element field holding the membership value
-	MembGoType string // "string" or "[]byte"
-	Channel    mappingplan.MembershipChannel
+	GoField     string // outer DTO field, e.g. "Strings"
+	StructType  string // element struct type name, e.g. "LabeledText"
+	Memberships []mappingplan.TupleMembership
+}
+
+// Channels returns the distinct membership channels the tuple's elements
+// carry, in first-seen (declaration) order. The AttrI exposes one
+// AddMembership<Channel>P per channel and Validate checks the DML has each —
+// an element may mix verbatim and ref channels (ADR-0109 D4).
+func (ts TupleSpec) Channels() (out []mappingplan.MembershipChannel) {
+	seen := map[mappingplan.MembershipChannel]bool{}
+	for _, m := range ts.Memberships {
+		if seen[m.Channel] {
+			continue
+		}
+		seen[m.Channel] = true
+		out = append(out, m.Channel)
+	}
+	return
 }
 
 // TupleSpec reports whether the section is tuple-driven, and its spec.
@@ -203,11 +218,9 @@ func (g SectionGroup) TupleSpec() (ts TupleSpec, ok bool) {
 		return
 	}
 	return TupleSpec{
-		GoField:    f.TupleField,
-		StructType: f.TupleStructType,
-		MembField:  f.TupleMembField,
-		MembGoType: f.TupleMembGoType,
-		Channel:    f.Flags.Channel,
+		GoField:     f.TupleField,
+		StructType:  f.TupleStructType,
+		Memberships: f.TupleMemberships,
 	}, true
 }
 

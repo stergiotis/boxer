@@ -225,14 +225,20 @@ func LabeledTextDocFillFromArrow[
 			for v := range textAttrs.GetAttrValueWordBag(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				textWordBagLocal = append(textWordBagLocal, v)
 			}
-			for membBytes := range textMembs.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-				textTextsElems = append(textTextsElems, LabeledText{
-					Label:      string(membBytes),
-					Text:       textTextLocal,
-					WordLength: textWordLengthLocal,
-					WordBag:    textWordBagLocal,
-				})
+			var textLowCardVerbatimMembs [][]byte
+			for mv := range textMembs.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				textLowCardVerbatimMembs = append(textLowCardVerbatimMembs, mv)
 			}
+			if len(textLowCardVerbatimMembs) != 1 {
+				err = eb.Build().Str("section", "text").Str("channel", "LowCardVerbatim").Int("got", len(textLowCardVerbatimMembs)).Int("want", 1).Errorf("membership count mismatch on read")
+				return
+			}
+			textTextsElems = append(textTextsElems, LabeledText{
+				Label:      string(textLowCardVerbatimMembs[0]),
+				Text:       textTextLocal,
+				WordLength: textWordLengthLocal,
+				WordBag:    textWordBagLocal,
+			})
 		}
 		c.Texts = append(c.Texts, textTextsElems)
 	}

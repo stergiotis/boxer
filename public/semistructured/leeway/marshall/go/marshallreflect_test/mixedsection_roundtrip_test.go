@@ -376,7 +376,8 @@ func TestPlanFor_MixedSectionRejections(t *testing.T) {
 		require.Len(t, plan.Fields, 3) // one TaggedField per sub-column
 		for _, f := range plan.Fields {
 			require.Equal(t, "Texts", f.TupleField)
-			require.Equal(t, "Label", f.TupleMembField)
+			require.Len(t, f.TupleMemberships, 1)
+			require.Equal(t, "Label", f.TupleMemberships[0].GoField)
 		}
 	})
 	t.Run("const", func(t *testing.T) {

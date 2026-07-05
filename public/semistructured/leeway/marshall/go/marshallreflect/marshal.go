@@ -186,15 +186,18 @@ func marshalMultiSubColumn(sec, row reflect.Value, g goplan.SectionGroup, lookup
 	return
 }
 
-// marshalTupleSection emits a dynamic-membership tuple section (ADR-0103):
-// one attribute per element of the outer slice, in element order —
-// BeginAttribute(<scalar sub-columns…>), the zipped co-containers, the
-// element's own membership via the verbatim channel, EndAttributeP. The
-// call sequence per element is the multi-sub-column sequence (ADR-0101
-// D4) and mirrors marshallgen's writeTupleSectionDriver exactly — the
-// byte-identity invariant between the two front-ends rests on it. An
-// element always emits (its presence in the slice is the signal — there
-// is no per-element splice); zero elements emit zero attributes.
+// marshalTupleSection emits a dynamic-membership tuple section (ADR-0103,
+// extended by ADR-0109): one attribute per element of the outer slice, in
+// element order — BeginAttribute(<scalar sub-columns…>), the zipped
+// co-containers, then the element's memberships, EndAttributeP. Each element
+// emits one AddMembership<Channel>P call per `@membership` field (declaration
+// order) — one per slice element for a repeated field — so an attribute may
+// carry several memberships (`membership-card > 1`) on possibly heterogeneous
+// channels; a ref channel passes the uint64 id directly, a verbatim channel the
+// []byte name. The call sequence mirrors marshallgen's writeTupleSectionDriver
+// exactly — the byte-identity invariant between the two front-ends rests on it.
+// An element always emits (its presence in the slice is the signal — there is
+// no per-element splice); zero elements emit zero attributes.
 func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, filter cardFilter) (err error) {
 	scalars := g.ScalarSubColumns()
 	containers := g.ContainerSubColumns()
@@ -202,7 +205,6 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 	if len(containers) > 0 {
 		addMethod = goplan.ContainerAddMethod(len(containers)) + "P"
 	}
-	membMethod := "AddMembership" + ts.Channel.AddMethodSuffix() + "P"
 
 	elems := row.FieldByName(ts.GoField)
 	containerVals := make([]reflect.Value, len(containers))
@@ -240,20 +242,32 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 			}
 			mustCall(attr, addMethod, elemArgs...)
 		}
-		mustCall(attr, membMethod, reflect.ValueOf(tupleMembBytes(elem, ts)))
+		for _, m := range ts.Memberships {
+			method := "AddMembership" + m.Channel.AddMethodSuffix() + "P"
+			mf := elem.FieldByName(m.GoField)
+			if m.IsSlice {
+				for k := 0; k < mf.Len(); k++ {
+					mustCall(attr, method, tupleMembArg(mf.Index(k), m))
+				}
+			} else {
+				mustCall(attr, method, tupleMembArg(mf, m))
+			}
+		}
 		mustCall(attr, "EndAttributeP")
 	}
 	return
 }
 
-// tupleMembBytes reads a tuple element's membership value as the []byte
-// the verbatim AddMembership…P methods take.
-func tupleMembBytes(elem reflect.Value, ts goplan.TupleSpec) []byte {
-	v := elem.FieldByName(ts.MembField)
-	if ts.MembGoType == "[]byte" {
-		return v.Bytes()
+// tupleMembArg converts a tuple element's membership value to the argument the
+// AddMembership<Channel>P method takes: a []byte name for a verbatim channel
+// (a string field re-cast to []byte; a []byte field passed as-is), or the
+// uint64 id directly for a ref channel. v is the field value, or one element of
+// a repeated (slice) membership field.
+func tupleMembArg(v reflect.Value, m mappingplan.TupleMembership) reflect.Value {
+	if m.Channel.EmbedsLiteralName() && m.GoType == "string" {
+		return reflect.ValueOf([]byte(v.String()))
 	}
-	return []byte(v.String())
+	return v
 }
 
 // tupleElemCardMatches classifies one tuple element by its shared

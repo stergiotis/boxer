@@ -104,7 +104,7 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 	beginArgs := -1         // BeginAttribute arity; -1 skips the check
 	coContainerMethod := "" // multi-sub-column container append (AddTo(Co)Container(s)P)
 	coContainerArgs := 0
-	_, isTuple := g.TupleSpec()
+	ts, isTuple := g.TupleSpec()
 	if isTuple || len(g.SubColumns) > 1 {
 		// Multi-sub-column or dynamic-membership tuple (ADR-0103 — the
 		// same per-element call shape, at any sub-column count):
@@ -158,5 +158,14 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 		requireMethod(attrType, attrCtx, coContainerMethod, coContainerArgs, problems)
 	}
 	requireMethod(attrType, attrCtx, "EndAttributeP", -1, problems)
-	requireMethod(attrType, attrCtx, "AddMembership"+g.Channel().AddMethodSuffix()+"P", -1, problems)
+	// A tuple element may carry memberships on several channels (ADR-0109 D4);
+	// the DML must expose AddMembership<Channel>P for each. A ref @membership on
+	// a section whose spec lacks that ref channel fails here, not at marshal.
+	if isTuple {
+		for _, ch := range ts.Channels() {
+			requireMethod(attrType, attrCtx, "AddMembership"+ch.AddMethodSuffix()+"P", -1, problems)
+		}
+	} else {
+		requireMethod(attrType, attrCtx, "AddMembership"+g.Channel().AddMethodSuffix()+"P", -1, problems)
+	}
 }
