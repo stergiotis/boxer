@@ -8,9 +8,9 @@ package seq
 import (
 	"encoding/binary"
 	"errors"
+	"sync"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/rs/zerolog/log"
 	badger2 "github.com/stergiotis/boxer/public/db/badger"
 	"github.com/stergiotis/boxer/public/identity/identgen"
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -21,10 +21,15 @@ import (
 var _ identifier.IdGeneratorFactoryI = (*BadgerIdSequenceGenerator)(nil)
 var _ identifier.IdGeneratorI = (*BadgerIdSequence)(nil)
 
-// BadgerIdSequenceGenerator is a Badger-backed factory for per-tag sequential id
-// generators; one embedded store may host many tags.
+// BadgerIdSequenceGenerator is a Badger-backed factory for per-tag sequential
+// id generators; one embedded store may host many tags, each with at most one
+// generator (identgen.ErrTagInUse otherwise — a second generator would lease
+// disjoint id blocks and interleave them, breaking the dense increasing
+// stream this package promises).
 type BadgerIdSequenceGenerator struct {
-	kv *badger.DB
+	kv    *badger.DB
+	mu    sync.Mutex
+	inUse map[identifier.TagValue]struct{}
 }
 
 // BadgerIdSequence hands out monotonically increasing ids for one tag, leased
@@ -46,11 +51,12 @@ func (inst *BadgerIdSequence) GetId(naturalKey []byte) (id identifier.TaggedId, 
 	return
 }
 
+// GetUntaggedId hands out the next id in the tag's stream. The natural key is
+// ignored by contract (see identifier.IdGeneratorI); it used to be warned
+// about per call, which spammed the log of any caller using the seam
+// generically.
 func (inst *BadgerIdSequence) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
 	fresh = true
-	if naturalKey != nil {
-		log.Warn().Msg("natural key is ignored for sequential ids")
-	}
 	var raw uint64
 	raw, err = inst.seq.Next()
 	if err != nil {
@@ -75,6 +81,10 @@ func (inst *BadgerIdSequence) GetTag() (tag identifier.IdTag) {
 	return
 }
 
+// Create returns the sequential generator for tagValue. At most one generator
+// per tag and store may exist (identgen.ErrTagInUse); the slot is held until
+// the factory closes — Release keeps its generator usable and therefore does
+// not free the slot.
 func (inst *BadgerIdSequenceGenerator) Create(tagValue identifier.TagValue, generationBandwidth uint64) (gen identifier.IdGeneratorI, err error) {
 	if !tagValue.IsValid() {
 		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("invalid tag value (zero is reserved)")
@@ -82,6 +92,12 @@ func (inst *BadgerIdSequenceGenerator) Create(tagValue identifier.TagValue, gene
 	}
 	if generationBandwidth == 0 {
 		err = eh.Errorf("generation bandwidth is zero")
+		return
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if _, dup := inst.inUse[tagValue]; dup {
+		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("cannot create a second sequential generator: %w", identgen.ErrTagInUse)
 		return
 	}
 	k := make([]byte, 9)
@@ -92,6 +108,7 @@ func (inst *BadgerIdSequenceGenerator) Create(tagValue identifier.TagValue, gene
 		err = eh.Errorf("unable to create sequence: %w", err)
 		return
 	}
+	inst.inUse[tagValue] = struct{}{}
 	tag := tagValue.GetTag()
 	gen = &BadgerIdSequence{
 		gen:   inst,
@@ -111,7 +128,8 @@ func NewBadgerIdSequenceGenerator(storePath string) (inst *BadgerIdSequenceGener
 		return
 	}
 	inst = &BadgerIdSequenceGenerator{
-		kv: kv,
+		kv:    kv,
+		inUse: make(map[identifier.TagValue]struct{}),
 	}
 	return
 }

@@ -47,8 +47,14 @@ type BatchInternalizerI interface {
 	// element len(dst)+i is the id of keys.At(i). If fresh is non-nil it is grown
 	// in lockstep and carries the newly-minted flags (pass nil to skip tracking).
 	//
-	// All keys are validated before anything is assigned, so on a bad batch (for
-	// example an empty key) dst and fresh are returned unmodified. The fresh
-	// mappings commit in one transaction.
+	// On any error dst and fresh are returned unmodified. Keys are validated up
+	// front (an empty key assigns nothing anywhere). A batch whose distinct
+	// fresh keys exceed the tag's remaining id space fails with
+	// ErrIdSpaceExhausted: a backend that can count the space up front assigns
+	// nothing, a store-backed one persists the mappings minted before the
+	// overrun (consumed sequence values cannot be returned). Fresh mappings
+	// commit in one or more storage transactions. Either way a persisted
+	// prefix is harmless — interning is idempotent get-or-assign, so retried
+	// keys resolve to the ids already assigned.
 	AppendIds(dst []identifier.TaggedId, keys KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error)
 }

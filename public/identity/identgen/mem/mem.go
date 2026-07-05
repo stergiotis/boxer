@@ -160,11 +160,31 @@ func (inst *IdInternalizer) AppendIds(dst []identifier.TaggedId, keys identgen.K
 			return dst, fresh, err
 		}
 	}
-	// Worst case every key is fresh; reject up front if that would exhaust the tag.
+	// Exact capacity check: count the distinct keys that are actually fresh
+	// (skipping ones already interned and duplicates within the batch). The
+	// former worst-case check charged every key as fresh, rejecting
+	// satisfiable batches near exhaustion that the Badger backend accepts.
 	remaining := inst.maxId - inst.offset + 1 - identifier.UntaggedId(len(inst.forward))
-	if identifier.UntaggedId(n) > remaining {
+	var need identifier.UntaggedId
+	var freshSeen map[string]struct{}
+	for i := range n {
+		k := keys.At(i)
+		if _, has := inst.forward[string(k)]; has {
+			continue
+		}
+		if _, dup := freshSeen[string(k)]; dup {
+			continue
+		}
+		if freshSeen == nil {
+			freshSeen = make(map[string]struct{})
+		}
+		freshSeen[string(k)] = struct{}{}
+		need++
+	}
+	if need > remaining {
 		err = eb.Build().
 			Uint64("remaining", uint64(remaining)).
+			Uint64("distinctFresh", uint64(need)).
 			Int("batch", n).
 			Errorf("cannot mint id batch: %w", identgen.ErrIdSpaceExhausted)
 		return dst, fresh, err

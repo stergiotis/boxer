@@ -23,9 +23,12 @@ var _ identifier.IdGeneratorI = (*BadgerIdInternalizer)(nil)
 var _ identgen.BatchInternalizerI = (*BadgerIdInternalizer)(nil)
 
 // BadgerIdInternalizedGenerator is a Badger-backed factory for per-tag
-// internalizing id generators; a single embedded store may host many tags.
+// internalizing id generators; a single embedded store may host many tags,
+// each with at most one generator (identgen.ErrTagInUse otherwise).
 type BadgerIdInternalizedGenerator struct {
-	kv *badger.DB
+	kv    *badger.DB
+	mu    sync.Mutex
+	inUse map[identifier.TagValue]struct{}
 }
 
 // BadgerIdInternalizer maps a natural key to a stable id under one tag,
@@ -130,9 +133,10 @@ func (inst *BadgerIdInternalizer) GetTag() (tag identifier.IdTag) {
 	return
 }
 
-// AppendIds resolves a whole column of natural keys under this generator's tag in
-// two transactions (one read, one write) regardless of batch size, amortising the
-// per-call Badger transaction overhead. See identgen.BatchInternalizerI.
+// AppendIds resolves a whole column of natural keys under this generator's tag
+// in one read transaction plus as few write transactions as fit Badger's
+// transaction-size limit (usually one), amortising the per-call transaction
+// overhead. See identgen.BatchInternalizerI for the chunked-commit semantics.
 func (inst *BadgerIdInternalizer) AppendIds(dst []identifier.TaggedId, keys identgen.KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error) {
 	n := keys.Len()
 	for i := range n {
@@ -185,8 +189,16 @@ func (inst *BadgerIdInternalizer) AppendIds(dst []identifier.TaggedId, keys iden
 	// within this batch (the first occurrence mints; later ones reuse it, matching
 	// single-key GetId). A leased badger.Sequence must not be advanced inside a
 	// transaction, so this runs between the read and write phases.
+	//
+	// A batch that overruns the tag's remaining space fails, but the mappings
+	// minted before the overrun are still persisted below: consumed sequence
+	// values cannot be returned, so dropping them would burn the space with
+	// nothing to show, while persisting keeps retries idempotent (the minted
+	// keys resolve as existing). The in-memory backend can count the space up
+	// front instead and assigns nothing on such a batch.
 	minted := make(map[string]uint64)
 	vals := make([]byte, 8*n)
+	var exhausted error
 	for i := range n {
 		if !freshMark[i] {
 			continue
@@ -194,6 +206,10 @@ func (inst *BadgerIdInternalizer) AppendIds(dst []identifier.TaggedId, keys iden
 		if b, ok := minted[string(keys.At(i))]; ok {
 			bodies[i] = b
 			freshMark[i] = false // repeat of a key already minted in this batch
+			continue
+		}
+		if exhausted != nil {
+			freshMark[i] = false // not minted; must not reach the write phase
 			continue
 		}
 		var raw uint64
@@ -204,30 +220,48 @@ func (inst *BadgerIdInternalizer) AppendIds(dst []identifier.TaggedId, keys iden
 		}
 		u := raw + 1 // body 0 is reserved as invalid/NULL
 		if u > inst.maxId {
-			err = eb.Build().Uint64("tagValue", uint64(inst.tag.GetValue())).Uint64("untaggedId", u).Errorf("cannot mint a fresh id: %w", identgen.ErrIdSpaceExhausted)
-			return dst, fresh, err
+			exhausted = eb.Build().Uint64("tagValue", uint64(inst.tag.GetValue())).Uint64("untaggedId", u).Errorf("cannot mint a fresh id: %w", identgen.ErrIdSpaceExhausted)
+			freshMark[i] = false
+			continue
 		}
 		bodies[i] = u
 		minted[string(keys.At(i))] = u
 		binary.LittleEndian.PutUint64(vals[i*8:i*8+8], u)
 	}
 
-	// Write phase: persist all fresh mappings in one transaction.
-	err = inst.gen.kv.Update(func(txn *badger.Txn) (e error) {
-		for i := range n {
-			if !freshMark[i] {
-				continue
-			}
-			e = txn.Set(mks[i], vals[i*8:i*8+8])
-			if e != nil {
-				return
-			}
+	// Write phase: persist all fresh mappings, rolling over to a further
+	// transaction whenever one fills up (ErrTxnTooBig; a single Update capped
+	// batches at roughly a hundred thousand fresh keys). Splitting is safe
+	// because interning is idempotent get-or-assign: should a later chunk
+	// fail, the keys already committed simply resolve as existing on retry.
+	txn := inst.gen.kv.NewTransaction(true)
+	defer func() { txn.Discard() }()
+	for i := range n {
+		if !freshMark[i] {
+			continue
 		}
-		return
-	})
+		e := txn.Set(mks[i], vals[i*8:i*8+8])
+		if errors.Is(e, badger.ErrTxnTooBig) {
+			e = txn.Commit()
+			if e != nil {
+				err = eh.Errorf("unable to persist id batch chunk: %w", e)
+				return dst, fresh, err
+			}
+			txn = inst.gen.kv.NewTransaction(true)
+			e = txn.Set(mks[i], vals[i*8:i*8+8])
+		}
+		if e != nil {
+			err = eh.Errorf("unable to persist id batch: %w", e)
+			return dst, fresh, err
+		}
+	}
+	err = txn.Commit()
 	if err != nil {
 		err = eh.Errorf("unable to persist id batch: %w", err)
 		return dst, fresh, err
+	}
+	if exhausted != nil {
+		return dst, fresh, exhausted
 	}
 
 	// Assemble the output columns.
@@ -244,6 +278,12 @@ func (inst *BadgerIdInternalizer) AppendIds(dst []identifier.TaggedId, keys iden
 	return
 }
 
+// Create returns the internalizing generator for tagValue. At most one
+// generator per tag and store may exist: a second Create for the same tag
+// fails with identgen.ErrTagInUse (the per-generator lock cannot span two
+// instances, so a duplicate could mint two ids for one key). The slot is held
+// until the factory closes; Release keeps its generator usable and therefore
+// does not free the slot.
 func (inst *BadgerIdInternalizedGenerator) Create(tagValue identifier.TagValue, generationBandwidth uint64) (gen identifier.IdGeneratorI, err error) {
 	if !tagValue.IsValid() {
 		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("invalid tag value (zero is reserved)")
@@ -251,6 +291,12 @@ func (inst *BadgerIdInternalizedGenerator) Create(tagValue identifier.TagValue, 
 	}
 	if generationBandwidth == 0 {
 		err = eh.Errorf("generation bandwidth is zero")
+		return
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if _, dup := inst.inUse[tagValue]; dup {
+		err = eb.Build().Uint64("tagValue", uint64(tagValue)).Errorf("cannot create a second internalizing generator: %w", identgen.ErrTagInUse)
 		return
 	}
 	prefix := make([]byte, 8)
@@ -261,6 +307,7 @@ func (inst *BadgerIdInternalizedGenerator) Create(tagValue identifier.TagValue, 
 		err = eh.Errorf("unable to create sequence: %w", err)
 		return
 	}
+	inst.inUse[tagValue] = struct{}{}
 	tag := tagValue.GetTag()
 	gen = &BadgerIdInternalizer{
 		gen:    inst,
@@ -281,7 +328,8 @@ func NewBadgerIdInternalizedGenerator(storePath string) (inst *BadgerIdInternali
 		return
 	}
 	inst = &BadgerIdInternalizedGenerator{
-		kv: kv,
+		kv:    kv,
+		inUse: make(map[identifier.TagValue]struct{}),
 	}
 	return
 }
