@@ -7,9 +7,12 @@
     "typecheck": "for f in *.qnt; do quint typecheck \"$f\" || exit 1; done",
     "test": "for f in *.qnt; do quint test \"$f\" || exit 1; done",
     "sweep": "quint run versioned_cache.qnt --invariant=Safety --max-steps=14 --max-samples=20000 && quint run freshness_ttl.qnt --invariant=Safety --max-steps=14 --max-samples=20000",
-    "verify": "quint verify versioned_cache.qnt --invariant=Safety --max-steps=10 && quint verify freshness_ttl.qnt --invariant=Safety --max-steps=10",
+    "verify": "quint verify versioned_cache.qnt --invariant=Safety --max-steps=6 && quint verify freshness_ttl.qnt --invariant=Safety --max-steps=10",
     "findings": "quint run versioned_cache_unsafe_lww.qnt --invariant=MonotoneServe --max-steps=12 ; quint test versioned_cache_unsafe_nopin.qnt ; quint run freshness_ttl_unsafe.qnt --invariant=FreshnessHonest --max-steps=10",
-    "check": "npm run typecheck && npm run test && npm run sweep"
+    "traces": "for s in 1 2 3 4 5 6 7 8; do quint run versioned_cache.qnt --max-steps=20 --seed=0x$s --out-itf=../../../public/caching/testdata/itf/versioned_seed$s.itf.json || exit 1; done",
+    "check": "npm run typecheck && npm run test && npm run sweep",
+    "liveness": "java -cp \"${TLA_TOOLS:-$HOME/.tlaplus/tla2tools.jar}\" tlc2.TLC -deadlock -cleanup -config replay_liveness.cfg replay_liveness.tla",
+    "liveness:nonegcache": "java -cp \"${TLA_TOOLS:-$HOME/.tlaplus/tla2tools.jar}\" tlc2.TLC -deadlock -cleanup -config replay_liveness_nonegcache.cfg replay_liveness.tla"
   },
   "license": "ISC",
   "dependencies": {

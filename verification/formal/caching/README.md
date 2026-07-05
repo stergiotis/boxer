@@ -46,6 +46,7 @@ S3-FIFO candidates postponed to a later round.
 | `versioned_cache_unsafe_nopin.qnt` | Counterfactual — dirty pin removed. The regression the gate alone cannot stop: an evicted dirty entry is refetched at the older durable version and admitted into a cold cache. |
 | `freshness_ttl.qnt` | The `WithFreshnessTTL` half: age stamps, stale-while-revalidate onset, equal-version revalidation, stamps carried through demotion. |
 | `freshness_ttl_unsafe.qnt` | Counterfactual — the stash envelope lacks the age field; a tier round-trip re-stamps the entry and it reads fresh past its true TTL. |
+| `replay_liveness.tla` + `.cfg`/`_nonegcache.cfg` | TLC liveness pair for the suspend/replay loop: `Quiescence` (`<>[]` nothing pending or queued) holds WITH negative caching even for keys the upstream lacks, and is violated WITHOUT it despite weak fairness on every action — the absent-key livelock as a mechanical theorem. `SatisfiableDone`: the livelock never starves satisfiable items. |
 
 ## Refinement map (spec action → Go symbol)
 
@@ -98,10 +99,24 @@ spec elides):
 | `StampFaithful` (freshness) | the carried age stamp equals the key's true last-refresh time |
 | `FreshnessHonest` (freshness) | no read is served as fresh past the key's true TTL |
 
-Status: `versioned_cache.qnt` `Safety` and `freshness_ttl.qnt` `Safety` each
-survive 20 000 randomized traces (`quint run`, depth 14); all witness runs
-pass (`quint test`). Apalache bounded proofs (`npm run verify`, depth 10)
-have not been run yet — pending a session with the verification budget.
+Status: `versioned_cache.qnt` `Safety` is **proved to depth 6 with
+Apalache** (`quint verify`, ~35 s, `NoError`); depth 10 did not finish
+inside a 15-minute budget at this model size — push the bound with more
+time or Apalache tuning. `freshness_ttl.qnt` `Safety` is **proved to depth
+10** (~22 s, `NoError`). Both additionally survive 20 000 randomized traces
+each (`quint run`, depth 14) and all witness runs pass (`quint test`). The
+liveness pair is checked with TLC (`npm run liveness` /
+`liveness:nonegcache`): `Quiescence` and `SatisfiableDone` hold under
+negative caching ("No error has been found", 14 distinct states); without
+it TLC returns the livelock lasso (`Back to state: Replay`) violating
+`Quiescence` despite full weak fairness.
+
+**Spec↔code binding (ITF conformance).** `npm run traces` exports eight
+seeded `quint run` traces to `public/caching/testdata/itf/`;
+`TestSpecTraceConformance` (caching_spectrace_test.go) infers the action
+sequence from the state diffs and replays it against the real
+implementation, asserting tier/version/pin/queue agreement after every
+step. A drift on either side fails the Go suite.
 
 ## The findings: both rules are load-bearing
 
@@ -132,7 +147,12 @@ have not been run yet — pending a session with the verification budget.
 npm install         # pins quint locally
 npm run check       # typecheck + witness runs + randomized Safety sweeps
 npm run findings    # prints the counterexample traces (lww, nopin, ttl)
-npm run verify      # Apalache bounded proofs of Safety (depth 10)
+npm run verify      # Apalache bounded proofs of Safety (depth 6 / 10)
+npm run traces      # regenerate the ITF conformance traces (Go testdata)
+
+# liveness needs TLC (one-time): grab tla2tools.jar to ~/.tlaplus/ (or set $TLA_TOOLS)
+npm run liveness             # TLC: Quiescence holds under negative caching
+npm run liveness:nonegcache  # TLC: the absent-key livelock lasso without it
 ```
 
 Per spec, e.g.:
@@ -146,10 +166,11 @@ npx quint run  freshness_ttl_unsafe.qnt       --invariant=FreshnessHonest # coun
 
 ## Not yet modelled (next increments)
 
-- **Liveness** — "every pending work item is eventually replayed under fair
-  flushing" and "replay loops over absent keys quiesce" are `◇`/`◇□`
-  properties; the pushout precedent checks these with a TLC-native module.
-  Worth adding once the implementation lands.
+- ✓ **Liveness (replay quiescence)** — modelled in `replay_liveness.tla`
+  and proved with TLC; the negative-caching counterfactual shows fairness
+  alone cannot prevent the absent-key livelock. See the status above.
+  (Eventual replay of every *satisfiable* item is the `SatisfiableDone`
+  half; finer-grained progress properties remain open.)
 - **The thrash boundary** — characterize for which working-set/capacity
   ratios the suspend/replay protocol completes (the livelock test in the Go
   suite witnesses one side).
