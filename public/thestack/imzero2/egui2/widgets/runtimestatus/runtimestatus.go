@@ -127,14 +127,14 @@ func renderStatusSegment(ids *c.WidgetIdStack, name string, active bool, capId s
 
 // monoLabel emits a plain monospace label.
 func monoLabel(text string) {
-	c.LabelAtoms(c.Atoms().RichText(text).Monospace().EndRichText().Keep()).Send()
+	c.LabelAtoms(c.Atoms().BeginRichText(text).Monospace().End().Keep()).Send()
 }
 
 // monoSpacer renders a two-space gap with a fixed-width middot
 // separator. Keeps the visual rhythm without ambiguity when the
 // labels themselves contain spaces.
 func monoSpacer() {
-	c.LabelAtoms(c.Atoms().RichText(" · ").Monospace().EndRichText().Keep()).Send()
+	c.LabelAtoms(c.Atoms().BeginRichText(" · ").Monospace().End().Keep()).Send()
 }
 
 // monoStatus renders "name ✓" in the IDS Success role when active and
@@ -155,8 +155,8 @@ func monoStatus(name string, active bool) {
 	}
 	c.LabelAtoms(
 		c.Atoms().
-			RichText(name + " ").Monospace().EndRichText().
-			RichTextColored(glyph, col, color.Transparent).Monospace().EndRichText().
+			BeginRichText(name+" ").Monospace().End().
+			BeginRichTextColored(col, color.Transparent, glyph).Monospace().End().
 			Keep(),
 	).Send()
 }

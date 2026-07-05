@@ -414,18 +414,18 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		launchURL = client.URL()
 	}
 	inst := &PlayApp{
-		ids:               c.NewWidgetIdStack(),
-		graph:             graph,
-		client:            client,
+		ids:              c.NewWidgetIdStack(),
+		graph:            graph,
+		client:           client,
 		intermediateLane: newNodeLane(clientExecutor{client: client, opts: newExecOptions("intermediate")}, memory.NewGoAllocator(), 0),
-		endpointDraft:     launchURL,
-		launchURL:         launchURL,
-		density:           styletokens.DensityFromEnv(),
-		sql:               initialSQL,
-		selectedRow:       -1,
-		cards:             cards,
-		projector:         NewProjector(projectorIds, cards),
-		projFSM:           projFSM,
+		endpointDraft:    launchURL,
+		launchURL:        launchURL,
+		density:          styletokens.DensityFromEnv(),
+		sql:              initialSQL,
+		selectedRow:      -1,
+		cards:            cards,
+		projector:        NewProjector(projectorIds, cards),
+		projFSM:          projFSM,
 		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
 			Title("UMAP projector").
 			ShowSubscript(true).
@@ -1510,7 +1510,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			for range et.Cells(local, 0) {
 				marker := fmt.Sprintf("%d", absRow+1)
 				if c.Button(ids.PrepareSeq(rowBase),
-					c.Atoms().RichText(marker).Monospace().EndRichText().Keep()).
+					c.Atoms().BeginRichText(marker).Monospace().End().Keep()).
 					Frame(false).
 					Selected(selected).
 					Truncate().
@@ -1527,7 +1527,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			for range et.Cells(local, colPlus1) {
 				text := formatCell(rec, col, absRow)
 				if c.Button(ids.PrepareSeq(rowBase+uint64(col)+1),
-					c.Atoms().RichText(text).Monospace().EndRichText().Keep()).
+					c.Atoms().BeginRichText(text).Monospace().End().Keep()).
 					Frame(false).
 					Selected(selected).
 					Truncate().

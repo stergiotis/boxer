@@ -742,9 +742,16 @@ func generateMethodCode(w io.Writer, factory *ir.BuilderFactoryNode, tracker *co
 	b := factory.Name.Convert(naming.UpperCamelCase).String()
 	for _, method := range factory.BuilderMethods {
 		tracker.ErrorMessagePrefix = fmt.Sprintf("%s.%s ", factory.Name, method.Spec.Name)
+		// Unexported methods emit a lower-camel Go name (callable only from
+		// inside the bindings package); the opcode enum below stays UpperCamel
+		// so the wire format and the client dispatch are unchanged.
+		goMethodName := method.Spec.Name.Convert(naming.UpperCamelCase)
+		if method.Spec.UnexportedGoName {
+			goMethodName = method.Spec.Name.Convert(naming.LowerCamelCase)
+		}
 		_, err := fmt.Fprintf(w, `func (inst %sFluid) %s(`,
 			b,
-			method.Spec.Name.Convert(naming.UpperCamelCase),
+			goMethodName,
 		)
 		tracker.MergeError(err)
 		first := generateArgumentsDeclPlain(true, w, method.Spec.PlainArguments, tracker)

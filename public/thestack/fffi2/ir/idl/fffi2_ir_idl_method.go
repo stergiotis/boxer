@@ -45,6 +45,9 @@ func (inst *MethodBuilder) verifyState(allowed MethodBuilderStateE) {
 func (inst *MethodBuilder) Merge(mths ...ir.Method) *MethodBuilder {
 	for _, mth := range mths {
 		inst.BeginMethod(mth.Spec.Name)
+		if mth.Spec.UnexportedGoName {
+			inst.Unexported()
+		}
 		for i, n := range mth.Spec.PlainArguments.Names {
 			inst.Arg(n, mth.Spec.PlainArguments.Types[i])
 			if i < len(mth.Spec.PlainArguments.ColorArgKinds) {
@@ -178,6 +181,16 @@ func (inst *MethodBuilder) AsColors() *MethodBuilder {
 		log.Panic().Stringer("name", spec.Names[n-1]).Msg("AsColors: argument is already color-annotated")
 	}
 	spec.ColorArgKinds[n-1] = ir.ColorArgKindSlice
+	return inst
+}
+
+// Unexported marks the in-progress method so its server-side Go builder
+// method emits a lower-camel (unexported) name — callable only from inside
+// the bindings package. The opcode enum and wire format are unchanged. Use
+// to hide a raw wire sub-protocol behind a hand-written type-safe wrapper.
+func (inst *MethodBuilder) Unexported() *MethodBuilder {
+	inst.verifyState(MethodBuilderStateInMethod)
+	inst.retr[len(inst.retr)-1].Spec.UnexportedGoName = true
 	return inst
 }
 func (inst *MethodBuilder) CodeClientRust(code ir.VerbatimCodeI) *MethodBuilder {

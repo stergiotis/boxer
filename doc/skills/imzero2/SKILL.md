@@ -362,12 +362,31 @@ c.Button(ids, c.Atoms().
 
 ### Type Safety
 
+`BeginRichText` / `BeginRichTextColored` are the **only** public way to open a
+rich-text segment. The raw wire sub-protocol on `AtomsFluid` — `richText`,
+`richTextColored`, `endRichText`, and every style method (`strong`, `code`,
+`heading`, …) — is emitted **unexported** (via the IDL `.Unexported()` flag in
+`egui2_definition_d_evaluated.go`), so it is callable only from inside the
+`bindings` package. Public code cannot open a segment without the balancing
+`End()`, which means the classic desync footgun
+`Atoms().RichTextColored(v, fg, bg).Text(...)` — emitting a `Text` opcode inside
+an unclosed rich segment — is now a **compile error**, not a runtime FFI crash.
+Only `Text(...)` and `Keep()` stay exported on `AtomsFluid`.
+
 | Expression | Compiles? | Why |
 |:---|:---|:---|
 | `Atoms().BeginRichText("x").Strong().End()` | Yes | `Strong()` is on `RichTextScope` |
-| `Atoms().Strong()` | No | `Strong()` not on `AtomsFluid` (only on the generated flat API) |
+| `Atoms().Text("x")` | Yes | `Text` (plain atom) stays exported on `AtomsFluid` |
+| `Atoms().Strong()` | No | style methods are unexported on `AtomsFluid` — use `BeginRichText(…).Strong()` |
+| `Atoms().RichTextColored(v, fg, bg).Text(y)` | No | `RichTextColored` is unexported — the old runtime-desync footgun, now caught at compile time |
 | `Atoms().BeginRichText("x").Text("y")` | No | `Text()` not on `RichTextScope` |
 | `Atoms().BeginRichText("x").Keep()` | No | `Keep()` not on `RichTextScope` |
+
+Defense in depth: even if a malformed atoms stream reaches the client (a
+hand-written raw byte buffer, a future regression), the Rust richText /
+richTextColored sub-loops **self-heal** — a stray `Text` closes the open segment
+implicitly and is pushed as its own atom (byte-safe), so the frame degrades to
+"segment + plain text" and logs a warning instead of crashing.
 
 ### Available Style Methods (on RichTextScope)
 

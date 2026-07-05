@@ -52,8 +52,27 @@ loop {
             let name = self.io.read_plain_s()?;
             rt = rt.text_style(egui::TextStyle::Name(name.into()));
         }
+        AtomsBuilderMethodId::Text => {
+            // Self-heal: a plain-text atom arriving inside an unclosed rich
+            // segment means the caller skipped endRichText (the classic
+            // RichTextColored(...).Text(...) desync footgun). Close the
+            // segment implicitly so its content is not lost, then push the
+            // text as its own atom. Byte-safe: we consume Text's string arg
+            // here, so the outer loop stays aligned and the frame does not
+            // crash. The Go-side sub-protocol methods are unexported, so this
+            // is unreachable from normal code — it guards hand-written raw
+            // streams and future regressions.
+            {{AtomsRegister0Reference}}.push_right(rt);
+            let v = self.io.read_plain_s()?;
+            {{AtomsRegister0Reference}}.push_right(v);
+            break;
+        }
         _ => {
-            tracing::warn!("unexpected method {:?} inside richText sub-loop", m2);
+            // Any other out-of-scope method: preserve the accumulated segment
+            // and stop. Not guaranteed byte-aligned if the method carried args,
+            // but this path is unreachable from the (unexported) safe Go API.
+            {{AtomsRegister0Reference}}.push_right(rt);
+            tracing::warn!("unexpected method {:?} inside richText sub-loop — closing segment", m2);
             break;
         }
     }
@@ -104,8 +123,22 @@ loop {
             let name = self.io.read_plain_s()?;
             rt = rt.text_style(egui::TextStyle::Name(name.into()));
         }
+        AtomsBuilderMethodId::Text => {
+            // Self-heal: see the richText sub-loop above. Close the colored
+            // segment implicitly (don't lose it), consume Text's string arg
+            // to stay byte-aligned, and push it as its own atom instead of
+            // crashing the frame.
+            {{AtomsRegister0Reference}}.push_right(rt);
+            let v = self.io.read_plain_s()?;
+            {{AtomsRegister0Reference}}.push_right(v);
+            break;
+        }
         _ => {
-            tracing::warn!("unexpected method {:?} inside richTextColored sub-loop", m2);
+            // Any other out-of-scope method: preserve the accumulated segment
+            // and stop. Not guaranteed byte-aligned if the method carried args,
+            // but this path is unreachable from the (unexported) safe Go API.
+            {{AtomsRegister0Reference}}.push_right(rt);
+            tracing::warn!("unexpected method {:?} inside richTextColored sub-loop — closing segment", m2);
             break;
         }
     }
@@ -121,31 +154,39 @@ loop {
 	evaluated = append(evaluated, idl.NewBuilderFactoryNode("atoms").
 		AddMethods(idl.NewMethodBuilder().
 			BeginMethod("text").Arg("val", ctabb.S).CodeClientRust(rustClientCode("{{AtomsRegister0Reference}}.push_right(val);\n")).EndMethod().
-			// RichText sub-protocol: richText(text) starts inner loop, endRichText terminates it
-			BeginMethod("richText").Arg("val", ctabb.S).CodeClientRust(richTextInnerLoop).EndMethod().
-			BeginMethod("richTextColored").EvaluatedArg("cl", structColor32()).AsColor().EvaluatedArg("bk", structColor32()).AsColor().Arg("val", ctabb.S).CodeClientRust(richTextColoredInnerLoop).EndMethod().
-			BeginMethod("endRichText").CodeClientRust(richTextStyleWarn).EndMethod().
+			// RichText sub-protocol: richText(text) starts inner loop, endRichText terminates it.
+			// Every method below is .Unexported() so it emits a lower-camel Go
+			// name callable only from inside the bindings package. Public code
+			// must go through the hand-written RichTextScope (BeginRichText /
+			// StyledText / DisplayRichText), which balances the richText…endRichText
+			// pair for you. That makes an unbalanced chain — the classic
+			// `Atoms().RichTextColored(...).Text(...)` FFI-desync footgun — a
+			// compile error instead of a runtime crash. The opcode enums and wire
+			// format are unchanged; only the Go method visibility differs.
+			BeginMethod("richText").Unexported().Arg("val", ctabb.S).CodeClientRust(richTextInnerLoop).EndMethod().
+			BeginMethod("richTextColored").Unexported().EvaluatedArg("cl", structColor32()).AsColor().EvaluatedArg("bk", structColor32()).AsColor().Arg("val", ctabb.S).CodeClientRust(richTextColoredInnerLoop).EndMethod().
+			BeginMethod("endRichText").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
 			// Style methods — only meaningful inside richText/endRichText; warn if used in outer loop
-			BeginMethod("size").Arg("sz", ctabb.F32).CodeClientRust(richTextStyleWarnWithArg).EndMethod().
-			BeginMethod("extraLetterSpacing").Arg("sp", ctabb.F32).CodeClientRust(richTextStyleWarnWithArg).EndMethod().
-			BeginMethod("lineHeight").Arg("lh", ctabb.F32).CodeClientRust(richTextStyleWarnWithArg).EndMethod().
-			BeginMethod("lineHeightDefault").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("heading").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("monospace").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("code").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("strong").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("weak").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("underline").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("strikethrough").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("italics").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("small").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("smallRaised").CodeClientRust(richTextStyleWarn).EndMethod().
-			BeginMethod("raised").CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("size").Unexported().Arg("sz", ctabb.F32).CodeClientRust(richTextStyleWarnWithArg).EndMethod().
+			BeginMethod("extraLetterSpacing").Unexported().Arg("sp", ctabb.F32).CodeClientRust(richTextStyleWarnWithArg).EndMethod().
+			BeginMethod("lineHeight").Unexported().Arg("lh", ctabb.F32).CodeClientRust(richTextStyleWarnWithArg).EndMethod().
+			BeginMethod("lineHeightDefault").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("heading").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("monospace").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("code").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("strong").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("weak").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("underline").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("strikethrough").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("italics").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("small").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("smallRaised").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
+			BeginMethod("raised").Unexported().CodeClientRust(richTextStyleWarn).EndMethod().
 			// Selects a custom TextStyle::Name slot — most commonly the
 			// IDS "ids-display" / "ids-micro" tiers bound by the Rust
 			// apply path (ADR-0030 §SD3). Built-in tiers (Heading/Body/
 			// Small/Monospace/Button) stay on their dedicated methods.
-			BeginMethod("textStyleName").Arg("name", ctabb.S).CodeClientRust(richTextStyleWarnWithArg).EndMethod().
+			BeginMethod("textStyleName").Unexported().Arg("name", ctabb.S).CodeClientRust(richTextStyleWarnWithArg).EndMethod().
 			Build()...).
 		WithConstructionCodeClientRust(ir.EmptyCode).
 		WithSettingRetained(true).

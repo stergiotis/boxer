@@ -22,9 +22,9 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
 // capDocsFS holds the per-cap explanation files. One markdown file
@@ -233,7 +233,6 @@ func diagramCapLabel(capId CapId) (s string) {
 	return
 }
 
-
 // renderLiveConsumers is a one-line footnote naming the apps in the
 // current registry that exercise this cap. Kept compact on purpose
 // — the inspector is about the cap-broker contract; the live
@@ -314,7 +313,7 @@ func shortAppName(m app.Manifest) (s string) {
 // RichTextScope but not as a widget shortcut, so this wrapper
 // keeps the renderer code readable.
 func heading(text string) {
-	c.LabelAtoms(c.Atoms().RichText(text).Heading().EndRichText().Keep()).Send()
+	c.LabelAtoms(c.Atoms().BeginRichText(text).Heading().End().Keep()).Send()
 }
 
 func lastSlash(s string) (idx int) {

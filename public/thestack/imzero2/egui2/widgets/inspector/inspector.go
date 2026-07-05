@@ -140,19 +140,19 @@ func ProvenanceChip(p Provenance) {
 		// reads as one consistent vocabulary.
 		c.Label("↳").Send()
 		if p.Subject != "" {
-			c.LabelAtoms(c.Atoms().RichText(p.Subject).Monospace().EndRichText().Keep()).Send()
+			c.LabelAtoms(c.Atoms().BeginRichText(p.Subject).Monospace().End().Keep()).Send()
 		}
 		if !p.SampledAt.IsZero() {
 			c.AddSpace(gap)
-			c.LabelAtoms(c.Atoms().RichTextColored("· "+formatAgo(time.Since(p.SampledAt)), mutedFg, transparentBg).EndRichText().Keep()).Send()
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(mutedFg, transparentBg, "· "+formatAgo(time.Since(p.SampledAt))).End().Keep()).Send()
 		}
 		if p.Schema != "" {
 			c.AddSpace(gap)
-			c.LabelAtoms(c.Atoms().RichTextColored("· "+p.Schema, mutedFg, transparentBg).EndRichText().Keep()).Send()
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(mutedFg, transparentBg, "· "+p.Schema).End().Keep()).Send()
 		}
 		if p.SourceApp != "" {
 			c.AddSpace(gap)
-			c.LabelAtoms(c.Atoms().RichTextColored("· from "+p.SourceApp, mutedFg, transparentBg).EndRichText().Keep()).Send()
+			c.LabelAtoms(c.Atoms().BeginRichTextColored(mutedFg, transparentBg, "· from "+p.SourceApp).End().Keep()).Send()
 		}
 	}
 }

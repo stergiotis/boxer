@@ -7,9 +7,9 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/functional"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 )
 
 // Id returns the widget id stamped on this Frame at construction time,
@@ -375,40 +375,46 @@ func (inst *DockAreaFluid) send() {
 type RichTextScope struct{ a AtomsFluid }
 
 // BeginRichText starts a rich text segment. Chain style methods, then call .End().
+//
+// This is the only public way to open a rich-text segment: the raw sub-protocol
+// methods (richText/richTextColored/endRichText and the style methods) are
+// unexported on AtomsFluid (see egui2_definition_d_evaluated.go), so an
+// unbalanced chain like Atoms().RichTextColored(...).Text(...) no longer
+// compiles — the balancing endRichText is issued by RichTextScope.End().
 func (inst AtomsFluid) BeginRichText(text string) RichTextScope {
-	return RichTextScope{a: inst.RichText(text)}
+	return RichTextScope{a: inst.richText(text)}
 }
 
 // BeginRichTextColored starts a colored rich text segment.
 func (inst AtomsFluid) BeginRichTextColored(cl, bk color.Color, text string) RichTextScope {
-	return RichTextScope{a: inst.RichTextColored(text, cl, bk)}
+	return RichTextScope{a: inst.richTextColored(text, cl, bk)}
 }
 
 // Strong applies bold styling to the rich-text segment. Strong, Weak, Italics,
 // Underline, Strikethrough, Code, Monospace, Small, Heading, Raised, Lowered,
 // and the *Color variants each return RichTextScope for chaining.
-func (inst RichTextScope) Strong() RichTextScope    { return RichTextScope{a: inst.a.Strong()} }
-func (inst RichTextScope) Weak() RichTextScope      { return RichTextScope{a: inst.a.Weak()} }
-func (inst RichTextScope) Italics() RichTextScope   { return RichTextScope{a: inst.a.Italics()} }
-func (inst RichTextScope) Underline() RichTextScope { return RichTextScope{a: inst.a.Underline()} }
+func (inst RichTextScope) Strong() RichTextScope    { return RichTextScope{a: inst.a.strong()} }
+func (inst RichTextScope) Weak() RichTextScope      { return RichTextScope{a: inst.a.weak()} }
+func (inst RichTextScope) Italics() RichTextScope   { return RichTextScope{a: inst.a.italics()} }
+func (inst RichTextScope) Underline() RichTextScope { return RichTextScope{a: inst.a.underline()} }
 func (inst RichTextScope) Strikethrough() RichTextScope {
-	return RichTextScope{a: inst.a.Strikethrough()}
+	return RichTextScope{a: inst.a.strikethrough()}
 }
-func (inst RichTextScope) Code() RichTextScope           { return RichTextScope{a: inst.a.Code()} }
-func (inst RichTextScope) Monospace() RichTextScope      { return RichTextScope{a: inst.a.Monospace()} }
-func (inst RichTextScope) Heading() RichTextScope        { return RichTextScope{a: inst.a.Heading()} }
-func (inst RichTextScope) Small() RichTextScope          { return RichTextScope{a: inst.a.Small()} }
-func (inst RichTextScope) SmallRaised() RichTextScope    { return RichTextScope{a: inst.a.SmallRaised()} }
-func (inst RichTextScope) Raised() RichTextScope         { return RichTextScope{a: inst.a.Raised()} }
-func (inst RichTextScope) Size(sz float32) RichTextScope { return RichTextScope{a: inst.a.Size(sz)} }
+func (inst RichTextScope) Code() RichTextScope           { return RichTextScope{a: inst.a.code()} }
+func (inst RichTextScope) Monospace() RichTextScope      { return RichTextScope{a: inst.a.monospace()} }
+func (inst RichTextScope) Heading() RichTextScope        { return RichTextScope{a: inst.a.heading()} }
+func (inst RichTextScope) Small() RichTextScope          { return RichTextScope{a: inst.a.small()} }
+func (inst RichTextScope) SmallRaised() RichTextScope    { return RichTextScope{a: inst.a.smallRaised()} }
+func (inst RichTextScope) Raised() RichTextScope         { return RichTextScope{a: inst.a.raised()} }
+func (inst RichTextScope) Size(sz float32) RichTextScope { return RichTextScope{a: inst.a.size(sz)} }
 func (inst RichTextScope) ExtraLetterSpacing(sp float32) RichTextScope {
-	return RichTextScope{a: inst.a.ExtraLetterSpacing(sp)}
+	return RichTextScope{a: inst.a.extraLetterSpacing(sp)}
 }
 func (inst RichTextScope) LineHeight(lh float32) RichTextScope {
-	return RichTextScope{a: inst.a.LineHeight(lh)}
+	return RichTextScope{a: inst.a.lineHeight(lh)}
 }
 func (inst RichTextScope) LineHeightDefault() RichTextScope {
-	return RichTextScope{a: inst.a.LineHeightDefault()}
+	return RichTextScope{a: inst.a.lineHeightDefault()}
 }
 
 // TextStyleName selects a custom TextStyle::Name slot — most commonly
@@ -416,11 +422,11 @@ func (inst RichTextScope) LineHeightDefault() RichTextScope {
 // Built-in tiers (Heading/Body/Small/Monospace/Button) stay on their
 // dedicated methods (Heading()/Small()/Monospace()).
 func (inst RichTextScope) TextStyleName(name string) RichTextScope {
-	return RichTextScope{a: inst.a.TextStyleName(name)}
+	return RichTextScope{a: inst.a.textStyleName(name)}
 }
 
 // End closes the rich text segment and returns to the AtomsFluid scope.
-func (inst RichTextScope) End() AtomsFluid { return inst.a.EndRichText() }
+func (inst RichTextScope) End() AtomsFluid { return inst.a.endRichText() }
 
 // --- iter.Seq-based rich text scoping ---
 

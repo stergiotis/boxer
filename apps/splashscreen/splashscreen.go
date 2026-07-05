@@ -304,7 +304,7 @@ func (inst *App) renderNotice() {
 // the bindings expose Heading() on the rich-text scope but not as a widget
 // shortcut.
 func heading(text string) {
-	c.LabelAtoms(c.Atoms().RichText(text).Heading().EndRichText().Keep()).Send()
+	c.LabelAtoms(c.Atoms().BeginRichText(text).Heading().End().Keep()).Send()
 }
 
 // kv renders a "key: value" line with the value in monospace so hashes and

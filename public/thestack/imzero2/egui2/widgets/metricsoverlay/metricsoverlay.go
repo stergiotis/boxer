@@ -80,12 +80,13 @@ func RenderInline(fpsId c.WidgetIdCreatorI) {
 // pixel-stable across frames as long as every callsite uses monospace.
 func monoLabel(text string, col color.Color, colored bool) {
 	a := c.Atoms()
+	var rt c.RichTextScope
 	if colored {
-		a = a.RichTextColored(text, col, color.Transparent)
+		rt = a.BeginRichTextColored(col, color.Transparent, text)
 	} else {
-		a = a.RichText(text)
+		rt = a.BeginRichText(text)
 	}
-	c.LabelAtoms(a.Monospace().EndRichText().Keep()).Send()
+	c.LabelAtoms(rt.Monospace().End().Keep()).Send()
 }
 
 // formatBytesFixed always reports kilobytes with one decimal place so the

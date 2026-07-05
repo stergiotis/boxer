@@ -40,7 +40,7 @@ func (inst AtomsFluid) Text(val string) AtomsFluid {
 	return inst
 }
 
-func (inst AtomsFluid) RichText(val string) AtomsFluid {
+func (inst AtomsFluid) richText(val string) AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdRichText))
 	r.WriteString(val)
@@ -48,7 +48,7 @@ func (inst AtomsFluid) RichText(val string) AtomsFluid {
 	return inst
 }
 
-func (inst AtomsFluid) RichTextColored(val string, cl color.Color, bk color.Color) AtomsFluid {
+func (inst AtomsFluid) richTextColored(val string, cl color.Color, bk color.Color) AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdRichTextColored))
 	r.WriteString(val)
@@ -58,14 +58,14 @@ func (inst AtomsFluid) RichTextColored(val string, cl color.Color, bk color.Colo
 	return inst
 }
 
-func (inst AtomsFluid) EndRichText() AtomsFluid {
+func (inst AtomsFluid) endRichText() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdEndRichText))
 
 	return inst
 }
 
-func (inst AtomsFluid) Size(sz float32) AtomsFluid {
+func (inst AtomsFluid) size(sz float32) AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdSize))
 	r.WriteFloat32(sz)
@@ -73,7 +73,7 @@ func (inst AtomsFluid) Size(sz float32) AtomsFluid {
 	return inst
 }
 
-func (inst AtomsFluid) ExtraLetterSpacing(sp float32) AtomsFluid {
+func (inst AtomsFluid) extraLetterSpacing(sp float32) AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdExtraLetterSpacing))
 	r.WriteFloat32(sp)
@@ -81,7 +81,7 @@ func (inst AtomsFluid) ExtraLetterSpacing(sp float32) AtomsFluid {
 	return inst
 }
 
-func (inst AtomsFluid) LineHeight(lh float32) AtomsFluid {
+func (inst AtomsFluid) lineHeight(lh float32) AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdLineHeight))
 	r.WriteFloat32(lh)
@@ -89,91 +89,91 @@ func (inst AtomsFluid) LineHeight(lh float32) AtomsFluid {
 	return inst
 }
 
-func (inst AtomsFluid) LineHeightDefault() AtomsFluid {
+func (inst AtomsFluid) lineHeightDefault() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdLineHeightDefault))
 
 	return inst
 }
 
-func (inst AtomsFluid) Heading() AtomsFluid {
+func (inst AtomsFluid) heading() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdHeading))
 
 	return inst
 }
 
-func (inst AtomsFluid) Monospace() AtomsFluid {
+func (inst AtomsFluid) monospace() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdMonospace))
 
 	return inst
 }
 
-func (inst AtomsFluid) Code() AtomsFluid {
+func (inst AtomsFluid) code() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdCode))
 
 	return inst
 }
 
-func (inst AtomsFluid) Strong() AtomsFluid {
+func (inst AtomsFluid) strong() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdStrong))
 
 	return inst
 }
 
-func (inst AtomsFluid) Weak() AtomsFluid {
+func (inst AtomsFluid) weak() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdWeak))
 
 	return inst
 }
 
-func (inst AtomsFluid) Underline() AtomsFluid {
+func (inst AtomsFluid) underline() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdUnderline))
 
 	return inst
 }
 
-func (inst AtomsFluid) Strikethrough() AtomsFluid {
+func (inst AtomsFluid) strikethrough() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdStrikethrough))
 
 	return inst
 }
 
-func (inst AtomsFluid) Italics() AtomsFluid {
+func (inst AtomsFluid) italics() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdItalics))
 
 	return inst
 }
 
-func (inst AtomsFluid) Small() AtomsFluid {
+func (inst AtomsFluid) small() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdSmall))
 
 	return inst
 }
 
-func (inst AtomsFluid) SmallRaised() AtomsFluid {
+func (inst AtomsFluid) smallRaised() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdSmallRaised))
 
 	return inst
 }
 
-func (inst AtomsFluid) Raised() AtomsFluid {
+func (inst AtomsFluid) raised() AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdRaised))
 
 	return inst
 }
 
-func (inst AtomsFluid) TextStyleName(name string) AtomsFluid {
+func (inst AtomsFluid) textStyleName(name string) AtomsFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(AtomsMethodIdTextStyleName))
 	r.WriteString(name)

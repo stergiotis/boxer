@@ -4,9 +4,9 @@ import (
 	"iter"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/compiletimeflags"
 )
 
 type AbstractType struct {
@@ -84,6 +84,14 @@ type MethodSpec struct {
 	Name               naming.StylableName
 	PlainArguments     PlainArgumentSpec
 	EvaluatedArguments EvaluatedArgumentSpec
+	// UnexportedGoName emits the server-side builder method with a
+	// lower-camel (unexported) Go name, so it is callable only from within
+	// the bindings package. The opcode enum stays UpperCamel and the wire
+	// format is unchanged. Used to hide raw wire sub-protocol methods (e.g.
+	// the atoms richText/style/endRichText family) behind a hand-written
+	// type-safe wrapper, making an unbalanced call a compile error rather
+	// than a runtime FFI desync.
+	UnexportedGoName bool
 }
 type Method struct {
 	Spec       MethodSpec
