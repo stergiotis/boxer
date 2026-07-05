@@ -20,7 +20,8 @@ import (
 // The container internally tracks a (sorted, compacted) mode flag. Every
 // read entry point (Has, Get, GetDefault, Len, IterateKeys, IterateValues,
 // IteratePairs, MergeValue, UpsertSingle, Delete) transparently invokes
-// ensureSorted before operating, so callers never need to flush manually.
+// ensureSorted before operating — the Iterate* methods at the start of
+// each range — so callers never need to flush manually.
 // UpsertBatch is the only writer that defers — see its docstring for the
 // full cost model, invariants, and antipatterns.
 //
@@ -57,9 +58,14 @@ type BinarySearchGrowingKV[K any, V any] struct {
 	compacted bool
 }
 
+// IterateKeys yields the keys in cmpKey-ascending order. The container's
+// deferred UpsertBatch state is flushed when ranging begins, not when
+// IterateKeys is called, so a Seq obtained earlier always iterates the
+// current (sorted, compacted) view. Mutating the container while a range
+// is in progress remains undefined behaviour.
 func (inst *BinarySearchGrowingKV[K, V]) IterateKeys() iter.Seq[K] {
-	inst.ensureSorted()
 	return func(yield func(K) bool) {
+		inst.ensureSorted()
 		for _, k := range inst.keys {
 			if !yield(k) {
 				return
@@ -67,9 +73,12 @@ func (inst *BinarySearchGrowingKV[K, V]) IterateKeys() iter.Seq[K] {
 		}
 	}
 }
+
+// IterateValues yields the values in cmpKey-ascending key order. Flush
+// semantics as in [BinarySearchGrowingKV.IterateKeys].
 func (inst *BinarySearchGrowingKV[K, V]) IterateValues() iter.Seq[V] {
-	inst.ensureSorted()
 	return func(yield func(V) bool) {
+		inst.ensureSorted()
 		for _, v := range inst.vals {
 			if !yield(v) {
 				return
@@ -77,9 +86,12 @@ func (inst *BinarySearchGrowingKV[K, V]) IterateValues() iter.Seq[V] {
 		}
 	}
 }
+
+// IteratePairs yields (key, value) pairs in cmpKey-ascending order.
+// Flush semantics as in [BinarySearchGrowingKV.IterateKeys].
 func (inst *BinarySearchGrowingKV[K, V]) IteratePairs() iter.Seq2[K, V] {
-	inst.ensureSorted()
 	return func(yield func(K, V) bool) {
+		inst.ensureSorted()
 		vals := inst.vals
 		for i, k := range inst.keys {
 			if !yield(k, vals[i]) {
@@ -353,9 +365,11 @@ func (inst *BinarySearchGrowingKV[K, V]) Grow(n int) {
 //     the flush cost. Choose one strategy per build phase.
 //
 //   - Calling UpsertBatch during iteration of the same container. The
-//     iterator closure captures the slice headers at construction time;
-//     the append may grow-and-relocate the underlying array, leaving
-//     the iterator walking stale storage.
+//     iterator reads the slice headers when ranging begins; the append
+//     may grow-and-relocate the underlying array mid-iteration, leaving
+//     the loop walking stale storage. (Obtaining an iterator, mutating,
+//     and only then ranging is safe — the deferred state is flushed when
+//     ranging begins, not when the Iterate method is called.)
 //
 // # Sizing
 //
@@ -382,9 +396,11 @@ func (inst *BinarySearchGrowingKV[K, V]) Reset() {
 	inst.vals = inst.vals[:0]
 }
 func IterateMergedBinarySearchGrowingKVKeys[K any, V any, W any](a *BinarySearchGrowingKV[K, V], b *BinarySearchGrowingKV[K, W]) iter.Seq[K] {
-	a.ensureSorted()
-	b.ensureSorted()
-	return IterateSortedUniqueFuncUnique(a.keys, b.keys, a.cmpKey)
+	return func(yield func(K) bool) {
+		a.ensureSorted()
+		b.ensureSorted()
+		IterateSortedUniqueFuncUnique(a.keys, b.keys, a.cmpKey)(yield)
+	}
 }
 
 var _ sort.Interface = bskvSortInterface[any, any]{}

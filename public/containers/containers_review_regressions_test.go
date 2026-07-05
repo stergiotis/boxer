@@ -8,6 +8,11 @@ package containers
 //      spelling, while UpsertSingle/MergeValue keep the resident key.
 //      Under an equivalence comparator (case-insensitive, locale, …)
 //      the documented Single/Batch equivalence was violated.
+// D2 — Iterate{Keys,Values,Pairs} and IterateMergedBinarySearchGrowingKVKeys
+//      ran ensureSorted when the Seq was constructed but read the slices
+//      when ranging began: a mutation between the two silently yielded an
+//      unsorted, duplicate-bearing view. The flush now happens at the
+//      start of each range.
 
 import (
 	"cmp"
@@ -87,4 +92,65 @@ func TestD1_SingleThenBatch_KeepsResidentSpelling(t *testing.T) {
 
 	require.Equal(t, []string{"Key"}, slices.Collect(kv.IterateKeys()))
 	require.Equal(t, 2, kv.GetDefault("key", -1))
+}
+
+// TestD2_IteratorObtainedBeforeMutation_SeesFlushedView pins that a Seq
+// obtained before UpsertBatch calls iterates the sorted, compacted
+// post-mutation view (pre-fix: raw append order including duplicates).
+func TestD2_IteratorObtainedBeforeMutation_SeesFlushedView(t *testing.T) {
+	mk := func() *BinarySearchGrowingKV[string, int] {
+		kv := NewBinarySearchGrowingKVOrdered[string, int](8)
+		kv.UpsertSingle("b", 2)
+		kv.UpsertSingle("c", 3)
+		return kv
+	}
+	mutate := func(kv *BinarySearchGrowingKV[string, int]) {
+		kv.UpsertBatch("a", 1) // new key, sorts before existing ones
+		kv.UpsertBatch("b", 9) // duplicate key, newest value must win
+	}
+
+	t.Run("keys", func(t *testing.T) {
+		kv := mk()
+		seq := kv.IterateKeys()
+		mutate(kv)
+		require.Equal(t, []string{"a", "b", "c"}, slices.Collect(seq))
+	})
+	t.Run("values", func(t *testing.T) {
+		kv := mk()
+		seq := kv.IterateValues()
+		mutate(kv)
+		require.Equal(t, []int{1, 9, 3}, slices.Collect(seq))
+	})
+	t.Run("pairs", func(t *testing.T) {
+		kv := mk()
+		seq := kv.IteratePairs()
+		mutate(kv)
+		var got []kvPair
+		for k, v := range seq {
+			got = append(got, kvPair{K: k, V: v})
+		}
+		require.Equal(t, []kvPair{{"a", 1}, {"b", 9}, {"c", 3}}, got)
+	})
+	t.Run("merged_keys", func(t *testing.T) {
+		a := mk()
+		b := NewBinarySearchGrowingKVOrdered[string, uint8](4)
+		b.UpsertSingle("d", 4)
+		seq := IterateMergedBinarySearchGrowingKVKeys(a, b)
+		mutate(a)
+		b.UpsertBatch("e", 5)
+		require.Equal(t, []string{"a", "b", "c", "d", "e"}, slices.Collect(seq))
+	})
+}
+
+// TestD2_RangeTwiceWithInterveningMutation pins that the same Seq value
+// re-ranged after a mutation reflects the newer flushed state — each
+// range start re-runs the flush.
+func TestD2_RangeTwiceWithInterveningMutation(t *testing.T) {
+	kv := NewBinarySearchGrowingKVOrdered[string, int](8)
+	kv.UpsertBatch("b", 2)
+	seq := kv.IterateKeys()
+
+	require.Equal(t, []string{"b"}, slices.Collect(seq))
+	kv.UpsertBatch("a", 1)
+	require.Equal(t, []string{"a", "b"}, slices.Collect(seq))
 }
