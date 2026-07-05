@@ -21,3 +21,9 @@ func TestMapStash_Conformance(t *testing.T) {
 		return caching.NewMapStash[string, int](capacity)
 	}, stashtest.Opts{})
 }
+
+func TestS3FIFOStash_Conformance(t *testing.T) {
+	stashtest.Run(t, func(t *testing.T, capacity int) caching.StashBackendI[string, int] {
+		return caching.NewS3FIFOStash[string, int](capacity)
+	}, stashtest.Opts{})
+}

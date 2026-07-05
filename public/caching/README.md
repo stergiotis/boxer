@@ -85,6 +85,10 @@ When the L1 cache is full of "Pinned" items (Working Set > L1 Capacity), items a
 *   **Implementations:**
     *   `SliceStash`: CPU-heavy ($O(N)$ scan), Memory-dense. Good for small L2.
     *   `MapStash`: Memory-heavy, CPU-light ($O(1)$). Good for large RAM L2.
+    *   `S3FIFOStash`: S3-FIFO-derived (probationary FIFO + ghost
+        readmission of bouncing victims). Measured about even with the
+        others on a Zipf workload (see caching_policy_study_test.go) —
+        worth trying when victim-bounce traffic dominates.
     *   `PogrebStash`/`PebbleStash`: Disk-backed. Good for datasets exceeding
         RAM. Best-effort by contract: storage or codec errors degrade into
         misses or dropped writes, never into failures of the cache itself.
