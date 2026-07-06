@@ -144,6 +144,37 @@ func overwriteCodeAtMarker(candidateFiles []string, marker string, content strin
 	return
 }
 
+// rustfmtFile formats a single generated Rust file in place using the crate's
+// PINNED toolchain, not whatever rustfmt happens to be the rustup default.
+//
+// It runs `rustfmt <file>` with the working directory set to the file's own
+// directory, so the ~/.cargo/bin/rustfmt rustup proxy resolves the crate's
+// rust-toolchain (rust/imzero2 -> 1.92 / rustfmt 1.8.0). Running it from the
+// repo root — as the previous inline code did — resolves the DEFAULT toolchain
+// instead (a newer rustfmt), which reformats generated files differently from
+// the pin and surfaces as spurious drift in the committed tree. rustfmt.toml is
+// discovered by walking up from the file, so it applies regardless of the cwd.
+//
+// Formatting is best-effort: an absent rustfmt (rustfmtPath == "") or a format
+// failure is logged and ignored so code generation never fails on it.
+func rustfmtFile(rustfmtPath string, path string) {
+	if rustfmtPath == "" {
+		return
+	}
+	absP, err := filepath.Abs(path)
+	if err != nil {
+		log.Warn().Err(err).Str("file", path).Msg("unable to absolutize rust file path for rustfmt, skipping format")
+		return
+	}
+	buf := bytes.NewBuffer(nil)
+	c := exec.Command(rustfmtPath, absP)
+	c.Dir = filepath.Dir(absP) // resolve the crate's pinned rust-toolchain via the rustup proxy
+	c.Stderr = buf
+	if err = c.Run(); err != nil {
+		log.Warn().Err(err).Str("rustfmtPath", rustfmtPath).Str("file", absP).Str("stderr", buf.String()).Msg("unable to format rust file using rustfmt, ignoring")
+	}
+}
+
 func GenerateRustFiles(basePath string) (err error) {
 	tracker := compiletime.NewStateAndErrTracker[rustclient.GeneratorStateE](rustclient.GenerateStateInitial, "")
 	factoryBuf := bytes.NewBuffer(nil)
@@ -183,9 +214,12 @@ func GenerateRustFiles(basePath string) (err error) {
 	var rustfmtPath string
 	rustfmtPath, err = exec.LookPath("rustfmt")
 	if err != nil {
-		log.Warn().Msg("rustfmt not found in path, templated files will not be reformated")
+		log.Warn().Msg("rustfmt not found in path, generated files will not be reformatted")
 		err = nil
 	}
+	// enums_out.rs was written raw above; format it through the pin too, so a bare
+	// `egui2gen generate rust` leaves no drift behind for fmt_rust.sh to mop up.
+	rustfmtFile(rustfmtPath, filepath.Join(basePath, "enums_out.rs"))
 	for marker, content := range functional.MakeIter2FromAlternatedValue("//IMZERO2_INCLUDE_FFFI_DISPATCH_OUT", dispatchBuf.String()) {
 		var p string
 		p, err = overwriteCodeAtMarker(candidates, marker, content)
@@ -194,16 +228,7 @@ func GenerateRustFiles(basePath string) (err error) {
 			return
 		}
 		log.Info().Int("lines", strings.Count(content, "\n")).Str("marker", marker).Str("path", p).Msg("inserted code at marker")
-		if rustfmtPath != "" {
-			buf := bytes.NewBuffer(nil)
-			c := exec.Command(rustfmtPath, p)
-			c.Stderr = buf
-			err = c.Run()
-			if err != nil {
-				log.Warn().Err(err).Str("rustfmtPath", rustfmtPath).Str("file", p).Str("stderr", buf.String()).Msg("unable to format rust file using rustfmt, ignoring")
-				err = nil
-			}
-		}
+		rustfmtFile(rustfmtPath, p)
 	}
 
 	return
