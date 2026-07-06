@@ -1,4 +1,5 @@
-brace_style = "SameLineWhere"
-chain_width = 140
-wrap_comments = false
+# chain_width keeps method chains on one line up to max_width (100). Load-bearing:
+# dropping it reverts to rustfmt's default (60) and reformats ~1.6k lines. Pinned
+# rustfmt 1.8.0 spuriously warns "exceeds max_width" for any explicit value — benign.
+chain_width = 100
 edition = "2024"
