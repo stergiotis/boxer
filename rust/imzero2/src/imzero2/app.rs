@@ -14,8 +14,8 @@ const WARMUP_PASSES: u32 = 16;
 /// window refreshes. Matches the imztop sampler's 1 s tick.
 const IDLE_REPAINT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
-pub struct App<'a,R: std::io::BufRead,W: std::io::Write> {
-    fffi: imzero2::interpreter::ImZeroFffi<'a,R,W>,
+pub struct App<'a, R: std::io::BufRead, W: std::io::Write> {
+    fffi: imzero2::interpreter::ImZeroFffi<'a, R, W>,
     /// Counts down from [WARMUP_PASSES]; while > 0, `logic()` forces an
     /// immediate repaint even in reactive mode. See `logic()`.
     warmup_passes: u32,
@@ -25,21 +25,24 @@ pub struct App<'a,R: std::io::BufRead,W: std::io::Write> {
     reactive: bool,
 }
 
-impl<'a,R: std::io::BufRead,W: std::io::Write> App<'a,R,W> {
+impl<'a, R: std::io::BufRead, W: std::io::Write> App<'a, R, W> {
     /// Called once before the first frame. The host-independent part of
     /// the setup (fonts, IDS overlay, single-pass pinning, interpreter,
     /// SVG-export plugin) lives in [`apphost::init_common`], shared with
     /// the headless host (ADR-0024 SD1).
     pub fn new(cc: &eframe::CreationContext<'_>, config: &AppConfig, r: R, w: W) -> Self {
         let (fffi, reactive) = apphost::init_common(&cc.egui_ctx, config, r, w);
-        Self { fffi, warmup_passes: WARMUP_PASSES, reactive }
+        Self {
+            fffi,
+            warmup_passes: WARMUP_PASSES,
+            reactive,
+        }
     }
 }
 
-impl<'a,R: std::io::BufRead,W: std::io::Write> eframe::App for App<'a,R,W> {
+impl<'a, R: std::io::BufRead, W: std::io::Write> eframe::App for App<'a, R, W> {
     /// Called by the framework to save state before shutdown.
-    fn save(&mut self, _storage: &mut dyn eframe::Storage) {
-    }
+    fn save(&mut self, _storage: &mut dyn eframe::Storage) {}
 
     /// Called before ui() AND whenever the window is hidden but a repaint was
     /// requested. This is the *only* lifecycle hook eframe 0.34 runs while the
@@ -102,6 +105,5 @@ impl<'a,R: std::io::BufRead,W: std::io::Write> eframe::App for App<'a,R,W> {
 
     /// No-op: all work happens in `logic()`. We still have to provide `ui()`
     /// because it's a required method on `eframe::App`.
-    fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-    }
+    fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {}
 }

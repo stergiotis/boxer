@@ -98,11 +98,7 @@ impl FontResolver {
     /// defaults, and builds the combined CSS family value. Faces whose
     /// TTF lacks a usable name record are skipped silently (so they
     /// won't end up in the CSS chain or the subset output either).
-    pub fn register_chain(
-        &mut self,
-        family: FontFamily,
-        chain: Vec<(Arc<Vec<u8>>, u32)>,
-    ) {
+    pub fn register_chain(&mut self, family: FontFamily, chain: Vec<(Arc<Vec<u8>>, u32)>) {
         let generic = generic_for(&family);
         let mut entries: Vec<FontEntry> = Vec::with_capacity(chain.len());
         let mut names: Vec<String> = Vec::with_capacity(chain.len());
@@ -124,7 +120,13 @@ impl FontResolver {
         }
         names.push(generic.to_string());
         let css_family = names.join(", ");
-        self.chains.insert(family, FontChain { css_family, entries });
+        self.chains.insert(
+            family,
+            FontChain {
+                css_family,
+                entries,
+            },
+        );
     }
 
     /// Single-face shorthand for `register_chain` with one entry. Kept
@@ -212,11 +214,8 @@ impl FontResolver {
                 .into_iter()
                 .filter_map(|(c, old)| remapper.get(old).map(|new| (c, new)))
                 .collect();
-            let patched = patch_subset_for_browser(
-                subset_bytes,
-                &entry.ttf_bytes,
-                &char_to_new_gid,
-            );
+            let patched =
+                patch_subset_for_browser(subset_bytes, &entry.ttf_bytes, &char_to_new_gid);
             out.push(ChainSubset {
                 chain_index: i,
                 bytes: patched,
@@ -299,8 +298,18 @@ fn read_table(bytes: &[u8], tag: &[u8; 4]) -> Option<Vec<u8>> {
             return None;
         }
         if &bytes[off..off + 4] == tag {
-            let o = u32::from_be_bytes([bytes[off + 8], bytes[off + 9], bytes[off + 10], bytes[off + 11]]) as usize;
-            let l = u32::from_be_bytes([bytes[off + 12], bytes[off + 13], bytes[off + 14], bytes[off + 15]]) as usize;
+            let o = u32::from_be_bytes([
+                bytes[off + 8],
+                bytes[off + 9],
+                bytes[off + 10],
+                bytes[off + 11],
+            ]) as usize;
+            let l = u32::from_be_bytes([
+                bytes[off + 12],
+                bytes[off + 13],
+                bytes[off + 14],
+                bytes[off + 15],
+            ]) as usize;
             if o + l <= bytes.len() {
                 return Some(bytes[o..o + l].to_vec());
             }
@@ -331,7 +340,11 @@ fn build_cmap_blob(mappings: &[(char, u16)]) -> Vec<u8> {
         .iter()
         .filter_map(|(c, g)| {
             let u = *c as u32;
-            if u <= 0xFFFF { Some((u as u16, *g)) } else { None }
+            if u <= 0xFFFF {
+                Some((u as u16, *g))
+            } else {
+                None
+            }
         })
         .collect();
     let supp: Vec<(u32, u16)> = mappings
@@ -343,7 +356,11 @@ fn build_cmap_blob(mappings: &[(char, u16)]) -> Vec<u8> {
         .collect();
     bmp.sort_unstable_by_key(|(c, _)| *c);
     let format4 = build_format4(&bmp);
-    let format12 = if supp.is_empty() { None } else { Some(build_format12(&supp)) };
+    let format12 = if supp.is_empty() {
+        None
+    } else {
+        Some(build_format12(&supp))
+    };
 
     let num_sub: u32 = 1 + format12.is_some() as u32;
     let header_size: u32 = 4 + num_sub * 8;
@@ -374,10 +391,7 @@ fn build_cmap_blob(mappings: &[(char, u16)]) -> Vec<u8> {
 
 fn build_format4(bmp: &[(u16, u16)]) -> Vec<u8> {
     // One segment per char + one mandatory sentinel at 0xFFFF.
-    let mut segs: Vec<(u16, u16, u16)> = bmp
-        .iter()
-        .map(|&(c, g)| (c, c, g))
-        .collect();
+    let mut segs: Vec<(u16, u16, u16)> = bmp.iter().map(|&(c, g)| (c, c, g)).collect();
     segs.push((0xFFFF, 0xFFFF, 0));
 
     let seg_count = segs.len() as u16;
@@ -451,8 +465,18 @@ fn splice_in_table(bytes: &[u8], new_tag: [u8; 4], new_data: &[u8]) -> Vec<u8> {
         let off = 12 + i * 16;
         let mut tag = [0u8; 4];
         tag.copy_from_slice(&bytes[off..off + 4]);
-        let o = u32::from_be_bytes([bytes[off + 8], bytes[off + 9], bytes[off + 10], bytes[off + 11]]);
-        let l = u32::from_be_bytes([bytes[off + 12], bytes[off + 13], bytes[off + 14], bytes[off + 15]]);
+        let o = u32::from_be_bytes([
+            bytes[off + 8],
+            bytes[off + 9],
+            bytes[off + 10],
+            bytes[off + 11],
+        ]);
+        let l = u32::from_be_bytes([
+            bytes[off + 12],
+            bytes[off + 13],
+            bytes[off + 14],
+            bytes[off + 15],
+        ]);
         entries.push((tag, o, l));
     }
     // Collect each table's raw blob from its old position.
@@ -583,7 +607,12 @@ impl TexturePixelCache {
     ) {
         self.textures.insert(
             id,
-            CachedTexture { width, height, rgba, nearest },
+            CachedTexture {
+                width,
+                height,
+                rgba,
+                nearest,
+            },
         );
     }
     pub fn get(&self, id: egui::TextureId) -> Option<&CachedTexture> {
@@ -691,7 +720,10 @@ pub enum WindowMode {
 pub enum ExportScope {
     #[default]
     Viewport,
-    Window { id: egui::Id, mode: WindowMode },
+    Window {
+        id: egui::Id,
+        mode: WindowMode,
+    },
 }
 
 /// A queued export. `embed_fonts=false` produces a lightweight SVG that
@@ -730,7 +762,12 @@ impl SvgExportPlugin {
         textures: TexturePixelCacheHandle,
         links: LinkZonesHandle,
     ) -> Self {
-        Self { state, fonts, textures, links }
+        Self {
+            state,
+            fonts,
+            textures,
+            links,
+        }
     }
 }
 
@@ -753,10 +790,7 @@ impl egui::plugin::Plugin for SvgExportPlugin {
         } else if let Ok(bytes) = result {
             tracing::info!(path = %req.path.display(), embed = req.embed_fonts, bytes, "svg export ok");
         }
-        self.state
-            .lock()
-            .expect("svg_export state poisoned")
-            .last_result = Some(result);
+        self.state.lock().expect("svg_export state poisoned").last_result = Some(result);
     }
 }
 
@@ -869,10 +903,8 @@ pub fn render_svg_from_context(
     // `ctx.*` accessor inside the graphics closure re-borrows Context state
     // and deadlocks against the next pass's write lock (cost us 22 minutes
     // of stuck-tour time the first try).
-    let xforms: Vec<Option<egui::emath::TSTransform>> = layer_ids
-        .iter()
-        .map(|id| ctx.layer_transform_to_global(*id))
-        .collect();
+    let xforms: Vec<Option<egui::emath::TSTransform>> =
+        layer_ids.iter().map(|id| ctx.layer_transform_to_global(*id)).collect();
 
     // Tier-2 pre-pass: collect every (FontFamily, char) pair the frame
     // actually paints, route each char to the first face in the family's
@@ -983,10 +1015,7 @@ pub fn render_svg_window(
     // shapes remain in the layer but lie outside the viewBox, and
     // an `<svg>` with overflow=hidden clips them in every viewer
     // we care about (browsers + resvg).
-    b.set_css_class(format!(
-        "imzero-svg imzero-window-{:x}",
-        window_id.value()
-    ));
+    b.set_css_class(format!("imzero-svg imzero-window-{:x}", window_id.value()));
     if matches!(mode, WindowMode::ContentOnly) {
         let style = ctx.style();
         let spacing = &style.spacing;
@@ -1137,10 +1166,7 @@ fn collect_used_glyphs(
     used
 }
 
-fn visit_for_chars(
-    shape: &Shape,
-    used: &mut HashMap<FontFamily, std::collections::HashSet<char>>,
-) {
+fn visit_for_chars(shape: &Shape, used: &mut HashMap<FontFamily, std::collections::HashSet<char>>) {
     match shape {
         Shape::Vec(children) => {
             for c in children {
@@ -1337,11 +1363,7 @@ impl SvgBuilder {
     /// linear scan is fine; reverse order so a later (nested) hyperlink
     /// shadows an earlier (outer) one.
     fn link_for_bbox(&self, bbox: Rect) -> Option<&str> {
-        self.links
-            .iter()
-            .rev()
-            .find(|z| z.rect.contains_rect(bbox))
-            .map(|z| z.url.as_str())
+        self.links.iter().rev().find(|z| z.rect.contains_rect(bbox)).map(|z| z.url.as_str())
     }
 
     /// Open or close an `<a>` wrap to match `want`. Idempotent; called
@@ -1596,7 +1618,11 @@ impl SvgBuilder {
 
         let fallback = text.fallback_color;
         let resolve = |c: Color32| -> Color32 {
-            if c == Color32::PLACEHOLDER { fallback } else { c }
+            if c == Color32::PLACEHOLDER {
+                fallback
+            } else {
+                c
+            }
         };
 
         for placed_row in &galley.rows {
@@ -1609,9 +1635,7 @@ impl SvgBuilder {
                 let section = &job.sections[section_idx];
                 let format = &section.format;
 
-                let glyph_color = text
-                    .override_text_color
-                    .unwrap_or_else(|| resolve(format.color));
+                let glyph_color = text.override_text_color.unwrap_or_else(|| resolve(format.color));
                 let text_alpha = (glyph_color.a() as f32) / 255.0 * opacity;
 
                 let bx = origin.x + placed_row.pos.x + glyph.pos.x;
@@ -1640,17 +1664,13 @@ impl SvgBuilder {
                 }
 
                 // 2. Text — only when there's an actual glyph to draw.
-                if !glyph.chr.is_whitespace()
-                    && !glyph.uv_rect.is_nothing()
-                    && text_alpha > 0.0
-                {
-                    let family_hint = if let Some(chain) =
-                        self.embed_for_family.get(&format.font_id.family)
-                    {
-                        chain.clone()
-                    } else {
-                        self.fonts.for_id(&format.font_id)
-                    };
+                if !glyph.chr.is_whitespace() && !glyph.uv_rect.is_nothing() && text_alpha > 0.0 {
+                    let family_hint =
+                        if let Some(chain) = self.embed_for_family.get(&format.font_id.family) {
+                            chain.clone()
+                        } else {
+                            self.fonts.for_id(&format.font_id)
+                        };
                     let fill = color_hex(glyph_color);
                     let style_attr = if format.italics {
                         " font-style=\"italic\""
@@ -1664,14 +1684,13 @@ impl SvgBuilder {
                     // export start and emit `font-weight` so browsers
                     // synth-bold (or thin) when the embedded subset is
                     // single-weight.
-                    let weight_attr =
-                        if self.weights.strong == Some(glyph_color) {
-                            " font-weight=\"bold\""
-                        } else if self.weights.weak == Some(glyph_color) {
-                            " font-weight=\"lighter\""
-                        } else {
-                            ""
-                        };
+                    let weight_attr = if self.weights.strong == Some(glyph_color) {
+                        " font-weight=\"bold\""
+                    } else if self.weights.weak == Some(glyph_color) {
+                        " font-weight=\"lighter\""
+                    } else {
+                        ""
+                    };
                     let _ = writeln!(
                         self.body,
                         "  <text x=\"{bx:.2}\" y=\"{by:.2}\" font-size=\"{em_size:.2}\" font-family=\"{family_hint}\"{style_attr}{weight_attr} fill=\"{fill}\" fill-opacity=\"{text_alpha:.3}\">{ch}</text>",
@@ -1774,9 +1793,12 @@ impl SvgBuilder {
             let _ = writeln!(
                 self.body,
                 "  <polygon points=\"{x0:.2},{y0:.2} {x1:.2},{y1:.2} {x2:.2},{y2:.2}\" fill=\"{fill}\" fill-opacity=\"{alpha:.3}\"/>",
-                x0 = v0.pos.x, y0 = v0.pos.y,
-                x1 = v1.pos.x, y1 = v1.pos.y,
-                x2 = v2.pos.x, y2 = v2.pos.y,
+                x0 = v0.pos.x,
+                y0 = v0.pos.y,
+                x1 = v1.pos.x,
+                y1 = v1.pos.y,
+                x2 = v2.pos.x,
+                y2 = v2.pos.y,
                 fill = color_hex(v0.color),
             );
             self.counts.triangles_emitted += 1;
@@ -1978,8 +2000,10 @@ impl SvgBuilder {
         let _ = writeln!(
             self.body,
             "  <line x1=\"{x1:.2}\" y1=\"{y1:.2}\" x2=\"{x2:.2}\" y2=\"{y2:.2}\" stroke=\"{c}\" stroke-opacity=\"{a:.3}\" stroke-width=\"{w:.2}\"/>",
-            x1 = points[0].x, y1 = points[0].y,
-            x2 = points[1].x, y2 = points[1].y,
+            x1 = points[0].x,
+            y1 = points[0].y,
+            x2 = points[1].x,
+            y2 = points[1].y,
             c = color_hex(stroke.color),
             a = (stroke.color.a() as f32) / 255.0,
             w = stroke.width,
@@ -2009,11 +2033,18 @@ impl SvgBuilder {
 
     fn emit_quad_bezier(&mut self, q: &QuadraticBezierShape) {
         let [p0, p1, p2] = q.points;
-        let mut d = format!("M{:.2},{:.2} Q{:.2},{:.2} {:.2},{:.2}", p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
+        let mut d = format!(
+            "M{:.2},{:.2} Q{:.2},{:.2} {:.2},{:.2}",
+            p0.x, p0.y, p1.x, p1.y, p2.x, p2.y
+        );
         if q.closed {
             d.push_str(" Z");
         }
-        let fill = if q.closed { fill_attr(q.fill) } else { " fill=\"none\"".into() };
+        let fill = if q.closed {
+            fill_attr(q.fill)
+        } else {
+            " fill=\"none\"".into()
+        };
         let stroke = path_stroke_attr(&q.stroke);
         let _ = writeln!(self.body, "  <path d=\"{d}\"{fill}{stroke}/>");
     }
@@ -2027,7 +2058,11 @@ impl SvgBuilder {
         if c.closed {
             d.push_str(" Z");
         }
-        let fill = if c.closed { fill_attr(c.fill) } else { " fill=\"none\"".into() };
+        let fill = if c.closed {
+            fill_attr(c.fill)
+        } else {
+            " fill=\"none\"".into()
+        };
         let stroke = path_stroke_attr(&c.stroke);
         let _ = writeln!(self.body, "  <path d=\"{d}\"{fill}{stroke}/>");
     }
@@ -2077,9 +2112,7 @@ fn solve_textured_quad_affine(
     crop_x0: u32,
     crop_y0: u32,
 ) -> Option<[f32; 6]> {
-    let solve = |i0: usize, i1: usize, i2: usize|
-        -> Option<(f32, f32, f32, f32, f32, f32)>
-    {
+    let solve = |i0: usize, i1: usize, i2: usize| -> Option<(f32, f32, f32, f32, f32, f32)> {
         let p0 = &vertices[i0];
         let p1 = &vertices[i1];
         let p2 = &vertices[i2];
@@ -2102,14 +2135,12 @@ fn solve_textured_quad_affine(
         let y2 = p2.pos.y;
         let a = ((v1 - v2) * x0 + (v2 - v0) * x1 + (v0 - v1) * x2) * inv;
         let c = ((u2 - u1) * x0 + (u0 - u2) * x1 + (u1 - u0) * x2) * inv;
-        let e = ((u1 * v2 - u2 * v1) * x0
-              + (u2 * v0 - u0 * v2) * x1
-              + (u0 * v1 - u1 * v0) * x2) * inv;
+        let e =
+            ((u1 * v2 - u2 * v1) * x0 + (u2 * v0 - u0 * v2) * x1 + (u0 * v1 - u1 * v0) * x2) * inv;
         let b = ((v1 - v2) * y0 + (v2 - v0) * y1 + (v0 - v1) * y2) * inv;
         let d = ((u2 - u1) * y0 + (u0 - u2) * y1 + (u1 - u0) * y2) * inv;
-        let f = ((u1 * v2 - u2 * v1) * y0
-              + (u2 * v0 - u0 * v2) * y1
-              + (u0 * v1 - u1 * v0) * y2) * inv;
+        let f =
+            ((u1 * v2 - u2 * v1) * y0 + (u2 * v0 - u0 * v2) * y1 + (u0 * v1 - u1 * v0) * y2) * inv;
         Some((a, b, c, d, e, f))
     };
     let (a, b, c, d, e, f) = solve(0, 1, 2).or_else(|| solve(0, 1, 3))?;
@@ -2256,10 +2287,7 @@ mod tests {
     }
 
     fn matrix_close(actual: [f32; 6], expected: [f32; 6], tol: f32) -> bool {
-        actual
-            .iter()
-            .zip(expected.iter())
-            .all(|(a, e)| (a - e).abs() < tol)
+        actual.iter().zip(expected.iter()).all(|(a, e)| (a - e).abs() < tol)
     }
 
     #[test]
@@ -2273,8 +2301,7 @@ mod tests {
             vtx((10.0, 80.0), (0.0, 1.0)),
             vtx((110.0, 80.0), (1.0, 1.0)),
         ];
-        let m = solve_textured_quad_affine(&v, 100.0, 60.0, 0, 0)
-            .expect("non-degenerate");
+        let m = solve_textured_quad_affine(&v, 100.0, 60.0, 0, 0).expect("non-degenerate");
         assert!(
             matrix_close(m, [1.0, 0.0, 0.0, 1.0, 10.0, 20.0], 1e-4),
             "got {:?}",
@@ -2293,8 +2320,7 @@ mod tests {
             vtx((0.0, 0.0), (0.0, 1.0)),
             vtx((0.0, 100.0), (1.0, 1.0)),
         ];
-        let m = solve_textured_quad_affine(&v, 100.0, 100.0, 0, 0)
-            .expect("non-degenerate");
+        let m = solve_textured_quad_affine(&v, 100.0, 100.0, 0, 0).expect("non-degenerate");
         assert!(
             matrix_close(m, [0.0, 1.0, -1.0, 0.0, 100.0, 0.0], 1e-4),
             "got {:?}",
@@ -2312,8 +2338,7 @@ mod tests {
             vtx((0.0, 60.0), (1.0, 1.0)),
             vtx((100.0, 60.0), (0.0, 1.0)),
         ];
-        let m = solve_textured_quad_affine(&v, 100.0, 60.0, 0, 0)
-            .expect("non-degenerate");
+        let m = solve_textured_quad_affine(&v, 100.0, 60.0, 0, 0).expect("non-degenerate");
         // Local (lx, ly) → screen (100 - lx, ly).
         assert!(
             matrix_close(m, [-1.0, 0.0, 0.0, 1.0, 100.0, 0.0], 1e-4),
@@ -2334,8 +2359,7 @@ mod tests {
             vtx((160.0, 151.0), (1.0, 1.0)),
             vtx((0.0, 151.0), (1.0, 0.0)),
         ];
-        let m = solve_textured_quad_affine(&v, 160.0, 160.0, 9, 0)
-            .expect("non-degenerate");
+        let m = solve_textured_quad_affine(&v, 160.0, 160.0, 9, 0).expect("non-degenerate");
         // Axis swap: local-x → screen-y, local-y → screen-x.
         assert!(
             matrix_close(m, [0.0, 1.0, 1.0, 0.0, 0.0, 0.0], 1e-3),
@@ -2367,8 +2391,7 @@ mod tests {
             vtx((100.0, 300.0), (0.25, 1.0)),
             vtx((400.0, 300.0), (1.0, 1.0)),
         ];
-        let m = solve_textured_quad_affine(&v, 100.0, 60.0, 25, 0)
-            .expect("non-degenerate");
+        let m = solve_textured_quad_affine(&v, 100.0, 60.0, 25, 0).expect("non-degenerate");
         assert!(
             matrix_close(m, [4.0, 0.0, 0.0, 100.0 / 60.0, 100.0, 200.0], 1e-3),
             "got {:?}",
@@ -2398,8 +2421,7 @@ mod tests {
         let alpha_id = egui::Id::new("alpha-window");
         let beta_id = egui::Id::new("beta-window");
         let resolver = FontResolver::default();
-        let textures: TexturePixelCacheHandle =
-            Arc::new(Mutex::new(TexturePixelCache::default()));
+        let textures: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
         let links: LinkZonesHandle = Arc::new(Mutex::new(Vec::new()));
 
         let raw = RawInput {
@@ -2411,18 +2433,12 @@ mod tests {
         // once outer_rect is known). Two passes get us settled geometry
         // even with max_passes=2 / multipass off.
         let show_ui = |ctx: &Context| {
-            egui::Window::new("Alpha")
-                .id(alpha_id)
-                .default_pos([10.0, 10.0])
-                .show(ctx, |ui| {
-                    ui.label("ZZZ");
-                });
-            egui::Window::new("Beta")
-                .id(beta_id)
-                .default_pos([300.0, 10.0])
-                .show(ctx, |ui| {
-                    ui.label("QQQ");
-                });
+            egui::Window::new("Alpha").id(alpha_id).default_pos([10.0, 10.0]).show(ctx, |ui| {
+                ui.label("ZZZ");
+            });
+            egui::Window::new("Beta").id(beta_id).default_pos([300.0, 10.0]).show(ctx, |ui| {
+                ui.label("QQQ");
+            });
         };
         for _ in 0..2 {
             let _ = ctx.run(raw.clone(), |ctx| show_ui(ctx));
@@ -2489,8 +2505,7 @@ mod tests {
         let ctx = Context::default();
         let win_id = egui::Id::new("report-window");
         let resolver = FontResolver::default();
-        let textures: TexturePixelCacheHandle =
-            Arc::new(Mutex::new(TexturePixelCache::default()));
+        let textures: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
         let links: LinkZonesHandle = Arc::new(Mutex::new(Vec::new()));
 
         let raw = RawInput {
@@ -2498,12 +2513,9 @@ mod tests {
             ..Default::default()
         };
         let show_ui = |ctx: &Context| {
-            egui::Window::new("Report")
-                .id(win_id)
-                .default_pos([10.0, 10.0])
-                .show(ctx, |ui| {
-                    ui.label("CONTENT");
-                });
+            egui::Window::new("Report").id(win_id).default_pos([10.0, 10.0]).show(ctx, |ui| {
+                ui.label("CONTENT");
+            });
         };
         for _ in 0..2 {
             let _ = ctx.run(raw.clone(), |ctx| show_ui(ctx));
@@ -2634,8 +2646,7 @@ mod tests {
         // plugin logs the failure rather than writing an empty file.
         let ctx = Context::default();
         let resolver = FontResolver::default();
-        let textures: TexturePixelCacheHandle =
-            Arc::new(Mutex::new(TexturePixelCache::default()));
+        let textures: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
         let links: LinkZonesHandle = Arc::new(Mutex::new(Vec::new()));
         let raw = egui::RawInput::default();
 

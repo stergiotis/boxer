@@ -87,4 +87,3 @@ pub const WARNING_DEFAULT: Color32 = Color32::from_rgb(230, 181, 93);
 
 /// `semantic.warning.strong` (OKLCh L=0.900 C=0.130 h=80.0 post-clip C=0.130)
 pub const WARNING_STRONG: Color32 = Color32::from_rgb(255, 212, 116);
-

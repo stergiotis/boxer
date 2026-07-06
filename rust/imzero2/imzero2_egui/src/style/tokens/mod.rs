@@ -17,9 +17,11 @@ pub mod stroke;
 pub mod typography;
 pub mod visuals;
 
-pub use branding::{body_mono_family, mode_from_env, ScreenshotMode};
+pub use branding::{ScreenshotMode, body_mono_family, mode_from_env};
 pub use typography::{apply_fonts, install_fonts};
-pub use visuals::{apply_visuals, diverging, qualitative_cycle, sequential, DivergingE, SequentialE};
+pub use visuals::{
+    DivergingE, SequentialE, apply_visuals, diverging, qualitative_cycle, sequential,
+};
 
 pub use density::Density;
 
@@ -89,9 +91,7 @@ pub fn apply_rounding(visuals: &mut Visuals) {
 /// All sizes are scaled by the active density per ADR-0030 §SD3:
 /// Tight subtracts 1 pt (floored at 9), Roomy adds 1 pt.
 pub fn apply_typography(style: &mut Style, density: Density) {
-    use typography::{
-        scaled, BODY_PT, CAPTION_PT, DISPLAY_PT, HEADING_PT, MICRO_PT,
-    };
+    use typography::{BODY_PT, CAPTION_PT, DISPLAY_PT, HEADING_PT, MICRO_PT, scaled};
 
     let proportional = FontFamily::Proportional;
     let monospace = FontFamily::Monospace;

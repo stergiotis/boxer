@@ -16,7 +16,10 @@ fn apply_tweak(data: &mut egui::FontData, tweak: &FontTweakConfig) {
     data.tweak.y_offset = tweak.y_offset;
 }
 
-pub fn load_custom_fonts(ctx: &egui::Context, config: &AppConfig) -> imzero2::svgexport::FontResolver {
+pub fn load_custom_fonts(
+    ctx: &egui::Context,
+    config: &AppConfig,
+) -> imzero2::svgexport::FontResolver {
     let mut fonts = egui::FontDefinitions::default();
     let mut resolver = imzero2::svgexport::FontResolver::new();
 
@@ -29,7 +32,11 @@ pub fn load_custom_fonts(ctx: &egui::Context, config: &AppConfig) -> imzero2::sv
     let mut phosphor_bytes: Option<(Vec<u8>, u32)> = None;
     let mut fallback_bytes: Option<(Vec<u8>, u32)> = None;
 
-    let mut load_font = |path: &str, name: &str, tweak: &FontTweakConfig, capture: Option<&mut Option<(Vec<u8>, u32)>>| -> bool {
+    let mut load_font = |path: &str,
+                         name: &str,
+                         tweak: &FontTweakConfig,
+                         capture: Option<&mut Option<(Vec<u8>, u32)>>|
+     -> bool {
         if path.is_empty() {
             return false;
         }
@@ -41,7 +48,14 @@ pub fn load_custom_fonts(ctx: &egui::Context, config: &AppConfig) -> imzero2::sv
                 let mut font_data = egui::FontData::from_owned(data);
                 apply_tweak(&mut font_data, tweak);
                 fonts.font_data.insert(name.to_owned(), font_data.into());
-                tracing::info!(path, name, scale=tweak.scale, y_offset=tweak.y_offset, y_offset_factor=tweak.y_offset_factor, "loaded font");
+                tracing::info!(
+                    path,
+                    name,
+                    scale = tweak.scale,
+                    y_offset = tweak.y_offset,
+                    y_offset_factor = tweak.y_offset_factor,
+                    "loaded font"
+                );
                 true
             }
             Err(e) => {
@@ -60,10 +74,30 @@ pub fn load_custom_fonts(ctx: &egui::Context, config: &AppConfig) -> imzero2::sv
     // the monospace primary too — preserves the pre-split default UX
     // where a single MAIN_FONT served every text style. Pass
     // --monoFontTTF (or MONO_FONT in hmi.sh) to override.
-    let has_main = load_font(&config.main_font_ttf, "main", &config.main_font_tweak, Some(&mut main_bytes));
-    let has_mono = load_font(&config.mono_font_ttf, "mono", &config.mono_font_tweak, Some(&mut mono_bytes));
-    let has_phosphor = load_font(&config.phosphor_font_ttf, "phosphor", &config.phosphor_font_tweak, Some(&mut phosphor_bytes));
-    let has_fallback = load_font(&config.fallback_font_ttf, "fallback", &config.fallback_font_tweak, Some(&mut fallback_bytes));
+    let has_main = load_font(
+        &config.main_font_ttf,
+        "main",
+        &config.main_font_tweak,
+        Some(&mut main_bytes),
+    );
+    let has_mono = load_font(
+        &config.mono_font_ttf,
+        "mono",
+        &config.mono_font_tweak,
+        Some(&mut mono_bytes),
+    );
+    let has_phosphor = load_font(
+        &config.phosphor_font_ttf,
+        "phosphor",
+        &config.phosphor_font_tweak,
+        Some(&mut phosphor_bytes),
+    );
+    let has_fallback = load_font(
+        &config.fallback_font_ttf,
+        "fallback",
+        &config.fallback_font_tweak,
+        Some(&mut fallback_bytes),
+    );
 
     if !has_main && !has_mono && !has_phosphor && !has_fallback {
         return resolver; // no custom fonts, keep egui defaults; empty resolver
@@ -105,23 +139,22 @@ pub fn load_custom_fonts(ctx: &egui::Context, config: &AppConfig) -> imzero2::sv
     let phosphor_arc = phosphor_bytes.take().map(|(b, i)| (std::sync::Arc::new(b), i));
     let fallback_arc = fallback_bytes.take().map(|(b, i)| (std::sync::Arc::new(b), i));
     let main_arc = main_bytes.take().map(|(b, i)| (std::sync::Arc::new(b), i));
-    let mono_arc = mono_bytes
-        .take()
-        .map(|(b, i)| (std::sync::Arc::new(b), i))
-        .or_else(|| main_arc.clone());
-    let build_svg = |primary: Option<(std::sync::Arc<Vec<u8>>, u32)>| -> Vec<(std::sync::Arc<Vec<u8>>, u32)> {
-        let mut out = Vec::new();
-        if let Some(pair) = primary {
-            out.push(pair);
-        }
-        if let Some(pair) = phosphor_arc.clone() {
-            out.push(pair);
-        }
-        if let Some(pair) = fallback_arc.clone() {
-            out.push(pair);
-        }
-        out
-    };
+    let mono_arc =
+        mono_bytes.take().map(|(b, i)| (std::sync::Arc::new(b), i)).or_else(|| main_arc.clone());
+    let build_svg =
+        |primary: Option<(std::sync::Arc<Vec<u8>>, u32)>| -> Vec<(std::sync::Arc<Vec<u8>>, u32)> {
+            let mut out = Vec::new();
+            if let Some(pair) = primary {
+                out.push(pair);
+            }
+            if let Some(pair) = phosphor_arc.clone() {
+                out.push(pair);
+            }
+            if let Some(pair) = fallback_arc.clone() {
+                out.push(pair);
+            }
+            out
+        };
     let prop_chain = build_svg(main_arc);
     if !prop_chain.is_empty() {
         resolver.register_chain(egui::FontFamily::Proportional, prop_chain);
@@ -166,9 +199,8 @@ pub fn init_common<'a, R: std::io::BufRead, W: std::io::Write>(
     // overlay — used for ADR-0030 §SD10 Aile hinting evaluation.
     // Default keeps the carousel's env-configured fonts.
     let density = imzero2_egui::style::tokens::density::from_env();
-    let use_ids_fonts = std::env::var("IMZERO2_IDS_FONTS")
-        .map(|v| v.eq_ignore_ascii_case("on"))
-        .unwrap_or(false);
+    let use_ids_fonts =
+        std::env::var("IMZERO2_IDS_FONTS").map(|v| v.eq_ignore_ascii_case("on")).unwrap_or(false);
     if use_ids_fonts {
         imzero2_egui::style::apply(ctx, density);
         tracing::info!(?density, "applied IDS style overlay + IDS fonts");
@@ -181,9 +213,7 @@ pub fn init_common<'a, R: std::io::BufRead, W: std::io::Write>(
     // racy compositor focus delivery and cursor warping can't paint
     // an accent stroke into the first few captures. See the function
     // doc on apply_tour_neutral_overrides for the underlying race.
-    let in_tour = std::env::var("IMZERO2_SCREENSHOT_DIR")
-        .map(|v| !v.is_empty())
-        .unwrap_or(false);
+    let in_tour = std::env::var("IMZERO2_SCREENSHOT_DIR").map(|v| !v.is_empty()).unwrap_or(false);
     if in_tour {
         imzero2_egui::style::apply_tour_neutral_overrides(ctx);
         tracing::info!("applied tour-neutral hover/active stroke override");

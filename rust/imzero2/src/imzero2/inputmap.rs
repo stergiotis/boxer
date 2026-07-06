@@ -158,29 +158,60 @@ mod tests {
     /// divide) must not reach egui, where they corrupt hit-testing.
     #[test]
     fn nonfinite_pointer_move_dropped() {
-        assert!(run(E::MouseMove(pb::MouseMove { x: f32::NAN, y: 0.0 })).is_empty());
-        assert!(run(E::MouseMove(pb::MouseMove { x: 0.0, y: f32::INFINITY })).is_empty());
+        assert!(
+            run(E::MouseMove(pb::MouseMove {
+                x: f32::NAN,
+                y: 0.0
+            }))
+            .is_empty()
+        );
+        assert!(
+            run(E::MouseMove(pb::MouseMove {
+                x: 0.0,
+                y: f32::INFINITY
+            }))
+            .is_empty()
+        );
     }
 
     #[test]
     fn finite_wheel_passes() {
-        let ev = E::MouseWheel(pb::MouseWheel { dx: -3.0, dy: 5.0, unit: 0, modifiers: 0 });
-        assert!(matches!(run(ev).as_slice(), [egui::Event::MouseWheel { .. }]));
+        let ev = E::MouseWheel(pb::MouseWheel {
+            dx: -3.0,
+            dy: 5.0,
+            unit: 0,
+            modifiers: 0,
+        });
+        assert!(matches!(
+            run(ev).as_slice(),
+            [egui::Event::MouseWheel { .. }]
+        ));
     }
 
     /// L1: a non-finite scroll delta would persist as a NaN scroll offset and
     /// wedge the affected scroll area — drop it.
     #[test]
     fn nonfinite_wheel_dropped() {
-        let ev = E::MouseWheel(pb::MouseWheel { dx: 1.0, dy: f32::INFINITY, unit: 0, modifiers: 0 });
+        let ev = E::MouseWheel(pb::MouseWheel {
+            dx: 1.0,
+            dy: f32::INFINITY,
+            unit: 0,
+            modifiers: 0,
+        });
         assert!(run(ev).is_empty());
     }
 
     #[test]
     fn finite_button_passes() {
         assert!(matches!(
-            run(E::MouseButton(pb::MouseButton { x: 1.0, y: 2.0, button: 0, pressed: true, modifiers: 0 }))
-                .as_slice(),
+            run(E::MouseButton(pb::MouseButton {
+                x: 1.0,
+                y: 2.0,
+                button: 0,
+                pressed: true,
+                modifiers: 0
+            }))
+            .as_slice(),
             [egui::Event::PointerButton { .. }]
         ));
     }
@@ -192,11 +223,20 @@ mod tests {
         let mut t = InputTranslator::default();
         let mut out = Vec::new();
         t.translate(
-            E::MouseButton(pb::MouseButton { x: f32::NAN, y: 0.0, button: 0, pressed: true, modifiers: 4 }),
+            E::MouseButton(pb::MouseButton {
+                x: f32::NAN,
+                y: 0.0,
+                button: 0,
+                pressed: true,
+                modifiers: 4,
+            }),
             &mut out,
         );
         assert!(out.is_empty(), "non-finite button position is dropped");
-        assert!(t.modifiers.shift, "modifier state (bit 4 = shift) is still tracked");
+        assert!(
+            t.modifiers.shift,
+            "modifier state (bit 4 = shift) is still tracked"
+        );
     }
 
     /// The existing PinchZoom guard stays in force (regression anchor).

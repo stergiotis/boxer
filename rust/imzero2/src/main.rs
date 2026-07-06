@@ -13,14 +13,14 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc; // Much faster allocator
 
 fn setup_tracing() {
     let subscriber = tracing_subscriber::fmt()
-    .with_writer(std::io::stderr)
-    .with_max_level(tracing::Level::DEBUG)
-    .with_file(true)
-    .with_line_number(true)
-    .with_thread_ids(false)
-    .with_target(false)
-    .compact()
-    .finish();
+        .with_writer(std::io::stderr)
+        .with_max_level(tracing::Level::DEBUG)
+        .with_file(true)
+        .with_line_number(true)
+        .with_thread_ids(false)
+        .with_target(false)
+        .compact()
+        .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting tracing default failed");
 }
 
@@ -30,7 +30,9 @@ fn start_puffin_server() {
 
     match puffin_http::Server::new("127.0.0.1:8585") {
         Ok(puffin_server) => {
-            tracing::info!("run: cargo install puffin_viewer && puffin_viewer --url 127.0.0.1:8585");
+            tracing::info!(
+                "run: cargo install puffin_viewer && puffin_viewer --url 127.0.0.1:8585"
+            );
             //std::process::Command::new("puffin_viewer")
             //    .arg("--url")
             //    .arg("127.0.0.1:8585")
@@ -100,7 +102,7 @@ fn usage(w: &mut impl std::io::Write, bin_name: &str, regular: bool) -> std::io:
     }
 }
 
-fn main() -> Result<(),Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "dhat-heap")]
     let _profiler = dhat::Profiler::new_heap();
 
@@ -123,7 +125,7 @@ fn main() -> Result<(),Box<dyn std::error::Error>> {
         usage(&mut std::io::stderr(), bin_name, false)?;
     }
     let command = args[1].as_str();
-    let rest_args : &[String] = &args[2..];
+    let rest_args: &[String] = &args[2..];
     let mut used = roaring::RoaringBitmap::new();
     if command == "-help" {
         usage(&mut std::io::stderr(), bin_name, true)?;
@@ -132,34 +134,55 @@ fn main() -> Result<(),Box<dyn std::error::Error>> {
     let r = match command {
         "imzero2" => {
             let mut cfg = imzero2::appconfig::AppConfig::default();
-            if imzero2::cli::flags::find_flag_value_default_bool(rest_args.iter(), &mut used, "-help", false) {
+            if imzero2::cli::flags::find_flag_value_default_bool(
+                rest_args.iter(),
+                &mut used,
+                "-help",
+                false,
+            ) {
                 cfg.usage(&mut std::io::stderr()).expect("unable to display usage");
             } else {
                 cfg.parse(&mut used, &rest_args);
             }
-            flags::validate_all_args_used(rest_args, rest_args.len() as u32,&used);
+            flags::validate_all_args_used(rest_args, rest_args.len() as u32, &used);
             run_imzero2(cfg)
-        },
+        }
         "ipc" => {
-            let shm_path = flags::find_flag_default(rest_args.iter(), &mut used, "-shm-path","".to_string());
-            let data_size = flags::find_flag_value_default_parsable(rest_args.iter(), &mut used, "-data-size",0usize);
-            let mode = flags::find_flag_default(rest_args.iter(), &mut used, "-mode","consumer".to_string());
-            flags::validate_all_args_used(rest_args, rest_args.len() as u32,&used);
-            tracing::info!(shm_path=shm_path,data_size=data_size,mode=mode,"running ipc test harness");
+            let shm_path =
+                flags::find_flag_default(rest_args.iter(), &mut used, "-shm-path", "".to_string());
+            let data_size = flags::find_flag_value_default_parsable(
+                rest_args.iter(),
+                &mut used,
+                "-data-size",
+                0usize,
+            );
+            let mode = flags::find_flag_default(
+                rest_args.iter(),
+                &mut used,
+                "-mode",
+                "consumer".to_string(),
+            );
+            flags::validate_all_args_used(rest_args, rest_args.len() as u32, &used);
+            tracing::info!(
+                shm_path = shm_path,
+                data_size = data_size,
+                mode = mode,
+                "running ipc test harness"
+            );
             match mode.as_str() {
                 "consumer" => {
                     imzero2::run_ipc06_testharness_consumer(shm_path.as_str(), data_size);
-                },
+                }
                 "producer" => {
                     imzero2::run_ipc06_testharness_producer(shm_path.as_str(), data_size);
                 }
                 _ => {
-                    tracing::error!(mode=mode,"unknown test harness mode");
+                    tracing::error!(mode = mode, "unknown test harness mode");
                     panic!("unknown test harness mode");
                 }
             }
             Ok(())
-        },
+        }
         _ => {
             usage(&mut std::io::stderr(), bin_name, false)?;
             Ok(())

@@ -152,7 +152,11 @@ impl CodecLane {
     /// raw `ENCODER_ARGS` override without one keeps ffmpeg's default GOP and so
     /// opts out of the toggle).
     pub fn with_gop(&self, periodic: bool) -> Self {
-        let gop = if periodic { PERIODIC_IDR_GOP } else { INFINITE_GOP };
+        let gop = if periodic {
+            PERIODIC_IDR_GOP
+        } else {
+            INFINITE_GOP
+        };
         let mut lane = self.clone();
         if let Some(i) = lane.encoder_args.iter().position(|a| a == "-g") {
             if let Some(v) = lane.encoder_args.get_mut(i + 1) {
@@ -174,23 +178,56 @@ impl CodecLane {
         // Forcing 4:2:0 also matches the chroma the browser path assumes.
         let args: &[&str] = match codec {
             VideoCodec::H264 => &[
-                "-c:v", "libopenh264", "-rc_mode", "off", "-bf", "0", "-g", PERIODIC_IDR_GOP,
-                "-pix_fmt", "yuv420p",
+                "-c:v",
+                "libopenh264",
+                "-rc_mode",
+                "off",
+                "-bf",
+                "0",
+                "-g",
+                PERIODIC_IDR_GOP,
+                "-pix_fmt",
+                "yuv420p",
             ],
             VideoCodec::Vp9 => &[
-                "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-b:v", "6M",
-                "-g", PERIODIC_IDR_GOP, "-pix_fmt", "yuv420p",
+                "-c:v",
+                "libvpx-vp9",
+                "-deadline",
+                "realtime",
+                "-cpu-used",
+                "8",
+                "-b:v",
+                "6M",
+                "-g",
+                PERIODIC_IDR_GOP,
+                "-pix_fmt",
+                "yuv420p",
             ],
             VideoCodec::Av1 => &[
-                "-c:v", "libsvtav1", "-preset", "8", "-g", PERIODIC_IDR_GOP, "-pix_fmt", "yuv420p",
+                "-c:v",
+                "libsvtav1",
+                "-preset",
+                "8",
+                "-g",
+                PERIODIC_IDR_GOP,
+                "-pix_fmt",
+                "yuv420p",
             ],
             // 4:4:4 lane: libsvtav1 is 4:2:0-only, so libaom-av1 (which does
             // yuv444p). Realtime usage + cpu-used 8 keeps it interactive
             // (verified ~6x realtime at 256²). `-pix_fmt yuv444p` is the whole
             // point — full chroma for chart/text linework.
             VideoCodec::Av1Hi444 => &[
-                "-c:v", "libaom-av1", "-usage", "realtime", "-cpu-used", "8",
-                "-g", PERIODIC_IDR_GOP, "-pix_fmt", "yuv444p",
+                "-c:v",
+                "libaom-av1",
+                "-usage",
+                "realtime",
+                "-cpu-used",
+                "8",
+                "-g",
+                PERIODIC_IDR_GOP,
+                "-pix_fmt",
+                "yuv444p",
             ],
         };
         Self {
@@ -335,16 +372,21 @@ fn classify_probe_stderr(stderr: &str) -> LaneProbe {
 /// so an unavailable codec is never offered, the encode backend (HW vs SW) is
 /// reported truthfully, and a disabled lane carries why it failed.
 pub fn probe_host_encode() -> Vec<(VideoCodec, LaneProbe, LaneProbe)> {
-    [VideoCodec::H264, VideoCodec::Vp9, VideoCodec::Av1, VideoCodec::Av1Hi444]
-        .into_iter()
-        .map(|c| {
-            (
-                c,
-                probe_lane(&CodecLane::software(c)),
-                probe_lane(&CodecLane::hardware(c)),
-            )
-        })
-        .collect()
+    [
+        VideoCodec::H264,
+        VideoCodec::Vp9,
+        VideoCodec::Av1,
+        VideoCodec::Av1Hi444,
+    ]
+    .into_iter()
+    .map(|c| {
+        (
+            c,
+            probe_lane(&CodecLane::software(c)),
+            probe_lane(&CodecLane::hardware(c)),
+        )
+    })
+    .collect()
 }
 
 /// Probe whether a specific lane actually encodes on this host (SD5): a 2-frame
@@ -361,8 +403,15 @@ pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
     // that encodes fine at real stream sizes. 256×256 clears the floor for both
     // H.264 (128–4096) and AV1 (128–8192 × 128–4352).
     cmd.args([
-        "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-        "color=c=black:s=256x256:r=30", "-frames:v", "2",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=black:s=256x256:r=30",
+        "-frames:v",
+        "2",
     ])
     .args(&lane.encoder_args);
     if let Some(bsf) = lane.bsf {
@@ -445,7 +494,10 @@ mod tests {
 
     #[test]
     fn unrecognised_failure_is_other() {
-        assert_eq!(classify_probe_stderr("some unrelated error\n"), LaneProbe::Other);
+        assert_eq!(
+            classify_probe_stderr("some unrelated error\n"),
+            LaneProbe::Other
+        );
     }
 
     #[test]
@@ -465,7 +517,10 @@ mod tests {
         let vp9 = CodecLane::software(VideoCodec::Vp9);
         let av1 = CodecLane::software(VideoCodec::Av1);
         // H.264 self-describes via its in-band SPS — the host names nothing.
-        assert_eq!(CodecLane::software(VideoCodec::H264).webcodecs_codec_string(3840, 2160), "");
+        assert_eq!(
+            CodecLane::software(VideoCodec::H264).webcodecs_codec_string(3840, 2160),
+            ""
+        );
         // Default 1280×800: minimal sufficient level.
         assert_eq!(vp9.webcodecs_codec_string(1280, 800), "vp09.00.40.08");
         assert_eq!(av1.webcodecs_codec_string(1280, 800), "av01.0.05M.08");

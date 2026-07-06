@@ -26,9 +26,7 @@ static RUN_ID: OnceLock<Option<String>> = OnceLock::new();
 /// Returns the inherited run_id, or None when `PEBBLE2_RUN_ID` is
 /// unset. Cached on first read; subsequent calls are lock-free.
 pub fn run_id() -> Option<&'static str> {
-    RUN_ID
-        .get_or_init(|| std::env::var(ENV_VAR).ok().filter(|s| !s.is_empty()))
-        .as_deref()
+    RUN_ID.get_or_init(|| std::env::var(ENV_VAR).ok().filter(|s| !s.is_empty())).as_deref()
 }
 
 /// Convenience accessor returning [`STANDALONE`] when no parent run
@@ -64,10 +62,7 @@ pub fn log_bound_run() {
             env_var = ENV_VAR,
             "runinfo: bound to parent run"
         ),
-        None => tracing::info!(
-            env_var = ENV_VAR,
-            "runinfo: standalone (no parent run_id)"
-        ),
+        None => tracing::info!(env_var = ENV_VAR, "runinfo: standalone (no parent run_id)"),
     }
 }
 

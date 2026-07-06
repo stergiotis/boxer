@@ -26,7 +26,11 @@ pub struct PngDumpSink {
 impl PngDumpSink {
     pub fn new(dir: std::path::PathBuf, every: u64) -> std::io::Result<Self> {
         std::fs::create_dir_all(&dir)?;
-        Ok(Self { dir, every, rgba: Vec::new() })
+        Ok(Self {
+            dir,
+            every,
+            rgba: Vec::new(),
+        })
     }
 }
 
@@ -44,13 +48,22 @@ impl FrameSink for PngDumpSink {
         }
         let path = self.dir.join(format!("frame_{frame_idx:06}.png"));
         match write_png(&path, &self.rgba, width, height) {
-            Ok(()) => tracing::info!(path=%path.display(), width, height, frame_idx, "headless frame dumped"),
-            Err(e) => tracing::error!(path=%path.display(), error=%e, "failed to dump headless frame"),
+            Ok(()) => {
+                tracing::info!(path=%path.display(), width, height, frame_idx, "headless frame dumped")
+            }
+            Err(e) => {
+                tracing::error!(path=%path.display(), error=%e, "failed to dump headless frame")
+            }
         }
     }
 }
 
-pub fn write_png(path: &std::path::Path, rgba: &[u8], width: u32, height: u32) -> std::io::Result<()> {
+pub fn write_png(
+    path: &std::path::Path,
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+) -> std::io::Result<()> {
     let file = std::fs::File::create(path)?;
     let w = std::io::BufWriter::new(file);
     let mut encoder = png::Encoder::new(w, width, height);

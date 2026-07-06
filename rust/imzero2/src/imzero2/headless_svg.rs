@@ -46,7 +46,11 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), Box<dyn std::error::Error>
     let height = config.initial_main_window_height.max(64.0);
     let screen_rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));
 
-    tracing::info!(width, height, "headless_svg host up (GPU-less SVG-only render loop)");
+    tracing::info!(
+        width,
+        height,
+        "headless_svg host up (GPU-less SVG-only render loop)"
+    );
 
     let ctx = egui::Context::default();
     // Shared, host-independent setup: fonts, IDS style overlay, single-pass

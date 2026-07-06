@@ -18,9 +18,9 @@
 // semantics are preserved via the Go-side helpers PackDateTimeUtc /
 // UnpackDateTimeUtc.
 
+use jiff::Timestamp;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
-use jiff::Timestamp;
 
 use super::interpreter::ImZeroFffi;
 
@@ -101,21 +101,9 @@ impl<'a> egui::Widget for DateTimePickerWidget<'a> {
                 dpb = dpb.arrows(b);
             }
             let r_d = ui.add(dpb);
-            let r_h = ui.add(
-                egui::DragValue::new(self.hour)
-                    .range(0u8..=23u8)
-                    .suffix("h"),
-            );
-            let r_m = ui.add(
-                egui::DragValue::new(self.minute)
-                    .range(0u8..=59u8)
-                    .suffix("m"),
-            );
-            let r_s = ui.add(
-                egui::DragValue::new(self.second)
-                    .range(0u8..=59u8)
-                    .suffix("s"),
-            );
+            let r_h = ui.add(egui::DragValue::new(self.hour).range(0u8..=23u8).suffix("h"));
+            let r_m = ui.add(egui::DragValue::new(self.minute).range(0u8..=59u8).suffix("m"));
+            let r_s = ui.add(egui::DragValue::new(self.second).range(0u8..=59u8).suffix("s"));
             r_d | r_h | r_m | r_s
         })
         .inner

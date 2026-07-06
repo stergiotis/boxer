@@ -334,11 +334,19 @@ impl FrameSink for EncoderSink {
         let died = self.mailbox.dead.load(Ordering::Acquire);
         if geometry_changed || died {
             if geometry_changed {
-                tracing::info!(from_w = self.width, from_h = self.height, to_w = width, to_h = height,
-                    "frame geometry changed — restarting encoder");
+                tracing::info!(
+                    from_w = self.width,
+                    from_h = self.height,
+                    to_w = width,
+                    to_h = height,
+                    "frame geometry changed — restarting encoder"
+                );
             } else {
                 self.restarts += 1;
-                tracing::error!(restarts = self.restarts, "ffmpeg encoder feeder died — restarting encoder");
+                tracing::error!(
+                    restarts = self.restarts,
+                    "ffmpeg encoder feeder died — restarting encoder"
+                );
             }
             self.reap();
             self.width = width;
@@ -485,7 +493,10 @@ fn drain_to_channel_nut(
                     match cancellable_send(tx, framed, stop) {
                         SendOutcome::Sent => {}
                         SendOutcome::Closed => {
-                            tracing::info!(frames = frame_index, "viewer channel closed — stopping nut drain");
+                            tracing::info!(
+                                frames = frame_index,
+                                "viewer channel closed — stopping nut drain"
+                            );
                             // Keep consuming so ffmpeg can exit cleanly once
                             // our stdin side closes.
                             let _ = std::io::copy(&mut so, &mut std::io::sink());
@@ -496,7 +507,10 @@ fn drain_to_channel_nut(
                             // codec switch / disconnect) and kills the child,
                             // so just stop — abandoning the in-flight frame is
                             // intended (the old stream's tail is discarded).
-                            tracing::debug!(frames = frame_index, "nut drain cancelled under backpressure — encoder teardown");
+                            tracing::debug!(
+                                frames = frame_index,
+                                "nut drain cancelled under backpressure — encoder teardown"
+                            );
                             return;
                         }
                     }
@@ -510,7 +524,11 @@ fn drain_to_channel_nut(
             }
         }
     }
-    tracing::info!(frames = frame_index, bytes = sent_bytes, "nut drain finished (encoder eof)");
+    tracing::info!(
+        frames = frame_index,
+        bytes = sent_bytes,
+        "nut drain finished (encoder eof)"
+    );
 }
 
 #[cfg(test)]
@@ -532,13 +550,19 @@ mod tests {
 
         // It should be parked (channel full, stop not yet set).
         std::thread::sleep(std::time::Duration::from_millis(20));
-        assert!(!h.is_finished(), "send must still be parked on the full channel");
+        assert!(
+            !h.is_finished(),
+            "send must still be parked on the full channel"
+        );
 
         // Once reap signals teardown it must return promptly.
         stop.store(true, Ordering::Release);
         let start = std::time::Instant::now();
         let outcome = h.join().expect("join send thread");
-        assert!(matches!(outcome, SendOutcome::Cancelled), "must report Cancelled");
+        assert!(
+            matches!(outcome, SendOutcome::Cancelled),
+            "must report Cancelled"
+        );
         assert!(
             start.elapsed() < std::time::Duration::from_secs(1),
             "cancel must be prompt, not wedged"

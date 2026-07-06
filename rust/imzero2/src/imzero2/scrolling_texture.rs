@@ -52,7 +52,10 @@ pub struct ScrollingTextureResponse {
 
 impl ScrollingTextureResponse {
     const fn none() -> Self {
-        Self { hover_rc: HOVER_RC_NONE, clicked: false }
+        Self {
+            hover_rc: HOVER_RC_NONE,
+            clicked: false,
+        }
     }
 }
 
@@ -147,10 +150,7 @@ impl ScrollingTextureCache {
     pub fn release(&mut self, id: u64) {
         if let Some(entry) = self.entries.remove(&id) {
             if let Some(cache) = &self.texture_cache {
-                cache
-                    .lock()
-                    .expect("texture cache poisoned")
-                    .remove(entry.tex.id());
+                cache.lock().expect("texture cache poisoned").remove(entry.tex.id());
             }
         }
     }
@@ -182,16 +182,13 @@ impl ScrollingTextureCache {
             // so a tour that captures the very first frame doesn't lose
             // the texture entry.
             if let Some(cache) = &self.texture_cache {
-                cache
-                    .lock()
-                    .expect("texture cache poisoned")
-                    .insert(
-                        tex.id(),
-                        width_slots,
-                        height_slots,
-                        rgba.clone(),
-                        nearest,
-                    );
+                cache.lock().expect("texture cache poisoned").insert(
+                    tex.id(),
+                    width_slots,
+                    height_slots,
+                    rgba.clone(),
+                    nearest,
+                );
             }
             self.entries.insert(
                 id,
@@ -252,10 +249,7 @@ impl ScrollingTextureCache {
         }
 
         self.ensure_entry(ctx, id, width_slots, height_slots, filter_opts);
-        let entry = self
-            .entries
-            .get_mut(&id)
-            .expect("entry just ensured above");
+        let entry = self.entries.get_mut(&id).expect("entry just ensured above");
         entry.last_touched_frame = self.frame;
 
         if payload_valid && new_count > 0 {
@@ -264,10 +258,8 @@ impl ScrollingTextureCache {
             for i in 0..(new_count as usize) {
                 let col_x = ((head as usize) + i) % w;
                 let base = i * h;
-                let col_pixels: Vec<Color32> = new_columns[base..base + h]
-                    .iter()
-                    .map(|v| color32_from_rgba_u32(*v))
-                    .collect();
+                let col_pixels: Vec<Color32> =
+                    new_columns[base..base + h].iter().map(|v| color32_from_rgba_u32(*v)).collect();
                 let img = ColorImage::new([1, h], col_pixels);
                 entry.tex.set_partial([col_x, 0], img, filter_opts);
 
@@ -287,18 +279,14 @@ impl ScrollingTextureCache {
                 }
             }
             if let Some(cache) = &self.texture_cache {
-                let nearest =
-                    filter_opts.magnification == egui::TextureFilter::Nearest;
-                cache
-                    .lock()
-                    .expect("texture cache poisoned")
-                    .insert(
-                        entry.tex.id(),
-                        entry.width_slots,
-                        entry.height_slots,
-                        entry.rgba.clone(),
-                        nearest,
-                    );
+                let nearest = filter_opts.magnification == egui::TextureFilter::Nearest;
+                cache.lock().expect("texture cache poisoned").insert(
+                    entry.tex.id(),
+                    entry.width_slots,
+                    entry.height_slots,
+                    entry.rgba.clone(),
+                    nearest,
+                );
             }
         }
 
@@ -317,8 +305,16 @@ impl ScrollingTextureCache {
         // the rect (and the texture sample) along that axis. Hover
         // coordinates are converted back to slot units below so the
         // returned (row, col) still names ring positions, not pixels.
-        let disp_w = if display_width_px > 0.0 { display_width_px } else { base_w };
-        let disp_h = if display_height_px > 0.0 { display_height_px } else { base_h };
+        let disp_w = if display_width_px > 0.0 {
+            display_width_px
+        } else {
+            base_w
+        };
+        let disp_h = if display_height_px > 0.0 {
+            display_height_px
+        } else {
+            base_h
+        };
         let screen_size = vec2(disp_w, disp_h);
         let sense = Sense::hover().union(Sense::click());
         let (rect, resp) = ui.allocate_exact_size(screen_size, sense);
@@ -362,7 +358,12 @@ impl ScrollingTextureCache {
                     draw_textured_quad(
                         &painter,
                         tex_id,
-                        [r1.left_top(), r1.right_top(), r1.right_bottom(), r1.left_bottom()],
+                        [
+                            r1.left_top(),
+                            r1.right_top(),
+                            r1.right_bottom(),
+                            r1.left_bottom(),
+                        ],
                         [
                             pos2(split, 0.0),
                             pos2(0.0, 0.0),
@@ -383,7 +384,12 @@ impl ScrollingTextureCache {
                     draw_textured_quad(
                         &painter,
                         tex_id,
-                        [r2.left_top(), r2.right_top(), r2.right_bottom(), r2.left_bottom()],
+                        [
+                            r2.left_top(),
+                            r2.right_top(),
+                            r2.right_bottom(),
+                            r2.left_bottom(),
+                        ],
                         [
                             pos2(1.0, 0.0),
                             pos2(split, 0.0),
@@ -406,7 +412,12 @@ impl ScrollingTextureCache {
                     draw_textured_quad(
                         &painter,
                         tex_id,
-                        [r1.left_top(), r1.right_top(), r1.right_bottom(), r1.left_bottom()],
+                        [
+                            r1.left_top(),
+                            r1.right_top(),
+                            r1.right_bottom(),
+                            r1.left_bottom(),
+                        ],
                         [
                             pos2(split, 0.0),
                             pos2(split, 1.0),
@@ -427,7 +438,12 @@ impl ScrollingTextureCache {
                     draw_textured_quad(
                         &painter,
                         tex_id,
-                        [r2.left_top(), r2.right_top(), r2.right_bottom(), r2.left_bottom()],
+                        [
+                            r2.left_top(),
+                            r2.right_top(),
+                            r2.right_bottom(),
+                            r2.left_bottom(),
+                        ],
                         [
                             pos2(0.0, 0.0),
                             pos2(0.0, 1.0),
@@ -449,7 +465,12 @@ impl ScrollingTextureCache {
                     draw_textured_quad(
                         &painter,
                         tex_id,
-                        [r1.left_top(), r1.right_top(), r1.right_bottom(), r1.left_bottom()],
+                        [
+                            r1.left_top(),
+                            r1.right_top(),
+                            r1.right_bottom(),
+                            r1.left_bottom(),
+                        ],
                         [
                             pos2(split, 0.0),
                             pos2(split, 1.0),
@@ -471,7 +492,12 @@ impl ScrollingTextureCache {
                     draw_textured_quad(
                         &painter,
                         tex_id,
-                        [r2.left_top(), r2.right_top(), r2.right_bottom(), r2.left_bottom()],
+                        [
+                            r2.left_top(),
+                            r2.right_top(),
+                            r2.right_bottom(),
+                            r2.left_bottom(),
+                        ],
                         [
                             pos2(1.0, 0.0),
                             pos2(1.0, 1.0),
@@ -510,8 +536,16 @@ impl ScrollingTextureCache {
             // for orientation rotation); rect_w/rect_h are the actual
             // rendered pixels. When display = slot count both ratios are
             // 1.0 and this collapses to the historical pixel→slot mapping.
-            let lx = if rect_w > 0.0 { lx_px * base_w / rect_w } else { lx_px };
-            let ly = if rect_h > 0.0 { ly_px * base_h / rect_h } else { ly_px };
+            let lx = if rect_w > 0.0 {
+                lx_px * base_w / rect_w
+            } else {
+                lx_px
+            };
+            let ly = if rect_h > 0.0 {
+                ly_px * base_h / rect_h
+            } else {
+                ly_px
+            };
             let (row, col) = match orientation {
                 ORIENTATION_SCROLL_LEFT => {
                     let col = ((draw_head as f32 + lx).rem_euclid(w)) as u32;

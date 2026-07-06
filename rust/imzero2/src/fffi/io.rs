@@ -1,5 +1,5 @@
+use crate::fffi::common::{FffiError, FffiResult};
 use std::io::Read;
-use crate::fffi::common::{FffiError,FffiResult};
 
 /// Dense block map: all block data in a single contiguous slab, indexed by
 /// a flat `Vec<(u32, u32)>` of (offset, length) pairs. Lookup is a single
@@ -40,7 +40,10 @@ struct ReplayReader {
 
 impl ReplayReader {
     fn new() -> Self {
-        Self { buf: Vec::new(), pos: 0 }
+        Self {
+            buf: Vec::new(),
+            pos: 0,
+        }
     }
 
     /// Copy block data into the reusable buffer and reset read position.
@@ -90,7 +93,7 @@ pub struct ImZeroFffiIo<R: std::io::BufRead, W: std::io::Write> {
     /// Restored in `end_replay()` so replay reads don't inflate pipe accounting.
     replay_saved_read_bytes_counts: Vec<usize>,
 }
-impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
+impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     pub fn new(r: R, w: W) -> Self {
         return Self {
             r,
@@ -101,7 +104,7 @@ impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
             replay_readers: Vec::new(),
             replay_depth: 0,
             replay_saved_read_bytes_counts: Vec::new(),
-        }
+        };
     }
     pub fn reset_counts(&mut self) {
         self.written_bytes_count = 0;
@@ -145,9 +148,14 @@ impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
     /// The reader is NOT deallocated — its buffer stays for reuse next frame.
     /// Restores `read_bytes_count` to its pre-replay value.
     pub fn end_replay(&mut self) {
-        assert!(self.replay_depth > 0, "end_replay without matching begin_replay");
+        assert!(
+            self.replay_depth > 0,
+            "end_replay without matching begin_replay"
+        );
         self.replay_depth -= 1;
-        self.read_bytes_count = self.replay_saved_read_bytes_counts.pop()
+        self.read_bytes_count = self
+            .replay_saved_read_bytes_counts
+            .pop()
             .expect("end_replay without matching begin_replay");
     }
 
@@ -182,42 +190,42 @@ impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
     // Write methods (unchanged)
     // =========================================================================
 
-    pub fn flush(&mut self) -> Result<(),FffiError> {
+    pub fn flush(&mut self) -> Result<(), FffiError> {
         self.flush_count += 1;
         self.w.flush()?;
         return Ok(());
     }
-    pub fn write_all(&mut self, buf: &[u8]) -> Result<(),FffiError> {
+    pub fn write_all(&mut self, buf: &[u8]) -> Result<(), FffiError> {
         self.w.write_all(buf)?;
         self.written_bytes_count += buf.len();
         return Ok(());
     }
-    pub fn write_plain_u8(&mut self,v: u8) -> Result<(),FffiError> {
+    pub fn write_plain_u8(&mut self, v: u8) -> Result<(), FffiError> {
         let buffer = [v];
         self.write_all(&buffer)?;
         return Ok(());
     }
-    pub fn write_plain_u16(&mut self,v: u16) -> Result<(),FffiError> {
+    pub fn write_plain_u16(&mut self, v: u16) -> Result<(), FffiError> {
         let buffer = v.to_le_bytes();
         self.write_all(&buffer)?;
         return Ok(());
     }
-    pub fn write_plain_u32(&mut self,v: u32) -> Result<(),FffiError> {
+    pub fn write_plain_u32(&mut self, v: u32) -> Result<(), FffiError> {
         let buffer = v.to_le_bytes();
         self.write_all(&buffer)?;
         return Ok(());
     }
-    pub fn write_plain_u64(&mut self,v: u64) -> Result<(),FffiError> {
+    pub fn write_plain_u64(&mut self, v: u64) -> Result<(), FffiError> {
         let buffer = v.to_le_bytes();
         self.write_all(&buffer)?;
         return Ok(());
     }
-    pub fn write_plain_i64(&mut self,v: i64) -> Result<(),FffiError> {
+    pub fn write_plain_i64(&mut self, v: i64) -> Result<(), FffiError> {
         let buffer = v.to_le_bytes();
         self.write_all(&buffer)?;
         return Ok(());
     }
-    pub fn write_plain_s(&mut self,v: String) -> Result<(),FffiError> {
+    pub fn write_plain_s(&mut self, v: String) -> Result<(), FffiError> {
         let l = v.len();
         self.write_plain_u32(l as u32)?;
         if l > 0 {
@@ -225,55 +233,79 @@ impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
         }
         return Ok(());
     }
-    pub fn write_plain_u32h(&mut self,len: usize,it: impl IntoIterator<Item=u32>) -> Result<(),FffiError> {
+    pub fn write_plain_u32h(
+        &mut self,
+        len: usize,
+        it: impl IntoIterator<Item = u32>,
+    ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
         for e in it.into_iter() {
             self.write_plain_u32(e)?;
         }
         return Ok(());
     }
-    pub fn write_plain_u64h(&mut self,len: usize, it: impl IntoIterator<Item=u64>) -> Result<(),FffiError> {
+    pub fn write_plain_u64h(
+        &mut self,
+        len: usize,
+        it: impl IntoIterator<Item = u64>,
+    ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
         for e in it.into_iter() {
             self.write_plain_u64(e)?;
         }
         return Ok(());
     }
-    pub fn write_plain_f32h(&mut self,len: usize, it: impl IntoIterator<Item=f32>) -> Result<(),FffiError> {
+    pub fn write_plain_f32h(
+        &mut self,
+        len: usize,
+        it: impl IntoIterator<Item = f32>,
+    ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
         for e in it.into_iter() {
             self.write_plain_f32(e)?;
         }
         return Ok(());
     }
-    pub fn write_plain_f64h(&mut self,len: usize, it: impl IntoIterator<Item=f64>) -> Result<(),FffiError> {
+    pub fn write_plain_f64h(
+        &mut self,
+        len: usize,
+        it: impl IntoIterator<Item = f64>,
+    ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
         for e in it.into_iter() {
             self.write_plain_f64(e)?;
         }
         return Ok(());
     }
-    pub fn write_plain_i64h(&mut self,len: usize, it: impl IntoIterator<Item=i64>) -> Result<(),FffiError> {
+    pub fn write_plain_i64h(
+        &mut self,
+        len: usize,
+        it: impl IntoIterator<Item = i64>,
+    ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
         for e in it.into_iter() {
             self.write_plain_i64(e)?;
         }
         return Ok(());
     }
-    pub fn write_plain_sh(&mut self,len: usize, it: impl IntoIterator<Item=String>) -> Result<(),FffiError> {
+    pub fn write_plain_sh(
+        &mut self,
+        len: usize,
+        it: impl IntoIterator<Item = String>,
+    ) -> Result<(), FffiError> {
         self.write_plain_u32(len as u32)?;
         for e in it.into_iter() {
             self.write_plain_s(e)?;
         }
         return Ok(());
     }
-    pub fn write_plain_f32(&mut self,v: f32) -> Result<(),FffiError> {
+    pub fn write_plain_f32(&mut self, v: f32) -> Result<(), FffiError> {
         return self.write_plain_u32(v.to_bits());
     }
-    pub fn write_plain_f64(&mut self,v: f64) -> Result<(),FffiError> {
+    pub fn write_plain_f64(&mut self, v: f64) -> Result<(), FffiError> {
         return self.write_plain_u64(v.to_bits());
     }
-    pub fn write_plain_b(&mut self,v: bool) -> Result<(),FffiError> {
+    pub fn write_plain_b(&mut self, v: bool) -> Result<(), FffiError> {
         return self.write_plain_u8(if v { 1u8 } else { 0u8 });
     }
 
@@ -364,7 +396,13 @@ impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
                     .join(" ");
                 let ascii_preview: String = bad[..preview_len]
                     .iter()
-                    .map(|&b| if (0x20..0x7f).contains(&b) { b as char } else { '·' })
+                    .map(|&b| {
+                        if (0x20..0x7f).contains(&b) {
+                            b as char
+                        } else {
+                            '·'
+                        }
+                    })
                     .collect();
                 tracing::error!(
                     str_len = len,
@@ -442,12 +480,12 @@ impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
     }
     pub fn read_plain_b(&mut self) -> FffiResult<bool> {
         let v = self.read_plain_u8()?;
-        return Ok(v != 0)
+        return Ok(v != 0);
     }
     pub fn skip(&mut self, skip: usize) -> FffiResult<()> {
         // see https://github.com/rust-lang/rust/issues/53294
         if skip == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         let mut buf = [0u8; 1024];
@@ -465,7 +503,7 @@ impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
             };
             debug_assert!(total <= skip);
         }
-        return Ok(())
+        return Ok(());
     }
 
     // =========================================================================
@@ -530,7 +568,11 @@ impl<R: std::io::BufRead,W: std::io::Write> ImZeroFffiIo<R,W> {
                 entries[idx] = (offset, buf_len as u32);
             }
         }
-        Ok(DenseBlockMap { slab, entries, col_count })
+        Ok(DenseBlockMap {
+            slab,
+            entries,
+            col_count,
+        })
     }
 
     /// Skip a deferred block map with key type (u64, u32) without deserializing.

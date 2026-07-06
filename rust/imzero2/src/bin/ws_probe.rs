@@ -38,7 +38,10 @@ fn input_event(ev: pb::input_event::Event) -> Vec<u8> {
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 4 {
-        eprintln!("usage: {} <ws-url> <out.h264> <num_aus> [click_x click_y after_au]", args.first().map(String::as_str).unwrap_or("ws_probe"));
+        eprintln!(
+            "usage: {} <ws-url> <out.h264> <num_aus> [click_x click_y after_au]",
+            args.first().map(String::as_str).unwrap_or("ws_probe")
+        );
         std::process::exit(2);
     }
     let url = args.get(1).expect("url");
@@ -72,9 +75,8 @@ async fn main() {
             ));
             i += 3;
         } else if args.get(i).map(String::as_str) == Some("take") {
-            take_session = Some(
-                args.get(i + 1).and_then(|v| v.parse().ok()).expect("take after_au"),
-            );
+            take_session =
+                Some(args.get(i + 1).and_then(|v| v.parse().ok()).expect("take after_au"));
             i += 2;
         } else if args.get(i).map(String::as_str) == Some("resize") {
             resize = Some((
@@ -94,9 +96,8 @@ async fn main() {
         }
     }
 
-    let (ws, _resp) = tokio_tungstenite::connect_async(url)
-        .await
-        .expect("websocket connect failed");
+    let (ws, _resp) =
+        tokio_tungstenite::connect_async(url).await.expect("websocket connect failed");
     let (mut tx, mut rx) = ws.split();
     // Announce caps + a label so the host marks this probe takeover-capable and
     // lists it in the roster (ADR-0086 SD8). Without it the probe reads
@@ -147,12 +148,17 @@ async fn main() {
                                 // Geometry changed: split subsequent AUs into a
                                 // second file so each segment can be ffprobe'd.
                                 let path = format!("{out_path}.resized");
-                                resized_out = Some(std::fs::File::create(&path).expect("create resized out"));
+                                resized_out =
+                                    Some(std::fs::File::create(&path).expect("create resized out"));
                                 eprintln!("geometry change — subsequent AUs go to {path}");
                             }
                         }
                         Some(pb::session_control::Control::Roster(r)) => {
-                            let role = if r.you_role == pb::Role::Active as i32 { "active" } else { "passive" };
+                            let role = if r.you_role == pb::Role::Active as i32 {
+                                "active"
+                            } else {
+                                "passive"
+                            };
                             let conns: Vec<String> = r
                                 .connections
                                 .iter()
@@ -160,14 +166,23 @@ async fn main() {
                                     format!(
                                         "#{}{}{}",
                                         c.id,
-                                        if c.role == pb::Role::Active as i32 { "=active" } else { "" },
+                                        if c.role == pb::Role::Active as i32 {
+                                            "=active"
+                                        } else {
+                                            ""
+                                        },
                                         if c.webcodecs { ":wc" } else { "" }
                                     )
                                 })
                                 .collect();
                             eprintln!(
                                 "roster: you=#{} {} active=#{} {}/{} [{}]",
-                                r.you_id, role, r.active_id, r.count, r.max, conns.join(" ")
+                                r.you_id,
+                                role,
+                                r.active_id,
+                                r.count,
+                                r.max,
+                                conns.join(" ")
                             );
                         }
                         Some(pb::session_control::Control::Clipboard(c)) => {
@@ -189,7 +204,9 @@ async fn main() {
                     if let Some((after, hold)) = stall {
                         if aus >= after {
                             stall = None;
-                            eprintln!("STALL: not reading the socket for {hold}s after AU {aus} (congesting the encoder)");
+                            eprintln!(
+                                "STALL: not reading the socket for {hold}s after AU {aus} (congesting the encoder)"
+                            );
                             tokio::time::sleep(std::time::Duration::from_secs(hold)).await;
                             eprintln!("STALL: resuming reads");
                         }
@@ -280,8 +297,8 @@ async fn main() {
             _ => {}
         }
     }
-    let _ = tx
-        .send(tokio_tungstenite::tungstenite::Message::Close(None))
-        .await;
-    eprintln!("probe done: {aus} AUs, {bytes} bytes, {keyframes} keyframes, {hellos} hello(s) -> {out_path}");
+    let _ = tx.send(tokio_tungstenite::tungstenite::Message::Close(None)).await;
+    eprintln!(
+        "probe done: {aus} AUs, {bytes} bytes, {keyframes} keyframes, {hellos} hello(s) -> {out_path}"
+    );
 }

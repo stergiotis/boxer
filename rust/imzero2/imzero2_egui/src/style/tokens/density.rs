@@ -29,12 +29,7 @@ impl Default for Density {
 /// Per-user config file support (`$XDG_CONFIG_HOME/imzero2/density.toml`,
 /// per ADR-0032 §SD1) lands later; the env var is the M0 surface.
 pub fn from_env() -> Density {
-    match env::var("IMZERO2_DENSITY")
-        .ok()
-        .as_deref()
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
+    match env::var("IMZERO2_DENSITY").ok().as_deref().map(str::to_ascii_lowercase).as_deref() {
         Some("tight") => Density::Tight,
         Some("roomy") => Density::Roomy,
         _ => Density::Standard,

@@ -186,9 +186,7 @@ impl Registry {
 
     /// The active connection's outbound queue, if any (clipboard → active).
     fn active_tx(&self) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
-        self.active_id
-            .and_then(|id| self.find(id))
-            .map(|c| c.tx.clone())
+        self.active_id.and_then(|id| self.find(id)).map(|c| c.tx.clone())
     }
 }
 
@@ -314,38 +312,37 @@ impl WsCarrier {
         tracing::info!(viewer=%format!("http://{page_addr}/"), websocket=%format!("ws://{ws_addr}/"), max_connections=max, "remote viewer carrier listening");
 
         let inner_thread = inner.clone();
-        std::thread::Builder::new()
-            .name("imzero2-ws-carrier".to_owned())
-            .spawn(move || {
-                let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
-                    Ok(rt) => rt,
-                    Err(e) => {
-                        tracing::error!(error=%e, "carrier tokio runtime failed to build");
-                        return;
+        std::thread::Builder::new().name("imzero2-ws-carrier".to_owned()).spawn(move || {
+            let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    tracing::error!(error=%e, "carrier tokio runtime failed to build");
+                    return;
+                }
+            };
+            rt.block_on(async move {
+                let page: std::sync::Arc<str> =
+                    std::sync::Arc::from(include_str!("viewer/index.html"));
+                let a = async {
+                    match tokio::net::TcpListener::from_std(ws_listener) {
+                        Ok(l) => accept_loop(l, inner_thread.clone(), page.clone()).await,
+                        Err(e) => tracing::error!(error=%e, "ws listener conversion failed"),
                     }
                 };
-                rt.block_on(async move {
-                    let page: std::sync::Arc<str> = std::sync::Arc::from(include_str!("viewer/index.html"));
-                    let a = async {
-                        match tokio::net::TcpListener::from_std(ws_listener) {
-                            Ok(l) => accept_loop(l, inner_thread.clone(), page.clone()).await,
-                            Err(e) => tracing::error!(error=%e, "ws listener conversion failed"),
-                        }
-                    };
-                    let inner_page = inner_thread.clone();
-                    let page2 = page.clone();
-                    let b = async {
-                        match tokio::net::TcpListener::from_std(page_listener) {
-                            Ok(l) => accept_loop(l, inner_page, page2).await,
-                            Err(e) => tracing::error!(error=%e, "page listener conversion failed"),
-                        }
-                    };
-                    // The distributor fans the shared encoder's NAL units out to
-                    // every connection's queue; it runs for the carrier's lifetime.
-                    let dist = distribute(encoder_rx, inner_thread.clone());
-                    tokio::join!(a, b, dist);
-                });
-            })?;
+                let inner_page = inner_thread.clone();
+                let page2 = page.clone();
+                let b = async {
+                    match tokio::net::TcpListener::from_std(page_listener) {
+                        Ok(l) => accept_loop(l, inner_page, page2).await,
+                        Err(e) => tracing::error!(error=%e, "page listener conversion failed"),
+                    }
+                };
+                // The distributor fans the shared encoder's NAL units out to
+                // every connection's queue; it runs for the carrier's lifetime.
+                let dist = distribute(encoder_rx, inner_thread.clone());
+                tokio::join!(a, b, dist);
+            });
+        })?;
         Ok(Self {
             inner,
             encoder: None,
@@ -400,7 +397,9 @@ impl WsCarrier {
         let tx = self.inner.registry.lock().ok().and_then(|r| r.active_tx());
         if let Some(tx) = tx {
             let msg = pb::SessionControl {
-                control: Some(pb::session_control::Control::Clipboard(pb::ClipboardData { text })),
+                control: Some(pb::session_control::Control::Clipboard(pb::ClipboardData {
+                    text,
+                })),
             };
             let mut framed = Vec::with_capacity(1 + msg.encoded_len());
             framed.push(pb::PREFIX_SESSION);
@@ -432,7 +431,12 @@ impl WsCarrier {
         // (old-geometry) access units into the encoder channel, so the hello
         // below lands after them at the distributor.
         if self.encoder.take().is_some() {
-            tracing::info!(width_px, height_px, pixels_per_point, "geometry change — shared encoder stopped for restart");
+            tracing::info!(
+                width_px,
+                height_px,
+                pixels_per_point,
+                "geometry change — shared encoder stopped for restart"
+            );
         }
         self.last_frame_hash = None;
         broadcast_hello(&self.inner, hello);
@@ -457,7 +461,10 @@ impl WsCarrier {
         self.last_frame_hash = None;
         let hello = self.inner.hello.lock().map(|h| (*h).clone()).unwrap_or_default();
         broadcast_hello(&self.inner, hello);
-        tracing::info!(codec = self.lane.codec.as_str(), "video codec switched at runtime");
+        tracing::info!(
+            codec = self.lane.codec.as_str(),
+            "video codec switched at runtime"
+        );
     }
 
     /// ADR-0088: a clone of the active connection's latest reported decode caps.
@@ -513,14 +520,23 @@ impl WsCarrier {
         // serving a passive.
         let want_periodic = self.inner.want_periodic.load(Acquire);
         if self.encoder.is_some() && self.encoder_periodic != want_periodic {
-            tracing::info!(want_periodic, "passive presence changed — restarting shared encoder for GOP switch");
+            tracing::info!(
+                want_periodic,
+                "passive presence changed — restarting shared encoder for GOP switch"
+            );
             self.encoder = None;
             self.last_frame_hash = None;
         }
         if self.encoder.is_none() {
             self.last_frame_hash = None;
             let lane = self.lane.with_gop(want_periodic);
-            match EncoderSink::new(width, height, self.fps, lane, EncoderTarget::Channel(self.encoder_tx.clone())) {
+            match EncoderSink::new(
+                width,
+                height,
+                self.fps,
+                lane,
+                EncoderTarget::Channel(self.encoder_tx.clone()),
+            ) {
                 Ok(enc) => {
                     tracing::info!(periodic_idr = want_periodic, "shared encoder started");
                     self.encoder = Some(enc);
@@ -548,7 +564,10 @@ impl WsCarrier {
 /// is non-blocking `try_send`: a stalled viewer drops the unit (and recovers
 /// at its next decode-error reconnect) without backing up the encoder or the
 /// other viewers. Telemetry counts each unit once (stream bitrate, not egress).
-async fn distribute(mut encoder_rx: tokio::sync::mpsc::Receiver<Vec<u8>>, inner: std::sync::Arc<Inner>) {
+async fn distribute(
+    mut encoder_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    inner: std::sync::Arc<Inner>,
+) {
     use std::sync::atomic::Ordering::Relaxed;
     while let Some(payload) = encoder_rx.recv().await {
         inner.bytes_sent.fetch_add(payload.len() as u64, Relaxed);
@@ -578,10 +597,15 @@ fn broadcast_hello(inner: &Inner, hello: pb::SessionHello) {
     let mut framed = Vec::with_capacity(1 + msg.encoded_len());
     framed.push(pb::PREFIX_SESSION);
     let _ = msg.encode(&mut framed);
-    let Ok(reg) = inner.registry.lock() else { return };
+    let Ok(reg) = inner.registry.lock() else {
+        return;
+    };
     for c in &reg.conns {
         if c.tx.try_send(framed.clone()).is_err() {
-            tracing::debug!(id = c.id, "hello re-announce skipped — viewer stalled or mid-teardown");
+            tracing::debug!(
+                id = c.id,
+                "hello re-announce skipped — viewer stalled or mid-teardown"
+            );
         }
     }
 }
@@ -590,15 +614,15 @@ fn broadcast_hello(inner: &Inner, hello: pb::SessionHello) {
 /// (ADR-0086 SD1/SD8): every copy shares the connection list but carries its
 /// own `you_id`/`you_role`. Called on every membership/role change.
 fn broadcast_roster(inner: &Inner) {
-    let Ok(reg) = inner.registry.lock() else { return };
+    let Ok(reg) = inner.registry.lock() else {
+        return;
+    };
     // Conditional GOP (ADR-0086 SD10 Update): a passive viewer is present iff
     // there is more than one connection (≤1-active + lone-survivor auto-promote
     // ⇒ a single connection is always the active one). On a change, wake the
     // render thread so it re-picks the shared encoder's GOP promptly.
     let want_periodic = reg.conns.len() >= 2;
-    if inner
-        .want_periodic
-        .swap(want_periodic, std::sync::atomic::Ordering::Release)
+    if inner.want_periodic.swap(want_periodic, std::sync::atomic::Ordering::Release)
         != want_periodic
     {
         let _ = inner.waker.send(());
@@ -640,9 +664,7 @@ fn contains_ci(haystack: &[u8], needle: &[u8]) -> bool {
     if needle.is_empty() || haystack.len() < needle.len() {
         return false;
     }
-    haystack
-        .windows(needle.len())
-        .any(|w| w.eq_ignore_ascii_case(needle))
+    haystack.windows(needle.len()).any(|w| w.eq_ignore_ascii_case(needle))
 }
 
 /// Decide whether the incoming request is a WebSocket handshake by
@@ -755,7 +777,9 @@ async fn handle_session(
     framed.push(pb::PREFIX_SESSION);
     let _ = hello.encode(&mut framed);
     let hello_result = ws_tx
-        .send(tokio_tungstenite::tungstenite::Message::Binary(framed.into()))
+        .send(tokio_tungstenite::tungstenite::Message::Binary(
+            framed.into(),
+        ))
         .await;
 
     let result: Result<(), tokio_tungstenite::tungstenite::Error> = if let Err(e) = hello_result {
@@ -856,11 +880,7 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
     // the active connection (ADR-0086 SD2/SD8) — a passive connection's are
     // dropped here at the server. ClientHello and TakeSession are accepted from
     // any connection.
-    let active = inner
-        .registry
-        .lock()
-        .map(|r| r.is_active(id))
-        .unwrap_or(false);
+    let active = inner.registry.lock().map(|r| r.is_active(id)).unwrap_or(false);
     match prefix {
         pb::PREFIX_INPUT => {
             if !active {
@@ -901,7 +921,10 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
                     // remote attestation that WebCodecs decode is working.
                     if active {
                         inner.frames_decoded.store(p.nonce, std::sync::atomic::Ordering::Relaxed);
-                        tracing::debug!(frames_decoded = p.nonce, "active viewer decode-progress ping");
+                        tracing::debug!(
+                            frames_decoded = p.nonce,
+                            "active viewer decode-progress ping"
+                        );
                     }
                 }
                 Some(pb::session_control::Control::DecodeCapabilities(caps)) => {
@@ -934,7 +957,10 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
                             if r.find(id).map(|c| c.webcodecs).unwrap_or(false) {
                                 r.take_session(id)
                             } else {
-                                tracing::debug!(id, "TakeSession ignored — connection not WebCodecs-capable");
+                                tracing::debug!(
+                                    id,
+                                    "TakeSession ignored — connection not WebCodecs-capable"
+                                );
                                 false
                             }
                         }

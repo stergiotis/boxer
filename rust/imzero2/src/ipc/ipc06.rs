@@ -1,9 +1,9 @@
 use memmap2::MmapMut;
 use std::fs::OpenOptions;
 use std::os::unix::fs::OpenOptionsExt;
+use std::ptr;
 use std::sync::atomic::{AtomicI64, AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::ptr;
 
 const BUFFER_SIZE: u64 = 1024 * 1024 * 64;
 const MSG_HEADER_SIZE: u64 = 8;
@@ -70,7 +70,7 @@ impl MeshNode {
             file.set_len(total_size)?;
         }
 
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         let mut mmap = unsafe { MmapMut::map_mut(&file)? };
 
         // Pointer Arithmetic
@@ -79,11 +79,11 @@ impl MeshNode {
         let header_ptr = base_ptr as *mut FileHeader;
 
         // Metadata starts after FileHeader
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         let meta_ptr = unsafe { base_ptr.add(FILE_HEADER_SIZE) } as *const Metadata;
 
         // Buffer starts after FileHeader + Metadata
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         let buffer_ptr = unsafe { base_ptr.add(FILE_HEADER_SIZE + METADATA_SIZE) };
 
         let mut node = MeshNode {
@@ -97,14 +97,14 @@ impl MeshNode {
 
         if mode == "producer" {
             // Write Magic & Version
-#[allow(unsafe_code)]
+            #[allow(unsafe_code)]
             unsafe {
                 (*node.header).magic = MAGIC_CONSTANT;
                 (*node.header).version = PROTOCOL_VER;
             }
         } else {
             // Validate Magic & Version
-#[allow(unsafe_code)]
+            #[allow(unsafe_code)]
             unsafe {
                 if (*node.header).magic != MAGIC_CONSTANT {
                     return Err(format!("Invalid Magic: {:X}", (*node.header).magic).into());
@@ -121,7 +121,7 @@ impl MeshNode {
     }
 
     fn register_consumer(&mut self) -> Result<(), std::io::Error> {
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         let meta = unsafe { &*self.meta };
         for (i, slot) in meta.consumers.iter().enumerate() {
             if slot.active.compare_exchange(0, 1, Ordering::SeqCst, Ordering::Relaxed).is_ok() {
@@ -133,12 +133,15 @@ impl MeshNode {
                 return Ok(());
             }
         }
-        Err(std::io::Error::new(std::io::ErrorKind::Other, "No consumer slots available"))
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "No consumer slots available",
+        ))
     }
 
     fn unregister(&self) {
         if let Some(idx) = self.slot_idx {
-#[allow(unsafe_code)]
+            #[allow(unsafe_code)]
             let meta = unsafe { &*self.meta };
             meta.consumers[idx].active.store(0, Ordering::SeqCst);
         }
@@ -151,15 +154,13 @@ impl MeshNode {
         if let Some(idx) = self.slot_idx {
             #[allow(unsafe_code)]
             let meta = unsafe { &*self.meta };
-            meta.consumers[idx]
-                .read_pos
-                .store(0, Ordering::Relaxed);
+            meta.consumers[idx].read_pos.store(0, Ordering::Relaxed);
         }
     }
 
     // Producer Write
     pub fn write(&mut self, payload: &[u8]) {
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         let meta = unsafe { &*self.meta };
         let msg_len = payload.len() as u32;
 
@@ -185,9 +186,12 @@ impl MeshNode {
     // Consumer Read
     pub fn read(&mut self) -> Result<Option<Vec<u8>>, String> {
         let Some(slot_idx) = self.slot_idx else {
-            return Err("read called on unregistered node (producer-mode or registration failed)".to_string());
+            return Err(
+                "read called on unregistered node (producer-mode or registration failed)"
+                    .to_string(),
+            );
         };
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         let meta = unsafe { &*self.meta };
         let slot = &meta.consumers[slot_idx];
 
@@ -214,13 +218,15 @@ impl MeshNode {
         let pre_lap = u32::from_le_bytes(header_bytes[0..4].try_into().unwrap());
         let msg_len = u32::from_le_bytes(header_bytes[4..8].try_into().unwrap());
 
-        if msg_len as u64 > BUFFER_SIZE { return Ok(None); }
+        if msg_len as u64 > BUFFER_SIZE {
+            return Ok(None);
+        }
 
         let payload_start = (ring_offset + MSG_HEADER_SIZE) % BUFFER_SIZE;
         let payload = self.read_raw_bytes(payload_start, msg_len as u64);
 
         // Atomic Load for Post-Check
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         let post_lap = unsafe {
             // We align logic guarantees header is contiguous (align_cursor moves us if <8 bytes remain)
             let ptr = self.data_buffer.add(ring_offset as usize) as *const AtomicU32;
@@ -252,14 +258,18 @@ impl MeshNode {
     fn write_raw_bytes(&self, offset: u64, data: &[u8]) {
         let offset = offset as usize;
         let size = data.len();
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         unsafe {
             if (offset + size) <= BUFFER_SIZE as usize {
                 ptr::copy_nonoverlapping(data.as_ptr(), self.data_buffer.add(offset), size);
             } else {
                 let first_chunk = (BUFFER_SIZE as usize) - offset;
                 ptr::copy_nonoverlapping(data.as_ptr(), self.data_buffer.add(offset), first_chunk);
-                ptr::copy_nonoverlapping(data.as_ptr().add(first_chunk), self.data_buffer, size - first_chunk);
+                ptr::copy_nonoverlapping(
+                    data.as_ptr().add(first_chunk),
+                    self.data_buffer,
+                    size - first_chunk,
+                );
             }
         }
     }
@@ -268,14 +278,22 @@ impl MeshNode {
         let offset = offset as usize;
         let size = size as usize;
         let mut out = vec![0u8; size];
-#[allow(unsafe_code)]
+        #[allow(unsafe_code)]
         unsafe {
             if (offset + size) <= BUFFER_SIZE as usize {
                 ptr::copy_nonoverlapping(self.data_buffer.add(offset), out.as_mut_ptr(), size);
             } else {
                 let first_chunk = (BUFFER_SIZE as usize) - offset;
-                ptr::copy_nonoverlapping(self.data_buffer.add(offset), out.as_mut_ptr(), first_chunk);
-                ptr::copy_nonoverlapping(self.data_buffer, out.as_mut_ptr().add(first_chunk), size - first_chunk);
+                ptr::copy_nonoverlapping(
+                    self.data_buffer.add(offset),
+                    out.as_mut_ptr(),
+                    first_chunk,
+                );
+                ptr::copy_nonoverlapping(
+                    self.data_buffer,
+                    out.as_mut_ptr().add(first_chunk),
+                    size - first_chunk,
+                );
             }
         }
         out

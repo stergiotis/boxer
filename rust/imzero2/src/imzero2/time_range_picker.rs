@@ -50,9 +50,9 @@
 // interoperability while no other consumer survives.
 
 use egui::{ComboBox, DragValue, Id, Popup, PopupCloseBehavior, Response, TextEdit, Ui, Widget};
+use jiff::Timestamp;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
-use jiff::Timestamp;
 
 use super::interpreter::ImZeroFffi;
 
@@ -136,10 +136,7 @@ struct DraftState {
 
 /// Today in UTC. Used to seed the calendar pop's initial display.
 fn default_today() -> Date {
-    Timestamp::now()
-        .to_zoned(TimeZone::UTC)
-        .datetime()
-        .date()
+    Timestamp::now().to_zoned(TimeZone::UTC).datetime().date()
 }
 
 /// Render the calendar pop button followed by three h:m:s DragValues.
@@ -204,10 +201,8 @@ fn resolve_tz(name: &str) -> jiff::tz::TimeZone {
 /// (seconds remain visible inside the popover's h:m:s drag values).
 fn format_bounds(from_ms: i64, to_ms: i64, tz_name: &str) -> String {
     let tz = resolve_tz(tz_name);
-    let from_ts = jiff::Timestamp::from_millisecond(from_ms)
-        .unwrap_or(jiff::Timestamp::UNIX_EPOCH);
-    let to_ts = jiff::Timestamp::from_millisecond(to_ms)
-        .unwrap_or(jiff::Timestamp::UNIX_EPOCH);
+    let from_ts = jiff::Timestamp::from_millisecond(from_ms).unwrap_or(jiff::Timestamp::UNIX_EPOCH);
+    let to_ts = jiff::Timestamp::from_millisecond(to_ms).unwrap_or(jiff::Timestamp::UNIX_EPOCH);
     let from_d = from_ts.to_zoned(tz.clone()).datetime();
     let to_d = to_ts.to_zoned(tz).datetime();
     if from_d.date() == to_d.date() {
@@ -282,9 +277,8 @@ struct TimeRangePickerWidget<'a> {
 impl<'a> Widget for TimeRangePickerWidget<'a> {
     fn ui(self, ui: &mut Ui) -> Response {
         let mem_id = self.salt_id.with("time_range_picker_drafts");
-        let mut draft = ui
-            .memory_mut(|m| m.data.get_temp::<DraftState>(mem_id))
-            .unwrap_or_else(|| {
+        let mut draft =
+            ui.memory_mut(|m| m.data.get_temp::<DraftState>(mem_id)).unwrap_or_else(|| {
                 let today = default_today();
                 DraftState {
                     from: self.from_initial.clone(),
@@ -308,13 +302,10 @@ impl<'a> Widget for TimeRangePickerWidget<'a> {
         let to_cal_salt = format!("{salt_hex}-to-cal");
         let tz_combo_salt = format!("{salt_hex}-tz");
 
-        let trigger_label =
-            compute_trigger_label(&draft, &self.presets, self.evaluated_bounds);
+        let trigger_label = compute_trigger_label(&draft, &self.presets, self.evaluated_bounds);
         let trigger_text = format!("{trigger_label}  ·  {}  ▾", draft.last_tz);
-        let mut btn_resp = ui.add(
-            egui::Button::new(trigger_text)
-                .min_size(egui::vec2(TRIGGER_MIN_WIDTH, 0.0)),
-        );
+        let mut btn_resp =
+            ui.add(egui::Button::new(trigger_text).min_size(egui::vec2(TRIGGER_MIN_WIDTH, 0.0)));
         let popup_id = Popup::default_response_id(&btn_resp);
 
         let mut applied = false;
@@ -332,8 +323,7 @@ impl<'a> Widget for TimeRangePickerWidget<'a> {
                         ui.separator();
                         ui.label("From");
                         ui.add(
-                            TextEdit::singleline(&mut draft.from)
-                                .desired_width(TEXT_EDIT_WIDTH),
+                            TextEdit::singleline(&mut draft.from).desired_width(TEXT_EDIT_WIDTH),
                         );
                         ui.horizontal(|ui| {
                             render_calendar_pop(
@@ -348,10 +338,7 @@ impl<'a> Widget for TimeRangePickerWidget<'a> {
                         });
                         ui.add_space(4.0);
                         ui.label("To");
-                        ui.add(
-                            TextEdit::singleline(&mut draft.to)
-                                .desired_width(TEXT_EDIT_WIDTH),
-                        );
+                        ui.add(TextEdit::singleline(&mut draft.to).desired_width(TEXT_EDIT_WIDTH));
                         ui.horizontal(|ui| {
                             render_calendar_pop(
                                 ui,
@@ -391,11 +378,7 @@ impl<'a> Widget for TimeRangePickerWidget<'a> {
                                     }
                                     if !shown.contains(self.initial_tz.as_str()) {
                                         let cur = self.initial_tz.clone();
-                                        ui.selectable_value(
-                                            &mut draft.tz,
-                                            cur.clone(),
-                                            cur,
-                                        );
+                                        ui.selectable_value(&mut draft.tz, cur.clone(), cur);
                                     }
                                 });
                         });
@@ -412,9 +395,9 @@ impl<'a> Widget for TimeRangePickerWidget<'a> {
                         if self.presets.is_empty() {
                             ui.weak("(no presets configured)");
                         } else {
-                            egui::ScrollArea::vertical()
-                                .max_height(PRESET_LIST_MAX_HEIGHT)
-                                .show(ui, |ui| {
+                            egui::ScrollArea::vertical().max_height(PRESET_LIST_MAX_HEIGHT).show(
+                                ui,
+                                |ui| {
                                     for p in &self.presets {
                                         let r = ui.add_sized(
                                             egui::vec2(RIGHT_COL_WIDTH, 0.0),
@@ -426,7 +409,8 @@ impl<'a> Widget for TimeRangePickerWidget<'a> {
                                             applied = true;
                                         }
                                     }
-                                });
+                                },
+                            );
                         }
                     });
                 });

@@ -16,10 +16,9 @@ use std::sync::{Arc, Mutex};
 const VIEWPORT_BG: Color32 = Color32::from_rgb(0x1e, 0x1e, 0x1e);
 
 fn show(ctx: &Context, window_id: Id) {
-    egui::Window::new("Q3 Revenue Report")
-        .id(window_id)
-        .default_pos([40.0, 60.0])
-        .show(ctx, |ui| {
+    egui::Window::new("Q3 Revenue Report").id(window_id).default_pos([40.0, 60.0]).show(
+        ctx,
+        |ui| {
             ui.heading("Revenue by region");
             ui.label("Americas:  $4.2M  (+12%)");
             ui.label("EMEA:      $3.1M  (+8%)");
@@ -27,15 +26,15 @@ fn show(ctx: &Context, window_id: Id) {
             ui.separator();
             ui.label("Year-on-year growth driven by APAC expansion.");
             ui.hyperlink_to("Q4 forecast →", "https://example.com/q4");
-        });
+        },
+    );
 }
 
 fn main() {
     let ctx = Context::default();
     let id = Id::new("report-window");
     let fonts = FontResolver::default();
-    let textures: TexturePixelCacheHandle =
-        Arc::new(Mutex::new(TexturePixelCache::default()));
+    let textures: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
     let links: LinkZonesHandle = Arc::new(Mutex::new(Vec::new()));
     let raw = RawInput {
         screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0))),
@@ -55,7 +54,12 @@ fn main() {
         variants.push((
             "faithful-dark",
             svgexport::render_svg_window(
-                ctx, &fonts, &textures, &links, true, id,
+                ctx,
+                &fonts,
+                &textures,
+                &links,
+                true,
+                id,
                 WindowMode::Faithful,
                 Some(VIEWPORT_BG),
             ),
@@ -63,7 +67,12 @@ fn main() {
         variants.push((
             "faithful-transparent",
             svgexport::render_svg_window(
-                ctx, &fonts, &textures, &links, true, id,
+                ctx,
+                &fonts,
+                &textures,
+                &links,
+                true,
+                id,
                 WindowMode::Faithful,
                 None,
             ),
@@ -71,7 +80,12 @@ fn main() {
         variants.push((
             "content-only-white",
             svgexport::render_svg_window(
-                ctx, &fonts, &textures, &links, true, id,
+                ctx,
+                &fonts,
+                &textures,
+                &links,
+                true,
+                id,
                 WindowMode::ContentOnly,
                 Some(Color32::WHITE),
             ),
@@ -79,7 +93,12 @@ fn main() {
         variants.push((
             "content-only-transparent",
             svgexport::render_svg_window(
-                ctx, &fonts, &textures, &links, true, id,
+                ctx,
+                &fonts,
+                &textures,
+                &links,
+                true,
+                id,
                 WindowMode::ContentOnly,
                 None,
             ),
@@ -91,10 +110,7 @@ fn main() {
         let path = format!("/tmp/window_content_only.{tag}.svg");
         std::fs::write(&path, &svg).expect("write svg");
         // Extract the root <svg> opening tag for a quick eyeball.
-        let head = svg
-            .lines()
-            .find(|l| l.starts_with("<svg "))
-            .unwrap_or("(no svg tag)");
+        let head = svg.lines().find(|l| l.starts_with("<svg ")).unwrap_or("(no svg tag)");
         println!("{tag}: {} bytes — wrote {path}", svg.len());
         println!("  root: {head}");
     }

@@ -81,10 +81,8 @@ mod tests {
 
     fn with_env<F: FnOnce()>(vars: &[(&str, Option<&str>)], f: F) {
         let _g = ENV_LOCK.lock().unwrap();
-        let saved: Vec<(String, Option<String>)> = vars
-            .iter()
-            .map(|(k, _)| (k.to_string(), env::var(*k).ok()))
-            .collect();
+        let saved: Vec<(String, Option<String>)> =
+            vars.iter().map(|(k, _)| (k.to_string(), env::var(*k).ok())).collect();
         unsafe {
             for (k, v) in vars {
                 match v {

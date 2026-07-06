@@ -8,7 +8,11 @@ pub struct FontTweakConfig {
 }
 impl Default for FontTweakConfig {
     fn default() -> Self {
-        Self { scale: 1.0, y_offset_factor: 0.0, y_offset: 0.0 }
+        Self {
+            scale: 1.0,
+            y_offset_factor: 0.0,
+            y_offset: 0.0,
+        }
     }
 }
 
@@ -84,38 +88,138 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn parse(&mut self, used: &mut roaring::RoaringBitmap, args: &[String]) {
-        self.initial_main_window_width = flags::find_flag_value_default_parsable(args, used, "-initialMainWindowWidth", self.initial_main_window_width);
-        self.initial_main_window_height = flags::find_flag_value_default_parsable(args, used, "-initialMainWindowHeight", self.initial_main_window_height);
-        self.fullscreen = flags::find_flag_value_default_bool(args, used, "-fullscrreen", self.fullscreen);
+        self.initial_main_window_width = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-initialMainWindowWidth",
+            self.initial_main_window_width,
+        );
+        self.initial_main_window_height = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-initialMainWindowHeight",
+            self.initial_main_window_height,
+        );
+        self.fullscreen =
+            flags::find_flag_value_default_bool(args, used, "-fullscrreen", self.fullscreen);
         self.vsync = flags::find_flag_value_default_bool(args, used, "-vsync", self.vsync);
 
-        self.window_title = flags::find_flag_default(args, used, "-windowTitle", self.window_title.clone()).to_owned();
-        self.app_title = flags::find_flag_default(args, used, "-appTitle", self.window_title.clone()).to_owned();
+        self.window_title =
+            flags::find_flag_default(args, used, "-windowTitle", self.window_title.clone())
+                .to_owned();
+        self.app_title =
+            flags::find_flag_default(args, used, "-appTitle", self.window_title.clone()).to_owned();
 
         self.vsync = flags::find_flag_value_default_bool(args, used, "-vsync", self.vsync);
-        self.fffi_interpreter = flags::find_flag_value_default_bool(args, used, "-fffiInterpreter", self.fffi_interpreter);
+        self.fffi_interpreter = flags::find_flag_value_default_bool(
+            args,
+            used,
+            "-fffiInterpreter",
+            self.fffi_interpreter,
+        );
 
-        self.main_font_ttf = flags::find_flag_default(args, used, "-mainFontTTF", self.main_font_ttf.clone()).to_owned();
-        self.mono_font_ttf = flags::find_flag_default(args, used, "-monoFontTTF", self.mono_font_ttf.clone()).to_owned();
-        self.phosphor_font_ttf = flags::find_flag_default(args, used, "-phosphorFontTTF", self.phosphor_font_ttf.clone()).to_owned();
-        self.fallback_font_ttf = flags::find_flag_default(args, used, "-fallbackFontTTF", self.fallback_font_ttf.clone()).to_owned();
-        self.main_font_size = flags::find_flag_value_default_parsable(args, used, "-mainFontSizeInPixels", self.main_font_size);
+        self.main_font_ttf =
+            flags::find_flag_default(args, used, "-mainFontTTF", self.main_font_ttf.clone())
+                .to_owned();
+        self.mono_font_ttf =
+            flags::find_flag_default(args, used, "-monoFontTTF", self.mono_font_ttf.clone())
+                .to_owned();
+        self.phosphor_font_ttf = flags::find_flag_default(
+            args,
+            used,
+            "-phosphorFontTTF",
+            self.phosphor_font_ttf.clone(),
+        )
+        .to_owned();
+        self.fallback_font_ttf = flags::find_flag_default(
+            args,
+            used,
+            "-fallbackFontTTF",
+            self.fallback_font_ttf.clone(),
+        )
+        .to_owned();
+        self.main_font_size = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-mainFontSizeInPixels",
+            self.main_font_size,
+        );
 
-        self.main_font_tweak.scale = flags::find_flag_value_default_parsable(args, used, "-mainFontScale", self.main_font_tweak.scale);
-        self.main_font_tweak.y_offset_factor = flags::find_flag_value_default_parsable(args, used, "-mainFontYOffsetFactor", self.main_font_tweak.y_offset_factor);
-        self.main_font_tweak.y_offset = flags::find_flag_value_default_parsable(args, used, "-mainFontYOffset", self.main_font_tweak.y_offset);
+        self.main_font_tweak.scale = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-mainFontScale",
+            self.main_font_tweak.scale,
+        );
+        self.main_font_tweak.y_offset_factor = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-mainFontYOffsetFactor",
+            self.main_font_tweak.y_offset_factor,
+        );
+        self.main_font_tweak.y_offset = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-mainFontYOffset",
+            self.main_font_tweak.y_offset,
+        );
 
-        self.mono_font_tweak.scale = flags::find_flag_value_default_parsable(args, used, "-monoFontScale", self.mono_font_tweak.scale);
-        self.mono_font_tweak.y_offset_factor = flags::find_flag_value_default_parsable(args, used, "-monoFontYOffsetFactor", self.mono_font_tweak.y_offset_factor);
-        self.mono_font_tweak.y_offset = flags::find_flag_value_default_parsable(args, used, "-monoFontYOffset", self.mono_font_tweak.y_offset);
+        self.mono_font_tweak.scale = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-monoFontScale",
+            self.mono_font_tweak.scale,
+        );
+        self.mono_font_tweak.y_offset_factor = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-monoFontYOffsetFactor",
+            self.mono_font_tweak.y_offset_factor,
+        );
+        self.mono_font_tweak.y_offset = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-monoFontYOffset",
+            self.mono_font_tweak.y_offset,
+        );
 
-        self.phosphor_font_tweak.scale = flags::find_flag_value_default_parsable(args, used, "-phosphorFontScale", self.phosphor_font_tweak.scale);
-        self.phosphor_font_tweak.y_offset_factor = flags::find_flag_value_default_parsable(args, used, "-phosphorFontYOffsetFactor", self.phosphor_font_tweak.y_offset_factor);
-        self.phosphor_font_tweak.y_offset = flags::find_flag_value_default_parsable(args, used, "-phosphorFontYOffset", self.phosphor_font_tweak.y_offset);
+        self.phosphor_font_tweak.scale = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-phosphorFontScale",
+            self.phosphor_font_tweak.scale,
+        );
+        self.phosphor_font_tweak.y_offset_factor = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-phosphorFontYOffsetFactor",
+            self.phosphor_font_tweak.y_offset_factor,
+        );
+        self.phosphor_font_tweak.y_offset = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-phosphorFontYOffset",
+            self.phosphor_font_tweak.y_offset,
+        );
 
-        self.fallback_font_tweak.scale = flags::find_flag_value_default_parsable(args, used, "-fallbackFontScale", self.fallback_font_tweak.scale);
-        self.fallback_font_tweak.y_offset_factor = flags::find_flag_value_default_parsable(args, used, "-fallbackFontYOffsetFactor", self.fallback_font_tweak.y_offset_factor);
-        self.fallback_font_tweak.y_offset = flags::find_flag_value_default_parsable(args, used, "-fallbackFontYOffset", self.fallback_font_tweak.y_offset);
+        self.fallback_font_tweak.scale = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-fallbackFontScale",
+            self.fallback_font_tweak.scale,
+        );
+        self.fallback_font_tweak.y_offset_factor = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-fallbackFontYOffsetFactor",
+            self.fallback_font_tweak.y_offset_factor,
+        );
+        self.fallback_font_tweak.y_offset = flags::find_flag_value_default_parsable(
+            args,
+            used,
+            "-fallbackFontYOffset",
+            self.fallback_font_tweak.y_offset,
+        );
     }
     pub fn usage(&mut self, w: &mut impl std::io::Write) -> std::io::Result<()> {
         write!(w, "usage:\n")?;
@@ -123,35 +227,99 @@ impl AppConfig {
         write!(w, "\t-help\n")?;
 
         write!(w, "general flags:\n")?;
-        write!(w, "\t-initialMainWindowWidth [f32:{}]\n", self.inner_min_size_width)?;
-        write!(w, "\t-initialMainWindowHeight [f32:{}]\n", self.inner_min_size_height)?;
+        write!(
+            w,
+            "\t-initialMainWindowWidth [f32:{}]\n",
+            self.inner_min_size_width
+        )?;
+        write!(
+            w,
+            "\t-initialMainWindowHeight [f32:{}]\n",
+            self.inner_min_size_height
+        )?;
 
         write!(w, "graphics flags:\n")?;
-        write!(w, "\t-vsync [bool:{}]\n", if self.vsync { "on" } else { "off" })?;
+        write!(
+            w,
+            "\t-vsync [bool:{}]\n",
+            if self.vsync { "on" } else { "off" }
+        )?;
 
         write!(w, "fffi flags:\n")?;
-        write!(w, "\t-fffiInterpreter [bool:{}]\n", if self.fffi_interpreter { "on" } else { "off" })?;
+        write!(
+            w,
+            "\t-fffiInterpreter [bool:{}]\n",
+            if self.fffi_interpreter { "on" } else { "off" }
+        )?;
 
         write!(w, "font flags:\n")?;
         write!(w, "\t-mainFontTTF [string:{}]\n", self.main_font_ttf)?;
         write!(w, "\t-monoFontTTF [string:{}]\n", self.mono_font_ttf)?;
-        write!(w, "\t-phosphorFontTTF [string:{}]\n", self.phosphor_font_ttf)?;
-        write!(w, "\t-fallbackFontTTF [string:{}]\n", self.fallback_font_ttf)?;
+        write!(
+            w,
+            "\t-phosphorFontTTF [string:{}]\n",
+            self.phosphor_font_ttf
+        )?;
+        write!(
+            w,
+            "\t-fallbackFontTTF [string:{}]\n",
+            self.fallback_font_ttf
+        )?;
         write!(w, "\t-mainFontSizeInPixels [f32:{}]\n", self.main_font_size)?;
 
         write!(w, "font tweak flags:\n")?;
         write!(w, "\t-mainFontScale [f32:{}]\n", self.main_font_tweak.scale)?;
-        write!(w, "\t-mainFontYOffsetFactor [f32:{}]\n", self.main_font_tweak.y_offset_factor)?;
-        write!(w, "\t-mainFontYOffset [f32:{}]\n", self.main_font_tweak.y_offset)?;
+        write!(
+            w,
+            "\t-mainFontYOffsetFactor [f32:{}]\n",
+            self.main_font_tweak.y_offset_factor
+        )?;
+        write!(
+            w,
+            "\t-mainFontYOffset [f32:{}]\n",
+            self.main_font_tweak.y_offset
+        )?;
         write!(w, "\t-monoFontScale [f32:{}]\n", self.mono_font_tweak.scale)?;
-        write!(w, "\t-monoFontYOffsetFactor [f32:{}]\n", self.mono_font_tweak.y_offset_factor)?;
-        write!(w, "\t-monoFontYOffset [f32:{}]\n", self.mono_font_tweak.y_offset)?;
-        write!(w, "\t-phosphorFontScale [f32:{}]\n", self.phosphor_font_tweak.scale)?;
-        write!(w, "\t-phosphorFontYOffsetFactor [f32:{}]\n", self.phosphor_font_tweak.y_offset_factor)?;
-        write!(w, "\t-phosphorFontYOffset [f32:{}]\n", self.phosphor_font_tweak.y_offset)?;
-        write!(w, "\t-fallbackFontScale [f32:{}]\n", self.fallback_font_tweak.scale)?;
-        write!(w, "\t-fallbackFontYOffsetFactor [f32:{}]\n", self.fallback_font_tweak.y_offset_factor)?;
-        write!(w, "\t-fallbackFontYOffset [f32:{}]\n", self.fallback_font_tweak.y_offset)?;
+        write!(
+            w,
+            "\t-monoFontYOffsetFactor [f32:{}]\n",
+            self.mono_font_tweak.y_offset_factor
+        )?;
+        write!(
+            w,
+            "\t-monoFontYOffset [f32:{}]\n",
+            self.mono_font_tweak.y_offset
+        )?;
+        write!(
+            w,
+            "\t-phosphorFontScale [f32:{}]\n",
+            self.phosphor_font_tweak.scale
+        )?;
+        write!(
+            w,
+            "\t-phosphorFontYOffsetFactor [f32:{}]\n",
+            self.phosphor_font_tweak.y_offset_factor
+        )?;
+        write!(
+            w,
+            "\t-phosphorFontYOffset [f32:{}]\n",
+            self.phosphor_font_tweak.y_offset
+        )?;
+        write!(
+            w,
+            "\t-fallbackFontScale [f32:{}]\n",
+            self.fallback_font_tweak.scale
+        )?;
+        write!(
+            w,
+            "\t-fallbackFontYOffsetFactor [f32:{}]\n",
+            self.fallback_font_tweak.y_offset_factor
+        )?;
+        write!(
+            w,
+            "\t-fallbackFontYOffset [f32:{}]\n",
+            self.fallback_font_tweak.y_offset
+        )?;
         return Ok(());
     }
 }

@@ -112,10 +112,7 @@ fn emit_children() {
         // A resolution-3 cell with its resolution-4 children keeps the
         // vector small and human-reviewable.
         let parent = ll.to_cell(Resolution::Three);
-        let children: Vec<u64> = parent
-            .children(Resolution::Four)
-            .map(u64::from)
-            .collect();
+        let children: Vec<u64> = parent.children(Resolution::Four).map(u64::from).collect();
         let children_str = children
             .iter()
             .map(|c| c.to_string())
@@ -314,22 +311,15 @@ fn emit_polyfill() {
                     .map(|ring| {
                         geo_types::LineString::new(
                             ring.iter()
-                                .map(|&(lng, lat)| geo_types::Coord {
-                                    x: lng,
-                                    y: lat,
-                                })
+                                .map(|&(lng, lat)| geo_types::Coord { x: lng, y: lat })
                                 .collect(),
                         )
                     })
                     .collect();
                 let polygon = geo_types::Polygon::new(exterior, holes);
-                let mut tiler =
-                    TilerBuilder::new(r).containment_mode(mode).build();
+                let mut tiler = TilerBuilder::new(r).containment_mode(mode).build();
                 tiler.add(polygon).expect("valid polygon");
-                let cells: Vec<u64> = tiler
-                    .into_coverage()
-                    .map(u64::from)
-                    .collect();
+                let cells: Vec<u64> = tiler.into_coverage().map(u64::from).collect();
                 let cells_str = cells
                     .iter()
                     .map(|c| c.to_string())
@@ -369,18 +359,14 @@ fn emit_compact_uncompact() {
     for (name, lat, lng) in reference_points().iter().take(3) {
         let ll = LatLng::new(*lat, *lng).expect("valid latlng");
         let base = ll.to_cell(Resolution::Three);
-        let children: Vec<u64> = base
-            .children(Resolution::Five)
-            .map(u64::from)
-            .collect();
+        let children: Vec<u64> = base.children(Resolution::Five).map(u64::from).collect();
         // Compacted form: sort + compact in-place.
         let mut cells_for_compact: Vec<CellIndex> = children
             .iter()
             .map(|&c| CellIndex::try_from(c).unwrap())
             .collect();
         CellIndex::compact(&mut cells_for_compact).expect("compactable");
-        let compacted: Vec<u64> =
-            cells_for_compact.iter().map(|c| u64::from(*c)).collect();
+        let compacted: Vec<u64> = cells_for_compact.iter().map(|c| u64::from(*c)).collect();
 
         let cells_str = children
             .iter()
@@ -400,9 +386,7 @@ fn emit_compact_uncompact() {
 
         // Uncompact: expand the compacted form back to res 5.
         let expanded: Vec<u64> = CellIndex::uncompact(
-            compacted
-                .iter()
-                .map(|&c| CellIndex::try_from(c).unwrap()),
+            compacted.iter().map(|&c| CellIndex::try_from(c).unwrap()),
             Resolution::Five,
         )
         .map(u64::from)
@@ -431,8 +415,5 @@ fn main() {
     emit_boundaries();
     emit_polyfill();
     emit_compact_uncompact();
-    eprintln!(
-        "wrote golden vectors to {}",
-        testdata_dir().display()
-    );
+    eprintln!("wrote golden vectors to {}", testdata_dir().display());
 }

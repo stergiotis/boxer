@@ -60,23 +60,20 @@ pub const FAMILY_ICONS_PHOSPHOR: &str = "phosphor";
 /// M0b-deferred pending a subsetting / size-budget decision (per
 /// ADR-0034 SD3 amendment — actual TTF size ~10 MB/style vs ADR-0030
 /// §SD7 estimate of ~200 KB/style).
-pub const IOSEVKA_AILE_REGULAR: &[u8] = include_bytes!(
-    "../../../../assets/fonts/iosevka-aile/IosevkaAile-Regular.ttf"
-);
+pub const IOSEVKA_AILE_REGULAR: &[u8] =
+    include_bytes!("../../../../assets/fonts/iosevka-aile/IosevkaAile-Regular.ttf");
 
 /// Phosphor Regular — icon font (ADR-0044 §SD1).
-pub const PHOSPHOR_REGULAR: &[u8] = include_bytes!(
-    "../../../../assets/fonts/phosphor/Phosphor.ttf"
-);
+pub const PHOSPHOR_REGULAR: &[u8] =
+    include_bytes!("../../../../assets/fonts/phosphor/Phosphor.ttf");
 
 /// IDS Mono Regular — monospace default (ADR-0030 §SD1).
 ///
 /// M0a ships Regular only; Medium / Bold + italics are vendored in
 /// `assets/fonts/ids-mono/` but not yet embedded (same size-budget
 /// constraint as Aile — see [`IOSEVKA_AILE_REGULAR`]).
-pub const IDS_MONO_REGULAR: &[u8] = include_bytes!(
-    "../../../../assets/fonts/ids-mono/IDSMono-Regular.ttf"
-);
+pub const IDS_MONO_REGULAR: &[u8] =
+    include_bytes!("../../../../assets/fonts/ids-mono/IDSMono-Regular.ttf");
 
 /// Register IDS fonts into `egui::FontDefinitions`. Call once at startup
 /// before any frame; the `apply_fonts` entry combines this with the
@@ -111,14 +108,8 @@ pub fn install_fonts(defs: &mut FontDefinitions) {
         .push(FAMILY_ICONS_PHOSPHOR.to_string());
     // Wire IDS Mono as the first Monospace family entry; Phosphor falls
     // through as the icon-codepoint fallback per ADR-0044 §SD5.
-    defs.families
-        .entry(FontFamily::Monospace)
-        .or_default()
-        .insert(0, FAMILY_MONO.to_string());
-    defs.families
-        .entry(FontFamily::Monospace)
-        .or_default()
-        .push(FAMILY_ICONS_PHOSPHOR.to_string());
+    defs.families.entry(FontFamily::Monospace).or_default().insert(0, FAMILY_MONO.to_string());
+    defs.families.entry(FontFamily::Monospace).or_default().push(FAMILY_ICONS_PHOSPHOR.to_string());
 }
 
 /// One-shot startup helper. Calls `install_fonts` against a fresh
@@ -211,22 +202,28 @@ mod tests {
     #[test]
     fn embedded_aile_is_nonempty() {
         // Smoke test: include_bytes! resolved a real font.
-        assert!(IOSEVKA_AILE_REGULAR.len() > 100_000,
+        assert!(
+            IOSEVKA_AILE_REGULAR.len() > 100_000,
             "Iosevka Aile Regular bytes too small ({} B) — check repo state",
-            IOSEVKA_AILE_REGULAR.len());
+            IOSEVKA_AILE_REGULAR.len()
+        );
     }
 
     #[test]
     fn embedded_phosphor_is_nonempty() {
-        assert!(PHOSPHOR_REGULAR.len() > 100_000,
+        assert!(
+            PHOSPHOR_REGULAR.len() > 100_000,
             "Phosphor Regular bytes too small ({} B) — check repo state",
-            PHOSPHOR_REGULAR.len());
+            PHOSPHOR_REGULAR.len()
+        );
     }
 
     #[test]
     fn embedded_ids_mono_is_nonempty() {
-        assert!(IDS_MONO_REGULAR.len() > 100_000,
+        assert!(
+            IDS_MONO_REGULAR.len() > 100_000,
             "IDS Mono Regular bytes too small ({} B) — check repo state",
-            IDS_MONO_REGULAR.len());
+            IDS_MONO_REGULAR.len()
+        );
     }
 }

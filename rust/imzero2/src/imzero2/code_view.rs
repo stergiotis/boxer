@@ -56,7 +56,8 @@ fn content_hash(job: &CodeViewJobData) -> u64 {
 
 /// Build a LayoutJob from text and colored sections.
 fn build_layout_job(job: &CodeViewJobData, ctx: &egui::Context) -> egui::text::LayoutJob {
-    let font_id = egui::FontId::monospace(ctx.style().text_styles[&egui::TextStyle::Monospace].size);
+    let font_id =
+        egui::FontId::monospace(ctx.style().text_styles[&egui::TextStyle::Monospace].size);
 
     let mut layout_job = egui::text::LayoutJob {
         text: job.text.clone(),
@@ -115,10 +116,13 @@ pub fn get_or_build_layout_job(
     }
 
     let layout_job = build_layout_job(job, ctx);
-    cache.entries.insert(hash, CacheEntry {
-        text_hash: hash,
-        sections_len: job.sections.len(),
-        layout_job: layout_job.clone(),
-    });
+    cache.entries.insert(
+        hash,
+        CacheEntry {
+            text_hash: hash,
+            sections_len: job.sections.len(),
+            layout_job: layout_job.clone(),
+        },
+    );
     layout_job
 }

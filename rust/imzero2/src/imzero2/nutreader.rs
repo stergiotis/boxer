@@ -214,7 +214,13 @@ impl NutReader {
             if !self.main_parsed {
                 return Err(NutError::FrameBeforeMain);
             }
-            match parse_frame(&self.buf, self.pos, &self.table, &self.header_lens, &self.headers)? {
+            match parse_frame(
+                &self.buf,
+                self.pos,
+                &self.table,
+                &self.header_lens,
+                &self.headers,
+            )? {
                 None => Ok(Step::NeedMore),
                 Some((np, frame)) => {
                     self.pos = np;
@@ -354,8 +360,16 @@ fn parse_main_header(b: &[u8], pos: usize) -> Result<Option<MainHeader>, NutErro
         if nfields > 2 {
             rd_v(b, &mut c).ok_or(m)?; // stream id — single stream, unused
         }
-        let run_size = if nfields > 3 { rd_v(b, &mut c).ok_or(m)? } else { 0 };
-        let run_reserved = if nfields > 4 { rd_v(b, &mut c).ok_or(m)? } else { 0 };
+        let run_size = if nfields > 3 {
+            rd_v(b, &mut c).ok_or(m)?
+        } else {
+            0
+        };
+        let run_reserved = if nfields > 4 {
+            rd_v(b, &mut c).ok_or(m)?
+        } else {
+            0
+        };
         let run_len = if nfields > 5 {
             rd_v(b, &mut c).ok_or(m)?
         } else {
@@ -523,11 +537,7 @@ mod tests {
     use std::process::Command;
 
     fn have(cmd: &str) -> bool {
-        Command::new(cmd)
-            .arg("-version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        Command::new(cmd).arg("-version").output().map(|o| o.status.success()).unwrap_or(false)
     }
 
     /// Ground truth: ffprobe's per-packet (size, is_keyframe) for the stream.

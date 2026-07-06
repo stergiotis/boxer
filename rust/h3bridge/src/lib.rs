@@ -70,7 +70,9 @@ pub extern "C" fn ext_free(off: u32, n: u32) {
 }
 
 fn resolution_from_u32(res: u32) -> Option<Resolution> {
-    u8::try_from(res).ok().and_then(|r| Resolution::try_from(r).ok())
+    u8::try_from(res)
+        .ok()
+        .and_then(|r| Resolution::try_from(r).ok())
 }
 
 unsafe fn as_f64_slice<'a>(ptr: u32, n: u32) -> &'a [f64] {
@@ -449,12 +451,7 @@ pub extern "C" fn h3_are_valid(cells_ptr: u32, n: u32, valid_ptr: u32) {
 }
 
 #[no_mangle]
-pub extern "C" fn h3_get_resolution(
-    cells_ptr: u32,
-    n: u32,
-    res_ptr: u32,
-    status_ptr: u32,
-) {
+pub extern "C" fn h3_get_resolution(cells_ptr: u32, n: u32, res_ptr: u32, status_ptr: u32) {
     let cells = unsafe { as_u64_slice(cells_ptr, n) };
     let res = unsafe { as_u8_slice_mut(res_ptr, n) };
     let status = unsafe { as_u8_slice_mut(status_ptr, n) };
@@ -515,7 +512,8 @@ pub extern "C" fn h3_polygon_to_cells(
 
     // Build geo_types::Polygon from the rings. First ring is exterior, rest are holes.
     // geo uses (x=lng, y=lat) for its Coord convention.
-    let mut ring_line_strings: Vec<geo_types::LineString<f64>> = Vec::with_capacity(ring_count as usize);
+    let mut ring_line_strings: Vec<geo_types::LineString<f64>> =
+        Vec::with_capacity(ring_count as usize);
     for i in 0..ring_count as usize {
         let start = ring_offsets[i] as usize;
         let end = ring_offsets[i + 1] as usize;

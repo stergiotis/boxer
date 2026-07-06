@@ -86,13 +86,11 @@ fn main() {
             egui::UiBuilder::new()
                 .max_rect(Rect::from_min_size(scroll_origin, Vec2::new(110.0, 90.0))),
         );
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(&mut child, |ui| {
-                for i in 0..20 {
-                    ui.label(format!("scrolled_line_{i:02}"));
-                }
-            });
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(&mut child, |ui| {
+            for i in 0..20 {
+                ui.label(format!("scrolled_line_{i:02}"));
+            }
+        });
     });
 
     // Standalone smoke test runs *after* `run_ui` returns, by which point

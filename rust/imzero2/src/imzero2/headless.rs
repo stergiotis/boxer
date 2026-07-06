@@ -102,28 +102,25 @@ struct HeadlessOpts {
 impl HeadlessOpts {
     fn from_env() -> Self {
         fn parse<T: std::str::FromStr>(name: &str, default: T) -> T {
-            std::env::var(name)
-                .ok()
-                .and_then(|v| v.parse::<T>().ok())
-                .unwrap_or(default)
+            std::env::var(name).ok().and_then(|v| v.parse::<T>().ok()).unwrap_or(default)
         }
         fn path_var(name: &str) -> Option<std::path::PathBuf> {
-            std::env::var(name)
-                .ok()
-                .filter(|v| !v.is_empty())
-                .map(std::path::PathBuf::from)
+            std::env::var(name).ok().filter(|v| !v.is_empty()).map(std::path::PathBuf::from)
         }
         // `bool::from_str` only accepts "true"/"false"; accept the usual env
         // truthy spellings so a unit can set `=1` (systemd's idiom).
         fn flag(name: &str) -> bool {
             std::env::var(name)
-                .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .map(|v| {
+                    matches!(
+                        v.trim().to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+                })
                 .unwrap_or(false)
         }
         let h264_out = path_var("IMZERO2_HEADLESS_H264_OUT");
-        let listen = std::env::var("IMZERO2_HEADLESS_LISTEN")
-            .ok()
-            .filter(|v| !v.is_empty());
+        let listen = std::env::var("IMZERO2_HEADLESS_LISTEN").ok().filter(|v| !v.is_empty());
         // Resolve (and thus probe) the encoder lane only when something will
         // actually encode — a remote carrier or the file dump. PNG-only / null
         // runs never spawn ffmpeg, so probing the VAAPI lane (CodecLane::best)
@@ -167,9 +164,8 @@ fn build_codec_lane() -> CodecLane {
     // (VAAPI) if it encodes on this host, else the portable software lane
     // (SD5; avoids the Fedora-mesa h264_vaapi ENOSYS respawn loop).
     if codec == VideoCodec::H264 {
-        if let Some(args) = std::env::var("IMZERO2_HEADLESS_ENCODER_ARGS")
-            .ok()
-            .filter(|v| !v.trim().is_empty())
+        if let Some(args) =
+            std::env::var("IMZERO2_HEADLESS_ENCODER_ARGS").ok().filter(|v| !v.trim().is_empty())
         {
             return CodecLane::h264(args.split_whitespace().map(str::to_owned).collect());
         }
@@ -263,7 +259,8 @@ const TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
 fn init_gpu(width_px: u32, height_px: u32) -> Result<Gpu, HeadlessError> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY | wgpu::Backends::GL),
+        backends: wgpu::Backends::from_env()
+            .unwrap_or(wgpu::Backends::PRIMARY | wgpu::Backends::GL),
         flags: wgpu::InstanceFlags::from_build_config().with_env(),
         backend_options: wgpu::BackendOptions::from_env_or_default(),
         memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
@@ -272,8 +269,8 @@ fn init_gpu(width_px: u32, height_px: u32) -> Result<Gpu, HeadlessError> {
         display: None,
     });
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::from_env()
-            .unwrap_or(wgpu::PowerPreference::HighPerformance),
+        power_preference:
+            wgpu::PowerPreference::from_env().unwrap_or(wgpu::PowerPreference::HighPerformance),
         compatible_surface: None,
         force_fallback_adapter: false,
     }))?;
@@ -374,8 +371,10 @@ impl Gpu {
         });
         self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.unpadded_bytes_per_row = width_px * 4;
-        self.padded_bytes_per_row =
-            wgpu::util::align_to(self.unpadded_bytes_per_row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        self.padded_bytes_per_row = wgpu::util::align_to(
+            self.unpadded_bytes_per_row,
+            wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
+        );
         self.readback = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("imzero2_headless_readback"),
             size: self.padded_bytes_per_row as u64 * height_px as u64,
@@ -398,14 +397,11 @@ impl Gpu {
             self.renderer.update_texture(&self.device, &self.queue, *id, delta);
         }
         let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("imzero2_headless_encoder"),
-            });
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("imzero2_headless_encoder"),
+        });
         let user_cmds =
-            self.renderer
-                .update_buffers(&self.device, &self.queue, &mut encoder, &clipped, screen);
+            self.renderer.update_buffers(&self.device, &self.queue, &mut encoder, &clipped, screen);
         {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -442,8 +438,7 @@ impl Gpu {
         for id in &out.textures_delta.free {
             self.renderer.free_texture(id);
         }
-        self.queue
-            .submit(user_cmds.into_iter().chain([encoder.finish()]));
+        self.queue.submit(user_cmds.into_iter().chain([encoder.finish()]));
 
         let slice = self.readback.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -457,9 +452,8 @@ impl Gpu {
             frame.clear();
             frame.reserve(self.unpadded_bytes_per_row as usize * self.extent.height as usize);
             for padded_row in data.chunks(self.padded_bytes_per_row as usize) {
-                let row = padded_row
-                    .get(..self.unpadded_bytes_per_row as usize)
-                    .unwrap_or(padded_row);
+                let row =
+                    padded_row.get(..self.unpadded_bytes_per_row as usize).unwrap_or(padded_row);
                 frame.extend_from_slice(row);
             }
         }
@@ -554,7 +548,10 @@ fn clamp_resize(
     cur_h: u32,
     cur_ppp: f32,
 ) -> Option<(u32, u32, f32)> {
-    if !(req.logical_width.is_finite() && req.logical_height.is_finite() && req.pixel_scale.is_finite()) {
+    if !(req.logical_width.is_finite()
+        && req.logical_height.is_finite()
+        && req.pixel_scale.is_finite())
+    {
         return None;
     }
     let ppp = req.pixel_scale.clamp(0.25, 4.0);
@@ -598,8 +595,15 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         std::io::stdin().lock(),
         std::io::stdout().lock(),
     );
-    let mut cadence = if reactive { Cadence::Reactive } else { Cadence::Continuous };
-    tracing::info!(?cadence, "render cadence (IMZERO2_RENDER_CADENCE; runtime-switchable via the wire)");
+    let mut cadence = if reactive {
+        Cadence::Reactive
+    } else {
+        Cadence::Continuous
+    };
+    tracing::info!(
+        ?cadence,
+        "render cadence (IMZERO2_RENDER_CADENCE; runtime-switchable via the wire)"
+    );
 
     let mut sinks: Vec<Box<dyn FrameSink>> = Vec::new();
     if let Some(dir) = &opts.dump_dir {
@@ -713,7 +717,11 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // Runtime cadence switch (wire SetCadence — the viewer's toggle).
         if let Some(c) = &mut carrier {
             if let Some(req) = c.take_cadence() {
-                let new = if req == 1 { Cadence::Reactive } else { Cadence::Continuous };
+                let new = if req == 1 {
+                    Cadence::Reactive
+                } else {
+                    Cadence::Continuous
+                };
                 if new != cadence {
                     cadence = new;
                     c.set_hello_cadence(cadence as u32);
@@ -728,7 +736,9 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // and restart the encoder (fresh SPS/PPS + IDR at the new size).
         if let Some(c) = &mut carrier {
             if let Some(req) = c.take_resize() {
-                if let Some((nw, nh, nppp)) = clamp_resize(&req, gpu.max_texture_side, width_px, height_px, ppp) {
+                if let Some((nw, nh, nppp)) =
+                    clamp_resize(&req, gpu.max_texture_side, width_px, height_px, ppp)
+                {
                     gpu.resize(nw, nh);
                     width_px = nw;
                     height_px = nh;
@@ -742,7 +752,12 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                         egui::vec2(nw as f32 / nppp, nh as f32 / nppp),
                     );
                     c.apply_geometry(nw, nh, nppp);
-                    tracing::info!(width_px = nw, height_px = nh, pixels_per_point = nppp, "viewport resize applied");
+                    tracing::info!(
+                        width_px = nw,
+                        height_px = nh,
+                        pixels_per_point = nppp,
+                        "viewport resize applied"
+                    );
                 }
             }
         }
@@ -775,11 +790,8 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             modifiers: translator.modifiers,
             ..Default::default()
         };
-        raw_input
-            .viewports
-            .entry(egui::ViewportId::ROOT)
-            .or_default()
-            .native_pixels_per_point = Some(ppp);
+        raw_input.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point =
+            Some(ppp);
 
         let mut shutdown = false;
         // ADR-0088: publish current video-pipeline capabilities for the Go
@@ -788,12 +800,17 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             // Publish capabilities + stream geometry only while a viewer is
             // connected, so the Go control self-hides when there is no sink.
             if c.connected() {
-                fffi.set_video_capabilities(&build_video_caps(&host_encode_caps, c.decode_caps().as_ref()));
+                fffi.set_video_capabilities(&build_video_caps(
+                    &host_encode_caps,
+                    c.decode_caps().as_ref(),
+                ));
                 let (bytes_sent, frames_sent, frames_decoded, frames_dropped) = c.stats();
                 let now = std::time::Instant::now();
                 let dt = now.duration_since(bitrate_prev_inst).as_secs_f64();
                 if dt >= 0.25 {
-                    let inst = (bytes_sent.saturating_sub(bitrate_prev_bytes) as f64 * 8.0 / dt / 1000.0) as u64;
+                    let inst = (bytes_sent.saturating_sub(bitrate_prev_bytes) as f64 * 8.0
+                        / dt
+                        / 1000.0) as u64;
                     bitrate_kbps = (bitrate_kbps * 3 + inst) / 4; // EMA, ~250 ms window
                     bitrate_prev_bytes = bytes_sent;
                     bitrate_prev_inst = now;
@@ -876,8 +893,8 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 next_deadline = std::time::Instant::now();
             }
         }
-        let need_pixels = !sinks.is_empty()
-            || carrier.as_ref().map(WsCarrier::connected).unwrap_or(false);
+        let need_pixels =
+            !sinks.is_empty() || carrier.as_ref().map(WsCarrier::connected).unwrap_or(false);
         if need_pixels {
             gpu.render_and_readback(&ctx, out, &screen, &mut bgra_frame)?;
             for sink in &mut sinks {
@@ -904,10 +921,17 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             break;
         }
         if opts.max_frames > 0 && frame_idx >= opts.max_frames {
-            tracing::info!(frames = frame_idx, "IMZERO2_HEADLESS_MAX_FRAMES reached — exiting");
+            tracing::info!(
+                frames = frame_idx,
+                "IMZERO2_HEADLESS_MAX_FRAMES reached — exiting"
+            );
             break;
         }
     }
-    tracing::info!(frames = frame_idx, elapsed_s = start.elapsed().as_secs_f64(), "headless host done");
+    tracing::info!(
+        frames = frame_idx,
+        elapsed_s = start.elapsed().as_secs_f64(),
+        "headless host done"
+    );
     Ok(())
 }

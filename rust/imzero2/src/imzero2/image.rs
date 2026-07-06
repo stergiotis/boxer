@@ -20,13 +20,9 @@
 
 use std::collections::HashMap;
 
-use egui::{
-    Color32, ColorImage, Context, Rect, Sense, TextureHandle, TextureOptions, pos2, vec2,
-};
+use egui::{Color32, ColorImage, Context, Rect, Sense, TextureHandle, TextureOptions, pos2, vec2};
 
-use crate::imzero2::scrolling_texture::{
-    HOVER_RC_NONE, color32_from_rgba_u32, filter_to_options,
-};
+use crate::imzero2::scrolling_texture::{HOVER_RC_NONE, color32_from_rgba_u32, filter_to_options};
 
 // Fit wire values — mirror FitE in the Go IDL.
 pub const FIT_NATIVE: u8 = 0;
@@ -87,10 +83,7 @@ impl ImageCache {
     pub fn release(&mut self, id: u64) {
         if let Some(entry) = self.entries.remove(&id) {
             if let Some(cache) = &self.texture_cache {
-                cache
-                    .lock()
-                    .expect("texture cache poisoned")
-                    .remove(entry.tex.id());
+                cache.lock().expect("texture cache poisoned").remove(entry.tex.id());
             }
         }
     }
@@ -120,19 +113,17 @@ impl ImageCache {
         if let Some(cache) = &self.texture_cache {
             let rgba: Vec<u8> = pixels
                 .iter()
-                .flat_map(|&v| [
-                    ((v >> 24) & 0xff) as u8,
-                    ((v >> 16) & 0xff) as u8,
-                    ((v >> 8) & 0xff) as u8,
-                    (v & 0xff) as u8,
-                ])
+                .flat_map(|&v| {
+                    [
+                        ((v >> 24) & 0xff) as u8,
+                        ((v >> 16) & 0xff) as u8,
+                        ((v >> 8) & 0xff) as u8,
+                        (v & 0xff) as u8,
+                    ]
+                })
                 .collect();
-            let nearest =
-                filter_opts.magnification == egui::TextureFilter::Nearest;
-            cache
-                .lock()
-                .expect("texture cache poisoned")
-                .insert(tex.id(), w, h, rgba, nearest);
+            let nearest = filter_opts.magnification == egui::TextureFilter::Nearest;
+            cache.lock().expect("texture cache poisoned").insert(tex.id(), w, h, rgba, nearest);
         }
 
         self.entries.insert(
@@ -214,8 +205,16 @@ impl ImageCache {
                 // size from the host, whose only available-size channel is a
                 // single global register that reads wrong when several windows
                 // render in one frame.
-                let fw = if fixed_w == 0 { available.x } else { fixed_w as f32 };
-                let fh = if fixed_h == 0 { available.y } else { fixed_h as f32 };
+                let fw = if fixed_w == 0 {
+                    available.x
+                } else {
+                    fixed_w as f32
+                };
+                let fh = if fixed_h == 0 {
+                    available.y
+                } else {
+                    fixed_h as f32
+                };
                 if fw <= 0.0 || fh <= 0.0 {
                     return vec2(0.0, 0.0);
                 }
@@ -307,7 +306,14 @@ impl ImageCache {
         let native_h = entry.h;
         let tex_id = entry.tex.id();
 
-        let size = Self::compute_size(fit, native_w, native_h, fixed_w, fixed_h, ui.available_size());
+        let size = Self::compute_size(
+            fit,
+            native_w,
+            native_h,
+            fixed_w,
+            fixed_h,
+            ui.available_size(),
+        );
         let sense = Sense::hover().union(Sense::click());
         let (rect, resp) = ui.allocate_exact_size(size, sense);
 
