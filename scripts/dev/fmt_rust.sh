@@ -18,8 +18,10 @@
 #   scripts/dev/fmt_rust.sh            # format in place
 #   scripts/dev/fmt_rust.sh --check    # verify only; non-zero exit on drift (CI)
 #
-# Graceful skip when cargo is absent, matching scripts/ci/watermark_test.sh, so
-# a toolchain-less checkout still goes green.
+# Graceful skip — matching scripts/ci/watermark_test.sh — when cargo is absent or
+# a crate's pinned toolchain can't be resolved: a toolchain-less checkout still
+# goes green locally, while CI (with the toolchains installed) is the enforcer.
+# Wired into scripts/ci/lint.sh via `--check`.
 #
 # NOTE: rust/h3bridge pins the rolling `stable` channel, so its formatting is
 # only reproducible until the next stable release; the 1.92-pinned crates are
@@ -59,17 +61,31 @@ if [ "${#manifests[@]}" -eq 0 ]; then
 fi
 
 rc=0
+checked=0
 for manifest in "${manifests[@]}"; do
     crate=$(dirname "$manifest")
+    # Skip gracefully when this crate's PINNED toolchain can't be resolved (e.g. a
+    # contributor with cargo but not the 1.92 toolchain, offline). `cargo --version`
+    # runs from the crate dir so the rustup proxy resolves the pin; mirrors
+    # scripts/ci/watermark_test.sh and keeps local lint green.
+    if ! ( cd "$crate" && cargo --version >/dev/null 2>&1 ); then
+        echo "fmt_rust: skipped $crate (pinned toolchain unavailable)"
+        continue
+    fi
+    checked=$((checked + 1))
     echo "=== cargo fmt --all ($mode): $crate ==="
     # Subshell + cd so the rustup proxy resolves this crate's pinned toolchain.
     if ! ( cd "$crate" && cargo fmt --all "${fmt_args[@]}" ); then
         rc=1
-        [ "$mode" = "check" ] && echo "fmt_rust: $crate is not formatted (run without --check to fix)" >&2
+        [ "$mode" = "check" ] && echo "fmt_rust: $crate is not formatted — run scripts/dev/fmt_rust.sh to fix" >&2
     fi
 done
 
 if [ "$rc" -eq 0 ]; then
-    echo "fmt_rust: ok ($mode)"
+    if [ "$checked" -eq 0 ]; then
+        echo "fmt_rust: skipped (no pinned toolchain available)"
+    else
+        echo "fmt_rust: ok ($mode)"
+    fi
 fi
 exit $rc
