@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/lw"
 )
 
 // ipcBytes serialises a record to an Arrow IPC stream — the strict wire-byte
@@ -31,7 +32,7 @@ func ipcBytes(t *testing.T, rec arrow.RecordBatch) []byte {
 // invariant. The GENERATED codec (buildGen) drives the DML directly; the REFLECT
 // codec walks the same DTO with a lookup that maps the static membership name to
 // the same kind id the generated code hardcodes.
-func assertGenEqualsReflect[T any](t *testing.T, data []T, buildGen func(*anchor.InEntityTestTable) error, lookup marshallreflect.MapLookup) {
+func assertGenEqualsReflect[T any](t *testing.T, data []T, buildGen func(*anchor.InEntityTestTable) error, lookup marshallreflect.LookupI) {
 	t.Helper()
 	pool := memory.NewGoAllocator()
 
@@ -100,4 +101,56 @@ func TestOptNoteDoc_GenEqualsReflect(t *testing.T) {
 	assertGenEqualsReflect(t, data,
 		func(tbl *anchor.InEntityTestTable) error { return OptNoteDocBuildEntities(tbl, cols) },
 		marshallreflect.MapLookup{"note": kindNote})
+}
+
+// --- Step 2a: dynamic membership markers (lw.Ref / lw.Verbatim). ---
+// Dynamic memberships carry their value directly (verbatim = the name, ref = the
+// id, ADR-0109), so no lookup is consulted — NoLookup on the reflect side.
+
+func TestLabeledTextNested_GenEqualsReflect(t *testing.T) {
+	data := []LabeledTextNested{
+		{ID: 1, Tracking: []byte("A"), Texts: []labeledTextAttr{
+			{Label: "title", Text: "hello world", WordLength: []uint32{5, 5}, WordBag: []string{"hello", "world"}},
+			{Label: "body", Text: "hi", WordLength: []uint32{2}, WordBag: []string{"hi"}},
+		}},
+		{ID: 2, Tracking: []byte("B")},
+	}
+	cols := &LabeledTextNestedColumns{}
+	for _, d := range data {
+		cols.Append(d)
+	}
+	assertGenEqualsReflect(t, data,
+		func(tbl *anchor.InEntityTestTable) error { return LabeledTextNestedBuildEntities(tbl, cols) },
+		marshallreflect.NoLookup{})
+}
+
+func TestNamedTextNested_GenEqualsReflect(t *testing.T) {
+	data := []NamedTextNested{
+		{ID: 5, Tracking: []byte("N1"), Notes: []namedTextAttr{
+			{Name: "author", Kind: 7, Text: "ann", WordLength: []uint32{3}, WordBag: []string{"ann"}},
+		}},
+	}
+	cols := &NamedTextNestedColumns{}
+	for _, d := range data {
+		cols.Append(d)
+	}
+	assertGenEqualsReflect(t, data,
+		func(tbl *anchor.InEntityTestTable) error { return NamedTextNestedBuildEntities(tbl, cols) },
+		marshallreflect.NoLookup{})
+}
+
+func TestLineageNested_GenEqualsReflect(t *testing.T) {
+	data := []LineageNested{
+		{ID: 9, Tracking: []byte("L1"), Types: []lineageAttr{
+			{Ancestors: []lw.Ref{10, 20, 30}, Kind: "person"},
+			{Ancestors: []lw.Ref{40}, Kind: "thing"},
+		}},
+	}
+	cols := &LineageNestedColumns{}
+	for _, d := range data {
+		cols.Append(d)
+	}
+	assertGenEqualsReflect(t, data,
+		func(tbl *anchor.InEntityTestTable) error { return LineageNestedBuildEntities(tbl, cols) },
+		marshallreflect.NoLookup{})
 }

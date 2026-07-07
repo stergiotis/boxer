@@ -55,6 +55,10 @@ var membershipMarkerChannel = map[string]mappingplan.MembershipChannel{
 // canonical, exactly like `,ct=`.
 func classifyLwMarker(rt reflect.Type) (s goplan.FieldShape, err error) {
 	name := rt.Name()
+	// The as-written marker type ("lw.Ref", "lw.Single[uint64]", "lw.IPv4") —
+	// carried through the shared Plan for the codegen codec's newtype bridging;
+	// the reflect codec ignores it (it converts off the live reflect.Type).
+	s.MarkerGoType = rt.String()
 	if strings.HasPrefix(name, "Single[") {
 		vf, ok := rt.FieldByName("Val")
 		if !ok {

@@ -212,6 +212,7 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	needsRoaring := false
 	needsTime := false
 	needsMarshalltypes := false
+	needsLw := false
 	for _, f := range plan.Fields {
 		if f.IsRoaring() {
 			needsRoaring = true
@@ -221,6 +222,13 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 		}
 		if f.CarrierField != "" {
 			needsMarshalltypes = true
+		}
+		// An lw.* marker membership emits newtype conversions (lw.Ref(v) / …) in
+		// the decode, which need the lw package.
+		for _, m := range f.TupleMemberships {
+			if m.MarkerGoType != "" {
+				needsLw = true
+			}
 		}
 	}
 	for _, p := range plan.PlainCols {
@@ -282,6 +290,9 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	}
 	if needsMarshalltypes {
 		boxer = append(boxer, `"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/marshalltypes"`)
+	}
+	if needsLw {
+		boxer = append(boxer, `"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/lw"`)
 	}
 	imps.group(boxer...)
 
@@ -1072,8 +1083,18 @@ func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 // `[]byte(x)` for a verbatim string field, the expression as-is for a []byte or
 // a ref uint64 field.
 func tupleMembExpr(valExpr string, m mappingplan.TupleMembership) string {
-	if m.Channel.EmbedsLiteralName() && m.GoType == "string" {
-		return "[]byte(" + valExpr + ")"
+	if m.Channel.EmbedsLiteralName() {
+		// verbatim: []byte(name). A string field or an lw.Verbatim newtype both
+		// convert directly; a []byte field passes as-is.
+		if m.GoType == "string" {
+			return "[]byte(" + valExpr + ")"
+		}
+		return valExpr
+	}
+	// ref: the uint64 id. An lw.Ref marker newtype needs an explicit conversion
+	// to the DML method's plain uint64 parameter.
+	if m.MarkerGoType != "" {
+		return "uint64(" + valExpr + ")"
 	}
 	return valExpr
 }
@@ -1592,7 +1613,7 @@ func writeTupleSectionDecode(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 			// Slice-mode: the sole field on this channel takes the whole Seq.
 			f := chFields[0]
 			sliceVar := prefix + f.GoField + "Membs"
-			linef(sb, 3, "var %s []%s", sliceVar, f.GoType)
+			linef(sb, 3, "var %s []%s", sliceVar, membElemGoType(f))
 			linef(sb, 3, "for mv := range %s {", accessor)
 			linef(sb, 4, "%s = append(%s, %s)", sliceVar, sliceVar, tupleMembDecodeElem("mv", f))
 			line(sb, 3, "}")
@@ -1675,14 +1696,31 @@ func writeTupleSectionDecode(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 // a defensive []byte copy for a []byte field (the value aliases the reused Arrow
 // buffer and is retained inside the tuple slice).
 func tupleMembDecodeElem(src string, m mappingplan.TupleMembership) string {
+	var expr string
 	switch m.GoType {
 	case "uint64":
-		return src
+		expr = src
 	case "[]byte":
-		return "append([]byte(nil), " + src + "...)"
+		expr = "append([]byte(nil), " + src + "...)"
 	default: // "string"
-		return "string(" + src + ")"
+		expr = "string(" + src + ")"
 	}
+	// Wrap in the lw.* marker newtype (lw.Ref(v) / lw.Verbatim(string(v))); a
+	// plain @membership field takes the underlying type directly.
+	if m.MarkerGoType != "" {
+		expr = m.MarkerGoType + "(" + expr + ")"
+	}
+	return expr
+}
+
+// membElemGoType is the Go type of one membership value in a decoded slice: the
+// lw.* marker newtype when set (so a `[]lw.Ref` field is declared `[]lw.Ref`),
+// else the plain underlying type.
+func membElemGoType(m mappingplan.TupleMembership) string {
+	if m.MarkerGoType != "" {
+		return m.MarkerGoType
+	}
+	return m.GoType
 }
 
 // writeSectionMatchLoops emits the shared middle of a non-carrier

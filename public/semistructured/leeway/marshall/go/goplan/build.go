@@ -46,6 +46,14 @@ type FieldShape struct {
 	IsMembership      bool
 	MembershipChannel mappingplan.MembershipChannel
 
+	// MarkerGoType is the as-written lw.* marker Go type (e.g. "lw.Ref",
+	// "lw.Verbatim", "lw.Single[uint64]", "lw.IPv4"), or "" for a plain field.
+	// The reflect codec bridges markers off the live reflect.Type and IGNORES
+	// this; the codegen codec has no live type and needs it to emit the newtype
+	// conversions (uint64(x) / lw.Ref(v) / .Val / …). Additive — the marker's
+	// wire representation is its Canonical, unchanged.
+	MarkerGoType string
+
 	// CarrierType is the marshalltypes carrier struct name (e.g.
 	// "MixedLowCardRef") when the field's Go type is a Cut-2 carrier, or ""
 	// otherwise. Both front-ends set it by recognising the marshalltypes
@@ -883,10 +891,11 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 				return
 			}
 			memberships = append(memberships, mappingplan.TupleMembership{
-				GoField: e.GoFieldName,
-				GoType:  mGoType,
-				Channel: e.Shape.MembershipChannel,
-				IsSlice: mIsSlice,
+				GoField:      e.GoFieldName,
+				GoType:       mGoType,
+				Channel:      e.Shape.MembershipChannel,
+				IsSlice:      mIsSlice,
+				MarkerGoType: e.Shape.MarkerGoType, // "lw.Ref" / "lw.Verbatim" for the codegen bridge
 			})
 			continue
 		}

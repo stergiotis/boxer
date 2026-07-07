@@ -374,26 +374,67 @@ func buildAstNestedElems(st *ast.StructType) (elems []goplan.TupleElem, err erro
 	return
 }
 
-// isLwMarkerExpr reports whether expr names an lw.* marker type (lw.Single[T],
-// lw.IPv4/IPv6 lanes, lw.Ref/HighRef/Verbatim/HighVerbatim membership markers, or
-// a `[]` of one). The codegen front-end does not yet bridge these (Slice C step
-// 2); classifyType rejects them for a clear error.
-func isLwMarkerExpr(expr ast.Expr) bool {
+// membershipMarkerChannel maps an lw.* membership marker type name to its
+// channel — the AST mirror of marshallreflect.membershipMarkerChannel.
+var membershipMarkerChannel = map[string]mappingplan.MembershipChannel{
+	"Ref":          mappingplan.MembershipChannelLowCardRef,
+	"HighRef":      mappingplan.MembershipChannelHighCardRef,
+	"Verbatim":     mappingplan.MembershipChannelLowCardVerbatim,
+	"HighVerbatim": mappingplan.MembershipChannelHighCardVerbatim,
+}
+
+// lwMarkerName reports whether expr names an lw.* marker type — a selector into
+// the `lw` package (lw.Ref, lw.IPv4, …), an lw.Single[T] index expression, or a
+// `[]` of one. It returns the marker's type name (e.g. "Ref", "Single") and
+// whether it was wrapped in a slice.
+func lwMarkerName(expr ast.Expr) (name string, isSlice, ok bool) {
 	switch v := expr.(type) {
-	case *ast.SelectorExpr: // lw.IPv4, lw.Ref, …
-		pkg, ok := v.X.(*ast.Ident)
-		return ok && pkg.Name == "lw"
+	case *ast.SelectorExpr: // lw.Ref, lw.IPv4, …
+		if pkg, pok := v.X.(*ast.Ident); pok && pkg.Name == "lw" {
+			return v.Sel.Name, false, true
+		}
 	case *ast.IndexExpr: // lw.Single[T]
-		if sel, ok := v.X.(*ast.SelectorExpr); ok {
-			pkg, pok := sel.X.(*ast.Ident)
-			return pok && pkg.Name == "lw"
+		if sel, sok := v.X.(*ast.SelectorExpr); sok {
+			if pkg, pok := sel.X.(*ast.Ident); pok && pkg.Name == "lw" {
+				return sel.Sel.Name, false, true
+			}
 		}
 	case *ast.ArrayType: // []lw.Ref
 		if v.Len == nil {
-			return isLwMarkerExpr(v.Elt)
+			n, _, o := lwMarkerName(v.Elt)
+			return n, true, o
 		}
 	}
-	return false
+	return "", false, false
+}
+
+// classifyLwMembershipMarker classifies an lw.* membership marker (lw.Ref /
+// lw.HighRef / lw.Verbatim / lw.HighVerbatim, or a `[]` of them) into a
+// FieldShape — mirroring marshallreflect.classifyLwMarker's membership branch.
+// The value's Go type is uint64 (ref) or string (verbatim), a slice promotes the
+// canonical to HomogenousArray, and MarkerGoType carries the newtype for the
+// codegen bridge. lw.Single / lane value markers are deferred to step 2b.
+func classifyLwMembershipMarker(name string, isSlice bool) (shape goplan.FieldShape, err error) {
+	ch, ok := membershipMarkerChannel[name]
+	if !ok {
+		err = eb.Build().Str("marker", "lw."+name).Errorf("lw.%s is not yet supported by the codegen front-end (Slice C step 2b — only the membership markers lw.Ref / lw.HighRef / lw.Verbatim / lw.HighVerbatim are wired)", name)
+		return
+	}
+	shape.IsMembership = true
+	shape.MembershipChannel = ch
+	shape.MarkerGoType = "lw." + name
+	goType := "uint64"
+	if ch.EmbedsLiteralName() {
+		goType = "string"
+	}
+	shape.Canonical, err = goplan.ScalarCanonicalForGoType(goType)
+	if err != nil {
+		return
+	}
+	if isSlice {
+		shape.Canonical = canonicaltypes.PromoteScalarPrim(shape.Canonical, canonicaltypes.ScalarModifierHomogenousArray)
+	}
+	return
 }
 
 func stripQuotes(s string) (out string) {
@@ -421,13 +462,12 @@ func fieldNamesString(field *ast.Field) (out string) {
 // Option[[]byte]), `[]Option[T]`, arbitrary pointers (other than
 // `*roaring.Bitmap`), and nested generics other than `option.Option`.
 func classifyType(expr ast.Expr) (shape goplan.FieldShape, err error) {
-	// lw.* marker types (lw.Single[T], lw.IPv4/IPv6, lw.Ref/Verbatim/…) are the
-	// nested-model spelling; the codegen front-end does not yet bridge their Go
-	// shapes (Slice C step 2). Reject clearly rather than fall through to the
-	// unknown-scalar / unsupported-generic errors below.
-	if isLwMarkerExpr(expr) {
-		err = eb.Build().Errorf("lw.* marker types are not yet supported by the codegen front-end (Slice C step 2); use the reflect front-end for now")
-		return
+	// lw.* marker types (the nested model). Membership markers
+	// (lw.Ref/HighRef/Verbatim/HighVerbatim, and `[]` of them) classify to a
+	// per-attribute membership; value markers (lw.Single[T], lanes lw.IPv4/IPv6)
+	// are deferred to step 2b (classifyLwMembershipMarker rejects them clearly).
+	if mname, isSlice, ok := lwMarkerName(expr); ok {
+		return classifyLwMembershipMarker(mname, isSlice)
 	}
 	// option.Option[T] at the top level (functional.option in boxer).
 	if idx, ok := expr.(*ast.IndexExpr); ok {

@@ -582,6 +582,12 @@ type TupleMembership struct {
 	// AddMembership<Channel>P call per slice element, in slice order. A slice
 	// field is the sole membership on its channel (ADR-0109 D3).
 	IsSlice bool
+	// MarkerGoType is the as-written lw.* membership marker type (e.g. "lw.Ref",
+	// "lw.Verbatim"), or "" for a plain `@membership` field whose Go type is
+	// GoType directly. The codegen codec bridges the newtype — uint64(x) on
+	// write, lw.Ref(v) on read; the reflect codec ignores it (it converts off the
+	// live reflect.Type). For a repeated field it is the slice ELEMENT marker.
+	MarkerGoType string
 }
 
 // GoType returns the field's value type in Go source form (e.g. "uint64",
