@@ -314,16 +314,24 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 	return
 }
 
+var uint64Type = reflect.TypeOf(uint64(0))
+
 // tupleMembArg converts a tuple element's membership value to the argument the
 // AddMembership<Channel>P method takes: a []byte name for a verbatim channel
-// (a string field re-cast to []byte; a []byte field passed as-is), or the
-// uint64 id directly for a ref channel. v is the field value, or one element of
-// a repeated (slice) membership field.
+// (a string field / newtype re-cast to []byte; a []byte field passed as-is), or
+// the uint64 id for a ref channel. v is the field value, or one element of a
+// repeated (slice) membership field. It bridges the nested-model marker newtypes
+// (lw.Ref / lw.Verbatim) whose Go type differs from the DML method's plain type.
 func tupleMembArg(v reflect.Value, m mappingplan.TupleMembership) reflect.Value {
-	if m.Channel.EmbedsLiteralName() && m.GoType == "string" {
-		return reflect.ValueOf([]byte(v.String()))
+	if m.Channel.EmbedsLiteralName() {
+		if m.GoType == "string" {
+			return reflect.ValueOf([]byte(v.String()))
+		}
+		return v // []byte
 	}
-	return v
+	// ref: a plain uint64 id. Convert an lw.Ref marker newtype (a no-op for a
+	// plain uint64 field).
+	return v.Convert(uint64Type)
 }
 
 // tupleElemCardMatches classifies one tuple element by its shared

@@ -724,16 +724,23 @@ func setTupleMembSlice(elem reflect.Value, m mappingplan.TupleMembership, vals [
 		return
 	}
 	fld := elem.FieldByName(m.GoField)
+	elemType := fld.Type().Elem()
 	out := reflect.MakeSlice(fld.Type(), 0, len(vals))
 	for _, v := range vals {
+		var ev reflect.Value
 		switch m.GoType {
 		case "uint64":
-			out = reflect.Append(out, v)
+			ev = v
 		case "[]byte":
-			out = reflect.Append(out, reflect.ValueOf(append([]byte(nil), v.Bytes()...)))
+			ev = reflect.ValueOf(append([]byte(nil), v.Bytes()...))
 		default: // "string"
-			out = reflect.Append(out, reflect.ValueOf(string(v.Bytes())))
+			ev = reflect.ValueOf(string(v.Bytes()))
 		}
+		// Bridge a marker newtype element ([]lw.Ref → convert uint64→lw.Ref).
+		if ev.Type() != elemType && ev.Type().ConvertibleTo(elemType) {
+			ev = ev.Convert(elemType)
+		}
+		out = reflect.Append(out, ev)
 	}
 	fld.Set(out)
 }

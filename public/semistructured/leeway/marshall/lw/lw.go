@@ -27,3 +27,17 @@ type (
 	IPv4 [4]byte  // canonical "v" — an IPv4 address as 4 bytes
 	IPv6 [16]byte // canonical "w" — an IPv6 address as 16 bytes
 )
+
+// The membership channel markers make a nested attribute struct's field a
+// per-attribute MEMBERSHIP rather than a value sub-column — the type-safe form
+// of the tuple `@membership` tag. The field's TYPE fixes the channel; its value
+// is the per-row identity, carried directly on the wire (ADR-0109): a ref id as
+// uint64, a verbatim name as the literal string. A `[]Ref` field is a repeated
+// membership (one attribute, many memberships); several marker fields are
+// several memberships, possibly on heterogeneous channels.
+type (
+	Ref          uint64 // low-card ref  — a membership id, carried directly
+	HighRef      uint64 // high-card ref
+	Verbatim     string // low-card verbatim — the literal membership name
+	HighVerbatim string // high-card verbatim
+)

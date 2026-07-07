@@ -111,17 +111,23 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 		// element struct's fields are classified individually and validated
 		// by the shared builder.
 		if isTupleSliceType(f.Type) {
-			// `[]S` is a static-membership nested section (Many) only when BOTH
-			// signals agree: the element struct declares no per-attribute
-			// membership field (`@membership`), and the outer tag names a static
-			// membership (`membership,section`). Otherwise it is a
-			// dynamic-membership tuple — including a bare-section tag whose element
-			// forgot its `@membership` (a tuple-path error), or a tuple with a
-			// malformed flagged tag — so those keep the tuple-specific errors.
-			if !elemHasTupleMembership(f.Type.Elem()) && strings.Contains(lwTag, ",") {
-				err = addNestedSectionField(b, rt, f.Name, lwTag, f.Type.Elem(), mappingplan.AttrCardinalityMany)
-			} else {
-				err = addReflectTupleField(b, rt, f.Name, lwTag, f.Type.Elem())
+			elem := f.Type.Elem()
+			switch {
+			case elemHasLwMembershipMarker(elem):
+				// Nested dynamic tuple: lw.* marker memberships + nested value
+				// fields (column-only tags). Routed to the nested builder.
+				err = addNestedSectionField(b, rt, f.Name, lwTag, elem, mappingplan.AttrCardinalityMany)
+			case elemHasAtMembership(elem):
+				// Flat dynamic tuple: `@membership` tags + `section:column` value
+				// fields — the original ADR-0103 grammar.
+				err = addReflectTupleField(b, rt, f.Name, lwTag, elem)
+			case strings.Contains(lwTag, ","):
+				// Static-Many nested section (its single membership on the tag).
+				err = addNestedSectionField(b, rt, f.Name, lwTag, elem, mappingplan.AttrCardinalityMany)
+			default:
+				// A bare-section `[]S` with no membership at all → the flat tuple
+				// path reports the missing-`@membership` error.
+				err = addReflectTupleField(b, rt, f.Name, lwTag, elem)
 			}
 			if err != nil {
 				return
@@ -229,12 +235,21 @@ func isAttrStructType(t reflect.Type) bool {
 	return true
 }
 
-// elemHasTupleMembership reports whether a slice-of-struct element carries a
-// per-attribute membership field — an `@membership`-tagged field (the dynamic
-// tuple marker; `@` is reserved for it). Such a `[]S` is a dynamic-membership
-// tuple; without one it is a static-membership nested section (Many). (Slice-A
-// Step 5 will extend this to lw.* marker TYPES for a tag-free dynamic element.)
-func elemHasTupleMembership(elemType reflect.Type) bool {
+// elemHasLwMembershipMarker reports whether a slice-of-struct element carries an
+// lw.* membership marker FIELD (lw.Ref / lw.Verbatim / …) — the nested-model,
+// tag-free spelling of a per-attribute membership. Such a `[]S` is a dynamic
+// nested tuple. elemHasAtMembership is the sibling for the original
+// `@membership`-tag spelling (ADR-0103); the two route to different builders.
+func elemHasLwMembershipMarker(elemType reflect.Type) bool {
+	for j := 0; j < elemType.NumField(); j++ {
+		if isLwMembershipType(elemType.Field(j).Type) {
+			return true
+		}
+	}
+	return false
+}
+
+func elemHasAtMembership(elemType reflect.Type) bool {
 	for j := 0; j < elemType.NumField(); j++ {
 		if strings.HasPrefix(strings.TrimSpace(elemType.Field(j).Tag.Get("lw")), "@") {
 			return true

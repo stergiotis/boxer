@@ -535,3 +535,234 @@ func TestNested_RejectSingleInStruct(t *testing.T) {
 	require.Error(t, err, "lw.Single as a nested sub-column is deferred")
 	require.Contains(t, err.Error(), "lw.Single")
 }
+
+// Slice A, Step 5 — dynamic memberships via lw.* marker TYPES (lw.Ref / lw.Verbatim),
+// the tag-free spelling of the `@membership` tuple. A []S whose element carries a
+// marker membership field is a dynamic nested tuple, byte-identical to the flat
+// `@membership` tuple.
+
+// --- verbatim membership (a text-section tuple, like labeledtextdoc) ---
+
+type flatTextTag struct {
+	Label      string   `lw:"@membership,verbatim"`
+	Text       string   `lw:"text:text"`
+	WordLength []uint32 `lw:"text:wordLength"`
+	WordBag    []string `lw:"text:wordBag"`
+}
+type flatTextTagDoc struct {
+	_        struct{}      `kind:"textTagDoc"`
+	ID       uint64        `lw:",id"`
+	Tracking []byte        `lw:",naturalKey"`
+	Texts    []flatTextTag `lw:"text"`
+}
+type nestedTextTag struct {
+	Label      lw.Verbatim // marker membership — verbatim channel
+	Text       string      `lw:"text"`
+	WordLength []uint32    `lw:"wordLength"`
+	WordBag    []string    `lw:"wordBag"`
+}
+type nestedTextTagDoc struct {
+	_        struct{}        `kind:"textTagDoc"`
+	ID       uint64          `lw:",id"`
+	Tracking []byte          `lw:",naturalKey"`
+	Texts    []nestedTextTag `lw:"text"`
+}
+
+func TestNested_DynamicVerbatim_ByteIdenticalToAtMembership(t *testing.T) {
+	lookup := marshallreflect.NoLookup{}
+	flat := []flatTextTagDoc{
+		{ID: 1, Tracking: []byte("D1"), Texts: []flatTextTag{
+			{Label: "title", Text: "hello world", WordLength: []uint32{5, 5}, WordBag: []string{"hello", "world"}},
+			{Label: "body", Text: "hi", WordLength: []uint32{2}, WordBag: []string{"hi"}},
+		}},
+		{ID: 2, Tracking: []byte("D2"), Texts: nil},
+	}
+	nested := []nestedTextTagDoc{
+		{ID: 1, Tracking: []byte("D1"), Texts: []nestedTextTag{
+			{Label: "title", Text: "hello world", WordLength: []uint32{5, 5}, WordBag: []string{"hello", "world"}},
+			{Label: "body", Text: "hi", WordLength: []uint32{2}, WordBag: []string{"hi"}},
+		}},
+		{ID: 2, Tracking: []byte("D2"), Texts: nil},
+	}
+
+	require.NoError(t, marshallreflect.Validate[nestedTextTagDoc](anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(nested))))
+
+	flatRec, r1 := marshalToRecord(t, flat, lookup)
+	defer r1()
+	nestedRec, r2 := marshalToRecord(t, nested, lookup)
+	defer r2()
+
+	require.True(t, array.RecordEqual(flatRec, nestedRec), "records differ:\nflat=%s\nnested=%s", flatRec, nestedRec)
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, nestedRec), "Arrow IPC bytes differ")
+
+	idReader, rID := loadIdReader(t, nestedRec)
+	defer rID()
+	txReader := anchor.NewReadAccessTestTableTaggedText()
+	txReader.SetColumnIndices(txReader.GetColumnIndices())
+	require.NoError(t, txReader.LoadFromRecord(nestedRec))
+	defer txReader.Release()
+	require.Equal(t, int64(2), txReader.GetAttributes().GetNumberOfAttributes(0))
+	require.Equal(t, int64(0), txReader.GetAttributes().GetNumberOfAttributes(1))
+
+	args := idReaders(idReader).Section("text", txReader.GetAttributes(), txReader.GetMemberships())
+	var got []nestedTextTagDoc
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
+	require.Len(t, got, 2)
+	require.Len(t, got[0].Texts, 2)
+	require.Equal(t, lw.Verbatim("title"), got[0].Texts[0].Label, "verbatim membership reads into lw.Verbatim")
+	require.Equal(t, "hello world", got[0].Texts[0].Text)
+	require.Equal(t, lw.Verbatim("body"), got[0].Texts[1].Label)
+	require.Nil(t, got[1].Texts, "zero elements → nil slice")
+}
+
+// --- repeated ref membership ([]lw.Ref, carried directly — ADR-0109) ---
+
+type flatRefTag struct {
+	Ancestors []uint64 `lw:"@membership,lowCardRef"`
+	Kind      string   `lw:"symbol"`
+}
+type flatRefDoc struct {
+	_        struct{}     `kind:"refTagDoc"`
+	ID       uint64       `lw:",id"`
+	Tracking []byte       `lw:",naturalKey"`
+	Types    []flatRefTag `lw:"symbol"`
+}
+type nestedRefTag struct {
+	Ancestors []lw.Ref // repeated ref membership, ids carried directly
+	Kind      string   // value sub-column, tag-free → "value"
+}
+type nestedRefDoc struct {
+	_        struct{}       `kind:"refTagDoc"`
+	ID       uint64         `lw:",id"`
+	Tracking []byte         `lw:",naturalKey"`
+	Types    []nestedRefTag `lw:"symbol"`
+}
+
+func TestNested_DynamicRepeatedRef_ByteIdenticalToAtMembership(t *testing.T) {
+	lookup := marshallreflect.NoLookup{}
+	flat := []flatRefDoc{
+		{ID: 1, Tracking: []byte("R1"), Types: []flatRefTag{
+			{Ancestors: []uint64{10, 20, 30}, Kind: "person"},
+			{Ancestors: []uint64{40}, Kind: "thing"},
+		}},
+	}
+	nested := []nestedRefDoc{
+		{ID: 1, Tracking: []byte("R1"), Types: []nestedRefTag{
+			{Ancestors: []lw.Ref{10, 20, 30}, Kind: "person"},
+			{Ancestors: []lw.Ref{40}, Kind: "thing"},
+		}},
+	}
+
+	require.NoError(t, marshallreflect.Validate[nestedRefDoc](anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(nested))))
+
+	flatRec, r1 := marshalToRecord(t, flat, lookup)
+	defer r1()
+	nestedRec, r2 := marshalToRecord(t, nested, lookup)
+	defer r2()
+
+	require.True(t, array.RecordEqual(flatRec, nestedRec), "records differ:\nflat=%s\nnested=%s", flatRec, nestedRec)
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, nestedRec), "Arrow IPC bytes differ")
+
+	idReader, rID := loadIdReader(t, nestedRec)
+	defer rID()
+	symReader := anchor.NewReadAccessTestTableTaggedSymbol()
+	symReader.SetColumnIndices(symReader.GetColumnIndices())
+	require.NoError(t, symReader.LoadFromRecord(nestedRec))
+	defer symReader.Release()
+
+	args := idReaders(idReader).Section("symbol", symReader.GetAttributes(), symReader.GetMemberships())
+	var got []nestedRefDoc
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Types, 2)
+	require.Equal(t, []lw.Ref{10, 20, 30}, got[0].Types[0].Ancestors, "repeated ref reads into []lw.Ref")
+	require.Equal(t, "person", got[0].Types[0].Kind)
+	require.Equal(t, []lw.Ref{40}, got[0].Types[1].Ancestors)
+}
+
+// --- heterogeneous memberships (verbatim + ref on one attribute, like lineagedoc) ---
+
+type flatNamedText struct {
+	Name       string   `lw:"@membership,verbatim"`
+	Kind       uint64   `lw:"@membership,lowCardRef"`
+	Text       string   `lw:"text:text"`
+	WordLength []uint32 `lw:"text:wordLength"`
+	WordBag    []string `lw:"text:wordBag"`
+}
+type flatNamedDoc struct {
+	_        struct{}        `kind:"namedDoc"`
+	ID       uint64          `lw:",id"`
+	Tracking []byte          `lw:",naturalKey"`
+	Notes    []flatNamedText `lw:"text"`
+}
+type nestedNamedText struct {
+	Name       lw.Verbatim // membership #1 (verbatim)
+	Kind       lw.Ref      // membership #2 (ref) — heterogeneous channels
+	Text       string      `lw:"text"`
+	WordLength []uint32    `lw:"wordLength"`
+	WordBag    []string    `lw:"wordBag"`
+}
+type nestedNamedDoc struct {
+	_        struct{}          `kind:"namedDoc"`
+	ID       uint64            `lw:",id"`
+	Tracking []byte            `lw:",naturalKey"`
+	Notes    []nestedNamedText `lw:"text"`
+}
+
+func TestNested_DynamicHeterogeneous_ByteIdenticalToAtMembership(t *testing.T) {
+	lookup := marshallreflect.NoLookup{}
+	flat := []flatNamedDoc{
+		{ID: 1, Tracking: []byte("N1"), Notes: []flatNamedText{
+			{Name: "author", Kind: 7, Text: "ann", WordLength: []uint32{3}, WordBag: []string{"ann"}},
+		}},
+	}
+	nested := []nestedNamedDoc{
+		{ID: 1, Tracking: []byte("N1"), Notes: []nestedNamedText{
+			{Name: "author", Kind: 7, Text: "ann", WordLength: []uint32{3}, WordBag: []string{"ann"}},
+		}},
+	}
+
+	require.NoError(t, marshallreflect.Validate[nestedNamedDoc](anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(nested))))
+
+	flatRec, r1 := marshalToRecord(t, flat, lookup)
+	defer r1()
+	nestedRec, r2 := marshalToRecord(t, nested, lookup)
+	defer r2()
+
+	require.True(t, array.RecordEqual(flatRec, nestedRec), "records differ:\nflat=%s\nnested=%s", flatRec, nestedRec)
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, nestedRec), "Arrow IPC bytes differ")
+
+	idReader, rID := loadIdReader(t, nestedRec)
+	defer rID()
+	txReader := anchor.NewReadAccessTestTableTaggedText()
+	txReader.SetColumnIndices(txReader.GetColumnIndices())
+	require.NoError(t, txReader.LoadFromRecord(nestedRec))
+	defer txReader.Release()
+
+	args := idReaders(idReader).Section("text", txReader.GetAttributes(), txReader.GetMemberships())
+	var got []nestedNamedDoc
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Notes, 1)
+	require.Equal(t, lw.Verbatim("author"), got[0].Notes[0].Name)
+	require.Equal(t, lw.Ref(7), got[0].Notes[0].Kind)
+	require.Equal(t, "ann", got[0].Notes[0].Text)
+}
+
+// A One-cardinality section with a per-attribute lw.* membership field is
+// rejected: dynamic memberships require a slice ([]S) in Slice A.
+type oneWithMarker struct {
+	M   lw.Verbatim
+	Val string `lw:"value"`
+}
+type oneMarkerDrone struct {
+	_   struct{}      `kind:"om"`
+	ID  uint64        `lw:",id"`
+	Bad oneWithMarker `lw:"symbol"`
+}
+
+func TestNested_RejectOneWithMarkerMembership(t *testing.T) {
+	_, err := marshallreflect.PlanFor[oneMarkerDrone]()
+	require.Error(t, err, "One-cardinality dynamic membership is deferred")
+	require.Contains(t, err.Error(), "must be a slice")
+}

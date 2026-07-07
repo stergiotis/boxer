@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
 )
 
@@ -38,6 +39,15 @@ var laneCanonical = map[string]string{
 	"IPv6": "w",
 }
 
+// membershipMarkerChannel maps an lw membership marker type's name to its
+// leeway channel — the type-safe form of the tuple `@membership,<channel>` tag.
+var membershipMarkerChannel = map[string]mappingplan.MembershipChannel{
+	"Ref":          mappingplan.MembershipChannelLowCardRef,
+	"HighRef":      mappingplan.MembershipChannelHighCardRef,
+	"Verbatim":     mappingplan.MembershipChannelLowCardVerbatim,
+	"HighVerbatim": mappingplan.MembershipChannelHighCardVerbatim,
+}
+
 // classifyLwMarker classifies a field whose type is from the lw marker package.
 // lw.Single[T] is the unit shape — a container sub-column carrying one element
 // supplied as the scalar T (routed to BeginAttributeSingle via the Unit flag);
@@ -62,13 +72,41 @@ func classifyLwMarker(rt reflect.Type) (s goplan.FieldShape, err error) {
 		}
 		return
 	}
-	err = eb.Build().Str("type", rt.String()).Errorf("unknown lw marker type (recognised: Single[T], IPv4, IPv6)")
+	if ch, ok := membershipMarkerChannel[name]; ok {
+		// A membership marker: the value type is uint64 (ref id) or string
+		// (verbatim name); AddTupleSliceField reads MembershipChannel + the
+		// Canonical to build the TupleMembership.
+		s.IsMembership = true
+		s.MembershipChannel = ch
+		goType := "uint64"
+		if ch.EmbedsLiteralName() {
+			goType = "string"
+		}
+		s.Canonical, err = goplan.ScalarCanonicalForGoType(goType)
+		return
+	}
+	err = eb.Build().Str("type", rt.String()).Errorf("unknown lw marker type (recognised: Single[T], IPv4, IPv6, Ref, HighRef, Verbatim, HighVerbatim)")
 	return
 }
 
 // isLwSingleType reports whether t is an lw.Single[T] wrapper.
 func isLwSingleType(t reflect.Type) bool {
 	return t.Kind() == reflect.Struct && t.PkgPath() == lwPkgPath && strings.HasPrefix(t.Name(), "Single[")
+}
+
+// isLwMembershipType reports whether t (or its slice element, for a repeated
+// membership) is an lw membership marker (lw.Ref / lw.Verbatim / …). Used by the
+// tuple detector to route a `[]S` whose element carries marker-typed memberships
+// to the dynamic-tuple path.
+func isLwMembershipType(t reflect.Type) bool {
+	if t.Kind() == reflect.Slice {
+		t = t.Elem()
+	}
+	if t.PkgPath() != lwPkgPath {
+		return false
+	}
+	_, ok := membershipMarkerChannel[t.Name()]
+	return ok
 }
 
 // unwrapLwSingle returns v.Val when v is an lw.Single[T] wrapper (so the codec
@@ -165,6 +203,20 @@ func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 
 	case reflect.Slice:
 		elem := rt.Elem()
+		// []lw.Ref etc. — a repeated membership marker (one attribute, many
+		// memberships). Only membership markers may be sliced this way.
+		if elem.PkgPath() == lwPkgPath {
+			s, err = classifyLwMarker(elem)
+			if err != nil {
+				return
+			}
+			if !s.IsMembership {
+				err = eb.Build().Str("type", rt.String()).Errorf("only lw membership markers (lw.Ref / lw.Verbatim / …) may be sliced — []lw.Single / []lw.<lane> is not supported")
+				return
+			}
+			s.Canonical = canonicaltypes.PromoteScalarPrim(s.Canonical, canonicaltypes.ScalarModifierHomogenousArray)
+			return
+		}
 		// []byte: scalar blob lane (necessarily also []uint8 — the
 		// identical Go type; the u8 homogenous-array lane is selected
 		// explicitly via `,ct=u8h`, matching the go/ast front-end —
