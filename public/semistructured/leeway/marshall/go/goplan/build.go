@@ -31,6 +31,12 @@ type FieldShape struct {
 	Canonical canonicaltypes.PrimitiveAstNodeI
 	IsOption  bool // option.Option[T] wrapper
 
+	// Unit marks the ,unit / BeginAttributeSingle shape (an lw.Single[T] field):
+	// a container sub-column carrying exactly one element, supplied as the scalar
+	// Canonical. AddField folds it into FieldFlags.Unit so the field behaves like
+	// a flat `,unit` field.
+	Unit bool
+
 	// CarrierType is the marshalltypes carrier struct name (e.g.
 	// "MixedLowCardRef") when the field's Go type is a Cut-2 carrier, or ""
 	// otherwise. Both front-ends set it by recognising the marshalltypes
@@ -302,6 +308,11 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 		return
 	}
 	membership, section, column, flags := pt.Membership, pt.Section, pt.Column, pt.Flags
+	// An lw.Single[T] field carries the unit shape by TYPE, not a tag flag; fold
+	// it in so the field behaves exactly like a flat `,unit` field.
+	if shape.Unit {
+		flags.Unit = true
+	}
 	if err = rejectReservedMembership(membership); err != nil {
 		err = eb.Build().Str("field", goFieldName).Errorf("%w", err)
 		return
@@ -877,6 +888,10 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 		}
 		if e.Shape.IsOption {
 			err = ctx.Errorf("Option[T] not supported as a nested sub-column — the attribute has no per-sub-column presence")
+			return
+		}
+		if e.Shape.Unit {
+			err = ctx.Errorf("lw.Single (unit) not yet supported as a nested sub-column — use it at the entity level for now (Slice-A Step 4)")
 			return
 		}
 		var column string

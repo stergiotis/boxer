@@ -451,7 +451,7 @@ func projectAccumulator(row reflect.Value, a *accumulator) (err error) {
 			err = eb.Build().Str("field", a.Field.GoFieldName).Errorf("expected exactly one occurrence per row")
 			return
 		}
-		fld.Set(a.Val)
+		setScalarField(fld, a.Val)
 	}
 	return
 }
@@ -591,7 +591,9 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 			if !locals[k].IsValid() {
 				continue
 			}
-			elem.FieldByName(g.SubColumns[k].Fields[0].GoFieldName).Set(locals[k])
+			// setScalarField bridges lane newtypes (a nested sub-column may be an
+			// lw.IPv4 / lw.IPv6); a plain sub-column takes the fast path.
+			setScalarField(elem.FieldByName(g.SubColumns[k].Fields[0].GoFieldName), locals[k])
 		}
 		if !static {
 			// …then distribute the attribute's memberships into the element's

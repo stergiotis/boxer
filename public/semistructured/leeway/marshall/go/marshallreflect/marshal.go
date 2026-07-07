@@ -408,7 +408,8 @@ func marshalScalarOne(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 		}
 		val = reslicedIfFixedByte(fld.FieldByName("Val"), f)
 	default:
-		val = reslicedIfFixedByte(row.FieldByName(f.GoFieldName), f)
+		// unwrapLwSingle unwraps an lw.Single[T] to its scalar; a no-op otherwise.
+		val = reslicedIfFixedByte(unwrapLwSingle(row.FieldByName(f.GoFieldName)), f)
 	}
 	attr := mustCall(sec, beginMethod, val)[0]
 	if err = addMembership(attr, row, f, lookup, reflect.Value{}); err != nil {

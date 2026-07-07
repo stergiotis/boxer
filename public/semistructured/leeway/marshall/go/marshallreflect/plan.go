@@ -168,7 +168,7 @@ func isTupleSliceType(ft reflect.Type) bool {
 		return false
 	}
 	switch e.PkgPath() {
-	case marshalltypesPkgPath, optionPkgPath, "time":
+	case marshalltypesPkgPath, optionPkgPath, lwPkgPath, "time":
 		return false
 	}
 	return true
@@ -223,7 +223,7 @@ func isAttrStructType(t reflect.Type) bool {
 		return false
 	}
 	switch t.PkgPath() {
-	case marshalltypesPkgPath, optionPkgPath, roaringPkgPath, "time":
+	case marshalltypesPkgPath, optionPkgPath, roaringPkgPath, lwPkgPath, "time":
 		return false
 	}
 	return true

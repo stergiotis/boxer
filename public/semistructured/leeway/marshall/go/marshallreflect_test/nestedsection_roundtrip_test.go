@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
+	lw "github.com/stergiotis/boxer/public/semistructured/leeway/marshall/lw"
 )
 
 // Slice A, Step 1a — the nested-struct front-end's architecture prover.
@@ -429,4 +430,108 @@ func TestNested_StaticMany_ByteIdenticalToFlatExplode(t *testing.T) {
 	require.Equal(t, []symOne{{Val: "a"}, {Val: "b"}, {Val: "c"}}, got[0].Blocks)
 	require.Equal(t, []symOne{{Val: "x"}}, got[1].Blocks)
 	require.Nil(t, got[2].Blocks, "zero elements → nil slice")
+}
+
+// Slice A, Step 4 — the lw marker package. lw.Single[T] is the value-shape marker
+// for the unit / BeginAttributeSingle shape (a container column carrying one
+// element as T); at the entity level it is byte-identical to a flat `,unit` field.
+
+type flatUnitDrone struct {
+	_        struct{} `kind:"unitDrone"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Batt     uint64   `lw:"batt,u64Array,unit"`
+}
+type nestedUnitDrone struct {
+	_        struct{}          `kind:"unitDrone"`
+	ID       uint64            `lw:",id"`
+	Tracking []byte            `lw:",naturalKey"`
+	Batt     lw.Single[uint64] `lw:"batt,u64Array"`
+}
+
+func TestNested_EntitySingle_ByteIdenticalToFlatUnit(t *testing.T) {
+	lookup := marshallreflect.MapLookup{"batt": 1}
+	flat := []flatUnitDrone{
+		{ID: 1, Tracking: []byte("U1"), Batt: 88},
+		{ID: 2, Tracking: []byte("U2"), Batt: 12},
+	}
+	nested := []nestedUnitDrone{
+		{ID: 1, Tracking: []byte("U1"), Batt: lw.Single[uint64]{Val: 88}},
+		{ID: 2, Tracking: []byte("U2"), Batt: lw.One[uint64](12)},
+	}
+
+	require.NoError(t, marshallreflect.Validate[nestedUnitDrone](anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(nested))))
+
+	flatRec, r1 := marshalToRecord(t, flat, lookup)
+	defer r1()
+	nestedRec, r2 := marshalToRecord(t, nested, lookup)
+	defer r2()
+
+	require.True(t, array.RecordEqual(flatRec, nestedRec),
+		"records differ:\nflat=%s\nnested=%s", flatRec, nestedRec)
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, nestedRec), "Arrow IPC bytes differ")
+
+	idReader, rID := loadIdReader(t, nestedRec)
+	defer rID()
+	u64Reader := anchor.NewReadAccessTestTableTaggedU64Array()
+	u64Reader.SetColumnIndices(u64Reader.GetColumnIndices())
+	require.NoError(t, u64Reader.LoadFromRecord(nestedRec))
+	defer u64Reader.Release()
+	require.Equal(t, int64(1), u64Reader.GetAttributes().GetNumberOfAttributes(0))
+
+	args := idReaders(idReader).
+		Section("u64Array", u64Reader.GetAttributes(), u64Reader.GetMemberships())
+	var got []nestedUnitDrone
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
+	require.Len(t, got, 2)
+	require.Equal(t, uint64(88), got[0].Batt.Val, "lw.Single unwraps to Val on read")
+	require.Equal(t, uint64(12), got[1].Batt.Val)
+}
+
+// nestedIPDrone is the lane form of ipDrone (canonicaloverride_test): lw.IPv4 /
+// lw.IPv6 relabel a [4]byte / [16]byte to the network canonical by TYPE, exactly
+// as `,ct=v` / `,ct=w` do by flag. Verified at the Plan level (the sections have
+// no marshallable RA readers, like the flat ct= test).
+type nestedIPDrone struct {
+	_   struct{} `kind:"ipdn"`
+	Id  uint64   `lw:",id"`
+	Src lw.IPv4  `lw:"src,ipv4Section"`
+	Dst lw.IPv6  `lw:"dst,ipv6Section"`
+}
+
+func TestNested_Lanes_PlanCanonicalMatchesCt(t *testing.T) {
+	plan, err := marshallreflect.PlanFor[nestedIPDrone]()
+	require.NoError(t, err)
+
+	seen := map[string]bool{}
+	for _, f := range plan.Fields {
+		switch f.GoFieldName {
+		case "Src":
+			require.True(t, f.Canonical.IsNetworkNode(), "lw.IPv4 → network canonical (≡ ,ct=v)")
+			require.Equal(t, "[4]byte", f.GoType(), "lw.IPv4 Go shape is [4]byte")
+			seen["Src"] = true
+		case "Dst":
+			require.True(t, f.Canonical.IsNetworkNode(), "lw.IPv6 → network canonical (≡ ,ct=w)")
+			require.Equal(t, "[16]byte", f.GoType(), "lw.IPv6 Go shape is [16]byte")
+			seen["Dst"] = true
+		}
+	}
+	require.True(t, seen["Src"] && seen["Dst"], "both lane fields present")
+}
+
+// lw.Single is not yet supported as a NESTED sub-column (only at the entity
+// level); the plan builder rejects it (Slice-A Step 4 boundary).
+type badNestedSingle struct {
+	Reading lw.Single[uint64]
+}
+type badSingleDrone struct {
+	_   struct{}        `kind:"badSingle"`
+	ID  uint64          `lw:",id"`
+	Bad badNestedSingle `lw:"m,u64Array"`
+}
+
+func TestNested_RejectSingleInStruct(t *testing.T) {
+	_, err := marshallreflect.PlanFor[badSingleDrone]()
+	require.Error(t, err, "lw.Single as a nested sub-column is deferred")
+	require.Contains(t, err.Error(), "lw.Single")
 }

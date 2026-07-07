@@ -3,6 +3,7 @@ package marshallreflect
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
@@ -25,6 +26,78 @@ const roaringPkgPath = "github.com/RoaringBitmap/roaring"
 // a carrier, paired with its value sibling by goplan.PlanBuilder.
 const marshalltypesPkgPath = "github.com/stergiotis/boxer/public/semistructured/leeway/marshall/marshalltypes"
 
+// lwPkgPath is the import path of the leeway nested-model marker package. A
+// field whose type is from this package is a marker — a value-shape marker
+// (lw.Single, the unit shape) or a canonical lane (lw.IPv4 / lw.IPv6).
+const lwPkgPath = "github.com/stergiotis/boxer/public/semistructured/leeway/marshall/lw"
+
+// laneCanonical maps an lw lane type's name to the canonical string it relabels
+// its (type-fixed) bytes as — the type-safe form of a `,ct=` override.
+var laneCanonical = map[string]string{
+	"IPv4": "v",
+	"IPv6": "w",
+}
+
+// classifyLwMarker classifies a field whose type is from the lw marker package.
+// lw.Single[T] is the unit shape — a container sub-column carrying one element
+// supplied as the scalar T (routed to BeginAttributeSingle via the Unit flag);
+// a lane type (lw.IPv4 / lw.IPv6) relabels its fixed bytes to a network
+// canonical, exactly like `,ct=`.
+func classifyLwMarker(rt reflect.Type) (s goplan.FieldShape, err error) {
+	name := rt.Name()
+	if strings.HasPrefix(name, "Single[") {
+		vf, ok := rt.FieldByName("Val")
+		if !ok {
+			err = eb.Build().Str("type", rt.String()).Errorf("lw.Single without Val field — wrong shape")
+			return
+		}
+		s.Canonical, err = goplan.ScalarCanonicalForGoType(reflectGoTypeName(vf.Type))
+		s.Unit = true
+		return
+	}
+	if ct, ok := laneCanonical[name]; ok {
+		s.Canonical, err = canonicaltypes.NewParser().ParsePrimitiveTypeAst(ct)
+		if err != nil {
+			err = eb.Build().Str("type", rt.String()).Str("canonical", ct).Errorf("lw lane canonical failed to parse: %w", err)
+		}
+		return
+	}
+	err = eb.Build().Str("type", rt.String()).Errorf("unknown lw marker type (recognised: Single[T], IPv4, IPv6)")
+	return
+}
+
+// isLwSingleType reports whether t is an lw.Single[T] wrapper.
+func isLwSingleType(t reflect.Type) bool {
+	return t.Kind() == reflect.Struct && t.PkgPath() == lwPkgPath && strings.HasPrefix(t.Name(), "Single[")
+}
+
+// unwrapLwSingle returns v.Val when v is an lw.Single[T] wrapper (so the codec
+// passes the wrapped scalar to the DML), else v unchanged. A no-op for every
+// non-marker field.
+func unwrapLwSingle(v reflect.Value) reflect.Value {
+	if isLwSingleType(v.Type()) {
+		return v.FieldByName("Val")
+	}
+	return v
+}
+
+// setScalarField sets a scalar Go field from a decoded value, bridging the
+// nested-model marker types whose Go type differs from the canonical's plain Go
+// type: an lw.Single[T] wrapper receives the value in its Val field; a lane
+// newtype (lw.IPv4 = [4]byte, …) receives it via a Convert. Plain fields (the
+// value type already matches) take the fast path.
+func setScalarField(fld, val reflect.Value) {
+	ft := fld.Type()
+	switch {
+	case isLwSingleType(ft):
+		fld.FieldByName("Val").Set(val)
+	case val.Type() != ft && val.Type().ConvertibleTo(ft):
+		fld.Set(val.Convert(ft))
+	default:
+		fld.Set(val)
+	}
+}
+
 // classifyReflectType inspects rt and returns the corresponding shared
 // goplan.FieldShape (consumed by goplan.PlanBuilder). It is
 // canonical-native: the shape's value type is a leeway Canonical (the
@@ -37,6 +110,12 @@ const marshalltypesPkgPath = "github.com/stergiotis/boxer/public/semistructured/
 // …); both front-ends funnel those tokens through
 // goplan.ScalarCanonicalForGoType so they cannot drift.
 func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
+	// lw marker types (nested-model value-shape markers + lanes) are recognised
+	// by package, ahead of the structural switch — lw.Single[T] is a struct that
+	// would otherwise be misread, and the lanes are named byte types.
+	if rt.PkgPath() == lwPkgPath {
+		return classifyLwMarker(rt)
+	}
 	switch rt.Kind() {
 
 	case reflect.Ptr:
