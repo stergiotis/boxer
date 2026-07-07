@@ -8,6 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
@@ -285,4 +286,147 @@ func TestNested_StaticOne_CoContainers_ByteIdenticalToFlat(t *testing.T) {
 	require.Equal(t, "empty", got[2].Body.Text)
 	require.Nil(t, got[2].Body.WordLength, "row 2 empty co-container reads back nil")
 	require.Nil(t, got[2].Body.WordBag)
+}
+
+// Slice A, Step 3 — Optional cardinality (`*S` and `option.Option[S]`): a section
+// carrying zero-or-one attribute. A single-scalar Optional section is byte-identical
+// to the flat `option.Option[T]` scalar (the shipped optDrone): present → one
+// attribute, absent → zero (the splice).
+
+type symOpt struct {
+	Val string // single scalar sub-column, column "value" (tag-free)
+}
+type nestedOptPtr struct {
+	_        struct{} `kind:"optDrone"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Note     *symOpt  `lw:"note,symbol"` // Optional via pointer
+}
+type nestedOptOpt struct {
+	_        struct{}              `kind:"optDrone"`
+	ID       uint64                `lw:",id"`
+	Tracking []byte                `lw:",naturalKey"`
+	Note     option.Option[symOpt] `lw:"note,symbol"` // Optional via option.Option
+}
+
+func TestNested_Optional_ByteIdenticalToFlatOption(t *testing.T) {
+	lookup := marshallreflect.MapLookup{"note": 1}
+
+	flat := []optDrone{
+		{ID: 1, Tracking: []byte("O1"), Note: option.Some("hello")},
+		{ID: 2, Tracking: []byte("O2"), Note: option.None[string]()},
+		{ID: 3, Tracking: []byte("O3"), Note: option.Some("world")},
+	}
+	ptr := []nestedOptPtr{
+		{ID: 1, Tracking: []byte("O1"), Note: &symOpt{Val: "hello"}},
+		{ID: 2, Tracking: []byte("O2"), Note: nil},
+		{ID: 3, Tracking: []byte("O3"), Note: &symOpt{Val: "world"}},
+	}
+	opt := []nestedOptOpt{
+		{ID: 1, Tracking: []byte("O1"), Note: option.Some(symOpt{Val: "hello"})},
+		{ID: 2, Tracking: []byte("O2"), Note: option.None[symOpt]()},
+		{ID: 3, Tracking: []byte("O3"), Note: option.Some(symOpt{Val: "world"})},
+	}
+
+	flatRec, r1 := marshalToRecord(t, flat, lookup)
+	defer r1()
+	ptrRec, r2 := marshalToRecord(t, ptr, lookup)
+	defer r2()
+	optRec, r3 := marshalToRecord(t, opt, lookup)
+	defer r3()
+
+	// Both Optional spellings are byte-identical to the flat option.Option[T].
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, ptrRec), "*S Optional differs from flat Option")
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, optRec), "option.Option[S] differs from flat Option")
+
+	// Round-trip the pointer form; the absent row stays a nil pointer.
+	idReader, rID := loadIdReader(t, ptrRec)
+	defer rID()
+	symReader := anchor.NewReadAccessTestTableTaggedSymbol()
+	symReader.SetColumnIndices(symReader.GetColumnIndices())
+	require.NoError(t, symReader.LoadFromRecord(ptrRec))
+	defer symReader.Release()
+	require.Equal(t, int64(1), symReader.GetAttributes().GetNumberOfAttributes(0))
+	require.Equal(t, int64(0), symReader.GetAttributes().GetNumberOfAttributes(1)) // absent
+
+	args := idReaders(idReader).
+		Section("symbol", symReader.GetAttributes(), symReader.GetMemberships())
+	var got []nestedOptPtr
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
+	require.Len(t, got, 3)
+	require.NotNil(t, got[0].Note)
+	require.Equal(t, "hello", got[0].Note.Val)
+	require.Nil(t, got[1].Note, "absent → nil pointer")
+	require.NotNil(t, got[2].Note)
+	require.Equal(t, "world", got[2].Note.Val)
+}
+
+// Slice A, Step 3 — static-Many cardinality (`[]S` with a static membership): N
+// attributes per row, all carrying the SAME static membership. A single-scalar
+// static-Many section is byte-identical to the flat `,explode` shape (N single-value
+// attributes, one membership), which the flat grammar reaches only for a single
+// sub-column. The `[]S` form is disambiguated from a dynamic-membership tuple by
+// the tag naming a membership (`tags,symbol` vs a bare `symbol`).
+
+type symOne struct {
+	Val string
+}
+type flatExplodeSym struct {
+	_        struct{} `kind:"manyDrone"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Tags     []string `lw:"tags,symbol,explode"`
+}
+type nestedManySym struct {
+	_        struct{} `kind:"manyDrone"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Blocks   []symOne `lw:"tags,symbol"`
+}
+
+func TestNested_StaticMany_ByteIdenticalToFlatExplode(t *testing.T) {
+	lookup := marshallreflect.MapLookup{"tags": 1}
+
+	flat := []flatExplodeSym{
+		{ID: 1, Tracking: []byte("M1"), Tags: []string{"a", "b", "c"}},
+		{ID: 2, Tracking: []byte("M2"), Tags: []string{"x"}},
+		{ID: 3, Tracking: []byte("M3"), Tags: nil},
+	}
+	nested := []nestedManySym{
+		{ID: 1, Tracking: []byte("M1"), Blocks: []symOne{{Val: "a"}, {Val: "b"}, {Val: "c"}}},
+		{ID: 2, Tracking: []byte("M2"), Blocks: []symOne{{Val: "x"}}},
+		{ID: 3, Tracking: []byte("M3"), Blocks: nil},
+	}
+
+	require.NoError(t, marshallreflect.Validate[nestedManySym](anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(nested))))
+
+	flatRec, r1 := marshalToRecord(t, flat, lookup)
+	defer r1()
+	nestedRec, r2 := marshalToRecord(t, nested, lookup)
+	defer r2()
+
+	require.True(t, array.RecordEqual(flatRec, nestedRec),
+		"records differ:\nflat=%s\nnested=%s", flatRec, nestedRec)
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, nestedRec), "Arrow IPC bytes differ")
+
+	idReader, rID := loadIdReader(t, nestedRec)
+	defer rID()
+	symReader := anchor.NewReadAccessTestTableTaggedSymbol()
+	symReader.SetColumnIndices(symReader.GetColumnIndices())
+	require.NoError(t, symReader.LoadFromRecord(nestedRec))
+	defer symReader.Release()
+
+	// N attributes per row, one per []S element.
+	require.Equal(t, int64(3), symReader.GetAttributes().GetNumberOfAttributes(0))
+	require.Equal(t, int64(1), symReader.GetAttributes().GetNumberOfAttributes(1))
+	require.Equal(t, int64(0), symReader.GetAttributes().GetNumberOfAttributes(2))
+
+	args := idReaders(idReader).
+		Section("symbol", symReader.GetAttributes(), symReader.GetMemberships())
+	var got []nestedManySym
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
+	require.Len(t, got, 3)
+	require.Equal(t, []symOne{{Val: "a"}, {Val: "b"}, {Val: "c"}}, got[0].Blocks)
+	require.Equal(t, []symOne{{Val: "x"}}, got[1].Blocks)
+	require.Nil(t, got[2].Blocks, "zero elements → nil slice")
 }

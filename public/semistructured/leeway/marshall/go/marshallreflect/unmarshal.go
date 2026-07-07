@@ -558,8 +558,12 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 	case mappingplan.AttrCardinalityOne:
 		elemType = outFld.Type()
 	case mappingplan.AttrCardinalityOptional:
-		err = eb.Build().Str("section", g.Section).Errorf("Optional nested-section cardinality not yet implemented (Slice-A Step 3)")
-		return
+		if outFld.Kind() == reflect.Ptr {
+			elemType = outFld.Type().Elem()
+		} else { // option.Option[S]
+			vf, _ := outFld.Type().FieldByName("Val")
+			elemType = vf.Type
+		}
 	default: // Many
 		elemType = outFld.Type().Elem()
 	}
@@ -611,6 +615,25 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 		}
 		if len(elems) == 1 {
 			outFld.Set(elems[0])
+		}
+	case mappingplan.AttrCardinalityOptional:
+		// Zero-or-one attribute. Absent (nil pointer / Has=false) stays the zero
+		// value; present sets it. For an all-container Optional section a
+		// present-but-empty value splices to zero and reads back as absent — the
+		// S=0 splice is indistinguishable from absence on the wire.
+		if len(elems) > 1 {
+			err = eb.Build().Str("section", g.Section).Int("attrs", len(elems)).Errorf("Optional nested section must carry at most one attribute per row")
+			return
+		}
+		if len(elems) == 1 {
+			if outFld.Kind() == reflect.Ptr {
+				p := reflect.New(outFld.Type().Elem())
+				p.Elem().Set(elems[0])
+				outFld.Set(p)
+			} else { // option.Option[S]
+				outFld.FieldByName("Has").SetBool(true)
+				outFld.FieldByName("Val").Set(elems[0])
+			}
 		}
 	default: // Many — a slice; nil when zero attributes.
 		if len(elems) > 0 {

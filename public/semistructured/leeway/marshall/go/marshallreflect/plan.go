@@ -2,6 +2,7 @@ package marshallreflect
 
 import (
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -110,7 +111,19 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 		// element struct's fields are classified individually and validated
 		// by the shared builder.
 		if isTupleSliceType(f.Type) {
-			if err = addReflectTupleField(b, rt, f.Name, lwTag, f.Type.Elem()); err != nil {
+			// `[]S` is a static-membership nested section (Many) only when BOTH
+			// signals agree: the element struct declares no per-attribute
+			// membership field (`@membership`), and the outer tag names a static
+			// membership (`membership,section`). Otherwise it is a
+			// dynamic-membership tuple — including a bare-section tag whose element
+			// forgot its `@membership` (a tuple-path error), or a tuple with a
+			// malformed flagged tag — so those keep the tuple-specific errors.
+			if !elemHasTupleMembership(f.Type.Elem()) && strings.Contains(lwTag, ",") {
+				err = addNestedSectionField(b, rt, f.Name, lwTag, f.Type.Elem(), mappingplan.AttrCardinalityMany)
+			} else {
+				err = addReflectTupleField(b, rt, f.Name, lwTag, f.Type.Elem())
+			}
+			if err != nil {
 				return
 			}
 			continue
@@ -216,15 +229,43 @@ func isAttrStructType(t reflect.Type) bool {
 	return true
 }
 
+// elemHasTupleMembership reports whether a slice-of-struct element carries a
+// per-attribute membership field — an `@membership`-tagged field (the dynamic
+// tuple marker; `@` is reserved for it). Such a `[]S` is a dynamic-membership
+// tuple; without one it is a static-membership nested section (Many). (Slice-A
+// Step 5 will extend this to lw.* marker TYPES for a tag-free dynamic element.)
+func elemHasTupleMembership(elemType reflect.Type) bool {
+	for j := 0; j < elemType.NumField(); j++ {
+		if strings.HasPrefix(strings.TrimSpace(elemType.Field(j).Tag.Get("lw")), "@") {
+			return true
+		}
+	}
+	return false
+}
+
 // nestedSectionCardinality reports whether ft is a nested (static-membership)
-// section field and, if so, its element struct type and attributes-per-row
-// cardinality. Slice-A Step 1 recognises cardinality One (a struct value) only;
-// Optional (`*S` / `option.Option[S]`) and static-Many (`[]S`) are added with
-// their codec support in later steps. A `[]S` continues to route to the
-// dynamic-membership tuple path (isTupleSliceType) for now.
+// section field with a *non-slice* shape and, if so, its element struct type and
+// attributes-per-row cardinality: a struct value `S` → One; a pointer `*S` or an
+// `option.Option[S]` → Optional (zero-or-one). The static-Many shape (`[]S`) is
+// recognised separately in buildPlan (it shares the `isTupleSliceType` slice
+// check with the dynamic tuple, disambiguated by the tag).
 func nestedSectionCardinality(ft reflect.Type) (elemType reflect.Type, card mappingplan.AttrCardinalityE, ok bool) {
-	if ft.Kind() == reflect.Struct && isAttrStructType(ft) {
-		return ft, mappingplan.AttrCardinalityOne, true
+	switch ft.Kind() {
+	case reflect.Struct:
+		if ft.PkgPath() == optionPkgPath {
+			// option.Option[S]: the payload S is the attribute struct.
+			if vf, has := ft.FieldByName("Val"); has && isAttrStructType(vf.Type) {
+				return vf.Type, mappingplan.AttrCardinalityOptional, true
+			}
+			return nil, 0, false
+		}
+		if isAttrStructType(ft) {
+			return ft, mappingplan.AttrCardinalityOne, true
+		}
+	case reflect.Ptr:
+		if isAttrStructType(ft.Elem()) {
+			return ft.Elem(), mappingplan.AttrCardinalityOptional, true
+		}
 	}
 	return nil, 0, false
 }

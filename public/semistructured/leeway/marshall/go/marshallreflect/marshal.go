@@ -198,7 +198,17 @@ func tupleRowElements(row reflect.Value, ts goplan.TupleSpec) []reflect.Value {
 	case mappingplan.AttrCardinalityOne:
 		return []reflect.Value{fld}
 	case mappingplan.AttrCardinalityOptional:
-		return nil // Slice-A Step 3 (present() gate on *S / option.Option[S]).
+		// *S (nil ⇒ absent) or option.Option[S] (Has=false ⇒ absent).
+		if fld.Kind() == reflect.Ptr {
+			if fld.IsNil() {
+				return nil
+			}
+			return []reflect.Value{fld.Elem()}
+		}
+		if !fld.FieldByName("Has").Bool() {
+			return nil
+		}
+		return []reflect.Value{fld.FieldByName("Val")}
 	default: // AttrCardinalityMany — the dynamic-membership tuple.
 		out := make([]reflect.Value, fld.Len())
 		for e := range out {
