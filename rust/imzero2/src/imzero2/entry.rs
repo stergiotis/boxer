@@ -16,7 +16,14 @@ pub fn run_main_loop(config: appconfig::AppConfig) -> eframe::Result {
             .with_resizable(true),
         ..Default::default()
     };
-    native_options.vsync = config.vsync;
+    // eframe 0.35 removed `NativeOptions::vsync`; on the wgpu backend vsync is
+    // the swapchain present mode (default `AutoVsync`). Map the `-vsync` flag
+    // onto it so the config option keeps its effect.
+    native_options.wgpu_options.surface.present_mode = if config.vsync {
+        egui_wgpu::wgpu::PresentMode::AutoVsync
+    } else {
+        egui_wgpu::wgpu::PresentMode::AutoNoVsync
+    };
     eframe::run_native(
         &config.app_title,
         native_options,

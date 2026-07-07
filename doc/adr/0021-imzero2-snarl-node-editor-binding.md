@@ -128,6 +128,20 @@ Accepted — 2026-05-04 by @spx. M1 implementation underway in this branch: `egu
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are append-only; supersession is recorded, not deleted.
 
+## Update — 2026-07-08: egui 0.35 upgrade; `egui-snarl` un-pinned from git
+
+The repository upgraded to egui 0.35.0 in a coordinated ecosystem bump (eframe /
+egui-wgpu / egui_extras 0.35, egui_plot 0.36, egui_table 0.9, egui_dock 0.20,
+egui_graphs 0.31, egui_ltreeview 0.8, walkers 0.56; wgpu unchanged at ^29). The
+C1 "egui 0.34.1 compatibility" constraint now reads egui 0.35.
+
+`egui-snarl` gained a crates.io release tracking current egui (`0.11.0`,
+egui ^0.35), so the git-commit pin M1 carried while the 0.34 migration was
+unreleased is retired — `rust/imzero2/Cargo.toml` is on `egui-snarl = "0.11.0"`.
+The O1 decision (viewer-trait binding) and the wire/state shape are unchanged;
+only the version coordinates moved, and the `snarl` demo was re-verified rendering
+under 0.11 after the bump.
+
 ## References
 
 - [ADR-0056 — Slippy map + H3 cell overlays via `walkers` + `h3o`](0056-walkers-map-h3-binding.md) — sibling external-egui-crate binding ADR; same template shape.

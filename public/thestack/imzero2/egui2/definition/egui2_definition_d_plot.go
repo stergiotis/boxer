@@ -614,7 +614,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
         // text) sit on top — required for ECDF + confidence-band
         // composition where the band is a fill and the curve overlays.
         for pg in &polygons_series {
-            let pts: egui_plot::PlotPoints = pg.points.iter().copied().collect();
+            let pts: egui_plot::PlotPoints<'_> = pg.points.iter().copied().collect();
             let mut poly = egui_plot::Polygon::new(&pg.name, pts)
                 .fill_color(color32_from_rgba_u32(pg.fill_color));
             // egui interprets Stroke::new(0, _) as a hairline, not "no
@@ -630,7 +630,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
             plot_ui.polygon(poly);
         }
         for ld in &lines {
-            let pts: egui_plot::PlotPoints = ld.points.iter().copied().collect();
+            let pts: egui_plot::PlotPoints<'_> = ld.points.iter().copied().collect();
             let mut line = egui_plot::Line::new(&ld.name, pts).width(ld.width);
             if let Some(c) = ld.color { line = line.color(c); }
             if ld.highlight { line = line.highlight(true); }
@@ -638,7 +638,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
             plot_ui.line(line);
         }
         for sd in &scatters {
-            let pts: egui_plot::PlotPoints = sd.points.iter().copied().collect();
+            let pts: egui_plot::PlotPoints<'_> = sd.points.iter().copied().collect();
             let shape = match sd.shape {
                 0 => egui_plot::MarkerShape::Circle, 1 => egui_plot::MarkerShape::Diamond,
                 2 => egui_plot::MarkerShape::Square, 3 => egui_plot::MarkerShape::Cross,

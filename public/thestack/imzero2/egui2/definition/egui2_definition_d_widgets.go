@@ -205,7 +205,7 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 	// and the shaper falls back to character-by-character wrapping. A
 	// LayoutJob with one section per styled span sidesteps that — the
 	// shaper sees one continuous run and breaks on word boundaries.
-	let style = c.style();
+	let style = c.style_of(c.theme());
 	let mut lj = egui::text::LayoutJob::default();
 	for atom in atoms.into_iter() {
 		if let egui::AtomKind::Text(wt) = atom.kind {
@@ -417,7 +417,9 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				PlainArg("checked", ctabb.B).
 				PlainArg("text", ctabb.S).
 				Build()).
-			WithConstructionCodeClientRust(rustClientCode("egui::SelectableLabel::new(checked, text);\n")).
+			// egui 0.35 removed the `SelectableLabel` widget; `Button::selectable`
+			// is its replacement (frameless selectable button, same visual).
+			WithConstructionCodeClientRust(rustClientCode("egui::Button::selectable(checked, text);\n")).
 			WithSettingImmediate(true).
 			WithReturnType(structSelectableLabel()).
 			Build())
@@ -486,7 +488,9 @@ if let Some(ins) = self.text_edit_pending_insert.take() {
 		.as_ref()
 		.and_then(|ctx| egui::text_edit::TextEditState::load(ctx, {{Id}}))
 		.and_then(|st| st.cursor.char_range())
-		.map(|cr| cr.as_sorted_char_range())
+		// egui 0.35 returns a Range<CharIndex>; splice_text_at_cursor works in
+		// plain usize, so unwrap the newtype at this boundary.
+		.map(|cr| { let r = cr.as_sorted_char_range(); r.start.0..r.end.0 })
 		.unwrap_or(end..end);
 	let caret = splice_text_at_cursor(&mut text, &ins, range);
 	if let Some(ctx) = ctx_opt {

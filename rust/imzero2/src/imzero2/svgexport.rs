@@ -703,7 +703,7 @@ pub enum WindowMode {
 ///
 /// `Viewport` (the default) is the original behaviour: walks every
 /// Area-registered layer plus the implicit background and uses
-/// `ctx.screen_rect()` as the SVG viewBox.
+/// `ctx.viewport_rect()` as the SVG viewBox.
 ///
 /// `Window { id, mode }` restricts the walk to the single layer at
 /// `LayerId::new(Order::Middle, id)` and uses that area's stored rect
@@ -869,7 +869,7 @@ pub fn render_svg_from_context(
     embed_fonts: bool,
     bg: Option<Color32>,
 ) -> String {
-    let viewport = ctx.screen_rect();
+    let viewport = ctx.viewport_rect();
     let weights = ThemeWeights::from_context(ctx);
     // Snapshot link zones for this pass so we don't hold the mutex
     // through the entire shape walk.
@@ -1017,7 +1017,7 @@ pub fn render_svg_window(
     // we care about (browsers + resvg).
     b.set_css_class(format!("imzero-svg imzero-window-{:x}", window_id.value()));
     if matches!(mode, WindowMode::ContentOnly) {
-        let style = ctx.style();
+        let style = ctx.style_of(ctx.theme());
         let spacing = &style.spacing;
         let stroke_w = style.visuals.window_stroke.width;
         // Approximation of egui's `title_bar_height_with_margin`:
@@ -1189,7 +1189,7 @@ fn visit_for_chars(shape: &Shape, used: &mut HashMap<FontFamily, std::collection
             for row in &t.galley.rows {
                 for g in &row.row.glyphs {
                     while section_idx + 1 < job.sections.len()
-                        && byte_cursor >= job.sections[section_idx].byte_range.end
+                        && byte_cursor >= job.sections[section_idx].byte_range.end.0
                     {
                         section_idx += 1;
                     }
@@ -1251,7 +1251,7 @@ impl ThemeWeights {
         // egui::Context::style() returns Arc<Style>; the closure form
         // doesn't exist in this version of egui (the parallel session
         // that landed 260d6bf9 mis-typed the API).
-        let style = ctx.style();
+        let style = ctx.style_of(ctx.theme());
         let v = &style.visuals;
         let normal = v.text_color();
         let strong = v.strong_text_color();
@@ -1628,7 +1628,7 @@ impl SvgBuilder {
         for placed_row in &galley.rows {
             for glyph in &placed_row.row.glyphs {
                 while section_idx + 1 < job.sections.len()
-                    && byte_cursor >= job.sections[section_idx].byte_range.end
+                    && byte_cursor >= job.sections[section_idx].byte_range.end.0
                 {
                     section_idx += 1;
                 }

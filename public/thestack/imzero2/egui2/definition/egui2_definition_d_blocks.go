@@ -260,21 +260,21 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			CodeClientRust(rustClientCode("hover_cursor_pointer = true;\n")).EndMethod().
 			// Preset constructors (reset to themed defaults)
 			BeginMethod("presetGroup").
-			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::group({{EguiContext}}.style().as_ref());\n")).EndMethod().
+			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::group({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
 			BeginMethod("presetWindow").
-			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::window({{EguiContext}}.style().as_ref());\n")).EndMethod().
+			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::window({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
 			BeginMethod("presetPopup").
-			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::popup({{EguiContext}}.style().as_ref());\n")).EndMethod().
+			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::popup({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
 			BeginMethod("presetMenu").
-			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::menu({{EguiContext}}.style().as_ref());\n")).EndMethod().
+			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::menu({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
 			BeginMethod("presetCanvas").
-			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::canvas({{EguiContext}}.style().as_ref());\n")).EndMethod().
+			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::canvas({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
 			BeginMethod("presetDarkCanvas").
-			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::dark_canvas({{EguiContext}}.style().as_ref());\n")).EndMethod().
+			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::dark_canvas({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
 			BeginMethod("presetSideTopPanel").
-			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::side_top_panel({{EguiContext}}.style().as_ref());\n")).EndMethod().
+			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::side_top_panel({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
 			BeginMethod("presetCentralPanel").
-			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::central_panel({{EguiContext}}.style().as_ref());\n")).EndMethod().
+			CodeClientRust(rustClientCode("{{Instance}} = egui::Frame::central_panel({{EguiContext}}.style_of({{EguiContext}}.theme()).as_ref());\n")).EndMethod().
 			Build()...).
 		WithSettingBlockIterator(true).
 		WithSettingImmediate(true).
@@ -657,11 +657,11 @@ let mut inner_margin: f32 = 0.0;
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let parent_ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
 						let origin = parent_ui.min_rect().min;
-						parent_ui.allocate_ui_at_rect(
-							egui::Rect::from_min_max(
+						parent_ui.scope_builder(
+							egui::UiBuilder::new().max_rect(egui::Rect::from_min_max(
 								egui::pos2(origin.x + min_x, origin.y + min_y),
 								egui::pos2(origin.x + max_x, origin.y + max_y),
-							),
+							)),
 							|ui| {
 								let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
 							},
@@ -702,7 +702,7 @@ let mut layout = egui::Layout::default();`)).
 		{
 			applyCode: `
 					if {{EguiUiOptionalOuter}}.is_some() {
-						{{Instance}}.show_inside({{EguiUiOptionalOuter}}.as_mut().unwrap(), |ui| {
+						{{Instance}}.show({{EguiUiOptionalOuter}}.as_mut().unwrap(), |ui| {
 							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
 						});
 					} else {
@@ -712,10 +712,19 @@ let mut layout = egui::Layout::default();`)).
 			suffix: "Inside",
 		},
 		{
+			// egui 0.35 removed `Panel::show(&Context)`; a panel now renders
+			// inside a `Ui`. The root variant shows into the top-level `Ui`
+			// that `interpret_commands_outer` threads through as
+			// `EguiUiOptionalOuter` (its `else` arm still drains the body when
+			// no `Ui` is present, keeping the opcode stream balanced).
 			applyCode: `
-					{{Instance}}.show({{EguiContext}}, |ui| {
-						let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
-					});
+					if {{EguiUiOptionalOuter}}.is_some() {
+						{{Instance}}.show({{EguiUiOptionalOuter}}.as_mut().unwrap(), |ui| {
+							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						});
+					} else {
+						self.interpret_outer({{EguiContext}}, &mut None)?;
+					}
 `,
 			suffix: "",
 		},
@@ -763,19 +772,13 @@ let mut layout = egui::Layout::default();`)).
 				WithApplyCodeClientRust(rustClientCode(item.applyCode)).Build())
 		}
 		// egui::CentralPanel has no id and no size methods — it fills the
-		// remaining area. Two variants: root (show(ctx)) and inside
-		// (show_inside(ui)). The same two apply patterns as the side/top
-		// panels would differ — CentralPanel::show takes the ctx (root
-		// context), show_inside takes a ui (nested context).
+		// remaining area. egui 0.35 unified panel showing: CentralPanel::show
+		// now takes a `&mut Ui` like the side/top panels, so both the root and
+		// inside variants use the shared item.applyCode (show into
+		// EguiUiOptionalOuter when present; the root Ui comes from
+		// interpret_commands_outer).
 		{
 			centralApply := item.applyCode
-			if item.suffix == "" {
-				centralApply = `
-						{{Instance}}.show({{EguiContext}}, |ui| {
-							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
-						});
-`
-			}
 			blocks = append(blocks, idl.NewBuilderFactoryNode(naming.MustBeValidStylableName("panelCentral"+item.suffix)).
 				WithSettingImmediate(true).
 				WithSettingBlockIterator(true).

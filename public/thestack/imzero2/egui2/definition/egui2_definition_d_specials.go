@@ -420,7 +420,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 		idl.NewProceduralNode("paintAbsoluteOverlay").
 			WithApplyCodeClientRust(rustClientCode(`
 {
-    let screen = {{EguiContext}}.screen_rect();
+    let screen = {{EguiContext}}.viewport_rect();
     let layer_id = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("imzero-absolute-overlay"));
     let painter = egui::Painter::new({{EguiContext}}.clone(), layer_id, screen);
     self.drain_paint_cmds_to_painter(&painter, egui::Pos2::ZERO, None);

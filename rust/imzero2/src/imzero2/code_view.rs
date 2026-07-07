@@ -57,7 +57,7 @@ fn content_hash(job: &CodeViewJobData) -> u64 {
 /// Build a LayoutJob from text and colored sections.
 fn build_layout_job(job: &CodeViewJobData, ctx: &egui::Context) -> egui::text::LayoutJob {
     let font_id =
-        egui::FontId::monospace(ctx.style().text_styles[&egui::TextStyle::Monospace].size);
+        egui::FontId::monospace(ctx.style_of(ctx.theme()).text_styles[&egui::TextStyle::Monospace].size);
 
     let mut layout_job = egui::text::LayoutJob {
         text: job.text.clone(),
@@ -70,8 +70,8 @@ fn build_layout_job(job: &CodeViewJobData, ctx: &egui::Context) -> egui::text::L
         // No sections — render entire text as default monospace
         layout_job.sections.push(egui::text::LayoutSection {
             leading_space: 0.0,
-            byte_range: 0..job.text.len(),
-            format: egui::TextFormat::simple(font_id, ctx.style().visuals.text_color()),
+            byte_range: egui::text::ByteIndex(0)..egui::text::ByteIndex(job.text.len()),
+            format: egui::TextFormat::simple(font_id, ctx.style_of(ctx.theme()).visuals.text_color()),
         });
         return layout_job;
     }
@@ -85,7 +85,7 @@ fn build_layout_job(job: &CodeViewJobData, ctx: &egui::Context) -> egui::text::L
         }
         layout_job.sections.push(egui::text::LayoutSection {
             leading_space: 0.0,
-            byte_range: start..stop,
+            byte_range: egui::text::ByteIndex(start)..egui::text::ByteIndex(stop),
             format: egui::TextFormat {
                 font_id: font_id.clone(),
                 color: section.color,

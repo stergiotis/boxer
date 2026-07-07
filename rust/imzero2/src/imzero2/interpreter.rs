@@ -69,9 +69,12 @@ fn merge_left<T>(left: Option<T>, right: Option<T>) -> Option<T> {
 /// CCursorRange to `range`. Backs TextEditFluid.InsertAtCursor (ADR-0063).
 fn splice_text_at_cursor(text: &mut String, ins: &str, range: std::ops::Range<usize>) -> usize {
     use egui::TextBuffer as _;
+    // egui 0.35 wraps text offsets in the `CharIndex` newtype; convert at the
+    // TextBuffer boundary and keep this helper's own arithmetic in plain `usize`.
+    use egui::text::CharIndex;
     let start = range.start;
-    text.delete_char_range(range);
-    let n = text.insert_text(ins, start);
+    text.delete_char_range(CharIndex(range.start)..CharIndex(range.end));
+    let n = text.insert_text(ins, CharIndex(start));
     start + n
 }
 
@@ -2724,7 +2727,27 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.scrolling_texture.tick();
         self.image_cache.tick();
         self.walkers_raster_cache.tick();
-        let result = self.interpret_outer(ctx, &mut None);
+        // egui 0.35: root panels (`Panel::{top,bottom,left,right}`, `CentralPanel`)
+        // now render *inside* a `Ui` — the `Panel::show(&Context)` that attached
+        // straight to the screen in 0.34 was removed. Every host drives us from a
+        // `run_ui`/`logic` scope that owns the real root `Ui` but only hands us its
+        // `Context` (the desktop host deliberately runs from `logic()` so it keeps
+        // draining Go's stream while the window is startup-hidden — see app.rs).
+        // So we build our own background-layer `Ui` spanning the viewport, with an
+        // id distinct from egui's own `__top_ui` to avoid a clash, and thread it as
+        // the root — exactly what `Panel::show(ctx)` did internally. Widgets never
+        // dispatch at the root (Go always opens a container first, and
+        // `apply_widget` late-culls when `u` is `None`), so a `Some` root only
+        // supplies root panels the `Ui` they now require.
+        let mut root_ui = egui::Ui::new(
+            ctx.clone(),
+            egui::Id::new((ctx.viewport_id(), "__imzero2_root")),
+            egui::UiBuilder::new()
+                .layer_id(egui::LayerId::background())
+                .max_rect(ctx.viewport_rect()),
+        );
+        let mut root = Some(&mut root_ui);
+        let result = self.interpret_outer(ctx, &mut root);
         // Capture even on error so the overlay keeps reporting the time spent
         // before the failure rather than freezing on a stale value.
         let micros = t0.elapsed().as_micros();
@@ -3210,11 +3233,11 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                 if u.is_some() {
                     let parent_ui = u.as_mut().unwrap();
                     let origin = parent_ui.min_rect().min;
-                    parent_ui.allocate_ui_at_rect(
-                        egui::Rect::from_min_max(
+                    parent_ui.scope_builder(
+                        egui::UiBuilder::new().max_rect(egui::Rect::from_min_max(
                             egui::pos2(origin.x + min_x, origin.y + min_y),
                             egui::pos2(origin.x + max_x, origin.y + max_y),
-                        ),
+                        )),
                         |ui| {
                             let _ = self.interpret_outer_logged(c, &mut Some(ui));
                         },
@@ -6282,37 +6305,37 @@ self.apply_widget(w,u,f,Some(i));
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match FrameBuilderMethodId::PresetGroup");
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                            w = egui::Frame::group(c.style().as_ref());
+                            w = egui::Frame::group(c.style_of(c.theme()).as_ref());
                         }
                         FrameBuilderMethodId::PresetWindow => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match FrameBuilderMethodId::PresetWindow");
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                            w = egui::Frame::window(c.style().as_ref());
+                            w = egui::Frame::window(c.style_of(c.theme()).as_ref());
                         }
                         FrameBuilderMethodId::PresetPopup => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match FrameBuilderMethodId::PresetPopup");
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                            w = egui::Frame::popup(c.style().as_ref());
+                            w = egui::Frame::popup(c.style_of(c.theme()).as_ref());
                         }
                         FrameBuilderMethodId::PresetMenu => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match FrameBuilderMethodId::PresetMenu");
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                            w = egui::Frame::menu(c.style().as_ref());
+                            w = egui::Frame::menu(c.style_of(c.theme()).as_ref());
                         }
                         FrameBuilderMethodId::PresetCanvas => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match FrameBuilderMethodId::PresetCanvas");
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                            w = egui::Frame::canvas(c.style().as_ref());
+                            w = egui::Frame::canvas(c.style_of(c.theme()).as_ref());
                         }
                         FrameBuilderMethodId::PresetDarkCanvas => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match FrameBuilderMethodId::PresetDarkCanvas");
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                            w = egui::Frame::dark_canvas(c.style().as_ref());
+                            w = egui::Frame::dark_canvas(c.style_of(c.theme()).as_ref());
                         }
                         FrameBuilderMethodId::PresetSideTopPanel => {
                             #[cfg(feature = "puffin")]
@@ -6320,7 +6343,7 @@ self.apply_widget(w,u,f,Some(i));
                                 "match FrameBuilderMethodId::PresetSideTopPanel"
                             );
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                            w = egui::Frame::side_top_panel(c.style().as_ref());
+                            w = egui::Frame::side_top_panel(c.style_of(c.theme()).as_ref());
                         }
                         FrameBuilderMethodId::PresetCentralPanel => {
                             #[cfg(feature = "puffin")]
@@ -6328,7 +6351,7 @@ self.apply_widget(w,u,f,Some(i));
                                 "match FrameBuilderMethodId::PresetCentralPanel"
                             );
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                            w = egui::Frame::central_panel(c.style().as_ref());
+                            w = egui::Frame::central_panel(c.style_of(c.theme()).as_ref());
                         }
                     }
                 }
@@ -7532,7 +7555,7 @@ egui::Grid::new(i);
                     // and the shaper falls back to character-by-character wrapping. A
                     // LayoutJob with one section per styled span sidesteps that — the
                     // shaper sees one continuous run and breaks on word boundaries.
-                    let style = c.style();
+                    let style = c.style_of(c.theme());
                     let mut lj = egui::text::LayoutJob::default();
                     for atom in atoms.into_iter() {
                         if let egui::AtomKind::Text(wt) = atom.kind {
@@ -8255,7 +8278,7 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 {
-                    let screen = c.screen_rect();
+                    let screen = c.viewport_rect();
                     let layer_id = egui::LayerId::new(
                         egui::Order::Foreground,
                         egui::Id::new("imzero-absolute-overlay"),
@@ -8846,9 +8869,13 @@ egui::Panel::bottom(i);
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                w.show(c, |ui| {
-                    let _ = self.interpret_outer_logged(c, &mut Some(ui));
-                });
+                if u.is_some() {
+                    w.show(u.as_mut().unwrap(), |ui| {
+                        let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                    });
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
             }
             FuncProcId::PanelBottomInside => {
                 #[cfg(feature = "puffin")]
@@ -8904,7 +8931,7 @@ egui::Panel::bottom(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show_inside(u.as_mut().unwrap(), |ui| {
+                    w.show(u.as_mut().unwrap(), |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
                 } else {
@@ -8925,9 +8952,13 @@ egui::Panel::bottom(i);
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                w.show(c, |ui| {
-                    let _ = self.interpret_outer_logged(c, &mut Some(ui));
-                });
+                if u.is_some() {
+                    w.show(u.as_mut().unwrap(), |ui| {
+                        let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                    });
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
             }
             FuncProcId::PanelCentralInside => {
                 #[cfg(feature = "puffin")]
@@ -8944,7 +8975,7 @@ egui::Panel::bottom(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show_inside(u.as_mut().unwrap(), |ui| {
+                    w.show(u.as_mut().unwrap(), |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
                 } else {
@@ -8997,9 +9028,13 @@ egui::Panel::left(i);
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                w.show(c, |ui| {
-                    let _ = self.interpret_outer_logged(c, &mut Some(ui));
-                });
+                if u.is_some() {
+                    w.show(u.as_mut().unwrap(), |ui| {
+                        let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                    });
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
             }
             FuncProcId::PanelLeftInside => {
                 #[cfg(feature = "puffin")]
@@ -9054,7 +9089,7 @@ egui::Panel::left(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show_inside(u.as_mut().unwrap(), |ui| {
+                    w.show(u.as_mut().unwrap(), |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
                 } else {
@@ -9107,9 +9142,13 @@ egui::Panel::right(i);
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                w.show(c, |ui| {
-                    let _ = self.interpret_outer_logged(c, &mut Some(ui));
-                });
+                if u.is_some() {
+                    w.show(u.as_mut().unwrap(), |ui| {
+                        let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                    });
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
             }
             FuncProcId::PanelRightInside => {
                 #[cfg(feature = "puffin")]
@@ -9164,7 +9203,7 @@ egui::Panel::right(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show_inside(u.as_mut().unwrap(), |ui| {
+                    w.show(u.as_mut().unwrap(), |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
                 } else {
@@ -9217,9 +9256,13 @@ egui::Panel::top(i);
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                w.show(c, |ui| {
-                    let _ = self.interpret_outer_logged(c, &mut Some(ui));
-                });
+                if u.is_some() {
+                    w.show(u.as_mut().unwrap(), |ui| {
+                        let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                    });
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
             }
             FuncProcId::PanelTopInside => {
                 #[cfg(feature = "puffin")]
@@ -9274,7 +9317,7 @@ egui::Panel::top(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    w.show_inside(u.as_mut().unwrap(), |ui| {
+                    w.show(u.as_mut().unwrap(), |ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
                 } else {
@@ -9806,7 +9849,8 @@ egui::Panel::top(i);
                         // text) sit on top — required for ECDF + confidence-band
                         // composition where the band is a fill and the curve overlays.
                         for pg in &polygons_series {
-                            let pts: egui_plot::PlotPoints = pg.points.iter().copied().collect();
+                            let pts: egui_plot::PlotPoints<'_> =
+                                pg.points.iter().copied().collect();
                             let mut poly = egui_plot::Polygon::new(&pg.name, pts)
                                 .fill_color(color32_from_rgba_u32(pg.fill_color));
                             // egui interprets Stroke::new(0, _) as a hairline, not "no
@@ -9827,7 +9871,8 @@ egui::Panel::top(i);
                             plot_ui.polygon(poly);
                         }
                         for ld in &lines {
-                            let pts: egui_plot::PlotPoints = ld.points.iter().copied().collect();
+                            let pts: egui_plot::PlotPoints<'_> =
+                                ld.points.iter().copied().collect();
                             let mut line = egui_plot::Line::new(&ld.name, pts).width(ld.width);
                             if let Some(c) = ld.color {
                                 line = line.color(c);
@@ -9841,7 +9886,8 @@ egui::Panel::top(i);
                             plot_ui.line(line);
                         }
                         for sd in &scatters {
-                            let pts: egui_plot::PlotPoints = sd.points.iter().copied().collect();
+                            let pts: egui_plot::PlotPoints<'_> =
+                                sd.points.iter().copied().collect();
                             let shape = match sd.shape {
                                 0 => egui_plot::MarkerShape::Circle,
                                 1 => egui_plot::MarkerShape::Diamond,
@@ -10997,7 +11043,7 @@ self.apply_widget(w,u,f,Some(i));
                 // construct
 
                 #[allow(unused_mut)]
-                let mut w = egui::SelectableLabel::new(checked, text);
+                let mut w = egui::Button::selectable(checked, text);
                 if d == 0 {
                     self.end_consume_message()?;
                 }
@@ -12372,7 +12418,12 @@ self.apply_widget(w,u,f,Some(i));
                         .as_ref()
                         .and_then(|ctx| egui::text_edit::TextEditState::load(ctx, i))
                         .and_then(|st| st.cursor.char_range())
-                        .map(|cr| cr.as_sorted_char_range())
+                        // egui 0.35 returns a Range<CharIndex>; splice_text_at_cursor works in
+                        // plain usize, so unwrap the newtype at this boundary.
+                        .map(|cr| {
+                            let r = cr.as_sorted_char_range();
+                            r.start.0..r.end.0
+                        })
                         .unwrap_or(end..end);
                     let caret = splice_text_at_cursor(&mut text, &ins, range);
                     if let Some(ctx) = ctx_opt {
