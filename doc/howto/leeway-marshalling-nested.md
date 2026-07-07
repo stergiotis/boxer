@@ -6,12 +6,15 @@ status: draft
 # reviewed-date: YYYY-MM-DD
 ---
 
-> **Status: draft — pre-human-review.** DESIGN TARGET, NOT IMPLEMENTED — this
-> how-to is written *as if* the nested-struct front-end and the named DML
-> already existed end-to-end. Nothing here ships yet. The shipped, authoritative
-> recipe is the flat `lw:` tag grammar in [leeway-marshalling.md](./leeway-marshalling.md);
-> this document is the target that a forthcoming ADR (generalising ADR-0103)
-> would build toward. Do not cite it as behaviour in force.
+> **Status: draft — pre-human-review.** The nested-struct front-end now ships in
+> the **reflect** codec for every shape below, and in **codegen** for static and
+> dynamic-membership sections; the named DML `Add` ships. Surfaces that are still
+> reflect-only or unbuilt are flagged inline and gathered under
+> [Boundaries](#boundaries) — read the [status table](#implementation-status)
+> before relying on a feature. The flat `lw:` grammar in
+> [leeway-marshalling.md](./leeway-marshalling.md) is the other authoritative
+> recipe; the nested form is a second *spelling* of the same map — byte-identical
+> on the wire (see [How it lowers](#how-it-lowers)) — not a new capability.
 
 # How to marshal a Go struct to and from a leeway table — nested model
 
@@ -30,6 +33,25 @@ channels. Where the flat grammar reaches those with a `:column` suffix, a
 `@membership` sentinel, a channel flag, and an implicitly-paired carrier sibling
 — four different mechanisms — the nested model reaches all of them with **one**:
 the field's Go type.
+
+## Implementation status
+
+Per surface, so you know what to rely on. "reflect" = `marshallreflect`; "codegen"
+= `marshallgen` (`keelsoncodec`); "DML" = the generated `Add`. Deferred surfaces
+are **rejected at build/validate time with a clear error**, never silently wrong.
+
+| Capability | reflect | codegen |
+|---|---|---|
+| static sections — scalar / co-containers, One / Optional / Many | ✅ | ✅ |
+| dynamic memberships — `lw.Ref` / `lw.Verbatim`, repeated (`[]lw.Ref`), heterogeneous | ✅ | ✅ |
+| entity-level `lw.Single` (unit) and lanes (`lw.IPv4`/`lw.IPv6`) | ✅ | ⛔ deferred |
+| `lw.Single` as a *nested* sub-column | ⛔ deferred | ⛔ deferred |
+| carrier membership in a nested section (`lw.MixedRef[P]`) | ⛔ deferred | ⛔ deferred |
+| One / Optional **dynamic**-membership section (requires `[]Attr`) | ⛔ deferred | ⛔ deferred |
+
+The named DML `Add` (value sub-columns by name; membership chained) ships from the
+DML generator. Optional cardinality is spelled `option.Option[S]` — codegen rejects
+`*S` (matching its scalar-pointer policy); reflect accepts both.
 
 ## The model in one paragraph
 
@@ -258,6 +280,11 @@ so only dynamic memberships get channel-by-type.
 
 ## Carriers
 
+> **Deferred — not built in either front-end.** The nested spelling below is the
+> design proposed in [ADR-0110](../adr/0110-leeway-marshall-carrier-memberships-in-tuples.md)
+> (status: proposed); a carrier membership today must use the flat grammar. Shown
+> for completeness.
+
 A carrier channel's identity is per-row data. In the flat grammar that means a
 value field plus a `marshalltypes` sibling sharing an identical tag, paired by
 the builder. Here it collapses to a **membership field that is the carrier** —
@@ -337,6 +364,12 @@ Battery lw.Single[uint64] `lw:"battery,u64Array"`   // degenerate one-attribute,
 
 (the `dronemission` example below).
 
+> **Status:** the **entity-level** `lw.Single` above ships in **reflect**;
+> **codegen defers** it (it needs the top-level value-marker bridge —
+> [Boundaries](#boundaries)), so a codegen'd DTO uses the flat `,unit` spelling.
+> `lw.Single` as a **nested sub-column** (the `Telemetry` struct) is deferred in
+> **both** front-ends — use a plain `[]T` container or the flat `,unit` field.
+
 ## Canonical lanes
 
 A field's canonical type is derived from its Go type. When you need a *different*
@@ -354,8 +387,12 @@ type Endpoint struct {
 Lanes keep the attribute struct tag-free (the relabel is the type, not a tag)
 and answer *where schema-fixed canonical metadata lives*: a small,
 registry-backed set of named types. The registry's full contents are reserved —
-this cut ships the lanes the shipped `,ct=` already reaches (`v` / `w` / CIDR /
+this cut reaches the lanes the shipped `,ct=` already does (`v` / `w` / CIDR /
 u8).
+
+> **Status:** lanes ship in **reflect**; **codegen defers** them (the same
+> top-level value-marker bridge as `lw.Single` — [Boundaries](#boundaries)). Use
+> `,ct=` for a codegen'd DTO.
 
 ## Constants
 
@@ -375,25 +412,35 @@ the flat path documented but the compiler only caught when types differed:
 
 ```go
 sec := dml.GetSectionText()
-sec.Add(anchor.TextAttr{           // schema-generated attr struct — named, order-free
-    Membership: myKindID,          // present only for dynamic-membership sections
+a := sec.Add(InEntityTestTableSectionTextAttr{ // schema-generated attr — named value sub-columns
     Text:       "hello world",
-    WordLength: []uint32{5, 5},    // parallel co-containers, zipped
+    WordLength: []uint32{5, 5},                // parallel co-containers, zipped
     WordBag:    []string{"hello", "world"},
 })
+a.AddMembershipLowCardVerbatimP([]byte("title")) // membership stays chained on the cursor
+a.EndAttributeP()
 ```
 
-`Add` is a **compile-time skin**: it destructures the value struct into today's
-lean, allocation-free positional calls — `BeginAttribute(Text)`,
-`AddMembership…P(Membership)`, one `AddToCoContainersP(WordLength[k], WordBag[k])`
-per element — so the hot path is byte-for-byte what it is now. (The
-schema-generated `TextAttr` is distinct from your DTO's `Prose`; the codec
-bridges DTO→DML by field role, keeping the DTO independent of the schema
-package. A hand-written producer uses the generated struct directly.)
+`Add` binds the **value sub-columns** by name and lowers to today's lean,
+allocation-free positional calls — `BeginAttribute(Text)`, one
+`AddToCoContainersP(WordLength[k], WordBag[k])` per element — then **returns the
+attribute cursor**, so membership stays a chained `AddMembership…P` call and the
+close a chained `EndAttributeP` (the `…P` methods are void, so hold the cursor
+rather than chaining off them). Membership deliberately did **not** move into the
+value struct: one field can't express a repeated or heterogeneous membership, and
+the positional hazard was the *sub-columns*, which `Add` fixes. Unequal
+co-container lengths are recorded via `CheckErrors`, not a panic. The generated
+type is `<Section>Attr` (e.g. `InEntityTestTableSectionTextAttr`), distinct from
+your DTO's `Prose`; the reflect / codegen codecs drive the positional primitives
+directly, so `Add` is the surface for **hand-written** producers.
 
 ## Drive it: codegen and reflect
 
-Both front-ends accept the nested DTO and produce the same `Plan`.
+Both front-ends accept the nested DTO and produce the same `Plan` — with the
+value-marker exception in the [status table](#implementation-status): codegen
+rejects an entity-level `lw.Single`/lane field (a clear `PlanFor` error), so use
+its flat `,unit` / `,ct=` spelling in a codegen'd DTO. Static and
+dynamic-membership sections drive both front-ends identically.
 
 ```sh
 # codegen — emits doc.out.go next to the source, as today
@@ -470,10 +517,22 @@ Because column identity is now a **field name checked against the
 schema-generated `Add`**, a mistyped or reordered sub-column is a compile error
 (`unknown field Wrd…`), not silent garbage caught later by the byte tests.
 
-## Boundaries — reserved, not in this cut
+## Boundaries
 
-Designed *not to foreclose*, but explicitly **not built** here:
+Reserved, not in this cut. Deferred surfaces are **rejected with a clear `PlanFor`
+/ `Validate` error**, never silently wrong. What is not built here:
 
+- **Value markers in codegen** — entity-level `lw.Single` and lanes ship in
+  reflect but not codegen (they need the top-level marker→plain bridge across the
+  SoA / `Append` / `Row` / decode paths). Codegen'd DTOs use the flat `,unit` /
+  `,ct=` spelling. *(reflect ✅ · codegen ⛔)*
+- **`lw.Single` as a nested sub-column** — deferred in both front-ends; it needs
+  `BeginAttributeSingle` inside the tuple path. Use a plain `[]T`.
+- **One / Optional dynamic-membership sections** — a per-attribute `lw.*`
+  membership requires the section be `[]Attr` (Many); a One or Optional section
+  carrying a marker field is rejected.
+- **Carrier memberships in a nested section** — [ADR-0110](../adr/0110-leeway-marshall-carrier-memberships-in-tuples.md)
+  (proposed); use the flat carrier grammar for now.
 - **Store `ReadRow` over tuple/carrier kinds (ADR-0100).** The nested struct
   gives `ReadRow` a destination for N attributes, but generalising the store
   read path is a separate slice.
@@ -504,9 +563,9 @@ Designed *not to foreclose*, but explicitly **not built** here:
 
 ## Further reading
 
-- [leeway-marshalling.md](./leeway-marshalling.md) — the **shipped** flat `lw:`
-  grammar. Authoritative for behaviour in force; this document is its
-  design-stage sibling.
+- [leeway-marshalling.md](./leeway-marshalling.md) — the flat `lw:` grammar.
+  Authoritative for the flat spelling; this document is the nested spelling of the
+  same map (see the [status table](#implementation-status) for what ships where).
 - [the `mappingplan` model](../../public/semistructured/leeway/mappingplan/) — the
   shared IR both front-ends target; the `channelTable` the markers mirror.
 - [the `goplan` toolkit](../../public/semistructured/leeway/marshall/go/goplan/) —
@@ -521,8 +580,11 @@ Designed *not to foreclose*, but explicitly **not built** here:
 
 ## Worked examples
 
-The four `codecdemo` DTOs, re-expressed. Diff against the flat originals to see
-each ad-hoc mechanism dissolve into a field type.
+The `codecdemo` DTOs, re-expressed. Diff against the flat originals to see each
+ad-hoc mechanism dissolve into a field type. Two below use surfaces not fully
+shipped — `SensorReading`'s carrier (deferred; [ADR-0110](../adr/0110-leeway-marshall-carrier-memberships-in-tuples.md))
+and `DroneMission`'s entity-level `lw.Single` (reflect-only) — see the
+[status table](#implementation-status). The first three ship in both front-ends.
 
 ```go
 // textdoc — mixed scalar + co-containers, one static membership, one attribute.
@@ -574,6 +636,7 @@ type NamedText struct {
 }
 
 // sensorreading — carrier channel, one attribute, no sibling.
+// DEFERRED (both front-ends) — ADR-0110 proposed; use the flat carrier grammar today.
 type SensorReading struct {
     _        struct{} `kind:"sensorReading"`
     ID       uint64   `lw:",id"`
@@ -593,6 +656,7 @@ type DroneMission struct {
     Tracking []byte   `lw:",naturalKey"`
 
     Status  string            `lw:"droneStatus,symbol"`  // scalar section — unchanged sugar
-    Battery lw.Single[uint64] `lw:"battery,u64Array"`    // was: uint64 `lw:"battery,u64Array,unit"`
+    Battery lw.Single[uint64] `lw:"battery,u64Array"`    // reflect-only; codegen uses the flat ,unit spelling
+
 }
 ```
