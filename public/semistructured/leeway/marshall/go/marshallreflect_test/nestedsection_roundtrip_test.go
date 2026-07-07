@@ -201,3 +201,88 @@ func TestNested_StaticOne_SingleContainer_ByteIdenticalToFlat(t *testing.T) {
 	require.Nil(t, got[1].Codes.Values, "row 1 spliced empty container reads back nil")
 	require.Equal(t, []uint32{99}, got[2].Codes.Values, "row 2 container")
 }
+
+// Slice A, Step 1c — a nested MIXED section: a scalar sub-column plus co-container
+// sub-columns, authored as PARALLEL []T fields (the flat-tuple-element form; the
+// chosen 1c design, not a bundled []Word). It must be byte-identical to the flat
+// multi-sub-column textDoc, with the co-containers zipping in lockstep
+// (equal-length checked at runtime). No new codec machinery — 1a/1b's widened
+// tuple path already emits/reads a scalar + N co-containers.
+
+type flatTextDoc struct {
+	_          struct{} `kind:"textDoc"`
+	ID         uint64   `lw:",id"`
+	Tracking   []byte   `lw:",naturalKey"`
+	Text       string   `lw:"prose,text:text"`
+	WordLength []uint32 `lw:"prose,text:wordLength"`
+	WordBag    []string `lw:"prose,text:wordBag"`
+}
+
+// prose is the nested attribute struct for anchor's mixed text section: one
+// scalar sub-column plus two parallel co-container sub-columns.
+type prose struct {
+	Text       string   `lw:"text"`
+	WordLength []uint32 `lw:"wordLength"`
+	WordBag    []string `lw:"wordBag"`
+}
+
+type nestedTextDoc struct {
+	_        struct{} `kind:"textDoc"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Body     prose    `lw:"prose,text"`
+}
+
+func TestNested_StaticOne_CoContainers_ByteIdenticalToFlat(t *testing.T) {
+	lookup := marshallreflect.MapLookup{"prose": 1}
+
+	// Row 3 has the scalar present but empty co-containers (N=0): the attribute
+	// still emits (the scalar is the presence signal) in both spellings.
+	flat := []flatTextDoc{
+		{ID: 1, Tracking: []byte("T1"), Text: "hello world", WordLength: []uint32{5, 5}, WordBag: []string{"hello", "world"}},
+		{ID: 2, Tracking: []byte("T2"), Text: "hi", WordLength: []uint32{2}, WordBag: []string{"hi"}},
+		{ID: 3, Tracking: []byte("T3"), Text: "empty", WordLength: nil, WordBag: nil},
+	}
+	nested := []nestedTextDoc{
+		{ID: 1, Tracking: []byte("T1"), Body: prose{Text: "hello world", WordLength: []uint32{5, 5}, WordBag: []string{"hello", "world"}}},
+		{ID: 2, Tracking: []byte("T2"), Body: prose{Text: "hi", WordLength: []uint32{2}, WordBag: []string{"hi"}}},
+		{ID: 3, Tracking: []byte("T3"), Body: prose{Text: "empty", WordLength: nil, WordBag: nil}},
+	}
+
+	require.NoError(t, marshallreflect.Validate[nestedTextDoc](anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(nested))))
+
+	flatRec, relF := marshalToRecord(t, flat, lookup)
+	defer relF()
+	nestedRec, relN := marshalToRecord(t, nested, lookup)
+	defer relN()
+
+	require.True(t, array.RecordEqual(flatRec, nestedRec),
+		"records differ:\nflat=%s\nnested=%s", flatRec, nestedRec)
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, nestedRec), "Arrow IPC bytes differ")
+
+	idReader, relID := loadIdReader(t, nestedRec)
+	defer relID()
+	txReader := anchor.NewReadAccessTestTableTaggedText()
+	txReader.SetColumnIndices(txReader.GetColumnIndices())
+	require.NoError(t, txReader.LoadFromRecord(nestedRec))
+	defer txReader.Release()
+
+	// Scalar present ⇒ one attribute per row, including the empty-co-container row.
+	require.Equal(t, int64(1), txReader.GetAttributes().GetNumberOfAttributes(0))
+	require.Equal(t, int64(1), txReader.GetAttributes().GetNumberOfAttributes(2))
+
+	args := idReaders(idReader).
+		Section("text", txReader.GetAttributes(), txReader.GetMemberships())
+	var got []nestedTextDoc
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
+
+	require.Equal(t, len(nested), len(got))
+	require.Equal(t, "hello world", got[0].Body.Text)
+	require.Equal(t, []uint32{5, 5}, got[0].Body.WordLength, "row 0 co-container 1")
+	require.Equal(t, []string{"hello", "world"}, got[0].Body.WordBag, "row 0 co-container 2")
+	require.Equal(t, "hi", got[1].Body.Text)
+	require.Equal(t, []uint32{2}, got[1].Body.WordLength)
+	require.Equal(t, "empty", got[2].Body.Text)
+	require.Nil(t, got[2].Body.WordLength, "row 2 empty co-container reads back nil")
+	require.Nil(t, got[2].Body.WordBag)
+}
