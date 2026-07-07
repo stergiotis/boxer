@@ -116,6 +116,17 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 			continue
 		}
 
+		// Nested (static-membership) section field: a struct value whose fields
+		// are the section's sub-columns (Slice A). Recognised before the scalar
+		// classifier, which would otherwise reject a DTO-package struct as an
+		// unsupported scalar type.
+		if elemType, card, ok := nestedSectionCardinality(f.Type); ok {
+			if err = addNestedSectionField(b, rt, f.Name, lwTag, elemType, card); err != nil {
+				return
+			}
+			continue
+		}
+
 		var shape goplan.FieldShape
 		shape, err = classifyReflectType(f.Type)
 		if err != nil {
@@ -187,6 +198,70 @@ func addReflectTupleField(b *goplan.PlanBuilder, dto reflect.Type, goFieldName, 
 		elems = append(elems, goplan.TupleElem{GoFieldName: ef.Name, LWTag: lw, Shape: shape})
 	}
 	return b.AddTupleSliceField(goFieldName, lwTag, elemType.Name(), elems)
+}
+
+// isAttrStructType reports whether t is a named plain struct usable as a nested
+// attribute struct (or a dynamic-tuple element): a named struct that is NOT one
+// of the struct types with a dedicated classifier lane (marshalltypes carriers,
+// option.Option, time.Time, roaring). The same exclusion set isTupleSliceType
+// uses, factored out so the nested-section detector shares it.
+func isAttrStructType(t reflect.Type) bool {
+	if t.Kind() != reflect.Struct || t.Name() == "" {
+		return false
+	}
+	switch t.PkgPath() {
+	case marshalltypesPkgPath, optionPkgPath, roaringPkgPath, "time":
+		return false
+	}
+	return true
+}
+
+// nestedSectionCardinality reports whether ft is a nested (static-membership)
+// section field and, if so, its element struct type and attributes-per-row
+// cardinality. Slice-A Step 1 recognises cardinality One (a struct value) only;
+// Optional (`*S` / `option.Option[S]`) and static-Many (`[]S`) are added with
+// their codec support in later steps. A `[]S` continues to route to the
+// dynamic-membership tuple path (isTupleSliceType) for now.
+func nestedSectionCardinality(ft reflect.Type) (elemType reflect.Type, card mappingplan.AttrCardinalityE, ok bool) {
+	if ft.Kind() == reflect.Struct && isAttrStructType(ft) {
+		return ft, mappingplan.AttrCardinalityOne, true
+	}
+	return nil, 0, false
+}
+
+// addNestedSectionField walks a nested section struct's fields, classifies each
+// with the shared reflect classifier, and hands them to
+// goplan.PlanBuilder.AddNestedSliceField — the static-membership sibling of
+// addReflectTupleField. Unlike a tuple element, a nested sub-column field need
+// not carry an `lw:` tag (its column defaults to the lower-cased field name);
+// the tag, when present, names the column and may carry a `,ct=` override.
+func addNestedSectionField(b *goplan.PlanBuilder, dto reflect.Type, goFieldName, lwTag string, elemType reflect.Type, card mappingplan.AttrCardinalityE) (err error) {
+	if elemType.PkgPath() != dto.PkgPath() {
+		// Front-end parity with the go/ast path, which resolves the struct from
+		// the DTO's own file.
+		err = eb.Build().Str("field", goFieldName).Str("elemType", elemType.String()).Errorf("nested section struct must be declared in the DTO's package (the marshallgen front-end resolves it from the DTO's file)")
+		return
+	}
+	elems := make([]goplan.TupleElem, 0, elemType.NumField())
+	for j := 0; j < elemType.NumField(); j++ {
+		ef := elemType.Field(j)
+		if ef.Name == "_" {
+			err = eb.Build().Str("field", goFieldName).Errorf("`_` fields are not supported inside a nested section struct — entity metadata belongs on the DTO")
+			return
+		}
+		if !ef.IsExported() {
+			err = eb.Build().Str("field", goFieldName).Str("elemField", ef.Name).Errorf("unexported field in a nested section struct")
+			return
+		}
+		var shape goplan.FieldShape
+		shape, err = classifyReflectType(ef.Type)
+		if err != nil {
+			err = eb.Build().Str("field", goFieldName).Str("elemField", ef.Name).Errorf("classify nested sub-column field type: %w", err)
+			return
+		}
+		elems = append(elems, goplan.TupleElem{GoFieldName: ef.Name, LWTag: ef.Tag.Get("lw"), Shape: shape})
+	}
+	return b.AddNestedSliceField(goFieldName, lwTag, elemType.Name(), elems, card)
 }
 
 func pkgLastSegment(pkg string) string {

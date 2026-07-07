@@ -185,6 +185,11 @@ type TupleSpec struct {
 	GoField     string // outer DTO field, e.g. "Strings"
 	StructType  string // element struct type name, e.g. "LabeledText"
 	Memberships []mappingplan.TupleMembership
+	// Cardinality is the attributes-per-row multiplicity: Many (`[]X`, the
+	// dynamic-membership tuple), One (`X`), or Optional (`option.Option[X]`).
+	// When Memberships is empty the section carries a single STATIC membership
+	// (SectionGroup.Memberships[0]); the codec branches on len(Memberships)==0.
+	Cardinality mappingplan.AttrCardinalityE
 }
 
 // Channels returns the distinct membership channels the tuple's elements
@@ -221,6 +226,7 @@ func (g SectionGroup) TupleSpec() (ts TupleSpec, ok bool) {
 		GoField:     f.TupleField,
 		StructType:  f.TupleStructType,
 		Memberships: f.TupleMemberships,
+		Cardinality: f.TupleCardinality,
 	}, true
 }
 

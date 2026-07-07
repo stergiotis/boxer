@@ -538,19 +538,35 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 	return
 }
 
-// unmarshalTupleSection decodes a dynamic-membership tuple section
-// (ADR-0103, extended by ADR-0109). Every attribute of the row belongs to
-// the tuple field — PlanBuilder.Finish guarantees the section carries no
-// other field — so there is no membership matching: each attribute decodes
-// to ONE element, its sub-column values read positionally and its
-// memberships distributed to the element's `@membership` fields per channel
-// (distributeTupleMemberships). Zero attributes decode to a nil slice.
+// unmarshalTupleSection decodes a tuple-family section — a dynamic-membership
+// tuple (ADR-0103/0109) or a nested static-membership section (Slice A). Every
+// attribute belongs to the section's field — PlanBuilder.Finish guarantees no
+// other field targets it — so there is no membership matching: each attribute
+// decodes to ONE element, its sub-column values read positionally. A DYNAMIC
+// tuple additionally distributes each attribute's memberships into the element's
+// `@membership` fields (distributeTupleMemberships); a STATIC nested section has
+// no such fields (its one membership is implied), so that step is skipped.
+//
+// The decoded elements are projected into the row by cardinality: Many → a slice
+// (nil when zero); One → the struct value, requiring exactly one attribute
+// unless the section is all-container (S=0) and spliced to zero.
 func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, attrs, membs reflect.Value, i int) (err error) {
 	outFld := row.FieldByName(ts.GoField)
-	elemType := outFld.Type().Elem()
 
-	var out reflect.Value // lazily allocated — zero attributes keep the nil slice
+	var elemType reflect.Type
+	switch ts.Cardinality {
+	case mappingplan.AttrCardinalityOne:
+		elemType = outFld.Type()
+	case mappingplan.AttrCardinalityOptional:
+		err = eb.Build().Str("section", g.Section).Errorf("Optional nested-section cardinality not yet implemented (Slice-A Step 3)")
+		return
+	default: // Many
+		elemType = outFld.Type().Elem()
+	}
+	static := len(ts.Memberships) == 0
+
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
+	elems := make([]reflect.Value, 0, n)
 	locals := make([]reflect.Value, len(g.SubColumns))
 	for attrJ := int64(0); attrJ < n; attrJ++ {
 		// One element per attribute (ADR-0109 D2). Read every sub-column value…
@@ -573,18 +589,37 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 			}
 			elem.FieldByName(g.SubColumns[k].Fields[0].GoFieldName).Set(locals[k])
 		}
-		// …then distribute the attribute's memberships into the element's
-		// `@membership` fields, one channel at a time.
-		if err = distributeTupleMemberships(elem, ts, g.Section, membs, i, attrJ); err != nil {
+		if !static {
+			// …then distribute the attribute's memberships into the element's
+			// `@membership` fields, one channel at a time.
+			if err = distributeTupleMemberships(elem, ts, g.Section, membs, i, attrJ); err != nil {
+				return
+			}
+		}
+		elems = append(elems, elem)
+	}
+
+	switch ts.Cardinality {
+	case mappingplan.AttrCardinalityOne:
+		// Exactly one attribute per row — unless the section is all-container
+		// (no scalar sub-column) and spliced to zero, in which case the zero
+		// value stays (the S=0 rule, mirroring unmarshalMultiSubColumn).
+		want := len(g.ScalarSubColumns()) > 0
+		if len(elems) > 1 || (want && len(elems) != 1) {
+			err = eb.Build().Str("section", g.Section).Int("attrs", len(elems)).Errorf("cardinality-One nested section must carry exactly one attribute per row")
 			return
 		}
-		if !out.IsValid() {
-			out = reflect.MakeSlice(outFld.Type(), 0, int(n))
+		if len(elems) == 1 {
+			outFld.Set(elems[0])
 		}
-		out = reflect.Append(out, elem)
-	}
-	if out.IsValid() {
-		outFld.Set(out)
+	default: // Many — a slice; nil when zero attributes.
+		if len(elems) > 0 {
+			out := reflect.MakeSlice(outFld.Type(), 0, len(elems))
+			for _, e := range elems {
+				out = reflect.Append(out, e)
+			}
+			outFld.Set(out)
+		}
 	}
 	return
 }

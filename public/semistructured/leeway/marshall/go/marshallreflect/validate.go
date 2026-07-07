@@ -158,14 +158,19 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 		requireMethod(attrType, attrCtx, coContainerMethod, coContainerArgs, problems)
 	}
 	requireMethod(attrType, attrCtx, "EndAttributeP", -1, problems)
-	// A tuple element may carry memberships on several channels (ADR-0109 D4);
-	// the DML must expose AddMembership<Channel>P for each. A ref @membership on
-	// a section whose spec lacks that ref channel fails here, not at marshal.
-	if isTuple {
+	// A dynamic tuple element may carry memberships on several channels
+	// (ADR-0109 D4); the DML must expose AddMembership<Channel>P for each. A
+	// ref @membership on a section whose spec lacks that ref channel fails here,
+	// not at marshal. A STATIC nested section (isTuple with no @membership
+	// fields) emits its one membership via AddMembership<g.Channel()>P like a
+	// flat section, so it needs that method — ts.Channels() is empty and would
+	// otherwise require nothing (the codec would then panic mid-marshal).
+	switch {
+	case isTuple && len(ts.Memberships) > 0:
 		for _, ch := range ts.Channels() {
 			requireMethod(attrType, attrCtx, "AddMembership"+ch.AddMethodSuffix()+"P", -1, problems)
 		}
-	} else {
+	default:
 		requireMethod(attrType, attrCtx, "AddMembership"+g.Channel().AddMethodSuffix()+"P", -1, problems)
 	}
 }

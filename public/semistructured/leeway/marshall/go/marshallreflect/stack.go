@@ -205,14 +205,15 @@ func sectionHasMatchingField(row reflect.Value, g goplan.SectionGroup, filter ca
 	}
 	if ts, ok := g.TupleSpec(); ok {
 		// One attribute per element; each element classifies by its own
-		// shared container length (marshalTupleSection re-evaluates the
-		// same predicate per element).
+		// shared container length (marshalTupleSection re-evaluates the same
+		// predicate per element). Element enumeration follows the section
+		// cardinality (Many slice / One struct value) via the shared helper so
+		// the frame predicate and the emitter cannot disagree.
 		containers := g.ContainerSubColumns()
-		elems := row.FieldByName(ts.GoField)
-		for e := 0; e < elems.Len(); e++ {
+		for _, elem := range tupleRowElements(row, ts) {
 			n := 0
 			if len(containers) > 0 {
-				n = elems.Index(e).FieldByName(containers[0].Fields[0].GoFieldName).Len()
+				n = elem.FieldByName(containers[0].Fields[0].GoFieldName).Len()
 			}
 			if tupleElemCardMatches(n, filter) {
 				return true

@@ -785,6 +785,185 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 	return
 }
 
+// defaultSubColumnName derives a nested sub-column's leeway column name from
+// its Go field name when the field carries no `lw:"<column>"` override: the
+// field name with its first letter lower-cased (e.g. `BeginIncl` → `beginIncl`).
+// Go field names are ASCII identifiers, so lower-casing the first byte suffices;
+// an all-caps acronym field whose column differs uses the explicit tag.
+func defaultSubColumnName(goFieldName string) string {
+	if goFieldName == "" {
+		return ""
+	}
+	return strings.ToLower(goFieldName[:1]) + goFieldName[1:]
+}
+
+// splitNestedElemLW parses the optional lw: tag on a field INSIDE a nested
+// attribute struct: `lw:"<column>[,ct=<canonical>]"`. Unlike a tuple element
+// (SplitTupleElemLW) it carries neither an `@membership` marker nor a
+// `<section>:` prefix — the section comes from the outer section-field tag and
+// the column is the bare head token (empty ⇒ the caller defaults it via
+// defaultSubColumnName). Only `,ct=` is meaningful here; the channel lives on
+// the section field and unit/explode/const have no per-sub-column meaning
+// (AddNestedSliceField rejects them).
+func splitNestedElemLW(tag string) (column string, flags mappingplan.FieldFlags, err error) {
+	if strings.TrimSpace(tag) == "" {
+		return
+	}
+	parts := strings.Split(tag, ",")
+	column = strings.TrimSpace(parts[0])
+	if strings.IndexByte(column, ':') >= 0 {
+		err = eb.Build().Str("tag", tag).Errorf("nested sub-column tag names a bare column, not `section:column` (the section is on the struct field)")
+		return
+	}
+	err = parseFlagTokens(parts[1:], &flags)
+	return
+}
+
+// AddNestedSliceField validates a NESTED, static-membership section field
+// (Slice A): an attribute-struct-typed DTO field — e.g. `Window rangeWindow`
+// tagged `lw:"<membership>,<section>"` — whose struct fields are the section's
+// sub-columns, emitting `card` attributes per row (One / Optional / Many). It is
+// the static-membership sibling of AddTupleSliceField: the membership is a
+// compile-time tag (not per-element `@membership` fields), so the emitted
+// TaggedFields carry a normal LWMembership / Flags.Channel and an EMPTY
+// TupleMemberships — the codec's static-vs-dynamic discriminator. structTypeName
+// is the element struct type; elems are its fields in declaration order.
+//
+// Slice-A scope: value sub-columns only (scalars / `[]T` containers) — no
+// `@membership` fields, no lw.Single, no bundled co-container element list, no
+// carriers; later steps widen it.
+func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName string, elems []TupleElem, card mappingplan.AttrCardinalityE) (err error) {
+	var pt ParsedLWTag
+	pt, err = SplitLW(outerTag)
+	if err != nil {
+		err = eb.Build().Str("field", goFieldName).Errorf("parse nested section tag: %w", err)
+		return
+	}
+	if err = rejectReservedMembership(pt.Membership); err != nil {
+		err = eb.Build().Str("field", goFieldName).Errorf("%w", err)
+		return
+	}
+	if pt.Membership == "" || pt.Section == "" {
+		err = eb.Build().Str("field", goFieldName).Str("tag", outerTag).Errorf("nested section field needs a static membership and section (`lw:\"<membership>,<section>\"`); a bare-section (dynamic-membership) nested field is not yet supported")
+		return
+	}
+	if pt.Column != "" {
+		err = eb.Build().Str("field", goFieldName).Errorf("nested section field names the whole section, not a sub-column (`:<col>`) — the sub-columns are the struct's fields")
+		return
+	}
+	if pt.Flags.Unit || pt.Flags.Explode || pt.Flags.HasConst || pt.Flags.CanonicalType != "" {
+		err = eb.Build().Str("field", goFieldName).Errorf("nested section field tag takes only a channel flag (no unit / explode / const / ct=)")
+		return
+	}
+	if pt.Flags.Channel.UsesCarrier() {
+		err = eb.Build().Str("field", goFieldName).Str("channel", pt.Flags.Channel.String()).Errorf("nested section cannot use a carrier / parametrized channel — a carrier's identity is per-row data, not a static membership")
+		return
+	}
+	if structTypeName == "" {
+		err = eb.Build().Str("field", goFieldName).Errorf("nested section element type must be a named struct type")
+		return
+	}
+	if len(elems) == 0 {
+		err = eb.Build().Str("field", goFieldName).Errorf("nested section struct has no fields")
+		return
+	}
+
+	channel := pt.Flags.Channel
+	membership := pt.Membership
+	section := pt.Section
+
+	type valueField struct {
+		goField   string
+		column    string
+		canonical canonicaltypes.PrimitiveAstNodeI
+		ct        string
+	}
+	values := make([]valueField, 0, len(elems))
+	usedCols := map[string]string{}
+
+	for _, e := range elems {
+		ctx := eb.Build().Str("field", goFieldName).Str("elemField", e.GoFieldName)
+		if e.Shape.CarrierType != "" {
+			err = ctx.Errorf("marshalltypes carrier not supported inside a nested section — carrier channels cannot reach a nested section")
+			return
+		}
+		if e.Shape.IsOption {
+			err = ctx.Errorf("Option[T] not supported as a nested sub-column — the attribute has no per-sub-column presence")
+			return
+		}
+		var column string
+		var flags mappingplan.FieldFlags
+		column, flags, err = splitNestedElemLW(e.LWTag)
+		if err != nil {
+			err = ctx.Errorf("parse nested sub-column tag: %w", err)
+			return
+		}
+		if column == "" {
+			column = defaultSubColumnName(e.GoFieldName)
+		}
+		if flags.Unit || flags.Explode || flags.HasConst || flags.Channel != mappingplan.MembershipChannelLowCardRef {
+			err = ctx.Errorf("nested sub-column tag takes only `ct=` (no unit / explode / const / channel — the channel is on the section field)")
+			return
+		}
+		if prev, dup := usedCols[column]; dup {
+			err = ctx.Str("column", column).Str("first", prev).Errorf("sub-column appears on two nested fields")
+			return
+		}
+		usedCols[column] = e.GoFieldName
+
+		var goType string
+		var isSlice, isRoaring bool
+		goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(e.Shape.Canonical)
+		if err != nil {
+			err = ctx.Errorf("derive Go type from canonical: %w", err)
+			return
+		}
+		fieldCanonical := e.Shape.Canonical
+		if flags.CanonicalType != "" {
+			fieldCanonical, err = resolveCanonicalOverride(e.GoFieldName, flags.CanonicalType, goType, isSlice, isRoaring)
+			if err != nil {
+				return
+			}
+			goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(fieldCanonical)
+			if err != nil {
+				err = ctx.Errorf("derive Go type from `,ct=` canonical: %w", err)
+				return
+			}
+		}
+		if isRoaring {
+			err = ctx.Errorf("*roaring.Bitmap not supported as a nested sub-column — no stable element index to zip; use []T")
+			return
+		}
+		if isSlice {
+			if err = checkSliceElemType(e.GoFieldName, goType); err != nil {
+				return
+			}
+		}
+		values = append(values, valueField{goField: e.GoFieldName, column: column, canonical: fieldCanonical, ct: flags.CanonicalType})
+	}
+
+	if len(values) == 0 {
+		err = eb.Build().Str("field", goFieldName).Errorf("nested section struct needs at least one sub-column field")
+		return
+	}
+
+	for _, v := range values {
+		b.plan.Fields = append(b.plan.Fields, mappingplan.TaggedField{
+			GoFieldName:      v.goField,
+			Canonical:        v.canonical,
+			LWMembership:     membership, // STATIC — from the section-field tag
+			LWSection:        section,
+			LWColumn:         v.column,
+			Flags:            mappingplan.FieldFlags{Channel: channel, CanonicalType: v.ct},
+			TupleField:       goFieldName,
+			TupleStructType:  structTypeName,
+			TupleMemberships: nil, // empty ⇒ static membership (codec discriminator)
+			TupleCardinality: card,
+		})
+	}
+	return
+}
+
 // Finish runs the whole-DTO completeness + per-section channel
 // uniformity checks and returns the assembled plan.
 func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
@@ -814,11 +993,14 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 	// never identifiers (literal wire label / per-row carrier data), so
 	// their names may be arbitrary.
 	for _, f := range b.plan.Fields {
-		// Tuple value fields carry a ref channel only to keep g.Channel()
-		// well-defined; their memberships are per-element ids (or names)
-		// declared on the element's `@membership` fields, not a static kindXxx
-		// symbol (ADR-0109), so this identifier rule does not apply to them.
-		if f.TupleField != "" {
+		// DYNAMIC tuple value fields carry a ref channel only to keep
+		// g.Channel() well-defined; their memberships are per-element ids (or
+		// names) declared on the element's `@membership` fields, not a static
+		// kindXxx symbol (ADR-0109), so this identifier rule does not apply to
+		// them. A STATIC nested section (TupleField set, TupleMemberships empty)
+		// DOES resolve its membership through a kindXxx symbol like any flat
+		// section, so it must satisfy the identifier rule.
+		if f.TupleField != "" && len(f.TupleMemberships) > 0 {
 			continue
 		}
 		if f.Flags.Channel.NeedsKindVar() && !mappingplan.IsIdentifierLike(f.LWMembership) {

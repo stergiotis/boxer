@@ -96,7 +96,7 @@ func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup Lookup
 		// Dynamic-membership tuple: one attribute per element of the outer
 		// slice, each with its own membership (ADR-0103). Dispatched before
 		// the sub-column-count split — a tuple may have any S + C ≥ 1.
-		err = marshalTupleSection(sec, row, g, ts, filter)
+		err = marshalTupleSection(sec, row, g, ts, lookup, filter)
 		if err != nil {
 			return
 		}
@@ -186,19 +186,49 @@ func marshalMultiSubColumn(sec, row reflect.Value, g goplan.SectionGroup, lookup
 	return
 }
 
-// marshalTupleSection emits a dynamic-membership tuple section (ADR-0103,
-// extended by ADR-0109): one attribute per element of the outer slice, in
-// element order — BeginAttribute(<scalar sub-columns…>), the zipped
-// co-containers, then the element's memberships, EndAttributeP. Each element
-// emits one AddMembership<Channel>P call per `@membership` field (declaration
-// order) — one per slice element for a repeated field — so an attribute may
-// carry several memberships (`membership-card > 1`) on possibly heterogeneous
-// channels; a ref channel passes the uint64 id directly, a verbatim channel the
-// []byte name. The call sequence mirrors marshallgen's writeTupleSectionDriver
-// exactly — the byte-identity invariant between the two front-ends rests on it.
-// An element always emits (its presence in the slice is the signal — there is
-// no per-element splice); zero elements emit zero attributes.
-func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, filter cardFilter) (err error) {
+// tupleRowElements returns the element reflect.Values a row contributes to a
+// tuple-family section, by cardinality: Many → each element of the outer slice;
+// One → the struct value once; Optional → zero-or-one (Slice-A Step 3, currently
+// none). Shared by the write emitter (marshalTupleSection) and the frame
+// predicate (sectionHasMatchingField) so the two cannot disagree on which
+// elements a row emits.
+func tupleRowElements(row reflect.Value, ts goplan.TupleSpec) []reflect.Value {
+	fld := row.FieldByName(ts.GoField)
+	switch ts.Cardinality {
+	case mappingplan.AttrCardinalityOne:
+		return []reflect.Value{fld}
+	case mappingplan.AttrCardinalityOptional:
+		return nil // Slice-A Step 3 (present() gate on *S / option.Option[S]).
+	default: // AttrCardinalityMany — the dynamic-membership tuple.
+		out := make([]reflect.Value, fld.Len())
+		for e := range out {
+			out[e] = fld.Index(e)
+		}
+		return out
+	}
+}
+
+// marshalTupleSection emits a tuple-family section — either a
+// dynamic-membership tuple (ADR-0103/0109) or a nested static-membership section
+// (Slice A). One attribute is emitted per element the row contributes:
+// BeginAttribute(<scalar sub-columns…>), the zipped co-containers, the
+// membership(s), then EndAttributeP. The call sequence mirrors marshallgen's
+// writeTupleSectionDriver / the flat multi-sub-column driver exactly — the
+// byte-identity invariant rests on it.
+//
+// Two axes generalise the original dynamic tuple:
+//
+//   - Cardinality (ts.Cardinality) fixes how many elements the row contributes:
+//     Many → each element of the outer slice; One → the struct value once. (An
+//     element always emits — its presence is the signal; zero elements emit
+//     zero attributes. Optional cardinality and the all-container S=0 splice are
+//     added in later Slice-A steps.)
+//   - Membership source: a DYNAMIC tuple (ts.Memberships non-empty) emits one
+//     AddMembership<Channel>P per `@membership` field, the value carried
+//     directly. A STATIC nested section (ts.Memberships empty) resolves its one
+//     membership through addMembership — the ref lookup / verbatim literal —
+//     exactly like a flat section, NOT the raw per-element path.
+func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, lookup LookupI, filter cardFilter) (err error) {
 	scalars := g.ScalarSubColumns()
 	containers := g.ContainerSubColumns()
 	addMethod := ""
@@ -206,12 +236,12 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 		addMethod = goplan.ContainerAddMethod(len(containers)) + "P"
 	}
 
-	elems := row.FieldByName(ts.GoField)
+	elems := tupleRowElements(row, ts)
+
 	containerVals := make([]reflect.Value, len(containers))
 	args := make([]reflect.Value, 0, len(scalars))
 	elemArgs := make([]reflect.Value, len(containers))
-	for e := 0; e < elems.Len(); e++ {
-		elem := elems.Index(e)
+	for e, elem := range elems {
 		// Zip-length agreement across the container class, per element —
 		// checked before the cardinality filter so a mis-zipped element is
 		// an error on every RowComposer pass, not only the one it emits in.
@@ -242,15 +272,24 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 			}
 			mustCall(attr, addMethod, elemArgs...)
 		}
-		for _, m := range ts.Memberships {
-			method := "AddMembership" + m.Channel.AddMethodSuffix() + "P"
-			mf := elem.FieldByName(m.GoField)
-			if m.IsSlice {
-				for k := 0; k < mf.Len(); k++ {
-					mustCall(attr, method, tupleMembArg(mf.Index(k), m))
+		if len(ts.Memberships) == 0 {
+			// STATIC nested section: one membership from the section tag,
+			// resolved (ref lookup / verbatim literal) exactly like a flat
+			// multi-sub-column section.
+			if err = addMembership(attr, row, g.Memberships[0], lookup, reflect.Value{}); err != nil {
+				return
+			}
+		} else {
+			for _, m := range ts.Memberships {
+				method := "AddMembership" + m.Channel.AddMethodSuffix() + "P"
+				mf := elem.FieldByName(m.GoField)
+				if m.IsSlice {
+					for k := 0; k < mf.Len(); k++ {
+						mustCall(attr, method, tupleMembArg(mf.Index(k), m))
+					}
+				} else {
+					mustCall(attr, method, tupleMembArg(mf, m))
 				}
-			} else {
-				mustCall(attr, method, tupleMembArg(mf, m))
 			}
 		}
 		mustCall(attr, "EndAttributeP")

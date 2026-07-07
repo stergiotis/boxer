@@ -469,6 +469,25 @@ type FieldFlags struct {
 	CanonicalType string
 }
 
+// AttrCardinalityE is the attributes-per-row multiplicity of a tuple-family
+// (nested) section — how many attributes one row emits into the section. It is
+// carried on every value TaggedField of a nested section (TupleCardinality) in
+// identical copies. The zero value is Many, which is exactly today's
+// dynamic-membership tuple (`[]X`) and every plan built before nested sections
+// existed, so introducing the axis is backward-compatible.
+type AttrCardinalityE uint8
+
+const (
+	// AttrCardinalityMany is the `[]X` shape: N attributes per row, in slice
+	// order (the ADR-0103 dynamic-membership tuple). Zero value.
+	AttrCardinalityMany AttrCardinalityE = iota
+	// AttrCardinalityOne is the `X` shape: exactly one attribute per row.
+	AttrCardinalityOne
+	// AttrCardinalityOptional is the `option.Option[X]` / `*X` shape: zero or
+	// one attribute per row (absent ⇒ zero attributes, the splice).
+	AttrCardinalityOptional
+)
+
 // TaggedField is one DTO field (or constant) bound to a leeway
 // membership via an lw: tag.
 type TaggedField struct {
@@ -527,6 +546,18 @@ type TaggedField struct {
 	TupleField       string
 	TupleStructType  string
 	TupleMemberships []TupleMembership
+
+	// TupleCardinality is the attributes-per-row multiplicity of the tuple
+	// section this field belongs to: Many (`[]X`, the dynamic-membership
+	// tuple), One (`X`), or Optional (`option.Option[X]` / `*X`). The zero
+	// value Many covers every dynamic-membership tuple and every plan built
+	// before nested sections existed, so the field is additive. When
+	// TupleMemberships is empty the section carries a single STATIC membership
+	// (read from the section's LWMembership / Flags.Channel like a flat
+	// section) rather than per-element `@membership` fields — this is the
+	// nested-section (non-dynamic) case. All sub-fields of one tuple carry
+	// identical copies.
+	TupleCardinality AttrCardinalityE
 }
 
 // TupleMembership describes one `@membership` field of a dynamic-membership
