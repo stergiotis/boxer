@@ -1002,3 +1002,80 @@ type MyDTO struct {
 		t.Fatalf("want unexported-element rejection, got: %v", err)
 	}
 }
+
+// --- Slice C step 1: nested-section cardinality + static membership. ---
+
+// An lw.* marker field is rejected by the codegen front-end (deferred to step 2)
+// with a clear error, not a fall-through unknown-scalar failure.
+func TestParse_RejectsLwMarkerInCodegen(t *testing.T) {
+	_, err := generateMay(t, `package demo
+type MyDTO struct {
+	_   struct{} `+"`kind:\"my\"`"+`
+	Id  uint64   `+"`lw:\",id\"`"+`
+	Loc lw.IPv4  `+"`lw:\"loc,ipv4\"`"+`
+}
+`)
+	if err == nil {
+		t.Fatal("expected an lw.* marker field to be rejected by the codegen front-end")
+	}
+	if !strings.Contains(err.Error(), "codegen front-end") {
+		t.Fatalf("expected a codegen-front-end deferral error, got: %v", err)
+	}
+}
+
+// A struct-valued nested field is a One-cardinality section: SoA `[]S` (one
+// struct per row, NOT `[][]S`), and the outer tag's static membership.
+func TestEmit_NestedOne_SingleSlice(t *testing.T) {
+	out := generate(t, `package demo
+type Window struct {
+	Begin uint64 `+"`lw:\"beginIncl\"`"+`
+	End   uint64 `+"`lw:\"endExcl\"`"+`
+}
+type MyDTO struct {
+	_   struct{} `+"`kind:\"my\"`"+`
+	Id  uint64   `+"`lw:\",id\"`"+`
+	Rng Window   `+"`lw:\"window,timeRange\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "Rng []Window")
+	mustNotContain(t, out, "Rng [][]Window")
+	mustContain(t, out, "AddMembershipLowCardRefP(kindWindow)")
+}
+
+// An option.Option[S] nested field is Optional: SoA decomposed into `<F>Val []S`
+// + `<F>Has []bool` (like a scalar Option), and a presence gate in the driver.
+func TestEmit_NestedOptional_ValHas(t *testing.T) {
+	out := generate(t, `package demo
+type Note struct {
+	Val string `+"`lw:\"value\"`"+`
+}
+type MyDTO struct {
+	_  struct{}            `+"`kind:\"my\"`"+`
+	Id uint64              `+"`lw:\",id\"`"+`
+	N  option.Option[Note] `+"`lw:\"note,symbol\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "NVal []Note")
+	mustContain(t, out, "NHas []bool")
+	mustContain(t, out, "if c.NHas[i] {")
+}
+
+// A `[]S` with no `@membership` field is a static-membership Many section: SoA
+// `[][]S`, one attribute per element.
+func TestEmit_NestedMany_DoubleSlice(t *testing.T) {
+	out := generate(t, `package demo
+type Block struct {
+	Val string `+"`lw:\"value\"`"+`
+}
+type MyDTO struct {
+	_  struct{} `+"`kind:\"my\"`"+`
+	Id uint64   `+"`lw:\",id\"`"+`
+	Bs []Block  `+"`lw:\"tags,symbol\"`"+`
+}
+`)
+	parseGo(t, out)
+	mustContain(t, out, "Bs [][]Block")
+	mustContain(t, out, "AddMembershipLowCardRefP(kindTags)")
+}

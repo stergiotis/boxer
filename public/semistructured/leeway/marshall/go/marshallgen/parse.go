@@ -138,18 +138,49 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 		}
 		goFieldName := field.Names[0].Name
 
-		// Dynamic-membership tuple field (ADR-0103): `[]X` where X is a
-		// struct declared in this file. The element struct's fields are
-		// classified individually; validation lives in the shared builder.
-		if elemName, elemStruct, isTuple := tupleElemStruct(field.Type, structDecls, kindType); isTuple {
+		// `[]X` where X is a struct declared in this file: either a flat
+		// dynamic-membership tuple (ADR-0103 — the element carries `@membership`
+		// fields) or a static-membership NESTED section (the outer tag names the
+		// membership; the element struct is the attribute's sub-columns). Both
+		// classify the element's fields individually; validation lives in the
+		// shared builder.
+		if elemName, elemStruct, isSlice := tupleElemStruct(field.Type, structDecls, kindType); isSlice {
 			usedTupleStructs[elemName] = true
 			var elems []goplan.TupleElem
-			elems, err = buildAstTupleElems(elemStruct)
+			if elemHasAtMembershipAst(elemStruct) {
+				elems, err = buildAstTupleElems(elemStruct)
+				if err != nil {
+					err = eb.Build().Str("field", goFieldName).Str("elemStruct", elemName).Errorf("%w", err)
+					return
+				}
+				if err = b.AddTupleSliceField(goFieldName, lwTag, elemName, elems); err != nil {
+					return
+				}
+			} else {
+				elems, err = buildAstNestedElems(elemStruct)
+				if err != nil {
+					err = eb.Build().Str("field", goFieldName).Str("elemStruct", elemName).Errorf("%w", err)
+					return
+				}
+				if err = b.AddNestedSliceField(goFieldName, lwTag, elemName, elems, mappingplan.AttrCardinalityMany); err != nil {
+					return
+				}
+			}
+			continue
+		}
+
+		// `X` / `*X` / `option.Option[X]` where X is a struct declared in this
+		// file: a nested section with One / Optional cardinality (one attribute
+		// per row, present-or-absent for Optional).
+		if elemName, elemStruct, card, isNested := nestedSectionCardinalityAst(field.Type, structDecls, kindType); isNested {
+			usedTupleStructs[elemName] = true
+			var elems []goplan.TupleElem
+			elems, err = buildAstNestedElems(elemStruct)
 			if err != nil {
 				err = eb.Build().Str("field", goFieldName).Str("elemStruct", elemName).Errorf("%w", err)
 				return
 			}
-			if err = b.AddTupleSliceField(goFieldName, lwTag, elemName, elems); err != nil {
+			if err = b.AddNestedSliceField(goFieldName, lwTag, elemName, elems, card); err != nil {
 				return
 			}
 			continue
@@ -254,6 +285,117 @@ func buildAstTupleElems(st *ast.StructType) (elems []goplan.TupleElem, err error
 	return
 }
 
+// elemHasAtMembershipAst reports whether a `[]S` element struct carries a
+// per-attribute `@membership`-tagged field — the flat dynamic-membership tuple
+// marker (ADR-0103). Such a `[]S` routes to the flat tuple builder; without one
+// it is a static-membership nested section (Many). Mirrors
+// marshallreflect.elemHasAtMembership.
+func elemHasAtMembershipAst(st *ast.StructType) bool {
+	for _, field := range st.Fields.List {
+		if field.Tag == nil {
+			continue
+		}
+		lw := reflect.StructTag(stripQuotes(field.Tag.Value)).Get("lw")
+		if strings.HasPrefix(strings.TrimSpace(lw), "@") {
+			return true
+		}
+	}
+	return false
+}
+
+// nestedSectionCardinalityAst reports whether expr is a non-slice NESTED section:
+// a struct value `S` (One), a pointer `*S` (Optional), or `option.Option[S]`
+// (Optional), where S is a struct declared in this file (not the DTO). Mirrors
+// marshallreflect.nestedSectionCardinality. A scalar `option.Option[T]`, a
+// `*roaring.Bitmap`, and a plain scalar Ident are NOT nested (they fall through
+// to classifyType).
+func nestedSectionCardinalityAst(expr ast.Expr, structDecls map[string]*ast.StructType, kindType string) (name string, st *ast.StructType, card mappingplan.AttrCardinalityE, ok bool) {
+	local := func(id *ast.Ident) (*ast.StructType, bool) {
+		if id == nil || id.Name == kindType {
+			return nil, false
+		}
+		s, found := structDecls[id.Name]
+		return s, found
+	}
+	switch v := expr.(type) {
+	case *ast.Ident: // S → One
+		if s, found := local(v); found {
+			return v.Name, s, mappingplan.AttrCardinalityOne, true
+		}
+	case *ast.StarExpr: // *S → Optional
+		if id, isIdent := v.X.(*ast.Ident); isIdent {
+			if s, found := local(id); found {
+				return id.Name, s, mappingplan.AttrCardinalityOptional, true
+			}
+		}
+	case *ast.IndexExpr: // option.Option[S] → Optional
+		if sel, sok := v.X.(*ast.SelectorExpr); sok && sel.Sel.Name == "Option" {
+			if id, isIdent := v.Index.(*ast.Ident); isIdent {
+				if s, found := local(id); found {
+					return id.Name, s, mappingplan.AttrCardinalityOptional, true
+				}
+			}
+		}
+	}
+	return
+}
+
+// buildAstNestedElems walks a NESTED attribute struct's sub-column fields. Unlike
+// buildAstTupleElems (flat @membership tuple elements), a nested sub-column tag is
+// OPTIONAL — an untagged field defaults its column to "value" in the shared
+// builder. Mirrors marshallreflect.addNestedSectionField's element walk.
+func buildAstNestedElems(st *ast.StructType) (elems []goplan.TupleElem, err error) {
+	for _, field := range st.Fields.List {
+		if len(field.Names) != 1 {
+			err = eb.Build().Errorf("multi-name or anonymous nested sub-column field forbidden — declare one field per line")
+			return
+		}
+		name := field.Names[0].Name
+		if name == "_" {
+			err = eb.Build().Errorf("`_` fields are not supported inside a nested attribute struct — entity metadata belongs on the DTO")
+			return
+		}
+		if !ast.IsExported(name) {
+			err = eb.Build().Str("elemField", name).Errorf("unexported nested sub-column field; fields must be exported")
+			return
+		}
+		var lw string
+		if field.Tag != nil {
+			lw = reflect.StructTag(stripQuotes(field.Tag.Value)).Get("lw")
+		}
+		var shape goplan.FieldShape
+		shape, err = classifyType(field.Type)
+		if err != nil {
+			err = eb.Build().Str("elemField", name).Errorf("classify nested sub-column field type: %w", err)
+			return
+		}
+		elems = append(elems, goplan.TupleElem{GoFieldName: name, LWTag: lw, Shape: shape})
+	}
+	return
+}
+
+// isLwMarkerExpr reports whether expr names an lw.* marker type (lw.Single[T],
+// lw.IPv4/IPv6 lanes, lw.Ref/HighRef/Verbatim/HighVerbatim membership markers, or
+// a `[]` of one). The codegen front-end does not yet bridge these (Slice C step
+// 2); classifyType rejects them for a clear error.
+func isLwMarkerExpr(expr ast.Expr) bool {
+	switch v := expr.(type) {
+	case *ast.SelectorExpr: // lw.IPv4, lw.Ref, …
+		pkg, ok := v.X.(*ast.Ident)
+		return ok && pkg.Name == "lw"
+	case *ast.IndexExpr: // lw.Single[T]
+		if sel, ok := v.X.(*ast.SelectorExpr); ok {
+			pkg, pok := sel.X.(*ast.Ident)
+			return pok && pkg.Name == "lw"
+		}
+	case *ast.ArrayType: // []lw.Ref
+		if v.Len == nil {
+			return isLwMarkerExpr(v.Elt)
+		}
+	}
+	return false
+}
+
 func stripQuotes(s string) (out string) {
 	out, err := strconv.Unquote(s)
 	if err != nil {
@@ -279,6 +421,14 @@ func fieldNamesString(field *ast.Field) (out string) {
 // Option[[]byte]), `[]Option[T]`, arbitrary pointers (other than
 // `*roaring.Bitmap`), and nested generics other than `option.Option`.
 func classifyType(expr ast.Expr) (shape goplan.FieldShape, err error) {
+	// lw.* marker types (lw.Single[T], lw.IPv4/IPv6, lw.Ref/Verbatim/…) are the
+	// nested-model spelling; the codegen front-end does not yet bridge their Go
+	// shapes (Slice C step 2). Reject clearly rather than fall through to the
+	// unknown-scalar / unsupported-generic errors below.
+	if isLwMarkerExpr(expr) {
+		err = eb.Build().Errorf("lw.* marker types are not yet supported by the codegen front-end (Slice C step 2); use the reflect front-end for now")
+		return
+	}
 	// option.Option[T] at the top level (functional.option in boxer).
 	if idx, ok := expr.(*ast.IndexExpr); ok {
 		sel, sok := idx.X.(*ast.SelectorExpr)

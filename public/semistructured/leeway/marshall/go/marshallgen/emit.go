@@ -150,7 +150,7 @@ func EmitPlan(plan *mappingplan.Plan, wrapper WrapperEmitterI, opts EmitOpts) (o
 
 	var sb strings.Builder
 	writeHeader(&sb, plan)
-	writeImports(&sb, plan, wrapper, strings.Contains(body.String(), "eb.Build("), opts.Mode)
+	writeImports(&sb, plan, wrapper, strings.Contains(body.String(), "eb.Build("), strings.Contains(body.String(), "iter."), opts.Mode)
 	sb.WriteString(body.String())
 
 	raw := []byte(sb.String())
@@ -208,7 +208,7 @@ func writeHeader(sb *strings.Builder, plan *mappingplan.Plan) {
 	linef(sb, 0, "package %s\n", plan.PackageName)
 }
 
-func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEmitterI, bodyUsesEB bool, mode EmitModeE) {
+func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEmitterI, bodyUsesEB, bodyUsesIter bool, mode EmitModeE) {
 	needsRoaring := false
 	needsTime := false
 	needsMarshalltypes := false
@@ -248,7 +248,10 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	imps := newImportSet()
 
 	stdlib := []string{}
-	if hasTagged {
+	// iter is used only where a container / dynamic-membership section emits an
+	// iter.Seq accessor; a scalar-only static nested section reads no Seq. Gate
+	// on the emitted body (like eb), not merely on having a tagged field.
+	if bodyUsesIter {
 		stdlib = append(stdlib, `"iter"`)
 	}
 	if needsTime {
@@ -388,13 +391,23 @@ func writeColumnsStruct(sb *strings.Builder, plan *mappingplan.Plan) {
 		if f.IsConst {
 			continue // const fields have no Go-side storage
 		}
-		// A tuple's sub-column fields live inside the element struct; the
-		// SoA column is the outer slice-of-struct field, once per tuple
-		// (ADR-0103).
+		// A tuple / nested section's sub-column fields live inside the element
+		// struct; the SoA column is the outer field, once per tuple. Its shape
+		// follows the attributes-per-row cardinality: Many `[][]S`, One `[]S`,
+		// Optional decomposed into `<F>Val []S` + `<F>Has []bool` (mirroring the
+		// scalar-Option split above).
 		if f.TupleField != "" {
 			if !seenTuple[f.TupleField] {
 				seenTuple[f.TupleField] = true
-				linef(sb, 1, "%s [][]%s", f.TupleField, f.TupleStructType)
+				switch f.TupleCardinality {
+				case mappingplan.AttrCardinalityOne:
+					linef(sb, 1, "%s []%s", f.TupleField, f.TupleStructType)
+				case mappingplan.AttrCardinalityOptional:
+					linef(sb, 1, "%sVal []%s", f.TupleField, f.TupleStructType)
+					linef(sb, 1, "%sHas []bool", f.TupleField)
+				default: // Many
+					linef(sb, 1, "%s [][]%s", f.TupleField, f.TupleStructType)
+				}
 			}
 			continue
 		}
@@ -446,7 +459,12 @@ func writeLenAndAppend(sb *strings.Builder, plan *mappingplan.Plan) {
 		if f.TupleField != "" {
 			if !seenTuple[f.TupleField] {
 				seenTuple[f.TupleField] = true
-				linef(sb, 1, "c.%s = append(c.%s, row.%s)", f.TupleField, f.TupleField, f.TupleField)
+				if f.TupleCardinality == mappingplan.AttrCardinalityOptional {
+					linef(sb, 1, "c.%sVal = append(c.%sVal, row.%s.Val)", f.TupleField, f.TupleField, f.TupleField)
+					linef(sb, 1, "c.%sHas = append(c.%sHas, row.%s.Has)", f.TupleField, f.TupleField, f.TupleField)
+				} else {
+					linef(sb, 1, "c.%s = append(c.%s, row.%s)", f.TupleField, f.TupleField, f.TupleField)
+				}
 			}
 			continue
 		}
@@ -479,7 +497,12 @@ func writeRowExtract(sb *strings.Builder, plan *mappingplan.Plan) {
 		if f.TupleField != "" {
 			if !seenTuple[f.TupleField] {
 				seenTuple[f.TupleField] = true
-				linef(sb, 1, "row.%s = c.%s[i]", f.TupleField, f.TupleField)
+				if f.TupleCardinality == mappingplan.AttrCardinalityOptional {
+					linef(sb, 1, "row.%s.Val = c.%sVal[i]", f.TupleField, f.TupleField)
+					linef(sb, 1, "row.%s.Has = c.%sHas[i]", f.TupleField, f.TupleField)
+				} else {
+					linef(sb, 1, "row.%s = c.%s[i]", f.TupleField, f.TupleField)
+				}
 			}
 			continue
 		}
@@ -674,13 +697,17 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 	line(sb, 0, "// every method returns void so no F-bounded `[Self]` parameter is")
 	line(sb, 0, "// needed.")
 	linef(sb, 0, "type %s%sAttrI interface {", kind, method)
-	if ts, ok := g.TupleSpec(); ok {
-		// A tuple element may carry memberships on several channels (ADR-0109
-		// D4); the AttrI embeds one InAttributeMembership<Channel>PI per channel.
+	if ts, ok := g.TupleSpec(); ok && len(ts.Memberships) > 0 {
+		// A DYNAMIC tuple element may carry memberships on several channels
+		// (ADR-0109 D4); the AttrI embeds one InAttributeMembership<Channel>PI
+		// per channel.
 		for _, ch := range ts.Channels() {
 			linef(sb, 1, "dmlruntime.InAttributeMembership%sPI", ch.AddMethodSuffix())
 		}
 	} else {
+		// A plain section OR a STATIC nested section carries one section
+		// membership (g.Channel()); the static tuple resolves it exactly like a
+		// flat section.
 		linef(sb, 1, "dmlruntime.InAttributeMembership%sPI", g.Channel().AddMethodSuffix())
 	}
 	if needAddToContainer != "" {
@@ -944,30 +971,49 @@ func writeSectionDriver(sb *strings.Builder, g goplan.SectionGroup, src valueSrc
 	return
 }
 
-// writeTupleSectionDriver emits the write driver for a dynamic-membership
-// tuple section (ADR-0103, extended by ADR-0109): one attribute per element
-// of the outer slice, in element order — BeginAttribute(<scalar sub-columns…>),
-// the zipped co-containers, then the element's memberships (one
-// AddMembership<Channel>P per `@membership` field, one per slice element for a
-// repeated field, possibly on heterogeneous channels), EndAttributeP. The
-// per-element call sequence mirrors marshallreflect.marshalTupleSection exactly
-// (byte-identity). An element always emits — its presence in the slice is the
-// signal, there is no per-element splice — and the per-element zip-length guard
-// surfaces mis-zipped co-containers as an error, never silent truncation.
+// writeTupleSectionDriver emits the write driver for a tuple-family section —
+// a dynamic-membership tuple (ADR-0103/0109) or a nested static-membership
+// section (Slice A/C). One attribute per element the row contributes:
+// BeginAttribute(<scalar sub-columns…>), the zipped co-containers, the
+// membership(s), then EndAttributeP. The per-element sequence mirrors
+// marshallreflect.marshalTupleSection exactly (the byte-identity invariant).
+// Two axes generalise the original Many/dynamic tuple:
+//
+//   - Cardinality (ts.Cardinality): Many → each slice element; One → the struct
+//     value once; Optional → the present-gated option.Option[S] value. A One /
+//     Optional all-container element whose containers are all empty splices to
+//     zero attributes (the S=0 rule), matching the flat multi-sub-column driver.
+//   - Membership source: a DYNAMIC tuple (ts.Memberships non-empty) emits one
+//     AddMembership<Channel>P per `@membership` field (one per element for a
+//     repeated field). A STATIC nested section (ts.Memberships empty) resolves
+//     its one section membership through writeMembershipAdd — the ref lookup
+//     symbol / verbatim literal — exactly like a flat section.
 func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts goplan.TupleSpec, secVar string, src valueSrc) {
 	scalars := g.ScalarSubColumns()
 	containers := g.ContainerSubColumns()
 	elemVar := secVar + "Elem"
 	attrVar := secVar + "Attr"
-	// Element fields are reached through the loop variable; reusing the
-	// valueSrc contract lets the scalar / blob render helpers apply
-	// unchanged. Options cannot occur inside a tuple (PlanBuilder).
+	// Element fields are reached through the loop / block variable; reusing the
+	// valueSrc contract lets the scalar / blob render helpers apply unchanged.
+	// Options cannot occur inside a tuple element (PlanBuilder).
 	elemSrc := valueSrc{
 		field:     func(goField string) string { return elemVar + "." + goField },
 		rowErrCtx: src.rowErrCtx,
 	}
 
-	linef(sb, 2, "for _, %s := range %s {", elemVar, src.field(ts.GoField))
+	// Enumerate the attribute element(s) by cardinality, binding elemVar; the
+	// per-element body runs at depth 3.
+	switch ts.Cardinality {
+	case mappingplan.AttrCardinalityOne:
+		line(sb, 2, "{")
+		linef(sb, 3, "%s := %s", elemVar, src.field(ts.GoField))
+	case mappingplan.AttrCardinalityOptional:
+		linef(sb, 2, "if %s {", src.optionHas(ts.GoField))
+		linef(sb, 3, "%s := %s", elemVar, src.optionVal(ts.GoField))
+	default: // Many
+		linef(sb, 2, "for _, %s := range %s {", elemVar, src.field(ts.GoField))
+	}
+
 	if len(containers) > 1 {
 		for _, sc := range containers[1:] {
 			linef(sb, 3, "if len(%s) != len(%s) {", elemSrc.field(sc.Fields[0].GoFieldName), elemSrc.field(containers[0].Fields[0].GoFieldName))
@@ -976,32 +1022,48 @@ func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 			line(sb, 3, "}")
 		}
 	}
+
+	// S=0 splice (H2): a One / Optional all-container element with every
+	// container empty emits no attribute. A Many element always emits.
+	depth := 3
+	if ts.Cardinality != mappingplan.AttrCardinalityMany && len(scalars) == 0 && len(containers) > 0 {
+		linef(sb, 3, "if len(%s) > 0 {", elemSrc.field(containers[0].Fields[0].GoFieldName))
+		depth = 4
+	}
+
 	args := make([]string, 0, len(scalars))
 	for _, sc := range scalars {
 		args = append(args, scalarValueExpr(sc.Fields[0], elemSrc))
 	}
-	linef(sb, 3, "%s := %s.BeginAttribute(%s)", attrVar, secVar, strings.Join(args, ", "))
+	linef(sb, depth, "%s := %s.BeginAttribute(%s)", attrVar, secVar, strings.Join(args, ", "))
 	if len(containers) > 0 {
 		elems := make([]string, 0, len(containers))
 		for _, sc := range containers {
 			f := sc.Fields[0]
 			elems = append(elems, sliceElemExpr(f, elemSrc.field(f.GoFieldName)+"[k]"))
 		}
-		linef(sb, 3, "for k := range %s {", elemSrc.field(containers[0].Fields[0].GoFieldName))
-		linef(sb, 4, "%s.%sP(%s)", attrVar, goplan.ContainerAddMethod(len(containers)), strings.Join(elems, ", "))
-		line(sb, 3, "}")
+		linef(sb, depth, "for k := range %s {", elemSrc.field(containers[0].Fields[0].GoFieldName))
+		linef(sb, depth+1, "%s.%sP(%s)", attrVar, goplan.ContainerAddMethod(len(containers)), strings.Join(elems, ", "))
+		line(sb, depth, "}")
 	}
-	for _, m := range ts.Memberships {
-		suffix := m.Channel.AddMethodSuffix()
-		if m.IsSlice {
-			linef(sb, 3, "for _, mv := range %s {", elemSrc.field(m.GoField))
-			linef(sb, 4, "%s.AddMembership%sP(%s)", attrVar, suffix, tupleMembExpr("mv", m))
-			line(sb, 3, "}")
-		} else {
-			linef(sb, 3, "%s.AddMembership%sP(%s)", attrVar, suffix, tupleMembExpr(elemSrc.field(m.GoField), m))
+	if len(ts.Memberships) == 0 {
+		writeMembershipAdd(sb, strings.Repeat("\t", depth), attrVar, g.Memberships[0], "", elemSrc)
+	} else {
+		for _, m := range ts.Memberships {
+			suffix := m.Channel.AddMethodSuffix()
+			if m.IsSlice {
+				linef(sb, depth, "for _, mv := range %s {", elemSrc.field(m.GoField))
+				linef(sb, depth+1, "%s.AddMembership%sP(%s)", attrVar, suffix, tupleMembExpr("mv", m))
+				line(sb, depth, "}")
+			} else {
+				linef(sb, depth, "%s.AddMembership%sP(%s)", attrVar, suffix, tupleMembExpr(elemSrc.field(m.GoField), m))
+			}
 		}
 	}
-	linef(sb, 3, "%s.EndAttributeP()", attrVar)
+	linef(sb, depth, "%s.EndAttributeP()", attrVar)
+	if depth == 4 {
+		line(sb, 3, "}")
+	}
 	line(sb, 2, "}")
 }
 
@@ -1567,7 +1629,44 @@ func writeTupleSectionDecode(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 	}
 	line(sb, 3, "})")
 	line(sb, 2, "}")
-	linef(sb, 2, "c.%s = append(c.%s, %s)", ts.GoField, ts.GoField, elemsVar)
+
+	// Project the decoded elements onto the SoA column by cardinality (mirrors
+	// marshallreflect.unmarshalTupleSection). One: exactly one attribute per row
+	// (zero only when the section is all-container and spliced away); Optional:
+	// at most one (Val/Has); Many: the whole element slice (nil when empty).
+	switch ts.Cardinality {
+	case mappingplan.AttrCardinalityOne:
+		cond := fmt.Sprintf("len(%s) != 1", elemsVar)
+		if len(g.ScalarSubColumns()) == 0 {
+			cond = fmt.Sprintf("len(%s) > 1", elemsVar) // all-container: 0 or 1
+		}
+		linef(sb, 2, "if %s {", cond)
+		linef(sb, 3, `err = eb.Build().Str("section", %q).Int("attrs", len(%s)).Errorf("cardinality-One nested section must carry exactly one attribute per row")`, g.Section, elemsVar)
+		line(sb, 3, "return")
+		line(sb, 2, "}")
+		oneVar := prefix + ts.GoField + "One"
+		linef(sb, 2, "var %s %s", oneVar, ts.StructType)
+		linef(sb, 2, "if len(%s) == 1 {", elemsVar)
+		linef(sb, 3, "%s = %s[0]", oneVar, elemsVar)
+		line(sb, 2, "}")
+		linef(sb, 2, "c.%s = append(c.%s, %s)", ts.GoField, ts.GoField, oneVar)
+	case mappingplan.AttrCardinalityOptional:
+		linef(sb, 2, "if len(%s) > 1 {", elemsVar)
+		linef(sb, 3, `err = eb.Build().Str("section", %q).Int("attrs", len(%s)).Errorf("Optional nested section must carry at most one attribute per row")`, g.Section, elemsVar)
+		line(sb, 3, "return")
+		line(sb, 2, "}")
+		valVar := prefix + ts.GoField + "Val"
+		hasVar := prefix + ts.GoField + "Has"
+		linef(sb, 2, "var %s %s", valVar, ts.StructType)
+		linef(sb, 2, "%s := len(%s) == 1", hasVar, elemsVar)
+		linef(sb, 2, "if %s {", hasVar)
+		linef(sb, 3, "%s = %s[0]", valVar, elemsVar)
+		line(sb, 2, "}")
+		linef(sb, 2, "c.%sVal = append(c.%sVal, %s)", ts.GoField, ts.GoField, valVar)
+		linef(sb, 2, "c.%sHas = append(c.%sHas, %s)", ts.GoField, ts.GoField, hasVar)
+	default: // Many
+		linef(sb, 2, "c.%s = append(c.%s, %s)", ts.GoField, ts.GoField, elemsVar)
+	}
 }
 
 // tupleMembDecodeElem renders the expression converting one wire membership
