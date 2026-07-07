@@ -59,7 +59,7 @@ func createRecordBuilder() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntity struct {
 	errs                  []error
@@ -141,7 +141,7 @@ var InEntitySectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntity) SetId(hash0 [32]byte) *InEntity {
 	if inst.state != runtime.EntityStateInEntity {
@@ -374,6 +374,8 @@ func (inst *InEntity) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut
 	rec := inst.builder.NewRecord()
 	if rec.NumRows() > 0 {
 		recordsOut = append(recordsOut, rec)
+	} else {
+		rec.Release() // an empty snapshot is nobody's to keep
 	}
 	return
 }
@@ -435,6 +437,15 @@ func (inst *InEntityBool) BeginAttribute(value13 bool) *InEntityBoolInAttr {
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityBoolAttr struct {
+	Value bool
+}
+
+func (inst *InEntityBool) Add(attr InEntityBoolAttr) *InEntityBoolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityBool) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -640,6 +651,15 @@ func (inst *InEntityDate32) BeginAttribute(value25 time.Time) *InEntityDate32InA
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityDate32Attr struct {
+	Value time.Time
+}
+
+func (inst *InEntityDate32) Add(attr InEntityDate32Attr) *InEntityDate32InAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityDate32) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -843,6 +863,15 @@ func (inst *InEntityInt64) BeginAttribute(value21 int64) *InEntityInt64InAttr {
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityInt64Attr struct {
+	Value int64
+}
+
+func (inst *InEntityInt64) Add(attr InEntityInt64Attr) *InEntityInt64InAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityInt64) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1048,6 +1077,15 @@ func (inst *InEntityString) BeginAttribute(value5 string) *InEntityStringInAttr 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityStringAttr struct {
+	Value string
+}
+
+func (inst *InEntityString) Add(attr InEntityStringAttr) *InEntityStringInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityString) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1251,6 +1289,15 @@ func (inst *InEntitySymbol) BeginAttribute(ref1 uint64) *InEntitySymbolInAttr {
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntitySymbolAttr struct {
+	Ref uint64
+}
+
+func (inst *InEntitySymbol) Add(attr InEntitySymbolAttr) *InEntitySymbolInAttr {
+	a := inst.BeginAttribute(attr.Ref)
+	return a
 }
 func (inst *InEntitySymbol) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1456,6 +1503,15 @@ func (inst *InEntityText) BeginAttribute(english9 string) *InEntityTextInAttr {
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityTextAttr struct {
+	English string
+}
+
+func (inst *InEntityText) Add(attr InEntityTextAttr) *InEntityTextInAttr {
+	a := inst.BeginAttribute(attr.English)
+	return a
+}
 func (inst *InEntityText) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1659,6 +1715,15 @@ func (inst *InEntityUint64) BeginAttribute(value17 uint64) *InEntityUint64InAttr
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityUint64Attr struct {
+	Value uint64
+}
+
+func (inst *InEntityUint64) Add(attr InEntityUint64Attr) *InEntityUint64InAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityUint64) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

@@ -107,7 +107,7 @@ func CreateSchemaPushoutTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityPushoutTable struct {
 	errs           []error
@@ -199,7 +199,7 @@ var InEntityPushoutTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityPushoutTable) SetId(id0 string) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -214,7 +214,7 @@ func (inst *InEntityPushoutTable) SetId(id0 string) *InEntityPushoutTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityPushoutTable) SetTimestamp(ts1 time.Time) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -229,7 +229,7 @@ func (inst *InEntityPushoutTable) SetTimestamp(ts1 time.Time) *InEntityPushoutTa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityPushoutTable) SetLifecycle(lifecycle2 uint8) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -533,6 +533,15 @@ func (inst *InEntityPushoutTableSectionEnvBlob) BeginAttribute(value3 []byte) *I
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityPushoutTableSectionEnvBlobAttr struct {
+	Value []byte
+}
+
+func (inst *InEntityPushoutTableSectionEnvBlob) Add(attr InEntityPushoutTableSectionEnvBlobAttr) *InEntityPushoutTableSectionEnvBlobInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityPushoutTableSectionEnvBlob) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -839,6 +848,15 @@ func (inst *InEntityPushoutTableSectionLogHash) BeginAttribute(value13 string) *
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityPushoutTableSectionLogHashAttr struct {
+	Value string
+}
+
+func (inst *InEntityPushoutTableSectionLogHash) Add(attr InEntityPushoutTableSectionLogHashAttr) *InEntityPushoutTableSectionLogHashInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityPushoutTableSectionLogHash) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1147,6 +1165,18 @@ func (inst *InEntityPushoutTableSectionRetHash) BeginAttribute() *InEntityPushou
 }
 func (inst *InEntityPushoutTableSectionRetHash) BeginAttributeSingle(value44 string) *InEntityPushoutTableSectionRetHashInAttr {
 	return inst.BeginAttribute().AddToContainer(value44)
+}
+
+type InEntityPushoutTableSectionRetHashAttr struct {
+	Value []string
+}
+
+func (inst *InEntityPushoutTableSectionRetHash) Add(attr InEntityPushoutTableSectionRetHashAttr) *InEntityPushoutTableSectionRetHashInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityPushoutTableSectionRetHash) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1479,6 +1509,18 @@ func (inst *InEntityPushoutTableSectionRetIndex) BeginAttribute() *InEntityPusho
 func (inst *InEntityPushoutTableSectionRetIndex) BeginAttributeSingle(value55 uint64) *InEntityPushoutTableSectionRetIndexInAttr {
 	return inst.BeginAttribute().AddToContainer(value55)
 }
+
+type InEntityPushoutTableSectionRetIndexAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityPushoutTableSectionRetIndex) Add(attr InEntityPushoutTableSectionRetIndexAttr) *InEntityPushoutTableSectionRetIndexInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityPushoutTableSectionRetIndex) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1809,6 +1851,18 @@ func (inst *InEntityPushoutTableSectionRetTime) BeginAttribute() *InEntityPushou
 }
 func (inst *InEntityPushoutTableSectionRetTime) BeginAttributeSingle(value66 int64) *InEntityPushoutTableSectionRetTimeInAttr {
 	return inst.BeginAttribute().AddToContainer(value66)
+}
+
+type InEntityPushoutTableSectionRetTimeAttr struct {
+	Value []int64
+}
+
+func (inst *InEntityPushoutTableSectionRetTime) Add(attr InEntityPushoutTableSectionRetTimeAttr) *InEntityPushoutTableSectionRetTimeInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityPushoutTableSectionRetTime) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -2141,6 +2195,18 @@ func (inst *InEntityPushoutTableSectionSnapApplied) BeginAttribute() *InEntityPu
 func (inst *InEntityPushoutTableSectionSnapApplied) BeginAttributeSingle(value33 string) *InEntityPushoutTableSectionSnapAppliedInAttr {
 	return inst.BeginAttribute().AddToContainer(value33)
 }
+
+type InEntityPushoutTableSectionSnapAppliedAttr struct {
+	Value []string
+}
+
+func (inst *InEntityPushoutTableSectionSnapApplied) Add(attr InEntityPushoutTableSectionSnapAppliedAttr) *InEntityPushoutTableSectionSnapAppliedInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityPushoutTableSectionSnapApplied) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -2469,6 +2535,15 @@ func (inst *InEntityPushoutTableSectionSnapGraggle) BeginAttribute(value23 []byt
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityPushoutTableSectionSnapGraggleAttr struct {
+	Value []byte
+}
+
+func (inst *InEntityPushoutTableSectionSnapGraggle) Add(attr InEntityPushoutTableSectionSnapGraggleAttr) *InEntityPushoutTableSectionSnapGraggleInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityPushoutTableSectionSnapGraggle) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

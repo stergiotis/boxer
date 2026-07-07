@@ -86,7 +86,7 @@ func CreateSchemaDroneTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityDroneTable struct {
 	errs                  []error
@@ -162,7 +162,7 @@ var InEntityDroneTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityDroneTable) SetId(id0 uint64) *InEntityDroneTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -432,6 +432,17 @@ func (inst *InEntityDroneTableSectionGeoPoint) BeginAttribute(pointLat33 float32
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityDroneTableSectionGeoPointAttr struct {
+	PointLat float32
+	PointLng float32
+	H3       uint64
+}
+
+func (inst *InEntityDroneTableSectionGeoPoint) Add(attr InEntityDroneTableSectionGeoPointAttr) *InEntityDroneTableSectionGeoPointInAttr {
+	a := inst.BeginAttribute(attr.PointLat, attr.PointLng, attr.H3)
+	return a
 }
 func (inst *InEntityDroneTableSectionGeoPoint) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -749,6 +760,15 @@ func (inst *InEntityDroneTableSectionSymbol) BeginAttribute(value1 string) *InEn
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityDroneTableSectionSymbolAttr struct {
+	Value string
+}
+
+func (inst *InEntityDroneTableSectionSymbol) Add(attr InEntityDroneTableSectionSymbolAttr) *InEntityDroneTableSectionSymbolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityDroneTableSectionSymbol) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1056,6 +1076,18 @@ func (inst *InEntityDroneTableSectionSymbolArray) BeginAttribute() *InEntityDron
 }
 func (inst *InEntityDroneTableSectionSymbolArray) BeginAttributeSingle(value22 string) *InEntityDroneTableSectionSymbolArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value22)
+}
+
+type InEntityDroneTableSectionSymbolArrayAttr struct {
+	Value []string
+}
+
+func (inst *InEntityDroneTableSectionSymbolArray) Add(attr InEntityDroneTableSectionSymbolArrayAttr) *InEntityDroneTableSectionSymbolArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityDroneTableSectionSymbolArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1391,6 +1423,16 @@ func (inst *InEntityDroneTableSectionTimeRange) BeginAttribute(beginIncl45 time.
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityDroneTableSectionTimeRangeAttr struct {
+	BeginIncl time.Time
+	EndExcl   time.Time
+}
+
+func (inst *InEntityDroneTableSectionTimeRange) Add(attr InEntityDroneTableSectionTimeRangeAttr) *InEntityDroneTableSectionTimeRangeInAttr {
+	a := inst.BeginAttribute(attr.BeginIncl, attr.EndExcl)
+	return a
+}
 func (inst *InEntityDroneTableSectionTimeRange) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1703,6 +1745,18 @@ func (inst *InEntityDroneTableSectionU64Array) BeginAttribute() *InEntityDroneTa
 }
 func (inst *InEntityDroneTableSectionU64Array) BeginAttributeSingle(value11 uint64) *InEntityDroneTableSectionU64ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value11)
+}
+
+type InEntityDroneTableSectionU64ArrayAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityDroneTableSectionU64Array) Add(attr InEntityDroneTableSectionU64ArrayAttr) *InEntityDroneTableSectionU64ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityDroneTableSectionU64Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

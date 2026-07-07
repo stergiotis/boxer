@@ -215,7 +215,7 @@ func CreateSchemaFacts() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityFacts struct {
 	errs           []error
@@ -354,7 +354,7 @@ var InEntityFactsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityFacts) SetId(id0 uint64, naturalKey1 []byte) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -370,7 +370,7 @@ func (inst *InEntityFacts) SetId(id0 uint64, naturalKey1 []byte) *InEntityFacts 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityFacts) SetTimestamp(ts2 time.Time) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -385,7 +385,7 @@ func (inst *InEntityFacts) SetTimestamp(ts2 time.Time) *InEntityFacts {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityFacts) SetLifecycle(expiresAt3 time.Time) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -948,6 +948,18 @@ func (inst *InEntityFactsSectionBlobArray) BeginAttribute() *InEntityFactsSectio
 func (inst *InEntityFactsSectionBlobArray) BeginAttributeSingle(value42 []byte) *InEntityFactsSectionBlobArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value42)
 }
+
+type InEntityFactsSectionBlobArrayAttr struct {
+	Value [][]byte
+}
+
+func (inst *InEntityFactsSectionBlobArray) Add(attr InEntityFactsSectionBlobArrayAttr) *InEntityFactsSectionBlobArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionBlobArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1243,6 +1255,15 @@ func (inst *InEntityFactsSectionBool) BeginAttribute(value177 bool) *InEntityFac
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityFactsSectionBoolAttr struct {
+	Value bool
+}
+
+func (inst *InEntityFactsSectionBool) Add(attr InEntityFactsSectionBoolAttr) *InEntityFactsSectionBoolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityFactsSectionBool) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1516,6 +1537,18 @@ func (inst *InEntityFactsSectionF32Array) BeginAttribute() *InEntityFactsSection
 }
 func (inst *InEntityFactsSectionF32Array) BeginAttributeSingle(value141 float32) *InEntityFactsSectionF32ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value141)
+}
+
+type InEntityFactsSectionF32ArrayAttr struct {
+	Value []float32
+}
+
+func (inst *InEntityFactsSectionF32Array) Add(attr InEntityFactsSectionF32ArrayAttr) *InEntityFactsSectionF32ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityFactsSectionF32Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1814,6 +1847,18 @@ func (inst *InEntityFactsSectionF64Array) BeginAttribute() *InEntityFactsSection
 func (inst *InEntityFactsSectionF64Array) BeginAttributeSingle(value150 float64) *InEntityFactsSectionF64ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value150)
 }
+
+type InEntityFactsSectionF64ArrayAttr struct {
+	Value []float64
+}
+
+func (inst *InEntityFactsSectionF64Array) Add(attr InEntityFactsSectionF64ArrayAttr) *InEntityFactsSectionF64ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionF64Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -2109,6 +2154,15 @@ func (inst *InEntityFactsSectionForeignKey) BeginAttribute(value4 uint64) *InEnt
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityFactsSectionForeignKeyAttr struct {
+	Value uint64
+}
+
+func (inst *InEntityFactsSectionForeignKey) Add(attr InEntityFactsSectionForeignKeyAttr) *InEntityFactsSectionForeignKeyInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityFactsSectionForeignKey) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -2302,6 +2356,18 @@ func (inst *InEntityFactsSectionI16Array) BeginAttribute() *InEntityFactsSection
 }
 func (inst *InEntityFactsSectionI16Array) BeginAttributeSingle(value114 int16) *InEntityFactsSectionI16ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value114)
+}
+
+type InEntityFactsSectionI16ArrayAttr struct {
+	Value []int16
+}
+
+func (inst *InEntityFactsSectionI16Array) Add(attr InEntityFactsSectionI16ArrayAttr) *InEntityFactsSectionI16ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityFactsSectionI16Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -2600,6 +2666,18 @@ func (inst *InEntityFactsSectionI32Array) BeginAttribute() *InEntityFactsSection
 func (inst *InEntityFactsSectionI32Array) BeginAttributeSingle(value123 int32) *InEntityFactsSectionI32ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value123)
 }
+
+type InEntityFactsSectionI32ArrayAttr struct {
+	Value []int32
+}
+
+func (inst *InEntityFactsSectionI32Array) Add(attr InEntityFactsSectionI32ArrayAttr) *InEntityFactsSectionI32ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionI32Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -2896,6 +2974,18 @@ func (inst *InEntityFactsSectionI64Array) BeginAttribute() *InEntityFactsSection
 }
 func (inst *InEntityFactsSectionI64Array) BeginAttributeSingle(value132 int64) *InEntityFactsSectionI64ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value132)
+}
+
+type InEntityFactsSectionI64ArrayAttr struct {
+	Value []int64
+}
+
+func (inst *InEntityFactsSectionI64Array) Add(attr InEntityFactsSectionI64ArrayAttr) *InEntityFactsSectionI64ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityFactsSectionI64Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -3194,6 +3284,18 @@ func (inst *InEntityFactsSectionI8Array) BeginAttribute() *InEntityFactsSectionI
 func (inst *InEntityFactsSectionI8Array) BeginAttributeSingle(value105 int8) *InEntityFactsSectionI8ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value105)
 }
+
+type InEntityFactsSectionI8ArrayAttr struct {
+	Value []int8
+}
+
+func (inst *InEntityFactsSectionI8Array) Add(attr InEntityFactsSectionI8ArrayAttr) *InEntityFactsSectionI8ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionI8Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -3491,6 +3593,18 @@ func (inst *InEntityFactsSectionStringArray) BeginAttribute() *InEntityFactsSect
 func (inst *InEntityFactsSectionStringArray) BeginAttributeSingle(value16 string) *InEntityFactsSectionStringArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value16)
 }
+
+type InEntityFactsSectionStringArrayAttr struct {
+	Value []string
+}
+
+func (inst *InEntityFactsSectionStringArray) Add(attr InEntityFactsSectionStringArrayAttr) *InEntityFactsSectionStringArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionStringArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -3786,6 +3900,15 @@ func (inst *InEntityFactsSectionSymbol) BeginAttribute(value25 string) *InEntity
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityFactsSectionSymbolAttr struct {
+	Value string
+}
+
+func (inst *InEntityFactsSectionSymbol) Add(attr InEntityFactsSectionSymbolAttr) *InEntityFactsSectionSymbolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityFactsSectionSymbol) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -4059,6 +4182,18 @@ func (inst *InEntityFactsSectionSymbolArray) BeginAttribute() *InEntityFactsSect
 }
 func (inst *InEntityFactsSectionSymbolArray) BeginAttributeSingle(value33 string) *InEntityFactsSectionSymbolArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value33)
+}
+
+type InEntityFactsSectionSymbolArrayAttr struct {
+	Value []string
+}
+
+func (inst *InEntityFactsSectionSymbolArray) Add(attr InEntityFactsSectionSymbolArrayAttr) *InEntityFactsSectionSymbolArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityFactsSectionSymbolArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -4357,6 +4492,18 @@ func (inst *InEntityFactsSectionTextArray) BeginAttribute() *InEntityFactsSectio
 func (inst *InEntityFactsSectionTextArray) BeginAttributeSingle(value7 string) *InEntityFactsSectionTextArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value7)
 }
+
+type InEntityFactsSectionTextArrayAttr struct {
+	Value []string
+}
+
+func (inst *InEntityFactsSectionTextArray) Add(attr InEntityFactsSectionTextArrayAttr) *InEntityFactsSectionTextArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionTextArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -4653,6 +4800,18 @@ func (inst *InEntityFactsSectionTimeArray) BeginAttribute() *InEntityFactsSectio
 }
 func (inst *InEntityFactsSectionTimeArray) BeginAttributeSingle(value168 time.Time) *InEntityFactsSectionTimeArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value168)
+}
+
+type InEntityFactsSectionTimeArrayAttr struct {
+	Value []time.Time
+}
+
+func (inst *InEntityFactsSectionTimeArray) Add(attr InEntityFactsSectionTimeArrayAttr) *InEntityFactsSectionTimeArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityFactsSectionTimeArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -4951,6 +5110,18 @@ func (inst *InEntityFactsSectionU16Array) BeginAttribute() *InEntityFactsSection
 func (inst *InEntityFactsSectionU16Array) BeginAttributeSingle(value60 uint16) *InEntityFactsSectionU16ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value60)
 }
+
+type InEntityFactsSectionU16ArrayAttr struct {
+	Value []uint16
+}
+
+func (inst *InEntityFactsSectionU16Array) Add(attr InEntityFactsSectionU16ArrayAttr) *InEntityFactsSectionU16ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionU16Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -5247,6 +5418,18 @@ func (inst *InEntityFactsSectionU32Array) BeginAttribute() *InEntityFactsSection
 }
 func (inst *InEntityFactsSectionU32Array) BeginAttributeSingle(value69 uint32) *InEntityFactsSectionU32ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value69)
+}
+
+type InEntityFactsSectionU32ArrayAttr struct {
+	Value []uint32
+}
+
+func (inst *InEntityFactsSectionU32Array) Add(attr InEntityFactsSectionU32ArrayAttr) *InEntityFactsSectionU32ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityFactsSectionU32Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -5548,6 +5731,16 @@ func (inst *InEntityFactsSectionU32Range) BeginAttribute(beginIncl159 uint32, en
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityFactsSectionU32RangeAttr struct {
+	BeginIncl uint32
+	EndExcl   uint32
+}
+
+func (inst *InEntityFactsSectionU32Range) Add(attr InEntityFactsSectionU32RangeAttr) *InEntityFactsSectionU32RangeInAttr {
+	a := inst.BeginAttribute(attr.BeginIncl, attr.EndExcl)
+	return a
+}
 func (inst *InEntityFactsSectionU32Range) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -5826,6 +6019,18 @@ func (inst *InEntityFactsSectionU32Set) BeginAttribute() *InEntityFactsSectionU3
 }
 func (inst *InEntityFactsSectionU32Set) BeginAttributeSingle(value78 uint32) *InEntityFactsSectionU32SetInAttr {
 	return inst.BeginAttribute().AddToContainer(value78)
+}
+
+type InEntityFactsSectionU32SetAttr struct {
+	Value []uint32
+}
+
+func (inst *InEntityFactsSectionU32Set) Add(attr InEntityFactsSectionU32SetAttr) *InEntityFactsSectionU32SetInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityFactsSectionU32Set) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -6124,6 +6329,18 @@ func (inst *InEntityFactsSectionU64Array) BeginAttribute() *InEntityFactsSection
 func (inst *InEntityFactsSectionU64Array) BeginAttributeSingle(value87 uint64) *InEntityFactsSectionU64ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value87)
 }
+
+type InEntityFactsSectionU64ArrayAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityFactsSectionU64Array) Add(attr InEntityFactsSectionU64ArrayAttr) *InEntityFactsSectionU64ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionU64Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -6421,6 +6638,18 @@ func (inst *InEntityFactsSectionU64Set) BeginAttribute() *InEntityFactsSectionU6
 func (inst *InEntityFactsSectionU64Set) BeginAttributeSingle(value96 uint64) *InEntityFactsSectionU64SetInAttr {
 	return inst.BeginAttribute().AddToContainer(value96)
 }
+
+type InEntityFactsSectionU64SetAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityFactsSectionU64Set) Add(attr InEntityFactsSectionU64SetAttr) *InEntityFactsSectionU64SetInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityFactsSectionU64Set) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -6717,6 +6946,18 @@ func (inst *InEntityFactsSectionU8Array) BeginAttribute() *InEntityFactsSectionU
 }
 func (inst *InEntityFactsSectionU8Array) BeginAttributeSingle(value51 uint8) *InEntityFactsSectionU8ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value51)
+}
+
+type InEntityFactsSectionU8ArrayAttr struct {
+	Value []uint8
+}
+
+func (inst *InEntityFactsSectionU8Array) Add(attr InEntityFactsSectionU8ArrayAttr) *InEntityFactsSectionU8ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityFactsSectionU8Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

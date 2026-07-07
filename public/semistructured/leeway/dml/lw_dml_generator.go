@@ -1059,6 +1059,58 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 	return
 }
 
+// exportedFieldNames returns the UpperCamelCase field names of every value
+// sub-column in irh, in iteration order — the exported fields of a generated
+// <Section>Attr value struct and the `attr.<Field>` references in its Add method.
+func exportedFieldNames(irh *common.IntermediatePairHolder) (out []string) {
+	for _, cp := range irh.IterateColumnProps() {
+		for i := 0; i < cp.Length(); i++ {
+			out = append(out, cp.Names[i].Convert(naming.UpperCamelCase).String())
+		}
+	}
+	return
+}
+
+// joinAttrRefs renders `attr.<Field>` (or `attr.<Field>[i]` when index) for each
+// name, comma-separated — the argument lists inside a generated Add method.
+func joinAttrRefs(names []string, index bool) string {
+	var sb strings.Builder
+	for k, n := range names {
+		if k > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString("attr.")
+		sb.WriteString(n)
+		if index {
+			sb.WriteString("[i]")
+		}
+	}
+	return sb.String()
+}
+
+// composeAttrStructFields emits one exported struct field per value sub-column
+// across the given sub-holders (name = UpperCamelCase, type = GenerateType, which
+// is []T for an array/set sub-column) — the body of a <Section>Attr value struct.
+func (inst *GoClassBuilder) composeAttrStructFields(irhs ...*common.IntermediatePairHolder) (err error) {
+	for _, irh := range irhs {
+		for _, cp := range irh.IterateColumnProps() {
+			for i := 0; i < cp.Length(); i++ {
+				_, err = fmt.Fprintf(inst.builder, "\t%s ", cp.Names[i].Convert(naming.UpperCamelCase).String())
+				if err != nil {
+					return
+				}
+				if err = inst.tech.GenerateType(cp.CanonicalType[i]); err != nil {
+					return
+				}
+				if _, err = inst.builder.WriteString("\n"); err != nil {
+					return
+				}
+			}
+		}
+	}
+	return
+}
+
 func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, sectionName naming.StylableName, sectionIdx int, totalSections int, sectionIRH *common.IntermediatePairHolder, tableRowConfig common.TableRowConfigE) (err error) {
 	b := inst.builder
 	var clsNames gocodegen.ClassNames
@@ -1169,6 +1221,57 @@ func (inst *GoClassBuilder) ComposeSectionCode(clsNamer gocodegen.GoClassNamerI,
 			if err != nil {
 				return
 			}
+		}
+	}
+	{ // Add(<Section>Attr) — named value-struct API. Binds value sub-columns by
+		// NAME and lowers to BeginAttribute + AddTo(Co)Container(s)P, returning the
+		// attribute cursor so membership + EndAttributeP chain as usual. Co-container
+		// fields are parallel slices, zipped element-wise (equal length required).
+		attrTypeName := clsNames.InSectionClassName + "Attr"
+		nonScalarIRH := sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
+		scalarNames := exportedFieldNames(scalarIRH)
+		coNames := exportedFieldNames(nonScalarIRH)
+
+		_, err = fmt.Fprintf(b, "type %s struct {\n", attrTypeName)
+		if err != nil {
+			return
+		}
+		if err = inst.composeAttrStructFields(scalarIRH, nonScalarIRH); err != nil {
+			return
+		}
+		_, err = fmt.Fprintf(b, "}\n\nfunc (inst *%s) Add(attr %s) *%s {\n", clsNames.InSectionClassName, attrTypeName, clsNames.InAttributeClassName)
+		if err != nil {
+			return
+		}
+
+		if len(coNames) >= 2 {
+			conds := make([]string, 0, len(coNames)-1)
+			for k := 1; k < len(coNames); k++ {
+				conds = append(conds, fmt.Sprintf("len(attr.%s) != len(attr.%s)", coNames[k], coNames[0]))
+			}
+			_, err = fmt.Fprintf(b, "\tif %s {\n\t\tinst.AppendError(eh.Errorf(%q))\n\t\treturn inst.inAttr\n\t}\n", strings.Join(conds, " || "), attrTypeName+".Add: co-container fields have unequal length")
+			if err != nil {
+				return
+			}
+		}
+
+		_, err = fmt.Fprintf(b, "\ta := inst.BeginAttribute(%s)\n", joinAttrRefs(scalarNames, false))
+		if err != nil {
+			return
+		}
+		if len(coNames) > 0 {
+			addMethod := "AddToContainer"
+			if len(coNames) > 1 {
+				addMethod = "AddToCoContainers"
+			}
+			_, err = fmt.Fprintf(b, "\tfor i := range attr.%s {\n\t\ta.%sP(%s)\n\t}\n", coNames[0], addMethod, joinAttrRefs(coNames, true))
+			if err != nil {
+				return
+			}
+		}
+		_, err = b.WriteString("\treturn a\n}\n")
+		if err != nil {
+			return
 		}
 	}
 	{ // CheckErrors

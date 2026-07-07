@@ -57,7 +57,7 @@ func CreateSchemaFixture() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityFixture struct {
 	errs           []error
@@ -137,7 +137,7 @@ var InEntityFixtureSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 string) *InEntityFixture {
 	if inst.state != runtime.EntityStateInEntity {
@@ -385,6 +385,19 @@ func (inst *InEntityFixtureSectionGeoArea) BeginAttribute(code25 string) *InEnti
 func (inst *InEntityFixtureSectionGeoArea) BeginAttributeSingle(code25 string, poly26 float32) *InEntityFixtureSectionGeoAreaInAttr {
 	return inst.BeginAttribute(code25).AddToContainer(poly26)
 }
+
+type InEntityFixtureSectionGeoAreaAttr struct {
+	Code string
+	Poly []float32
+}
+
+func (inst *InEntityFixtureSectionGeoArea) Add(attr InEntityFixtureSectionGeoAreaAttr) *InEntityFixtureSectionGeoAreaInAttr {
+	a := inst.BeginAttribute(attr.Code)
+	for i := range attr.Poly {
+		a.AddToContainerP(attr.Poly[i])
+	}
+	return a
+}
 func (inst *InEntityFixtureSectionGeoArea) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -575,6 +588,16 @@ func (inst *InEntityFixtureSectionGeoPoint) BeginAttribute(lat21 float32, lng22 
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityFixtureSectionGeoPointAttr struct {
+	Lat float32
+	Lng float32
+}
+
+func (inst *InEntityFixtureSectionGeoPoint) Add(attr InEntityFixtureSectionGeoPointAttr) *InEntityFixtureSectionGeoPointInAttr {
+	a := inst.BeginAttribute(attr.Lat, attr.Lng)
+	return a
 }
 func (inst *InEntityFixtureSectionGeoPoint) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -788,6 +811,25 @@ func (inst *InEntityFixtureSectionMetric) BeginAttribute(value3 float64, rawBlob
 }
 func (inst *InEntityFixtureSectionMetric) BeginAttributeSingle(value3 float64, rawBlob4 string, tags5 string, bins6 uint32) *InEntityFixtureSectionMetricInAttr {
 	return inst.BeginAttribute(value3, rawBlob4).AddToCoContainers(tags5, bins6)
+}
+
+type InEntityFixtureSectionMetricAttr struct {
+	Value   float64
+	RawBlob string
+	Tags    []string
+	Bins    []uint32
+}
+
+func (inst *InEntityFixtureSectionMetric) Add(attr InEntityFixtureSectionMetricAttr) *InEntityFixtureSectionMetricInAttr {
+	if len(attr.Bins) != len(attr.Tags) {
+		inst.AppendError(eh.Errorf("InEntityFixtureSectionMetricAttr.Add: co-container fields have unequal length"))
+		return inst.inAttr
+	}
+	a := inst.BeginAttribute(attr.Value, attr.RawBlob)
+	for i := range attr.Tags {
+		a.AddToCoContainersP(attr.Tags[i], attr.Bins[i])
+	}
+	return a
 }
 func (inst *InEntityFixtureSectionMetric) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

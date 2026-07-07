@@ -59,7 +59,7 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityTesttable struct {
 	plainTs1              time.Time
@@ -140,7 +140,7 @@ var InEntityTesttableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -155,7 +155,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -420,6 +420,15 @@ func (inst *InEntityTesttableSectionBool) BeginAttribute(value2 bool) *InEntityT
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityTesttableSectionBoolAttr struct {
+	Value bool
+}
+
+func (inst *InEntityTesttableSectionBool) Add(attr InEntityTesttableSectionBoolAttr) *InEntityTesttableSectionBoolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityTesttableSectionBool) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -624,6 +633,15 @@ func (inst *InEntityTesttableSectionFloat64) BeginAttribute(value10 float64) *In
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityTesttableSectionFloat64Attr struct {
+	Value float64
+}
+
+func (inst *InEntityTesttableSectionFloat64) Add(attr InEntityTesttableSectionFloat64Attr) *InEntityTesttableSectionFloat64InAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityTesttableSectionFloat64) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -840,6 +858,24 @@ func (inst *InEntityTesttableSectionMulti) BeginAttribute(name21 string) *InEnti
 }
 func (inst *InEntityTesttableSectionMulti) BeginAttributeSingle(name21 string, vals22 uint32, tags23 uint64) *InEntityTesttableSectionMultiInAttr {
 	return inst.BeginAttribute(name21).AddToCoContainers(vals22, tags23)
+}
+
+type InEntityTesttableSectionMultiAttr struct {
+	Name string
+	Vals []uint32
+	Tags []uint64
+}
+
+func (inst *InEntityTesttableSectionMulti) Add(attr InEntityTesttableSectionMultiAttr) *InEntityTesttableSectionMultiInAttr {
+	if len(attr.Tags) != len(attr.Vals) {
+		inst.AppendError(eh.Errorf("InEntityTesttableSectionMultiAttr.Add: co-container fields have unequal length"))
+		return inst.inAttr
+	}
+	a := inst.BeginAttribute(attr.Name)
+	for i := range attr.Vals {
+		a.AddToCoContainersP(attr.Vals[i], attr.Tags[i])
+	}
+	return a
 }
 func (inst *InEntityTesttableSectionMulti) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1103,6 +1139,24 @@ func (inst *InEntityTesttableSectionSpecial) BeginAttribute(spc14 string) *InEnt
 func (inst *InEntityTesttableSectionSpecial) BeginAttributeSingle(spc14 string, ary115 uint32, ary216 uint32) *InEntityTesttableSectionSpecialInAttr {
 	return inst.BeginAttribute(spc14).AddToCoContainers(ary115, ary216)
 }
+
+type InEntityTesttableSectionSpecialAttr struct {
+	Spc  string
+	Ary1 []uint32
+	Ary2 []uint32
+}
+
+func (inst *InEntityTesttableSectionSpecial) Add(attr InEntityTesttableSectionSpecialAttr) *InEntityTesttableSectionSpecialInAttr {
+	if len(attr.Ary2) != len(attr.Ary1) {
+		inst.AppendError(eh.Errorf("InEntityTesttableSectionSpecialAttr.Add: co-container fields have unequal length"))
+		return inst.inAttr
+	}
+	a := inst.BeginAttribute(attr.Spc)
+	for i := range attr.Ary1 {
+		a.AddToCoContainersP(attr.Ary1[i], attr.Ary2[i])
+	}
+	return a
+}
 func (inst *InEntityTesttableSectionSpecial) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1345,6 +1399,15 @@ func (inst *InEntityTesttableSectionString) BeginAttribute(value6 string) *InEnt
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityTesttableSectionStringAttr struct {
+	Value string
+}
+
+func (inst *InEntityTesttableSectionString) Add(attr InEntityTesttableSectionStringAttr) *InEntityTesttableSectionStringInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityTesttableSectionString) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

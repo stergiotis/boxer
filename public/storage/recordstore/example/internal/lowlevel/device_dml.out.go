@@ -77,7 +77,7 @@ func CreateSchemaDeviceTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityDeviceTable struct {
 	errs           []error
@@ -160,7 +160,7 @@ var InEntityDeviceTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityDeviceTable) SetId(id0 uint64) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -175,7 +175,7 @@ func (inst *InEntityDeviceTable) SetId(id0 uint64) *InEntityDeviceTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityDeviceTable) SetTimestamp(ts1 time.Time) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -190,7 +190,7 @@ func (inst *InEntityDeviceTable) SetTimestamp(ts1 time.Time) *InEntityDeviceTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityDeviceTable) SetLifecycle(lifecycle2 uint8) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -450,6 +450,17 @@ func (inst *InEntityDeviceTableSectionGeoPoint) BeginAttribute(pointLat35 float3
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityDeviceTableSectionGeoPointAttr struct {
+	PointLat float32
+	PointLng float32
+	H3       uint64
+}
+
+func (inst *InEntityDeviceTableSectionGeoPoint) Add(attr InEntityDeviceTableSectionGeoPointAttr) *InEntityDeviceTableSectionGeoPointInAttr {
+	a := inst.BeginAttribute(attr.PointLat, attr.PointLng, attr.H3)
+	return a
 }
 func (inst *InEntityDeviceTableSectionGeoPoint) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -767,6 +778,15 @@ func (inst *InEntityDeviceTableSectionSymbol) BeginAttribute(value3 string) *InE
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityDeviceTableSectionSymbolAttr struct {
+	Value string
+}
+
+func (inst *InEntityDeviceTableSectionSymbol) Add(attr InEntityDeviceTableSectionSymbolAttr) *InEntityDeviceTableSectionSymbolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityDeviceTableSectionSymbol) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1074,6 +1094,18 @@ func (inst *InEntityDeviceTableSectionSymbolArray) BeginAttribute() *InEntityDev
 }
 func (inst *InEntityDeviceTableSectionSymbolArray) BeginAttributeSingle(value24 string) *InEntityDeviceTableSectionSymbolArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value24)
+}
+
+type InEntityDeviceTableSectionSymbolArrayAttr struct {
+	Value []string
+}
+
+func (inst *InEntityDeviceTableSectionSymbolArray) Add(attr InEntityDeviceTableSectionSymbolArrayAttr) *InEntityDeviceTableSectionSymbolArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityDeviceTableSectionSymbolArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1405,6 +1437,18 @@ func (inst *InEntityDeviceTableSectionU64Array) BeginAttribute() *InEntityDevice
 }
 func (inst *InEntityDeviceTableSectionU64Array) BeginAttributeSingle(value13 uint64) *InEntityDeviceTableSectionU64ArrayInAttr {
 	return inst.BeginAttribute().AddToContainer(value13)
+}
+
+type InEntityDeviceTableSectionU64ArrayAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityDeviceTableSectionU64Array) Add(attr InEntityDeviceTableSectionU64ArrayAttr) *InEntityDeviceTableSectionU64ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityDeviceTableSectionU64Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

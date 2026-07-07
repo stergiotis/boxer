@@ -56,7 +56,7 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityJson struct {
 	allocator             memory.Allocator
@@ -138,7 +138,7 @@ var InEntityJsonSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {
@@ -435,6 +435,15 @@ func (inst *InEntityJsonSectionBool) BeginAttribute(value1 bool) *InEntityJsonSe
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityJsonSectionBoolAttr struct {
+	Value bool
+}
+
+func (inst *InEntityJsonSectionBool) Add(attr InEntityJsonSectionBoolAttr) *InEntityJsonSectionBoolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityJsonSectionBool) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -639,6 +648,15 @@ func (inst *InEntityJsonSectionFloat64) BeginAttribute(value19 float64) *InEntit
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityJsonSectionFloat64Attr struct {
+	Value float64
+}
+
+func (inst *InEntityJsonSectionFloat64) Add(attr InEntityJsonSectionFloat64Attr) *InEntityJsonSectionFloat64InAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityJsonSectionFloat64) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -845,6 +863,15 @@ func (inst *InEntityJsonSectionInt64) BeginAttribute(value23 int64) *InEntityJso
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityJsonSectionInt64Attr struct {
+	Value int64
+}
+
+func (inst *InEntityJsonSectionInt64) Add(attr InEntityJsonSectionInt64Attr) *InEntityJsonSectionInt64InAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityJsonSectionInt64) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1045,6 +1072,14 @@ func (inst *InEntityJsonSectionNull) BeginAttribute() *InEntityJsonSectionNullIn
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityJsonSectionNullAttr struct {
+}
+
+func (inst *InEntityJsonSectionNull) Add(attr InEntityJsonSectionNullAttr) *InEntityJsonSectionNullInAttr {
+	a := inst.BeginAttribute()
+	return a
+}
 func (inst *InEntityJsonSectionNull) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1244,6 +1279,15 @@ func (inst *InEntityJsonSectionString) BeginAttribute(value11 string) *InEntityJ
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityJsonSectionStringAttr struct {
+	Value string
+}
+
+func (inst *InEntityJsonSectionString) Add(attr InEntityJsonSectionStringAttr) *InEntityJsonSectionStringInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityJsonSectionString) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1450,6 +1494,15 @@ func (inst *InEntityJsonSectionSymbol) BeginAttribute(value15 string) *InEntityJ
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityJsonSectionSymbolAttr struct {
+	Value string
+}
+
+func (inst *InEntityJsonSectionSymbol) Add(attr InEntityJsonSectionSymbolAttr) *InEntityJsonSectionSymbolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityJsonSectionSymbol) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1649,6 +1702,14 @@ func (inst *InEntityJsonSectionUndefined) BeginAttribute() *InEntityJsonSectionU
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityJsonSectionUndefinedAttr struct {
+}
+
+func (inst *InEntityJsonSectionUndefined) Add(attr InEntityJsonSectionUndefinedAttr) *InEntityJsonSectionUndefinedInAttr {
+	a := inst.BeginAttribute()
+	return a
 }
 func (inst *InEntityJsonSectionUndefined) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

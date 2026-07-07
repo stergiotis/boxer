@@ -64,7 +64,7 @@ func CreateSchemaSystemTableColumns() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntitySystemTableColumns struct {
 	allocator             memory.Allocator
@@ -148,7 +148,7 @@ var InEntitySystemTableColumnsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 uint64) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -164,7 +164,7 @@ func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 ui
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -414,6 +414,15 @@ func (inst *InEntitySystemTableColumnsSectionString) BeginAttribute(value11 stri
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntitySystemTableColumnsSectionStringAttr struct {
+	Value string
+}
+
+func (inst *InEntitySystemTableColumnsSectionString) Add(attr InEntitySystemTableColumnsSectionStringAttr) *InEntitySystemTableColumnsSectionStringInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntitySystemTableColumnsSectionString) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -688,6 +697,15 @@ func (inst *InEntitySystemTableColumnsSectionSymbol) BeginAttribute(value3 strin
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntitySystemTableColumnsSectionSymbolAttr struct {
+	Value string
+}
+
+func (inst *InEntitySystemTableColumnsSectionSymbol) Add(attr InEntitySystemTableColumnsSectionSymbolAttr) *InEntitySystemTableColumnsSectionSymbolInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntitySystemTableColumnsSectionSymbol) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -961,6 +979,15 @@ func (inst *InEntitySystemTableColumnsSectionText) BeginAttribute(value27 string
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntitySystemTableColumnsSectionTextAttr struct {
+	Value string
+}
+
+func (inst *InEntitySystemTableColumnsSectionText) Add(attr InEntitySystemTableColumnsSectionTextAttr) *InEntitySystemTableColumnsSectionTextInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntitySystemTableColumnsSectionText) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1233,6 +1260,15 @@ func (inst *InEntitySystemTableColumnsSectionU64) BeginAttribute(value19 uint64)
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntitySystemTableColumnsSectionU64Attr struct {
+	Value uint64
+}
+
+func (inst *InEntitySystemTableColumnsSectionU64) Add(attr InEntitySystemTableColumnsSectionU64Attr) *InEntitySystemTableColumnsSectionU64InAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntitySystemTableColumnsSectionU64) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

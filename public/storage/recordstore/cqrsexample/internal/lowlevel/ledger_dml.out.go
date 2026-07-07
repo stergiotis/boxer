@@ -116,7 +116,7 @@ func CreateSchemaLedgerTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityLedgerTable struct {
 	errs           []error
@@ -206,7 +206,7 @@ var InEntityLedgerTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityLedgerTable) SetId(id0 string) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -221,7 +221,7 @@ func (inst *InEntityLedgerTable) SetId(id0 string) *InEntityLedgerTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityLedgerTable) SetTimestamp(ts1 time.Time) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -540,6 +540,15 @@ func (inst *InEntityLedgerTableSectionAcctClosed) BeginAttribute(value34 string)
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityLedgerTableSectionAcctClosedAttr struct {
+	Value string
+}
+
+func (inst *InEntityLedgerTableSectionAcctClosed) Add(attr InEntityLedgerTableSectionAcctClosedAttr) *InEntityLedgerTableSectionAcctClosedInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityLedgerTableSectionAcctClosed) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -847,6 +856,18 @@ func (inst *InEntityLedgerTableSectionAcctDeposit) BeginAttribute() *InEntityLed
 }
 func (inst *InEntityLedgerTableSectionAcctDeposit) BeginAttributeSingle(value12 uint64) *InEntityLedgerTableSectionAcctDepositInAttr {
 	return inst.BeginAttribute().AddToContainer(value12)
+}
+
+type InEntityLedgerTableSectionAcctDepositAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityLedgerTableSectionAcctDeposit) Add(attr InEntityLedgerTableSectionAcctDepositAttr) *InEntityLedgerTableSectionAcctDepositInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityLedgerTableSectionAcctDeposit) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1177,6 +1198,15 @@ func (inst *InEntityLedgerTableSectionAcctOwner) BeginAttribute(value2 string) *
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityLedgerTableSectionAcctOwnerAttr struct {
+	Value string
+}
+
+func (inst *InEntityLedgerTableSectionAcctOwner) Add(attr InEntityLedgerTableSectionAcctOwnerAttr) *InEntityLedgerTableSectionAcctOwnerInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityLedgerTableSectionAcctOwner) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -1484,6 +1514,18 @@ func (inst *InEntityLedgerTableSectionAcctWithdraw) BeginAttribute() *InEntityLe
 }
 func (inst *InEntityLedgerTableSectionAcctWithdraw) BeginAttributeSingle(value23 uint64) *InEntityLedgerTableSectionAcctWithdrawInAttr {
 	return inst.BeginAttribute().AddToContainer(value23)
+}
+
+type InEntityLedgerTableSectionAcctWithdrawAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityLedgerTableSectionAcctWithdraw) Add(attr InEntityLedgerTableSectionAcctWithdrawAttr) *InEntityLedgerTableSectionAcctWithdrawInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
 }
 func (inst *InEntityLedgerTableSectionAcctWithdraw) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -1816,6 +1858,18 @@ func (inst *InEntityLedgerTableSectionSnapAsOf) BeginAttribute() *InEntityLedger
 func (inst *InEntityLedgerTableSectionSnapAsOf) BeginAttributeSingle(value75 uint64) *InEntityLedgerTableSectionSnapAsOfInAttr {
 	return inst.BeginAttribute().AddToContainer(value75)
 }
+
+type InEntityLedgerTableSectionSnapAsOfAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityLedgerTableSectionSnapAsOf) Add(attr InEntityLedgerTableSectionSnapAsOfAttr) *InEntityLedgerTableSectionSnapAsOfInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityLedgerTableSectionSnapAsOf) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -2147,6 +2201,18 @@ func (inst *InEntityLedgerTableSectionSnapBalance) BeginAttribute() *InEntityLed
 func (inst *InEntityLedgerTableSectionSnapBalance) BeginAttributeSingle(value54 uint64) *InEntityLedgerTableSectionSnapBalanceInAttr {
 	return inst.BeginAttribute().AddToContainer(value54)
 }
+
+type InEntityLedgerTableSectionSnapBalanceAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityLedgerTableSectionSnapBalance) Add(attr InEntityLedgerTableSectionSnapBalanceAttr) *InEntityLedgerTableSectionSnapBalanceInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
 func (inst *InEntityLedgerTableSectionSnapBalance) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -2476,6 +2542,15 @@ func (inst *InEntityLedgerTableSectionSnapClosed) BeginAttribute(value65 bool) *
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
+
+type InEntityLedgerTableSectionSnapClosedAttr struct {
+	Value bool
+}
+
+func (inst *InEntityLedgerTableSectionSnapClosed) Add(attr InEntityLedgerTableSectionSnapClosedAttr) *InEntityLedgerTableSectionSnapClosedInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
+}
 func (inst *InEntityLedgerTableSectionSnapClosed) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
@@ -2781,6 +2856,15 @@ func (inst *InEntityLedgerTableSectionSnapOwner) BeginAttribute(value44 string) 
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityLedgerTableSectionSnapOwnerAttr struct {
+	Value string
+}
+
+func (inst *InEntityLedgerTableSectionSnapOwner) Add(attr InEntityLedgerTableSectionSnapOwnerAttr) *InEntityLedgerTableSectionSnapOwnerInAttr {
+	a := inst.BeginAttribute(attr.Value)
+	return a
 }
 func (inst *InEntityLedgerTableSectionSnapOwner) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))

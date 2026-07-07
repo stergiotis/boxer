@@ -51,7 +51,7 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1266
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
 
 type InEntityTestTable struct {
 	plainTs1              time.Time
@@ -128,7 +128,7 @@ var InEntityTestTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -143,7 +143,7 @@ func (inst *InEntityTestTable) SetId(id0 uint64) *InEntityTestTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1443
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
 
 func (inst *InEntityTestTable) SetTimestamp(ts1 time.Time, proc2 []time.Time) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -298,6 +298,8 @@ func (inst *InEntityTestTable) TransferRecords(recordsIn []arrow.RecordBatch) (r
 	rec := inst.builder.NewRecord()
 	if rec.NumRows() > 0 {
 		recordsOut = append(recordsOut, rec)
+	} else {
+		rec.Release() // an empty snapshot is nobody's to keep
 	}
 	return
 }
@@ -374,6 +376,18 @@ func (inst *InEntityTestTableSectionGeo) BeginAttribute(lat3 float32, lng4 float
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
+}
+
+type InEntityTestTableSectionGeoAttr struct {
+	H3Res1 uint64
+	H3Res2 uint64
+	Lat    float32
+	Lng    float32
+}
+
+func (inst *InEntityTestTableSectionGeo) Add(attr InEntityTestTableSectionGeoAttr) *InEntityTestTableSectionGeoInAttr {
+	a := inst.BeginAttribute(attr.Lat, attr.Lng, attr.H3Res1, attr.H3Res2)
+	return a
 }
 func (inst *InEntityTestTableSectionGeo) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
@@ -639,6 +653,24 @@ func (inst *InEntityTestTableSectionText) BeginAttribute(text12 string) *InEntit
 }
 func (inst *InEntityTestTableSectionText) BeginAttributeSingle(text12 string, wordLength13 uint32, words14 string) *InEntityTestTableSectionTextInAttr {
 	return inst.BeginAttribute(text12).AddToCoContainers(wordLength13, words14)
+}
+
+type InEntityTestTableSectionTextAttr struct {
+	Text       string
+	WordLength []uint32
+	Words      []string
+}
+
+func (inst *InEntityTestTableSectionText) Add(attr InEntityTestTableSectionTextAttr) *InEntityTestTableSectionTextInAttr {
+	if len(attr.Words) != len(attr.WordLength) {
+		inst.AppendError(eh.Errorf("InEntityTestTableSectionTextAttr.Add: co-container fields have unequal length"))
+		return inst.inAttr
+	}
+	a := inst.BeginAttribute(attr.Text)
+	for i := range attr.WordLength {
+		a.AddToCoContainersP(attr.WordLength[i], attr.Words[i])
+	}
+	return a
 }
 func (inst *InEntityTestTableSectionText) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
