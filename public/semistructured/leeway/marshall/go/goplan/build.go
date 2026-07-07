@@ -785,26 +785,14 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 	return
 }
 
-// defaultSubColumnName derives a nested sub-column's leeway column name from
-// its Go field name when the field carries no `lw:"<column>"` override: the
-// field name with its first letter lower-cased (e.g. `BeginIncl` → `beginIncl`).
-// Go field names are ASCII identifiers, so lower-casing the first byte suffices;
-// an all-caps acronym field whose column differs uses the explicit tag.
-func defaultSubColumnName(goFieldName string) string {
-	if goFieldName == "" {
-		return ""
-	}
-	return strings.ToLower(goFieldName[:1]) + goFieldName[1:]
-}
-
 // splitNestedElemLW parses the optional lw: tag on a field INSIDE a nested
 // attribute struct: `lw:"<column>[,ct=<canonical>]"`. Unlike a tuple element
 // (SplitTupleElemLW) it carries neither an `@membership` marker nor a
 // `<section>:` prefix — the section comes from the outer section-field tag and
-// the column is the bare head token (empty ⇒ the caller defaults it via
-// defaultSubColumnName). Only `,ct=` is meaningful here; the channel lives on
-// the section field and unit/explode/const have no per-sub-column meaning
-// (AddNestedSliceField rejects them).
+// the column is the bare head token (empty ⇒ the caller defaults it to "value",
+// the flat single-sub-column default). Only `,ct=` is meaningful here; the
+// channel lives on the section field and unit/explode/const have no
+// per-sub-column meaning (AddNestedSliceField rejects them).
 func splitNestedElemLW(tag string) (column string, flags mappingplan.FieldFlags, err error) {
 	if strings.TrimSpace(tag) == "" {
 		return
@@ -899,7 +887,10 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 			return
 		}
 		if column == "" {
-			column = defaultSubColumnName(e.GoFieldName)
+			// The flat single-sub-column default. A multi-sub-column nested
+			// section must give each field a distinct `lw:"<column>"` tag — two
+			// untagged fields would both claim "value" and collide below.
+			column = "value"
 		}
 		if flags.Unit || flags.Explode || flags.HasConst || flags.Channel != mappingplan.MembershipChannelLowCardRef {
 			err = ctx.Errorf("nested sub-column tag takes only `ct=` (no unit / explode / const / channel — the channel is on the section field)")

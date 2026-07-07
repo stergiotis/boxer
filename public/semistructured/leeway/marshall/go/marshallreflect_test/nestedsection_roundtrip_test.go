@@ -129,3 +129,75 @@ func TestNested_StaticOne_CrossDecodeFlat(t *testing.T) {
 	require.Equal(t, b.Unix(), got[0].Window.Begin.Unix())
 	require.Equal(t, e.Unix(), got[0].Window.End.Unix())
 }
+
+// Slice A, Step 1b — a nested single-container, all-container (no scalar) section.
+//
+// It exercises the container-append path in marshalTupleSection and the S=0
+// splice (H2): a cardinality-One all-container element whose container is empty
+// emits ZERO attributes, exactly like the flat single-sub-column container path
+// (marshalContainer). The single sub-column takes the flat default column name
+// "value" (the tag-free case). Byte reference: the shipped flat sliceDrone.
+
+// u32Nest is the nested attribute struct for anchor's u32Array section: one
+// container sub-column. Tag-free → the sub-column takes the flat default column
+// name "value".
+type u32Nest struct {
+	Values []uint32
+}
+
+type nestedSliceDrone struct {
+	_        struct{} `kind:"sliceDrone"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Codes    u32Nest  `lw:"codes,u32Array"`
+}
+
+func TestNested_StaticOne_SingleContainer_ByteIdenticalToFlat(t *testing.T) {
+	lookup := marshallreflect.MapLookup{"codes": 1}
+
+	// Row 2 carries an empty container — it must splice to zero attributes in
+	// both spellings (H2), so the two records stay byte-identical.
+	flat := []sliceDrone{
+		{ID: 1, Tracking: []byte("S1"), Codes: []uint32{30, 10, 20, 10}},
+		{ID: 2, Tracking: []byte("S2"), Codes: nil},
+		{ID: 3, Tracking: []byte("S3"), Codes: []uint32{99}},
+	}
+	nested := []nestedSliceDrone{
+		{ID: 1, Tracking: []byte("S1"), Codes: u32Nest{Values: []uint32{30, 10, 20, 10}}},
+		{ID: 2, Tracking: []byte("S2"), Codes: u32Nest{Values: nil}},
+		{ID: 3, Tracking: []byte("S3"), Codes: u32Nest{Values: []uint32{99}}},
+	}
+
+	require.NoError(t, marshallreflect.Validate[nestedSliceDrone](anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(nested))))
+
+	flatRec, relF := marshalToRecord(t, flat, lookup)
+	defer relF()
+	nestedRec, relN := marshalToRecord(t, nested, lookup)
+	defer relN()
+
+	require.True(t, array.RecordEqual(flatRec, nestedRec),
+		"records differ:\nflat=%s\nnested=%s", flatRec, nestedRec)
+	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, nestedRec), "Arrow IPC bytes differ")
+
+	idReader, relID := loadIdReader(t, nestedRec)
+	defer relID()
+	u32Reader := anchor.NewReadAccessTestTableTaggedU32Array()
+	u32Reader.SetColumnIndices(u32Reader.GetColumnIndices())
+	require.NoError(t, u32Reader.LoadFromRecord(nestedRec))
+	defer u32Reader.Release()
+
+	// H2: the empty-container row emits zero attributes (the splice).
+	require.Equal(t, int64(1), u32Reader.GetAttributes().GetNumberOfAttributes(0))
+	require.Equal(t, int64(0), u32Reader.GetAttributes().GetNumberOfAttributes(1))
+	require.Equal(t, int64(1), u32Reader.GetAttributes().GetNumberOfAttributes(2))
+
+	args := idReaders(idReader).
+		Section("u32Array", u32Reader.GetAttributes(), u32Reader.GetMemberships())
+	var got []nestedSliceDrone
+	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
+
+	require.Equal(t, len(nested), len(got))
+	require.Equal(t, []uint32{30, 10, 20, 10}, got[0].Codes.Values, "row 0 container order + multiplicity")
+	require.Nil(t, got[1].Codes.Values, "row 1 spliced empty container reads back nil")
+	require.Equal(t, []uint32{99}, got[2].Codes.Values, "row 2 container")
+}

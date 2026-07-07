@@ -257,6 +257,13 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 				return
 			}
 		}
+		// S=0 splice (H2): a One / Optional all-container element whose
+		// containers are all empty emits zero attributes — matching the flat
+		// multi-sub-column / single-container S=0 rule. A Many (dynamic-tuple)
+		// element always emits: its slice presence is the signal.
+		if ts.Cardinality != mappingplan.AttrCardinalityMany && len(scalars) == 0 && n == 0 {
+			continue
+		}
 		if !tupleElemCardMatches(n, filter) {
 			continue
 		}

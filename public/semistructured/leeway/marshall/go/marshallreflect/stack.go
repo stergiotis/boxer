@@ -210,10 +210,16 @@ func sectionHasMatchingField(row reflect.Value, g goplan.SectionGroup, filter ca
 		// cardinality (Many slice / One struct value) via the shared helper so
 		// the frame predicate and the emitter cannot disagree.
 		containers := g.ContainerSubColumns()
+		noScalars := len(g.ScalarSubColumns()) == 0
 		for _, elem := range tupleRowElements(row, ts) {
 			n := 0
 			if len(containers) > 0 {
 				n = elem.FieldByName(containers[0].Fields[0].GoFieldName).Len()
+			}
+			// Mirror the emitter's S=0 splice (H2): a One/Optional all-container
+			// empty element emits nothing, so it opens no frame.
+			if ts.Cardinality != mappingplan.AttrCardinalityMany && noScalars && n == 0 {
+				continue
 			}
 			if tupleElemCardMatches(n, filter) {
 				return true
