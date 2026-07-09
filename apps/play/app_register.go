@@ -63,6 +63,19 @@ var (
 	})
 )
 
+// NewLivePlayApp builds a PlayApp wired to a live ClickHouse Client — the same
+// query-graph wiring PlayLauncher.Mount uses — and returns it ready for a
+// re-user to customize before mounting (e.g. SetDetailContent to override the
+// Detail body). It is the supported constructor for embedding the playground
+// behind a domain-specific AppI: the live query graph type is unexported, so an
+// external module cannot call NewPlayApp directly. maxHistory bounds each lane's
+// result-history ring (the shipped launcher uses 100). See
+// doc/howto/play-pluggable-detail.md.
+func NewLivePlayApp(client *Client, initialSQL string, maxHistory int) *PlayApp {
+	graph := newLiveQueryGraph(client, memory.NewGoAllocator(), maxHistory)
+	return NewPlayApp(client, graph, initialSQL)
+}
+
 // PlayLauncher is the AppI wrapper for the SQL Playground. Late binding —
 // ClickHouse connection details are read from environment variables at
 // Mount, matching the legacy resolveApplication behaviour. A simple
@@ -144,8 +157,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		Password: clickhouseenv.Password.Get(),
 	}
 	client := NewClient(cfg, nil)
-	graph := newLiveQueryGraph(client, memory.NewGoAllocator(), 100)
-	inner := NewPlayApp(client, graph, initSQL)
+	inner := NewLivePlayApp(client, initSQL, 100)
 	inner.AutoRun = AutoRun.Get() != ""
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""
