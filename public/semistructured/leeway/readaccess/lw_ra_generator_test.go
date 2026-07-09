@@ -174,6 +174,32 @@ func TestReadAccessNetworkGolden(t *testing.T) {
 	require.Contains(t, src, "netip.PrefixFrom(netip.AddrFrom16([16]byte(v[:16])), int(v[16]))", "ipv6 CIDR must expose a netip.Prefix accessor")
 }
 
+// TestReadAccessNetworkDmlGolden generates the DML (write) side for the same
+// network table, so the compiled example package can drive a full
+// write→arrow→read round-trip (network_roundtrip_test.go) through the network
+// FixedSizeBinary columns. golang.WriteAligned type-checks the generated setters.
+func TestReadAccessNetworkDmlGolden(t *testing.T) {
+	tblDesc, err := networkSampleTableDesc()
+	require.NoError(t, err)
+
+	var conv *ddl.HumanReadableNamingConvention
+	conv, err = ddl.NewHumanReadableNamingConvention(":")
+	require.NoError(t, err)
+	chTech := clickhouse.NewTechnologySpecificCodeGenerator()
+	driver := dml.NewGoCodeGeneratorDriver(conv, chTech)
+
+	var sourceCode []byte
+	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
+	namingStyle := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("net_table"), tblDesc, tableRowConfig, namingStyle)
+	require.NoError(t, err)
+
+	p := "./example/readaccess_nettable_dml.out.go"
+	_ = os.Remove(p)
+	err = golang.WriteAligned(p, sourceCode)
+	require.NoError(t, err)
+}
+
 func TestGoClassBuilderSample(t *testing.T) {
 	seed1, seed2 := rand.Uint64(), rand.Uint64()
 	t.Logf("randomized test seed: %d %d (rand.NewPCG)", seed1, seed2) // review G-15: log seed for reproducibility

@@ -1,0 +1,110 @@
+package example
+
+import (
+	"net/netip"
+	"testing"
+	"time"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
+	"github.com/stretchr/testify/require"
+)
+
+// packPrefix4 / packPrefix16 encode a netip.Prefix the way the leeway network
+// canonical does: the address bytes followed by one trailing prefix-length byte
+// (NetworkTypeAstNode.ByteWidth). This is the write-side mirror of the read
+// accessor's GetAttrValue<Col>Prefix decode.
+func packPrefix4(p netip.Prefix) (out [5]byte) {
+	a := p.Addr().As4()
+	copy(out[:4], a[:])
+	out[4] = byte(p.Bits())
+	return
+}
+
+func packPrefix16(p netip.Prefix) (out [17]byte) {
+	a := p.Addr().As16()
+	copy(out[:16], a[:])
+	out[16] = byte(p.Bits())
+	return
+}
+
+// TestNetworkRoundtrip drives the network table end to end: ipv4/ipv6 host
+// addresses and CIDR prefixes are written through the DML FixedSizeBinary
+// setters, transferred to an arrow record, loaded on the RA side, and read back
+// through every accessor — the packed [N]byte getter and the netip.Addr /
+// netip.Prefix convenience accessors — asserting write == read for each.
+func TestNetworkRoundtrip(t *testing.T) {
+	const nEntities = 3
+	addr4 := []netip.Addr{
+		netip.MustParseAddr("192.168.0.1"),
+		netip.MustParseAddr("10.0.0.42"),
+		netip.MustParseAddr("172.16.5.9"),
+	}
+	addr6 := []netip.Addr{
+		netip.MustParseAddr("2001:db8::1"),
+		netip.MustParseAddr("2001:db8::dead:beef"),
+		netip.MustParseAddr("2001:db8:1:2:3:4:5:6"),
+	}
+	pfx4 := []netip.Prefix{
+		netip.MustParsePrefix("192.168.0.0/24"),
+		netip.MustParsePrefix("10.0.0.0/8"),
+		netip.MustParsePrefix("172.16.0.0/16"),
+	}
+	pfx6 := []netip.Prefix{
+		netip.MustParsePrefix("2001:db8::/48"),
+		netip.MustParsePrefix("2001:db8:1::/64"),
+		netip.MustParsePrefix("::/0"),
+	}
+	ts := time.UnixMilli(time.Now().UnixMilli()).UTC()
+
+	dml := NewInEntityNetTable(memory.DefaultAllocator, nEntities)
+	var err error
+	{ // write via the DML FixedSizeBinary setters
+		secNet := dml.GetSectionNet()
+		for i := range nEntities {
+			ent := dml.BeginEntity()
+			ent.SetId(uint64(i))
+			ent.SetTimestamp(ts)
+			a4 := addr4[i].As4()
+			a6 := addr6[i].As16()
+			secNet.BeginAttribute(a4, a6, packPrefix4(pfx4[i]), packPrefix16(pfx6[i])).
+				AddMembershipLowCardRef(uint64(i)).
+				AddMembershipMixedLowCardVerbatim([]byte("v"), []byte("p")).
+				EndAttribute()
+			require.NoError(t, ent.CheckErrors())
+			require.NoError(t, ent.CommitEntity())
+		}
+	}
+
+	ra := NewReadAccessNetTable()
+	{ // transfer through arrow
+		var records []arrow.RecordBatch
+		records, err = dml.TransferRecords(nil)
+		require.NoError(t, err)
+		require.Len(t, records, 1)
+		require.EqualValues(t, nEntities, records[0].NumRows())
+		require.NoError(t, ra.LoadFromRecord(records[0]))
+	}
+
+	{ // read back + assert every accessor
+		attrs := ra.Net.Attributes
+		const attrIdx = runtime.AttributeIdx(0)
+		for i := range nEntities {
+			entityIdx := runtime.EntityIdx(i)
+			require.EqualValues(t, 1, attrs.GetNumberOfAttributes(entityIdx))
+
+			// packed [N]byte getters
+			require.Equal(t, addr4[i].As4(), attrs.GetAttrValueIpv4(entityIdx, attrIdx), "entity %d ipv4 bytes", i)
+			require.Equal(t, addr6[i].As16(), attrs.GetAttrValueIpv6(entityIdx, attrIdx), "entity %d ipv6 bytes", i)
+			require.Equal(t, packPrefix4(pfx4[i]), attrs.GetAttrValueIpv4Cidr(entityIdx, attrIdx), "entity %d ipv4 cidr bytes", i)
+			require.Equal(t, packPrefix16(pfx6[i]), attrs.GetAttrValueIpv6Cidr(entityIdx, attrIdx), "entity %d ipv6 cidr bytes", i)
+
+			// netip.Addr / netip.Prefix convenience accessors
+			require.Equal(t, addr4[i], attrs.GetAttrValueIpv4Addr(entityIdx, attrIdx), "entity %d ipv4 addr", i)
+			require.Equal(t, addr6[i], attrs.GetAttrValueIpv6Addr(entityIdx, attrIdx), "entity %d ipv6 addr", i)
+			require.Equal(t, pfx4[i], attrs.GetAttrValueIpv4CidrPrefix(entityIdx, attrIdx), "entity %d ipv4 prefix", i)
+			require.Equal(t, pfx6[i], attrs.GetAttrValueIpv6CidrPrefix(entityIdx, attrIdx), "entity %d ipv6 prefix", i)
+		}
+	}
+}
