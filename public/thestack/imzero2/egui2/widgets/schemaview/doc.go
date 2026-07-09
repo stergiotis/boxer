@@ -44,7 +44,9 @@
 // The vocabulary travels with the widget: a "?" toggle in the navigator
 // header opens a tethered legend window (the canonicaltypesummary inspector
 // idiom — anchor + bezier connector) keying every glyph, so a reader needs
-// neither the demo description nor this doc to decode the tree.
+// neither the demo description nor this doc to decode the tree. The long-form
+// reference ships as the "Schema inspector" help book (see [HelpFS]), which the
+// carousel layer registers with the runtime help library for the Help app.
 //
 // # Detail pane
 //
