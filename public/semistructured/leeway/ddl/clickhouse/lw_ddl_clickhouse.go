@@ -181,10 +181,10 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 	switch compr {
 	case 0:
 		if hasTransform {
-			codecChain = append(codecChain, "LZ4(4)")
+			codecChain = append(codecChain, "LZ4")
 		}
 	case 1:
-		codecChain = append(codecChain, "LZ4(4)")
+		codecChain = append(codecChain, "LZ4")
 	case 2:
 		codecChain = append(codecChain, "ZSTD(3)")
 	case 3:
