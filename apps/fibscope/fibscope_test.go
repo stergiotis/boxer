@@ -106,6 +106,80 @@ func TestSetBodyOnInvalidIdIsNoOp(t *testing.T) {
 	assert.Equal(t, invalidId, inst.id)
 }
 
+// TestDragScrubberDelayedWritebackIsNotClobbered pins the fix for the reported
+// bug: a DragValueU64 bound to a frame-local re-seeded from inst.id each frame
+// lost every edit. dragScrubber holds a stable draft and re-seeds it only on an
+// external change, so the frontend's one-frame-late databinding writeback
+// survives to the frame HasChanged fires.
+func TestDragScrubberDelayedWritebackIsNotClobbered(t *testing.T) {
+	var s dragScrubber
+
+	// Frame N: seed from the decoded value, then the user scrubs 12 -> 13. The
+	// frontend writeback (StateManager.Sync) lands in the stable pointer after
+	// the widget has rendered.
+	require.Equal(t, uint64(12), s.sync(12))
+	s.draft = 13
+
+	// Frame N+1: inst.id has not been recomposed yet (the app applies this
+	// frame), so the decode still reads 12. The old frame-local binding was
+	// re-seeded to 12 here and the edit vanished; sync must keep the 13.
+	assert.Equal(t, uint64(13), s.sync(12), "pending edit must survive the re-seed guard")
+
+	// The app applies the edit and commits the value decoded back out of the
+	// now-updated inst.id.
+	s.commit(13)
+
+	// Frame N+2: the decode reports 13; sync leaves the settled value alone.
+	assert.Equal(t, uint64(13), s.sync(13))
+}
+
+// TestDragScrubberReseedsOnExternalChange covers the complementary direction: a
+// preset button or the raw-id field moves inst.id under an idle scrubber, and
+// the scrubber must adopt the new decoded value (reflects was never advanced,
+// so the change reads as external).
+func TestDragScrubberReseedsOnExternalChange(t *testing.T) {
+	var s dragScrubber
+	require.Equal(t, uint64(12), s.sync(12))
+	assert.Equal(t, uint64(40), s.sync(40))
+	assert.Equal(t, uint64(40), s.draft)
+}
+
+// TestDragScrubberCommitSnapsToResolvedValue covers a clamped edit: the frontend
+// writes an out-of-domain scrub value, the app clamps on apply, and commit snaps
+// the draft to the resolved value so the next frame shows the real result
+// instead of the rejected input — and does not re-seed over it.
+func TestDragScrubberCommitSnapsToResolvedValue(t *testing.T) {
+	var s dragScrubber
+	s.sync(1)
+	s.draft = 9999 // frontend writeback of an out-of-range scrub
+	s.commit(500)  // app clamped to 500 and committed the decoded result
+	assert.Equal(t, uint64(500), s.draft)
+	assert.Equal(t, uint64(500), s.sync(500))
+}
+
+// TestTagScrubberEditAdvancesId drives the App the way renderControls does,
+// minus the GUI, to prove the end-to-end symptom is gone: a tag-value scrub now
+// advances inst.id instead of snapping back to the initial value.
+func TestTagScrubberEditAdvancesId(t *testing.T) {
+	inst := &App{id: defaultId} // tag value 12, body 1
+
+	// Frame N: seed from the decode, user scrubs the tag to 13, frontend writes
+	// it back into the stable draft.
+	inst.tagScrub.sync(uint64(decode(inst.id).tagValue))
+	inst.tagScrub.draft = 13
+
+	// Frame N+1: sync keeps the pending 13 (inst.id still decodes to 12),
+	// HasChanged fires, the app recomposes inst.id and commits.
+	inst.tagScrub.sync(uint64(decode(inst.id).tagValue))
+	inst.setTagValue(inst.tagScrub.draft)
+	inst.tagScrub.commit(uint64(decode(inst.id).tagValue))
+
+	assert.Equal(t, identifier.TagValue(13), decode(inst.id).tagValue,
+		"tag scrub must advance inst.id, not reset to the initial value")
+	assert.Equal(t, identifier.UntaggedId(1), decode(inst.id).body,
+		"the body is preserved across a tag-value edit")
+}
+
 func TestZeckExplain(t *testing.T) {
 	// The code spells the tag value as a sum of non-consecutive Fibonacci
 	// numbers (the two encoder biases cancel).

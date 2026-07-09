@@ -127,8 +127,17 @@ type App struct {
 	// id is the single source of truth on the Explore tab — a TaggedId's raw
 	// bits. Tag/body/raw edits all recompose it; an invalid word is kept
 	// as-is so its split can be inspected. The raw-id field (c.U64Edit) keeps
-	// its own exact text draft, so no draft state lives here.
+	// its own exact text draft inside the widget; the two drag scrubbers keep
+	// theirs here (see dragScrubber), because the pointer bound to SendRespVal
+	// must outlive the frame it is emitted in.
 	id uint64
+
+	// tagScrub and bodyScrub are the stable FFI write-back targets for the tag
+	// value and body DragValueU64 scrubbers. Each mirrors a decoded sub-field of
+	// id and edits it back; that indirection (draft ≠ the value the widget owns
+	// outright) is what forces the dragScrubber re-seed guard.
+	tagScrub  dragScrubber
+	bodyScrub dragScrubber
 
 	// maxExp backs the Trade-offs log slider (max expected ids per category).
 	maxExp float64
@@ -244,21 +253,67 @@ func (inst *App) renderExplore() {
 	inst.renderSQL(d)
 }
 
+// dragScrubber is the stable write-back state for a DragValueU64 whose value is
+// a decoded sub-field of inst.id rather than a field the widget owns outright.
+// Across the FFFI boundary a databinding write lands one frame after the edit
+// (imzero2 skill §12, "Stable Pointers for Delayed FFI State"), so the pointer
+// handed to SendRespVal must outlive the frame — a plain local re-seeded from
+// the decode each frame is written back into a dead pointer and the edit is
+// lost, then re-seeded to the old value on the frame HasChanged finally fires.
+// draft is that surviving pointer; reflects is the decoded value draft mirrors,
+// kept so an external edit to inst.id (a preset, the raw-id field, the *other*
+// scrubber) is distinguished from this scrubber's own in-flight drag — only the
+// former re-seeds. No frontend-cache override (cf. c.U64Edit's "Stubborn Text")
+// is needed: DragValueU64 is a controlled widget that re-reads Go's value every
+// frame and retains nothing between them.
+type dragScrubber struct {
+	draft    uint64 // bound to SendRespVal; the frontend writes the edit here
+	reflects uint64 // the inst.id sub-field draft was last seeded from / committed to
+	init     bool
+}
+
+// sync reconciles the scrubber with cur — the value freshly decoded from
+// inst.id this frame — and returns the value to display. It re-seeds only when
+// cur diverges from what the draft already reflects, so a drag whose write is
+// still one frame behind (draft ahead of the decode) is not clobbered, while a
+// genuine external change to inst.id is picked up. Call once per frame, before
+// rendering the widget.
+func (inst *dragScrubber) sync(cur uint64) uint64 {
+	if !inst.init || inst.reflects != cur {
+		inst.draft = cur
+		inst.reflects = cur
+		inst.init = true
+	}
+	return inst.draft
+}
+
+// commit records that this scrubber's edit resolved to res — the sub-field
+// decoded back out of inst.id after the app applied (and possibly clamped) the
+// draft. Snapping draft and reflects to res shows a clamped edit's true result
+// next frame and marks the change as self-inflicted, so sync does not re-seed
+// over it.
+func (inst *dragScrubber) commit(res uint64) {
+	inst.draft = res
+	inst.reflects = res
+}
+
 func (inst *App) renderControls() {
 	d := decode(inst.id)
 	for range c.Horizontal().KeepIter() {
-		tv := uint64(d.tagValue)
+		tv := inst.tagScrub.sync(uint64(d.tagValue))
 		for range c.HoverText(tipTagValue).KeepIter() {
 			if c.DragValueU64(ids.PrepareStr("tagval"), tv).Speed(1).Prefix("tag ").
-				SendRespVal(&tv).HasChanged() {
-				inst.setTagValue(tv)
+				SendRespVal(&inst.tagScrub.draft).HasChanged() {
+				inst.setTagValue(inst.tagScrub.draft)
+				inst.tagScrub.commit(uint64(decode(inst.id).tagValue))
 			}
 		}
-		b := uint64(d.body)
+		b := inst.bodyScrub.sync(uint64(d.body))
 		for range c.HoverText(tipBody).KeepIter() {
 			if c.DragValueU64(ids.PrepareStr("body"), b).Speed(1).Prefix("body ").
-				SendRespVal(&b).HasChanged() {
-				inst.setBody(b)
+				SendRespVal(&inst.bodyScrub.draft).HasChanged() {
+				inst.setBody(inst.bodyScrub.draft)
+				inst.bodyScrub.commit(uint64(decode(inst.id).body))
 			}
 		}
 	}
