@@ -37,6 +37,17 @@ func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")
 			return
 		}
+	case canonicaltypes2.NetworkTypeAstNode:
+		// array.FixedSizeBinary.Value(i) returns a []byte view, but the Go-native
+		// type is a packed [ByteWidth]byte (see codegen.generateNetworkType), so
+		// convert the slice to the fixed-size array. The width matches by
+		// construction, so the Go 1.20+ slice-to-array conversion cannot panic.
+		// deferred: fixed-width byte strings (StringAstNode + WidthModifierFixed +
+		// BaseTypeStringBytes) share the FixedSizeBinary backing and a [width]byte
+		// Go type, so they need this same conversion; wire it in when that path is
+		// exercised end-to-end (no ctabb abbreviation / golden covers it today).
+		prefix = fmt.Sprintf("[%d]byte(", ctt.ByteWidth())
+		suffix = ")"
 	}
 	return
 }

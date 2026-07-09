@@ -120,12 +120,21 @@ func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 	return manip.BuildTableDesc()
 }
 
-// TestReadAccessNetworkArrowConstName locks the codegen fix for multi-word arrow
-// class names: network columns must load via the real arrow.FIXED_SIZE_BINARY
-// constant, never the non-existent arrow.FIXEDSIZEBINARY that a naive strings.ToUpper
-// produced. format.Source (the wellFormed check) does not resolve identifiers, so only
-// asserting on the emitted constant catches this regression.
-func TestReadAccessNetworkArrowConstName(t *testing.T) {
+// TestReadAccessNetworkGolden locks two codegen fixes for network (ipv4/ipv6)
+// columns, which resolve to the multi-word arrow class name FixedSizeBinary:
+//
+//  1. the load constant must be the real arrow.FIXED_SIZE_BINARY, never the
+//     non-existent arrow.FIXEDSIZEBINARY a naive strings.ToUpper produced; and
+//  2. the getter must convert array.FixedSizeBinary.Value(i) ([]byte) to the
+//     Go-native packed [N]byte via ArrowTypeToGoType, not assign []byte to [N]byte.
+//
+// The string assertions pin (1). Neither is caught by the wellFormed check
+// (format.Source resolves no identifiers and type-checks nothing), so the test
+// also writes the generated classes into the compiled example package as
+// readaccess_nettable_ra.out.go: a `go build`/`go test` of that package then
+// fails to compile if either regression returns. The RA classes reference no
+// dml-generated types, so this golden compiles standalone.
+func TestReadAccessNetworkGolden(t *testing.T) {
 	tblDesc, err := networkSampleTableDesc()
 	require.NoError(t, err)
 
@@ -139,6 +148,9 @@ func TestReadAccessNetworkArrowConstName(t *testing.T) {
 	var sourceCode []byte
 	namingConvention := gocodegen.NewMultiTablePerPackageGoClassNamer()
 	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("net_table"), tblDesc, tableRowConfig, namingConvention)
+	require.NoError(t, err)
+
+	err = golang.WriteAligned("example/readaccess_nettable_ra.out.go", sourceCode)
 	require.NoError(t, err)
 
 	src := string(sourceCode)
