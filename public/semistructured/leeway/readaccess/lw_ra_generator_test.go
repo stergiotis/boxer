@@ -85,6 +85,68 @@ func TestReadAccessGoClassBuilder(t *testing.T) {
 	err = golang.WriteAligned("example/readaccess_testtable_ra.out.go", sourceCode)
 	require.NoError(t, err)
 }
+
+// networkSampleTableDesc mirrors sampleTableDesc but carries a section of network
+// (ipv4/ipv6) columns, which resolve to the multi-word arrow class name
+// FixedSizeBinary. It is kept separate from sampleTableDesc so the shared golden and
+// the compiled example/ roundtrip corpus stay untouched.
+func networkSampleTableDesc() (tbl common.TableDesc, err error) {
+	var manip *common.TableManipulator
+	manip, err = common.NewTableManipulator()
+	if err != nil {
+		err = eh.Errorf("unable to create table manipulator")
+		return
+	}
+	var hintsId, hintsTs encodingaspects2.AspectSet
+	hintsId, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)
+	if err != nil {
+		err = eh.Errorf("unable to encode hints: %w", err)
+		return
+	}
+	hintsTs, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)
+	if err != nil {
+		err = eh.Errorf("unable to encode hints: %w", err)
+		return
+	}
+	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "id", ctabb.U64, hintsId, valueaspects.EmptyAspectSet)
+	manip.AddPlainValueItem(common.PlainItemTypeEntityTimestamp, "ts", ctabb.Z32, hintsTs, valueaspects.EmptyAspectSet)
+	{
+		sec := manip.TaggedValueSection("net").
+			AddSectionMembership(common.MembershipSpecLowCardRef).
+			AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
+		sec.TaggedValueColumn("ipv4", ctabb.V) // NetworkTypeAstNode -> arrow FixedSizeBinary
+		sec.TaggedValueColumn("ipv6", ctabb.W) // NetworkTypeAstNode -> arrow FixedSizeBinary
+	}
+	return manip.BuildTableDesc()
+}
+
+// TestReadAccessNetworkArrowConstName locks the codegen fix for multi-word arrow
+// class names: network columns must load via the real arrow.FIXED_SIZE_BINARY
+// constant, never the non-existent arrow.FIXEDSIZEBINARY that a naive strings.ToUpper
+// produced. format.Source (the wellFormed check) does not resolve identifiers, so only
+// asserting on the emitted constant catches this regression.
+func TestReadAccessNetworkArrowConstName(t *testing.T) {
+	tblDesc, err := networkSampleTableDesc()
+	require.NoError(t, err)
+
+	var conv *ddl.HumanReadableNamingConvention
+	chTech := clickhouse.NewTechnologySpecificCodeGenerator()
+	conv, err = ddl.NewHumanReadableNamingConvention(":")
+	require.NoError(t, err)
+	driver := NewGoCodeGeneratorDriver(conv, chTech, true)
+
+	tableRowConfig := common.TableRowConfigMultiAttributesPerRow
+	var sourceCode []byte
+	namingConvention := gocodegen.NewMultiTablePerPackageGoClassNamer()
+	sourceCode, _, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("net_table"), tblDesc, tableRowConfig, namingConvention)
+	require.NoError(t, err)
+
+	src := string(sourceCode)
+	require.Contains(t, src, "arrow.FIXED_SIZE_BINARY", "network columns must load via the real arrow.FIXED_SIZE_BINARY constant")
+	require.NotContains(t, src, "arrow.FIXEDSIZEBINARY", "arrow has no FIXEDSIZEBINARY constant; class name must be UpperSnakeCase, not strings.ToUpper")
+	require.Contains(t, src, "array.NewFixedSizeBinaryData", "sanity: the FixedSizeBinary array constructor should still be emitted")
+}
+
 func TestGoClassBuilderSample(t *testing.T) {
 	seed1, seed2 := rand.Uint64(), rand.Uint64()
 	t.Logf("randomized test seed: %d %d (rand.NewPCG)", seed1, seed2) // review G-15: log seed for reproducibility

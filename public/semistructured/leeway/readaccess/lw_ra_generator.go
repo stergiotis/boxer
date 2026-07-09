@@ -1271,7 +1271,8 @@ func (inst *%s%s) Len() (nEntities int) {
 							if arrowConstName == "Boolean" {
 								arrowConstName = "BOOL" // arrow inconsistency: arrow.BOOL but array.NewBooleanData / array.Boolean
 							} else {
-								arrowConstName = strings.ToUpper(arrowConstName)
+								// UpperSnakeCase, not strings.ToUpper: multi-word class names such as FixedSizeBinary must map to arrow.FIXED_SIZE_BINARY, not the non-existent arrow.FIXEDSIZEBINARY. Matches the membership-pack site above.
+								arrowConstName = naming.MustBeValidStylableName(arrowConstName).Convert(naming.UpperSnakeCase).String()
 							}
 							var elementAccessor bool
 							elementAccessor, err = isElementAccessorNeeded(cc, role, tableRowConfig)
