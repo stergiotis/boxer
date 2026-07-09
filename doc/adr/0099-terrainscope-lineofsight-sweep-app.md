@@ -4,6 +4,8 @@ status: proposed
 date: 2026-06-28
 ---
 
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
 # ADR-0099: `terrainscope` — a keelson app for terrain line-of-sight and polar viewshed sweeps
 
 ## Context
@@ -95,3 +97,13 @@ first cut; the principled bus-service split is Phase 4.
 - Under the ADR-0085 sandbox the direct-read app needs a filesystem capability
   until Phase 4 removes the direct read. Documented, accepted for the desktop / dev
   first cut.
+
+## Status
+
+Proposed — awaiting review by @spx. A first cut (the `terrainscope` keelson app,
+its capability / env-var registration, and per-control hover-help) is already
+committed to `main`; the decision is treated as provisional until that review
+lands.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
