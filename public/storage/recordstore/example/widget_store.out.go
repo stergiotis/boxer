@@ -34,7 +34,8 @@ import (
 //go:embed widget_ddl_clickhouse.out.sql
 var widgetDDLCreate string
 
-// WidgetTableName is the ClickHouse table this store binds.
+// WidgetTableName is the ClickHouse table this store binds — database-
+// qualified ("<db>.<table>") when a Database was set at generation.
 const WidgetTableName = "widget"
 
 // Physical (encoded, quoted) names of the envelope role columns,

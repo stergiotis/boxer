@@ -34,7 +34,8 @@ import (
 //go:embed device_ddl_clickhouse.out.sql
 var deviceDDLCreate string
 
-// DeviceTableName is the ClickHouse table this store binds.
+// DeviceTableName is the ClickHouse table this store binds — database-
+// qualified ("<db>.<table>") when a Database was set at generation.
 const DeviceTableName = "device"
 
 // Physical (encoded, quoted) names of the envelope role columns,

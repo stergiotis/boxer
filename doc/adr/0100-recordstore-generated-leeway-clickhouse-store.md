@@ -858,6 +858,29 @@ composite-id/routing/set backbone — with `TestWidgetStoreEnvelopeRoundTrip`
 as the clickhouse-local acceptance (write the full envelope incl. a set
 column, `Latest` reads it back, `Delete`/`GetLive` exercise the tombstone).
 
+### 2026-07-09 — optional database qualification
+
+`Input.Database` optionally scopes the generated store to a named ClickHouse
+database. Empty (the default) leaves every reference unqualified — the store
+binds whatever database the executor connects to, and the output is
+byte-identical to before. When set, one value qualifies the whole surface:
+the emitted `<Store>TableName` const becomes `"<db>.<table>"`, so every
+runtime statement that routes through it (the `SELECT`/`INSERT`/`DESCRIBE`
+verbs and the drift-path `ALTER`) is database-scoped, and the composed
+`CREATE TABLE` names `<db>.<table>` too. The name carries `TableName`'s
+simple-identifier constraint (`[a-z][a-z0-9]*`) — it is emitted unquoted.
+
+The DDL also **provisions** the database: it prepends `CREATE DATABASE IF NOT
+EXISTS <db>;` ahead of the `CREATE TABLE`, so `EnsureTable` succeeds against a
+fresh server — the same self-provisioning posture as the existing `CREATE
+TABLE IF NOT EXISTS` (the executor runs the embedded file as one
+multi-statement script). A deployment that provisions databases out of band
+inherits the idempotent no-op.
+
+Pins: `TestGenerateWithDatabaseQualifiesSQL` (the const and DDL shapes plus a
+clickhouse-local leg — the table resolves as `<db>.<table>` and not under the
+default database) and `TestGenerateRejectsBadDatabaseName`.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

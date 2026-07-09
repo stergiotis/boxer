@@ -43,6 +43,17 @@ type Input struct {
 	// the generated class names from it — and must agree with the
 	// TableDesc's own name when that is set.
 	TableName string
+	// Database optionally qualifies every generated table reference as
+	// "<Database>.<TableName>": the composed CREATE TABLE and every
+	// runtime statement (SELECT/INSERT/DESCRIBE, and the ALTER on the
+	// drift path) — all of which route through the emitted <Store>TableName
+	// const. It must be a single lowercase word ([a-z][a-z0-9]*), like
+	// TableName. Empty (the default) leaves references unqualified, so the
+	// store binds whatever database the executor connects to. When set, the
+	// emitted DDL prepends "CREATE DATABASE IF NOT EXISTS <Database>;" so
+	// EnsureTable provisions the database before the qualified table,
+	// matching its CREATE TABLE IF NOT EXISTS self-provisioning posture.
+	Database string
 	// Table is the physical schema. Its plain columns form the envelope;
 	// the ADR-0100 roles are bound by PlainItemTypeE: EntityId → Key,
 	// EntityTimestamp → Order, EntityLifecycle → Lifecycle (state view).
@@ -104,6 +115,13 @@ func (inst Input) Generate() (err error) {
 	}
 	if n := string(inst.Table.DictionaryEntry.Name); n != "" && n != inst.TableName {
 		err = eh.Errorf("Input.TableName %q and the TableDesc's own name %q disagree — the emitted DDL and SQL use TableName; align the two", inst.TableName, n)
+		return
+	}
+	// The database name is emitted unquoted into the qualified reference
+	// (and into CREATE DATABASE), so it carries the same simple-identifier
+	// constraint as TableName.
+	if inst.Database != "" && !tableNameRe.MatchString(inst.Database) {
+		err = eh.Errorf("Database %q must be a single lowercase word ([a-z][a-z0-9]*) — it is emitted unquoted into the qualified table reference", inst.Database)
 		return
 	}
 	conv, err := ddl.NewHumanReadableNamingConvention(":")
@@ -192,10 +210,16 @@ func (inst Input) Generate() (err error) {
 	// 6. DDL — the complete CREATE TABLE through the ADR-0102 table-clause
 	// seam: derived clause defaults (roles → ORDER BY, resolved to
 	// physical names) merged with Input.DDL overrides.
-	ddlSql, err := clickhouse.ComposeCreateTable(inst.TableName, ir, inst.RowConfig, conv, inst.tableOptions())
+	ddlSql, err := clickhouse.ComposeCreateTable(inst.qualifiedTableName(), ir, inst.RowConfig, conv, inst.tableOptions())
 	if err != nil {
 		err = eh.Errorf("generate ddl: %w", err)
 		return
+	}
+	if inst.Database != "" {
+		// Provision the database ahead of the qualified CREATE TABLE so
+		// EnsureTable succeeds against a fresh server — the executor runs
+		// the embedded file as one multi-statement script.
+		ddlSql = "CREATE DATABASE IF NOT EXISTS " + inst.Database + ";\n\n" + ddlSql
 	}
 	err = inst.write(inst.TableName+"_ddl_clickhouse.out.sql", []byte(ddlSql))
 	return
@@ -259,6 +283,18 @@ func firstPlainName(t common.TableDesc, it common.PlainItemTypeE) (name naming.S
 		}
 	}
 	return "", false
+}
+
+// qualifiedTableName is the table reference the generated SQL uses: the
+// bare TableName, or "<Database>.<TableName>" when a Database is set. It
+// feeds both the composed CREATE TABLE and the <Store>TableName const that
+// every runtime statement routes through, so a single value qualifies the
+// whole generated surface.
+func (inst Input) qualifiedTableName() string {
+	if inst.Database == "" {
+		return inst.TableName
+	}
+	return inst.Database + "." + inst.TableName
 }
 
 // scaffoldPkg is the package the DML/RA scaffolding declares: the
