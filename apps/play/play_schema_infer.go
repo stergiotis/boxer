@@ -11,32 +11,33 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
-// play_schema_infer.go backs the Schema dock tab: it turns the active result's
-// Arrow schema into a leeway TableDesc the schemaview widget can inspect.
+// play_schema_infer.go is the Schema pane's FALLBACK schema derivation.
 //
-// The inference is deliberately shallow. An ad-hoc SQL result carries only
-// column names and physical Arrow types — none of the leeway structure a
-// TableDesc can express (tagged sections, memberships, co-sections, entity
-// roles). So every result column becomes a plain OPAQUE value column with a
-// best-effort canonical type; there are no tagged sections. This is the honest
-// cut, not a first slice of a richer inference: the section structure simply
-// isn't in the data. LowCardinality (dictionary-encoded) columns are the one
-// exception where a real encoding hint is recoverable.
+// The faithful path is not here: a leeway table encodes its whole structure —
+// sections, membership roles, co-section groups, canonical types, encoding
+// hints — into its physical column names, and the play app reconstructs the
+// authored [common.TableDesc] from them in exactly one place, [CardDriver]
+// (which the Detail card already relies on). resultTableDesc prefers that
+// reconstruction.
+//
+// This file handles only the leftover case: a non-leeway result — an
+// aggregation, a join, a projection that renames columns, or a plain
+// non-leeway table — whose names don't parse as leeway. Then there is no
+// section structure to recover, so every column becomes a plain OPAQUE value
+// with a best-effort canonical type off its Arrow physical type.
+// LowCardinality (dictionary-encoded) columns keep their one recoverable
+// encoding hint.
 
 // inferredTableName titles the inferred schema in the navigator header. Cast
 // verbatim rather than validated — it is display-only and never round-trips
 // through a naming convention.
 const inferredTableName = naming.StylableName("query-result")
 
-// inferTableDesc builds a leeway TableDesc from an Arrow result schema, mapping
-// each field to a plain opaque value column (see the file comment for why the
-// shape is flat). Returns nil for a nil schema so the panel shows its empty
-// state.
-func inferTableDesc(schema *arrow.Schema) *common.TableDesc {
-	if schema == nil {
-		return nil
-	}
-	fields := schema.Fields()
+// inferOpaqueTableDesc builds a shallow TableDesc for a non-leeway result:
+// every field becomes a plain opaque value column with a best-effort canonical
+// type. Used only when the CardDriver could not reconstruct a real leeway
+// schema (see resultTableDesc).
+func inferOpaqueTableDesc(fields []arrow.Field) *common.TableDesc {
 	td := &common.TableDesc{
 		DictionaryEntry: common.TableDictionaryEntryDescDto{
 			Name:    inferredTableName,

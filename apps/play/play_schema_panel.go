@@ -2,6 +2,7 @@ package play
 
 import (
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 )
@@ -82,13 +83,32 @@ func (inst *PlayApp) renderSchemaView() {
 
 // syncSchemaModel rebinds the inspector's TableDesc when the active result's
 // Arrow schema changes, keyed by pointer identity — the same cheap once-per-
-// result cache as colWidthsForSchema and the projector's forSchema. Building the
-// TableDesc every frame would be wasteful; the schema pointer is stable for a
-// given result, so a pointer compare gates the rebuild.
+// result cache as colWidthsForSchema and the projector's forSchema. The
+// pointer gate also keeps SetTable (which resets the widget's selection /
+// filter) from firing every frame.
 func (inst *PlayApp) syncSchemaModel(schema *arrow.Schema) {
 	if inst.schemaForSchema == schema {
 		return
 	}
 	inst.schemaForSchema = schema
-	inst.schemaModel.SetTable(inferTableDesc(schema))
+	inst.schemaModel.SetTable(inst.resultTableDesc(schema))
+}
+
+// resultTableDesc returns the leeway schema for the current result. The faithful
+// path is the reconstruction the CardDriver already derives from the physical
+// column names — the SAME derivation the Detail card uses, so the schema is
+// computed once in the play core, not re-run here. Only a non-leeway result
+// (an aggregation, a join, a non-leeway table) whose names don't parse falls
+// back to the shallow opaque inference off the Arrow types.
+func (inst *PlayApp) resultTableDesc(schema *arrow.Schema) *common.TableDesc {
+	if schema == nil {
+		return nil
+	}
+	if inst.cards != nil {
+		inst.cards.EnsureFor(schema)
+		if td := inst.cards.TableDesc(); td != nil {
+			return td
+		}
+	}
+	return inferOpaqueTableDesc(schema.Fields())
 }

@@ -18,6 +18,15 @@ import (
 // CardDriver bridges the current Arrow schema to the leeway
 // streamreadaccess.Driver + a Table2CardEmitter.
 //
+// It is also the play app's single leeway-schema reconstruction point: the
+// leeway physical column names carry the whole authored structure (sections,
+// membership roles, co-section groups, canonical types, encoding hints), and
+// EnsureFor recovers the [common.TableDesc] from them via
+// DiscoverTableFromColumnNames. That TableDesc is exposed through [TableDesc]
+// so schema-only consumers (the Schema pane) share this one derivation instead
+// of re-running discovery — the Driver they don't need is built once anyway for
+// the Detail card.
+//
 // Two-stage caching:
 //   - The Driver + TableDesc are rebuilt only when the Arrow schema object
 //     changes (cheap pointer compare).
@@ -32,7 +41,8 @@ type CardDriver struct {
 	schema  *arrow.Schema
 	driver  *streamreadaccess.Driver
 	emitter *leewaywidgets.Table2CardEmitter
-	usable  bool // false if the schema is not leeway-shaped
+	usable  bool              // false if the schema is not leeway-shaped
+	table   *common.TableDesc // reconstructed leeway schema, nil when not leeway-shaped
 }
 
 // NewCardDriver returns an empty driver. EnsureFor must be called before the
@@ -52,6 +62,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		inst.driver = nil
 		inst.emitter = nil
 		inst.usable = false
+		inst.table = nil
 		return false
 	}
 	if schema == inst.schema && inst.driver != nil {
@@ -61,6 +72,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	inst.driver = nil
 	inst.emitter = nil
 	inst.usable = false
+	inst.table = nil
 
 	nFields := schema.NumFields()
 	colNames := make([]string, 0, nFields)
@@ -98,6 +110,10 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		log.Warn().Err(err).Msg("play: leeway discovery failed — falling back")
 		return false
 	}
+	// Publish the reconstructed schema now, before the (heavier, and card-only)
+	// Driver construction: the Schema pane wants the TableDesc even on a schema
+	// where the Driver build later fails.
+	inst.table = &tblDesc
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	ir := common.NewIntermediateTableRepresentation()
 	err = ir.LoadFromTable(&tblDesc, tech)
@@ -128,6 +144,15 @@ func (inst *CardDriver) Driver() *streamreadaccess.Driver {
 		return nil
 	}
 	return inst.driver
+}
+
+// TableDesc returns the leeway schema reconstructed from the current result's
+// physical column names, or nil when the schema is not leeway-shaped. This is
+// the play app's single leeway-schema derivation — the Schema pane renders it
+// rather than re-running discovery. EnsureFor must have been called for the
+// current schema first (it is, every frame, via the Detail card).
+func (inst *CardDriver) TableDesc() *common.TableDesc {
+	return inst.table
 }
 
 // SetTagClickHandler wires a clipboard / filter pivot callback through to the

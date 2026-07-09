@@ -4,9 +4,12 @@ import (
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,7 +74,7 @@ func TestInferTableDescPlainOpaque(t *testing.T) {
 		arrow.Field{Name: "name", Type: arrow.BinaryTypes.String},
 		arrow.Field{Name: "kind", Type: &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Uint16, ValueType: arrow.BinaryTypes.String}},
 	)
-	td := inferTableDesc(schema)
+	td := inferOpaqueTableDesc(schema.Fields())
 	require.NotNil(t, td)
 	require.Empty(t, td.TaggedValuesSections)
 	require.Len(t, td.PlainValuesNames, 3)
@@ -88,21 +91,42 @@ func TestInferTableDescPlainOpaque(t *testing.T) {
 	require.True(t, td.PlainValuesEncodingHints[2].Contains(encodingaspects.AspectInterRecordLowCardinality), "kind is low-cardinality")
 }
 
-// TestInferTableDescVerbatimNames: result column names come from arbitrary SQL
-// and are shown verbatim, including forms that aren't valid StylableNames.
+// TestInferTableDescVerbatimNames: non-leeway result column names come from
+// arbitrary SQL and are shown verbatim, including forms that aren't valid
+// StylableNames.
 func TestInferTableDescVerbatimNames(t *testing.T) {
-	td := inferTableDesc(schemaWith(
+	td := inferOpaqueTableDesc(schemaWith(
 		arrow.Field{Name: "count()", Type: arrow.PrimitiveTypes.Uint64},
 		arrow.Field{Name: "a + b", Type: arrow.PrimitiveTypes.Float64},
-	))
+	).Fields())
 	require.Equal(t, "count()", td.PlainValuesNames[0].String())
 	require.Equal(t, "a + b", td.PlainValuesNames[1].String())
 }
 
-// TestInferTableDescNil: a nil schema yields a nil TableDesc so the panel shows
-// its empty state.
-func TestInferTableDescNil(t *testing.T) {
-	require.Nil(t, inferTableDesc(nil))
+// TestInferOpaqueTableDescEmpty: no fields yields an empty (non-nil) TableDesc.
+func TestInferOpaqueTableDescEmpty(t *testing.T) {
+	td := inferOpaqueTableDesc(nil)
+	require.NotNil(t, td)
+	require.Empty(t, td.PlainValuesNames)
+	require.Empty(t, td.TaggedValuesSections)
+}
+
+// TestCardDriverReconstructsLeewaySchema proves the faithful path: a leeway-
+// shaped result's physical column names reconstruct the authored TableDesc —
+// tagged sections and all — through the app's single derivation (CardDriver),
+// which the Schema pane consumes instead of re-running discovery. A non-leeway
+// schema reconstructs to nothing, so the pane falls back to the opaque inference.
+func TestCardDriverReconstructsLeewaySchema(t *testing.T) {
+	schema := anchor.CreateSchemaTestTable()
+	cards := NewCardDriver(c.NewWidgetIdStack(), memory.NewGoAllocator())
+	require.True(t, cards.EnsureFor(schema), "anchor schema must be leeway-shaped")
+
+	td := cards.TableDesc()
+	require.NotNil(t, td)
+	require.NotEmpty(t, td.TaggedValuesSections, "reconstruction recovers tagged sections from the column names")
+
+	require.False(t, cards.EnsureFor(schemaWith(strField("count()"))))
+	require.Nil(t, cards.TableDesc())
 }
 
 // TestSchemaPanelContract: the panel declares one required main channel and
