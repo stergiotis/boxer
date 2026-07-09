@@ -19,21 +19,23 @@ package main
 
 import (
 	"encoding/binary"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/observability/logging"
+	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/urfave/cli/v2"
 )
 
 // renderJob is one unit of work handed from an HTTP handler to the render loop.
@@ -265,31 +267,63 @@ const indexHTML = `<!doctype html>
 </body>`
 
 func main() {
-	var (
-		addr         string
-		clientBinary string
-		mainFont     string
-		monoFont     string
-		phosphorFont string
-		winW         string
-		winH         string
-	)
-	flag.StringVar(&addr, "addr", ":8087", "HTTP listen address")
-	flag.StringVar(&clientBinary, "clientBinary",
-		"rust/imzero2/target/headless_svg/release/imzero2",
-		"path to the headless_svg imzero2 client binary")
-	flag.StringVar(&mainFont, "mainFontTTF", "", "proportional font TTF (optional; enables self-contained embedded-font SVG)")
-	flag.StringVar(&monoFont, "monoFontTTF", "", "monospace font TTF (optional)")
-	flag.StringVar(&phosphorFont, "phosphorFontTTF", "", "icon font TTF (optional)")
-	flag.StringVar(&winW, "width", "1200", "render viewport width in points")
-	flag.StringVar(&winH, "height", "900", "render viewport height in points")
-	flag.Parse()
+	app := &cli.App{
+		Name:    "svgserver",
+		Usage:   "render imzero2 (egui) views and serve them as SVG over HTTP",
+		Version: vcs.BuildVersionInfo(),
+		Flags: slices.Concat(
+			logging.LoggingFlags,
+			[]cli.Flag{
+				&cli.StringFlag{
+					Name:  "addr",
+					Value: ":8087",
+					Usage: "HTTP listen address",
+				},
+				&cli.StringFlag{
+					Name:  "clientBinary",
+					Value: "rust/imzero2/target/headless_svg/release/imzero2",
+					Usage: "path to the headless_svg imzero2 client binary",
+				},
+				&cli.StringFlag{
+					Name:  "mainFontTTF",
+					Usage: "proportional font TTF (optional; enables self-contained embedded-font SVG)",
+				},
+				&cli.StringFlag{
+					Name:  "monoFontTTF",
+					Usage: "monospace font TTF (optional)",
+				},
+				&cli.StringFlag{
+					Name:  "phosphorFontTTF",
+					Usage: "icon font TTF (optional)",
+				},
+				&cli.StringFlag{
+					Name:  "width",
+					Value: "1200",
+					Usage: "render viewport width in points",
+				},
+				&cli.StringFlag{
+					Name:  "height",
+					Value: "900",
+					Usage: "render viewport height in points",
+				},
+			},
+		),
+		Before: logging.Apply,
+		Action: runServer,
+	}
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal().Err(err).Msg("svgserver exited with error")
+	}
+}
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
+// runServer is the cli Action: it stands up the render loop and the HTTP
+// server, then blocks on the imzero2 app's run loop (which owns the main
+// goroutine). The jobs channel is the only bridge between the HTTP handlers
+// and the single-threaded render loop.
+func runServer(ctx *cli.Context) (err error) {
 	tmpDir, err := os.MkdirTemp("", "imzero2-svgserver-")
 	if err != nil {
-		log.Fatal().Err(err).Msg("unable to create temp dir")
+		return fmt.Errorf("unable to create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
@@ -299,21 +333,21 @@ func main() {
 	}
 
 	appCfg := &application.Config{
-		ClientBinary:    clientBinary,
-		MainFontTTF:     mainFont,
-		MonoFontTTF:     monoFont,
-		PhosphorFontTTF: phosphorFont,
+		ClientBinary:    ctx.String("clientBinary"),
+		MainFontTTF:     ctx.String("mainFontTTF"),
+		MonoFontTTF:     ctx.String("monoFontTTF"),
+		PhosphorFontTTF: ctx.String("phosphorFontTTF"),
 		ImZeroSkiaClientConfig: &application.ImZeroClientConfig{
 			AppTitle:                "svgserver",
-			InitialMainWindowWidth:  winW,
-			InitialMainWindowHeight: winH,
+			InitialMainWindowWidth:  ctx.String("width"),
+			InitialMainWindowHeight: ctx.String("height"),
 			Vsync:                   "false",
 		},
 	}
 	unm := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 	app, err := application.NewApplication(appCfg, unm)
 	if err != nil {
-		log.Fatal().Err(err).Msg("unable to create application")
+		return fmt.Errorf("unable to create application: %w", err)
 	}
 
 	app.FffiEstablishedHandler = func(fffi *runtime.Fffi2[*runtime.Unmarshaller]) error {
@@ -325,20 +359,22 @@ func main() {
 
 	// HTTP server on its own goroutine; the render loop owns the main goroutine
 	// (app.Run blocks). The jobs channel is the only bridge between them.
+	addr := ctx.String("addr")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/svg", srv.handleSVG)
 	mux.HandleFunc("/", srv.handleIndex)
 	go func() {
 		log.Info().Str("addr", addr).Msg("svgserver http listening")
-		if err := http.ListenAndServe(addr, mux); err != nil {
-			log.Fatal().Err(err).Msg("http server failed")
+		if serveErr := http.ListenAndServe(addr, mux); serveErr != nil {
+			log.Fatal().Err(serveErr).Msg("http server failed")
 		}
 	}()
 
-	if err := app.Launch(); err != nil {
-		log.Fatal().Err(err).Msg("unable to launch imzero2 client")
+	if err = app.Launch(); err != nil {
+		return fmt.Errorf("unable to launch imzero2 client: %w", err)
 	}
-	if err := app.Run(); err != nil {
-		log.Fatal().Err(err).Msg("render loop exited with error")
+	if err = app.Run(); err != nil {
+		return fmt.Errorf("render loop exited with error: %w", err)
 	}
+	return
 }
