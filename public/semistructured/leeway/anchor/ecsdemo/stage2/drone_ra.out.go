@@ -31,7 +31,7 @@ var _ = time.Time{}
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:229
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:247
 
 type MembershipPackDroneTableShared1 struct {
 	ValueHighCardRef                           *array.List
@@ -438,7 +438,7 @@ func (inst *MembershipPackDroneTableShared1) GetNumberOfMemberItemsByAttrLowCard
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:847
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:865
 
 type ReadAccessDroneTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -687,7 +687,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessDroneTableTaggedU64ArrayAttribu
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1065
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1083
 
 func (inst *ReadAccessDroneTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -733,7 +733,7 @@ func (inst *ReadAccessDroneTableTaggedU64ArrayAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1139
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1157
 
 var _ runtime.ReleasableI = (*ReadAccessDroneTablePlainEntityIdAttributes)(nil)
 
@@ -787,7 +787,7 @@ func (inst *ReadAccessDroneTableTaggedU64ArrayAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1218
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1236
 
 func (inst *ReadAccessDroneTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -834,7 +834,7 @@ func (inst *ReadAccessDroneTableTaggedU64ArrayAttributes) Len() (nEntities int) 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1270
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1288
 
 func (inst *ReadAccessDroneTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -1026,7 +1026,7 @@ func (inst *ReadAccessDroneTablePlainEntityIdAttributes) GetAttrValueId(entityId
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1911
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1949
 
 func (inst *ReadAccessDroneTableTaggedSymbolAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
@@ -1055,7 +1055,7 @@ func (inst *ReadAccessDroneTableTaggedTimeRangeAttributes) GetNumberOfAttributes
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2009
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2047
 
 type ReadAccessDroneTableTaggedSymbol struct {
 	Attributes  *ReadAccessDroneTableTaggedSymbolAttributes
@@ -1495,7 +1495,7 @@ func (inst *ReadAccessDroneTableTaggedTimeRange) GetSectionMembershipSpec() comm
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2359
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2397
 
 type ReadAccessDroneTable struct {
 	EntityId    *ReadAccessDroneTablePlainEntityIdAttributes

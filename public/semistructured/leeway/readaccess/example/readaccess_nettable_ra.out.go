@@ -29,7 +29,7 @@ import (
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GoClassBuilder).ComposeGoImports-range1
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2720
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2758
 
 	"net/netip"
 )
@@ -39,7 +39,7 @@ var _ = time.Time{}
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:229
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:247
 
 type MembershipPackNetTableNet struct {
 	ValueLowCardRef                                 *array.List
@@ -64,12 +64,12 @@ func NewMembershipPackNetTableNetNet() (inst *MembershipPackNetTableNet) {
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexLowCardRef = 4
-	inst.ColumnIndexLowCardRefAccel = 7
-	inst.ColumnIndexMixedLowCardVerbatim = 5
-	inst.ColumnIndexMixedLowCardVerbatimAccel = 8
-	inst.ColumnIndexMixedVerbatimHighCardParameters = 6
-	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 8
+	inst.ColumnIndexLowCardRef = 6
+	inst.ColumnIndexLowCardRefAccel = 9
+	inst.ColumnIndexMixedLowCardVerbatim = 7
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 10
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 8
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 10
 	return
 }
 
@@ -258,7 +258,7 @@ func (inst *MembershipPackNetTableNet) GetNumberOfMemberItemsByAttrLowCardVerbat
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:847
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:865
 
 type ReadAccessNetTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -271,12 +271,18 @@ type ReadAccessNetTablePlainEntityTimestampAttributes struct {
 }
 
 type ReadAccessNetTableTaggedNetAttributes struct {
-	ValueIpv4         *array.List
-	ValueIpv4Elements *array.FixedSizeBinary
-	ValueIpv6         *array.List
-	ValueIpv6Elements *array.FixedSizeBinary
-	ColumnIndexIpv4   uint32
-	ColumnIndexIpv6   uint32
+	ValueIpv4             *array.List
+	ValueIpv4Elements     *array.FixedSizeBinary
+	ValueIpv6             *array.List
+	ValueIpv6Elements     *array.FixedSizeBinary
+	ValueIpv4Cidr         *array.List
+	ValueIpv4CidrElements *array.FixedSizeBinary
+	ValueIpv6Cidr         *array.List
+	ValueIpv6CidrElements *array.FixedSizeBinary
+	ColumnIndexIpv4       uint32
+	ColumnIndexIpv6       uint32
+	ColumnIndexIpv4Cidr   uint32
+	ColumnIndexIpv6Cidr   uint32
 }
 
 func NewReadAccessNetTablePlainEntityIdAttributes() (inst *ReadAccessNetTablePlainEntityIdAttributes) {
@@ -341,6 +347,8 @@ func NewReadAccessNetTableTaggedNetAttributes() (inst *ReadAccessNetTableTaggedN
 	inst = &ReadAccessNetTableTaggedNetAttributes{}
 	inst.ColumnIndexIpv4 = 2
 	inst.ColumnIndexIpv6 = 3
+	inst.ColumnIndexIpv4Cidr = 4
+	inst.ColumnIndexIpv6Cidr = 5
 	return
 }
 
@@ -348,6 +356,8 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) GetColumnIndices() (columnInd
 	columnIndices = []uint32{
 		inst.ColumnIndexIpv4,
 		inst.ColumnIndexIpv6,
+		inst.ColumnIndexIpv4Cidr,
+		inst.ColumnIndexIpv6Cidr,
 	}
 	return
 }
@@ -356,6 +366,8 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) GetColumnIndexFieldNames() (f
 	fieldNames = []string{
 		"ReadAccessNetTableTaggedNetAttributes.ColumnIndexIpv4",
 		"ReadAccessNetTableTaggedNetAttributes.ColumnIndexIpv6",
+		"ReadAccessNetTableTaggedNetAttributes.ColumnIndexIpv4Cidr",
+		"ReadAccessNetTableTaggedNetAttributes.ColumnIndexIpv6Cidr",
 	}
 	return
 }
@@ -363,8 +375,10 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) GetColumnIndexFieldNames() (f
 func (inst *ReadAccessNetTableTaggedNetAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexIpv4 = indices[0]
 	inst.ColumnIndexIpv6 = indices[1]
+	inst.ColumnIndexIpv4Cidr = indices[2]
+	inst.ColumnIndexIpv6Cidr = indices[3]
 
-	rest = indices[2:]
+	rest = indices[4:]
 	return
 }
 
@@ -373,7 +387,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessNetTableTaggedNetAttributes)(ni
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1065
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1083
 
 func (inst *ReadAccessNetTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -388,12 +402,16 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) Reset() {
 	inst.ValueIpv4Elements = nil
 	inst.ValueIpv6 = nil
 	inst.ValueIpv6Elements = nil
+	inst.ValueIpv4Cidr = nil
+	inst.ValueIpv4CidrElements = nil
+	inst.ValueIpv6Cidr = nil
+	inst.ValueIpv6CidrElements = nil
 }
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1139
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1157
 
 var _ runtime.ReleasableI = (*ReadAccessNetTablePlainEntityIdAttributes)(nil)
 
@@ -414,12 +432,16 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueIpv4Elements)
 	runtime.ReleaseIfNotNil(inst.ValueIpv6)
 	runtime.ReleaseIfNotNil(inst.ValueIpv6Elements)
+	runtime.ReleaseIfNotNil(inst.ValueIpv4Cidr)
+	runtime.ReleaseIfNotNil(inst.ValueIpv4CidrElements)
+	runtime.ReleaseIfNotNil(inst.ValueIpv6Cidr)
+	runtime.ReleaseIfNotNil(inst.ValueIpv6CidrElements)
 }
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1218
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1236
 
 func (inst *ReadAccessNetTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -445,7 +467,7 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1270
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1288
 
 func (inst *ReadAccessNetTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -469,6 +491,14 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) LoadFromRecord(rec runtime.Re
 		return
 	}
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexIpv6, arrow.FIXED_SIZE_BINARY, rec, &inst.ValueIpv6, &inst.ValueIpv6Elements, array.NewFixedSizeBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexIpv4Cidr, arrow.FIXED_SIZE_BINARY, rec, &inst.ValueIpv4Cidr, &inst.ValueIpv4CidrElements, array.NewFixedSizeBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexIpv6Cidr, arrow.FIXED_SIZE_BINARY, rec, &inst.ValueIpv6Cidr, &inst.ValueIpv6CidrElements, array.NewFixedSizeBinaryData)
 	if err != nil {
 		return
 	}
@@ -499,6 +529,32 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv6Addr(entityId
 	addr = netip.AddrFrom16(inst.GetAttrValueIpv6(entityIdx, attrIdx))
 	return
 }
+func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv4Cidr(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue [5]byte) {
+	b, e := inst.ValueIpv4Cidr.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Ipv4Cidr").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = [5]byte(inst.ValueIpv4CidrElements.Value(int(b) + int(attrIdx)))
+	return
+}
+func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv4CidrPrefix(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (prefix netip.Prefix) {
+	v := inst.GetAttrValueIpv4Cidr(entityIdx, attrIdx)
+	prefix = netip.PrefixFrom(netip.AddrFrom4([4]byte(v[:4])), int(v[4]))
+	return
+}
+func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv6Cidr(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue [17]byte) {
+	b, e := inst.ValueIpv6Cidr.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Ipv6Cidr").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = [17]byte(inst.ValueIpv6CidrElements.Value(int(b) + int(attrIdx)))
+	return
+}
+func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv6CidrPrefix(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (prefix netip.Prefix) {
+	v := inst.GetAttrValueIpv6Cidr(entityIdx, attrIdx)
+	prefix = netip.PrefixFrom(netip.AddrFrom16([16]byte(v[:16])), int(v[16]))
+	return
+}
 func (inst *ReadAccessNetTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
@@ -511,7 +567,7 @@ func (inst *ReadAccessNetTablePlainEntityTimestampAttributes) GetAttrValueTs(ent
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1911
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1949
 
 func (inst *ReadAccessNetTableTaggedNetAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueIpv4.ValueOffsets(int(entityIdx))
@@ -522,7 +578,7 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) GetNumberOfAttributes(entityI
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2009
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2047
 
 type ReadAccessNetTableTaggedNet struct {
 	Attributes  *ReadAccessNetTableTaggedNetAttributes
@@ -614,7 +670,7 @@ func (inst *ReadAccessNetTableTaggedNet) GetSectionMembershipSpec() common.Membe
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2359
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2397
 
 type ReadAccessNetTable struct {
 	EntityId        *ReadAccessNetTablePlainEntityIdAttributes

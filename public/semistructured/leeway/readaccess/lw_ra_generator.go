@@ -203,23 +203,41 @@ func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingasp
 	return
 }
 
-// netipAddrCtor reports whether a scalar network host-address column gets a
-// convenience GetAttrValue<Col>Addr accessor and, if so, the net/netip
-// constructor that turns its packed [N]byte value into a netip.Addr. Only plain
-// (non-CIDR) scalar ipv4/ipv6 host addresses qualify. deferred: CIDR values are a
-// netip.Prefix and array/set forms an iter.Seq[netip.Addr]; wire those in once a
-// golden exercises them. Keep this predicate identical at the getter-emission and
-// import-composition sites so the net/netip import is present iff an accessor is.
-func netipAddrCtor(ct canonicaltypes.PrimitiveAstNodeI) (ctor string, ok bool) {
+// netipAccessorSpec describes the net/netip convenience accessor a scalar network
+// column gets on top of its packed-byte getter.
+type netipAccessorSpec struct {
+	addrCtor  string // netip.AddrFrom4 (ipv4) or netip.AddrFrom16 (ipv6)
+	addrBytes int    // leading address width in bytes: 4 or 16
+	cidr      bool   // true → netip.Prefix (address bytes + one trailing prefix-length byte); false → netip.Addr
+}
+
+// netipAccessor reports whether a scalar network column gets a net/netip
+// convenience accessor and, if so, how to build it: a host address (v/w) gets a
+// GetAttrValue<Col>Addr returning netip.Addr; a CIDR value (vc/wc) gets a
+// GetAttrValue<Col>Prefix returning netip.Prefix, decoded from the packed value as
+// the leading address bytes followed by one trailing prefix-length byte (the
+// layout documented on NetworkTypeAstNode.ByteWidth). Array/set-of-network columns
+// are excluded (deferred: iter.Seq[netip.Addr]). Keep this predicate identical at
+// the getter-emission and import-composition sites so the net/netip import is
+// present iff an accessor is.
+func netipAccessor(ct canonicaltypes.PrimitiveAstNodeI) (spec netipAccessorSpec, ok bool) {
 	nt, isNet := ct.(canonicaltypes.NetworkTypeAstNode)
-	if !isNet || nt.CIDRModifier != canonicaltypes.CIDRModifierNone || nt.ScalarModifier != canonicaltypes.ScalarModifierNone {
+	if !isNet || nt.ScalarModifier != canonicaltypes.ScalarModifierNone {
 		return
 	}
 	switch nt.BaseType {
 	case canonicaltypes.BaseTypeNetworkIPv4:
-		ctor, ok = "netip.AddrFrom4", true
+		spec.addrCtor, spec.addrBytes = "netip.AddrFrom4", 4
 	case canonicaltypes.BaseTypeNetworkIPv6:
-		ctor, ok = "netip.AddrFrom16", true
+		spec.addrCtor, spec.addrBytes = "netip.AddrFrom16", 16
+	default:
+		return
+	}
+	switch nt.CIDRModifier {
+	case canonicaltypes.CIDRModifierNone:
+		ok = true
+	case canonicaltypes.CIDRModifierVariable:
+		spec.cidr, ok = true, true
 	}
 	return
 }
@@ -1427,19 +1445,39 @@ func (inst *%s%s) Len() (nEntities int) {
 						typeConvSuffix,
 					)
 					if err == nil {
-						if ctor, ok := netipAddrCtor(ct); ok {
-							// Same host address as GetAttrValue<Col>, exposed as a net/netip.Addr.
-							_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%sAddr(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) (addr netip.Addr) {
+						if spec, ok := netipAccessor(ct); ok {
+							if spec.cidr {
+								// CIDR: packed as the leading address bytes plus one trailing
+								// prefix-length byte (NetworkTypeAstNode.ByteWidth), decoded to a netip.Prefix.
+								_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%sPrefix(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) (prefix netip.Prefix) {
+	v := inst.GetAttrValue%s(entityIdx, attrIdx)
+	prefix = netip.PrefixFrom(%s([%d]byte(v[:%d])), int(v[%d]))
+	return
+}
+`,
+									clsName,
+									genericTypeParamsUse,
+									attrNameS,
+									attrNameS,
+									spec.addrCtor,
+									spec.addrBytes,
+									spec.addrBytes,
+									spec.addrBytes,
+								)
+							} else {
+								// Host address: same value as GetAttrValue<Col>, exposed as a net/netip.Addr.
+								_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%sAddr(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) (addr netip.Addr) {
 	addr = %s(inst.GetAttrValue%s(entityIdx, attrIdx))
 	return
 }
 `,
-								clsName,
-								genericTypeParamsUse,
-								attrNameS,
-								ctor,
-								attrNameS,
-							)
+									clsName,
+									genericTypeParamsUse,
+									attrNameS,
+									spec.addrCtor,
+									attrNameS,
+								)
+							}
 						}
 					}
 				case common.IntermediateColumnsSubTypeSet, common.IntermediateColumnsSubTypeHomogenousArray:
@@ -2708,8 +2746,8 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 				err = eb.Build().Stringer("canonicalType", ct).Errorf("unable to generate go code for canonical type: %w", err)
 				return
 			}
-			if _, ok := netipAddrCtor(ct); ok {
-				// The GetAttrValue<Col>Addr accessor emitted for this column needs net/netip.
+			if _, ok := netipAccessor(ct); ok {
+				// The GetAttrValue<Col>Addr / <Col>Prefix accessor emitted for this column needs net/netip.
 				imp = append(imp, "net/netip")
 			}
 			for _, im := range imp {

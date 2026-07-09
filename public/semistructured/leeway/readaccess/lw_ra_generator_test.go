@@ -87,9 +87,10 @@ func TestReadAccessGoClassBuilder(t *testing.T) {
 }
 
 // networkSampleTableDesc mirrors sampleTableDesc but carries a section of network
-// (ipv4/ipv6) columns, which resolve to the multi-word arrow class name
-// FixedSizeBinary. It is kept separate from sampleTableDesc so the shared golden and
-// the compiled example/ roundtrip corpus stay untouched.
+// columns, both host-address (v/w) and CIDR (vc/wc) forms, which resolve to the
+// multi-word arrow class name FixedSizeBinary. It is kept separate from
+// sampleTableDesc so the shared golden and the compiled example/ roundtrip corpus
+// stay untouched.
 func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 	var manip *common.TableManipulator
 	manip, err = common.NewTableManipulator()
@@ -114,8 +115,10 @@ func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 		sec := manip.TaggedValueSection("net").
 			AddSectionMembership(common.MembershipSpecLowCardRef).
 			AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
-		sec.TaggedValueColumn("ipv4", ctabb.V) // NetworkTypeAstNode -> arrow FixedSizeBinary
-		sec.TaggedValueColumn("ipv6", ctabb.W) // NetworkTypeAstNode -> arrow FixedSizeBinary
+		sec.TaggedValueColumn("ipv4", ctabb.V)       // host address -> [4]byte, netip.Addr accessor
+		sec.TaggedValueColumn("ipv6", ctabb.W)       // host address -> [16]byte, netip.Addr accessor
+		sec.TaggedValueColumn("ipv4_cidr", ctabb.Vc) // CIDR -> [5]byte, netip.Prefix accessor
+		sec.TaggedValueColumn("ipv6_cidr", ctabb.Wc) // CIDR -> [17]byte, netip.Prefix accessor
 	}
 	return manip.BuildTableDesc()
 }
@@ -128,7 +131,9 @@ func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 //  2. the [N]byte getter must convert array.FixedSizeBinary.Value(i) ([]byte) via
 //     ArrowTypeToGoType, not assign []byte to [N]byte; and
 //  3. each scalar host address gets a GetAttrValue<Col>Addr net/netip.Addr
-//     accessor (AddrFrom4 for ipv4, AddrFrom16 for ipv6).
+//     accessor (AddrFrom4 for ipv4, AddrFrom16 for ipv6); and
+//  4. each scalar CIDR value gets a GetAttrValue<Col>Prefix net/netip.Prefix
+//     accessor, decoding the leading address bytes + trailing prefix-length byte.
 //
 // The string assertions pin the exact emitted forms. None of these is caught by
 // the wellFormed check (format.Source resolves no identifiers and type-checks
@@ -160,10 +165,13 @@ func TestReadAccessNetworkGolden(t *testing.T) {
 	require.Contains(t, src, "arrow.FIXED_SIZE_BINARY", "network columns must load via the real arrow.FIXED_SIZE_BINARY constant")
 	require.NotContains(t, src, "arrow.FIXEDSIZEBINARY", "arrow has no FIXEDSIZEBINARY constant; class name must be UpperSnakeCase, not strings.ToUpper")
 	require.Contains(t, src, "array.NewFixedSizeBinaryData", "sanity: the FixedSizeBinary array constructor should still be emitted")
-	// netip.Addr convenience accessors, delegating to the packed-byte getters.
-	require.Contains(t, src, `"net/netip"`, "a network host-address column must pull in the net/netip import")
+	// netip convenience accessors, delegating to the packed-byte getters.
+	require.Contains(t, src, `"net/netip"`, "a network column must pull in the net/netip import")
 	require.Contains(t, src, "netip.AddrFrom4(inst.GetAttrValueIpv4(entityIdx, attrIdx))", "ipv4 host address must expose a netip.Addr accessor via AddrFrom4")
 	require.Contains(t, src, "netip.AddrFrom16(inst.GetAttrValueIpv6(entityIdx, attrIdx))", "ipv6 host address must expose a netip.Addr accessor via AddrFrom16")
+	// CIDR: leading address bytes + trailing prefix-length byte -> netip.Prefix.
+	require.Contains(t, src, "netip.PrefixFrom(netip.AddrFrom4([4]byte(v[:4])), int(v[4]))", "ipv4 CIDR must expose a netip.Prefix accessor")
+	require.Contains(t, src, "netip.PrefixFrom(netip.AddrFrom16([16]byte(v[:16])), int(v[16]))", "ipv6 CIDR must expose a netip.Prefix accessor")
 }
 
 func TestGoClassBuilderSample(t *testing.T) {
