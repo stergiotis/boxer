@@ -1289,7 +1289,14 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		inst.renderResultsZeroRows()
 		return
 	}
+	// Give the pager strip vertical breathing room off the tab bar and rule it
+	// off from the grid, so the toolbar reads as its own band rather than being
+	// jammed against the table's first header row.
+	pad := styletokens.PaddingTight(inst.density)
+	c.AddSpace(pad)
 	inst.pager.Render()
+	c.AddSpace(pad)
+	c.Separator().Send()
 	dispatchPanel(tablePanel{app: inst}, map[ChannelID]channelInput{
 		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: playSignals{selectedRow: inst.selectedRow}},
 	}, selectedRowEmitter{target: &inst.selectedRow})
@@ -1440,6 +1447,15 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	ids := inst.ids
 	ncols := int(rec.NumCols())
 	totalRows := rec.NumRows()
+
+	// egui_table draws cell content flush to the cell edge ("Does not add any
+	// margins to cells" — egui_table's own docs say to add them yourself). We
+	// lead every header and body cell with a horizontal AddSpace so content
+	// isn't jammed against the gridline or the neighbouring column's header
+	// type string. The cell ui is laid out left-to-right, so AddSpace advances
+	// the cursor along the row → a left inset. ensureColWidths reserves the
+	// same amount so the inset doesn't eat into a column's fitted width.
+	cellPadX := styletokens.PaddingTight(inst.density)
 	if totalRows > numRows {
 		totalRows = numRows
 	}
@@ -1491,6 +1507,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// numbers below.
 	if vis, _ := et.ColVisible(0); vis {
 		for range et.Headers(0, 0) {
+			c.AddSpace(cellPadX)
 			for rt := range c.RichTextLabel("#") {
 				rt.Weak().Monospace()
 			}
@@ -1501,6 +1518,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			continue
 		}
 		for range et.Headers(0, uint32(col+1)) {
+			c.AddSpace(cellPadX)
 			field := schema.Field(col)
 			for rt := range c.RichTextLabel(field.Name) {
 				rt.Strong().Monospace()
@@ -1533,6 +1551,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Cells(local, 0) {
+				c.AddSpace(cellPadX)
 				marker := fmt.Sprintf("%d", absRow+1)
 				if c.Button(ids.PrepareSeq(rowBase),
 					c.Atoms().BeginRichText(marker).Monospace().End().Keep()).
@@ -1550,6 +1569,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				continue
 			}
 			for range et.Cells(local, colPlus1) {
+				c.AddSpace(cellPadX)
 				text := formatCell(rec, col, absRow)
 				if c.Button(ids.PrepareSeq(rowBase+uint64(col)+1),
 					c.Atoms().BeginRichText(text).Monospace().End().Keep()).
@@ -1581,6 +1601,9 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	if sampleN > colSampleRows {
 		sampleN = colSampleRows
 	}
+	// Reserve the same left inset renderMasterTable leads each cell with, so a
+	// padded cell doesn't truncate content that would otherwise fit.
+	cellPadX := styletokens.PaddingTight(inst.density)
 	for col := 0; col < ncols; col++ {
 		maxChars := len(schema.Field(col).Name)
 		for r := int64(0); r < sampleN; r++ {
@@ -1588,7 +1611,7 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 				maxChars = n
 			}
 		}
-		w := float32(maxChars)*colCharPx + 16.0
+		w := float32(maxChars)*colCharPx + 16.0 + cellPadX
 		if w < colMinWidth {
 			w = colMinWidth
 		}
