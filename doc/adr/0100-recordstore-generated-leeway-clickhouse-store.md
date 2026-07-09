@@ -805,6 +805,59 @@ The example package's exported surface ends at ~54 identifiers — store
 family, cache view, entity, builder and the hand-written DTOs — from
 roughly 320 before this review cycle began.
 
+### 2026-07-09 — pass-through envelope fields land
+
+The 2026-07-04 SD2 correction deferred "pass-through envelope fields" and
+gated any non-role plain column at generation time. The first consumer
+whose backbone exceeds the Key/Order/Lifecycle role model — a fact-log
+schema carrying a composite id (a natural key beside the surrogate), a band
+of routing columns and lifecycle columns that are not the `u8`
+live/tombstone marker — triggers the deferred work. Where the SD2 text and
+that correction disagree, this update supersedes them.
+
+The generator now enumerates every plain column in canonical order (the
+order the DML grouped setters take their arguments and the read-access
+readers expose their fields — both from one IR) and groups them by
+`PlainItemTypeE`. The three roles bind as before — the **leading** `EntityId`
+is the Key, the `EntityTimestamp` the Order, the first `u8` `EntityLifecycle`
+the state-view Lifecycle — and every **other** plain column (a second/further
+`EntityId`, any `EntityRouting`, an extra or non-`u8` `EntityLifecycle`)
+becomes a pass-through field. `Transaction`/`Opaque` plain columns stay
+deferred (they carry streaming-group / transaction semantics the store glue
+does not model).
+
+- **`<Store>Envelope`.** A generated struct with one field per pass-through
+  column, in canonical order. It is embedded in `<Store>Entity` (the columns
+  read as promoted fields), taken as a third `Begin(id, ts, env)` argument,
+  and populated by the decode. A schema with no pass-through column emits
+  none of this and is **byte-identical** to the prior output (the device
+  example is unchanged) — the feature is inert until a schema needs it.
+- **Writes** go through the existing grouped DML setters
+  (`SetId`/`SetRouting`/`SetLifecycle`/…), one call per PlainItemType group:
+  the Key from `id`, the Order from `ts`, the state-view Lifecycle from the
+  live/tombstone marker, and every other argument from `env.<Field>`. So a
+  composite id's `SetId(id, env.<surrogate>)` and the routing/lifecycle
+  groups are set in the order the DML defined.
+- **Reads** use the readers' typed accessors: scalars via `GetAttrValue<Col>`,
+  array/set columns via `slices.Collect` over the accessor's `iter.Seq`.
+  A set column surfaces as `[]element` (the DML setter and accessor shape),
+  not the codec's `*roaring.Bitmap` carrier.
+- **DDL.** `ORDER BY` now addresses the Key and Order **by column name**, so a
+  composite id (several `EntityId` columns) leaves the clause unambiguous
+  instead of failing the multi-match column reference.
+- **State view coexists.** When a `u8` lifecycle and pass-through columns are
+  both present, `Delete` writes a tombstone with a zero envelope; `Begin`
+  stamps `LifecycleLive`. A schema with no `u8` lifecycle has no state view,
+  and all its lifecycle columns pass through.
+
+Pins: `TestGenerateSecondIdIsPassThrough` and
+`TestGenerateRoutingColumnIsPassThrough` (replacing the former
+reject-tests), `TestGenerateRejectsOpaquePlainColumn` for the still-deferred
+lanes, and the `widget` reference store — a device-shaped schema plus a
+composite-id/routing/set backbone — with `TestWidgetStoreEnvelopeRoundTrip`
+as the clickhouse-local acceptance (write the full envelope incl. a set
+column, `Latest` reads it back, `Delete`/`GetLive` exercise the tombstone).
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

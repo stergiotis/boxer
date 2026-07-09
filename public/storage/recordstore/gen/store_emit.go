@@ -12,7 +12,20 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
+
+// needsSlices reports whether the decode uses slices.Collect — true when a
+// pass-through column is array-shaped (its read-access accessor yields an
+// iter.Seq the decode collects).
+func (m plainModel) needsSlices() bool {
+	for _, c := range m.passthrough {
+		if c.isArray {
+			return true
+		}
+	}
+	return false
+}
 
 // emitter carries Input plus the emission-time facts derived from the
 // schema — scratch state stays off the public config struct.
@@ -21,6 +34,60 @@ type emitter struct {
 	// keyGoType is the Key column's derived Go type ("uint64" or
 	// "string").
 	keyGoType string
+	// model is the enumerated plain-column backbone: the role bindings plus
+	// the pass-through envelope columns and their PlainItemType grouping.
+	model plainModel
+	// hasComps records whether any component is bound. The option package
+	// (and the typed Add/Scan/component-decode surface) is only reached when
+	// a component exists — a bare backbone store binds none.
+	hasComps bool
+}
+
+// plainRole classifies one plain (backbone) column. The three roles drive
+// the store's SQL semantics (point lookup, ORDER BY, tombstone); every
+// other plain column is carried verbatim through the envelope.
+type plainRole int
+
+const (
+	rolePassThrough plainRole = iota // a verbatim envelope field
+	roleKey                          // the leading EntityId column (point-lookup key)
+	roleOrder                        // the EntityTimestamp column (version / ORDER BY)
+	roleLifecycle                    // a u8 EntityLifecycle column (state view)
+)
+
+// plainCol is one enumerated plain column: the field/arg identifier and Go
+// type the store surfaces, plus its role and PlainItemType. isArray marks
+// the homogenous-array / set columns, whose DML setter takes []element and
+// whose read-access accessor yields an iter.Seq.
+type plainCol struct {
+	itemType common.PlainItemTypeE
+	pascal   string // UpperCamelCase identifier, e.g. "PartitioningKey"
+	goType   string // field / setter-arg Go type, e.g. "uint64", "[]string"
+	isArray  bool
+	physical string // encoded physical column name (for messages)
+	role     plainRole
+}
+
+// plainGroup is the ordered set of plain columns sharing one PlainItemType —
+// the shape of the generated DML grouped setter (SetId, SetRouting, …). The
+// column order within a group matches the DML setter's argument order and
+// the read-access reader's field order (both derive from the same IR).
+type plainGroup struct {
+	itemType common.PlainItemTypeE
+	cols     []plainCol
+}
+
+// plainModel is the enumerated backbone: every plain column grouped by
+// PlainItemType in canonical order, the three role bindings (pointers into
+// groups), and the pass-through columns in canonical order. stateView is
+// set when a u8 EntityLifecycle column bound the Lifecycle role.
+type plainModel struct {
+	groups      []plainGroup
+	key         *plainCol
+	order       *plainCol
+	lifecycle   *plainCol
+	passthrough []plainCol
+	stateView   bool
 }
 
 // storeComponent is the per-component emission model: the parsed plan plus
@@ -68,33 +135,29 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		err = eh.Errorf("load readback IR: %w", err)
 		return
 	}
-	key, order, lifecycle, err := inst.envelope(info, conv)
+	model, err := inst.enumeratePlain(info)
 	if err != nil {
 		return
 	}
-	if key.physical == "" {
+	if model.key == nil {
 		err = eh.Errorf("schema has no EntityId plain column — the Key role is required")
 		return
 	}
-	if order.physical == "" {
+	if model.order == nil {
 		err = eh.Errorf("schema has no EntityTimestamp plain column — Latest/Replay need the Order role")
 		return
 	}
-	switch key.goType {
+	switch model.key.goType {
 	case "uint64", "string":
 	default:
-		err = eh.Errorf("Key column Go type %q not supported (uint64 and string are; ADR-0100 SD2)", key.goType)
+		err = eh.Errorf("Key column Go type %q not supported (uint64 and string are; ADR-0100 SD2)", model.key.goType)
 		return
 	}
-	if order.goType != "time.Time" {
-		err = eh.Errorf("Order column Go type %q not supported — Replay and the decode assume the z64 timestamp lane (DateTime64(9)); declare the EntityTimestamp column as ctabb.Z64", order.goType)
+	if model.order.goType != "time.Time" {
+		err = eh.Errorf("Order column Go type %q not supported — Replay and the decode assume the timestamp lane; declare the EntityTimestamp column as a temporal (ctabb.Z64 for nanosecond replay precision)", model.order.goType)
 		return
 	}
-	stateView := lifecycle.physical != ""
-	if stateView && lifecycle.goType != "uint8" {
-		err = eh.Errorf("Lifecycle column Go type %q not supported — the state view assumes a u8 live/tombstone marker (ctabb.U8)", lifecycle.goType)
-		return
-	}
+	stateView := model.stateView
 
 	comps := make([]storeComponent, 0, len(plans))
 	for _, plan := range plans {
@@ -119,10 +182,35 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 			sectionOwner[g.Section] = sc.Kind
 		}
 	}
+	// A pass-through column surfaces as a promoted entity field (via the
+	// embedded envelope struct) — refuse a name that collides with the
+	// fixed entity fields/methods or a component field, since Go would
+	// reject the generated type.
+	if len(model.passthrough) > 0 {
+		reserved := map[string]bool{"ID": true, "Ts": true, "Lifecycle": true, "Archetype": true, "IsTombstone": true}
+		for _, sc := range comps {
+			reserved[sc.Kind] = true
+		}
+		for _, pt := range model.passthrough {
+			if reserved[pt.pascal] {
+				err = eh.Errorf("pass-through envelope column %s maps to entity field %q, which collides with a fixed field/method or a component — rename the column", pt.physical, pt.pascal)
+				return
+			}
+			reserved[pt.pascal] = true // also catches two columns styling to one name
+		}
+	}
 
-	em := emitter{Input: inst, keyGoType: key.goType}
+	key := envelopeCol{physical: model.key.physical, goType: model.key.goType}
+	order := envelopeCol{physical: model.order.physical, goType: model.order.goType}
+	var lifecycle envelopeCol
+	if model.lifecycle != nil {
+		lifecycle = envelopeCol{physical: model.lifecycle.physical, goType: model.lifecycle.goType}
+	}
+
+	em := emitter{Input: inst, keyGoType: model.key.goType, model: model, hasComps: len(comps) > 0}
 	var sb strings.Builder
 	em.emitStoreHeader(&sb, key, order, lifecycle, stateView)
+	em.emitEnvelopeStruct(&sb)
 	em.emitEntityBag(&sb, comps, stateView)
 	em.emitStoreType(&sb)
 	em.emitBuilder(&sb, comps, stateView)
@@ -143,54 +231,202 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	return
 }
 
-// envelope finds the physical (encoded) names of the role-bearing plain
-// columns by walking the Plan⋈IR join readback maintains. Each role binds
-// at most once — a second matching column is a schema error, not a silent
-// override (ADR-0100 SD2; explicit role configuration stays deferred).
-func (inst Input) envelope(info *readback.InformationRetrieval, conv common.NamingConventionI) (key, order, lifecycle envelopeCol, err error) {
-	bind := func(dst *envelopeCol, role string, physical string, ct canonicaltypes.PrimitiveAstNodeI) error {
-		if dst.physical != "" {
-			return eh.Errorf("plain columns %s and %s both carry the %s role — roles must be unambiguous (ADR-0100 SD2)", dst.physical, physical, role)
-		}
-		dst.physical = physical
-		gt, _, _, derr := mappingplan.DeriveGoShape(ct)
-		if derr != nil {
-			return eh.Errorf("derive %s column Go type: %w", role, derr)
-		}
-		dst.goType = gt
-		return nil
-	}
+// enumeratePlain walks the plain (backbone) columns in canonical order —
+// the order the DML grouped setters take their arguments and the read-access
+// readers expose their fields, both derived from the same IR — grouping them
+// by PlainItemType and binding the three roles. The leading EntityId column
+// is the Key, the EntityTimestamp column the Order, and the first u8
+// EntityLifecycle column the state-view Lifecycle; every other EntityId /
+// EntityRouting / EntityLifecycle column is a pass-through envelope field
+// (ADR-0100 Update 2026-07-09). Transaction and Opaque plain columns remain
+// deferred — they carry streaming-group / transaction semantics the store
+// glue does not model yet.
+func (inst Input) enumeratePlain(info *readback.InformationRetrieval) (m plainModel, err error) {
+	byType := map[common.PlainItemTypeE]int{}
 	for cr := range info.IterateAll() {
-		var itemType common.PlainItemTypeE
-		itemType, err = conv.ExtractPlainItemType(cr.PhysicalColumn)
-		if err != nil {
-			// Not a plain column under this convention; skip.
-			err = nil
+		it := cr.ColumnContext.PlainItemType
+		if it == common.PlainItemTypeNone {
+			// Tagged (and support) columns report None; skip them.
 			continue
 		}
-		switch itemType {
-		case common.PlainItemTypeEntityId:
-			err = bind(&key, "Key", cr.PhysicalColumn.String(), cr.CanonicalType)
-		case common.PlainItemTypeEntityTimestamp:
-			err = bind(&order, "Order", cr.PhysicalColumn.String(), cr.CanonicalType)
-		case common.PlainItemTypeEntityLifecycle:
-			err = bind(&lifecycle, "Lifecycle", cr.PhysicalColumn.String(), cr.CanonicalType)
-		case common.PlainItemTypeNone:
-			// Tagged and other non-plain columns report None under this
-			// convention; plain columns always carry a concrete item type
-			// (the IR defines plain-ness as != None).
+		switch it {
+		case common.PlainItemTypeEntityId, common.PlainItemTypeEntityTimestamp,
+			common.PlainItemTypeEntityRouting, common.PlainItemTypeEntityLifecycle:
 		default:
-			// A non-role plain column would be silently zero-written by
-			// every Begin and dropped by the decode — refuse until
-			// pass-through envelope fields exist (ADR-0100 Update
-			// 2026-07-04).
-			err = eh.Errorf("plain column %s carries item type %v — only the role-bearing EntityId/EntityTimestamp/EntityLifecycle plain columns are supported; pass-through envelope fields are deferred (ADR-0100 Update 2026-07-04)", cr.PhysicalColumn.String(), itemType)
-		}
-		if err != nil {
+			err = eh.Errorf("plain column %s carries item type %v — only the envelope item types (EntityId / EntityTimestamp / EntityRouting / EntityLifecycle) are supported; Transaction and Opaque plain columns are deferred", cr.PhysicalColumn.String(), it)
 			return
+		}
+		var col plainCol
+		col.itemType = it
+		col.physical = cr.PhysicalColumn.String()
+		col.pascal = cr.Name.Convert(naming.UpperCamelCase).String()
+		col.goType, col.isArray, err = fieldGoType(cr.CanonicalType)
+		if err != nil {
+			err = eh.Errorf("derive Go type for plain column %s: %w", col.physical, err)
+			return
+		}
+		gi, ok := byType[it]
+		if !ok {
+			gi = len(m.groups)
+			m.groups = append(m.groups, plainGroup{itemType: it})
+			byType[it] = gi
+		}
+		m.groups[gi].cols = append(m.groups[gi].cols, col)
+	}
+	// Bind roles onto the stored columns. The groups slice is not mutated
+	// after this point, so the role pointers stay valid across the return.
+	for gi := range m.groups {
+		for ci := range m.groups[gi].cols {
+			c := &m.groups[gi].cols[ci]
+			switch c.itemType {
+			case common.PlainItemTypeEntityId:
+				if m.key == nil {
+					c.role = roleKey
+					m.key = c
+				}
+			case common.PlainItemTypeEntityTimestamp:
+				if m.order == nil {
+					c.role = roleOrder
+					m.order = c
+				}
+			case common.PlainItemTypeEntityLifecycle:
+				if m.lifecycle == nil && c.goType == "uint8" {
+					c.role = roleLifecycle
+					m.lifecycle = c
+				}
+			}
+		}
+	}
+	m.stateView = m.lifecycle != nil
+	for gi := range m.groups {
+		for _, c := range m.groups[gi].cols {
+			if c.role == rolePassThrough {
+				m.passthrough = append(m.passthrough, c)
+			}
 		}
 	}
 	return
+}
+
+// fieldGoType renders the Go type a plain column surfaces as — a store
+// field, an envelope field and a DML setter argument. Scalars keep their
+// derived type; homogenous-array and set columns become []element (the DML
+// setter takes []element and the read-access accessor yields
+// iter.Seq[element], regardless of the codec's internal carrier).
+func fieldGoType(ct canonicaltypes.PrimitiveAstNodeI) (goType string, isArray bool, err error) {
+	gt, isSlice, isRoaring, derr := mappingplan.DeriveGoShape(ct)
+	if derr != nil {
+		err = derr
+		return
+	}
+	if isRoaring {
+		// Set carrier is *roaring.Bitmap in the codec, but the DML setter /
+		// read-access API is []element — recover the element scalar type.
+		elem, _, _, e := mappingplan.DeriveGoShape(canonicaltypes.DemoteToScalarPrim(ct))
+		if e != nil {
+			err = e
+			return
+		}
+		goType = "[]" + elem
+		isArray = true
+		return
+	}
+	if isSlice {
+		goType = "[]" + gt
+		isArray = true
+		return
+	}
+	goType = gt
+	return
+}
+
+// itemTypeToSetterName maps a PlainItemType to the generated DML grouped
+// setter — the mirror of the leeway DML generator's own mapping, so the
+// store glue and the DML scaffolding agree on the method names.
+func itemTypeToSetterName(itemType common.PlainItemTypeE) string {
+	switch itemType {
+	case common.PlainItemTypeEntityId:
+		return "SetId"
+	case common.PlainItemTypeEntityTimestamp:
+		return "SetTimestamp"
+	case common.PlainItemTypeEntityRouting:
+		return "SetRouting"
+	case common.PlainItemTypeEntityLifecycle:
+		return "SetLifecycle"
+	case common.PlainItemTypeTransaction:
+		return "SetTransaction"
+	case common.PlainItemTypeOpaque:
+		return "SetOpaque"
+	}
+	return ""
+}
+
+// plainReaderVar is the decode-side local variable holding a group's
+// read-access reader; the token also forms the reader constructor
+// (New<ra>Plain<Token>Attributes).
+func plainReaderRoleToken(itemType common.PlainItemTypeE) string {
+	return naming.MustBeValidStylableName(itemType.String()).Convert(naming.UpperCamelCase).String()
+}
+
+func plainReaderVar(itemType common.PlainItemTypeE) string {
+	switch itemType {
+	case common.PlainItemTypeEntityId:
+		return "idR"
+	case common.PlainItemTypeEntityTimestamp:
+		return "tsR"
+	case common.PlainItemTypeEntityLifecycle:
+		return "lcR"
+	case common.PlainItemTypeEntityRouting:
+		return "rtR"
+	}
+	return lowerFirst(plainReaderRoleToken(itemType)) + "R"
+}
+
+// dmlChain renders the ".SetId(…).SetTimestamp(…)…" plain-setter chain over
+// every group in canonical order. The Key column is sourced from id, the
+// Order from ts, the state-view Lifecycle from lifecycleExpr, and each
+// pass-through column from envVar.<field> (envVar is unreferenced when a
+// group carries no pass-through column, e.g. every group in a role-only
+// schema).
+func (inst emitter) dmlChain(lifecycleExpr, envVar string) string {
+	var sb strings.Builder
+	for _, g := range inst.model.groups {
+		args := make([]string, 0, len(g.cols))
+		for _, c := range g.cols {
+			switch c.role {
+			case roleKey:
+				args = append(args, "id")
+			case roleOrder:
+				args = append(args, "ts")
+			case roleLifecycle:
+				args = append(args, lifecycleExpr)
+			default:
+				args = append(args, envVar+"."+c.pascal)
+			}
+		}
+		fmt.Fprintf(&sb, ".%s(%s)", itemTypeToSetterName(g.itemType), strings.Join(args, ", "))
+	}
+	return sb.String()
+}
+
+// emitEnvelopeStruct renders the pass-through envelope carrier — one field
+// per non-role plain column, in canonical order. Nothing is emitted for a
+// role-only schema (the pre-pass-through shape).
+func (inst emitter) emitEnvelopeStruct(sb *strings.Builder) {
+	if len(inst.model.passthrough) == 0 {
+		return
+	}
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// %sEnvelope carries the pass-through backbone columns — every plain", inst.StoreName)
+	p("// column that is not the Key, Order or state-view Lifecycle role. Pass")
+	p("// one to Begin; it is written verbatim onto the row and read back onto")
+	p("// the entity.")
+	p("type %sEnvelope struct {", inst.StoreName)
+	for _, c := range inst.model.passthrough {
+		p("\t%s %s", c.pascal, c.goType)
+	}
+	p("}")
+	p("")
 }
 
 // classifyComponent validates a component against the store's decode
@@ -271,6 +507,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("\t%q", "context")
 	p("\t_ %q", "embed")
 	p("\t%q", "iter")
+	if inst.model.needsSlices() {
+		p("\t%q", "slices")
+	}
 	p("\t%q", "strconv")
 	p("\t%q", "strings")
 	p("\t%q", "time")
@@ -283,7 +522,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 		p("\t%q", "github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling")
 	}
 	p("\t%q", "github.com/stergiotis/boxer/public/functional")
-	p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
+	if inst.hasComps {
+		p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
+	}
 	p("\t%q", "github.com/stergiotis/boxer/public/observability/eh")
 	p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore")
 	if !inst.Flat {
@@ -335,6 +576,11 @@ func (inst emitter) emitEntityBag(sb *strings.Builder, comps []storeComponent, s
 	p("\tTs time.Time")
 	if stateView {
 		p("\tLifecycle uint8")
+	}
+	if len(inst.model.passthrough) > 0 {
+		p("\t// %sEnvelope is embedded: its pass-through columns read as", inst.StoreName)
+		p("\t// promoted entity fields.")
+		p("\t%sEnvelope", inst.StoreName)
 	}
 	for _, c := range comps {
 		p("\t%s option.Option[%s]", c.Kind, c.Kind)
@@ -495,16 +741,38 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("\traw bool")
 	p("}")
 	p("")
+	hasPT := len(inst.model.passthrough) > 0
 	p("// Begin opens one entity with the envelope roles as typed arguments")
-	p("// (Key, Order)%s.", map[bool]string{true: " and a live lifecycle", false: ""}[stateView])
-	p("func (inst *%s) Begin(id %s, ts time.Time) *%s {", inst.storeType(), inst.keyGoType, inst.builderType())
+	extras := make([]string, 0, 2)
 	if stateView {
-		p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleLive)")
-		p("\treturn &%s{store: inst, key: id, ent: %s{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}", inst.builderType(), inst.entityType())
-	} else {
-		p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts)")
-		p("\treturn &%s{store: inst, key: id, ent: %s{ID: id, Ts: ts}}", inst.builderType(), inst.entityType())
+		extras = append(extras, "a live lifecycle")
 	}
+	if hasPT {
+		extras = append(extras, "the pass-through envelope")
+	}
+	beginSuffix := ""
+	switch len(extras) {
+	case 1:
+		beginSuffix = " and " + extras[0]
+	case 2:
+		beginSuffix = ", " + extras[0] + " and " + extras[1]
+	}
+	p("// (Key, Order)%s.", beginSuffix)
+	sig := fmt.Sprintf("func (inst *%s) Begin(id %s, ts time.Time", inst.storeType(), inst.keyGoType)
+	if hasPT {
+		sig += fmt.Sprintf(", env %sEnvelope", inst.StoreName)
+	}
+	p("%s) *%s {", sig, inst.builderType())
+	lit := fmt.Sprintf("%s{ID: id, Ts: ts", inst.entityType())
+	if stateView {
+		lit += ", Lifecycle: recordstore.LifecycleLive"
+	}
+	if hasPT {
+		lit += fmt.Sprintf(", %sEnvelope: env", inst.StoreName)
+	}
+	lit += "}"
+	p("\tinst.dml.BeginEntity()%s", inst.dmlChain("recordstore.LifecycleLive", "env"))
+	p("\treturn &%s{store: inst, key: id, ent: %s}", inst.builderType(), lit)
 	p("}")
 	p("")
 	for _, c := range comps {
@@ -602,7 +870,11 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 		p("\t\t\treturn")
 		p("\t\t}")
 		p("\t\tseen[rows[i].%s] = struct{}{}", idCol.GoField)
-		p("\t\terr = inst.Begin(rows[i].%s, ts).Add%s(rows[i]).Commit()", idCol.GoField, c.Kind)
+		beginArgs := fmt.Sprintf("rows[i].%s, ts", idCol.GoField)
+		if len(inst.model.passthrough) > 0 {
+			beginArgs += fmt.Sprintf(", %sEnvelope{}", inst.StoreName)
+		}
+		p("\t\terr = inst.Begin(%s).Add%s(rows[i]).Commit()", beginArgs, c.Kind)
 		p("\t\tif err != nil {")
 		p("\t\t\terr = eh.Errorf(\"ingest %s row %%d: %%w\", i, err)", lowerFirst(c.Kind))
 		p("\t\t\treturn")
@@ -1043,7 +1315,10 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("// like any commit — a versioned deletion, so GetLive reads the key as")
 	p("// absent immediately.")
 	p("func (inst *%s) Delete(id %s, ts time.Time) (err error) {", inst.storeType(), inst.keyGoType)
-	p("\tinst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleTombstone)")
+	if len(inst.model.passthrough) > 0 {
+		p("\tvar env %sEnvelope // a tombstone carries no pass-through payload", inst.StoreName)
+	}
+	p("\tinst.dml.BeginEntity()%s", inst.dmlChain("recordstore.LifecycleTombstone", "env"))
 	p("\terr = inst.dml.CommitEntity()")
 	p("\tif err != nil {")
 	p("\t\t_ = inst.dml.RollbackEntity() // discard the failed frame; the store stays usable")
@@ -1140,18 +1415,19 @@ func (inst emitter) emitDecode(sb *strings.Builder, comps []storeComponent, stat
 	p("// membership-matched reads (fat rows carry optional components — the")
 	p("// kind-homogeneous helpers cannot decode them).")
 	p("func decode%sRecord(rec arrow.RecordBatch) (ents []*%s, err error) {", inst.StoreName, inst.entityType())
-	p("\tidR := %sNew%sPlainEntityIdAttributes()", inst.lowQ(), ra)
-	p("\ttsR := %sNew%sPlainEntityTimestampAttributes()", inst.lowQ(), ra)
-	if stateView {
-		p("\tlcR := %sNew%sPlainEntityLifecycleAttributes()", inst.lowQ(), ra)
+	// One read-access reader per plain item-type group present in the schema
+	// (Key and Order always; Lifecycle and Routing when the schema carries
+	// them, whether as roles or pass-through envelope columns).
+	plainVars := make([]string, 0, len(inst.model.groups))
+	for _, g := range inst.model.groups {
+		v := plainReaderVar(g.itemType)
+		p("\t%s := %sNew%sPlain%sAttributes()", v, inst.lowQ(), ra, plainReaderRoleToken(g.itemType))
+		plainVars = append(plainVars, v)
 	}
 	for _, m := range order {
 		p("\t%s := %sNew%sTagged%s()", seen[m].varN, inst.lowQ(), ra, m)
 	}
-	readerVars := []string{"idR", "tsR"}
-	if stateView {
-		readerVars = append(readerVars, "lcR")
-	}
+	readerVars := append([]string{}, plainVars...)
 	for _, m := range order {
 		readerVars = append(readerVars, seen[m].varN)
 	}
@@ -1169,21 +1445,35 @@ func (inst emitter) emitDecode(sb *strings.Builder, comps []storeComponent, stat
 	p("\t\t}")
 	p("\t}()")
 	p("")
-	p("\tn := idR.ValueId.Len()")
-	p("\ttsType, ok := tsR.ValueTs.DataType().(*arrow.TimestampType)")
+	keyVar := plainReaderVar(inst.model.key.itemType)
+	orderVar := plainReaderVar(inst.model.order.itemType)
+	keyField := "Value" + inst.model.key.pascal
+	orderField := "Value" + inst.model.order.pascal
+	p("\tn := %s.%s.Len()", keyVar, keyField)
+	p("\ttsType, ok := %s.%s.DataType().(*arrow.TimestampType)", orderVar, orderField)
 	p("\tif !ok {")
-	p("\t\terr = eh.Errorf(\"order column is not a timestamp (got %%s)\", tsR.ValueTs.DataType())")
+	p("\t\terr = eh.Errorf(\"order column is not a timestamp (got %%s)\", %s.%s.DataType())", orderVar, orderField)
 	p("\t\treturn")
 	p("\t}")
 	p("\tents = make([]*%s, 0, n)", inst.entityType())
 	p("\tfor i := range n {")
 	p("\t\tent := &%s{", inst.entityType())
-	p("\t\t\tID: idR.ValueId.Value(i),")
-	p("\t\t\tTs: tsR.ValueTs.Value(i).ToTime(tsType.Unit).UTC(),")
+	p("\t\t\tID: %s.%s.Value(i),", keyVar, keyField)
+	p("\t\t\tTs: %s.%s.Value(i).ToTime(tsType.Unit).UTC(),", orderVar, orderField)
 	if stateView {
-		p("\t\t\tLifecycle: lcR.ValueLifecycle.Value(i),")
+		p("\t\t\tLifecycle: %s.Value%s.Value(i),", plainReaderVar(inst.model.lifecycle.itemType), inst.model.lifecycle.pascal)
 	}
 	p("\t\t}")
+	// Pass-through envelope columns: promoted-field assignment from the
+	// group reader's typed accessor (scalars direct, arrays collected).
+	for _, c := range inst.model.passthrough {
+		rv := plainReaderVar(c.itemType)
+		if c.isArray {
+			p("\t\tent.%s = slices.Collect(%s.GetAttrValue%s(raruntime.EntityIdx(i)))", c.pascal, rv, c.pascal)
+		} else {
+			p("\t\tent.%s = %s.GetAttrValue%s(raruntime.EntityIdx(i))", c.pascal, rv, c.pascal)
+		}
+	}
 	// One presence-gated <Kind>ReadRow call per component (the generated
 	// twin of FillFromArrow; the Attrs/Membs readers bind by inference).
 	// Fields bound to plain columns come from the envelope afterwards.

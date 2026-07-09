@@ -43,18 +43,36 @@ func validationManipulator(t *testing.T, sections ...string) *common.TableManipu
 
 func generateInto(t *testing.T, manip *common.TableManipulator, componentPaths ...string) error {
 	t.Helper()
-	td, err := manip.BuildTableDesc()
-	require.NoError(t, err)
-	return gen.Input{
+	_, err := generateIntoDir(t, manip, componentPaths...)
+	return err
+}
+
+// generateIntoDir is generateInto but returns the OutDir so a test can read
+// the emitted files back (e.g. to assert the pass-through envelope shape).
+func generateIntoDir(t *testing.T, manip *common.TableManipulator, componentPaths ...string) (outDir string, err error) {
+	t.Helper()
+	td, berr := manip.BuildTableDesc()
+	require.NoError(t, berr)
+	outDir = t.TempDir()
+	err = gen.Input{
 		PackageName:    "tmp",
 		StoreName:      "Valcheck",
 		TableName:      "valcheck",
 		Table:          td,
 		RowConfig:      common.TableRowConfigMultiAttributesPerRow,
 		ComponentPaths: componentPaths,
-		OutDir:         t.TempDir(),
+		OutDir:         outDir,
 		ImportPath:     "example.invalid/tmp",
 	}.Generate()
+	return
+}
+
+// readStore returns the generated store glue file from an OutDir.
+func readStore(t *testing.T, outDir string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
+	require.NoError(t, err)
+	return string(b)
 }
 
 // TestGenerateRejectsSharedSection: membership ids are assigned per kind,
@@ -84,7 +102,10 @@ type KindB struct {
 
 // TestGenerateRejectsDuplicateRoleColumns: a second EntityId plain column
 // must be a schema error, not a silent last-wins.
-func TestGenerateRejectsDuplicateRoleColumns(t *testing.T) {
+// TestGenerateSecondIdIsPassThrough: a second EntityId column is not a
+// duplicate Key — the leading EntityId binds the Key role and the rest ride
+// as pass-through envelope fields (ADR-0100 Update 2026-07-09).
+func TestGenerateSecondIdIsPassThrough(t *testing.T) {
 	dir := t.TempDir()
 	a := writeDTO(t, dir, "kind_a.go", `package tmp
 
@@ -96,8 +117,13 @@ type KindA struct {
 `)
 	manip := validationManipulator(t, "solo")
 	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id2", ctabb.U64)
-	err := generateInto(t, manip, a)
-	require.ErrorContains(t, err, "both carry the Key role")
+	out, err := generateIntoDir(t, manip, a)
+	require.NoError(t, err)
+	store := readStore(t, out)
+	require.Contains(t, store, "type ValcheckEnvelope struct")
+	require.Contains(t, store, "Id2 uint64")
+	// The Key still binds the leading EntityId; the DML sets both id columns.
+	require.Contains(t, store, "SetId(id, env.Id2)")
 }
 
 // TestGenerateInternalLayout: the default layout places the DML/RA
@@ -260,7 +286,11 @@ type KindA struct {
 // roles would be silently zero-written by every Begin and dropped by the
 // decode — the generator must refuse until pass-through envelope fields
 // exist (ADR-0100 Update 2026-07-04).
-func TestGenerateRejectsNonRolePlainColumn(t *testing.T) {
+// TestGenerateRoutingColumnIsPassThrough: a non-role plain column (here an
+// EntityRouting lane) is carried through the envelope — written on Begin and
+// read back onto the entity — rather than rejected (ADR-0100 Update
+// 2026-07-09).
+func TestGenerateRoutingColumnIsPassThrough(t *testing.T) {
 	dir := t.TempDir()
 	a := writeDTO(t, dir, "kind_a.go", `package tmp
 
@@ -272,8 +302,22 @@ type KindA struct {
 `)
 	manip := validationManipulator(t, "solo")
 	manip.PlainValueColumn(common.PlainItemTypeEntityRouting, "route", ctabb.U64)
-	err := generateInto(t, manip, a)
-	require.ErrorContains(t, err, "only the role-bearing")
+	out, err := generateIntoDir(t, manip, a)
+	require.NoError(t, err)
+	store := readStore(t, out)
+	require.Contains(t, store, "type ValcheckEnvelope struct")
+	require.Contains(t, store, "Route uint64")
+	require.Contains(t, store, "SetRouting(env.Route)")
+	require.Contains(t, store, "env ValcheckEnvelope")
+}
+
+// TestGenerateRejectsOpaquePlainColumn: Transaction/Opaque plain columns
+// carry semantics the store glue does not model — they stay deferred.
+func TestGenerateRejectsOpaquePlainColumn(t *testing.T) {
+	manip := validationManipulator(t, "solo")
+	manip.PlainValueColumn(common.PlainItemTypeOpaque, "blob", ctabb.S)
+	err := generateInto(t, manip)
+	require.ErrorContains(t, err, "deferred")
 }
 
 // TestGenerateRejectsIngestIdTypeMismatch: an id field whose Go type

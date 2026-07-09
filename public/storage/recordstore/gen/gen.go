@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -205,16 +204,21 @@ func (inst Input) Generate() (err error) {
 // tableOptions merges the derived clause defaults with Input.DDL:
 // non-zero override fields win, Indexes are taken as given. The defaults
 // bind ORDER BY to the envelope roles — Key leading (the point-lookup
-// guidance), Order second when the schema has one.
+// guidance), Order second when the schema has one. Both are addressed by
+// column name, so a composite id (several EntityId columns, the rest
+// pass-through) leaves the ORDER BY unambiguous; the Key is the leading
+// EntityId column, matching enumeratePlain's binding.
 func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 	opts = clickhouse.TableOptions{
 		Mode:     clickhouse.CreateModeIfNotExists,
 		Engine:   "MergeTree()",
-		OrderBy:  []clickhouse.ColumnRef{{PlainItem: common.PlainItemTypeEntityId}},
 		Settings: []string{"allow_suspicious_low_cardinality_types=1"},
 	}
-	if slices.Contains(inst.Table.PlainValuesItemTypes, common.PlainItemTypeEntityTimestamp) {
-		opts.OrderBy = append(opts.OrderBy, clickhouse.ColumnRef{PlainItem: common.PlainItemTypeEntityTimestamp})
+	if keyName, ok := firstPlainName(inst.Table, common.PlainItemTypeEntityId); ok {
+		opts.OrderBy = []clickhouse.ColumnRef{{Plain: keyName}}
+		if orderName, ok := firstPlainName(inst.Table, common.PlainItemTypeEntityTimestamp); ok {
+			opts.OrderBy = append(opts.OrderBy, clickhouse.ColumnRef{Plain: orderName})
+		}
 	}
 	if inst.DDL == nil {
 		return
@@ -243,6 +247,18 @@ func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 	}
 	opts.Indexes = o.Indexes
 	return
+}
+
+// firstPlainName returns the leeway name of the first plain column carrying
+// item type it — the leading EntityId is the Key, the EntityTimestamp the
+// Order.
+func firstPlainName(t common.TableDesc, it common.PlainItemTypeE) (name naming.StylableName, ok bool) {
+	for i, x := range t.PlainValuesItemTypes {
+		if x == it {
+			return t.PlainValuesNames[i], true
+		}
+	}
+	return "", false
 }
 
 // scaffoldPkg is the package the DML/RA scaffolding declares: the
