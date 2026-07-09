@@ -114,6 +114,11 @@ type PlayApp struct {
 	cards                 *CardDriver
 	projector             *Projector
 
+	// detailContent, when non-nil, replaces the Detail panel's built-in body
+	// (RenderDefaultDetailContent). A library re-using PlayApp installs one via
+	// SetDetailContent to render a domain-specific card for the selected row.
+	detailContent DetailContentFunc
+
 	// projFSM mirrors projector lifecycle into a fsmview.Machine so the
 	// renderer can show a chip + drill-down popup (table / graph /
 	// history). statetrooper FSM is render-thread-only; renderProjection
@@ -1364,10 +1369,10 @@ func (inst *PlayApp) renderTimelineReject(reason string) {
 // node and the consumer of the `selection` signal the Timeline/Table/Projection
 // publish — this method runs the panel's Accept (which reads the selection from
 // the signal env) and renders its reject reason or the card body. renderDetailPane
-// scrolls its own content (the leeway card table owns its scroll; the JSON and
-// ad-hoc fallbacks each add one), so the dock tab must NOT add an outer
-// ScrollArea — wrapping the self-scrolling card table hands it unbounded height
-// and crops its tail (tagged) sections.
+// scrolls its own content (the leeway card table owns its scroll; the ad-hoc
+// fallback adds one), so the dock tab must NOT add an outer ScrollArea —
+// wrapping the self-scrolling card table hands it unbounded height and crops its
+// tail (tagged) sections.
 func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema) {
 	if rec == nil {
 		for rt := range c.RichTextLabel("Run a query, then select a row to see its detail.") {

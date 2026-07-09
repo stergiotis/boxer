@@ -1,22 +1,17 @@
 package play
 
 import (
-	"bytes"
-	"encoding/json/jsontext"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
-	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 )
 
@@ -38,16 +33,6 @@ type CardDriver struct {
 	driver  *streamreadaccess.Driver
 	emitter *leewaywidgets.Table2CardEmitter
 	usable  bool // false if the schema is not leeway-shaped
-
-	// JSON-view cache (ADR-0018 canonical card-JSON). Re-uses the same Driver
-	// as Render but feeds a JsonCardEmitter. Single-slot keyed by (rec, row);
-	// navigating rows or running a new query drops the slot. Holders are
-	// interned via unique.Make, so overwriting the slot doesn't leak.
-	jsonBuf        *bytes.Buffer
-	jsonCacheRec   arrow.RecordBatch
-	jsonCacheRow   int64
-	jsonCacheView  typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	jsonCacheValid bool
 }
 
 // NewCardDriver returns an empty driver. EnsureFor must be called before the
@@ -67,7 +52,6 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		inst.driver = nil
 		inst.emitter = nil
 		inst.usable = false
-		inst.invalidateJSON()
 		return false
 	}
 	if schema == inst.schema && inst.driver != nil {
@@ -77,7 +61,6 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	inst.driver = nil
 	inst.emitter = nil
 	inst.usable = false
-	inst.invalidateJSON()
 
 	nFields := schema.NumFields()
 	colNames := make([]string, 0, nFields)
@@ -178,56 +161,4 @@ func (inst *CardDriver) Render(rec arrow.RecordBatch, row int64) error {
 		return eh.Errorf("unable to drive record batch: %w", err)
 	}
 	return nil
-}
-
-// JSONFor returns a syntax-highlighted CodeViewJob holder for the canonical
-// Leeway card-JSON of (rec, row), per ADR-0018. The retained holder is cached
-// for the most-recently requested (rec, row); navigating rows or running a new
-// query invalidates the slot. ok=false with err=nil means "not applicable"
-// (driver not usable, nil rec, or out-of-range row) — caller should skip
-// rendering. ok=false with err!=nil means encoding failed.
-func (inst *CardDriver) JSONFor(rec arrow.RecordBatch, row int64) (view typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool, err error) {
-	if !inst.usable || inst.driver == nil {
-		return
-	}
-	if rec == nil || row < 0 || row >= rec.NumRows() {
-		return
-	}
-	if inst.jsonCacheValid && inst.jsonCacheRec == rec && inst.jsonCacheRow == row {
-		view = inst.jsonCacheView
-		ok = true
-		return
-	}
-	if inst.jsonBuf == nil {
-		inst.jsonBuf = bytes.NewBuffer(make([]byte, 0, 4096))
-	} else {
-		inst.jsonBuf.Reset()
-	}
-	enc := jsontext.NewEncoder(inst.jsonBuf,
-		jsontext.Multiline(true),
-		jsontext.WithIndent("  "))
-	sink := card.NewJsonCardEmitter(enc, nil)
-	slice := rec.NewSlice(row, row+1)
-	defer slice.Release()
-	err = inst.driver.DriveRecordBatch(sink, slice)
-	if err != nil {
-		log.Warn().Err(err).Int64("row", row).Msg("play: json driver error")
-		err = eh.Errorf("unable to drive record batch for json: %w", err)
-		return
-	}
-	view = codeview.PrepareJson(inst.jsonBuf.String())
-	inst.jsonCacheRec = rec
-	inst.jsonCacheRow = row
-	inst.jsonCacheView = view
-	inst.jsonCacheValid = true
-	ok = true
-	return
-}
-
-// invalidateJSON drops the (rec, row) cache slot. Called whenever the driver
-// is rebuilt — old rows belong to a different schema and must not be served.
-func (inst *CardDriver) invalidateJSON() {
-	inst.jsonCacheValid = false
-	inst.jsonCacheRec = nil
-	inst.jsonCacheView = typed.RetainedFffiHolderTyped[c.CodeViewJobS]{}
 }

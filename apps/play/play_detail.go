@@ -101,10 +101,25 @@ func shortColumnLabel(name string) string {
 	return name
 }
 
-// renderDetailPane renders the right-hand card stack for the selected row.
-// Prefers the leeway streamreadaccess.Driver path when the schema is
-// leeway-shaped (co-sections, real tags, per-type formatters). Falls back to
-// a simple prefix-based section layout for arbitrary SQL results.
+// DetailContentFunc renders the body of the Detail panel for one selected row,
+// below the header (row position + entity identity) PlayApp always draws. It
+// runs inside the pane's Vertical scope; rec/schema/row identify the row. A
+// library re-using PlayApp installs one with SetDetailContent to replace the
+// built-in leeway-card / ad-hoc body with a domain-specific view — or to wrap
+// it, by calling RenderDefaultDetailContent and then appending its own widgets.
+type DetailContentFunc func(rec arrow.RecordBatch, schema *arrow.Schema, row int64)
+
+// SetDetailContent overrides the Detail panel's body renderer. Passing nil
+// restores the built-in body (RenderDefaultDetailContent). The header PlayApp
+// draws above the body is unaffected.
+func (inst *PlayApp) SetDetailContent(fn DetailContentFunc) {
+	inst.detailContent = fn
+}
+
+// renderDetailPane renders the right-hand detail card for the selected row: a
+// fixed header (row position + entity identity) followed by the pluggable body.
+// The body is inst.detailContent when a re-user installed one, else the built-in
+// RenderDefaultDetailContent.
 func (inst *PlayApp) renderDetailPane(rec arrow.RecordBatch, schema *arrow.Schema, row int64) {
 	for range c.Vertical().KeepIter() {
 		entityLabel, natKey := entityHeader(rec, row)
@@ -123,45 +138,38 @@ func (inst *PlayApp) renderDetailPane(rec arrow.RecordBatch, schema *arrow.Schem
 			}
 		}
 
-		// The leeway card view (Table2CardEmitter) renders into an
-		// egui_extras::TableBuilder that owns its own ScrollArea, so it must
-		// NOT be wrapped in an outer ScrollArea: that hands the table
-		// unbounded available height and egui_extras then crops its tail rows.
-		// The driver emits the plain section first and the tagged / co-sections
-		// after it, so the cropped rows are exactly the tagged sections —
-		// leaving "only plain value sections" visible. Render the card directly
-		// in the bounded dock tab, matching the leewaywidgets demo's
-		// renderActiveView. The ad-hoc fallback has no self-scrolling widget,
-		// so it keeps an explicit ScrollArea.
-		switch {
-		case inst.cards != nil && inst.cards.EnsureFor(schema):
-			if err := inst.cards.Render(rec, row); err != nil {
-				c.Label(fmt.Sprintf("card render error: %s", err)).Wrap().Send()
-			}
-			// Canonical Leeway card-JSON (ADR-0018) as a collapsed-by-default
-			// reference below the table. CodeView is a plain (selectable)
-			// egui::Label with no scroll of its own, so its body gets a
-			// dedicated ScrollArea — a sibling of the table's scroll, never its
-			// parent (a parent ScrollArea is what crops the table above).
-			// Cached per (rec, row) inside CardDriver, so the JSON view is
-			// recomputed only on selection change or new query.
-			view, ok, err := inst.cards.JSONFor(rec, row)
-			switch {
-			case err != nil:
-				c.Label(fmt.Sprintf("json render error: %s", err)).Wrap().Send()
-			case ok:
-				c.Separator().Horizontal().Send()
-				for range c.CollapsingHeader(inst.ids.PrepareStr("rowJsonHdr"),
-					c.WidgetText().Text("CANONICAL JSON").Keep()).KeepIter() {
-					for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
-						c.CodeView(inst.ids.PrepareStr("rowJson"), view).Wrap().Send()
-					}
-				}
-			}
-		default:
-			for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
-				inst.renderAdHocDetail(rec, schema, row)
-			}
+		if inst.detailContent != nil {
+			inst.detailContent(rec, schema, row)
+		} else {
+			inst.RenderDefaultDetailContent(rec, schema, row)
+		}
+	}
+}
+
+// RenderDefaultDetailContent is the built-in Detail body: the leeway card stack
+// when the schema is leeway-shaped (co-sections, real tags, per-type
+// formatters), else a prefix-grouped ad-hoc section layout for arbitrary SQL
+// results. Exported so a custom DetailContentFunc can delegate to it and append
+// its own widgets.
+//
+// The leeway card view (Table2CardEmitter) renders into an
+// egui_extras::TableBuilder that owns its own ScrollArea, so it must NOT be
+// wrapped in an outer ScrollArea: that hands the table unbounded available
+// height and egui_extras then crops its tail rows. The driver emits the plain
+// section first and the tagged / co-sections after it, so the cropped rows are
+// exactly the tagged sections — leaving "only plain value sections" visible.
+// Render the card directly in the bounded dock tab, matching the leewaywidgets
+// demo's renderActiveView. The ad-hoc fallback has no self-scrolling widget, so
+// it keeps an explicit ScrollArea.
+func (inst *PlayApp) RenderDefaultDetailContent(rec arrow.RecordBatch, schema *arrow.Schema, row int64) {
+	switch {
+	case inst.cards != nil && inst.cards.EnsureFor(schema):
+		if err := inst.cards.Render(rec, row); err != nil {
+			c.Label(fmt.Sprintf("card render error: %s", err)).Wrap().Send()
+		}
+	default:
+		for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {
+			inst.renderAdHocDetail(rec, schema, row)
 		}
 	}
 }

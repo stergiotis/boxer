@@ -134,7 +134,7 @@ from the result's column names:
 - **Leeway card** — when the columns are leeway-encoded (`id:…`, `tv:…`), the card
   groups them into the entity's plain `id` section, its tagged sections, and the
   membership chips on each attribute. A `SELECT *` from a leeway table takes this
-  path. A collapsed **canonical JSON** view sits at the bottom.
+  path.
 - **Ad-hoc grouping** — for ordinary SQL results (aliased or aggregated columns),
   columns are grouped by name prefix into pinned / relations / data / meta sections.
 
