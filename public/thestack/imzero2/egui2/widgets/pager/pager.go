@@ -175,10 +175,10 @@ func (inst *Pager) Render() bool {
 
 		c.Separator().Vertical().Send()
 
-		if smallBtn(ids, "pFirst", "«") {
+		if navBtn(ids, "pFirst", "«") {
 			inst.currentPage = 0
 		}
-		if smallBtn(ids, "pPrev", "‹") {
+		if navBtn(ids, "pPrev", "‹") {
 			inst.currentPage = max(0, inst.currentPage-1)
 		}
 
@@ -198,9 +198,13 @@ func (inst *Pager) Render() bool {
 				label = inst.pageLabels[i]
 			}
 			selected := i == cur
+			// Full-height (not .Small()) so the numbered buttons match the
+			// jump DragValue and the page-size ComboBox; a uniform control
+			// height keeps the centered row from reading as ragged — short
+			// buttons floating among tall controls (imzero2 SKILL.md,
+			// "Ragged Control Row").
 			if c.Button(ids.PrepareSeq(uint64(0x1000+i)),
 				c.Atoms().Text(label).Keep()).
-				Small().
 				Selected(selected).
 				SendResp().HasPrimaryClicked() {
 				inst.currentPage = i
@@ -210,10 +214,10 @@ func (inst *Pager) Render() bool {
 			c.Label("…").Send()
 		}
 
-		if smallBtn(ids, "pNext", "›") {
+		if navBtn(ids, "pNext", "›") {
 			inst.currentPage = min(maxPageIncl, inst.currentPage+1)
 		}
-		if smallBtn(ids, "pLast", "»") {
+		if navBtn(ids, "pLast", "»") {
 			inst.currentPage = maxPageIncl
 		}
 
@@ -266,9 +270,12 @@ func (inst *Pager) Render() bool {
 	return inst.currentPage != prevPage || inst.pageSize != prevSize
 }
 
-func smallBtn(ids *c.WidgetIdStack, id, label string) bool {
+// navBtn draws a first/prev/next/last stepper. Full-height (not .Small()) so
+// it shares the row's control height with the jump DragValue, the numbered
+// buttons and the page-size ComboBox — see the "Ragged Control Row" note in
+// imzero2 SKILL.md.
+func navBtn(ids *c.WidgetIdStack, id, label string) bool {
 	return c.Button(ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
-		Small().
 		SendResp().HasPrimaryClicked()
 }
 
