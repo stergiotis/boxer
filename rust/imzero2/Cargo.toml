@@ -48,6 +48,18 @@ headless = [
 # no GPU device is needed. Adds no dependencies (egui + svgexport are core).
 # Intended client binary for serving imzero2 views as SVG over HTTP.
 headless_svg = []
+# egui_mcp app-side hook (rerun-io/kittest_inspector's `egui_mcp`). Turns on
+# eframe's `inspection` feature → the `egui_inspection` egui::Plugin, which
+# eframe's wgpu integration auto-attaches at startup when the EGUI_INSPECTION
+# env var is set (binds 127.0.0.1:5719 by default). No imzero2 code path is
+# involved: the plugin reads the AccessKit tree and injects input/screenshot
+# requests one layer below the FFFI2 interpreter, so an out-of-process MCP
+# agent can drive the desktop host. Off by default and deliberately not in
+# `default` — an open inspection port is unauthenticated remote control of the
+# app plus its screen, so it must never ship in a production or headless build;
+# opt in only for a trusted local agent-driven session. Desktop host only
+# (eframe). See doc/howto/egui-mcp.md.
+inspection = ["desktop", "eframe?/inspection"]
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
 wayland = ["eframe?/wayland"]

@@ -87,6 +87,22 @@ else
 	echo "hmi.sh: non-interactive launch — skipping rebuild (HMI_BUILD=1 to force)" >&2
 	do_build=0
 fi
+# egui_mcp (doc/howto/egui-mcp.md): a truthy EGUI_INSPECTION turns on the
+# off-by-default `inspection` cargo feature for the client build and is exported
+# so the launched client inherits it (the Go launcher passes its environment
+# through). eframe then binds the inspection port (127.0.0.1:5719 by default) —
+# unauthenticated remote control of the app, so keep it to trusted local
+# sessions. Falsy set mirrors eframe's own (unset/empty/0/false); anything else
+# (1, true, host:port) enables it. A rebuild is required for the feature to take
+# effect — force one with HMI_BUILD=1 if this launch is skipping the build.
+case "${EGUI_INSPECTION,,}" in
+	""|0|false) : ;;
+	*)
+		export EGUI_INSPECTION
+		export IMZERO2_BUILD_FEATURES="${IMZERO2_BUILD_FEATURES:+$IMZERO2_BUILD_FEATURES }inspection"
+		echo "hmi.sh: egui_mcp inspection ON (EGUI_INSPECTION=$EGUI_INSPECTION) — building client with --features inspection" >&2
+		;;
+esac
 if [[ "$do_build" == 1 ]]; then
 	./build_rust.sh || exit 1
 	./build_go.sh || exit 1

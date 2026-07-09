@@ -179,6 +179,18 @@ self-contained HTML file with no bundling step; that codec must be
 updated by hand when the schema changes (a protobuf-es step is the
 escape hatch if it ever outgrows hand-maintenance).
 
+## Driving imzero2 from an agent (egui_mcp)
+
+The desktop host can be driven by an MCP agent — reading the widget tree and
+injecting clicks/keys/screenshots — through egui's upstream `egui_inspection`
+protocol. Build the client with the off-by-default `inspection` feature and set
+`EGUI_INSPECTION` (e.g. `EGUI_INSPECTION=1 ./hmi.sh`); eframe binds a loopback
+inspection port that the separately-installed
+[egui-mcp](https://github.com/rerun-io/kittest_inspector) server connects to. The
+port is unauthenticated remote control, so the feature is off by default and must
+never ship in a production build. Full steps and the security note:
+[doc/howto/egui-mcp.md](../../doc/howto/egui-mcp.md).
+
 ## Layout
 
 | Path | Contents |
