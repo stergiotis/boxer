@@ -35,8 +35,10 @@ const lwPkgPath = "github.com/stergiotis/boxer/public/semistructured/leeway/mars
 // laneCanonical maps an lw lane type's name to the canonical string it relabels
 // its (type-fixed) bytes as — the type-safe form of a `,ct=` override.
 var laneCanonical = map[string]string{
-	"IPv4": "v",
-	"IPv6": "w",
+	"IPv4":       "v",
+	"IPv6":       "w",
+	"IPv4Prefix": "vc",
+	"IPv6Prefix": "wc",
 }
 
 // membershipMarkerChannel maps an lw membership marker type's name to its
@@ -89,7 +91,7 @@ func classifyLwMarker(rt reflect.Type) (s goplan.FieldShape, err error) {
 		s.Canonical, err = goplan.ScalarCanonicalForGoType(goType)
 		return
 	}
-	err = eb.Build().Str("type", rt.String()).Errorf("unknown lw marker type (recognised: Single[T], IPv4, IPv6, Ref, HighRef, Verbatim, HighVerbatim)")
+	err = eb.Build().Str("type", rt.String()).Errorf("unknown lw marker type (recognised: Single[T], IPv4, IPv6, IPv4Prefix, IPv6Prefix, Ref, HighRef, Verbatim, HighVerbatim)")
 	return
 }
 

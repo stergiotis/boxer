@@ -519,6 +519,36 @@ func TestNested_Lanes_PlanCanonicalMatchesCt(t *testing.T) {
 	require.True(t, seen["Src"] && seen["Dst"], "both lane fields present")
 }
 
+// nestedCidrDrone is the lane form of ipCidrDrone (canonicaloverride_test):
+// lw.IPv4Prefix / lw.IPv6Prefix relabel a [5]byte / [17]byte to the CIDR network
+// canonical by TYPE, exactly as `,ct=vc` / `,ct=wc` do by flag. Verified at the
+// Plan level, like the flat ct= CIDR test.
+type nestedCidrDrone struct {
+	_    struct{}      `kind:"ipcn"`
+	Id   uint64        `lw:",id"`
+	Net4 lw.IPv4Prefix `lw:"net4,cidr4Section"`
+	Net6 lw.IPv6Prefix `lw:"net6,cidr6Section"`
+}
+
+func TestNested_CidrLanes_PlanCanonicalMatchesCt(t *testing.T) {
+	plan, err := marshallreflect.PlanFor[nestedCidrDrone]()
+	require.NoError(t, err)
+
+	got := map[string]string{}
+	for _, f := range plan.Fields {
+		switch f.GoFieldName {
+		case "Net4":
+			require.True(t, f.Canonical.IsNetworkNode(), "lw.IPv4Prefix → network canonical (≡ ,ct=vc)")
+			got["Net4"] = f.GoType()
+		case "Net6":
+			require.True(t, f.Canonical.IsNetworkNode(), "lw.IPv6Prefix → network canonical (≡ ,ct=wc)")
+			got["Net6"] = f.GoType()
+		}
+	}
+	require.Equal(t, "[5]byte", got["Net4"], "lw.IPv4Prefix Go shape is [5]byte (4 address + 1 prefix byte)")
+	require.Equal(t, "[17]byte", got["Net6"], "lw.IPv6Prefix Go shape is [17]byte (16 address + 1 prefix byte)")
+}
+
 // lw.Single is not yet supported as a NESTED sub-column (only at the entity
 // level); the plan builder rejects it (Slice-A Step 4 boundary).
 type badNestedSingle struct {

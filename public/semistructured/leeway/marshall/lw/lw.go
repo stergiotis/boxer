@@ -26,6 +26,14 @@ func One[T any](v T) Single[T] { return Single[T]{Val: v} }
 type (
 	IPv4 [4]byte  // canonical "v" — an IPv4 address as 4 bytes
 	IPv6 [16]byte // canonical "w" — an IPv6 address as 16 bytes
+
+	// The CIDR lanes carry a per-value prefix packed as the address bytes
+	// followed by one trailing prefix-length byte — the layout documented on
+	// canonicaltypes.NetworkTypeAstNode.ByteWidth and decoded by the read side's
+	// GetAttrValue<Col>Prefix. Fill them from a netip.Prefix as
+	// {addr.As4()/As16()…, byte(p.Bits())}.
+	IPv4Prefix [5]byte  // canonical "vc" — an IPv4 CIDR: 4 address bytes + 1 prefix-length byte
+	IPv6Prefix [17]byte // canonical "wc" — an IPv6 CIDR: 16 address bytes + 1 prefix-length byte
 )
 
 // The membership channel markers make a nested attribute struct's field a
