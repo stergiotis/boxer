@@ -68,7 +68,7 @@ func (inst RegisteredNaturalKeyDml) MustAddRestriction(sectionName naming.Stylab
 	inst.w.allowedColumnsSectionMembership = append(inst.w.allowedColumnsSectionMembership, membershipSpec)
 	for m := range membershipSpec.Iterate() {
 		switch m {
-		case common.MembershipSpecLowCardRef, common.MembershipSpecHighCardRef, common.MembershipSpecMixedLowCardRefHighCardParameters, common.MembershipSpecLowCardRefParametrized, common.MembershipSpecHighCardRefParametrized:
+		case common.MembershipSpecLowCardRef, common.MembershipSpecHighCardRef, common.MembershipSpecMixedLowCardRefHighCardParameters, common.MembershipSpecLowCardRefParametrized, common.MembershipSpecHighCardRefParametrized, common.MembershipSpecLowCardVerbatim:
 		default:
 			log.Panic().Stringer("m", m).Msg("found disallowed membership spec for natural key vdd")
 		}
