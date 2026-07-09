@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker/evaluator"
 )
@@ -65,6 +66,7 @@ const (
 	dockTabSnippets   uint64 = 8
 	dockTabMap        uint64 = 9
 	dockTabGraph      uint64 = 10
+	dockTabSchema     uint64 = 11
 )
 
 type PlayApp struct {
@@ -113,6 +115,15 @@ type PlayApp struct {
 	selectedRow           int64
 	cards                 *CardDriver
 	projector             *Projector
+
+	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
+	// a leeway TableDesc inferred from the active result's Arrow schema (plain
+	// opaque columns — tagged sections/memberships aren't recoverable from an
+	// ad-hoc result; see play_schema_infer.go). schemaForSchema is the pointer-
+	// identity cache that gates the rebuild, mirroring colWidthsForSchema and
+	// the projector's forSchema.
+	schemaModel     *schemaview.Model
+	schemaForSchema *arrow.Schema
 
 	// detailContent, when non-nil, replaces the Detail panel's built-in body
 	// (RenderDefaultDetailContent). A library re-using PlayApp installs one via
@@ -430,6 +441,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		selectedRow:      -1,
 		cards:            cards,
 		projector:        NewProjector(projectorIds, cards),
+		schemaModel:      schemaview.NewModel(nil),
 		projFSM:          projFSM,
 		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
 			Title("UMAP projector").
@@ -576,6 +588,7 @@ func (inst *PlayApp) Render() error {
 		}
 		inst.pager.Configure(rec.NumRows())
 		inst.projector.Invalidate(schema, executed)
+		inst.syncSchemaModel(schema)
 	}
 
 	// Mirror the result↔input lifecycle into the query FSM every frame —
@@ -605,18 +618,22 @@ func (inst *PlayApp) Render() error {
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
-			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph}
+			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema}
 			if os.Getenv("SPINNAKER_PLAY_FOCUS_MAP") != "" {
 				// Scripted-screenshot focus: make Map the default-active body tab.
-				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets}
+				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabSchema}
 			}
 			if os.Getenv("SPINNAKER_PLAY_FOCUS_GRAPH") != "" {
 				// Scripted-screenshot focus: make Graph the default-active body tab.
-				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap}
+				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabSchema}
 			}
 			if os.Getenv("SPINNAKER_PLAY_FOCUS_TIMELINE") != "" {
 				// Scripted-screenshot focus: make Timeline the default-active body tab.
-				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabGraph}
+				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema}
+			}
+			if os.Getenv("SPINNAKER_PLAY_FOCUS_SCHEMA") != "" {
+				// Scripted-screenshot focus: make Schema the default-active body tab.
+				bodyTabs = []uint64{dockTabSchema, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph}
 			}
 			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45, bodyTabs...)
 			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
@@ -657,6 +674,9 @@ func (inst *PlayApp) Render() error {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderGraphTab()
 				}
+			}
+			for range dock.Tab(dockTabSchema, "Schema") {
+				inst.renderSchemaTab(rec, schema, err)
 			}
 		}
 	}
