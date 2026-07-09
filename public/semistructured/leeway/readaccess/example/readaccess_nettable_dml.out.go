@@ -25,7 +25,7 @@ func CreateSchemaNetTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:id:u64:2k:0:0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 001 */ arrow.Field{Name: "ts:ts:z32:2k:0:0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Millisecond}},
-		/* 002 */ arrow.Field{Name: "tv:net:ipv4:val:v:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 4})},
+		/* 002 */ arrow.Field{Name: "tv:net:ipv4:val:v:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
 		/* 003 */ arrow.Field{Name: "tv:net:ipv6:val:w:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 16})},
 		/* 004 */ arrow.Field{Name: "tv:net:ipv4_cidr:val:vc:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 5})},
 		/* 005 */ arrow.Field{Name: "tv:net:ipv6_cidr:val:wc:0:0:0:0::", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 17})},
@@ -274,7 +274,7 @@ func (inst *InEntityNetTable) clearErrors() {
 type InEntityNetTableSectionNet struct {
 	inAttr                *InEntityNetTableSectionNetInAttr
 	parent                *InEntityNetTable
-	scalarFieldBuilder002 *array.FixedSizeBinaryBuilder
+	scalarFieldBuilder002 *array.Uint32Builder
 	scalarListBuilder002  *array.ListBuilder
 	scalarFieldBuilder003 *array.FixedSizeBinaryBuilder
 	scalarListBuilder003  *array.ListBuilder
@@ -294,7 +294,7 @@ func NewInEntityNetTableSectionNet(builder *array.RecordBuilder, parent *InEntit
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.FixedSizeBinaryBuilder)
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
 	inst.scalarListBuilder002 = builder.Field(2).(*array.ListBuilder)
 	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.FixedSizeBinaryBuilder)
 	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
@@ -315,7 +315,7 @@ func (inst *InEntityNetTableSectionNet) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityNetTableSectionNet) BeginAttribute(ipv42 [4]byte, ipv63 [16]byte, ipv4Cidr4 [5]byte, ipv6Cidr5 [17]byte) *InEntityNetTableSectionNetInAttr {
+func (inst *InEntityNetTableSectionNet) BeginAttribute(ipv42 uint32, ipv63 [16]byte, ipv4Cidr4 [5]byte, ipv6Cidr5 [17]byte) *InEntityNetTableSectionNetInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -324,7 +324,7 @@ func (inst *InEntityNetTableSectionNet) BeginAttribute(ipv42 [4]byte, ipv63 [16]
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder002.Append(ipv42[:])
+	inst.scalarFieldBuilder002.Append(ipv42)
 	inst.scalarFieldBuilder003.Append(ipv63[:])
 	inst.scalarFieldBuilder004.Append(ipv4Cidr4[:])
 	inst.scalarFieldBuilder005.Append(ipv6Cidr5[:])
@@ -335,10 +335,10 @@ func (inst *InEntityNetTableSectionNet) BeginAttribute(ipv42 [4]byte, ipv63 [16]
 }
 
 type InEntityNetTableSectionNetAttr struct {
+	Ipv4     uint32
 	Ipv6Cidr [17]byte
 	Ipv6     [16]byte
 	Ipv4Cidr [5]byte
-	Ipv4     [4]byte
 }
 
 func (inst *InEntityNetTableSectionNet) Add(attr InEntityNetTableSectionNetAttr) *InEntityNetTableSectionNetInAttr {
@@ -384,7 +384,7 @@ func (inst *InEntityNetTableSectionNet) clearErrors() {
 
 type InEntityNetTableSectionNetInAttr struct {
 	parent                           *InEntityNetTableSectionNet
-	scalarFieldBuilder002            *array.FixedSizeBinaryBuilder
+	scalarFieldBuilder002            *array.Uint32Builder
 	scalarListBuilder002             *array.ListBuilder
 	scalarFieldBuilder003            *array.FixedSizeBinaryBuilder
 	scalarListBuilder003             *array.ListBuilder
@@ -418,7 +418,7 @@ func NewInEntityNetTableSectionNetInAttr(builder *array.RecordBuilder, parent *I
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.FixedSizeBinaryBuilder)
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
 	inst.scalarListBuilder002 = builder.Field(2).(*array.ListBuilder)
 	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.FixedSizeBinaryBuilder)
 	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)

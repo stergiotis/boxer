@@ -387,7 +387,15 @@ func (inst *TechnologySpecificCodeGenerator) generateNetworkType(ct canonicaltyp
 		err = common.ErrNoBuilder
 		return
 	}
-	code := fmt.Sprintf("&arrow.FixedSizeBinaryType{ByteWidth: %d}", ct.ByteWidth())
+	// An IPv4 host address rides as a big-endian uint32 — the Arrow type
+	// ClickHouse's IPv4 column uses; IPv6 and the CIDR variants stay packed
+	// FixedSizeBinary (see the matching branch in the Go-type codegen).
+	var code string
+	if ct.BaseType == canonicaltypes.BaseTypeNetworkIPv4 && ct.CIDRModifier == canonicaltypes.CIDRModifierNone {
+		code = "arrow.PrimitiveTypes.Uint32"
+	} else {
+		code = fmt.Sprintf("&arrow.FixedSizeBinaryType{ByteWidth: %d}", ct.ByteWidth())
+	}
 	code = inst.typeProlog + code + inst.typeEpilog
 	switch ct.ScalarModifier {
 	case canonicaltypes.ScalarModifierNone:

@@ -208,8 +208,18 @@ func generateMachineNumericType(baseMachineNumber canonicaltypes.BaseTypeMachine
 
 func generateNetworkType(ct canonicaltypes.NetworkTypeAstNode, hints encodingaspects.AspectSet) (code string, zeroValueLiteral string, imports []string, err error) {
 	n := ct.ByteWidth()
-	code = fmt.Sprintf("[%d]byte", n)
-	zeroValueLiteral = fmt.Sprintf("[%d]byte{}", n)
+	// An IPv4 host address serialises as a big-endian uint32 — the Arrow
+	// representation ClickHouse's IPv4 column uses (toIPv4(0x01020304) =
+	// '1.2.3.4'). Every other network shape stays a packed byte array: IPv6
+	// (16 bytes) and the CIDR variants (address bytes plus a trailing
+	// prefix-length byte).
+	if ct.BaseType == canonicaltypes.BaseTypeNetworkIPv4 && ct.CIDRModifier == canonicaltypes.CIDRModifierNone {
+		code = "uint32"
+		zeroValueLiteral = "0"
+	} else {
+		code = fmt.Sprintf("[%d]byte", n)
+		zeroValueLiteral = fmt.Sprintf("[%d]byte{}", n)
+	}
 	switch ct.ScalarModifier {
 	case canonicaltypes.ScalarModifierNone:
 		break

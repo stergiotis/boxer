@@ -14,11 +14,11 @@ func TestGenerateNetworkType(t *testing.T) {
 	gen.SetCodeBuilder(b)
 	p := canonicaltypes.NewParser()
 	cases := []struct{ sig, want string }{
-		{"v", "&arrow.FixedSizeBinaryType{ByteWidth: 4}"},
+		{"v", "arrow.PrimitiveTypes.Uint32"}, // ipv4 host: big-endian uint32 (the ClickHouse IPv4 Arrow type)
 		{"w", "&arrow.FixedSizeBinaryType{ByteWidth: 16}"},
 		{"vc", "&arrow.FixedSizeBinaryType{ByteWidth: 5}"},
 		{"wc", "&arrow.FixedSizeBinaryType{ByteWidth: 17}"},
-		{"vh", "arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 4})"},
+		{"vh", "arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)"},
 		{"wch", "arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 17})"},
 	}
 	for _, c := range cases {

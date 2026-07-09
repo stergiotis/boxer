@@ -14,7 +14,7 @@ import (
 type ipDrone struct {
 	_   struct{} `kind:"ipd"`
 	Id  uint64   `lw:",id"`
-	Src [4]byte  `lw:"src,ipv4Section,ct=v"`
+	Src uint32   `lw:"src,ipv4Section,ct=v"`
 	Dst [16]byte `lw:"dst,ipv6Section,ct=w"`
 }
 
@@ -40,7 +40,8 @@ type ctBadDrone struct {
 }
 
 // TestCanonicalOverride_NetworkFidelity confirms `,ct=` lifts the Plan canonical
-// to the network type while leaving the Go/wire shape ([N]byte) untouched.
+// to the network type while leaving the Go/wire shape untouched — uint32 for an
+// IPv4 host (its ClickHouse Arrow shape), [N]byte for IPv6 and the CIDR lanes.
 func TestCanonicalOverride_NetworkFidelity(t *testing.T) {
 	plan, err := marshallreflect.PlanFor[ipDrone]()
 	require.NoError(t, err)
@@ -50,7 +51,7 @@ func TestCanonicalOverride_NetworkFidelity(t *testing.T) {
 		switch f.GoFieldName {
 		case "Src":
 			require.True(t, f.Canonical.IsNetworkNode(), "Src canonical should be a network node, got %T", f.Canonical)
-			require.Equal(t, "[4]byte", f.GoType(), "Src Go shape unchanged")
+			require.Equal(t, "uint32", f.GoType(), "Src (IPv4 host) Go shape is uint32")
 			seen["Src"] = true
 		case "Dst":
 			require.True(t, f.Canonical.IsNetworkNode(), "Dst canonical should be a network node, got %T", f.Canonical)

@@ -206,9 +206,10 @@ func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingasp
 // netipAccessorSpec describes the net/netip convenience accessor a scalar network
 // column gets on top of its packed-byte getter.
 type netipAccessorSpec struct {
-	addrCtor  string // netip.AddrFrom4 (ipv4) or netip.AddrFrom16 (ipv6)
-	addrBytes int    // leading address width in bytes: 4 or 16
-	cidr      bool   // true → netip.Prefix (address bytes + one trailing prefix-length byte); false → netip.Addr
+	addrCtor     string // netip.AddrFrom4 (ipv4) or netip.AddrFrom16 (ipv6)
+	addrBytes    int    // leading address width in bytes: 4 or 16
+	cidr         bool   // true → netip.Prefix (address bytes + one trailing prefix-length byte); false → netip.Addr
+	uint32Backed bool   // true → the host getter returns a big-endian uint32 (IPv4), not a packed [4]byte
 }
 
 // netipAccessor reports whether a scalar network column gets a net/netip
@@ -228,6 +229,9 @@ func netipAccessor(ct canonicaltypes.PrimitiveAstNodeI) (spec netipAccessorSpec,
 	switch nt.BaseType {
 	case canonicaltypes.BaseTypeNetworkIPv4:
 		spec.addrCtor, spec.addrBytes = "netip.AddrFrom4", 4
+		// A non-CIDR IPv4 host getter returns a big-endian uint32 (the Arrow
+		// shape); the CIDR form stays packed bytes.
+		spec.uint32Backed = nt.CIDRModifier == canonicaltypes.CIDRModifierNone
 	case canonicaltypes.BaseTypeNetworkIPv6:
 		spec.addrCtor, spec.addrBytes = "netip.AddrFrom16", 16
 	default:
@@ -1463,6 +1467,21 @@ func (inst *%s%s) Len() (nEntities int) {
 									spec.addrBytes,
 									spec.addrBytes,
 									spec.addrBytes,
+								)
+							} else if spec.uint32Backed {
+								// IPv4 host: the getter returns a big-endian uint32; unpack
+								// it to the four address bytes for netip.AddrFrom4.
+								_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%sAddr(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) (addr netip.Addr) {
+	v := inst.GetAttrValue%s(entityIdx, attrIdx)
+	addr = %s([4]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)})
+	return
+}
+`,
+									clsName,
+									genericTypeParamsUse,
+									attrNameS,
+									attrNameS,
+									spec.addrCtor,
 								)
 							} else {
 								// Host address: same value as GetAttrValue<Col>, exposed as a net/netip.Addr.

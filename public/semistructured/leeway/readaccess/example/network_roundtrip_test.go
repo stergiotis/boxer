@@ -1,6 +1,7 @@
 package example
 
 import (
+	"encoding/binary"
 	"net/netip"
 	"testing"
 	"time"
@@ -10,6 +11,14 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 	"github.com/stretchr/testify/require"
 )
+
+// ipv4ToU32 encodes an IPv4 host address as the big-endian uint32 the leeway
+// network canonical uses for ipv4 (v) columns — the Arrow representation
+// ClickHouse's IPv4 column round-trips (toIPv4(0x01020304) = '1.2.3.4').
+func ipv4ToU32(a netip.Addr) uint32 {
+	b := a.As4()
+	return binary.BigEndian.Uint32(b[:])
+}
 
 // packPrefix4 / packPrefix16 encode a netip.Prefix the way the leeway network
 // canonical does: the address bytes followed by one trailing prefix-length byte
@@ -66,9 +75,8 @@ func TestNetworkRoundtrip(t *testing.T) {
 			ent := dml.BeginEntity()
 			ent.SetId(uint64(i))
 			ent.SetTimestamp(ts)
-			a4 := addr4[i].As4()
 			a6 := addr6[i].As16()
-			secNet.BeginAttribute(a4, a6, packPrefix4(pfx4[i]), packPrefix16(pfx6[i])).
+			secNet.BeginAttribute(ipv4ToU32(addr4[i]), a6, packPrefix4(pfx4[i]), packPrefix16(pfx6[i])).
 				AddMembershipLowCardRef(uint64(i)).
 				AddMembershipMixedLowCardVerbatim([]byte("v"), []byte("p")).
 				EndAttribute()
@@ -94,8 +102,8 @@ func TestNetworkRoundtrip(t *testing.T) {
 			entityIdx := runtime.EntityIdx(i)
 			require.EqualValues(t, 1, attrs.GetNumberOfAttributes(entityIdx))
 
-			// packed [N]byte getters
-			require.Equal(t, addr4[i].As4(), attrs.GetAttrValueIpv4(entityIdx, attrIdx), "entity %d ipv4 bytes", i)
+			// packed getters: ipv4 is a big-endian uint32, ipv6 a [16]byte
+			require.Equal(t, ipv4ToU32(addr4[i]), attrs.GetAttrValueIpv4(entityIdx, attrIdx), "entity %d ipv4 uint32", i)
 			require.Equal(t, addr6[i].As16(), attrs.GetAttrValueIpv6(entityIdx, attrIdx), "entity %d ipv6 bytes", i)
 			require.Equal(t, packPrefix4(pfx4[i]), attrs.GetAttrValueIpv4Cidr(entityIdx, attrIdx), "entity %d ipv4 cidr bytes", i)
 			require.Equal(t, packPrefix16(pfx6[i]), attrs.GetAttrValueIpv6Cidr(entityIdx, attrIdx), "entity %d ipv6 cidr bytes", i)

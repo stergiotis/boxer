@@ -24,7 +24,7 @@ func One[T any](v T) Single[T] { return Single[T]{Val: v} }
 // richer network type. The Go byte shape is fixed by the type definition, so no
 // reshape is possible.
 type (
-	IPv4 [4]byte  // canonical "v" — an IPv4 address as 4 bytes
+	IPv4 uint32   // canonical "v" — an IPv4 address as a big-endian uint32 (the ClickHouse IPv4 Arrow type; fill from a netip.Addr via binary.BigEndian.Uint32(addr.As4()))
 	IPv6 [16]byte // canonical "w" — an IPv6 address as 16 bytes
 
 	// The CIDR lanes carry a per-value prefix packed as the address bytes

@@ -115,7 +115,7 @@ func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 		sec := manip.TaggedValueSection("net").
 			AddSectionMembership(common.MembershipSpecLowCardRef).
 			AddSectionMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
-		sec.TaggedValueColumn("ipv4", ctabb.V)       // host address -> [4]byte, netip.Addr accessor
+		sec.TaggedValueColumn("ipv4", ctabb.V)       // host address -> uint32 (big-endian), netip.Addr accessor
 		sec.TaggedValueColumn("ipv6", ctabb.W)       // host address -> [16]byte, netip.Addr accessor
 		sec.TaggedValueColumn("ipv4_cidr", ctabb.Vc) // CIDR -> [5]byte, netip.Prefix accessor
 		sec.TaggedValueColumn("ipv6_cidr", ctabb.Wc) // CIDR -> [17]byte, netip.Prefix accessor
@@ -167,7 +167,7 @@ func TestReadAccessNetworkGolden(t *testing.T) {
 	require.Contains(t, src, "array.NewFixedSizeBinaryData", "sanity: the FixedSizeBinary array constructor should still be emitted")
 	// netip convenience accessors, delegating to the packed-byte getters.
 	require.Contains(t, src, `"net/netip"`, "a network column must pull in the net/netip import")
-	require.Contains(t, src, "netip.AddrFrom4(inst.GetAttrValueIpv4(entityIdx, attrIdx))", "ipv4 host address must expose a netip.Addr accessor via AddrFrom4")
+	require.Contains(t, src, "netip.AddrFrom4([4]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)})", "ipv4 host address (a big-endian uint32) must expose a netip.Addr accessor via AddrFrom4")
 	require.Contains(t, src, "netip.AddrFrom16(inst.GetAttrValueIpv6(entityIdx, attrIdx))", "ipv6 host address must expose a netip.Addr accessor via AddrFrom16")
 	// CIDR: leading address bytes + trailing prefix-length byte -> netip.Prefix.
 	require.Contains(t, src, "netip.PrefixFrom(netip.AddrFrom4([4]byte(v[:4])), int(v[4]))", "ipv4 CIDR must expose a netip.Prefix accessor")

@@ -10,6 +10,15 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
+// isIPv4Host reports whether ct is a non-CIDR IPv4 address. Such a column
+// rides as a big-endian uint32 — the Arrow representation ClickHouse's IPv4
+// column round-trips (toIPv4(0x01020304) = '1.2.3.4') — whereas every other
+// network shape (IPv6, and the CIDR variants that carry a trailing
+// prefix-length byte) stays a packed FixedSizeBinary / [N]byte.
+func isIPv4Host(ct canonicaltypes2.NetworkTypeAstNode) bool {
+	return ct.BaseType == canonicaltypes2.BaseTypeNetworkIPv4 && ct.CIDRModifier == canonicaltypes2.CIDRModifierNone
+}
+
 func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects.AspectSet, useDictionaryEncoding bool) (prefix string, suffix string, err error) {
 	switch ctt := ct.(type) {
 	case canonicaltypes2.TemporalTypeAstNode:
@@ -38,6 +47,8 @@ func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 			return
 		}
 	case canonicaltypes2.NetworkTypeAstNode:
+		// An IPv4 host is an array.Uint32 whose Value(i) is already the uint32 Go
+		// type — no conversion. Every other network shape is a FixedSizeBinary:
 		// array.FixedSizeBinary.Value(i) returns a []byte view, but the Go-native
 		// type is a packed [ByteWidth]byte (see codegen.generateNetworkType), so
 		// convert the slice to the fixed-size array. The width matches by
@@ -46,8 +57,10 @@ func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 		// BaseTypeStringBytes) share the FixedSizeBinary backing and a [width]byte
 		// Go type, so they need this same conversion; wire it in when that path is
 		// exercised end-to-end (no ctabb abbreviation / golden covers it today).
-		prefix = fmt.Sprintf("[%d]byte(", ctt.ByteWidth())
-		suffix = ")"
+		if !isIPv4Host(ctt) {
+			prefix = fmt.Sprintf("[%d]byte(", ctt.ByteWidth())
+			suffix = ")"
+		}
 	}
 	return
 }
@@ -93,8 +106,11 @@ func GoTypeToArrowType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 			return
 		}
 	case canonicaltypes2.NetworkTypeAstNode:
-		// packed [N]byte array: slice to []byte for the FixedSizeBinary builder
-		suffix = "[:]"
+		// packed [N]byte array: slice to []byte for the FixedSizeBinary builder.
+		// An IPv4 host is a uint32 appended directly (no slice).
+		if !isIPv4Host(ctt) {
+			suffix = "[:]"
+		}
 	case canonicaltypes2.TemporalTypeAstNode:
 		var unit string
 		switch ctt.Width {
@@ -170,7 +186,13 @@ func CanonicalTypeToArrowBaseClassName(ct canonicaltypes2.PrimitiveAstNodeI, enc
 			return
 		}
 	case canonicaltypes2.NetworkTypeAstNode:
-		name = "FixedSizeBinary"
+		// IPv4 host → big-endian uint32 (the ClickHouse IPv4 Arrow type); every
+		// other network shape stays a packed FixedSizeBinary.
+		if isIPv4Host(ctt) {
+			name = "Uint32"
+		} else {
+			name = "FixedSizeBinary"
+		}
 	default:
 		err = eb.Build().Type("type", ct).Errorf("unhandled canonical type")
 		return

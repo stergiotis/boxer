@@ -103,8 +103,8 @@ the wire shape (classified by `mappingplan.ClassifyBegin`):
 The flag is the signal; section names are not inspected. `,unit` alone on a
 multi-element shape and `,explode` alone on a scalar are rejected; everything
 else composes. `,ct=<canonical>` may **relabel** a field's canonical type (e.g. a
-`[4]byte` as IPv4, or a `[]byte` blob as the `u8` array lane) without reshaping
-its bytes.
+`uint32` as IPv4, or a `[]byte` blob as the `u8` array lane) without reshaping
+its Go type.
 
 **Splice semantics.** An empty `[]T`, a `*roaring.Bitmap` that is nil/empty, and
 `Option[T]{Has:false}` all emit **zero attributes**. Leeway has no

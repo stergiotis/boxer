@@ -508,7 +508,7 @@ func TestNested_Lanes_PlanCanonicalMatchesCt(t *testing.T) {
 		switch f.GoFieldName {
 		case "Src":
 			require.True(t, f.Canonical.IsNetworkNode(), "lw.IPv4 → network canonical (≡ ,ct=v)")
-			require.Equal(t, "[4]byte", f.GoType(), "lw.IPv4 Go shape is [4]byte")
+			require.Equal(t, "uint32", f.GoType(), "lw.IPv4 Go shape is uint32")
 			seen["Src"] = true
 		case "Dst":
 			require.True(t, f.Canonical.IsNetworkNode(), "lw.IPv6 → network canonical (≡ ,ct=w)")

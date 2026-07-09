@@ -132,7 +132,7 @@ type Single[T any] struct{ Val T }
 
 // lane types — named Go types the classifier maps to a specific canonical (the
 // ,ct= relabels), so a struct field stays tag-free. Same bytes, relabelled:
-type IPv4    [4]byte    // canonical "v"     (vs a plain [4]byte)
+type IPv4    uint32     // canonical "v"     (big-endian; the ClickHouse IPv4 Arrow type)
 type IPv6    [16]byte   // canonical "w"
 type U8Array []byte     // u8 container lane (vs a plain []byte = scalar byte-string)
 // Adding a lane = one registry entry; the set is bounded by the canonicals ,ct= reaches.
@@ -373,13 +373,13 @@ Battery lw.Single[uint64] `lw:"battery,u64Array"`   // degenerate one-attribute,
 ## Canonical lanes
 
 A field's canonical type is derived from its Go type. When you need a *different*
-canonical over the **same bytes** — a `[4]byte` read as IPv4, a `[]byte` read as
+canonical over the **same Go shape** — a `uint32` read as IPv4, a `[]byte` read as
 the u8 array lane rather than a scalar byte-string — reach for a **lane type**
 instead of the flat grammar's `,ct=` flag:
 
 ```go
 type Endpoint struct {
-    Addr lw.IPv4     // [4]byte bytes, canonical "v"
+    Addr lw.IPv4     // uint32 (big-endian IPv4), canonical "v"
     Mask lw.U8Array  // []byte bytes, u8 container lane (not a scalar blob)
 }
 ```
