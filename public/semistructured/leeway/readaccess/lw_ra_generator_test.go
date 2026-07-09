@@ -120,20 +120,23 @@ func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 	return manip.BuildTableDesc()
 }
 
-// TestReadAccessNetworkGolden locks two codegen fixes for network (ipv4/ipv6)
-// columns, which resolve to the multi-word arrow class name FixedSizeBinary:
+// TestReadAccessNetworkGolden locks the codegen for network (ipv4/ipv6) columns,
+// which resolve to the multi-word arrow class name FixedSizeBinary:
 //
 //  1. the load constant must be the real arrow.FIXED_SIZE_BINARY, never the
-//     non-existent arrow.FIXEDSIZEBINARY a naive strings.ToUpper produced; and
-//  2. the getter must convert array.FixedSizeBinary.Value(i) ([]byte) to the
-//     Go-native packed [N]byte via ArrowTypeToGoType, not assign []byte to [N]byte.
+//     non-existent arrow.FIXEDSIZEBINARY a naive strings.ToUpper produced;
+//  2. the [N]byte getter must convert array.FixedSizeBinary.Value(i) ([]byte) via
+//     ArrowTypeToGoType, not assign []byte to [N]byte; and
+//  3. each scalar host address gets a GetAttrValue<Col>Addr net/netip.Addr
+//     accessor (AddrFrom4 for ipv4, AddrFrom16 for ipv6).
 //
-// The string assertions pin (1). Neither is caught by the wellFormed check
-// (format.Source resolves no identifiers and type-checks nothing), so the test
-// also writes the generated classes into the compiled example package as
-// readaccess_nettable_ra.out.go: a `go build`/`go test` of that package then
-// fails to compile if either regression returns. The RA classes reference no
-// dml-generated types, so this golden compiles standalone.
+// The string assertions pin the exact emitted forms. None of these is caught by
+// the wellFormed check (format.Source resolves no identifiers and type-checks
+// nothing), so the test also writes the classes into the compiled example package
+// as readaccess_nettable_ra.out.go: a `go build`/`go test` of that package then
+// fails to compile if any regression returns (golang.WriteAligned itself
+// type-checks before writing). The RA classes reference no dml-generated types,
+// so this golden compiles standalone.
 func TestReadAccessNetworkGolden(t *testing.T) {
 	tblDesc, err := networkSampleTableDesc()
 	require.NoError(t, err)
@@ -157,6 +160,10 @@ func TestReadAccessNetworkGolden(t *testing.T) {
 	require.Contains(t, src, "arrow.FIXED_SIZE_BINARY", "network columns must load via the real arrow.FIXED_SIZE_BINARY constant")
 	require.NotContains(t, src, "arrow.FIXEDSIZEBINARY", "arrow has no FIXEDSIZEBINARY constant; class name must be UpperSnakeCase, not strings.ToUpper")
 	require.Contains(t, src, "array.NewFixedSizeBinaryData", "sanity: the FixedSizeBinary array constructor should still be emitted")
+	// netip.Addr convenience accessors, delegating to the packed-byte getters.
+	require.Contains(t, src, `"net/netip"`, "a network host-address column must pull in the net/netip import")
+	require.Contains(t, src, "netip.AddrFrom4(inst.GetAttrValueIpv4(entityIdx, attrIdx))", "ipv4 host address must expose a netip.Addr accessor via AddrFrom4")
+	require.Contains(t, src, "netip.AddrFrom16(inst.GetAttrValueIpv6(entityIdx, attrIdx))", "ipv6 host address must expose a netip.Addr accessor via AddrFrom16")
 }
 
 func TestGoClassBuilderSample(t *testing.T) {

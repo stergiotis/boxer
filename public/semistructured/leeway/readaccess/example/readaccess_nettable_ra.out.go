@@ -20,10 +20,18 @@ import (
 	"iter"
 	"slices"
 	"time"
+
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
 	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:101
+
+	///////////////////////////////////////////////////////////////////
+	// code generator
+	// readaccess.(*GoClassBuilder).ComposeGoImports-range1
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2720
+
+	"net/netip"
 )
 
 var _ = time.Time{}
@@ -31,7 +39,7 @@ var _ = time.Time{}
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:208
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:229
 
 type MembershipPackNetTableNet struct {
 	ValueLowCardRef                                 *array.List
@@ -250,7 +258,7 @@ func (inst *MembershipPackNetTableNet) GetNumberOfMemberItemsByAttrLowCardVerbat
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:826
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:847
 
 type ReadAccessNetTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -365,7 +373,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessNetTableTaggedNetAttributes)(ni
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1044
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1065
 
 func (inst *ReadAccessNetTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -385,7 +393,7 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1118
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1139
 
 var _ runtime.ReleasableI = (*ReadAccessNetTablePlainEntityIdAttributes)(nil)
 
@@ -411,7 +419,7 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1197
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1218
 
 func (inst *ReadAccessNetTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -437,7 +445,7 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1249
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1270
 
 func (inst *ReadAccessNetTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -475,12 +483,20 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv4(entityIdx ru
 	scalarAttrValue = [4]byte(inst.ValueIpv4Elements.Value(int(b) + int(attrIdx)))
 	return
 }
+func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv4Addr(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (addr netip.Addr) {
+	addr = netip.AddrFrom4(inst.GetAttrValueIpv4(entityIdx, attrIdx))
+	return
+}
 func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv6(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue [16]byte) {
 	b, e := inst.ValueIpv6.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Ipv6").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
 	scalarAttrValue = [16]byte(inst.ValueIpv6Elements.Value(int(b) + int(attrIdx)))
+	return
+}
+func (inst *ReadAccessNetTableTaggedNetAttributes) GetAttrValueIpv6Addr(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (addr netip.Addr) {
+	addr = netip.AddrFrom16(inst.GetAttrValueIpv6(entityIdx, attrIdx))
 	return
 }
 func (inst *ReadAccessNetTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
@@ -495,7 +511,7 @@ func (inst *ReadAccessNetTablePlainEntityTimestampAttributes) GetAttrValueTs(ent
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1874
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1911
 
 func (inst *ReadAccessNetTableTaggedNetAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueIpv4.ValueOffsets(int(entityIdx))
@@ -506,7 +522,7 @@ func (inst *ReadAccessNetTableTaggedNetAttributes) GetNumberOfAttributes(entityI
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1972
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2009
 
 type ReadAccessNetTableTaggedNet struct {
 	Attributes  *ReadAccessNetTableTaggedNetAttributes
@@ -598,7 +614,7 @@ func (inst *ReadAccessNetTableTaggedNet) GetSectionMembershipSpec() common.Membe
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2322
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2359
 
 type ReadAccessNetTable struct {
 	EntityId        *ReadAccessNetTablePlainEntityIdAttributes

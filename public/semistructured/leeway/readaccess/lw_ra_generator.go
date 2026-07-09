@@ -203,6 +203,27 @@ func getElementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingasp
 	return
 }
 
+// netipAddrCtor reports whether a scalar network host-address column gets a
+// convenience GetAttrValue<Col>Addr accessor and, if so, the net/netip
+// constructor that turns its packed [N]byte value into a netip.Addr. Only plain
+// (non-CIDR) scalar ipv4/ipv6 host addresses qualify. deferred: CIDR values are a
+// netip.Prefix and array/set forms an iter.Seq[netip.Addr]; wire those in once a
+// golden exercises them. Keep this predicate identical at the getter-emission and
+// import-composition sites so the net/netip import is present iff an accessor is.
+func netipAddrCtor(ct canonicaltypes.PrimitiveAstNodeI) (ctor string, ok bool) {
+	nt, isNet := ct.(canonicaltypes.NetworkTypeAstNode)
+	if !isNet || nt.CIDRModifier != canonicaltypes.CIDRModifierNone || nt.ScalarModifier != canonicaltypes.ScalarModifierNone {
+		return
+	}
+	switch nt.BaseType {
+	case canonicaltypes.BaseTypeNetworkIPv4:
+		ctor, ok = "netip.AddrFrom4", true
+	case canonicaltypes.BaseTypeNetworkIPv6:
+		ctor, ok = "netip.AddrFrom16", true
+	}
+	return
+}
+
 func (inst *GoClassBuilder) composeMembershipPacks(ir *common.IntermediateTableRepresentation, tblDesc common.TableDesc, clsNamer gocodegen.GoClassNamerReadAccessI, tableRowConfig common.TableRowConfigE, useDictEncoding bool) (err error) {
 	b := inst.builder
 	gocodegen.EmitGeneratingCodeLocation(b)
@@ -1405,6 +1426,22 @@ func (inst *%s%s) Len() (nEntities int) {
 						clsNamer.ComposeValueFieldElementAccessor(attrNameS),
 						typeConvSuffix,
 					)
+					if err == nil {
+						if ctor, ok := netipAddrCtor(ct); ok {
+							// Same host address as GetAttrValue<Col>, exposed as a net/netip.Addr.
+							_, err = fmt.Fprintf(b, `func (inst *%s%s) GetAttrValue%sAddr(entityIdx runtime.EntityIdx,attrIdx runtime.AttributeIdx) (addr netip.Addr) {
+	addr = %s(inst.GetAttrValue%s(entityIdx, attrIdx))
+	return
+}
+`,
+								clsName,
+								genericTypeParamsUse,
+								attrNameS,
+								ctor,
+								attrNameS,
+							)
+						}
+					}
 				case common.IntermediateColumnsSubTypeSet, common.IntermediateColumnsSubTypeHomogenousArray:
 					var f string
 					switch subType {
@@ -2670,6 +2707,10 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 			if err != nil {
 				err = eb.Build().Stringer("canonicalType", ct).Errorf("unable to generate go code for canonical type: %w", err)
 				return
+			}
+			if _, ok := netipAddrCtor(ct); ok {
+				// The GetAttrValue<Col>Addr accessor emitted for this column needs net/netip.
+				imp = append(imp, "net/netip")
 			}
 			for _, im := range imp {
 				if imports.Has(im) || (suppressedImports != nil && suppressedImports.Has(im)) {
