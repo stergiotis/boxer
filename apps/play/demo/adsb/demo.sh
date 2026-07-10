@@ -36,6 +36,9 @@
 #                under the row cap (this also makes full-res planes_mercator
 #                viable). Set e.g. "10 11 12" for a quick partial load.
 #   CH           clickhouse-client binary (default: clickhouse-client)
+#   ADSB_VIEW_CENTER ADSB_VIEW_ZOOM  only the play map-view hint printed at the
+#                end (default: Zürich, zoom 8); presets like switzerland.sh set
+#                a country-wide view.
 #
 set -euo pipefail
 here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -48,6 +51,9 @@ here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 : "${ADSB_APPEND:=0}"
 : "${ADSB_SRC:=planes_mercator_sample10}"
 : "${ADSB_HOURS:=$(seq -s' ' 0 23)}"
+# Map-view hint printed at the end (center "lat,lon" + zoom); default = Zürich.
+: "${ADSB_VIEW_CENTER:=47.3769,8.5417}"
+: "${ADSB_VIEW_ZOOM:=8}"
 
 # A closed [ADSB_FROM, ADSB_TO] date range expands into ADSB_DAYS, overriding it.
 if [ -n "${ADSB_FROM:-}" ] || [ -n "${ADSB_TO:-}" ]; then
@@ -143,8 +149,8 @@ cat <<EOF
 Done. View it in play (its default endpoint is already http://localhost:8123/):
 
   SPINNAKER_PLAY_MAP_TABLE=planes_mercator \\
-  SPINNAKER_PLAY_MAP_CENTER=47.3769,8.5417 \\
-  SPINNAKER_PLAY_MAP_ZOOM=8 \\
+  SPINNAKER_PLAY_MAP_CENTER=${ADSB_VIEW_CENTER} \\
+  SPINNAKER_PLAY_MAP_ZOOM=${ADSB_VIEW_ZOOM} \\
   <launch the play HMI>   # then open the Map panel, "no basemap" for offline
 
 EOF

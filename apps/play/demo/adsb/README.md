@@ -26,6 +26,9 @@ public instance.
 
 After that the data is entirely local; rendering needs no network.
 
+`switzerland.sh` is a preset wrapper over `demo.sh` for the common case — a
+full-resolution week for the whole country (see [below](#switzerlandsh-preset)).
+
 ## Prerequisites
 
 - A local `clickhouse-server` running with the **default user and no password**
@@ -42,6 +45,25 @@ apps/play/demo/adsb/demo.sh                                  # one day (yesterda
 ADSB_FROM=2026-07-01 ADSB_TO=2026-07-07 apps/play/demo/adsb/demo.sh   # a whole week
 ADSB_APPEND=1 ADSB_DAYS="2026-07-08" apps/play/demo/adsb/demo.sh      # add a day on top
 ```
+
+### `switzerland.sh` preset
+
+`switzerland.sh` is a thin wrapper that captures a ready-made recipe — the whole
+of Switzerland, a rolling week, at **full resolution** (~35 M rows) — by setting
+Swiss-national defaults and handing off to `demo.sh`. Every `demo.sh` knob still
+overrides:
+
+```sh
+apps/play/demo/adsb/switzerland.sh                         # last 7 days, full res
+ADSB_WEEK_DAYS=14 apps/play/demo/adsb/switzerland.sh       # last two weeks
+ADSB_SRC=planes_mercator_sample10 apps/play/demo/adsb/switzerland.sh   # ~10× lighter
+```
+
+It defaults the bbox to Switzerland's extent (lat `45.8`–`47.85`, lon
+`5.9`–`10.55`), the window to the last `ADSB_WEEK_DAYS` (default 7) complete UTC
+days ending yesterday, and `ADSB_SRC` to full-resolution `planes_mercator`. An
+explicit `ADSB_FROM`/`ADSB_TO` still wins over the rolling window; if a recent
+day comes back empty, the public instance's data lags — shift the window back.
 
 See [Loading more](#loading-more) for the multi-day / wider-area / accumulate
 knobs. Then view it in `play` (default endpoint is already
