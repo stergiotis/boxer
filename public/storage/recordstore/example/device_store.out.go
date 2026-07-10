@@ -101,6 +101,12 @@ type DeviceStoreConfig struct {
 	// entity's attributes. Empty (the default) leaves the store unstamped
 	// and behaviour-identical. A stamper must not write to this store.
 	Stampers []recordstore.ReferenceStamper
+	// BestEffortStampFlush relaxes the ADR-0112 SD5 ordered flush: when
+	// true, Flush does NOT flush the stampers' dimension stores before its
+	// own insert, so a referencing row may become durable ahead of its
+	// descriptor fact (resolution self-heals on the dimension's own flush).
+	// The default keeps the descriptor durable no later than the row.
+	BestEffortStampFlush bool
 }
 
 // DeviceStore is single-goroutine, like every part it composes. Batched
@@ -470,6 +476,18 @@ func (inst *DeviceStore) Buffered() int { return inst.buffered }
 func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 	if inst.buffered == 0 && len(inst.pending) == 0 {
 		return
+	}
+	// Ordered flush (ADR-0112 SD5): make the dimension facts this batch
+	// references durable before the payload insert, so a referencing row is
+	// never durable ahead of its descriptor. On failure nothing is
+	// transferred yet — the buffered rows stay and the next Flush retries.
+	if !inst.cfg.BestEffortStampFlush {
+		for _, s := range inst.stampers {
+			if _, ferr := s.Flush(ctx); ferr != nil {
+				err = eh.Errorf("ordered flush of stampers: %w", ferr)
+				return
+			}
+		}
 	}
 	records, err := lowlevel.InEntityDeviceTableTransferRecords(inst.dml, nil)
 	if err != nil {

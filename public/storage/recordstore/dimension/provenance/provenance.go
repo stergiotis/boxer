@@ -92,6 +92,10 @@ func (s stamper) Current(ctx context.Context) iter.Seq2[identifier.TaggedId, err
 	}
 }
 
+// Flush makes the interned provenance facts durable — a payload store calls it
+// before its own insert (ADR-0112 SD5).
+func (s stamper) Flush(ctx context.Context) (int, error) { return s.r.Flush(ctx) }
+
 // Resolve returns the host and frames a surrogate id was minted for.
 func (inst *Recorder) Resolve(ctx context.Context, id identifier.TaggedId) (Provenance, bool, error) {
 	return inst.dim.Resolve(ctx, id)

@@ -50,8 +50,9 @@ func TestProvenanceStampingEndToEnd(t *testing.T) {
 	n, err := dev.Flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
-	_, err = rec.Flush(ctx) // make the descriptor durable (SD5 ordered flush is manual here)
-	require.NoError(t, err)
+	// No manual provenance flush: dev.Flush ordered-flushed the bound provenance
+	// store before its own insert (ADR-0112 SD5), so the descriptor fact is
+	// already durable and the Resolve below finds it.
 
 	// The stored symbol attribute carries exactly one HighCardRef membership: the stamp.
 	high := storedSymbolHighCardRef(t, ctx, exec, 1)

@@ -379,10 +379,14 @@ who, _, _ := prov.Resolve(ctx, provID)                         // host + frames,
   one (ADR-0111) needs the ctx. End-to-end test (`example`): a device write
   through a provenance stamper → flush → the stored row's HighCardRef membership
   resolves to the writer's host and stack; inert (all suites pass) with no
-  stamper set. **Remaining S2:** ordered flush (SD5) — the payload store
-  flushing its bound dimension stores before its own insert (the test does it
-  manually for now). Other membership flavours and the entity-level synthetic
-  section stay Deferred.
+  stamper set. **Ordered flush (SD5) is done:** the store's Flush flushes its
+  bound stampers' dimension stores before its own insert (same executor), so a
+  referencing row is never durable ahead of its descriptor fact — a
+  `BestEffortStampFlush` config toggle opts into the relaxation. The end-to-end
+  test now resolves the stamped id after `dev.Flush` alone (no manual provenance
+  flush), proving the ordering. **S2 is complete.** Deferred beyond it: the
+  entity-level synthetic section (SD4) and membership flavours other than
+  HighCardRef.
 - **S3** — attribute-level opt-in (SD4); a readback artefact for querying by
   dimension membership; the host-only / sampled provenance tiers.
 - **S4** — a second dimension (the first real trace/causation/tenant consumer)
@@ -396,9 +400,12 @@ is the default or opt-in (SD5). Depends on ADR-0111 for the id-generation seam.
 S1 is scoped to the `DimensionStore` runtime and the provenance instance — the
 intern/emit/resolve loop — keeping the shared DML-subsystem change (M1) and its
 tighter ADR-0111 coupling in S2, so none of those three forks blocks S1. S1 is
-now **implemented and tested** (round-trip green against clickhouse-local); the
-ADR stays proposed pending human review — flip to accepted with a reviewer once
-the S2 forks are settled.
+now **implemented and tested** (round-trip green against clickhouse-local), and
+**S2 is complete** — the M1 ambient primitive, the `ReferenceStamper` seam, and
+ordered flush (SD5), each with tests. The ADR stays proposed pending human
+review — flip to accepted with a reviewer now that S1 and S2 are in; S3
+(attribute-level opt-in, query artefact, tiers) and S4 (a second dimension)
+remain optional follow-ups.
 
 ## References
 

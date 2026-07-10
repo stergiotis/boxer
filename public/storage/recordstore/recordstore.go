@@ -37,6 +37,11 @@ import (
 // that same store, or interning a fact would recurse.
 type ReferenceStamper interface {
 	Current(ctx context.Context) iter.Seq2[identifier.TaggedId, error]
+	// Flush makes the descriptor facts the stamped ids reference durable. A
+	// payload store calls it before its own insert (ordered flush, ADR-0112
+	// SD5), so a referencing row is never durable ahead of its descriptor fact.
+	// A stamper with no backing store returns (0, nil).
+	Flush(ctx context.Context) (n int, err error)
 }
 
 // Lifecycle marker values of the envelope Lifecycle column (the state
