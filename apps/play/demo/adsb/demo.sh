@@ -46,7 +46,7 @@ echo "· schema (idempotent) …"
 # Wake the idled staging instance (and fail fast if it is unreachable) BEFORE we
 # TRUNCATE, so a network problem never leaves the local tables empty.
 echo "· waking the public instance (idled to zero — first connect ~30–60s) …"
-"$CH" "${remote_flags[@]}" --query \
+"$CH" --progress "${remote_flags[@]}" --query \
   "SELECT 1 FROM remoteSecure('kvzqttvc2n.eu-west-1.aws.clickhouse-staging.com:9440', default.planes_mercator_sample100, 'website', '') LIMIT 1" >/dev/null
 
 echo "· clearing any previous slice …"
@@ -63,7 +63,7 @@ fi
 
 echo "· ingesting bbox [${ADSB_MIN_LAT},${ADSB_MIN_LON} .. ${ADSB_MAX_LAT},${ADSB_MAX_LON}] for ${ADSB_DAY} from ${ADSB_SRC}"
 echo "  (public instance is idled — first connect may take ~30–60s) …"
-"$CH" "${remote_flags[@]}" \
+"$CH" --progress "${remote_flags[@]}" \
   --param_min_lat="$ADSB_MIN_LAT" --param_max_lat="$ADSB_MAX_LAT" \
   --param_min_lon="$ADSB_MIN_LON" --param_max_lon="$ADSB_MAX_LON" \
   --param_day="$ADSB_DAY" \
