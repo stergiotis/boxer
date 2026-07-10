@@ -70,7 +70,11 @@ func (inst *PlayApp) renderSchemaTab(rec arrow.RecordBatch, schema *arrow.Schema
 
 // renderSchemaView draws the schemaview inspector for the current model. The
 // widget owns its own two-pane dock + scroll, so it is embedded directly (no
-// outer ScrollArea), mirroring the demo host.
+// outer ScrollArea). Unlike the gallery host (a vertically-unbounded scroll
+// host), a dock-tab leaf already bounds the widget's height, so FillHost makes
+// it fill the leaf instead of flooring to dockMinHeight — the floor overflows
+// the (shorter) leaf and its nested dock paints across the neighbouring panes
+// once the section list scrolls.
 func (inst *PlayApp) renderSchemaView() {
 	if inst.schemaModel == nil || inst.schemaModel.Table == nil {
 		for rt := range c.RichTextLabel("No schema to display.") {
@@ -78,7 +82,7 @@ func (inst *PlayApp) renderSchemaView() {
 		}
 		return
 	}
-	schemaview.Render(schemaview.Input{Ids: inst.ids, ScopeKey: "play-schema", Model: inst.schemaModel})
+	schemaview.Render(schemaview.Input{Ids: inst.ids, ScopeKey: "play-schema", Model: inst.schemaModel, FillHost: true})
 }
 
 // syncSchemaModel rebinds the inspector's TableDesc when the active result's

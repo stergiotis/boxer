@@ -30,6 +30,16 @@ type Input struct {
 	ScopeKey string
 	// Model is the inspector state, mutated in place by the navigator.
 	Model *Model
+	// FillHost tells Render its host already gives it a bounded height, so
+	// it must fill that rect rather than floor to dockMinHeight. The floor
+	// is a scroll-host device (see dockMinHeight): the standalone gallery is
+	// a vertically-unbounded ScrollArea, so without a floor the dock would
+	// collapse. Inside a host that is ALREADY bounded and often shorter than
+	// the floor — a dock-tab leaf (the play Schema tab) — forcing 620 px
+	// overflows the leaf, and the nested dock's tab-bars / separators paint
+	// across the neighbouring panes (severe disarray once the section list
+	// is scrolled). Bounded hosts set this true; the gallery leaves it false.
+	FillHost bool
 }
 
 const (
@@ -60,7 +70,11 @@ func Render(in Input) {
 	}
 	scope := legendScope(in.ScopeKey)
 	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
-		c.UiSetMinHeight(dockMinHeight)
+		// Floor the dock's height only in an unbounded scroll host; a bounded
+		// host (FillHost) lets the dock fill its leaf instead of overflowing it.
+		if !in.FillHost {
+			c.UiSetMinHeight(dockMinHeight)
+		}
 		for dock := range c.DockArea(in.Ids.PrepareStr("svdock")) {
 			root := dock.InitRoot(navTabID)
 			dock.Split(root, c.DockRight, navFrac, detailTabID)
