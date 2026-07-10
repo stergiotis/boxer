@@ -112,7 +112,14 @@ its Go type.
 
 ## Choose a membership channel
 
-Append a channel flag to the tag; the default (no flag) is `LowCardRef`.
+A **channel** fixes how a field's *membership identity* rides the wire — the
+field's *value* still lands in the section named by the tag. Append the channel
+flag; the default (no flag) is `lowCardRef`. The eight channels form a
+cardinality × identity grid ([ADR-0072](../adr/0072-leeway-membership-carriage.md),
+[ADR-0008](../adr/0008-leeway-marshall-extensions.md)): a **low-** or
+**high-cardinality** dictionary crossed with a **ref** id, a **verbatim** name,
+or **per-row** carrier data. The realized eight are a sparse subset of the grid —
+there is deliberately no mixed-high-card channel.
 
 | Flag | Identity on the wire | Resolver |
 |------|----------------------|----------|
@@ -120,20 +127,64 @@ Append a channel flag to the tag; the default (no flag) is `LowCardRef`.
 | `highCardRef` | `uint64` id | same |
 | `verbatim` / `lowCardVerbatim` | the literal name as `[]byte` | none — embeds directly |
 | `highCardVerbatim` | literal name `[]byte` | none |
-| `mixedLowCardRef` / `mixedLowCardVerbatim` | per-row id/name **+ params** | a `marshalltypes` carrier sibling |
+| `mixedLowCardRef` | per-row `uint64` id **+ params** | a `marshalltypes.MixedLowCardRef` sibling |
+| `mixedLowCardVerbatim` | per-row `[]byte` name **+ params** | a `marshalltypes.MixedLowCardVerbatim` sibling |
 | `lowCardRefParametrized` / `highCardRefParametrized` | per-row opaque params blob | a `marshalltypes.Parametrized` sibling |
 
-A **carrier channel** (the mixed / parametrized rows) carries its identity as
-per-row data: pair the value field with a `marshalltypes` sibling field on the
-same `(membership, section)`; scalar/Option/container values pair with a scalar
-carrier, `,explode` with a `[]marshalltypes.X` slice carrier. A carrier section
-holds one membership only.
+The snippets below are the tag *shapes* you write; the schema's section must
+declare the channel's `AddMembership…P` method — the codec drives it, it does not
+define it, and an absent method fails at `go build` / `Validate` (no in-tree
+schema declares all eight on one section).
+
+**The four simple channels** name the membership once, in the tag, and every row
+on the section shares it. `ref` resolves that name to a `uint64` id (via
+`kindXxx` / `LookupI`); `verbatim` embeds the name literally as `[]byte`. Low vs
+high card only picks the dictionary the section builds — the Go shape is
+identical:
+
+```go
+Author  string `lw:"author,symbol"`                  // lowCardRef (default): membership `author` → kindAuthor uint64
+Session string `lw:"session,symbol,highCardRef"`     // highCardRef: same identity, high-card dictionary
+Locale  string `lw:"locale,symbol,verbatim"`         // lowCardVerbatim: the bytes "locale" embed on the wire
+Header  string `lw:"header,symbol,highCardVerbatim"` // highCardVerbatim: literal name, high-card
+```
+
+**The four carrier channels** let the membership identity vary **row by row**, so
+it can't be a fixed name in the tag: it rides in a `marshalltypes` sibling field
+sharing the value's full `(membership, section, channel)` triple. The tag's
+membership slot is then only the design-time pairing/grouping key — the wire
+identity comes entirely from the carrier:
+
+```go
+// mixedLowCardRef — per-row (uint64 Id + []byte Params); the in-tree example is sensorreading.go
+Reading  string                        `lw:"sensor,symbol,mixedLowCardRef"`
+ReadingC marshalltypes.MixedLowCardRef `lw:"sensor,symbol,mixedLowCardRef"`
+
+// mixedLowCardVerbatim — per-row (literal []byte Name + []byte Params)
+Metric  string                             `lw:"gauge,symbol,mixedLowCardVerbatim"`
+MetricC marshalltypes.MixedLowCardVerbatim `lw:"gauge,symbol,mixedLowCardVerbatim"`
+
+// lowCardRefParametrized — the whole identity is one opaque []byte Params blob
+Signal  string                     `lw:"probe,symbol,lowCardRefParametrized"`
+SignalC marshalltypes.Parametrized `lw:"probe,symbol,lowCardRefParametrized"`
+
+// highCardRefParametrized — same Parametrized carrier, high-card dictionary
+Trace  string                     `lw:"span,symbol,highCardRefParametrized"`
+TraceC marshalltypes.Parametrized `lw:"span,symbol,highCardRefParametrized"`
+```
+
+A scalar / `Option` / container value pairs with a **scalar** carrier; `,explode`
+instead pairs with a **slice** carrier (`[]marshalltypes.X`), one carrier element
+per exploded attribute. `Parametrized` serves both parametrized channels — the
+flag, not the carrier type, picks low- vs high-card. `Params` is wire-emitted
+even when empty: carrier *presence*, not params content, is the "attribute is
+here" signal.
 
 **One channel per section.** All fields targeting a section must agree on the
 channel — the read-side decode iterates a single channel whose iterator element
 type (`uint64` vs `[]byte`) differs per channel. Ref-channel membership names
 must be Go identifiers (they become the `kindXxx` symbol); verbatim names are
-arbitrary.
+arbitrary; and a carrier section holds one membership only.
 
 ## Map several sub-columns as one attribute (multi-sub-column)
 
