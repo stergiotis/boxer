@@ -59,16 +59,19 @@ here.
 | --- | --- | --- |
 | `ADSB_MIN_LAT` `ADSB_MAX_LAT` `ADSB_MIN_LON` `ADSB_MAX_LON` | `45.5 49.0 5.5 12.0` | bbox (WGS84); default covers Zürich and the surrounding Alpine airspace |
 | `ADSB_DAY` | yesterday (UTC) | the single day to load (`YYYY-MM-DD`) |
-| `ADSB_SRC` | `planes_mercator_sample10` | remote source; the 10% sample (~0.8 M rows/day here) stays under the result cap below. `planes_mercator` is full resolution but only for a narrow bbox/short window |
+| `ADSB_SRC` | `planes_mercator_sample10` | remote source; the 10% sample (~0.8 M rows/day) is quick and dense. `planes_mercator` is full resolution — viable now that the load is chunked (see below) |
+| `ADSB_HOURS` | `0`…`23` (all) | which UTC hours to load, space-separated. The day is pulled **one `INSERT` per hour**, so set e.g. `"10 11 12"` for a fast partial (midday) load |
 | `CH` | `clickhouse-client` | client binary |
 
 Reference volume: the default box for one day is ≈0.84 M rows / ~5 k aircraft
-from the 10% sample — a quick transatlantic pull and a dense raster. The public
-`website` user caps any single query result at **1,048,576 rows**, so the
-full-resolution `planes_mercator` (~8.4 M rows/day for this box) fails with
-`TOO_MANY_ROWS_OR_BYTES` unless you narrow the bbox or load a sub-day window;
-`ADSB_SRC=planes_mercator_sample100` is the always-safe fallback for busy days or
-wide boxes.
+from the 10% sample. The load runs **one `INSERT` per UTC hour** (≈1/24 of the
+day each), with per-hour retry — so a single slow chunk can't blow the receive
+timeout the way a whole-day pull did, and a failed hour is retried in isolation.
+Keeping each query small also holds it under the public `website` user's
+**1,048,576-row result cap**, which a whole-day full-resolution pull (~8.4 M
+rows) exceeded — so `ADSB_SRC=planes_mercator` (full res) is viable too, at ~10×
+the transfer. `planes_mercator_sample100` stays the lightest option; `ADSB_HOURS`
+narrows to a partial day.
 
 ## Data provenance and licensing
 

@@ -7,6 +7,9 @@
 -- Parameters (passed by demo.sh via clickhouse-client --param_*):
 --   min_lat/max_lat/min_lon/max_lon : Float64  viewport bbox (WGS84)
 --   day                             : Date     the single UTC day to load
+--   hour                            : UInt8    the UTC hour (0-23); demo.sh runs
+--                                              one INSERT per hour so each
+--                                              transfer is small and retryable
 --
 -- The bbox is expressed in lat/lon and converted to the mercator UInt32 range
 -- with the setup.sql formulas, so the WHERE prunes the remote's morton-indexed
@@ -28,4 +31,5 @@ SELECT *
 FROM remoteSecure('kvzqttvc2n.eu-west-1.aws.clickhouse-staging.com:9440', default.planes_mercator, 'website', '')
 WHERE mercator_x BETWEEN min_x AND max_x
   AND mercator_y BETWEEN min_y AND max_y
-  AND date = {day:Date};
+  AND date = {day:Date}
+  AND toHour(time) = {hour:UInt8};
