@@ -57,22 +57,23 @@ func CreateSchemaFixture() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityFixture struct {
-	errs           []error
-	state          runtime.EntityStateE
-	allocator      memory.Allocator
-	builder        *array.RecordBuilder
-	records        []arrow.RecordBatch
-	section00Inst  *InEntityFixtureSectionGeoArea
-	section00State runtime.EntityStateE
-	section01Inst  *InEntityFixtureSectionGeoPoint
-	section01State runtime.EntityStateE
-	section02Inst  *InEntityFixtureSectionMetric
-	section02State runtime.EntityStateE
-	activeSections *[3]bool
-	plainId0       uint64
+	errs               []error
+	state              runtime.EntityStateE
+	allocator          memory.Allocator
+	builder            *array.RecordBuilder
+	records            []arrow.RecordBatch
+	section00Inst      *InEntityFixtureSectionGeoArea
+	section00State     runtime.EntityStateE
+	section01Inst      *InEntityFixtureSectionGeoPoint
+	section01State     runtime.EntityStateE
+	section02Inst      *InEntityFixtureSectionMetric
+	section02State     runtime.EntityStateE
+	activeSections     *[3]bool
+	ambientHighCardRef []uint64
+	plainId0           uint64
 
 	plainInternalKey1 string
 
@@ -137,7 +138,7 @@ var InEntityFixtureSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 string) *InEntityFixture {
 	if inst.state != runtime.EntityStateInEntity {
@@ -149,6 +150,25 @@ func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 
 	inst.plainNaturalKey2 = naturalKey2
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityFixture) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityFixture) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityFixture) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -494,11 +514,14 @@ func (inst *InEntityFixtureSectionGeoAreaInAttr) handleNonScalarSupportColumns()
 	inst.homogenousArrayContainerLength026 = 0
 	inst.homogenousArraySupportFieldBuilder027.Append(uint64(l))
 }
+func (inst *InEntityFixtureSectionGeoAreaInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityFixtureSectionGeoAreaInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityFixtureSectionGeoAreaInAttr) EndSection() *InEntityFixture {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -513,6 +536,7 @@ func (inst *InEntityFixtureSectionGeoAreaInAttr) EndSection() *InEntityFixture {
 	return inst.parent.parent
 }
 func (inst *InEntityFixtureSectionGeoAreaInAttr) EndAttribute() *InEntityFixtureSectionGeoArea {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -706,11 +730,14 @@ func (inst *InEntityFixtureSectionGeoPointInAttr) handleNonScalarSupportColumns(
 	var l int
 	var _ = l
 }
+func (inst *InEntityFixtureSectionGeoPointInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityFixtureSectionGeoPointInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityFixtureSectionGeoPointInAttr) EndSection() *InEntityFixture {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -725,6 +752,7 @@ func (inst *InEntityFixtureSectionGeoPointInAttr) EndSection() *InEntityFixture 
 	return inst.parent.parent
 }
 func (inst *InEntityFixtureSectionGeoPointInAttr) EndAttribute() *InEntityFixtureSectionGeoPoint {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1144,11 +1172,14 @@ func (inst *InEntityFixtureSectionMetricInAttr) handleNonScalarSupportColumns() 
 	inst.setContainerLength006 = 0
 	inst.setSupportFieldBuilder015.Append(uint64(l))
 }
+func (inst *InEntityFixtureSectionMetricInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityFixtureSectionMetricInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityFixtureSectionMetricInAttr) EndSection() *InEntityFixture {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1163,6 +1194,7 @@ func (inst *InEntityFixtureSectionMetricInAttr) EndSection() *InEntityFixture {
 	return inst.parent.parent
 }
 func (inst *InEntityFixtureSectionMetricInAttr) EndAttribute() *InEntityFixtureSectionMetric {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

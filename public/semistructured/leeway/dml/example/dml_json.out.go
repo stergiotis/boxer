@@ -56,7 +56,7 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityJson struct {
 	allocator             memory.Allocator
@@ -72,6 +72,7 @@ type InEntityJson struct {
 	scalarFieldBuilder000 *array.BinaryBuilder
 	errs                  []error
 	records               []arrow.RecordBatch
+	ambientHighCardRef    []uint64
 	plainBlake3hash0      []byte
 	state                 runtime.EntityStateE
 	section00State        runtime.EntityStateE
@@ -138,7 +139,7 @@ var InEntityJsonSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {
@@ -148,6 +149,25 @@ func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	inst.plainBlake3hash0 = blake3hash0
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityJson) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityJson) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityJson) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainBlake3hash0)
@@ -559,11 +579,14 @@ func (inst *InEntityJsonSectionBoolInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
+func (inst *InEntityJsonSectionBoolInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityJsonSectionBoolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityJsonSectionBoolInAttr) EndSection() *InEntityJson {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -578,6 +601,7 @@ func (inst *InEntityJsonSectionBoolInAttr) EndSection() *InEntityJson {
 	return inst.parent.parent
 }
 func (inst *InEntityJsonSectionBoolInAttr) EndAttribute() *InEntityJsonSectionBool {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -773,11 +797,14 @@ func (inst *InEntityJsonSectionFloat64InAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
+func (inst *InEntityJsonSectionFloat64InAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityJsonSectionFloat64InAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityJsonSectionFloat64InAttr) EndSection() *InEntityJson {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -792,6 +819,7 @@ func (inst *InEntityJsonSectionFloat64InAttr) EndSection() *InEntityJson {
 	return inst.parent.parent
 }
 func (inst *InEntityJsonSectionFloat64InAttr) EndAttribute() *InEntityJsonSectionFloat64 {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -987,11 +1015,14 @@ func (inst *InEntityJsonSectionInt64InAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
+func (inst *InEntityJsonSectionInt64InAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityJsonSectionInt64InAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityJsonSectionInt64InAttr) EndSection() *InEntityJson {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1006,6 +1037,7 @@ func (inst *InEntityJsonSectionInt64InAttr) EndSection() *InEntityJson {
 	return inst.parent.parent
 }
 func (inst *InEntityJsonSectionInt64InAttr) EndAttribute() *InEntityJsonSectionInt64 {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1190,11 +1222,14 @@ func (inst *InEntityJsonSectionNullInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
+func (inst *InEntityJsonSectionNullInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityJsonSectionNullInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityJsonSectionNullInAttr) EndSection() *InEntityJson {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1209,6 +1244,7 @@ func (inst *InEntityJsonSectionNullInAttr) EndSection() *InEntityJson {
 	return inst.parent.parent
 }
 func (inst *InEntityJsonSectionNullInAttr) EndAttribute() *InEntityJsonSectionNull {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1404,11 +1440,14 @@ func (inst *InEntityJsonSectionStringInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
+func (inst *InEntityJsonSectionStringInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityJsonSectionStringInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityJsonSectionStringInAttr) EndSection() *InEntityJson {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1423,6 +1462,7 @@ func (inst *InEntityJsonSectionStringInAttr) EndSection() *InEntityJson {
 	return inst.parent.parent
 }
 func (inst *InEntityJsonSectionStringInAttr) EndAttribute() *InEntityJsonSectionString {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1618,11 +1658,14 @@ func (inst *InEntityJsonSectionSymbolInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
+func (inst *InEntityJsonSectionSymbolInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityJsonSectionSymbolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityJsonSectionSymbolInAttr) EndSection() *InEntityJson {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1637,6 +1680,7 @@ func (inst *InEntityJsonSectionSymbolInAttr) EndSection() *InEntityJson {
 	return inst.parent.parent
 }
 func (inst *InEntityJsonSectionSymbolInAttr) EndAttribute() *InEntityJsonSectionSymbol {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1821,11 +1865,14 @@ func (inst *InEntityJsonSectionUndefinedInAttr) handleNonScalarSupportColumns() 
 	var l int
 	var _ = l
 }
+func (inst *InEntityJsonSectionUndefinedInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityJsonSectionUndefinedInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityJsonSectionUndefinedInAttr) EndSection() *InEntityJson {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1840,6 +1887,7 @@ func (inst *InEntityJsonSectionUndefinedInAttr) EndSection() *InEntityJson {
 	return inst.parent.parent
 }
 func (inst *InEntityJsonSectionUndefinedInAttr) EndAttribute() *InEntityJsonSectionUndefined {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

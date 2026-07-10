@@ -116,32 +116,33 @@ func CreateSchemaLedgerTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityLedgerTable struct {
-	errs           []error
-	state          runtime.EntityStateE
-	allocator      memory.Allocator
-	builder        *array.RecordBuilder
-	records        []arrow.RecordBatch
-	section00Inst  *InEntityLedgerTableSectionAcctClosed
-	section00State runtime.EntityStateE
-	section01Inst  *InEntityLedgerTableSectionAcctDeposit
-	section01State runtime.EntityStateE
-	section02Inst  *InEntityLedgerTableSectionAcctOwner
-	section02State runtime.EntityStateE
-	section03Inst  *InEntityLedgerTableSectionAcctWithdraw
-	section03State runtime.EntityStateE
-	section04Inst  *InEntityLedgerTableSectionSnapAsOf
-	section04State runtime.EntityStateE
-	section05Inst  *InEntityLedgerTableSectionSnapBalance
-	section05State runtime.EntityStateE
-	section06Inst  *InEntityLedgerTableSectionSnapClosed
-	section06State runtime.EntityStateE
-	section07Inst  *InEntityLedgerTableSectionSnapOwner
-	section07State runtime.EntityStateE
-	activeSections *[8]bool
-	plainId0       string
+	errs               []error
+	state              runtime.EntityStateE
+	allocator          memory.Allocator
+	builder            *array.RecordBuilder
+	records            []arrow.RecordBatch
+	section00Inst      *InEntityLedgerTableSectionAcctClosed
+	section00State     runtime.EntityStateE
+	section01Inst      *InEntityLedgerTableSectionAcctDeposit
+	section01State     runtime.EntityStateE
+	section02Inst      *InEntityLedgerTableSectionAcctOwner
+	section02State     runtime.EntityStateE
+	section03Inst      *InEntityLedgerTableSectionAcctWithdraw
+	section03State     runtime.EntityStateE
+	section04Inst      *InEntityLedgerTableSectionSnapAsOf
+	section04State     runtime.EntityStateE
+	section05Inst      *InEntityLedgerTableSectionSnapBalance
+	section05State     runtime.EntityStateE
+	section06Inst      *InEntityLedgerTableSectionSnapClosed
+	section06State     runtime.EntityStateE
+	section07Inst      *InEntityLedgerTableSectionSnapOwner
+	section07State     runtime.EntityStateE
+	activeSections     *[8]bool
+	ambientHighCardRef []uint64
+	plainId0           string
 
 	plainTs1              time.Time
 	scalarFieldBuilder000 *array.StringBuilder
@@ -201,7 +202,7 @@ var InEntityLedgerTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -216,7 +217,7 @@ func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityLedgerTable) setTimestamp(ts1 time.Time) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -226,6 +227,25 @@ func (inst *InEntityLedgerTable) setTimestamp(ts1 time.Time) *InEntityLedgerTabl
 	inst.plainTs1 = ts1
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityLedgerTable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityLedgerTable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityLedgerTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -781,11 +801,17 @@ func (inst *InEntityLedgerTableSectionAcctClosedInAttr) handleNonScalarSupportCo
 	var l int
 	var _ = l
 }
+func (inst *InEntityLedgerTableSectionAcctClosedInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityLedgerTableSectionAcctClosedInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityLedgerTableSectionAcctClosedInAttr) EndSection() *InEntityLedgerTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -800,6 +826,7 @@ func (inst *InEntityLedgerTableSectionAcctClosedInAttr) EndSection() *InEntityLe
 	return inst.parent.parent
 }
 func (inst *InEntityLedgerTableSectionAcctClosedInAttr) EndAttribute() *InEntityLedgerTableSectionAcctClosed {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1124,11 +1151,17 @@ func (inst *InEntityLedgerTableSectionAcctDepositInAttr) handleNonScalarSupportC
 	inst.homogenousArrayContainerLength012 = 0
 	inst.homogenousArraySupportFieldBuilder018.Append(uint64(l))
 }
+func (inst *InEntityLedgerTableSectionAcctDepositInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityLedgerTableSectionAcctDepositInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityLedgerTableSectionAcctDepositInAttr) EndSection() *InEntityLedgerTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1143,6 +1176,7 @@ func (inst *InEntityLedgerTableSectionAcctDepositInAttr) EndSection() *InEntityL
 	return inst.parent.parent
 }
 func (inst *InEntityLedgerTableSectionAcctDepositInAttr) EndAttribute() *InEntityLedgerTableSectionAcctDeposit {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1439,11 +1473,17 @@ func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) handleNonScalarSupportCol
 	var l int
 	var _ = l
 }
+func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) EndSection() *InEntityLedgerTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1458,6 +1498,7 @@ func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) EndSection() *InEntityLed
 	return inst.parent.parent
 }
 func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) EndAttribute() *InEntityLedgerTableSectionAcctOwner {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1782,11 +1823,17 @@ func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) handleNonScalarSupport
 	inst.homogenousArrayContainerLength023 = 0
 	inst.homogenousArraySupportFieldBuilder029.Append(uint64(l))
 }
+func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) EndSection() *InEntityLedgerTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1801,6 +1848,7 @@ func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) EndSection() *InEntity
 	return inst.parent.parent
 }
 func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) EndAttribute() *InEntityLedgerTableSectionAcctWithdraw {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2125,11 +2173,17 @@ func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) handleNonScalarSupportColu
 	inst.homogenousArrayContainerLength075 = 0
 	inst.homogenousArraySupportFieldBuilder081.Append(uint64(l))
 }
+func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) EndSection() *InEntityLedgerTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2144,6 +2198,7 @@ func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) EndSection() *InEntityLedg
 	return inst.parent.parent
 }
 func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) EndAttribute() *InEntityLedgerTableSectionSnapAsOf {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2468,11 +2523,17 @@ func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) handleNonScalarSupportC
 	inst.homogenousArrayContainerLength054 = 0
 	inst.homogenousArraySupportFieldBuilder060.Append(uint64(l))
 }
+func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) EndSection() *InEntityLedgerTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2487,6 +2548,7 @@ func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) EndSection() *InEntityL
 	return inst.parent.parent
 }
 func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) EndAttribute() *InEntityLedgerTableSectionSnapBalance {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2783,11 +2845,17 @@ func (inst *InEntityLedgerTableSectionSnapClosedInAttr) handleNonScalarSupportCo
 	var l int
 	var _ = l
 }
+func (inst *InEntityLedgerTableSectionSnapClosedInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityLedgerTableSectionSnapClosedInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityLedgerTableSectionSnapClosedInAttr) EndSection() *InEntityLedgerTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2802,6 +2870,7 @@ func (inst *InEntityLedgerTableSectionSnapClosedInAttr) EndSection() *InEntityLe
 	return inst.parent.parent
 }
 func (inst *InEntityLedgerTableSectionSnapClosedInAttr) EndAttribute() *InEntityLedgerTableSectionSnapClosed {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -3098,11 +3167,17 @@ func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) handleNonScalarSupportCol
 	var l int
 	var _ = l
 }
+func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) EndSection() *InEntityLedgerTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -3117,6 +3192,7 @@ func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) EndSection() *InEntityLed
 	return inst.parent.parent
 }
 func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) EndAttribute() *InEntityLedgerTableSectionSnapOwner {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

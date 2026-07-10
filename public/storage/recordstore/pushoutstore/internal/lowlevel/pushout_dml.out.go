@@ -107,30 +107,31 @@ func CreateSchemaPushoutTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityPushoutTable struct {
-	errs           []error
-	state          runtime.EntityStateE
-	allocator      memory.Allocator
-	builder        *array.RecordBuilder
-	records        []arrow.RecordBatch
-	section00Inst  *InEntityPushoutTableSectionEnvBlob
-	section00State runtime.EntityStateE
-	section01Inst  *InEntityPushoutTableSectionLogHash
-	section01State runtime.EntityStateE
-	section02Inst  *InEntityPushoutTableSectionRetHash
-	section02State runtime.EntityStateE
-	section03Inst  *InEntityPushoutTableSectionRetIndex
-	section03State runtime.EntityStateE
-	section04Inst  *InEntityPushoutTableSectionRetTime
-	section04State runtime.EntityStateE
-	section05Inst  *InEntityPushoutTableSectionSnapApplied
-	section05State runtime.EntityStateE
-	section06Inst  *InEntityPushoutTableSectionSnapGraggle
-	section06State runtime.EntityStateE
-	activeSections *[7]bool
-	plainId0       string
+	errs               []error
+	state              runtime.EntityStateE
+	allocator          memory.Allocator
+	builder            *array.RecordBuilder
+	records            []arrow.RecordBatch
+	section00Inst      *InEntityPushoutTableSectionEnvBlob
+	section00State     runtime.EntityStateE
+	section01Inst      *InEntityPushoutTableSectionLogHash
+	section01State     runtime.EntityStateE
+	section02Inst      *InEntityPushoutTableSectionRetHash
+	section02State     runtime.EntityStateE
+	section03Inst      *InEntityPushoutTableSectionRetIndex
+	section03State     runtime.EntityStateE
+	section04Inst      *InEntityPushoutTableSectionRetTime
+	section04State     runtime.EntityStateE
+	section05Inst      *InEntityPushoutTableSectionSnapApplied
+	section05State     runtime.EntityStateE
+	section06Inst      *InEntityPushoutTableSectionSnapGraggle
+	section06State     runtime.EntityStateE
+	activeSections     *[7]bool
+	ambientHighCardRef []uint64
+	plainId0           string
 
 	plainTs1 time.Time
 
@@ -194,7 +195,7 @@ var InEntityPushoutTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -209,7 +210,7 @@ func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -224,7 +225,7 @@ func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityPushoutTable) setLifecycle(lifecycle2 uint8) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -234,6 +235,25 @@ func (inst *InEntityPushoutTable) setLifecycle(lifecycle2 uint8) *InEntityPushou
 	inst.plainLifecycle2 = lifecycle2
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityPushoutTable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityPushoutTable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityPushoutTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -778,11 +798,17 @@ func (inst *InEntityPushoutTableSectionEnvBlobInAttr) handleNonScalarSupportColu
 	var l int
 	var _ = l
 }
+func (inst *InEntityPushoutTableSectionEnvBlobInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityPushoutTableSectionEnvBlobInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityPushoutTableSectionEnvBlobInAttr) EndSection() *InEntityPushoutTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -797,6 +823,7 @@ func (inst *InEntityPushoutTableSectionEnvBlobInAttr) EndSection() *InEntityPush
 	return inst.parent.parent
 }
 func (inst *InEntityPushoutTableSectionEnvBlobInAttr) EndAttribute() *InEntityPushoutTableSectionEnvBlob {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1093,11 +1120,17 @@ func (inst *InEntityPushoutTableSectionLogHashInAttr) handleNonScalarSupportColu
 	var l int
 	var _ = l
 }
+func (inst *InEntityPushoutTableSectionLogHashInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityPushoutTableSectionLogHashInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityPushoutTableSectionLogHashInAttr) EndSection() *InEntityPushoutTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1112,6 +1145,7 @@ func (inst *InEntityPushoutTableSectionLogHashInAttr) EndSection() *InEntityPush
 	return inst.parent.parent
 }
 func (inst *InEntityPushoutTableSectionLogHashInAttr) EndAttribute() *InEntityPushoutTableSectionLogHash {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1436,11 +1470,17 @@ func (inst *InEntityPushoutTableSectionRetHashInAttr) handleNonScalarSupportColu
 	inst.homogenousArrayContainerLength044 = 0
 	inst.homogenousArraySupportFieldBuilder050.Append(uint64(l))
 }
+func (inst *InEntityPushoutTableSectionRetHashInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityPushoutTableSectionRetHashInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityPushoutTableSectionRetHashInAttr) EndSection() *InEntityPushoutTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1455,6 +1495,7 @@ func (inst *InEntityPushoutTableSectionRetHashInAttr) EndSection() *InEntityPush
 	return inst.parent.parent
 }
 func (inst *InEntityPushoutTableSectionRetHashInAttr) EndAttribute() *InEntityPushoutTableSectionRetHash {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1779,11 +1820,17 @@ func (inst *InEntityPushoutTableSectionRetIndexInAttr) handleNonScalarSupportCol
 	inst.homogenousArrayContainerLength055 = 0
 	inst.homogenousArraySupportFieldBuilder061.Append(uint64(l))
 }
+func (inst *InEntityPushoutTableSectionRetIndexInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityPushoutTableSectionRetIndexInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityPushoutTableSectionRetIndexInAttr) EndSection() *InEntityPushoutTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1798,6 +1845,7 @@ func (inst *InEntityPushoutTableSectionRetIndexInAttr) EndSection() *InEntityPus
 	return inst.parent.parent
 }
 func (inst *InEntityPushoutTableSectionRetIndexInAttr) EndAttribute() *InEntityPushoutTableSectionRetIndex {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2122,11 +2170,17 @@ func (inst *InEntityPushoutTableSectionRetTimeInAttr) handleNonScalarSupportColu
 	inst.homogenousArrayContainerLength066 = 0
 	inst.homogenousArraySupportFieldBuilder072.Append(uint64(l))
 }
+func (inst *InEntityPushoutTableSectionRetTimeInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityPushoutTableSectionRetTimeInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityPushoutTableSectionRetTimeInAttr) EndSection() *InEntityPushoutTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2141,6 +2195,7 @@ func (inst *InEntityPushoutTableSectionRetTimeInAttr) EndSection() *InEntityPush
 	return inst.parent.parent
 }
 func (inst *InEntityPushoutTableSectionRetTimeInAttr) EndAttribute() *InEntityPushoutTableSectionRetTime {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2465,11 +2520,17 @@ func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) handleNonScalarSupport
 	inst.homogenousArrayContainerLength033 = 0
 	inst.homogenousArraySupportFieldBuilder039.Append(uint64(l))
 }
+func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) EndSection() *InEntityPushoutTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2484,6 +2545,7 @@ func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) EndSection() *InEntity
 	return inst.parent.parent
 }
 func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) EndAttribute() *InEntityPushoutTableSectionSnapApplied {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2780,11 +2842,17 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) handleNonScalarSupport
 	var l int
 	var _ = l
 }
+func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) EndSection() *InEntityPushoutTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2799,6 +2867,7 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) EndSection() *InEntity
 	return inst.parent.parent
 }
 func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) EndAttribute() *InEntityPushoutTableSectionSnapGraggle {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

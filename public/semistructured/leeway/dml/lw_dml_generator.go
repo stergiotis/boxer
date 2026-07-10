@@ -987,6 +987,34 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		}
 	}
 
+	{ // applyAmbientMemberships (ADR-0112 M1): replay the entity's ambient
+		// HighCardRef memberships onto this attribute, before completeAttribute
+		// counts them. Emitted with a body only when the section declares a
+		// HighCardRef membership column; a no-op otherwise, and inert (nil
+		// ambient stack) when nothing was pushed.
+		hasHighCardRef := false
+		for _, cp := range membershipIRH.IterateColumnProps() {
+			for i := 0; i < cp.Length(); i++ {
+				if cp.Roles[i] == common.ColumnRoleHighCardRef {
+					hasHighCardRef = true
+				}
+			}
+		}
+		_, err = fmt.Fprintf(b, "func (inst *%s) applyAmbientMemberships() {\n", clsNames.InAttributeClassName)
+		if err != nil {
+			return
+		}
+		if hasHighCardRef {
+			_, err = b.WriteString("\tfor _, v := range inst.parent.parent.ambientHighCardRef {\n\t\tinst.AddMembershipHighCardRefP(v)\n\t}\n")
+			if err != nil {
+				return
+			}
+		}
+		_, err = b.WriteString("}\n")
+		if err != nil {
+			return
+		}
+	}
 	{ // completeAttribute
 		_, err = fmt.Fprintf(b, `func (inst *%s) completeAttribute() {
 	inst.handleMembershipSupportColumns()
@@ -1002,6 +1030,12 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		_, err = fmt.Fprintf(b, `func (inst *%s) EndSection() *%s {
 `,
 			clsNames.InAttributeClassName, clsNames.InEntityClassName)
+		if err != nil {
+			return
+		}
+		// ADR-0112 M1: this InAttr.EndSection closes an open attribute too, so
+		// replay ambient memberships before the transition (state InAttribute).
+		_, err = b.WriteString("\tinst.applyAmbientMemberships()\n")
 		if err != nil {
 			return
 		}
@@ -1024,6 +1058,12 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		_, err = fmt.Fprintf(b, `func (inst *%s) EndAttribute() *%s {
 `,
 			clsNames.InAttributeClassName, clsNames.InSectionClassName)
+		if err != nil {
+			return
+		}
+		// ADR-0112 M1: replay ambient memberships while state is still
+		// InAttribute (AddMembership* guards on it), before the transition.
+		_, err = b.WriteString("\tinst.applyAmbientMemberships()\n")
 		if err != nil {
 			return
 		}
@@ -1401,6 +1441,15 @@ func (inst *GoClassBuilder) ComposeEntityClassAndFactoryCode(clsNamer gocodegen.
 	if err != nil {
 		return
 	}
+	// ambientHighCardRef holds the entity's pushed ambient HighCardRef
+	// memberships (ADR-0112 M1): every attribute replays them as it closes, so
+	// a stamp lands on each attribute in scope. Caller-managed via
+	// PushMembershipHighCardRef / PopMembershipsHighCardRef; not reset by the
+	// frame lifecycle. nil (nothing pushed) makes the replay a no-op.
+	_, err = b.WriteString("\tambientHighCardRef []uint64\n")
+	if err != nil {
+		return
+	}
 	plainIRH := entityIRH.DeriveSubHolder(deriveSubHolderSelectPlainValues)
 	plainScalarIRH := plainIRH.DeriveSubHolder(deriveSubHolderSelectScalar)
 	plainNonScalarIRH := plainIRH.DeriveSubHolder(deriveSubHolderSelectNonScalar)
@@ -1599,6 +1648,30 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 			if err != nil {
 				return
 			}
+		}
+	}
+	{ // ambient memberships (ADR-0112 M1)
+		_, err = fmt.Fprintf(b, `// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *%s) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *%s) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+`, clsNames.InEntityClassName, clsNames.InEntityClassName)
+		if err != nil {
+			return
 		}
 	}
 	{ // appendPlainValues

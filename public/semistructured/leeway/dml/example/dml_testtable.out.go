@@ -59,7 +59,7 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityTesttable struct {
 	plainTs1              time.Time
@@ -76,6 +76,7 @@ type InEntityTesttable struct {
 	scalarFieldBuilder001 *array.TimestampBuilder
 	errs                  []error
 	records               []arrow.RecordBatch
+	ambientHighCardRef    []uint64
 	plainId0              uint64
 
 	state          runtime.EntityStateE
@@ -140,7 +141,7 @@ var InEntityTesttableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -155,7 +156,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -165,6 +166,25 @@ func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	inst.plainTs1 = ts1
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityTesttable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityTesttable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityTesttable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -544,11 +564,14 @@ func (inst *InEntityTesttableSectionBoolInAttr) handleNonScalarSupportColumns() 
 	var l int
 	var _ = l
 }
+func (inst *InEntityTesttableSectionBoolInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityTesttableSectionBoolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTesttableSectionBoolInAttr) EndSection() *InEntityTesttable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -563,6 +586,7 @@ func (inst *InEntityTesttableSectionBoolInAttr) EndSection() *InEntityTesttable 
 	return inst.parent.parent
 }
 func (inst *InEntityTesttableSectionBoolInAttr) EndAttribute() *InEntityTesttableSectionBool {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -758,11 +782,14 @@ func (inst *InEntityTesttableSectionFloat64InAttr) handleNonScalarSupportColumns
 	var l int
 	var _ = l
 }
+func (inst *InEntityTesttableSectionFloat64InAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityTesttableSectionFloat64InAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTesttableSectionFloat64InAttr) EndSection() *InEntityTesttable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -777,6 +804,7 @@ func (inst *InEntityTesttableSectionFloat64InAttr) EndSection() *InEntityTesttab
 	return inst.parent.parent
 }
 func (inst *InEntityTesttableSectionFloat64InAttr) EndAttribute() *InEntityTesttableSectionFloat64 {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1038,11 +1066,14 @@ func (inst *InEntityTesttableSectionMultiInAttr) handleNonScalarSupportColumns()
 	inst.setContainerLength023 = 0
 	inst.setSupportFieldBuilder027.Append(uint64(l))
 }
+func (inst *InEntityTesttableSectionMultiInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityTesttableSectionMultiInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTesttableSectionMultiInAttr) EndSection() *InEntityTesttable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1057,6 +1088,7 @@ func (inst *InEntityTesttableSectionMultiInAttr) EndSection() *InEntityTesttable
 	return inst.parent.parent
 }
 func (inst *InEntityTesttableSectionMultiInAttr) EndAttribute() *InEntityTesttableSectionMulti {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1310,11 +1342,14 @@ func (inst *InEntityTesttableSectionSpecialInAttr) handleNonScalarSupportColumns
 	inst.homogenousArrayContainerLength015 = 0
 	inst.homogenousArraySupportFieldBuilder019.Append(uint64(l))
 }
+func (inst *InEntityTesttableSectionSpecialInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityTesttableSectionSpecialInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTesttableSectionSpecialInAttr) EndSection() *InEntityTesttable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1329,6 +1364,7 @@ func (inst *InEntityTesttableSectionSpecialInAttr) EndSection() *InEntityTesttab
 	return inst.parent.parent
 }
 func (inst *InEntityTesttableSectionSpecialInAttr) EndAttribute() *InEntityTesttableSectionSpecial {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1524,11 +1560,14 @@ func (inst *InEntityTesttableSectionStringInAttr) handleNonScalarSupportColumns(
 	var l int
 	var _ = l
 }
+func (inst *InEntityTesttableSectionStringInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityTesttableSectionStringInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTesttableSectionStringInAttr) EndSection() *InEntityTesttable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1543,6 +1582,7 @@ func (inst *InEntityTesttableSectionStringInAttr) EndSection() *InEntityTesttabl
 	return inst.parent.parent
 }
 func (inst *InEntityTesttableSectionStringInAttr) EndAttribute() *InEntityTesttableSectionString {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

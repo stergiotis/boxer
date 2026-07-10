@@ -39,20 +39,21 @@ func CreateSchemaProvenanceTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityProvenanceTable struct {
-	errs           []error
-	state          runtime.EntityStateE
-	allocator      memory.Allocator
-	builder        *array.RecordBuilder
-	records        []arrow.RecordBatch
-	section00Inst  *InEntityProvenanceTableSectionSymbol
-	section00State runtime.EntityStateE
-	section01Inst  *InEntityProvenanceTableSectionSymbolArray
-	section01State runtime.EntityStateE
-	activeSections *[2]bool
-	plainId0       uint64
+	errs               []error
+	state              runtime.EntityStateE
+	allocator          memory.Allocator
+	builder            *array.RecordBuilder
+	records            []arrow.RecordBatch
+	section00Inst      *InEntityProvenanceTableSectionSymbol
+	section00State     runtime.EntityStateE
+	section01Inst      *InEntityProvenanceTableSectionSymbolArray
+	section01State     runtime.EntityStateE
+	activeSections     *[2]bool
+	ambientHighCardRef []uint64
+	plainId0           uint64
 
 	plainTs1              time.Time
 	scalarFieldBuilder000 *array.Uint64Builder
@@ -106,7 +107,7 @@ var InEntityProvenanceTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityProvenanceTable) setId(id0 uint64) *InEntityProvenanceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -121,7 +122,7 @@ func (inst *InEntityProvenanceTable) setId(id0 uint64) *InEntityProvenanceTable 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityProvenanceTable) setTimestamp(ts1 time.Time) *InEntityProvenanceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -131,6 +132,25 @@ func (inst *InEntityProvenanceTable) setTimestamp(ts1 time.Time) *InEntityProven
 	inst.plainTs1 = ts1
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityProvenanceTable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityProvenanceTable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityProvenanceTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -466,11 +486,14 @@ func (inst *InEntityProvenanceTableSectionSymbolInAttr) handleNonScalarSupportCo
 	var l int
 	var _ = l
 }
+func (inst *InEntityProvenanceTableSectionSymbolInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityProvenanceTableSectionSymbolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityProvenanceTableSectionSymbolInAttr) EndSection() *InEntityProvenanceTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -485,6 +508,7 @@ func (inst *InEntityProvenanceTableSectionSymbolInAttr) EndSection() *InEntityPr
 	return inst.parent.parent
 }
 func (inst *InEntityProvenanceTableSectionSymbolInAttr) EndAttribute() *InEntityProvenanceTableSectionSymbol {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -695,11 +719,14 @@ func (inst *InEntityProvenanceTableSectionSymbolArrayInAttr) handleNonScalarSupp
 	inst.homogenousArrayContainerLength005 = 0
 	inst.homogenousArraySupportFieldBuilder007.Append(uint64(l))
 }
+func (inst *InEntityProvenanceTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityProvenanceTableSectionSymbolArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityProvenanceTableSectionSymbolArrayInAttr) EndSection() *InEntityProvenanceTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -714,6 +741,7 @@ func (inst *InEntityProvenanceTableSectionSymbolArrayInAttr) EndSection() *InEnt
 	return inst.parent.parent
 }
 func (inst *InEntityProvenanceTableSectionSymbolArrayInAttr) EndAttribute() *InEntityProvenanceTableSectionSymbolArray {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

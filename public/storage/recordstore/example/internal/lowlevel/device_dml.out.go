@@ -77,24 +77,25 @@ func CreateSchemaDeviceTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityDeviceTable struct {
-	errs           []error
-	state          runtime.EntityStateE
-	allocator      memory.Allocator
-	builder        *array.RecordBuilder
-	records        []arrow.RecordBatch
-	section00Inst  *InEntityDeviceTableSectionGeoPoint
-	section00State runtime.EntityStateE
-	section01Inst  *InEntityDeviceTableSectionSymbol
-	section01State runtime.EntityStateE
-	section02Inst  *InEntityDeviceTableSectionSymbolArray
-	section02State runtime.EntityStateE
-	section03Inst  *InEntityDeviceTableSectionU64Array
-	section03State runtime.EntityStateE
-	activeSections *[4]bool
-	plainId0       uint64
+	errs               []error
+	state              runtime.EntityStateE
+	allocator          memory.Allocator
+	builder            *array.RecordBuilder
+	records            []arrow.RecordBatch
+	section00Inst      *InEntityDeviceTableSectionGeoPoint
+	section00State     runtime.EntityStateE
+	section01Inst      *InEntityDeviceTableSectionSymbol
+	section01State     runtime.EntityStateE
+	section02Inst      *InEntityDeviceTableSectionSymbolArray
+	section02State     runtime.EntityStateE
+	section03Inst      *InEntityDeviceTableSectionU64Array
+	section03State     runtime.EntityStateE
+	activeSections     *[4]bool
+	ambientHighCardRef []uint64
+	plainId0           uint64
 
 	plainTs1 time.Time
 
@@ -155,7 +156,7 @@ var InEntityDeviceTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityDeviceTable) setId(id0 uint64) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -170,7 +171,7 @@ func (inst *InEntityDeviceTable) setId(id0 uint64) *InEntityDeviceTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityDeviceTable) setTimestamp(ts1 time.Time) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -185,7 +186,7 @@ func (inst *InEntityDeviceTable) setTimestamp(ts1 time.Time) *InEntityDeviceTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityDeviceTable) setLifecycle(lifecycle2 uint8) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -195,6 +196,25 @@ func (inst *InEntityDeviceTable) setLifecycle(lifecycle2 uint8) *InEntityDeviceT
 	inst.plainLifecycle2 = lifecycle2
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityDeviceTable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityDeviceTable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityDeviceTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -707,11 +727,17 @@ func (inst *InEntityDeviceTableSectionGeoPointInAttr) handleNonScalarSupportColu
 	var l int
 	var _ = l
 }
+func (inst *InEntityDeviceTableSectionGeoPointInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDeviceTableSectionGeoPointInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDeviceTableSectionGeoPointInAttr) EndSection() *InEntityDeviceTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -726,6 +752,7 @@ func (inst *InEntityDeviceTableSectionGeoPointInAttr) EndSection() *InEntityDevi
 	return inst.parent.parent
 }
 func (inst *InEntityDeviceTableSectionGeoPointInAttr) EndAttribute() *InEntityDeviceTableSectionGeoPoint {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1022,11 +1049,17 @@ func (inst *InEntityDeviceTableSectionSymbolInAttr) handleNonScalarSupportColumn
 	var l int
 	var _ = l
 }
+func (inst *InEntityDeviceTableSectionSymbolInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDeviceTableSectionSymbolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDeviceTableSectionSymbolInAttr) EndSection() *InEntityDeviceTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1041,6 +1074,7 @@ func (inst *InEntityDeviceTableSectionSymbolInAttr) EndSection() *InEntityDevice
 	return inst.parent.parent
 }
 func (inst *InEntityDeviceTableSectionSymbolInAttr) EndAttribute() *InEntityDeviceTableSectionSymbol {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1365,11 +1399,17 @@ func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) handleNonScalarSupportC
 	inst.homogenousArrayContainerLength024 = 0
 	inst.homogenousArraySupportFieldBuilder030.Append(uint64(l))
 }
+func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) EndSection() *InEntityDeviceTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1384,6 +1424,7 @@ func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) EndSection() *InEntityD
 	return inst.parent.parent
 }
 func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) EndAttribute() *InEntityDeviceTableSectionSymbolArray {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1708,11 +1749,17 @@ func (inst *InEntityDeviceTableSectionU64ArrayInAttr) handleNonScalarSupportColu
 	inst.homogenousArrayContainerLength013 = 0
 	inst.homogenousArraySupportFieldBuilder019.Append(uint64(l))
 }
+func (inst *InEntityDeviceTableSectionU64ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDeviceTableSectionU64ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDeviceTableSectionU64ArrayInAttr) EndSection() *InEntityDeviceTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1727,6 +1774,7 @@ func (inst *InEntityDeviceTableSectionU64ArrayInAttr) EndSection() *InEntityDevi
 	return inst.parent.parent
 }
 func (inst *InEntityDeviceTableSectionU64ArrayInAttr) EndAttribute() *InEntityDeviceTableSectionU64Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

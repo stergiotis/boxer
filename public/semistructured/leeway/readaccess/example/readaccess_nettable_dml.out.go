@@ -41,7 +41,7 @@ func CreateSchemaNetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityNetTable struct {
 	plainTs1              time.Time
@@ -54,6 +54,7 @@ type InEntityNetTable struct {
 	scalarFieldBuilder001 *array.TimestampBuilder
 	errs                  []error
 	records               []arrow.RecordBatch
+	ambientHighCardRef    []uint64
 	plainId0              uint64
 
 	state          runtime.EntityStateE
@@ -110,7 +111,7 @@ var InEntityNetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityNetTable) SetId(id0 uint64) *InEntityNetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -125,7 +126,7 @@ func (inst *InEntityNetTable) SetId(id0 uint64) *InEntityNetTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityNetTable) SetTimestamp(ts1 time.Time) *InEntityNetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -135,6 +136,25 @@ func (inst *InEntityNetTable) SetTimestamp(ts1 time.Time) *InEntityNetTable {
 	inst.plainTs1 = ts1
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityNetTable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityNetTable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityNetTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -509,11 +529,14 @@ func (inst *InEntityNetTableSectionNetInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
+func (inst *InEntityNetTableSectionNetInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityNetTableSectionNetInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityNetTableSectionNetInAttr) EndSection() *InEntityNetTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -528,6 +551,7 @@ func (inst *InEntityNetTableSectionNetInAttr) EndSection() *InEntityNetTable {
 	return inst.parent.parent
 }
 func (inst *InEntityNetTableSectionNetInAttr) EndAttribute() *InEntityNetTableSectionNet {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

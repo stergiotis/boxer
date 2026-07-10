@@ -86,7 +86,7 @@ func CreateSchemaDroneTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityDroneTable struct {
 	errs                  []error
@@ -105,6 +105,7 @@ type InEntityDroneTable struct {
 	section04Inst         *InEntityDroneTableSectionU64Array
 	section04State        runtime.EntityStateE
 	activeSections        *[5]bool
+	ambientHighCardRef    []uint64
 	plainId0              uint64
 	scalarFieldBuilder000 *array.Uint64Builder
 }
@@ -162,7 +163,7 @@ var InEntityDroneTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityDroneTable) SetId(id0 uint64) *InEntityDroneTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -172,6 +173,25 @@ func (inst *InEntityDroneTable) SetId(id0 uint64) *InEntityDroneTable {
 	inst.plainId0 = id0
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityDroneTable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityDroneTable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityDroneTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -670,11 +690,17 @@ func (inst *InEntityDroneTableSectionGeoPointInAttr) handleNonScalarSupportColum
 	var l int
 	var _ = l
 }
+func (inst *InEntityDroneTableSectionGeoPointInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDroneTableSectionGeoPointInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDroneTableSectionGeoPointInAttr) EndSection() *InEntityDroneTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -689,6 +715,7 @@ func (inst *InEntityDroneTableSectionGeoPointInAttr) EndSection() *InEntityDrone
 	return inst.parent.parent
 }
 func (inst *InEntityDroneTableSectionGeoPointInAttr) EndAttribute() *InEntityDroneTableSectionGeoPoint {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -985,11 +1012,17 @@ func (inst *InEntityDroneTableSectionSymbolInAttr) handleNonScalarSupportColumns
 	var l int
 	var _ = l
 }
+func (inst *InEntityDroneTableSectionSymbolInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDroneTableSectionSymbolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDroneTableSectionSymbolInAttr) EndSection() *InEntityDroneTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1004,6 +1037,7 @@ func (inst *InEntityDroneTableSectionSymbolInAttr) EndSection() *InEntityDroneTa
 	return inst.parent.parent
 }
 func (inst *InEntityDroneTableSectionSymbolInAttr) EndAttribute() *InEntityDroneTableSectionSymbol {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1328,11 +1362,17 @@ func (inst *InEntityDroneTableSectionSymbolArrayInAttr) handleNonScalarSupportCo
 	inst.homogenousArrayContainerLength022 = 0
 	inst.homogenousArraySupportFieldBuilder028.Append(uint64(l))
 }
+func (inst *InEntityDroneTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDroneTableSectionSymbolArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDroneTableSectionSymbolArrayInAttr) EndSection() *InEntityDroneTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1347,6 +1387,7 @@ func (inst *InEntityDroneTableSectionSymbolArrayInAttr) EndSection() *InEntityDr
 	return inst.parent.parent
 }
 func (inst *InEntityDroneTableSectionSymbolArrayInAttr) EndAttribute() *InEntityDroneTableSectionSymbolArray {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1654,11 +1695,17 @@ func (inst *InEntityDroneTableSectionTimeRangeInAttr) handleNonScalarSupportColu
 	var l int
 	var _ = l
 }
+func (inst *InEntityDroneTableSectionTimeRangeInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDroneTableSectionTimeRangeInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDroneTableSectionTimeRangeInAttr) EndSection() *InEntityDroneTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1673,6 +1720,7 @@ func (inst *InEntityDroneTableSectionTimeRangeInAttr) EndSection() *InEntityDron
 	return inst.parent.parent
 }
 func (inst *InEntityDroneTableSectionTimeRangeInAttr) EndAttribute() *InEntityDroneTableSectionTimeRange {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1997,11 +2045,17 @@ func (inst *InEntityDroneTableSectionU64ArrayInAttr) handleNonScalarSupportColum
 	inst.homogenousArrayContainerLength011 = 0
 	inst.homogenousArraySupportFieldBuilder017.Append(uint64(l))
 }
+func (inst *InEntityDroneTableSectionU64ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityDroneTableSectionU64ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityDroneTableSectionU64ArrayInAttr) EndSection() *InEntityDroneTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2016,6 +2070,7 @@ func (inst *InEntityDroneTableSectionU64ArrayInAttr) EndSection() *InEntityDrone
 	return inst.parent.parent
 }
 func (inst *InEntityDroneTableSectionU64ArrayInAttr) EndAttribute() *InEntityDroneTableSectionU64Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

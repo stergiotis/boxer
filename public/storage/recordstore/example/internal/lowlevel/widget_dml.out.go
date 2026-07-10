@@ -80,24 +80,25 @@ func CreateSchemaWidgetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityWidgetTable struct {
-	errs           []error
-	state          runtime.EntityStateE
-	allocator      memory.Allocator
-	builder        *array.RecordBuilder
-	records        []arrow.RecordBatch
-	section00Inst  *InEntityWidgetTableSectionGeoPoint
-	section00State runtime.EntityStateE
-	section01Inst  *InEntityWidgetTableSectionSymbol
-	section01State runtime.EntityStateE
-	section02Inst  *InEntityWidgetTableSectionSymbolArray
-	section02State runtime.EntityStateE
-	section03Inst  *InEntityWidgetTableSectionU64Array
-	section03State runtime.EntityStateE
-	activeSections *[4]bool
-	plainId0       uint64
+	errs               []error
+	state              runtime.EntityStateE
+	allocator          memory.Allocator
+	builder            *array.RecordBuilder
+	records            []arrow.RecordBatch
+	section00Inst      *InEntityWidgetTableSectionGeoPoint
+	section00State     runtime.EntityStateE
+	section01Inst      *InEntityWidgetTableSectionSymbol
+	section01State     runtime.EntityStateE
+	section02Inst      *InEntityWidgetTableSectionSymbolArray
+	section02State     runtime.EntityStateE
+	section03Inst      *InEntityWidgetTableSectionU64Array
+	section03State     runtime.EntityStateE
+	activeSections     *[4]bool
+	ambientHighCardRef []uint64
+	plainId0           uint64
 
 	plainAlt1 uint64
 
@@ -173,7 +174,7 @@ var InEntityWidgetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -189,7 +190,7 @@ func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetT
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -204,7 +205,7 @@ func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -220,7 +221,7 @@ func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InE
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityWidgetTable) setLifecycle(lifecycle5 uint8) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -230,6 +231,25 @@ func (inst *InEntityWidgetTable) setLifecycle(lifecycle5 uint8) *InEntityWidgetT
 	inst.plainLifecycle5 = lifecycle5
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityWidgetTable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityWidgetTable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityWidgetTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -760,11 +780,17 @@ func (inst *InEntityWidgetTableSectionGeoPointInAttr) handleNonScalarSupportColu
 	var l int
 	var _ = l
 }
+func (inst *InEntityWidgetTableSectionGeoPointInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityWidgetTableSectionGeoPointInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityWidgetTableSectionGeoPointInAttr) EndSection() *InEntityWidgetTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -779,6 +805,7 @@ func (inst *InEntityWidgetTableSectionGeoPointInAttr) EndSection() *InEntityWidg
 	return inst.parent.parent
 }
 func (inst *InEntityWidgetTableSectionGeoPointInAttr) EndAttribute() *InEntityWidgetTableSectionGeoPoint {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1075,11 +1102,17 @@ func (inst *InEntityWidgetTableSectionSymbolInAttr) handleNonScalarSupportColumn
 	var l int
 	var _ = l
 }
+func (inst *InEntityWidgetTableSectionSymbolInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityWidgetTableSectionSymbolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityWidgetTableSectionSymbolInAttr) EndSection() *InEntityWidgetTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1094,6 +1127,7 @@ func (inst *InEntityWidgetTableSectionSymbolInAttr) EndSection() *InEntityWidget
 	return inst.parent.parent
 }
 func (inst *InEntityWidgetTableSectionSymbolInAttr) EndAttribute() *InEntityWidgetTableSectionSymbol {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1418,11 +1452,17 @@ func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) handleNonScalarSupportC
 	inst.homogenousArrayContainerLength027 = 0
 	inst.homogenousArraySupportFieldBuilder033.Append(uint64(l))
 }
+func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) EndSection() *InEntityWidgetTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1437,6 +1477,7 @@ func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) EndSection() *InEntityW
 	return inst.parent.parent
 }
 func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) EndAttribute() *InEntityWidgetTableSectionSymbolArray {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1761,11 +1802,17 @@ func (inst *InEntityWidgetTableSectionU64ArrayInAttr) handleNonScalarSupportColu
 	inst.homogenousArrayContainerLength016 = 0
 	inst.homogenousArraySupportFieldBuilder022.Append(uint64(l))
 }
+func (inst *InEntityWidgetTableSectionU64ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityWidgetTableSectionU64ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityWidgetTableSectionU64ArrayInAttr) EndSection() *InEntityWidgetTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1780,6 +1827,7 @@ func (inst *InEntityWidgetTableSectionU64ArrayInAttr) EndSection() *InEntityWidg
 	return inst.parent.parent
 }
 func (inst *InEntityWidgetTableSectionU64ArrayInAttr) EndAttribute() *InEntityWidgetTableSectionU64Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

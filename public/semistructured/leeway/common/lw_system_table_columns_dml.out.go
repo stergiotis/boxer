@@ -64,7 +64,7 @@ func CreateSchemaSystemTableColumns() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntitySystemTableColumns struct {
 	allocator             memory.Allocator
@@ -80,10 +80,11 @@ type InEntitySystemTableColumns struct {
 
 	scalarFieldBuilder002 *array.StringBuilder
 
-	plainTableName2 string
-	errs            []error
-	records         []arrow.RecordBatch
-	plainTableHash0 uint64
+	plainTableName2    string
+	errs               []error
+	records            []arrow.RecordBatch
+	ambientHighCardRef []uint64
+	plainTableHash0    uint64
 
 	plainColumnIndex1 uint64
 
@@ -148,7 +149,7 @@ var InEntitySystemTableColumnsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 uint64) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -164,7 +165,7 @@ func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 ui
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -174,6 +175,25 @@ func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntityS
 	inst.plainTableName2 = tableName2
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntitySystemTableColumns) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntitySystemTableColumns) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntitySystemTableColumns) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainTableHash0)
@@ -607,11 +627,17 @@ func (inst *InEntitySystemTableColumnsSectionStringInAttr) handleNonScalarSuppor
 	var l int
 	var _ = l
 }
+func (inst *InEntitySystemTableColumnsSectionStringInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntitySystemTableColumnsSectionStringInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntitySystemTableColumnsSectionStringInAttr) EndSection() *InEntitySystemTableColumns {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -626,6 +652,7 @@ func (inst *InEntitySystemTableColumnsSectionStringInAttr) EndSection() *InEntit
 	return inst.parent.parent
 }
 func (inst *InEntitySystemTableColumnsSectionStringInAttr) EndAttribute() *InEntitySystemTableColumnsSectionString {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -889,11 +916,17 @@ func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) handleNonScalarSuppor
 	var l int
 	var _ = l
 }
+func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) EndSection() *InEntitySystemTableColumns {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -908,6 +941,7 @@ func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) EndSection() *InEntit
 	return inst.parent.parent
 }
 func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) EndAttribute() *InEntitySystemTableColumnsSectionSymbol {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1171,11 +1205,17 @@ func (inst *InEntitySystemTableColumnsSectionTextInAttr) handleNonScalarSupportC
 	var l int
 	var _ = l
 }
+func (inst *InEntitySystemTableColumnsSectionTextInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntitySystemTableColumnsSectionTextInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntitySystemTableColumnsSectionTextInAttr) EndSection() *InEntitySystemTableColumns {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1190,6 +1230,7 @@ func (inst *InEntitySystemTableColumnsSectionTextInAttr) EndSection() *InEntityS
 	return inst.parent.parent
 }
 func (inst *InEntitySystemTableColumnsSectionTextInAttr) EndAttribute() *InEntitySystemTableColumnsSectionText {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1453,11 +1494,17 @@ func (inst *InEntitySystemTableColumnsSectionU64InAttr) handleNonScalarSupportCo
 	var l int
 	var _ = l
 }
+func (inst *InEntitySystemTableColumnsSectionU64InAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntitySystemTableColumnsSectionU64InAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntitySystemTableColumnsSectionU64InAttr) EndSection() *InEntitySystemTableColumns {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1472,6 +1519,7 @@ func (inst *InEntitySystemTableColumnsSectionU64InAttr) EndSection() *InEntitySy
 	return inst.parent.parent
 }
 func (inst *InEntitySystemTableColumnsSectionU64InAttr) EndAttribute() *InEntitySystemTableColumnsSectionU64 {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection

@@ -351,6 +351,22 @@ who, _, _ := prov.Resolve(ctx, provID)                         // host + frames,
   attributes carry the surrogate id (typed decode unaffected) → `Resolve`
   attributes the row; a store with provenance off is byte- and
   behaviour-identical to today.
+  The **M1 primitive is done** (`dml/lw_dml_generator.go`): the entity carries
+  an ambient HighCardRef stack (`PushMembershipHighCardRef` /
+  `PopMembershipsHighCardRef`, always-exported attribute surface) replayed onto
+  each attribute at the top of `EndAttribute`/`EndSection` — before the state
+  transition, while `AddMembership*` still passes its `InAttribute` guard, and
+  before `completeAttribute` records the per-attribute membership count.
+  `applyAmbientMemberships` is body-emitted only for sections that declare a
+  HighCardRef membership column (so a carrier schema must declare that channel
+  on the sections meant to carry the stamp; others no-op). All 17 DML consumers
+  were regenerated — behaviour-inert with nothing pushed (every consumer suite
+  passes) — and a DML→read-access test (`example/internal/lowlevel`) proves a
+  pushed id lands in the HighCardRef lane alongside the codec's own membership.
+  Remaining S2: the `ReferenceStamper` seam on the generated store, the
+  capture-skip handling, entity-vs-attribute scope (SD4), and ordered flush
+  (SD5). Other membership flavours beyond HighCardRef are a mechanical repeat
+  (Deferred).
 - **S3** — attribute-level opt-in (SD4); a readback artefact for querying by
   dimension membership; the host-only / sampled provenance tiers.
 - **S4** — a second dimension (the first real trace/causation/tenant consumer)

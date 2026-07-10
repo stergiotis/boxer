@@ -271,60 +271,61 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1369
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
 
 type InEntityTestTable struct {
-	errs           []error
-	state          runtime.EntityStateE
-	allocator      memory.Allocator
-	builder        *array.RecordBuilder
-	records        []arrow.RecordBatch
-	section00Inst  *InEntityTestTableSectionBlobArray
-	section00State runtime.EntityStateE
-	section01Inst  *InEntityTestTableSectionF32Array
-	section01State runtime.EntityStateE
-	section02Inst  *InEntityTestTableSectionF64Array
-	section02State runtime.EntityStateE
-	section03Inst  *InEntityTestTableSectionForeignKey
-	section03State runtime.EntityStateE
-	section04Inst  *InEntityTestTableSectionGeoArea
-	section04State runtime.EntityStateE
-	section05Inst  *InEntityTestTableSectionGeoPoint
-	section05State runtime.EntityStateE
-	section06Inst  *InEntityTestTableSectionI16Array
-	section06State runtime.EntityStateE
-	section07Inst  *InEntityTestTableSectionI32Array
-	section07State runtime.EntityStateE
-	section08Inst  *InEntityTestTableSectionI64Array
-	section08State runtime.EntityStateE
-	section09Inst  *InEntityTestTableSectionI8Array
-	section09State runtime.EntityStateE
-	section10Inst  *InEntityTestTableSectionStringArray
-	section10State runtime.EntityStateE
-	section11Inst  *InEntityTestTableSectionSymbol
-	section11State runtime.EntityStateE
-	section12Inst  *InEntityTestTableSectionSymbolArray
-	section12State runtime.EntityStateE
-	section13Inst  *InEntityTestTableSectionText
-	section13State runtime.EntityStateE
-	section14Inst  *InEntityTestTableSectionTimeArray
-	section14State runtime.EntityStateE
-	section15Inst  *InEntityTestTableSectionTimeRange
-	section15State runtime.EntityStateE
-	section16Inst  *InEntityTestTableSectionU16Array
-	section16State runtime.EntityStateE
-	section17Inst  *InEntityTestTableSectionU32Array
-	section17State runtime.EntityStateE
-	section18Inst  *InEntityTestTableSectionU32Set
-	section18State runtime.EntityStateE
-	section19Inst  *InEntityTestTableSectionU64Array
-	section19State runtime.EntityStateE
-	section20Inst  *InEntityTestTableSectionU64Set
-	section20State runtime.EntityStateE
-	section21Inst  *InEntityTestTableSectionU8Array
-	section21State runtime.EntityStateE
-	activeSections *[22]bool
-	plainId0       uint64
+	errs               []error
+	state              runtime.EntityStateE
+	allocator          memory.Allocator
+	builder            *array.RecordBuilder
+	records            []arrow.RecordBatch
+	section00Inst      *InEntityTestTableSectionBlobArray
+	section00State     runtime.EntityStateE
+	section01Inst      *InEntityTestTableSectionF32Array
+	section01State     runtime.EntityStateE
+	section02Inst      *InEntityTestTableSectionF64Array
+	section02State     runtime.EntityStateE
+	section03Inst      *InEntityTestTableSectionForeignKey
+	section03State     runtime.EntityStateE
+	section04Inst      *InEntityTestTableSectionGeoArea
+	section04State     runtime.EntityStateE
+	section05Inst      *InEntityTestTableSectionGeoPoint
+	section05State     runtime.EntityStateE
+	section06Inst      *InEntityTestTableSectionI16Array
+	section06State     runtime.EntityStateE
+	section07Inst      *InEntityTestTableSectionI32Array
+	section07State     runtime.EntityStateE
+	section08Inst      *InEntityTestTableSectionI64Array
+	section08State     runtime.EntityStateE
+	section09Inst      *InEntityTestTableSectionI8Array
+	section09State     runtime.EntityStateE
+	section10Inst      *InEntityTestTableSectionStringArray
+	section10State     runtime.EntityStateE
+	section11Inst      *InEntityTestTableSectionSymbol
+	section11State     runtime.EntityStateE
+	section12Inst      *InEntityTestTableSectionSymbolArray
+	section12State     runtime.EntityStateE
+	section13Inst      *InEntityTestTableSectionText
+	section13State     runtime.EntityStateE
+	section14Inst      *InEntityTestTableSectionTimeArray
+	section14State     runtime.EntityStateE
+	section15Inst      *InEntityTestTableSectionTimeRange
+	section15State     runtime.EntityStateE
+	section16Inst      *InEntityTestTableSectionU16Array
+	section16State     runtime.EntityStateE
+	section17Inst      *InEntityTestTableSectionU32Array
+	section17State     runtime.EntityStateE
+	section18Inst      *InEntityTestTableSectionU32Set
+	section18State     runtime.EntityStateE
+	section19Inst      *InEntityTestTableSectionU64Array
+	section19State     runtime.EntityStateE
+	section20Inst      *InEntityTestTableSectionU64Set
+	section20State     runtime.EntityStateE
+	section21Inst      *InEntityTestTableSectionU8Array
+	section21State     runtime.EntityStateE
+	activeSections     *[22]bool
+	ambientHighCardRef []uint64
+	plainId0           uint64
 
 	plainNaturalKey1      []byte
 	scalarFieldBuilder000 *array.Uint64Builder
@@ -403,7 +404,7 @@ var InEntityTestTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
 
 func (inst *InEntityTestTable) SetId(id0 uint64, naturalKey1 []byte) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -414,6 +415,25 @@ func (inst *InEntityTestTable) SetId(id0 uint64, naturalKey1 []byte) *InEntityTe
 	inst.plainNaturalKey1 = naturalKey1
 
 	return inst
+}
+
+// PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
+// replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
+// The stamp scope — one section vs the whole entity — is the caller's to set.
+func (inst *InEntityTestTable) PushMembershipHighCardRef(id uint64) {
+	inst.ambientHighCardRef = append(inst.ambientHighCardRef, id)
+}
+
+// PopMembershipsHighCardRef removes the last n ambient HighCardRef memberships
+// (bounds-clamped); balance it against PushMembershipHighCardRef.
+func (inst *InEntityTestTable) PopMembershipsHighCardRef(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n > len(inst.ambientHighCardRef) {
+		n = len(inst.ambientHighCardRef)
+	}
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
 func (inst *InEntityTestTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -1228,11 +1248,17 @@ func (inst *InEntityTestTableSectionBlobArrayInAttr) handleNonScalarSupportColum
 	inst.homogenousArrayContainerLength050 = 0
 	inst.homogenousArraySupportFieldBuilder056.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionBlobArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionBlobArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionBlobArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1247,6 +1273,7 @@ func (inst *InEntityTestTableSectionBlobArrayInAttr) EndSection() *InEntityTestT
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionBlobArrayInAttr) EndAttribute() *InEntityTestTableSectionBlobArray {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1571,11 +1598,17 @@ func (inst *InEntityTestTableSectionF32ArrayInAttr) handleNonScalarSupportColumn
 	inst.homogenousArrayContainerLength182 = 0
 	inst.homogenousArraySupportFieldBuilder188.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionF32ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionF32ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionF32ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1590,6 +1623,7 @@ func (inst *InEntityTestTableSectionF32ArrayInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionF32ArrayInAttr) EndAttribute() *InEntityTestTableSectionF32Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1914,11 +1948,17 @@ func (inst *InEntityTestTableSectionF64ArrayInAttr) handleNonScalarSupportColumn
 	inst.homogenousArrayContainerLength193 = 0
 	inst.homogenousArraySupportFieldBuilder199.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionF64ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionF64ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionF64ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -1933,6 +1973,7 @@ func (inst *InEntityTestTableSectionF64ArrayInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionF64ArrayInAttr) EndAttribute() *InEntityTestTableSectionF64Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2115,11 +2156,14 @@ func (inst *InEntityTestTableSectionForeignKeyInAttr) handleNonScalarSupportColu
 	var l int
 	var _ = l
 }
+func (inst *InEntityTestTableSectionForeignKeyInAttr) applyAmbientMemberships() {
+}
 func (inst *InEntityTestTableSectionForeignKeyInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionForeignKeyInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2134,6 +2178,7 @@ func (inst *InEntityTestTableSectionForeignKeyInAttr) EndSection() *InEntityTest
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionForeignKeyInAttr) EndAttribute() *InEntityTestTableSectionForeignKey {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2500,11 +2545,17 @@ func (inst *InEntityTestTableSectionGeoAreaInAttr) handleNonScalarSupportColumns
 	inst.setContainerLength218 = 0
 	inst.setSupportFieldBuilder225.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionGeoAreaInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionGeoAreaInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionGeoAreaInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2519,6 +2570,7 @@ func (inst *InEntityTestTableSectionGeoAreaInAttr) EndSection() *InEntityTestTab
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionGeoAreaInAttr) EndAttribute() *InEntityTestTableSectionGeoArea {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -2837,11 +2889,17 @@ func (inst *InEntityTestTableSectionGeoPointInAttr) handleNonScalarSupportColumn
 	var l int
 	var _ = l
 }
+func (inst *InEntityTestTableSectionGeoPointInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionGeoPointInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionGeoPointInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -2856,6 +2914,7 @@ func (inst *InEntityTestTableSectionGeoPointInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionGeoPointInAttr) EndAttribute() *InEntityTestTableSectionGeoPoint {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -3180,11 +3239,17 @@ func (inst *InEntityTestTableSectionI16ArrayInAttr) handleNonScalarSupportColumn
 	inst.homogenousArrayContainerLength138 = 0
 	inst.homogenousArraySupportFieldBuilder144.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionI16ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionI16ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionI16ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -3199,6 +3264,7 @@ func (inst *InEntityTestTableSectionI16ArrayInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionI16ArrayInAttr) EndAttribute() *InEntityTestTableSectionI16Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -3523,11 +3589,17 @@ func (inst *InEntityTestTableSectionI32ArrayInAttr) handleNonScalarSupportColumn
 	inst.homogenousArrayContainerLength149 = 0
 	inst.homogenousArraySupportFieldBuilder155.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionI32ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionI32ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionI32ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -3542,6 +3614,7 @@ func (inst *InEntityTestTableSectionI32ArrayInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionI32ArrayInAttr) EndAttribute() *InEntityTestTableSectionI32Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -3866,11 +3939,17 @@ func (inst *InEntityTestTableSectionI64ArrayInAttr) handleNonScalarSupportColumn
 	inst.homogenousArrayContainerLength160 = 0
 	inst.homogenousArraySupportFieldBuilder166.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionI64ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionI64ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionI64ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -3885,6 +3964,7 @@ func (inst *InEntityTestTableSectionI64ArrayInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionI64ArrayInAttr) EndAttribute() *InEntityTestTableSectionI64Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -4209,11 +4289,17 @@ func (inst *InEntityTestTableSectionI8ArrayInAttr) handleNonScalarSupportColumns
 	inst.homogenousArrayContainerLength127 = 0
 	inst.homogenousArraySupportFieldBuilder133.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionI8ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionI8ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionI8ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -4228,6 +4314,7 @@ func (inst *InEntityTestTableSectionI8ArrayInAttr) EndSection() *InEntityTestTab
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionI8ArrayInAttr) EndAttribute() *InEntityTestTableSectionI8Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -4552,11 +4639,17 @@ func (inst *InEntityTestTableSectionStringArrayInAttr) handleNonScalarSupportCol
 	inst.homogenousArrayContainerLength026 = 0
 	inst.homogenousArraySupportFieldBuilder032.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionStringArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionStringArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionStringArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -4571,6 +4664,7 @@ func (inst *InEntityTestTableSectionStringArrayInAttr) EndSection() *InEntityTes
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionStringArrayInAttr) EndAttribute() *InEntityTestTableSectionStringArray {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -4867,11 +4961,17 @@ func (inst *InEntityTestTableSectionSymbolInAttr) handleNonScalarSupportColumns(
 	var l int
 	var _ = l
 }
+func (inst *InEntityTestTableSectionSymbolInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionSymbolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionSymbolInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -4886,6 +4986,7 @@ func (inst *InEntityTestTableSectionSymbolInAttr) EndSection() *InEntityTestTabl
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionSymbolInAttr) EndAttribute() *InEntityTestTableSectionSymbol {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -5210,11 +5311,17 @@ func (inst *InEntityTestTableSectionSymbolArrayInAttr) handleNonScalarSupportCol
 	inst.homogenousArrayContainerLength015 = 0
 	inst.homogenousArraySupportFieldBuilder021.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionSymbolArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionSymbolArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -5229,6 +5336,7 @@ func (inst *InEntityTestTableSectionSymbolArrayInAttr) EndSection() *InEntityTes
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionSymbolArrayInAttr) EndAttribute() *InEntityTestTableSectionSymbolArray {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -5583,11 +5691,17 @@ func (inst *InEntityTestTableSectionTextInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArrayContainerLength038 = 0
 	inst.homogenousArraySupportFieldBuilder045.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionTextInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionTextInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionTextInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -5602,6 +5716,7 @@ func (inst *InEntityTestTableSectionTextInAttr) EndSection() *InEntityTestTable 
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionTextInAttr) EndAttribute() *InEntityTestTableSectionText {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -5926,11 +6041,17 @@ func (inst *InEntityTestTableSectionTimeArrayInAttr) handleNonScalarSupportColum
 	inst.homogenousArrayContainerLength230 = 0
 	inst.homogenousArraySupportFieldBuilder236.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionTimeArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionTimeArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionTimeArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -5945,6 +6066,7 @@ func (inst *InEntityTestTableSectionTimeArrayInAttr) EndSection() *InEntityTestT
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionTimeArrayInAttr) EndAttribute() *InEntityTestTableSectionTimeArray {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -6252,11 +6374,17 @@ func (inst *InEntityTestTableSectionTimeRangeInAttr) handleNonScalarSupportColum
 	var l int
 	var _ = l
 }
+func (inst *InEntityTestTableSectionTimeRangeInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionTimeRangeInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionTimeRangeInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -6271,6 +6399,7 @@ func (inst *InEntityTestTableSectionTimeRangeInAttr) EndSection() *InEntityTestT
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionTimeRangeInAttr) EndAttribute() *InEntityTestTableSectionTimeRange {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -6595,11 +6724,17 @@ func (inst *InEntityTestTableSectionU16ArrayInAttr) handleNonScalarSupportColumn
 	inst.homogenousArrayContainerLength072 = 0
 	inst.homogenousArraySupportFieldBuilder078.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionU16ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionU16ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionU16ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -6614,6 +6749,7 @@ func (inst *InEntityTestTableSectionU16ArrayInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionU16ArrayInAttr) EndAttribute() *InEntityTestTableSectionU16Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -6938,11 +7074,17 @@ func (inst *InEntityTestTableSectionU32ArrayInAttr) handleNonScalarSupportColumn
 	inst.homogenousArrayContainerLength083 = 0
 	inst.homogenousArraySupportFieldBuilder089.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionU32ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionU32ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionU32ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -6957,6 +7099,7 @@ func (inst *InEntityTestTableSectionU32ArrayInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionU32ArrayInAttr) EndAttribute() *InEntityTestTableSectionU32Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -7281,11 +7424,17 @@ func (inst *InEntityTestTableSectionU32SetInAttr) handleNonScalarSupportColumns(
 	inst.setContainerLength094 = 0
 	inst.setSupportFieldBuilder100.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionU32SetInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionU32SetInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionU32SetInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -7300,6 +7449,7 @@ func (inst *InEntityTestTableSectionU32SetInAttr) EndSection() *InEntityTestTabl
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionU32SetInAttr) EndAttribute() *InEntityTestTableSectionU32Set {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -7624,11 +7774,17 @@ func (inst *InEntityTestTableSectionU64ArrayInAttr) handleNonScalarSupportColumn
 	inst.homogenousArrayContainerLength105 = 0
 	inst.homogenousArraySupportFieldBuilder111.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionU64ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionU64ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionU64ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -7643,6 +7799,7 @@ func (inst *InEntityTestTableSectionU64ArrayInAttr) EndSection() *InEntityTestTa
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionU64ArrayInAttr) EndAttribute() *InEntityTestTableSectionU64Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -7967,11 +8124,17 @@ func (inst *InEntityTestTableSectionU64SetInAttr) handleNonScalarSupportColumns(
 	inst.setContainerLength116 = 0
 	inst.setSupportFieldBuilder122.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionU64SetInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionU64SetInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionU64SetInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -7986,6 +8149,7 @@ func (inst *InEntityTestTableSectionU64SetInAttr) EndSection() *InEntityTestTabl
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionU64SetInAttr) EndAttribute() *InEntityTestTableSectionU64Set {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -8310,11 +8474,17 @@ func (inst *InEntityTestTableSectionU8ArrayInAttr) handleNonScalarSupportColumns
 	inst.homogenousArrayContainerLength061 = 0
 	inst.homogenousArraySupportFieldBuilder067.Append(uint64(l))
 }
+func (inst *InEntityTestTableSectionU8ArrayInAttr) applyAmbientMemberships() {
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
 func (inst *InEntityTestTableSectionU8ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
 func (inst *InEntityTestTableSectionU8ArrayInAttr) EndSection() *InEntityTestTable {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInitial
@@ -8329,6 +8499,7 @@ func (inst *InEntityTestTableSectionU8ArrayInAttr) EndSection() *InEntityTestTab
 	return inst.parent.parent
 }
 func (inst *InEntityTestTableSectionU8ArrayInAttr) EndAttribute() *InEntityTestTableSectionU8Array {
+	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
