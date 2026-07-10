@@ -850,6 +850,30 @@ APIs with `egui::Ui` callbacks (like `egui_table::TableDelegate`) use `WithDefer
   }
   ```
 
+### The mirror image — embedding a floored widget in a *bounded* host (`FillHost`)
+
+That `UiSetMinHeight(...)`-before-a-`DockArea` floor is a **scroll-host device**. Reuse the same widget inside a host that is *already* bounded — a dock-tab leaf, a fixed `PanelCentralInside`, a windowed app's central region — and the floor turns from load-bearing into a bug: when the host is **shorter** than the floor, the widget forces itself past the host's rect, and a *nested* `DockArea` then paints its tab-bars / separators / stray empty leaves across the neighbouring panes. It can look fine at rest, but the moment a pane's `ScrollArea` scrolls that oversized viewport the scroll gesture leaks into the outer dock and the layout tears (the play **Schema** tab overflowing its leaf was exactly this).
+
+* **The Pattern:** **gate the floor behind an `Input.FillHost bool`.** The widget keeps the floor for the gallery (default `false`); a bounded host sets it `true` and the widget fills the host rect instead.
+  ```go
+  type Input struct {
+      // ...
+      FillHost bool // host already bounds our height — fill it, don't floor to dockMinHeight
+  }
+
+  func Render(in Input) {
+      for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
+          if !in.FillHost {                 // gallery (unbounded scroll host) → floor
+              c.UiSetMinHeight(dockMinHeight)
+          }                                 // bounded host (FillHost) → fill the leaf
+          for dock := range c.DockArea(in.Ids.PrepareStr("...")) { /* ... */ }
+      }
+  }
+  ```
+  - **Carry `FillHost`:** `schemaview.Input` and `mappingplanview.Input`. The gallery demos leave it `false`; play's Schema dock-tab (`apps/play/play_schema_panel.go`) sets it `true`.
+  - **Inlined floor, no field:** an *app* that owns its dock and always renders into a bounded window may keep an unconditional floor **iff** the window is guaranteed ≥ the floor — the floor is then a no-op that fills the window (e.g. `apps/godepview`: a 620 floor inside a ≥760 px window). Resizing such a window below the floor reintroduces the overflow, so prefer `FillHost` (or drop the floor) for any widget that can also land in a short bounded host.
+  - **Verify in the real bounded host, not the gallery/tour** — the inverse of the caveat above. The overflow only shows where the host is bounded *and* shorter than the floor; the play window (or a resized leaf), not the demo, is the falsifier.
+
 ---
 
 # 13. Culling, Block Skipping, and Register Mechanics

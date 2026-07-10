@@ -29,6 +29,17 @@ type Input struct {
 	// Model.SetOutputs / Model.SetInvalid. The host must also call it once at
 	// init so the dock's initial split has the output tab ids to place.
 	Recompute func(*Model)
+	// FillHost tells Render its host already gives it a bounded height, so it
+	// must fill that rect rather than floor to dockMinHeight. The floor is a
+	// scroll-host device (see dockMinHeight): the gallery is a vertically-
+	// unbounded ScrollArea, so without a floor the dock collapses. Inside a
+	// host that is ALREADY bounded and often shorter than the floor — a
+	// dock-tab leaf — forcing the floor overflows the leaf and the nested dock
+	// paints across the neighbouring panes (worse once a pane scrolls). Bounded
+	// hosts set this true; the gallery leaves it false. See schemaview.Input,
+	// which carries the same field, and the imzero2 SKILL "Gallery Scroll-Host
+	// Layout" section for both sides of the pattern.
+	FillHost bool
 }
 
 const (
@@ -69,7 +80,11 @@ func channelLabel(ch mappingplan.MembershipChannel) string {
 func Render(in Input) {
 	m := in.Model
 	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
-		c.UiSetMinHeight(dockMinHeight) // bound the dock in a scrolling host (gallery)
+		// Floor the dock's height only in an unbounded scroll host (the gallery);
+		// a bounded host (FillHost) lets the dock fill its leaf, not overflow it.
+		if !in.FillHost {
+			c.UiSetMinHeight(dockMinHeight)
+		}
 		for dock := range c.DockArea(in.Ids.PrepareStr("mpvdock")) {
 			// Initial layout (honoured once, on first dock_state construction):
 			// editor in the root leaf, the output panes split off to its right.
