@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-23
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: accepted (2026-07-10).** Built and committed — see the Status section.
 
 # ADR-0096: In-DB-rendered geo-raster panel for `play` (serverless slippy map via a `mapRaster` walkers overlay)
 
@@ -315,13 +315,39 @@ and the panel guarding a non-degenerate bbox (`span_x`, `span_y` > 0).
 
 ## Status
 
-Proposed — 2026-06-23. Gated on agreeing the `mapRaster` IDL shape and the
-bbox-query reserved-param contract. First spike: wire `mapRaster` and draw a
-*static* single-bbox raster (no lane, fixed bbox) to validate projection-exactness
-end to end, then add the camera→params→panel-local-lane→debounce loop. Descoped
-items (SD10) carry explicit triggers.
+Accepted — 2026-07-10 (proposed 2026-06-23). Built and committed: the `mapRaster`
+walkers overlay (IDL + Rust `OverlayPlugin` textured-quad draw) and the `MapDriver`
+panel (`apps/play/play_map.go`) — camera→debounce→panel-local node lane→RGBA
+repack→overlay, with the SD4/SD5 projection contract, SD9 supersession, and the
+§SD6 bbox raster query. A local demo loader (`apps/play/demo/adsb/`, commit
+`1e7ebe99`) makes it render offline against a real ADS-B slice. The remaining SD10
+items (progressive sampling ladder, hover→info, keepBuffer margin) stay deferred
+with their triggers; the configurable-render descope was lifted — see the
+2026-07-10 Update.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
+
+## Update — 2026-07-10: pluggable render (SD6 realized)
+
+The first cut hardcoded the adsb "Altitude & Velocity" colour block, so the panel
+only worked on tables with `altitude`/`ground_speed`. SD6 anticipated the fix —
+the geometry + density header (`span_*`, `in_view`, `px/py/pos`, `zoom_factor`,
+`total`, `max_total`, `transparency`, `alpha`) is render-agnostic, and a render
+swaps only the colour `WITH` block + optional `WHERE`. That split is now real.
+
+`apps/play/play_map.go` gains a `rasterRender` (name, `colorSQL` spliced after the
+shared header, optional `where`, `needs` columns for the status hint, `custom`
+flag) and a ComboBox render picker in the panel. Built-ins: **Altitude & Velocity**
+(default; the prior block, aviation), **Density** (table-agnostic — colour from
+`count()` alone via `transparency`, assumes only `mercator_x/y`; the "any
+geo-point table" unlock), **Speed** (assumes `ground_speed`), and **Custom** (the
+user types the `red/green/blue` expression, matching the playground's existing
+arbitrary-`table` freedom). The render is part of the fetch key, so switching it
+supersedes any in-flight run and re-renders. Validated: all four modes emit a
+dense `w×h` framebuffer with distinct colour distributions over the same points.
+
+This lifts the configurable-render descope; the remaining SD10 items (progressive
+sampling ladder, hover→info, keepBuffer margin) stay deferred.
 
 ## References
 

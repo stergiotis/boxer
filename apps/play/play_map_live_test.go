@@ -41,7 +41,7 @@ func TestMapRasterLive(t *testing.T) {
 	if !ok {
 		t.Fatal("degenerate bbox")
 	}
-	sql := buildRasterSQL(b, w, h, sanitizeTable(table), 100)
+	sql := buildRasterSQL(b, w, h, sanitizeTable(table), 100, builtinRenders[0].colorSQL, builtinRenders[0].where)
 	ctx, cancel := context.WithTimeout(context.Background(), mapFetchTimeout)
 	defer cancel()
 	rec, _, _, exErr := clientExecutor{client: client}.execute(ctx, sql, memory.NewGoAllocator())

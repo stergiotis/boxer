@@ -113,7 +113,7 @@ func TestMapStatusLineDoesNotLatchErrors(t *testing.T) {
 
 	d.packErr = nil
 	d.packW, d.packH = 2, 2
-	require.Equal(t, "2×2 raster", d.statusLine())
+	require.Equal(t, "2×2 raster · Altitude & Velocity", d.statusLine())
 }
 
 // repack pins the packed state to the served fingerprint (the observers'
@@ -130,4 +130,28 @@ func TestMapDriverRepackRecordsFingerprint(t *testing.T) {
 	require.Equal(t, "q", d.lastPackedSQL)
 	require.Equal(t, uint64(1), d.version)
 	require.Equal(t, uint32(1), d.packW)
+}
+
+// buildRasterSQL splices each render's colour block into the shared geometry
+// header; the result must be well-formed for every builtin mode (ADR-0096 §SD6).
+func TestBuildRasterSQLRendersWellFormed(t *testing.T) {
+	b := mercBox{minX: 100, maxX: 200, minY: 100, maxY: 200}
+	for _, r := range builtinRenders {
+		colorSQL := r.colorSQL
+		if r.custom {
+			colorSQL = "transparency * 255 AS red, transparency AS green, 0 AS blue"
+		}
+		sql := buildRasterSQL(b, 256, 256, "planes_mercator", 100, colorSQL, r.where)
+		for _, want := range []string{"255 AS alpha", "AS red", "AS green", "AS blue", "GROUP BY pos", "WITH FILL FROM 0 TO"} {
+			require.Contains(t, sql, want, "render %q missing %q", r.name, want)
+		}
+	}
+}
+
+// An extra WHERE is ANDed with in_view; an empty one leaves the filter bare.
+func TestBuildRasterSQLExtraWhere(t *testing.T) {
+	b := mercBox{minX: 1, maxX: 2, minY: 1, maxY: 2}
+	rgb := "0 AS red, 0 AS green, 0 AS blue"
+	require.Contains(t, buildRasterSQL(b, 4, 4, "t", 100, rgb, "t = 'A320'"), "WHERE in_view AND (t = 'A320')")
+	require.Contains(t, buildRasterSQL(b, 4, 4, "t", 100, rgb, ""), "WHERE in_view\n")
 }

@@ -34,25 +34,30 @@ type MapDriver struct {
 	client *Client
 
 	// Controls + display.
-	table       string
-	sampling    float64
-	opacity     float64
-	noTiles     bool
-	live        bool
-	mapWidth    float64
-	mapHeight   float64
-	initLat     float64
-	initLon     float64
-	initZoom    float64
-	inited      bool
+	table        string
+	sampling     float64
+	opacity      float64
+	noTiles      bool
+	live         bool
+	mapWidth     float64
+	mapHeight    float64
+	initLat      float64
+	initLon      float64
+	initZoom     float64
+	inited       bool
 	forceRefresh bool
+
+	// renderIdx selects builtinRenders; customColorSQL is the colour expression
+	// used when the "Custom" render is active.
+	renderIdx      int
+	customColorSQL string
 
 	// Debounce on the quantized viewHash: reset the timer whenever it changes,
 	// fire only once the camera has been stable for mapDebounce.
-	lastViewHash    uint64
-	viewStableAt    time.Time
+	lastViewHash     uint64
+	viewStableAt     time.Time
 	lastRequestedKey mapFetchKey
-	lastSentVersion uint64
+	lastSentVersion  uint64
 
 	// lane runs the raster query off the render thread (ADR-0097 3f): the
 	// node-graph nodeLane replaces the former bespoke fetch goroutine + staleness
@@ -95,8 +100,8 @@ type rasterMeta struct {
 const (
 	mapRasterID uint64 = 1
 	mapDebounce        = 250 * time.Millisecond
-	mapMaxDim   uint32 = 1024          // bounds query cost + Arrow size per view
-	mercMax            = 4294967295.0  // 0xFFFFFFFF — full Web-Mercator world
+	mapMaxDim   uint32 = 1024         // bounds query cost + Arrow size per view
+	mercMax            = 4294967295.0 // 0xFFFFFFFF — full Web-Mercator world
 )
 
 // mapFetchTimeout bounds one raster round-trip. Generous because a remote()
@@ -110,14 +115,69 @@ var mapFetchTimeout = 60 * time.Second
 // (they would jitter under a stable viewHash) — they ride alongside as the SQL
 // inputs and the overlay bounds.
 type mapFetchKey struct {
-	viewHash uint64
-	table    string
-	sampling uint32
-	w        uint32
-	h        uint32
+	viewHash   uint64
+	table      string
+	sampling   uint32
+	w          uint32
+	h          uint32
+	colorSQL   string
+	extraWhere string
 }
 
 type mercBox struct{ minX, maxX, minY, maxY uint32 }
+
+// rasterRender is a swappable colour mode (ADR-0096 §SD6). The geometry + density
+// header of the raster query (span_*, in_view, px/py/pos, zoom_factor, total,
+// max_total, transparency, alpha) is render-agnostic; a render supplies only the
+// colour block and an optional extra WHERE. This is what lets the panel target
+// any table with mercator_x/mercator_y, not just the ADS-B schema.
+type rasterRender struct {
+	name string // UI label + fetch-key component
+	// colorSQL is spliced into the WITH block after `255 AS alpha,`. In scope:
+	// total, max_total, transparency, alpha, plus any table column via aggregates
+	// (avg(col), …). It MUST define red, green, blue (Float64, 0..255) and end
+	// without a trailing comma. Ignored when custom (customColorSQL is used).
+	colorSQL string
+	where    string   // optional predicate ANDed with in_view; "" = none
+	needs    []string // columns beyond mercator_x/y assumed; nil = table-agnostic
+	custom   bool     // colorSQL comes from the panel's editable field
+}
+
+// builtinRenders are the selectable colour modes. "Altitude & Velocity" is the
+// upstream adsb default (needs altitude+ground_speed); "Density" assumes only
+// mercator_x/y so it works on ANY geo-point table; "Custom" takes a user-typed
+// red/green/blue expression, matching the playground's arbitrary-table freedom.
+var builtinRenders = []rasterRender{
+	{
+		name:  "Altitude & Velocity",
+		needs: []string{"altitude", "ground_speed"},
+		colorSQL: `greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
+    greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
+    greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
+    (1 + transparency) / 2 * (1 - color3) * 255 AS red,
+    transparency * color1 * 255 AS green,
+    color2 * 255 AS blue`,
+	},
+	{
+		name: "Density",
+		colorSQL: `least(1, transparency * 1.5) AS d,
+    least(255, d * 255) AS red,
+    greatest(0, least(255, (d * 1.6 - 0.45) * 255)) AS green,
+    greatest(0, least(255, (d * 2.3 - 1.45) * 255)) AS blue`,
+	},
+	{
+		name:  "Speed",
+		needs: []string{"ground_speed"},
+		colorSQL: `greatest(0, least(avg(ground_speed), 700)) / 700 AS s,
+    transparency * (1 - s) * 255 AS red,
+    transparency * 90 AS green,
+    transparency * s * 255 AS blue`,
+	},
+	{
+		name:   "Custom",
+		custom: true,
+	},
+}
 
 func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	d := &MapDriver{
@@ -137,6 +197,9 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		initLat:   40.0,
 		initLon:   0.0,
 		initZoom:  4.0,
+		// renderIdx 0 = "Altitude & Velocity" (matches the demo table); Custom
+		// starts from an editable density expression.
+		customColorSQL: "transparency * 255 AS red,\n    transparency * 200 AS green,\n    transparency * 120 AS blue",
 	}
 	// Scripted-screenshot overrides (SPINNAKER_PLAY_MAP_*), parallel to the
 	// SPINNAKER_PLAY_* knobs the play HMI already reads.
@@ -260,6 +323,13 @@ func (inst *MapDriver) renderControls() {
 			Text("sampling").SendRespVal(&inst.sampling)
 	}
 	for range c.Horizontal().KeepIter() {
+		inst.renderModeCombo()
+	}
+	if builtinRenders[inst.renderIdx].custom {
+		c.TextEdit(inst.ids.PrepareStr("map-color"), inst.customColorSQL, true).
+			DesiredWidth(420).SendRespVal(&inst.customColorSQL)
+	}
+	for range c.Horizontal().KeepIter() {
 		c.SliderF64(inst.ids.PrepareStr("map-opacity"), inst.opacity, 0.1, 1.0).
 			Text("opacity").SendRespVal(&inst.opacity)
 		c.Checkbox(inst.ids.PrepareStr("map-live"), inst.live, "live").SendRespVal(&inst.live)
@@ -271,6 +341,28 @@ func (inst *MapDriver) renderControls() {
 		}
 	}
 	c.Label(inst.statusLine()).Send()
+}
+
+// renderModeCombo is the colour-mode picker (mirrors play_projection's
+// renderColorByCombo). Changing the mode forces a refetch so the new colours
+// apply immediately, whether or not "live" is on.
+func (inst *MapDriver) renderModeCombo() {
+	cur := builtinRenders[inst.renderIdx].name
+	for range c.ComboBox(inst.ids.PrepareStr("map-render"),
+		c.WidgetText().Text("render").Keep(),
+		c.WidgetText().Text(cur).Keep()).
+		KeepIter() {
+		for i, r := range builtinRenders {
+			if c.Button(inst.ids.PrepareSeq(uint64(0x4000+i)),
+				c.Atoms().Text(r.name).Keep()).
+				Frame(false).
+				Selected(i == inst.renderIdx).
+				SendResp().HasPrimaryClicked() {
+				inst.renderIdx = i
+				inst.requestRefresh()
+			}
+		}
+	}
 }
 
 // requestRefresh forces a re-fetch of the current view: the request-dedup key
@@ -305,12 +397,17 @@ func (inst *MapDriver) updateDemand(viewHash uint64, minLat, maxLat, minLon, max
 	if sampling < 1 {
 		sampling = 1
 	}
-	key := mapFetchKey{viewHash: viewHash, table: table, sampling: sampling, w: w, h: h}
+	r := builtinRenders[inst.renderIdx]
+	colorSQL := r.colorSQL
+	if r.custom {
+		colorSQL = inst.customColorSQL
+	}
+	key := mapFetchKey{viewHash: viewHash, table: table, sampling: sampling, w: w, h: h, colorSQL: colorSQL, extraWhere: r.where}
 	if key == inst.lastRequestedKey {
 		return
 	}
 	inst.lastRequestedKey = key
-	sql := buildRasterSQL(b, w, h, table, sampling)
+	sql := buildRasterSQL(b, w, h, table, sampling, colorSQL, r.where)
 	inst.demandedSQL = sql
 	inst.sqlMeta[sql] = rasterMeta{bounds: [4]float64{minLat, minLon, maxLat, maxLon}, w: w, h: h}
 	inst.pruneSqlMeta()
@@ -396,16 +493,26 @@ func (inst *MapDriver) statusLine() string {
 	case inst.loading:
 		return "rendering tile…"
 	case inst.packW > 0:
-		return fmt.Sprintf("%d×%d raster", inst.packW, inst.packH)
+		return fmt.Sprintf("%d×%d raster · %s", inst.packW, inst.packH, builtinRenders[inst.renderIdx].name)
 	default:
-		return "pan/zoom over a ClickHouse table with mercator_x/mercator_y (e.g. planes_mercator)"
+		msg := "pan/zoom over a ClickHouse table with mercator_x/mercator_y (e.g. planes_mercator)"
+		if needs := builtinRenders[inst.renderIdx].needs; len(needs) > 0 {
+			msg += " · '" + builtinRenders[inst.renderIdx].name + "' needs " + strings.Join(needs, ", ")
+		}
+		return msg
 	}
 }
 
-// buildRasterSQL generalises the adsb.exposed "Altitude & Velocity" tile render
-// from a fixed 1024² tile to an arbitrary viewport (ADR-0096 §SD6). Values are
-// inlined as literals; mercator_x/mercator_y/altitude/ground_speed are assumed.
-func buildRasterSQL(b mercBox, w, h uint32, table string, sampling uint32) string {
+// buildRasterSQL builds the bbox raster query (ADR-0096 §SD6): a fixed geometry +
+// density header (span_*, in_view, px/py/pos, zoom_factor, total, max_total,
+// transparency, alpha), then the selected render's colour block spliced in and an
+// optional extra WHERE. Values are inlined as literals; the header assumes only
+// mercator_x/mercator_y — what other columns are needed depends on colorSQL.
+func buildRasterSQL(b mercBox, w, h uint32, table string, sampling uint32, colorSQL, extraWhere string) string {
+	where := "in_view"
+	if strings.TrimSpace(extraWhere) != "" {
+		where = "in_view AND (" + extraWhere + ")"
+	}
 	return fmt.Sprintf(`WITH
     toUInt64(%[2]d) - %[1]d AS span_x,
     toUInt64(%[4]d) - %[3]d AS span_y,
@@ -419,19 +526,14 @@ func buildRasterSQL(b mercBox, w, h uint32, table string, sampling uint32) strin
     count() AS total,
     greatest(1000000. / %[8]d / zoom_factor, toFloat64(count())) AS max_total,
     pow(total / max_total, 1/5) AS transparency,
-    greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
-    greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
-    greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
     255 AS alpha,
-    (1 + transparency) / 2 * (1 - color3) * 255 AS red,
-    transparency * color1 * 255 AS green,
-    color2 * 255 AS blue
+    %[9]s
 SELECT round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
 FROM %[7]s
-WHERE in_view
+WHERE %[10]s
 GROUP BY pos
 ORDER BY pos WITH FILL FROM 0 TO toUInt64(%[5]d) * %[6]d`,
-		b.minX, b.maxX, b.minY, b.maxY, w, h, table, sampling)
+		b.minX, b.maxX, b.minY, b.maxY, w, h, table, sampling, colorSQL, where)
 }
 
 // bboxFromLatLon converts a lat/lon viewport to the mercator bbox the SQL bins
@@ -501,7 +603,7 @@ func clampDim(px float32) uint32 {
 // sanitizeTable accepts a plain identifier OR a table-function source
 // (remote / remoteSecure / url / file / merge / …) so the Map panel can read a
 // remote ClickHouse — e.g. adsb.exposed via
-// `remoteSecure('…:9440', default.planes_mercator_sample100, 'website', '')`.
+// `remoteSecure('…:9440', default.planes_mercator_sample100, 'website', ”)`.
 // It blocks only statement-breakers (terminator, comment markers, newlines) so
 // the inlined source stays inside `FROM <src> WHERE …`. The playground already
 // grants arbitrary SQL via the editor, so this is no new capability — just a
