@@ -169,7 +169,7 @@ func NewInEntityLedgerTable(allocator memory.Allocator, estimatedNumberOfRecords
 // initialise (skipping beginSection for the rest). Pass nil to clear.
 // The hint is a performance optimisation; sending BeginAttribute to
 // an unmarked section produces empty-list bytes at TransferRecords.
-func (inst *InEntityLedgerTable) SetActiveSections(idxs []int) {
+func (inst *InEntityLedgerTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
 		return
@@ -182,11 +182,6 @@ func (inst *InEntityLedgerTable) SetActiveSections(idxs []int) {
 	}
 	inst.activeSections = &mask
 }
-
-// Builder exposes the underlying RecordBuilder so callers can apply
-// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
-// arrowsparserb / arrowrowcbor backends).
-func (inst *InEntityLedgerTable) Builder() *array.RecordBuilder { return inst.builder }
 
 // InEntityLedgerTableSectionIndices maps each section name to its section%02dInst slot in
 // the generated entity. Useful for callers that need to compute
@@ -206,9 +201,9 @@ var InEntityLedgerTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityLedgerTable) SetId(id0 string) *InEntityLedgerTable {
+func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -221,9 +216,9 @@ func (inst *InEntityLedgerTable) SetId(id0 string) *InEntityLedgerTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityLedgerTable) SetTimestamp(ts1 time.Time) *InEntityLedgerTable {
+func (inst *InEntityLedgerTable) setTimestamp(ts1 time.Time) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -336,7 +331,7 @@ func (inst *InEntityLedgerTable) GetSectionSnapClosed() *InEntityLedgerTableSect
 func (inst *InEntityLedgerTable) GetSectionSnapOwner() *InEntityLedgerTableSectionSnapOwner {
 	return inst.section07Inst
 }
-func (inst *InEntityLedgerTable) BeginEntity() *InEntityLedgerTable {
+func (inst *InEntityLedgerTable) beginEntity() *InEntityLedgerTable {
 	switch inst.state {
 	case runtime.EntityStateInitial:
 		inst.state = runtime.EntityStateInEntity
@@ -417,7 +412,7 @@ func (inst *InEntityLedgerTable) validateEntity() {
 
 	return
 }
-func (inst *InEntityLedgerTable) CommitEntity() (err error) {
+func (inst *InEntityLedgerTable) commitEntity() (err error) {
 	inst.validateEntity()
 	err = inst.CheckErrors()
 	if err != nil {
@@ -438,7 +433,7 @@ func (inst *InEntityLedgerTable) CommitEntity() (err error) {
 	inst.resetSections()
 	return
 }
-func (inst *InEntityLedgerTable) RollbackEntity() (err error) {
+func (inst *InEntityLedgerTable) rollbackEntity() (err error) {
 	switch inst.state {
 	case runtime.EntityStateInEntity:
 		inst.state = runtime.EntityStateInitial
@@ -464,7 +459,7 @@ func (inst *InEntityLedgerTable) RollbackEntity() (err error) {
 }
 
 // TransferRecords The returned Records must be Release()'d after use.
-func (inst *InEntityLedgerTable) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
+func (inst *InEntityLedgerTable) transferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
 	if inst.state != runtime.EntityStateInitial {
 		err = runtime.ErrInvalidStateTransition
 		return
@@ -484,6 +479,27 @@ func (inst *InEntityLedgerTable) TransferRecords(recordsIn []arrow.RecordBatch) 
 
 func (inst *InEntityLedgerTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
+}
+
+// --- store control drivers (ADR-0100 SD6): exported access to InEntityLedgerTable's
+// unexported frame control, callable only from within this package. ---
+func InEntityLedgerTableBeginEntity(e *InEntityLedgerTable) *InEntityLedgerTable {
+	return e.beginEntity()
+}
+func InEntityLedgerTableCommitEntity(e *InEntityLedgerTable) error   { return e.commitEntity() }
+func InEntityLedgerTableRollbackEntity(e *InEntityLedgerTable) error { return e.rollbackEntity() }
+func InEntityLedgerTableTransferRecords(e *InEntityLedgerTable, recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
+	return e.transferRecords(recordsIn)
+}
+func InEntityLedgerTableSetActiveSections(e *InEntityLedgerTable, idxs []int) {
+	e.setActiveSections(idxs)
+}
+func InEntityLedgerTableReleaseBuilder(e *InEntityLedgerTable) { e.builder.Release() }
+func InEntityLedgerTableSetId(e *InEntityLedgerTable, id0 string) *InEntityLedgerTable {
+	return e.setId(id0)
+}
+func InEntityLedgerTableSetTimestamp(e *InEntityLedgerTable, ts1 time.Time) *InEntityLedgerTable {
+	return e.setTimestamp(ts1)
 }
 
 func (inst *InEntityLedgerTable) AppendError(err error) {

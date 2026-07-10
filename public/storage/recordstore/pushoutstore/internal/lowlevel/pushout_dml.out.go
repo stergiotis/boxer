@@ -163,7 +163,7 @@ func NewInEntityPushoutTable(allocator memory.Allocator, estimatedNumberOfRecord
 // initialise (skipping beginSection for the rest). Pass nil to clear.
 // The hint is a performance optimisation; sending BeginAttribute to
 // an unmarked section produces empty-list bytes at TransferRecords.
-func (inst *InEntityPushoutTable) SetActiveSections(idxs []int) {
+func (inst *InEntityPushoutTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
 		return
@@ -176,11 +176,6 @@ func (inst *InEntityPushoutTable) SetActiveSections(idxs []int) {
 	}
 	inst.activeSections = &mask
 }
-
-// Builder exposes the underlying RecordBuilder so callers can apply
-// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
-// arrowsparserb / arrowrowcbor backends).
-func (inst *InEntityPushoutTable) Builder() *array.RecordBuilder { return inst.builder }
 
 // InEntityPushoutTableSectionIndices maps each section name to its section%02dInst slot in
 // the generated entity. Useful for callers that need to compute
@@ -199,9 +194,9 @@ var InEntityPushoutTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityPushoutTable) SetId(id0 string) *InEntityPushoutTable {
+func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -214,9 +209,9 @@ func (inst *InEntityPushoutTable) SetId(id0 string) *InEntityPushoutTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityPushoutTable) SetTimestamp(ts1 time.Time) *InEntityPushoutTable {
+func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -229,9 +224,9 @@ func (inst *InEntityPushoutTable) SetTimestamp(ts1 time.Time) *InEntityPushoutTa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityPushoutTable) SetLifecycle(lifecycle2 uint8) *InEntityPushoutTable {
+func (inst *InEntityPushoutTable) setLifecycle(lifecycle2 uint8) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -338,7 +333,7 @@ func (inst *InEntityPushoutTable) GetSectionSnapApplied() *InEntityPushoutTableS
 func (inst *InEntityPushoutTable) GetSectionSnapGraggle() *InEntityPushoutTableSectionSnapGraggle {
 	return inst.section06Inst
 }
-func (inst *InEntityPushoutTable) BeginEntity() *InEntityPushoutTable {
+func (inst *InEntityPushoutTable) beginEntity() *InEntityPushoutTable {
 	switch inst.state {
 	case runtime.EntityStateInitial:
 		inst.state = runtime.EntityStateInEntity
@@ -411,7 +406,7 @@ func (inst *InEntityPushoutTable) validateEntity() {
 
 	return
 }
-func (inst *InEntityPushoutTable) CommitEntity() (err error) {
+func (inst *InEntityPushoutTable) commitEntity() (err error) {
 	inst.validateEntity()
 	err = inst.CheckErrors()
 	if err != nil {
@@ -432,7 +427,7 @@ func (inst *InEntityPushoutTable) CommitEntity() (err error) {
 	inst.resetSections()
 	return
 }
-func (inst *InEntityPushoutTable) RollbackEntity() (err error) {
+func (inst *InEntityPushoutTable) rollbackEntity() (err error) {
 	switch inst.state {
 	case runtime.EntityStateInEntity:
 		inst.state = runtime.EntityStateInitial
@@ -458,7 +453,7 @@ func (inst *InEntityPushoutTable) RollbackEntity() (err error) {
 }
 
 // TransferRecords The returned Records must be Release()'d after use.
-func (inst *InEntityPushoutTable) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
+func (inst *InEntityPushoutTable) transferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
 	if inst.state != runtime.EntityStateInitial {
 		err = runtime.ErrInvalidStateTransition
 		return
@@ -478,6 +473,30 @@ func (inst *InEntityPushoutTable) TransferRecords(recordsIn []arrow.RecordBatch)
 
 func (inst *InEntityPushoutTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
+}
+
+// --- store control drivers (ADR-0100 SD6): exported access to InEntityPushoutTable's
+// unexported frame control, callable only from within this package. ---
+func InEntityPushoutTableBeginEntity(e *InEntityPushoutTable) *InEntityPushoutTable {
+	return e.beginEntity()
+}
+func InEntityPushoutTableCommitEntity(e *InEntityPushoutTable) error   { return e.commitEntity() }
+func InEntityPushoutTableRollbackEntity(e *InEntityPushoutTable) error { return e.rollbackEntity() }
+func InEntityPushoutTableTransferRecords(e *InEntityPushoutTable, recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
+	return e.transferRecords(recordsIn)
+}
+func InEntityPushoutTableSetActiveSections(e *InEntityPushoutTable, idxs []int) {
+	e.setActiveSections(idxs)
+}
+func InEntityPushoutTableReleaseBuilder(e *InEntityPushoutTable) { e.builder.Release() }
+func InEntityPushoutTableSetId(e *InEntityPushoutTable, id0 string) *InEntityPushoutTable {
+	return e.setId(id0)
+}
+func InEntityPushoutTableSetTimestamp(e *InEntityPushoutTable, ts1 time.Time) *InEntityPushoutTable {
+	return e.setTimestamp(ts1)
+}
+func InEntityPushoutTableSetLifecycle(e *InEntityPushoutTable, lifecycle2 uint8) *InEntityPushoutTable {
+	return e.setLifecycle(lifecycle2)
 }
 
 func (inst *InEntityPushoutTable) AppendError(err error) {

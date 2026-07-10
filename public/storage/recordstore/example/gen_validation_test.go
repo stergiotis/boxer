@@ -122,8 +122,9 @@ type KindA struct {
 	store := readStore(t, out)
 	require.Contains(t, store, "type ValcheckEnvelope struct")
 	require.Contains(t, store, "Id2 uint64")
-	// The Key still binds the leading EntityId; the DML sets both id columns.
-	require.Contains(t, store, "SetId(id, env.Id2)")
+	// The Key still binds the leading EntityId; the DML sets both id columns
+	// (via the private-control driver — ADR-0100 SD6 — in the default layout).
+	require.Contains(t, store, "SetId(inst.dml, id, env.Id2)")
 }
 
 // TestGenerateInternalLayout: the default layout places the DML/RA
@@ -197,6 +198,11 @@ type KindA struct {
 	require.NoError(t, err)
 	require.Contains(t, string(store), "dml: NewInEntityValcheckTable(alloc, 64)")
 	require.NotContains(t, string(store), "lowlevel.")
+	// Flat keeps the control surface exported (private control is off under
+	// Flat and FullCodecs — ADR-0100 SD6), so the store drives the frame by
+	// plain method calls, not the type-prefixed driver functions.
+	require.Contains(t, string(store), ".BeginEntity()")
+	require.NotContains(t, string(store), "InEntityValcheckTableBeginEntity(")
 }
 
 // TestGenerateRequiresImportPath: the internal layout cannot write the
@@ -307,7 +313,7 @@ type KindA struct {
 	store := readStore(t, out)
 	require.Contains(t, store, "type ValcheckEnvelope struct")
 	require.Contains(t, store, "Route uint64")
-	require.Contains(t, store, "SetRouting(env.Route)")
+	require.Contains(t, store, "SetRouting(inst.dml, env.Route)")
 	require.Contains(t, store, "env ValcheckEnvelope")
 }
 
@@ -441,4 +447,9 @@ type KindA struct {
 	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
 	require.NoError(t, err)
 	require.Contains(t, string(store), "KindAAddSections(inst.store.dml, row)")
+	// FullCodecs keeps the control surface exported (private control is off,
+	// so <Kind>BuildEntities can drive the frame — ADR-0100 SD6); the store
+	// drives it by plain method calls, not the type-prefixed drivers.
+	require.Contains(t, string(store), ".BeginEntity()")
+	require.NotContains(t, string(store), "InEntityValcheckTableBeginEntity(")
 }

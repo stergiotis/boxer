@@ -19,6 +19,18 @@ type GeneratorDriver struct {
 	namingConvention common.NamingConventionI
 	tech             common.TechnologySpecificGeneratorI
 	builderPkg       BuilderPackage
+	privateControl   bool
+}
+
+// EmitControlPrivate makes the driver emit the entity control surface (the
+// frame lifecycle, the record drain, SetActiveSections, the plain setters
+// and the raw builder accessor) unexported, with exported driver functions
+// the owning store calls, so a store can wall frame control from external
+// holders of the builder (ADR-0100 SD6). Returns the driver for chaining;
+// the default keeps the full exported surface, byte-identical to before.
+func (inst *GeneratorDriver) EmitControlPrivate() *GeneratorDriver {
+	inst.privateControl = true
+	return inst
 }
 
 func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech common.TechnologySpecificGeneratorI) *GeneratorDriver {
@@ -55,6 +67,7 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 	}
 
 	builder := inst.builder
+	builder.privateControl = inst.privateControl
 	builder.SetCodeBuilder(s)
 	ir := common.NewIntermediateTableRepresentation()
 	err = ir.LoadFromTable(&tblDesc, inst.tech)

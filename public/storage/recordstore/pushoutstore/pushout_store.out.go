@@ -35,7 +35,8 @@ import (
 //go:embed pushout_ddl_clickhouse.out.sql
 var pushoutDDLCreate string
 
-// PushoutTableName is the ClickHouse table this store binds.
+// PushoutTableName is the ClickHouse table this store binds — database-
+// qualified ("<db>.<table>") when a Database was set at generation.
 const PushoutTableName = "pushout"
 
 // Physical (encoded, quoted) names of the envelope role columns,
@@ -221,7 +222,10 @@ type PushoutEntityBuilder struct {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order) and a live lifecycle.
 func (inst *PushoutStore) Begin(id string, ts time.Time) *PushoutEntityBuilder {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleLive)
+	lowlevel.InEntityPushoutTableBeginEntity(inst.dml)
+	lowlevel.InEntityPushoutTableSetId(inst.dml, id)
+	lowlevel.InEntityPushoutTableSetTimestamp(inst.dml, ts)
+	lowlevel.InEntityPushoutTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
 	return &PushoutEntityBuilder{store: inst, key: id, ent: PushoutEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
 }
 
@@ -304,9 +308,9 @@ func (inst *PushoutEntityBuilder) Raw() *lowlevel.InEntityPushoutTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *PushoutEntityBuilder) Commit() (err error) {
-	err = inst.store.dml.CommitEntity()
+	err = lowlevel.InEntityPushoutTableCommitEntity(inst.store.dml)
 	if err != nil {
-		_ = inst.store.dml.RollbackEntity() // no-op error when no frame is open
+		_ = lowlevel.InEntityPushoutTableRollbackEntity(inst.store.dml) // no-op error when no frame is open
 		return
 	}
 	inst.store.buffered++
@@ -323,7 +327,7 @@ func (inst *PushoutEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *PushoutEntityBuilder) Rollback() (err error) {
-	return inst.store.dml.RollbackEntity()
+	return lowlevel.InEntityPushoutTableRollbackEntity(inst.store.dml)
 }
 
 // IngestEnvelope buffers one whole entity per row carrying only the
@@ -434,7 +438,7 @@ func (inst *PushoutStore) Flush(ctx context.Context) (n int, err error) {
 	if inst.buffered == 0 && len(inst.pending) == 0 {
 		return
 	}
-	records, err := inst.dml.TransferRecords(nil)
+	records, err := lowlevel.InEntityPushoutTableTransferRecords(inst.dml, nil)
 	if err != nil {
 		err = eh.Errorf("transfer records: %w", err)
 		return
@@ -466,8 +470,8 @@ func (inst *PushoutStore) Flush(ctx context.Context) (n int, err error) {
 // open (uncommitted) entity frame. It gives a failed Flush "never
 // happened" semantics — ClickHouse state is the truth afterwards.
 func (inst *PushoutStore) DiscardPending() {
-	_ = inst.dml.RollbackEntity() // no-op error when no frame is open
-	if records, err := inst.dml.TransferRecords(nil); err == nil {
+	_ = lowlevel.InEntityPushoutTableRollbackEntity(inst.dml) // no-op error when no frame is open
+	if records, err := lowlevel.InEntityPushoutTableTransferRecords(inst.dml, nil); err == nil {
 		for _, rec := range records {
 			rec.Release()
 		}
@@ -489,7 +493,7 @@ func (inst *PushoutStore) DiscardPending() {
 // allocator needs no Close.
 func (inst *PushoutStore) Close() {
 	inst.DiscardPending()
-	inst.dml.Builder().Release()
+	lowlevel.InEntityPushoutTableReleaseBuilder(inst.dml)
 }
 
 // PushoutCacheConfig parameterizes an attached read-through cache view.
@@ -905,10 +909,13 @@ func (inst *PushoutStore) Replay(ctx context.Context, key string, fromOrder time
 // like any commit — a versioned deletion, so GetLive reads the key as
 // absent immediately.
 func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleTombstone)
-	err = inst.dml.CommitEntity()
+	lowlevel.InEntityPushoutTableBeginEntity(inst.dml)
+	lowlevel.InEntityPushoutTableSetId(inst.dml, id)
+	lowlevel.InEntityPushoutTableSetTimestamp(inst.dml, ts)
+	lowlevel.InEntityPushoutTableSetLifecycle(inst.dml, recordstore.LifecycleTombstone)
+	err = lowlevel.InEntityPushoutTableCommitEntity(inst.dml)
 	if err != nil {
-		_ = inst.dml.RollbackEntity() // discard the failed frame; the store stays usable
+		_ = lowlevel.InEntityPushoutTableRollbackEntity(inst.dml) // discard the failed frame; the store stays usable
 		return
 	}
 	inst.buffered++

@@ -31,19 +31,19 @@ type openedAcctOwnerSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// openedEntityI lists exactly the entity-level methods opened uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// openedEntityI is the entity-builder surface openedAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type openedEntityI[
 	AcctOwnerAttr openedAcctOwnerAttrI,
 	AcctOwnerSec openedAcctOwnerSecI[AcctOwnerAttr, Ent],
 	Ent any,
 ] interface {
-	BeginEntity() Ent
-	SetId(id string) Ent
 	GetSectionAcctOwner() AcctOwnerSec
-	CommitEntity() (err error)
 }
 
 // openedAddSections contributes this kind's tagged sections to the OPEN

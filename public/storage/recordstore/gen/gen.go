@@ -133,6 +133,11 @@ func (inst Input) Generate() (err error) {
 
 	// 1. DML (the Arrow write target).
 	dmlDriver := dml.NewGoCodeGeneratorDriver(conv, clickhouse.NewTechnologySpecificCodeGenerator())
+	if inst.privateControl() {
+		// Wall the builder's frame control so an external holder of Raw()
+		// cannot drive it (ADR-0100 SD6). Off under Flat/FullCodecs.
+		dmlDriver.EmitControlPrivate()
+	}
 	namer := gocodegen.NewMultiTablePerPackageGoClassNamer()
 	code, _, err := dmlDriver.GenerateGoClasses(inst.scaffoldPkg(), tableStylable, inst.Table, inst.RowConfig, namer)
 	if err != nil {

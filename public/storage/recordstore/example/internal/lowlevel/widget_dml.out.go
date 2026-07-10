@@ -145,7 +145,7 @@ func NewInEntityWidgetTable(allocator memory.Allocator, estimatedNumberOfRecords
 // initialise (skipping beginSection for the rest). Pass nil to clear.
 // The hint is a performance optimisation; sending BeginAttribute to
 // an unmarked section produces empty-list bytes at TransferRecords.
-func (inst *InEntityWidgetTable) SetActiveSections(idxs []int) {
+func (inst *InEntityWidgetTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
 		return
@@ -158,11 +158,6 @@ func (inst *InEntityWidgetTable) SetActiveSections(idxs []int) {
 	}
 	inst.activeSections = &mask
 }
-
-// Builder exposes the underlying RecordBuilder so callers can apply
-// shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
-// arrowsparserb / arrowrowcbor backends).
-func (inst *InEntityWidgetTable) Builder() *array.RecordBuilder { return inst.builder }
 
 // InEntityWidgetTableSectionIndices maps each section name to its section%02dInst slot in
 // the generated entity. Useful for callers that need to compute
@@ -178,9 +173,9 @@ var InEntityWidgetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityWidgetTable) SetId(id0 uint64, alt1 uint64) *InEntityWidgetTable {
+func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -194,9 +189,9 @@ func (inst *InEntityWidgetTable) SetId(id0 uint64, alt1 uint64) *InEntityWidgetT
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityWidgetTable) SetTimestamp(ts2 time.Time) *InEntityWidgetTable {
+func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -209,9 +204,9 @@ func (inst *InEntityWidgetTable) SetTimestamp(ts2 time.Time) *InEntityWidgetTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityWidgetTable) SetRouting(region3 uint64, tags4 []string) *InEntityWidgetTable {
+func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -225,9 +220,9 @@ func (inst *InEntityWidgetTable) SetRouting(region3 uint64, tags4 []string) *InE
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1546
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1555
 
-func (inst *InEntityWidgetTable) SetLifecycle(lifecycle5 uint8) *InEntityWidgetTable {
+func (inst *InEntityWidgetTable) setLifecycle(lifecycle5 uint8) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -319,7 +314,7 @@ func (inst *InEntityWidgetTable) GetSectionSymbolArray() *InEntityWidgetTableSec
 func (inst *InEntityWidgetTable) GetSectionU64Array() *InEntityWidgetTableSectionU64Array {
 	return inst.section03Inst
 }
-func (inst *InEntityWidgetTable) BeginEntity() *InEntityWidgetTable {
+func (inst *InEntityWidgetTable) beginEntity() *InEntityWidgetTable {
 	switch inst.state {
 	case runtime.EntityStateInitial:
 		inst.state = runtime.EntityStateInEntity
@@ -368,7 +363,7 @@ func (inst *InEntityWidgetTable) validateEntity() {
 
 	return
 }
-func (inst *InEntityWidgetTable) CommitEntity() (err error) {
+func (inst *InEntityWidgetTable) commitEntity() (err error) {
 	inst.validateEntity()
 	err = inst.CheckErrors()
 	if err != nil {
@@ -389,7 +384,7 @@ func (inst *InEntityWidgetTable) CommitEntity() (err error) {
 	inst.resetSections()
 	return
 }
-func (inst *InEntityWidgetTable) RollbackEntity() (err error) {
+func (inst *InEntityWidgetTable) rollbackEntity() (err error) {
 	switch inst.state {
 	case runtime.EntityStateInEntity:
 		inst.state = runtime.EntityStateInitial
@@ -415,7 +410,7 @@ func (inst *InEntityWidgetTable) RollbackEntity() (err error) {
 }
 
 // TransferRecords The returned Records must be Release()'d after use.
-func (inst *InEntityWidgetTable) TransferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
+func (inst *InEntityWidgetTable) transferRecords(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
 	if inst.state != runtime.EntityStateInitial {
 		err = runtime.ErrInvalidStateTransition
 		return
@@ -435,6 +430,33 @@ func (inst *InEntityWidgetTable) TransferRecords(recordsIn []arrow.RecordBatch) 
 
 func (inst *InEntityWidgetTable) GetSchema() (schema *arrow.Schema) {
 	return inst.builder.Schema()
+}
+
+// --- store control drivers (ADR-0100 SD6): exported access to InEntityWidgetTable's
+// unexported frame control, callable only from within this package. ---
+func InEntityWidgetTableBeginEntity(e *InEntityWidgetTable) *InEntityWidgetTable {
+	return e.beginEntity()
+}
+func InEntityWidgetTableCommitEntity(e *InEntityWidgetTable) error   { return e.commitEntity() }
+func InEntityWidgetTableRollbackEntity(e *InEntityWidgetTable) error { return e.rollbackEntity() }
+func InEntityWidgetTableTransferRecords(e *InEntityWidgetTable, recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
+	return e.transferRecords(recordsIn)
+}
+func InEntityWidgetTableSetActiveSections(e *InEntityWidgetTable, idxs []int) {
+	e.setActiveSections(idxs)
+}
+func InEntityWidgetTableReleaseBuilder(e *InEntityWidgetTable) { e.builder.Release() }
+func InEntityWidgetTableSetId(e *InEntityWidgetTable, id0 uint64, alt1 uint64) *InEntityWidgetTable {
+	return e.setId(id0, alt1)
+}
+func InEntityWidgetTableSetTimestamp(e *InEntityWidgetTable, ts2 time.Time) *InEntityWidgetTable {
+	return e.setTimestamp(ts2)
+}
+func InEntityWidgetTableSetRouting(e *InEntityWidgetTable, region3 uint64, tags4 []string) *InEntityWidgetTable {
+	return e.setRouting(region3, tags4)
+}
+func InEntityWidgetTableSetLifecycle(e *InEntityWidgetTable, lifecycle5 uint8) *InEntityWidgetTable {
+	return e.setLifecycle(lifecycle5)
 }
 
 func (inst *InEntityWidgetTable) AppendError(err error) {

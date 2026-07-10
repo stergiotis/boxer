@@ -409,6 +409,56 @@ func (inst emitter) dmlChain(lifecycleExpr, envVar string) string {
 	return sb.String()
 }
 
+// privateControl reports whether the DML builder emits its control surface
+// unexported (ADR-0100 SD6) — the default internal/lowlevel + trimmed
+// layout. Flat exports the whole builder into the consumer package, and
+// FullCodecs needs the exported control set for <Kind>BuildEntities, so
+// either one keeps the control surface exported and the store drives it by
+// plain method calls.
+func (inst Input) privateControl() bool { return !inst.Flat && !inst.FullCodecs }
+
+// ctrlCall renders a call to an entity control method (frame lifecycle,
+// record drain, plain setters): a plain method call when the control
+// surface is exported, or the type-prefixed driver function call (living in
+// the builder's package) when it is private. E.g. ctrlCall("inst.dml",
+// "CommitEntity") is "inst.dml.CommitEntity()" exported, or
+// "lowlevel.InEntity<Table>CommitEntity(inst.dml)" private.
+func (inst emitter) ctrlCall(recv, method string, args ...string) string {
+	if inst.privateControl() {
+		all := append([]string{recv}, args...)
+		return inst.lowQ() + inst.dmlType() + method + "(" + strings.Join(all, ", ") + ")"
+	}
+	return recv + "." + method + "(" + strings.Join(args, ", ") + ")"
+}
+
+// emitBeginFrame writes the open-frame + envelope-setter sequence over recv
+// (a dml pointer expression): the fluent method chain when control is
+// exported, or sequential driver-function calls when it is private (drivers
+// do not chain — they take the builder as their first argument).
+func (inst emitter) emitBeginFrame(p func(string, ...any), recv, lifecycleExpr, envVar string) {
+	if !inst.privateControl() {
+		p("\t%s.BeginEntity()%s", recv, inst.dmlChain(lifecycleExpr, envVar))
+		return
+	}
+	p("\t%s", inst.ctrlCall(recv, "BeginEntity"))
+	for _, g := range inst.model.groups {
+		args := make([]string, 0, len(g.cols))
+		for _, c := range g.cols {
+			switch c.role {
+			case roleKey:
+				args = append(args, "id")
+			case roleOrder:
+				args = append(args, "ts")
+			case roleLifecycle:
+				args = append(args, lifecycleExpr)
+			default:
+				args = append(args, envVar+"."+c.pascal)
+			}
+		}
+		p("\t%s", inst.ctrlCall(recv, itemTypeToSetterName(g.itemType), args...))
+	}
+}
+
 // emitEnvelopeStruct renders the pass-through envelope carrier — one field
 // per non-role plain column, in canonical order. Nothing is emitted for a
 // role-only schema (the pre-pass-through shape).
@@ -772,7 +822,7 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 		lit += fmt.Sprintf(", %sEnvelope: env", inst.StoreName)
 	}
 	lit += "}"
-	p("\tinst.dml.BeginEntity()%s", inst.dmlChain("recordstore.LifecycleLive", "env"))
+	inst.emitBeginFrame(p, "inst.dml", "recordstore.LifecycleLive", "env")
 	p("\treturn &%s{store: inst, key: id, ent: %s}", inst.builderType(), lit)
 	p("}")
 	p("")
@@ -814,9 +864,9 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("// instead. A failed Commit rolls the frame back — the entity is")
 	p("// discarded and the store stays usable.")
 	p("func (inst *%s) Commit() (err error) {", inst.builderType())
-	p("\terr = inst.store.dml.CommitEntity()")
+	p("\terr = %s", inst.ctrlCall("inst.store.dml", "CommitEntity"))
 	p("\tif err != nil {")
-	p("\t\t_ = inst.store.dml.RollbackEntity() // no-op error when no frame is open")
+	p("\t\t_ = %s // no-op error when no frame is open", inst.ctrlCall("inst.store.dml", "RollbackEntity"))
 	p("\t\treturn")
 	p("\t}")
 	p("\tinst.store.buffered++")
@@ -833,7 +883,7 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("// Rollback abandons the open entity frame without committing it;")
 	p("// already-buffered rows and the store remain usable.")
 	p("func (inst *%s) Rollback() (err error) {", inst.builderType())
-	p("\treturn inst.store.dml.RollbackEntity()")
+	p("\treturn %s", inst.ctrlCall("inst.store.dml", "RollbackEntity"))
 	p("}")
 	p("")
 }
@@ -902,7 +952,7 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\tif inst.buffered == 0 && len(inst.pending) == 0 {")
 	p("\t\treturn")
 	p("\t}")
-	p("\trecords, err := inst.dml.TransferRecords(nil)")
+	p("\trecords, err := %s", inst.ctrlCall("inst.dml", "TransferRecords", "nil"))
 	p("\tif err != nil {")
 	p("\t\terr = eh.Errorf(\"transfer records: %%w\", err)")
 	p("\t\treturn")
@@ -934,8 +984,8 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("// open (uncommitted) entity frame. It gives a failed Flush \"never")
 	p("// happened\" semantics — ClickHouse state is the truth afterwards.")
 	p("func (inst *%s) DiscardPending() {", inst.storeType())
-	p("\t_ = inst.dml.RollbackEntity() // no-op error when no frame is open")
-	p("\tif records, err := inst.dml.TransferRecords(nil); err == nil {")
+	p("\t_ = %s // no-op error when no frame is open", inst.ctrlCall("inst.dml", "RollbackEntity"))
+	p("\tif records, err := %s; err == nil {", inst.ctrlCall("inst.dml", "TransferRecords", "nil"))
 	p("\t\tfor _, rec := range records {")
 	p("\t\t\trec.Release()")
 	p("\t\t}")
@@ -957,7 +1007,11 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("// allocator needs no Close.")
 	p("func (inst *%s) Close() {", inst.storeType())
 	p("\tinst.DiscardPending()")
-	p("\tinst.dml.Builder().Release()")
+	if inst.privateControl() {
+		p("\t%s%sReleaseBuilder(inst.dml)", inst.lowQ(), inst.dmlType())
+	} else {
+		p("\tinst.dml.Builder().Release()")
+	}
 	p("}")
 	p("")
 }
@@ -1319,10 +1373,10 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	if len(inst.model.passthrough) > 0 {
 		p("\tvar env %sEnvelope // a tombstone carries no pass-through payload", inst.StoreName)
 	}
-	p("\tinst.dml.BeginEntity()%s", inst.dmlChain("recordstore.LifecycleTombstone", "env"))
-	p("\terr = inst.dml.CommitEntity()")
+	inst.emitBeginFrame(p, "inst.dml", "recordstore.LifecycleTombstone", "env")
+	p("\terr = %s", inst.ctrlCall("inst.dml", "CommitEntity"))
 	p("\tif err != nil {")
-	p("\t\t_ = inst.dml.RollbackEntity() // discard the failed frame; the store stays usable")
+	p("\t\t_ = %s // discard the failed frame; the store stays usable", inst.ctrlCall("inst.dml", "RollbackEntity"))
 	p("\t\treturn")
 	p("\t}")
 	p("\tinst.buffered++")

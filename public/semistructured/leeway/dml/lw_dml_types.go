@@ -50,4 +50,14 @@ type GoClassBuilder struct {
 	builder    *strings.Builder
 	tech       *golang.TechnologySpecificCodeGenerator
 	builderPkg BuilderPackage
+	// privateControl emits the entity control surface — the frame lifecycle
+	// (BeginEntity/CommitEntity/RollbackEntity), the record drain
+	// (TransferRecords), SetActiveSections, the plain setters and the raw
+	// builder accessor — unexported, plus exported driver functions the
+	// owning store calls. External holders of the builder value cannot reach
+	// the control surface (they can neither import this package to call the
+	// drivers nor recover the unexported methods by casting), so a store can
+	// wall frame control while still exposing the section/attribute surface
+	// through Raw() (ADR-0100 SD6). The default emits everything exported.
+	privateControl bool
 }

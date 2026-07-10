@@ -218,7 +218,11 @@ type WidgetEntityBuilder struct {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order), a live lifecycle and the pass-through envelope.
 func (inst *WidgetStore) Begin(id uint64, ts time.Time, env WidgetEnvelope) *WidgetEntityBuilder {
-	inst.dml.BeginEntity().SetId(id, env.Alt).SetTimestamp(ts).SetRouting(env.Region, env.Tags).SetLifecycle(recordstore.LifecycleLive)
+	lowlevel.InEntityWidgetTableBeginEntity(inst.dml)
+	lowlevel.InEntityWidgetTableSetId(inst.dml, id, env.Alt)
+	lowlevel.InEntityWidgetTableSetTimestamp(inst.dml, ts)
+	lowlevel.InEntityWidgetTableSetRouting(inst.dml, env.Region, env.Tags)
+	lowlevel.InEntityWidgetTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
 	return &WidgetEntityBuilder{store: inst, key: id, ent: WidgetEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive, WidgetEnvelope: env}}
 }
 
@@ -241,9 +245,9 @@ func (inst *WidgetEntityBuilder) Raw() *lowlevel.InEntityWidgetTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *WidgetEntityBuilder) Commit() (err error) {
-	err = inst.store.dml.CommitEntity()
+	err = lowlevel.InEntityWidgetTableCommitEntity(inst.store.dml)
 	if err != nil {
-		_ = inst.store.dml.RollbackEntity() // no-op error when no frame is open
+		_ = lowlevel.InEntityWidgetTableRollbackEntity(inst.store.dml) // no-op error when no frame is open
 		return
 	}
 	inst.store.buffered++
@@ -260,7 +264,7 @@ func (inst *WidgetEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *WidgetEntityBuilder) Rollback() (err error) {
-	return inst.store.dml.RollbackEntity()
+	return lowlevel.InEntityWidgetTableRollbackEntity(inst.store.dml)
 }
 
 // Buffered reports the number of committed-but-unflushed rows.
@@ -275,7 +279,7 @@ func (inst *WidgetStore) Flush(ctx context.Context) (n int, err error) {
 	if inst.buffered == 0 && len(inst.pending) == 0 {
 		return
 	}
-	records, err := inst.dml.TransferRecords(nil)
+	records, err := lowlevel.InEntityWidgetTableTransferRecords(inst.dml, nil)
 	if err != nil {
 		err = eh.Errorf("transfer records: %w", err)
 		return
@@ -307,8 +311,8 @@ func (inst *WidgetStore) Flush(ctx context.Context) (n int, err error) {
 // open (uncommitted) entity frame. It gives a failed Flush "never
 // happened" semantics — ClickHouse state is the truth afterwards.
 func (inst *WidgetStore) DiscardPending() {
-	_ = inst.dml.RollbackEntity() // no-op error when no frame is open
-	if records, err := inst.dml.TransferRecords(nil); err == nil {
+	_ = lowlevel.InEntityWidgetTableRollbackEntity(inst.dml) // no-op error when no frame is open
+	if records, err := lowlevel.InEntityWidgetTableTransferRecords(inst.dml, nil); err == nil {
 		for _, rec := range records {
 			rec.Release()
 		}
@@ -330,7 +334,7 @@ func (inst *WidgetStore) DiscardPending() {
 // allocator needs no Close.
 func (inst *WidgetStore) Close() {
 	inst.DiscardPending()
-	inst.dml.Builder().Release()
+	lowlevel.InEntityWidgetTableReleaseBuilder(inst.dml)
 }
 
 // WidgetCacheConfig parameterizes an attached read-through cache view.
@@ -642,10 +646,14 @@ func (inst *WidgetStore) Replay(ctx context.Context, key uint64, fromOrder time.
 // absent immediately.
 func (inst *WidgetStore) Delete(id uint64, ts time.Time) (err error) {
 	var env WidgetEnvelope // a tombstone carries no pass-through payload
-	inst.dml.BeginEntity().SetId(id, env.Alt).SetTimestamp(ts).SetRouting(env.Region, env.Tags).SetLifecycle(recordstore.LifecycleTombstone)
-	err = inst.dml.CommitEntity()
+	lowlevel.InEntityWidgetTableBeginEntity(inst.dml)
+	lowlevel.InEntityWidgetTableSetId(inst.dml, id, env.Alt)
+	lowlevel.InEntityWidgetTableSetTimestamp(inst.dml, ts)
+	lowlevel.InEntityWidgetTableSetRouting(inst.dml, env.Region, env.Tags)
+	lowlevel.InEntityWidgetTableSetLifecycle(inst.dml, recordstore.LifecycleTombstone)
+	err = lowlevel.InEntityWidgetTableCommitEntity(inst.dml)
 	if err != nil {
-		_ = inst.dml.RollbackEntity() // discard the failed frame; the store stays usable
+		_ = lowlevel.InEntityWidgetTableRollbackEntity(inst.dml) // discard the failed frame; the store stays usable
 		return
 	}
 	inst.buffered++

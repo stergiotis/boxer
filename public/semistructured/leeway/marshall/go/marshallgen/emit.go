@@ -774,10 +774,13 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 func writeEntityInterface(sb *strings.Builder, plan *mappingplan.Plan, groups []goplan.SectionGroup, mode EmitModeE) (err error) {
 	kind := kindIdent(plan.KindType, mode)
 
-	linef(sb, 0, "// %sEntityI lists exactly the entity-level methods %s uses.", kind, kind)
-	line(sb, 0, "// Type parameters compose the per-section Attr + Sec interfaces; Ent")
-	line(sb, 0, "// is the entity type itself (return type of BeginEntity / SetId /")
-	line(sb, 0, "// SetTimestamp / SetLifecycle — usually the DML pointer).")
+	linef(sb, 0, "// %sEntityI is the entity-builder surface %sAddSections drives.", kind, kind)
+	line(sb, 0, "// It always lists the per-section getters; the entity-frame methods")
+	line(sb, 0, "// (BeginEntity / plain setters / CommitEntity) are added only for the")
+	line(sb, 0, "// full codec's BuildEntities. AddSections stacks sections onto a frame")
+	line(sb, 0, "// the caller already owns, so it needs none of them — which lets a")
+	line(sb, 0, "// store drive it with a builder whose frame control is unexported")
+	line(sb, 0, "// (ADR-0100 SD6). Ent is the builder pointer.")
 	linef(sb, 0, "type %sEntityI[", kind)
 	for _, g := range groups {
 		method := methodFor(g.Section)
@@ -786,29 +789,36 @@ func writeEntityInterface(sb *strings.Builder, plan *mappingplan.Plan, groups []
 	}
 	line(sb, 1, "Ent any,")
 	line(sb, 0, "] interface {")
-	line(sb, 1, "BeginEntity() Ent")
 
 	idCol := planIdCol(plan)
 	if idCol == nil {
 		err = eb.Build().Errorf("plain spec missing required `id` column")
 		return
 	}
-	if nkCol := planNaturalKeyCol(plan); nkCol != nil {
-		linef(sb, 1, "SetId(id %s, naturalKey %s) Ent", idCol.GoType(), nkCol.GoType())
-	} else {
-		linef(sb, 1, "SetId(id %s) Ent", idCol.GoType())
-	}
-	if tsCol := planTsCol(plan); tsCol != nil {
-		linef(sb, 1, "SetTimestamp(ts %s) Ent", tsCol.GoType())
-	}
-	if lcCol := planExpiresAtCol(plan); lcCol != nil {
-		linef(sb, 1, "SetLifecycle(expiresAt %s) Ent", lcCol.GoType())
+	// Frame-lifecycle methods are what BuildEntities drives; AddSections
+	// never calls them, so the store-support product omits them and its
+	// constraint stays satisfiable by a builder with unexported control.
+	if mode != EmitModeStoreSupport {
+		line(sb, 1, "BeginEntity() Ent")
+		if nkCol := planNaturalKeyCol(plan); nkCol != nil {
+			linef(sb, 1, "SetId(id %s, naturalKey %s) Ent", idCol.GoType(), nkCol.GoType())
+		} else {
+			linef(sb, 1, "SetId(id %s) Ent", idCol.GoType())
+		}
+		if tsCol := planTsCol(plan); tsCol != nil {
+			linef(sb, 1, "SetTimestamp(ts %s) Ent", tsCol.GoType())
+		}
+		if lcCol := planExpiresAtCol(plan); lcCol != nil {
+			linef(sb, 1, "SetLifecycle(expiresAt %s) Ent", lcCol.GoType())
+		}
 	}
 	for _, g := range groups {
 		method := methodFor(g.Section)
 		linef(sb, 1, "GetSection%s() %sSec", method, method)
 	}
-	line(sb, 1, "CommitEntity() (err error)")
+	if mode != EmitModeStoreSupport {
+		line(sb, 1, "CommitEntity() (err error)")
+	}
 	line(sb, 0, "}\n")
 	return
 }

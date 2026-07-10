@@ -31,19 +31,19 @@ type withdrawnAcctWithdrawSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// withdrawnEntityI lists exactly the entity-level methods withdrawn uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// withdrawnEntityI is the entity-builder surface withdrawnAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type withdrawnEntityI[
 	AcctWithdrawAttr withdrawnAcctWithdrawAttrI,
 	AcctWithdrawSec withdrawnAcctWithdrawSecI[AcctWithdrawAttr, Ent],
 	Ent any,
 ] interface {
-	BeginEntity() Ent
-	SetId(id string) Ent
 	GetSectionAcctWithdraw() AcctWithdrawSec
-	CommitEntity() (err error)
 }
 
 // withdrawnAddSections contributes this kind's tagged sections to the OPEN

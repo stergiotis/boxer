@@ -221,7 +221,10 @@ type DeviceEntityBuilder struct {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order) and a live lifecycle.
 func (inst *DeviceStore) Begin(id uint64, ts time.Time) *DeviceEntityBuilder {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleLive)
+	lowlevel.InEntityDeviceTableBeginEntity(inst.dml)
+	lowlevel.InEntityDeviceTableSetId(inst.dml, id)
+	lowlevel.InEntityDeviceTableSetTimestamp(inst.dml, ts)
+	lowlevel.InEntityDeviceTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
 	return &DeviceEntityBuilder{store: inst, key: id, ent: DeviceEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
 }
 
@@ -304,9 +307,9 @@ func (inst *DeviceEntityBuilder) Raw() *lowlevel.InEntityDeviceTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *DeviceEntityBuilder) Commit() (err error) {
-	err = inst.store.dml.CommitEntity()
+	err = lowlevel.InEntityDeviceTableCommitEntity(inst.store.dml)
 	if err != nil {
-		_ = inst.store.dml.RollbackEntity() // no-op error when no frame is open
+		_ = lowlevel.InEntityDeviceTableRollbackEntity(inst.store.dml) // no-op error when no frame is open
 		return
 	}
 	inst.store.buffered++
@@ -323,7 +326,7 @@ func (inst *DeviceEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *DeviceEntityBuilder) Rollback() (err error) {
-	return inst.store.dml.RollbackEntity()
+	return lowlevel.InEntityDeviceTableRollbackEntity(inst.store.dml)
 }
 
 // IngestIdentity buffers one whole entity per row carrying only the
@@ -434,7 +437,7 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 	if inst.buffered == 0 && len(inst.pending) == 0 {
 		return
 	}
-	records, err := inst.dml.TransferRecords(nil)
+	records, err := lowlevel.InEntityDeviceTableTransferRecords(inst.dml, nil)
 	if err != nil {
 		err = eh.Errorf("transfer records: %w", err)
 		return
@@ -466,8 +469,8 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 // open (uncommitted) entity frame. It gives a failed Flush "never
 // happened" semantics — ClickHouse state is the truth afterwards.
 func (inst *DeviceStore) DiscardPending() {
-	_ = inst.dml.RollbackEntity() // no-op error when no frame is open
-	if records, err := inst.dml.TransferRecords(nil); err == nil {
+	_ = lowlevel.InEntityDeviceTableRollbackEntity(inst.dml) // no-op error when no frame is open
+	if records, err := lowlevel.InEntityDeviceTableTransferRecords(inst.dml, nil); err == nil {
 		for _, rec := range records {
 			rec.Release()
 		}
@@ -489,7 +492,7 @@ func (inst *DeviceStore) DiscardPending() {
 // allocator needs no Close.
 func (inst *DeviceStore) Close() {
 	inst.DiscardPending()
-	inst.dml.Builder().Release()
+	lowlevel.InEntityDeviceTableReleaseBuilder(inst.dml)
 }
 
 // DeviceCacheConfig parameterizes an attached read-through cache view.
@@ -905,10 +908,13 @@ func (inst *DeviceStore) Replay(ctx context.Context, key uint64, fromOrder time.
 // like any commit — a versioned deletion, so GetLive reads the key as
 // absent immediately.
 func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts).SetLifecycle(recordstore.LifecycleTombstone)
-	err = inst.dml.CommitEntity()
+	lowlevel.InEntityDeviceTableBeginEntity(inst.dml)
+	lowlevel.InEntityDeviceTableSetId(inst.dml, id)
+	lowlevel.InEntityDeviceTableSetTimestamp(inst.dml, ts)
+	lowlevel.InEntityDeviceTableSetLifecycle(inst.dml, recordstore.LifecycleTombstone)
+	err = lowlevel.InEntityDeviceTableCommitEntity(inst.dml)
 	if err != nil {
-		_ = inst.dml.RollbackEntity() // discard the failed frame; the store stays usable
+		_ = lowlevel.InEntityDeviceTableRollbackEntity(inst.dml) // discard the failed frame; the store stays usable
 		return
 	}
 	inst.buffered++

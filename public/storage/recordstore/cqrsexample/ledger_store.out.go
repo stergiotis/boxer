@@ -35,7 +35,8 @@ import (
 //go:embed ledger_ddl_clickhouse.out.sql
 var ledgerDDLCreate string
 
-// LedgerTableName is the ClickHouse table this store binds.
+// LedgerTableName is the ClickHouse table this store binds — database-
+// qualified ("<db>.<table>") when a Database was set at generation.
 const LedgerTableName = "ledger"
 
 // Physical (encoded, quoted) names of the envelope role columns,
@@ -216,7 +217,9 @@ type LedgerEntityBuilder struct {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order).
 func (inst *LedgerStore) Begin(id string, ts time.Time) *LedgerEntityBuilder {
-	inst.dml.BeginEntity().SetId(id).SetTimestamp(ts)
+	lowlevel.InEntityLedgerTableBeginEntity(inst.dml)
+	lowlevel.InEntityLedgerTableSetId(inst.dml, id)
+	lowlevel.InEntityLedgerTableSetTimestamp(inst.dml, ts)
 	return &LedgerEntityBuilder{store: inst, key: id, ent: LedgerEntity{ID: id, Ts: ts}}
 }
 
@@ -314,9 +317,9 @@ func (inst *LedgerEntityBuilder) Raw() *lowlevel.InEntityLedgerTable {
 // instead. A failed Commit rolls the frame back — the entity is
 // discarded and the store stays usable.
 func (inst *LedgerEntityBuilder) Commit() (err error) {
-	err = inst.store.dml.CommitEntity()
+	err = lowlevel.InEntityLedgerTableCommitEntity(inst.store.dml)
 	if err != nil {
-		_ = inst.store.dml.RollbackEntity() // no-op error when no frame is open
+		_ = lowlevel.InEntityLedgerTableRollbackEntity(inst.store.dml) // no-op error when no frame is open
 		return
 	}
 	inst.store.buffered++
@@ -333,7 +336,7 @@ func (inst *LedgerEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *LedgerEntityBuilder) Rollback() (err error) {
-	return inst.store.dml.RollbackEntity()
+	return lowlevel.InEntityLedgerTableRollbackEntity(inst.store.dml)
 }
 
 // IngestOpened buffers one whole entity per row carrying only the
@@ -468,7 +471,7 @@ func (inst *LedgerStore) Flush(ctx context.Context) (n int, err error) {
 	if inst.buffered == 0 && len(inst.pending) == 0 {
 		return
 	}
-	records, err := inst.dml.TransferRecords(nil)
+	records, err := lowlevel.InEntityLedgerTableTransferRecords(inst.dml, nil)
 	if err != nil {
 		err = eh.Errorf("transfer records: %w", err)
 		return
@@ -500,8 +503,8 @@ func (inst *LedgerStore) Flush(ctx context.Context) (n int, err error) {
 // open (uncommitted) entity frame. It gives a failed Flush "never
 // happened" semantics — ClickHouse state is the truth afterwards.
 func (inst *LedgerStore) DiscardPending() {
-	_ = inst.dml.RollbackEntity() // no-op error when no frame is open
-	if records, err := inst.dml.TransferRecords(nil); err == nil {
+	_ = lowlevel.InEntityLedgerTableRollbackEntity(inst.dml) // no-op error when no frame is open
+	if records, err := lowlevel.InEntityLedgerTableTransferRecords(inst.dml, nil); err == nil {
 		for _, rec := range records {
 			rec.Release()
 		}
@@ -523,7 +526,7 @@ func (inst *LedgerStore) DiscardPending() {
 // allocator needs no Close.
 func (inst *LedgerStore) Close() {
 	inst.DiscardPending()
-	inst.dml.Builder().Release()
+	lowlevel.InEntityLedgerTableReleaseBuilder(inst.dml)
 }
 
 // LedgerCacheConfig parameterizes an attached read-through cache view.

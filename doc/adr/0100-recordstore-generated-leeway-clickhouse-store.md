@@ -114,134 +114,207 @@ Adopt **O4**. Specific decisions:
   a blob store are one family, and neither the representation-format
   grouping (`semistructured/`: cbor, leeway, markdown) nor the per-engine
   tooling grouping (`db/`) names what this is. Subpackages:
-  - `recordstore` (root) — the runtime the generated code imports: the
-    executor seam, envelope-role types, generic cache/fetcher scaffolding,
-    flush policy, shared errors. Kept small, mirroring `dml` vs
-    `dml/runtime`.
+  - `recordstore` (root) — the small runtime the generated code and
+    adapters share: the executor seam (`ExecutorI`), the lifecycle marker
+    constants, the `ReplayOpts`/`ScanOpts` option types, the
+    synthetic-sequence `SeqTs`/`SeqOf` helpers and shared errors. The
+    per-store cache, fetcher and flush machinery is generated, not here —
+    keeping the root small, mirroring `dml` vs `dml/runtime`.
   - `recordstore/gen` — the generator library. Driven the repo-idiomatic way
     (a `gen_test.go` in the target package, like `ecsdemo/stage2`); a CLI
     wrapper may follow.
   - `recordstore/chexec` — the default `ExecutorI` adapter over
     `chclient` (HTTP server) and a `clickhouse-local` adapter for tests.
     Isolated in a subpackage so the root stays dependency-light.
-- **SD2 — Envelope roles.** A store binds one `TableDesc`. Its plain columns
-  form the **envelope**; generator config names up to three roles among
-  them: `Key` (required; the KV access key; Go type must be comparable —
-  the generator derives it from the column's canonical type and supports
-  `uint64` and `string`, emitting a per-store SQL-literal renderer),
-  `Order` (optional; numeric/time; enables `Latest` and `Replay`) and
-  `Lifecycle` (optional; carries the live/tombstone marker; together with
-  Key and Order it enables the state-view verbs). Roles bind from
-  `PlainItemTypeE` (`EntityId` → Key, `EntityTimestamp` → Order,
-  `EntityLifecycle` → Lifecycle); a schema in which two plain columns
-  claim one role is a generation error, not a silent last-wins (explicit
-  role configuration is deferred). The generator also gates the role
-  column shapes it hard-assumes: Key must derive to `uint64` or `string`,
-  Order to the z64 timestamp lane (`DateTime64(9)` — `Replay` compares
-  in nanoseconds), Lifecycle to `uint8`. Remaining plain columns pass
-  through as ordinary envelope fields. Callers must keep Order values
-  **strictly monotonic per key**: `Latest`, `GetLatest` and the cached
-  fetch pick one row among equal-Order ties arbitrarily (`Scan` alone is
-  tie-deterministic — it orders by (Order, Key)).
+- **SD2 — Envelope roles and pass-through fields.** A store binds one
+  `TableDesc`; its plain columns form the **envelope**. The generator
+  enumerates them in canonical order — the order the DML setters take their
+  arguments and the read-access readers expose their fields, both from one
+  IR — and binds up to three **roles** by `PlainItemTypeE`:
+  - `Key` (required; the KV access key) — the **leading** `EntityId`
+    column. Its Go type is derived from the canonical type; `uint64` and
+    `string` are supported, with a per-store SQL-literal renderer emitted
+    (the unexported `<table>KeyLiteral`).
+  - `Order` (optional; enables `Latest`, `Replay` and the state view) —
+    the `EntityTimestamp` column. It must derive to the z64 timestamp lane
+    (`DateTime64(9)`; `Replay` compares in nanoseconds).
+  - `Lifecycle` (optional; enables the state view together with Key and
+    Order) — the first `u8` `EntityLifecycle` column, carrying the
+    live/tombstone marker (`recordstore.LifecycleLive` /
+    `LifecycleTombstone`).
+
+  Every **other** plain column — a second or further `EntityId`, any
+  `EntityRouting`, an extra or non-`u8` `EntityLifecycle` — becomes a
+  **pass-through field**. The generator emits a `<Store>Envelope` struct
+  with one field per pass-through column in canonical order, embedded in
+  `<Store>Entity` (so the columns read back as promoted fields) and taken
+  as a third `Begin(id, ts, env)` argument; writes flow through the grouped
+  DML setters (`SetId`/`SetRouting`/`SetLifecycle`, one call per
+  `PlainItemType` group) and reads through the readers' typed accessors (a
+  set column surfaces as `[]element`, the accessor shape, not the codec's
+  bitmap carrier). A schema with **no** pass-through column emits none of
+  this and is byte-identical to the pre-feature output — the feature is
+  inert until a schema needs it. `Transaction`/`Opaque` plain columns are
+  **rejected** at generation (they carry streaming-group / transaction
+  semantics the store glue does not model); their pass-through is deferred.
+
+  The generator also gates the role column shapes it hard-assumes: Key must
+  derive to `uint64` or `string`, Order to the z64 timestamp lane, Lifecycle
+  to `uint8`. Role binding is by `PlainItemTypeE` and column order alone — a
+  schema needing to pick among several same-typed columns for a role cannot
+  express which is the role, and explicit role configuration is deferred.
+  Callers must keep Order values **strictly monotonic per key**: `Latest`,
+  `GetLive` and the cached fetch pick one row among equal-Order ties
+  arbitrarily (`Scan` alone is tie-deterministic — it orders by (Order,
+  Key)).
+
+  For cross-package handles and external SQL, each store exports its table
+  name and role column names — `<Store>TableName` (the qualified
+  `<db>.<table>` when a Database is set; SD6) and
+  `<Store>ColKey`/`ColOrder`/`ColLifecycle`, the quoted leeway-encoded
+  physical names — so `ScanOpts.ExtraPredicate` and hand-written SQL can
+  address the columns without re-deriving their encodings.
 - **SD3 — Append-only primitive.** Rows are immutable once committed.
   `Latest` and `Replay` are query verbs; duplicates are legal (idempotent
   re-puts of identical bytes are harmless by construction). Overwrite and
   tombstone *semantics* exist only as views over appended rows — the
   generated state view (SD4) is one such view — and retention belongs to
   layers above.
-- **SD4 — Verb set.** Sketch (generated names per store; `Drone` as the
-  running example):
+- **SD4 — Verb set.** The store carries append/flush, the query verbs and
+  the state view; the batched-KV cache is a separately constructed
+  **attached view** (SD5). Sketch (generated names per store; `Drone` as
+  the running example):
 
   ```go
-  st := NewDroneStore(exec, alloc, cfg)      // cfg: cache capacity, FetchCriteria, DDL tail
-  st.EnsureTable(ctx)                        // DDL via ddl/clickhouse + cfg.DDLTail
+  st := NewDroneStore(exec, alloc, cfg)      // cfg: DDLTail (raw suffix); no cache fields
+  st.EnsureTable(ctx)                        // composed CREATE TABLE (+ CREATE DATABASE if qualified) + DDLTail
+  st.VerifySchema(ctx)                       // DESCRIBE vs the generated Arrow schema; drift is an error
 
-  b := st.Begin(id, ts)                      // envelope roles → typed args
-  b.AddIdentity(Identity{...})               // component appenders, same entity frame
+  b := st.Begin(id, ts)                      // (id, ts, env) when the schema has pass-through fields (SD2)
+  b.AddIdentity(Identity{...})               // component appenders, one entity frame
   b.AddBattery(Battery{...})
-  b.Raw()                                    // *InEntityDroneTable: direct attribute manipulation
-  b.Commit()                                 // CommitEntity; buffered (rolls back on error)
+  b.Raw()                                    // *lowlevel.InEntityDroneTable: attribute escape hatch; frame control walled off (SD6)
+  b.Commit()                                 // CommitEntity; buffered (rolls back the frame on error)
   b.Rollback()                               // abandon the open frame instead
 
-  st.IngestIdentity(ts, rows []Identity)     // whole-entity batches per kind
+  st.IngestIdentity(ts, rows []Identity)     // whole-entity batches per kind; dup key in one call → ErrDuplicateIngestKey
+  st.Buffered()                              // rows staged since the last flush
   st.Flush(ctx)                              // TransferRecords → Arrow IPC → InsertArrow;
                                              // durable when it returns (synchronous insert);
                                              // retryable — a failed insert retains the records
   st.DiscardPending()                        // …or drop everything unflushed ("never happened")
+  st.Close()                                 // DiscardPending + release the builders (tracking allocators)
 
-  has, ent := st.Get(k)                      // batched KV via caching.ReadThroughCache
-  for range st.WorkItem(w) { ... }           // caching's suspend/replay contract, re-exposed
-  st.AdvanceEpoch()                          // cache pinning epoch, once per frame/batch
-  ent, ok := st.Latest(ctx, k)               // ORDER BY order DESC LIMIT 1 BY key; uncached v1
-  for ent := range st.Replay(ctx, k, from)   // ordered rows for key, order ≥ from
-  rows := st.ScanIdentity(ctx, extra)        // per-kind: baked ADR-0066 Filter artefact
-                                             // (presence AND validator, ids as literals)
-                                             // + optional raw extra predicate
+  ent, found, err := st.Latest(ctx, k)       // newest row for key (tombstone-blind); uncached
+  for ent, err := range st.Replay(ctx, k, from, recordstore.ReplayOpts{To, Limit}) { … }
+                                             // ordered rows, from ≤ Order < To; single-use iterator
+  for ent, err := range st.ScanIdentity(ctx, recordstore.ScanOpts{ExtraPredicate, Limit}) { … }
+                                             // per-kind: baked ADR-0066 Filter artefact + optional extra predicate
 
-  // State view — emitted only when Key, Order AND Lifecycle roles are bound:
-  b := st.Put(id, ts)                        // append a new version (Begin, lifecycle=live)
-  b.AddIdentity(...); b.Commit()
+  // State view — emitted only when Key, Order AND a u8 Lifecycle role are bound (SD2):
   st.Delete(id, ts)                          // append a tombstone row (Lifecycle column)
-  ent, ok := st.GetLatest(ctx, k)            // Latest + tombstone interpretation:
-                                             // newest row wins; tombstone ⇒ absent
+  ent, found, err := st.GetLive(ctx, k)      // Latest + tombstone interpretation (tombstone ⇒ absent); uncached
   ```
 
-  `Get` (the cached path) is intended for **immutable-by-key** access —
-  content-addressed or unique-keyed records — where cache entries can never
-  go stale. Local writes are coherent regardless: `Commit`, `Put` and
-  `Delete` invalidate the written key's cache entry, and the key stays
-  uncacheable (fetched but not retained) until the write flushes, so a
-  fetch inside the dirty window cannot resurrect the pre-write row. Only
-  **external** writers can leave `Get` stale. `Latest` and `GetLatest`
-  stay uncached in v1 (see Deferred). `Flush` is retryable — a failed
-  insert retains the transferred records for the next attempt — and
-  `DiscardPending` drops every buffered row instead, for callers whose
-  per-operation contract is "a failed operation never happened" (the
-  pushout adapter and the CQRS command path both use it).
+  The multi-row verbs (`Replay`, `Scan<Kind>`) return
+  `iter.Seq2[*Entity, error]` — the repo's fallible-iteration idiom: the
+  sequence is single-use, `ctx` must stay valid until iteration completes,
+  the query may run at call time or lazily during iteration, and an error
+  ends the sequence as a final `(nil, err)` pair. `Latest` and `GetLive`
+  stay value-shaped (`(ent, found, err)`). v1 buffers each result set
+  internally, so streaming `Replay` becomes an executor-seam change (SD7)
+  with no signature impact.
 
-  The **state view** (`Put`/`Delete`/`GetLatest`) supplies the
+  There is **no `Put`**: appending a new version through `Begin` *is* the
+  update. The **state view** (`Delete`/`GetLive`) supplies the
   update/delete ergonomics of a data-management hub without breaking the
-  append-only substrate: `Put` appends a new version, `Delete` appends a
-  tombstone, `GetLatest` reads newest-row-wins with tombstones read as
-  absent — `chstore`'s `WriteState`/`DeleteState`/`LatestState`
-  generalized and generated. The verb ladder is: append-only primitives →
-  state view → consumer layers (CQRS, pushout), all on one substrate.
-- **SD5 — Cache wiring.** The generator emits an
-  `caching.ItemFetcherI[K, *DroneEntity]` implementation: one
-  `SELECT * FROM t WHERE <key> IN (…) FORMAT Arrow` per partition via the
-  executor, decoded client-side through the generated read-access classes
-  into the **entity bag**. (`SELECT *`, not a projection: the RA readers
-  bake schema-order column indices, so the fetch must return every column
-  in schema order; a needed-columns projection with index rebinding is
-  deferred.)
+  append-only substrate — `Delete` appends a tombstone, `GetLive` reads
+  newest-row-wins with tombstones read as absent (`chstore`'s
+  `WriteState`/`DeleteState`/`LatestState` generalized and generated).
+  `Live` names the interpreted read; the unmarked `Latest` is the raw
+  newest-row read. The verb ladder is: append-only primitives → state view
+  → consumer layers (CQRS, pushout), all on one substrate.
+
+  `Flush` is retryable — a failed insert retains the transferred records
+  for the next attempt — and `DiscardPending` drops every buffered row
+  instead, for callers whose per-operation contract is "a failed operation
+  never happened" (the pushout adapter and the CQRS command path both use
+  it). Reads see only **flushed** rows.
+- **SD5 — Cache wiring: an attached view.** The batched-KV cache is a
+  generated `<Store>Cache[W comparable]` view, constructed separately over a
+  store — `New<Store>Cache[W](st, <Store>CacheConfig{Capacity,
+  FetchCriteria})` — so the store itself is non-generic (the `[W]` work-item
+  parameter lives only where the cache's suspend/replay machinery needs it;
+  consumers that don't use work items instantiate `struct{}`). A store may
+  carry several attached views; each registers a local-write invalidation
+  hook at construction.
+
+  The view owns a `caching.ReadThroughCache` and an unexported
+  `<table>Fetcher` shim implementing `caching.ItemFetcherI[K, *DroneEntity]`
+  (a compile-time `var _ caching.ItemFetcherI = …` assertion pins it, and
+  keeps `DeterminePartition`/`FetchItemSinglePartition` off the store's
+  public surface). The fetcher runs one
+  `SELECT * FROM t WHERE <key> IN (…) FORMAT Arrow` per partition — shared as
+  `fetchLatestSQL` with `GetFetch` — decoded client-side through the
+  generated read-access classes into the **entity bag**:
 
   ```go
   type DroneEntity struct {
-      ID       uint64                    // envelope
+      ID       uint64                    // envelope (SD2); pass-through fields via an embedded DroneEnvelope
       Ts       time.Time
       Identity option.Option[Identity]   // one option per bound component
       Battery  option.Option[Battery]
-      ...
+      …
   }
   func (e *DroneEntity) Archetype() []string
+  func (e *DroneEntity) IsTombstone() bool   // state-view stores only
   ```
 
-  Cached values are **Arrow-free** plain Go — decode happens eagerly at
-  fetch time, because `RecordBatch.Release` lifecycles cannot be tied to
-  cache eviction (the cache deliberately has no eviction callbacks).
-  `DeterminePartition` is a config hook; v1 default is a single partition
-  (one table, one server), with key-hash chunking available for oversized
-  batches. Read-back for point lookups deliberately does **not** use the
-  ADR-0066 SQL artefacts: raw-column fetch + client-side decode is the
-  proven `ecsdemo` path and avoids SQL-side tuple/NULL gymnastics; the
-  artefacts serve `Scan`.
+  `SELECT *`, not a projection: the RA readers bake schema-order column
+  indices, so the fetch must return every column in schema order (a
+  needed-columns projection with index rebinding is deferred). Cached values
+  are **Arrow-free** plain Go — decode happens eagerly at fetch time,
+  because `RecordBatch.Release` lifecycles cannot be tied to cache eviction
+  (the cache has no eviction callbacks); cached entities are shared, so
+  callers must treat them as immutable. `DeterminePartition` is a config
+  hook; v1 default is a single partition (one table, one server), with
+  key-hash chunking available for oversized batches. Point-lookup read-back
+  deliberately does **not** use the ADR-0066 SQL artefacts: raw-column fetch
+  + client-side decode is the proven `ecsdemo` path and avoids SQL-side
+  tuple/NULL gymnastics; the artefacts serve `Scan`.
 
-  Three facts S1 established bind this decode path: physical **plain**
-  column names are leeway-encoded like every other column (e.g.
-  `"id:id:u64:2k:0:0:"`) — every SQL fragment quotes names derived from
-  the IR at generation time, never bare role names; fetched Arrow must be
-  pinned to the shape the read-access classes expect
-  (`SETTINGS output_format_arrow_string_as_string=1,
+  View verbs: `Get(k) (ent, found)` (cached only — a miss does not fetch);
+  `GetFetch(ctx, k) (ent, found, err)` (cached, or one immediate batch fetch
+  with the fetch error surfaced — `found=false, err=nil` is the
+  authoritative absent); `WorkItem`/`IterateReadyWorkItems`/
+  `IterateRestWorkItems`/`AdvanceEpoch` (the caching suspend/replay
+  contract). On a state-view store the view also carries the **cached
+  state-view reads** `GetLive(k) (ent, found)` and
+  `GetLiveAcceptStale(k) (ent, found, stale)` — the cached twins of the
+  store's uncached authoritative `GetLive`, with the tombstone read as
+  absent.
+
+  `Get` is intended for **immutable-by-key** access — content-addressed or
+  unique-keyed records where cache entries can never go stale. Local writes
+  are coherent regardless: `Commit`/`Delete` invalidate the written key and
+  the store's dirty map keeps it uncacheable (fetched but not retained)
+  until the write flushes, so a fetch inside the dirty window cannot
+  resurrect the pre-write row. Only **external** writers can leave a cached
+  read stale, and the caller supplies the signal: `MarkStale(k)` (next
+  strict read misses and refetches), `MarkStaleIfOlder(k, order)` (the
+  version-carrying signal — redundant for a version already held, the sink
+  for a `(key, Order)` invalidation stream), `Invalidate(k)`, and
+  `InvalidateAll()` (drops every entry via the cache's `Clear` — the bulk
+  signal after e.g. an external import; call between frames, with no
+  suspended work). A freshness TTL for auto-staleness remains deferred (it
+  belongs in `public/caching` with a clock seam).
+
+  Three facts S1 established bind this decode path: physical **plain** column
+  names are leeway-encoded like every other column (e.g.
+  `"id:id:u64:2k:0:0:"`, exported per store as `<Store>ColKey` etc.) — every
+  SQL fragment quotes names derived from the IR at generation time, never
+  bare role names; fetched Arrow must be pinned to the shape the read-access
+  classes expect (`SETTINGS output_format_arrow_string_as_string=1,
   output_format_arrow_low_cardinality_as_dictionary=0`); and the
   kind-homogeneous decode helpers (`<Kind>FillFromArrow`,
   `marshallreflect.Unmarshal`) **cannot decode fat rows** — they enforce
@@ -280,12 +353,99 @@ Adopt **O4**. Specific decisions:
   per kind, so two kinds writing one section would alias each other's
   memberships and silently cross-decode; the generator enforces the
   invariant at generation time.
+
+  *Emitted layout and control visibility.* The DML and RA scaffolding (~280
+  identifiers: the `InEntity` builder, section classes,
+  `ReadAccess`/`MembershipPack` readers) go into `internal/lowlevel` beneath
+  `OutDir` as their own package; the store file imports it through the
+  required `gen.Input.ImportPath` and qualifies every scaffolding reference.
+
+  The builder's **control set** — the entity-frame lifecycle
+  (`BeginEntity`/`CommitEntity`/`RollbackEntity`), the drain
+  (`TransferRecords`), the envelope setters, `SetActiveSections`, and the raw
+  `array.RecordBuilder` accessor (dropped from the public surface — a
+  `ReleaseBuilder` driver covers `Close`'s only use) — is emitted
+  **unexported**; the store drives it through exported **free-function
+  drivers** in `lowlevel` (`lowlevel.CommitEntity(b)`, …). The
+  section/attribute surface (`GetSection*` and the methods `addSections`
+  uses) stays exported. So `Raw()` lets an external holder manipulate
+  attributes of the frame the store opened, but **cannot** open, commit,
+  drain or re-key a frame — it can no longer desync the store's
+  buffered-count, dirty-key and cache-invalidation bookkeeping. The default
+  layout is **construction-safe** against that bypass: an external package
+  can neither import `lowlevel` to call the drivers nor recover the
+  unexported methods by casting the `Raw()` value. The control surface moves
+  *off the type* rather than behind a narrowed `Raw()` interface for a
+  reason — a type assertion to a locally-declared interface recovers any
+  control method with a public signature (e.g. `Builder`, `CommitEntity`), so
+  interface-narrowing is safe-by-convention only, whereas the import barrier
+  and the unexported-method rule are safe-by-construction.
+
+  The per-kind codecs stay in the parent package: they name the hand-written
+  DTO types and the parent already imports lowlevel, so moving them would
+  cycle — and they reference no concrete DML/RA type, driving them through
+  ADR-0042/0070 structural generics. `gen.Input.Flat` opts into the
+  single-package layout for a consumer that must name DML/RA types in its own
+  signatures; there — as under `FullCodecs` — the control set stays
+  **exported** (the wide, unguarded surface: `Raw()` and the nameable builder
+  can drive frames), documented as the escape hatch it is. A Flat layout that
+  keeps the control set walled (nameable types via in-package unexported
+  methods) is deferred; no in-repo package needs it.
+
+  *Trimmed codec emission.* By default the per-component codec is the trimmed
+  `marshallgen.EmitModeStoreSupport` product — `addSections` and `readRow`
+  with unexported kind prefixes plus their constraint interfaces, and *not*
+  `<Kind>Columns`/`BuildEntities`/`FillFromArrow`. Dropping `BuildEntities`
+  removes a live coherence bypass: `<Kind>BuildEntities` on `Raw()` would
+  drive entity frames past the store's buffered-count, dirty-key and
+  cache-invalidation bookkeeping. `gen.Input.FullCodecs` opts a store package
+  back into the full exported codec (the SoA batch / bus-wire path, ADR-0089
+  territory); the marshallgen goldens verify the mode split byte-identically.
+  Because `<Kind>BuildEntities` drives entity frames from the parent package,
+  `FullCodecs` **requires the exported control set** (above): it selects the
+  wide builder and is mutually exclusive with the construction-safe default —
+  by construction, not by a gate. The trimming takes the example package from
+  ~320 exported identifiers to ~54.
+
+  *DDL and schema.* The complete `CREATE TABLE` is composed at generation
+  time through the ADR-0102 table-clause seam
+  (`ddl/clickhouse.ComposeCreateTable`): clause defaults derived from the
+  envelope roles (IF NOT EXISTS, `MergeTree()`, `ORDER BY` the Key then Order
+  **by column name** — so a composite id leaves the clause unambiguous — and
+  the low-cardinality settings) merged with the `gen.Input.DDL` overrides
+  (engine, order, indexes, raw PARTITION BY/TTL). `EnsureTable` runs the
+  embedded `.out.sql` verbatim; the runtime `DDLTail` survives only as a raw
+  suffix appended after the composed statement. When `gen.Input.Database` is
+  set, one value qualifies the whole surface — the `<Store>TableName` const
+  becomes `"<db>.<table>"` so every runtime statement is database-scoped, and
+  the DDL prepends `CREATE DATABASE IF NOT EXISTS <db>;` so `EnsureTable`
+  self-provisions. `VerifySchema` compares the live table's `DESCRIBE` column
+  names and order against the generated Arrow schema — `EnsureTable` is `IF
+  NOT EXISTS` and the decode is positional, so drift would otherwise fail
+  late or, for same-typed column swaps, silently.
+
+  The generation step order matters: the store glue — with its role gates
+  (duplicate roles, unsupported shapes) — is emitted **before** the DDL
+  composition, so a domain-level role error wins over a downstream
+  column-reference failure.
 - **SD7 — Executor seam.** `ExecutorI { Exec(ctx, sql) error;
-  QueryArrow(ctx, sql) ([]arrow.RecordBatch, error); InsertArrow(ctx, table,
-  recs) error }` (exact shape to be settled during implementation; a
-  streaming query variant may be needed for `Replay`). `chexec` adapts
-  `chclient` and `clickhouse-local`; the bus-hosted `chlocalbroker` can be
-  adapted later if a consumer needs it.
+  QueryArrow(ctx, sql) iter.Seq2[arrow.RecordBatch, error]; InsertArrow(ctx,
+  table, recs) error }`. `QueryArrow` **streams**: the sequence is
+  single-use, an error ends it as a final `(nil, err)` pair (the convention
+  the store's iterator verbs share), and ownership of each yielded batch
+  transfers to the consumer — which must `Release` every batch it receives,
+  including one it breaks on; batches never yielded stay the
+  implementation's. `InsertArrow` does not retain the records (the caller
+  releases them after return) and, over a durable engine with asynchronous
+  inserts disabled, returns only once the rows are durable — the property
+  the state view and the pushout adapter rely on. The streaming shape was
+  fixed before external adapters exist because it cannot be retrofitted
+  afterward: a buffered implementation satisfies it trivially (`chexec`
+  materializes a slice and iterates it), the reverse is impossible; and the
+  generated decode already releases each batch as it is consumed, so
+  record-level memory is bounded the moment a streaming executor exists.
+  `chexec` adapts `chclient` (HTTP server) and `clickhouse-local`; the
+  bus-hosted `chlocalbroker` can be adapted later if a consumer needs it.
 - **SD8 — Ownership.** A store instance is single-goroutine, like every
   part it composes (the cache, the DML builders, ADR-0010's codec rule).
   Concurrent-read requirements of adapters (e.g. pushout's "safe for
@@ -311,7 +471,7 @@ pre-S3 sketch differed in two places, corrected below):
 | `StorageI` method | store verbs | notes |
 | --- | --- | --- |
 | `PutEnvelope(h, framed)` | existence check via `Latest`, then `Begin("env/"+hex).AddEnvelope(…).Commit()` + `Flush` | first-write-wins must hold even for **different** bytes under the same hash (the suite tests it), so read-before-insert — race-free because StorageI writes are engine-locked; "duplicate rows are harmless" was not enough |
-| `GetEnvelope(h)` / `HasEnvelope(h)` | cached `Get` (miss → one forced batch fetch → hit), falling back to uncached `Latest` | the fallback gives the authoritative absent-vs-error answer (cache misses swallow fetch errors); immutable-by-key — the ideal cache case |
+| `GetEnvelope(h)` / `HasEnvelope(h)` | one cache-view `GetFetch` (cached hit, or an immediate batch fetch with the error surfaced) | `GetFetch` collapsed the earlier Get/force/Get/`Latest` ritual; `found=false, err=nil` is the authoritative absent; immutable-by-key — the ideal cache case |
 | `AppendApplied(h)` | `Begin("log", seqTs).AddLogEntry(hex).Commit()` + `Flush` | torn tail = row never inserted = "never acknowledged" |
 | `LoadApplied()` | `Replay("log", 0)`, keeping entries after the **last tombstone** | no generation marker needed — the state-view tombstone is the log reset |
 | `ReplaceApplied(hs)` | `Delete("log", seqTs)` (tombstone) + new entries, **one** `Flush` | a single Arrow insert: readers observe the old or the new log, never a mixture |
@@ -369,15 +529,20 @@ also exercises the generator's no-state-view emission path.
 - A new generator that *orchestrates four existing generators* concentrates
   drift risk: a change in `dml`, `ddl`, `readaccess` or `marshallgen`
   output now has a downstream consumer that must move with it.
-- Point-lookup performance depends on the user supplying a sensible
-  `DDLTail` (key leading ORDER BY) until the table-clause seam exists.
+- Point-lookup performance depends on the `ORDER BY` (Key leading); the
+  generator derives that default and `gen.Input.DDL` overrides it, with
+  `DDLTail` surviving only as a raw suffix (the table-clause seam landed as
+  ADR-0102).
 - Single-goroutine ownership pushes concurrency handling to adapters
   (pushout's concurrent-read contract needs an adapter-level lock).
 
 ### Neutral
 
-- leeway itself is untouched — the store is purely a consumer (ADR-0074
-  discipline).
+- leeway's data-representation pipeline is untouched (ADR-0074 discipline) —
+  no data semantics change; but the store now drives one leeway *generator*
+  capability, the dml generator's optional control-method visibility (SD6)
+  that makes `Raw()` construction-safe, as it drove the ADR-0102 table-clause
+  seam.
 - ADR-0010 remains deferred; its RPC-wire niche is neither served nor
   blocked by this package.
 - Direct users get verbs shaped by two demanding consumers; for simple
@@ -419,6 +584,8 @@ The QOC options above carry the rankings; notes below record nuance.
   flat-DTO limit (no nested component structs) is inherited.
 - **ADR-0066** artefacts back the `Scan` verb; point lookups bypass them by
   design (SD5).
+- **ADR-0102** supplies the table-clause seam SD6 composes the full
+  `CREATE TABLE` through; the runtime `DDLTail` is demoted to a raw suffix.
 - **ADR-0042** set the SoA-primary, batch-shaped codec model this store
   builds on.
 - **ADR-0010** (deferred generic CBOR codec) anticipated a generic
@@ -430,24 +597,22 @@ The QOC options above carry the rankings; notes below record nuance.
 
 ## Deferred
 
-- **Table-level DDL clauses** (ENGINE, ORDER BY, PARTITION BY, TTL, skip
-  indexes). Still the known leeway gap; v1 takes an opaque `DDLTail` string
-  in config. Point-lookup performance on MergeTree wants the key column
-  leading ORDER BY — the tail is where the user says so for now. A proper
-  seam (which would also close the readback skip-index gap) is its own
-  future decision.
-- **Caching `Latest`/`GetLatest`.** Requires write-through invalidation
-  (`MarkAsStale`/`Delete` on local appends to the same key) and a staleness
-  story for external writers. Deferred until a consumer needs it.
-- **Negative caching.** Absent keys are never recorded, so every `Get` of
-  a missing key re-queries — the pushout adapter's `HasEnvelope(absent)`
-  pays a forced fetch plus the authoritative `Latest` on every probe.
-  Needs a `public/caching` feature (absent-entries with a TTL), not a
-  store-side hack.
 - **Explicit role configuration** (SD2). Role binding is by
-  `PlainItemTypeE` only; a schema needing to pick among several
-  same-typed columns cannot express it. Ambiguity is a generation error
-  today.
+  `PlainItemTypeE` and column order; a schema with several same-typed
+  columns cannot elect which one is the role — the leading `EntityId` is the
+  Key and the rest pass through, with no way to name a different one.
+- **Pass-through of `Transaction`/`Opaque` plain columns** (SD2). Every
+  other plain-item type passes through today; these two carry
+  streaming-group / transaction semantics the store glue does not model and
+  are rejected at generation.
+- **Negative caching.** Absent keys are never recorded, so every `GetFetch`
+  of a missing key re-queries — the pushout adapter's `HasEnvelope(absent)`
+  pays a forced fetch on every probe. Needs a `public/caching` feature
+  (absent-entries with a TTL), not a store-side hack.
+- **Freshness TTL for cached reads** (SD5). Auto-staleness after a bound, so
+  a multi-writer deployment need not arrange explicit `MarkStale` signals;
+  it belongs in `public/caching` and wants a clock seam there for
+  testability.
 - **Projection fetch.** Point lookups are `SELECT *` (SD5); a
   needed-columns projection requires rebinding the RA readers' column
   indices at generation time.
@@ -460,14 +625,26 @@ The QOC options above carry the rankings; notes below record nuance.
   package.
 - **Exactly-once / dedup.** ClickHouse block-level insert deduplication may
   give cheap idempotence for retried flushes; not relied on in v1.
-- **Streaming `Replay`** (chunked Arrow decode) — v1 buffers whole
-  results; the executor seam is where streaming lands.
+- **A streaming executor.** The executor seam and the store verbs already
+  stream (SD7 — the decode releases each batch as consumed), but `chexec`
+  buffers whole result sets, so streaming `Replay` end-to-end is an
+  executor-implementation change with no signature impact.
+- **Index-selection defaults and structured PARTITION BY / TTL** beyond the
+  raw overrides `gen.Input.DDL` takes today — which columns deserve a skip
+  index without being asked, and typed partition/TTL clauses (both with
+  ADR-0102).
 - **Generator shape coverage.** With `<Kind>ReadRow` upstreamed (S2), the
   store decode covers scalar, scalar-single (`unit`), slice-container,
   Option-scalar, roaring and multi-sub-column shapes on the non-carrier
   channels. Carrier (mixed / parametrized) channels and exploded fields
   remain uncovered — `marshallgen.ReadRowSupported` is the single gate —
   pending a consumer (the keelson facts kinds would be the trigger).
+- **Flat-safe layout** (SD6). `Flat` today exports the whole builder,
+  control set included — the wide, unguarded surface. A Flat variant that
+  keeps the types nameable but the control set walled (in-package unexported
+  methods, no import barrier to lean on) is deferred: the default
+  internal/lowlevel layout already delivers construction-safety, and no
+  consumer needs nameable-and-safe yet.
 - **Projections / read models**, multi-table stores, nested component
   structs (blocked on the deferred marshallreflect nested-struct feature),
   and a CLI wrapper for the generator.
@@ -476,8 +653,8 @@ The QOC options above carry the rankings; notes below record nuance.
 
 - **S1** — `recordstore` runtime + `recordstore/gen` emitting a store for an
   `ecsdemo`-shaped schema; unit-level round-trip (build → flush →
-  clickhouse-local → Get/Latest/Replay, plus the state view
-  Put/Delete/GetLatest) green. **Done** (see `public/storage/recordstore`): the
+  clickhouse-local → cache Get, Latest/Replay, plus the state view
+  Delete/GetLive) green. **Done** (see `public/storage/recordstore`): the
   example package's store is fully generated by one `gen.Input.Generate`
   call, and the round-trip test that pinned the hand-written reference
   passes unchanged against the generated store. v1 shape limits recorded
@@ -515,371 +692,72 @@ The QOC options above carry the rankings; notes below record nuance.
 
 ## Status
 
-Accepted — 2026-07-04 (reviewed by @spx). The decision in force:
-`public/storage/recordstore` is the generated, append-only store
-composing leeway, the read-through cache and ClickHouse — SD1–SD9 as
-written, with all four slices delivered and the two consumer adapters
-(pushout `StorageI` passing `repo/storagetest`, the CQRS ledger example)
-as the acceptance evidence. Deferred items (table-clause seam, cached
-`Latest`, CAS, carrier/explode ReadRow coverage, streaming `Replay`)
-remain open with their triggers recorded under Deferred.
+Accepted — 2026-07-04 (reviewed by @spx); reconciled in place 2026-07-10
+(see Updates). The decision in force: `public/storage/recordstore` is the
+generated, append-only store composing leeway, the read-through cache and
+ClickHouse — SD1–SD9 as written, with all four slices delivered and the two
+consumer adapters (pushout `StorageI` passing `repo/storagetest`, the CQRS
+ledger example) as the acceptance evidence. Open items (explicit roles, CAS,
+carrier/explode ReadRow coverage, a streaming executor, negative caching)
+remain recorded under Deferred.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
-From acceptance on, this document changes only via dated `## Update`
-sections; see `doc/DOCUMENTATION_STANDARD.md` for the edit-policy tiers.
+From acceptance on, this document normally changes only via dated `## Update`
+sections; the 2026-07-10 reconciliation is a maintainer-authorized
+consolidation exception (the SD text now states current truth and the dated
+updates are compacted to the changelog below). See
+`doc/DOCUMENTATION_STANDARD.md` for the edit-policy tiers.
 
 ## Updates
 
-### 2026-07-04 — API-surface corrections from the post-acceptance review
+### 2026-07-10 — reconciled in place
 
-A review of the generated surface (developer experience, homogeneity,
-future-proofing) landed five corrections while every consumer is still
-in-repo; where the SD2/SD4/SD5 text above disagrees in these details,
-this update supersedes it.
+The Decision (SD1–SD9), Consumer mappings, Consequences, Deferred and
+References above were rewritten to state the store's **current** shape
+directly, folding in the dated updates that had accreted between acceptance
+(2026-07-04) and now. This is a one-time consolidation authorized by the
+maintainer — the accepted-ADR edit policy otherwise appends dated updates
+rather than rewriting SD text (see `doc/DOCUMENTATION_STANDARD.md`). The
+changelog below preserves what changed when; the prose those entries carried
+now lives in the SDs.
 
-- **SD2 correction — non-role plain columns are rejected, not passed
-  through.** "Remaining plain columns pass through as ordinary envelope
-  fields" was never implemented: the emitter silently ignored them, so a
-  non-role plain column (e.g. `EntityRouting`) would be zero-written by
-  every `Begin` and dropped by the decode. The generator now refuses
-  such schemas at generation time (pinned by
-  `TestGenerateRejectsNonRolePlainColumn`); pass-through envelope fields
-  move under Deferred, triggered by the first schema that needs one.
-- **`Get` returns value-first.** `Get(key) (ent, found)` — previously it
-  mirrored the cache's `(has, ent)` order, clashing with
-  `Latest`/`GetLatest` on the same generated type. The generated wrapper
-  flips the order; the `public/caching` signature is unchanged.
-- **`Scan<Kind>` takes options.** `Scan<Kind>(ctx, recordstore.ScanOpts)`
-  replaces the positional `extraPredicate string`. `ScanOpts` (one shared
-  type in the root package, not N generated copies) carries
-  `ExtraPredicate` (trusted SQL, never user input) and `Limit`, so future
-  knobs are non-breaking additions; `LIMIT` renders ahead of the
-  Arrow-output `SETTINGS`.
-- **SD5 note — the fetcher moved off the store's method set.**
-  `DeterminePartition`/`FetchItemSinglePartition` were public only
-  because the store passed itself to the cache as its
-  `caching.ItemFetcherI`; an unexported per-store shim
-  (`<table>Fetcher`) implements them now, so the store's public surface
-  is consumer verbs only.
-- **Root package — the synthetic-sequence idiom is canonical.**
-  `recordstore.SeqTs(seq)` / `SeqOf(ts)` replace the
-  `time.Unix(0, int64(n)).UTC()` helpers both consumer adapters had
-  duplicated (the pushout per-key sequences, the CQRS event sequence);
-  `SeqTs(0)` is the replay-everything bound. The package doc no longer
-  claims "common errors" the package never held.
+Changelog (all landed; see git history for the commits):
 
-Generated-doc additions in the same pass: the constructor documents the
-nil-alloc and CacheCapacity defaults and the `W` work-item parameter
-(`struct{}` when unused); `CacheCapacity` is entries, not bytes;
-`Ingest<Kind>` requires distinct keys per call (rows share ts, so
-duplicate keys tie on Order); `Get` documents that a miss can mean a
-swallowed fetch error, with `Latest` as the authoritative check.
-
-### 2026-07-04 — iterator query verbs; the cache becomes an attached view
-
-The two shape decisions the earlier review deferred to a design dialogue
-are now settled and built; where the SD4/SD5 sketches above disagree,
-this update supersedes them.
-
-- **`Replay` and `Scan<Kind>` iterate.** Both return
-  `iter.Seq2[*Entity, error]` — the repo's established fallible-iteration
-  idiom (gov/doclint, gov/codelint, gov/callsites). Converting `Scan`
-  too was a deliberate homogeneity choice: every multi-row verb shares
-  one shape (`Latest`/`GetLatest` stay value-shaped). The contract,
-  documented on the emitted verbs: the sequence is single-use; ctx must
-  stay valid until iteration completes; the query may execute at call
-  time or lazily during iteration; an error ends the sequence as a final
-  `(nil, err)` pair. v1 buffers internally (the Deferred streaming
-  `Replay` becomes an executor-seam change with no visible signature
-  impact — the reason the shape was fixed now, before external
-  consumers).
-- **The store is no longer generic; caching is an attached view.** The
-  `[W comparable]` parameter existed only for the cache's work-item
-  machinery, which both consumer adapters instantiated as `struct{}`.
-  The store now carries append/flush, the query verbs and the state
-  view; a generated `<Store>Cache[W]` view (constructed via
-  `New<Store>Cache[W](st, <Store>CacheConfig{Capacity, FetchCriteria})`)
-  owns the read-through cache, the fetcher shim and the cache verbs
-  (`Get`/`WorkItem`/`IterateReadyWorkItems`/`IterateRestWorkItems`/
-  `AdvanceEpoch`). Coherence is unchanged: the dirty map stays on the
-  store, and each view registers a local-write invalidation hook at
-  construction, so `Commit`/`Put`/`Delete` still evict the written key
-  from every attached view. `<Store>StoreConfig` sheds the cache fields
-  (`DDLTail` remains). Consumer effect: the CQRS example is
-  generics-free end to end; the pushout adapter holds a store plus one
-  view, and its `Open` takes the store and cache configs separately.
-
-### 2026-07-04 — table-clause seam lands (ADR-0102); DDLTail demoted
-
-The Deferred item "table-level DDL clauses" is resolved by the ADR-0102
-seam: `ddl/clickhouse.ComposeCreateTable` renders the complete CREATE
-TABLE with typed column references resolved to physical names. The store
-generator now composes the full statement at generation time — defaults
-derived from the envelope roles (IF NOT EXISTS, `MergeTree()`, ORDER BY
-Key then Order, the low-cardinality settings) merged with the new
-`gen.Input.DDL` overrides (engine, order, indexes, raw PARTITION BY/TTL)
-— and the emitted `.out.sql` is executed verbatim by `EnsureTable`. The
-runtime `DDLTail` survives only as a raw suffix appended after the
-composed statement. The example store declares a bloom-filter index on
-its symbol section's LowCardRef column — closing, for stores, the
-readback skip-index gap the ADR-0066 Filter artefacts were shaped for.
-Deferred here onward: index-selection defaults (which columns deserve
-indexes without being asked) and structured PARTITION BY/TTL, both with
-ADR-0102.
-
-### 2026-07-04 — DML/RA scaffolding moves to internal/lowlevel
-
-A generated package previously exported the whole composition — the
-store family plus ~280 DML/RA scaffolding identifiers (the `InEntity`
-builder and section classes, the `ReadAccess`/`MembershipPack`
-readers) that consumers were never meant to call directly. The
-generator now places `<table>_dml.out.go` and `<table>_ra.out.go` in
-`internal/lowlevel` beneath the output directory, emitted as their own
-package; the store file imports it through the new required
-`gen.Input.ImportPath` (the generated package's own import path) and
-qualifies every scaffolding reference. The example package's exported
-surface drops from roughly 320 identifiers to under 100.
-
-What stays in the parent package is forced by the dependency shape:
-the per-kind codecs name the hand-written DTO types (moving them would
-cycle) — and they reference no DML/RA concrete types at all, driving
-them through the structural generic constraints of ADR-0042/0070, so
-the dependency stays strictly parent → internal. The `.out.sql` stays
-beside the store (`//go:embed` is same-directory).
-
-`Raw()` now returns the internal `*lowlevel.InEntity<Table>`: Go's
-internal rule restricts imports, not use, so callers outside the
-generated package hold the value by inference and chain its methods
-but cannot name the type in their own signatures — the intended
-escape-hatch semantics, documented on the verb.
-
-`gen.Input.Flat` opts back into the single-package layout (everything
-beside the store, no ImportPath needed); it exists as an escape for a
-consumer that must name DML/RA types in its own declarations, is
-exercised by a generator validation test, and is not used by any
-in-repo package.
-
-### 2026-07-04 — cached state-view reads; explicit staleness controls
-
-The Deferred item "Caching `Latest`/`GetLatest`" is resolved on the
-attached cache view, without new fetch machinery: the view's fetcher
-already retrieves the newest row per key, and the local-write
-invalidation hooks plus the dirty map already keep cached entries exact
-under this process's single writer. What lands:
-
-- `GetLatest(key)` on the view (schemas with the Lifecycle role only):
-  the cached lookup with the tombstone read as absent — the cached twin
-  of the store's uncached `GetLatest`, which remains the authoritative
-  read.
-- `GetLatestAcceptStale(key)` — stale-while-revalidate: a stale entry is
-  served immediately (`stale=true`) while the refetch queues, pairing
-  with the work-item replay loop for frame-shaped consumers.
-- Explicit external-writer signals: `MarkStale(key)` (next strict read
-  misses and queues a refetch; accept-stale reads bridge the gap),
-  `Invalidate(key)`, and `InvalidateAll()` (rebuilds the underlying
-  cache — bulk signal after e.g. an external import; drops in-flight
-  miss bookkeeping, so call between frames). The view's write hook now
-  closes over the view rather than binding the cache instance, so it
-  survives the rebuild.
-
-Coherence claim, stated precisely: cached state-view reads are exact
-under the single writer that owns the store; for external writers the
-caller supplies the signal. A freshness TTL (auto-stale after a bound)
-remains the recorded follow-up — it belongs in `public/caching` and
-wants a clock seam there for testability; the trigger is the first
-multi-writer deployment that cannot arrange explicit signals.
-
-### 2026-07-04 — external-review batch 1: additive surface fixes
-
-Two independent surface reviews (one over the worked examples, one over
-a prototypical description) converged on a set of additive gaps, all
-rooted in one blind spot: every consumer so far lives inside the
-generated package. This batch closes the additive part; the breaking
-candidates the reviews raised (verb renames, the `Put` alias,
-`ReplayOpts`, a streaming executor seam) are a separate decision.
-
-- **Zero-time `Replay` fixed.** `time.Time{}.UnixNano()` is undefined
-  (int64 overflow) and the emitted SQL rode it; a zero `fromOrder` now
-  omits the Order predicate and is the documented replay-everything
-  bound. Found independently by both reviewers; the round-trip test had
-  been passing by accident.
-- **Cross-package handles.** The lifecycle marker values move to the
-  runtime as `recordstore.LifecycleLive`/`LifecycleTombstone`; entities
-  of state-view stores gain `IsTombstone()`; the table name and the
-  envelope role column names are exported per store
-  (`<Store>TableName`, `<Store>ColKey`/`ColOrder`/`ColLifecycle`) so
-  `ScanOpts.ExtraPredicate` and external SQL can address them.
-- **`GetFetch` on the cache view.** The single-lookup read: cached hit,
-  or one immediate batched point fetch with the fetch error surfaced —
-  `found=false, err=nil` is the authoritative absent. The pushout
-  adapter's four-step Get/force/Get/Latest ritual collapses onto it.
-  The batched lookup SQL is now a shared `fetchLatestSQL` used by the
-  fetcher and `GetFetch`.
-- **`Ingest<Kind>` gates duplicates.** A duplicate key within one call
-  returns `recordstore.ErrDuplicateIngestKey` instead of silently tying
-  on Order; the docs now state buffering (Flush ships) and
-  partial-buffer-on-error semantics.
-- **`Close()`.** DiscardPending plus builder release — required under
-  tracking allocators. The checked-allocator test for it exposed a
-  genuine leak in the leeway DML generator's `TransferRecords` (an
-  empty snapshot record was neither returned nor released); fixed in
-  the generator and regenerated across all nine emitted DML classes
-  repo-wide.
-- **`VerifySchema(ctx)`.** Compares the live table's column names and
-  order (`DESCRIBE TABLE`) against the generated Arrow schema —
-  `EnsureTable` is `IF NOT EXISTS` and the decode is positional, so
-  drift otherwise fails late or, for same-typed column swaps, silently.
-  The pushout adapter runs it at `Open`.
-- **Documented contracts.** Reads see only flushed rows (stated on the
-  read verbs and the package header); cached entities are shared —
-  treat as immutable; `Capacity` is entries-not-bytes with the memory
-  budget spelled out; cache views attach for the store's lifetime; the
-  generated file no longer claims the package doc slot.
-
-### 2026-07-04 — external-review batch 2: the breaking set
-
-The review's breaking candidates, decided and landed while all
-consumers are in-repo. Where the SD4/SD7 text above disagrees, this
-update supersedes it.
-
-- **The state-view read is `GetLive`** — store `GetLatest` → `GetLive`,
-  cache view `GetLatest`/`GetLatestAcceptStale` →
-  `GetLive`/`GetLiveAcceptStale`. Both reviewers flagged that
-  `Latest`/`GetLatest`/`Get` encode three tombstone semantics in names
-  that communicate none of it. Direction chosen: `Live` is the domain's
-  own vocabulary (`LifecycleLive`/`LifecycleTombstone`), so the name
-  states the semantics; the raw `Latest` keeps a truthful name
-  everywhere ("newest row") and its deliberate raw uses (the pushout
-  adapter throughout) don't churn; one rename instead of two. The
-  family rule: unmarked verbs (`Latest`, `Get`) are row-level, the
-  `Live`-marked verbs are the interpreted state reads. The alternative
-  (`GetLatest` → `Latest`, raw → `LatestRaw`) was rejected because it
-  renames the primitive every consumer already uses and makes the short
-  name's result-set differ between store flavors.
-- **`Put` is gone.** A pure alias of `Begin` — two names for one
-  operation; both reviewers called it the textbook orthogonality
-  violation, outvoting the original chstore-symmetry rationale.
-  Versioned writes go through `Begin`: appending the new version IS the
-  update.
-- **`Replay` takes `recordstore.ReplayOpts{To, Limit}`** after the
-  positional lower bound — `To` is the exclusive upper Order bound
-  ("state as of"), `Limit` caps rows. Bounded rehydration was otherwise
-  inexpressible except by client-side break, which pays for the whole
-  tail under the buffered v1 executor.
-- **`ExecutorI.QueryArrow` streams**:
-  `iter.Seq2[arrow.RecordBatch, error]` with the same error-as-final-
-  pair convention as the store verbs; ownership of each yielded batch
-  transfers to the consumer (release-on-break stated), and `InsertArrow`
-  documents that the executor does not retain records. The materializing
-  seam was the one shape that could not be fixed after external adapters
-  exist — a buffered adapter satisfies the streaming shape trivially
-  (chexec does exactly that), the reverse retrofit is impossible. The
-  generated decode now releases each batch as it is consumed, so
-  record-level memory is bounded as soon as a streaming executor
-  exists; the SD7 sketch's slice-returning `QueryArrow` is superseded.
-
-### 2026-07-04 — external-review batch 3: trimmed per-kind codec emission
-
-The last review finding: roughly half of a generated package's exported
-identifiers were per-kind marshallgen codec machinery no store consumer
-calls — and one piece of it was a live coherence bypass
-(`<Kind>BuildEntities` on `Raw()` drives entity frames past the store's
-buffered-count, dirty-key and cache-invalidation bookkeeping). The
-codec files cannot move to `internal/lowlevel` (they name the
-hand-written DTO types; the parent imports lowlevel — a cycle, the
-kill-reason recorded when lowlevel landed), so the fix is emission-side:
-
-- marshallgen gains `EmitOpts{Mode}` on `EmitPlan`/`Generate`. The zero
-  value (`EmitModeCodec`) is today's full exported codec — the product
-  for the keelson codecs and the anchor demos, whose goldens verify the
-  mode split byte-identically. `EmitModeStoreSupport` emits only what a
-  generated store consumes — `addSections`, `readRow` and their
-  constraint interfaces, kind prefix unexported (the DTO type itself
-  stays as written) — and none of `Columns`/`BuildEntities`/
-  `FillFromArrow`, so the bypass ceases to exist rather than hiding.
-- `gen.Input.FullCodecs` opts a store package back into the full
-  exported codec (the SoA batch / bus-wire path, ADR-0089 territory);
-  the default is trimmed, same polarity as `Flat`.
-
-The example package's exported surface ends at ~54 identifiers — store
-family, cache view, entity, builder and the hand-written DTOs — from
-roughly 320 before this review cycle began.
-
-### 2026-07-09 — pass-through envelope fields land
-
-The 2026-07-04 SD2 correction deferred "pass-through envelope fields" and
-gated any non-role plain column at generation time. The first consumer
-whose backbone exceeds the Key/Order/Lifecycle role model — a fact-log
-schema carrying a composite id (a natural key beside the surrogate), a band
-of routing columns and lifecycle columns that are not the `u8`
-live/tombstone marker — triggers the deferred work. Where the SD2 text and
-that correction disagree, this update supersedes them.
-
-The generator now enumerates every plain column in canonical order (the
-order the DML grouped setters take their arguments and the read-access
-readers expose their fields — both from one IR) and groups them by
-`PlainItemTypeE`. The three roles bind as before — the **leading** `EntityId`
-is the Key, the `EntityTimestamp` the Order, the first `u8` `EntityLifecycle`
-the state-view Lifecycle — and every **other** plain column (a second/further
-`EntityId`, any `EntityRouting`, an extra or non-`u8` `EntityLifecycle`)
-becomes a pass-through field. `Transaction`/`Opaque` plain columns stay
-deferred (they carry streaming-group / transaction semantics the store glue
-does not model).
-
-- **`<Store>Envelope`.** A generated struct with one field per pass-through
-  column, in canonical order. It is embedded in `<Store>Entity` (the columns
-  read as promoted fields), taken as a third `Begin(id, ts, env)` argument,
-  and populated by the decode. A schema with no pass-through column emits
-  none of this and is **byte-identical** to the prior output (the device
-  example is unchanged) — the feature is inert until a schema needs it.
-- **Writes** go through the existing grouped DML setters
-  (`SetId`/`SetRouting`/`SetLifecycle`/…), one call per PlainItemType group:
-  the Key from `id`, the Order from `ts`, the state-view Lifecycle from the
-  live/tombstone marker, and every other argument from `env.<Field>`. So a
-  composite id's `SetId(id, env.<surrogate>)` and the routing/lifecycle
-  groups are set in the order the DML defined.
-- **Reads** use the readers' typed accessors: scalars via `GetAttrValue<Col>`,
-  array/set columns via `slices.Collect` over the accessor's `iter.Seq`.
-  A set column surfaces as `[]element` (the DML setter and accessor shape),
-  not the codec's `*roaring.Bitmap` carrier.
-- **DDL.** `ORDER BY` now addresses the Key and Order **by column name**, so a
-  composite id (several `EntityId` columns) leaves the clause unambiguous
-  instead of failing the multi-match column reference.
-- **State view coexists.** When a `u8` lifecycle and pass-through columns are
-  both present, `Delete` writes a tombstone with a zero envelope; `Begin`
-  stamps `LifecycleLive`. A schema with no `u8` lifecycle has no state view,
-  and all its lifecycle columns pass through.
-
-Pins: `TestGenerateSecondIdIsPassThrough` and
-`TestGenerateRoutingColumnIsPassThrough` (replacing the former
-reject-tests), `TestGenerateRejectsOpaquePlainColumn` for the still-deferred
-lanes, and the `widget` reference store — a device-shaped schema plus a
-composite-id/routing/set backbone — with `TestWidgetStoreEnvelopeRoundTrip`
-as the clickhouse-local acceptance (write the full envelope incl. a set
-column, `Latest` reads it back, `Delete`/`GetLive` exercise the tombstone).
-
-### 2026-07-09 — optional database qualification
-
-`Input.Database` optionally scopes the generated store to a named ClickHouse
-database. Empty (the default) leaves every reference unqualified — the store
-binds whatever database the executor connects to, and the output is
-byte-identical to before. When set, one value qualifies the whole surface:
-the emitted `<Store>TableName` const becomes `"<db>.<table>"`, so every
-runtime statement that routes through it (the `SELECT`/`INSERT`/`DESCRIBE`
-verbs and the drift-path `ALTER`) is database-scoped, and the composed
-`CREATE TABLE` names `<db>.<table>` too. The name carries `TableName`'s
-simple-identifier constraint (`[a-z][a-z0-9]*`) — it is emitted unquoted.
-
-The DDL also **provisions** the database: it prepends `CREATE DATABASE IF NOT
-EXISTS <db>;` ahead of the `CREATE TABLE`, so `EnsureTable` succeeds against a
-fresh server — the same self-provisioning posture as the existing `CREATE
-TABLE IF NOT EXISTS` (the executor runs the embedded file as one
-multi-statement script). A deployment that provisions databases out of band
-inherits the idempotent no-op.
-
-Pins: `TestGenerateWithDatabaseQualifiesSQL` (the const and DDL shapes plus a
-clickhouse-local leg — the table resolves as `<db>.<table>` and not under the
-default database) and `TestGenerateRejectsBadDatabaseName`.
+- **2026-07-04** — post-acceptance API-surface corrections: `Get`
+  value-first, `Scan<Kind>(ScanOpts)`, the fetcher shim moved off the
+  store's method set, `recordstore.SeqTs`/`SeqOf` canonicalized. (SD2/SD4/SD5)
+- **2026-07-04** — `Replay`/`Scan<Kind>` became `iter.Seq2` iterators; the
+  store de-generified and the cache became a separately constructed
+  `<Store>Cache[W]` attached view. (SD4/SD5)
+- **2026-07-04** — table-clause seam (ADR-0102): the full `CREATE TABLE` is
+  composed at generation time; `DDLTail` demoted to a raw suffix. (SD6)
+- **2026-07-04** — DML/RA scaffolding moved to `internal/lowlevel`;
+  `gen.Input.ImportPath` required, `Flat` opts out. (SD6)
+- **2026-07-04** — cached state-view reads (`GetLive`/`GetLiveAcceptStale`)
+  and explicit external-writer staleness controls landed on the view. (SD5)
+- **2026-07-04** — external-review batch 1 (additive): zero-time `Replay`
+  fix, exported `<Store>TableName`/`Col*` and `LifecycleLive`/`Tombstone`
+  handles, `GetFetch`, the `Ingest<Kind>` duplicate gate, `Close`,
+  `VerifySchema`. (SD2/SD4/SD5/SD6)
+- **2026-07-04** — external-review batch 2 (breaking): the state-view read
+  is `GetLive` (was `GetLatest`), `Put` removed (Begin is the update),
+  `Replay` takes `ReplayOpts{To, Limit}`, `ExecutorI.QueryArrow` streams.
+  (SD4/SD7)
+- **2026-07-04** — external-review batch 3: trimmed per-kind codec emission
+  (`EmitModeStoreSupport` default, `gen.Input.FullCodecs` opt-out), removing
+  the `BuildEntities`-on-`Raw()` coherence bypass. (SD6)
+- **2026-07-09** — pass-through envelope fields: non-role plain columns
+  become a `<Store>Envelope` taken by `Begin(id, ts, env)`, superseding the
+  interim rejection of non-role columns. (SD2)
+- **2026-07-09** — optional `gen.Input.Database` qualification of the whole
+  generated surface, with `CREATE DATABASE IF NOT EXISTS` self-provisioning.
+  (SD2/SD6)
+- **2026-07-10** — dml control-method visibility (this refinement, in place):
+  the default layout emits the builder's control set (frame lifecycle, drain,
+  envelope setters, `Builder`) unexported with import-walled free-function
+  drivers, making `Raw()` construction-safe; `Flat`/`FullCodecs` select the
+  exported (wide) control set. Interface-narrowing was rejected as
+  cast-defeatable. A dml-generator capability drove this. (SD4/SD6)
 
 ## References
 
@@ -898,6 +776,8 @@ default database) and `TestGenerateRejectsBadDatabaseName`.
   — `repo.StorageI` and the conformance suite gating slice S3.
 - [ADR-0089: row-DML serialization vs ClickHouse-native ingestion](0089-rowdml-serialization-clickhouse-native-ingestion.md)
   — the SoA pivot and Arrow-IPC ingest this store persists through.
+- [ADR-0102: leeway ClickHouse table-clause seam](0102-leeway-clickhouse-table-clause-seam.md)
+  — the composed `CREATE TABLE` SD6 emits; `DDLTail` demoted to a raw suffix.
 - [ADR-0010: leeway CBOR RPC codec](0010-leeway-cbor-rpc-codec.md) —
   deferred; adjacent territory, untouched.
 - [`public/caching`](../../public/caching) — the read-through cache;

@@ -1466,13 +1466,16 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	if err != nil {
 		return
 	}
-	// ADR-0042 M9 — public hint methods.
+	// ADR-0042 M9 — hint methods. Under private control (ADR-0100 SD6) the
+	// raw Builder() accessor is dropped — its only in-tree use, Close's
+	// Release, is served by the ReleaseBuilder driver — and SetActiveSections
+	// is unexported like the rest of the control surface.
 	_, err = fmt.Fprintf(b, `
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
 // The hint is a performance optimisation; sending BeginAttribute to
 // an unmarked section produces empty-list bytes at TransferRecords.
-func (inst *%s) SetActiveSections(idxs []int) {
+func (inst *%s) %s(idxs []int) {
 	if idxs == nil { inst.activeSections = nil; return }
 	var mask [%d]bool
 	for _, i := range idxs {
@@ -1480,14 +1483,20 @@ func (inst *%s) SetActiveSections(idxs []int) {
 	}
 	inst.activeSections = &mask
 }
-
+`, clsNames.InEntityClassName, inst.ctrlName("SetActiveSections"), len(sectionNames))
+	if err != nil {
+		return
+	}
+	if !inst.privateControl {
+		_, err = fmt.Fprintf(b, `
 // Builder exposes the underlying RecordBuilder so callers can apply
 // shim-level hints (e.g. SetActiveFields on the arrowrowbinary /
 // arrowsparserb / arrowrowcbor backends).
 func (inst *%s) Builder() *%s.RecordBuilder { return inst.builder }
-`, clsNames.InEntityClassName, len(sectionNames), clsNames.InEntityClassName, inst.builderPkg.Alias)
-	if err != nil {
-		return
+`, clsNames.InEntityClassName, inst.builderPkg.Alias)
+		if err != nil {
+			return
+		}
 	}
 
 	// %sSectionIndices maps each section's canonical name to its
@@ -1536,7 +1545,7 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 	b := inst.builder
 	{ // setter
 		for _, pt := range common.AllPlainItemTypes {
-			setterName := itemTypeToSetterName(pt)
+			setterName := inst.ctrlName(itemTypeToSetterName(pt))
 			irh := plainSetterIRH.DeriveSubHolder(func(cc common.IntermediateColumnContext) (keep bool) {
 				return cc.PlainItemType == pt
 			})
@@ -1739,8 +1748,8 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 		}
 	}
 	{ // BeginEntity
-		_, err = fmt.Fprintf(b, `func (inst *%s) BeginEntity() *%s {
-`, clsNames.InEntityClassName, clsNames.InEntityClassName)
+		_, err = fmt.Fprintf(b, `func (inst *%s) %s() *%s {
+`, clsNames.InEntityClassName, inst.ctrlName("BeginEntity"), clsNames.InEntityClassName)
 		err = inst.composeStateTransitionCode([]runtime.EntityStateE{runtime.EntityStateInitial}, runtime.EntityStateInEntity, false, "inst")
 		if err != nil {
 			return
@@ -1826,14 +1835,14 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 		}
 	}
 	{ // CommitEntity
-		_, err = fmt.Fprintf(b, `func (inst *%s) CommitEntity() (err error) {
+		_, err = fmt.Fprintf(b, `func (inst *%s) %s() (err error) {
 	inst.validateEntity()
 	err = inst.CheckErrors()
 	if err != nil {
 		err = eh.Errorf("unable to commit entity, found errors: %%w", err)
 		return
 	}
-`, clsNames.InEntityClassName)
+`, clsNames.InEntityClassName, inst.ctrlName("CommitEntity"))
 		err = inst.composeStateTransitionCode([]runtime.EntityStateE{runtime.EntityStateInEntity}, runtime.EntityStateInitial, true, "inst")
 		if err != nil {
 			return
@@ -1850,8 +1859,8 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 		}
 	}
 	{ // RollbackEntity
-		_, err = fmt.Fprintf(b, `func (inst *%s) RollbackEntity() (err error) {
-`, clsNames.InEntityClassName)
+		_, err = fmt.Fprintf(b, `func (inst *%s) %s() (err error) {
+`, clsNames.InEntityClassName, inst.ctrlName("RollbackEntity"))
 		err = inst.composeStateTransitionCode([]runtime.EntityStateE{runtime.EntityStateInEntity}, runtime.EntityStateInitial, true, "inst")
 		if err != nil {
 			return
@@ -1879,8 +1888,8 @@ func (inst *GoClassBuilder) ComposeEntityCode(clsNamer gocodegen.GoClassNamerI, 
 	{ // TransferRecords
 		_, err = fmt.Fprintf(b, `
 // TransferRecords The returned Records must be Release()'d after use.
-func (inst *%s) TransferRecords(recordsIn []%s) (recordsOut []%s, err error) {
-`, clsNames.InEntityClassName, inst.builderPkg.RecordType, inst.builderPkg.RecordType)
+func (inst *%s) %s(recordsIn []%s) (recordsOut []%s, err error) {
+`, clsNames.InEntityClassName, inst.ctrlName("TransferRecords"), inst.builderPkg.RecordType, inst.builderPkg.RecordType)
 		err = inst.composeStateVerificationCode([]runtime.EntityStateE{runtime.EntityStateInitial}, true, "inst")
 		if err != nil {
 			return
@@ -1913,6 +1922,10 @@ func (inst *%s) GetSchema() (schema *arrow.Schema) {
 		}
 	}
 
+	err = inst.composeControlDrivers(clsNames, plainSetterIRH)
+	if err != nil {
+		return
+	}
 	err = inst.composeErrorHandlingCode(clsNames.InEntityClassName)
 	if err != nil {
 		return
