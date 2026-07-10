@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-10
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0103: leeway marshall — dynamic-membership tuples (multi-membership multi-sub-column sections)
 
@@ -316,9 +314,13 @@ untagged element fields are rejected by both front-ends.
 
 ## Status
 
-Proposed (2026-07-04). Implemented behind the shared plan layer in
-goplan + mappingplan + marshallgen + marshallreflect with the verification
-suite above green; resolves the "Multi-membership mixed sections" open
+Accepted (2026-07-10; proposed 2026-07-04) — reviewed in the marshall
+consolidation dialogue, see
+[ADR-0113](0113-leeway-marshall-nested-primary-consolidation.md). Implemented
+behind the shared plan layer in goplan + mappingplan + marshallgen +
+marshallreflect with the verification suite above green, including the
+consumer's byte-identity reproduction against its production section
+(Verification 2); resolves the "Multi-membership mixed sections" open
 question of [ADR-0101](0101-leeway-marshall-mixed-shape-sections.md) (see
 its Updates section).
 

@@ -280,9 +280,9 @@ so only dynamic memberships get channel-by-type.
 
 ## Carriers
 
-> **Deferred — not built in either front-end.** The nested spelling below is the
-> design proposed in [ADR-0110](../adr/0110-leeway-marshall-carrier-memberships-in-tuples.md)
-> (status: proposed); a carrier membership today must use the flat grammar. Shown
+> **Parked — not built in either front-end.** The nested spelling below is the
+> design recorded in [ADR-0113 D6](../adr/0113-leeway-marshall-nested-primary-consolidation.md)
+> (formerly ADR-0110); a carrier membership today must use the flat grammar. Shown
 > for completeness.
 
 A carrier channel's identity is per-row data. In the flat grammar that means a
@@ -531,8 +531,9 @@ Reserved, not in this cut. Deferred surfaces are **rejected with a clear `PlanFo
 - **One / Optional dynamic-membership sections** — a per-attribute `lw.*`
   membership requires the section be `[]Attr` (Many); a One or Optional section
   carrying a marker field is rejected.
-- **Carrier memberships in a nested section** — [ADR-0110](../adr/0110-leeway-marshall-carrier-memberships-in-tuples.md)
-  (proposed); use the flat carrier grammar for now.
+- **Carrier memberships in a nested section** — parked, see
+  [ADR-0113 D6](../adr/0113-leeway-marshall-nested-primary-consolidation.md)
+  (formerly ADR-0110); use the flat carrier grammar for now.
 - **Store `ReadRow` over tuple/carrier kinds (ADR-0100).** The nested struct
   gives `ReadRow` a destination for N attributes, but generalising the store
   read path is a separate slice.
@@ -582,7 +583,7 @@ Reserved, not in this cut. Deferred surfaces are **rejected with a clear `PlanFo
 
 The `codecdemo` DTOs, re-expressed. Diff against the flat originals to see each
 ad-hoc mechanism dissolve into a field type. Two below use surfaces not fully
-shipped — `SensorReading`'s carrier (deferred; [ADR-0110](../adr/0110-leeway-marshall-carrier-memberships-in-tuples.md))
+shipped — `SensorReading`'s carrier (parked; [ADR-0113 D6](../adr/0113-leeway-marshall-nested-primary-consolidation.md))
 and `DroneMission`'s entity-level `lw.Single` (reflect-only) — see the
 [status table](#implementation-status). The first three ship in both front-ends.
 
@@ -636,7 +637,7 @@ type NamedText struct {
 }
 
 // sensorreading — carrier channel, one attribute, no sibling.
-// DEFERRED (both front-ends) — ADR-0110 proposed; use the flat carrier grammar today.
+// PARKED (both front-ends) — ADR-0113 D6 (formerly ADR-0110); use the flat carrier grammar today.
 type SensorReading struct {
     _        struct{} `kind:"sensorReading"`
     ID       uint64   `lw:",id"`

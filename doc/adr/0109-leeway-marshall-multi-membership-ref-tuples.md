@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-05
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-10
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0109: leeway marshall — multi-membership + ref-channel dynamic tuples
 
@@ -232,7 +230,11 @@ instead.
 
 ## Status
 
-Proposed (2026-07-05). Implemented behind the shared plan layer (goplan +
+Accepted (2026-07-10; proposed 2026-07-05) — reviewed in the marshall
+consolidation dialogue, see
+[ADR-0113](0113-leeway-marshall-nested-primary-consolidation.md); the consumer's
+type-lineage encoding remains one of its open modelling candidates, which the
+acceptance does not pre-empt. Implemented behind the shared plan layer (goplan +
 mappingplan + marshallgen + marshallreflect) with the verification suite above
 green; the single-verbatim tuple path and every other in-tree `.out.go` regenerate
 wire-stable. Resolves the "Dynamic ref memberships" open question of

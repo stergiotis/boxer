@@ -36,7 +36,8 @@ The pieces to do this cheaply already exist:
   typed decode (`<Kind>ReadRow`) switches on the *known* kind ids and **ignores
   every other membership** — so extra memberships in a disjoint lane ride along
   invisibly to the entity decode and its presence gate. Ref channels are the
-  subject of ADR-0103/ADR-0109/ADR-0110; ADR-0109 already contemplates a
+  subject of ADR-0103/ADR-0109 (their carrier extension is parked in
+  ADR-0113 D6); ADR-0109 already contemplates a
   `LookupI` resolving a ref id.
 - **Tagged ids (`identifier`, ADR-0106).** A `TaggedId` is `tag | body`; the
   fibonacci tag lets several id domains coexist in one lane, each
@@ -300,7 +301,8 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
 - **ADR-0100 (recordstore).** `DimensionStore` is a recordstore fact store plus
   a stamping seam on the generated builder; it adds no new store kind and keeps
   the append-only, single-goroutine model.
-- **ADR-0103 / ADR-0109 / ADR-0110 (membership + ref-channel tuples).** The
+- **ADR-0103 / ADR-0109 (membership + ref-channel tuples; carrier extension
+  parked in ADR-0113 D6).** The
   surrogate id rides the Ref membership lanes those ADRs define; a
   `DimensionStore.Resolve` is the natural backing of ADR-0109's `LookupI` for a
   ref id.
@@ -415,7 +417,8 @@ second dimension) remain optional follow-ups.
 
 - ADR-0100 — recordstore.
 - ADR-0102 — table-clause seam.
-- ADR-0103 / ADR-0109 / ADR-0110 — membership and ref-channel tuples.
+- ADR-0103 / ADR-0109 — membership and ref-channel tuples (carrier extension
+  parked in ADR-0113 D6).
 - ADR-0106 — identifier (fibonacci-tagged ids).
 - ADR-0111 — technology-neutral leased id generation.
 - `public/caching` — read-through / versioned write-through cache.
