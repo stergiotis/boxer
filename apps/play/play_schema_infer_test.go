@@ -1,10 +1,14 @@
 package play
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -127,6 +131,34 @@ func TestCardDriverReconstructsLeewaySchema(t *testing.T) {
 
 	require.False(t, cards.EnsureFor(schemaWith(strField("count()"))))
 	require.Nil(t, cards.TableDesc())
+}
+
+// TestCardDriverCachesNonLeewaySchema locks in the per-frame anti-spam
+// contract. EnsureFor runs every frame from the Detail tab, and a non-leeway
+// result (an aggregation, a join, arbitrary SQL) never yields a driver — so it
+// must be probed, and its fallback logged, at most once per schema pointer, not
+// once per frame. Regression guard against re-adding a `driver != nil` clause
+// to EnsureFor's pointer-identity cache, which would re-run discovery and
+// re-log on every frame.
+func TestCardDriverCachesNonLeewaySchema(t *testing.T) {
+	prev := log.Logger
+	var buf bytes.Buffer
+	log.Logger = zerolog.New(&buf).Level(zerolog.DebugLevel)
+	defer func() { log.Logger = prev }()
+
+	cards := NewCardDriver(c.NewWidgetIdStack(), memory.NewGoAllocator())
+	// One stable schema pointer, as rec.Schema() hands back per result.
+	schema := schemaWith(strField("count()"))
+
+	const frames = 5
+	for range frames {
+		require.False(t, cards.EnsureFor(schema), "a non-leeway schema is never card-usable")
+	}
+	require.Nil(t, cards.TableDesc())
+
+	got := strings.Count(buf.String(), "not leeway-shaped")
+	require.Equalf(t, 1, got,
+		"the non-leeway fallback must log once per schema, not once per frame (got %d over %d frames)", got, frames)
 }
 
 // TestSchemaPanelContract: the panel declares one required main channel and

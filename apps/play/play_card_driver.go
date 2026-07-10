@@ -65,7 +65,13 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		inst.table = nil
 		return false
 	}
-	if schema == inst.schema && inst.driver != nil {
+	// Pointer-identity cache (same idiom as the Projector's forSchema and
+	// syncSchemaModel): once a schema has been probed, return the cached
+	// verdict. Caching the *negative* result is the point — a non-leeway
+	// schema leaves driver nil, and EnsureFor runs every frame from the
+	// Detail tab, so gating this on driver != nil would re-run discovery and
+	// re-log the fallback on every frame.
+	if schema == inst.schema {
 		return inst.usable
 	}
 	inst.schema = schema
@@ -107,7 +113,11 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	}
 	tblDesc, tableRowConfig, err := conv.DiscoverTableFromColumnNames(colNames)
 	if err != nil {
-		log.Warn().Err(err).Msg("play: leeway discovery failed — falling back")
+		// A non-leeway result (aggregation, join, arbitrary SQL) is an
+		// expected, fully-supported case — the caller renders the ad-hoc
+		// detail view. Debug, not Warn: a normal fallback, not a fault. The
+		// pointer cache above means this logs at most once per result schema.
+		log.Debug().Err(err).Msg("play: result not leeway-shaped — using ad-hoc view")
 		return false
 	}
 	// Publish the reconstructed schema now, before the (heavier, and card-only)
