@@ -2,6 +2,8 @@
 type: adr
 status: accepted
 date: 2026-06-23
+reviewed-by: "@spx"
+reviewed-date: 2026-07-10
 ---
 
 > **Status: accepted (2026-07-10).** Built and committed — see the Status section.
@@ -348,6 +350,35 @@ dense `w×h` framebuffer with distinct colour distributions over the same points
 
 This lifts the configurable-render descope; the remaining SD10 items (progressive
 sampling ladder, hover→info, keepBuffer margin) stay deferred.
+
+## Update — 2026-07-10: SD6 param-contract divergence (inlined literals, not reserved params)
+
+The render-agnostic-header half of SD6 shipped (previous Update); the other half —
+the **reserved-`vp_*`-param contract** — did not, and the panel diverged to a
+simpler shape. SD6 specified six `vp_*` `UInt32` params (viewport mercator bbox +
+output `w×h`) that the panel injects into a *user-owned* query via the
+param-injection seam, with the human owning `{table}`/`{sampling}` and any `WHERE`.
+As built (`apps/play/play_map.go`):
+
+- **Literals, not params.** `buildRasterSQL` inlines the bbox and `w`/`h` with
+  `fmt.Sprintf` and builds the whole query itself; it does not touch
+  `play_param_inject.go` or a `SET param_*` prelude.
+- **The panel owns the entire query.** The user's only inputs are the `table`
+  field (a plain name or a table-function source, guarded by `sanitizeTable` — the
+  sole user-owned fragment), the render mode, and the `sampling` slider; no
+  user-supplied `WHERE`/filter is fused in.
+- **Independent of the editor.** The map query runs on a panel-local lane, not
+  `QueryStore` (SD2), and never reads the editor buffer; the two paths share only
+  play's endpoint (and, by naming convention, possibly the same table).
+
+Consequence: the *"validates the param-injection seam as the map↔SQL interface"*
+item under Consequences → Positive did **not** land — pan/zoom is a rebuilt-literals
+query, not a typed param mutation, so that seam is still exercised only by the main
+editor. The reserved-`vp_*` contract stays the forward path if a *shared*,
+user-editable raster query (panel-injected viewport + user filters) is ever wanted.
+SD6's bbox query does now "ship as a snippet" (the ADS-B section of the Snippets
+library, commit `4178adc2`), but as an editor snippet with inlined literals — not
+the param-bound reference query SD6 imagined.
 
 ## References
 
