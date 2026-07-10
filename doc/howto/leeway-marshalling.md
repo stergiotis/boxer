@@ -3,7 +3,7 @@ type: how-to
 audience: engineer with a specific task
 status: stable
 reviewed-by: "@stergiotis"
-reviewed-date: 2026-07-05
+reviewed-date: 2026-07-10
 ---
 
 # How to marshal a Go struct to and from a leeway table
