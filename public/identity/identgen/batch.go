@@ -1,6 +1,10 @@
 package identgen
 
-import "github.com/stergiotis/boxer/public/identity/identifier"
+import (
+	"context"
+
+	"github.com/stergiotis/boxer/public/identity/identifier"
+)
 
 // KeysColumn is a columnar (struct-of-arrays) batch of natural keys: every key's
 // bytes are concatenated in Data, and Ends[i] is the exclusive end offset of key
@@ -56,5 +60,5 @@ type BatchInternalizerI interface {
 	// commit in one or more storage transactions. Either way a persisted
 	// prefix is harmless — interning is idempotent get-or-assign, so retried
 	// keys resolve to the ids already assigned.
-	AppendIds(dst []identifier.TaggedId, keys KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error)
+	AppendIds(ctx context.Context, dst []identifier.TaggedId, keys KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error)
 }

@@ -1,6 +1,7 @@
 package mem
 
 import (
+	"context"
 	"encoding/binary"
 	"math/rand/v2"
 	"testing"
@@ -22,11 +23,11 @@ func TestIdInternalizer_RejectsEmptyKey(t *testing.T) {
 	s, err := NewIdInternalizer(identifier.TagValue(1), 0)
 	require.NoError(t, err)
 
-	_, _, err = s.GetId(nil)
+	_, _, err = s.GetId(context.Background(), nil)
 	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
-	_, _, err = s.GetId([]byte{})
+	_, _, err = s.GetId(context.Background(), []byte{})
 	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
-	_, _, err = s.GetUntaggedId(nil)
+	_, _, err = s.GetUntaggedId(context.Background(), nil)
 	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
 
 	require.Equal(t, 0, s.Len())
@@ -36,7 +37,7 @@ func TestIdInternalizer_AssignsDenseMonotonicIds(t *testing.T) {
 	s, err := NewIdInternalizer(identifier.TagValue(3), 4)
 	require.NoError(t, err)
 	for i := range 5 {
-		id, fresh, err := s.GetId([]byte{byte('a' + i)})
+		id, fresh, err := s.GetId(context.Background(), []byte{byte('a' + i)})
 		require.NoError(t, err)
 		require.True(t, fresh)
 		require.True(t, id.IsValid())
@@ -51,10 +52,10 @@ func TestIdInternalizer_ReStampIsIdempotent(t *testing.T) {
 	s, err := NewIdInternalizer(identifier.TagValue(1), 0)
 	require.NoError(t, err)
 	k := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
-	id1, fresh1, err := s.GetId(k)
+	id1, fresh1, err := s.GetId(context.Background(), k)
 	require.NoError(t, err)
 	require.True(t, fresh1)
-	id2, fresh2, err := s.GetId(k)
+	id2, fresh2, err := s.GetId(context.Background(), k)
 	require.NoError(t, err)
 	require.False(t, fresh2)
 	require.Equal(t, id1, id2)
@@ -64,7 +65,7 @@ func TestIdInternalizer_ReStampIsIdempotent(t *testing.T) {
 func TestIdInternalizer_ResolveRoundtrip(t *testing.T) {
 	s, err := NewIdInternalizer(identifier.TagValue(5), 0)
 	require.NoError(t, err)
-	id, _, err := s.GetId([]byte("hello"))
+	id, _, err := s.GetId(context.Background(), []byte("hello"))
 	require.NoError(t, err)
 
 	got, found := s.Resolve(id)
@@ -92,7 +93,7 @@ func TestIdInternalizer_AllYieldsAssignmentOrder(t *testing.T) {
 	keys := []string{"one", "two", "three"}
 	want := make([]identifier.TaggedId, 0, len(keys))
 	for _, k := range keys {
-		id, _, err := s.GetId([]byte(k))
+		id, _, err := s.GetId(context.Background(), []byte(k))
 		require.NoError(t, err)
 		want = append(want, id)
 	}
@@ -109,10 +110,10 @@ func TestIdInternalizer_LookupDoesNotAllocate(t *testing.T) {
 	s, err := NewIdInternalizer(identifier.TagValue(1), 0)
 	require.NoError(t, err)
 	key := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
-	_, _, err = s.GetId(key)
+	_, _, err = s.GetId(context.Background(), key)
 	require.NoError(t, err)
 	allocs := testing.AllocsPerRun(1000, func() {
-		_, _, _ = s.GetId(key) // existing key: the string(key) map lookup must not allocate
+		_, _, _ = s.GetId(context.Background(), key) // existing key: the string(key) map lookup must not allocate
 	})
 	require.Zero(t, allocs, "GetId of an existing key must not allocate")
 }
@@ -122,7 +123,7 @@ func TestIdInternalizedGenerator_CreatesWorkingGenerator(t *testing.T) {
 	gen, err := f.Create(identifier.TagValue(9), 128)
 	require.NoError(t, err)
 
-	id, fresh, err := gen.GetId([]byte("k"))
+	id, fresh, err := gen.GetId(context.Background(), []byte("k"))
 	require.NoError(t, err)
 	require.True(t, fresh)
 	require.True(t, id.IsValid())
@@ -132,7 +133,7 @@ func TestIdInternalizedGenerator_CreatesWorkingGenerator(t *testing.T) {
 	require.NoError(t, gen.Release())
 
 	// Usable after Release, and the mapping is retained.
-	id2, fresh2, err := gen.GetId([]byte("k"))
+	id2, fresh2, err := gen.GetId(context.Background(), []byte("k"))
 	require.NoError(t, err)
 	require.False(t, fresh2)
 	require.Equal(t, id, id2)
@@ -163,7 +164,7 @@ func TestIdInternalizer_PropertyConsistency(t *testing.T) {
 	}
 	for range n {
 		k := keyPool[r.IntN(len(keyPool))]
-		id, fresh, err := s.GetId(k)
+		id, fresh, err := s.GetId(context.Background(), k)
 		require.NoError(t, err)
 		require.True(t, id.IsValid())
 		require.EqualValues(t, tagVal, id.GetTag().GetValue())
@@ -194,7 +195,7 @@ func TestIdInternalizer_AppendIds(t *testing.T) {
 		keys = keys.AppendKey([]byte(k))
 	}
 
-	ids, fresh, err := gen.AppendIds(nil, keys, make([]bool, 0))
+	ids, fresh, err := gen.AppendIds(context.Background(), nil, keys, make([]bool, 0))
 	require.NoError(t, err)
 	require.Len(t, ids, 5)
 	require.Len(t, fresh, 5)
@@ -213,7 +214,7 @@ func TestIdInternalizer_AppendIds(t *testing.T) {
 
 	// The batch agrees with single GetId for the same keys.
 	for i, k := range seq {
-		gotID, _, err := gen.GetId([]byte(k))
+		gotID, _, err := gen.GetId(context.Background(), []byte(k))
 		require.NoError(t, err)
 		require.Equal(t, ids[i], gotID)
 	}
@@ -225,14 +226,14 @@ func TestIdInternalizer_AppendIds_NilFreshAndDstReuse(t *testing.T) {
 	keys := identgen.KeysColumn{}.AppendKey([]byte("x")).AppendKey([]byte("y"))
 
 	// nil fresh -> flags not tracked.
-	ids, freshOut, err := gen.AppendIds(nil, keys, nil)
+	ids, freshOut, err := gen.AppendIds(context.Background(), nil, keys, nil)
 	require.NoError(t, err)
 	require.Nil(t, freshOut)
 	require.Len(t, ids, 2)
 
 	// dst reuse: results are appended after existing elements.
 	dst := []identifier.TaggedId{0xdead}
-	out, _, err := gen.AppendIds(dst, keys, nil)
+	out, _, err := gen.AppendIds(context.Background(), dst, keys, nil)
 	require.NoError(t, err)
 	require.Len(t, out, 3)
 	require.EqualValues(t, 0xdead, out[0])
@@ -245,7 +246,7 @@ func TestIdInternalizer_AppendIds_RejectsEmptyKeyAtomically(t *testing.T) {
 	require.NoError(t, err)
 	keys := identgen.KeysColumn{}.AppendKey([]byte("ok")).AppendKey([]byte("")).AppendKey([]byte("also"))
 
-	out, _, err := gen.AppendIds([]identifier.TaggedId{}, keys, nil)
+	out, _, err := gen.AppendIds(context.Background(), []identifier.TaggedId{}, keys, nil)
 	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
 	require.Empty(t, out, "dst returned unmodified")
 	require.Equal(t, 0, gen.Len(), "nothing minted on a bad batch")
@@ -258,10 +259,10 @@ func BenchmarkIdInternalizer_GetId(b *testing.B) {
 	b.Run("hit", func(b *testing.B) {
 		gen, err := NewIdInternalizer(identifier.TagValue(1), 16)
 		require.NoError(b, err)
-		_, _, _ = gen.GetId(key) // prime
+		_, _, _ = gen.GetId(context.Background(), key) // prime
 		b.ReportAllocs()
 		for b.Loop() {
-			_, _, _ = gen.GetId(key)
+			_, _, _ = gen.GetId(context.Background(), key)
 		}
 	})
 
@@ -281,7 +282,7 @@ func BenchmarkIdInternalizer_GetId(b *testing.B) {
 			}
 			binary.LittleEndian.PutUint64(buf, i)
 			i++
-			_, _, _ = gen.GetId(buf)
+			_, _, _ = gen.GetId(context.Background(), buf)
 		}
 	})
 }

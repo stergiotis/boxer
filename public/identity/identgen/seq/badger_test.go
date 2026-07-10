@@ -1,6 +1,7 @@
 package seq
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -27,7 +28,7 @@ func TestBadgerIdSequence_MonotonicAndIgnoresKey(t *testing.T) {
 
 	var prev uint64
 	for i := range 10 {
-		id, fresh, err := gen.GetId([]byte("ignored")) // natural key must not matter
+		id, fresh, err := gen.GetId(context.Background(), []byte("ignored")) // natural key must not matter
 		require.NoError(t, err)
 		require.True(t, fresh)
 		require.True(t, id.IsValid())
@@ -55,11 +56,11 @@ func TestBadgerIdSequence_PerTagIsolation(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = genB.Release() }()
 
-	a1, _, err := genA.GetId(nil)
+	a1, _, err := genA.GetId(context.Background(), nil)
 	require.NoError(t, err)
-	_, _, err = genB.GetId(nil) // B's draw must not advance A
+	_, _, err = genB.GetId(context.Background(), nil) // B's draw must not advance A
 	require.NoError(t, err)
-	a2, _, err := genA.GetId(nil)
+	a2, _, err := genA.GetId(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.EqualValues(t, 1, a1.GetTag().GetValue())
@@ -78,7 +79,7 @@ func TestBadgerIdSequence_PersistsAcrossReopen(t *testing.T) {
 	require.NoError(t, err)
 	var last uint64
 	for range 3 {
-		id, _, err := gen.GetId(nil)
+		id, _, err := gen.GetId(context.Background(), nil)
 		require.NoError(t, err)
 		last = bodyOf(id)
 	}
@@ -91,7 +92,7 @@ func TestBadgerIdSequence_PersistsAcrossReopen(t *testing.T) {
 	gen2, err := genFac2.Create(tagVal, 4)
 	require.NoError(t, err)
 	defer func() { _ = gen2.Release() }()
-	id, _, err := gen2.GetId(nil)
+	id, _, err := gen2.GetId(context.Background(), nil)
 	require.NoError(t, err)
 	require.Greater(t, bodyOf(id), last, "sequence must not regress or repeat across reopen")
 }

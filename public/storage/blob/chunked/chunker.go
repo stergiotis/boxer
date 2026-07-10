@@ -3,6 +3,7 @@ package chunked
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"io"
 
 	"github.com/rs/zerolog/log"
@@ -25,6 +26,7 @@ const (
 
 type wrapper struct {
 	cw         ChunkedWriterI
+	ctx        context.Context // bounds the lazy id generation on the first emit
 	id         identifier.TaggedId
 	idGen      identifier.IdGeneratorI
 	naturalKey []byte
@@ -35,8 +37,9 @@ type wrapper struct {
 	err        error
 }
 
-func (inst *wrapper) prepare(idGen identifier.IdGeneratorI, naturalKey []byte, cw ChunkedWriterI) {
+func (inst *wrapper) prepare(ctx context.Context, idGen identifier.IdGeneratorI, naturalKey []byte, cw ChunkedWriterI) {
 	inst.cw = cw
+	inst.ctx = ctx
 	inst.id = 0
 	inst.idGen = idGen
 	inst.naturalKey = naturalKey
@@ -65,7 +68,7 @@ func (inst *wrapper) ready() bool {
 }
 
 func (inst *wrapper) ensureId() (err error) {
-	inst.id, _, err = inst.idGen.GetId(inst.naturalKey)
+	inst.id, _, err = inst.idGen.GetId(inst.ctx, inst.naturalKey)
 	if err != nil {
 		err = eh.Errorf("unable to generate id: %w", err)
 		return
@@ -238,7 +241,7 @@ func (inst *Chunker) WriteString(s string) (n int, err error) {
 func NewChunker(chunkSize int) *Chunker {
 	bw := bufio.NewWriterSize(nil, chunkSize)
 	wra := &wrapper{buf: &bytes.Buffer{}}
-	wra.prepare(nil, nil, nil)
+	wra.prepare(context.Background(), nil, nil, nil)
 	return &Chunker{
 		bw:      bw,
 		wrapper: wra,
@@ -255,7 +258,7 @@ func (inst *Chunker) Close() error {
 			return eh.Errorf("unable to flush to writer: %w", err)
 		}
 		wra.forceFlush()
-		wra.prepare(nil, nil, nil)
+		wra.prepare(context.Background(), nil, nil, nil)
 	}
 	return nil
 }
@@ -274,14 +277,14 @@ func (inst *Chunker) Write(p []byte) (n int, err error) {
 	}
 }
 
-func (inst *Chunker) Prepare(idGen identifier.IdGeneratorI, naturalKey []byte, chunkRecv ChunkedWriterI) (err error) {
+func (inst *Chunker) Prepare(ctx context.Context, idGen identifier.IdGeneratorI, naturalKey []byte, chunkRecv ChunkedWriterI) (err error) {
 	if inst.wrapper.ready() {
 		err = inst.bw.Flush()
 		if err != nil {
 			err = eh.Errorf("unable to flush current writer before initializing next: %w", err)
 		}
 	}
-	inst.wrapper.prepare(idGen, naturalKey, chunkRecv)
+	inst.wrapper.prepare(ctx, idGen, naturalKey, chunkRecv)
 	inst.bw.Reset(inst.wrapper)
 	return
 }

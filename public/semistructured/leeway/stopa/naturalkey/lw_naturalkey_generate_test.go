@@ -1,6 +1,7 @@
 package naturalkey
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/identity/identgen/mem"
@@ -26,7 +27,7 @@ func TestEncoderEndAndGenerate_WithMemInternalizer(t *testing.T) {
 	require.NoError(t, err)
 
 	// First generation mints a fresh, valid, correctly-tagged id.
-	id1, fresh1, err := buildAcctKey().EndAndGenerate(gen, SerializationFormatCbor)
+	id1, fresh1, err := buildAcctKey().EndAndGenerate(context.Background(), gen, SerializationFormatCbor)
 	require.NoError(t, err)
 	require.True(t, fresh1)
 	require.True(t, id1.IsValid())
@@ -34,13 +35,13 @@ func TestEncoderEndAndGenerate_WithMemInternalizer(t *testing.T) {
 
 	// The identical key resolves to the same id (not fresh). EndAndGenerate2 also
 	// returns the serialized key it fed to the generator.
-	id2, key2, fresh2, err := buildAcctKey().EndAndGenerate2(gen, SerializationFormatCbor)
+	id2, key2, fresh2, err := buildAcctKey().EndAndGenerate2(context.Background(), gen, SerializationFormatCbor)
 	require.NoError(t, err)
 	require.False(t, fresh2)
 	require.Equal(t, id1, id2)
 
 	// Feeding that serialized key straight to the generator agrees.
-	idDirect, freshDirect, err := gen.GetId(key2)
+	idDirect, freshDirect, err := gen.GetId(context.Background(), key2)
 	require.NoError(t, err)
 	require.False(t, freshDirect)
 	require.Equal(t, id1, idDirect)
@@ -49,7 +50,7 @@ func TestEncoderEndAndGenerate_WithMemInternalizer(t *testing.T) {
 	enc := NewEncoder()
 	enc.Begin()
 	enc.AddStr("other")
-	id3, fresh3, err := enc.EndAndGenerate(gen, SerializationFormatCbor)
+	id3, fresh3, err := enc.EndAndGenerate(context.Background(), gen, SerializationFormatCbor)
 	require.NoError(t, err)
 	require.True(t, fresh3)
 	require.NotEqual(t, id1, id3)

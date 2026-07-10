@@ -1,6 +1,7 @@
 package seq
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -46,11 +47,11 @@ func TestExhaustion_MaxWidthTag(t *testing.T) {
 
 	var last identifier.UntaggedId
 	for i := 0; i < capacity; i++ {
-		u, _, err := gen.GetUntaggedId(nil)
+		u, _, err := gen.GetUntaggedId(context.Background(), nil)
 		require.NoError(t, err)
 		last = u
 	}
 	require.EqualValues(t, capacity, last, "the stream must end exactly at the body capacity")
-	_, _, err = gen.GetUntaggedId(nil)
+	_, _, err = gen.GetUntaggedId(context.Background(), nil)
 	require.ErrorIs(t, err, identgen.ErrIdSpaceExhausted)
 }

@@ -6,6 +6,7 @@
 package seq
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"sync"
@@ -41,9 +42,9 @@ type BadgerIdSequence struct {
 	maxId uint64
 }
 
-func (inst *BadgerIdSequence) GetId(naturalKey []byte) (id identifier.TaggedId, fresh bool, err error) {
+func (inst *BadgerIdSequence) GetId(ctx context.Context, naturalKey []byte) (id identifier.TaggedId, fresh bool, err error) {
 	var untagged identifier.UntaggedId
-	untagged, fresh, err = inst.GetUntaggedId(naturalKey)
+	untagged, fresh, err = inst.GetUntaggedId(ctx, naturalKey)
 	if err != nil {
 		return
 	}
@@ -55,7 +56,10 @@ func (inst *BadgerIdSequence) GetId(naturalKey []byte) (id identifier.TaggedId, 
 // ignored by contract (see identifier.IdGeneratorI); it used to be warned
 // about per call, which spammed the log of any caller using the seam
 // generically.
-func (inst *BadgerIdSequence) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
+func (inst *BadgerIdSequence) GetUntaggedId(ctx context.Context, naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
 	fresh = true
 	var raw uint64
 	raw, err = inst.seq.Next()

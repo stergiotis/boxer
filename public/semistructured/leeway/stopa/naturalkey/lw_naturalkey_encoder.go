@@ -2,6 +2,7 @@ package naturalkey
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"slices"
 	"strconv"
@@ -299,7 +300,7 @@ func (inst *Encoder) EndAndResolve(resolver ResolverI, format SerializationForma
 	inst.state = encoderStateEnded
 	return resolver.ResolveNaturalKey(key)
 }
-func (inst *Encoder) EndAndGenerate(idGen identifier.IdGeneratorI, format SerializationFormatE) (id identifier.TaggedId, fresh bool, err error) {
+func (inst *Encoder) EndAndGenerate(ctx context.Context, idGen identifier.IdGeneratorI, format SerializationFormatE) (id identifier.TaggedId, fresh bool, err error) {
 	switch inst.state {
 	case encoderStateBegun, encoderStateEnded:
 		break
@@ -319,9 +320,9 @@ func (inst *Encoder) EndAndGenerate(idGen identifier.IdGeneratorI, format Serial
 		return
 	}
 	inst.state = encoderStateEnded
-	return idGen.GetId(key)
+	return idGen.GetId(ctx, key)
 }
-func (inst *Encoder) EndAndGenerate2(idGen identifier.IdGeneratorI, format SerializationFormatE) (id identifier.TaggedId, key []byte, fresh bool, err error) {
+func (inst *Encoder) EndAndGenerate2(ctx context.Context, idGen identifier.IdGeneratorI, format SerializationFormatE) (id identifier.TaggedId, key []byte, fresh bool, err error) {
 	switch inst.state {
 	case encoderStateBegun, encoderStateEnded:
 		break
@@ -340,7 +341,7 @@ func (inst *Encoder) EndAndGenerate2(idGen identifier.IdGeneratorI, format Seria
 		return
 	}
 	inst.state = encoderStateEnded
-	id, fresh, err = idGen.GetId(key)
+	id, fresh, err = idGen.GetId(ctx, key)
 	if err != nil {
 		err = eh.Errorf("unable to generate id: %w", err)
 		return

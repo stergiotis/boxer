@@ -6,6 +6,7 @@
 package mem
 
 import (
+	"context"
 	"iter"
 	"slices"
 
@@ -59,7 +60,9 @@ func NewIdInternalizer(tagValue identifier.TagValue, estSize int) (inst *IdInter
 	return
 }
 
-func (inst *IdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
+// GetUntaggedId ignores ctx: the mapping is entirely in memory, so there is no
+// store or network work to bound or cancel.
+func (inst *IdInternalizer) GetUntaggedId(ctx context.Context, naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
 	if len(naturalKey) == 0 {
 		err = identgen.ErrEmptyNaturalKey
 		return
@@ -83,9 +86,9 @@ func (inst *IdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identifie
 	return
 }
 
-func (inst *IdInternalizer) GetId(naturalKey []byte) (id identifier.TaggedId, fresh bool, err error) {
+func (inst *IdInternalizer) GetId(ctx context.Context, naturalKey []byte) (id identifier.TaggedId, fresh bool, err error) {
 	var untagged identifier.UntaggedId
-	untagged, fresh, err = inst.GetUntaggedId(naturalKey)
+	untagged, fresh, err = inst.GetUntaggedId(ctx, naturalKey)
 	if err != nil {
 		return
 	}
@@ -152,7 +155,7 @@ func (inst *IdInternalizer) All() iter.Seq2[identifier.TaggedId, string] {
 // appending the ids to dst. See identgen.BatchInternalizerI. In memory this is a
 // plain loop, but it validates the batch up front (empty keys, id-space capacity)
 // so a bad batch assigns nothing.
-func (inst *IdInternalizer) AppendIds(dst []identifier.TaggedId, keys identgen.KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error) {
+func (inst *IdInternalizer) AppendIds(ctx context.Context, dst []identifier.TaggedId, keys identgen.KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error) {
 	n := keys.Len()
 	for i := range n {
 		if len(keys.At(i)) == 0 {
@@ -196,7 +199,7 @@ func (inst *IdInternalizer) AppendIds(dst []identifier.TaggedId, keys identgen.K
 	for i := range n {
 		var id identifier.TaggedId
 		var f bool
-		id, f, err = inst.GetId(keys.At(i))
+		id, f, err = inst.GetId(ctx, keys.At(i))
 		if err != nil {
 			return dst, fresh, err
 		}

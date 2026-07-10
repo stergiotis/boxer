@@ -5,6 +5,7 @@
 package internalized
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"slices"
@@ -54,7 +55,10 @@ func (inst *BadgerIdInternalizer) mappingKey(naturalKey []byte) (key []byte) {
 	return
 }
 
-func (inst *BadgerIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
+func (inst *BadgerIdInternalizer) GetUntaggedId(ctx context.Context, naturalKey []byte) (untagged identifier.UntaggedId, fresh bool, err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
 	if len(naturalKey) == 0 {
 		err = identgen.ErrEmptyNaturalKey
 		return
@@ -113,9 +117,9 @@ func (inst *BadgerIdInternalizer) GetUntaggedId(naturalKey []byte) (untagged ide
 	return
 }
 
-func (inst *BadgerIdInternalizer) GetId(naturalKey []byte) (id identifier.TaggedId, fresh bool, err error) {
+func (inst *BadgerIdInternalizer) GetId(ctx context.Context, naturalKey []byte) (id identifier.TaggedId, fresh bool, err error) {
 	var untagged identifier.UntaggedId
-	untagged, fresh, err = inst.GetUntaggedId(naturalKey)
+	untagged, fresh, err = inst.GetUntaggedId(ctx, naturalKey)
 	if err != nil {
 		return
 	}
@@ -137,7 +141,10 @@ func (inst *BadgerIdInternalizer) GetTag() (tag identifier.IdTag) {
 // in one read transaction plus as few write transactions as fit Badger's
 // transaction-size limit (usually one), amortising the per-call transaction
 // overhead. See identgen.BatchInternalizerI for the chunked-commit semantics.
-func (inst *BadgerIdInternalizer) AppendIds(dst []identifier.TaggedId, keys identgen.KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error) {
+func (inst *BadgerIdInternalizer) AppendIds(ctx context.Context, dst []identifier.TaggedId, keys identgen.KeysColumn, fresh []bool) (ids []identifier.TaggedId, freshOut []bool, err error) {
+	if err = ctx.Err(); err != nil {
+		return dst, fresh, err
+	}
 	n := keys.Len()
 	for i := range n {
 		if len(keys.At(i)) == 0 {

@@ -1,6 +1,7 @@
 package mem
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -34,24 +35,24 @@ func TestAppendIds_ExactCapacityCheck(t *testing.T) {
 
 	// Filling the space exactly succeeds, duplicates within the batch and
 	// re-resolution afterwards cost nothing.
-	ids, _, err := gen.AppendIds(nil, keys, nil)
+	ids, _, err := gen.AppendIds(context.Background(), nil, keys, nil)
 	require.NoError(t, err)
 	require.Len(t, ids, capacity)
 	require.Equal(t, capacity, gen.Len())
 
 	// All-existing batch at zero remaining: accepted (was ErrIdSpaceExhausted).
-	again, _, err := gen.AppendIds(nil, keys, nil)
+	again, _, err := gen.AppendIds(context.Background(), nil, keys, nil)
 	require.NoError(t, err)
 	require.Equal(t, ids, again)
 
 	// One genuinely fresh key beyond capacity: rejected atomically.
 	overflow := identgen.KeysColumn{}.AppendKey([]byte("fresh-overflow")).AppendKey([]byte("fresh-overflow"))
-	_, _, err = gen.AppendIds(nil, overflow, nil)
+	_, _, err = gen.AppendIds(context.Background(), nil, overflow, nil)
 	require.ErrorIs(t, err, identgen.ErrIdSpaceExhausted)
 	require.Equal(t, capacity, gen.Len(), "nothing assigned by the rejected batch")
 
 	// Existing keys still resolve via the single-key path after exhaustion.
-	id0, fresh0, err := gen.GetId(keys.At(0))
+	id0, fresh0, err := gen.GetId(context.Background(), keys.At(0))
 	require.NoError(t, err)
 	require.False(t, fresh0)
 	require.Equal(t, ids[0], id0)
@@ -68,7 +69,7 @@ func TestAppendIds_DuplicatesChargedOnce(t *testing.T) {
 	for i := 0; i < capacity+50; i++ { // 50 more entries than the space holds
 		keys = keys.AppendKey([]byte{byte(i % 200)}) // but only 200 distinct keys
 	}
-	ids, fresh, err := gen.AppendIds(nil, keys, make([]bool, 0))
+	ids, fresh, err := gen.AppendIds(context.Background(), nil, keys, make([]bool, 0))
 	require.NoError(t, err)
 	require.Len(t, ids, capacity+50)
 	require.Len(t, fresh, capacity+50)

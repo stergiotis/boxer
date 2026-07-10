@@ -1,5 +1,7 @@
 package identifier
 
+import "context"
+
 const TotalIdWidth = 64
 
 // TaggedId is the concatenation of a Tag with an UntaggedId.
@@ -16,10 +18,12 @@ type TagValue uint32
 type IdGeneratorI interface {
 	// GetId resolves or mints the tagged id for naturalKey; fresh reports a
 	// mint. Internalizing generators dedupe by key and reject an empty one;
-	// sequential generators ignore the key entirely and always mint.
-	GetId(naturalKey []byte) (id TaggedId, fresh bool, err error)
+	// sequential generators ignore the key entirely and always mint. ctx bounds
+	// a store- or network-backed generator's work — a block lease or a
+	// transaction — and may cancel it; purely in-memory generators ignore it.
+	GetId(ctx context.Context, naturalKey []byte) (id TaggedId, fresh bool, err error)
 	// GetUntaggedId is GetId without the tag composition.
-	GetUntaggedId(naturalKey []byte) (untagged UntaggedId, fresh bool, err error)
+	GetUntaggedId(ctx context.Context, naturalKey []byte) (untagged UntaggedId, fresh bool, err error)
 
 	// Release Call this to avoid waste. Calling GetId() after Release() is allowed (incurs a performance penalty)
 	Release() (err error)

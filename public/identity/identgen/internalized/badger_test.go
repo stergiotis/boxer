@@ -1,6 +1,7 @@
 package internalized
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -20,14 +21,14 @@ func TestBadgerIdInternalizer_RoundtripAndIdempotent(t *testing.T) {
 	defer func() { _ = gen.Release() }()
 
 	k := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
-	id1, fresh1, err := gen.GetId(k)
+	id1, fresh1, err := gen.GetId(context.Background(), k)
 	require.NoError(t, err)
 	require.True(t, fresh1)
 	require.True(t, id1.IsValid())
 	require.True(t, id1.RemoveTag().IsValid(), "body 0 is reserved as invalid/NULL")
 	require.EqualValues(t, 3, id1.GetTag().GetValue())
 
-	id2, fresh2, err := gen.GetId(k)
+	id2, fresh2, err := gen.GetId(context.Background(), k)
 	require.NoError(t, err)
 	require.False(t, fresh2)
 	require.Equal(t, id1, id2)
@@ -49,9 +50,9 @@ func TestBadgerIdInternalizer_TagIsolation(t *testing.T) {
 	defer func() { _ = genB.Release() }()
 
 	key := []byte("shared-key")
-	idA, _, err := genA.GetId(key)
+	idA, _, err := genA.GetId(context.Background(), key)
 	require.NoError(t, err)
-	idB, _, err := genB.GetId(key)
+	idB, _, err := genB.GetId(context.Background(), key)
 	require.NoError(t, err)
 
 	require.NotEqual(t, idA, idB)
@@ -59,7 +60,7 @@ func TestBadgerIdInternalizer_TagIsolation(t *testing.T) {
 	require.EqualValues(t, 2, idB.GetTag().GetValue())
 
 	// Each tag resolves its own key stably.
-	idA2, freshA2, err := genA.GetId(key)
+	idA2, freshA2, err := genA.GetId(context.Background(), key)
 	require.NoError(t, err)
 	require.False(t, freshA2)
 	require.Equal(t, idA, idA2)
@@ -73,9 +74,9 @@ func TestBadgerIdInternalizer_RejectsEmptyKey(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = gen.Release() }()
 
-	_, _, err = gen.GetId(nil)
+	_, _, err = gen.GetId(context.Background(), nil)
 	require.Error(t, err)
-	_, _, err = gen.GetId([]byte{})
+	_, _, err = gen.GetId(context.Background(), []byte{})
 	require.Error(t, err)
 }
 
@@ -86,7 +87,7 @@ func TestBadgerIdInternalizer_PersistsAcrossReopen(t *testing.T) {
 	gen, err := genFac.Create(identifier.TagValue(4), 16)
 	require.NoError(t, err)
 	key := []byte("persisted")
-	id1, _, err := gen.GetId(key)
+	id1, _, err := gen.GetId(context.Background(), key)
 	require.NoError(t, err)
 	require.NoError(t, gen.Release())
 	require.NoError(t, genFac.Close())
@@ -98,7 +99,7 @@ func TestBadgerIdInternalizer_PersistsAcrossReopen(t *testing.T) {
 	gen2, err := genFac2.Create(identifier.TagValue(4), 16)
 	require.NoError(t, err)
 	defer func() { _ = gen2.Release() }()
-	id2, fresh2, err := gen2.GetId(key)
+	id2, fresh2, err := gen2.GetId(context.Background(), key)
 	require.NoError(t, err)
 	require.False(t, fresh2, "mapping should have persisted across reopen")
 	require.Equal(t, id1, id2)
@@ -140,7 +141,7 @@ func TestBadgerIdInternalizer_ConcurrentGetId(t *testing.T) {
 			defer wg.Done()
 			for i := range perWorker {
 				key := fmt.Sprintf("w%d-k%d", w, i)
-				id, _, e := gen.GetId([]byte(key))
+				id, _, e := gen.GetId(context.Background(), []byte(key))
 				if e != nil {
 					errs <- e
 					return
@@ -181,7 +182,7 @@ func TestBadgerIdInternalizer_AppendIds(t *testing.T) {
 		keys = keys.AppendKey([]byte(k))
 	}
 
-	ids, fresh, err := bgen.AppendIds(nil, keys, make([]bool, 0))
+	ids, fresh, err := bgen.AppendIds(context.Background(), nil, keys, make([]bool, 0))
 	require.NoError(t, err)
 	require.Len(t, ids, 5)
 	require.Equal(t, ids[0], ids[2]) // dedup + alignment
@@ -195,13 +196,13 @@ func TestBadgerIdInternalizer_AppendIds(t *testing.T) {
 	}
 
 	// The mapping persisted: single GetId returns the same id, not fresh.
-	gotA, freshA, err := bgen.GetId([]byte("a"))
+	gotA, freshA, err := bgen.GetId(context.Background(), []byte("a"))
 	require.NoError(t, err)
 	require.False(t, freshA)
 	require.Equal(t, ids[0], gotA)
 
 	// Re-batching the same column resolves everything to the same ids, none fresh.
-	ids2, fresh2, err := bgen.AppendIds(nil, keys, make([]bool, 0))
+	ids2, fresh2, err := bgen.AppendIds(context.Background(), nil, keys, make([]bool, 0))
 	require.NoError(t, err)
 	require.Equal(t, ids, ids2)
 	require.Equal(t, []bool{false, false, false, false, false}, fresh2)
@@ -217,12 +218,12 @@ func TestBadgerIdInternalizer_AppendIds_RejectsEmptyKey(t *testing.T) {
 	bgen := gen.(identgen.BatchInternalizerI)
 
 	keys := identgen.KeysColumn{}.AppendKey([]byte("ok")).AppendKey([]byte(""))
-	out, _, err := bgen.AppendIds(nil, keys, nil)
+	out, _, err := bgen.AppendIds(context.Background(), nil, keys, nil)
 	require.ErrorIs(t, err, identgen.ErrEmptyNaturalKey)
 	require.Empty(t, out)
 
 	// The rejected batch persisted nothing: "ok" is still fresh.
-	_, fresh, err := bgen.GetId([]byte("ok"))
+	_, fresh, err := bgen.GetId(context.Background(), []byte("ok"))
 	require.NoError(t, err)
 	require.True(t, fresh)
 }
@@ -238,11 +239,11 @@ func BenchmarkBadgerIdInternalizer_GetId_Hit(b *testing.B) {
 	defer func() { _ = gen.Release() }()
 
 	key := []byte("de305d54-75b4-431b-adb2-eb6b9e546013")
-	_, _, _ = gen.GetId(key) // prime
+	_, _, _ = gen.GetId(context.Background(), key) // prime
 
 	b.ReportAllocs()
 	for b.Loop() {
-		_, _, _ = gen.GetId(key)
+		_, _, _ = gen.GetId(context.Background(), key)
 	}
 }
 
@@ -263,12 +264,12 @@ func BenchmarkBadgerIdInternalizer_AppendIds(b *testing.B) {
 	for i := range batch {
 		keys = keys.AppendKey(fmt.Appendf(nil, "k%d", i))
 	}
-	_, _, _ = bgen.AppendIds(nil, keys, nil) // prime
+	_, _, _ = bgen.AppendIds(context.Background(), nil, keys, nil) // prime
 
 	var dst []identifier.TaggedId
 	b.ReportAllocs()
 	for b.Loop() {
-		dst, _, _ = bgen.AppendIds(dst[:0], keys, nil)
+		dst, _, _ = bgen.AppendIds(context.Background(), dst[:0], keys, nil)
 	}
 	b.ReportMetric(batch, "keys/op")
 }

@@ -2,6 +2,7 @@ package chunked
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/identity/identgen/mem"
@@ -88,7 +89,7 @@ func TestChunkerSingleChunk_WithMemInternalizer(t *testing.T) {
 	rec := &recordingWriter{}
 	ch := NewChunker(64)
 	key := []byte("blob-A")
-	require.NoError(t, ch.Prepare(gen, key, rec))
+	require.NoError(t, ch.Prepare(context.Background(), gen, key, rec))
 
 	payload := []byte("small payload")
 	_, err = ch.Write(payload)
@@ -104,7 +105,7 @@ func TestChunkerSingleChunk_WithMemInternalizer(t *testing.T) {
 
 	// The id delivered to the writer is exactly the one the generator assigns
 	// to this natural key.
-	gotId, fresh, err := gen.GetId(key)
+	gotId, fresh, err := gen.GetId(context.Background(), key)
 	require.NoError(t, err)
 	require.False(t, fresh)
 	require.Equal(t, rec.id, gotId)
@@ -118,7 +119,7 @@ func TestChunkerMultiChunk_WithMemInternalizer(t *testing.T) {
 
 	rec := &recordingWriter{}
 	ch := NewChunker(4) // tiny chunk size to force multiple chunks
-	require.NoError(t, ch.Prepare(gen, []byte("blob-multi"), rec))
+	require.NoError(t, ch.Prepare(context.Background(), gen, []byte("blob-multi"), rec))
 
 	payload := []byte("0123456789abcdef") // 16 bytes
 	// Write one byte at a time so bufio buffers and flushes at chunk boundaries
@@ -146,7 +147,7 @@ func TestChunkerMultiChunk_Metadata(t *testing.T) {
 
 	rec := &recordingWriter{}
 	ch := NewChunker(4)
-	require.NoError(t, ch.Prepare(gen, []byte("blob"), rec))
+	require.NoError(t, ch.Prepare(context.Background(), gen, []byte("blob"), rec))
 	for _, b := range []byte("0123456789abcdef") { // 16 bytes -> 4 chunks of 4
 		_, err = ch.Write([]byte{b})
 		require.NoError(t, err)
@@ -184,7 +185,7 @@ func TestChunkerEmpty_SuppressesChunksAndId(t *testing.T) {
 
 	rec := &recordingWriter{}
 	ch := NewChunker(64)
-	require.NoError(t, ch.Prepare(gen, []byte("empty-blob"), rec))
+	require.NoError(t, ch.Prepare(context.Background(), gen, []byte("empty-blob"), rec))
 	require.NoError(t, ch.Close()) // no writes
 
 	require.False(t, rec.idSet, "no chunks should be emitted for an empty blob")
@@ -201,7 +202,7 @@ func TestChunkerReuseAcrossBlobs_WithMemInternalizer(t *testing.T) {
 
 	write := func(key, payload []byte) identifier.TaggedId {
 		rec := &recordingWriter{}
-		require.NoError(t, ch.Prepare(gen, key, rec))
+		require.NoError(t, ch.Prepare(context.Background(), gen, key, rec))
 		_, e := ch.Write(payload)
 		require.NoError(t, e)
 		require.NoError(t, ch.Close())
