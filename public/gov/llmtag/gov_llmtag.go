@@ -32,9 +32,16 @@ type LLMIdentity struct {
 var KnownLLMIdentities = []LLMIdentity{
 	{Display: "Claude Opus 4.6", Tag: "opus46"},
 	{Display: "Claude Opus 4.7", Tag: "opus47"},
+	{Display: "Claude Opus 4.8", Tag: "opus48"},
 	{Display: "Claude Sonnet 4.6", Tag: "sonnet46"},
+	{Display: "Claude Sonnet 5", Tag: "sonnet5"},
 	{Display: "Claude Haiku 4.5", Tag: "haiku45"},
+	{Display: "Claude Fable 5", Tag: "fable5"},
 	{Display: "Gemini 3 Pro", Tag: "gemini3pro"},
+	{Display: "Codex GPT-5", Tag: "codexgpt5"},
+	{Display: "Kimi 2.7", Tag: "kimi27"},
+	{Display: "Antigravity", Tag: "antigravity"},
+	{Display: "qwen3.6", Tag: "qwen36"},
 }
 
 // ApplyOpE selects whether the Applier mutates files or only reports.
