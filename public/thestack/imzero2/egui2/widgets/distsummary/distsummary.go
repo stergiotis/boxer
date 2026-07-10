@@ -211,7 +211,17 @@ type Renderer struct {
 	popupPad    float32
 	showN       bool
 	showIcon    bool
-	formatFunc  FormatFunc
+	// inline suppresses the level-1 anchor's own [c.Horizontal] wrapper so
+	// the label + toggle are emitted directly into the caller's row. A
+	// centered horizontal nested inside another centered horizontal sits a
+	// few px below its plain-widget siblings (the "Ragged Control Row" issue
+	// in imzero2 SKILL.md), so a distsummary dropped into a status bar reads
+	// as misaligned. Callers already inside a [c.Horizontal] set this via
+	// [Renderer.Inline]; the default (false) keeps the wrapper so a
+	// standalone Render in a vertical parent still lays the toggle beside
+	// the label rather than beneath it.
+	inline     bool
+	formatFunc FormatFunc
 	// unit, when non-empty, is written once after the last quantile value
 	// (e.g. "fps", "ms", "MB") so the level-1 summary reads as a dimensioned
 	// line. Empty (default) appends nothing. Set via Unit.
@@ -525,6 +535,22 @@ func (inst Renderer) ShowIcon(b bool) (out Renderer) {
 	return
 }
 
+// Inline emits the level-1 anchor (summary label + inspector toggle)
+// directly into the caller's layout instead of inside distsummary's own
+// [c.Horizontal] wrapper. Set it when the anchor is placed in a row the
+// caller already opened — e.g. a status bar — so it aligns on the row's
+// shared baseline; egui seats a centered horizontal nested inside another
+// centered horizontal a few px below its plain-widget siblings (the
+// "Ragged Control Row" note in imzero2 SKILL.md). The caller MUST provide
+// the horizontal context: without it (a vertical parent) the toggle lands
+// beneath the label instead of beside it. Default false keeps the wrapper,
+// which is correct for a standalone Render. See [Renderer.inline].
+func (inst Renderer) Inline() (out Renderer) {
+	inst.inline = true
+	out = inst
+	return
+}
+
 // Format replaces the per-value formatter. Useful for unit-suffixed
 // values, fixed precision, or domain-specific rounding. Passing nil
 // is a no-op (the existing formatter is retained).
@@ -615,10 +641,25 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, digest *tdigest.TDigest, e
 	labelAtoms := c.Atoms().BeginRichText(label).Monospace().End().Keep()
 	tether := inspector.NewAnchorTether(scope)
 	toggleId := c.MakeAbsoluteIdStr(scope + "-anchor-toggle")
-	for range c.Horizontal().KeepIter() {
+	// Level-1 anchor: summary label + inspector toggle. In inline mode the
+	// caller already owns a horizontal row, so emit straight into it — a
+	// nested horizontal would seat the anchor a few px below its siblings
+	// (see [Renderer.inline]). Otherwise wrap in our own horizontal so a
+	// standalone Render keeps the toggle beside, not beneath, the label.
+	// CaptureToggle still pins the tether's "from" endpoint at the toggle's
+	// right edge in both modes: the toggle is the last item emitted, so the
+	// captured row's max-x is the toggle's right edge either way.
+	emitAnchor := func() {
 		c.LabelAtoms(labelAtoms).Send()
 		inspector.AnchorToggle(toggleId, &state.pinned)
 		tether.CaptureToggle()
+	}
+	if inst.inline {
+		emitAnchor()
+	} else {
+		for range c.Horizontal().KeepIter() {
+			emitAnchor()
+		}
 	}
 
 	if !state.pinned {

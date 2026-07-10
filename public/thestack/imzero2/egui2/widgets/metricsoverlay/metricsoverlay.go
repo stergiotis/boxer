@@ -25,7 +25,12 @@ import (
 // frame-rate distribution. An integer-fps formatter keeps the inline
 // 5-number summary compact in the status bar; the anchor toggle opens the
 // ECDF / letter-value inspector over the same window for the full picture.
-var fpsDist = distsummary.New("fps").Format(formatFps).Unit("fps")
+// Inline: RenderInline runs inside the host chrome's own status-bar
+// c.Horizontal (see host/chrome.go), so the anchor emits straight into that
+// row. Left to wrap itself, distsummary's nested horizontal would seat the
+// fps summary a few px below the neighbouring Go/Rust/vsync readout (the
+// "Ragged Control Row" note in imzero2 SKILL.md).
+var fpsDist = distsummary.New("fps").Format(formatFps).Unit("fps").Inline()
 
 // formatFps renders one fps quantile for the compact inline summary. Whole
 // numbers read cleanly at a glance in the bar; the inspector window carries
