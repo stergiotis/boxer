@@ -177,20 +177,24 @@ wired in:
 **Recursion guard:** the descriptor store's own writes run with stamping
 **off** — interning a fact must not try to intern its own write's stack.
 
-### SD4 — Granularity: entity-level default, attribute-level opt-in
+### SD4 — Granularity: attribute-level
 
-Memberships are per-attribute; there is no entity-level membership lane. Two
-tiers, entity-level the default:
+Stamping is **attribute-level**: the surrogate ids apply as ambient HighCardRef
+memberships to *every* attribute the entity writes (via M1). One tier, no
+opt-in.
 
-- **Entity-level** (default) — one **synthetic single-attribute dimension
-  section** per row carries the id(s): one extra attribute per row, cheap,
-  and enough to attribute the whole entity.
-- **Attribute-level** (opt-in) — the ambient id is applied to *every*
-  attribute the entity writes (via M1), for field-level attribution at the cost
-  of one id per payload attribute.
-
-Kill "attribute-level always": on a fat event log it multiplies the membership
-count per row for attribution most consumers want only per entity.
+An **entity-level** tier — one id per row rather than one per attribute — was
+considered and dropped. Memberships are per-attribute (there is no row-level
+membership lane), so "one stamp per row" would need a dedicated **synthetic
+single-attribute section** baked into the store's schema (DML/DDL/RA) behind a
+generation-time flag — a change through the whole leeway pipeline. And the
+saving is small: every attribute of one entity carries the **same** id, so
+ClickHouse RLE / low-cardinality encoding compresses the repeated value away;
+only the per-attribute membership *list structure* grows O(N), which is cheap.
+The synthetic section is not worth its schema and generator cost — revisit only
+if a fat-row consumer profiles that O(N) list overhead as material, and then a
+plain backbone provenance column is likely lighter than a synthetic tagged
+section anyway.
 
 ### SD5 — Flush ordering: dimension durable no later than payload
 
@@ -228,15 +232,16 @@ is gated behind a store option (with room for a host-only tier and sampling).
 ## Usage sketch
 
 ```go
-prov := provenance.New(idGen, provExec, alloc)                  // DimensionStore[Provenance]
-st   := NewDeviceStore(exec, alloc, cfg,
-            recordstore.WithStamper(prov.Stamper()))            // opt-in; ordered flush binds prov
-st.Begin(id, ts, env).AddIdentity(Identity{...}).Commit()      // Identity's attrs carry the prov id
-st.Flush(ctx)                                                  // prov flushed first, then payload
+provStore := provenance.NewProvenanceStore(exec, alloc, provenance.ProvenanceStoreConfig{})
+rec, _    := provenance.NewRecorder(idGen, provenance.NewStoreSink(provStore))  // captures + interns
+st        := NewDeviceStore(exec, alloc, DeviceStoreConfig{
+                 Stampers: []recordstore.ReferenceStamper{rec.Stamper()}})      // opt-in; ordered flush binds prov
+st.Begin(id, ts).AddIdentity(Identity{...}).Commit()                            // Identity's attrs carry the prov id
+st.Flush(ctx)                                                                   // prov flushed first, then payload
 
 // read side
-ent, _, _ := st.Latest(ctx, id)                                // typed decode: prov ids invisible
-who, _, _ := prov.Resolve(ctx, provID)                         // host + frames, cached
+ent, _, _ := st.Latest(ctx, id)                                                 // typed decode: prov ids invisible
+who, _, _ := rec.Resolve(ctx, provID)                                           // host + frames, cached
 ```
 
 ## Consequences
@@ -345,7 +350,7 @@ who, _, _ := prov.Resolve(ctx, provID)                         // host + frames,
   as a caveat in `provenance.key` (Deferred).
 - **S2** — the stamping path: the ambient-membership primitive (M1) in the
   leeway DML runtime/generator, the `ReferenceStamper` seam on the generated
-  store (gated, inert when off), entity-level granularity (SD4) and ordered
+  store (gated, inert when off), attribute-level granularity (SD4) and ordered
   flush (SD5). Wire the `provenance` `DimensionStore` from S1 as the first
   stamper. End-to-end test: write with provenance on → flush → payload
   attributes carry the surrogate id (typed decode unaffected) → `Resolve`
@@ -370,13 +375,13 @@ who, _, _ := prov.Resolve(ctx, provID)                         // host + frames,
   `Commit`/`Rollback`. Provenance's `Recorder.Stamper()` adapts it; the capture
   skip is tuned for the store call path (the two store frames it leaves are
   honest context). The recursion guard falls out — the provenance store carries
-  no stampers. Two **approved deviations** from the stated defaults, both noting
-  a lighter cut: granularity is **attribute-level** (M1 on every attribute), not
-  the SD4 entity-level synthetic section — deferred, and softened because every
-  attribute of one entity shares the same id (ClickHouse RLE compresses it); and
-  `Begin` consults stampers with `context.Background()` rather than gaining a ctx
-  parameter — fine for the in-memory interner, revisit when a durable/networked
-  one (ADR-0111) needs the ctx. End-to-end test (`example`): a device write
+  no stampers. Granularity is **attribute-level** (M1 on every attribute) — now
+  SD4's settled model; the entity-level synthetic section was dropped (RLE
+  compresses the repeated id, so it is not worth the schema/generator cost). One
+  **approved deviation** remains: `Begin` consults stampers with
+  `context.Background()` rather than gaining a ctx parameter — fine for the
+  in-memory interner, revisit when a durable/networked one (ADR-0111) needs the
+  ctx. End-to-end test (`example`): a device write
   through a provenance stamper → flush → the stored row's HighCardRef membership
   resolves to the writer's host and stack; inert (all suites pass) with no
   stamper set. **Ordered flush (SD5) is done:** the store's Flush flushes its
@@ -384,28 +389,27 @@ who, _, _ := prov.Resolve(ctx, provID)                         // host + frames,
   referencing row is never durable ahead of its descriptor fact — a
   `BestEffortStampFlush` config toggle opts into the relaxation. The end-to-end
   test now resolves the stamped id after `dev.Flush` alone (no manual provenance
-  flush), proving the ordering. **S2 is complete.** Deferred beyond it: the
-  entity-level synthetic section (SD4) and membership flavours other than
-  HighCardRef.
-- **S3** — attribute-level opt-in (SD4); a readback artefact for querying by
-  dimension membership; the host-only / sampled provenance tiers.
+  flush), proving the ordering. **S2 is complete.** Deferred beyond it:
+  membership flavours other than HighCardRef (the entity-level synthetic section
+  was dropped — see SD4).
+- **S3** — a readback artefact for querying by dimension membership; the
+  host-only / sampled provenance capture tiers. (SD4 granularity is settled at
+  attribute-level; there is no entity-level tier.)
 - **S4** — a second dimension (the first real trace/causation/tenant consumer)
   extracts the registry, with its interface earned rather than guessed.
 
 ## Status
 
-Proposed. Open forks for review: the M1 ambient-membership surface on the DML
-builder (SD2); the entity-vs-attribute default (SD4); and whether ordered flush
-is the default or opt-in (SD5). Depends on ADR-0111 for the id-generation seam.
-S1 is scoped to the `DimensionStore` runtime and the provenance instance — the
-intern/emit/resolve loop — keeping the shared DML-subsystem change (M1) and its
-tighter ADR-0111 coupling in S2, so none of those three forks blocks S1. S1 is
-now **implemented and tested** (round-trip green against clickhouse-local), and
-**S2 is complete** — the M1 ambient primitive, the `ReferenceStamper` seam, and
-ordered flush (SD5), each with tests. The ADR stays proposed pending human
-review — flip to accepted with a reviewer now that S1 and S2 are in; S3
-(attribute-level opt-in, query artefact, tiers) and S4 (a second dimension)
-remain optional follow-ups.
+Proposed. **S1 and S2 are implemented and tested** (round-trips green against
+clickhouse-local): the `DimensionStore` runtime and the provenance instance
+(S1); the M1 ambient-membership primitive, the `ReferenceStamper` seam, and
+ordered flush (S2). The earlier open forks are settled — M1's DML surface is
+built, SD4 granularity is fixed at attribute-level (the entity-level synthetic
+section dropped), and SD5 is ordered-flush-by-default with a best-effort toggle.
+Depends on ADR-0111 for the id-generation seam (its `GetId(ctx)` has landed).
+The ADR stays proposed pending human review — ready to flip to accepted with a
+reviewer. S3 (a readback artefact, host-only / sampled capture tiers) and S4 (a
+second dimension) remain optional follow-ups.
 
 ## References
 
