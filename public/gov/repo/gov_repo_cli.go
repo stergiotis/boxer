@@ -205,6 +205,61 @@ func NewCliCommand() *cli.Command {
 				},
 			},
 			{
+				Name:  "ownership",
+				Usage: "Show surviving-line ownership per file (git blame × Co-Authored-By provenance)",
+				Flags: slices.Concat([]cli.Flag{
+					&cli.StringFlag{
+						Name:  "repo",
+						Value: ".",
+						Usage: "Path to git repository",
+					},
+					&cli.IntFlag{
+						Name:  "parallelism",
+						Value: 0,
+						Usage: "Concurrent git blame processes (0 = auto)",
+					},
+					&cli.BoolFlag{
+						Name:  "summary",
+						Usage: "Show aggregated owner totals and model sponsorship instead of per-file records",
+					},
+				}, fmtFlags),
+				Action: func(c *cli.Context) error {
+					git := gitFromContext(c)
+					analyzer := &OwnershipAnalyzer{
+						Parallelism: c.Int("parallelism"),
+					}
+					if c.Bool("summary") {
+						summary, sumErr := analyzer.RunSummary(c.Context, &git)
+						if sumErr != nil {
+							return eh.Errorf("ownership analysis failed: %w", sumErr)
+						}
+						for _, owner := range summary.Owners {
+							err = f.FormatValue(c, owner)
+							if err != nil {
+								return eh.Errorf("unable to format value: %w", err)
+							}
+						}
+						for _, sponsor := range summary.Sponsors {
+							err = f.FormatValue(c, sponsor)
+							if err != nil {
+								return eh.Errorf("unable to format value: %w", err)
+							}
+						}
+						return nil
+					}
+					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+						if iterErr != nil {
+							return eh.Errorf("ownership analysis failed: %w", iterErr)
+						}
+						err = f.FormatValue(c, rec)
+						if err != nil {
+							return eh.Errorf("unable to format value: %w", err)
+						}
+					}
+					return nil
+				},
+			},
+			{
 				Name:  "firefighting",
 				Usage: "Show reverts, hotfixes, and emergency commits",
 				Flags: slices.Concat(sharedFlags(), fmtFlags, []cli.Flag{
