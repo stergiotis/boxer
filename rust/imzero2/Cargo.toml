@@ -25,7 +25,13 @@ required-features = ["headless"]
 # render-to-texture host (hand-rolled egui::Context + egui_wgpu loop, no
 # window system) that feeds the remote-access pixel pipeline. The FFFI2
 # interpreter body is shared verbatim between the two hosts.
-default = ["desktop"]
+#
+# `inspection` rides along in the desktop default so every desktop build is
+# egui_mcp-capable without a bespoke rebuild; it stays dormant until the
+# EGUI_INSPECTION env var opens the port (see the `inspection` feature note
+# below). Headless builds pass `--no-default-features`, so they never pick it
+# up — and could not, since `inspection` pulls in the eframe-only `desktop`.
+default = ["desktop", "inspection"]
 # egui-wgpu is pulled in transitively by eframe under `desktop`; declare it on
 # the feature too so `entry.rs` can name `egui_wgpu::wgpu::PresentMode` when
 # mapping the `-vsync` flag onto the wgpu swapchain (eframe 0.35 dropped the
@@ -54,11 +60,21 @@ headless_svg = []
 # env var is set (binds 127.0.0.1:5719 by default). No imzero2 code path is
 # involved: the plugin reads the AccessKit tree and injects input/screenshot
 # requests one layer below the FFFI2 interpreter, so an out-of-process MCP
-# agent can drive the desktop host. Off by default and deliberately not in
-# `default` — an open inspection port is unauthenticated remote control of the
-# app plus its screen, so it must never ship in a production or headless build;
-# opt in only for a trusted local agent-driven session. Desktop host only
-# (eframe). See doc/howto/egui-mcp.md.
+# agent can drive the desktop host. Desktop host only (eframe).
+#
+# Bundled into the desktop `default` (above): the code is compiled in but inert
+# — eframe attaches the plugin, generates the AccessKit tree, and opens the
+# port ONLY when EGUI_INSPECTION is set, so an unset build pays ~0.7 MB of
+# binary and no per-frame cost. The runtime env var, not the compile flag, is
+# the gate: default off, and its truthy default binds loopback (127.0.0.1)
+# only. Two things bound the blast radius of that gate: the port is still
+# unauthenticated remote control of the app plus its screen, and 127.0.0.1 is
+# host-scoped (any local user), so only enable it on a trusted, ideally
+# single-user host; and it cannot reach the remote-access carrier at all, since
+# that ships headless (`--no-default-features`) and `inspection` requires the
+# eframe-only `desktop`. Precedent for an always-compiled loopback dev port:
+# the puffin profiler server (main.rs, under `--features puffin`). See
+# doc/howto/egui-mcp.md.
 inspection = ["desktop", "eframe?/inspection"]
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]

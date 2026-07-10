@@ -21,12 +21,13 @@ inspection path.
 
 The two halves:
 
-- **App side** — enable eframe's `inspection` feature (imzero2's `inspection`
-  feature does this) and set `EGUI_INSPECTION`. eframe's wgpu integration then
-  auto-attaches the `egui_inspection` plugin at startup and binds a TCP port. The
-  plugin reads the AccessKit tree egui already emits and injects input/screenshot
-  requests *below* the FFFI2 interpreter, so imzero2's Go-driven render loop is
-  untouched.
+- **App side** — imzero2's `inspection` feature (which turns on eframe's) ships
+  in the desktop default build, so you only set `EGUI_INSPECTION` at runtime.
+  eframe's wgpu integration then auto-attaches the `egui_inspection` plugin at
+  startup and binds a TCP port. The plugin reads the AccessKit tree egui already
+  emits and injects input/screenshot requests *below* the FFFI2 interpreter, so
+  imzero2's Go-driven render loop is untouched. With the env var unset the plugin
+  is never attached — the feature is compiled in but inert.
 - **Agent side** — the `egui-mcp` binary, installed and registered with your
   agent separately (below). It connects to the app's port and exposes the tools.
 
@@ -37,12 +38,13 @@ is for locally driving the eframe window with an agent, not for remote viewing.
 ## 1. Run imzero2 with inspection enabled
 
 The quickest path is `hmi.sh`: when `EGUI_INSPECTION` is set to a truthy value it
-builds the Rust client with the (off-by-default) `inspection` feature, exports the
-variable so the launched client inherits it, and starts the demo.
+exports the variable so the launched client inherits it and starts the demo. The
+`inspection` feature is already in the desktop default build, so no special build
+flag or rebuild is involved.
 
 ```sh
 cd rust/imzero2
-EGUI_INSPECTION=1 ./hmi.sh          # builds with --features inspection, binds 127.0.0.1:5719
+EGUI_INSPECTION=1 ./hmi.sh          # binds 127.0.0.1:5719
 ```
 
 `EGUI_INSPECTION` is read by eframe itself:
@@ -56,14 +58,9 @@ EGUI_INSPECTION=1 ./hmi.sh          # builds with --features inspection, binds 1
 On startup you should see `egui_inspection: listening on 127.0.0.1:5719` in the
 client's stderr. If instead you see *"Inspection env var set but app was compiled
 without eframe/inspection feature"*, the client binary was built without the
-feature — force a rebuild (`HMI_BUILD=1 EGUI_INSPECTION=1 ./hmi.sh`).
-
-To build the client yourself instead of through `hmi.sh`:
-
-```sh
-cd rust/imzero2
-cargo build --release --features inspection      # or: IMZERO2_BUILD_FEATURES=inspection ./build_rust.sh
-```
+feature — which for the desktop build only happens if you disabled defaults
+(`--no-default-features`) or built a headless target; rebuild with defaults
+(a plain `./build_rust.sh` or `cargo build --release` includes it).
 
 The Go launcher passes its environment through to the client process, so any
 launch path (`hmi.sh`, `app imzero2 demo --clientBinary …`) that inherits
@@ -129,13 +126,19 @@ pixels with no node behind them.
 ## Security
 
 The inspection port is **unauthenticated remote control**: anyone who can reach it
-can drive the app and read its screen. Two deliberate guards keep that contained:
+can drive the app and read its screen. The `inspection` feature is compiled into
+the desktop default build, so the **runtime env var is the gate**, not the build:
 
-- The `inspection` cargo feature is **off by default and not in `default`** — a
-  normal or headless build has no inspection code and cannot open the port. Never
-  ship a production build with it.
-- Even compiled in, the port stays closed unless `EGUI_INSPECTION` is set, and the
-  truthy default binds **loopback only** (`127.0.0.1`).
+- The port stays closed unless `EGUI_INSPECTION` is set. Unset, eframe never
+  attaches the plugin, so there is no listener and no per-frame accessibility
+  cost — the compiled-in code is inert.
+- When set, the truthy default binds **loopback only** (`127.0.0.1`). Note that
+  loopback is **host-scoped, not user-scoped**: any local user on the same
+  machine can connect. Enable it only on a trusted, ideally single-user host.
+- The remote-access carrier is out of reach regardless: it ships **headless**
+  (`--no-default-features`), and `inspection` pulls in the eframe-only `desktop`,
+  so a headless build cannot compile it in. Keep it that way — do not add
+  `inspection` to a headless or otherwise network-exposed build.
 
 Binding a non-loopback address (`0.0.0.0:5719`, a LAN IP) exposes that control to
 the network with no authentication; `egui_inspection` logs a warning when you do.

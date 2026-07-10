@@ -183,12 +183,13 @@ escape hatch if it ever outgrows hand-maintenance).
 
 The desktop host can be driven by an MCP agent — reading the widget tree and
 injecting clicks/keys/screenshots — through egui's upstream `egui_inspection`
-protocol. Build the client with the off-by-default `inspection` feature and set
-`EGUI_INSPECTION` (e.g. `EGUI_INSPECTION=1 ./hmi.sh`); eframe binds a loopback
-inspection port that the separately-installed
+protocol. The `inspection` feature is part of the desktop default build, so you
+just set `EGUI_INSPECTION` (e.g. `EGUI_INSPECTION=1 ./hmi.sh`); eframe then binds
+a loopback inspection port that the separately-installed
 [egui-mcp](https://github.com/rerun-io/kittest_inspector) server connects to. The
-port is unauthenticated remote control, so the feature is off by default and must
-never ship in a production build. Full steps and the security note:
+port is unauthenticated remote control, so it stays closed until `EGUI_INSPECTION`
+opens it (loopback only), and the headless remote-access build excludes the
+feature entirely. Full steps and the security note:
 [doc/howto/egui-mcp.md](../../doc/howto/egui-mcp.md).
 
 ## Layout
