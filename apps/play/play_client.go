@@ -214,9 +214,19 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		_ = resp.Body.Close()
-		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", string(msg)).Errorf("clickhouse http error")
+		// ClickHouse reports the real problem — the SQL error text and its help
+		// hint — in the response body. Fold it into the error *message* (not
+		// only the structured field) so the play UI, which renders err.Error()
+		// in the Table tab and the status bar, shows the user what actually
+		// failed instead of a bare "clickhouse http error".
+		detail := strings.TrimSpace(string(raw))
+		bld := eb.Build().Int("statusCode", resp.StatusCode).Str("body", detail)
+		if detail == "" {
+			detail = "(empty response body)"
+		}
+		err = bld.Errorf("clickhouse http %d: %s", resp.StatusCode, detail)
 		return
 	}
 	summary = parseSummaryHeader(resp.Header.Get("X-ClickHouse-Summary"))

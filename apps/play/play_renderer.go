@@ -1270,7 +1270,9 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	if err != nil && rec == nil {
 		for range c.ScrollArea().Vscroll(true).KeepIter() {
 			c.Label("Query failed:").Send()
-			c.Label(err.Error()).Wrap().Send()
+			// Selectable so the ClickHouse diagnostic (folded into err.Error()
+			// by ExecuteArrowStream) can be copied out to search or a bug report.
+			c.Label(err.Error()).Wrap().Selectable(true).Send()
 		}
 		return
 	}

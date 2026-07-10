@@ -298,6 +298,65 @@ func TestExecuteArrowStreamFailingPreExecutePassFallsBack(t *testing.T) {
 	}
 }
 
+// TestExecuteArrowStreamSurfacesClickHouseErrorBody: an invalid query comes
+// back as a non-2xx whose body carries ClickHouse's real diagnostic (the "help
+// text"). ExecuteArrowStream must fold that body into err.Error() — not bury it
+// in a structured field only — because the play UI renders err.Error() in the
+// Table tab and status bar. Without this the user sees a bare "clickhouse http
+// error" and none of the actual cause.
+func TestExecuteArrowStreamSurfacesClickHouseErrorBody(t *testing.T) {
+	const chErr = "Code: 47. DB::Exception: Unknown expression identifier 'nope' in scope SELECT nope. (UNKNOWN_IDENTIFIER) (version 24.8.1.1 (official build))"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		// ClickHouse terminates the diagnostic with a newline; the client must
+		// still surface it verbatim (trimmed).
+		_, _ = io.WriteString(w, chErr+"\n")
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT nope`, memory.NewGoAllocator(), nil)
+	if rdr != nil {
+		t.Cleanup(rdr.Release)
+	}
+	if closer != nil {
+		t.Cleanup(func() { _ = closer.Close() })
+	}
+	if err == nil {
+		t.Fatalf("expected an error for a non-200 response, got nil")
+	}
+	got := err.Error()
+	if !strings.Contains(got, chErr) {
+		t.Errorf("error message missing ClickHouse body:\n got: %q\n want substring: %q", got, chErr)
+	}
+	if !strings.Contains(got, "400") {
+		t.Errorf("error message missing status code 400: %q", got)
+	}
+}
+
+// TestExecuteArrowStreamErrorWithEmptyBody: a non-2xx with no body must still
+// produce a legible error (status + a placeholder), never a dangling
+// "clickhouse http 500: " with a trailing colon and nothing after it.
+func TestExecuteArrowStreamErrorWithEmptyBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	_, _, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
+	if err == nil {
+		t.Fatalf("expected an error for a 500 response, got nil")
+	}
+	got := err.Error()
+	if !strings.Contains(got, "500") {
+		t.Errorf("error message missing status code 500: %q", got)
+	}
+	if !strings.Contains(got, "empty response body") {
+		t.Errorf("empty-body error should note the empty body: %q", got)
+	}
+}
+
 // TestExecuteArrowStreamExpandsLwIdMacrosViaStandardSet drives the real
 // standard pass set (passreg/defaults) through the client: LW_ID_* macros
 // leave expanded, param slots survive the ExtractParams→expand ordering,
