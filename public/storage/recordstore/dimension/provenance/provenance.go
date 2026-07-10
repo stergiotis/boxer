@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"iter"
 	"os"
 	"runtime"
 
@@ -53,13 +54,42 @@ func NewRecorder(gen identifier.IdGeneratorI, sink dimension.DescriptorSink[Prov
 // surrogate id it maps to. Symbolication runs only on the first sight of a
 // stack, inside the fresh-gated describe.
 func (inst *Recorder) Reference(ctx context.Context) (id identifier.TaggedId, err error) {
+	return inst.reference(ctx, inst.skip)
+}
+
+// reference captures the stack skip frames above runtime.Callers and interns
+// it. Reference uses inst.skip (direct call); the Stamper adapter passes a
+// deeper skip for the store call path.
+func (inst *Recorder) reference(ctx context.Context, skip int) (id identifier.TaggedId, err error) {
 	var pcbuf [maxDepth]uintptr
-	n := runtime.Callers(inst.skip, pcbuf[:])
+	n := runtime.Callers(skip, pcbuf[:])
 	pcs := make([]uintptr, n)
 	copy(pcs, pcbuf[:n])
 	return inst.dim.Reference(ctx, inst.key(pcs), func() Provenance {
 		return Provenance{Host: inst.host, Stack: symbolicate(pcs)}
 	})
+}
+
+// stamperCaptureSkip trims runtime.Callers, Recorder.reference and the Current
+// seq closure, so the first captured frame is the store's applyStampers and the
+// user's Begin call site follows — enough to distinguish write sites in the key
+// and to attribute the row. The two store frames it leaves (applyStampers,
+// Begin) are honest context, not noise to hide.
+const stamperCaptureSkip = 3
+
+// Stamper adapts the Recorder to recordstore.ReferenceStamper, so it can be
+// registered on a payload store via <Store>StoreConfig.Stampers and consulted
+// on every Begin. Do not register a provenance store's own recorder on that
+// same store — interning a fact would recurse.
+func (inst *Recorder) Stamper() recordstore.ReferenceStamper { return stamper{inst} }
+
+type stamper struct{ r *Recorder }
+
+func (s stamper) Current(ctx context.Context) iter.Seq2[identifier.TaggedId, error] {
+	return func(yield func(identifier.TaggedId, error) bool) {
+		id, err := s.r.reference(ctx, stamperCaptureSkip)
+		yield(id, err)
+	}
 }
 
 // Resolve returns the host and frames a surrogate id was minted for.

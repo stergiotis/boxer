@@ -363,10 +363,26 @@ who, _, _ := prov.Resolve(ctx, provID)                         // host + frames,
   were regenerated — behaviour-inert with nothing pushed (every consumer suite
   passes) — and a DML→read-access test (`example/internal/lowlevel`) proves a
   pushed id lands in the HighCardRef lane alongside the codec's own membership.
-  Remaining S2: the `ReferenceStamper` seam on the generated store, the
-  capture-skip handling, entity-vs-attribute scope (SD4), and ordered flush
-  (SD5). Other membership flavours beyond HighCardRef are a mechanical repeat
-  (Deferred).
+  The **`ReferenceStamper` seam is done** (`recordstore/gen/store_emit.go`,
+  `recordstore.ReferenceStamper`): `<Store>Config` gains a `Stampers` slice; the
+  store consults them once per `Begin` (`applyStampers`), pushing each yielded
+  id as an ambient HighCardRef membership and popping the count at
+  `Commit`/`Rollback`. Provenance's `Recorder.Stamper()` adapts it; the capture
+  skip is tuned for the store call path (the two store frames it leaves are
+  honest context). The recursion guard falls out — the provenance store carries
+  no stampers. Two **approved deviations** from the stated defaults, both noting
+  a lighter cut: granularity is **attribute-level** (M1 on every attribute), not
+  the SD4 entity-level synthetic section — deferred, and softened because every
+  attribute of one entity shares the same id (ClickHouse RLE compresses it); and
+  `Begin` consults stampers with `context.Background()` rather than gaining a ctx
+  parameter — fine for the in-memory interner, revisit when a durable/networked
+  one (ADR-0111) needs the ctx. End-to-end test (`example`): a device write
+  through a provenance stamper → flush → the stored row's HighCardRef membership
+  resolves to the writer's host and stack; inert (all suites pass) with no
+  stamper set. **Remaining S2:** ordered flush (SD5) — the payload store
+  flushing its bound dimension stores before its own insert (the test does it
+  manually for now). Other membership flavours and the entity-level synthetic
+  section stay Deferred.
 - **S3** — attribute-level opt-in (SD4); a readback artefact for querying by
   dimension membership; the host-only / sampled provenance tiers.
 - **S4** — a second dimension (the first real trace/causation/tenant consumer)

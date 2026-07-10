@@ -92,6 +92,11 @@ type LedgerStoreConfig struct {
 	// CREATE TABLE at EnsureTable time — the escape hatch for clauses
 	// the generation-time table options (ADR-0102) do not carry.
 	DDLTail string
+	// Stampers are consulted on every Begin (ADR-0112 M1): each yields
+	// surrogate ids stamped as additive HighCardRef memberships onto the
+	// entity's attributes. Empty (the default) leaves the store unstamped
+	// and behaviour-identical. A stamper must not write to this store.
+	Stampers []recordstore.ReferenceStamper
 }
 
 // LedgerStore is single-goroutine, like every part it composes. Batched
@@ -119,6 +124,8 @@ type LedgerStore struct {
 	// once the row is durable.
 	onWrite []func(string, *LedgerEntity)
 	onFlush []func(string)
+	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
+	stampers []recordstore.ReferenceStamper
 }
 
 // NewLedgerStore wires the store. A nil alloc selects the Go allocator.
@@ -126,7 +133,27 @@ func NewLedgerStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Ledg
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
-	inst = &LedgerStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityLedgerTable(alloc, 64), dirty: make(map[string]struct{})}
+	inst = &LedgerStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityLedgerTable(alloc, 64), dirty: make(map[string]struct{}), stampers: cfg.Stampers}
+	return
+}
+
+// applyStampers consults the configured stampers and pushes their surrogate
+// ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
+// returning the count so Commit/Rollback pop exactly that many.
+// context.Background() bounds the interning — the in-memory interner ignores
+// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
+// means no pushes: inert.
+func (inst *LedgerStore) applyStampers() (pushed int) {
+	for _, s := range inst.stampers {
+		for id, err := range s.Current(context.Background()) {
+			if err != nil {
+				inst.dml.AppendError(err)
+				continue
+			}
+			inst.dml.PushMembershipHighCardRef(uint64(id))
+			pushed++
+		}
+	}
 	return
 }
 
@@ -212,6 +239,9 @@ type LedgerEntityBuilder struct {
 	// materialized faithfully and invalidate the key instead.
 	ent LedgerEntity
 	raw bool
+	// pushed counts the ambient memberships Begin pushed via the stampers;
+	// Commit/Rollback pop exactly that many (ADR-0112 M1).
+	pushed int
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
@@ -220,7 +250,9 @@ func (inst *LedgerStore) Begin(id string, ts time.Time) *LedgerEntityBuilder {
 	lowlevel.InEntityLedgerTableBeginEntity(inst.dml)
 	lowlevel.InEntityLedgerTableSetId(inst.dml, id)
 	lowlevel.InEntityLedgerTableSetTimestamp(inst.dml, ts)
-	return &LedgerEntityBuilder{store: inst, key: id, ent: LedgerEntity{ID: id, Ts: ts}}
+	b := &LedgerEntityBuilder{store: inst, key: id, ent: LedgerEntity{ID: id, Ts: ts}}
+	b.pushed = inst.applyStampers()
+	return b
 }
 
 // AddOpened contributes the Opened component to the open entity via the
@@ -318,6 +350,7 @@ func (inst *LedgerEntityBuilder) Raw() *lowlevel.InEntityLedgerTable {
 // discarded and the store stays usable.
 func (inst *LedgerEntityBuilder) Commit() (err error) {
 	err = lowlevel.InEntityLedgerTableCommitEntity(inst.store.dml)
+	inst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)
 	if err != nil {
 		_ = lowlevel.InEntityLedgerTableRollbackEntity(inst.store.dml) // no-op error when no frame is open
 		return
@@ -336,6 +369,7 @@ func (inst *LedgerEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *LedgerEntityBuilder) Rollback() (err error) {
+	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityLedgerTableRollbackEntity(inst.store.dml)
 }
 

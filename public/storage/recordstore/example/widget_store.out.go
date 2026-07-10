@@ -93,6 +93,11 @@ type WidgetStoreConfig struct {
 	// CREATE TABLE at EnsureTable time — the escape hatch for clauses
 	// the generation-time table options (ADR-0102) do not carry.
 	DDLTail string
+	// Stampers are consulted on every Begin (ADR-0112 M1): each yields
+	// surrogate ids stamped as additive HighCardRef memberships onto the
+	// entity's attributes. Empty (the default) leaves the store unstamped
+	// and behaviour-identical. A stamper must not write to this store.
+	Stampers []recordstore.ReferenceStamper
 }
 
 // WidgetStore is single-goroutine, like every part it composes. Batched
@@ -120,6 +125,8 @@ type WidgetStore struct {
 	// once the row is durable.
 	onWrite []func(uint64, *WidgetEntity)
 	onFlush []func(uint64)
+	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
+	stampers []recordstore.ReferenceStamper
 }
 
 // NewWidgetStore wires the store. A nil alloc selects the Go allocator.
@@ -127,7 +134,27 @@ func NewWidgetStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Widg
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
-	inst = &WidgetStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityWidgetTable(alloc, 64), dirty: make(map[uint64]struct{})}
+	inst = &WidgetStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityWidgetTable(alloc, 64), dirty: make(map[uint64]struct{}), stampers: cfg.Stampers}
+	return
+}
+
+// applyStampers consults the configured stampers and pushes their surrogate
+// ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
+// returning the count so Commit/Rollback pop exactly that many.
+// context.Background() bounds the interning — the in-memory interner ignores
+// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
+// means no pushes: inert.
+func (inst *WidgetStore) applyStampers() (pushed int) {
+	for _, s := range inst.stampers {
+		for id, err := range s.Current(context.Background()) {
+			if err != nil {
+				inst.dml.AppendError(err)
+				continue
+			}
+			inst.dml.PushMembershipHighCardRef(uint64(id))
+			pushed++
+		}
+	}
 	return
 }
 
@@ -213,6 +240,9 @@ type WidgetEntityBuilder struct {
 	// materialized faithfully and invalidate the key instead.
 	ent WidgetEntity
 	raw bool
+	// pushed counts the ambient memberships Begin pushed via the stampers;
+	// Commit/Rollback pop exactly that many (ADR-0112 M1).
+	pushed int
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
@@ -223,7 +253,9 @@ func (inst *WidgetStore) Begin(id uint64, ts time.Time, env WidgetEnvelope) *Wid
 	lowlevel.InEntityWidgetTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityWidgetTableSetRouting(inst.dml, env.Region, env.Tags)
 	lowlevel.InEntityWidgetTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
-	return &WidgetEntityBuilder{store: inst, key: id, ent: WidgetEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive, WidgetEnvelope: env}}
+	b := &WidgetEntityBuilder{store: inst, key: id, ent: WidgetEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive, WidgetEnvelope: env}}
+	b.pushed = inst.applyStampers()
+	return b
 }
 
 // Raw exposes the underlying DML entity for direct attribute
@@ -246,6 +278,7 @@ func (inst *WidgetEntityBuilder) Raw() *lowlevel.InEntityWidgetTable {
 // discarded and the store stays usable.
 func (inst *WidgetEntityBuilder) Commit() (err error) {
 	err = lowlevel.InEntityWidgetTableCommitEntity(inst.store.dml)
+	inst.store.dml.PopMembershipsHighCardRef(inst.pushed) // release Begin's ambient stamps (consumed by the closed attributes)
 	if err != nil {
 		_ = lowlevel.InEntityWidgetTableRollbackEntity(inst.store.dml) // no-op error when no frame is open
 		return
@@ -264,6 +297,7 @@ func (inst *WidgetEntityBuilder) Commit() (err error) {
 // Rollback abandons the open entity frame without committing it;
 // already-buffered rows and the store remain usable.
 func (inst *WidgetEntityBuilder) Rollback() (err error) {
+	inst.store.dml.PopMembershipsHighCardRef(inst.pushed)
 	return lowlevel.InEntityWidgetTableRollbackEntity(inst.store.dml)
 }
 

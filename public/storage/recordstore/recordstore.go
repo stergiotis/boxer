@@ -23,7 +23,21 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 )
+
+// ReferenceStamper is the ADR-0112 M1 seam. A generated store consults its
+// configured stampers once per Begin; each yields the surrogate ids to stamp as
+// additive HighCardRef memberships onto every attribute the entity writes (via
+// the DML ambient-membership primitive). Current captures whatever context it
+// needs at that point — for provenance, the writer's host and call stack — and
+// interns it, so the yielded TaggedId is the compact reference to a descriptor
+// fact. A composite over several dimensions satisfies the same interface by
+// yielding the concatenation. Stampers registered on a store must not write to
+// that same store, or interning a fact would recurse.
+type ReferenceStamper interface {
+	Current(ctx context.Context) iter.Seq2[identifier.TaggedId, error]
+}
 
 // Lifecycle marker values of the envelope Lifecycle column (the state
 // view; ADR-0100 SD2/SD4). Generated stores write LifecycleLive on Begin
