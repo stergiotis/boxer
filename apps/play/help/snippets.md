@@ -13,7 +13,9 @@ A small library of ready-to-run queries against `anchor.facts`, the
 self-contained demo table. Click **Insert** above any block to splice it into
 the editor at the cursor; place the caret where you want it first (an empty
 editor takes the snippet whole). Do not add a `FORMAT` clause — the app appends
-one. The verified, explained versions live on the **Example queries** page.
+one. The verified, explained versions live on the **Example queries** page. The
+**ADS-B geo-raster** section below targets `planes_mercator` from the demo loader
+(`apps/play/demo/adsb/demo.sh`), not `anchor.facts`.
 
 ## Whole entities
 
@@ -127,6 +129,75 @@ placeholder is substituted by ClickHouse.
 SET param_event = 'DDOS';
 SELECT * FROM anchor.facts
 WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, {event:String})
+```
+
+## ADS-B geo-raster (demo loader)
+
+These target `planes_mercator`, the aircraft-position table loaded by
+`apps/play/demo/adsb/demo.sh` (see its README) — point play's endpoint at that
+local ClickHouse first. The **Map** tab renders the raster visually (ADR-0096);
+the queries here run in the main editor.
+
+Positions per 5,000-ft altitude band:
+
+```sql
+SELECT intDiv(altitude, 5000) * 5000 AS alt_band_ft, count() AS positions
+FROM planes_mercator
+GROUP BY alt_band_ft
+ORDER BY alt_band_ft
+```
+
+Busiest aircraft types in the loaded slice:
+
+```sql
+SELECT t AS type, count() AS positions, uniqExact(icao) AS aircraft,
+       round(avg(altitude)) AS avg_alt_ft
+FROM planes_mercator
+WHERE t != ''
+GROUP BY type
+ORDER BY positions DESC
+LIMIT 20
+```
+
+The Map tab's raster query as a snippet (ADR-0096 §SD6): it bins the visible
+points into a `W×H` grid and derives an RGBA value per pixel, so it returns one
+row per pixel — a `W*H`-row framebuffer, not a readable table (the **Map** tab
+draws it). Here the viewport is fixed to a Zürich box at 256×256; the Map tab
+injects the live viewport instead.
+
+```sql
+WITH
+  45.5 AS min_lat, 49.0 AS max_lat, 5.5 AS min_lon, 12.0 AS max_lon,
+  256 AS W, 256 AS H, 100 AS sampling,
+  toUInt32(0xFFFFFFFF * ((min_lon + 180) / 360)) AS min_x,
+  toUInt32(0xFFFFFFFF * ((max_lon + 180) / 360)) AS max_x,
+  toUInt32(0xFFFFFFFF * (1/2 - log(tan((max_lat + 90) / 360 * pi())) / 2 / pi())) AS min_y,
+  toUInt32(0xFFFFFFFF * (1/2 - log(tan((min_lat + 90) / 360 * pi())) / 2 / pi())) AS max_y,
+  toUInt64(max_x) - min_x AS span_x,
+  toUInt64(max_y) - min_y AS span_y,
+  mercator_x >= min_x AND mercator_x < max_x
+    AND mercator_y >= min_y AND mercator_y < max_y AS in_view,
+  least((toUInt64(mercator_x - min_x) * W) DIV span_x, W - 1) AS px,
+  least((toUInt64(mercator_y - min_y) * H) DIV span_y, H - 1) AS py,
+  py * W + px AS pos,
+  (span_x / W) * (span_y / H) AS pixel_area,
+  pow(2, 22) / sqrt(pixel_area) AS zoom_factor,
+  count() AS total,
+  greatest(1000000. / sampling / zoom_factor, toFloat64(count())) AS max_total,
+  pow(total / max_total, 1/5) AS transparency,
+  greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
+  greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
+  greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
+  255 AS alpha,
+  (1 + transparency) / 2 * (1 - color3) * 255 AS red,
+  transparency * color1 * 255 AS green,
+  color2 * 255 AS blue
+SELECT round(red)::UInt8 AS r, round(green)::UInt8 AS g,
+       round(blue)::UInt8 AS b, round(alpha)::UInt8 AS a
+FROM planes_mercator
+WHERE in_view
+GROUP BY pos
+ORDER BY pos WITH FILL FROM 0 TO toUInt64(W) * H
 ```
 
 ## Trivial states
