@@ -149,6 +149,12 @@ the technology set:
   anti-joins a recent destination window, so delivery is at-least-once with
   structural dedup. Push via URL-engine sink tables is the documented
   fallback for fire-and-forget stages (gap-on-down + anti-join backfill).
+  The refreshable MV is a deliberate answer to *who drives the load*:
+  ClickHouse owns both the schedule and the write, so the pipeline is a
+  schema object — declared in DDL, drift-detectable via
+  `create_table_query`, observable as data in `system.view_refreshes` — and
+  the service holds no write authority: it only SELECTs and serves bytes.
+  The daemon-driven-insert shape this rejects is assessed in §Alternatives.
 - **SD3 — Wire format: ArrowStream.** Services serve exactly the Arrow IPC
   the generated DML builders emit; `url(…, 'ArrowStream', …)` consumes it.
   No re-encoding tier exists anywhere in the plane.
@@ -215,6 +221,44 @@ evidence:
   Remains the right shape for born-outside-CH stages (SD1), with a bare
   keelson service preferred over a framework until connector breadth is the
   actual need.
+
+### O6 sub-shapes — who drives the load
+
+Within the chosen family, three drivers were weighed:
+
+- **Refreshable-MV pull** *(chosen)*: CH schedules, reads the endpoint, and
+  performs the write. Endpoint downtime degrades to catch-up — the next
+  successful refresh reads everything newer than the destination watermark
+  (measured: no gap).
+- **Event-MV → URL-engine sink push.** Each flushed block is offered to the
+  endpoint exactly once; endpoint downtime is a gap until an anti-join
+  backfill (measured). No `url()` involvement, so none of its
+  read-amplification duplicates. Retained as the fallback for
+  fire-and-forget stages where a lost window is acceptable.
+- **Daemon-driven direct insert (no MV).** The service extracts, encodes,
+  and INSERTs on its own ticker — the `chstore.InsertArrow` pattern promoted
+  to a unit, and the simplest shape on paper: no `url()` read amplification,
+  no anti-join guard, one fewer DDL object. Rejected for the spine on four
+  grounds. (1) *The pipeline stops being a schema object*: dataflow,
+  cadence, and dedup guard live in Go instead of DDL, drift detection via
+  `create_table_query` disappears, and pipeline health is only as observable
+  as the daemon's logs — where the MV gets `system.view_refreshes` (status,
+  exception, retry, duration) as a queryable table for free. (2) *Authority
+  separation*: under the MV the database performs the write and the service
+  needs no INSERT grant — its blast radius is bounded by the one declared
+  target (ADR-0026 hygiene); daemon-insert puts the write on an imperative
+  path behind a write-capable credential. (3) *Scheduling machinery*:
+  refresh serialization (no overlapping runs), retry with backoff, and
+  exception capture would be reimplemented as a hand-rolled ticker loop,
+  each piece a small bug surface; under the MV the remaining Go is a
+  stateless HTTP handler. (4) *Shape-stability*: the SD6 escalation and
+  every later ELT stage (facts → marts) are MV-driven by construction, so an
+  MV-driven first stage makes moving the transform in-database a
+  transform-tier swap rather than a topology change. The honest cost of the
+  chosen shape: the `url()` read-amplification class of duplicates exists
+  *only* because of the pull — deterministic ids carry the dedup burden in
+  either shape, and the anti-join guard is the price paid for reasons (1)
+  through (4).
 
 ## Consequences
 
