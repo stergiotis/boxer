@@ -83,6 +83,13 @@ type CTEDef struct {
 
 	// Scopes holds the body scopes, one per UNION branch of the CTE body.
 	Scopes []*SelectScope
+
+	// Recursive marks a definition from a `WITH RECURSIVE` clause. The
+	// definition is then visible inside its own body (that visibility IS what
+	// recursion means), so a self-reference resolves to this def and is marked
+	// IsCTE. The self-entry placed in the body's CTEDefs carries nil Scopes —
+	// traversals therefore never descend from a body back into itself.
+	Recursive bool
 }
 
 // ResolveAlias looks up a table alias or table name in this scope's Tables.
@@ -530,10 +537,12 @@ func tableSourceFromFunction(expr *grammar1.TableExprFunctionContext) (ts *Table
 // query-level ctes rule or the selectStmt-level withClause rule — both
 // contain withItem children). Earlier definitions are visible to later
 // bodies (chained CTEs); inherited definitions from enclosing scopes are
-// visible to all bodies. CTE bodies are full query rules and may carry
-// their own nested WITH clauses — handled by recursion through
-// buildQueryScopes.
+// visible to all bodies; under WITH RECURSIVE a definition is additionally
+// visible to its own body (see CTEDef.Recursive). CTE bodies are full query
+// rules and may carry their own nested WITH clauses — handled by recursion
+// through buildQueryScopes.
 func buildCTEDefs(withContainer antlr.ParserRuleContext, parent *SelectScope, inherited []CTEDef, defaultDB string) (defs []CTEDef) {
+	recursive := withClauseIsRecursive(withContainer)
 	defs = make([]CTEDef, 0, withContainer.GetChildCount())
 	for i := 0; i < withContainer.GetChildCount(); i++ {
 		// withItem alternation: WithItemNamedQueryContext wraps the CTE form
@@ -548,10 +557,21 @@ func buildCTEDefs(withContainer antlr.ParserRuleContext, parent *SelectScope, in
 			continue
 		}
 		def := CTEDef{
-			Name: DecodeIdentifier(nqCtx.Identifier().GetText()),
-			Node: nqCtx,
+			Name:      DecodeIdentifier(nqCtx.Identifier().GetText()),
+			Node:      nqCtx,
+			Recursive: recursive,
 		}
-		visible := combineCTEDefs(defs, inherited)
+		own := defs
+		if recursive {
+			// The definition is visible inside its own body. The self-entry
+			// carries nil Scopes: the body scopes are being built right now,
+			// and a populated self-entry would let traversals descend from a
+			// body back into itself.
+			own = make([]CTEDef, 0, len(defs)+1)
+			own = append(own, defs...)
+			own = append(own, CTEDef{Name: def.Name, Node: def.Node, Recursive: true})
+		}
+		visible := combineCTEDefs(own, inherited)
 		for j := 0; j < nqCtx.GetChildCount(); j++ {
 			if qCtx, ok := nqCtx.GetChild(j).(*grammar1.QueryContext); ok {
 				def.Scopes = buildQueryScopes(qCtx, parent, visible, defaultDB)
@@ -561,4 +581,17 @@ func buildCTEDefs(withContainer antlr.ParserRuleContext, parent *SelectScope, in
 		defs = append(defs, def)
 	}
 	return
+}
+
+// withClauseIsRecursive reports whether a WITH container (the query-level
+// ctes rule or the selectStmt-level withClause rule) carries the RECURSIVE
+// modifier. The modifier applies to the whole clause.
+func withClauseIsRecursive(withContainer antlr.ParserRuleContext) bool {
+	switch c := withContainer.(type) {
+	case *grammar1.CtesContext:
+		return c.RECURSIVE() != nil
+	case *grammar1.WithClauseContext:
+		return c.RECURSIVE() != nil
+	}
+	return false
 }

@@ -701,3 +701,71 @@ func TestBuildScopesMixedDatabases(t *testing.T) {
 	// db2.t2 is qualified → uses explicit
 	assert.Equal(t, "db2", scopes[0].Tables[1].ResolvedDatabase(scopes[0]))
 }
+
+func TestBuildScopesRecursiveCTE(t *testing.T) {
+	// WITH RECURSIVE: the definition is visible inside its own body, so the
+	// self-reference is a CTE reference (not a bare table that e.g.
+	// QualifyTables would wrongly qualify with a database), and the def is
+	// marked Recursive.
+	sql := "WITH RECURSIVE t AS (SELECT 1 AS x UNION ALL SELECT x + 1 FROM t WHERE x < 10) SELECT * FROM t"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes, err := nanopass.BuildScopes(pr, "db")
+	require.NoError(t, err)
+	require.Len(t, scopes, 1)
+	root := scopes[0]
+
+	require.Len(t, root.CTEDefs, 1)
+	def := root.CTEDefs[0]
+	assert.Equal(t, "t", def.Name)
+	assert.True(t, def.Recursive)
+	require.Len(t, def.Scopes, 2, "one scope per UNION branch of the body")
+
+	// The recursive branch's FROM t resolves to the definition itself.
+	rec := def.Scopes[1]
+	require.Len(t, rec.Tables, 1)
+	assert.True(t, rec.Tables[0].IsCTE, "the self-reference is a CTE reference")
+	selfDef, found := rec.ResolveCTE("t")
+	require.True(t, found)
+	assert.Same(t, def.Node, selfDef.Node, "the self-reference resolves to the definition")
+	assert.Nil(t, selfDef.Scopes, "the self-entry carries no scopes (no self-descent)")
+
+	// The outer reference resolves too, to the fully-built def.
+	require.Len(t, root.Tables, 1)
+	assert.True(t, root.Tables[0].IsCTE)
+
+	// FlattenScopes terminates and visits the body scopes exactly once.
+	all := nanopass.FlattenScopes(scopes)
+	assert.Len(t, all, 3, "root + two body branches")
+}
+
+func TestBuildScopesNonRecursiveCTEHasNoSelfVisibility(t *testing.T) {
+	// Without RECURSIVE a CTE cannot see itself: `FROM t` inside t's body is
+	// a plain table reference (ClickHouse would read the real table t).
+	sql := "WITH t AS (SELECT x FROM t) SELECT * FROM t"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
+	def := scopes[0].CTEDefs[0]
+	assert.False(t, def.Recursive)
+	require.Len(t, def.Scopes, 1)
+	require.Len(t, def.Scopes[0].Tables, 1)
+	assert.False(t, def.Scopes[0].Tables[0].IsCTE, "no self-visibility without RECURSIVE")
+}
+
+func TestBuildScopesRecursiveClauseMarksAllDefs(t *testing.T) {
+	// RECURSIVE applies to the whole clause; a sibling that does not
+	// self-reference is still part of a recursive clause.
+	sql := "WITH RECURSIVE seed AS (SELECT 1 AS x), t AS (SELECT x FROM seed UNION ALL SELECT x + 1 FROM t WHERE x < 3) SELECT * FROM t"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
+	require.Len(t, scopes[0].CTEDefs, 2)
+	assert.True(t, scopes[0].CTEDefs[0].Recursive)
+	assert.True(t, scopes[0].CTEDefs[1].Recursive)
+}
