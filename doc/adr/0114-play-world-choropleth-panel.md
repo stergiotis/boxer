@@ -1,29 +1,31 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-11
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-07-11
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: accepted (2026-07-11).** Built and committed — see the Status section.
 
 # ADR-0114: `play` schematic world-choropleth result pane
 
 ## Status
 
-Proposed. The design dialogue settled the asset form (verbatim compressed
-Natural Earth 110m), the projection (Natural Earth), the matching contract
-(ISO codes + names) and that this ADR precedes the implementation.
+Accepted 2026-07-11, same-day as proposed; the design dialogue settled the
+asset form (verbatim compressed Natural Earth 110m), the projection (Natural
+Earth), and the matching contract (ISO codes + names) before implementation.
 
-Implemented in-tree (uncommitted): `widgets/worldmap` (asset + resolver +
-projection + rasterizer + widget, unit-tested), the play World dock tab
-(`play_world_panel.go`, panel tests), a widgets-tour demo, and the
-`SPINNAKER_PLAY_FOCUS_WORLD` knob. Verified per §Validation: unit suites
-green, and a live drive (egui inspection) confirmed hover ("Brazil (BRA) ·
-216.4") and click→selection (Detail followed to the clicked row); scripted
-captures confirm the choropleth, legend, and status line against a
-17-row `values()` result with one deliberate unmatched key.
+Built and committed: `widgets/worldmap` (asset + resolver + projection +
+rasterizer + widget, unit-tested; asset later moved from gzip to zstd with a
+json/v2 streaming decode — §SD1), the play World dock tab
+(`play_world_panel.go`, panel tests), a widgets-tour demo, the
+`SPINNAKER_PLAY_FOCUS_WORLD` knob, and a snippets-library entry whose
+`values()` row tuples also drove a grammar1 `tableArgExpr` fix. Verified per
+§Validation: unit suites green, and a live drive (egui inspection) confirmed
+hover ("Brazil (BRA) · 216.4") and click→selection (Detail followed to the
+clicked row); scripted captures confirm the choropleth, legend, and status
+line against a 17-row `values()` result with one deliberate unmatched key.
 
 ## Context
 
