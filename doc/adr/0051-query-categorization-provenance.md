@@ -4,7 +4,16 @@ status: proposed
 date: 2026-04-21
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: proposed — pre-human-review.** Decision under consideration; do
+> not implement as if accepted. Dormant since 2026-04; its requirements
+> (result categorization, archival routing, lineage) are restated and tracked
+> in
+> [doc/explanation/query-observability.md](../explanation/query-observability.md),
+> which also records what has changed since this was written (a catalog now
+> exists, lineage has a native ref-tuple encoding). A successor design ADR is
+> expected when the weave slice is reached, at which point this ADR flips to
+> superseded; until then the shape-lattice analysis below is the theory
+> record.
 
 # ADR-0051: Query Categorization via Perm-Style Provenance-Shape Rewrite
 

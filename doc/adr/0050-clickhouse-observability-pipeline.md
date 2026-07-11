@@ -1,10 +1,20 @@
 ---
 type: adr
-status: proposed
+status: superseded
 date: 2026-04-20
+superseded-date: 2026-07-11
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: superseded (2026-07-11) by [ADR-0115](0115-query-observability-data-plane-strategy.md).**
+> Never accepted or implemented; superseded pre-acceptance. Its three planes
+> resolved separately: result batches flow inline on the query's HTTP
+> response (the shipped play client), progress rides the in-band
+> `X-ClickHouse-Progress`/`Summary` headers, and the `query_log` plane is
+> replaced by ADR-0115's pull-based URL-transform pipeline. The requirements
+> this ADR articulated remain live and are tracked in
+> [doc/explanation/query-observability.md](../explanation/query-observability.md);
+> the option analysis below (O1–O7) remains the kill-reason record for the
+> push/broker family.
 
 # ADR-0050: ClickHouse Observability Pipeline via URL Engine, On-Disk Batches, and NATS Notifications
 
@@ -523,8 +533,10 @@ Two-or-three system users, one shared group:
 
 ## Status
 
-Proposed — 2026-04-20. Awaiting review by `p@stergiotis`.
-Implementation to follow once accepted.
+Superseded — 2026-07-11, by
+[ADR-0115](0115-query-observability-data-plane-strategy.md), pre-acceptance
+(proposed 2026-04-20, never accepted or implemented). See the banner at the
+top for the per-plane disposition.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
