@@ -62,9 +62,10 @@ withItem
     | columnsExpr                                                                  # WithItemColumnsExpr
     ;
 
-// CTE statement
+// CTE statement. RECURSIVE applies to the whole clause; canonical form keeps
+// it verbatim (it is semantics, not sugar).
 ctes
-    : WITH withItem (COMMA withItem)*
+    : WITH RECURSIVE? withItem (COMMA withItem)*
     ;
 
 namedQuery
@@ -104,7 +105,7 @@ staticOrDynamicColumnSelection
     | dynamicColumnSelection               # DynamicColumnList;
 dynamicColumnSelection
     : COLUMNS LPAREN STRING_LITERAL RPAREN;
-withClause: WITH withItem (COMMA withItem)*;
+withClause: WITH RECURSIVE? withItem (COMMA withItem)*;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
 arrayJoinClause: (LEFT | INNER)? ARRAY JOIN columnExprList;

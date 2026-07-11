@@ -10,7 +10,10 @@ antlr4="java -jar $HOME/Downloads/antlr-4.13.2-complete.jar"
 compile() {
   rm -f *.out.go
   $antlr4 -Werror -Dlanguage=Go -visitor -no-listener -package "grammar$1" -o . ClickHouseLexer.g4 "ClickHouseParser$2.g4"
-  rename .go .out.go ./*.go
+  # Rename only the ANTLR outputs (clickhouse*.go): a bare ./*.go would also
+  # sweep hand-written co-located files (package_props.go, ADR-0080) into
+  # .out.go and mislabel them as generated.
+  rename .go .out.go ./clickhouse*.go
 }
 compile "0" "Grammar0"
 cd ../grammar1 || exit 1

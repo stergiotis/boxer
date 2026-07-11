@@ -43,9 +43,12 @@ withItem
     ;
 
 // CTE statement — kept as a top-level optional in `query` (see line above) so
-// that scoping for CTE-on-union still anchors at the query level.
+// that scoping for CTE-on-union still anchors at the query level. RECURSIVE
+// applies to the whole clause (ClickHouse ≥ 24.4 recursive CTEs); ANTLR's
+// adaptive prediction keeps a CTE *named* `recursive` unambiguous (RECURSIVE
+// followed by AS is a name, followed by an identifier it is the modifier).
 ctes
-    : WITH withItem (COMMA withItem)*
+    : WITH RECURSIVE? withItem (COMMA withItem)*
     ;
 
 namedQuery
@@ -85,7 +88,7 @@ staticOrDynamicColumnSelection
     | dynamicColumnSelection               # DynamicColumnList;
 dynamicColumnSelection
     : COLUMNS LPAREN STRING_LITERAL RPAREN;
-withClause: WITH withItem (COMMA withItem)*;
+withClause: WITH RECURSIVE? withItem (COMMA withItem)*;
 topClause: TOP DECIMAL_LITERAL (WITH TIES)?;
 fromClause: FROM joinExpr;
 arrayJoinClause: (LEFT | INNER)? ARRAY JOIN columnExprList;
@@ -280,7 +283,7 @@ keyword
     | IF | ILIKE | IN | INDEX | INJECTIVE | INNER | INSERT | INTERVAL | INTO | IS | IS_OBJECT_ID | JOIN | JSON_FALSE | JSON_TRUE | KEY
     | KILL | LAST | LAYOUT | LEADING | LEFT | LIFETIME | LIKE | LIMIT | LIVE | LOCAL | LOGS | MATERIALIZE | MATERIALIZED | MAX | MERGES
     | MIN | MODIFY | MOVE | MUTATION | NO | NOT | NULLS | OFFSET | ON | OPTIMIZE | OR | ORDER | OUTER | OUTFILE | OVER | PARTITION
-    | POPULATE | PRECEDING | PREWHERE | PRIMARY | RANGE | RELOAD | REMOVE | RENAME | REPLACE | REPLICA | REPLICATED | RIGHT | ROLLUP | ROW
+    | POPULATE | PRECEDING | PREWHERE | PRIMARY | RANGE | RECURSIVE | RELOAD | REMOVE | RENAME | REPLACE | REPLICA | REPLICATED | RIGHT | ROLLUP | ROW
     | ROWS | SAMPLE | SELECT | SEMI | SENDS | SET | SETTINGS | SHOW | SOURCE | START | STOP | SUBSTRING | SYNC | SYNTAX | SYSTEM | TABLE
     | TABLES | TEMPORARY | TEST | THEN | TIES | TIMEOUT | TIMESTAMP | TOTALS | TRAILING | TRIM | TRUNCATE | TO | TOP | TTL | TYPE
     | UNBOUNDED | UNION | UPDATE | USE | USING | UUID | VALUES | VIEW | VOLUME | WATCH | WHEN | WHERE | WINDOW | WITH | FILL | STEP
