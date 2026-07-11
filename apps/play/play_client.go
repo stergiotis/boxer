@@ -99,13 +99,7 @@ func newExecOptions(label string) *ExecOptions {
 // tab's "as sent" view calls this too, so what it shows can never drift
 // from what executes.
 func (inst *Client) BuildStatement(sql string) (body string, params map[string]string) {
-	residual, params, exErr := ExtractParams(sql)
-	if exErr != nil {
-		log.Debug().Err(exErr).Msg("play: ExtractParams failed, sending sql verbatim")
-		residual = sql
-		params = nil
-	}
-	residual = inst.passes.ApplyBestEffort(passreg.StagePreExecute, residual, log.Logger)
+	residual, params := inst.buildResidual(sql)
 	body, setErr := passes.SetFormat("ArrowStream").Run(residual)
 	if setErr != nil {
 		log.Debug().Err(setErr).Msg("play: SetFormat failed, falling back to textual append")
@@ -114,6 +108,84 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 			body += " FORMAT ArrowStream"
 		}
 	}
+	return
+}
+
+// ProbeStatement POSTs sql verbatim (params riding the URL exactly as in
+// ExecuteArrowStream) and reports only whether the server accepted it — no
+// FORMAT rewrite, no Arrow decode. The diagnostics EXPLAIN probe consumes the
+// verdict, not the rows: a FORMAT appended to `EXPLAIN AST <stmt>` would bind
+// to the inner statement and leave EXPLAIN's own output undecodable, so the
+// probe must stay off the Arrow pipeline. Non-200 responses fold the server's
+// diagnostic into the error exactly like ExecuteArrowStream ("clickhouse http
+// <code>: <body>"), which classifyProbeError keys on.
+func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[string]string, opts *ExecOptions) (err error) {
+	reqURL := inst.URL()
+	qs := url.Values{}
+	for k, v := range params {
+		qs.Set(k, v)
+	}
+	if opts != nil && opts.QueryID != "" {
+		qs.Set("query_id", opts.QueryID)
+		if opts.ReplaceRunningQuery {
+			qs.Set("replace_running_query", "1")
+		}
+	}
+	if len(qs) > 0 {
+		sep := "?"
+		if strings.Contains(reqURL, "?") {
+			sep = "&"
+		}
+		reqURL = reqURL + sep + qs.Encode()
+	}
+	var req *http.Request
+	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(sql))
+	if err != nil {
+		err = eh.Errorf("unable to build clickhouse request: %w", err)
+		return
+	}
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if inst.cfg.User != "" {
+		req.Header.Set("X-ClickHouse-User", inst.cfg.User)
+	}
+	if inst.cfg.Password != "" {
+		req.Header.Set("X-ClickHouse-Key", inst.cfg.Password)
+	}
+	var resp *http.Response
+	resp, err = inst.http.Do(req)
+	if err != nil {
+		err = eh.Errorf("clickhouse request failed: %w", err)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		detail := strings.TrimSpace(string(raw))
+		bld := eb.Build().Int("statusCode", resp.StatusCode).Str("body", detail)
+		if detail == "" {
+			detail = "(empty response body)"
+		}
+		err = bld.Errorf("clickhouse http %d: %s", resp.StatusCode, detail)
+		return
+	}
+	// Drain (bounded) so the connection can be reused; the content is unused.
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	return
+}
+
+// buildResidual is steps 1–2 of BuildStatement — the SET-prelude harvest and
+// the pre-execute rewrites — shared with the diagnostics EXPLAIN probe, which
+// wraps the residual in `EXPLAIN AST` instead of appending a FORMAT clause
+// (step 3). Keeping the probe on this path is what makes its verdict match a
+// real Run byte-for-byte: both degrade identically on unparseable input.
+func (inst *Client) buildResidual(sql string) (residual string, params map[string]string) {
+	residual, params, exErr := ExtractParams(sql)
+	if exErr != nil {
+		log.Debug().Err(exErr).Msg("play: ExtractParams failed, sending sql verbatim")
+		residual = sql
+		params = nil
+	}
+	residual = inst.passes.ApplyBestEffort(passreg.StagePreExecute, residual, log.Logger)
 	return
 }
 

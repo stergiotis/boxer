@@ -231,10 +231,22 @@ func queryStateTone(s queryStateE) badge.ToneE {
 
 // renderQuerySummary is the tethered summary's stat line
 // ([fsmview.Widget.Summary]): muted small text keyed on the FSM state, rendered
-// just right of the colored state badge. The full error text and the result
-// grid live in the Table tab; the state graph / history live in the pop-out
-// inspector window.
+// just right of the colored state badge. The full error text lives in the
+// Diagnostics tab; the state graph / history live in the pop-out inspector
+// window.
 func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+	s := inst.querySummaryLine(numRows, elapsed, summary, executed, err)
+	if s == "" {
+		return
+	}
+	muted := color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	atoms := c.Atoms().BeginRichTextColored(muted, color.Transparent, s).Small().End().Keep()
+	c.LabelAtoms(atoms).Send()
+}
+
+// querySummaryLine is the FSM-keyed one-line result summary, shared by the
+// status bar and the Diagnostics tab's "Last run" section.
+func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) string {
 	var s string
 	switch inst.queryFSM.Current() {
 	case queryStateIdle:
@@ -259,12 +271,7 @@ func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, su
 	case queryStateFailedStale:
 		s = "errored · editor changed"
 	}
-	if s == "" {
-		return
-	}
-	muted := color.Hex(styletokens.NeutralTextSecondary.AsHex())
-	atoms := c.Atoms().BeginRichTextColored(muted, color.Transparent, s).Small().End().Keep()
-	c.LabelAtoms(atoms).Send()
+	return s
 }
 
 // humanizeAgo renders a coarse "Xs/Xm/Xh ago" for the time a result was

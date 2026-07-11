@@ -94,6 +94,12 @@ var (
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
+	FocusDiagnostics = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_FOCUS_DIAGNOSTICS",
+		Description: "non-empty makes Diagnostics (parse advice + full error texts) the default-active body tab (scripted screenshots)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
 	ObserveNode = env.NewString(env.Spec{
 		Name:        "SPINNAKER_PLAY_OBSERVE",
 		Description: "graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split",

@@ -51,7 +51,7 @@ func (inst *PlayApp) renderSchemaTab(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 	if err != nil && rec == nil {
-		c.Label("Query failed.").Send()
+		inst.renderResultsFailed()
 		return
 	}
 	if rec == nil {

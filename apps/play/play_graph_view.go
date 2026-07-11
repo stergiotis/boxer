@@ -22,7 +22,9 @@ func (inst *PlayApp) renderGraphTab() {
 	if len(split.Nodes) == 0 {
 		msg := "Run a query to see its node graph."
 		if inst.splitErr != nil {
-			msg = "split failed: " + inst.splitErr.Error() + " — the raw buffer was executed instead."
+			// Pointer only — the split error's full text lives in the
+			// Diagnostics tab's "Query graph" section.
+			msg = "The buffer did not split into a graph (it executed as a single statement) — see the Diagnostics tab."
 		}
 		for rt := range c.RichTextLabel(msg) {
 			rt.Small().Weak()

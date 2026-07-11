@@ -55,18 +55,19 @@ const (
 // Stable tab identifiers for the dock area. Persistent egui_dock state is
 // keyed off these — never renumber and never reuse a retired value.
 const (
-	dockTabEditor     uint64 = 1
-	dockTabHistory    uint64 = 2
-	dockTabTable      uint64 = 3
-	dockTabProjection uint64 = 4
-	dockTabDetail     uint64 = 5
-	dockTabPreview    uint64 = 6
-	dockTabTimeline   uint64 = 7
-	dockTabSnippets   uint64 = 8
-	dockTabMap        uint64 = 9
-	dockTabGraph      uint64 = 10
-	dockTabSchema     uint64 = 11
-	dockTabWorld      uint64 = 12
+	dockTabEditor      uint64 = 1
+	dockTabHistory     uint64 = 2
+	dockTabTable       uint64 = 3
+	dockTabProjection  uint64 = 4
+	dockTabDetail      uint64 = 5
+	dockTabPreview     uint64 = 6
+	dockTabTimeline    uint64 = 7
+	dockTabSnippets    uint64 = 8
+	dockTabMap         uint64 = 9
+	dockTabGraph       uint64 = 10
+	dockTabSchema      uint64 = 11
+	dockTabWorld       uint64 = 12
+	dockTabDiagnostics uint64 = 13
 )
 
 type PlayApp struct {
@@ -172,6 +173,11 @@ type PlayApp struct {
 	// worldDriver is the ADR-0114 schematic world-choropleth panel (World dock
 	// tab): a plain observer of the active result — no lane, nothing to Close.
 	worldDriver *WorldDriver
+
+	// diag owns the Diagnostics dock tab's EXPLAIN AST probe (its own lane
+	// against the live endpoint); the pane itself is the single owner of the
+	// playground's error prose — result tabs only point here.
+	diag *DiagnosticsDriver
 
 	// colorByFeature picks the EntityFeatures field whose value drives the
 	// projection scatter's per-point colour. -1 means monochrome (default);
@@ -519,6 +525,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.timeline = NewTimelineDriver(timelineIds, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
 	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
 	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
+	inst.diag = NewDiagnosticsDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	return inst
 }
@@ -539,6 +546,9 @@ func (inst *PlayApp) Close() {
 	}
 	if inst.timeline != nil && inst.timeline.bandsLane != nil {
 		inst.timeline.bandsLane.close()
+	}
+	if inst.diag != nil {
+		inst.diag.close()
 	}
 	if inst.graph != nil {
 		inst.graph.close() // also closes the main lane
@@ -659,6 +669,12 @@ func (inst *PlayApp) Render() error {
 	// output fresh even when the user has the Editor tab hidden.
 	inst.updatePreview()
 
+	// Keep the Diagnostics EXPLAIN probe warm regardless of tab visibility:
+	// an armed probe (grammar-rejected buffer) executes on its lane so the
+	// verdict is ready when the tab opens; unchanged/unarmed probes are a
+	// memo-hit no-op.
+	_, _ = inst.diag.probeView()
+
 	// Layout inside the runtime-created window scope (ADR-0026
 	// Amendment 2026-05-12). Mirrors imztop's shape: a pinned topbar
 	// with controls, a single DockArea hosting the body panes as
@@ -675,26 +691,30 @@ func (inst *PlayApp) Render() error {
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
-			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema}
+			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema, dockTabDiagnostics}
 			if FocusMap.Get() != "" {
 				// Scripted-screenshot focus: make Map the default-active body tab.
-				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabWorld, dockTabSchema}
+				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabWorld, dockTabSchema, dockTabDiagnostics}
 			}
 			if FocusGraph.Get() != "" {
 				// Scripted-screenshot focus: make Graph the default-active body tab.
-				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabSchema}
+				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabSchema, dockTabDiagnostics}
 			}
 			if FocusTimeline.Get() != "" {
 				// Scripted-screenshot focus: make Timeline the default-active body tab.
-				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema}
+				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema, dockTabDiagnostics}
 			}
 			if FocusSchema.Get() != "" {
 				// Scripted-screenshot focus: make Schema the default-active body tab.
-				bodyTabs = []uint64{dockTabSchema, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph}
+				bodyTabs = []uint64{dockTabSchema, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabDiagnostics}
 			}
 			if FocusWorld.Get() != "" {
 				// Scripted-screenshot focus: make World the default-active body tab.
-				bodyTabs = []uint64{dockTabWorld, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema}
+				bodyTabs = []uint64{dockTabWorld, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema, dockTabDiagnostics}
+			}
+			if FocusDiagnostics.Get() != "" {
+				// Scripted-screenshot focus: make Diagnostics the default-active body tab.
+				bodyTabs = []uint64{dockTabDiagnostics, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema}
 			}
 			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45, bodyTabs...)
 			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
@@ -745,6 +765,11 @@ func (inst *PlayApp) Render() error {
 			}
 			for range dock.Tab(dockTabSchema, "Schema") {
 				inst.renderSchemaTab(rec, schema, loading, err)
+			}
+			for range dock.Tab(dockTabDiagnostics, "Diagnostics") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderDiagnosticsTab(numRows, elapsed, summary, executed, err)
+				}
 			}
 		}
 	}
@@ -891,11 +916,15 @@ func (inst *PlayApp) autoShotTick() {
 	}
 	switch inst.shotPhase {
 	case 0:
-		// Wait until a query has completed with results.
+		// Wait until a query has completed — with results OR with an error
+		// (a failed run has no record; scripted captures of the Diagnostics
+		// tab's failure states still need the shot to fire).
 		if inst.didAutoRun && !inst.graph.MainLoading() {
-			rec, _, _, _, _, _, _, _ := inst.graph.MainSnapshot()
+			rec, _, _, _, _, _, _, err := inst.graph.MainSnapshot()
 			if rec != nil {
 				rec.Release()
+			}
+			if rec != nil || err != nil {
 				inst.shotPhase = 1
 				inst.shotSettle = inst.frame
 			}
@@ -1208,7 +1237,10 @@ func (inst *PlayApp) renderPreviewTab() {
 	}
 	switch {
 	case inst.formattedErr != nil:
-		for rt := range c.RichTextLabel("parse: " + inst.formattedErr.Error()) {
+		// Pointer only — the Diagnostics tab owns the parse advice (whether
+		// this is a boxer grammar gap or genuinely broken SQL, per the
+		// EXPLAIN probe) and the full error texts.
+		for rt := range c.RichTextLabel("No canonical form — boxer's grammar does not parse this statement; see the Diagnostics tab. Run sends the buffer verbatim.") {
 			rt.Small().Weak()
 		}
 	case inst.formatted != "":
@@ -1294,6 +1326,7 @@ func (inst *PlayApp) updatePreview() {
 		inst.formatted = ""
 		inst.formattedErr = nil
 		inst.refreshParamSlotsFromParse(nil, nil)
+		inst.diag.noteParse(raw, nil)
 		return
 	}
 	// Param-slot extraction runs unconditionally on the raw buffer:
@@ -1306,10 +1339,13 @@ func (inst *PlayApp) updatePreview() {
 	}
 	// Reparse first so syntax errors surface with line/column info —
 	// the Sequence's error drops position because its internal listener
-	// does not capture it.
+	// does not capture it. A failure arms the Diagnostics EXPLAIN probe
+	// (a success disarms it) — the server-side classification of buffers
+	// boxer's grammar cannot model.
 	if err := formatSyntaxError(raw); err != nil {
 		inst.formatted = ""
 		inst.formattedErr = err
+		inst.diag.noteParse(raw, err)
 		return
 	}
 	// affordanceEval is analytical: its handlers return discard ControlFlow,
@@ -1325,10 +1361,12 @@ func (inst *PlayApp) updatePreview() {
 	if err != nil {
 		inst.formatted = ""
 		inst.formattedErr = err
+		inst.diag.noteParse(raw, err)
 		return
 	}
 	inst.formatted = out
 	inst.formattedErr = nil
+	inst.diag.noteParse(raw, nil)
 }
 
 // updateWirePreview keeps the "as sent" cache in sync with inst.sql on the
@@ -1419,12 +1457,7 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		return
 	}
 	if err != nil && rec == nil {
-		for range c.ScrollArea().Vscroll(true).KeepIter() {
-			c.Label("Query failed:").Send()
-			// Selectable so the ClickHouse diagnostic (folded into err.Error()
-			// by ExecuteArrowStream) can be copied out to search or a bug report.
-			c.Label(err.Error()).Wrap().Selectable(true).Send()
-		}
+		inst.renderResultsFailed()
 		return
 	}
 	if rec == nil {
@@ -1463,7 +1496,7 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, er
 		return
 	}
 	if err != nil && rec == nil {
-		c.Label("Query failed.").Send()
+		inst.renderResultsFailed()
 		return
 	}
 	if rec == nil {
@@ -1488,7 +1521,7 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		return
 	}
 	if err != nil && rec == nil {
-		c.Label("Query failed.").Send()
+		inst.renderResultsFailed()
 		return
 	}
 	if rec == nil {
@@ -1555,7 +1588,7 @@ func (inst *PlayApp) renderWorldTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		return
 	}
 	if err != nil && rec == nil {
-		c.Label("Query failed.").Send()
+		inst.renderResultsFailed()
 		return
 	}
 	if rec == nil {
@@ -1624,6 +1657,17 @@ func (inst *PlayApp) renderResultsZeroRows() {
 	for range c.VerticalCentered().KeepIter() {
 		c.AddSpace(styletokens.Px(inst.density, 7))
 		c.Label("0 rows — the query ran but matched nothing.").Send()
+	}
+}
+
+// renderResultsFailed is the shared failed-state for the result tabs: a
+// pointer, not the error itself — the Diagnostics tab is the single owner of
+// the full error prose (parse advice, split status, execution error), so the
+// same text is never maintained across five panes.
+func (inst *PlayApp) renderResultsFailed() {
+	for range c.VerticalCentered().KeepIter() {
+		c.AddSpace(styletokens.Px(inst.density, 7))
+		c.Label("Query failed — see the Diagnostics tab.").Send()
 	}
 }
 
