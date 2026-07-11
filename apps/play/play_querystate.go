@@ -15,23 +15,25 @@ import (
 )
 
 // queryStateE is the playground's result↔input lifecycle: how the displayed
-// result set relates to the editor SQL. It drives the status-bar message and
-// the fsmview chip so the user can tell "no query yet" from "ran, 0 rows",
-// and sees when the shown output is stale relative to the edited SQL.
+// result set relates to the run's inputs — the editor SQL plus its referenced
+// signals (slice-5 D2). It drives the status-bar message and the fsmview chip
+// so the user can tell "no query yet" from "ran, 0 rows", and sees when the
+// shown output is stale relative to the current inputs.
 //
 // The three *Stale variants pair with their fresh counterparts: they mean
-// "this result is still on screen, but the editor has changed since the run".
+// "this result is still on screen, but an input — the buffer or a referenced
+// signal — has changed since the run".
 type queryStateE uint8
 
 const (
 	queryStateIdle        queryStateE = iota // no query has completed yet
 	queryStateRunning                        // a query is in flight
-	queryStateRows                           // ≥1 row, editor matches the run
-	queryStateEmpty                          // 0 rows, editor matches the run
-	queryStateFailed                         // query errored, editor matches the run
-	queryStateRowsStale                      // editor edited since these rows
-	queryStateEmptyStale                     // editor edited since this empty result
-	queryStateFailedStale                    // editor edited since this error
+	queryStateRows                           // ≥1 row, inputs match the run
+	queryStateEmpty                          // 0 rows, inputs match the run
+	queryStateFailed                         // query errored, inputs match the run
+	queryStateRowsStale                      // inputs changed since these rows
+	queryStateEmptyStale                     // inputs changed since this empty result
+	queryStateFailedStale                    // inputs changed since this error
 )
 
 func (s queryStateE) String() string {
@@ -144,8 +146,9 @@ func (inst *PlayApp) syncQueryFSM(loading bool, numRows int64, executed time.Tim
 }
 
 // newQueryFSM declares the query result lifecycle graph: Idle→Running→
-// {Rows,Empty,Failed}, each result kind flips to its *Stale twin on an edit
-// (and back on revert), and every settled state can re-Run. These rules
+// {Rows,Empty,Failed}, each result kind flips to its *Stale twin on an input
+// change — a buffer edit or a referenced-signal move — and back on revert,
+// and every settled state can re-Run. These rules
 // drive the drawn graph (the popup's arrows) and label the happy path;
 // they need not be exhaustive, because syncQueryFSM mirrors observed state
 // with [fsmview.Machine.Mirror] — an edge not declared here is followed and
@@ -179,11 +182,11 @@ func newQueryFSM() *fsmview.Machine[queryStateE] {
 		EdgeLabel(queryStateRunning, queryStateEmpty, "0 rows").
 		EdgeLabel(queryStateRunning, queryStateFailed, "error").
 		EdgeLabel(queryStateRows, queryStateRunning, "Run").
-		EdgeLabel(queryStateRows, queryStateRowsStale, "edit").
+		EdgeLabel(queryStateRows, queryStateRowsStale, "input change").
 		EdgeLabel(queryStateEmpty, queryStateRunning, "Run").
-		EdgeLabel(queryStateEmpty, queryStateEmptyStale, "edit").
+		EdgeLabel(queryStateEmpty, queryStateEmptyStale, "input change").
 		EdgeLabel(queryStateFailed, queryStateRunning, "Run").
-		EdgeLabel(queryStateFailed, queryStateFailedStale, "edit").
+		EdgeLabel(queryStateFailed, queryStateFailedStale, "input change").
 		EdgeLabel(queryStateRowsStale, queryStateRunning, "Run").
 		EdgeLabel(queryStateRowsStale, queryStateRows, "revert").
 		EdgeLabel(queryStateEmptyStale, queryStateRunning, "Run").
@@ -271,12 +274,15 @@ func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summ
 		} else {
 			s = "errored · " + humanizeAgo(executed)
 		}
+	// "inputs changed", not "editor changed": since slice-5 D2 the staleness
+	// witness also fires on a moved referenced signal, with the buffer
+	// untouched.
 	case queryStateRowsStale:
-		s = fmt.Sprintf("%d rows · editor changed", numRows)
+		s = fmt.Sprintf("%d rows · inputs changed", numRows)
 	case queryStateEmptyStale:
-		s = "0 rows · editor changed"
+		s = "0 rows · inputs changed"
 	case queryStateFailedStale:
-		s = "errored · editor changed"
+		s = "errored · inputs changed"
 	}
 	return s
 }

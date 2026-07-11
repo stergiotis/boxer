@@ -49,10 +49,13 @@ canonical form.
 ## Query parameters
 
 Write a `{name:Type}` placeholder in the query (e.g. `{event:String}`,
-`{from:DateTime}`) and the playground lifts it into a `SET param_<name> = <value>`
-line at the top of the buffer and surfaces an editing widget above the editor. On
-Run, the `SET param_*` prelude is stripped from the body and shipped to ClickHouse
-on the request URL, so the placeholder is substituted server-side.
+`{from:DateTime}`) and the playground surfaces an editing widget above the
+editor. Filling the widget authors a `SET param_<name> = <value>` line at the
+top of the buffer — the name is now a **constant**: buffer-owned, part of the
+query text, reproducible by copy-paste. A placeholder you leave without a
+`SET` is a live **signal** instead (see **Signals** below). On Run, the
+`SET param_*` prelude is stripped from the body and shipped to ClickHouse on
+the request URL, so the placeholder is substituted server-side either way.
 
 The widget chosen for a slot depends on its shape:
 
@@ -75,14 +78,16 @@ query body. Toggle it off to hand-edit the `SET` lines directly.
 ## Signals (live parameters)
 
 A placeholder *without* a `SET` line is a **signal**: a live value shared by
-name across every query and panel. Panels write them as you interact — the
-Table/Timeline selection writes `selection`, the Map's settled viewport writes
-the `vp_*` set, the Timeline publishes the events extent as `tl_min`/`tl_max`
-— and any query referencing the name picks the value up on its next run. The
-**signals** section at the top of the Graph tab lists them (value, declared
-type, who wrote it last) and is also where you set one by hand; adding a `SET`
-for the same name pins it into a constant that shadows the signal until the
-`SET` is removed.
+name across every query and panel. Panels write them as you interact —
+clicking a row (Table), a point (Projection), an event (Timeline), or a
+country (World) writes `selection`; the Map's settled viewport writes the
+`vp_*` set; the Timeline publishes the events extent as `tl_min`/`tl_max` —
+and any query referencing the name picks the value up on its next run. The
+**signals** section at the top of the Graph tab lists them — value, declared
+type(s), and who last wrote it (a name read as different types by different
+queries gets a conflict warning) — and is also where you set, add, or discard
+one by hand. Adding a `SET` for the same name pins it into a constant that
+shadows the signal until the `SET` is removed.
 
 A referenced name that nothing fills blocks Run with a hint (instead of the
 server's "substitution not set" error). The **Live** checkbox (top bar, shown
@@ -101,6 +106,9 @@ so you can tune the patterns without leaving the panel.
 
 - **Run** executes the editor SQL; while it runs the button becomes **Cancel** with
   a spinner. Execution is asynchronous, so the UI stays responsive.
+- Run is **refused** — with an actionable hint in the status bar — when the query
+  references a placeholder that neither a `SET` nor a signal fills (see
+  **Signals**); nothing is sent, since the server could only reject it.
 - **Load .sql…** (shown when the host wired the file capability) opens a file picker
   and replaces the buffer with the chosen file's contents.
 - Results land in the **Table** tab and feed the **Detail**, **Projection**, and
@@ -120,12 +128,15 @@ apart, so an empty result and a stale result are distinct, named states:
 - **empty** — amber badge, `0 rows · ran 8s ago`. The query ran and matched nothing.
 - **failed** — red badge, `errored: <message>`.
 - **rows (stale)** / **empty (stale)** / **failed (stale)** — muted badge,
-  `… · editor changed`.
+  `… · inputs changed`.
 
-The **stale** variants appear when the editor SQL has diverged from the query that
-produced the results on screen (any edit, a parameter change, or a snippet insert) —
-i.e. the table below is showing output for a query you've since changed; press Run to
-refresh.
+The **stale** variants appear when the run's inputs have diverged from what
+produced the results on screen: a buffer edit, a parameter change, a snippet
+insert — or a referenced **signal** that moved since the run (a Table click
+that changed `selection`, a Map pan that moved `vp_*`, …). The table below is
+showing output for inputs you've since changed; press Run to refresh, or check
+**Live** to re-run on signal moves automatically (buffer edits always wait for
+Run).
 
 ## Result views
 
@@ -135,7 +146,8 @@ the Projection and Timeline views work over the whole result set.
 ### Table
 
 The result grid, in a leading-`#` selectable form. Click anywhere on a row to select
-it — the selection is absolute (it survives paging) and drives the **Detail** view.
+it — the selection is absolute (it survives paging), is published as the
+`selection` signal, and drives the **Detail** view.
 Above the grid, the pager pages through large results and lets you pick the page size
 (50 to 10000 rows); a `rows A–B of N` label shows the current window. Column widths
 are sized from a sample of the first rows and are drag-resizable.
@@ -205,7 +217,10 @@ An in-database-rendered geo raster over a pannable map (ADR-0096), for tables wi
 `mercator_x` / `mercator_y` columns (e.g. the ADS-B demo loader's
 `planes_mercator`): the visible viewport is rendered to pixels by a ClickHouse
 query on each pan/zoom settle. Table, sampling, colour mode and opacity are panel
-controls — this tab queries on its own, independent of the editor's result.
+controls — this tab queries on its own, independent of the editor's result. The
+settled viewport is published as the `vp_*` signals (packed-mercator bounds plus
+output dimensions), so any query can reference `{vp_min_x:UInt32}` … to
+cross-filter against the visible extent.
 
 ### Graph
 
@@ -229,6 +244,14 @@ you can see the structure even when your own formatting is irregular. When boxer
 grammar can't parse the buffer, the pane points at **Diagnostics** instead of a
 canonical form; Run still sends the buffer verbatim.
 
+An **As sent to server** checkbox flips the pane to the wire form: the exact
+statement that will be POSTed (pre-execute rewrites applied, `FORMAT`
+appended), with captions naming what rides the URL instead of the body —
+`params on URL: …` for the `SET`-bound constants, and `signals on URL:
+name=value, …` for the signal values the store would supply at Run. Unlike the
+canonical view this renders even for SQL boxer's grammar can't parse, because
+it is what would actually be sent.
+
 ### Diagnostics
 
 The single home of the playground's error texts — the other tabs only point here.
@@ -245,6 +268,9 @@ the status bar shows only its first line — or the usual result summary.
 
 Previously-run queries, newest first. Each row reads `HH:MM:SS  <N>r <elapsed>` (or
 `ERR`) followed by the query text; click one to reload that SQL into the editor.
+The signal values the run shipped are re-seeded into the store alongside the
+buffer, so re-running reproduces the same inputs (signals do not otherwise
+persist across sessions; constants persist via the buffer).
 
 ### Snippets
 

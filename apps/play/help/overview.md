@@ -40,7 +40,8 @@ feature, is covered in depth on the **Features** page):
 - **World** — a schematic world choropleth when the result names countries
   (ISO codes or names) alongside a numeric column.
 - **Graph** — the reactive query-graph: the buffer's CTEs as nodes; observe an
-  intermediate node to point the result tabs at it.
+  intermediate node to point the result tabs at it. Also hosts the **signals**
+  editor (see below).
 - **Schema** — a structural inspector over the result's schema.
 - **Diagnostics** — parse advice and the full error texts (the other tabs only
   point here). When boxer's grammar can't parse the buffer, an `EXPLAIN AST`
@@ -59,7 +60,7 @@ column names:
   columns), columns are grouped by name prefix into pinned / relations / data /
   meta sections.
 
-## Parameters
+## Parameters and signals
 
 Top-level `SET param_<name> = <value>` statements are lifted out of the body and
 shipped to ClickHouse on the request URL, so a `{name:Type}` placeholder in the
@@ -70,6 +71,13 @@ SET param_event = 'DDOS';
 SELECT * FROM anchor.facts
 WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, {event:String})
 ```
+
+A placeholder *without* a `SET` line is a live **signal** instead: panels
+publish values under shared names as you interact (the selected row, the Map
+viewport, the Timeline extent), any query can reference them, and the Graph
+tab's **signals** section is where you inspect them or set one by hand. The
+**Features** page covers the constant-vs-signal model, the **Live** re-run
+toggle, and what happens when a placeholder is left unfilled.
 
 ## Where the data comes from
 

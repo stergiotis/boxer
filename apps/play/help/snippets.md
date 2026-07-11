@@ -40,9 +40,10 @@ WHERE hasAny(`tv:symbol:value:val:s:m:0:24:0::data`,
 
 Each top-level CTE splits into its own node of the reactive query-graph
 (ADR-0097): `recent` and `by_kind` below become nodes — `by_kind` reads
-`recent`, and the final `SELECT` reads `by_kind`. Today the chain fuses back into
-a single query (identical to running it inline) and the panels observe the final
-(sink) node; a forthcoming graph view surfaces the structure.
+`recent`, and the final `SELECT` reads `by_kind`. The chain fuses back into a
+single query for execution (identical to running it inline); the **Graph** tab
+shows the nodes and their edges, and its *observe in panels* button points the
+result tabs at an intermediate node instead of the sink.
 
 ```sql
 WITH
@@ -167,6 +168,17 @@ placeholder is substituted by ClickHouse.
 SET param_event = 'DDOS';
 SELECT * FROM anchor.facts
 WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, {event:String})
+```
+
+## Signals (unbound parameter)
+
+A placeholder with no `SET` is a live signal. Run refuses while nothing fills
+`lim` (the status bar says what to do): open the Graph tab's **signals**
+section, give `lim` a value, press **set**, then Run. Check **Live** in the
+top bar and further **set** clicks re-run the query by themselves.
+
+```sql
+SELECT * FROM anchor.facts LIMIT {lim:UInt64}
 ```
 
 ## World choropleth (countries)

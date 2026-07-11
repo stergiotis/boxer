@@ -122,6 +122,19 @@ SELECT * FROM anchor.facts
 WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, {event:String})
 ```
 
+An *unbound* placeholder — no `SET` — is a live **signal** instead:
+
+```sql
+SELECT * FROM anchor.facts LIMIT {lim:UInt64}
+```
+
+Run refuses while nothing fills `lim`, with a hint in the status bar. Open the
+Graph tab's **signals** section, give `lim` a value, press **set**, and Run —
+the value rides the URL exactly like a `SET`-bound constant. Check **Live** in
+the top bar and the query re-runs by itself whenever a referenced signal moves
+(a further **set**, or a panel write such as a Table row click when the query
+references `{selection:Int64}`); edits to the SQL itself still wait for Run.
+
 ## Empty and trivial states
 
 ```sql
