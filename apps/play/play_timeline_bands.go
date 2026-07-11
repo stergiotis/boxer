@@ -25,11 +25,13 @@ const (
 	timelineSlotBandColor = "_tl_band_color"
 	timelineSlotBandLabel = "_tl_band_label"
 
-	// timelineBandsPlaceholderMin / Max are textually replaced in the
-	// user-typed bands SQL with toDateTime64() literals derived from
-	// the main result's _tl_time extent. Plain `replace` rather than
-	// CH parameter binding because CH parameter names cannot start
-	// with an underscore.
+	// timelineBandsPlaceholderMin / Max are the RETIRED textual placeholders
+	// (pre-slice-5d): they were string-replaced with toDateTime64() literals.
+	// The extent now arrives as the tl_min / tl_max signals, referenced as
+	// `{tl_min:DateTime64(3, 'UTC')}` / `{tl_max:DateTime64(3, 'UTC')}` param
+	// slots. The constants remain only so demandBands can detect a legacy
+	// bands SQL and show a targeted migration hint instead of the server's
+	// unknown-identifier error.
 	timelineBandsPlaceholderMin = "_time_data_min"
 	timelineBandsPlaceholderMax = "_time_data_max"
 )
@@ -84,20 +86,12 @@ func bandColorByName(name string) (packed uint32, ok bool) {
 	return
 }
 
-// substituteBandsRange replaces _time_data_min / _time_data_max in the
-// bands SQL with CH-parseable toDateTime64 literals derived from the
-// main result's time extent. Substitution is plain text (CH parameter
-// binding rejects leading-underscore names) so the rewritten SQL stays
-// inspectable end-to-end.
-func substituteBandsRange(sql string, minMS, maxMS int64) (out string) {
-	fmtLit := func(ms int64) string {
-		t := time.UnixMilli(ms).UTC()
-		return fmt.Sprintf("toDateTime64('%s', 3, 'UTC')",
-			t.Format("2006-01-02 15:04:05.000"))
-	}
-	out = strings.ReplaceAll(sql, timelineBandsPlaceholderMin, fmtLit(minMS))
-	out = strings.ReplaceAll(out, timelineBandsPlaceholderMax, fmtLit(maxMS))
-	return
+// formatExtentParam renders an epoch-ms extent bound as the raw value of a
+// `{tl_min:DateTime64(3, 'UTC')}` / `{tl_max:…}` param: the UTC-formatted
+// string ClickHouse parses under the slot's explicit-UTC type (server-checked
+// — never the server's timezone, per the repo's toHour lesson).
+func formatExtentParam(ms int64) string {
+	return time.UnixMilli(ms).UTC().Format("2006-01-02 15:04:05.000")
 }
 
 // bandsFetchTimeout bounds a single bands round-trip on the bands node lane.
@@ -217,47 +211,111 @@ func (inst *TimelineDriver) bandsProducer(viewMinMS, viewMaxMS int64) iter.Seq[l
 	}
 }
 
-// demandBands demands the bands node lane with the bands SQL substituted for the
-// current (dataMinMS, dataMaxMS) extent, returning the retained _tl_band_* result
-// for the Timeline's chBands channel (4b-2; the caller MUST Release rec). Empty
-// SQL / invalid extent / no client yields (nil, nil). The lane supplies async +
-// supersession + last-good; an unchanged (extent, SQL) is a memo hit. The result
-// is mapped into inst.bands by setBands, called from the panel's Render.
-func (inst *TimelineDriver) demandBands() (rec arrow.RecordBatch, schema *arrow.Schema) {
+// ensureBandsSlots re-derives the bands SQL's slot names and SET-bound set
+// when the editor text changes (one parse per edit, not per frame), and
+// detects the retired _time_data_* placeholders for the migration hint. An
+// unparseable bands SQL yields no slots — the demand ships it verbatim and
+// the server reports, exactly as for the main buffer.
+func (inst *TimelineDriver) ensureBandsSlots(sql string) {
+	if sql == inst.bandsSlotsFor {
+		return
+	}
+	inst.bandsSlotsFor = sql
+	inst.bandsLegacy = strings.Contains(sql, timelineBandsPlaceholderMin) ||
+		strings.Contains(sql, timelineBandsPlaceholderMax)
+	inst.bandsSlotNames = inst.bandsSlotNames[:0]
+	inst.bandsBound = nil
+	slots, vals, err := extractSlotsAndParams(sql)
+	if err != nil {
+		return
+	}
+	for _, s := range slots {
+		inst.bandsSlotNames = append(inst.bandsSlotNames, s.Name)
+	}
+	inst.bandsBound = make(map[string]bool, len(vals))
+	for urlKey := range vals {
+		inst.bandsBound[strings.TrimPrefix(urlKey, "param_")] = true
+	}
+}
+
+// bandsExtentPending reports whether the bands SQL references the tl_min /
+// tl_max extent signals (unbound) that the store cannot yet resolve — i.e.
+// the Timeline has not rendered events. Such a node waits ("pending"); a
+// bands SQL that does not reference the extent runs immediately (new since
+// 5d — absolute-time bands no longer wait for events). Other unresolved
+// slots do NOT gate: the server's "param not set" error is the informative
+// path, as for the main buffer.
+func (inst *TimelineDriver) bandsExtentPending(params map[string]string) bool {
+	for _, name := range inst.bandsSlotNames {
+		if name != string(signalTimelineMin) && name != string(signalTimelineMax) {
+			continue
+		}
+		if inst.bandsBound[name] {
+			continue
+		}
+		if _, resolved := params["param_"+name]; !resolved {
+			return true
+		}
+	}
+	return false
+}
+
+// demandBands compiles the bands node against the frame's signal snapshot and
+// demands it on the bands lane, returning the retained _tl_band_* result for
+// the Timeline's chBands channel (4b-2; the caller MUST Release rec). The
+// extent arrives as the tl_min/tl_max signals the events render published
+// (slice 5d — the textual substitution retired), so an unchanged
+// (SQL, signal values) pair is a lane memo hit and a moved extent supersedes
+// in flight. Empty SQL / no client yields (nil, nil); a legacy-placeholder
+// SQL is not demanded (the status line carries the migration hint). The
+// result is mapped into inst.bands by setBands, called from the panel's
+// Render.
+func (inst *TimelineDriver) demandBands(sig SignalEnvI) (rec arrow.RecordBatch, schema *arrow.Schema) {
 	if inst.bandsSQLPtr == nil {
 		return
 	}
 	sql := strings.TrimSpace(*inst.bandsSQLPtr)
-	if sql == "" || !inst.dataExtentValid || inst.client == nil {
+	if sql == "" || inst.client == nil {
 		inst.bandsLoading = false
 		inst.bandsLaneErr = nil
 		inst.bandsMapErr = nil
-		inst.bandsServedSQL = ""
+		inst.bandsServedKey = ""
 		inst.bandsServedFP = 0
+		inst.bandsLegacy = false
+		inst.bandsSlotsFor = ""
 		return
 	}
-	// The extent is textually substituted until slice 5d moves it onto
-	// {tl_min}/{tl_max} signals, so the compiled node carries no params yet.
-	compiled := substituteBandsRange(sql, inst.dataMinMS, inst.dataMaxMS)
-	view := inst.bandsLane.demand(compiledNode{SQL: compiled})
+	inst.ensureBandsSlots(sql)
+	if inst.bandsLegacy {
+		inst.bandsLoading = false
+		inst.bandsLaneErr = nil
+		return
+	}
+	params := resolveSignalNames(inst.bandsSlotNames, inst.bandsBound, sig)
+	if inst.bandsExtentPending(params) {
+		inst.bandsLoading = false
+		inst.bandsLaneErr = nil
+		return
+	}
+	view := inst.bandsLane.demand(compiledNode{SQL: sql, Params: params})
 	inst.bandsLoading = view.loading
 	inst.bandsLaneErr = view.err // mirrored every demand — nil clears (no latch)
-	inst.bandsServedSQL = view.sql
+	inst.bandsServedKey = view.key
 	inst.bandsServedFP = view.fingerprint
 	return view.rec, view.schema
 }
 
 // setBands maps the chBands result into inst.bands, re-mapping only when the
-// served (fingerprint, SQL) pair changes (the Map's repack idiom — ADR-0097
-// SD4 early cutoff at the observer: a forced re-fetch of the same SQL with
-// identical bytes re-maps nothing, but new data under the same SQL does; the
-// SQL half keeps a first empty result — fingerprint 0, the zero value —
-// distinguishable from "nothing mapped yet"). A successful empty fetch (nil
-// rec with a schema) maps to ZERO bands — distinct from "pending" (review
-// finding). Called from the Timeline panel's Render before the events render —
-// the band producer reads inst.bands.
+// served (fingerprint, compiled key) pair changes (the Map's repack idiom —
+// ADR-0097 SD4 early cutoff at the observer: a forced re-fetch of the same
+// inputs with identical bytes re-maps nothing, but new data under the same
+// inputs does; the key half keeps a first empty result — fingerprint 0, the
+// zero value — distinguishable from "nothing mapped yet"). A successful empty
+// fetch (nil rec with a schema) maps to ZERO bands — distinct from "pending"
+// (review finding). Called from the Timeline panel's Render before the events
+// render — the band producer reads inst.bands.
 func (inst *TimelineDriver) setBands(rec arrow.RecordBatch) {
-	if inst.bandsServedFP == inst.bandsMappedFP && inst.bandsServedSQL == inst.bandsMappedSQL {
+	if inst.bandsServedFP == inst.bandsMappedFP && inst.bandsServedKey == inst.bandsMappedKey {
 		return
 	}
 	if rec == nil {
@@ -265,7 +323,7 @@ func (inst *TimelineDriver) setBands(rec arrow.RecordBatch) {
 		inst.bandsSkipped = 0
 		inst.bandsMapErr = nil
 		inst.bandsMappedFP = inst.bandsServedFP
-		inst.bandsMappedSQL = inst.bandsServedSQL
+		inst.bandsMappedKey = inst.bandsServedKey
 		return
 	}
 	bands, skipped, mapErr := mapBandsRecord(rec)
@@ -277,7 +335,7 @@ func (inst *TimelineDriver) setBands(rec arrow.RecordBatch) {
 	inst.bandsSkipped = skipped
 	inst.bandsMapErr = nil
 	inst.bandsMappedFP = inst.bandsServedFP
-	inst.bandsMappedSQL = inst.bandsServedSQL
+	inst.bandsMappedKey = inst.bandsServedKey
 }
 
 // clearBands resets the band data when the chBands channel is unfilled (empty
@@ -289,7 +347,7 @@ func (inst *TimelineDriver) clearBands() {
 	inst.bandsSkipped = 0
 	inst.bandsMapErr = nil
 	inst.bandsMappedFP = 0
-	inst.bandsMappedSQL = ""
+	inst.bandsMappedKey = ""
 }
 
 // renderBandsControls emits the collapsible bands-SQL editor + Run
@@ -306,7 +364,7 @@ func (inst *TimelineDriver) renderBandsControls() {
 			CodeEditor().
 			DesiredRows(3).
 			DesiredWidth(float32(math.Inf(1))).
-			HintText("-- bands SELECT; _time_data_min / _time_data_max substituted from result extent").
+			HintText("-- bands SELECT; {tl_min:DateTime64(3, 'UTC')} / {tl_max:…} carry the events extent").
 			SendRespVal(inst.bandsSQLPtr)
 
 		for range c.Horizontal().KeepIter() {
@@ -327,20 +385,25 @@ func (inst *TimelineDriver) renderBandsControls() {
 }
 
 // bandsStatusLine formats the one-line summary shown next to the Run button.
-// Order of precedence: loading > error > pending > populated. The skipped-row
-// count renders only when non-trivial. Render-thread-only state (4b).
+// Order of precedence: legacy hint > loading > error > pending > populated.
+// The skipped-row count renders only when non-trivial. Render-thread-only
+// state (4b).
 func (inst *TimelineDriver) bandsStatusLine() (s string) {
 	if inst.bandsSQLPtr == nil || strings.TrimSpace(*inst.bandsSQLPtr) == "" {
 		return "no bands SQL — fill in to overlay shaded ranges"
 	}
 	switch {
+	case inst.bandsLegacy:
+		return "bands SQL uses the retired " + timelineBandsPlaceholderMin + " / " +
+			timelineBandsPlaceholderMax + " placeholders — reference " +
+			"{tl_min:DateTime64(3, 'UTC')} / {tl_max:DateTime64(3, 'UTC')} instead"
 	case inst.bandsLoading && len(inst.bands) == 0:
 		return "fetching bands…"
 	case inst.bandsLaneErr != nil:
 		return "bands error: " + inst.bandsLaneErr.Error()
 	case inst.bandsMapErr != nil:
 		return "bands error: " + inst.bandsMapErr.Error()
-	case inst.bandsMappedSQL == "":
+	case inst.bandsMappedKey == "":
 		return "bands pending — run a query above"
 	}
 	parts := []string{fmt.Sprintf("%d bands", len(inst.bands))}

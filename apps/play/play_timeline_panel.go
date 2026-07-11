@@ -19,6 +19,16 @@ const mainNodeID NodeID = "main"
 // (ADR-0097 SD8: selection is just a panel-written signal, shared by name).
 const signalSelection SignalID = "selection"
 
+// signalTimelineMin / signalTimelineMax carry the events extent the Timeline
+// publishes after each rebuild (slice 5d): UTC-formatted DateTime64(3) raw
+// values that the bands node — or any other node — reads as
+// `{tl_min:DateTime64(3, 'UTC')}` / `{tl_max:DateTime64(3, 'UTC')}` params.
+// They replace the retired `_time_data_*` textual substitution.
+const (
+	signalTimelineMin SignalID = "tl_min"
+	signalTimelineMax SignalID = "tl_max"
+)
+
 // bandsNodeID is the id of the Timeline's bands node — the bands-editor SQL run
 // on the driver's bands lane (4b). It is the chBands channel's fixed source
 // (option a): a panel-authored node, not one of the split-graph nodes.

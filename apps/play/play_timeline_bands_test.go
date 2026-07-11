@@ -3,7 +3,6 @@ package play
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -61,26 +60,34 @@ func TestBandColorByName_AlphaApplied(t *testing.T) {
 	assert.Equal(t, bandAlpha, gotAlpha)
 }
 
-func TestSubstituteBandsRange_LiteralForm(t *testing.T) {
+// formatExtentParam renders the raw value a {tl_*:DateTime64(3, 'UTC')} slot
+// receives: UTC-formatted, millisecond precision (slice 5d — the successor of
+// the retired toDateTime64-literal substitution).
+func TestFormatExtentParam(t *testing.T) {
 	// 2026-05-23T17:13:42.000Z → 1779556422000 ms epoch
-	// 2026-05-23T17:14:42.000Z → 1779556482000 ms epoch
-	const minMS int64 = 1779556422000
-	const maxMS int64 = 1779556482000
-	const sql = "SELECT * FROM bands WHERE t BETWEEN _time_data_min AND _time_data_max"
-
-	out := substituteBandsRange(sql, minMS, maxMS)
-	assert.Contains(t, out, "toDateTime64('2026-05-23 17:13:42.000', 3, 'UTC')")
-	assert.Contains(t, out, "toDateTime64('2026-05-23 17:14:42.000', 3, 'UTC')")
-	assert.False(t, strings.Contains(out, "_time_data_min"),
-		"placeholder _time_data_min must be replaced")
-	assert.False(t, strings.Contains(out, "_time_data_max"),
-		"placeholder _time_data_max must be replaced")
+	assert.Equal(t, "2026-05-23 17:13:42.000", formatExtentParam(1779556422000))
+	assert.Equal(t, "1970-01-01 00:00:00.001", formatExtentParam(1))
 }
 
-func TestSubstituteBandsRange_NoPlaceholdersIsNoOp(t *testing.T) {
-	const sql = "SELECT 1 AS _tl_band_from, 2 AS _tl_band_to"
-	out := substituteBandsRange(sql, 0, 0)
-	assert.Equal(t, sql, out)
+// publishExtent emits tl_min/tl_max into the store once an extent exists;
+// without one it emits nothing (an extent-referencing bands node stays
+// pending until the first events render).
+func TestPublishExtentEmitsSignals(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	drv := &TimelineDriver{}
+
+	drv.publishExtent(graphEmitter{graph: g})
+	_, found := g.signals().Get(string(signalTimelineMin))
+	assert.False(t, found, "no extent ⇒ no emit")
+
+	drv.dataMinMS, drv.dataMaxMS, drv.dataExtentValid = 1779556422000, 1779556482000, true
+	drv.publishExtent(graphEmitter{graph: g})
+	pMin, okMin := g.signals().Get(string(signalTimelineMin))
+	pMax, okMax := g.signals().Get(string(signalTimelineMax))
+	require.True(t, okMin)
+	require.True(t, okMax)
+	assert.Equal(t, "2026-05-23 17:13:42.000", pMin.Raw)
+	assert.Equal(t, "2026-05-23 17:14:42.000", pMax.Raw)
 }
 
 func TestExtentOfEvents_Points(t *testing.T) {
@@ -155,24 +162,34 @@ func bandRec(fromMS, toMS int64, color string) arrow.RecordBatch {
 	return rec
 }
 
-// demandBands demands the bands node lane (4b-2); setBands maps its _tl_band_*
-// result into inst.bands (the chBands channel path).
+// demandBands compiles the bands node against the signal snapshot (the
+// extent rides the tl_min/tl_max signals, 5d) and demands the lane; setBands
+// maps its _tl_band_* result into inst.bands (the chBands channel path).
 func TestDemandBandsLaneAndSetBandsMaps(t *testing.T) {
 	exec := &mockExecutor{build: func(string) arrow.RecordBatch { return bandRec(1000, 2000, "info.subtle") }}
-	sql := "SELECT _time_data_min AS _tl_band_from, _time_data_max AS _tl_band_to, 'info.subtle' AS _tl_band_color"
+	sql := "SELECT {tl_min:DateTime64(3, 'UTC')} AS _tl_band_from, {tl_max:DateTime64(3, 'UTC')} AS _tl_band_to, 'info.subtle' AS _tl_band_color"
 	drv := &TimelineDriver{
-		client:          &Client{},
-		bandsLane:       newNodeLane(exec, memory.NewGoAllocator(), 0),
-		bandsSQLPtr:     &sql,
-		dataMinMS:       1000,
-		dataMaxMS:       2000,
-		dataExtentValid: true,
+		client:      &Client{},
+		bandsLane:   newNodeLane(exec, memory.NewGoAllocator(), 0),
+		bandsSQLPtr: &sql,
 	}
 	defer drv.bandsLane.close()
 
+	// Extent absent from the store ⇒ the extent-referencing node is pending,
+	// nothing is demanded.
+	rec, _ := drv.demandBands(sigNone())
+	require.Nil(t, rec)
+	require.Equal(t, 0, exec.calls, "no extent signals ⇒ no demand")
+
+	// The Timeline publishes the extent; the bands compile picks it up.
+	g := newQueryGraph(nil, nil)
+	edrv := &TimelineDriver{dataMinMS: 1000, dataMaxMS: 2000, dataExtentValid: true}
+	edrv.publishExtent(graphEmitter{graph: g})
+	sig := g.signals()
+
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		rec, _ := drv.demandBands() // non-blocking; the lane lands the result async
+		rec, _ := drv.demandBands(sig) // non-blocking; the lane lands the result async
 		if rec != nil {
 			drv.setBands(rec)
 			rec.Release()
@@ -187,13 +204,69 @@ func TestDemandBandsLaneAndSetBandsMaps(t *testing.T) {
 	assert.Equal(t, int64(2000), drv.bands[0].ToMS)
 	require.NoError(t, drv.bandsLaneErr)
 	require.NoError(t, drv.bandsMapErr)
+	require.Equal(t, 1, exec.calls)
 
-	// An unchanged (extent, SQL) is a memo hit — no second wire call.
-	rec, _ := drv.demandBands()
+	// An unchanged (SQL, signal values) pair is a lane memo hit.
+	rec, _ = drv.demandBands(sig)
 	if rec != nil {
 		rec.Release()
 	}
-	assert.Equal(t, 1, exec.calls, "unchanged compiled SQL must be a lane memo hit")
+	assert.Equal(t, 1, exec.calls, "unchanged compiled pair must be a lane memo hit")
+
+	// A moved extent recompiles and re-executes (supersession by params).
+	edrv.dataMaxMS = 3000
+	edrv.publishExtent(graphEmitter{graph: g})
+	sig2 := g.signals()
+	require.Eventually(t, func() bool {
+		rec, _ := drv.demandBands(sig2)
+		if rec != nil {
+			rec.Release()
+		}
+		return exec.calls == 2
+	}, 2*time.Second, time.Millisecond, "a moved extent signal re-executes the bands node")
+}
+
+// A legacy bands SQL (the retired _time_data_* placeholders) is never
+// demanded; the status line carries the migration hint instead of the
+// server's unknown-identifier error.
+func TestDemandBandsLegacyPlaceholderHint(t *testing.T) {
+	exec := &mockExecutor{build: func(string) arrow.RecordBatch { return bandRec(1, 2, "info.subtle") }}
+	sql := "WITH _time_data_min AS lo SELECT lo AS _tl_band_from"
+	drv := &TimelineDriver{
+		client:      &Client{},
+		bandsLane:   newNodeLane(exec, memory.NewGoAllocator(), 0),
+		bandsSQLPtr: &sql,
+	}
+	defer drv.bandsLane.close()
+
+	rec, _ := drv.demandBands(sigNone())
+	require.Nil(t, rec)
+	require.Equal(t, 0, exec.calls, "a legacy SQL must not reach the lane")
+	require.Contains(t, drv.bandsStatusLine(), "retired")
+	require.Contains(t, drv.bandsStatusLine(), "{tl_min:DateTime64(3, 'UTC')}")
+}
+
+// A bands SQL that does not reference the extent runs immediately — new since
+// 5d: absolute-time bands no longer wait for an events render.
+func TestDemandBandsExtentFreeRunsWithoutEvents(t *testing.T) {
+	exec := &mockExecutor{build: func(string) arrow.RecordBatch { return bandRec(10, 20, "info.subtle") }}
+	sql := "SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') AS _tl_band_from, toDateTime64('2026-01-02 00:00:00', 3, 'UTC') AS _tl_band_to, 'info.subtle' AS _tl_band_color"
+	drv := &TimelineDriver{
+		client:      &Client{},
+		bandsLane:   newNodeLane(exec, memory.NewGoAllocator(), 0),
+		bandsSQLPtr: &sql,
+	}
+	defer drv.bandsLane.close()
+
+	require.Eventually(t, func() bool {
+		rec, _ := drv.demandBands(sigNone()) // no signals at all — still runs
+		if rec != nil {
+			drv.setBands(rec)
+			rec.Release()
+		}
+		return len(drv.bands) == 1
+	}, 2*time.Second, time.Millisecond, "extent-free bands run without events")
+	require.Equal(t, 1, exec.calls)
 }
 
 // schemaOnlyExecutor mimics a query that succeeds with an EMPTY result: the
@@ -213,16 +286,13 @@ func TestSetBandsEmptySuccessMapsToZeroBands(t *testing.T) {
 	schema := arrow.NewSchema([]arrow.Field{
 		{Name: timelineSlotBandFrom, Type: &arrow.TimestampType{Unit: arrow.Millisecond}},
 	}, nil)
-	sql := "SELECT 1 AS _tl_band_from WHERE 0"
+	sql := "SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') AS _tl_band_from WHERE 0"
 	drv := &TimelineDriver{
-		client:          &Client{},
-		bandsLane:       newNodeLane(&schemaOnlyExecutor{schema: schema}, memory.NewGoAllocator(), 0),
-		bandsSQLPtr:     &sql,
-		dataMinMS:       1000,
-		dataMaxMS:       2000,
-		dataExtentValid: true,
-		bandsMapErr:     errors.New("stale mapping error"),
-		bands:           []layout.BackgroundBand{{FromMS: 1, ToMS: 2}},
+		client:      &Client{},
+		bandsLane:   newNodeLane(&schemaOnlyExecutor{schema: schema}, memory.NewGoAllocator(), 0),
+		bandsSQLPtr: &sql,
+		bandsMapErr: errors.New("stale mapping error"),
+		bands:       []layout.BackgroundBand{{FromMS: 1, ToMS: 2}},
 	}
 	defer drv.bandsLane.close()
 
@@ -230,8 +300,8 @@ func TestSetBandsEmptySuccessMapsToZeroBands(t *testing.T) {
 	var sc *arrow.Schema
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		rec, sc = drv.demandBands()
-		if !drv.bandsLoading && drv.bandsServedSQL != "" {
+		rec, sc = drv.demandBands(sigNone())
+		if !drv.bandsLoading && drv.bandsServedKey != "" {
 			break
 		}
 		if rec != nil {
@@ -245,7 +315,7 @@ func TestSetBandsEmptySuccessMapsToZeroBands(t *testing.T) {
 	drv.setBands(rec) // the chBands Render path with a schema-only fill
 	assert.Empty(t, drv.bands, "zero bands mapped")
 	assert.NoError(t, drv.bandsMapErr, "stale map error cleared by the empty success")
-	assert.Equal(t, drv.bandsServedSQL, drv.bandsMappedSQL)
+	assert.Equal(t, drv.bandsServedKey, drv.bandsMappedKey)
 	assert.Equal(t, "0 bands", drv.bandsStatusLine())
 }
 
@@ -263,6 +333,38 @@ func TestBandsStatusLineDoesNotLatchErrors(t *testing.T) {
 	require.Contains(t, drv.bandsStatusLine(), "bad column")
 
 	drv.bandsMapErr = nil
-	drv.bandsMappedSQL = "SELECT 1"
+	drv.bandsMappedKey = "SELECT 1"
 	require.Equal(t, "0 bands", drv.bandsStatusLine())
+}
+
+// The bands seam on the wire (5d): the published extent rides the request URL
+// as param_tl_min / param_tl_max — no textual rewriting of the bands SQL.
+func TestDemandBandsShipsExtentParamsOnWire(t *testing.T) {
+	srv, got := captureServer(t)
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+	sql := "SELECT {tl_min:DateTime64(3, 'UTC')} AS _tl_band_from, {tl_max:DateTime64(3, 'UTC')} AS _tl_band_to, 'info.subtle' AS _tl_band_color"
+	drv := &TimelineDriver{
+		client:      client,
+		bandsLane:   newNodeLane(clientExecutor{client: client}, memory.NewGoAllocator(), 0),
+		bandsSQLPtr: &sql,
+	}
+	defer drv.bandsLane.close()
+
+	g := newQueryGraph(nil, nil)
+	edrv := &TimelineDriver{dataMinMS: 1779556422000, dataMaxMS: 1779556482000, dataExtentValid: true}
+	edrv.publishExtent(graphEmitter{graph: g})
+	sig := g.signals()
+
+	require.Eventually(t, func() bool {
+		rec, _ := drv.demandBands(sig)
+		if rec != nil {
+			rec.Release()
+		}
+		return len(got()) == 1
+	}, 2*time.Second, time.Millisecond)
+	qs := got()
+	assert.Equal(t, "2026-05-23 17:13:42.000", qs[0].Get("param_tl_min"))
+	assert.Equal(t, "2026-05-23 17:14:42.000", qs[0].Get("param_tl_max"))
+	assert.NotContains(t, qs[0], "param__time_data_min", "no legacy channel")
 }

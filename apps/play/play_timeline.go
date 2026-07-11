@@ -65,13 +65,13 @@ type timelineContract struct {
 // publish the `selection` signal (slice 5b) so the Detail tab updates. Bucket
 // clicks (Points-mode rug aggregation) carry no per-row id and are ignored.
 //
-// Bands: a separate panel-local SQL (held on PlayApp, accessed through
-// bandsSQLPtr) is run synchronously whenever the main result's _tl_time
-// extent changes — the (minMS, maxMS) pair is substituted into the
-// user-typed SQL via the timelineBandsPlaceholder* tokens, the resulting
-// bands are cached by (minMS, maxMS, sql) under an LRU, and a closure
-// over inst.bands feeds the widget's WithBackgroundBands producer each
-// frame. See play_timeline_bands.go for the bands-specific helpers.
+// Bands: a panel-authored node (SQL held on PlayApp, accessed through
+// bandsSQLPtr) demanded on its own lane each frame. Its `{tl_min}`/`{tl_max}`
+// slots — and any other referenced signals — resolve against the frame
+// snapshot; the Timeline publishes the events extent as those signals after
+// each rebuild (slice 5d), and a closure over inst.bands feeds the widget's
+// WithBackgroundBands producer each frame. See play_timeline_bands.go for
+// the bands-specific helpers.
 type TimelineDriver struct {
 	ids         *c.WidgetIdStack
 	tl          *timeline.Timeline
@@ -90,16 +90,28 @@ type TimelineDriver struct {
 
 	// Bands (ADR-0097 4b): the bands SQL runs on a node lane — the former
 	// bespoke fetch goroutine + LRU + staleness guard retired into the graph
-	// runtime, the twin of the Map lane (3f). Bands are render-thread-only now
-	// (the lane is the sole async part): updateBands demands the lane each frame
-	// and re-maps only when the served SQL changes; bandsProducer reads
-	// inst.bands directly.
+	// runtime, the twin of the Map lane (3f). Since slice 5d the bands SQL is
+	// a panel-authored node on the param seam: its `{tl_min}`/`{tl_max}` slots
+	// (and any other referenced signals) resolve against the frame snapshot,
+	// and the Timeline publishes the events extent as those signals — the
+	// textual `_time_data_*` substitution retired. Bands are render-thread-only
+	// (the lane is the sole async part): demandBands compiles + demands each
+	// frame and setBands re-maps only when the served (fingerprint, key) pair
+	// changes; bandsProducer reads inst.bands directly.
 	bandsLane      *nodeLane
 	bands          []layout.BackgroundBand
-	bandsServedSQL string // the SQL the lane's last result was for (set by demandBands)
+	bandsServedKey string // compiled key of the lane's last result (set by demandBands)
 	bandsServedFP  uint64 // that result's content fingerprint (early-cutoff key)
 	bandsMappedFP  uint64 // the fingerprint inst.bands was mapped from (setBands re-maps on change)
-	bandsMappedSQL string // the SQL inst.bands was mapped from (empty ⇒ nothing mapped yet)
+	bandsMappedKey string // the compiled key inst.bands was mapped from (empty ⇒ nothing mapped yet)
+	// bandsSlotsFor caches the parse of the bands SQL (one parse per edit,
+	// not per frame): the slot names the compile resolves, the SET-bound set
+	// (a SET pins, D1), and whether the retired _time_data_* placeholders are
+	// present (the migration hint).
+	bandsSlotsFor  string
+	bandsSlotNames []string
+	bandsBound     map[string]bool
+	bandsLegacy    bool
 	// Two error owners, so neither can latch a stale message (review finding):
 	// bandsLaneErr mirrors the lane's error EVERY demand (nil clears it);
 	// bandsMapErr belongs to the last mapping attempt (cleared on success).
@@ -184,6 +196,7 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 		inst.tl.SetIntensityEncoding(ct.ColIntensity >= 0)
 		inst.dataMinMS, inst.dataMaxMS, inst.dataExtentValid = extentOfEvents(ivs, pts, anns)
 	}
+	inst.publishExtent(emit)
 	inst.renderToolbar()
 	inst.renderBandsControls()
 	// Bands are set via the chBands channel (4b-2) before this render, so
@@ -245,6 +258,20 @@ func (inst *TimelineDriver) renderToolbar() {
 		}
 	}
 	inst.tl.SetNowLine(*inst.nowLinePtr)
+}
+
+// publishExtent emits the events extent as the tl_min/tl_max signals (slice
+// 5d): UTC-formatted DateTime64(3) raw values, deduped by the store (a stable
+// extent is write-free) and visible to the bands compile from the next
+// frame's snapshot — the accepted one-frame lag. Without a renderable extent
+// nothing is emitted, so an extent-referencing bands node stays pending until
+// the first events render.
+func (inst *TimelineDriver) publishExtent(emit SignalEmitterI) {
+	if !inst.dataExtentValid || emit == nil {
+		return
+	}
+	emit.Emit(signalTimelineMin, formatExtentParam(inst.dataMinMS))
+	emit.Emit(signalTimelineMax, formatExtentParam(inst.dataMaxMS))
 }
 
 // extentOfEvents finds the (minMS, maxMS) covering every event time in

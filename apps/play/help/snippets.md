@@ -127,14 +127,16 @@ editor, not the main editor — Insert here would put it in the wrong box. Bands
 return the `_tl_band_*` slots: a `from`/`to` `DateTime64` pair, a
 `_tl_band_color` that must be an IDS token name (`neutral.default`,
 `accent.default`, `warning.default`, `error.default`, …), and an optional
-`_tl_band_label`. The `_time_data_min` / `_time_data_max` tokens are replaced
-with the main result's time extent, so a band can be sized relative to whatever
-the query returned. This one shades the middle 50% of the visible window —
-adjust the `0.25` / `0.75` fractions to move or resize the region.
+`_tl_band_label`. The `{tl_min:…}` / `{tl_max:…}` parameters carry the
+events' time extent — the Timeline publishes them as signals after each
+render — so a band can be sized relative to whatever the query returned. A
+bands query that doesn't reference them runs on its own, without waiting for
+events. This one shades the middle 50% of the visible window — adjust the
+`0.25` / `0.75` fractions to move or resize the region.
 
 ```sql
-WITH _time_data_min AS lo,
-     _time_data_max AS hi
+WITH {tl_min:DateTime64(3, 'UTC')} AS lo,
+     {tl_max:DateTime64(3, 'UTC')} AS hi
 SELECT
   addMilliseconds(lo, toInt64(0.25 * dateDiff('millisecond', lo, hi))) AS _tl_band_from,
   addMilliseconds(lo, toInt64(0.75 * dateDiff('millisecond', lo, hi))) AS _tl_band_to,

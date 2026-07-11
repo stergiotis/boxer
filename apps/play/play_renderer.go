@@ -1510,12 +1510,13 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		inst.renderTimelineReject(ct.Reject)
 		return
 	}
-	// Demand the bands node (its own lane) for the chBands channel; it lags the
-	// events extent by a frame (it reads the previous frame's extent), absorbed
-	// by the fetch latency. Both nil (empty bands SQL / no result yet) →
-	// chBands unfilled; a schema-only view (successful empty fetch) still
-	// fills the channel so it maps to "0 bands" rather than "pending".
-	bandsRec, bandsSchema := inst.timeline.demandBands()
+	// Demand the bands node (its own lane) for the chBands channel; since 5d
+	// it compiles against the frame snapshot — the events extent arrives as
+	// the tl_min/tl_max signals the Timeline published, one frame behind
+	// (absorbed by the fetch latency). Both nil (empty bands SQL / no result
+	// yet) → chBands unfilled; a schema-only view (successful empty fetch)
+	// still fills the channel so it maps to "0 bands" rather than "pending".
+	bandsRec, bandsSchema := inst.timeline.demandBands(inst.frameSig)
 	if bandsRec != nil {
 		defer bandsRec.Release()
 	}
