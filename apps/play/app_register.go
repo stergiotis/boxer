@@ -24,7 +24,9 @@ var helpFS embed.FS
 
 // SPINNAKER_PLAY_* drive optional one-shot/scripted-screenshot
 // behaviours on the play HMI. Registered with the boxer-wide env
-// registry per ADR-0058.
+// registry per ADR-0009, so every knob shows up in the generated
+// doc/env-vars.md catalog. The typed handles cache after the first
+// read — fine here: the knobs are set before launch and never change.
 var (
 	SQLOverride = env.NewString(env.Spec{
 		Name:        "SPINNAKER_PLAY_SQL",
@@ -59,6 +61,66 @@ var (
 	PreviewAsSent = env.NewString(env.Spec{
 		Name:        "SPINNAKER_PLAY_PREVIEW_AS_SENT",
 		Description: "non-empty starts the Preview tab in 'as sent to server' mode (post-pass wire SQL) for scripted screenshots",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	FocusMap = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_FOCUS_MAP",
+		Description: "non-empty makes Map the default-active body tab (scripted screenshots)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	FocusGraph = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_FOCUS_GRAPH",
+		Description: "non-empty makes Graph the default-active body tab (scripted screenshots)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	FocusTimeline = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_FOCUS_TIMELINE",
+		Description: "non-empty makes Timeline the default-active body tab (scripted screenshots)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	FocusSchema = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_FOCUS_SCHEMA",
+		Description: "non-empty makes Schema the default-active body tab (scripted screenshots)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	ObserveNode = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_OBSERVE",
+		Description: "graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	ShotSettleFrames = env.NewInt(env.Spec{
+		Name:        "SPINNAKER_PLAY_SHOT_SETTLE",
+		Description: "settle frames before SPINNAKER_PLAY_SCREENSHOT fires; a positive value overrides the default (5), e.g. to wait out an async panel fetch",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	MapTable = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_MAP_TABLE",
+		Description: "initial table for the Map panel; empty keeps the default (planes_mercator_sample100)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	MapZoom = env.NewFloat(env.Spec{
+		Name:        "SPINNAKER_PLAY_MAP_ZOOM",
+		Description: "initial Map zoom level; a positive value overrides the default (4)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	MapCenter = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_MAP_CENTER",
+		Description: "initial Map center as \"lat,lon\" (WGS84); empty or unparseable keeps the default (40,0)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
+	MapSize = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_MAP_SIZE",
+		Description: "Map widget size as \"WxH\" logical points; empty or unparseable keeps the default (960x560)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 )

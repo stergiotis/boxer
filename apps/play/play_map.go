@@ -3,7 +3,6 @@ package play
 import (
 	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -201,20 +200,19 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		// starts from an editable density expression.
 		customColorSQL: "transparency * 255 AS red,\n    transparency * 200 AS green,\n    transparency * 120 AS blue",
 	}
-	// Scripted-screenshot overrides (SPINNAKER_PLAY_MAP_*), parallel to the
-	// SPINNAKER_PLAY_* knobs the play HMI already reads.
-	if t := strings.TrimSpace(os.Getenv("SPINNAKER_PLAY_MAP_TABLE")); t != "" {
+	// Scripted-screenshot overrides — the SPINNAKER_PLAY_MAP_* knobs from the
+	// app_register.go env-registry block (ADR-0009); unset keeps the defaults
+	// above.
+	if t := strings.TrimSpace(MapTable.Get()); t != "" {
 		d.table = t
 	}
-	if z := strings.TrimSpace(os.Getenv("SPINNAKER_PLAY_MAP_ZOOM")); z != "" {
-		if f, err := strconv.ParseFloat(z, 64); err == nil {
-			d.initZoom = f
-		}
+	if z := MapZoom.Get(); z > 0 {
+		d.initZoom = z
 	}
-	if la, lo, ok := parseLatLon(os.Getenv("SPINNAKER_PLAY_MAP_CENTER")); ok {
+	if la, lo, ok := parseLatLon(MapCenter.Get()); ok {
 		d.initLat, d.initLon = la, lo
 	}
-	if w, h, ok := parseWxH(os.Getenv("SPINNAKER_PLAY_MAP_SIZE")); ok {
+	if w, h, ok := parseWxH(MapSize.Get()); ok {
 		d.mapWidth, d.mapHeight = w, h
 	}
 	return d

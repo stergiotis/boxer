@@ -5,7 +5,6 @@ import (
 	"math"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -645,19 +644,19 @@ func (inst *PlayApp) Render() error {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
 			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema}
-			if os.Getenv("SPINNAKER_PLAY_FOCUS_MAP") != "" {
+			if FocusMap.Get() != "" {
 				// Scripted-screenshot focus: make Map the default-active body tab.
 				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabSchema}
 			}
-			if os.Getenv("SPINNAKER_PLAY_FOCUS_GRAPH") != "" {
+			if FocusGraph.Get() != "" {
 				// Scripted-screenshot focus: make Graph the default-active body tab.
 				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabSchema}
 			}
-			if os.Getenv("SPINNAKER_PLAY_FOCUS_TIMELINE") != "" {
+			if FocusTimeline.Get() != "" {
 				// Scripted-screenshot focus: make Timeline the default-active body tab.
 				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema}
 			}
-			if os.Getenv("SPINNAKER_PLAY_FOCUS_SCHEMA") != "" {
+			if FocusSchema.Get() != "" {
 				// Scripted-screenshot focus: make Schema the default-active body tab.
 				bodyTabs = []uint64{dockTabSchema, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph}
 			}
@@ -732,7 +731,7 @@ func (inst *PlayApp) Render() error {
 			// Scripted-screenshot affordance: observe a named node on run so a
 			// capture can show the panels rendering an intermediate (mirrors
 			// SPINNAKER_PLAY_FOCUS_*). Ignored when the node is absent.
-			if obs := os.Getenv("SPINNAKER_PLAY_OBSERVE"); obs != "" {
+			if obs := ObserveNode.Get(); obs != "" {
 				if _, ok := findSplitNode(split, NodeID(obs)); ok {
 					inst.observedNode = NodeID(obs)
 				}
@@ -811,10 +810,8 @@ func (inst *PlayApp) autoShotTick() {
 		// captures can wait out an async panel fetch (e.g. the Map tab's
 		// debounced raster round-trip) before the screenshot fires.
 		settleFrames := 5
-		if v := os.Getenv("SPINNAKER_PLAY_SHOT_SETTLE"); v != "" {
-			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 {
-				settleFrames = n
-			}
+		if n := ShotSettleFrames.Get(); n > 0 {
+			settleFrames = int(n)
 		}
 		settled := inst.frame-inst.shotSettle >= settleFrames
 		ceiling := inst.frame-inst.shotSettle >= settleFrames+60
