@@ -8,7 +8,7 @@ import (
 
 func TestProjectionPanelAcceptClaimsSelectionRow(t *testing.T) {
 	p := projectionPanel{}
-	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), playSignals{selectedRow: 2})
+	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), sigWith(2))
 	require.Empty(t, reason)
 	row, ok := claim.(int64)
 	require.True(t, ok)
@@ -17,7 +17,7 @@ func TestProjectionPanelAcceptClaimsSelectionRow(t *testing.T) {
 
 func TestProjectionPanelRejectsNilSchema(t *testing.T) {
 	p := projectionPanel{}
-	claim, reason := p.AcceptForChannel(chMain, nil, playSignals{selectedRow: 0})
+	claim, reason := p.AcceptForChannel(chMain, nil, sigWith(0))
 	require.Nil(t, claim)
 	require.NotEmpty(t, reason)
 }

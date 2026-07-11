@@ -24,18 +24,18 @@ func strField(name string) arrow.Field {
 func TestTimelinePanelAcceptClaimsRenderableSchema(t *testing.T) {
 	p := timelinePanel{}
 
-	claim, reason := p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime)), emptySignals{})
+	claim, reason := p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime)), sigNone())
 	require.Empty(t, reason)
 	ct, ok := claim.(timelineContract)
 	require.True(t, ok)
 	require.Equal(t, timelineModePoints, ct.Mode)
 
-	claim, reason = p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime), tsField(timelineSlotTimeEnd)), emptySignals{})
+	claim, reason = p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime), tsField(timelineSlotTimeEnd)), sigNone())
 	require.Empty(t, reason)
 	ct, _ = claim.(timelineContract)
 	require.Equal(t, timelineModeIntervals, ct.Mode)
 
-	claim, reason = p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime), strField(timelineSlotLabel)), emptySignals{})
+	claim, reason = p.AcceptForChannel(chEvents, schemaWith(tsField(timelineSlotTime), strField(timelineSlotLabel)), sigNone())
 	require.Empty(t, reason)
 	ct, _ = claim.(timelineContract)
 	require.Equal(t, timelineModeAnnotations, ct.Mode)
@@ -57,7 +57,7 @@ func TestTimelinePanelAcceptRejectsWithReason(t *testing.T) {
 		{"no contract columns", schemaWith(strField("whatever"))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			claim, reason := p.AcceptForChannel(chEvents, tc.schema, emptySignals{})
+			claim, reason := p.AcceptForChannel(chEvents, tc.schema, sigNone())
 			require.Nil(t, claim, "reject must carry no claim")
 			require.NotEmpty(t, reason, "reject must carry an empty-state reason")
 		})
@@ -78,36 +78,44 @@ func TestTimelinePanelDeclaresEventsAndBandsChannels(t *testing.T) {
 // unfilled.
 func TestTimelinePanelBandsChannelAccepts(t *testing.T) {
 	p := timelinePanel{}
-	claim, reason := p.AcceptForChannel(chBands, schemaWith(tsField(timelineSlotBandFrom)), emptySignals{})
+	claim, reason := p.AcceptForChannel(chBands, schemaWith(tsField(timelineSlotBandFrom)), sigNone())
 	require.Empty(t, reason)
 	require.Equal(t, true, claim)
 
-	_, reason = p.AcceptForChannel(chBands, nil, emptySignals{})
+	_, reason = p.AcceptForChannel(chBands, nil, sigNone())
 	require.NotEmpty(t, reason, "absent bands result → optional channel unfilled")
 }
 
-// The selection emitter bridges signalSelection writes to the legacy
-// selectedRow sink, and ignores everything else.
-func TestSelectedRowEmitterBridgesSelection(t *testing.T) {
-	row := int64(-1)
-	em := selectedRowEmitter{target: &row}
+// The live emitter (slice 5b) writes any named signal into the store; a
+// string value is encodable too (it is no longer a selection-only bridge).
+// The write is visible from the next snapshot.
+func TestGraphEmitterWritesStore(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	em := graphEmitter{graph: g}
 
 	em.Emit(signalSelection, int64(7))
-	require.Equal(t, int64(7), row)
+	got, ok := readSelection(g.signals())
+	require.True(t, ok)
+	require.Equal(t, int64(7), got)
 
-	em.Emit("other", int64(9)) // wrong signal id
-	require.Equal(t, int64(7), row)
+	em.Emit("other", int64(9)) // any name is a signal now
+	p, ok := g.signals().Get("other")
+	require.True(t, ok)
+	require.Equal(t, "9", p.Raw)
 
-	em.Emit(signalSelection, "nope") // wrong value type
-	require.Equal(t, int64(7), row)
+	em.Emit(signalSelection, struct{}{}) // unencodable ⇒ dropped with a warning
+	got, ok = readSelection(g.signals())
+	require.True(t, ok)
+	require.Equal(t, int64(7), got)
 
 	em.Emit(signalSelection, int64(3))
-	require.Equal(t, int64(3), row)
+	got, _ = readSelection(g.signals())
+	require.Equal(t, int64(3), got)
 }
 
-// emptySignals reports no bound signals and a zero revision.
-func TestEmptySignals(t *testing.T) {
-	var sig SignalEnvI = emptySignals{}
+// A fresh store reports no signals and a zero revision.
+func TestFreshStoreEnvIsEmpty(t *testing.T) {
+	var sig SignalEnvI = sigNone()
 	_, ok := sig.Get("anything")
 	require.False(t, ok)
 	require.Equal(t, uint64(0), sig.Revision())

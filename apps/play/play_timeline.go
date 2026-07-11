@@ -62,7 +62,7 @@ type timelineContract struct {
 // widget. Per-frame: when the result identity changes (schema pointer or
 // executed timestamp), the driver re-resolves the column contract and pushes
 // the layout-event slices into the widget. Clicks on intervals / annotations
-// route back into PlayApp.selectedRow so the Detail tab updates. Bucket
+// publish the `selection` signal (slice 5b) so the Detail tab updates. Bucket
 // clicks (Points-mode rug aggregation) carry no per-row id and are ignored.
 //
 // Bands: a separate panel-local SQL (held on PlayApp, accessed through
@@ -76,7 +76,6 @@ type TimelineDriver struct {
 	ids         *c.WidgetIdStack
 	tl          *timeline.Timeline
 	client      *Client
-	selectedRow *int64
 	bandsSQLPtr *string
 	nowLinePtr  *bool
 
@@ -112,20 +111,19 @@ type TimelineDriver struct {
 
 // NewTimelineDriver constructs the driver and the underlying composite
 // widget eagerly (the widget tolerates nil starter data and renders an
-// empty axis until SetIntervals/SetPoints/SetAnnotations is called). The
-// selectedRow pointer is captured so the WithOnSelection callback can
-// push a row index back into PlayApp without a back-reference. The
-// client is reused for bands-SQL submissions; bandsSQLPtr points at the
-// PlayApp-owned, persisted bands SQL string (mutated by the TextEdit
-// inside renderBandsControls). nowLinePtr points at the PlayApp-owned
-// "now line" toggle (mutated by the toolbar checkbox); the driver
-// pushes its current value into the widget via SetNowLine each frame
-// so the flip survives data swaps without recreating the widget.
-func NewTimelineDriver(ids *c.WidgetIdStack, selectedRow *int64, client *Client, bandsSQLPtr *string, nowLinePtr *bool) (inst *TimelineDriver) {
+// empty axis until SetIntervals/SetPoints/SetAnnotations is called).
+// Selection publishes through the SignalEmitterI renderContract receives
+// per frame (slice 5b — no PlayApp back-reference). The client is reused
+// for bands-SQL submissions; bandsSQLPtr points at the PlayApp-owned,
+// persisted bands SQL string (mutated by the TextEdit inside
+// renderBandsControls). nowLinePtr points at the PlayApp-owned "now line"
+// toggle (mutated by the toolbar checkbox); the driver pushes its current
+// value into the widget via SetNowLine each frame so the flip survives
+// data swaps without recreating the widget.
+func NewTimelineDriver(ids *c.WidgetIdStack, client *Client, bandsSQLPtr *string, nowLinePtr *bool) (inst *TimelineDriver) {
 	inst = &TimelineDriver{
 		ids:         ids,
 		client:      client,
-		selectedRow: selectedRow,
 		bandsSQLPtr: bandsSQLPtr,
 		nowLinePtr:  nowLinePtr,
 		bandsLane:   newNodeLane(clientExecutor{client: client, opts: newExecOptions("bands")}, memory.NewGoAllocator(), bandsFetchTimeout),
@@ -154,15 +152,11 @@ func (inst *TimelineDriver) onSelect(sel timeline.SelectionInfo) {
 	if row < 0 {
 		return
 	}
-	// ADR-0097 SD8: selection is published as a param mutation. emit is set per
-	// frame by renderContract; the legacy selectedRow pointer is the fallback
-	// until the signal graph owns the selection sink.
+	// ADR-0097 SD8: selection is published as a param mutation into the
+	// signal store (slice 5b). emit is set per frame by renderContract; the
+	// nil guard covers a widget callback firing before the first render.
 	if inst.emit != nil {
 		inst.emit.Emit(signalSelection, row)
-		return
-	}
-	if inst.selectedRow != nil {
-		*inst.selectedRow = row
 	}
 }
 

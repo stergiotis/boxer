@@ -48,18 +48,18 @@ func testWorldDriver(t *testing.T) *WorldDriver {
 
 func TestWorldPanelAccept(t *testing.T) {
 	p := worldPanel{driver: testWorldDriver(t)}
-	if _, reason := p.AcceptForChannel(chMain, nil, emptySignals{}); reason == "" {
+	if _, reason := p.AcceptForChannel(chMain, nil, sigNone()); reason == "" {
 		t.Fatal("nil schema must reject")
 	}
 	noStr := arrow.NewSchema([]arrow.Field{{Name: "n", Type: arrow.PrimitiveTypes.Int64}}, nil)
-	if _, reason := p.AcceptForChannel(chMain, noStr, emptySignals{}); reason == "" {
+	if _, reason := p.AcceptForChannel(chMain, noStr, sigNone()); reason == "" {
 		t.Fatal("schema without a string column must reject")
 	}
 	withStr := arrow.NewSchema([]arrow.Field{
 		{Name: "country", Type: arrow.BinaryTypes.String},
 		{Name: "v", Type: arrow.PrimitiveTypes.Float64},
 	}, nil)
-	if _, reason := p.AcceptForChannel(chMain, withStr, emptySignals{}); reason != "" {
+	if _, reason := p.AcceptForChannel(chMain, withStr, sigNone()); reason != "" {
 		t.Fatalf("schema with a string column rejected: %s", reason)
 	}
 }

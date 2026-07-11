@@ -5,12 +5,14 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -241,10 +243,56 @@ func (inst *queryGraph) signals() (sig SignalEnvI) {
 // setSignalRaw writes a signal's raw value into the store (ADR-0097 slice
 // 5a). name is the bare param name (no `param_` prefix); raw is the value
 // string that rides the URL channel at execution. The revision bumps only on
-// an actual change (setSignal). Writers: history-restore seeding (D4) and,
-// from slice 5b on, the panel emitters.
+// an actual change (setSignal). Writers: history-restore seeding (D4) and
+// the panel emitters (graphEmitter, slice 5b).
 func (inst *queryGraph) setSignalRaw(name SignalID, raw string) {
 	inst.setSignal(name, env.Param{Name: name, Raw: raw})
+}
+
+// encodeSignalValue renders a panel-emitted Go value as the raw string a
+// signal stores (the param_* URL channel ships raw text; the referencing
+// slot's declared type drives the server-side interpretation). Unsupported
+// types report ok=false — the emitter drops the write with a warning rather
+// than storing something lossy.
+func encodeSignalValue(value any) (raw string, ok bool) {
+	switch v := value.(type) {
+	case string:
+		return v, true
+	case int:
+		return strconv.Itoa(v), true
+	case int64:
+		return strconv.FormatInt(v, 10), true
+	case uint64:
+		return strconv.FormatUint(v, 10), true
+	case float64:
+		return strconv.FormatFloat(v, 'g', -1, 64), true
+	case bool:
+		if v {
+			return "1", true
+		}
+		return "0", true
+	}
+	return "", false
+}
+
+// graphEmitter is the live SignalEmitterI over the signal store (ADR-0097
+// slice 5b): a panel's Emit writes the named value into the store, where it
+// is visible from the NEXT frame's snapshot (frame consistency, 5a) — every
+// panel in a frame sees one revision, so propagation is uniform rather than
+// dependent on tab render order. This is the single Emit path; the per-field
+// selectedRow bridge (selectedRowEmitter) retired with it.
+type graphEmitter struct {
+	graph *queryGraph
+}
+
+func (inst graphEmitter) Emit(id SignalID, value any) {
+	raw, encodable := encodeSignalValue(value)
+	if !encodable {
+		log.Warn().Str("signal", string(id)).Type("valueType", value).
+			Msg("play: dropping signal emit with unsupported value type")
+		return
+	}
+	inst.graph.setSignalRaw(id, raw)
 }
 
 // resolveSignalNames resolves the given slot names against a signal snapshot,

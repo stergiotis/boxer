@@ -168,10 +168,10 @@ func TestSchemaPanelContract(t *testing.T) {
 	require.Equal(t, PanelID("schema"), p.ID())
 	require.Equal(t, []ChannelSpec{{ID: chMain, Required: true, Label: "schema"}}, p.Channels())
 
-	_, reason := p.AcceptForChannel(chMain, nil, playSignals{})
+	_, reason := p.AcceptForChannel(chMain, nil, sigNone())
 	require.NotEmpty(t, reason)
 
-	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), playSignals{})
+	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), sigNone())
 	require.Empty(t, reason)
 	require.Nil(t, claim)
 }

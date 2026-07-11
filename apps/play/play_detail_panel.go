@@ -4,7 +4,6 @@ import (
 	"strconv"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -70,15 +69,14 @@ func (inst detailPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 	inst.app.renderDetailPane(main.Rec, dc.schema, dc.row)
 }
 
-// selectionParam encodes a selected row index as the `selection` signal's value —
-// an Int64 param, the same shape a SQL param would carry (ADR-0097 SD8).
-func selectionParam(row int64) env.Param {
-	return env.Param{Name: signalSelection, Type: "Int64", Raw: strconv.FormatInt(row, 10)}
-}
-
-// readSelection decodes the selected row from a signal env, or (-1, false) when
-// the selection signal is absent or unparseable.
+// readSelection decodes the selected row from a signal env, or (-1, false)
+// when the selection signal is absent or unparseable. Since slice 5b the env
+// is the live store snapshot (the frame's `frameSig`) — the selection is an
+// ordinary store signal the panels write through graphEmitter.
 func readSelection(sig SignalEnvI) (row int64, ok bool) {
+	if sig == nil {
+		return -1, false
+	}
 	p, found := sig.Get(signalSelection)
 	if !found {
 		return -1, false
@@ -89,21 +87,3 @@ func readSelection(sig SignalEnvI) (row int64, ok bool) {
 	}
 	return r, true
 }
-
-// playSignals is the strangler signal env: it exposes PlayApp.selectedRow as the
-// `selection` signal, so consumers (Detail) read selection through the signal
-// vocabulary while producers (Timeline's emitter, Table/Projection) still write
-// selectedRow. When the runtime owns the signal store, this bridge and
-// selectedRowEmitter retire together and the panels are unchanged.
-type playSignals struct {
-	selectedRow int64
-}
-
-func (inst playSignals) Get(id SignalID) (param env.Param, ok bool) {
-	if id == signalSelection {
-		return selectionParam(inst.selectedRow), true
-	}
-	return env.Param{}, false
-}
-
-func (inst playSignals) Revision() uint64 { return 0 }

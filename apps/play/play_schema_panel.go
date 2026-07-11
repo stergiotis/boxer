@@ -59,7 +59,7 @@ func (inst *PlayApp) renderSchemaTab(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 	reject := dispatchPanel(schemaPanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: playSignals{selectedRow: inst.selectedRow}},
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
 	}, nil)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {

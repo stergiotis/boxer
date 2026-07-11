@@ -112,7 +112,12 @@ type PlayApp struct {
 	// names its prelude bound — the signal half of the staleness witness
 	// and the observed intermediates' resolution inputs. wireSignals
 	// mirrors the would-be resolution for the "as sent" preview caption.
-	frameSig          SignalEnvI
+	frameSig SignalEnvI
+	// sigEmit is the live SignalEmitterI panels publish through (slice 5b):
+	// writes land in the store and are visible from the next frame's
+	// snapshot. The selection is a store signal now — PlayApp no longer
+	// carries a selectedRow field.
+	sigEmit           graphEmitter
 	lastSentSigParams map[string]string
 	lastRunBound      map[string]bool
 	wireSignals       map[string]string
@@ -125,7 +130,6 @@ type PlayApp struct {
 	pendingSnippetInsert  string
 	pendingSnippetReplace string
 	requestRun            bool
-	selectedRow           int64
 	cards                 *CardDriver
 	projector             *Projector
 
@@ -478,7 +482,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		launchURL:        launchURL,
 		density:          styletokens.DensityFromEnv(),
 		sql:              initialSQL,
-		selectedRow:      -1,
+		sigEmit:          graphEmitter{graph: graph},
 		cards:            cards,
 		projector:        NewProjector(projectorIds, cards),
 		schemaModel:      schemaview.NewModel(nil),
@@ -512,7 +516,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 			newScalarTextWidget(),
 		},
 	}
-	inst.timeline = NewTimelineDriver(timelineIds, &inst.selectedRow, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
+	inst.timeline = NewTimelineDriver(timelineIds, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
 	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
 	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
@@ -634,9 +638,7 @@ func (inst *PlayApp) Render() error {
 	rec, schema, numRows, loading, elapsed, summary, executed, err := inst.activeSnapshot()
 	if rec != nil {
 		defer rec.Release()
-		if inst.selectedRow < 0 || inst.selectedRow >= rec.NumRows() {
-			inst.selectedRow = 0
-		}
+		inst.syncSelectionClamp(rec)
 		if executed != inst.pagerSeenExecuted {
 			inst.pagerSeenExecuted = executed
 			inst.pager.Reset()
@@ -799,6 +801,24 @@ func (inst *PlayApp) Render() error {
 	inst.autoShotTick()
 	c.RequestRepaint()
 	return nil
+}
+
+// syncSelectionClamp keeps the selection signal valid for the active result
+// (slice 5b, replacing the selectedRow field clamp): an absent or
+// out-of-range selection resets to row 0, so a fresh result auto-selects its
+// first row exactly as before. The write lands in the store immediately and
+// is visible from the NEXT frame's snapshot; this frame's panels guard
+// out-of-range rows themselves (the Detail empty-state), so the one-frame
+// window is benign. An in-range selection writes nothing (and a repeated "0"
+// write does not bump the store revision).
+func (inst *PlayApp) syncSelectionClamp(rec arrow.RecordBatch) {
+	if rec == nil {
+		return
+	}
+	row, found := readSelection(inst.frameSig)
+	if !found || row < 0 || row >= rec.NumRows() {
+		inst.graph.setSignalRaw(signalSelection, "0")
+	}
 }
 
 // resolveRunSignals resolves a Run buffer's unbound param slots against the
@@ -1431,8 +1451,8 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	c.AddSpace(pad)
 	c.Separator().Send()
 	dispatchPanel(tablePanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: playSignals{selectedRow: inst.selectedRow}},
-	}, selectedRowEmitter{target: &inst.selectedRow})
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
+	}, inst.sigEmit)
 }
 
 // renderProjectionTab is the Projection dock tab body: the UMAP scatter
@@ -1451,8 +1471,8 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, er
 		return
 	}
 	dispatchPanel(projectionPanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: rec.Schema(), sig: playSignals{selectedRow: inst.selectedRow}},
-	}, selectedRowEmitter{target: &inst.selectedRow})
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: rec.Schema(), sig: inst.frameSig},
+	}, inst.sigEmit)
 }
 
 // renderTimelineTab is the Timeline dock tab body: the calendar-axis
@@ -1500,12 +1520,12 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		defer bandsRec.Release()
 	}
 	inputs := map[ChannelID]channelInput{
-		chEvents: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: emptySignals{}},
+		chEvents: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
 	}
 	if bandsRec != nil || bandsSchema != nil {
-		inputs[chBands] = channelInput{node: bandsNodeID, rec: bandsRec, schema: bandsSchema, sig: emptySignals{}}
+		inputs[chBands] = channelInput{node: bandsNodeID, rec: bandsRec, schema: bandsSchema, sig: inst.frameSig}
 	}
-	if reject := dispatchPanel(timelinePanel{driver: inst.timeline}, inputs, selectedRowEmitter{target: &inst.selectedRow}); reject != "" {
+	if reject := dispatchPanel(timelinePanel{driver: inst.timeline}, inputs, inst.sigEmit); reject != "" {
 		inst.renderTimelineReject(reject)
 		return
 	}
@@ -1545,8 +1565,8 @@ func (inst *PlayApp) renderWorldTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	}
 	inst.worldDriver.noteExecuted(executed)
 	reject := dispatchPanel(worldPanel{driver: inst.worldDriver}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: playSignals{selectedRow: inst.selectedRow}},
-	}, selectedRowEmitter{target: &inst.selectedRow})
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
+	}, inst.sigEmit)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {
 			rt.Small().Weak()
@@ -1571,7 +1591,7 @@ func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 	reject := dispatchPanel(detailPanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: playSignals{selectedRow: inst.selectedRow}},
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
 	}, nil)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {

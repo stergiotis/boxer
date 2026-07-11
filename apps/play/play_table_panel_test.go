@@ -10,7 +10,7 @@ import (
 // signal env.
 func TestTablePanelAcceptClaimsSelectionRow(t *testing.T) {
 	p := tablePanel{}
-	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), playSignals{selectedRow: 4})
+	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), sigWith(4))
 	require.Empty(t, reason)
 	row, ok := claim.(int64)
 	require.True(t, ok)
@@ -21,7 +21,7 @@ func TestTablePanelAcceptClaimsSelectionRow(t *testing.T) {
 // highlighted), so Accept claims rather than rejecting.
 func TestTablePanelClaimsWithoutSelection(t *testing.T) {
 	p := tablePanel{}
-	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), playSignals{selectedRow: -1})
+	claim, reason := p.AcceptForChannel(chMain, schemaWith(strField("c")), sigWith(-1))
 	require.Empty(t, reason)
 	row, _ := claim.(int64)
 	require.Equal(t, int64(-1), row)
@@ -29,7 +29,7 @@ func TestTablePanelClaimsWithoutSelection(t *testing.T) {
 
 func TestTablePanelRejectsNilSchema(t *testing.T) {
 	p := tablePanel{}
-	claim, reason := p.AcceptForChannel(chMain, nil, playSignals{selectedRow: 0})
+	claim, reason := p.AcceptForChannel(chMain, nil, sigWith(0))
 	require.Nil(t, claim)
 	require.NotEmpty(t, reason)
 }

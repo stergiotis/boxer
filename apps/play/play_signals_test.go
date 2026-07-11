@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -205,4 +206,71 @@ func TestActiveSnapshotResolvesIntermediateSignals(t *testing.T) {
 	require.Eventually(t, func() bool { return len(got()) == 1 }, 2*time.Second, time.Millisecond)
 	require.Equal(t, "9", got()[0].Get("param_x"), "the intermediate's Reads resolve from the store and ride the URL")
 	app.Close()
+}
+
+// sigWith returns a live store snapshot carrying the selection signal — the
+// slice-5b replacement for the retired playSignals test stub: panel tests
+// exercise the same env implementation production uses.
+func sigWith(selection int64) SignalEnvI {
+	g := newQueryGraph(nil, nil)
+	g.setSignalRaw(signalSelection, strconv.FormatInt(selection, 10))
+	return g.signals()
+}
+
+// sigNone returns an empty live store snapshot (no signals set) — the
+// replacement for the retired emptySignals stub.
+func sigNone() SignalEnvI {
+	return newQueryGraph(nil, nil).signals()
+}
+
+// encodeSignalValue covers the emit-value vocabulary; unsupported types
+// report ok=false (the emitter drops them).
+func TestEncodeSignalValue(t *testing.T) {
+	for _, tc := range []struct {
+		in  any
+		raw string
+		ok  bool
+	}{
+		{"s", "s", true},
+		{int(3), "3", true},
+		{int64(-4), "-4", true},
+		{uint64(5), "5", true},
+		{float64(1.5), "1.5", true},
+		{true, "1", true},
+		{false, "0", true},
+		{struct{}{}, "", false},
+	} {
+		raw, ok := encodeSignalValue(tc.in)
+		require.Equal(t, tc.ok, ok)
+		require.Equal(t, tc.raw, raw)
+	}
+}
+
+// syncSelectionClamp (slice 5b, replacing the selectedRow field clamp) resets
+// an absent or out-of-range selection to row 0 and leaves an in-range one
+// untouched — no store-revision churn on the steady state.
+func TestSyncSelectionClamp(t *testing.T) {
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	rec := int64Rec("n", 1, 2, 3)
+	defer rec.Release()
+
+	app.frameSig = app.graph.signals() // absent selection
+	app.syncSelectionClamp(rec)
+	got, found := readSelection(app.graph.signals())
+	require.True(t, found)
+	require.Equal(t, int64(0), got, "absent selection clamps to row 0 (auto-select the first row)")
+
+	app.graph.setSignalRaw(signalSelection, "7") // out of range for 3 rows
+	app.frameSig = app.graph.signals()
+	app.syncSelectionClamp(rec)
+	got, _ = readSelection(app.graph.signals())
+	require.Equal(t, int64(0), got, "out-of-range selection clamps to row 0")
+
+	app.graph.setSignalRaw(signalSelection, "2") // in range
+	app.frameSig = app.graph.signals()
+	rev := app.graph.signals().Revision()
+	app.syncSelectionClamp(rec)
+	require.Equal(t, rev, app.graph.signals().Revision(), "an in-range selection writes nothing")
+	got, _ = readSelection(app.graph.signals())
+	require.Equal(t, int64(2), got)
 }
