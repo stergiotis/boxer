@@ -875,6 +875,43 @@ four bespoke mechanisms into one primitive: the two strangler `SignalEnvI`
 stubs, the selection bridge, the Map literal rebuild, and the bands
 placeholder hack.
 
+### 2026-07-11 — Slice 5a shipped (the signal-store substrate)
+
+The substrate is live; with an empty store it is behaviour-identical (the
+first writers arrive in 5b):
+
+- **The store is the slice-1 signal env, promoted**: `setSignalRaw` writes a
+  bare name → raw value (revision bumps only on change), and `Render` takes
+  one immutable snapshot per frame — every compile and consumer in a frame
+  sees a single revision, an emit lands next frame.
+- **Nodes compile to `(sql, params)`** — the new `compiledNode`, whose
+  order-insensitive `key()` is the memo identity on the runtime memo AND the
+  lanes: the same SQL under a moved signal value re-executes; an unchanged
+  pair memo-hits. `ExecuteArrowStream` gained the signals argument; values
+  ride the `param_*` URL channel and the harvested SET constants are applied
+  second, so a bound name shadows a same-named signal (D1) at the wire too.
+- **Run resolution**: a fresh parse of the Run buffer yields the slot list
+  and the SET-bound set; unbound names with a store value ship as URL params
+  and are recorded (with the bound set) for the staleness witness and the
+  observed intermediates, which resolve their split `Reads` against the frame
+  snapshot on the intermediate lane. The raw-fallback Run resolves nothing —
+  the server reports, as for the SQL itself.
+- **Staleness (D2)**: `observeQueryState` flips to the `*Stale` twin when the
+  buffer's current resolution diverges from what the run shipped, and clears
+  when it moves back — symmetric with edit/revert. O(#slots) per frame off
+  the debounced caches, no parse.
+- **History (D4)**: `HistoryEntry.SigParams` snapshots the run's signal
+  inputs; restoring an entry seeds the store alongside the buffer.
+- **Chrome**: the "as sent" preview captions the would-be signal resolution
+  (`signals on URL: …`), refreshing on store-revision moves as well as
+  buffer edits.
+
+Regression tests cover the key identity, lane re-execution on a moved
+signal, the wire channel with D1 shadowing, the history snapshot + seed
+round-trip, unbound-only resolution (parse-failure resolves nothing), the
+staleness flip/clear, and the observed-intermediate resolution end to end
+against a capture server.
+
 ## References
 
 Internal:
