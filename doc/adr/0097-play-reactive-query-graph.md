@@ -912,6 +912,38 @@ round-trip, unbound-only resolution (parse-failure resolves nothing), the
 staleness flip/clear, and the observed-intermediate resolution end to end
 against a capture server.
 
+### 2026-07-11 — Slice 5b shipped (selection is a real signal; the stranglers retire)
+
+The `selection` signal now lives in the store and the three strangler types
+are gone:
+
+- **One emit path.** `graphEmitter` (any-name, typed-value encoding via
+  `encodeSignalValue`; an unencodable value is dropped with a warning) writes
+  the store; every panel dispatch publishes through it and reads the frame
+  snapshot (`frameSig`) as its env — Table, Projection, Timeline, Detail,
+  Schema, and the ADR-0114 World panel, which had adopted the strangler
+  pattern and migrated with the rest.
+- **`PlayApp.selectedRow` is gone.** The per-frame clamp became
+  `syncSelectionClamp`: an absent or out-of-range selection resets to row 0
+  in the store (a fresh result still auto-selects its first row); an
+  in-range one writes nothing, so the steady state does not churn the
+  revision. The reset is visible from the next frame — this frame's panels
+  guard out-of-range rows themselves, so the one-frame window is benign.
+- **Propagation is uniformly next-frame** (frame-snapshot consistency, 5a).
+  Previously a click propagated same-frame only to tabs rendered after the
+  emitting tab — order-dependent; now every panel in a frame sees one
+  revision. At interactive frame rates the one-frame lag is imperceptible.
+- **The Timeline driver lost its PlayApp back-reference** (the `selectedRow`
+  pointer fallback): selection publishes only through the per-frame emitter.
+- **Retired:** `playSignals`, `selectedRowEmitter`, `emptySignals`, and the
+  `selectionParam` helper. Panel tests now exercise the live store env
+  (`sigWith`/`sigNone` build real snapshots) instead of stubs.
+
+A consequence worth naming: `selection` is now an ordinary named signal, so a
+buffer referencing `{selection:Int64}` participates in the D2 staleness
+witness and ships the clicked row on the next Run — the first cross-filter
+falls out of the model with no new mechanism, exactly as SD8 intended.
+
 ## References
 
 Internal:
