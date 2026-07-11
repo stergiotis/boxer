@@ -47,6 +47,9 @@ func (inst *PlayApp) renderGraphTab() {
 // compiled SQL (the CTE body, or the whole statement for the sink).
 func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 	kind := "CTE"
+	if n.Recursive {
+		kind = "CTE (recursive)"
+	}
 	if n.Kind == splitNodeStatement {
 		kind = "sink"
 	}

@@ -42,6 +42,19 @@ type splitNode struct {
 	// Guaranteed by construction: when set, SQL's first token is the WITH
 	// keyword (the body text starts at the body query's first token).
 	OwnWith bool
+
+	// OwnWithRecursive marks an OwnWith body whose own clause is
+	// `WITH RECURSIVE …`. The comma-merge cannot continue such a list (the
+	// RECURSIVE keyword would land mid-list), so fuseNode uses the wrap form
+	// instead when deps must be attached.
+	OwnWithRecursive bool
+
+	// Recursive marks a CTE lifted from a `WITH RECURSIVE` clause (the
+	// modifier is clause-wide). Its body may reference the node's own name,
+	// so fuseNode materialises it as `WITH RECURSIVE … <id> AS (<body>)
+	// SELECT * FROM <id>` rather than executing the bare body (ADR-0097 SD9:
+	// the self-reference stays INSIDE the node — it is not a graph edge).
+	Recursive bool
 }
 
 // splitResult is the recovered node graph for an editor buffer.
@@ -111,12 +124,17 @@ func splitGraph(sql string) (res splitResult, err error) {
 	for i := range root.CTEDefs {
 		cte := root.CTEDefs[i]
 		res.Nodes = append(res.Nodes, splitNode{
-			ID:        NodeID(cte.Name),
-			Kind:      splitNodeCTE,
-			SQL:       cteBodyText(pr, cte),
-			DependsOn: resolvedDeps(cte.Scopes, topLevel),
-			Reads:     paramSlotsOf(pr, cte.Node),
-			OwnWith:   bodyOpensWithClause(cte),
+			ID:   NodeID(cte.Name),
+			Kind: splitNodeCTE,
+			SQL:  cteBodyText(pr, cte),
+			// A recursive CTE's self-reference resolves to its own lifted def;
+			// that is node-internal recursion (SD9), not a data edge — skipped
+			// via the self id.
+			DependsOn:        resolvedDeps(cte.Scopes, topLevel, NodeID(cte.Name)),
+			Reads:            paramSlotsOf(pr, cte.Node),
+			OwnWith:          bodyOpensWithClause(cte),
+			OwnWithRecursive: bodyOwnWithRecursive(pr, cte),
+			Recursive:        cte.Recursive,
 		})
 	}
 
@@ -138,7 +156,7 @@ func splitGraph(sql string) (res splitResult, err error) {
 		ID:        sinkID,
 		Kind:      splitNodeStatement,
 		SQL:       stmt,
-		DependsOn: resolvedDeps(scopes, topLevel),
+		DependsOn: resolvedDeps(scopes, topLevel, sinkID),
 		Reads:     paramSlotsOfAll(pr, sinkReads),
 	})
 	res.Sink = sinkID
@@ -206,9 +224,15 @@ func fuseToSink(sql string) (executable string, res splitResult, err error) {
 }
 
 // fuseNode assembles the executable SQL for one node (ADR-0097 3d): the SET
-// prelude, then — for the sink — the whole statement (CTEs inline), or for a CTE
-// node a `WITH <transitive dep CTEs, topologically ordered> <node body>`. The
-// client's ExtractParams re-lifts the prelude to URL params at execution.
+// prelude, then — for the sink — the whole statement (CTEs inline), or for a
+// CTE node a `WITH <transitive dep CTEs, topologically ordered> <node body>`.
+// A node from a `WITH RECURSIVE` clause instead materialises as
+// `WITH RECURSIVE <deps…,> <id> AS (<body>) SELECT * FROM <id>` — the body may
+// reference the node's own name, so it must stay a WITH item (SD9: the
+// self-reference is node-internal). The clause keyword is RECURSIVE whenever
+// the node or any inlined dep needs it (the modifier is clause-wide and is
+// valid with non-recursive members). The client's ExtractParams re-lifts the
+// prelude to URL params at execution.
 func fuseNode(res splitResult, nodeID NodeID) (executable string) {
 	parts := make([]string, 0, len(res.Prelude)+1)
 	parts = append(parts, res.Prelude...)
@@ -221,17 +245,35 @@ func fuseNode(res splitResult, nodeID NodeID) (executable string) {
 		return strings.Join(parts, ";\n")
 	}
 	deps := transitiveDeps(res, nodeID)
-	if len(deps) == 0 {
+	if len(deps) == 0 && !node.Recursive {
 		parts = append(parts, node.SQL)
 		return strings.Join(parts, ";\n")
 	}
-	withDefs := make([]string, 0, len(deps))
+	clauseKw := "WITH "
+	if node.Recursive {
+		clauseKw = "WITH RECURSIVE "
+	}
+	withDefs := make([]string, 0, len(deps)+1)
 	for _, d := range deps {
 		dn, found := findSplitNode(res, d)
 		if !found {
 			continue
 		}
+		if dn.Recursive {
+			clauseKw = "WITH RECURSIVE "
+		}
 		withDefs = append(withDefs, string(d)+" AS (\n"+dn.SQL+"\n)")
+	}
+	if node.Recursive || (node.OwnWithRecursive && len(withDefs) > 0) {
+		// Wrap form: the node itself becomes the last WITH item and a
+		// `SELECT * FROM <id>` reads it. Required for a recursive node (the
+		// body's self-reference resolves against the item), and for an
+		// OwnWithRecursive body with deps (the comma-merge below cannot
+		// continue a `WITH RECURSIVE` list — the keyword would land
+		// mid-list; inside parens the body's own clause stays intact).
+		withDefs = append(withDefs, string(node.ID)+" AS (\n"+node.SQL+"\n)")
+		parts = append(parts, clauseKw+strings.Join(withDefs, ",\n")+"\nSELECT * FROM "+string(node.ID))
+		return strings.Join(parts, ";\n")
 	}
 	if node.OwnWith {
 		// The body opens its own WITH list; continue it with a comma after the
@@ -241,10 +283,10 @@ func fuseNode(res splitResult, nodeID NodeID) (executable string) {
 		// cannot see a nested definition). OwnWith guarantees the body text
 		// starts with the WITH keyword token, so the slice is exact.
 		body := strings.TrimSpace(node.SQL[len("WITH"):])
-		parts = append(parts, "WITH "+strings.Join(withDefs, ",\n")+",\n"+body)
+		parts = append(parts, clauseKw+strings.Join(withDefs, ",\n")+",\n"+body)
 		return strings.Join(parts, ";\n")
 	}
-	parts = append(parts, "WITH "+strings.Join(withDefs, ",\n")+"\n"+node.SQL)
+	parts = append(parts, clauseKw+strings.Join(withDefs, ",\n")+"\n"+node.SQL)
 	return strings.Join(parts, ";\n")
 }
 
@@ -418,15 +460,38 @@ func bodyOpensWithClause(cte nanopass.CTEDef) bool {
 		q.GetStart().GetTokenType() == grammar1.ClickHouseLexerWITH
 }
 
+// bodyOwnWithRecursive reports whether an OwnWith body's clause is
+// `WITH RECURSIVE …`: the first default-channel token after the opening WITH
+// is the RECURSIVE keyword. Token-stream-checked, container-agnostic (the
+// body's WITH may be its query-level ctes rule or a selectStmt withClause).
+func bodyOwnWithRecursive(pr *nanopass.ParseResult, cte nanopass.CTEDef) bool {
+	q := bodyQueryCtx(cte)
+	if q == nil || q.GetStart() == nil || q.GetStop() == nil ||
+		q.GetStart().GetTokenType() != grammar1.ClickHouseLexerWITH {
+		return false
+	}
+	for i := q.GetStart().GetTokenIndex() + 1; i <= q.GetStop().GetTokenIndex(); i++ {
+		tok := pr.TokenStream.Get(i)
+		if tok.GetChannel() != antlr.TokenDefaultChannel {
+			continue
+		}
+		return tok.GetTokenType() == grammar1.ClickHouseLexerRECURSIVE
+	}
+	return false
+}
+
 // resolvedDeps collects the data edges of a node given its scope trees: every
 // CTE reference that RESOLVES to a lifted (top-level) definition, in the scope
 // where the reference occurs. Resolution — not name matching — is what keeps
 // the edges faithful: a reference to a nested CTE (including one shadowing a
-// lifted name) resolves to the nested definition and contributes no edge.
-// Descent covers FROM subqueries, expression subqueries, and the node's own
-// nested CTE bodies, but not the lifted definitions' bodies — those references
-// are the corresponding CTE nodes' own edges. Deduped and sorted.
-func resolvedDeps(roots []*nanopass.SelectScope, topLevel map[antlr.ParserRuleContext]NodeID) (deps []NodeID) {
+// lifted name) resolves to the nested definition and contributes no edge, and
+// a recursive CTE's self-reference (which resolves to the node's own def) is
+// node-internal, not an edge — callers pass their own id as self to skip it
+// (ADR-0097 SD9). Descent covers FROM subqueries, expression subqueries, and
+// the node's own nested CTE bodies, but not the lifted definitions' bodies —
+// those references are the corresponding CTE nodes' own edges. Deduped and
+// sorted.
+func resolvedDeps(roots []*nanopass.SelectScope, topLevel map[antlr.ParserRuleContext]NodeID, self NodeID) (deps []NodeID) {
 	seen := make(map[NodeID]bool, 4)
 	visited := make(map[*nanopass.SelectScope]bool, 8)
 	var visit func(sc *nanopass.SelectScope)
@@ -439,7 +504,7 @@ func resolvedDeps(roots []*nanopass.SelectScope, topLevel map[antlr.ParserRuleCo
 			ts := &sc.Tables[i]
 			if ts.IsCTE {
 				if def, found := sc.ResolveCTE(ts.Table); found {
-					if id, lifted := topLevel[def.Node]; lifted && !seen[id] {
+					if id, lifted := topLevel[def.Node]; lifted && id != self && !seen[id] {
 						seen[id] = true
 						deps = append(deps, id)
 					}

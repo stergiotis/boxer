@@ -751,6 +751,30 @@ this ADR's record:
   no graph) — it never reaches the cycle check. The acyclicity guard stays for
   contract honesty; the fix belongs in grammar1 (the nanopass discipline,
   ADR-0002), recorded as a trigger alongside the dollar-quoted-string gap.
+  *Resolved same day — see the entry below.*
+
+### 2026-07-11 — SD9 realized: `WITH RECURSIVE` lands in the grammar and the split contract
+
+The trigger recorded above is executed. grammar1 and grammar2 now parse
+`WITH RECURSIVE` (the modifier survives canonicalisation and the AST — it is
+semantics, not sugar), `BuildScopes` makes a recursive definition visible
+inside its own body (`CTEDef.Recursive`), and the split contract implements
+SD9 as specified:
+
+- A recursive CTE lifts as an ordinary node. Its self-reference resolves to
+  its own lifted definition and is **skipped as a data edge** — the recursion
+  stays inside the node, exactly as SD9 promised, so the split succeeds and
+  the acyclicity guard is not involved.
+- Observing a recursive node cannot execute the bare body (it references the
+  node's own name); `fuseNode` materialises it as
+  `WITH RECURSIVE <deps…,> <id> AS (<body>) SELECT * FROM <id>`. A node
+  inlining a recursive dep gets the clause-wide `RECURSIVE` keyword; a
+  non-recursive node whose body opens its own `WITH RECURSIVE` also takes the
+  wrap form (the comma-merge cannot continue such a list). All three fused
+  shapes verified executing on the server.
+- The Graph view labels recursive nodes (`CTE (recursive)`).
+
+The dollar-quoted-string gap remains the one open splitter trigger.
 - **The lane honours minimality on flip-back (SD4/SD5).** A demand returning
   to the SQL the memo already serves — while a superseding run is in flight
   (A→B→A: pan away and back on the Map, or a bands-extent flip) — re-executed

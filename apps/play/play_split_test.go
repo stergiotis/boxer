@@ -294,6 +294,83 @@ func TestSplitGraphShadowingNestedCTEIsNotAnEdge(t *testing.T) {
 	require.NoError(t, pErr)
 }
 
+// --- WITH RECURSIVE (ADR-0097 SD9, realized once grammar1 learned it) ---
+
+const recursiveBody = "SELECT 1 AS x UNION ALL SELECT x + 1 FROM t WHERE x < 10"
+
+func TestSplitGraphRecursiveCTEIsOneNodeNoCycle(t *testing.T) {
+	// SD9: the self-reference stays INSIDE the node — it is not a graph edge,
+	// so the split succeeds (previously the buffer failed the grammar and took
+	// the raw fallback; a naive self-edge would read as a bogus cycle).
+	res, err := splitGraph("WITH RECURSIVE t AS (" + recursiveBody + ") SELECT * FROM t")
+	require.NoError(t, err)
+	require.Len(t, res.Nodes, 2)
+
+	n, ok := nodeByID(res, "t")
+	require.True(t, ok)
+	require.True(t, n.Recursive)
+	require.Empty(t, n.DependsOn, "the self-reference is node-internal, not an edge")
+
+	sink, ok := nodeByID(res, res.Sink)
+	require.True(t, ok)
+	require.Equal(t, []NodeID{"t"}, sink.DependsOn)
+}
+
+func TestFuseNodeRecursiveCTEWrapsAsWithItem(t *testing.T) {
+	// Observing a recursive CTE cannot execute the bare body (it references
+	// its own name); it materialises as a self-contained WITH RECURSIVE item
+	// read by a SELECT.
+	_, res, err := fuseToSink("WITH RECURSIVE t AS (" + recursiveBody + ") SELECT * FROM t")
+	require.NoError(t, err)
+	exec := fuseNode(res, "t")
+	require.Contains(t, exec, "WITH RECURSIVE t AS (")
+	require.Contains(t, exec, "SELECT * FROM t")
+	_, pErr := nanopass.Parse(exec)
+	require.NoError(t, pErr, "the fused SQL must parse: %s", exec)
+}
+
+func TestFuseNodeDepOnRecursiveEmitsRecursiveClause(t *testing.T) {
+	// A node inlining a recursive dep needs the clause-wide RECURSIVE keyword;
+	// both nodes come from the same recursive clause here, so the dependent
+	// also wraps (its own name may be referenced under RECURSIVE semantics).
+	_, res, err := fuseToSink("WITH RECURSIVE t AS (" + recursiveBody + "), agg AS (SELECT max(x) AS m FROM t) SELECT * FROM agg")
+	require.NoError(t, err)
+	agg, ok := nodeByID(res, "agg")
+	require.True(t, ok)
+	require.True(t, agg.Recursive, "RECURSIVE is clause-wide")
+	require.Equal(t, []NodeID{"t"}, agg.DependsOn)
+
+	exec := fuseNode(res, "agg")
+	require.Contains(t, exec, "WITH RECURSIVE t AS (")
+	require.Contains(t, exec, "agg AS (")
+	require.Contains(t, exec, "SELECT * FROM agg")
+	_, pErr := nanopass.Parse(exec)
+	require.NoError(t, pErr, "the fused SQL must parse: %s", exec)
+}
+
+func TestFuseNodeOwnWithRecursiveBodyWrapsWithDeps(t *testing.T) {
+	// A NON-recursive clause whose CTE body opens its own WITH RECURSIVE:
+	// the comma-merge cannot continue that list (the keyword would land
+	// mid-list), so attaching the dep uses the wrap form with the body's own
+	// clause intact inside the parens.
+	sql := "WITH a AS (SELECT 1 AS v), b AS (WITH RECURSIVE i AS (SELECT 1 AS x UNION ALL SELECT x + 1 FROM i WHERE x < 3) SELECT max(x) AS m, v FROM i, a) SELECT * FROM b"
+	_, res, err := fuseToSink(sql)
+	require.NoError(t, err)
+	b, ok := nodeByID(res, "b")
+	require.True(t, ok)
+	require.False(t, b.Recursive, "the outer clause is not recursive")
+	require.True(t, b.OwnWith)
+	require.True(t, b.OwnWithRecursive)
+	require.Equal(t, []NodeID{"a"}, b.DependsOn)
+
+	exec := fuseNode(res, "b")
+	require.Contains(t, exec, "b AS (")
+	require.Contains(t, exec, "WITH RECURSIVE i AS (")
+	require.Contains(t, exec, "SELECT * FROM b")
+	_, pErr := nanopass.Parse(exec)
+	require.NoError(t, pErr, "the fused SQL must parse: %s", exec)
+}
+
 func TestTransitiveDepsTopoOrder(t *testing.T) {
 	res := splitResult{Nodes: []splitNode{
 		{ID: "a"},
