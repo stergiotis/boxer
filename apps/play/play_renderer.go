@@ -66,6 +66,7 @@ const (
 	dockTabMap        uint64 = 9
 	dockTabGraph      uint64 = 10
 	dockTabSchema     uint64 = 11
+	dockTabWorld      uint64 = 12
 )
 
 type PlayApp struct {
@@ -150,6 +151,10 @@ type PlayApp struct {
 	// mapDriver is the ADR-0096 geo-raster map panel (Map dock tab): a walkers
 	// map whose viewport drives an in-DB-rendered raster on a panel-local lane.
 	mapDriver *MapDriver
+
+	// worldDriver is the ADR-0114 schematic world-choropleth panel (World dock
+	// tab): a plain observer of the active result — no lane, nothing to Close.
+	worldDriver *WorldDriver
 
 	// colorByFeature picks the EntityFeatures field whose value drives the
 	// projection scatter's per-point colour. -1 means monochrome (default);
@@ -496,6 +501,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	}
 	inst.timeline = NewTimelineDriver(timelineIds, &inst.selectedRow, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
 	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
+	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	return inst
 }
@@ -643,22 +649,26 @@ func (inst *PlayApp) Render() error {
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
-			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema}
+			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema}
 			if FocusMap.Get() != "" {
 				// Scripted-screenshot focus: make Map the default-active body tab.
-				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabSchema}
+				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabWorld, dockTabSchema}
 			}
 			if FocusGraph.Get() != "" {
 				// Scripted-screenshot focus: make Graph the default-active body tab.
-				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabSchema}
+				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabSchema}
 			}
 			if FocusTimeline.Get() != "" {
 				// Scripted-screenshot focus: make Timeline the default-active body tab.
-				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema}
+				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema}
 			}
 			if FocusSchema.Get() != "" {
 				// Scripted-screenshot focus: make Schema the default-active body tab.
-				bodyTabs = []uint64{dockTabSchema, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph}
+				bodyTabs = []uint64{dockTabSchema, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph}
+			}
+			if FocusWorld.Get() != "" {
+				// Scripted-screenshot focus: make World the default-active body tab.
+				bodyTabs = []uint64{dockTabWorld, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema}
 			}
 			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45, bodyTabs...)
 			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
@@ -692,8 +702,15 @@ func (inst *PlayApp) Render() error {
 			for range dock.Tab(dockTabDetail, "Detail") {
 				inst.renderDetailTab(rec, schema)
 			}
-			for range dock.Tab(dockTabMap, "Map") {
+			// TabNoScroll: the walkers map reads wheel/zoom input globally
+			// (no consumption), so the dock's default body ScrollArea would
+			// scroll the panel in the same gesture that pans/zooms the map —
+			// the map jitters while zooming. Overflow clips instead.
+			for range dock.TabNoScroll(dockTabMap, "Map") {
 				inst.mapDriver.Render()
+			}
+			for range dock.Tab(dockTabWorld, "World") {
+				inst.renderWorldTab(rec, schema, loading, err, executed)
 			}
 			for range dock.Tab(dockTabGraph, "Graph") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
@@ -1417,6 +1434,36 @@ func (inst *PlayApp) renderTimelineReject(reason string) {
 		}
 		c.AddSpace(8)
 		inst.timeline.RenderContractHelp()
+	}
+}
+
+// renderWorldTab is the World dock tab body (ADR-0114): the schematic world
+// choropleth over the active result. The panel is a plain PanelI observer of
+// the observed node — same guards as the Table tab, plus the executed
+// timestamp handed to the driver as its extraction-cache key.
+func (inst *PlayApp) renderWorldTab(rec arrow.RecordBatch, schema *arrow.Schema, loading bool, err error, executed time.Time) {
+	if loading && rec == nil {
+		inst.renderResultsLoading()
+		return
+	}
+	if err != nil && rec == nil {
+		c.Label("Query failed.").Send()
+		return
+	}
+	if rec == nil {
+		for rt := range c.RichTextLabel("Run a query with a country column (ISO code or name) to see the world map.") {
+			rt.Small().Weak()
+		}
+		return
+	}
+	inst.worldDriver.noteExecuted(executed)
+	reject := dispatchPanel(worldPanel{driver: inst.worldDriver}, map[ChannelID]channelInput{
+		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: playSignals{selectedRow: inst.selectedRow}},
+	}, selectedRowEmitter{target: &inst.selectedRow})
+	if reject != "" {
+		for rt := range c.RichTextLabel(reject) {
+			rt.Small().Weak()
+		}
 	}
 }
 

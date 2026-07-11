@@ -88,6 +88,12 @@ var (
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
+	FocusWorld = env.NewString(env.Spec{
+		Name:        "SPINNAKER_PLAY_FOCUS_WORLD",
+		Description: "non-empty makes World (the ADR-0114 country choropleth) the default-active body tab (scripted screenshots)",
+		Category:    env.CategoryE("spinnaker-play"),
+	})
+
 	ObserveNode = env.NewString(env.Spec{
 		Name:        "SPINNAKER_PLAY_OBSERVE",
 		Description: "graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split",

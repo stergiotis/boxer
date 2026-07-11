@@ -167,6 +167,27 @@ SELECT * FROM anchor.facts
 WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, {event:String})
 ```
 
+## World choropleth (countries)
+
+A result with a country column (ISO 3166 alpha-2/alpha-3 codes or country
+names) plus a numeric column lights up the **World** tab (ADR-0114): countries
+fill by value, hover shows `name · value`, clicking a country selects its row.
+Table-free — the `values()` literal runs against any server. The `'XK'` row
+exercises the code path, and `'atlantis'` deliberately resolves nowhere so the
+status line shows an unmatched count. Values are illustrative, not
+authoritative statistics.
+
+```sql
+SELECT *
+FROM values('country String, population Float64',
+  ('Germany', 83.2), ('France', 68.1), ('Brazil', 216.4),
+  ('United States', 334.9), ('India', 1428.6), ('China', 1411.8),
+  ('Australia', 26.5), ('Norway', 5.5), ('Egypt', 112.7),
+  ('Japan', 124.5), ('Mexico', 128.5), ('Russia', 144.4),
+  ('South Africa', 60.4), ('Canada', 40.1), ('Argentina', 46.7),
+  ('XK', 1.7), ('atlantis', 0.1))
+```
+
 ## ADS-B geo-raster (demo loader)
 
 These target `planes_mercator`, the aircraft-position table loaded by
