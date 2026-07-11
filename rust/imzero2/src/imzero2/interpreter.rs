@@ -7258,7 +7258,7 @@ egui::Grid::new(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 if u.is_some() {
-                    u.as_mut().unwrap().horizontal_top(|ui| {
+                    u.as_mut().unwrap().horizontal_wrapped(|ui| {
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     });
                 } else {

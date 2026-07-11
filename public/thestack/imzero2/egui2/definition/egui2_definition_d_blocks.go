@@ -415,7 +415,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			WithApplyCodeClientRust(
 				rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
-						{{EguiUiOptionalOuter}}.as_mut().unwrap().horizontal_top(|ui| {
+						{{EguiUiOptionalOuter}}.as_mut().unwrap().horizontal_wrapped(|ui| {
 							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
 						});
 					} else {
