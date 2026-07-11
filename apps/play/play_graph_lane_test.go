@@ -253,3 +253,61 @@ func TestNodeLaneFingerprintTracksContentAcrossForget(t *testing.T) {
 	}
 	require.NotEqual(t, v1.fingerprint, v3.fingerprint, "changed bytes ⇒ changed fingerprint (repack fires)")
 }
+
+// Flipping the demand back to the SQL the memo already serves — while a
+// superseding run is in flight — must serve the memo and cancel the run, not
+// re-execute (review finding: A→B→A re-ran A although its memo was current, a
+// minimality deviation; on the Map, pan-away-and-back re-ran the raster).
+func TestNodeLaneFlipBackServesMemoWithoutReExecuting(t *testing.T) {
+	g := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch { return int64Rec("n", 1) }}
+	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
+	defer lane.close()
+
+	v := lane.demand("A")
+	require.Nil(t, v.rec)
+	g.gate <- struct{}{} // release A's execute
+	waitLaneReady(t, lane, "A")
+
+	v = lane.demand("B") // supersede toward B (its execute is held on the gate)
+	if v.rec != nil {
+		v.rec.Release()
+	}
+	require.True(t, v.loading)
+
+	view := lane.demand("A") // flip back while B is in flight
+	require.NotNil(t, view.rec, "the memo for A is current — served immediately")
+	view.rec.Release()
+	require.Equal(t, "A", view.sql)
+	require.False(t, view.loading, "the flip-back must not restart A")
+
+	// B's goroutine reaches the executor (call counted), then the closed gate
+	// releases it; its completion carries a stale generation and is discarded.
+	require.Eventually(t, func() bool { return g.callCount() == 2 },
+		2*time.Second, time.Millisecond, "A and B each executed once — A was NOT re-executed on flip-back")
+	close(g.gate)
+	require.Never(t, func() bool {
+		lane.mu.Lock()
+		defer lane.mu.Unlock()
+		return lane.servedSQL != "A"
+	}, 150*time.Millisecond, 5*time.Millisecond, "B's cancelled completion must not land")
+}
+
+// A closed lane drops demands instead of resurrecting: a straggler frame during
+// Unmount must not start a query nothing will consume (review finding —
+// QueryStore had this guard, the lane didn't).
+func TestNodeLaneClosedDropsDemandsAndForgets(t *testing.T) {
+	g := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch { return int64Rec("n", 1) }}
+	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
+	lane.close()
+
+	view := lane.demand("SELECT 1")
+	require.Nil(t, view.rec)
+	require.False(t, view.loading)
+	require.Equal(t, 0, g.callCount(), "no execution starts on a closed lane")
+
+	lane.forget() // no-op on a closed lane — must not cancel or re-arm anything
+	view = lane.demand("SELECT 1")
+	require.False(t, view.loading)
+	require.Equal(t, 0, g.callCount())
+	lane.close() // idempotent
+}

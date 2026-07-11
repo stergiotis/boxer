@@ -14,10 +14,13 @@ import (
 // returns the last-good result immediately and converges the lane toward
 // executing the requested compiled SQL — a changed SQL supersedes the in-flight
 // run (generation-tagged, latest wins) and the last-good result is retained
-// until the new one lands (no flicker). The `main` node keeps its QueryStore
-// lane (Run-triggered, with history); this lane is for demand-triggered
-// self-executed nodes (the splitter's, once they execute separately in slice 3d)
-// and is exercised by tests until then.
+// until the new one lands (no flicker). A demand that flips BACK to the SQL the
+// memo already serves cancels the in-flight run and serves the memo without
+// re-executing (minimality — a forced re-fetch goes through forget instead). A
+// closed lane drops demands rather than resurrecting. The `main` node keeps its
+// QueryStore lane (Run-triggered, with history); this lane is for
+// demand-triggered self-executed nodes (the splitter's, once they execute
+// separately in slice 3d) and is exercised by tests until then.
 
 type nodeLane struct {
 	exec    nodeExecutorI
@@ -31,6 +34,10 @@ type nodeLane struct {
 	loading   bool
 	gen       uint64 // bumped on each start; a stale (superseded) completion is discarded
 	cancel    context.CancelFunc
+	// closed marks a torn-down lane: a straggler frame's demand after close
+	// (the Unmount window) is dropped instead of starting a query nothing will
+	// consume — the QueryStore `closed` guard, mirrored here.
+	closed bool
 }
 
 func newNodeLane(exec nodeExecutorI, alloc memory.Allocator, timeout time.Duration) (inst *nodeLane) {
@@ -67,8 +74,27 @@ func (inst *nodeLane) demand(compiledSQL string) (view laneView) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 
-	fresh := inst.result != nil && inst.servedSQL == compiledSQL && !inst.loading
-	if !fresh && inst.wantSQL != compiledSQL {
+	if inst.closed {
+		// Torn down: drop the demand (empty view — no result, not loading).
+		return
+	}
+
+	memoCurrent := inst.result != nil && inst.servedSQL == compiledSQL
+	switch {
+	case memoCurrent && inst.loading:
+		// Flip-back: the demand returned to the SQL the memo already serves
+		// while a superseding run is still in flight (A→B→A). Cancel that run
+		// and serve the memo — re-executing would break minimality: nothing
+		// the memo covers changed (a forced re-fetch goes through forget,
+		// which clears servedSQL and so never lands here).
+		inst.gen++ // the in-flight completion is stale now
+		if inst.cancel != nil {
+			inst.cancel()
+			inst.cancel = nil
+		}
+		inst.loading = false
+		inst.wantSQL = compiledSQL
+	case !memoCurrent && inst.wantSQL != compiledSQL:
 		inst.startLocked(compiledSQL)
 	}
 
@@ -98,6 +124,9 @@ func (inst *nodeLane) demand(compiledSQL string) (view laneView) {
 func (inst *nodeLane) forget() {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	if inst.closed {
+		return
+	}
 	inst.servedSQL = ""
 	inst.wantSQL = ""
 	inst.gen++ // an in-flight completion is stale now
@@ -162,10 +191,12 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	}
 }
 
-// close cancels any in-flight run and releases the held result.
+// close cancels any in-flight run, releases the held result, and marks the
+// lane closed so later demands/forgets are dropped. Idempotent.
 func (inst *nodeLane) close() {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	inst.closed = true
 	if inst.cancel != nil {
 		inst.cancel()
 	}
