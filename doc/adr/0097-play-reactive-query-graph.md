@@ -1018,6 +1018,59 @@ capture server (`param_tl_min`/`param_tl_max` on the URL, no legacy channel).
 The help snippet migrated to the param form. Remaining slice-5 work: deferred
 **5e** only.
 
+### 2026-07-11 — Slice 5e shipped (signal-writing widgets + the `main` live toggle); slice 5 complete
+
+The two halves the design deferred as "one coherent step" (D3) land
+together, closing slice 5:
+
+- **The Signals chrome is writable** — the read-only section the mechanics
+  ratified arrives directly as the signal-writing widget, in the Graph tab.
+  One row per held-or-referenced name: declared type(s), an editable raw
+  value (a human write is `signals-editor` provenance, distinct from D1's
+  prelude constants — it does NOT pin), a discard (frees the name; the
+  staleness witness flips exactly as for a changed value), and a footer
+  that adds an arbitrary name — e.g. one only a panel-authored node
+  references. Value drafts are reseed-guarded: an idle draft follows
+  external writes (live values stay live), typing wins while the store
+  holds still.
+- **Write provenance** — the store records each signal's last *changer*
+  (writer id + revision; deduplicated re-sets update neither).
+  `dispatchPanel` stamps the panel's ID onto the shared emitter, so panel
+  writes carry provenance with no per-call-site plumbing; non-panel writers
+  (`selection-clamp`, `history`, `map`, `signals-editor`) stamp explicitly.
+- **Type conflicts are visible, never silent** (the ratified mechanics
+  bullet): the chrome collects every slot occurrence's declared type across
+  the buffer (no dedup — the per-buffer slot cache keeps first-wins) plus
+  the reserved panel-signal types (`vp_*` UInt32, `tl_*` DateTime64,
+  `selection` Int64), and warns on divergence — one shared value read
+  through different casts.
+- **The `main` live toggle** (D2's policy bit — `main` is its only
+  Run-gated holder, so the surface is a single topbar checkbox, offered
+  when the buffer has an unbound slot): with Live on, a referenced-signal
+  move re-runs the unchanged buffer through the ordinary Run path.
+  Buffer edits stay human-gated; an observed intermediate already re-drives
+  on its lane; an in-flight run defers to its completion frame, so signal
+  churn coalesces latest-wins at completion rate, not interaction rate.
+  Auto-runs skip the SQL persist (the persistence point stays anchored to
+  user intent).
+- **Unfilled inputs block at the Run gate** (D3's empty-state, applied
+  where it is cheapest): a referenced name that is neither SET-bound nor
+  signal-written can only fail server-side, so Run — manual or live — is
+  refused with an actionable reason (status bar, beside the FSM chip)
+  and a standing topbar hint names the unfilled slots while typing. The
+  raw-fallback path (unparseable buffer) still defers to the server.
+
+Regression tests: provenance (writer/revision/dedup), deletion semantics,
+the dispatcher stamp, the occurrence-level type collector, the chrome row
+model (pinned/held/unfilled/conflict), the unfilled caches, the auto-run
+decision gate by gate, and the blocked→filled→run and
+run→diverge→auto-run→settle loops against a capture server.
+
+**Slice 5 is complete**; the four bespoke mechanisms named in the design
+Update are retired and both deferred halves are now built. Still deferred
+(SD12 triggers): SD1 operator-IVM, SD13 shared-intermediate
+materialization, explicit multi-cell authoring.
+
 ## References
 
 Internal:
