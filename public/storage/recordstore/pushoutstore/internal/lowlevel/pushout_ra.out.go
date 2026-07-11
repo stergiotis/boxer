@@ -31,7 +31,7 @@ var _ = time.Time{}
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:208
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:251
 
 type MembershipPackPushoutTableShared1 struct {
 	ValueHighCardRef                           *array.List
@@ -478,7 +478,7 @@ func (inst *MembershipPackPushoutTableShared1) GetNumberOfMemberItemsByAttrLowCa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:826
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:869
 
 type ReadAccessPushoutTablePlainEntityIdAttributes struct {
 	ValueId       *array.String
@@ -858,7 +858,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedSnapGraggleAt
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1044
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1087
 
 func (inst *ReadAccessPushoutTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -922,7 +922,7 @@ func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1118
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1161
 
 var _ runtime.ReleasableI = (*ReadAccessPushoutTablePlainEntityIdAttributes)(nil)
 
@@ -998,7 +998,7 @@ func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1197
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1240
 
 func (inst *ReadAccessPushoutTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -1073,7 +1073,7 @@ func (inst *ReadAccessPushoutTableTaggedSnapGraggleAttributes) Len() (nEntities 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1249
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1292
 
 func (inst *ReadAccessPushoutTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.STRING, rec, &inst.ValueId, array.NewStringData)
@@ -1343,7 +1343,7 @@ func (inst *ReadAccessPushoutTablePlainEntityLifecycleAttributes) GetAttrValueLi
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1873
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1968
 
 func (inst *ReadAccessPushoutTableTaggedEnvBlobAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
@@ -1380,7 +1380,7 @@ func (inst *ReadAccessPushoutTableTaggedRetTimeAttributes) GetNumberOfAttributes
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1971
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2066
 
 type ReadAccessPushoutTableTaggedEnvBlob struct {
 	Attributes  *ReadAccessPushoutTableTaggedEnvBlobAttributes
@@ -1994,7 +1994,7 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionMembershipSpec() comm
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2321
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2416
 
 type ReadAccessPushoutTable struct {
 	EntityId        *ReadAccessPushoutTablePlainEntityIdAttributes

@@ -31,7 +31,7 @@ var _ = time.Time{}
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:208
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:251
 
 type MembershipPackDeviceTableShared1 struct {
 	ValueHighCardRef                           *array.List
@@ -418,7 +418,7 @@ func (inst *MembershipPackDeviceTableShared1) GetNumberOfMemberItemsByAttrLowCar
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:826
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:869
 
 type ReadAccessDeviceTablePlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -693,7 +693,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessDeviceTableTaggedU64ArrayAttrib
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1044
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1087
 
 func (inst *ReadAccessDeviceTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -740,7 +740,7 @@ func (inst *ReadAccessDeviceTableTaggedU64ArrayAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1118
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1161
 
 var _ runtime.ReleasableI = (*ReadAccessDeviceTablePlainEntityIdAttributes)(nil)
 
@@ -797,7 +797,7 @@ func (inst *ReadAccessDeviceTableTaggedU64ArrayAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1197
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1240
 
 func (inst *ReadAccessDeviceTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -851,7 +851,7 @@ func (inst *ReadAccessDeviceTableTaggedU64ArrayAttributes) Len() (nEntities int)
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1249
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1292
 
 func (inst *ReadAccessDeviceTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -1039,7 +1039,7 @@ func (inst *ReadAccessDeviceTablePlainEntityLifecycleAttributes) GetAttrValueLif
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1873
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1968
 
 func (inst *ReadAccessDeviceTableTaggedSymbolAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
@@ -1063,7 +1063,7 @@ func (inst *ReadAccessDeviceTableTaggedGeoPointAttributes) GetNumberOfAttributes
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1971
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2066
 
 type ReadAccessDeviceTableTaggedSymbol struct {
 	Attributes  *ReadAccessDeviceTableTaggedSymbolAttributes
@@ -1416,7 +1416,7 @@ func (inst *ReadAccessDeviceTableTaggedGeoPoint) GetSectionMembershipSpec() comm
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2321
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2416
 
 type ReadAccessDeviceTable struct {
 	EntityId        *ReadAccessDeviceTablePlainEntityIdAttributes
