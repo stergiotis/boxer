@@ -73,7 +73,7 @@ func TestQueryStoreExecuteRows(t *testing.T) {
 	defer srv.Close()
 
 	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100, "test")
-	store.Execute("SELECT n FROM t")
+	store.Execute("SELECT n FROM t", nil)
 	waitNotLoading(t, store)
 
 	rec, _, numRows, loading, _, summary, executed, err := store.Snapshot()
@@ -112,7 +112,7 @@ func TestQueryStoreZeroBatchKeepsSchema(t *testing.T) {
 	defer srv.Close()
 
 	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100, "test")
-	store.Execute("SELECT n FROM t WHERE 0")
+	store.Execute("SELECT n FROM t WHERE 0", nil)
 	waitNotLoading(t, store)
 
 	rec, schema, numRows, _, _, _, _, err := store.Snapshot()
@@ -142,7 +142,7 @@ func TestQueryStoreErrorStatus(t *testing.T) {
 	defer srv.Close()
 
 	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 100, "test")
-	store.Execute("SELECT bad")
+	store.Execute("SELECT bad", nil)
 	waitNotLoading(t, store)
 
 	rec, _, _, _, _, _, _, err := store.Snapshot()
@@ -171,7 +171,7 @@ func TestQueryStoreCloseDropsLateFinish(t *testing.T) {
 	}))
 
 	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 10, "test")
-	store.Execute("SELECT n FROM t")
+	store.Execute("SELECT n FROM t", nil)
 	store.Close() // torn down while the request is in flight
 	close(gate)   // let the handler answer; the goroutine's finish is late
 	waitNotLoading(t, store)
@@ -199,7 +199,7 @@ func TestQueryStoreHistoryCap(t *testing.T) {
 
 	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 2, "test")
 	for range 4 {
-		store.Execute("SELECT 1")
+		store.Execute("SELECT 1", nil)
 		waitNotLoading(t, store)
 	}
 	if got := len(store.History()); got != 2 {

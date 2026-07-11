@@ -65,6 +65,7 @@ func TestExecuteArrowStreamSendsParamsOnURLWhenPresent(t *testing.T) {
 		`SET param_a = 1; SET param_b = 'hello world'; SELECT {param_a : UInt64}`,
 		memory.NewGoAllocator(),
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
@@ -111,7 +112,7 @@ func TestExecuteArrowStreamPlainPostWhenNoParams(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c := NewClient(ClientConfig{URL: srv.URL}, nil)
-	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil, nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}
@@ -143,7 +144,7 @@ func TestExecuteArrowStreamSendsQueryIDAndReplace(t *testing.T) {
 	c := NewClient(ClientConfig{URL: srv.URL}, nil)
 
 	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`,
-		memory.NewGoAllocator(), &ExecOptions{QueryID: "play-test-1", ReplaceRunningQuery: true})
+		memory.NewGoAllocator(), &ExecOptions{QueryID: "play-test-1", ReplaceRunningQuery: true}, nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestExecuteArrowStreamSendsQueryIDAndReplace(t *testing.T) {
 	}
 
 	rdr, closer, _, err = c.ExecuteArrowStream(context.Background(), `SELECT 1`,
-		memory.NewGoAllocator(), nil)
+		memory.NewGoAllocator(), nil, nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}
@@ -200,7 +201,7 @@ func TestSetURLRoutesToNewTarget(t *testing.T) {
 		t.Fatalf("URL() after SetURL = %q, want %q", got, srvB.URL)
 	}
 
-	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil, nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestExecuteArrowStreamAppliesPreExecutePasses(t *testing.T) {
 	}
 	c.passes = reg
 
-	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil, nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}
@@ -286,7 +287,7 @@ func TestExecuteArrowStreamFailingPreExecutePassFallsBack(t *testing.T) {
 	}
 	c.passes = reg
 
-	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil, nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}
@@ -315,7 +316,7 @@ func TestExecuteArrowStreamSurfacesClickHouseErrorBody(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c := NewClient(ClientConfig{URL: srv.URL}, nil)
-	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT nope`, memory.NewGoAllocator(), nil)
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), `SELECT nope`, memory.NewGoAllocator(), nil, nil)
 	if rdr != nil {
 		t.Cleanup(rdr.Release)
 	}
@@ -344,7 +345,7 @@ func TestExecuteArrowStreamErrorWithEmptyBody(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c := NewClient(ClientConfig{URL: srv.URL}, nil)
-	_, _, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil)
+	_, _, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil, nil)
 	if err == nil {
 		t.Fatalf("expected an error for a 500 response, got nil")
 	}
@@ -384,7 +385,7 @@ func TestExecuteArrowStreamExpandsLwIdMacrosViaStandardSet(t *testing.T) {
 
 	run := func(sql string) string {
 		t.Helper()
-		rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil)
+		rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil)
 		if err != nil {
 			t.Fatalf("ExecuteArrowStream(%q): %v", sql, err)
 		}

@@ -30,7 +30,7 @@ func TestClientExecutorExecutesArrowStream(t *testing.T) {
 	defer srv.Close()
 
 	exec := clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}
-	rec, schema, summary, err := exec.execute(context.Background(), "SELECT n FROM t", memory.NewGoAllocator())
+	rec, schema, summary, err := exec.execute(context.Background(), compiledNode{SQL: "SELECT n FROM t"}, memory.NewGoAllocator())
 	require.NoError(t, err)
 	require.NotNil(t, rec)
 	defer rec.Release()
@@ -49,7 +49,7 @@ func TestClientExecutorZeroBatchKeepsSchema(t *testing.T) {
 	defer srv.Close()
 
 	exec := clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}
-	rec, schema, _, err := exec.execute(context.Background(), "SELECT n FROM t WHERE 0", memory.NewGoAllocator())
+	rec, schema, _, err := exec.execute(context.Background(), compiledNode{SQL: "SELECT n FROM t WHERE 0"}, memory.NewGoAllocator())
 	require.NoError(t, err)
 	require.Nil(t, rec)
 	require.NotNil(t, schema, "schema must survive an empty result")
@@ -65,7 +65,7 @@ func TestQueryGraphRunsRealExecutorWithMinimality(t *testing.T) {
 
 	g := newQueryGraph(clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}, memory.NewGoAllocator())
 	defer g.close()
-	g.addNode(&Node{ID: "main", Compile: func(SignalEnvI) (string, error) { return "SELECT n FROM t", nil }})
+	g.addNode(&Node{ID: "main", Compile: func(SignalEnvI) (compiledNode, error) { return compiledNode{SQL: "SELECT n FROM t"}, nil }})
 
 	r1, err := g.demand(context.Background(), "main")
 	require.NoError(t, err)

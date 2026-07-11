@@ -76,11 +76,11 @@ func TestMapDriverRequestRefreshForcesRefetch(t *testing.T) {
 	d.demandedSQL = "SELECT raster"
 	d.lastRequestedKey = mapFetchKey{viewHash: 42}
 
-	d.lane.demand(d.demandedSQL)
+	d.lane.demand(compiledNode{SQL: d.demandedSQL})
 	waitLaneReady(t, d.lane, d.demandedSQL)
 	require.Equal(t, 1, exec.callCount())
 
-	v := d.lane.demand(d.demandedSQL) // unchanged view: memo hit
+	v := d.lane.demand(compiledNode{SQL: d.demandedSQL}) // unchanged view: memo hit
 	if v.rec != nil {
 		v.rec.Release()
 	}
@@ -90,7 +90,7 @@ func TestMapDriverRequestRefreshForcesRefetch(t *testing.T) {
 	require.True(t, d.forceRefresh)
 	require.Equal(t, mapFetchKey{}, d.lastRequestedKey, "dedup key cleared so updateDemand re-fires")
 
-	v = d.lane.demand(d.demandedSQL) // the per-frame demand after Refresh
+	v = d.lane.demand(compiledNode{SQL: d.demandedSQL}) // the per-frame demand after Refresh
 	if v.rec != nil {
 		v.rec.Release()
 	}

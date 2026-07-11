@@ -236,8 +236,10 @@ func (inst *TimelineDriver) demandBands() (rec arrow.RecordBatch, schema *arrow.
 		inst.bandsServedFP = 0
 		return
 	}
+	// The extent is textually substituted until slice 5d moves it onto
+	// {tl_min}/{tl_max} signals, so the compiled node carries no params yet.
 	compiled := substituteBandsRange(sql, inst.dataMinMS, inst.dataMaxMS)
-	view := inst.bandsLane.demand(compiled)
+	view := inst.bandsLane.demand(compiledNode{SQL: compiled})
 	inst.bandsLoading = view.loading
 	inst.bandsLaneErr = view.err // mirrored every demand — nil clears (no latch)
 	inst.bandsServedSQL = view.sql

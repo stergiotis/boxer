@@ -2,6 +2,7 @@ package play
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -58,9 +59,10 @@ func (s queryStateE) String() string {
 // observeQueryState derives the lifecycle state from this frame's store
 // snapshot plus the editor buffer — a pure function (no side effects). The
 // executed timestamp (advances every QueryStore finish) separates "never
-// ran" (idle) from "ran, empty"; inst.sql vs inst.lastSentSql (both
-// canonical/trimmed, so param edits and snippet insert/replace count too)
-// is the staleness witness.
+// ran" (idle) from "ran, empty". The staleness witness is twofold (ADR-0097
+// slice-5 D2): inst.sql vs inst.lastSentSql (both canonical/trimmed, so
+// param edits and snippet insert/replace count too), OR the buffer's current
+// signal resolution diverging from what the last Run shipped.
 func (inst *PlayApp) observeQueryState(loading bool, numRows int64, executed time.Time, err error) queryStateE {
 	if loading {
 		return queryStateRunning
@@ -75,7 +77,8 @@ func (inst *PlayApp) observeQueryState(loading bool, numRows int64, executed tim
 	case numRows == 0:
 		kind = queryStateEmpty
 	}
-	if inst.lastSentSql != "" && strings.TrimSpace(inst.sql) != inst.lastSentSql {
+	if inst.lastSentSql != "" &&
+		(strings.TrimSpace(inst.sql) != inst.lastSentSql || inst.runSignalsDiverged()) {
 		switch kind {
 		case queryStateRows:
 			return queryStateRowsStale
@@ -86,6 +89,31 @@ func (inst *PlayApp) observeQueryState(loading bool, numRows int64, executed tim
 		}
 	}
 	return kind
+}
+
+// runSignalsDiverged reports whether the buffer's CURRENT signal resolution
+// differs from what the last Run shipped — the signal half of the staleness
+// witness (slice-5 D2): a referenced signal that moved since the run makes
+// the shown result stale, symmetric with a buffer edit (and it clears the
+// same way when the value moves back). It reads the debounced slot caches
+// (paramSlots for the referenced names, paramSyncedValues for the SET-bound
+// set — a SET pins, D1) against the frame snapshot: O(#slots) per frame, no
+// parse.
+func (inst *PlayApp) runSignalsDiverged() (diverged bool) {
+	if len(inst.paramSlots) == 0 && len(inst.lastSentSigParams) == 0 {
+		return
+	}
+	names := make([]string, 0, len(inst.paramSlots))
+	for _, s := range inst.paramSlots {
+		names = append(names, s.Name)
+	}
+	bound := make(map[string]bool, len(inst.paramSyncedValues))
+	for name := range inst.paramSyncedValues {
+		bound[name] = true
+	}
+	resolvedNow := resolveSignalNames(names, bound, inst.frameSig)
+	diverged = !maps.Equal(resolvedNow, inst.lastSentSigParams)
+	return
 }
 
 // syncQueryFSM mirrors the observed state into the render-thread-only

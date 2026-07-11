@@ -104,6 +104,19 @@ type PlayApp struct {
 
 	sql         string
 	lastSentSql string
+	// Slice-5a signal-store state. frameSig is the per-frame immutable
+	// snapshot of the graph's signal store, taken at Render top so every
+	// consumer in a frame sees a single revision (glitch-freedom as frame
+	// semantics); an emit lands next frame. lastSentSigParams /
+	// lastRunBound record what the last Run resolved (URL-keyed) and which
+	// names its prelude bound — the signal half of the staleness witness
+	// and the observed intermediates' resolution inputs. wireSignals
+	// mirrors the would-be resolution for the "as sent" preview caption.
+	frameSig          SignalEnvI
+	lastSentSigParams map[string]string
+	lastRunBound      map[string]bool
+	wireSignals       map[string]string
+	wireSigRev        uint64
 	// pendingSnippetInsert / pendingSnippetReplace hold a snippet-library
 	// click until the editor consumes it on the next frame: Insert splices
 	// the snippet at the caret via TextEditFluid.InsertAtCursor (ADR-0063);
@@ -583,8 +596,15 @@ func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
 func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
 	split := inst.currentSplit
 	if inst.observedNode != "" && inst.observedNode != split.Sink && len(split.Nodes) > 0 {
-		if _, ok := findSplitNode(split, inst.observedNode); ok {
-			view := inst.intermediateLane.demand(fuseNode(split, inst.observedNode))
+		if node, ok := findSplitNode(split, inst.observedNode); ok {
+			// The intermediate's signal values resolve from its Reads (the
+			// split's signal edges) against the frame snapshot; names the
+			// last Run's prelude bound are constants and travel inside the
+			// fused SQL's SET prelude instead (slice 5a).
+			view := inst.intermediateLane.demand(compiledNode{
+				SQL:    fuseNode(split, inst.observedNode),
+				Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
+			})
 			if view.rec != nil {
 				numRows = view.rec.NumRows()
 			}
@@ -600,6 +620,10 @@ func (inst *PlayApp) Render() error {
 
 	// Apply a picker-loaded buffer before anything reads inst.sql this frame.
 	inst.consumePickedSql()
+
+	// One signal snapshot per frame (slice 5a): every compile and consumer
+	// this frame sees a single store revision.
+	inst.frameSig = inst.graph.signals()
 
 	// One Snapshot per frame, with a matching release at end-of-frame.
 	// Tab bodies are captured into detached buffers by the DockArea
@@ -753,8 +777,16 @@ func (inst *PlayApp) Render() error {
 					inst.observedNode = NodeID(obs)
 				}
 			}
+			// Resolve the buffer's unbound param slots against the frame's
+			// signal snapshot (slice 5a): the values ride the request URL and
+			// the run's history entry snapshots them (D4). The resolution and
+			// the bound-name set also feed the staleness witness and the
+			// observed intermediates.
+			sigParams, boundNames := inst.resolveRunSignals(sql)
 			inst.lastSentSql = sql
-			inst.graph.RunMain(executable)
+			inst.lastSentSigParams = sigParams
+			inst.lastRunBound = boundNames
+			inst.graph.RunMain(executable, sigParams)
 			// Persist on Run: the user's intent is "this is the SQL I
 			// want to keep around". Save-on-Unmount is the fallback
 			// for sessions that never Run; doing both keeps the
@@ -767,6 +799,41 @@ func (inst *PlayApp) Render() error {
 	inst.autoShotTick()
 	c.RequestRepaint()
 	return nil
+}
+
+// resolveRunSignals resolves a Run buffer's unbound param slots against the
+// frame's signal snapshot (slice 5a): a fresh parse (the debounced caches may
+// lag the buffer) yields the slot list and the SET-bound names; unbound names
+// with a store value become URL params. Also returns the bound-name set (the
+// prelude constants — D1: a SET pins, so those names never consult the
+// store). On a parse failure — the raw-fallback Run path — nothing resolves
+// and the server reports the real problem, exactly as for the SQL itself.
+func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string, bound map[string]bool) {
+	slots, vals, err := extractSlotsAndParams(sql)
+	if err != nil {
+		return
+	}
+	bound = make(map[string]bool, len(vals))
+	for urlKey := range vals {
+		bound[strings.TrimPrefix(urlKey, "param_")] = true
+	}
+	names := make([]string, 0, len(slots))
+	for _, s := range slots {
+		names = append(names, s.Name)
+	}
+	sigParams = resolveSignalNames(names, bound, inst.frameSig)
+	return
+}
+
+// restoreHistoryEntry restores a past run: the buffer, plus the signal values
+// the run shipped seeded back into the store (slice-5 D4), so re-running
+// reproduces the same inputs. A SET-bound name still shadows a seeded signal
+// at execution (D1).
+func (inst *PlayApp) restoreHistoryEntry(entry HistoryEntry) {
+	inst.sql = entry.SQL
+	for urlKey, raw := range entry.SigParams {
+		inst.graph.setSignalRaw(strings.TrimPrefix(urlKey, "param_"), raw)
+	}
 }
 
 // playShotSvgPath returns the SVG sibling path for a screenshot PNG path.
@@ -1163,6 +1230,18 @@ func (inst *PlayApp) renderWirePreview() {
 				rt.Small().Weak()
 			}
 		}
+		if len(inst.wireSignals) > 0 {
+			// Signal values the store would supply at Run for the buffer's
+			// unbound slots (slice 5a) — name=value, values truncated.
+			pairs := make([]string, 0, len(inst.wireSignals))
+			for k, v := range inst.wireSignals {
+				pairs = append(pairs, k+"="+truncateRunes(v, 24))
+			}
+			sort.Strings(pairs)
+			for rt := range c.RichTextLabel("signals on URL: " + strings.Join(pairs, ", ")) {
+				rt.Small().Weak()
+			}
+		}
 		c.CodeView(ids.PrepareStr("sqlWire"),
 			codeview.BuildSql(inst.wireBody)).
 			Wrap().
@@ -1237,25 +1316,33 @@ func (inst *PlayApp) updatePreview() {
 // is on: BuildStatement re-parses per pass, and paying that per edit for a
 // hidden view would be waste. Toggling the checkbox on picks the current
 // buffer up on the next frame (wireFor is stale and the debounce window
-// has long elapsed).
+// has long elapsed). The signal caption additionally refreshes when the
+// store revision moves (a signal can change without a buffer edit).
 func (inst *PlayApp) updateWirePreview() {
 	if !inst.previewAsSent || inst.client == nil {
 		return
 	}
-	if inst.sql == inst.wireFor {
+	sigRev := uint64(0)
+	if inst.frameSig != nil {
+		sigRev = inst.frameSig.Revision()
+	}
+	if inst.sql == inst.wireFor && sigRev == inst.wireSigRev {
 		return
 	}
-	if time.Since(inst.lastEditAt) < previewDebounce {
+	if inst.sql != inst.wireFor && time.Since(inst.lastEditAt) < previewDebounce {
 		return
 	}
 	inst.wireFor = inst.sql
+	inst.wireSigRev = sigRev
 	raw := strings.TrimSpace(inst.sql)
 	if raw == "" {
 		inst.wireBody = ""
 		inst.wireParams = nil
+		inst.wireSignals = nil
 		return
 	}
 	inst.wireBody, inst.wireParams = inst.client.BuildStatement(raw)
+	inst.wireSignals, _ = inst.resolveRunSignals(raw)
 }
 
 // renderStatus is the bottom-bar status line. Per-frame snapshot values
@@ -1294,7 +1381,7 @@ func (inst *PlayApp) renderHistoryTab() {
 				Frame(false).
 				Truncate().
 				SendResp().HasPrimaryClicked() {
-				inst.sql = entry.SQL
+				inst.restoreHistoryEntry(entry)
 			}
 		}
 	}

@@ -29,8 +29,8 @@ type nodeLane struct {
 
 	mu        sync.Mutex
 	result    *nodeResult // last-good (owned); retained across a successful supersede
-	servedSQL string      // the SQL `result` was computed for
-	wantSQL   string      // the SQL currently desired (latest demanded)
+	servedKey string      // the compiled key `result` was computed for (compiledNode.key)
+	wantKey   string      // the compiled key currently desired (latest demanded)
 	loading   bool
 	gen       uint64 // bumped on each start; a stale (superseded) completion is discarded
 	cancel    context.CancelFunc
@@ -66,11 +66,13 @@ type laneView struct {
 	err         error
 }
 
-// demand requests the node's result for compiledSQL, non-blocking. It returns a
-// retained snapshot of the last-good result (caller MUST Release view.rec,
-// nil-safe) and ensures the lane converges to executing compiledSQL. While a
-// run is in flight, the prior result is returned (last-good) with loading=true.
-func (inst *nodeLane) demand(compiledSQL string) (view laneView) {
+// demand requests the node's result for the compiled (SQL, signal values)
+// pair, non-blocking. It returns a retained snapshot of the last-good result
+// (caller MUST Release view.rec, nil-safe) and ensures the lane converges to
+// executing c. While a run is in flight, the prior result is returned
+// (last-good) with loading=true. The memo keys on compiledNode.key(), so the
+// same SQL under different signal values re-executes (slice 5a).
+func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 
@@ -79,23 +81,24 @@ func (inst *nodeLane) demand(compiledSQL string) (view laneView) {
 		return
 	}
 
-	memoCurrent := inst.result != nil && inst.servedSQL == compiledSQL
+	demandKey := c.key()
+	memoCurrent := inst.result != nil && inst.servedKey == demandKey
 	switch {
 	case memoCurrent && inst.loading:
-		// Flip-back: the demand returned to the SQL the memo already serves
+		// Flip-back: the demand returned to the pair the memo already serves
 		// while a superseding run is still in flight (A→B→A). Cancel that run
 		// and serve the memo — re-executing would break minimality: nothing
 		// the memo covers changed (a forced re-fetch goes through forget,
-		// which clears servedSQL and so never lands here).
+		// which clears servedKey and so never lands here).
 		inst.gen++ // the in-flight completion is stale now
 		if inst.cancel != nil {
 			inst.cancel()
 			inst.cancel = nil
 		}
 		inst.loading = false
-		inst.wantSQL = compiledSQL
-	case !memoCurrent && inst.wantSQL != compiledSQL:
-		inst.startLocked(compiledSQL)
+		inst.wantKey = demandKey
+	case !memoCurrent && inst.wantKey != demandKey:
+		inst.startLocked(c, demandKey)
 	}
 
 	if inst.result != nil {
@@ -116,19 +119,19 @@ func (inst *nodeLane) demand(compiledSQL string) (view laneView) {
 }
 
 // forget clears the memo AND discards any in-flight run, so the next demand
-// re-executes even for an unchanged SQL (the "Run bands" / Map-Refresh force —
-// re-fetch against a changed source table). Without the generation bump, an
-// in-flight completion landing after forget would restore servedSQL and the
-// next demand would memo-hit, silently dropping the force. The last-good
-// result is retained until the re-run lands.
+// re-executes even for an unchanged input (the "Run bands" / Map-Refresh
+// force — re-fetch against a changed source table). Without the generation
+// bump, an in-flight completion landing after forget would restore servedKey
+// and the next demand would memo-hit, silently dropping the force. The
+// last-good result is retained until the re-run lands.
 func (inst *nodeLane) forget() {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.closed {
 		return
 	}
-	inst.servedSQL = ""
-	inst.wantSQL = ""
+	inst.servedKey = ""
+	inst.wantKey = ""
 	inst.gen++ // an in-flight completion is stale now
 	if inst.cancel != nil {
 		inst.cancel()
@@ -138,8 +141,8 @@ func (inst *nodeLane) forget() {
 }
 
 // startLocked supersedes any in-flight run and kicks a new one. Caller holds mu.
-func (inst *nodeLane) startLocked(sql string) {
-	inst.wantSQL = sql
+func (inst *nodeLane) startLocked(c compiledNode, demandKey string) {
+	inst.wantKey = demandKey
 	if inst.cancel != nil {
 		inst.cancel()
 	}
@@ -154,16 +157,16 @@ func (inst *nodeLane) startLocked(sql string) {
 	}
 	inst.cancel = cancel
 	inst.loading = true
-	go inst.run(ctx, cancel, gen, sql)
+	go inst.run(ctx, cancel, gen, c, demandKey)
 }
 
-func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen uint64, sql string) {
+func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen uint64, c compiledNode, demandKey string) {
 	// Release the context on every path (idempotent with the supersede /
 	// close cancels): a WithTimeout ctx left uncancelled keeps its timer
 	// armed until the deadline — 60s per map fetch (review finding).
 	defer cancel()
 	start := time.Now()
-	rec, schema, summary, err := inst.exec.execute(ctx, sql, inst.alloc)
+	rec, schema, summary, err := inst.exec.execute(ctx, c, inst.alloc)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if gen != inst.gen {
@@ -178,14 +181,14 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	inst.cancel = nil
 	prev := inst.result
 	inst.result = &nodeResult{
-		rec: rec, schema: schema, sql: sql,
+		rec: rec, schema: schema, sql: c.SQL, key: demandKey,
 		fingerprint: fingerprintRecord(rec),
 		summary:     summary,
 		executedAt:  time.Now(),
 		elapsed:     time.Since(start),
 		err:         err,
 	}
-	inst.servedSQL = sql
+	inst.servedKey = demandKey
 	if prev != nil && prev.rec != nil {
 		prev.rec.Release()
 	}

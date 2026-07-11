@@ -202,7 +202,7 @@ type schemaOnlyExecutor struct {
 	schema *arrow.Schema
 }
 
-func (inst *schemaOnlyExecutor) execute(context.Context, string, memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+func (inst *schemaOnlyExecutor) execute(context.Context, compiledNode, memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
 	return nil, inst.schema, Summary{}, nil
 }
 

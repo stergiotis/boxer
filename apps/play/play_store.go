@@ -12,10 +12,15 @@ import (
 )
 
 type HistoryEntry struct {
-	SQL       string
-	Executed  time.Time
-	Elapsed   time.Duration
-	NumRows   int64
+	SQL      string
+	Executed time.Time
+	Elapsed  time.Duration
+	NumRows  int64
+	// SigParams snapshots the URL-keyed signal values the run shipped
+	// (ADR-0097 slice-5 D4): the run's true inputs are the buffer (with its
+	// SET-bound constants) PLUS these. Restoring a history entry seeds the
+	// signal store from this map. nil when the run read no signals.
+	SigParams map[string]string
 	ErrorText string
 }
 
@@ -96,9 +101,11 @@ func (inst *QueryStore) History() []HistoryEntry {
 	return out
 }
 
-// Execute kicks off an async query. Subsequent calls while a query is running
-// are ignored; call Cancel first.
-func (inst *QueryStore) Execute(sql string) {
+// Execute kicks off an async query. signals carries the URL-keyed signal
+// values resolved for this run (ADR-0097 slice 5a; nil = none) — they ride
+// the request URL and are snapshotted into the history entry (D4). Subsequent
+// calls while a query is running are ignored; call Cancel first.
+func (inst *QueryStore) Execute(sql string, signals map[string]string) {
 	if inst.isLoading.Swap(true) {
 		return
 	}
@@ -110,6 +117,16 @@ func (inst *QueryStore) Execute(sql string) {
 	inst.cancel = cancel
 	inst.cancelMu.Unlock()
 
+	// Snapshot the caller's map: it must not mutate under the async run or
+	// the history entry.
+	var sigs map[string]string
+	if len(signals) > 0 {
+		sigs = make(map[string]string, len(signals))
+		for k, v := range signals {
+			sigs[k] = v
+		}
+	}
+
 	go func() {
 		defer cancel() // release the context (and its resources) on every path
 		defer inst.isLoading.Store(false)
@@ -120,9 +137,9 @@ func (inst *QueryStore) Execute(sql string) {
 		}()
 
 		start := time.Now()
-		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, inst.opts)
+		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, inst.opts, sigs)
 		if err != nil {
-			inst.finish(sql, start, nil, nil, 0, summary, err)
+			inst.finish(sql, sigs, start, nil, nil, 0, summary, err)
 			return
 		}
 		defer func() {
@@ -142,7 +159,7 @@ func (inst *QueryStore) Execute(sql string) {
 			for _, b := range batches {
 				b.Release()
 			}
-			inst.finish(sql, start, nil, nil, 0, summary, e)
+			inst.finish(sql, sigs, start, nil, nil, 0, summary, e)
 			return
 		}
 
@@ -151,7 +168,7 @@ func (inst *QueryStore) Execute(sql string) {
 			b.Release()
 		}
 		if cErr != nil {
-			inst.finish(sql, start, nil, nil, 0, summary, cErr)
+			inst.finish(sql, sigs, start, nil, nil, 0, summary, cErr)
 			return
 		}
 		if schema == nil {
@@ -163,7 +180,7 @@ func (inst *QueryStore) Execute(sql string) {
 		if rec != nil {
 			rows = rec.NumRows()
 		}
-		inst.finish(sql, start, rec, schema, rows, summary, nil)
+		inst.finish(sql, sigs, start, rec, schema, rows, summary, nil)
 	}()
 }
 
@@ -192,7 +209,7 @@ func (inst *QueryStore) Close() {
 	inst.schema = nil
 }
 
-func (inst *QueryStore) finish(sql string, start time.Time, rec arrow.RecordBatch, schema *arrow.Schema, rows int64, summary Summary, err error) {
+func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Time, rec arrow.RecordBatch, schema *arrow.Schema, rows int64, summary Summary, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.closed {
@@ -215,10 +232,11 @@ func (inst *QueryStore) finish(sql string, start time.Time, rec arrow.RecordBatc
 	inst.loading = false
 
 	entry := HistoryEntry{
-		SQL:      sql,
-		Executed: inst.executed,
-		Elapsed:  inst.elapsed,
-		NumRows:  rows,
+		SQL:       sql,
+		Executed:  inst.executed,
+		Elapsed:   inst.elapsed,
+		NumRows:   rows,
+		SigParams: sigs,
 	}
 	if err != nil {
 		entry.ErrorText = err.Error()

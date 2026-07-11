@@ -170,14 +170,24 @@ func (inst *Client) SetURL(u string) {
 //
 // opts may be nil; when set, its query_id / replace_running_query ride the URL
 // alongside the params (see ExecOptions).
-func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions) (rdr *ipc.Reader, body io.Closer, summary Summary, err error) {
+//
+// signals carries the caller's resolved signal values (ADR-0097 slice 5a),
+// URL-keyed (`param_<name>` → raw); nil/empty means none. They ride the same
+// `param_*` channel as the SET-bound constants BuildStatement harvests from
+// the body's prelude, and a SET-bound name SHADOWS a same-named signal
+// (slice-5 D1: a SET pins a signal into a constant) — the harvested params
+// are applied second.
+func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions, signals map[string]string) (rdr *ipc.Reader, body io.Closer, summary Summary, err error) {
 	q, params := inst.BuildStatement(sql)
 	// ClickHouse reads the body verbatim as SQL — params must ride the URL
 	// query string. See the function doc for size limits. The target is read
 	// once here so a concurrent SetURL never tears a request mid-build.
 	reqURL := inst.URL()
 	qs := url.Values{}
-	for k, v := range params {
+	for k, v := range signals {
+		qs.Set(k, v)
+	}
+	for k, v := range params { // SET-bound constants shadow same-named signals
 		qs.Set(k, v)
 	}
 	if opts != nil && opts.QueryID != "" {

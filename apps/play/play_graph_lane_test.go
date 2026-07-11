@@ -16,7 +16,7 @@ func waitLaneReady(t *testing.T, lane *nodeLane, wantSQL string) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		view := lane.demand(wantSQL)
+		view := lane.demand(compiledNode{SQL: wantSQL})
 		if view.rec != nil {
 			view.rec.Release()
 		}
@@ -37,7 +37,7 @@ type gatedExecutor struct {
 	calls int
 }
 
-func (inst *gatedExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+func (inst *gatedExecutor) execute(ctx context.Context, c compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
 	inst.mu.Lock()
 	inst.calls++
 	inst.mu.Unlock()
@@ -46,7 +46,7 @@ func (inst *gatedExecutor) execute(ctx context.Context, sql string, alloc memory
 		err = ctx.Err()
 		return
 	}
-	rec = inst.build(sql)
+	rec = inst.build(c.SQL)
 	schema = rec.Schema()
 	return
 }
@@ -65,12 +65,12 @@ func TestNodeLaneExecutesOnDemand(t *testing.T) {
 	lane := newNodeLane(clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
-	view := lane.demand("SELECT n FROM t")
+	view := lane.demand(compiledNode{SQL: "SELECT n FROM t"})
 	require.Nil(t, view.rec, "first demand is non-blocking — no result yet")
 	require.True(t, view.loading)
 
 	waitLaneReady(t, lane, "SELECT n FROM t")
-	view = lane.demand("SELECT n FROM t")
+	view = lane.demand(compiledNode{SQL: "SELECT n FROM t"})
 	require.NoError(t, view.err)
 	require.False(t, view.loading)
 	require.NotNil(t, view.rec)
@@ -80,7 +80,7 @@ func TestNodeLaneExecutesOnDemand(t *testing.T) {
 	require.NotZero(t, view.fingerprint)
 	require.Equal(t, 1, *hits)
 
-	v2 := lane.demand("SELECT n FROM t")
+	v2 := lane.demand(compiledNode{SQL: "SELECT n FROM t"})
 	if v2.rec != nil {
 		v2.rec.Release()
 	}
@@ -94,19 +94,19 @@ func TestNodeLaneReExecutesOnSqlChange(t *testing.T) {
 	lane := newNodeLane(clientExecutor{client: NewClient(ClientConfig{URL: srv.URL}, srv.Client())}, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
-	v := lane.demand("SELECT 1")
+	v := lane.demand(compiledNode{SQL: "SELECT 1"})
 	if v.rec != nil {
 		v.rec.Release()
 	}
 	waitLaneReady(t, lane, "SELECT 1")
 	require.Equal(t, 1, *hits)
 
-	v = lane.demand("SELECT 2")
+	v = lane.demand(compiledNode{SQL: "SELECT 2"})
 	if v.rec != nil {
 		v.rec.Release()
 	}
 	waitLaneReady(t, lane, "SELECT 2")
-	v = lane.demand("SELECT 2")
+	v = lane.demand(compiledNode{SQL: "SELECT 2"})
 	if v.rec != nil {
 		v.rec.Release()
 	}
@@ -121,7 +121,7 @@ func TestNodeLaneNonBlockingAndLastGood(t *testing.T) {
 	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
-	view := lane.demand("sql1")
+	view := lane.demand(compiledNode{SQL: "sql1"})
 	require.Nil(t, view.rec)
 	require.True(t, view.loading)
 
@@ -129,11 +129,11 @@ func TestNodeLaneNonBlockingAndLastGood(t *testing.T) {
 	waitLaneReady(t, lane, "sql1")
 
 	// supersede with sql2 (gated): the last-good (sql1) is returned while loading.
-	v1 := lane.demand("sql2")
+	v1 := lane.demand(compiledNode{SQL: "sql2"})
 	if v1.rec != nil {
 		v1.rec.Release()
 	}
-	view = lane.demand("sql2")
+	view = lane.demand(compiledNode{SQL: "sql2"})
 	require.NotNil(t, view.rec, "last-good retained during supersede")
 	require.Equal(t, "sql1", view.sql, "still sql1's result while sql2 loads")
 	require.True(t, view.loading)
@@ -141,7 +141,7 @@ func TestNodeLaneNonBlockingAndLastGood(t *testing.T) {
 
 	g.gate <- struct{}{} // release sql2's execute
 	waitLaneReady(t, lane, "sql2")
-	view = lane.demand("sql2")
+	view = lane.demand(compiledNode{SQL: "sql2"})
 	require.NotNil(t, view.rec)
 	view.rec.Release()
 	require.Equal(t, "sql2", view.sql)
@@ -155,11 +155,11 @@ func TestNodeLaneSupersedesInFlight(t *testing.T) {
 	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
-	v := lane.demand("sql1") // in flight (gated)
+	v := lane.demand(compiledNode{SQL: "sql1"}) // in flight (gated)
 	if v.rec != nil {
 		v.rec.Release()
 	}
-	v = lane.demand("sql2") // cancels sql1 in flight, starts sql2
+	v = lane.demand(compiledNode{SQL: "sql2"}) // cancels sql1 in flight, starts sql2
 	if v.rec != nil {
 		v.rec.Release()
 	}
@@ -170,7 +170,7 @@ func TestNodeLaneSupersedesInFlight(t *testing.T) {
 	g.gate <- struct{}{}
 	waitLaneReady(t, lane, "sql2")
 
-	view := lane.demand("sql2")
+	view := lane.demand(compiledNode{SQL: "sql2"})
 	require.NotNil(t, view.rec)
 	view.rec.Release()
 	require.Equal(t, "sql2", view.sql)
@@ -185,7 +185,7 @@ func TestNodeLaneForgetDiscardsInFlightCompletion(t *testing.T) {
 	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
-	v := lane.demand("SELECT 1") // kicks a run, held on the gate
+	v := lane.demand(compiledNode{SQL: "SELECT 1"}) // kicks a run, held on the gate
 	require.Nil(t, v.rec)
 	require.True(t, v.loading)
 	require.Eventually(t, func() bool { return g.callCount() == 1 },
@@ -197,11 +197,11 @@ func TestNodeLaneForgetDiscardsInFlightCompletion(t *testing.T) {
 	require.Never(t, func() bool {
 		lane.mu.Lock()
 		defer lane.mu.Unlock()
-		return lane.servedSQL == "SELECT 1" // a landed completion would restore this
+		return lane.servedKey == "SELECT 1" // a landed completion would restore this
 	}, 150*time.Millisecond, 5*time.Millisecond,
 		"the in-flight completion must be discarded after forget")
 
-	v = lane.demand("SELECT 1") // same SQL — must re-execute, not memo-hit
+	v = lane.demand(compiledNode{SQL: "SELECT 1"}) // same SQL — must re-execute, not memo-hit
 	if v.rec != nil {
 		v.rec.Release()
 	}
@@ -225,17 +225,17 @@ func TestNodeLaneFingerprintTracksContentAcrossForget(t *testing.T) {
 	lane := newNodeLane(exec, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
-	lane.demand("SELECT n")
+	lane.demand(compiledNode{SQL: "SELECT n"})
 	waitLaneReady(t, lane, "SELECT n")
-	v1 := lane.demand("SELECT n")
+	v1 := lane.demand(compiledNode{SQL: "SELECT n"})
 	if v1.rec != nil {
 		v1.rec.Release()
 	}
 
 	lane.forget() // re-fetch, same data
-	lane.demand("SELECT n")
+	lane.demand(compiledNode{SQL: "SELECT n"})
 	waitLaneReady(t, lane, "SELECT n")
-	v2 := lane.demand("SELECT n")
+	v2 := lane.demand(compiledNode{SQL: "SELECT n"})
 	if v2.rec != nil {
 		v2.rec.Release()
 	}
@@ -245,9 +245,9 @@ func TestNodeLaneFingerprintTracksContentAcrossForget(t *testing.T) {
 	val = 2 // the source "changed"
 	mu.Unlock()
 	lane.forget() // re-fetch, new data under the SAME SQL
-	lane.demand("SELECT n")
+	lane.demand(compiledNode{SQL: "SELECT n"})
 	waitLaneReady(t, lane, "SELECT n")
-	v3 := lane.demand("SELECT n")
+	v3 := lane.demand(compiledNode{SQL: "SELECT n"})
 	if v3.rec != nil {
 		v3.rec.Release()
 	}
@@ -263,18 +263,18 @@ func TestNodeLaneFlipBackServesMemoWithoutReExecuting(t *testing.T) {
 	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
 	defer lane.close()
 
-	v := lane.demand("A")
+	v := lane.demand(compiledNode{SQL: "A"})
 	require.Nil(t, v.rec)
 	g.gate <- struct{}{} // release A's execute
 	waitLaneReady(t, lane, "A")
 
-	v = lane.demand("B") // supersede toward B (its execute is held on the gate)
+	v = lane.demand(compiledNode{SQL: "B"}) // supersede toward B (its execute is held on the gate)
 	if v.rec != nil {
 		v.rec.Release()
 	}
 	require.True(t, v.loading)
 
-	view := lane.demand("A") // flip back while B is in flight
+	view := lane.demand(compiledNode{SQL: "A"}) // flip back while B is in flight
 	require.NotNil(t, view.rec, "the memo for A is current — served immediately")
 	view.rec.Release()
 	require.Equal(t, "A", view.sql)
@@ -288,7 +288,7 @@ func TestNodeLaneFlipBackServesMemoWithoutReExecuting(t *testing.T) {
 	require.Never(t, func() bool {
 		lane.mu.Lock()
 		defer lane.mu.Unlock()
-		return lane.servedSQL != "A"
+		return lane.servedKey != "A"
 	}, 150*time.Millisecond, 5*time.Millisecond, "B's cancelled completion must not land")
 }
 
@@ -300,13 +300,13 @@ func TestNodeLaneClosedDropsDemandsAndForgets(t *testing.T) {
 	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
 	lane.close()
 
-	view := lane.demand("SELECT 1")
+	view := lane.demand(compiledNode{SQL: "SELECT 1"})
 	require.Nil(t, view.rec)
 	require.False(t, view.loading)
 	require.Equal(t, 0, g.callCount(), "no execution starts on a closed lane")
 
 	lane.forget() // no-op on a closed lane — must not cancel or re-arm anything
-	view = lane.demand("SELECT 1")
+	view = lane.demand(compiledNode{SQL: "SELECT 1"})
 	require.False(t, view.loading)
 	require.Equal(t, 0, g.callCount())
 	lane.close() // idempotent

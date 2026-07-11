@@ -31,6 +31,7 @@ func TestLiveExecuteArrowStreamMultiStatementParams(t *testing.T) {
 		`SET param_a = 42; SET param_b = 'hello world'; SELECT {a : UInt64} AS a, {b : String} AS b`,
 		memory.NewGoAllocator(),
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
@@ -67,7 +68,7 @@ func TestLiveExecuteArrowStreamLargeStringParam(t *testing.T) {
 	}
 	sql := "SET param_blob = '" + string(blob) + "'; SELECT length({blob : String}) AS n"
 
-	rdr, body, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil)
+	rdr, body, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}

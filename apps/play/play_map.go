@@ -270,9 +270,11 @@ func (inst *MapDriver) Render() {
 
 	// Demand the raster on the node lane (non-blocking; supersedes the in-flight
 	// run on a new view; returns the last-good while a new one is loading). Re-pack
-	// only when the served result's fingerprint changes.
+	// only when the served result's fingerprint changes. The raster SQL inlines
+	// its viewport as literals until slice 5c moves it onto {vp_*} signals, so
+	// the compiled node carries no params yet.
 	if inst.demandedSQL != "" {
-		view := inst.lane.demand(inst.demandedSQL)
+		view := inst.lane.demand(compiledNode{SQL: inst.demandedSQL})
 		inst.loading = view.loading
 		inst.laneErr = view.err // mirrored every demand — nil clears (no latch)
 		if view.rec != nil {

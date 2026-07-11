@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/binary"
 	"hash/fnv"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -102,32 +104,68 @@ type PanelI interface {
 	Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI)
 }
 
+// compiledNode is a node's executable form (ADR-0097 slice 5a): the SQL body
+// plus the signal values the node reads, resolved from the store at compile
+// time. Params are URL entries — keys carry the `param_` prefix, values are
+// raw strings — and ride the same channel as SET-bound constants at
+// execution, where a SET-bound name shadows a same-named signal (slice-5 D1).
+type compiledNode struct {
+	SQL    string
+	Params map[string]string
+}
+
+// key is the memo identity of a compiled node: the SQL plus the sorted
+// params. The same SQL under different signal values is a different
+// execution — both the runtime memo and the lanes key on this pair.
+func (inst compiledNode) key() (out string) {
+	if len(inst.Params) == 0 {
+		return inst.SQL
+	}
+	names := make([]string, 0, len(inst.Params))
+	for k := range inst.Params {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	b.Grow(len(inst.SQL) + 32*len(names))
+	b.WriteString(inst.SQL)
+	for _, k := range names {
+		b.WriteByte(0x00)
+		b.WriteString(k)
+		b.WriteByte(0x01)
+		b.WriteString(inst.Params[k])
+	}
+	out = b.String()
+	return
+}
+
 // nodeExecutorI runs a compiled query and returns its single, concatenated Arrow
 // result plus the engine's execution summary. The real impl wraps
 // *Client.ExecuteArrowStream; tests use mocks (a zero Summary is fine).
 type nodeExecutorI interface {
-	execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
+	execute(ctx context.Context, c compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
 }
 
-// Node is a query node. Compile produces the pushed-down SQL from the current
-// signal env (ADR-0097: editor SQL → nanopass pipeline → param substitution). In
-// slice 1 Compile is supplied directly; the splitter and a real nanopass pipeline
-// land in slice 3.
+// Node is a query node. Compile produces the pushed-down SQL plus the signal
+// values it reads from the current signal env (ADR-0097: editor SQL →
+// nanopass pipeline → param resolution). In slice 1 Compile is supplied
+// directly; the splitter and a real nanopass pipeline land in slice 3.
 type Node struct {
 	ID      NodeID
-	Compile func(sig SignalEnvI) (sql string, err error)
+	Compile func(sig SignalEnvI) (c compiledNode, err error)
 }
 
 // nodeResult is a node's memoised output (ADR-0097 SD1/SD10): the result, the
-// compiled SQL that is its memo key, a content fingerprint for early cutoff
-// (SD4), and the signal revision it was computed at. The graph owns rec and
-// releases it when the result is replaced or the graph is closed; callers must
-// not release it. A failed execution is carried on err (per-node state, SD11),
-// not returned from demand.
+// compiled (SQL, signal values) pair whose key is the memo identity (5a), a
+// content fingerprint for early cutoff (SD4), and the signal revision it was
+// computed at. The graph owns rec and releases it when the result is replaced
+// or the graph is closed; callers must not release it. A failed execution is
+// carried on err (per-node state, SD11), not returned from demand.
 type nodeResult struct {
 	rec         arrow.RecordBatch
 	schema      *arrow.Schema
-	sql         string
+	sql         string // the compiled SQL half (display/observers)
+	key         string // compiledNode.key() — the memo identity
 	fingerprint uint64
 	revision    uint64
 	summary     Summary
@@ -200,6 +238,39 @@ func (inst *queryGraph) signals() (sig SignalEnvI) {
 	return
 }
 
+// setSignalRaw writes a signal's raw value into the store (ADR-0097 slice
+// 5a). name is the bare param name (no `param_` prefix); raw is the value
+// string that rides the URL channel at execution. The revision bumps only on
+// an actual change (setSignal). Writers: history-restore seeding (D4) and,
+// from slice 5b on, the panel emitters.
+func (inst *queryGraph) setSignalRaw(name SignalID, raw string) {
+	inst.setSignal(name, env.Param{Name: name, Raw: raw})
+}
+
+// resolveSignalNames resolves the given slot names against a signal snapshot,
+// skipping names in bound (SET-bound prelude constants — a SET pins, slice-5
+// D1) and names the store has no value for. The result is URL-keyed
+// (`param_`+name → raw), ready for the wire; nil when nothing resolves.
+func resolveSignalNames(names []string, bound map[string]bool, sig SignalEnvI) (out map[string]string) {
+	if sig == nil {
+		return
+	}
+	for _, name := range names {
+		if bound[name] {
+			continue
+		}
+		p, found := sig.Get(name)
+		if !found {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]string, 4)
+		}
+		out["param_"+name] = p.Raw
+	}
+	return
+}
+
 // setSignal sets a param's value, bumping the revision only when the value
 // actually changes (ADR-0097 SD4: minimality starts at the input). Unchanged
 // re-sets are no-ops, so a node is not re-run for a signal that did not move.
@@ -242,14 +313,15 @@ func (inst *queryGraph) demand(ctx context.Context, id NodeID) (res *nodeResult,
 	}
 	inst.demanded[id] = true
 
-	sql, cErr := n.Compile(inst.sig)
+	c, cErr := n.Compile(inst.sig)
 	if cErr != nil {
 		err = eh.Errorf("queryGraph.demand: compile node %q: %w", id, cErr)
 		return
 	}
+	memoKey := c.key()
 
 	prev := inst.results[id]
-	if prev != nil && prev.sql == sql {
+	if prev != nil && prev.key == memoKey {
 		res = prev
 		return
 	}
@@ -257,11 +329,12 @@ func (inst *queryGraph) demand(ctx context.Context, id NodeID) (res *nodeResult,
 	// Stale ⇒ execute. An executor error is carried on the result (SD11), not
 	// returned, so the bound panel can render it as an empty-state.
 	start := time.Now()
-	rec, schema, summary, xErr := inst.exec.execute(ctx, sql, inst.alloc)
+	rec, schema, summary, xErr := inst.exec.execute(ctx, c, inst.alloc)
 	next := &nodeResult{
 		rec:         rec,
 		schema:      schema,
-		sql:         sql,
+		sql:         c.SQL,
+		key:         memoKey,
 		fingerprint: fingerprintRecord(rec),
 		revision:    inst.sig.revision,
 		summary:     summary,
@@ -350,8 +423,13 @@ func newLiveQueryGraph(client *Client, alloc memory.Allocator, maxHistory int) (
 	return
 }
 
-// RunMain executes the `main` node's SQL (the editor buffer) on its async lane.
-func (inst *queryGraph) RunMain(sql string) { inst.mainLane.Execute(sql) }
+// RunMain executes the `main` node's SQL (the editor buffer) on its async
+// lane. signals carries the URL-keyed signal values resolved for this run
+// (slice 5a — the store's values for the buffer's unbound param slots); they
+// ride the request URL and are snapshotted into the run's history entry (D4).
+func (inst *queryGraph) RunMain(sql string, signals map[string]string) {
+	inst.mainLane.Execute(sql, signals)
+}
 
 // CancelMain aborts an in-flight `main` execution.
 func (inst *queryGraph) CancelMain() { inst.mainLane.Cancel() }

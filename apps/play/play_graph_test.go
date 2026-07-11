@@ -20,10 +20,10 @@ type mockExecutor struct {
 	build func(sql string) arrow.RecordBatch
 }
 
-func (inst *mockExecutor) execute(ctx context.Context, sql string, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+func (inst *mockExecutor) execute(ctx context.Context, c compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
 	inst.calls++
-	inst.sqls = append(inst.sqls, sql)
-	rec = inst.build(sql)
+	inst.sqls = append(inst.sqls, c.SQL)
+	rec = inst.build(c.SQL)
 	schema = rec.Schema()
 	return
 }
@@ -43,9 +43,9 @@ func int64Rec(col string, vals ...int64) (rec arrow.RecordBatch) {
 
 // selectParamX is a node whose compiled SQL embeds signal "x" — a stand-in for
 // the param substitution slice 3 does via nanopass.
-func selectParamX(sig SignalEnvI) (sql string, err error) {
+func selectParamX(sig SignalEnvI) (c compiledNode, err error) {
 	p, _ := sig.Get("x")
-	sql = "SELECT " + p.Raw
+	c = compiledNode{SQL: "SELECT " + p.Raw}
 	return
 }
 
@@ -79,8 +79,8 @@ func TestGraphDemandDrivenSkipsUnobservedNode(t *testing.T) {
 	exec := &mockExecutor{build: func(string) arrow.RecordBatch { return int64Rec("n", 7) }}
 	g := newQueryGraph(exec, memory.NewGoAllocator())
 	defer g.close()
-	g.addNode(&Node{ID: "a", Compile: func(SignalEnvI) (string, error) { return "SELECT 1", nil }})
-	g.addNode(&Node{ID: "b", Compile: func(SignalEnvI) (string, error) { return "SELECT 2", nil }})
+	g.addNode(&Node{ID: "a", Compile: func(SignalEnvI) (compiledNode, error) { return compiledNode{SQL: "SELECT 1"}, nil }})
+	g.addNode(&Node{ID: "b", Compile: func(SignalEnvI) (compiledNode, error) { return compiledNode{SQL: "SELECT 2"}, nil }})
 
 	g.beginFrame()
 	_, err := g.demand(context.Background(), "a")
@@ -159,7 +159,7 @@ func TestPanelAcceptRejectContract(t *testing.T) {
 	exec := &mockExecutor{build: func(string) arrow.RecordBatch { return int64Rec("n", 1) }}
 	g := newQueryGraph(exec, memory.NewGoAllocator())
 	defer g.close()
-	g.addNode(&Node{ID: "main", Compile: func(SignalEnvI) (string, error) { return "SELECT 1", nil }})
+	g.addNode(&Node{ID: "main", Compile: func(SignalEnvI) (compiledNode, error) { return compiledNode{SQL: "SELECT 1"}, nil }})
 
 	var p PanelI = countPanel{}
 	require.Equal(t, []ChannelSpec{{ID: chMain, Required: true}}, p.Channels())
