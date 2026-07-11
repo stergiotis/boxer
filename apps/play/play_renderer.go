@@ -123,6 +123,24 @@ type PlayApp struct {
 	lastRunBound      map[string]bool
 	wireSignals       map[string]string
 	wireSigRev        uint64
+	// Slice-5e state. liveMain is the `main` node's opt-in liveness bit
+	// (D2): with it on, a referenced-signal move re-runs the unchanged
+	// buffer (buffer edits stay Run-gated). runIsAuto marks the pending
+	// requestRun as toggle-fired so executeRun skips the persist (the
+	// persistence point stays user-intent-anchored). runBlockedReason
+	// carries the unfilled-input refusal (D3) for the status bar. The
+	// sig* fields back the Signals section: reseed-guarded value drafts,
+	// the add-signal footer's drafts, and the debounce-following
+	// slot-type table (conflict detection).
+	liveMain         bool
+	runIsAuto        bool
+	runBlockedReason string
+	sigValDrafts     map[string]*string
+	sigValSeeded     map[string]string
+	sigAddName       string
+	sigAddValue      string
+	sigTypesFor      string
+	sigTypes         map[string][]string
 	// pendingSnippetInsert / pendingSnippetReplace hold a snippet-library
 	// click until the editor consumes it on the next frame: Insert splices
 	// the snippet at the caret via TextEditFluid.InsertAtCursor (ADR-0063);
@@ -510,6 +528,8 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		},
 		paramDrafts:       map[string]*string{},
 		paramSyncedValues: map[string]string{},
+		sigValDrafts:      map[string]*string{},
+		sigValSeeded:      map[string]string{},
 		// Range widget first so the Grafana-style picker (when the
 		// host has wired an evaluator via SetCapabilities) folds the
 		// from/to pair; otherwise its Matches returns ok=false and
@@ -663,6 +683,13 @@ func (inst *PlayApp) Render() error {
 	// too. The status bar and its chip both read inst.queryFSM.
 	inst.syncQueryFSM(loading, numRows, executed, err)
 
+	// The `main` live toggle (slice 5e, D2): a referenced-signal move
+	// re-runs the unchanged buffer through the ordinary Run path below.
+	if inst.shouldAutoRun() {
+		inst.requestRun = true
+		inst.runIsAuto = true
+	}
+
 	// Run the canonical-form pipeline once per frame regardless of which
 	// tab is active. The pipeline is debounced internally (previewDebounce),
 	// so most frames are a no-op; running it here keeps the Preview tab's
@@ -753,7 +780,7 @@ func (inst *PlayApp) Render() error {
 			// scroll the panel in the same gesture that pans/zooms the map —
 			// the map jitters while zooming. Overflow clips instead.
 			for range dock.TabNoScroll(dockTabMap, "Map") {
-				inst.mapDriver.Render(inst.frameSig, inst.sigEmit)
+				inst.mapDriver.Render(inst.frameSig, inst.sigEmit.as(signalWriterMap))
 			}
 			for range dock.Tab(dockTabWorld, "World") {
 				inst.renderWorldTab(rec, schema, loading, err, executed)
@@ -777,55 +804,80 @@ func (inst *PlayApp) Render() error {
 	// Execute after rendering — keeps the UI responsive on the submit frame.
 	if inst.requestRun && !inst.graph.MainLoading() {
 		inst.requestRun = false
-		sql := strings.TrimSpace(inst.sql)
-		if sql != "" {
-			// ADR-0097 3c: split the buffer into the node graph and fuse to the
-			// sink for execution. For a single statement the fused SQL is the
-			// original (the client re-lifts the SET prelude either way), so this
-			// is behaviour-identical. On a split/parse failure, fall back to the
-			// raw buffer so ClickHouse reports the error exactly as before.
-			executable, split, fErr := fuseToSink(sql)
-			if fErr != nil {
-				executable = sql
-				split = splitResult{}
-			}
-			inst.currentSplit = split
-			inst.splitErr = fErr
-			// A fresh run resets the observed node to the new sink and forgets
-			// the intermediate lane's memo (3d): re-observing an intermediate
-			// after a Run re-executes against the possibly-changed data.
-			inst.observedNode = split.Sink
-			inst.intermediateLane.forget()
-			// Scripted-screenshot affordance: observe a named node on run so a
-			// capture can show the panels rendering an intermediate (mirrors
-			// SPINNAKER_PLAY_FOCUS_*). Ignored when the node is absent.
-			if obs := ObserveNode.Get(); obs != "" {
-				if _, ok := findSplitNode(split, NodeID(obs)); ok {
-					inst.observedNode = NodeID(obs)
-				}
-			}
-			// Resolve the buffer's unbound param slots against the frame's
-			// signal snapshot (slice 5a): the values ride the request URL and
-			// the run's history entry snapshots them (D4). The resolution and
-			// the bound-name set also feed the staleness witness and the
-			// observed intermediates.
-			sigParams, boundNames := inst.resolveRunSignals(sql)
-			inst.lastSentSql = sql
-			inst.lastSentSigParams = sigParams
-			inst.lastRunBound = boundNames
-			inst.graph.RunMain(executable, sigParams)
-			// Persist on Run: the user's intent is "this is the SQL I
-			// want to keep around". Save-on-Unmount is the fallback
-			// for sessions that never Run; doing both keeps the
-			// persistence point user-intent-anchored.
-			inst.PersistSql()
-		}
+		auto := inst.runIsAuto
+		inst.runIsAuto = false
+		inst.executeRun(auto)
 	}
 
 	inst.frame++
 	inst.autoShotTick()
 	c.RequestRepaint()
 	return nil
+}
+
+// executeRun is the Run path (manual and, since 5e, live-toggle-fired): split
+// the buffer, resolve its signal inputs, and launch the main lane. Extracted
+// from Render's requestRun block verbatim (no c.* calls) so tests can drive
+// it without a UI frame. auto marks a live-toggle run: it skips the persist
+// (the persistence point stays anchored to user intent, not signal churn).
+func (inst *PlayApp) executeRun(auto bool) {
+	sql := strings.TrimSpace(inst.sql)
+	if sql == "" {
+		return
+	}
+	// Resolve the buffer's unbound param slots against the frame's
+	// signal snapshot (slice 5a): the values ride the request URL and
+	// the run's history entry snapshots them (D4). The resolution and
+	// the bound-name set also feed the staleness witness and the
+	// observed intermediates.
+	sigParams, boundNames, unfilled := inst.resolveRunSignals(sql)
+	// An unfilled input (referenced, neither SET-bound nor signal-written)
+	// can only fail server-side — block the doomed request with an
+	// actionable hint instead (slice-5 D3's empty-state, applied at the
+	// Run gate). The raw-fallback path (parse failure) resolves nothing
+	// and reports nothing unfilled, so it still defers to the server.
+	if len(unfilled) > 0 {
+		inst.runBlockedReason = "unfilled parameter {" + strings.Join(unfilled, "}, {") +
+			"} — write it in the Graph tab's signals section, or bind it with SET param_<name> = …"
+		return
+	}
+	inst.runBlockedReason = ""
+	// ADR-0097 3c: split the buffer into the node graph and fuse to the
+	// sink for execution. For a single statement the fused SQL is the
+	// original (the client re-lifts the SET prelude either way), so this
+	// is behaviour-identical. On a split/parse failure, fall back to the
+	// raw buffer so ClickHouse reports the error exactly as before.
+	executable, split, fErr := fuseToSink(sql)
+	if fErr != nil {
+		executable = sql
+		split = splitResult{}
+	}
+	inst.currentSplit = split
+	inst.splitErr = fErr
+	// A fresh run resets the observed node to the new sink and forgets
+	// the intermediate lane's memo (3d): re-observing an intermediate
+	// after a Run re-executes against the possibly-changed data.
+	inst.observedNode = split.Sink
+	inst.intermediateLane.forget()
+	// Scripted-screenshot affordance: observe a named node on run so a
+	// capture can show the panels rendering an intermediate (mirrors
+	// SPINNAKER_PLAY_FOCUS_*). Ignored when the node is absent.
+	if obs := ObserveNode.Get(); obs != "" {
+		if _, ok := findSplitNode(split, NodeID(obs)); ok {
+			inst.observedNode = NodeID(obs)
+		}
+	}
+	inst.lastSentSql = sql
+	inst.lastSentSigParams = sigParams
+	inst.lastRunBound = boundNames
+	inst.graph.RunMain(executable, sigParams)
+	if !auto {
+		// Persist on Run: the user's intent is "this is the SQL I
+		// want to keep around". Save-on-Unmount is the fallback
+		// for sessions that never Run; doing both keeps the
+		// persistence point user-intent-anchored.
+		inst.PersistSql()
+	}
 }
 
 // syncSelectionClamp keeps the selection signal valid for the active result
@@ -842,7 +894,7 @@ func (inst *PlayApp) syncSelectionClamp(rec arrow.RecordBatch) {
 	}
 	row, found := readSelection(inst.frameSig)
 	if !found || row < 0 || row >= rec.NumRows() {
-		inst.graph.setSignalRaw(signalSelection, "0")
+		inst.graph.setSignalRawFrom(signalSelection, "0", signalWriterClamp)
 	}
 }
 
@@ -851,9 +903,11 @@ func (inst *PlayApp) syncSelectionClamp(rec arrow.RecordBatch) {
 // lag the buffer) yields the slot list and the SET-bound names; unbound names
 // with a store value become URL params. Also returns the bound-name set (the
 // prelude constants — D1: a SET pins, so those names never consult the
-// store). On a parse failure — the raw-fallback Run path — nothing resolves
-// and the server reports the real problem, exactly as for the SQL itself.
-func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string, bound map[string]bool) {
+// store) and the unfilled names (referenced, neither bound nor held — 5e's
+// Run gate refuses on those). On a parse failure — the raw-fallback Run path
+// — nothing resolves, nothing reports unfilled, and the server reports the
+// real problem, exactly as for the SQL itself.
+func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string, bound map[string]bool, unfilled []string) {
 	slots, vals, err := extractSlotsAndParams(sql)
 	if err != nil {
 		return
@@ -867,6 +921,15 @@ func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string,
 		names = append(names, s.Name)
 	}
 	sigParams = resolveSignalNames(names, bound, inst.frameSig)
+	for _, s := range slots {
+		if bound[s.Name] {
+			continue
+		}
+		if _, resolved := sigParams["param_"+s.Name]; resolved {
+			continue
+		}
+		unfilled = append(unfilled, s.Name)
+	}
 	return
 }
 
@@ -877,7 +940,7 @@ func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string,
 func (inst *PlayApp) restoreHistoryEntry(entry HistoryEntry) {
 	inst.sql = entry.SQL
 	for urlKey, raw := range entry.SigParams {
-		inst.graph.setSignalRaw(strings.TrimPrefix(urlKey, "param_"), raw)
+		inst.graph.setSignalRawFrom(strings.TrimPrefix(urlKey, "param_"), raw, signalWriterHistory)
 	}
 }
 
@@ -1034,6 +1097,25 @@ func (inst *PlayApp) renderTopBar() {
 			c.Separator().Vertical().Send()
 			c.Checkbox(ids.PrepareStr("hidePrelude"), inst.paramHidePrelude, "Hide prelude").
 				SendRespVal(&inst.paramHidePrelude)
+		}
+
+		// The `main` live toggle (slice 5e, D2): offered when the buffer has
+		// at least one signal input to react to — or while already on, so it
+		// can be unchecked after an edit removes the last unbound slot.
+		if inst.liveMain || inst.hasUnboundSlots() {
+			c.Separator().Vertical().Send()
+			c.Checkbox(ids.PrepareStr("liveMain"), inst.liveMain, "Live").
+				SendRespVal(&inst.liveMain)
+		}
+
+		// Unfilled inputs (D3): the buffer references a name nothing fills —
+		// a Run would be refused, so say what to do while still typing.
+		if unfilled := inst.unfilledInputs(); len(unfilled) > 0 {
+			c.Separator().Vertical().Send()
+			for rt := range c.RichTextLabel("unfilled: {" + strings.Join(unfilled, "}, {") +
+				"} — see Graph ▸ signals, or SET param_<name> = …") {
+				rt.Small().Weak()
+			}
 		}
 	}
 }
@@ -1400,7 +1482,7 @@ func (inst *PlayApp) updateWirePreview() {
 		return
 	}
 	inst.wireBody, inst.wireParams = inst.client.BuildStatement(raw)
-	inst.wireSignals, _ = inst.resolveRunSignals(raw)
+	inst.wireSignals, _, _ = inst.resolveRunSignals(raw)
 }
 
 // renderStatus is the bottom-bar status line. Per-frame snapshot values

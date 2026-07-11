@@ -236,6 +236,13 @@ func queryStateTone(s queryStateE) badge.ToneE {
 // window.
 func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
 	s := inst.querySummaryLine(numRows, elapsed, summary, executed, err)
+	// A Run refused on unfilled inputs (5e, D3) reports where its result
+	// summary would have landed — the FSM chip beside it keeps showing the
+	// last settled state. Retires as soon as the inputs are filled or
+	// edited away, no Run needed.
+	if inst.runBlockedReason != "" && len(inst.unfilledInputs()) > 0 {
+		s = "Run blocked: " + inst.runBlockedReason
+	}
 	if s == "" {
 		return
 	}

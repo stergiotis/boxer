@@ -107,3 +107,37 @@ func collectParamValues(pr *nanopass.ParseResult) (params map[string]string, err
 	params, _, err = collectParamSettings(pr)
 	return
 }
+
+// collectSlotTypes walks EVERY `{name : Type}` occurrence (no dedup, unlike
+// collectParamSlots) and returns each name's distinct declared types in
+// occurrence order. More than one entry for a name is the cross-node type
+// conflict the Signals chrome warns about (ADR-0097 slice 5e): signals unify
+// by name, so two nodes declaring different types for one name are reading
+// the same value through different casts.
+func collectSlotTypes(pr *nanopass.ParseResult) (out map[string][]string) {
+	out = make(map[string][]string, 4)
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		ps, ok := ctx.(*grammar1.ParamSlotContext)
+		if !ok {
+			return true
+		}
+		ident := ps.Identifier()
+		typeCtx := ps.ColumnTypeExpr()
+		if ident == nil || typeCtx == nil {
+			return true
+		}
+		name := strings.Trim(ident.GetText(), "`")
+		if name == "" {
+			return true
+		}
+		typ := strings.TrimSpace(nanopass.NodeText(pr, typeCtx))
+		for _, seen := range out[name] {
+			if seen == typ {
+				return true
+			}
+		}
+		out[name] = append(out[name], typ)
+		return true
+	})
+	return
+}

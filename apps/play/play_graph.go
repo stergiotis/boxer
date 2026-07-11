@@ -177,11 +177,32 @@ type nodeResult struct {
 	err         error
 }
 
+// signalMeta is a signal's write provenance for the Signals chrome (ADR-0097
+// slice 5e): who last CHANGED the value and at which store revision. A
+// deduplicated re-set (same value) updates neither — the chrome answers
+// "where did this value come from", not "who wrote last".
+type signalMeta struct {
+	writer   string
+	revision uint64
+}
+
+// Writer identities stamped on signal writes (slice 5e). Panels are stamped
+// with their PanelID by dispatchPanel; these name the non-panel writers.
+const (
+	signalWriterApp     = "app"             // default for unstamped writes
+	signalWriterEditor  = "signals-editor"  // the Graph tab's Signals section
+	signalWriterHistory = "history"         // history-restore seeding (D4)
+	signalWriterClamp   = "selection-clamp" // syncSelectionClamp's reset write
+	signalWriterMap     = "map"             // the Map driver's vp_* emits
+)
+
 // signalEnv is an immutable signal snapshot. setSignal copy-on-writes a new one
 // and bumps the revision, so a holder of an older snapshot keeps a consistent
-// view (glitch-free reads, ADR-0097 SD4).
+// view (glitch-free reads, ADR-0097 SD4). meta travels with params under the
+// same copy-on-write.
 type signalEnv struct {
 	params   map[SignalID]env.Param
+	meta     map[SignalID]signalMeta
 	revision uint64
 }
 
@@ -221,7 +242,10 @@ func newQueryGraph(exec nodeExecutorI, alloc memory.Allocator) (inst *queryGraph
 		nodes:    make(map[NodeID]*Node, 4),
 		results:  make(map[NodeID]*nodeResult, 4),
 		demanded: make(map[NodeID]bool, 4),
-		sig:      &signalEnv{params: make(map[SignalID]env.Param, 4)},
+		sig: &signalEnv{
+			params: make(map[SignalID]env.Param, 4),
+			meta:   make(map[SignalID]signalMeta, 4),
+		},
 	}
 	return
 }
@@ -244,10 +268,16 @@ func (inst *queryGraph) signals() (sig SignalEnvI) {
 // setSignalRaw writes a signal's raw value into the store (ADR-0097 slice
 // 5a). name is the bare param name (no `param_` prefix); raw is the value
 // string that rides the URL channel at execution. The revision bumps only on
-// an actual change (setSignal). Writers: history-restore seeding (D4) and
-// the panel emitters (graphEmitter, slice 5b).
+// an actual change (setSignal). Writers: history-restore seeding (D4), the
+// panel emitters (graphEmitter, slice 5b), and the Signals editor (5e).
 func (inst *queryGraph) setSignalRaw(name SignalID, raw string) {
-	inst.setSignal(name, env.Param{Name: name, Raw: raw})
+	inst.setSignalRawFrom(name, raw, signalWriterApp)
+}
+
+// setSignalRawFrom is setSignalRaw with an explicit writer identity for the
+// Signals chrome's provenance column (slice 5e).
+func (inst *queryGraph) setSignalRawFrom(name SignalID, raw string, writer string) {
+	inst.setSignalFrom(name, env.Param{Name: name, Raw: raw}, writer)
 }
 
 // encodeSignalValue renders a panel-emitted Go value as the raw string a
@@ -284,6 +314,16 @@ func encodeSignalValue(value any) (raw string, ok bool) {
 // selectedRow bridge (selectedRowEmitter) retired with it.
 type graphEmitter struct {
 	graph *queryGraph
+	// writer is the identity recorded on writes for the Signals chrome
+	// (slice 5e). dispatchPanel stamps a panel's ID onto an unstamped
+	// emitter; non-panel writers stamp via as(). Empty records as "app".
+	writer string
+}
+
+// as returns a copy of the emitter stamped with a writer identity.
+func (inst graphEmitter) as(writer string) graphEmitter {
+	inst.writer = writer
+	return inst
 }
 
 func (inst graphEmitter) Emit(id SignalID, value any) {
@@ -293,7 +333,7 @@ func (inst graphEmitter) Emit(id SignalID, value any) {
 			Msg("play: dropping signal emit with unsupported value type")
 		return
 	}
-	inst.graph.setSignalRaw(id, raw)
+	inst.graph.setSignalRawFrom(id, raw, inst.writer)
 }
 
 // resolveSignalNames resolves the given slot names against a signal snapshot,
@@ -324,18 +364,84 @@ func resolveSignalNames(names []string, bound map[string]bool, sig SignalEnvI) (
 // actually changes (ADR-0097 SD4: minimality starts at the input). Unchanged
 // re-sets are no-ops, so a node is not re-run for a signal that did not move.
 func (inst *queryGraph) setSignal(id SignalID, p env.Param) {
+	inst.setSignalFrom(id, p, signalWriterApp)
+}
+
+// setSignalFrom is the single store-write path: setSignal plus the writer
+// identity recorded in the signal's meta (slice 5e). A deduplicated re-set
+// changes neither value nor meta.
+func (inst *queryGraph) setSignalFrom(id SignalID, p env.Param, writer string) {
+	if writer == "" {
+		writer = signalWriterApp
+	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	cur, ok := inst.sig.params[id]
 	if ok && cur.Raw == p.Raw && cur.Type == p.Type {
 		return
 	}
+	rev := inst.sig.revision + 1
 	next := make(map[SignalID]env.Param, len(inst.sig.params)+1)
 	for k, v := range inst.sig.params {
 		next[k] = v
 	}
+	nextMeta := make(map[SignalID]signalMeta, len(inst.sig.meta)+1)
+	for k, v := range inst.sig.meta {
+		nextMeta[k] = v
+	}
 	next[id] = p
-	inst.sig = &signalEnv{params: next, revision: inst.sig.revision + 1}
+	nextMeta[id] = signalMeta{writer: writer, revision: rev}
+	inst.sig = &signalEnv{params: next, meta: nextMeta, revision: rev}
+}
+
+// deleteSignal frees a name from the store (slice 5e — the Signals editor's
+// discard): referencing nodes lose their resolution, so the staleness witness
+// flips exactly as for a changed value. Deleting an absent name is a no-op
+// (no revision churn).
+func (inst *queryGraph) deleteSignal(id SignalID) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if _, ok := inst.sig.params[id]; !ok {
+		return
+	}
+	next := make(map[SignalID]env.Param, len(inst.sig.params)-1)
+	for k, v := range inst.sig.params {
+		if k != id {
+			next[k] = v
+		}
+	}
+	nextMeta := make(map[SignalID]signalMeta, len(inst.sig.meta))
+	for k, v := range inst.sig.meta {
+		if k != id {
+			nextMeta[k] = v
+		}
+	}
+	inst.sig = &signalEnv{params: next, meta: nextMeta, revision: inst.sig.revision + 1}
+}
+
+// signalRow is one held signal for the Signals chrome (slice 5e): the value
+// plus its write provenance.
+type signalRow struct {
+	Name   string
+	Raw    string
+	Writer string
+	Rev    uint64
+}
+
+// signalRows lists the store's held signals sorted by name — the chrome's
+// read surface. Provenance reads from the same immutable snapshot as the
+// values, so a concurrent write cannot tear a row.
+func (inst *queryGraph) signalRows() (rows []signalRow) {
+	inst.mu.Lock()
+	sig := inst.sig
+	inst.mu.Unlock()
+	rows = make([]signalRow, 0, len(sig.params))
+	for name, p := range sig.params {
+		m := sig.meta[name]
+		rows = append(rows, signalRow{Name: name, Raw: p.Raw, Writer: m.writer, Rev: m.revision})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
+	return
 }
 
 // beginFrame clears the per-frame demand set. Panels call demand during the

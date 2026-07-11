@@ -72,6 +72,23 @@ collapses the `SET param_*` lines: the prelude renders as a read-only label abov
 the editor and you edit it only through the widgets, while the editor binds to the
 query body. Toggle it off to hand-edit the `SET` lines directly.
 
+## Signals (live parameters)
+
+A placeholder *without* a `SET` line is a **signal**: a live value shared by
+name across every query and panel. Panels write them as you interact — the
+Table/Timeline selection writes `selection`, the Map's settled viewport writes
+the `vp_*` set, the Timeline publishes the events extent as `tl_min`/`tl_max`
+— and any query referencing the name picks the value up on its next run. The
+**signals** section at the top of the Graph tab lists them (value, declared
+type, who wrote it last) and is also where you set one by hand; adding a `SET`
+for the same name pins it into a constant that shadows the signal until the
+`SET` is removed.
+
+A referenced name that nothing fills blocks Run with a hint (instead of the
+server's "substitution not set" error). The **Live** checkbox (top bar, shown
+when the query has a signal input) re-runs the query automatically when a
+referenced signal moves — edits to the SQL itself still wait for Run.
+
 ## Inline affordances
 
 When the debounced parse recognises certain function calls, a small context tool
@@ -194,7 +211,9 @@ controls — this tab queries on its own, independent of the editor's result.
 
 The reactive query-graph view (ADR-0097): each top-level CTE of the last-run
 buffer is a node, with the final `SELECT` as the sink the panels observe. Observe
-an intermediate node to point every result tab at that node's rows instead.
+an intermediate node to point every result tab at that node's rows instead. The
+**signals** section at the top lists the live parameter values (see "Signals"
+above) and lets you set, add, or discard one.
 
 ### Schema
 

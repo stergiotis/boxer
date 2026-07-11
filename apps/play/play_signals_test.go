@@ -18,6 +18,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stretchr/testify/require"
 )
 
@@ -131,14 +132,17 @@ func TestResolveRunSignalsResolvesUnboundOnly(t *testing.T) {
 	app.graph.setSignalRaw("y", "shadowed") // y is SET-bound below — never consulted
 	app.frameSig = app.graph.signals()
 
-	sig, bound := app.resolveRunSignals("SET param_y = 1; SELECT {x:UInt64}, {y:UInt64}, {z:UInt64}")
+	sig, bound, unfilled := app.resolveRunSignals("SET param_y = 1; SELECT {x:UInt64}, {y:UInt64}, {z:UInt64}")
 	require.Equal(t, map[string]string{"param_x": "41"}, sig,
 		"x resolves from the store; y is pinned by its SET; z has no store value")
 	require.Equal(t, map[string]bool{"y": true}, bound)
+	require.Equal(t, []string{"z"}, unfilled,
+		"z is referenced but neither SET-bound nor signal-written (5e)")
 
-	sigBad, boundBad := app.resolveRunSignals("this is not sql")
+	sigBad, boundBad, unfilledBad := app.resolveRunSignals("this is not sql")
 	require.Nil(t, sigBad)
 	require.Nil(t, boundBad)
+	require.Nil(t, unfilledBad, "the raw-fallback path reports nothing unfilled — the server decides")
 }
 
 // The staleness witness gains its signal half (D2): a referenced signal that
@@ -321,4 +325,242 @@ func TestMapViewportSeamEndToEnd(t *testing.T) {
 	b2, _ := bboxFromLatLon(48.6, 49.1, 1.9, 2.9)
 	require.Equal(t, strconv.FormatUint(uint64(b2.minX), 10), qs[1].Get("param_vp_min_x"),
 		"the pan re-executed with the new viewport params")
+}
+
+// --- Slice-5e regression tests: signal provenance, the Signals chrome's row
+// model, the unfilled-input Run gate (D3), and the `main` live toggle (D2). ---
+
+// Every write records who last CHANGED the value; deduplicated re-sets update
+// neither value nor provenance; an unstamped write records as "app".
+func TestSignalStoreTracksWriterAndRevision(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	graphEmitter{graph: g, writer: "table"}.Emit("x", int64(1))
+	rows := g.signalRows()
+	require.Len(t, rows, 1)
+	require.Equal(t, signalRow{Name: "x", Raw: "1", Writer: "table", Rev: 1}, rows[0])
+
+	graphEmitter{graph: g, writer: "projection"}.Emit("x", int64(1))
+	require.Equal(t, uint64(1), g.signalRows()[0].Rev, "unchanged value ⇒ no revision bump")
+	require.Equal(t, "table", g.signalRows()[0].Writer, "unchanged value ⇒ provenance keeps the changer")
+
+	graphEmitter{graph: g}.as("projection").Emit("x", int64(2))
+	require.Equal(t, signalRow{Name: "x", Raw: "2", Writer: "projection", Rev: 2}, g.signalRows()[0])
+
+	g.setSignalRaw("y", "raw")
+	rows = g.signalRows()
+	require.Len(t, rows, 2)
+	require.Equal(t, "app", rows[1].Writer, "unstamped writes record as app")
+	require.Equal(t, "x", rows[0].Name, "rows are name-sorted")
+}
+
+// deleteSignal frees the name and bumps the revision (referencing nodes go
+// stale/unfilled); deleting an absent name is revision-free.
+func TestDeleteSignalRemovesAndBumps(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	g.setSignalRaw("x", "1")
+	rev := g.signals().Revision()
+
+	g.deleteSignal("x")
+	_, held := g.signals().Get("x")
+	require.False(t, held)
+	require.Empty(t, g.signalRows())
+	require.Equal(t, rev+1, g.signals().Revision(), "deletion is a store change")
+
+	g.deleteSignal("x")
+	require.Equal(t, rev+1, g.signals().Revision(), "deleting an absent name is a no-op")
+}
+
+// stampProbePanel is a minimal PanelI whose Render emits — for asserting the
+// dispatcher's writer stamping.
+type stampProbePanel struct{}
+
+func (stampProbePanel) ID() PanelID             { return "probe" }
+func (stampProbePanel) Channels() []ChannelSpec { return []ChannelSpec{{ID: chMain, Required: true}} }
+func (stampProbePanel) AcceptForChannel(ChannelID, *arrow.Schema, SignalEnvI) (ChannelClaim, string) {
+	return true, ""
+}
+func (stampProbePanel) Render(_ map[ChannelID]ChannelResult, emit SignalEmitterI) {
+	emit.Emit("stamped", int64(7))
+}
+
+// dispatchPanel stamps the panel's ID onto an unstamped store emitter, so
+// panel writes carry provenance without any per-call-site plumbing.
+func TestDispatchPanelStampsEmitterWriter(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	reject := dispatchPanel(stampProbePanel{}, map[ChannelID]channelInput{chMain: {}}, graphEmitter{graph: g})
+	require.Empty(t, reject)
+	rows := g.signalRows()
+	require.Len(t, rows, 1)
+	require.Equal(t, "probe", rows[0].Writer)
+}
+
+// collectSlotTypes keeps every occurrence's type (no dedup by name): the
+// cross-node conflict signal the chrome warns on.
+func TestCollectSlotTypesConflicts(t *testing.T) {
+	pr, err := nanopass.Parse("SELECT {x:Int64}, {x:String}, {x:Int64}, {y:UInt8}")
+	require.NoError(t, err)
+	types := collectSlotTypes(pr)
+	require.Equal(t, []string{"Int64", "String"}, types["x"], "distinct types in occurrence order")
+	require.Equal(t, []string{"UInt8"}, types["y"])
+}
+
+// The chrome row model: held ∪ referenced, with pinned (D1), unfilled (D3),
+// provenance, and the reserved-type conflict check.
+func TestCollectSignalChromeRows(t *testing.T) {
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	sql := "SET param_a = 1;\nSELECT {a:Int64}, {b:UInt32}, {c:String}, {vp_w:String}"
+	app.sql = sql
+	app.formattedFor = sql // the debounce has settled — the type table may parse
+	slots, vals, err := extractSlotsAndParams(sql)
+	require.NoError(t, err)
+	app.refreshParamSlotsFromParse(slots, vals)
+	app.graph.setSignalRawFrom("b", "7", signalWriterMap)
+	app.frameSig = app.graph.signals()
+
+	rows := app.collectSignalChrome()
+	byName := make(map[string]signalChromeRow, len(rows))
+	for _, r := range rows {
+		byName[r.Name] = r
+	}
+	require.Len(t, rows, 4)
+
+	a := byName["a"]
+	require.True(t, a.Pinned, "SET-bound ⇒ pinned (D1)")
+	require.False(t, a.Unfilled, "a SET fills the input")
+	require.False(t, a.Held)
+	require.Equal(t, []string{"Int64"}, a.Types)
+
+	b := byName["b"]
+	require.True(t, b.Held)
+	require.Equal(t, "7", b.Raw)
+	require.Equal(t, signalWriterMap, b.Writer)
+	require.False(t, b.Unfilled)
+	require.False(t, b.Conflict)
+
+	cRow := byName["c"]
+	require.True(t, cRow.Unfilled, "referenced, neither bound nor held")
+
+	vpw := byName["vp_w"]
+	require.True(t, vpw.Conflict, "buffer String vs reserved UInt32")
+	require.ElementsMatch(t, []string{"String", "UInt32"}, vpw.Types)
+	require.True(t, vpw.Unfilled)
+}
+
+// unfilledInputs / hasUnboundSlots read the debounced caches + frame
+// snapshot: bound names and held names are filled; the rest are not.
+func TestUnfilledInputsFromCaches(t *testing.T) {
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app.paramSlots = []paramSlot{{Name: "a"}, {Name: "b"}, {Name: "c"}}
+	app.paramSyncedValues = map[string]string{"a": "1"}
+	app.graph.setSignalRaw("b", "2")
+	app.frameSig = app.graph.signals()
+
+	require.Equal(t, []string{"c"}, app.unfilledInputs())
+	require.True(t, app.hasUnboundSlots(), "b and c are unbound (a SET pins only a)")
+
+	app.paramSyncedValues = map[string]string{"a": "1", "b": "2", "c": "3"}
+	require.Empty(t, app.unfilledInputs())
+	require.False(t, app.hasUnboundSlots())
+}
+
+// The live toggle's decision, gate by gate (D2): only a signal move on an
+// unchanged, fully-filled, non-observing, settled buffer re-runs.
+func TestShouldAutoRunGates(t *testing.T) {
+	mk := func() *PlayApp {
+		app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+		app.sql = "SELECT {x:Int64} AS v"
+		app.lastSentSql = "SELECT {x:Int64} AS v"
+		app.paramSlots = []paramSlot{{Name: "x", Type: "Int64"}}
+		app.lastSentSigParams = map[string]string{"param_x": "1"}
+		app.graph.setSignalRaw("x", "2") // moved since the run
+		app.frameSig = app.graph.signals()
+		app.liveMain = true
+		return app
+	}
+	require.True(t, mk().shouldAutoRun(), "baseline: live + diverged + filled + unchanged buffer")
+
+	off := mk()
+	off.liveMain = false
+	require.False(t, off.shouldAutoRun(), "toggle off")
+
+	pending := mk()
+	pending.requestRun = true
+	require.False(t, pending.shouldAutoRun(), "a run is already requested")
+
+	neverRan := mk()
+	neverRan.lastSentSql = ""
+	require.False(t, neverRan.shouldAutoRun(), "live means re-run, not first-run")
+
+	edited := mk()
+	edited.sql += " -- edited"
+	require.False(t, edited.shouldAutoRun(), "buffer edits stay Run-gated")
+
+	observing := mk()
+	observing.currentSplit = splitResult{Sink: "main"}
+	observing.observedNode = "cte1"
+	require.False(t, observing.shouldAutoRun(), "observed intermediates already re-drive on their lane")
+
+	unfilled := mk()
+	unfilled.paramSlots = append(unfilled.paramSlots, paramSlot{Name: "z", Type: "String"})
+	require.False(t, unfilled.shouldAutoRun(), "an unfilled input blocks exactly as it blocks a manual Run")
+
+	settled := mk()
+	settled.lastSentSigParams = map[string]string{"param_x": "2"}
+	require.False(t, settled.shouldAutoRun(), "no divergence ⇒ no run")
+}
+
+// executeRun refuses a doomed request (unfilled input, D3) with an actionable
+// reason, and runs it once the input is written.
+func TestExecuteRunBlockedOnUnfilledThenRuns(t *testing.T) {
+	srv, got := captureServer(t)
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	defer app.graph.close()
+	app.sql = "SELECT {x:Int64} AS v"
+	app.frameSig = app.graph.signals()
+
+	app.executeRun(false)
+	require.Contains(t, app.runBlockedReason, "{x}")
+	require.Empty(t, got(), "no request goes to the server")
+	require.Empty(t, app.lastSentSql, "a blocked run records nothing as sent")
+
+	app.graph.setSignalRawFrom("x", "3", signalWriterEditor)
+	app.frameSig = app.graph.signals()
+	app.executeRun(false)
+	require.Empty(t, app.runBlockedReason)
+	require.Eventually(t, func() bool { return len(got()) == 1 }, 2*time.Second, time.Millisecond)
+	require.Equal(t, "3", got()[0].Get("param_x"))
+	require.Equal(t, map[string]string{"param_x": "3"}, app.lastSentSigParams)
+}
+
+// The live loop end to end: run, move a referenced signal, the toggle fires
+// the same Run path with the new value, and the divergence clears.
+func TestAutoRunLoopOnSignalDivergence(t *testing.T) {
+	srv, got := captureServer(t)
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	defer app.graph.close()
+	app.sql = "SELECT {x:Int64} AS v"
+	app.paramSlots = []paramSlot{{Name: "x", Type: "Int64"}} // the debounced cache
+	app.liveMain = true
+
+	app.graph.setSignalRawFrom("x", "1", signalWriterEditor)
+	app.frameSig = app.graph.signals()
+	app.executeRun(false) // the first run is manual — live means re-run
+	require.Eventually(t, func() bool { return len(got()) == 1 && !app.graph.MainLoading() },
+		2*time.Second, time.Millisecond)
+	require.False(t, app.shouldAutoRun(), "freshly run, nothing diverged")
+
+	app.graph.setSignalRawFrom("x", "2", signalWriterEditor)
+	app.frameSig = app.graph.signals()
+	require.True(t, app.shouldAutoRun(), "a referenced signal moved")
+	app.executeRun(true)
+	require.Eventually(t, func() bool { return len(got()) == 2 && !app.graph.MainLoading() },
+		2*time.Second, time.Millisecond)
+	require.Equal(t, "2", got()[1].Get("param_x"), "the re-run ships the moved value")
+
+	app.frameSig = app.graph.signals()
+	require.False(t, app.shouldAutoRun(), "the divergence cleared with the run")
 }

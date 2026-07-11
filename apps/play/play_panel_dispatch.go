@@ -25,6 +25,11 @@ type channelInput struct {
 // Render is called with the filled map. Returns the first unmet required
 // channel's reason, or "" when the panel rendered.
 func dispatchPanel(p PanelI, inputs map[ChannelID]channelInput, emit SignalEmitterI) (reject string) {
+	// Stamp the panel's identity onto an unstamped store emitter so its
+	// writes carry provenance for the Signals chrome (slice 5e).
+	if ge, isGraph := emit.(graphEmitter); isGraph && ge.writer == "" {
+		emit = ge.as(string(p.ID()))
+	}
 	filled := make(map[ChannelID]ChannelResult, len(inputs))
 	for _, spec := range p.Channels() {
 		in := inputs[spec.ID]
