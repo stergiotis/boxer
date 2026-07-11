@@ -13062,6 +13062,7 @@ self.apply_widget(w,u,f,Some(i));
                 let mut w = 0u8;
                 let mut width: f32 = 600.0;
                 let mut height: f32 = 400.0;
+                let mut fill_available: bool = false;
                 let mut override_zoom: Option<f64> = None;
                 let mut override_center: Option<(f64, f64)> = None;
                 let mut zoom_gesture: bool = true;
@@ -13090,6 +13091,15 @@ self.apply_widget(w,u,f,Some(i));
                             #[allow(unused_mut)]
                             let mut he = self.io.read_plain_f32()?;
                             height = he;
+                        }
+                        WalkersMapBuilderMethodId::FillAvailable => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match WalkersMapBuilderMethodId::FillAvailable"
+                            );
+                            #[allow(unused_mut)]
+                            let mut on = self.io.read_plain_b()?;
+                            fill_available = on;
                         }
                         WalkersMapBuilderMethodId::SetZoom => {
                             #[cfg(feature = "puffin")]
@@ -13168,6 +13178,7 @@ self.apply_widget(w,u,f,Some(i));
                     no_tiles,
                     width,
                     height,
+                    fill_available,
                     override_zoom,
                     override_center,
                     zoom_gesture,
@@ -13550,6 +13561,7 @@ egui::Window::new(label).id(i);
         no_tiles: bool,
         width: f32,
         height: f32,
+        fill_available: bool,
         override_zoom: Option<f64>,
         override_center: Option<(f64, f64)>,
         zoom_gesture: bool,
@@ -13696,7 +13708,18 @@ egui::Window::new(label).id(i);
                 };
 
                 let initial = walkers::lon_lat(init_lon, init_lat);
-                let size = egui::vec2(width, height);
+                // FillAvailable sizes the map to the parent's remaining space
+                // so it exactly fills a bounded host (e.g. a no-scroll dock
+                // tab — nothing overflows, nothing clips). Only meaningful in
+                // a bounded parent: a scrolling ScrollArea reports an
+                // effectively unbounded remainder — use Width/Height there.
+                // The floor guards a collapsed splitter (degenerate ~0-size
+                // leaf) so walkers never sees a zero-area viewport.
+                let size = if fill_available {
+                    u.as_ref().unwrap().available_size().max(egui::vec2(32.0, 32.0))
+                } else {
+                    egui::vec2(width, height)
+                };
 
                 // Split mutable borrow of `state` — tiles and memory are
                 // both needed by Map::new simultaneously.

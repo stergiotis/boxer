@@ -32,12 +32,17 @@ type MapDriver struct {
 	ids    *c.WidgetIdStack
 	client *Client
 
-	// Controls + display.
+	// Controls + display. The map fills the tab body by default (FillAvailable
+	// — the leaf is a bounded, no-scroll host, so filling it means nothing
+	// overflows or clips); mapWidth/mapHeight apply only when
+	// SPINNAKER_PLAY_MAP_SIZE pins a fixed size (fixedSize) for deterministic
+	// scripted screenshots.
 	table        string
 	sampling     float64
 	opacity      float64
 	noTiles      bool
 	live         bool
+	fixedSize    bool
 	mapWidth     float64
 	mapHeight    float64
 	initLat      float64
@@ -214,6 +219,7 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	}
 	if w, h, ok := parseWxH(MapSize.Get()); ok {
 		d.mapWidth, d.mapHeight = w, h
+		d.fixedSize = true
 	}
 	return d
 }
@@ -301,9 +307,17 @@ func (inst *MapDriver) Render() {
 
 	// The map (drains the overlay, reports the next camera). noTiles keeps it
 	// offline; flip it off for the built-in OSM basemap (needs network).
+	// Sizing: fill the (no-scroll, bounded) tab body so the whole map is
+	// always visible; a SPINNAKER_PLAY_MAP_SIZE override pins fixed dims
+	// instead, keeping scripted captures deterministic across hosts.
 	mw := c.WalkersMap(inst.ids.PrepareStr("map"),
 		inst.initLat, inst.initLon, inst.noTiles,
-	).Width(float32(inst.mapWidth)).Height(float32(inst.mapHeight))
+	)
+	if inst.fixedSize {
+		mw = mw.Width(float32(inst.mapWidth)).Height(float32(inst.mapHeight))
+	} else {
+		mw = mw.FillAvailable(true)
+	}
 	if !inst.noTiles {
 		mw = mw.TileUrl("")
 	}

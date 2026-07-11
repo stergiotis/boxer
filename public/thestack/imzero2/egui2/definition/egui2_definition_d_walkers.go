@@ -9,7 +9,7 @@ package definition
 // API shape (small by design; heavy lifting stays on Go):
 //
 //   Widget:    walkersMap(id, initLat, initLon, tileSource, noTiles)
-//              .Width / .Height / .SetZoom / .CenterAt
+//              .Width / .Height / .FillAvailable / .SetZoom / .CenterAt
 //
 //   Overlays   mapMarker(markerId, lat, lon)   .Label/.Color/.Radius
 //   (per-     mapPolyline(lats[], lons[])     .Stroke/.Width
@@ -213,6 +213,14 @@ func definitionsWalkersWidgets() []*ir.BuilderFactoryNode {
 			CodeClientRust(rustClientCode("width = wi;\n")).EndMethod().
 			BeginMethod("height").Arg("he", ctabb.F32).
 			CodeClientRust(rustClientCode("height = he;\n")).EndMethod().
+			// Size the map to the parent's remaining space instead of
+			// Width/Height, so it exactly fills a *bounded* host (e.g. a
+			// no-scroll dock tab) and nothing overflows or clips. Inside an
+			// unbounded parent (a scrolling ScrollArea) the reported
+			// remainder is effectively infinite — keep explicit
+			// Width/Height there.
+			BeginMethod("fillAvailable").Arg("on", ctabb.B).
+			CodeClientRust(rustClientCode("fill_available = on;\n")).EndMethod().
 			BeginMethod("setZoom").Arg("zoom", ctabb.F64).
 			CodeClientRust(rustClientCode("override_zoom = Some(zoom);\n")).EndMethod().
 			BeginMethod("centerAt").Arg("lat", ctabb.F64).Arg("lon", ctabb.F64).
@@ -239,6 +247,7 @@ func definitionsWalkersWidgets() []*ir.BuilderFactoryNode {
 		WithConstructionCodeClientRust(rustClientCode(`0u8;
 let mut width: f32 = 600.0;
 let mut height: f32 = 400.0;
+let mut fill_available: bool = false;
 let mut override_zoom: Option<f64> = None;
 let mut override_center: Option<(f64, f64)> = None;
 let mut zoom_gesture: bool = true;
@@ -252,7 +261,7 @@ let mut tile_size: u32 = 0;
 self.render_walkers_map(
     {{EguiUiOptionalOuter}}, {{FuncProcIdOuter}}, {{Id}},
     init_lat, init_lon, no_tiles,
-    width, height, override_zoom, override_center,
+    width, height, fill_available, override_zoom, override_center,
     zoom_gesture, panning,
     tile_url_template, tile_attribution_text, tile_max_zoom, tile_size,
 );

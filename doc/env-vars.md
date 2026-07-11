@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-07-11T15:10:44Z
+generated-at: 2026-07-11T18:37:22Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -118,7 +118,7 @@ generated-at: 2026-07-11T15:10:44Z
 | `SPINNAKER_PLAY_FOCUS_TIMELINE` | string | — | — |  | non-empty makes Timeline the default-active body tab (scripted screenshots) |
 | `SPINNAKER_PLAY_FOCUS_WORLD` | string | — | — |  | non-empty makes World (the ADR-0114 country choropleth) the default-active body tab (scripted screenshots) |
 | `SPINNAKER_PLAY_MAP_CENTER` | string | — | — |  | initial Map center as "lat,lon" (WGS84); empty or unparseable keeps the default (40,0) |
-| `SPINNAKER_PLAY_MAP_SIZE` | string | — | — |  | Map widget size as "WxH" logical points; empty or unparseable keeps the default (960x560) |
+| `SPINNAKER_PLAY_MAP_SIZE` | string | — | — |  | pin a fixed Map widget size as "WxH" logical points (deterministic scripted screenshots); empty or unparseable keeps the default (the map fills the Map tab) |
 | `SPINNAKER_PLAY_MAP_TABLE` | string | — | — |  | initial table for the Map panel; empty keeps the default (planes_mercator_sample100) |
 | `SPINNAKER_PLAY_MAP_ZOOM` | float64 | — | — |  | initial Map zoom level; a positive value overrides the default (4) |
 | `SPINNAKER_PLAY_OBSERVE` | string | — | — |  | graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split |

@@ -126,7 +126,7 @@ var (
 
 	MapSize = env.NewString(env.Spec{
 		Name:        "SPINNAKER_PLAY_MAP_SIZE",
-		Description: "Map widget size as \"WxH\" logical points; empty or unparseable keeps the default (960x560)",
+		Description: "pin a fixed Map widget size as \"WxH\" logical points (deterministic scripted screenshots); empty or unparseable keeps the default (the map fills the Map tab)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 )

@@ -973,14 +973,15 @@ const (
 
 	WalkersMapMethodIdWidth           WalkersMapMethodIdE = 1
 	WalkersMapMethodIdHeight          WalkersMapMethodIdE = 2
-	WalkersMapMethodIdSetZoom         WalkersMapMethodIdE = 3
-	WalkersMapMethodIdCenterAt        WalkersMapMethodIdE = 4
-	WalkersMapMethodIdZoomGesture     WalkersMapMethodIdE = 5
-	WalkersMapMethodIdPanning         WalkersMapMethodIdE = 6
-	WalkersMapMethodIdTileUrl         WalkersMapMethodIdE = 7
-	WalkersMapMethodIdTileAttribution WalkersMapMethodIdE = 8
-	WalkersMapMethodIdTileMaxZoom     WalkersMapMethodIdE = 9
-	WalkersMapMethodIdTileSize        WalkersMapMethodIdE = 10
+	WalkersMapMethodIdFillAvailable   WalkersMapMethodIdE = 3
+	WalkersMapMethodIdSetZoom         WalkersMapMethodIdE = 4
+	WalkersMapMethodIdCenterAt        WalkersMapMethodIdE = 5
+	WalkersMapMethodIdZoomGesture     WalkersMapMethodIdE = 6
+	WalkersMapMethodIdPanning         WalkersMapMethodIdE = 7
+	WalkersMapMethodIdTileUrl         WalkersMapMethodIdE = 8
+	WalkersMapMethodIdTileAttribution WalkersMapMethodIdE = 9
+	WalkersMapMethodIdTileMaxZoom     WalkersMapMethodIdE = 10
+	WalkersMapMethodIdTileSize        WalkersMapMethodIdE = 11
 )
 
 const (

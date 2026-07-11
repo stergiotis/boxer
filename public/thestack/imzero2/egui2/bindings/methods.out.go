@@ -4908,6 +4908,14 @@ func (inst WalkersMapFluid) Height(he float32) WalkersMapFluid {
 	return inst
 }
 
+func (inst WalkersMapFluid) FillAvailable(on bool) WalkersMapFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WalkersMapMethodIdFillAvailable))
+	r.WriteBool(on)
+
+	return inst
+}
+
 func (inst WalkersMapFluid) SetZoom(zoom float64) WalkersMapFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(WalkersMapMethodIdSetZoom))
