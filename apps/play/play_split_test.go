@@ -1,8 +1,10 @@
 package play
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stretchr/testify/require"
 )
 
@@ -190,6 +192,106 @@ func TestFuseNodePrependsPrelude(t *testing.T) {
 	exec := fuseNode(res, "a")
 	require.Contains(t, exec, "SET param_x = 1")
 	require.Contains(t, exec, "{x:UInt8}")
+}
+
+func TestSplitGraphSetClassificationIsGrammarBased(t *testing.T) {
+	// The former textual HasPrefix("SET ") check misread these prelude
+	// spellings as query statements and rejected the buffer as multi-statement
+	// (review finding); classification now matches ExtractParams' grammar-level
+	// view, so the splitter and the client agree on what is a prelude.
+	for _, tc := range []struct {
+		name string
+		sql  string
+	}{
+		{"block-comment prefix", "/* c */ SET param_a = 1; SELECT {a:UInt64}"},
+		{"line-comment prefix", "-- lead\nSET param_a = 1;\nSELECT {a:UInt64}"},
+		{"newline after SET", "SET\nparam_a = 1;\nSELECT {a:UInt64}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := splitGraph(tc.sql)
+			require.NoError(t, err)
+			require.Len(t, res.Prelude, 1, "the SET statement is a prelude, not a statement node")
+			require.Equal(t, mainNodeID, res.Sink)
+			sink, ok := nodeByID(res, mainNodeID)
+			require.True(t, ok)
+			require.Equal(t, []SignalID{"a"}, sink.Reads)
+		})
+	}
+}
+
+func TestFuseNodeMergesBodyOwnWithClause(t *testing.T) {
+	// A CTE body opening its own WITH clause, plus a sibling dep: fusing must
+	// CONTINUE that WITH list with the dep definitions — prepending a second
+	// `WITH` produced `WITH a AS (…) WITH x AS (…) SELECT …`, invalid SQL
+	// (review finding).
+	_, res, err := fuseToSink("WITH a AS (SELECT 1 AS v), b AS (WITH x AS (SELECT 2 AS w) SELECT v, w FROM a, x) SELECT * FROM b")
+	require.NoError(t, err)
+	b, ok := nodeByID(res, "b")
+	require.True(t, ok)
+	require.True(t, b.OwnWith)
+
+	exec := fuseNode(res, "b")
+	require.Contains(t, exec, "a AS (")
+	require.Contains(t, exec, "x AS (SELECT 2 AS w)")
+	require.Equal(t, 1, strings.Count(exec, "WITH"), "one WITH clause, continued with a comma")
+	_, pErr := nanopass.Parse(exec)
+	require.NoError(t, pErr, "the fused SQL must parse: %s", exec)
+}
+
+func TestFuseNodeMergesScalarAliasWith(t *testing.T) {
+	// The body's own WITH list may hold scalar aliases, not just CTEs; the
+	// merged list mixes both item kinds, which ClickHouse accepts.
+	_, res, err := fuseToSink("WITH a AS (SELECT 1 AS v), b AS (WITH 42 AS answer SELECT answer, v FROM a) SELECT * FROM b")
+	require.NoError(t, err)
+	exec := fuseNode(res, "b")
+	require.Contains(t, exec, "42 AS answer")
+	_, pErr := nanopass.Parse(exec)
+	require.NoError(t, pErr, "mixed CTE + scalar-alias WITH items fuse parseably: %s", exec)
+}
+
+func TestSplitGraphSinkDepsIncludeSubqueryRefs(t *testing.T) {
+	// A CTE referenced only inside a derived table drew no sink edge (review
+	// finding): dep derivation now descends FROM/expression subqueries.
+	res, err := splitGraph("WITH a AS (SELECT 1 AS v) SELECT * FROM (SELECT * FROM a)")
+	require.NoError(t, err)
+	sink, ok := nodeByID(res, res.Sink)
+	require.True(t, ok)
+	require.Equal(t, []NodeID{"a"}, sink.DependsOn)
+}
+
+func TestSplitGraphSinkDepsIncludeUnionMemberRefs(t *testing.T) {
+	res, err := splitGraph("WITH a AS (SELECT 1 AS v) SELECT 2 AS n UNION ALL SELECT v FROM a")
+	require.NoError(t, err)
+	sink, ok := nodeByID(res, res.Sink)
+	require.True(t, ok)
+	require.Equal(t, []NodeID{"a"}, sink.DependsOn, "refs in later UNION members are sink edges too")
+}
+
+func TestSplitGraphNestedCTERefIsNotAPhantomEdge(t *testing.T) {
+	// b's body references its own nested CTE x; x is not a graph node, so it
+	// must not surface as an edge (the Graph view previously showed
+	// "reads nodes: a, x" — review finding). References inside x's body still
+	// count as b's edges: x's body is part of b's fused unit.
+	res, err := splitGraph("WITH a AS (SELECT 1 AS v), b AS (WITH x AS (SELECT v FROM a) SELECT w FROM x) SELECT * FROM b")
+	require.NoError(t, err)
+	b, ok := nodeByID(res, "b")
+	require.True(t, ok)
+	require.Equal(t, []NodeID{"a"}, b.DependsOn, "the ref inside nested x's body is b's edge; x itself is not")
+}
+
+func TestSplitGraphShadowingNestedCTEIsNotAnEdge(t *testing.T) {
+	// b's nested CTE shadows the top-level a: references in b's body resolve to
+	// the nested definition, so there is no b→a edge — and fusing b must NOT
+	// inline the top-level a (a duplicate definition with different content).
+	res, err := splitGraph("WITH a AS (SELECT 1 AS v), b AS (WITH a AS (SELECT 2 AS w) SELECT * FROM a) SELECT * FROM b")
+	require.NoError(t, err)
+	b, ok := nodeByID(res, "b")
+	require.True(t, ok)
+	require.Empty(t, b.DependsOn, "the shadowed reference resolves to the nested definition")
+	exec := fuseNode(res, "b")
+	require.NotContains(t, exec, "SELECT 1 AS v", "top-level a is not inlined")
+	_, pErr := nanopass.Parse(exec)
+	require.NoError(t, pErr)
 }
 
 func TestTransitiveDepsTopoOrder(t *testing.T) {

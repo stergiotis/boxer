@@ -34,6 +34,14 @@ type splitNode struct {
 	SQL       string     // CTE body text, or the full statement for the sink
 	DependsOn []NodeID   // data edges: CTE nodes referenced
 	Reads     []SignalID // signal edges: unbound param-slot names referenced
+
+	// OwnWith marks a CTE node whose body opens with its own WITH clause
+	// (a nested CTE or scalar alias inside the body). fuseNode must then
+	// CONTINUE that WITH list with the transitive dep definitions instead
+	// of prepending a second `WITH` — two WITH clauses are invalid SQL.
+	// Guaranteed by construction: when set, SQL's first token is the WITH
+	// keyword (the body text starts at the body query's first token).
+	OwnWith bool
 }
 
 // splitResult is the recovered node graph for an editor buffer.
@@ -86,7 +94,19 @@ func splitGraph(sql string) (res splitResult, err error) {
 	}
 	root := scopes[0]
 
-	// Each top-level CTE → a node: its body SQL, the CTEs its body references
+	// topLevel maps each lifted CTE's definition node to its graph node id.
+	// Data edges are derived by RESOLUTION against this map (a reference is an
+	// edge iff it resolves to a lifted definition), not by name matching: a
+	// nested CTE inside a body is not a graph node, and a nested name that
+	// shadows a lifted one must not read as an edge to it (review finding —
+	// phantom edges).
+	topLevel := make(map[antlr.ParserRuleContext]NodeID, len(root.CTEDefs))
+	for i := range root.CTEDefs {
+		topLevel[root.CTEDefs[i].Node] = NodeID(root.CTEDefs[i].Name)
+	}
+
+	// Each top-level CTE → a node: its body SQL, the lifted CTEs its body
+	// (including any nested subqueries/CTEs of its own) resolves references to
 	// (data edges), and the param slots its body reads (signal edges).
 	for i := range root.CTEDefs {
 		cte := root.CTEDefs[i]
@@ -94,8 +114,9 @@ func splitGraph(sql string) (res splitResult, err error) {
 			ID:        NodeID(cte.Name),
 			Kind:      splitNodeCTE,
 			SQL:       cteBodyText(pr, cte),
-			DependsOn: cteRefs(cte.Scopes),
+			DependsOn: resolvedDeps(cte.Scopes, topLevel),
 			Reads:     paramSlotsOf(pr, cte.Node),
+			OwnWith:   bodyOpensWithClause(cte),
 		})
 	}
 
@@ -104,13 +125,21 @@ func splitGraph(sql string) (res splitResult, err error) {
 	// is synthetic (a lookup key and label — never emitted into SQL), so it
 	// steps aside when a user CTE claimed the default name: CTE ids must stay
 	// their SQL names (fuseNode emits `WITH <id> AS`), the sink key is free.
+	// Its data edges come from every top-level UNION member and their nested
+	// subqueries (a CTE referenced only inside a derived table previously drew
+	// no edge — review finding); the lifted CTE bodies are excluded, those
+	// references belong to the CTE nodes.
 	sinkID := uniqueSinkID(res.Nodes)
+	sinkReads := make([]antlr.ParserRuleContext, 0, len(scopes))
+	for _, sc := range scopes {
+		sinkReads = append(sinkReads, sc.Node)
+	}
 	res.Nodes = append(res.Nodes, splitNode{
 		ID:        sinkID,
 		Kind:      splitNodeStatement,
 		SQL:       stmt,
-		DependsOn: cteRefs([]*nanopass.SelectScope{root}),
-		Reads:     paramSlotsOf(pr, root.Node),
+		DependsOn: resolvedDeps(scopes, topLevel),
+		Reads:     paramSlotsOfAll(pr, sinkReads),
 	})
 	res.Sink = sinkID
 
@@ -203,6 +232,17 @@ func fuseNode(res splitResult, nodeID NodeID) (executable string) {
 			continue
 		}
 		withDefs = append(withDefs, string(d)+" AS (\n"+dn.SQL+"\n)")
+	}
+	if node.OwnWith {
+		// The body opens its own WITH list; continue it with a comma after the
+		// dep definitions instead of opening a second `WITH` — two WITH clauses
+		// are invalid SQL (review finding). Deps precede the body's own items,
+		// which may reference them; the reverse cannot occur (a lifted body
+		// cannot see a nested definition). OwnWith guarantees the body text
+		// starts with the WITH keyword token, so the slice is exact.
+		body := strings.TrimSpace(node.SQL[len("WITH"):])
+		parts = append(parts, "WITH "+strings.Join(withDefs, ",\n")+",\n"+body)
+		return strings.Join(parts, ";\n")
 	}
 	parts = append(parts, "WITH "+strings.Join(withDefs, ",\n")+"\n"+node.SQL)
 	return strings.Join(parts, ";\n")
@@ -313,34 +353,119 @@ func statementSplit(sql string) (stmts []string) {
 	return
 }
 
+// isSetStatement classifies one split fragment as a SET statement. Fast path:
+// the canonical spelling ("SET" then a space — a statement can only start that
+// way if it IS a SET). Slow path: grammar-based, the same classification
+// ExtractParams applies at execution, so the splitter can no longer disagree
+// with the client about what is a prelude. The former purely textual check
+// read a comment-prefixed or newline-broken SET as a query statement and
+// falsely rejected the buffer as multi-statement (review finding).
+//
+// Grammar1 accepts a SET only as the prelude of a following statement
+// (`SET …; <query>` — a lone `SET …;` does not parse), so the probe completes
+// the fragment with `;\nSELECT 1` and checks for a SetStmt in the parse. Only
+// a genuine single SET fragment parses in that shape: a query fragment
+// followed by the appended SELECT is a two-statement input, which the grammar
+// rejects. The leading newline keeps a trailing line comment in the fragment
+// from swallowing the terminator. An unparseable fragment is not a SET: it
+// stays the sink candidate and the sink parse reports the syntax error.
 func isSetStatement(stmt string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(stmt)), "SET ")
+	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(stmt)), "SET ") {
+		return true
+	}
+	pr, err := nanopass.Parse(stmt + "\n;\nSELECT 1")
+	if err != nil {
+		return false
+	}
+	found := false
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		if _, ok := ctx.(*grammar1.SetStmtContext); ok {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// bodyQueryCtx returns the CTE body's query context (`name AS (body)` → body),
+// or nil when the definition has an unexpected shape.
+func bodyQueryCtx(cte nanopass.CTEDef) *grammar1.QueryContext {
+	for i := 0; i < cte.Node.GetChildCount(); i++ {
+		if q, ok := cte.Node.GetChild(i).(*grammar1.QueryContext); ok {
+			return q
+		}
+	}
+	return nil
 }
 
 // cteBodyText returns a CTE's inner query text (the body of `name AS (body)`).
 func cteBodyText(pr *nanopass.ParseResult, cte nanopass.CTEDef) string {
-	for i := 0; i < cte.Node.GetChildCount(); i++ {
-		if q, ok := cte.Node.GetChild(i).(*grammar1.QueryContext); ok {
-			return strings.TrimSpace(nanopass.NodeText(pr, q))
-		}
+	if q := bodyQueryCtx(cte); q != nil {
+		return strings.TrimSpace(nanopass.NodeText(pr, q))
 	}
 	return strings.TrimSpace(nanopass.NodeText(pr, cte.Node))
 }
 
-// cteRefs collects the CTE-reference table sources across the given scopes —
-// the data edges. Deduped and sorted for deterministic output.
-func cteRefs(scopes []*nanopass.SelectScope) (deps []NodeID) {
-	seen := make(map[string]bool, 4)
-	for _, sc := range scopes {
-		if sc == nil {
-			continue
+// bodyOpensWithClause reports whether a CTE body starts with its own WITH
+// clause. Checked on the token stream (first token of the body query), not
+// the text, so an identifier that merely starts with "WITH" can't false-
+// positive. When true, the body text (which starts at that token) begins
+// with the WITH keyword — the contract fuseNode's merge relies on.
+func bodyOpensWithClause(cte nanopass.CTEDef) bool {
+	q := bodyQueryCtx(cte)
+	return q != nil && q.GetStart() != nil &&
+		q.GetStart().GetTokenType() == grammar1.ClickHouseLexerWITH
+}
+
+// resolvedDeps collects the data edges of a node given its scope trees: every
+// CTE reference that RESOLVES to a lifted (top-level) definition, in the scope
+// where the reference occurs. Resolution — not name matching — is what keeps
+// the edges faithful: a reference to a nested CTE (including one shadowing a
+// lifted name) resolves to the nested definition and contributes no edge.
+// Descent covers FROM subqueries, expression subqueries, and the node's own
+// nested CTE bodies, but not the lifted definitions' bodies — those references
+// are the corresponding CTE nodes' own edges. Deduped and sorted.
+func resolvedDeps(roots []*nanopass.SelectScope, topLevel map[antlr.ParserRuleContext]NodeID) (deps []NodeID) {
+	seen := make(map[NodeID]bool, 4)
+	visited := make(map[*nanopass.SelectScope]bool, 8)
+	var visit func(sc *nanopass.SelectScope)
+	visit = func(sc *nanopass.SelectScope) {
+		if sc == nil || visited[sc] {
+			return
 		}
-		for _, ts := range sc.Tables {
-			if ts.IsCTE && !seen[ts.Table] {
-				seen[ts.Table] = true
-				deps = append(deps, NodeID(ts.Table))
+		visited[sc] = true
+		for i := range sc.Tables {
+			ts := &sc.Tables[i]
+			if ts.IsCTE {
+				if def, found := sc.ResolveCTE(ts.Table); found {
+					if id, lifted := topLevel[def.Node]; lifted && !seen[id] {
+						seen[id] = true
+						deps = append(deps, id)
+					}
+				}
+			}
+			for _, sub := range ts.Scopes {
+				visit(sub)
 			}
 		}
+		for _, sub := range sc.Subqueries {
+			visit(sub)
+		}
+		for i := range sc.CTEDefs {
+			// The visible-defs list is shared: it holds this node's own nested
+			// definitions AND the inherited lifted ones. Descend only into the
+			// former — a lifted body is another node's territory.
+			if _, lifted := topLevel[sc.CTEDefs[i].Node]; lifted {
+				continue
+			}
+			for _, sub := range sc.CTEDefs[i].Scopes {
+				visit(sub)
+			}
+		}
+	}
+	for _, sc := range roots {
+		visit(sc)
 	}
 	sort.Slice(deps, func(i, j int) bool { return deps[i] < deps[j] })
 	return
@@ -349,16 +474,27 @@ func cteRefs(scopes []*nanopass.SelectScope) (deps []NodeID) {
 // paramSlotsOf collects the unbound `{name:Type}` param-slot names within a CST
 // node — the signal edges. Deduped and sorted.
 func paramSlotsOf(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext) (reads []SignalID) {
+	return paramSlotsOfAll(pr, []antlr.ParserRuleContext{ctx})
+}
+
+// paramSlotsOfAll is paramSlotsOf over several CST nodes (the sink's top-level
+// UNION members), deduped across all of them.
+func paramSlotsOfAll(pr *nanopass.ParseResult, ctxs []antlr.ParserRuleContext) (reads []SignalID) {
 	seen := make(map[string]bool, 4)
-	slots := nanopass.FindAll(ctx, func(c antlr.ParserRuleContext) bool {
-		_, ok := c.(*grammar1.ColumnExprParamSlotContext)
-		return ok
-	})
-	for _, s := range slots {
-		name := paramSlotName(nanopass.NodeText(pr, s))
-		if name != "" && !seen[name] {
-			seen[name] = true
-			reads = append(reads, name)
+	for _, ctx := range ctxs {
+		if ctx == nil {
+			continue
+		}
+		slots := nanopass.FindAll(ctx, func(c antlr.ParserRuleContext) bool {
+			_, ok := c.(*grammar1.ColumnExprParamSlotContext)
+			return ok
+		})
+		for _, s := range slots {
+			name := paramSlotName(nanopass.NodeText(pr, s))
+			if name != "" && !seen[name] {
+				seen[name] = true
+				reads = append(reads, name)
+			}
 		}
 	}
 	sort.Slice(reads, func(i, j int) bool { return reads[i] < reads[j] })
