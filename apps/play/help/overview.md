@@ -33,7 +33,18 @@ feature, is covered in depth on the **Features** page):
 - **Projection** — a derived/projection view over the result columns.
 - **Timeline** — plots time-shaped results on a horizontal time axis, when the
   result matches the timeline column contract (see the example-queries page).
+- **Snippets** — a library of ready-to-run fragments with Insert/Replace buttons.
 - **Detail** — the per-row card for the row selected in Table.
+- **Map** — an in-database-rendered geo raster over a pannable map, for tables
+  with mercator columns (queries on its own, independent of the editor).
+- **World** — a schematic world choropleth when the result names countries
+  (ISO codes or names) alongside a numeric column.
+- **Graph** — the reactive query-graph: the buffer's CTEs as nodes; observe an
+  intermediate node to point the result tabs at it.
+- **Schema** — a structural inspector over the result's schema.
+- **Diagnostics** — parse advice and the full error texts (the other tabs only
+  point here). When boxer's grammar can't parse the buffer, an `EXPLAIN AST`
+  probe against the server distinguishes a boxer grammar gap from broken SQL.
 
 ## The Detail card and leeway data
 

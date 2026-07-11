@@ -14,9 +14,10 @@ see the **Overview**, for a verified query set see **Example queries**, and for
 ready-to-run fragments see **Snippets**. This page describes each feature in turn.
 
 The window is a rearrangeable, splittable dock of tabs (Editor, Preview, History,
-Table, Projection, Timeline, Detail, Snippets) between a pinned top bar (Run, Load,
-connection) and a status bar (the query-state inspector). Drag a tab to re-dock or
-split it; the layout is remembered.
+Table, Projection, Timeline, Snippets, Detail, Map, World, Graph, Schema,
+Diagnostics) between a pinned top bar (Run, Load, connection) and a status bar
+(the query-state inspector). Drag a tab to re-dock or split it; the layout is
+remembered.
 
 ## Connecting to ClickHouse
 
@@ -166,15 +167,60 @@ Timestamps must be `DateTime64`. When the contract isn't met the panel shows the
 expected shapes instead of a plot, so you can fix the `SELECT`. A **Now line**
 checkbox draws a marker at the current time. An optional **Background bands** editor
 overlays shaded ranges: write a small `SELECT` returning `_tl_band_from` /
-`_tl_band_to` / `_tl_band_color` / `_tl_band_label`, using `_time_data_min` /
-`_time_data_max` placeholders that are substituted with the result's time extent.
+`_tl_band_to` / `_tl_band_color` / `_tl_band_label`, optionally reading the
+`{tl_min:…}` / `{tl_max:…}` parameters — the Timeline publishes the events' time
+extent under those names as signals after each render.
+
+### World
+
+A schematic world choropleth (ADR-0114) over the active result: it claims a result
+whose string column resolves to countries (ISO 3166 alpha-2/alpha-3 codes or
+country names), fills each country by the value column picked in the toolbar
+(**auto** = first numeric; no numeric column falls back to presence-only fill), and
+counts unmatched and duplicate rows in its status line (duplicates: last row wins —
+the pane never aggregates for you). Hover reads `name · value`; clicking a country
+selects its row, driving the Detail tab. The **Snippets** library carries a
+ready-to-run example ("World choropleth (countries)").
+
+### Map
+
+An in-database-rendered geo raster over a pannable map (ADR-0096), for tables with
+`mercator_x` / `mercator_y` columns (e.g. the ADS-B demo loader's
+`planes_mercator`): the visible viewport is rendered to pixels by a ClickHouse
+query on each pan/zoom settle. Table, sampling, colour mode and opacity are panel
+controls — this tab queries on its own, independent of the editor's result.
+
+### Graph
+
+The reactive query-graph view (ADR-0097): each top-level CTE of the last-run
+buffer is a node, with the final `SELECT` as the sink the panels observe. Observe
+an intermediate node to point every result tab at that node's rows instead.
+
+### Schema
+
+A leeway `TableDesc` inspector over the active result's Arrow schema — column
+types and inferred structure in a master-detail view (ad-hoc results show plain
+opaque columns; tagged sections aren't recoverable from an arbitrary result).
 
 ### Preview
 
 The editor's SQL re-rendered in its canonical, syntax-highlighted form (comments
 stripped, keywords/whitespace normalised). It's a parse aid — not a second query — so
-you can see the structure even when your own formatting is irregular. A parse error
-shows as `parse: <error>`.
+you can see the structure even when your own formatting is irregular. When boxer's
+grammar can't parse the buffer, the pane points at **Diagnostics** instead of a
+canonical form; Run still sends the buffer verbatim.
+
+### Diagnostics
+
+The single home of the playground's error texts — the other tabs only point here.
+Three sections: **Statement** is the parse status of the (debounced) editor buffer;
+when boxer's built-in grammar rejects it, an `EXPLAIN AST` probe against the live
+endpoint tells you whether that is just a boxer grammar gap (ClickHouse parses it —
+the statement will run, with the canonical preview, parameter widgets, query-graph
+split and pre-execute rewrites unavailable) or genuinely broken SQL (ClickHouse's
+own diagnostic is shown, with positions matching the editor). **Query graph** is
+the split status of the last Run. **Last run** carries the full execution error —
+the status bar shows only its first line — or the usual result summary.
 
 ### History
 
