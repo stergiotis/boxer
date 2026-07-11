@@ -359,6 +359,15 @@ The upstream ClickHouse ANTLR4 grammar has these required modifications:
 - **Whitespace/comments**: `-> skip` changed to `-> channel(HIDDEN)` for `WHITESPACE`, `SINGLE_LINE_COMMENT`, `MULTI_LINE_COMMENT`. Without this, the `TokenStreamRewriter` cannot preserve original formatting.
 - **Setting values**: `settingExpr` extended with `settingValue` rule supporting arrays (`[1,2]`), tuples (`(1,2)`), and function-form constructors (`array(1,2)`, `tuple(1,2)`) alongside scalar literals.
 - **Grammar2 `typeName`**: type positions accept the lexer keywords that double as ClickHouse type names (`Array`, `Date`, `Interval`, `Timestamp`, `UUID`) — the shared lexer wins these over `IDENTIFIER`, and Grammar1 admits them via its keyword-tolerant `identifier` rule, so Grammar2 must too or canonicalisation cannot close `{d: Array(UInt8)}` / `CAST(x, 'Date')` into it.
+- **`WITH RECURSIVE`** (ClickHouse ≥ 24.4 recursive CTEs): the `RECURSIVE`
+  keyword token plus an optional `RECURSIVE?` in both grammars' `ctes` and
+  `withClause` rules; Grammar1's `keyword` rule admits it so `recursive`
+  stays usable as an identifier. The modifier is semantics, not sugar, so
+  canonicalisation keeps it (Grammar2 accepts it) and `ast.Query.Recursive`
+  / `ast.Select.Recursive` carry it through ToSQL/CBOR/ToGoCode. In
+  `BuildScopes`, a recursive definition is visible inside its own body
+  (`CTEDef.Recursive`; the self-entry carries nil `Scopes`, so traversals
+  never descend from a body into itself).
 
 ## Known Grammar Limitations
 

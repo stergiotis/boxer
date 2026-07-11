@@ -60,6 +60,9 @@ func (inst Query) ToSQL() string {
 	}
 	if len(inst.CTEs) > 0 || len(inst.With) > 0 {
 		b.WriteString("WITH ")
+		if inst.Recursive {
+			b.WriteString("RECURSIVE ")
+		}
 		for i, cte := range inst.CTEs {
 			if i > 0 {
 				b.WriteString(", ")
@@ -131,6 +134,9 @@ func writeSelectUnion(b *strings.Builder, su SelectUnion) {
 func writeSelect(b *strings.Builder, sel Select) {
 	if len(sel.CTEs) > 0 || len(sel.With) > 0 {
 		b.WriteString("WITH ")
+		if sel.Recursive {
+			b.WriteString("RECURSIVE ")
+		}
 		for i, cte := range sel.CTEs {
 			if i > 0 {
 				b.WriteString(", ")

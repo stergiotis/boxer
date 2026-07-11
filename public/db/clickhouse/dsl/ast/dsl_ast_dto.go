@@ -6,7 +6,11 @@ package ast
 
 type Query struct {
 	Settings []SettingPair `cbor:"settings,omitempty"`
-	CTEs     []CTE         `cbor:"ctes,omitempty"`
+	// Recursive marks the query-level WITH clause as `WITH RECURSIVE …`: the
+	// CTEs may then reference themselves. It applies to the whole clause
+	// (ClickHouse/SQL semantics) and is meaningless without CTEs/With items.
+	Recursive bool  `cbor:"rec,omitempty"`
+	CTEs      []CTE `cbor:"ctes,omitempty"`
 	// With holds query-level scalar WITH items (`expr AS name`) that share
 	// the WITH clause with CTEs; ToSQL emits CTEs first, then these.
 	With   []Expr      `cbor:"qwith,omitempty"`
@@ -42,9 +46,11 @@ type Select struct {
 	// (`expr AS name`); CTEs holds its named-query items (`name AS (query)`).
 	// Both come from the same clause; ToSQL emits CTEs first, then the
 	// scalar items (the relative interleaving of the two groups in the
-	// source is not preserved).
+	// source is not preserved). Recursive marks the clause as
+	// `WITH RECURSIVE …` (see Query.Recursive).
 	With      []Expr           `cbor:"with,omitempty"`
 	CTEs      []CTE            `cbor:"sel_ctes,omitempty"`
+	Recursive bool             `cbor:"sel_rec,omitempty"`
 	From      *JoinExpr        `cbor:"from,omitempty"`
 	ArrayJoin *ArrayJoinClause `cbor:"array_join,omitempty"`
 	WindowDef *WindowDefClause `cbor:"window_def,omitempty"`

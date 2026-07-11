@@ -637,7 +637,7 @@ type TableSource struct {
     Scopes     []*SelectScope  // inner scopes of a FROM subquery, one per UNION branch
 }
 
-type CTEDef struct { Name string; Node antlr.ParserRuleContext; Scopes []*SelectScope }  // Scopes: one per UNION branch of the body
+type CTEDef struct { Name string; Node antlr.ParserRuleContext; Scopes []*SelectScope; Recursive bool }  // Scopes: one per UNION branch of the body; Recursive: WITH RECURSIVE def, visible in its own body (self-entry has nil Scopes)
 
 // Methods:
 scope.ResolveAlias(name) (TableSource, bool)  // alias hides table name; name may be quoted or bare
@@ -884,6 +884,11 @@ detail in the package README and
 - **Grammar2 `typeName`** accepts the lexer keywords that double as type names
   (`Array`, `Date`, `Interval`, `Timestamp`, `UUID`) so canonicalisation can
   close `{d: Array(UInt8)}` / `CAST(x, 'Date')` into Grammar2.
+- **`WITH RECURSIVE`** (ClickHouse ≥ 24.4 recursive CTEs) — `RECURSIVE` token +
+  `RECURSIVE?` in both grammars' `ctes`/`withClause`; kept by canonicalisation
+  (semantics, not sugar) and carried by `ast.Query.Recursive` /
+  `ast.Select.Recursive`. In scopes, a recursive def is visible inside its own
+  body (`CTEDef.Recursive`; the self-entry has nil `Scopes` — no self-descent).
 
 ## Known Grammar Limitations
 

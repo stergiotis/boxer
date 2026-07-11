@@ -19,6 +19,9 @@ func (inst Query) ToGoCodeWithPrefix(p string) string {
 
 	g.emitSelectUnion(inst.Body)
 
+	if inst.Recursive && len(inst.CTEs) > 0 {
+		b.WriteString(".\n\tRecursive()")
+	}
 	for _, cte := range inst.CTEs {
 		b.WriteString(".\n\tWith(")
 		b.WriteString(goStr(cte.Name))
@@ -170,7 +173,11 @@ func (inst *goEmitter) emitSelect(sel Select) {
 	// selectStmt-level CTEs emit as builder With() calls — the builder
 	// lowers them back into the head Select when the result is used as a
 	// subquery, and hoists them to the query level when built top-level
-	// (semantically equivalent visibility either way).
+	// (semantically equivalent visibility either way). Recursive rides the
+	// same route (the builder flag lands on whichever level the CTEs do).
+	if sel.Recursive && len(sel.CTEs) > 0 {
+		inst.w(".\n\tRecursive()")
+	}
 	for _, cte := range sel.CTEs {
 		inst.w(".\n\tWith(")
 		inst.w(goStr(cte.Name))

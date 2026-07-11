@@ -419,7 +419,7 @@ func TestGenerated_T032_date_literal(t *testing.T) {
 // Source: 033_extract
 // SQL: SELECT EXTRACT(YEAR FROM toDate('2024-01-01'))
 func TestGenerated_T033_extract(t *testing.T) {
-	q, err := Select(Func("extract", Func("toDate", Raw("'2024-01-01'")), Raw("'YEAR'"))).
+	q, err := Select(Func("toYear", Func("toDate", Raw("'2024-01-01'")))).
 		Build()
 	require.NoError(t, err, "builder error")
 	sql := q.ToSQL()
@@ -676,7 +676,7 @@ func TestGenerated_T052_group_order_json(t *testing.T) {
 // Source: 053_set_param_slots
 // SQL: SET param_a = 13; SET param_b = 'str'; SET param_c = '2022-08-04 18:30:53'; SELECT {a: UInt32}, {b: String}, {c: Date...
 func TestGenerated_T053_set_param_slots(t *testing.T) {
-	q, err := Select(Raw("{a: \"UInt32\"}"), Raw("{b: \"String\"}"), Raw("{c: \"DateTime\"}"), Raw("{d: \"Map\"(\"String\", \"Array\"(\"UInt8\"))}")).
+	q, err := Select(Raw("{a: UInt32}"), Raw("{b: String}"), Raw("{c: DateTime}"), Raw("{d: Map(String, Array(UInt8))}")).
 		Build()
 	require.NoError(t, err, "builder error")
 	sql := q.ToSQL()
@@ -856,6 +856,271 @@ func TestGenerated_T066_multiple_qualified_stars(t *testing.T) {
 func TestGenerated_T067_star_mixed_expressions(t *testing.T) {
 	q, err := Select(Star(), Func("now").As("query_time"), Raw("'v1'").As("api_version")).
 		From("orders").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 068_chained_ctes
+// SQL: WITH a AS (SELECT 1 AS x), b AS (SELECT x + 1 AS y FROM a) SELECT y FROM b
+func TestGenerated_T068_chained_ctes(t *testing.T) {
+	q, err := Select(Col("y")).
+		From("b").
+		With("a", Select(Raw("1").As("x"))).
+		With("b", Select(Col("x").Plus(Raw("1")).As("y")).
+			From("a")).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 069_paren_union
+// SQL: (SELECT x FROM t1 UNION ALL SELECT x FROM t2) UNION ALL SELECT x FROM t3
+func TestGenerated_T069_paren_union(t *testing.T) {
+	q, err := Select(Col("x")).
+		From("t1").
+		UnionAll(Select(Col("x")).
+			From("t2")).
+		UnionAll(Select(Col("x")).
+			From("t3")).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 070_union_branch_with
+// SQL: SELECT 1 AS x UNION ALL WITH c AS (SELECT 2 AS x) SELECT x FROM c
+func TestGenerated_T070_union_branch_with(t *testing.T) {
+	q, err := Select(Raw("1").As("x")).
+		UnionAll(Select(Col("x")).
+			From("c").
+			With("c", Select(Raw("2").As("x")))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 071_subquery_level_with
+// SQL: SELECT x FROM (WITH c AS (SELECT 1 AS x) SELECT x FROM c)
+func TestGenerated_T071_subquery_level_with(t *testing.T) {
+	q, err := Select(Col("x")).
+		FromSubquery(Select(Col("x")).
+			From("c").
+			With("c", Select(Raw("1").As("x"))), "").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 072_bare_aliases
+// SQL: SELECT o.amount, c.name FROM orders o JOIN customers c ON o.cid = c.id WHERE o.amount > 10
+func TestGenerated_T072_bare_aliases(t *testing.T) {
+	q, err := Select(Col("o", "amount"), Col("c", "name")).
+		FromExpr(ast.JoinExpr{Kind: ast.JoinExprOp, Op: &ast.JoinOpData{Left: ast.JoinExpr{Kind: ast.JoinExprTable, Table: &ast.JoinTableData{TableKind: ast.TableKindRef, Table: "orders", Alias: "o"}}, Right: ast.JoinExpr{Kind: ast.JoinExprTable, Table: &ast.JoinTableData{TableKind: ast.TableKindRef, Table: "customers", Alias: "c"}}, Kind: ast.JoinKindInner, Constraint: ast.JoinConstraint{Kind: ast.JoinConstraintOn, Exprs: []ast.Expr{Col("o", "cid").Eq(Col("c", "id")).Expr}}}}).
+		Where(Col("o", "amount").Gt(Raw("10"))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 073_projection_scalar_subquery
+// SQL: SELECT (SELECT max(v) FROM other) AS mx, a FROM t
+func TestGenerated_T073_projection_scalar_subquery(t *testing.T) {
+	q, err := Select(Sub(Select(Func("max", Col("v"))).
+		From("other")).As("mx"), Col("a")).
+		From("t").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 074_table_function_alias
+// SQL: SELECT n.number FROM numbers(10) AS n WHERE n.number > 3
+func TestGenerated_T074_table_function_alias(t *testing.T) {
+	q, err := Select(Col("n", "number")).
+		FromExpr(ast.JoinExpr{Kind: ast.JoinExprTable, Table: &ast.JoinTableData{TableKind: ast.TableKindFunc, FuncName: "numbers", FuncArgs: []ast.Expr{Raw("10").Expr}, Alias: "n"}}).
+		Where(Col("n", "number").Gt(Raw("3"))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 075_quoted_cte_reference
+// SQL: WITH x AS (SELECT 1 AS a) SELECT a FROM "x"
+func TestGenerated_T075_quoted_cte_reference(t *testing.T) {
+	q, err := Select(Col("a")).
+		From("x").
+		With("x", Select(Raw("1").As("a"))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 076_nested_with_in_cte_body
+// SQL: WITH outer_cte AS (WITH inner_cte AS (SELECT 1 AS v) SELECT v FROM inner_cte) SELECT v FROM outer_cte
+func TestGenerated_T076_nested_with_in_cte_body(t *testing.T) {
+	q, err := Select(Col("v")).
+		From("outer_cte").
+		With("outer_cte", Select(Col("v")).
+			From("inner_cte")).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 077_non_ascii_literals
+// SQL: SELECT 'héllø wörld' AS greeting, length('déjà') FROM t WHERE name LIKE '%ü%'
+func TestGenerated_T077_non_ascii_literals(t *testing.T) {
+	q, err := Select(Raw("'héllø wörld'").As("greeting"), Func("length", Raw("'déjà'"))).
+		From("t").
+		Where(Col("name").Like(Raw("'%ü%'"))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 078_nested_sugar
+// SQL: SELECT SUBSTRING(DATE '2024-01-02' FROM 1 FOR 4), EXTRACT(DAY FROM TIMESTAMP '2024-01-01 10:00:00') FROM t
+func TestGenerated_T078_nested_sugar(t *testing.T) {
+	q, err := Select(Func("substring", Func("toDate", Raw("'2024-01-02'")), Raw("1"), Raw("4")), Func("toDayOfMonth", Func("toDateTime", Raw("'2024-01-01 10:00:00'")))).
+		From("t").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 079_nested_cast_mixed
+// SQL: SELECT CAST(x::Int64 + 1 AS String), CAST(y AS FixedString(16)) FROM t
+func TestGenerated_T079_nested_cast_mixed(t *testing.T) {
+	q, err := Select(Func("CAST", Func("CAST", Col("x"), Raw("'Int64'")).Plus(Raw("1")), Raw("'String'")), Func("CAST", Col("y"), Raw("'FixedString(16)'"))).
+		From("t").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 080_tuple_in_lhs
+// SQL: SELECT (a, b) IN ((1, 2), (3, 4)) FROM t
+func TestGenerated_T080_tuple_in_lhs(t *testing.T) {
+	q, err := Select(Func("tuple", Col("a"), Col("b")).In(Func("array", Func("tuple", Raw("1"), Raw("2")), Func("tuple", Raw("3"), Raw("4"))))).
+		From("t").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 081_between_or_parens
+// SQL: SELECT (a BETWEEN b AND c) OR d, (x ? y : z) OR w FROM t
+func TestGenerated_T081_between_or_parens(t *testing.T) {
+	q, err := Select(Col("a").Between(Col("b"), Col("c")).Or(Col("d")), Func("if", Col("x"), Col("y"), Col("z")).Or(Col("w"))).
+		From("t").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 082_minus_negative_literal
+// SQL: SELECT a-(-5), -(-3) FROM t
+func TestGenerated_T082_minus_negative_literal(t *testing.T) {
+	q, err := Select(Col("a").Minus(Raw("-5")), Raw("3")).
+		From("t").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 083_function_arg_subquery
+// SQL: SELECT plus(1, (SELECT max(v) FROM other)) FROM t
+func TestGenerated_T083_function_arg_subquery(t *testing.T) {
+	q, err := Select(Func("plus", Raw("1"), Sub(Select(Func("max", Col("v"))).
+		From("other")))).
+		From("t").
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 084_with_recursive
+// SQL: WITH RECURSIVE t AS (SELECT 1 AS x UNION ALL SELECT x + 1 FROM t WHERE x < 10) SELECT * FROM t
+func TestGenerated_T084_with_recursive(t *testing.T) {
+	q, err := Select(Star()).
+		From("t").
+		Recursive().
+		With("t", Select(Raw("1").As("x")).
+			UnionAll(Select(Col("x").Plus(Raw("1"))).
+				From("t").
+				Where(Col("x").Lt(Raw("10"))))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 085_with_recursive_sibling
+// SQL: with recursive seed AS (SELECT 1 AS x), t AS (SELECT x FROM seed UNION ALL SELECT x + 1 FROM t WHERE x < 3) SELECT co...
+func TestGenerated_T085_with_recursive_sibling(t *testing.T) {
+	q, err := Select(Func("count")).
+		From("t").
+		Recursive().
+		With("seed", Select(Raw("1").As("x"))).
+		With("t", Select(Col("x")).
+			From("seed").
+			UnionAll(Select(Col("x").Plus(Raw("1"))).
+				From("t").
+				Where(Col("x").Lt(Raw("3"))))).
+		Build()
+	require.NoError(t, err, "builder error")
+	sql := q.ToSQL()
+	_, err = nanopass.Parse(sql)
+	require.NoError(t, err, "generated SQL not parseable:\n%s", sql)
+}
+
+// Source: 086_with_recursive_subquery
+// SQL: SELECT * FROM (WITH RECURSIVE t AS (SELECT 1 AS x UNION ALL SELECT x + 1 FROM t WHERE x < 3) SELECT * FROM t) AS s
+func TestGenerated_T086_with_recursive_subquery(t *testing.T) {
+	q, err := Select(Star()).
+		FromSubquery(Select(Star()).
+			From("t").
+			Recursive().
+			With("t", Select(Raw("1").As("x")).
+				UnionAll(Select(Col("x").Plus(Raw("1"))).
+					From("t").
+					Where(Col("x").Lt(Raw("3"))))), "s").
 		Build()
 	require.NoError(t, err, "builder error")
 	sql := q.ToSQL()

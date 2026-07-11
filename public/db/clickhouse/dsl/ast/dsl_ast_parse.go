@@ -60,7 +60,7 @@ func convertQuery(pr *nanopass.ParseResult, ctx *grammar2.QueryContext) (query Q
 			query.Settings = append(query.Settings, settings...)
 		case *grammar2.CtesContext:
 			var scalarWith []Expr
-			query.CTEs, scalarWith, err = convertCTEs(pr, c)
+			query.CTEs, scalarWith, query.Recursive, err = convertCTEs(pr, c)
 			if err != nil {
 				return
 			}
@@ -86,8 +86,10 @@ func convertQuery(pr *nanopass.ParseResult, ctx *grammar2.QueryContext) (query Q
 	if len(query.Body.Items) == 0 {
 		query.CTEs = append(query.CTEs, query.Body.Head.CTEs...)
 		query.With = append(query.With, query.Body.Head.With...)
+		query.Recursive = query.Recursive || query.Body.Head.Recursive
 		query.Body.Head.CTEs = nil
 		query.Body.Head.With = nil
+		query.Body.Head.Recursive = false
 	}
 	// Canonicalise the query-level SET prelude to match env's semantics:
 	// duplicate keys collapse last-wins (the server applies the last SET),
@@ -155,11 +157,13 @@ func convertSettingExpr(pr *nanopass.ParseResult, ctx *grammar2.SettingExprConte
 
 // --- CTEs ---
 
-func convertCTEs(pr *nanopass.ParseResult, ctx *grammar2.CtesContext) (ctes []CTE, scalarWith []Expr, err error) {
+func convertCTEs(pr *nanopass.ParseResult, ctx *grammar2.CtesContext) (ctes []CTE, scalarWith []Expr, recursive bool, err error) {
 	// Items under ctes are withItem alternatives: WithItemNamedQueryContext
 	// is the CTE form (`name AS (query)`); WithItemColumnsExprContext is the
 	// scalar alias form (`expr AS name`). Both are returned — the scalar
-	// items are query-scoped WITH expressions, not CTEs.
+	// items are query-scoped WITH expressions, not CTEs. The RECURSIVE
+	// modifier applies to the whole clause.
+	recursive = ctx.RECURSIVE() != nil
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		switch wi := ctx.GetChild(i).(type) {
 		case *grammar2.WithItemNamedQueryContext:
@@ -304,7 +308,7 @@ func convertSelectStmt(pr *nanopass.ParseResult, ctx *grammar2.SelectStmtContext
 		case *grammar2.ProjectionClauseContext:
 			err = convertProjectionClause(pr, c, &sel)
 		case *grammar2.WithClauseContext:
-			sel.With, sel.CTEs, err = convertWithClause(pr, c)
+			sel.With, sel.CTEs, sel.Recursive, err = convertWithClause(pr, c)
 		case *grammar2.FromClauseContext:
 			var je JoinExpr
 			je, err = convertFromClause(pr, c)
@@ -428,12 +432,14 @@ func convertProjectionExceptClause(ctx *grammar2.ProjectionExceptClauseContext) 
 	return
 }
 
-func convertWithClause(pr *nanopass.ParseResult, ctx *grammar2.WithClauseContext) (exprs []Expr, ctes []CTE, err error) {
+func convertWithClause(pr *nanopass.ParseResult, ctx *grammar2.WithClauseContext) (exprs []Expr, ctes []CTE, recursive bool, err error) {
 	// withClause holds a sequence of withItem alternatives: scalar aliases
 	// (`expr AS name`) land in exprs; named queries (`name AS (query)`) are
 	// CTEs declared at the selectStmt level — union branches and subqueries
 	// carry their WITH here, never via the query-level ctes rule — and land
-	// in ctes. Dropping them would detach every reference in the body.
+	// in ctes. Dropping them would detach every reference in the body. The
+	// RECURSIVE modifier applies to the whole clause.
+	recursive = ctx.RECURSIVE() != nil
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		switch wi := ctx.GetChild(i).(type) {
 		case *grammar2.WithItemColumnsExprContext:

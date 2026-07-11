@@ -214,11 +214,12 @@ func NullsLast(o ast.OrderItem) ast.OrderItem  { o.Nulls = ast.OrderNullsLast; r
 // Errors from E values or nested SelectBuilders are captured and deferred
 // to Build() / ToSQL().
 type SelectBuilder struct {
-	sel   ast.Select
-	ctes  []ast.CTE
-	items []ast.SelectUnionItem
-	fmt   string
-	err   error
+	sel       ast.Select
+	ctes      []ast.CTE
+	recursive bool // WITH RECURSIVE (clause-wide; see Recursive())
+	items     []ast.SelectUnionItem
+	fmt       string
+	err       error
 }
 
 func (inst SelectBuilder) absorbE(es ...E) SelectBuilder {
@@ -420,6 +421,14 @@ func (inst SelectBuilder) With(name string, body SelectBuilder) SelectBuilder {
 	return inst
 }
 
+// Recursive marks the WITH clause as `WITH RECURSIVE …`: CTEs added via With
+// may then reference themselves. It applies to the whole clause and is a
+// no-op without any With() CTEs.
+func (inst SelectBuilder) Recursive() SelectBuilder {
+	inst.recursive = true
+	return inst
+}
+
 // --- UNION ---
 
 func (inst SelectBuilder) UnionAll(other SelectBuilder) SelectBuilder {
@@ -456,15 +465,17 @@ func (inst SelectBuilder) buildUnion() ast.SelectUnion {
 	head := inst.sel
 	if len(inst.ctes) > 0 {
 		head.CTEs = append(append([]ast.CTE{}, inst.ctes...), head.CTEs...)
+		head.Recursive = head.Recursive || inst.recursive
 	}
 	return ast.SelectUnion{Head: head, Items: inst.items}
 }
 
 func (inst SelectBuilder) buildQuery() ast.Query {
 	return ast.Query{
-		CTEs:   inst.ctes,
-		Body:   ast.SelectUnion{Head: inst.sel, Items: inst.items},
-		Format: inst.fmt,
+		Recursive: inst.recursive && len(inst.ctes) > 0,
+		CTEs:      inst.ctes,
+		Body:      ast.SelectUnion{Head: inst.sel, Items: inst.items},
+		Format:    inst.fmt,
 	}
 }
 
