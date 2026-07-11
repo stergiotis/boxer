@@ -5,6 +5,7 @@ import (
 	"iter"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -104,6 +105,14 @@ type OwnershipAnalyzer struct {
 	// Parallelism bounds concurrent `git blame` child processes. Values
 	// below 1 select a default of min(8, GOMAXPROCS).
 	Parallelism int
+	// Progress, when non-nil, observes the blame join's advancement: once
+	// with (0, total) after the file list is known, then (done, total)
+	// after each completed batch. The blame join dominates a run's wall
+	// time (one git blame per tracked file), so this is the run's natural
+	// progress signal. Called from the analyzer's coordinating goroutine,
+	// never concurrently; implementations must return quickly and must
+	// not call back into the analyzer.
+	Progress func(done int, total int)
 }
 
 // DefaultModelMatcher matches Co-Authored-By trailer values by vendor
@@ -120,6 +129,19 @@ func DefaultModelMatcher(coauthor string) (tag string, ok bool) {
 		tag, ok = "gemini", true
 	}
 	return
+}
+
+// CommitRecord is one commit with its ownership provenance: when it was
+// authored, the accountable author, the subject, and the matched model
+// tag (empty for purely human commits). Streamed newest-first (git log
+// order).
+type CommitRecord struct {
+	Hash        string `json:"hash"`
+	AuthorSec   int64  `json:"authorSec"` // author date, unix seconds UTC
+	AuthorEmail string `json:"authorEmail"`
+	AuthorName  string `json:"authorName"`
+	Subject     string `json:"subject"`
+	ModelTag    string `json:"modelTag,omitempty"`
 }
 
 // ownerKeyT is the map key for owner aggregation.
@@ -213,45 +235,70 @@ func (inst *OwnershipAnalyzer) RunSummary(ctx context.Context, git *GitRunner) (
 	return
 }
 
-// scanCommits reads commit metadata for every commit reachable from HEAD
-// in one `git log` pass: hash, author email/name and the matched model
-// tag. emailNames maps each author email to the most recently used author
-// name (git log emits newest first).
-func (inst *OwnershipAnalyzer) scanCommits(ctx context.Context, git *GitRunner) (commits map[string]ownershipCommitT, emailNames map[string]string, err error) {
+// RunCommits streams the provenance-classified commit log, newest first:
+// one CommitRecord per commit reachable from HEAD, in a single `git log`
+// pass. This is the flow-side companion to the blame join — use it for
+// raw commit views and for joining precise author timestamps by hash.
+func (inst *OwnershipAnalyzer) RunCommits(ctx context.Context, git *GitRunner) iter.Seq2[CommitRecord, error] {
 	matcher := inst.ModelMatcher
 	if matcher == nil {
 		matcher = DefaultModelMatcher
 	}
-	commits = make(map[string]ownershipCommitT, 1024)
-	emailNames = make(map[string]string, 32)
-
 	const fieldSep = "\x1f"
 	const coauthorSep = "\x1e"
-	for line, iterErr := range git.RunLines(ctx, "log",
-		"--format=%H"+fieldSep+"%ae"+fieldSep+"%an"+fieldSep+"%(trailers:key=Co-authored-by,valueonly,separator="+coauthorSep+")") {
-		if iterErr != nil {
-			err = eh.Errorf("unable to read git log: %w", iterErr)
-			return
-		}
-		parts := strings.SplitN(line, fieldSep, 4)
-		if len(parts) != 4 || parts[0] == "" {
-			continue
-		}
-		info := ownershipCommitT{
-			authorEmail: strings.ToLower(parts[1]),
-			authorName:  parts[2],
-		}
-		if parts[3] != "" {
-			for co := range strings.SplitSeq(parts[3], coauthorSep) {
-				if tag, ok := matcher(strings.TrimSpace(co)); ok {
-					info.modelTag = tag
-					break
+	return func(yield func(CommitRecord, error) bool) {
+		for line, iterErr := range git.RunLines(ctx, "log",
+			"--format=%H"+fieldSep+"%at"+fieldSep+"%ae"+fieldSep+"%an"+fieldSep+"%s"+fieldSep+"%(trailers:key=Co-authored-by,valueonly,separator="+coauthorSep+")") {
+			if iterErr != nil {
+				yield(CommitRecord{}, eh.Errorf("unable to read git log: %w", iterErr))
+				return
+			}
+			parts := strings.SplitN(line, fieldSep, 6)
+			if len(parts) != 6 || parts[0] == "" {
+				continue
+			}
+			rec := CommitRecord{
+				Hash:        parts[0],
+				AuthorEmail: strings.ToLower(parts[2]),
+				AuthorName:  parts[3],
+				Subject:     parts[4],
+			}
+			if sec, convErr := strconv.ParseInt(parts[1], 10, 64); convErr == nil {
+				rec.AuthorSec = sec
+			}
+			if parts[5] != "" {
+				for co := range strings.SplitSeq(parts[5], coauthorSep) {
+					if tag, ok := matcher(strings.TrimSpace(co)); ok {
+						rec.ModelTag = tag
+						break
+					}
 				}
 			}
+			if !yield(rec, nil) {
+				return
+			}
 		}
-		commits[parts[0]] = info
-		if _, seen := emailNames[info.authorEmail]; !seen && info.authorName != "" {
-			emailNames[info.authorEmail] = info.authorName
+	}
+}
+
+// scanCommits folds the RunCommits stream into the blame-join lookup:
+// hash → provenance, plus author email → most recently used author name
+// (git log emits newest first).
+func (inst *OwnershipAnalyzer) scanCommits(ctx context.Context, git *GitRunner) (commits map[string]ownershipCommitT, emailNames map[string]string, err error) {
+	commits = make(map[string]ownershipCommitT, 1024)
+	emailNames = make(map[string]string, 32)
+	for rec, iterErr := range inst.RunCommits(ctx, git) {
+		if iterErr != nil {
+			err = iterErr
+			return
+		}
+		commits[rec.Hash] = ownershipCommitT{
+			authorEmail: rec.AuthorEmail,
+			authorName:  rec.AuthorName,
+			modelTag:    rec.ModelTag,
+		}
+		if _, seen := emailNames[rec.AuthorEmail]; !seen && rec.AuthorName != "" {
+			emailNames[rec.AuthorEmail] = rec.AuthorName
 		}
 	}
 	return
@@ -271,6 +318,9 @@ func (inst *OwnershipAnalyzer) runFiles(ctx context.Context, git *GitRunner, com
 	parallelism := inst.Parallelism
 	if parallelism < 1 {
 		parallelism = min(8, runtime.GOMAXPROCS(0))
+	}
+	if inst.Progress != nil {
+		inst.Progress(0, len(files))
 	}
 
 	yielded := 0
@@ -310,6 +360,9 @@ func (inst *OwnershipAnalyzer) runFiles(ctx context.Context, git *GitRunner, com
 			if !yield(recs[i], nil) {
 				return
 			}
+		}
+		if inst.Progress != nil {
+			inst.Progress(end, len(files))
 		}
 	}
 	if yielded == 0 && firstErr != nil {

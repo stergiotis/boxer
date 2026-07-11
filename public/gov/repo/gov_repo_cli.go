@@ -222,11 +222,27 @@ func NewCliCommand() *cli.Command {
 						Name:  "summary",
 						Usage: "Show aggregated owner totals and model sponsorship instead of per-file records",
 					},
+					&cli.BoolFlag{
+						Name:  "commits",
+						Usage: "Show the provenance-classified commit log instead of per-file records",
+					},
 				}, fmtFlags),
 				Action: func(c *cli.Context) error {
 					git := gitFromContext(c)
 					analyzer := &OwnershipAnalyzer{
 						Parallelism: c.Int("parallelism"),
+					}
+					if c.Bool("commits") {
+						for rec, iterErr := range analyzer.RunCommits(c.Context, &git) {
+							if iterErr != nil {
+								return eh.Errorf("commit scan failed: %w", iterErr)
+							}
+							err = f.FormatValue(c, rec)
+							if err != nil {
+								return eh.Errorf("unable to format value: %w", err)
+							}
+						}
+						return nil
 					}
 					if c.Bool("summary") {
 						summary, sumErr := analyzer.RunSummary(c.Context, &git)

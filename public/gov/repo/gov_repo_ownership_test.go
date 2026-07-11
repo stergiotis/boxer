@@ -81,10 +81,19 @@ func TestOwnershipAnalyzerRunSummary(t *testing.T) {
 	run("add", "b.txt")
 	run("commit", "--quiet", "-m", "model commit\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>")
 
-	analyzer := &OwnershipAnalyzer{Parallelism: 2}
+	var progress [][2]int
+	analyzer := &OwnershipAnalyzer{Parallelism: 2, Progress: func(done int, total int) {
+		progress = append(progress, [2]int{done, total})
+	}}
 	summary, err := analyzer.RunSummary(context.Background(), &GitRunner{RepoPath: dir})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Progress: an initial (0, total) plus one report per batch, ending
+	// complete. Both files fit one Parallelism=2 batch.
+	if len(progress) != 2 || progress[0] != [2]int{0, 2} || progress[1] != [2]int{2, 2} {
+		t.Errorf("progress = %v, want [(0,2) (2,2)]", progress)
 	}
 
 	if summary.TotalLines != 5 || summary.AttributedLines != 5 || summary.UncommittedLines != 0 {
@@ -112,5 +121,29 @@ func TestOwnershipAnalyzerRunSummary(t *testing.T) {
 	sp := summary.Sponsors[0]
 	if sp.ModelId != "claude" || sp.AuthorEmail != "jane@example.com" || sp.Commits != 1 || sp.AuthorName != "Jane Doe" {
 		t.Errorf("sponsor = %+v", sp)
+	}
+
+	// RunCommits: newest first, provenance classified, timestamps set.
+	var commits []CommitRecord
+	for rec, recErr := range analyzer.RunCommits(context.Background(), &GitRunner{RepoPath: dir}) {
+		if recErr != nil {
+			t.Fatal(recErr)
+		}
+		commits = append(commits, rec)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("commits = %d, want 2", len(commits))
+	}
+	newest, oldest := commits[0], commits[1]
+	if newest.Subject != "model commit" || newest.ModelTag != "claude" {
+		t.Errorf("newest = %+v, want model commit tagged claude", newest)
+	}
+	if oldest.Subject != "human commit" || oldest.ModelTag != "" {
+		t.Errorf("oldest = %+v, want untagged human commit", oldest)
+	}
+	for _, rec := range commits {
+		if rec.AuthorSec <= 0 || rec.AuthorEmail != "jane@example.com" || rec.AuthorName != "Jane Doe" || len(rec.Hash) != 40 {
+			t.Errorf("commit record fields incomplete: %+v", rec)
+		}
 	}
 }
