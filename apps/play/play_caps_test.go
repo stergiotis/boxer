@@ -94,9 +94,14 @@ func TestPlayApp_LoadFromPicker_RoundTrip(t *testing.T) {
 	}
 
 	inst.pickMu.Lock()
-	defer inst.pickMu.Unlock()
 	assert.False(t, inst.pickInFlight, "busy must clear at end of loadFromPicker")
 	assert.Empty(t, inst.pickErr)
+	inst.pickMu.Unlock()
+
+	// The goroutine only stashes; the buffer lands on the render thread at the
+	// next frame top (consumePickedSql) — inst.sql is render-thread-only, so
+	// the goroutine assigning it directly would race a concurrent frame.
+	inst.consumePickedSql()
 	assert.Equal(t, "SELECT 42 AS hello", inst.sql, "editor buffer must be replaced with file contents")
 }
 

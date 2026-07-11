@@ -45,8 +45,8 @@ func (inst schemaPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 // empty guards as the other result tabs, then the panel dispatch. The model is
 // kept in sync by syncSchemaModel in the per-frame consistency block, so the
 // tab body only renders it.
-func (inst *PlayApp) renderSchemaTab(rec arrow.RecordBatch, schema *arrow.Schema, err error) {
-	if inst.graph.MainLoading() && rec == nil {
+func (inst *PlayApp) renderSchemaTab(rec arrow.RecordBatch, schema *arrow.Schema, loading bool, err error) {
+	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
 	}

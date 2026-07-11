@@ -3,6 +3,7 @@ package play
 import (
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 )
@@ -56,4 +57,33 @@ func TestActiveSnapshotObservesIntermediateNode(t *testing.T) {
 		r3.Release()
 	}
 	require.Equal(t, 1, *hits, "observing the sink does not touch the intermediate lane")
+}
+
+// The loading flag the result tabs gate their spinner on must come from the
+// ACTIVE snapshot: an observed intermediate loads on the intermediate lane
+// while the main lane is idle, and the former MainLoading() gate misread its
+// first fetch as a settled empty result ("0 rows — the query ran but matched
+// nothing") instead of showing the spinner (review finding).
+func TestActiveSnapshotReportsIntermediateLaneLoading(t *testing.T) {
+	g := &gatedExecutor{gate: make(chan struct{}), build: func(string) arrow.RecordBatch { return int64Rec("n", 1) }}
+	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
+	app := NewPlayApp(nil, graph, "")
+	app.intermediateLane = newNodeLane(g, memory.NewGoAllocator(), 0)
+	app.currentSplit = splitResult{
+		Nodes: []splitNode{
+			{ID: "recent", Kind: splitNodeCTE, SQL: "SELECT n FROM t"},
+			{ID: mainNodeID, Kind: splitNodeStatement, SQL: "WITH recent AS (SELECT n FROM t) SELECT * FROM recent"},
+		},
+		Sink: mainNodeID,
+	}
+	app.observedNode = "recent"
+
+	rec, _, _, loading, _, _, _, _ := app.activeSnapshot()
+	require.Nil(t, rec, "first fetch still in flight — no result yet")
+	require.True(t, loading, "the active snapshot reports the intermediate lane's in-flight fetch")
+	require.False(t, graph.MainLoading(),
+		"the main lane is idle — a MainLoading() spinner gate would misread this frame as a settled empty result")
+
+	close(g.gate)
+	app.Close()
 }

@@ -250,10 +250,15 @@ type PlayApp struct {
 	// pickMu guards the goroutine-side load state. The Load button
 	// fires loadFromPicker in a goroutine; the Render loop reads
 	// pickInFlight + pickErr under the lock to render the status
-	// indicator.
+	// indicator. pickedSql is the loaded buffer awaiting handoff:
+	// inst.sql itself is render-thread-only (the editor binding and
+	// Run path read and write it unlocked), so the goroutine must
+	// never assign it directly — it stashes here and Render consumes
+	// once per frame (consumePickedSql). nil = nothing pending.
 	pickMu       sync.Mutex
 	pickInFlight bool
 	pickErr      string
+	pickedSql    *string
 }
 
 // SetCapabilities is the host-side seam for wiring the runtime's M2
@@ -389,12 +394,30 @@ func (inst *PlayApp) loadFromPicker() {
 		inst.setLoadErr("handle read: " + rerr.Error())
 		return
 	}
-	// Successful load — replace the editor buffer. The next debounce
-	// tick will re-format and the next Run will persist the new value.
+	// Successful load — stash the buffer for the render thread. inst.sql is
+	// render-thread-only (read/written unlocked by the editor binding and the
+	// Run path), so assigning it from this goroutine would race a concurrent
+	// frame (review finding); consumePickedSql applies it at the next frame
+	// top, after which the debounce re-formats and the next Run persists.
+	loaded := string(body)
 	inst.pickMu.Lock()
-	inst.sql = string(body)
+	inst.pickedSql = &loaded
 	inst.pickErr = ""
 	inst.pickMu.Unlock()
+}
+
+// consumePickedSql applies a picker-loaded buffer to inst.sql, on the render
+// thread, at most once per stash. Called at the top of Render so the load
+// lands regardless of which dock tab is active (unlike the snippet pendings,
+// which the Editor tab consumes).
+func (inst *PlayApp) consumePickedSql() {
+	inst.pickMu.Lock()
+	picked := inst.pickedSql
+	inst.pickedSql = nil
+	inst.pickMu.Unlock()
+	if picked != nil {
+		inst.sql = *picked
+	}
 }
 
 func (inst *PlayApp) setLoadBusy(b bool) {
@@ -570,6 +593,9 @@ func (inst *PlayApp) Render() error {
 	ids := inst.ids
 	ids.Reset()
 
+	// Apply a picker-loaded buffer before anything reads inst.sql this frame.
+	inst.consumePickedSql()
+
 	// One Snapshot per frame, with a matching release at end-of-frame.
 	// Tab bodies are captured into detached buffers by the DockArea
 	// iterator and flushed when the dock scope exits — all per-frame
@@ -653,13 +679,13 @@ func (inst *PlayApp) Render() error {
 				}
 			}
 			for range dock.Tab(dockTabTable, "Table") {
-				inst.renderTableTab(rec, schema, numRows, err)
+				inst.renderTableTab(rec, schema, numRows, loading, err)
 			}
 			for range dock.Tab(dockTabProjection, "Projection") {
-				inst.renderProjectionTab(rec, err)
+				inst.renderProjectionTab(rec, loading, err)
 			}
 			for range dock.Tab(dockTabTimeline, "Timeline") {
-				inst.renderTimelineTab(rec, schema, err)
+				inst.renderTimelineTab(rec, schema, loading, err)
 			}
 			for range dock.Tab(dockTabSnippets, "Snippets") {
 				inst.renderSnippetsTab()
@@ -676,7 +702,7 @@ func (inst *PlayApp) Render() error {
 				}
 			}
 			for range dock.Tab(dockTabSchema, "Schema") {
-				inst.renderSchemaTab(rec, schema, err)
+				inst.renderSchemaTab(rec, schema, loading, err)
 			}
 		}
 	}
@@ -1261,9 +1287,13 @@ func (inst *PlayApp) renderHistoryTab() {
 }
 
 // renderTableTab is the Table dock tab body: pager strip atop the master
-// table, with a centred empty-state when there is no result yet.
-func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, err error) {
-	if inst.graph.MainLoading() && rec == nil {
+// table, with a centred empty-state when there is no result yet. loading is
+// the ACTIVE snapshot's flag (activeSnapshot), not MainLoading(): an observed
+// intermediate loads on its own lane, and gating the spinner on the main lane
+// showed "0 rows" during its first fetch (review finding). Same for the
+// Projection/Timeline/Schema tabs below.
+func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, err error) {
+	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
 	}
@@ -1306,8 +1336,8 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 
 // renderProjectionTab is the Projection dock tab body: the UMAP scatter
 // with its own toolbar/status. Same empty/error guards as the Table tab.
-func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, err error) {
-	if inst.graph.MainLoading() && rec == nil {
+func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, err error) {
+	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
 	}
@@ -1331,8 +1361,8 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, err error) {
 // renders either its reject reason (+ the contract help, so the SQL author can
 // debug from the panel) or, on a claim, the panel body. Same empty/error guards
 // as the other result tabs.
-func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Schema, err error) {
-	if inst.graph.MainLoading() && rec == nil {
+func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Schema, loading bool, err error) {
+	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
 	}
