@@ -733,7 +733,7 @@ func (inst *PlayApp) Render() error {
 			// scroll the panel in the same gesture that pans/zooms the map —
 			// the map jitters while zooming. Overflow clips instead.
 			for range dock.TabNoScroll(dockTabMap, "Map") {
-				inst.mapDriver.Render()
+				inst.mapDriver.Render(inst.frameSig, inst.sigEmit)
 			}
 			for range dock.Tab(dockTabWorld, "World") {
 				inst.renderWorldTab(rec, schema, loading, err, executed)

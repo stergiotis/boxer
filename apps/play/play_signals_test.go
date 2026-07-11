@@ -274,3 +274,51 @@ func TestSyncSelectionClamp(t *testing.T) {
 	got, _ = readSelection(app.graph.signals())
 	require.Equal(t, int64(2), got)
 }
+
+// The 5c Map seam end to end: the emitted viewport compiles into vp_* URL
+// params against a STABLE SQL text; a pan changes only the params, and the
+// lane's (SQL, params) key re-executes. This is the ADR-0096 SD6 contract
+// ("pan/zoom become typed param mutations") verified on the wire.
+func TestMapViewportSeamEndToEnd(t *testing.T) {
+	srv, got := captureServer(t)
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+	g := newQueryGraph(nil, nil)
+	d := NewMapDriver(nil, client)
+	d.lane.close()
+	d.lane = newNodeLane(clientExecutor{client: client}, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+
+	demandSettled := func(wantHits int) {
+		require.Eventually(t, func() bool {
+			params := resolveSignalNames(d.templateReads, nil, g.signals())
+			if !hasViewportParams(params) {
+				return false
+			}
+			v := d.lane.demand(compiledNode{SQL: d.template, Params: params})
+			if v.rec != nil {
+				v.rec.Release()
+			}
+			return !v.loading && len(got()) == wantHits
+		}, 2*time.Second, time.Millisecond)
+	}
+
+	// First settle: London.
+	d.updateViewport(51.3, 51.7, -0.6, 0.3, 320, 240, graphEmitter{graph: g})
+	firstSQL := d.template
+	demandSettled(1)
+	qs := got()
+	b1, _ := bboxFromLatLon(51.3, 51.7, -0.6, 0.3)
+	require.Equal(t, strconv.FormatUint(uint64(b1.minX), 10), qs[0].Get("param_vp_min_x"),
+		"the viewport rides the param_* URL channel")
+	require.Equal(t, "320", qs[0].Get("param_vp_w"))
+
+	// Pan to Paris: the SQL text must be unchanged; only the params move.
+	d.updateViewport(48.6, 49.1, 1.9, 2.9, 320, 240, graphEmitter{graph: g})
+	require.Equal(t, firstSQL, d.template, "a pan never changes the SQL text")
+	demandSettled(2)
+	qs = got()
+	b2, _ := bboxFromLatLon(48.6, 49.1, 1.9, 2.9)
+	require.Equal(t, strconv.FormatUint(uint64(b2.minX), 10), qs[1].Get("param_vp_min_x"),
+		"the pan re-executed with the new viewport params")
+}

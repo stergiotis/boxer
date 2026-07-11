@@ -166,8 +166,9 @@ type Node struct {
 type nodeResult struct {
 	rec         arrow.RecordBatch
 	schema      *arrow.Schema
-	sql         string // the compiled SQL half (display/observers)
-	key         string // compiledNode.key() — the memo identity
+	sql         string            // the compiled SQL half (display/observers)
+	params      map[string]string // the compiled signal values (read-only)
+	key         string            // compiledNode.key() — the memo identity
 	fingerprint uint64
 	revision    uint64
 	summary     Summary

@@ -49,15 +49,20 @@ func newNodeLane(exec nodeExecutorI, alloc memory.Allocator, timeout time.Durati
 }
 
 // laneView is a demand-time snapshot of the lane: the last-good result
-// (retained for the caller — Release rec, nil-safe), the SQL and content
-// fingerprint it was computed for, and the in-flight flag. The fingerprint is
-// the early-cutoff hook (ADR-0097 SD4) for the lane's observers: repack/re-map
-// only when it changes, so a forced re-fetch that returns identical bytes
-// costs no downstream work.
+// (retained for the caller — Release rec, nil-safe), the compiled (SQL,
+// params) pair it was computed for — sql/params/key, where key is the memo
+// identity and params must be treated as read-only — and the in-flight flag.
+// The fingerprint is the early-cutoff hook (ADR-0097 SD4) for the lane's
+// observers: repack/re-map only when it changes, so a forced re-fetch that
+// returns identical bytes costs no downstream work. params lets an observer
+// derive per-result metadata from the served inputs themselves (the Map pins
+// its raster to bounds recovered from the served vp_* values, slice 5c).
 type laneView struct {
 	rec         arrow.RecordBatch
 	schema      *arrow.Schema
 	sql         string
+	params      map[string]string // served signal values (read-only)
+	key         string            // compiledNode.key() of the served result
 	fingerprint uint64
 	summary     Summary
 	executedAt  time.Time     // when the served result's execution finished
@@ -108,6 +113,8 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 		view.rec = inst.result.rec
 		view.schema = inst.result.schema
 		view.sql = inst.result.sql
+		view.params = inst.result.params
+		view.key = inst.result.key
 		view.fingerprint = inst.result.fingerprint
 		view.summary = inst.result.summary
 		view.executedAt = inst.result.executedAt
@@ -181,7 +188,7 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	inst.cancel = nil
 	prev := inst.result
 	inst.result = &nodeResult{
-		rec: rec, schema: schema, sql: c.SQL, key: demandKey,
+		rec: rec, schema: schema, sql: c.SQL, params: c.Params, key: demandKey,
 		fingerprint: fingerprintRecord(rec),
 		summary:     summary,
 		executedAt:  time.Now(),

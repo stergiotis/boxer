@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/png"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -41,10 +42,20 @@ func TestMapRasterLive(t *testing.T) {
 	if !ok {
 		t.Fatal("degenerate bbox")
 	}
-	sql := buildRasterSQL(b, w, h, sanitizeTable(table), 100, builtinRenders[0].colorSQL, builtinRenders[0].where)
+	// The production shape since slice 5c: a stable template + the viewport as
+	// vp_* params riding the URL channel.
+	sql := rasterTemplateSQL(sanitizeTable(table), 100, builtinRenders[0].colorSQL, builtinRenders[0].where)
+	params := map[string]string{
+		"param_vp_min_x": strconv.FormatUint(uint64(b.minX), 10),
+		"param_vp_max_x": strconv.FormatUint(uint64(b.maxX), 10),
+		"param_vp_min_y": strconv.FormatUint(uint64(b.minY), 10),
+		"param_vp_max_y": strconv.FormatUint(uint64(b.maxY), 10),
+		"param_vp_w":     strconv.FormatUint(uint64(w), 10),
+		"param_vp_h":     strconv.FormatUint(uint64(h), 10),
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), mapFetchTimeout)
 	defer cancel()
-	rec, _, _, exErr := clientExecutor{client: client}.execute(ctx, compiledNode{SQL: sql}, memory.NewGoAllocator())
+	rec, _, _, exErr := clientExecutor{client: client}.execute(ctx, compiledNode{SQL: sql, Params: params}, memory.NewGoAllocator())
 	if exErr != nil {
 		t.Fatalf("execute: %v", exErr)
 	}
