@@ -61,6 +61,42 @@ FROM by_kind
 ORDER BY n DESC
 ```
 
+## Recursive CTEs (WITH RECURSIVE)
+
+A `WITH RECURSIVE` CTE may reference its own name: a seed branch and a
+recursive branch combined with `UNION ALL` (needs a server with recursive-CTE
+support, ClickHouse ≥ 24.4). The Graph tab shows such a node as
+`CTE (recursive)` — the self-reference stays inside the node rather than
+becoming a graph edge (ADR-0097 §SD9). Table-free, so it runs against any
+endpoint:
+
+```sql
+WITH RECURSIVE fib AS (
+  SELECT 1 AS n, toUInt64(0) AS a, toUInt64(1) AS b
+  UNION ALL
+  SELECT n + 1, b, a + b FROM fib WHERE n < 40
+)
+SELECT n, a AS fib FROM fib
+```
+
+A recursive series also works as a spine for downstream CTEs — the calendar
+idiom. `days` is the recursive generator, `by_week` aggregates it, and
+"observe in panels" on either node in the Graph tab materialises it standalone:
+
+```sql
+WITH RECURSIVE days AS (
+  SELECT toDate('2026-01-01') AS day
+  UNION ALL
+  SELECT day + 1 FROM days WHERE day < toDate('2026-01-31')
+),
+by_week AS (
+  SELECT toStartOfWeek(day) AS week, count() AS days_in_week
+  FROM days
+  GROUP BY week
+)
+SELECT week, days_in_week FROM by_week ORDER BY week
+```
+
 ## One entity by id
 
 The ids 10005, 10010, 10015, 10020, 500003 carry the sparse `geoArea` section.
