@@ -12,7 +12,7 @@ date: 2026-07-11
 
 ## Status
 
-Proposed. The design dialogue settled the asset form (verbatim gzipped
+Proposed. The design dialogue settled the asset form (verbatim compressed
 Natural Earth 110m), the projection (Natural Earth), the matching contract
 (ISO codes + names) and that this ADR precedes the implementation.
 
@@ -60,15 +60,18 @@ A new reusable widget package
 choropleth drawn entirely Go-side — and a thin `play` result pane ("World"
 dock tab) that feeds it from the observed result. No Rust/IDL changes.
 
-### SD1 — Geometry asset: verbatim Natural Earth 110m, gzipped, embedded
+### SD1 — Geometry asset: verbatim Natural Earth 110m, compressed, embedded
 
 The country outlines are `ne_110m_admin_0_countries.geojson` from Natural
-Earth (public domain), embedded **verbatim** (gzipped, ~206 KB) via
-`go:embed` and parsed lazily on first use. Verbatim-upstream keeps provenance
-auditable: the asset README records the source URL and the sha256 of the
-uncompressed file, so anyone can diff against upstream. A preprocessed
-compact binary (~80 KB) was rejected: it would need a converter and a bespoke
-format to maintain, and breaks the checksum-against-upstream property.
+Earth (public domain), embedded **verbatim** (zstd-compressed, ~146 KB) via
+`go:embed` and parsed lazily on first use — a single-goroutine zstd decoder
+streamed into an `encoding/json/v2` reader, no intermediate uncompressed
+buffer. Verbatim-upstream keeps provenance auditable: the asset README
+records the source URL and the sha256 of the uncompressed file, so anyone
+can diff against upstream. A preprocessed compact binary (~80 KB) was
+rejected: it would need a converter and a bespoke format to maintain, and
+breaks the checksum-against-upstream property. (First cut shipped gzip;
+zstd replaced it for size and decode speed with the same verbatim contract.)
 
 Only five properties are consumed: `ADMIN`, `NAME`, `ISO_A2_EH`, `ISO_A3_EH`
 (the `_EH` variants fix the upstream `-99` quirks for France, Norway and
@@ -169,7 +172,7 @@ the asset, projection, or panel contract above.
 
 ## Consequences
 
-- ~206 KB gzipped asset in the binary; parse cost paid once, lazily.
+- ~146 KB zstd-compressed asset in the binary; parse cost paid once, lazily.
 - A new widget package with no FFI additions — works on every render host,
   including the headless SVG tour (textures are captured by the SVG
   visitor).

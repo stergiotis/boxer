@@ -1,8 +1,9 @@
 # Natural Earth 110m admin-0 countries (vendored)
 
-`ne_110m_admin_0_countries.geojson.gz` is the **verbatim** upstream file,
-gzipped (`gzip -9 -n`, no timestamp) — no properties stripped, no geometry
-re-encoded — so it stays checksummable against upstream (ADR-0114 §SD1).
+`ne_110m_admin_0_countries.geojson.zst` is the **verbatim** upstream file,
+zstd-compressed (`zstd -19`, v1.5.7; zstd frames carry no timestamp) — no
+properties stripped, no geometry re-encoded — so it stays checksummable
+against upstream (ADR-0114 §SD1).
 
 - Source: <https://github.com/nvkelso/natural-earth-vector>,
   path `geojson/ne_110m_admin_0_countries.geojson`
@@ -11,7 +12,7 @@ re-encoded — so it stays checksummable against upstream (ADR-0114 §SD1).
 - License: Natural Earth is in the **public domain**
   (<https://www.naturalearthdata.com/about/terms-of-use/>)
 
-To verify: `gunzip -c ne_110m_admin_0_countries.geojson.gz | sha256sum`.
+To verify: `zstd -dc ne_110m_admin_0_countries.geojson.zst | sha256sum`.
 
 The widget consumes only `ADMIN`, `NAME`, `ISO_A2_EH`, `ISO_A3_EH` and the
 geometry; everything else rides along for auditability. Known upstream

@@ -2,20 +2,21 @@ package worldmap
 
 import (
 	"bytes"
-	"compress/gzip"
 	_ "embed"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 // Country geometry + identity, parsed once from the vendored Natural Earth
 // 110m admin-0 asset (see assets/README.md for provenance; ADR-0114 §SD1).
 
-//go:embed assets/ne_110m_admin_0_countries.geojson.gz
-var neCountriesGz []byte
+//go:embed assets/ne_110m_admin_0_countries.geojson.zst
+var neCountriesZst []byte
 
 // CountryIdx indexes Atlas.Countries. NoCountry marks "no country" (sea in
 // the raster index buffer, resolver miss).
@@ -91,8 +92,8 @@ type neProps struct {
 	IsoA3E string `json:"ISO_A3_EH"`
 }
 type neGeometry struct {
-	Type        string          `json:"type"`
-	Coordinates json.RawMessage `json:"coordinates"`
+	Type        string         `json:"type"`
+	Coordinates jsontext.Value `json:"coordinates"`
 }
 
 var loadAtlasOnce = sync.OnceValues(loadAtlas)
@@ -102,16 +103,16 @@ var loadAtlasOnce = sync.OnceValues(loadAtlas)
 func LoadAtlas() (*Atlas, error) { return loadAtlasOnce() }
 
 func loadAtlas() (*Atlas, error) {
-	zr, err := gzip.NewReader(bytes.NewReader(neCountriesGz))
+	// One-shot decode of a small embedded asset: a single-goroutine zstd
+	// decoder streamed straight into the json/v2 reader — no intermediate
+	// uncompressed buffer.
+	zr, err := zstd.NewReader(bytes.NewReader(neCountriesZst), zstd.WithDecoderConcurrency(1))
 	if err != nil {
-		return nil, fmt.Errorf("worldmap: asset gunzip: %w", err)
+		return nil, fmt.Errorf("worldmap: asset zstd: %w", err)
 	}
-	raw, err := io.ReadAll(zr)
-	if err != nil {
-		return nil, fmt.Errorf("worldmap: asset read: %w", err)
-	}
+	defer zr.Close()
 	var fc neFeatureCollection
-	if err = json.Unmarshal(raw, &fc); err != nil {
+	if err = json.UnmarshalRead(zr, &fc); err != nil {
 		return nil, fmt.Errorf("worldmap: asset parse: %w", err)
 	}
 	a := &Atlas{
