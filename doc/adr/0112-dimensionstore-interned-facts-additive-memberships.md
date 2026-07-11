@@ -103,9 +103,11 @@ func (s *Store[D]) Resolve(ctx, id identifier.TaggedId) (d D, found bool, err er
 Internally: `Reference` calls the injected `IdGeneratorI.GetId(ctx, key)`; when
 `fresh`, it `describe()`s and writes one row through a **generated
 `recordstore` fact store** for `D` (SD placement below), keyed by the id; the
-store's attached `caching` view answers `Resolve` and doubles as the hot
-"already emitted this session" set. Nothing about `Store[D]` is
-provenance-specific.
+store's attached `caching` view answers `Resolve` — write-through, so a
+locally emitted descriptor resolves immediately (pre-flush); another process
+sees it once durable. The "already emitted" gate is the generator's `fresh`
+signal, not the cache (SD3 records where that distinction bites). Nothing
+about `Store[D]` is provenance-specific.
 
 The descriptor store is **not a new store kind** — it is an ordinary ADR-0100
 generated store over the `D` schema. "Provenance's store is an example" is
@@ -137,26 +139,57 @@ mechanisms were considered:
   for a strictly less reusable result.
 
 The id goes in a **Ref lane disjoint from the kind lane** (kinds are
-`LowCardRef`; dimension ids are `HighCardRef`), and its fibonacci tag
-self-identifies it, so a reader separates dimension ids from any other
-`HighCardRef` membership with a cheap `tag.SameTag(id)` and the typed
-`<Kind>ReadRow` never sees them.
+`LowCardRef` by default; dimension ids are `HighCardRef`), so the typed
+`<Kind>ReadRow` never sees them — and even a kind riding the HighCardRef
+lane stays safe, because the decode matches known kind ids and skips the
+rest. That safety is a **lane-hygiene contract, not a property of the
+lane**: the marshall vocabulary also admits per-element *data* in the same
+lane (a tuple `@membership` field on the `highCardRef` channel reads the
+whole lane back in wire order, ADR-0109), and there a stamp would decode as
+a spurious ref id. A stamped store's schema must therefore keep the
+HighCardRef lane free of lane-collected data. The generated constructor
+enforces both edges of the contract: it refuses `Stampers` when no section
+declares the HighCardRef membership column (stamps would be dropped
+silently) and when a bound component reads the lane back as data (today
+additionally shadowed by the ReadRow gate, which refuses tuple components
+outright). The fibonacci tag still lets a reader pick dimension ids out of
+a hygienic lane cheaply (`tag.SameTag(id)` is a short mask compare), but
+tags are prefix-free only within the TaggedId universe — against
+full-entropy raw uint64 ids the mask can false-positive, which is the other
+reason the lane must stay hygienic rather than merely tagged.
 
 The generated store gains a stamping seam mirroring the existing
-`onWrite`/`onFlush` slices: a `stampers []ReferenceStamper` field consulted per
-`Begin`/`Add<Kind>`, registered at runtime, inert (byte-identical output) when
-none is set. `ReferenceStamper` is the general seam
+`onWrite`/`onFlush` slices: a `stampers []ReferenceStamper` field consulted
+**once per `Begin`** (configured at store construction), inert (byte-identical
+output) when none is set. `ReferenceStamper` is the general seam
 (`Current(ctx) iter.Seq2[identifier.TaggedId, error]`); the provenance capture
-is its first registrant.
+is its first registrant. Consulting once per `Begin` — rather than per
+`Add<Kind>` — is the settled granularity: every attribute of the entity then
+carries the same ids, and an entity assembled across several call sites (a
+builder handed around) attributes wholly to the `Begin` site. The M1 push/pop
+machinery would support per-component consultation if a dimension ever needs
+it; the current cut keeps one capture per entity.
 
-Multiple dimensions **compose** as this slice: a `Composite` combines several
-`ReferenceStamper`s through the same interface (a leaf yields one id, a
-composite yields many), so provenance plus a later trace / causation / tenant
-dimension stack with no new machinery — the Composite pattern over `[]TaggedId`.
-One detail lands with the seam rather than the leaves: invoked from inside a
-generated `Add<Kind>`, a stamper's stack capture must skip the builder frames
-that the standalone S1 `Recorder` (called directly) does not see, so the
-capture-skip depth is an S2 seam concern, not a leaf's.
+Multiple dimensions **compose** as the `Stampers` slice itself — no separate
+composite type exists or is needed. A single stamper may also yield several
+ids: the seam iterates the sequence, so provenance plus a later trace /
+causation / tenant dimension stack with no new machinery. One detail lands
+with the seam rather than the leaves: invoked from inside the generated
+`Begin`, a stamper's stack capture must skip the builder frames that the
+standalone S1 `Recorder` (called directly) does not see, so the capture-skip
+depth is an S2 seam concern, not a leaf's. The seam's lifecycle owns the
+stamps it pushes: `Commit`/`Rollback` pop the builder's count, and
+`DiscardPending` clears the ambient stack wholesale — an abandoned builder's
+stamps die with the frame instead of leaking onto later entities.
+
+Stamper failure is **fail-fast by decision**: an error yielded by `Current`
+is recorded on the open entity and fails its `Commit`, so a store configured
+to stamp never writes unattributed rows silently — for an audit-shaped
+consumer, a loud failed write beats a quiet unattributed one. The cost is a
+coupling of failure domains (a wedged dimension backend blocks the payload
+writes that stamp through it); a degrade-to-unstamped mode with a surfaced
+warning is a possible future knob, deliberately not built without a consumer
+that wants it.
 
 ### SD3 — Id generation is an injected dependency
 
@@ -175,8 +208,28 @@ wired in:
 3. **Globally-unique `TaggedId`** — by tag or by leased block; not the
    `DimensionStore`'s business.
 
+**`fresh` is not "descriptor emitted".** The Store emits on the generator's
+`fresh`, so the composition is sound only while generator-interning and
+descriptor-emission advance together. Two divergences exist. Same-process — a
+failed `Emit` after a successful intern — the Store now closes itself: it
+remembers the id and retries the emission on the key's next sight
+(`TestReferenceRetriesFailedEmit`); one transient sink failure no longer
+orphans the id for the generator's lifetime. Cross-restart the divergence
+remains: a **durable** generator (ADR-0111) whose persisted lease outlives an
+unflushed descriptor answers `fresh=false` in every later run, so the
+descriptor is never written — and SD5's ordering cannot help, because it
+orders payload-vs-descriptor within one process, not generator-state-vs-
+descriptor across restarts. The remedy is **presence-based emission**
+(emit-if-absent, cheap through the attached cache) replacing freshness-based
+emission when a durable generator is wired — recorded here as a requirement
+of the ADR-0111 integration slice, not built against the in-memory interner
+(which cannot survive a restart, so the case cannot arise).
+
 **Recursion guard:** the descriptor store's own writes run with stamping
-**off** — interning a fact must not try to intern its own write's stack.
+**off** — interning a fact must not try to intern its own write's stack. This
+is enforced twice: the generated constructor refuses stampers on the
+lane-less descriptor schema (SD2 lane hygiene), and `Store.Reference` errors
+on re-entry instead of recursing.
 
 ### SD4 — Granularity: attribute-level
 
@@ -216,19 +269,19 @@ output and behaviour for existing stores until enabled):
 ```go
 type Provenance struct {
     _     struct{} `kind:"provenance"`
-    ID    uint64   `lw:",id"`               // = the TaggedId body carried as the membership
+    ID    uint64   `lw:",id"`               // = the full TaggedId carried as the membership
     Host  string   `lw:"provHost,symbol"`
     Stack []string `lw:"provStack,symbolArray"` // symbolicated once, on fresh
 }
 ```
 
-Capture: `Host` once at construction; the **call-stack via `runtime.Callers` at
-`Begin`/`Add<Kind>`** — the meaningful frame is the caller of the builder, and
-per-attribute stacks within one `AddSections` are identical modulo codec frames,
-so capturing per component and applying to its attributes is both correct and
-the cheap choice. The natural key is `(hostId, pcs)`; symbolication runs once,
-on `fresh`. `runtime.Callers` per component is real hot-path cost, so provenance
-is gated behind a store option (with room for a host-only tier and sampling).
+Capture: `Host` once at construction; the **call-stack via `runtime.Callers`
+once per `Begin`** (the SD2 seam granularity) — the meaningful frame is the
+caller of the store, so the captured stack names the write site that opened
+the entity, and every attribute the entity writes carries that one id. The
+natural key is `(hostId, pcs)`; symbolication runs once, on `fresh`.
+`runtime.Callers` per `Begin` is real hot-path cost, so provenance is gated
+behind a store option (with room for a host-only tier and sampling).
 
 ## Usage sketch
 
@@ -249,9 +302,9 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
 
 ### Positive
 
-- Cheap hot path: an 8-byte surrogate id per stamped attribute (or one per
-  row at entity granularity); the heavy descriptor is stored once. Host ids
-  are near-free under ClickHouse RLE; distinct stacks stay bounded.
+- Cheap hot path: an 8-byte surrogate id per stamped attribute; the heavy
+  descriptor is stored once. Host ids are near-free under ClickHouse RLE;
+  distinct stacks stay bounded.
 - No payload schema change; the typed decode and its presence gate are
   unaffected (disjoint lane, ignored memberships).
 - Reuses `identifier` (ids/tags), `identgen`/ADR-0111 (interning + leasing) and
@@ -277,9 +330,16 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
 
 - Surrogate ids are dense (leased) or per-host (tagged) per ADR-0111; the
   `DimensionStore` does not observe the difference.
-- Resolution requires the descriptor store reachable; an id whose fact was lost
-  (best-effort mode, pre-flush crash) resolves as absent — acceptable for
-  observability-shaped context.
+- Resolution requires the descriptor store reachable; an id whose fact is not
+  (yet) durable resolves as absent — acceptable for observability-shaped
+  context. The windows: best-effort mode until the dimension's own flush; a
+  pre-flush crash (any mode) for rows that were themselves lost with it; and,
+  until presence-based emission lands with a durable generator (SD3), the
+  cross-restart lease-outlives-descriptor case.
+- Tombstones carry no stamps: `Delete` writes a row with no attributes, and
+  memberships are per-attribute, so membership-based context cannot attribute
+  deletions. "Who deleted this" would need an envelope-level axis — out of
+  scope here; recorded as a boundary of the mechanism, not an oversight.
 
 ## Alternatives
 
@@ -324,7 +384,10 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
   H") beyond raw SQL over the membership lanes — wants a readback artefact,
   like ADR-0066's Filter.
 - **Symbolication format and build-id anchoring** for cross-build stack
-  resolution.
+  resolution — including path hygiene: symbolicated frames embed the build
+  machine's absolute source paths (and the descriptor the hostname), so a
+  deployment that shares its descriptor table wants `-trimpath` or
+  module-relative frames.
 - **Content-addressed id strategy** as a shipped `IdGeneratorI` (SD3 admits it;
   not built).
 
@@ -345,11 +408,14 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
   **Done** (`public/storage/recordstore/dimension` + `dimension/provenance`):
   `dimension.Store[D]` over a `DescriptorSink[D]`; the provenance `Recorder`
   over a generated `ProvenanceStore` (id/ts envelope, `symbol` + `symbolArray`
-  component). `TestS1ProvenanceRoundTrip` is green against clickhouse-local —
-  same-call-site dedup (one emit, one id), distinct-call-site distinctness,
-  resolve-after-flush (host + this test's frame), and absent-id. v1 uses a
-  host-plus-raw-pcs natural key; the ASLR-robust / cross-build key is recorded
-  as a caveat in `provenance.key` (Deferred).
+  component). The sink's `Resolve` goes through the store's attached cache
+  view (SD1): a cached point lookup, write-through, so a locally emitted
+  descriptor resolves before its flush. `TestS1ProvenanceRoundTrip` is green
+  against clickhouse-local — same-call-site dedup (one emit, one id),
+  distinct-call-site distinctness, resolve-after-flush (host + this test's
+  frame), and absent-id. v1 uses a host-plus-raw-pcs natural key; the
+  ASLR-robust / cross-build key is recorded as a caveat in `provenance.key`
+  (Deferred).
 - **S2** — the stamping path: the ambient-membership primitive (M1) in the
   leeway DML runtime/generator, the `ReferenceStamper` seam on the generated
   store (gated, inert when off), attribute-level granularity (SD4) and ordered
@@ -376,14 +442,18 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
   id as an ambient HighCardRef membership and popping the count at
   `Commit`/`Rollback`. Provenance's `Recorder.Stamper()` adapts it; the capture
   skip is tuned for the store call path (the two store frames it leaves are
-  honest context). The recursion guard falls out — the provenance store carries
-  no stampers. Granularity is **attribute-level** (M1 on every attribute) — now
+  honest context). The recursion guard is enforced, not merely conventional:
+  the descriptor schema carries no HighCardRef lane, so the generated
+  lane-hygiene guard makes `NewProvenanceStore` refuse any configured
+  stamper (`TestStampersRefusedOnDescriptorStore`). Granularity is **attribute-level** (M1 on every attribute) — now
   SD4's settled model; the entity-level synthetic section was dropped (RLE
   compresses the repeated id, so it is not worth the schema/generator cost). One
   **approved deviation** remains: `Begin` consults stampers with
   `context.Background()` rather than gaining a ctx parameter — fine for the
-  in-memory interner, revisit when a durable/networked one (ADR-0111) needs the
-  ctx. End-to-end test (`example`): a device write
+  in-memory interner, revisit when a durable/networked one (ADR-0111) needs
+  the ctx; note the eventual fix is a ctx parameter on the generated `Begin`,
+  a breaking signature change across every store consumer, so it should ride
+  the ADR-0111 integration slice rather than land alone. End-to-end test (`example`): a device write
   through a provenance stamper → flush → the stored row's HighCardRef membership
   resolves to the writer's host and stack; inert (all suites pass) with no
   stamper set. **Ordered flush (SD5) is done:** the store's Flush flushes its
@@ -391,9 +461,17 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
   referencing row is never durable ahead of its descriptor fact — a
   `BestEffortStampFlush` config toggle opts into the relaxation. The end-to-end
   test now resolves the stamped id after `dev.Flush` alone (no manual provenance
-  flush), proving the ordering. **S2 is complete.** Deferred beyond it:
-  membership flavours other than HighCardRef (the entity-level synthetic section
-  was dropped — see SD4).
+  flush), proving the ordering. **S2 is complete.** A post-review hardening
+  pass closed the seam's lifecycle and misuse edges: `DiscardPending` clears
+  the ambient stack (`ClearMembershipsHighCardRef` on the M1 surface), so an
+  abandoned builder's stamps die with the frame instead of stamping every
+  later entity (`TestStampDiscardPendingClearsAmbient` pins it); the
+  generated constructor enforces the SD2 lane-hygiene contract (laneless and
+  lane-as-data refusal, pinned in `gen_validation_test.go`); and the
+  end-to-end test also asserts the typed decode reads the stamped row's
+  Identity component intact. Deferred beyond it: membership flavours other
+  than HighCardRef (the entity-level synthetic section was dropped — see
+  SD4).
 - **S3** — a readback artefact for querying by dimension membership; the
   host-only / sampled provenance capture tiers. (SD4 granularity is settled at
   attribute-level; there is no entity-level tier.)
@@ -405,7 +483,10 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
 Proposed. **S1 and S2 are implemented and tested** (round-trips green against
 clickhouse-local): the `DimensionStore` runtime and the provenance instance
 (S1); the M1 ambient-membership primitive, the `ReferenceStamper` seam, and
-ordered flush (S2). The earlier open forks are settled — M1's DML surface is
+ordered flush (S2). An adversarial review pass (2026-07-11) hardened the
+lifecycle, lane-hygiene, failure-semantics and emission edges; being
+pre-acceptance, its outcomes are folded into SD1–SD3 and the slice notes
+in place rather than as dated updates. The earlier open forks are settled — M1's DML surface is
 built, SD4 granularity is fixed at attribute-level (the entity-level synthetic
 section dropped), and SD5 is ordered-flush-by-default with a best-effort toggle.
 Depends on ADR-0111 for the id-generation seam (its `GetId(ctx)` has landed).

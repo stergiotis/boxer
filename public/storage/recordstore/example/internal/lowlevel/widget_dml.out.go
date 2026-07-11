@@ -80,7 +80,7 @@ func CreateSchemaWidgetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntityWidgetTable struct {
 	errs               []error
@@ -174,7 +174,7 @@ var InEntityWidgetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -190,7 +190,7 @@ func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetT
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -205,7 +205,7 @@ func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -221,7 +221,7 @@ func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InE
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityWidgetTable) setLifecycle(lifecycle5 uint8) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -250,6 +250,15 @@ func (inst *InEntityWidgetTable) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntityWidgetTable) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntityWidgetTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -781,6 +790,9 @@ func (inst *InEntityWidgetTableSectionGeoPointInAttr) handleNonScalarSupportColu
 	var _ = l
 }
 func (inst *InEntityWidgetTableSectionGeoPointInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1103,6 +1115,9 @@ func (inst *InEntityWidgetTableSectionSymbolInAttr) handleNonScalarSupportColumn
 	var _ = l
 }
 func (inst *InEntityWidgetTableSectionSymbolInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1453,6 +1468,9 @@ func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) handleNonScalarSupportC
 	inst.homogenousArraySupportFieldBuilder033.Append(uint64(l))
 }
 func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1803,6 +1821,9 @@ func (inst *InEntityWidgetTableSectionU64ArrayInAttr) handleNonScalarSupportColu
 	inst.homogenousArraySupportFieldBuilder022.Append(uint64(l))
 }
 func (inst *InEntityWidgetTableSectionU64ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}

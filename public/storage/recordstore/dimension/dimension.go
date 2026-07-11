@@ -40,6 +40,20 @@ type DescriptorSink[D any] interface {
 type Store[D any] struct {
 	gen  identifier.IdGeneratorI
 	sink DescriptorSink[D]
+	// emitting guards Reference against re-entry: an Emit that finds its way
+	// back into the same Store's Reference — a stamper writing through its
+	// own descriptor store — would otherwise recurse, minting garbage ids
+	// until the bounded stack-capture window makes the keys repeat.
+	emitting bool
+	// retryEmit holds ids whose descriptor Emit failed after the key was
+	// already interned. The generator never reports such a key fresh again,
+	// so without the retry one transient Emit failure would orphan the id
+	// for the generator's lifetime — every later payload row referencing a
+	// descriptor that never gets written. Reference retries the emission on
+	// the next sight of the key. (The cross-restart analogue — a durable
+	// generator whose lease outlives an unflushed descriptor — is ADR-0112
+	// SD3's recorded ADR-0111 integration concern.)
+	retryEmit map[identifier.TaggedId]struct{}
 }
 
 // New wires a Store. gen must be an INTERNALIZING generator (one that dedupes by
@@ -52,25 +66,46 @@ func New[D any](gen identifier.IdGeneratorI, sink DescriptorSink[D]) *Store[D] {
 }
 
 // Reference interns key and returns the surrogate id it maps to. describe is
-// invoked only when the id is newly minted (fresh), so the caller can defer an
-// expensive descriptor construction (e.g. stack symbolication) behind it: a key
-// already seen this run costs one generator lookup and nothing more.
+// invoked only when the descriptor must be emitted — on the first sight of
+// key, or on a retry after a failed emission — so the caller can defer an
+// expensive descriptor construction (e.g. stack symbolication) behind it: a
+// key already seen and emitted costs one generator lookup and nothing more.
+//
+// A re-entrant call — Emit ending up back in this Store's Reference — errors
+// instead of recursing.
 func (inst *Store[D]) Reference(ctx context.Context, key []byte, describe func() D) (id identifier.TaggedId, err error) {
+	if inst.emitting {
+		err = eh.Errorf("re-entrant dimension Reference: a stamper must not write through its own descriptor store")
+		return
+	}
 	id, fresh, err := inst.gen.GetId(ctx, key)
 	if err != nil {
 		err = eh.Errorf("intern dimension key: %w", err)
 		return
 	}
-	if fresh {
-		if err = inst.sink.Emit(ctx, uint64(id), describe()); err != nil {
-			err = eh.Errorf("emit dimension descriptor %d: %w", uint64(id), err)
+	if !fresh {
+		if _, retry := inst.retryEmit[id]; !retry {
+			return
 		}
 	}
+	inst.emitting = true
+	defer func() { inst.emitting = false }()
+	if err = inst.sink.Emit(ctx, uint64(id), describe()); err != nil {
+		err = eh.Errorf("emit dimension descriptor %d: %w", uint64(id), err)
+		if inst.retryEmit == nil {
+			inst.retryEmit = make(map[identifier.TaggedId]struct{}, 1)
+		}
+		inst.retryEmit[id] = struct{}{}
+		return
+	}
+	delete(inst.retryEmit, id)
 	return
 }
 
-// Resolve returns the descriptor an id was minted for. Reads see only flushed
-// descriptors (the sink's store contract).
+// Resolve returns the descriptor an id was minted for. Visibility is the
+// sink's contract: the provenance sink's write-through cache resolves a
+// locally emitted descriptor immediately, while another process sees it only
+// once flushed.
 func (inst *Store[D]) Resolve(ctx context.Context, id identifier.TaggedId) (d D, found bool, err error) {
 	return inst.sink.Resolve(ctx, uint64(id))
 }

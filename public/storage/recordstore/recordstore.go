@@ -35,6 +35,10 @@ import (
 // fact. A composite over several dimensions satisfies the same interface by
 // yielding the concatenation. Stampers registered on a store must not write to
 // that same store, or interning a fact would recurse.
+//
+// Failure is fail-fast by decision (ADR-0112 SD2): an error yielded by Current
+// is recorded on the open entity and fails its Commit — a store configured to
+// stamp does not write unattributed rows silently.
 type ReferenceStamper interface {
 	Current(ctx context.Context) iter.Seq2[identifier.TaggedId, error]
 	// Flush makes the descriptor facts the stamped ids reference durable. A

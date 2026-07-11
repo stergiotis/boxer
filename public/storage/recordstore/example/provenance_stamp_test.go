@@ -54,6 +54,14 @@ func TestProvenanceStampingEndToEnd(t *testing.T) {
 	// store before its own insert (ADR-0112 SD5), so the descriptor fact is
 	// already durable and the Resolve below finds it.
 
+	// The typed decode is unaffected by the stamp: the Identity component
+	// round-trips intact, because the decode never reads the stamp's lane.
+	ent, found, err := dev.Latest(ctx, 1)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.True(t, ent.Identity.Has)
+	require.Equal(t, "live", ent.Identity.Val.Status)
+
 	// The stored symbol attribute carries exactly one HighCardRef membership: the stamp.
 	high := storedSymbolHighCardRef(t, ctx, exec, 1)
 	require.Len(t, high, 1)

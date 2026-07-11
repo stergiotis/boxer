@@ -39,7 +39,7 @@ func CreateSchemaProvenanceTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntityProvenanceTable struct {
 	errs               []error
@@ -107,7 +107,7 @@ var InEntityProvenanceTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityProvenanceTable) setId(id0 uint64) *InEntityProvenanceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -122,7 +122,7 @@ func (inst *InEntityProvenanceTable) setId(id0 uint64) *InEntityProvenanceTable 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityProvenanceTable) setTimestamp(ts1 time.Time) *InEntityProvenanceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -151,6 +151,15 @@ func (inst *InEntityProvenanceTable) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntityProvenanceTable) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntityProvenanceTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)

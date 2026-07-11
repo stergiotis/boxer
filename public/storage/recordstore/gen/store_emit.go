@@ -41,6 +41,19 @@ type emitter struct {
 	// (and the typed Add/Scan/component-decode surface) is only reached when
 	// a component exists — a bare backbone store binds none.
 	hasComps bool
+	// stampLane / stampLaneAsData drive the New<Store> stamping guards
+	// (ADR-0112 SD2 lane hygiene). stampLane: some section declares a
+	// HighCardRef membership column, so ambient stamps have somewhere to
+	// land — without it, configured Stampers would record nothing,
+	// silently. stampLaneAsData: a component reads that lane back as data
+	// (a tuple `@membership` field on the highCardRef channel collects the
+	// whole lane), so a stamp would decode as a spurious ref id. Kind
+	// memberships riding the lane are fine — their decode matches known
+	// ids and skips the rest. Today the ReadRowSupported gate refuses
+	// tuple components before stampLaneAsData can matter; the guard is the
+	// second wall for when that ADR-0100 deferral lifts.
+	stampLane       bool
+	stampLaneAsData bool
 }
 
 // plainRole classifies one plain (backbone) column. The three roles drive
@@ -207,7 +220,26 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		lifecycle = envelopeCol{physical: model.lifecycle.physical, goType: model.lifecycle.goType}
 	}
 
-	em := emitter{Input: inst, keyGoType: model.key.goType, model: model, hasComps: len(comps) > 0}
+	stampLane := false
+	for _, sec := range inst.Table.TaggedValuesSections {
+		if sec.MembershipSpec.HasHighCardRefOnly() {
+			stampLane = true
+			break
+		}
+	}
+	stampLaneAsData := false
+	for _, plan := range plans {
+		for i := range plan.Fields {
+			for _, tm := range plan.Fields[i].TupleMemberships {
+				if tm.Channel == mappingplan.MembershipChannelHighCardRef {
+					stampLaneAsData = true
+				}
+			}
+		}
+	}
+
+	em := emitter{Input: inst, keyGoType: model.key.goType, model: model, hasComps: len(comps) > 0,
+		stampLane: stampLane, stampLaneAsData: stampLaneAsData}
 	var sb strings.Builder
 	em.emitStoreHeader(&sb, key, order, lifecycle, stateView)
 	em.emitEnvelopeStruct(&sb)
@@ -670,6 +702,9 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t// surrogate ids stamped as additive HighCardRef memberships onto the")
 	p("\t// entity's attributes. Empty (the default) leaves the store unstamped")
 	p("\t// and behaviour-identical. A stamper must not write to this store.")
+	p("\t// The schema must carry the HighCardRef membership lane, and no")
+	p("\t// component may read that lane back as data — the constructor")
+	p("\t// panics otherwise (ADR-0112 SD2 lane hygiene).")
 	p("\tStampers []recordstore.ReferenceStamper")
 	p("\t// BestEffortStampFlush relaxes the ADR-0112 SD5 ordered flush: when")
 	p("\t// true, Flush does NOT flush the stampers' dimension stores before its")
@@ -709,7 +744,24 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("}")
 	p("")
 	p("// New%s wires the store. A nil alloc selects the Go allocator.", inst.storeType())
+	if !inst.stampLane || inst.stampLaneAsData {
+		p("// Configuring Stampers panics: see the field's doc — this schema")
+		p("// cannot carry stamps soundly.")
+	}
 	p("func New%s(exec recordstore.ExecutorI, alloc memory.Allocator, cfg %sStoreConfig) (inst *%s) {", inst.storeType(), inst.StoreName, inst.storeType())
+	// Lane-hygiene guards (ADR-0112 SD2): a wiring bug this static fails
+	// at construction, not silently at write or corruptly at read. Emitted
+	// only for schemas that cannot carry stamps, so a stampable store pays
+	// nothing.
+	if !inst.stampLane {
+		p("\tif len(cfg.Stampers) > 0 {")
+		p("\t\tpanic(\"%s: Stampers configured, but no section of the %s schema declares a HighCardRef membership column — stamps would be dropped silently; declare the channel (AddSectionMembership) or drop the stampers\")", inst.storeType(), inst.TableName)
+		p("\t}")
+	} else if inst.stampLaneAsData {
+		p("\tif len(cfg.Stampers) > 0 {")
+		p("\t\tpanic(\"%s: Stampers configured, but a component reads the HighCardRef membership lane back as data (a tuple @membership field on the highCardRef channel) — a stamp would decode as a spurious ref id; move the ref memberships to another lane or drop the stampers\")", inst.storeType())
+		p("\t}")
+	}
 	p("\tif alloc == nil {")
 	p("\t\talloc = memory.NewGoAllocator()")
 	p("\t}")
@@ -1035,8 +1087,12 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("// retained by a failed Flush, rows still in the DML builder, and an")
 	p("// open (uncommitted) entity frame. It gives a failed Flush \"never")
 	p("// happened\" semantics — ClickHouse state is the truth afterwards.")
+	p("// Ambient stamps are cleared with the frame they were pushed for —")
+	p("// including any pushed through Raw() — so an abandoned builder cannot")
+	p("// leak its stamps onto later entities.")
 	p("func (inst *%s) DiscardPending() {", inst.storeType())
 	p("\t_ = %s // no-op error when no frame is open", inst.ctrlCall("inst.dml", "RollbackEntity"))
+	p("\tinst.dml.ClearMembershipsHighCardRef() // an abandoned Begin's stamps must not outlive its frame")
 	p("\tif records, err := %s; err == nil {", inst.ctrlCall("inst.dml", "TransferRecords", "nil"))
 	p("\t\tfor _, rec := range records {")
 	p("\t\t\trec.Release()")

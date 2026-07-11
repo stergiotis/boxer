@@ -77,7 +77,7 @@ func CreateSchemaDeviceTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntityDeviceTable struct {
 	errs               []error
@@ -156,7 +156,7 @@ var InEntityDeviceTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityDeviceTable) setId(id0 uint64) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -171,7 +171,7 @@ func (inst *InEntityDeviceTable) setId(id0 uint64) *InEntityDeviceTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityDeviceTable) setTimestamp(ts1 time.Time) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -186,7 +186,7 @@ func (inst *InEntityDeviceTable) setTimestamp(ts1 time.Time) *InEntityDeviceTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityDeviceTable) setLifecycle(lifecycle2 uint8) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -215,6 +215,15 @@ func (inst *InEntityDeviceTable) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntityDeviceTable) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntityDeviceTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -728,6 +737,9 @@ func (inst *InEntityDeviceTableSectionGeoPointInAttr) handleNonScalarSupportColu
 	var _ = l
 }
 func (inst *InEntityDeviceTableSectionGeoPointInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1050,6 +1062,9 @@ func (inst *InEntityDeviceTableSectionSymbolInAttr) handleNonScalarSupportColumn
 	var _ = l
 }
 func (inst *InEntityDeviceTableSectionSymbolInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1400,6 +1415,9 @@ func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) handleNonScalarSupportC
 	inst.homogenousArraySupportFieldBuilder030.Append(uint64(l))
 }
 func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1750,6 +1768,9 @@ func (inst *InEntityDeviceTableSectionU64ArrayInAttr) handleNonScalarSupportColu
 	inst.homogenousArraySupportFieldBuilder019.Append(uint64(l))
 }
 func (inst *InEntityDeviceTableSectionU64ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}

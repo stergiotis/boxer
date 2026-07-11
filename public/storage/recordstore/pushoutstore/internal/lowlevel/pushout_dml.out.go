@@ -107,7 +107,7 @@ func CreateSchemaPushoutTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntityPushoutTable struct {
 	errs               []error
@@ -195,7 +195,7 @@ var InEntityPushoutTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -210,7 +210,7 @@ func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -225,7 +225,7 @@ func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityPushoutTable) setLifecycle(lifecycle2 uint8) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -254,6 +254,15 @@ func (inst *InEntityPushoutTable) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntityPushoutTable) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntityPushoutTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -799,6 +808,9 @@ func (inst *InEntityPushoutTableSectionEnvBlobInAttr) handleNonScalarSupportColu
 	var _ = l
 }
 func (inst *InEntityPushoutTableSectionEnvBlobInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1121,6 +1133,9 @@ func (inst *InEntityPushoutTableSectionLogHashInAttr) handleNonScalarSupportColu
 	var _ = l
 }
 func (inst *InEntityPushoutTableSectionLogHashInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1471,6 +1486,9 @@ func (inst *InEntityPushoutTableSectionRetHashInAttr) handleNonScalarSupportColu
 	inst.homogenousArraySupportFieldBuilder050.Append(uint64(l))
 }
 func (inst *InEntityPushoutTableSectionRetHashInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1821,6 +1839,9 @@ func (inst *InEntityPushoutTableSectionRetIndexInAttr) handleNonScalarSupportCol
 	inst.homogenousArraySupportFieldBuilder061.Append(uint64(l))
 }
 func (inst *InEntityPushoutTableSectionRetIndexInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2171,6 +2192,9 @@ func (inst *InEntityPushoutTableSectionRetTimeInAttr) handleNonScalarSupportColu
 	inst.homogenousArraySupportFieldBuilder072.Append(uint64(l))
 }
 func (inst *InEntityPushoutTableSectionRetTimeInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2521,6 +2545,9 @@ func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) handleNonScalarSupport
 	inst.homogenousArraySupportFieldBuilder039.Append(uint64(l))
 }
 func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2843,6 +2870,9 @@ func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) handleNonScalarSupport
 	var _ = l
 }
 func (inst *InEntityPushoutTableSectionSnapGraggleInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}

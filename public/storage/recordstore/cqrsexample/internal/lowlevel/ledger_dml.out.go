@@ -116,7 +116,7 @@ func CreateSchemaLedgerTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntityLedgerTable struct {
 	errs               []error
@@ -202,7 +202,7 @@ var InEntityLedgerTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -217,7 +217,7 @@ func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityLedgerTable) setTimestamp(ts1 time.Time) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -246,6 +246,15 @@ func (inst *InEntityLedgerTable) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntityLedgerTable) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntityLedgerTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -802,6 +811,9 @@ func (inst *InEntityLedgerTableSectionAcctClosedInAttr) handleNonScalarSupportCo
 	var _ = l
 }
 func (inst *InEntityLedgerTableSectionAcctClosedInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1152,6 +1164,9 @@ func (inst *InEntityLedgerTableSectionAcctDepositInAttr) handleNonScalarSupportC
 	inst.homogenousArraySupportFieldBuilder018.Append(uint64(l))
 }
 func (inst *InEntityLedgerTableSectionAcctDepositInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1474,6 +1489,9 @@ func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) handleNonScalarSupportCol
 	var _ = l
 }
 func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1824,6 +1842,9 @@ func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) handleNonScalarSupport
 	inst.homogenousArraySupportFieldBuilder029.Append(uint64(l))
 }
 func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2174,6 +2195,9 @@ func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) handleNonScalarSupportColu
 	inst.homogenousArraySupportFieldBuilder081.Append(uint64(l))
 }
 func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2524,6 +2548,9 @@ func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) handleNonScalarSupportC
 	inst.homogenousArraySupportFieldBuilder060.Append(uint64(l))
 }
 func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2846,6 +2873,9 @@ func (inst *InEntityLedgerTableSectionSnapClosedInAttr) handleNonScalarSupportCo
 	var _ = l
 }
 func (inst *InEntityLedgerTableSectionSnapClosedInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -3168,6 +3198,9 @@ func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) handleNonScalarSupportCol
 	var _ = l
 }
 func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}

@@ -23,7 +23,10 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore/dimension"
 )
 
-// maxDepth bounds the captured call stack.
+// maxDepth bounds the captured call stack — the innermost 64 frames. Two call
+// paths identical in that window but diverging below it intern to one id and
+// share a descriptor; deep-recursion provenance is attributed to the nearest
+// 64 frames.
 const maxDepth = 64
 
 // Recorder captures provenance and interns it through a dimension.Store.
@@ -111,8 +114,9 @@ func (inst *Recorder) Flush(ctx context.Context) (int, error) { return inst.dim.
 // Caveat (S1): raw pcs are stable across restarts only for a fixed-text
 // (non-PIE) build of one binary; a module-relative or symbol-derived key is the
 // ASLR-robust / cross-build refinement (deferred, ADR-0112). A production build
-// would encode via leeway/stopa/naturalkey; this length-prefixed concat keeps
-// the standalone slice dependency-light.
+// would encode via leeway/stopa/naturalkey; this NUL-separated concat (host
+// cannot contain NUL; pcs are fixed-width) keeps the standalone slice
+// dependency-light.
 func (inst *Recorder) key(pcs []uintptr) []byte {
 	buf := make([]byte, 0, len(inst.host)+1+len(pcs)*8)
 	buf = append(buf, inst.host...)
@@ -147,20 +151,34 @@ func symbolicate(pcs []uintptr) (frames []string) {
 // id — so a single non-zero Order suffices for Latest.
 var descriptorOrder = recordstore.SeqTs(1)
 
-type storeSink struct{ st *ProvenanceStore }
+type storeSink struct {
+	st *ProvenanceStore
+	// cache is the store's attached read-through view (ADR-0112 SD1): Resolve
+	// is a cached point lookup — the hot path for readers, which resolve few
+	// distinct ids across many stamped attributes. Write-through means a
+	// locally interned descriptor resolves immediately, before Flush; other
+	// processes see it once durable.
+	cache *ProvenanceCache[struct{}]
+}
 
-// NewStoreSink adapts the generated ProvenanceStore to dimension.DescriptorSink.
-func NewStoreSink(st *ProvenanceStore) dimension.DescriptorSink[Provenance] { return storeSink{st: st} }
+// NewStoreSink adapts the generated ProvenanceStore to dimension.DescriptorSink,
+// attaching a read-through cache view for Resolve.
+func NewStoreSink(st *ProvenanceStore) dimension.DescriptorSink[Provenance] {
+	return storeSink{st: st, cache: NewProvenanceCache[struct{}](st, ProvenanceCacheConfig{})}
+}
 
 func (inst storeSink) Emit(_ context.Context, id uint64, d Provenance) error {
 	// Begin(id, ts): the descriptor schema has no pass-through envelope and no
-	// lifecycle. The id is the key; d.ID is unused on write.
+	// lifecycle. The id is the key; it is mirrored into d.ID so the cache's
+	// write-through twin matches the decoded read (which fills ID from the
+	// plain column).
+	d.ID = id
 	return inst.st.Begin(id, descriptorOrder).AddProvenance(d).Commit()
 }
 
 func (inst storeSink) Resolve(ctx context.Context, id uint64) (d Provenance, found bool, err error) {
 	var ent *ProvenanceEntity
-	ent, found, err = inst.st.Latest(ctx, id)
+	ent, found, err = inst.cache.GetFetch(ctx, id)
 	if err != nil || !found {
 		return
 	}

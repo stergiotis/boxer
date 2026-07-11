@@ -453,3 +453,62 @@ type KindA struct {
 	require.Contains(t, string(store), ".BeginEntity()")
 	require.NotContains(t, string(store), "InEntityValcheckTableBeginEntity(")
 }
+
+// TestGenerateLanelessSchemaRefusesStampers: a schema without a HighCardRef
+// membership column has nowhere for ambient stamps to land, so configured
+// Stampers would record nothing, silently — the emitted constructor must
+// refuse them instead (ADR-0112 SD2 lane hygiene).
+func TestGenerateLanelessSchemaRefusesStampers(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "kind_a.go", `package tmp
+
+type KindA struct {
+	_  struct{} `+"`kind:\"kindA\"`"+`
+	ID uint64   `+"`lw:\",id\"`"+`
+	A  string   `+"`lw:\"fieldA,laneless\"`"+`
+}
+`)
+	// validationManipulator declares LowCardRef-only sections: no stamp lane.
+	outDir, err := generateIntoDir(t, validationManipulator(t, "laneless"), a)
+	require.NoError(t, err)
+	store := readStore(t, outDir)
+	require.Contains(t, store, "no section of the valcheck schema declares a HighCardRef membership column")
+}
+
+// TestGenerateStampLaneAsDataComponentRefused: a tuple `@membership` field on
+// the highCardRef channel reads the whole HighCardRef lane back as data
+// (ADR-0109), so an ambient stamp in that lane would decode as a spurious
+// ref id (ADR-0112 SD2 lane hygiene). Two walls stand in front of that:
+// today the ReadRow gate refuses any dynamic-membership tuple component
+// outright (ADR-0100 Deferred) — the refusal this test pins — and should
+// that deferral ever lift, the emitter's stampLaneAsData guard makes the
+// constructor panic on configured Stampers instead of letting stamps decode
+// as refs. Kind memberships riding the lane are id-matched on read and stay
+// allowed.
+func TestGenerateStampLaneAsDataComponentRefused(t *testing.T) {
+	dir := t.TempDir()
+	a := writeDTO(t, dir, "ref_doc.go", `package tmp
+
+type RefTag struct {
+	Ancestors []uint64 `+"`lw:\"@membership,highCardRef\"`"+`
+	Value     string   `+"`lw:\"reftags\"`"+`
+}
+
+type RefDoc struct {
+	_    struct{} `+"`kind:\"refDoc\"`"+`
+	ID   uint64   `+"`lw:\",id\"`"+`
+	Tags []RefTag `+"`lw:\"reftags\"`"+`
+}
+`)
+	manip, err := common.NewTableManipulator()
+	require.NoError(t, err)
+	manip.SetTableName("valcheck")
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.U64)
+	manip.PlainValueColumn(common.PlainItemTypeEntityTimestamp, "ts", ctabb.Z64)
+	sec := manip.TaggedValueSection(naming.MustBeValidStylableName("reftags")).
+		SectionStreamingGroup("data").
+		AddSectionMembership(common.MembershipSpecLowCardRef, common.MembershipSpecHighCardRef)
+	sec.TaggedValueColumn("value", ctabb.S)
+	err = generateInto(t, manip, a)
+	require.ErrorContains(t, err, "dynamic-membership tuple")
+}

@@ -79,6 +79,9 @@ type ProvenanceStoreConfig struct {
 	// surrogate ids stamped as additive HighCardRef memberships onto the
 	// entity's attributes. Empty (the default) leaves the store unstamped
 	// and behaviour-identical. A stamper must not write to this store.
+	// The schema must carry the HighCardRef membership lane, and no
+	// component may read that lane back as data — the constructor
+	// panics otherwise (ADR-0112 SD2 lane hygiene).
 	Stampers []recordstore.ReferenceStamper
 	// BestEffortStampFlush relaxes the ADR-0112 SD5 ordered flush: when
 	// true, Flush does NOT flush the stampers' dimension stores before its
@@ -118,7 +121,12 @@ type ProvenanceStore struct {
 }
 
 // NewProvenanceStore wires the store. A nil alloc selects the Go allocator.
+// Configuring Stampers panics: see the field's doc — this schema
+// cannot carry stamps soundly.
 func NewProvenanceStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg ProvenanceStoreConfig) (inst *ProvenanceStore) {
+	if len(cfg.Stampers) > 0 {
+		panic("ProvenanceStore: Stampers configured, but no section of the provenance schema declares a HighCardRef membership column — stamps would be dropped silently; declare the channel (AddSectionMembership) or drop the stampers")
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
@@ -381,8 +389,12 @@ func (inst *ProvenanceStore) Flush(ctx context.Context) (n int, err error) {
 // retained by a failed Flush, rows still in the DML builder, and an
 // open (uncommitted) entity frame. It gives a failed Flush "never
 // happened" semantics — ClickHouse state is the truth afterwards.
+// Ambient stamps are cleared with the frame they were pushed for —
+// including any pushed through Raw() — so an abandoned builder cannot
+// leak its stamps onto later entities.
 func (inst *ProvenanceStore) DiscardPending() {
 	_ = lowlevel.InEntityProvenanceTableRollbackEntity(inst.dml) // no-op error when no frame is open
+	inst.dml.ClearMembershipsHighCardRef()                       // an abandoned Begin's stamps must not outlive its frame
 	if records, err := lowlevel.InEntityProvenanceTableTransferRecords(inst.dml, nil); err == nil {
 		for _, rec := range records {
 			rec.Release()
