@@ -698,6 +698,75 @@ six commits. The corrections that amend this ADR's record:
   strings — grammar1 does not parse them, and the nanopass discipline says fix
   the grammar first, not the consumer.
 
+### 2026-07-11 — Second adversarial review: split-contract edge fidelity, SET classification, loading provenance, lane corners (+ SD9 correction)
+
+A second adversarial review confirmed seven defects, all in the seams this ADR
+introduced; each is fixed with a regression test. The corrections that amend
+this ADR's record:
+
+- **Fusing a CTE whose body opens its own `WITH` no longer emits invalid
+  SQL (3d).** `fuseNode` prepended a second `WITH` clause when the observed
+  node's body had one (a nested CTE or scalar alias) — `WITH a AS (…) WITH x
+  AS (…) SELECT …` — which the observe-in-panels gesture then executed. The
+  transitive dep definitions now *continue* the body's own WITH list
+  (comma-merged, deps first — the body's items may reference them, never the
+  reverse). Whether a body opens a WITH is read off the token stream at split
+  time, not the text.
+- **Data edges are derived by resolution, not name matching (3a/3e).** Two
+  fidelity gaps in the recovered graph the Graph view exists to make
+  trustworthy: the sink's edges came from the root scope only, so a CTE
+  referenced solely inside a derived table or a later UNION member drew no
+  edge; and a CTE body's edges name-matched every CTE-flagged reference, so a
+  body's *nested* CTE surfaced as a phantom edge to a nonexistent node — and a
+  nested name shadowing a lifted one would have fused the wrong definition.
+  Each reference is now resolved in the scope where it occurs (`ResolveCTE`)
+  and contributes an edge only when it binds to a lifted top-level definition;
+  the derivation descends FROM/expression subqueries and the node's own nested
+  CTE bodies, but not sibling lifted bodies (those references are the sibling
+  nodes' own edges).
+- **SET classification is grammar-based.** The splitter classified prelude
+  SETs with a textual prefix check while the client's `ExtractParams`
+  classifies by grammar — the two disagreed on comment-prefixed or
+  newline-broken SETs, and the splitter falsely rejected such buffers as
+  multi-statement (execution stayed correct via the raw-buffer fallback, but
+  the Graph tab mis-diagnosed the reason and the graph was lost). The splitter
+  now parses the fragment and looks for a SET statement. One grammar fact
+  shapes the probe: grammar1 accepts a SET only as the prelude of a following
+  statement (a lone `SET …;` does not parse), so the fragment is completed
+  with `;\nSELECT 1` — only a genuine single SET parses in that shape.
+- **The result tabs' loading gate reads the ACTIVE snapshot (3d).** The
+  spinner was gated on the `main` lane, but an observed intermediate loads on
+  the intermediate lane — its first fetch rendered the "0 rows" empty-state
+  instead of the spinner. The tabs now receive the loading flag from the same
+  `activeSnapshot` the frame renders.
+- **The picker load is a render-thread handoff.** `loadFromPicker` assigned
+  the editor buffer from its goroutine while the render loop reads and writes
+  it unlocked — a data race. The goroutine now stashes the loaded buffer under
+  the pick mutex and `Render` consumes it once per frame; the editor buffer is
+  render-thread-only.
+- **SD9 correction — recursive CTEs.** SD9 states ClickHouse recursive CTEs
+  "stay inside a single node and are not a graph cycle". In practice grammar1
+  does not parse `WITH RECURSIVE`, so such a buffer fails the split entirely
+  and takes the raw-buffer fallback (the server executes it verbatim; there is
+  no graph) — it never reaches the cycle check. The acyclicity guard stays for
+  contract honesty; the fix belongs in grammar1 (the nanopass discipline,
+  ADR-0002), recorded as a trigger alongside the dollar-quoted-string gap.
+- **The lane honours minimality on flip-back (SD4/SD5).** A demand returning
+  to the SQL the memo already serves — while a superseding run is in flight
+  (A→B→A: pan away and back on the Map, or a bands-extent flip) — re-executed
+  A although its memo was current. The lane now cancels the in-flight run and
+  serves the memo; a forced re-fetch still re-executes (forget clears the
+  served SQL, so a force never takes this path).
+- **`nodeLane` gained the closed guard `QueryStore` already had.** A demand
+  landing after `close` (a straggler frame during Unmount) started a query
+  nothing would consume; closed lanes now drop demands and forgets.
+- **Law-coverage note.** The slice-1 memoized, revision-based runtime
+  (`queryGraph.demand`/`setSignal`/`beginFrame`) remains dormant on the live
+  path: the law tests prove minimality/demand/early-cutoff there, while the
+  live path's coverage is the lane tests plus the per-observer fingerprint
+  guards. The two lane fixes above are those laws enforced at the lane, where
+  the live path actually runs.
+
 ## References
 
 Internal:
