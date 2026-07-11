@@ -2059,6 +2059,9 @@ pub struct FffiDockTabViewer<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write>
     pub ctx: &'c egui::Context,
     pub bodies: std::collections::HashMap<u64, Vec<u8>>,
     pub titles: std::collections::HashMap<u64, String>,
+    /// Tab ids whose body is NOT wrapped in a live ScrollArea (see
+    /// `scroll_bars`). Populated from the Go-side `noScrollTabIds` arg.
+    pub no_scroll: std::collections::HashSet<u64>,
 }
 
 impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
@@ -2083,6 +2086,26 @@ impl<'a, 'b, 'c, R: std::io::BufRead, W: std::io::Write> egui_dock::TabViewer
 
     fn closeable(&mut self, _tab: &mut u64) -> bool {
         false
+    }
+
+    /// egui_dock wraps every tab body in `ScrollArea::new(scroll_bars(tab))`
+    /// (leaf.rs, default `[true, true]`). For a tab whose body owns its
+    /// pointer/scroll interaction — e.g. a walkers map, which reads wheel and
+    /// zoom input globally without consuming it — that wrapper reacts to the
+    /// same wheel events as the widget, so one gesture scrolls the panel AND
+    /// pans the map (the play Map-tab zoom flicker). Go marks such tabs via
+    /// `noScrollTabIds`; their overflow clips instead of scrolling.
+    ///
+    /// The walkers half (read-without-consume) is reported upstream as
+    /// https://github.com/podusowski/walkers/issues/544 — once a walkers that
+    /// consumes the input it acts on lands, map-hosting tabs can drop the
+    /// marker and return to default scroll bars.
+    fn scroll_bars(&self, tab: &Self::Tab) -> [bool; 2] {
+        if self.no_scroll.contains(tab) {
+            [false, false]
+        } else {
+            [true, true]
+        }
     }
 }
 
@@ -4667,6 +4690,8 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                 let mut tab_titles = self.io.read_plain_sh()?;
                 #[allow(unused_mut)]
                 let mut initial_layout = self.io.read_plain_u8h()?;
+                #[allow(unused_mut)]
+                let mut no_scroll_tab_ids = self.io.read_plain_u64h()?;
                 // construct
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
@@ -4682,6 +4707,13 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     for (id, t) in tab_ids.iter().copied().zip(tab_titles.into_iter()) {
                         titles.insert(id, t);
                     }
+
+                    // Tabs whose body must not be wrapped in a live ScrollArea (both axes
+                    // off — overflow clips). Viewport-style bodies (walkers map, canvases)
+                    // read wheel/zoom input globally without consuming it, so the default
+                    // per-tab ScrollArea would scroll the panel in the same gesture that
+                    // pans/zooms the widget content.
+                    let no_scroll: HashSet<u64> = no_scroll_tab_ids.iter().copied().collect();
 
                     // Take DockState out of the map so the subsequent TabViewer can hold
                     // &mut self.interpreter without aliasing the HashMap entry. When
@@ -4733,6 +4765,7 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                             ctx: &ctx_cloned,
                             bodies,
                             titles,
+                            no_scroll,
                         };
                         egui_dock::DockArea::new(&mut dock_state)
                             .show_inside(child_ui, &mut viewer);

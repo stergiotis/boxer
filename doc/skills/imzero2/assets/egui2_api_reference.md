@@ -35,7 +35,7 @@ status: draft
 | CopyTextToClipboard | Procedural | No | 1 | 0 | - | - |
 | DatePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
 | DateTimePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
-| DockAreaRaw | BuilderFactory | Yes | 3 | 0 | 0 | Immediate |
+| DockAreaRaw | BuilderFactory | Yes | 4 | 0 | 0 | Immediate |
 | DragValueF64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
 | DragValueI64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
 | DragValueU64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
@@ -529,6 +529,7 @@ DateTimePickerButton
 | tabIds | plain | u64h |
 | tabTitles | plain | sh |
 | initialLayout | plain | u8h |
+| noScrollTabIds | plain | u64h |
 
 #### Deferred Block Maps
 

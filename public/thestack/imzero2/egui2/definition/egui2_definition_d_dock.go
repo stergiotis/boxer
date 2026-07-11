@@ -8,6 +8,9 @@ package definition
 //   - Identity id    — names the dock area; layout state is keyed by this.
 //   - PlainArg tabIds:    []u64   — Go-assigned stable tab identifiers.
 //   - PlainArg tabTitles: []string — one title per tab id (same length).
+//   - PlainArg initialLayout: []u8 — encoded first-frame split preset.
+//   - PlainArg noScrollTabIds: []u64 — tabs whose body ScrollArea is
+//     disabled on both axes (body overflow clips instead of scrolling).
 //   - DeferredBlockMap("tabBody", u64) — one opcode body per tab id.
 //
 // State ownership:
@@ -47,6 +50,7 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 			PlainArg("tabIds", ctabb.U64h).
 			PlainArg("tabTitles", ctabb.Sh).
 			PlainArg("initialLayout", ctabb.U8h).
+			PlainArg("noScrollTabIds", ctabb.U64h).
 			Build()).
 		WithDeferredBlockMap("tabBody", ctabb.U64).
 		WithSettingImmediate(true).
@@ -63,6 +67,13 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 		for (id, t) in tab_ids.iter().copied().zip(tab_titles.into_iter()) {
 			titles.insert(id, t);
 		}
+
+		// Tabs whose body must not be wrapped in a live ScrollArea (both axes
+		// off — overflow clips). Viewport-style bodies (walkers map, canvases)
+		// read wheel/zoom input globally without consuming it, so the default
+		// per-tab ScrollArea would scroll the panel in the same gesture that
+		// pans/zooms the widget content.
+		let no_scroll: HashSet<u64> = no_scroll_tab_ids.iter().copied().collect();
 
 		// Take DockState out of the map so the subsequent TabViewer can hold
 		// &mut self.interpreter without aliasing the HashMap entry. When
@@ -112,6 +123,7 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 				ctx: &ctx_cloned,
 				bodies,
 				titles,
+				no_scroll,
 			};
 			egui_dock::DockArea::new(&mut dock_state).show_inside(child_ui, &mut viewer);
 		});

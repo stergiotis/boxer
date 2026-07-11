@@ -208,14 +208,15 @@ type dockSplitS struct {
 // changes survive. Calling neither InitRoot nor Split keeps the
 // historical "everything in one leaf" default.
 type DockAreaFluid struct {
-	idGen      WidgetIdCreatorI
-	derivedId  uint64
-	ids        []uint64
-	titles     []string
-	bodies     [][]byte
-	rootTabs   []uint64
-	splits     []dockSplitS
-	nextLeafId DockLeafIdT
+	idGen        WidgetIdCreatorI
+	derivedId    uint64
+	ids          []uint64
+	titles       []string
+	bodies       [][]byte
+	noScrollTabs []uint64
+	rootTabs     []uint64
+	splits       []dockSplitS
+	nextLeafId   DockLeafIdT
 }
 
 // DockArea opens an iter-style dock area scope.
@@ -274,6 +275,23 @@ func (inst *DockAreaFluid) Tab(tabId uint64, title string) iter.Seq[functional.N
 		}()
 		yield(functional.NilIteratorValue)
 	}
+}
+
+// TabNoScroll declares a tab exactly like Tab, but with the dock's default
+// per-tab body ScrollArea disabled on both axes. Use it when the tab body
+// owns its pointer/scroll interaction (a map viewport, a canvas): egui
+// widgets read wheel input globally, so the wrapping ScrollArea otherwise
+// reacts to the same events the widget consumes for pan/zoom — one gesture
+// then scrolls the panel AND moves the widget content (the play Map-tab
+// zoom flicker). Content overflowing a no-scroll tab is clipped, not
+// scrollable — size the body to the leaf.
+//
+// The walkers read-without-consume half is reported upstream as
+// https://github.com/podusowski/walkers/issues/544; when a consuming
+// walkers lands, map-hosting tabs can return to plain Tab.
+func (inst *DockAreaFluid) TabNoScroll(tabId uint64, title string) iter.Seq[functional.NilIteratorValueType] {
+	inst.noScrollTabs = append(inst.noScrollTabs, tabId)
+	return inst.Tab(tabId, title)
 }
 
 // InitRoot declares the tabs that live in the root leaf of the initial
@@ -359,7 +377,14 @@ func (inst *DockAreaFluid) encodeInitialLayout() (out []byte) {
 // forwarding to the raw .Send(). Called by the DockArea iter's
 // deferred cleanup — never called directly by users.
 func (inst *DockAreaFluid) send() {
-	d := DockAreaRaw(AbsoluteWidgetId(inst.derivedId), inst.ids, inst.titles, inst.encodeInitialLayout())
+	noScroll := inst.noScrollTabs
+	if noScroll == nil {
+		// nil wire-encodes as WriteNilSlice (0xFFFFFFFF length), which the
+		// Rust u64h reader would misparse — same hazard encodeInitialLayout
+		// documents for the u8 slice. Always send a real (empty) slice.
+		noScroll = []uint64{}
+	}
+	d := DockAreaRaw(AbsoluteWidgetId(inst.derivedId), inst.ids, inst.titles, inst.encodeInitialLayout(), noScroll)
 	fffi := typed.GetCurrentFffiCapture()
 	for i, id := range inst.ids {
 		d.BeginTabBody(id)
