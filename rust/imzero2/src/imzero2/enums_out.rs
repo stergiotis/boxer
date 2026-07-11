@@ -1472,14 +1472,15 @@ pub enum WalkersMapBuilderMethodId {
     Build = 0,
     Width = 1,
     Height = 2,
-    SetZoom = 3,
-    CenterAt = 4,
-    ZoomGesture = 5,
-    Panning = 6,
-    TileUrl = 7,
-    TileAttribution = 8,
-    TileMaxZoom = 9,
-    TileSize = 10,
+    FillAvailable = 3,
+    SetZoom = 4,
+    CenterAt = 5,
+    ZoomGesture = 6,
+    Panning = 7,
+    TileUrl = 8,
+    TileAttribution = 9,
+    TileMaxZoom = 10,
+    TileSize = 11,
 }
 
 #[allow(dead_code)]
