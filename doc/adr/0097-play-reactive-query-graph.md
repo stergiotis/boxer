@@ -944,6 +944,44 @@ buffer referencing `{selection:Int64}` participates in the D2 staleness
 witness and ships the clicked row on the next Run — the first cross-filter
 falls out of the model with no new mechanism, exactly as SD8 intended.
 
+### 2026-07-11 — Slice 5c shipped (the Map on the param seam; ADR-0096 SD6 realized)
+
+The third strangler-adjacent mechanism retires: the Map's literal-rebuilt
+query. The raster is now a panel-authored node compiled against the signal
+store:
+
+- `rasterTemplateSQL` replaces `buildRasterSQL`: the node's SQL carries the
+  six reserved `{vp_*:UInt32}` slots (ADR-0096 §SD6) and is **stable across
+  pans** — the settled viewport is EMITTED as `vp_*` signals (uint32 mercator
+  bbox + clamped output dims), the per-frame compile resolves the template's
+  parsed Reads against the frame snapshot, and the lane's `(SQL, params)` key
+  supersedes in flight on any change. Server-verified on the FILL bound
+  (`WITH FILL … TO toUInt64({vp_w:UInt32}) * {vp_h:UInt32}` substitutes fine —
+  the wiring check ADR-0096 left open).
+- The overlay pin is **self-describing**: `laneView` exposes the served
+  compiled params, and repack recovers dims + lat/lon bounds from the served
+  `vp_*` values by inverse Web-Mercator — the demanded-SQL→bounds side table
+  (`sqlMeta`/`rasterMeta`/`mapFetchKey`) retired with it. A served result
+  lacking the vp set is a pack error, never a mis-pin.
+- The request-dedup key is gone: the store dedups unchanged emits (a still,
+  settled camera is write-free), and Refresh keeps its lane-forget force.
+- `table`, `sampling`, and the colour render stay panel controls spliced into
+  the template (the 2026-07-10 ADR-0096 shape); a control change is a
+  template change. Custom colour blocks outside Grammar1 fall back to the
+  reserved six for Reads derivation, so the viewport always resolves.
+- The `vp_*` names are ordinary signals (SD8): any node referencing
+  `{vp_min_x:UInt32}` now reacts to the map viewport — cross-filtering
+  against the visible extent costs nothing new.
+
+Regression tests: template well-formedness + Grammar1 parse + full vp Reads
+per render mode; viewport emission values against the forward projection;
+inverse-mercator round-trip; repack-from-served-params (including the
+missing-param error path); Refresh re-execution; and the seam end to end
+against a capture server — pan changes only `param_vp_*` on the wire, never
+the SQL. The live-ClickHouse map test now exercises the template + params
+path. Remaining slice-5 work: **5d** (bands extent onto `{tl_min}/{tl_max}`
+slots) and deferred **5e**.
+
 ## References
 
 Internal:

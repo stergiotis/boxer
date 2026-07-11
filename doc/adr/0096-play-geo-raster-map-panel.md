@@ -378,7 +378,39 @@ editor. The reserved-`vp_*` contract stays the forward path if a *shared*,
 user-editable raster query (panel-injected viewport + user filters) is ever wanted.
 SD6's bbox query does now "ship as a snippet" (the ADS-B section of the Snippets
 library, commit `4178adc2`), but as an editor snippet with inlined literals — not
-the param-bound reference query SD6 imagined.
+the param-bound reference query SD6 imagined. *Resolved — see the next Update.*
+
+## Update — 2026-07-11: SD6's reserved-param contract realized (ADR-0097 slice 5c)
+
+The divergence above is closed. With the ADR-0097 signal store in place
+(slice 5a/5b), the raster is a panel-authored node whose SQL carries the six
+reserved `{vp_*:UInt32}` slots verbatim from §SD6, and the panel EMITS the
+settled viewport as `vp_*` signals — pan/zoom are typed param mutations at
+last. Concretely (`apps/play/play_map.go`):
+
+- **The SQL text is stable across pans.** `rasterTemplateSQL` replaces
+  `buildRasterSQL`: the viewport is not in the text; the compiled
+  `(template, vp_* values)` pair is the lane's memo key, so a pan re-executes
+  with the SQL unchanged and only the `param_vp_*` URL entries moving.
+- **The wiring check SD6 called out is verified server-side**: ClickHouse
+  substitutes the slots everywhere they appear, *including* the
+  `ORDER BY … WITH FILL FROM 0 TO toUInt64({vp_w:UInt32}) * {vp_h:UInt32}`
+  bound — no literal-product fallback needed (checked on 26.6 with real
+  params; a data point lands at the exact computed `pos`).
+- **The overlay pin is self-describing**: repack recovers the raster's
+  lat/lon bounds from the SERVED `vp_*` values by inverse Web-Mercator (the
+  SD4 contract run backwards), so raster and query cannot disagree about
+  bounds — correct even when the signals were seeded from elsewhere (a
+  history restore). The former demanded-SQL→bounds side table retired.
+- **Panel-owned vs human-owned held its 2026-07-10 shape**, not the original
+  SD6 table: the six `vp_*` are panel-written signals; `table`, `sampling`,
+  and the colour render remain panel *controls spliced into the template* (a
+  control change is a template change). The `{table:Identifier}` /
+  `{sampling:UInt32}` human-owned slots of the original SD6 sketch remain
+  unbuilt — the forward path if a user-editable raster query is ever wanted.
+- Being ordinary named signals (ADR-0097 SD8), the `vp_*` values are
+  referenceable by any other node — a query reading `{vp_min_x:UInt32}` now
+  cross-filters against the map viewport with no new mechanism.
 
 ## References
 
