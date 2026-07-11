@@ -782,7 +782,16 @@ func (inst *PlayApp) Render() error {
 			for range dock.TabNoScroll(dockTabMap, "Map") {
 				inst.mapDriver.Render(inst.frameSig, inst.sigEmit.as(signalWriterMap))
 			}
-			for range dock.Tab(dockTabWorld, "World") {
+			// TabNoScroll: the world choropleth sizes its map image from
+			// ui.available_size() (zero-box FitAspectMax). Inside the dock's
+			// default per-tab ScrollArea — auto-shrinking on both axes — zero
+			// is a stable fixed point: a tab activated by click first lays out
+			// with a zero remainder, the stored content size then excludes the
+			// image, and it never comes back (the FOCUS_WORLD first-frame path
+			// dodged this, which is why scripted captures kept working). A
+			// no-scroll leaf is bounded, so the available size is the real
+			// remainder; overflow clips, as on the Map tab.
+			for range dock.TabNoScroll(dockTabWorld, "World") {
 				inst.renderWorldTab(rec, schema, loading, err, executed)
 			}
 			for range dock.Tab(dockTabGraph, "Graph") {
