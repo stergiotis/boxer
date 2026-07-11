@@ -169,7 +169,7 @@ func (inst *PlayApp) renderSignalRow(r signalChromeRow) {
 			inst.graph.setSignalRawFrom(r.Name, *draft, signalWriterEditor)
 		}
 		if r.Held {
-			if c.Button(ids.PrepareStr("sigClear-"+r.Name), c.Atoms().Text("✕").Keep()).
+			if c.Button(ids.PrepareStr("sigClear-"+r.Name), c.Atoms().Text("×").Keep()).
 				SendResp().HasPrimaryClicked() {
 				inst.graph.deleteSignal(r.Name)
 			}
