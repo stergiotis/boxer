@@ -982,6 +982,42 @@ the SQL. The live-ClickHouse map test now exercises the template + params
 path. Remaining slice-5 work: **5d** (bands extent onto `{tl_min}/{tl_max}`
 slots) and deferred **5e**.
 
+### 2026-07-11 — Slice 5d shipped (the bands extent rides `{tl_min}`/`{tl_max}` signals)
+
+The last textual-substitution mechanism retires: `substituteBandsRange`
+(string-replacing `_time_data_min`/`_time_data_max` with `toDateTime64`
+literals) is deleted. The Timeline now **publishes** its events extent after
+each rebuild — `tl_min`/`tl_max` signals carrying UTC-formatted
+`DateTime64(3)` raw values — and the bands node reads them as ordinary
+`{tl_min:DateTime64(3, 'UTC')}` / `{tl_max:…}` param slots, compiled against
+the frame snapshot like any other node (server-verified: `DateTime64(3,
+'UTC')` param slots substitute fine inside `WITH … AS lo`).
+
+Semantics this sharpens beyond parity:
+
+- **Extent gating is per-reference, not blanket**: the per-edit parse caches
+  the SQL's slot names and SET-bound set; only a bands query that references
+  an *unbound* `tl_min`/`tl_max` waits for the first events render. An
+  extent-free bands query runs immediately — under the substitution regime it
+  was needlessly extent-gated. A SET-bound `tl_*` pins as usual (D1).
+- **A moved extent supersedes in flight** via the lane's `(SQL, params)` key;
+  an unchanged (SQL, extent) pair stays a lane memo hit. The special-cased
+  "bands input + extent" hash retired with the substitution.
+- **Legacy SQL gets a migration hint**: a bands query still using the retired
+  `_time_data_*` tokens would now reach the server unsubstituted and fail
+  opaquely; the parse detects the tokens and the status line says what to
+  write instead (highest-precedence hint, before lane/map errors).
+- `tl_min`/`tl_max` are ordinary signals (SD8): any node — not just bands —
+  can react to the events extent, e.g. a main-editor query windowed to
+  `{tl_min:DateTime64(3, 'UTC')}`.
+
+Regression tests: extent formatting; publish-gated-on-validity; the
+pending→publish→demand→memo-hit→moved-extent-supersedes flow; the extent-free
+immediate run; the legacy-token hint; and the seam on the wire against a
+capture server (`param_tl_min`/`param_tl_max` on the URL, no legacy channel).
+The help snippet migrated to the param form. Remaining slice-5 work: deferred
+**5e** only.
+
 ## References
 
 Internal:
