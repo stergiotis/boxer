@@ -215,7 +215,7 @@ func CreateSchemaFacts() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntityFacts struct {
 	errs               []error
@@ -355,7 +355,7 @@ var InEntityFactsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityFacts) SetId(id0 uint64, naturalKey1 []byte) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -371,7 +371,7 @@ func (inst *InEntityFacts) SetId(id0 uint64, naturalKey1 []byte) *InEntityFacts 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityFacts) SetTimestamp(ts2 time.Time) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -386,7 +386,7 @@ func (inst *InEntityFacts) SetTimestamp(ts2 time.Time) *InEntityFacts {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityFacts) SetLifecycle(expiresAt3 time.Time) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -415,6 +415,15 @@ func (inst *InEntityFacts) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntityFacts) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntityFacts) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -1186,6 +1195,9 @@ func (inst *InEntityFactsSectionBlobArrayInAttr) handleNonScalarSupportColumns()
 	inst.homogenousArraySupportFieldBuilder047.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionBlobArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1474,6 +1486,9 @@ func (inst *InEntityFactsSectionBoolInAttr) handleNonScalarSupportColumns() {
 	var _ = l
 }
 func (inst *InEntityFactsSectionBoolInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1790,6 +1805,9 @@ func (inst *InEntityFactsSectionF32ArrayInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArraySupportFieldBuilder146.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionF32ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2106,6 +2124,9 @@ func (inst *InEntityFactsSectionF64ArrayInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArraySupportFieldBuilder155.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionF64ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2627,6 +2648,9 @@ func (inst *InEntityFactsSectionI16ArrayInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArraySupportFieldBuilder119.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionI16ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2943,6 +2967,9 @@ func (inst *InEntityFactsSectionI32ArrayInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArraySupportFieldBuilder128.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionI32ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -3259,6 +3286,9 @@ func (inst *InEntityFactsSectionI64ArrayInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArraySupportFieldBuilder137.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionI64ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -3575,6 +3605,9 @@ func (inst *InEntityFactsSectionI8ArrayInAttr) handleNonScalarSupportColumns() {
 	inst.homogenousArraySupportFieldBuilder110.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionI8ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -3891,6 +3924,9 @@ func (inst *InEntityFactsSectionStringArrayInAttr) handleNonScalarSupportColumns
 	inst.homogenousArraySupportFieldBuilder021.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionStringArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -4179,6 +4215,9 @@ func (inst *InEntityFactsSectionSymbolInAttr) handleNonScalarSupportColumns() {
 	var _ = l
 }
 func (inst *InEntityFactsSectionSymbolInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -4495,6 +4534,9 @@ func (inst *InEntityFactsSectionSymbolArrayInAttr) handleNonScalarSupportColumns
 	inst.homogenousArraySupportFieldBuilder038.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -4811,6 +4853,9 @@ func (inst *InEntityFactsSectionTextArrayInAttr) handleNonScalarSupportColumns()
 	inst.homogenousArraySupportFieldBuilder012.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionTextArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -5127,6 +5172,9 @@ func (inst *InEntityFactsSectionTimeArrayInAttr) handleNonScalarSupportColumns()
 	inst.homogenousArraySupportFieldBuilder173.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionTimeArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -5443,6 +5491,9 @@ func (inst *InEntityFactsSectionU16ArrayInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArraySupportFieldBuilder065.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionU16ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -5759,6 +5810,9 @@ func (inst *InEntityFactsSectionU32ArrayInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArraySupportFieldBuilder074.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionU32ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -6058,6 +6112,9 @@ func (inst *InEntityFactsSectionU32RangeInAttr) handleNonScalarSupportColumns() 
 	var _ = l
 }
 func (inst *InEntityFactsSectionU32RangeInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -6374,6 +6431,9 @@ func (inst *InEntityFactsSectionU32SetInAttr) handleNonScalarSupportColumns() {
 	inst.setSupportFieldBuilder083.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionU32SetInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -6690,6 +6750,9 @@ func (inst *InEntityFactsSectionU64ArrayInAttr) handleNonScalarSupportColumns() 
 	inst.homogenousArraySupportFieldBuilder092.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionU64ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -7006,6 +7069,9 @@ func (inst *InEntityFactsSectionU64SetInAttr) handleNonScalarSupportColumns() {
 	inst.setSupportFieldBuilder101.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionU64SetInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -7322,6 +7388,9 @@ func (inst *InEntityFactsSectionU8ArrayInAttr) handleNonScalarSupportColumns() {
 	inst.homogenousArraySupportFieldBuilder056.Append(uint64(l))
 }
 func (inst *InEntityFactsSectionU8ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}

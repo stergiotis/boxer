@@ -64,7 +64,7 @@ func CreateSchemaSystemTableColumns() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntitySystemTableColumns struct {
 	allocator             memory.Allocator
@@ -149,7 +149,7 @@ var InEntitySystemTableColumnsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 uint64) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -165,7 +165,7 @@ func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 ui
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -194,6 +194,15 @@ func (inst *InEntitySystemTableColumns) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntitySystemTableColumns) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntitySystemTableColumns) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainTableHash0)
@@ -628,6 +637,9 @@ func (inst *InEntitySystemTableColumnsSectionStringInAttr) handleNonScalarSuppor
 	var _ = l
 }
 func (inst *InEntitySystemTableColumnsSectionStringInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -917,6 +929,9 @@ func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) handleNonScalarSuppor
 	var _ = l
 }
 func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1206,6 +1221,9 @@ func (inst *InEntitySystemTableColumnsSectionTextInAttr) handleNonScalarSupportC
 	var _ = l
 }
 func (inst *InEntitySystemTableColumnsSectionTextInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1495,6 +1513,9 @@ func (inst *InEntitySystemTableColumnsSectionU64InAttr) handleNonScalarSupportCo
 	var _ = l
 }
 func (inst *InEntitySystemTableColumnsSectionU64InAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}

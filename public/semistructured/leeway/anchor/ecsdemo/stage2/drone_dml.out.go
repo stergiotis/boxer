@@ -86,7 +86,7 @@ func CreateSchemaDroneTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntityDroneTable struct {
 	errs                  []error
@@ -163,7 +163,7 @@ var InEntityDroneTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityDroneTable) SetId(id0 uint64) *InEntityDroneTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -192,6 +192,15 @@ func (inst *InEntityDroneTable) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntityDroneTable) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntityDroneTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
@@ -691,6 +700,9 @@ func (inst *InEntityDroneTableSectionGeoPointInAttr) handleNonScalarSupportColum
 	var _ = l
 }
 func (inst *InEntityDroneTableSectionGeoPointInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1013,6 +1025,9 @@ func (inst *InEntityDroneTableSectionSymbolInAttr) handleNonScalarSupportColumns
 	var _ = l
 }
 func (inst *InEntityDroneTableSectionSymbolInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1363,6 +1378,9 @@ func (inst *InEntityDroneTableSectionSymbolArrayInAttr) handleNonScalarSupportCo
 	inst.homogenousArraySupportFieldBuilder028.Append(uint64(l))
 }
 func (inst *InEntityDroneTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -1696,6 +1714,9 @@ func (inst *InEntityDroneTableSectionTimeRangeInAttr) handleNonScalarSupportColu
 	var _ = l
 }
 func (inst *InEntityDroneTableSectionTimeRangeInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}
@@ -2046,6 +2067,9 @@ func (inst *InEntityDroneTableSectionU64ArrayInAttr) handleNonScalarSupportColum
 	inst.homogenousArraySupportFieldBuilder017.Append(uint64(l))
 }
 func (inst *InEntityDroneTableSectionU64ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
 	for _, v := range inst.parent.parent.ambientHighCardRef {
 		inst.AddMembershipHighCardRefP(v)
 	}

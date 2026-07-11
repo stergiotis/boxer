@@ -991,7 +991,9 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		// HighCardRef memberships onto this attribute, before completeAttribute
 		// counts them. Emitted with a body only when the section declares a
 		// HighCardRef membership column; a no-op otherwise, and inert (nil
-		// ambient stack) when nothing was pushed.
+		// ambient stack) when nothing was pushed. The state guard keeps a
+		// wrong-state End* call from appending one spurious error per pushed
+		// id on top of its own transition error.
 		hasHighCardRef := false
 		for _, cp := range membershipIRH.IterateColumnProps() {
 			for i := 0; i < cp.Length(); i++ {
@@ -1005,7 +1007,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 			return
 		}
 		if hasHighCardRef {
-			_, err = b.WriteString("\tfor _, v := range inst.parent.parent.ambientHighCardRef {\n\t\tinst.AddMembershipHighCardRefP(v)\n\t}\n")
+			_, err = b.WriteString("\tif inst.state != runtime.EntityStateInAttribute {\n\t\treturn\n\t}\n\tfor _, v := range inst.parent.parent.ambientHighCardRef {\n\t\tinst.AddMembershipHighCardRefP(v)\n\t}\n")
 			if err != nil {
 				return
 			}
@@ -1669,7 +1671,16 @@ func (inst *%s) PopMembershipsHighCardRef(n int) {
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
 }
-`, clsNames.InEntityClassName, clsNames.InEntityClassName)
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *%s) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
+}
+`, clsNames.InEntityClassName, clsNames.InEntityClassName, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}

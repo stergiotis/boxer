@@ -59,7 +59,7 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1409
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
 
 type InEntityTesttable struct {
 	plainTs1              time.Time
@@ -141,7 +141,7 @@ var InEntityTesttableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -156,7 +156,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1604
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -185,6 +185,15 @@ func (inst *InEntityTesttable) PopMembershipsHighCardRef(n int) {
 		n = len(inst.ambientHighCardRef)
 	}
 	inst.ambientHighCardRef = inst.ambientHighCardRef[:len(inst.ambientHighCardRef)-n]
+}
+
+// ClearMembershipsHighCardRef drops every ambient HighCardRef membership,
+// pushed by anyone. It is the discard-everything counterpart to the balanced
+// Push/Pop discipline — for a caller that owns the whole entity (a generated
+// store's DiscardPending) and cannot know how many pushes abandoned frames
+// left behind.
+func (inst *InEntityTesttable) ClearMembershipsHighCardRef() {
+	inst.ambientHighCardRef = inst.ambientHighCardRef[:0]
 }
 func (inst *InEntityTesttable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
