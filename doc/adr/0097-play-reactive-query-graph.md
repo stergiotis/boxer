@@ -751,7 +751,22 @@ this ADR's record:
   no graph) — it never reaches the cycle check. The acyclicity guard stays for
   contract honesty; the fix belongs in grammar1 (the nanopass discipline,
   ADR-0002), recorded as a trigger alongside the dollar-quoted-string gap.
-  *Resolved same day — see the entry below.*
+  *Resolved same day — see the SD9-realized entry below.*
+- **The lane honours minimality on flip-back (SD4/SD5).** A demand returning
+  to the SQL the memo already serves — while a superseding run is in flight
+  (A→B→A: pan away and back on the Map, or a bands-extent flip) — re-executed
+  A although its memo was current. The lane now cancels the in-flight run and
+  serves the memo; a forced re-fetch still re-executes (forget clears the
+  served SQL, so a force never takes this path).
+- **`nodeLane` gained the closed guard `QueryStore` already had.** A demand
+  landing after `close` (a straggler frame during Unmount) started a query
+  nothing would consume; closed lanes now drop demands and forgets.
+- **Law-coverage note.** The slice-1 memoized, revision-based runtime
+  (`queryGraph.demand`/`setSignal`/`beginFrame`) remains dormant on the live
+  path: the law tests prove minimality/demand/early-cutoff there, while the
+  live path's coverage is the lane tests plus the per-observer fingerprint
+  guards. The two lane fixes above are those laws enforced at the lane, where
+  the live path actually runs.
 
 ### 2026-07-11 — SD9 realized: `WITH RECURSIVE` lands in the grammar and the split contract
 
@@ -775,21 +790,90 @@ SD9 as specified:
 - The Graph view labels recursive nodes (`CTE (recursive)`).
 
 The dollar-quoted-string gap remains the one open splitter trigger.
-- **The lane honours minimality on flip-back (SD4/SD5).** A demand returning
-  to the SQL the memo already serves — while a superseding run is in flight
-  (A→B→A: pan away and back on the Map, or a bands-extent flip) — re-executed
-  A although its memo was current. The lane now cancels the in-flight run and
-  serves the memo; a forced re-fetch still re-executes (forget clears the
-  served SQL, so a force never takes this path).
-- **`nodeLane` gained the closed guard `QueryStore` already had.** A demand
-  landing after `close` (a straggler frame during Unmount) started a query
-  nothing would consume; closed lanes now drop demands and forgets.
-- **Law-coverage note.** The slice-1 memoized, revision-based runtime
-  (`queryGraph.demand`/`setSignal`/`beginFrame`) remains dormant on the live
-  path: the law tests prove minimality/demand/early-cutoff there, while the
-  live path's coverage is the lane tests plus the per-observer fingerprint
-  guards. The two lane fixes above are those laws enforced at the lane, where
-  the live path actually runs.
+
+### 2026-07-11 — Slice 5 (design): the signal store — SD8's standing deferral ratified for implementation
+
+A design amendment ratified in dialogue (2026-07-11); the slices land as their
+own shipped-milestone Updates. SD8 defined the contract (a signal IS an unbound
+param; one namespace shared by name; widgets and panels write the same names;
+revisions for consistency) and the slice-1 runtime already implements the
+mechanics (`setSignal`, copy-on-write env, monotone revision) — dormant. What
+this amendment fixes is the store's relationship to the two systems that
+already own parameter state: the editor buffer's `SET` prelude and the lanes'
+memo keys.
+
+**Four decisions taken:**
+
+- **D1 — two-tier truth model.** A name **with** a `SET` in the buffer is a
+  *constant*: buffer-owned, human-authored, run-gated, reproducible — today's
+  semantics, untouched. A name **without** a `SET` is a *signal*: store-owned,
+  live, revisioned, panel-writable. Adding a `SET` *pins* a signal into a
+  constant (the constant shadows the store value, with a UI hint); deleting it
+  frees the name back to live. This is SD8 read literally, and it preserves
+  the buffer as a self-contained, reproducible artifact for everything the
+  human bound. Rejected: *store-is-truth* (all values leave the buffer —
+  breaks buffer-as-artifact; history, persistence, and copy-paste
+  reproducibility would all need a parallel snapshot to mean anything);
+  *buffer-is-truth with panel write-through* (a panning viewport rewrites the
+  editor at interaction rate — the debounce, undo, and staleness churn that
+  drove ADR-0096 panel-local in the first place).
+- **D2 — liveness is a per-node policy bit.** Demand-driven nodes (Map raster,
+  bands, observed intermediates, panel-authored nodes) re-drive automatically:
+  they compile per frame, changed inputs supersede in flight (SD5). The `main`
+  node stays Run-gated; a referenced signal write flips the query FSM to the
+  `*Stale` twin (the staleness witness grows from "buffer changed" to "buffer
+  or referenced-signal revision changed"). Preserves SD2's cost discipline;
+  the Map's "live" checkbox is the template for a later opt-in toggle on
+  `main`.
+- **D3 — widgets stay prelude-authoring in v1.** Humans produce constants
+  (unchanged `SyncParamPrelude` path); panels produce signals (`selection`,
+  `vp_*`, `tl_extent`). A referenced name that is neither SET-bound nor
+  signal-written is an *unfilled input* — the bound panel shows a "set
+  parameter {x}" empty-state (the SD6 idiom) instead of the server error.
+  Signal-writing widgets arrive later together with the live toggle, as one
+  coherent step.
+- **D4 — reproducibility from day one.** `HistoryEntry` gains an additive
+  signal-env snapshot (name→raw); restoring a history entry seeds the store
+  alongside the buffer. Signals do not persist across sessions (live state);
+  constants persist via the buffer as today.
+
+**Mechanics (subsidiary, ratified with the above):**
+
+- **Wire channel** — signal values ride the same `param_*` URL channel as
+  bound params (one input currency; ClickHouse does the typed substitution; no
+  literal-encoding surface). A node compiles to `(sql, params)`; the lane memo
+  key becomes that pair (today: SQL text only); `ExecuteArrowStream` gains a
+  direct params argument beside `BuildStatement`'s harvested ones. The
+  "as sent" preview names signal values in its caption.
+- **Frame-snapshot consistency** — emits apply to the store immediately, but
+  each frame compiles against one env snapshot taken at frame top: every panel
+  in a frame sees a single revision; an emit lands next frame (the one-frame
+  lag the bands already accept). This is SD4's glitch-freedom operationalized
+  without a scheduler.
+- **Ownership** — the store lives on the graph (the dormant slice-1 signal API
+  promoted to live); render-thread writes, immutable snapshots for async
+  readers.
+- **Conflicts are visible, never silent** — the same name declared with
+  different types across nodes: each node encodes with its own declared type
+  plus a Graph-view warning; a bound param shadowing a live signal gets the
+  same hint.
+- **Chrome** — a read-only Signals section in the Graph view (name, type,
+  value, last writer, revision): the implicit-input surface made visible, same
+  rationale as the node Graph view.
+
+**Delivery slices** (each additive, buildable): **5a** the store + frame
+snapshot + compile-with-params on the lanes + FSM staleness + history
+snapshot; **5b** `selection` becomes a real signal — `playSignals`,
+`selectedRowEmitter`, and `emptySignals` retire, behaviour-identical; **5c**
+the Map returns to the param seam — the raster becomes a panel-authored node
+with `{vp_*}` slots, the viewport emits signals, `buildRasterSQL` retires
+(closing the ADR-0096 SD6 divergence recorded in that ADR's 2026-07-10
+Update); **5d** the bands' `_time_data_min/max` textual substitution becomes
+`{tl_min}/{tl_max}` slots fed by a Timeline-emitted extent signal; **5e**
+(deferred) signal-writing widgets + per-node live toggles. End state retires
+four bespoke mechanisms into one primitive: the two strangler `SignalEnvI`
+stubs, the selection bridge, the Map literal rebuild, and the bands
+placeholder hack.
 
 ## References
 
