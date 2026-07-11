@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
@@ -501,7 +502,7 @@ func TestComputeVerticalLayout_RugAndAnnotationsReserveSpace(t *testing.T) {
 		WithPointEvents([]*layout.PointEvent{{TMS: 50}}),
 		WithAnnotations([]*layout.Annotation{{TMS: 50, Number: 1}}))
 	tl.laneAssn = layout.PackLanes(intervals)
-	vl := tl.computeVerticalLayout(0, 0, 1000)
+	vl := tl.computeVerticalLayout(0, 1, 0, 1000)
 	if vl.topReserved == 0 {
 		t.Error("annotations should reserve top space")
 	}
@@ -518,12 +519,105 @@ func TestComputeVerticalLayout_NoExtras(t *testing.T) {
 	intervals := []*layout.IntervalEvent{{FromMS: 0, ToMS: 100}}
 	tl := newTestTimeline(t, intervals)
 	tl.laneAssn = layout.PackLanes(intervals)
-	vl := tl.computeVerticalLayout(0, 0, 1000)
+	vl := tl.computeVerticalLayout(0, 1, 0, 1000)
 	if vl.topReserved != 0 {
 		t.Errorf("no-annotations: topReserved should be 0, got %v", vl.topReserved)
 	}
 	if vl.laneBaseY != 0 {
 		t.Errorf("no-rug: laneBaseY should be 0, got %v", vl.laneBaseY)
+	}
+}
+
+func TestComputeVerticalLayout_FlagRowsGrowAnnotationBand(t *testing.T) {
+	intervals := []*layout.IntervalEvent{{FromMS: 0, ToMS: 100}}
+	tl := newTestTimeline(t, intervals,
+		WithAnnotations([]*layout.Annotation{{TMS: 50, Number: 1}}))
+	tl.laneAssn = layout.PackLanes(intervals)
+	oneRow := tl.computeVerticalLayout(0, 1, 0, 1000)
+	twoRows := tl.computeVerticalLayout(0, 2, 0, 1000)
+	wantGrowth := tl.visuals.AnnotationBandH
+	if got := twoRows.topReserved - oneRow.topReserved; got != wantGrowth {
+		t.Errorf("second flag row should add AnnotationBandH: got +%v want +%v", got, wantGrowth)
+	}
+	// flagRows < 1 clamps to 1 — the band must not collapse while panning
+	// all flags off-view.
+	zeroRows := tl.computeVerticalLayout(0, 0, 0, 1000)
+	if zeroRows.topReserved != oneRow.topReserved {
+		t.Errorf("flagRows=0 should clamp to one row: got %v want %v",
+			zeroRows.topReserved, oneRow.topReserved)
+	}
+}
+
+func TestComputeFlagLayout_FiltersOffscreenAndStaggers(t *testing.T) {
+	// View 0..1000ms mapped to x 0..1000 → 1px/ms. Default flag width 26:
+	// annotations at 500/510ms collide (10px apart) and stagger; 800ms is
+	// far enough for row 0; 2000ms is off-view and must not participate.
+	coincidentA := &layout.Annotation{TMS: 500, Number: 1}
+	coincidentB := &layout.Annotation{TMS: 510, Number: 2}
+	lone := &layout.Annotation{TMS: 800, Number: 3}
+	offscreen := &layout.Annotation{TMS: 2000, Number: 4}
+	tl := newTestTimeline(t, nil,
+		WithAnnotations([]*layout.Annotation{coincidentA, coincidentB, lone, nil, offscreen}))
+	tm := layout.ComputeTickMap(time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC(),
+		0, 1000, nil, timeticks.TimeStep{})
+	fl := tl.computeFlagLayout(tm, 0, 1000)
+	if len(fl.anns) != 3 {
+		t.Fatalf("visible annotations: got %d want 3 (nil + offscreen filtered)", len(fl.anns))
+	}
+	if fl.anns[0] != coincidentA || fl.anns[1] != coincidentB || fl.anns[2] != lone {
+		t.Fatalf("visible order should preserve input order, got %v", fl.anns)
+	}
+	if fl.rowCount != 2 {
+		t.Errorf("rowCount: got %d want 2", fl.rowCount)
+	}
+	if fl.rows[0] != 0 || fl.rows[1] != 1 || fl.rows[2] != 0 {
+		t.Errorf("rows: got %v want [0,1,0]", fl.rows)
+	}
+}
+
+func TestHitTestAnnotation_StaggeredFlagsResolveByRow(t *testing.T) {
+	a := &layout.Annotation{TMS: 500, Number: 1}
+	b := &layout.Annotation{TMS: 500, Number: 2} // same instant — full x tie
+	tl := newTestTimeline(t, nil, WithAnnotations([]*layout.Annotation{a, b}))
+	fl := flagLayout{
+		anns:     []*layout.Annotation{a, b},
+		xs:       []float32{500, 500},
+		rows:     []int32{0, 1},
+		rowCount: 2,
+	}
+	rowH := tl.visuals.AnnotationBandH
+	if got := tl.hitTestAnnotation(fl, 500, rowH*0.5); got != a {
+		t.Errorf("click in row-0 slab: got %v want a (#1)", got)
+	}
+	if got := tl.hitTestAnnotation(fl, 500, rowH*1.5); got != b {
+		t.Errorf("click in row-1 slab: got %v want b (#2)", got)
+	}
+	// Below the band both dashes coincide: the corridor tier resolves the
+	// tie toward the later slice entry, matching paint z-order.
+	if got := tl.hitTestAnnotation(fl, 500, rowH*4); got != b {
+		t.Errorf("dash-corridor tie: got %v want b (painted on top)", got)
+	}
+	// Outside the corridor: miss.
+	if got := tl.hitTestAnnotation(fl, 500+annotationHitCorridorPx+1, rowH*4); got != nil {
+		t.Errorf("outside corridor: got %v want nil", got)
+	}
+}
+
+func TestHitTestAnnotation_CorridorFallbackInsideBand(t *testing.T) {
+	// A cursor in the flag band but on no flag rect — here: in the row-1
+	// slab while the nearby flag sits in row 0 — still resolves via the
+	// dash corridor, because the dashed line passes through that space.
+	a := &layout.Annotation{TMS: 500, Number: 1}
+	b := &layout.Annotation{TMS: 900, Number: 2}
+	tl := newTestTimeline(t, nil, WithAnnotations([]*layout.Annotation{a, b}))
+	fl := flagLayout{
+		anns:     []*layout.Annotation{a, b},
+		xs:       []float32{500, 900},
+		rows:     []int32{0, 1},
+		rowCount: 2,
+	}
+	if got := tl.hitTestAnnotation(fl, 505, tl.visuals.AnnotationBandH*1.5); got != a {
+		t.Errorf("corridor fallback in band: got %v want a", got)
 	}
 }
 

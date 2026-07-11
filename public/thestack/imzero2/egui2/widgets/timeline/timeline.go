@@ -214,8 +214,15 @@ const (
 	// and flag fill reads as the selection outline. Avoids PaintRectStroke
 	// which would clip against the canvas top edge at y=0.
 	annotationSelectionInsetPx float32 = 2
-	nowLineWidthPx           float32 = 1.5
-	emptyFallback                    = 1 * time.Hour
+	// annotationMaxFlagRows caps the flag stagger: flags whose x-extents
+	// collide drop to lower rows (growing the annotation band) up to this
+	// many rows, beyond which layout.PackFlagRows degrades to least-overlap
+	// placement within the last-resort row. Bounds the vertical space a
+	// pathologically dense annotation set can claim. Promote to Visuals if
+	// a caller needs to tune.
+	annotationMaxFlagRows int32   = 3
+	nowLineWidthPx        float32 = 1.5
+	emptyFallback                 = 1 * time.Hour
 )
 
 // SelectionKindE discriminates what a Timeline currently has selected.
@@ -258,6 +265,63 @@ func (vl verticalLayout) clipToAxis(x0, x1 float32) (cx0, cx1 float32, ok bool) 
 	cx0 = max(x0, vl.axisStartPx)
 	cx1 = min(x1, vl.axisEndPx)
 	ok = true
+	return
+}
+
+// flagLayout bundles the per-frame annotation-flag arrangement: the
+// on-screen annotations (input slice order preserved), their screen-x
+// centers, and the stagger row each flag occupies so colliding flags
+// never paint over one another (rows via layout.PackFlagRows, capped at
+// annotationMaxFlagRows). Computed once per frame in renderBody — after
+// the tick map (x positions need it) and before computeVerticalLayout
+// (the band height needs rowCount) — then threaded to paintAnnotations
+// and hitTestAnnotation so paint and click geometry can't drift.
+type flagLayout struct {
+	anns     []*layout.Annotation
+	xs       []float32
+	rows     []int32
+	rowCount int32
+}
+
+// computeFlagLayout resolves screen-x for every annotation, filters to
+// the ones inside the axis range, and packs their flags into stagger
+// rows. axisStartPx/axisEndPx mirror the verticalLayout fields of the
+// same name but arrive as parameters because this runs before
+// computeVerticalLayout (which consumes the row count). Off-screen
+// annotations don't participate at all: they neither consume a stagger
+// row nor respond to clicks — an invisible flag must not steal a click
+// from a visible one.
+func (inst *Timeline) computeFlagLayout(tm layout.TickMap, axisStartPx, axisEndPx float32) (fl flagLayout) {
+	if len(inst.annotations) == 0 {
+		return
+	}
+	fl.anns = make([]*layout.Annotation, 0, len(inst.annotations))
+	fl.xs = make([]float32, 0, len(inst.annotations))
+	centers := make([]float64, 0, len(inst.annotations))
+	for _, a := range inst.annotations {
+		if a == nil {
+			continue
+		}
+		x := float32(tm.MapMSToX(a.TMS))
+		if x < axisStartPx || x > axisEndPx {
+			continue
+		}
+		fl.anns = append(fl.anns, a)
+		fl.xs = append(fl.xs, x)
+		centers = append(centers, float64(x))
+	}
+	fl.rows, fl.rowCount = layout.PackFlagRows(centers, float64(inst.visuals.AnnotationFlagW), annotationMaxFlagRows)
+	return
+}
+
+// flagRowY returns the top/bottom y of the flag rect in stagger row r.
+// Row r owns the slab [r·AnnotationBandH, (r+1)·AnnotationBandH); the
+// flag sits annotationSelectionInsetPx inside the slab top so the
+// selection back-fill's margin stays visible (AnnotationBandH = FlagH +
+// 2 × inset at the defaults — see DefaultVisuals).
+func (inst *Timeline) flagRowY(row int32) (flagY0, flagY1 float32) {
+	flagY0 = float32(row)*inst.visuals.AnnotationBandH + annotationSelectionInsetPx
+	flagY1 = flagY0 + inst.visuals.AnnotationFlagH
 	return
 }
 
@@ -404,7 +468,9 @@ func WithOnSelection(fn SelectionListener) Option {
 // WithAnnotations attaches Grafana-style time-pinned markers (vertical
 // dashed lines + numbered flag at the top of the canvas). Annotations are
 // rendered above bars and rug events; their hit corridor extends the full
-// vertical data area.
+// vertical data area. Flags too close together at the current zoom to
+// paint side by side stagger into additional flag rows (the band grows
+// downward, up to annotationMaxFlagRows) rather than overlapping.
 //
 // Validation: nil clears (widget renders without annotations).
 func WithAnnotations(as []*layout.Annotation) Option {
@@ -799,17 +865,21 @@ func (inst *Timeline) SetRange(t0, t1 time.Time) {
 // per-frame Y geometry + horizontal axis bounds. Called once at the top
 // of renderBody and passed to every paint* / hitTest* method downstream.
 // Depends on inst.laneAssn being populated and the caller-supplied
-// labelW + effW + rolloverRows int. The canvas height is content-driven
+// labelW + effW + rolloverRows int. flagRows is the annotation stagger
+// row count from computeFlagLayout; values < 1 clamp to 1 so the band
+// never collapses/reappears while panning flags off-view (it exists
+// whenever annotations are attached, growing only when visible flags
+// actually stagger). The canvas height is content-driven
 // (sum of annotation band + rug + lanes + axis + rollover rows); the
 // widget no longer pads to fill any available vertical space the parent
 // happens to offer, so a 200-px-of-content timeline placed inside a
 // 600-px-tall panel occupies 200 px and lets siblings render directly
 // below it instead of staring at empty canvas.
-func (inst *Timeline) computeVerticalLayout(rolloverRows int, labelW, effW float32) (vl verticalLayout) {
+func (inst *Timeline) computeVerticalLayout(rolloverRows int, flagRows int32, labelW, effW float32) (vl verticalLayout) {
 	vl.axisStartPx = labelW
 	vl.axisEndPx = effW
 	if inst.annotationReserved() {
-		vl.topReserved = inst.visuals.AnnotationBandH + annotationGap
+		vl.topReserved = float32(max(flagRows, 1))*inst.visuals.AnnotationBandH + annotationGap
 	}
 	vl.rugTopY = vl.topReserved
 	vl.laneBaseY = vl.topReserved
@@ -866,7 +936,8 @@ func (inst *Timeline) renderBody() {
 	viewMaxMS := viewMax.UnixMilli()
 
 	tm := layout.ComputeTickMap(viewMin, viewMax, float64(labelW), float64(effW), nil, timeticks.TimeStep{})
-	vl := inst.computeVerticalLayout(len(tm.RolloverRows), labelW, effW)
+	fl := inst.computeFlagLayout(tm, labelW, effW)
+	vl := inst.computeVerticalLayout(len(tm.RolloverRows), fl.rowCount, labelW, effW)
 
 	inst.paintBackgroundBands(tm, vl, viewMinMS, viewMaxMS)
 	if inst.rugReserved() {
@@ -876,16 +947,16 @@ func (inst *Timeline) renderBody() {
 	inst.paintLaneLabels(vl)
 	inst.paintAxis(tm, vl)
 	inst.paintRolloverRows(tm, vl)
-	inst.paintAnnotations(tm, vl)
+	inst.paintAnnotations(fl, vl)
 	inst.paintNowLine(tm, vl, viewMinMS, viewMaxMS)
 
 	if inst.interactionEnabled && cursorInsideCanvas(cp, effW, vl.totalH) && cp.HoverX >= vl.axisStartPx {
 		inst.cursorTimeMS = tm.MapXToMS(float64(cp.HoverX))
 		inst.cursorTimeValid = true
 		c.PaintLine(cp.HoverX, vl.topReserved, cp.HoverX, vl.axisBaselineY, inst.visuals.AxisColor, crosshairWidthPx).Send()
-		inst.paintHoverTooltip(tm, vl, cp.HoverX, cp.HoverY)
+		inst.paintHoverTooltip(tm, fl, vl, cp.HoverX, cp.HoverY)
 		if cp.Clicked {
-			inst.dispatchClick(tm, vl, cp.HoverX, cp.HoverY)
+			inst.dispatchClick(tm, fl, vl, cp.HoverX, cp.HoverY)
 		}
 	} else {
 		inst.cursorTimeValid = false
@@ -910,8 +981,8 @@ func (inst *Timeline) renderBody() {
 // clicks clear the selection. Clicking the already-selected target toggles
 // the selection off. cp.Clicked is edge-triggered by egui (true only on
 // the frame the release lands), so callers don't need to debounce.
-func (inst *Timeline) dispatchClick(tm layout.TickMap, vl verticalLayout, cursorX, cursorY float32) {
-	if a := inst.hitTestAnnotation(tm, cursorX); a != nil {
+func (inst *Timeline) dispatchClick(tm layout.TickMap, fl flagLayout, vl verticalLayout, cursorX, cursorY float32) {
+	if a := inst.hitTestAnnotation(fl, cursorX, cursorY); a != nil {
 		if inst.selection.Kind == SelectionAnnotation && inst.selection.Annotation == a {
 			inst.selection = SelectionInfo{}
 		} else {
@@ -1237,34 +1308,34 @@ func (inst *Timeline) paintNowLine(tm layout.TickMap, vl verticalLayout, viewMin
 }
 
 // paintAnnotations renders the Grafana-style annotation markers: one
-// dashed vertical line per annotation spanning from below the flag band
-// to vl.axisBaselineY, plus a numbered flag rect at the top tinted by
-// the annotation's PaletteIdx. The selection stroke wraps the flag when
-// the annotation is currently selected. Drawn after lanes + axis so the
-// flag and dashes layer over the data, matching Grafana convention.
-func (inst *Timeline) paintAnnotations(tm layout.TickMap, vl verticalLayout) {
-	for _, a := range inst.annotations {
-		if a == nil {
-			continue
-		}
-		x := float32(tm.MapMSToX(a.TMS))
-		if x < vl.axisStartPx || x > vl.axisEndPx {
-			continue
-		}
+// dashed vertical line per on-screen annotation spanning from below its
+// flag to vl.axisBaselineY, plus a numbered flag rect tinted by the
+// annotation's PaletteIdx. Flags whose x-extents collide occupy distinct
+// stagger rows (fl.rows) instead of painting over each other — up to
+// annotationMaxFlagRows, past which the fallback row may overlap again
+// (see layout.PackFlagRows). Two passes — every dash, then every flag —
+// because an upper-row flag's dash crosses the lower rows' slab space on
+// its way down and must not strike through a flag there. The selection
+// stroke wraps the flag when the annotation is currently selected. Drawn
+// after lanes + axis so flags and dashes layer over the data, matching
+// Grafana convention.
+func (inst *Timeline) paintAnnotations(fl flagLayout, vl verticalLayout) {
+	for i, a := range fl.anns {
+		x := fl.xs[i]
+		rgba := styletokens.QualitativeCycle(int(a.PaletteIdx))
+		// The flag sits annotationSelectionInsetPx below its slab top (so
+		// the selection back-fill can paint a visible top margin — at row 0
+		// without clipping against the canvas at y=0) and the dash starts
+		// annotationFlagPaddingY below the flag for the same clearance.
+		_, flagY1 := inst.flagRowY(fl.rows[i])
+		c.PaintDashedLine(x, flagY1+annotationFlagPaddingY, x, vl.axisBaselineY,
+			annotationDashLen, annotationGapLen, color.Hex(rgba.AsHex()), annotationStrokeW).Send()
+	}
+	for i, a := range fl.anns {
+		x := fl.xs[i]
 		rgba := styletokens.QualitativeCycle(int(a.PaletteIdx))
 		col := color.Hex(rgba.AsHex())
-
-		// The flag is positioned with annotationSelectionInsetPx of clearance
-		// above (so the selection back-fill can paint a visible top margin
-		// without clipping against the canvas at y=0) AND below (where
-		// annotationFlagPaddingY already gives the same clearance against
-		// the dashed-line start). AnnotationBandH = FlagH + 2 × inset.
-		flagY0 := annotationSelectionInsetPx
-		flagY1 := flagY0 + inst.visuals.AnnotationFlagH
-
-		c.PaintDashedLine(x, flagY1+annotationFlagPaddingY, x, vl.axisBaselineY,
-			annotationDashLen, annotationGapLen, col, annotationStrokeW).Send()
-
+		flagY0, flagY1 := inst.flagRowY(fl.rows[i])
 		flagX0 := x - inst.visuals.AnnotationFlagW/2
 		flagX1 := x + inst.visuals.AnnotationFlagW/2
 		if inst.selection.Kind == SelectionAnnotation && inst.selection.Annotation == a {
@@ -1273,7 +1344,7 @@ func (inst *Timeline) paintAnnotations(tm layout.TickMap, vl verticalLayout) {
 			// clips against the canvas top edge. Two-fill emulation: paint
 			// a slightly larger rect in the stroke colour first, then the
 			// flag fill on top — the visible margin reads as the outline.
-			c.PaintRectFilled(flagX0-annotationSelectionInsetPx, 0,
+			c.PaintRectFilled(flagX0-annotationSelectionInsetPx, flagY0-annotationSelectionInsetPx,
 				flagX1+annotationSelectionInsetPx, flagY1+annotationSelectionInsetPx,
 				annotationFlagCornerR, inst.visuals.SelectionStrokeColor).Send()
 		}
@@ -1307,22 +1378,42 @@ func (inst *Timeline) hitTestInterval(tm layout.TickMap, vl verticalLayout, curs
 	return
 }
 
-// hitTestAnnotation returns the annotation whose dashed-line / flag is
-// closest to cursorX within annotationHitCorridorPx, or nil. Used by
-// both dispatchClick (precedence over interval/bucket hits) and the
-// hover tooltip path.
-func (inst *Timeline) hitTestAnnotation(tm layout.TickMap, cursorX float32) (a *layout.Annotation) {
-	nearestDist := annotationHitCorridorPx
-	for _, candidate := range inst.annotations {
-		if candidate == nil {
-			continue
+// hitTestAnnotation returns the annotation under the cursor, or nil.
+// Two tiers, mirroring the paint geometry of paintAnnotations:
+//
+//  1. Flag-rect hit — cursor inside a flag's stagger-row slab AND within
+//     the flag's x-extent. Row-aware, so near-coincident annotations
+//     whose flags stagger into different rows resolve to the flag
+//     actually under the cursor.
+//  2. Dash corridor — annotation x nearest to the cursor within
+//     annotationHitCorridorPx, at any height (the dashed line spans the
+//     canvas), for clicks on/near the dash below the flag band.
+//
+// Both tiers resolve ties toward the LAST slice entry, matching paint
+// z-order (later annotations paint on top). Only on-screen annotations
+// participate (fl holds the filtered set) — an off-view annotation is
+// not clickable. Used by both dispatchClick (precedence over interval/
+// bucket hits) and the hover tooltip path.
+func (inst *Timeline) hitTestAnnotation(fl flagLayout, cursorX, cursorY float32) (a *layout.Annotation) {
+	halfW := inst.visuals.AnnotationFlagW / 2
+	for i, candidate := range fl.anns {
+		slabY0 := float32(fl.rows[i]) * inst.visuals.AnnotationBandH
+		slabY1 := slabY0 + inst.visuals.AnnotationBandH
+		if cursorY >= slabY0 && cursorY <= slabY1 &&
+			cursorX >= fl.xs[i]-halfW && cursorX <= fl.xs[i]+halfW {
+			a = candidate
 		}
-		x := float32(tm.MapMSToX(candidate.TMS))
-		dist := cursorX - x
+	}
+	if a != nil {
+		return
+	}
+	nearestDist := annotationHitCorridorPx
+	for i, candidate := range fl.anns {
+		dist := cursorX - fl.xs[i]
 		if dist < 0 {
 			dist = -dist
 		}
-		if dist < nearestDist {
+		if dist <= nearestDist {
 			nearestDist = dist
 			a = candidate
 		}
@@ -1414,16 +1505,16 @@ func (inst *Timeline) paintRugDensity(tm layout.TickMap, vl verticalLayout, rugY
 // duration; rug-strip hits show either the single point (raw mode) or the
 // bucket count + window (density mode). One-frame lag relative to actual
 // cursor since both inputs come from last frame's StateManager cache.
-func (inst *Timeline) paintHoverTooltip(tm layout.TickMap, vl verticalLayout, cursorX, cursorY float32) {
-	text := inst.hitTestTooltipText(tm, vl, cursorX, cursorY)
+func (inst *Timeline) paintHoverTooltip(tm layout.TickMap, fl flagLayout, vl verticalLayout, cursorX, cursorY float32) {
+	text := inst.hitTestTooltipText(tm, fl, vl, cursorX, cursorY)
 	if text == "" {
 		return
 	}
 	inst.paintTooltipBlock(text, cursorX, cursorY, vl.axisEndPx, vl.totalH)
 }
 
-func (inst *Timeline) hitTestTooltipText(tm layout.TickMap, vl verticalLayout, cursorX, cursorY float32) (text string) {
-	if a := inst.hitTestAnnotation(tm, cursorX); a != nil {
+func (inst *Timeline) hitTestTooltipText(tm layout.TickMap, fl flagLayout, vl verticalLayout, cursorX, cursorY float32) (text string) {
+	if a := inst.hitTestAnnotation(fl, cursorX, cursorY); a != nil {
 		text = formatAnnotationTooltip(a)
 		return
 	}

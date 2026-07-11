@@ -1,7 +1,7 @@
 // Package layout provides the pure-Go layout primitives for the ImZero2
-// timeline widget: greedy lane packing for interval events, multi-resolution
-// bin indexing for point events, and a wrapper over boxer's timeticks for
-// renderer-ready tick coordinates.
+// timeline widget: greedy lane packing for interval events, row staggering
+// for annotation flags, multi-resolution bin indexing for point events, and
+// a wrapper over boxer's timeticks for renderer-ready tick coordinates.
 //
 // All algorithms are independent of any UI — callers feed events and view
 // bounds, receive arrangement data + screen-x positions. The widget layer

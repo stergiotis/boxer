@@ -65,7 +65,7 @@ func init() {
 			s := state.(*timelineDemoState)
 			c.Label("Timeline visualization — LifeLines-style mixed point + interval events on a calendar axis (ADR-0043).").Send()
 			c.Label("Top rug strip: ~150 PCG-seeded synthetic git commits over 3 days. Lane bars: 20 LLM sessions in three provider rows (claude / gpt / gemini).").Send()
-			c.Label("Annotation flags at the very top mark deploys/alerts/releases (5 sample markers); click a flag or its dashed line to select.").Send()
+			c.Label("Annotation flags at the very top mark deploys/alerts/releases (6 sample markers); click a flag or its dashed line to select. The alert + hotfix pair sits too close for one row, so those flags stagger into a second row instead of overlapping.").Send()
 			c.Label("Background bands (iter.Seq, computed each frame from the view range): muted weekend shade + warm office-hours overlay 09–17. Bright vertical line = now.").Send()
 			c.Label("Hover for tooltip · click to select (outline + card below) · Ctrl+scroll over a session zooms anchored at the cursor.").Send()
 			s.tl.Render()
@@ -337,14 +337,18 @@ func composeBandProducers(producers ...timeline.BackgroundBandProducer) timeline
 	}
 }
 
-// makeAnnotationFixture returns five Grafana-style annotations spread
-// across the three-day window: one deploy, one alert, one release, one
-// incident-resolve, one config-change. PaletteIdx values fan across the
-// BatlowS qualitative palette so the flags read as visually distinct.
+// makeAnnotationFixture returns six Grafana-style annotations spread
+// across the three-day window: one deploy, one alert, one hotfix, one
+// release, one incident-resolve, one config-change. PaletteIdx values fan
+// across the BatlowS qualitative palette so the flags read as visually
+// distinct. The hotfix lands 30 minutes after the alert — too close for
+// side-by-side flags at the demo's default zoom — so the pair exercises
+// the flag-row stagger (zoom in to watch them rejoin one row).
 func makeAnnotationFixture() (out []*layout.Annotation) {
 	base := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC).UnixMilli()
 	day := int64(24 * time.Hour / time.Millisecond)
 	hour := int64(time.Hour / time.Millisecond)
+	minute := int64(time.Minute / time.Millisecond)
 
 	type spec struct {
 		offsetMS int64
@@ -354,6 +358,7 @@ func makeAnnotationFixture() (out []*layout.Annotation) {
 	specs := []spec{
 		{8 * hour, 0, "Deploy v2.4.1"},
 		{day + 3*hour, 2, "Alert: API latency spike"},
+		{day + 3*hour + 30*minute, 5, "Hotfix v2.4.2 rollout"},
 		{day + 8*hour, 4, "Release notes published"},
 		{2*day + 2*hour, 6, "Incident resolved"},
 		{2*day + 10*hour, 8, "Config change: rate limit"},
