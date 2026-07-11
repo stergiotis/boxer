@@ -213,6 +213,55 @@ func TestCanonicalizeToFunctionTuple(t *testing.T) {
 	}
 }
 
+// TestCanonicalizeToFunctionTableArgTuple covers the grammar1 tableArgExpr
+// tuple alternative (`FROM values('…', (1, 2))`): the Function direction must
+// lower row tuples in table-function argument position to tuple(…) calls so
+// the canonical form stays grammar2-parseable (grammar2 has no bare tuples).
+func TestCanonicalizeToFunctionTableArgTuple(t *testing.T) {
+	pass := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "values_rows",
+			input:    "SELECT * FROM values('a UInt8, b UInt8', (1, 2), (3, 4))",
+			expected: "SELECT * FROM values('a UInt8, b UInt8', tuple(1, 2), tuple(3, 4))",
+		},
+		{
+			// A single-element row is parens around a tuple (ColumnExprParens,
+			// not a one-element ColumnExprTuple): the inner tuple lowers, the
+			// transparent parens stay — RemoveRedundantParens strips them in
+			// full pipelines.
+			name:     "nested_tuple_row",
+			input:    "SELECT * FROM values('t Tuple(a UInt8, b UInt8)', ((1, 2)))",
+			expected: "SELECT * FROM values('t Tuple(a UInt8, b UInt8)', (tuple(1, 2)))",
+		},
+		{
+			name:     "row_with_array_element",
+			input:    "SELECT * FROM values('a Int8, arr Array(UInt8)', (-1, [1, 2]))",
+			expected: "SELECT * FROM values('a Int8, arr Array(UInt8)', tuple(-1, array(1, 2)))",
+		},
+		{
+			name:     "identifier_and_literal_args_untouched",
+			input:    "SELECT * FROM remote('host:9000', db.tbl)",
+			expected: "SELECT * FROM remote('host:9000', db.tbl)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pass.Run(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
+
+			_, err = nanopass.Parse(got)
+			require.NoError(t, err, "produced invalid grammar1 SQL: %s", got)
+		})
+	}
+}
+
 func TestCanonicalizeToFunctionArray(t *testing.T) {
 	pass := passes.CanonicalizeConstructors(passes.ConstructorFormFunction)
 

@@ -250,10 +250,22 @@ tableExpr
 tableFunctionExpr: identifier LPAREN tableArgList? RPAREN;
 tableIdentifier: (databaseIdentifier DOT)? identifier;
 tableArgList: tableArgExpr (COMMA tableArgExpr)*;
+// The columnExpr alternative admits expression arguments — row tuples
+// `values('a UInt8, b UInt8', (1, 2))`, arrays, arithmetic, function calls —
+// which ClickHouse accepts (table-function args are expressions server-side)
+// but the inherited grammar rejected. It is deliberately LAST: earlier
+// alternatives keep the historical CST shapes (identifier args stay
+// nestedIdentifier, nested calls stay tableFunctionExpr, scalar literals stay
+// literal — consumers key on those accessors), so only previously-rejected
+// inputs reach it. Grammar2 needs no counterpart: the expressions parse as
+// ordinary column contexts, so CanonicalizeConstructors' existing rules lower
+// tuples/arrays to tuple(…)/array(…) calls, which both grammars accept as
+// nested table functions.
 tableArgExpr
     : nestedIdentifier
     | tableFunctionExpr
     | literal
+    | columnExpr
     ;
 
 // Databases
