@@ -1,6 +1,6 @@
 // Package clickhouseenv centralises the ClickHouse-related environment
 // variables consumed across boxer: the funccharacterize fuzzer,
-// the spinnaker play HMI, and the live test harness. Each spec is
+// the play HMI, and the live test harness. Each spec is
 // registered with the boxer-wide registry (ADR-0058).
 //
 // Names match the ClickHouse client-tool convention (CLICKHOUSE_USER /
@@ -45,7 +45,7 @@ var (
 	URL = env.NewString(env.Spec{
 		Name:        "CLICKHOUSE_URL",
 		Default:     "http://localhost:8123/",
-		Description: "ClickHouse HTTP URL used by the spinnaker play HMI; defaults to localhost",
+		Description: "ClickHouse HTTP URL used by the play HMI; defaults to localhost",
 		Category:    env.CategoryDatabase,
 	})
 )

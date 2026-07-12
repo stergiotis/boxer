@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-07-12T14:04:59Z
+generated-at: 2026-07-12T14:05:30Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -55,7 +55,7 @@ generated-at: 2026-07-12T14:04:59Z
 | `CLICKHOUSE_DATABASE` | string | — | — |  | ClickHouse database; consumers omit the X-ClickHouse-Database header when empty |
 | `CLICKHOUSE_ENDPOINT` | string | — | — |  | ClickHouse HTTP endpoint (e.g. http://localhost:8123); tests skip when empty |
 | `CLICKHOUSE_PASSWORD` | string | — | — | yes | ClickHouse password; consumers typically omit the auth header when empty |
-| `CLICKHOUSE_URL` | string | `http://localhost:8123/` | — |  | ClickHouse HTTP URL used by the spinnaker play HMI; defaults to localhost |
+| `CLICKHOUSE_URL` | string | `http://localhost:8123/` | — |  | ClickHouse HTTP URL used by the play HMI; defaults to localhost |
 | `CLICKHOUSE_USER` | string | `default` | — |  | ClickHouse user; defaults to the unauthenticated "default" account |
 
 ## dev (24)
