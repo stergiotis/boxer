@@ -153,6 +153,15 @@ func (inst *TabRegistry) freeze() { inst.frozen = true }
 // all returns the specs in registration order. Callers must not mutate.
 func (inst *TabRegistry) all() []TabSpec { return inst.specs }
 
+// Specs returns a copy of the registered tabs in registration order — the
+// read surface for embedders (asserting their registrations) and, later, the
+// binding UI. Mutate the set only through Add/Replace/Remove.
+func (inst *TabRegistry) Specs() (out []TabSpec) {
+	out = make([]TabSpec, len(inst.specs))
+	copy(out, inst.specs)
+	return
+}
+
 // byZone returns the specs of one layout zone, in registration order.
 func (inst *TabRegistry) byZone(z TabZoneE) (out []TabSpec) {
 	out = make([]TabSpec, 0, len(inst.specs))

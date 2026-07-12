@@ -99,6 +99,16 @@ func TestTabRegistryMutationAndFreeze(t *testing.T) {
 	require.Error(t, reg.Remove("table"))
 }
 
+// Specs is the embedder-facing enumeration: a copy, in registration order.
+func TestTabRegistrySpecsIsACopy(t *testing.T) {
+	reg := tabsTestApp().Tabs()
+	specs := reg.Specs()
+	require.Len(t, specs, len(reg.all()))
+	assert.Equal(t, reg.all()[0].ID, specs[0].ID)
+	specs[0].ID = "clobbered"
+	assert.NotEqual(t, "clobbered", reg.all()[0].ID, "Specs must return a copy")
+}
+
 // The focus reorder: one pure function over the body zone instead of six
 // hand-permuted arrays (whose FOCUS_MAP copy had silently dropped Graph).
 func TestBodyTabOrderFocusReorder(t *testing.T) {
