@@ -286,21 +286,21 @@ impl ImageCache {
                     return (resp, HOVER_RC_NONE, true);
                 }
             } else {
-            let expected = (w as usize).saturating_mul(h as usize);
-            if pixels.len() != expected {
-                tracing::warn!(
-                    id = id,
-                    w = w,
-                    h = h,
-                    got = pixels.len(),
-                    expected = expected,
-                    "image: pixels length mismatch; skipping upload"
-                );
-                // Fall through to draw whatever was cached (may be stale or
-                // absent — handled below).
-            } else {
-                self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
-            }
+                let expected = (w as usize).saturating_mul(h as usize);
+                if pixels.len() != expected {
+                    tracing::warn!(
+                        id = id,
+                        w = w,
+                        h = h,
+                        got = pixels.len(),
+                        expected = expected,
+                        "image: pixels length mismatch; skipping upload"
+                    );
+                    // Fall through to draw whatever was cached (may be stale or
+                    // absent — handled below).
+                } else {
+                    self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
+                }
             }
         }
 
