@@ -22,6 +22,8 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
@@ -160,6 +162,14 @@ type PlayApp struct {
 	boundLanes    map[NodeID]*nodeLane
 	boundViews    map[NodeID]laneView
 	resolvedNodes map[string]NodeID
+	// System-graph drawing state (play_graph_viz.go): the layout is cached
+	// on the topology fingerprint (vizKey); vizView carries pan/zoom;
+	// vizSeed keeps two live instances' canvas ids apart.
+	vizLayout *layeredgraph.Layout
+	vizKey    string
+	vizErr    error
+	vizView   view.ViewState
+	vizSeed   uint64
 	// pendingDockActivate focuses a dock tab on the next dock send (0 =
 	// none): set by affordances that deliver content into a tab body (the
 	// snippet library targeting the editor), consumed once per frame in the
@@ -567,6 +577,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
 	inst.tabs = defaultTabs(inst)
+	inst.vizSeed = nextVizSeed()
 	return inst
 }
 

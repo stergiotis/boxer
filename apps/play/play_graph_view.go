@@ -18,6 +18,15 @@ import (
 // renderGraphTab draws the Graph dock tab body.
 func (inst *PlayApp) renderGraphTab() {
 	ids := inst.ids
+	// The system drawing first — the whole reactive surface at a glance
+	// (play_graph_viz.go); collapsible so the sections below keep room.
+	for range c.CollapsingHeader(ids.PrepareStr("systemGraphViz"),
+		c.WidgetText().Text("system graph").Keep()).DefaultOpen(true).KeepIter() {
+		for range c.Vertical().KeepIter() {
+			inst.renderSystemGraph()
+		}
+	}
+	c.Separator().Horizontal().Send()
 	// The Signals section is store state, independent of a split — it
 	// renders even before the first Run (slice 5e).
 	inst.renderSignalsSection()
