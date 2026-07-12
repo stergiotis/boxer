@@ -37,16 +37,38 @@ type Move struct {
 	ToColumn   uint64
 }
 
+// dragState tracks an in-progress card drag (widget-owned). It is created on a
+// card frame's drag-start and cleared on drop or cancel; the drop target is
+// recomputed every frame from the pointer and the previous frame's captured
+// rects.
+type dragState struct {
+	cardID uint64
+	title  string
+	accent color.Color
+	// grabDX/grabDY is the pointer's offset inside the card at grab time, and
+	// w/h the card size — so the floating ghost tracks the pointer without
+	// jumping to a corner.
+	grabDX, grabDY float32
+	w, h           float32
+	// Recomputed each frame while dragging.
+	dropColumn uint64
+	dropIndex  int
+	dropOK     bool
+}
+
 // Model is the board state. Columns and Cards are owned by the host, which
 // builds them and reads them back after a move; the widget additionally holds
-// the transient selection and the pending-move queue. Render mutates only a
-// card's ColumnID and its position in Cards; it never touches Columns.
+// the transient selection, the pending-move queue, and any in-progress drag.
+// Render mutates only a card's ColumnID and its position in Cards; it never
+// touches Columns.
 type Model struct {
 	Columns []Column
 	Cards   []Card
 
-	sel   uint64 // selected card id; 0 = none
-	moves []Move
+	sel      uint64 // selected card id; 0 = none
+	moves    []Move
+	drag     *dragState // non-nil while a card is being dragged
+	dragStop bool       // the dragged card reported drag-stopped this frame
 }
 
 // NewModel binds a board. The slices are retained (not copied); the host may
@@ -183,4 +205,37 @@ func (m *Model) reorderWithin(idx, dir int) {
 	}
 	m.Cards[idx], m.Cards[j] = m.Cards[j], m.Cards[idx]
 	m.moves = append(m.moves, Move{CardID: m.Cards[j].ID, FromColumn: cid, ToColumn: cid})
+}
+
+// moveTo relocates the card cardID into column toColumn at insertion position
+// toIndex among that column's other cards (clamped to [0, len]). Records a
+// [Move]. This is the drag-drop mutator; shiftColumn / reorderWithin back the
+// button controls. toIndex counts the destination column's cards excluding the
+// dragged one, so it composes directly with the drag hit-test.
+func (m *Model) moveTo(cardID, toColumn uint64, toIndex int) {
+	src := m.cardIndex(cardID)
+	if src < 0 || m.columnIndex(toColumn) < 0 {
+		return
+	}
+	from := m.Cards[src].ColumnID
+	card := m.Cards[src]
+	card.ColumnID = toColumn
+	m.Cards = append(m.Cards[:src], m.Cards[src+1:]...) // remove
+
+	dest := m.cardIndicesIn(toColumn) // post-removal slice indices, in order
+	var insert int
+	switch {
+	case len(dest) == 0:
+		insert = len(m.Cards) // first card of an otherwise-empty column
+	case toIndex <= 0:
+		insert = dest[0]
+	case toIndex >= len(dest):
+		insert = dest[len(dest)-1] + 1
+	default:
+		insert = dest[toIndex]
+	}
+	m.Cards = append(m.Cards, Card{})
+	copy(m.Cards[insert+1:], m.Cards[insert:])
+	m.Cards[insert] = card
+	m.moves = append(m.moves, Move{CardID: cardID, FromColumn: from, ToColumn: toColumn})
 }

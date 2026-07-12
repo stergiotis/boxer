@@ -44,14 +44,21 @@
 // parents are board cards, (c) nest-in-parent-until-moved. The flat Model +
 // neutral rendering above forecloses none of them; revisit once this lands.
 //
+// # Dragging
+//
+// Cards also move by drag-and-drop: grabbing a card body starts a drag (the card
+// is accent-stroked and a ghost tracks the pointer), an insertion line marks
+// where it will land, and releasing drops it into that column at that position.
+// It is pure Go — a drag-sensed card Frame reports the drag flags, GetPointer
+// gives the cursor, CaptureUiRect / GetUiRect snapshot the lane and card rects
+// (one-frame lag, exact here because the layout is frozen for a drag's
+// duration), and the ghost + line paint through PaintAbsoluteOverlay's
+// foreground layer. No Rust/IDL codegen was needed. A quick click still selects;
+// only a press-and-move starts a drag.
+//
 // # Scope
 //
-// v1 moves cards with buttons. Drag-and-drop is a deliberate later slice: the
-// egui2 bindings already expose everything it needs in Go (per-frame drag flags,
-// pointer position, a foreground overlay layer for the drag ghost, arbitrary-rect
-// hit-testing), so it needs no Rust/IDL codegen — it is descoped for effort and
-// test surface, not feasibility. Independent per-column vertical scrolling is
-// likewise deferred (v1 scrolls the whole board together) to avoid the
-// width-pinned-column / nested-ScrollArea collapse documented in the imzero2
-// skill; the single board ScrollArea sidesteps it.
+// Independent per-column vertical scrolling is deferred (the board scrolls
+// together) to avoid the width-pinned-column / nested-ScrollArea collapse
+// documented in the imzero2 skill; the single board ScrollArea sidesteps it.
 package kanban

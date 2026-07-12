@@ -94,6 +94,44 @@ func TestReorderWithinColumn(t *testing.T) {
 	}
 }
 
+func TestMoveToInsertsAtIndex(t *testing.T) {
+	// col2 starts [B(11), D(13)]; drop A(10) from col1 at various indices.
+	check := func(idx int, want []uint64) {
+		t.Helper()
+		m := board()
+		m.moveTo(10, 2, idx)
+		if c := m.cardByID(10); c == nil || c.ColumnID != 2 {
+			t.Fatalf("A not in col2: %v", c)
+		}
+		eq(t, "col2", m.orderIn(2), want)
+		eq(t, "col1", m.orderIn(1), []uint64{12}) // C remains
+	}
+	check(0, []uint64{10, 11, 13}) // top
+	check(1, []uint64{11, 10, 13}) // between B and D
+	check(2, []uint64{11, 13, 10}) // end
+	check(9, []uint64{11, 13, 10}) // clamped past the end
+}
+
+func TestMoveToSameColumnReorder(t *testing.T) {
+	m := board() // col1 [A(10), C(12)]
+	m.moveTo(10, 1, 1)
+	eq(t, "col1", m.orderIn(1), []uint64{12, 10}) // A dropped after C
+	mv := m.DrainMoves()
+	if len(mv) != 1 || mv[0].FromColumn != 1 || mv[0].ToColumn != 1 {
+		t.Fatalf("same-column move = %#v", mv)
+	}
+}
+
+func TestMoveToEmptyColumn(t *testing.T) {
+	m := NewModel(
+		[]Column{{ID: 1}, {ID: 2}},
+		[]Card{{ID: 10, ColumnID: 1, Title: "A"}},
+	)
+	m.moveTo(10, 2, 0)
+	eq(t, "col1", m.orderIn(1), nil)
+	eq(t, "col2", m.orderIn(2), []uint64{10})
+}
+
 func TestChildCountAndLookup(t *testing.T) {
 	m := NewModel(
 		[]Column{{ID: 1}},

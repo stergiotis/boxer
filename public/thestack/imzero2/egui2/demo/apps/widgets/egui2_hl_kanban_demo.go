@@ -14,7 +14,7 @@ func init() {
 		Name: "kanban", Category: "Layout & widgets", Title: icons.IconTable + " kanban board",
 		Stage:       [2]float32{1040, 560},
 		Kind:        registry.DemoKindMixed,
-		Description: "A board of columns and the cards in them. Move a card between columns with its ◀ ▶ controls, reorder it within a column with ▲ ▼; click a card to select it (accent-stroked). Cards carry an optional accent bullet and a one-level parent link (a \"sub-item of …\" trailer; parents show a \"◱ N sub\" chip) — sub-items are scheduled independently of their parent. Drag-and-drop is a deferred slice.",
+		Description: "A board of columns and the cards in them. Move a card by dragging it (a ghost follows the pointer, an insertion line shows where it lands) or with its ◀ ▶ / ▲ ▼ controls; click a card to select it (accent-stroked). Cards carry an optional accent bullet and a one-level parent link (a \"sub-item of …\" trailer; parents show a \"◱ N sub\" chip) — sub-items are scheduled independently of their parent.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = newKanbanState()
 			return
