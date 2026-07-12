@@ -152,6 +152,14 @@ type PlayApp struct {
 	// registered TabSpec, frozen at the first Render. Embedders customize
 	// it via Tabs() between construction and mounting (D4).
 	tabs *TabRegistry
+	// Slice-6c per-panel binding state. tabBindings maps a panel tab to the
+	// split node it renders (unbound tabs render the active result);
+	// boundLanes holds one lane per distinct bound node; boundViews and
+	// resolvedNodes are the per-frame demand results (see demandBoundNodes).
+	tabBindings   map[string]NodeID
+	boundLanes    map[NodeID]*nodeLane
+	boundViews    map[NodeID]laneView
+	resolvedNodes map[string]NodeID
 	// pendingDockActivate focuses a dock tab on the next dock send (0 =
 	// none): set by affordances that deliver content into a tab body (the
 	// snippet library targeting the editor), consumed once per frame in the
@@ -578,6 +586,7 @@ func (inst *PlayApp) Close() {
 	if inst.intermediateLane != nil {
 		inst.intermediateLane.close()
 	}
+	inst.closeBoundLanes()
 	if inst.mapDriver != nil && inst.mapDriver.lane != nil {
 		inst.mapDriver.lane.close()
 	}
@@ -685,14 +694,15 @@ func (inst *PlayApp) Render() error {
 	rec, schema, numRows, loading, elapsed, summary, executed, err := inst.activeSnapshot()
 	if rec != nil {
 		defer rec.Release()
+	}
+	// Drive the bound nodes' lanes against this frame's snapshot (slice 6c)
+	// — one demand per distinct bound node; the views feed frameFor below.
+	// The pager/projector/schema syncs moved into their tabs, which since 6c
+	// render from their OWN (possibly bound) frame view.
+	releaseBound := inst.demandBoundNodes()
+	defer releaseBound()
+	if rec != nil {
 		inst.syncSelectionClamp(rec)
-		if executed != inst.pagerSeenExecuted {
-			inst.pagerSeenExecuted = executed
-			inst.pager.Reset()
-		}
-		inst.pager.Configure(rec.NumRows())
-		inst.projector.Invalidate(schema, executed)
-		inst.syncSchemaModel(schema)
 	}
 
 	// Mirror the result↔input lifecycle into the query FSM every frame —
@@ -767,14 +777,19 @@ func (inst *PlayApp) Render() error {
 				_ = dock.Split(rootLeaf, c.DockRight, 0.55, prev...)
 			}
 			for _, spec := range inst.tabs.all() {
+				// Per-tab frame view (slice 6c): a bound tab renders its
+				// node's lane view instead of the active result, and its
+				// dock title names the node.
+				tabFrame := inst.frameFor(spec.ID, &frame)
+				title := inst.boundTabTitle(&spec)
 				if spec.NoScroll {
-					for range dock.TabNoScroll(spec.DockID, spec.Title) {
-						spec.Render(&frame)
+					for range dock.TabNoScroll(spec.DockID, title) {
+						spec.Render(&tabFrame)
 					}
 					continue
 				}
-				for range dock.Tab(spec.DockID, spec.Title) {
-					spec.Render(&frame)
+				for range dock.Tab(spec.DockID, title) {
+					spec.Render(&tabFrame)
 				}
 			}
 		}
@@ -838,6 +853,9 @@ func (inst *PlayApp) executeRun(auto bool) {
 	// after a Run re-executes against the possibly-changed data.
 	inst.observedNode = split.Sink
 	inst.intermediateLane.forget()
+	// Bound lanes re-execute against the possibly-changed data too; the
+	// bindings themselves survive the Run (they revive by node name, 6c).
+	inst.forgetBoundLanes()
 	// Scripted-screenshot affordance: observe a named node on run so a
 	// capture can show the panels rendering an intermediate (mirrors
 	// BOXER_PLAY_FOCUS_*). Ignored when the node is absent.
@@ -859,20 +877,34 @@ func (inst *PlayApp) executeRun(auto bool) {
 	}
 }
 
-// syncSelectionClamp keeps the selection signal valid for the active result
-// (slice 5b, replacing the selectedRow field clamp): an absent or
-// out-of-range selection resets to row 0, so a fresh result auto-selects its
-// first row exactly as before. The write lands in the store immediately and
-// is visible from the NEXT frame's snapshot; this frame's panels guard
-// out-of-range rows themselves (the Detail empty-state), so the one-frame
-// window is benign. An in-range selection writes nothing (and a repeated "0"
-// write does not bump the store revision).
+// syncSelectionClamp keeps the selection signal valid for the result its
+// cursor indexes (slice 5b; node-aware since 6c): an absent or out-of-range
+// selection resets to row 0, so a fresh result auto-selects its first row.
+// The cursor's node comes from selection_node — a selection made on a BOUND
+// node clamps against that node's lane view, not the active result; a
+// selection whose node vanished this frame (unbound, or gone from the
+// split) retargets home to the active node. The write lands in the store
+// immediately and is visible from the NEXT frame's snapshot; this frame's
+// panels guard out-of-range rows themselves, so the one-frame window is
+// benign. An in-range selection writes nothing (a repeated identical write
+// does not bump the store revision).
 func (inst *PlayApp) syncSelectionClamp(rec arrow.RecordBatch) {
 	if rec == nil {
 		return
 	}
+	target := rec
+	if raw := inst.selectionNodeRaw(); raw != "" && raw != string(inst.activeNodeID()) {
+		v, visible := inst.boundViews[NodeID(raw)]
+		if !visible || v.rec == nil {
+			// The cursor's node is not on screen any more — send it home.
+			inst.graph.setSignalRawFrom(signalSelection, "0", signalWriterClamp)
+			inst.graph.setSignalRawFrom(signalSelectionNode, string(inst.activeNodeID()), signalWriterClamp)
+			return
+		}
+		target = v.rec
+	}
 	row, found := readSelection(inst.frameSig)
-	if !found || row < 0 || row >= rec.NumRows() {
+	if !found || row < 0 || row >= target.NumRows() {
 		inst.graph.setSignalRawFrom(signalSelection, "0", signalWriterClamp)
 	}
 }
@@ -1512,7 +1544,7 @@ func (inst *PlayApp) renderHistoryTab() {
 // intermediate loads on its own lane, and gating the spinner on the main lane
 // showed "0 rows" during its first fetch (review finding). Same for the
 // Projection/Timeline/Schema tabs below.
-func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, err error) {
+func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, err error, executed time.Time) {
 	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
@@ -1536,6 +1568,13 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		inst.renderResultsZeroRows()
 		return
 	}
+	// The pager tracks the result THIS tab renders (which since 6c may be a
+	// bound node's, not the active one) — sync moved here from Render.
+	if executed != inst.pagerSeenExecuted {
+		inst.pagerSeenExecuted = executed
+		inst.pager.Reset()
+	}
+	inst.pager.Configure(rec.NumRows())
 	// Give the pager strip vertical breathing room off the tab bar and rule it
 	// off from the grid, so the toolbar reads as its own band rather than being
 	// jammed against the table's first header row.
@@ -1545,13 +1584,13 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	c.AddSpace(pad)
 	c.Separator().Send()
 	dispatchPanel(tablePanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
+		chMain: {node: inst.resolvedTabNode("table"), rec: rec, schema: schema, sig: inst.frameSig},
 	}, inst.sigEmit)
 }
 
 // renderProjectionTab is the Projection dock tab body: the UMAP scatter
 // with its own toolbar/status. Same empty/error guards as the Table tab.
-func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, err error) {
+func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, err error, executed time.Time) {
 	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
@@ -1564,8 +1603,11 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, er
 		inst.renderResultsEmpty()
 		return
 	}
+	// The projector invalidates against the result THIS tab renders (which
+	// since 6c may be a bound node's) — sync moved here from Render.
+	inst.projector.Invalidate(rec.Schema(), executed)
 	dispatchPanel(projectionPanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: rec.Schema(), sig: inst.frameSig},
+		chMain: {node: inst.resolvedTabNode("projection"), rec: rec, schema: rec.Schema(), sig: inst.frameSig},
 	}, inst.sigEmit)
 }
 
@@ -1615,7 +1657,7 @@ func (inst *PlayApp) renderTimelineTab(rec arrow.RecordBatch, schema *arrow.Sche
 		defer bandsRec.Release()
 	}
 	inputs := map[ChannelID]channelInput{
-		chEvents: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
+		chEvents: {node: inst.resolvedTabNode("timeline"), rec: rec, schema: schema, sig: inst.frameSig},
 	}
 	if bandsRec != nil || bandsSchema != nil {
 		inputs[chBands] = channelInput{node: bandsNodeID, rec: bandsRec, schema: bandsSchema, sig: inst.frameSig}
@@ -1660,7 +1702,7 @@ func (inst *PlayApp) renderWorldTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	}
 	inst.worldDriver.noteExecuted(executed)
 	reject := dispatchPanel(worldPanel{driver: inst.worldDriver}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
+		chMain: {node: inst.resolvedTabNode("world"), rec: rec, schema: schema, sig: inst.frameSig},
 	}, inst.sigEmit)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {
@@ -1686,7 +1728,7 @@ func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 	reject := dispatchPanel(detailPanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
+		chMain: {node: inst.resolvedTabNode("detail"), rec: rec, schema: schema, sig: inst.frameSig},
 	}, nil)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {

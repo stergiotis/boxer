@@ -46,6 +46,7 @@ func (inst schemaPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 // kept in sync by syncSchemaModel in the per-frame consistency block, so the
 // tab body only renders it.
 func (inst *PlayApp) renderSchemaTab(rec arrow.RecordBatch, schema *arrow.Schema, loading bool, err error) {
+	inst.syncSchemaModel(schema)
 	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
@@ -59,7 +60,7 @@ func (inst *PlayApp) renderSchemaTab(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 	reject := dispatchPanel(schemaPanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.activeNodeID(), rec: rec, schema: schema, sig: inst.frameSig},
+		chMain: {node: inst.resolvedTabNode("schema"), rec: rec, schema: schema, sig: inst.frameSig},
 	}, nil)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {

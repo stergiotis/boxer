@@ -30,10 +30,23 @@ func dispatchPanel(p PanelI, inputs map[ChannelID]channelInput, emit SignalEmitt
 	if ge, isGraph := emit.(graphEmitter); isGraph && ge.writer == "" {
 		emit = ge.as(string(p.ID()))
 	}
+	specs := p.Channels()
+	// Selection coherence across differently-bound panels (slice 6c): the
+	// panel's selection writes are stamped with the node its primary channel
+	// renders (plus the row's leeway id when the result carries one), and
+	// its reads see `selection` only when the cursor indexes that node.
+	if len(specs) > 0 {
+		prim := inputs[specs[0].ID]
+		emit = selectionStamper{inner: emit, node: prim.node, rec: prim.rec}
+	}
 	filled := make(map[ChannelID]ChannelResult, len(inputs))
-	for _, spec := range p.Channels() {
+	for _, spec := range specs {
 		in := inputs[spec.ID]
-		claim, reason := p.AcceptForChannel(spec.ID, in.schema, in.sig)
+		sig := in.sig
+		if sig != nil {
+			sig = nodeScopedSelection{SignalEnvI: sig, node: in.node}
+		}
+		claim, reason := p.AcceptForChannel(spec.ID, in.schema, sig)
 		if reason != "" {
 			if spec.Required {
 				return reason

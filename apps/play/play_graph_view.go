@@ -41,6 +41,18 @@ func (inst *PlayApp) renderGraphTab() {
 		for rt := range c.RichTextLabel(inst.channelInventory()) {
 			rt.Small().Weak()
 		}
+		// Active per-tab bindings (6c) with a one-click reset.
+		if summary := inst.bindingSummary(); summary != "" {
+			for range c.Horizontal().KeepIter() {
+				for rt := range c.RichTextLabel(summary) {
+					rt.Small().Weak()
+				}
+				if c.Button(ids.PrepareStr("bindClear"), c.Atoms().Text("clear").Keep()).
+					SendResp().HasPrimaryClicked() {
+					inst.clearBindings()
+				}
+			}
+		}
 		c.Separator().Horizontal().Send()
 		for i := range split.Nodes {
 			inst.renderGraphNode(ids, split.Nodes[i])
@@ -81,6 +93,30 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 			if elig := nodeChannelEligibility(n); len(elig) > 0 {
 				for rt := range c.RichTextLabel("also fills: " + strings.Join(elig, ", ")) {
 					rt.Small().Weak()
+				}
+			}
+			// Per-tab binding toggles (6c): point one panel tab at THIS
+			// node while the rest keep the active result — the per-panel
+			// refinement of the all-panels observe gesture above.
+			for range c.Horizontal().KeepIter() {
+				for rt := range c.RichTextLabel("fill tab:") {
+					rt.Small().Weak()
+				}
+				for _, ts := range inst.tabs.all() {
+					if ts.Panel == nil {
+						continue
+					}
+					bound := inst.tabBindings[ts.ID] == n.ID
+					if c.Button(ids.PrepareStr("bind-"+ts.ID+"-"+string(n.ID)),
+						c.Atoms().Text(ts.Title).Keep()).
+						Selected(bound).Small().
+						SendResp().HasPrimaryClicked() {
+						if bound {
+							inst.unbindTab(ts.ID)
+						} else {
+							inst.bindTab(ts.ID, n.ID)
+						}
+					}
 				}
 			}
 			if len(n.DependsOn) > 0 {

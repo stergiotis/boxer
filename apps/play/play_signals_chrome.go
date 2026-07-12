@@ -54,6 +54,8 @@ func reservedSignalTypes() (out map[string]string) {
 	out[string(signalTimelineMin)] = "DateTime64(3, 'UTC')"
 	out[string(signalTimelineMax)] = "DateTime64(3, 'UTC')"
 	out[string(signalSelection)] = "Int64"
+	out[string(signalSelectionNode)] = "String"
+	out[string(signalSelectionID)] = "UInt64"
 	return
 }
 
