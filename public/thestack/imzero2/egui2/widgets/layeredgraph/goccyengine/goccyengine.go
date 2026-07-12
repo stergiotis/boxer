@@ -259,7 +259,17 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel) (*layeredgraph.Layout, e
 					key := [2]string{tName, hName}
 					if !seen[key] {
 						seen[key] = true
-						el := layeredgraph.EdgeLayout{From: tName, To: hName, Label: ed.GetStr("label")}
+						label := ed.GetStr("label")
+						if label == "\\E" {
+							// Graphviz declares the label attribute
+							// graph-wide once ANY edge carries one; edges
+							// without an explicit label then read back the
+							// unexpanded default escape "\E" (the edge
+							// name), which is never a real label. Mixed
+							// labeled/unlabeled graphs hit this.
+							label = ""
+						}
+						el := layeredgraph.EdgeLayout{From: tName, To: hName, Label: label}
 						el.Points, el.ArrowHead = parseSpline(ed.GetStr("pos"), flip)
 						if lx, ly, ok := parsePoint(ed.GetStr("lp")); ok {
 							p := flip(lx, ly)
