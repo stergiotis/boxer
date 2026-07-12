@@ -1192,6 +1192,31 @@ positioning, freeze refusal), the focus reorder, the derived knob set, and
 the registry-backed inventory. Next: **6b** (embedder tab, cross-repo),
 then **6c**.
 
+### 2026-07-12 — Slice 6b shipped (the embedder tab; the seam proven cross-repo)
+
+The out-of-tree embedder that reuses PlayApp whole added its first domain
+tab through the registry: the selected row's outgoing foreign-key edges as
+a full pane, registered via `Tabs().Add` in the pre-Render window at an
+embedder dock id (64, the ≥64 range D3 reserves), body zone by default,
+chrome-style (no PanelI) with its own empty states — the stock Map tab's
+precedent. It reads the shared `selection` signal off the frame view, so
+Table clicks retarget it exactly as they retarget Detail; its extraction
+helper is shared with the embedder's existing `SetDetailContent` override,
+which stays untouched — the two seams of D5 side by side in one app.
+
+Boxer's half of the slice is one addition: `TabRegistry.Specs()`, the
+exported copying enumeration the embedder's registration test asserts
+through (and 6c's binding UI will read). Everything else the embedder
+needed had shipped in 6a — the point of the exercise.
+
+Verified live in the embedder's shell: the tab lands after the built-ins,
+follows selection across rows (populated and empty), and renders real
+edges; the embedder's registration test also pins the duplicate-rejection
+path. Local builds resolve boxer through the parent workspace, so no
+version-pin dance was needed; the pin bump rides the next boxer push as
+usual. Remaining: **6c** — per-panel/per-channel node binding over the
+enumeration, with its own design refinement when picked up.
+
 ## References
 
 Internal:
