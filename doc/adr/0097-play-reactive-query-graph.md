@@ -1217,6 +1217,71 @@ version-pin dance was needed; the pin bump rides the next boxer push as
 usual. Remaining: **6c** — per-panel/per-channel node binding over the
 enumeration, with its own design refinement when picked up.
 
+### 2026-07-12 — Slice 6c shipped (per-panel node binding; selection grows a node and a key)
+
+The design refinement the 6c deferral called for, settled and shipped
+together. A panel tab binds to any split node: its frame view carries that
+node's result from a per-node lane — the observed-intermediate machinery
+generalized from one lane to N, sharing one lane per distinct node — its
+dock title names the node ("Table · recent"), and per-node loading/error
+ride the frame swap, so the existing per-tab empty/loading/error states
+present per binding with no new FSM. The Graph view grows per-node
+fill-tab toggles beside the observe gesture (which stays, as the
+all-panels override; an explicit binding wins over it), plus a bindings
+summary line with a reset.
+
+The four recorded open questions, as decided:
+
+- **Binding lifetime across Runs** — bindings key on the CTE name and
+  survive Runs; a split that lacks the name leaves the binding *inert*
+  (the tab falls back to the active result, its title says "absent") and
+  it revives when the name returns. Run forgets the bound lanes so they
+  re-execute against changed data, exactly as the observe lane does.
+  Rejected: dropping dangling bindings on Run — a rename-and-back would
+  silently lose the setup.
+- **Sink semantics** — Run always executes the fused sink; bindings are
+  presentation-side only. The status bar keeps tracking `main`. Rejected:
+  demand-skipping an unobserved sink (SD2 purism; Run is explicit user
+  intent and the history/staleness machinery hangs off it).
+- **Per-panel staleness** — bound lanes are live by construction: they
+  recompile against every frame's signal snapshot and supersede in flight
+  on change (D2's demand-driven half), so "staleness" reduces to the
+  per-node loading/error the frame swap already carries. No per-tab FSM.
+- **Selection coherence** — the row cursor gains a node, and the selected
+  row gains a key. The dispatcher stamps every panel selection write with
+  the node its primary channel renders (`selection_node`) and, when the
+  clicked result carries a leeway `id:id:…` column, the row's id value
+  (`selection_id`) — a *value*, not an ordinal, so `{selection_id:UInt64}`
+  cross-filters correctly regardless of node or ordering (the stable-key
+  beachhead; a full key-column picker for ad-hoc results stays deferred,
+  and `selection_id` tracks the last leeway click). Reads are gated
+  per-panel: the dispatcher hands each channel a node-scoped signal view
+  in which `selection` exists only if the cursor indexes that channel's
+  node (unset `selection_node` matches, preserving pre-6c behaviour).
+  Detail *follows* `selection_node` by default — clicking any panel
+  retargets it to the right node's row — and an explicit Detail binding
+  wins. The clamp is node-aware: out-of-range resets against the cursor's
+  own result; a cursor whose node left the screen retargets home to the
+  active node. Panels needed no changes — both the stamp and the gate
+  live in the dispatcher, like the 5e writer stamp.
+
+Mechanically, the pager/projector/schema syncs moved from Render's top
+into their tabs, which since 6c render from their own (possibly bound)
+frame view — the first per-tab state moves D2 anticipated.
+
+Regression tests: the leeway id extraction, the dispatcher stamp
+(node + id + provenance), the node-scoped read gate, the binding
+lifecycle with lane GC and the frame swap, the dangling-binding
+fallback, Detail's follow and its explicit-binding override, and the
+node-aware clamp (bound-node clamp, vanished-node retarget, in-range
+no-op). Live verification is deferred: the shared working tree's Go↔Rust
+FFI pair is mid-flight in a concurrent session (a clean pre-6c build
+fails to attach identically), so the Graph-view toggles should be driven
+live once that regen lands. Slice 6 is complete; the standing deferrals
+(SD1, SD12, SD13, the D5 unification trigger, contracts-as-data, an
+ad-hoc key-column picker for `selection_id`) keep their recorded
+triggers.
+
 ## References
 
 Internal:
