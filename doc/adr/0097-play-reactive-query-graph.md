@@ -1122,13 +1122,25 @@ tabs are the odd subsystem still enum-wired.
   the focus knobs collapse to one reorder over the enumeration.
   Rejected: package-global registration (two embedders fight); runtime
   add/remove (no consumer, and it churns the persisted dock state).
-- **D5 — granularities stay distinct.** The registry is tab-level.
-  Body-level seams — `SetDetailContent` and the how-to's patterns — remain
-  panel-owned extension points, unchanged: a tab replacement that existed
-  only to append a section would have to re-implement the pane's gating.
-  The non-tab core stays fixed: the editor buffer and Run lifecycle, the
-  topbar, the status bar, the signal store. Rejected: subsuming the detail
-  hook into `Replace("detail", …)`.
+- **D5 — granularities stay distinct, as a deferral with a trigger.** The
+  registry is tab-level. Body-level seams — `SetDetailContent` and the
+  how-to's patterns — remain panel-owned extension points, unchanged. The
+  unified alternative (subsume the hook into `Replace("detail", …)` over
+  wrappable panel values) is conceptually cleaner — one composition door,
+  no per-panel hook proliferation — and its apparent cost is a factoring
+  artifact, not essential: with the default Detail exported as a composable
+  panel value, a wrapper inherits the pane's gating for free. What it
+  actually requires is a public surface that does not yet exist — exported
+  default-panel values, a decorator idiom, wrapper identity semantics (a
+  wrapping panel's ID feeds the dispatcher's provenance stamp) — an API
+  commitment currently justified by exactly one narrow consumer, whose
+  working integration it would churn for no user-visible gain. The hook's
+  narrowness also insulates it from the 6c selection-key change (it
+  receives an already-resolved row). Revisit when a second body-level hook
+  is requested, or when 6c's binding work makes panels first-class values
+  anyway — wrapping then falls out nearly free and the hook can become
+  sugar over it. The non-tab core stays fixed: the editor buffer and Run
+  lifecycle, the topbar, the status bar, the signal store.
 
 **Mechanics (subsidiary):** the per-tab ScrollArea wrappers move inside the
 tab bodies so the dock loop is uniform (`NoScroll` covers the Map's
