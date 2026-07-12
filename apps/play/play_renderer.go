@@ -148,9 +148,15 @@ type PlayApp struct {
 	// renderSnippetsTab, captured-and-cleared by renderSqlEditor.
 	pendingSnippetInsert  string
 	pendingSnippetReplace string
-	requestRun            bool
-	cards                 *CardDriver
-	projector             *Projector
+	// pendingDockActivate focuses a dock tab on the next dock send (0 =
+	// none): set by affordances that deliver content into a tab body (the
+	// snippet library targeting the editor), consumed once per frame in the
+	// dock scope. A hidden tab's body buffer is discarded uninterpreted, so
+	// delivery ops must ride an activated tab.
+	pendingDockActivate uint64
+	requestRun          bool
+	cards               *CardDriver
+	projector           *Projector
 
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
 	// a leeway TableDesc inferred from the active result's Arrow schema (plain
@@ -343,7 +349,7 @@ func (inst *PlayApp) SetCapabilities(bus app.BusI, storage app.StorageI, logger 
 // persistKeyLastSql when storage is wired and the value is non-empty.
 // Best-effort: errors are logged at debug level and the existing
 // inst.sql stays. The caller (PlayLauncher.Mount) decides precedence:
-// today it lets SPINNAKER_PLAY_SQL win over persist, persist win over
+// today it lets BOXER_PLAY_SQL win over persist, persist win over
 // the literal default.
 func (inst *PlayApp) RestorePersistedSql() {
 	if inst.storage == nil {
@@ -717,6 +723,10 @@ func (inst *PlayApp) Render() error {
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
+			if inst.pendingDockActivate != 0 {
+				dock.ActivateTab(inst.pendingDockActivate)
+				inst.pendingDockActivate = 0
+			}
 			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
 			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema, dockTabDiagnostics}
 			if FocusMap.Get() != "" {
@@ -870,7 +880,7 @@ func (inst *PlayApp) executeRun(auto bool) {
 	inst.intermediateLane.forget()
 	// Scripted-screenshot affordance: observe a named node on run so a
 	// capture can show the panels rendering an intermediate (mirrors
-	// SPINNAKER_PLAY_FOCUS_*). Ignored when the node is absent.
+	// BOXER_PLAY_FOCUS_*). Ignored when the node is absent.
 	if obs := ObserveNode.Get(); obs != "" {
 		if _, ok := findSplitNode(split, NodeID(obs)); ok {
 			inst.observedNode = NodeID(obs)
@@ -1011,7 +1021,7 @@ func (inst *PlayApp) autoShotTick() {
 		// the formatter never running (parse error already covered
 		// by formattedErr != nil).
 		previewReady := inst.formatted != "" || inst.formattedErr != nil
-		// SPINNAKER_PLAY_SHOT_SETTLE bumps the settle window so scripted
+		// BOXER_PLAY_SHOT_SETTLE bumps the settle window so scripted
 		// captures can wait out an async panel fetch (e.g. the Map tab's
 		// debounced raster round-trip) before the screenshot fires.
 		settleFrames := 5

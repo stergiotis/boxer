@@ -148,9 +148,9 @@ cat <<EOF
 
 Done. View it in play (its default endpoint is already http://localhost:8123/):
 
-  SPINNAKER_PLAY_MAP_TABLE=planes_mercator \\
-  SPINNAKER_PLAY_MAP_CENTER=${ADSB_VIEW_CENTER} \\
-  SPINNAKER_PLAY_MAP_ZOOM=${ADSB_VIEW_ZOOM} \\
+  BOXER_PLAY_MAP_TABLE=planes_mercator \\
+  BOXER_PLAY_MAP_CENTER=${ADSB_VIEW_CENTER} \\
+  BOXER_PLAY_MAP_ZOOM=${ADSB_VIEW_ZOOM} \\
   <launch the play HMI>   # then open the Map panel, "no basemap" for offline
 
 EOF

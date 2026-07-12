@@ -22,116 +22,116 @@ import (
 //go:embed help
 var helpFS embed.FS
 
-// SPINNAKER_PLAY_* drive optional one-shot/scripted-screenshot
+// BOXER_PLAY_* drive optional one-shot/scripted-screenshot
 // behaviours on the play HMI. Registered with the boxer-wide env
 // registry per ADR-0009, so every knob shows up in the generated
 // doc/env-vars.md catalog. The typed handles cache after the first
 // read — fine here: the knobs are set before launch and never change.
 var (
 	SQLOverride = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_SQL",
+		Name:        "BOXER_PLAY_SQL",
 		Description: "initial SQL buffer for the play HMI; non-empty wins over the persisted-session restore",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	TimelineBandsSQLOverride = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_TIMELINE_BANDS_SQL",
+		Name:        "BOXER_PLAY_TIMELINE_BANDS_SQL",
 		Description: "panel-local bands SQL for the Timeline tab; non-empty wins over the persisted-session restore",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	AutoRun = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_AUTORUN",
+		Name:        "BOXER_PLAY_AUTORUN",
 		Description: "non-empty enables auto-run of the initial SQL on mount",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	ScreenshotPath = env.NewPath(env.Spec{
-		Name:        "SPINNAKER_PLAY_SCREENSHOT",
+		Name:        "BOXER_PLAY_SCREENSHOT",
 		Description: "if set, the play HMI captures a screenshot to this path after the first frame",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	ExitOnShot = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_EXIT_ON_SHOT",
-		Description: "non-empty exits the play HMI after writing SPINNAKER_PLAY_SCREENSHOT",
+		Name:        "BOXER_PLAY_EXIT_ON_SHOT",
+		Description: "non-empty exits the play HMI after writing BOXER_PLAY_SCREENSHOT",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	PreviewAsSent = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_PREVIEW_AS_SENT",
+		Name:        "BOXER_PLAY_PREVIEW_AS_SENT",
 		Description: "non-empty starts the Preview tab in 'as sent to server' mode (post-pass wire SQL) for scripted screenshots",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	FocusMap = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_FOCUS_MAP",
+		Name:        "BOXER_PLAY_FOCUS_MAP",
 		Description: "non-empty makes Map the default-active body tab (scripted screenshots)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	FocusGraph = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_FOCUS_GRAPH",
+		Name:        "BOXER_PLAY_FOCUS_GRAPH",
 		Description: "non-empty makes Graph the default-active body tab (scripted screenshots)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	FocusTimeline = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_FOCUS_TIMELINE",
+		Name:        "BOXER_PLAY_FOCUS_TIMELINE",
 		Description: "non-empty makes Timeline the default-active body tab (scripted screenshots)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	FocusSchema = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_FOCUS_SCHEMA",
+		Name:        "BOXER_PLAY_FOCUS_SCHEMA",
 		Description: "non-empty makes Schema the default-active body tab (scripted screenshots)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	FocusWorld = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_FOCUS_WORLD",
+		Name:        "BOXER_PLAY_FOCUS_WORLD",
 		Description: "non-empty makes World (the ADR-0114 country choropleth) the default-active body tab (scripted screenshots)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	FocusDiagnostics = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_FOCUS_DIAGNOSTICS",
+		Name:        "BOXER_PLAY_FOCUS_DIAGNOSTICS",
 		Description: "non-empty makes Diagnostics (parse advice + full error texts) the default-active body tab (scripted screenshots)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	ObserveNode = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_OBSERVE",
+		Name:        "BOXER_PLAY_OBSERVE",
 		Description: "graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	ShotSettleFrames = env.NewInt(env.Spec{
-		Name:        "SPINNAKER_PLAY_SHOT_SETTLE",
-		Description: "settle frames before SPINNAKER_PLAY_SCREENSHOT fires; a positive value overrides the default (5), e.g. to wait out an async panel fetch",
+		Name:        "BOXER_PLAY_SHOT_SETTLE",
+		Description: "settle frames before BOXER_PLAY_SCREENSHOT fires; a positive value overrides the default (5), e.g. to wait out an async panel fetch",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	MapTable = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_MAP_TABLE",
+		Name:        "BOXER_PLAY_MAP_TABLE",
 		Description: "initial table for the Map panel; empty keeps the default (planes_mercator_sample100)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	MapZoom = env.NewFloat(env.Spec{
-		Name:        "SPINNAKER_PLAY_MAP_ZOOM",
+		Name:        "BOXER_PLAY_MAP_ZOOM",
 		Description: "initial Map zoom level; a positive value overrides the default (4)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	MapCenter = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_MAP_CENTER",
+		Name:        "BOXER_PLAY_MAP_CENTER",
 		Description: "initial Map center as \"lat,lon\" (WGS84); empty or unparseable keeps the default (40,0)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
 
 	MapSize = env.NewString(env.Spec{
-		Name:        "SPINNAKER_PLAY_MAP_SIZE",
+		Name:        "BOXER_PLAY_MAP_SIZE",
 		Description: "pin a fixed Map widget size as \"WxH\" logical points (deterministic scripted screenshots); empty or unparseable keeps the default (the map fills the Map tab)",
 		Category:    env.CategoryE("spinnaker-play"),
 	})
@@ -200,7 +200,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		},
 		// PersistedKeys → host auto-injects
 		// runtime.persist.play.> cap; the editor buffer survives
-		// session restart. SPINNAKER_PLAY_SQL still wins when set.
+		// session restart. BOXER_PLAY_SQL still wins when set.
 		// timelineBandsSql persists the Timeline panel's bands-SQL
 		// editor across sessions; empty is a valid value (no bands).
 		PersistedKeys: []string{persistKeyLastSql, persistKeyTimelineBandsSql},
@@ -210,7 +210,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 
 func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// Precedence for the initial SQL buffer:
-	//   1. SPINNAKER_PLAY_SQL env var — explicit user override
+	//   1. BOXER_PLAY_SQL env var — explicit user override
 	//      (one-shot screenshots, scripted runs).
 	//   2. runtime.persist.play.lastSql — restored from the previous
 	//      session via MountCtx.Storage.
@@ -243,10 +243,10 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		inner.RestorePersistedSql()
 	}
 	// Bands SQL is always restored regardless of the main env override —
-	// it's panel-local, not main-SQL, so SPINNAKER_PLAY_SQL has no
+	// it's panel-local, not main-SQL, so BOXER_PLAY_SQL has no
 	// bearing on whether the user's last bands query should come back.
 	inner.RestorePersistedTimelineBandsSql()
-	// Dedicated bands env override (parallel to SPINNAKER_PLAY_SQL) lets
+	// Dedicated bands env override (parallel to BOXER_PLAY_SQL) lets
 	// scripted screenshots seed the bands editor without interactive input.
 	if bandsSQL, hasBands := TimelineBandsSQLOverride.Lookup(); hasBands && bandsSQL != "" {
 		inner.timelineBandsSql = bandsSQL

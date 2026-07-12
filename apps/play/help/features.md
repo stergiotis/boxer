@@ -290,9 +290,9 @@ Command-line flags (all optional):
 - `--initialSqlPath` — a `.sql` file preloaded into the editor.
 
 The editor buffer (`lastSql`) and the timeline bands SQL persist across sessions.
-`SPINNAKER_PLAY_SQL` overrides the restored buffer (useful for scripted runs), and
-the automation variables `SPINNAKER_PLAY_AUTORUN` (run the initial SQL on launch),
-`SPINNAKER_PLAY_SCREENSHOT` (capture to a path), and `SPINNAKER_PLAY_EXIT_ON_SHOT`
+`BOXER_PLAY_SQL` overrides the restored buffer (useful for scripted runs), and
+the automation variables `BOXER_PLAY_AUTORUN` (run the initial SQL on launch),
+`BOXER_PLAY_SCREENSHOT` (capture to a path), and `BOXER_PLAY_EXIT_ON_SHOT`
 (quit after the screenshot) drive headless captures.
 
 ## The demo data

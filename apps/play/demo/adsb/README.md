@@ -70,9 +70,9 @@ knobs. Then view it in `play` (default endpoint is already
 `http://localhost:8123/`):
 
 ```sh
-SPINNAKER_PLAY_MAP_TABLE=planes_mercator \
-SPINNAKER_PLAY_MAP_CENTER=47.3769,8.5417 \
-SPINNAKER_PLAY_MAP_ZOOM=8 \
+BOXER_PLAY_MAP_TABLE=planes_mercator \
+BOXER_PLAY_MAP_CENTER=47.3769,8.5417 \
+BOXER_PLAY_MAP_ZOOM=8 \
 <launch the play HMI>          # open the Map panel; "no basemap" keeps it offline
 ```
 

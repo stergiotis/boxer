@@ -108,16 +108,16 @@ From the repo root:
 
 ```sh
 CLICKHOUSE_URL=http://localhost:8123/ \
-SPINNAKER_PLAY_MAP_TABLE=local_planes \
-SPINNAKER_PLAY_MAP_CENTER=51.5,-0.15 \
-SPINNAKER_PLAY_MAP_ZOOM=10 \
-SPINNAKER_PLAY_MAP_SIZE=860x460 \
+BOXER_PLAY_MAP_TABLE=local_planes \
+BOXER_PLAY_MAP_CENTER=51.5,-0.15 \
+BOXER_PLAY_MAP_ZOOM=10 \
+BOXER_PLAY_MAP_SIZE=860x460 \
 bash rust/imzero2/hmi.sh --launch play
 ```
 
 Open the **Map** tab. The init view is pinned to London at zoom 10 because the
 default zoom-4 continental view is too heavy to aggregate. The
-`SPINNAKER_PLAY_MAP_*` knobs set only the initial table and view; sampling,
+`BOXER_PLAY_MAP_*` knobs set only the initial table and view; sampling,
 opacity, and the basemap toggle are interactive controls.
 
 ## Verify without the GUI

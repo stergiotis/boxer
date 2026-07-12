@@ -35,7 +35,7 @@ type MapDriver struct {
 	// Controls + display. The map fills the tab body by default (FillAvailable
 	// — the leaf is a bounded, no-scroll host, so filling it means nothing
 	// overflows or clips); mapWidth/mapHeight apply only when
-	// SPINNAKER_PLAY_MAP_SIZE pins a fixed size (fixedSize) for deterministic
+	// BOXER_PLAY_MAP_SIZE pins a fixed size (fixedSize) for deterministic
 	// scripted screenshots.
 	table        string
 	sampling     float64
@@ -188,7 +188,7 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		// starts from an editable density expression.
 		customColorSQL: "transparency * 255 AS red,\n    transparency * 200 AS green,\n    transparency * 120 AS blue",
 	}
-	// Scripted-screenshot overrides — the SPINNAKER_PLAY_MAP_* knobs from the
+	// Scripted-screenshot overrides — the BOXER_PLAY_MAP_* knobs from the
 	// app_register.go env-registry block (ADR-0009); unset keeps the defaults
 	// above.
 	if t := strings.TrimSpace(MapTable.Get()); t != "" {
@@ -281,9 +281,15 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 
 	// Draw the last-good raster, pinned to the bounds it was computed for, so it
 	// pans/zooms correctly under the camera until the next result lands.
+	// TextureStarved closes the send-once loop: the full upload can go into a
+	// discarded hidden-tab buffer, and the host's idle LRU evicts the texture
+	// after ~10 s uninterpreted — either way the host reports the rasterId
+	// starved and the pixels re-ship (previously the raster stayed invisible
+	// after a tab switch until a pan bumped the version).
 	if inst.packW > 0 && inst.packH > 0 {
 		toSend := inst.pixels
-		if inst.version == inst.lastSentVersion {
+		if inst.version == inst.lastSentVersion &&
+			!c.CurrentApplicationState.StateManager.TextureStarved(mapRasterID) {
 			toSend = []uint32{} // unchanged → reuse the cached texture (empty, NOT nil)
 		}
 		c.MapRaster(mapRasterID,
@@ -296,7 +302,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	// The map (drains the overlay, reports the next camera). noTiles keeps it
 	// offline; flip it off for the built-in OSM basemap (needs network).
 	// Sizing: fill the (no-scroll, bounded) tab body so the whole map is
-	// always visible; a SPINNAKER_PLAY_MAP_SIZE override pins fixed dims
+	// always visible; a BOXER_PLAY_MAP_SIZE override pins fixed dims
 	// instead, keeping scripted captures deterministic across hosts.
 	mw := c.WalkersMap(inst.ids.PrepareStr("map"),
 		inst.initLat, inst.initLon, inst.noTiles,
@@ -309,9 +315,17 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	if !inst.noTiles {
 		mw = mw.TileUrl("")
 	}
+	// SetZoom is a one-shot op: sent into a hidden tab's discarded buffer it
+	// is silently lost, so "sent" may not mean "applied". Keep sending until
+	// the camera register proves THIS map rendered at least one frame (the
+	// register is global — another app's walkers map can fill it while this
+	// tab is still hidden — so match on MapId). The frame after first render
+	// stops the re-send, so a user zoom is never fought.
 	if !inst.inited {
 		mw = mw.SetZoom(inst.initZoom)
-		inst.inited = true
+		if cam.Found && cam.MapId == inst.ids.PrepareStr("map").Derive() {
+			inst.inited = true
+		}
 	}
 	mw.Send()
 }

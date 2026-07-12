@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-07-11T19:06:32Z
+generated-at: 2026-07-12T13:09:39Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -110,24 +110,24 @@ generated-at: 2026-07-11T19:06:32Z
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
-| `SPINNAKER_PLAY_AUTORUN` | string | — | — |  | non-empty enables auto-run of the initial SQL on mount |
-| `SPINNAKER_PLAY_EXIT_ON_SHOT` | string | — | — |  | non-empty exits the play HMI after writing SPINNAKER_PLAY_SCREENSHOT |
-| `SPINNAKER_PLAY_FOCUS_DIAGNOSTICS` | string | — | — |  | non-empty makes Diagnostics (parse advice + full error texts) the default-active body tab (scripted screenshots) |
-| `SPINNAKER_PLAY_FOCUS_GRAPH` | string | — | — |  | non-empty makes Graph the default-active body tab (scripted screenshots) |
-| `SPINNAKER_PLAY_FOCUS_MAP` | string | — | — |  | non-empty makes Map the default-active body tab (scripted screenshots) |
-| `SPINNAKER_PLAY_FOCUS_SCHEMA` | string | — | — |  | non-empty makes Schema the default-active body tab (scripted screenshots) |
-| `SPINNAKER_PLAY_FOCUS_TIMELINE` | string | — | — |  | non-empty makes Timeline the default-active body tab (scripted screenshots) |
-| `SPINNAKER_PLAY_FOCUS_WORLD` | string | — | — |  | non-empty makes World (the ADR-0114 country choropleth) the default-active body tab (scripted screenshots) |
-| `SPINNAKER_PLAY_MAP_CENTER` | string | — | — |  | initial Map center as "lat,lon" (WGS84); empty or unparseable keeps the default (40,0) |
-| `SPINNAKER_PLAY_MAP_SIZE` | string | — | — |  | pin a fixed Map widget size as "WxH" logical points (deterministic scripted screenshots); empty or unparseable keeps the default (the map fills the Map tab) |
-| `SPINNAKER_PLAY_MAP_TABLE` | string | — | — |  | initial table for the Map panel; empty keeps the default (planes_mercator_sample100) |
-| `SPINNAKER_PLAY_MAP_ZOOM` | float64 | — | — |  | initial Map zoom level; a positive value overrides the default (4) |
-| `SPINNAKER_PLAY_OBSERVE` | string | — | — |  | graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split |
-| `SPINNAKER_PLAY_PREVIEW_AS_SENT` | string | — | — |  | non-empty starts the Preview tab in 'as sent to server' mode (post-pass wire SQL) for scripted screenshots |
-| `SPINNAKER_PLAY_SCREENSHOT` | path | — | — |  | if set, the play HMI captures a screenshot to this path after the first frame |
-| `SPINNAKER_PLAY_SHOT_SETTLE` | int64 | — | — |  | settle frames before SPINNAKER_PLAY_SCREENSHOT fires; a positive value overrides the default (5), e.g. to wait out an async panel fetch |
-| `SPINNAKER_PLAY_SQL` | string | — | — |  | initial SQL buffer for the play HMI; non-empty wins over the persisted-session restore |
-| `SPINNAKER_PLAY_TIMELINE_BANDS_SQL` | string | — | — |  | panel-local bands SQL for the Timeline tab; non-empty wins over the persisted-session restore |
+| `BOXER_PLAY_AUTORUN` | string | — | — |  | non-empty enables auto-run of the initial SQL on mount |
+| `BOXER_PLAY_EXIT_ON_SHOT` | string | — | — |  | non-empty exits the play HMI after writing BOXER_PLAY_SCREENSHOT |
+| `BOXER_PLAY_FOCUS_DIAGNOSTICS` | string | — | — |  | non-empty makes Diagnostics (parse advice + full error texts) the default-active body tab (scripted screenshots) |
+| `BOXER_PLAY_FOCUS_GRAPH` | string | — | — |  | non-empty makes Graph the default-active body tab (scripted screenshots) |
+| `BOXER_PLAY_FOCUS_MAP` | string | — | — |  | non-empty makes Map the default-active body tab (scripted screenshots) |
+| `BOXER_PLAY_FOCUS_SCHEMA` | string | — | — |  | non-empty makes Schema the default-active body tab (scripted screenshots) |
+| `BOXER_PLAY_FOCUS_TIMELINE` | string | — | — |  | non-empty makes Timeline the default-active body tab (scripted screenshots) |
+| `BOXER_PLAY_FOCUS_WORLD` | string | — | — |  | non-empty makes World (the ADR-0114 country choropleth) the default-active body tab (scripted screenshots) |
+| `BOXER_PLAY_MAP_CENTER` | string | — | — |  | initial Map center as "lat,lon" (WGS84); empty or unparseable keeps the default (40,0) |
+| `BOXER_PLAY_MAP_SIZE` | string | — | — |  | pin a fixed Map widget size as "WxH" logical points (deterministic scripted screenshots); empty or unparseable keeps the default (the map fills the Map tab) |
+| `BOXER_PLAY_MAP_TABLE` | string | — | — |  | initial table for the Map panel; empty keeps the default (planes_mercator_sample100) |
+| `BOXER_PLAY_MAP_ZOOM` | float64 | — | — |  | initial Map zoom level; a positive value overrides the default (4) |
+| `BOXER_PLAY_OBSERVE` | string | — | — |  | graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split |
+| `BOXER_PLAY_PREVIEW_AS_SENT` | string | — | — |  | non-empty starts the Preview tab in 'as sent to server' mode (post-pass wire SQL) for scripted screenshots |
+| `BOXER_PLAY_SCREENSHOT` | path | — | — |  | if set, the play HMI captures a screenshot to this path after the first frame |
+| `BOXER_PLAY_SHOT_SETTLE` | int64 | — | — |  | settle frames before BOXER_PLAY_SCREENSHOT fires; a positive value overrides the default (5), e.g. to wait out an async panel fetch |
+| `BOXER_PLAY_SQL` | string | — | — |  | initial SQL buffer for the play HMI; non-empty wins over the persisted-session restore |
+| `BOXER_PLAY_TIMELINE_BANDS_SQL` | string | — | — |  | panel-local bands SQL for the Timeline tab; non-empty wins over the persisted-session restore |
 
 ## swisstopo (1)
 
@@ -186,6 +186,24 @@ generated-at: 2026-07-11T19:06:32Z
 | `BOXER_LOG_OS_PID_ON_START` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/logging` |
 | `BOXER_LOG_VCS_REVISION_ON_START` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/logging` |
 | `BOXER_MARKDOWN_ECHO` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/docgen` |
+| `BOXER_PLAY_AUTORUN` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_EXIT_ON_SHOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_FOCUS_DIAGNOSTICS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_FOCUS_GRAPH` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_FOCUS_MAP` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_FOCUS_SCHEMA` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_FOCUS_TIMELINE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_FOCUS_WORLD` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_MAP_CENTER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_MAP_SIZE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_MAP_TABLE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_MAP_ZOOM` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_OBSERVE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_PREVIEW_AS_SENT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_SCREENSHOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_SHOT_SETTLE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_SQL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
+| `BOXER_PLAY_TIMELINE_BANDS_SQL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `BOXER_WAIT_FOR_DEBUGGER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/dev` |
 | `CLICKHOUSE_DATABASE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv` |
 | `CLICKHOUSE_ENDPOINT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv` |
@@ -238,23 +256,5 @@ generated-at: 2026-07-11T19:06:32Z
 | `PEBBLE2_RUN_ID` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/runinfo` |
 | `PEBBLE_MAX_HAMMING_DIST_PER_BYTE_INCL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/app/commands/findAnchor` |
 | `PEBBLE_N_ANCHOR_BYTES` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/app/commands/findAnchor` |
-| `SPINNAKER_PLAY_AUTORUN` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_EXIT_ON_SHOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_FOCUS_DIAGNOSTICS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_FOCUS_GRAPH` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_FOCUS_MAP` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_FOCUS_SCHEMA` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_FOCUS_TIMELINE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_FOCUS_WORLD` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_MAP_CENTER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_MAP_SIZE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_MAP_TABLE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_MAP_ZOOM` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_OBSERVE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_PREVIEW_AS_SENT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_SCREENSHOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_SHOT_SETTLE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_SQL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `SPINNAKER_PLAY_TIMELINE_BANDS_SQL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `SWISSTOPO_TILES_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/terrainscope` |
 | `WINDOWHOST_DEBUG_RENDER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/windowhost` |
