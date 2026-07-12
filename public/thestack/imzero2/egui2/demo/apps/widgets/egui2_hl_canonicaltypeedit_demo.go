@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -60,6 +61,6 @@ func init() {
 func demoCanonicalTypeEdit(ids *c.WidgetIdStack, st *ctEditDemoState) {
 	c.Label("Edit a canonical type — it opens compact (one row: the bar + a caret; click the caret for the structured form); click '+ element' to grow it into a group/signature (chips with '-'/'_' separators):").Send()
 	c.Separator().Horizontal().Send()
-	c.AddSpace(6)
+	c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
 	st.model.Render(ids, "ctedit-demo")
 }

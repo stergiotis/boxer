@@ -59,7 +59,7 @@ func AnchorToggle(ids c.WidgetIdCreatorI, pinned *bool) (clicked bool) {
 
 	f := c.Frame(ids).
 		Fill(fill).
-		CornerRadius(4).
+		CornerRadius(styletokens.RoundingSm).
 		InnerMarginSides(4, 4, 1, 1).
 		SenseClick().
 		HoverCursorPointer()

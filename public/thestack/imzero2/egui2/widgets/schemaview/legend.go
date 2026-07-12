@@ -55,7 +55,7 @@ func renderLegendToggle(m *Model, scope string) {
 	toggleId := c.MakeAbsoluteIdStr(scope + "-toggle")
 	f := c.Frame(toggleId).
 		Fill(fill).
-		CornerRadius(4).
+		CornerRadius(styletokens.RoundingSm).
 		InnerMarginSides(4, 4, 1, 1).
 		SenseClick().
 		HoverCursorPointer()
@@ -112,7 +112,7 @@ func renderLegendBody(ids *c.WidgetIdStack) {
 	for rt := range c.RichTextLabel("navigator glyphs") {
 		rt.Weak().Small()
 	}
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
 	for range c.Grid(ids.PrepareStr("legend-grid")).NumColumns(2).KeepIter() {
 		for i, e := range legendEntries {
 			badge.New(ids.PrepareSeq(uint64(0x1e6e_0000+i)), e.glyph).

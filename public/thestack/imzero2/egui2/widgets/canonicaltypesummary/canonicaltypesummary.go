@@ -324,7 +324,7 @@ func (inst Renderer) renderLevel2Body(scope string, state *instanceState, canoni
 
 	if !ok {
 		errCol := color.Hex(styletokens.ErrorDefault.AsHex())
-		c.AddSpace(4)
+		c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
 		msg := "parse error: " + firstLine(state.parseErr.Error())
 		c.LabelAtoms(c.Atoms().BeginRichTextColored(errCol, transparentBg, msg).Small().End().Keep()).Send()
 		return
@@ -376,9 +376,10 @@ func (inst Renderer) renderTabBar(scope string, state *instanceState) {
 // muted "var" label. The footprint is type-level (see the honest caveat
 // below the strip), not a byte-exact runtime encoding for non-network types.
 func renderLayoutTab(scope string, ast canonicaltypes.AstNodeI) {
+	density := styletokens.DensityFromEnv()
 	fixedBytes, anyVar, count := footprint(ast)
 	c.LabelAtoms(c.Atoms().BeginRichText(footprintHeader(count, fixedBytes, anyVar)).Small().Weak().End().Keep()).Send()
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(density))
 
 	fill := color.Hex(styletokens.AccentSubtle.AsHex())
 	muted := color.Hex(styletokens.NeutralTextSecondary.AsHex())
@@ -396,14 +397,14 @@ func renderLayoutTab(scope string, ast canonicaltypes.AstNodeI) {
 				if it.sep == canonicaltypes.SignatureSeparator {
 					col = accent
 				}
-				c.AddSpace(2)
+				c.AddSpace(styletokens.PaddingHair(density))
 				c.LabelAtoms(c.Atoms().BeginRichTextColored(col, transparentBg, it.sep).Monospace().Strong().End().Keep()).Send()
-				c.AddSpace(2)
+				c.AddSpace(styletokens.PaddingHair(density))
 				continue
 			}
 			info := it.info
 			segId := c.MakeAbsoluteIdStr(scope + "-seg-" + strconv.Itoa(i))
-			for range c.Frame(segId).Fill(fill).InnerMargin(6).CornerRadius(4).KeepIter() {
+			for range c.Frame(segId).Fill(fill).InnerMargin(styletokens.PaddingTight(density)).CornerRadius(styletokens.RoundingMd).KeepIter() {
 				for range c.Vertical().KeepIter() {
 					c.UiSetMinWidth(slotW)
 					c.UiSetMaxWidth(slotW)
@@ -418,9 +419,9 @@ func renderLayoutTab(scope string, ast canonicaltypes.AstNodeI) {
 			}
 		}
 	}
-	c.AddSpace(2)
+	c.AddSpace(styletokens.PaddingHair(density))
 	c.Separator().Horizontal().Send()
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(density))
 	c.LabelAtoms(c.Atoms().BeginRichTextColored(muted, transparentBg, "footprint is type-level; non-network runtime encoding may differ").Small().End().Keep()).Send()
 }
 

@@ -321,6 +321,7 @@ func (inst *SpectrumDisplay) renderInner() {
 	// top-left and paint over anything placed above us — e.g. the demo's controls.
 	for range c.Vertical().KeepIter() {
 		if r.texture.valid() {
+			// designlint:ignore=L5 (sub-rects share this widget's child-Ui origin — see wrapper comment above)
 			for range c.AllocateUiAtRect(r.texture.minX, r.texture.minY, r.texture.maxX, r.texture.maxY).KeepIter() {
 				c.UiClipToMaxRect()
 				inst.hs.SetDisplaySize(r.texture.w(), r.texture.h())
@@ -332,6 +333,7 @@ func (inst *SpectrumDisplay) renderInner() {
 			inst.renderLinePanel(r.linePanel)
 		}
 		if inst.showColorbar && r.colorbar.valid() {
+			// designlint:ignore=L5 (sub-rects share this widget's child-Ui origin — see wrapper comment above)
 			for range c.AllocateUiAtRect(r.colorbar.minX, r.colorbar.minY, r.colorbar.maxX, r.colorbar.maxY).KeepIter() {
 				c.UiClipToMaxRect()
 				inst.cbar.SetSize(r.colorbar.w(), r.colorbar.h())

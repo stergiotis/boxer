@@ -1052,7 +1052,7 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 			c.LabelAtoms(
 				c.Atoms().BeginRichText("conservative DKW preview band").Small().Weak().End().Keep(),
 			).Send()
-			c.AddSpace(8)
+			c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
 			if c.Button(c.MakeAbsoluteIdStr(scope+"-band-compute"), c.Atoms().Text("Compute exact band").Keep()).
 				Small().
 				SendResp().

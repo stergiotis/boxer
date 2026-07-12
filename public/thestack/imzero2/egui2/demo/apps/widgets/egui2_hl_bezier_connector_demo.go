@@ -144,8 +144,8 @@ func demoBezierConnector(ids *c.WidgetIdStack, anyState any) {
 		})
 		c.Separator().Send()
 		c.Label("(placeholder inspector body)").Send()
-		c.Label("value: …").Send()
-		c.Label("schema: …").Send()
+		c.Label("Value: …").Send()
+		c.Label("Schema: …").Send()
 	}
 
 	if !selChipOk || !windowOk {

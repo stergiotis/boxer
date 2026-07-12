@@ -3,6 +3,7 @@ package canonicaltypeedit
 import (
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -200,7 +201,7 @@ func (sm *SignatureModel) Render(ids *c.WidgetIdStack, scopeKey string) {
 				// A single, unobtrusive affordance to grow the lone primitive
 				// into a group/signature on demand — the chip strip then takes
 				// over from the next frame (and collapses back on remove).
-				c.AddSpace(4)
+				c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
 				if c.Button(ids.PrepareStr("grow"), c.Atoms().Text("+ element").Keep()).
 					Small().SendResp().HasPrimaryClicked() {
 					sm.elems = append(sm.elems, &sigElem{prim: NewModel(), sep: grpSepByte})
@@ -244,7 +245,7 @@ func (sm *SignatureModel) renderChipStrip(ids *c.WidgetIdStack) (structureChange
 				}
 			}
 		}
-		c.AddSpace(8)
+		c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
 		if c.Button(ids.PrepareStr("add-elem"), c.Atoms().Text("+").Keep()).
 			SendResp().HasPrimaryClicked() {
 			sm.elems = append(sm.elems, &sigElem{prim: NewModel(), sep: grpSepByte})

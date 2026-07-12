@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json/jsontext"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
 // viewKeyE identifies which renderer the central panel is showing. The tree
@@ -140,7 +141,7 @@ func (inst *App) renderGallery() {
 			c.UiSetMaxWidth(galleryTreeWidth)
 			inst.renderViewTree()
 		}
-		c.AddSpace(8)
+		c.AddSpace(styletokens.GapItems(styletokens.DensityFromEnv()))
 		for range c.Vertical().KeepIter() {
 			c.UiSetMinHeight(galleryContentH)
 			c.UiSetMaxHeight(galleryContentH)

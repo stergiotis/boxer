@@ -106,12 +106,13 @@ func Render(in Input) {
 // ScrollArea fills and clips it (a ScrollArea inside the former width-pinned
 // Vertical-in-Horizontal collapsed to its first child — see the package history).
 func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
+	density := styletokens.DensityFromEnv()
 	t := m.Table
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabel(t.DictionaryEntry.Name.String()) {
 			rt.Strong().Size(15)
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(density))
 		renderLegendToggle(m, scope)
 	}
 	if cmt := t.DictionaryEntry.Comment; cmt != "" {
@@ -123,7 +124,7 @@ func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
 		HintText("filter sections / columns…").
 		DesiredWidth(navWidth - 16).
 		SendRespVal(&m.filter)
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(density))
 }
 
 // renderSections draws the navigator as a flat list of collapsible headers:
@@ -273,18 +274,19 @@ func renderDetail(ids *c.WidgetIdStack, m *Model) {
 // (in the category tone) and trailed by a small kind chip, so the detail header
 // echoes the tree at a glance.
 func detailHeaderCat(ids *c.WidgetIdStack, name, glyph string, glyphTone styletokens.RGBA8, kind string, kindTone badge.ToneE) {
+	density := styletokens.DensityFromEnv()
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabelColored(color.Hex(glyphTone.AsHex()).Keep(), color.Transparent.Keep(), glyph) {
 			rt.Strong().Size(15)
 		}
-		c.AddSpace(4)
+		c.AddSpace(styletokens.PaddingInner(density))
 		for rt := range c.RichTextLabel(name) {
 			rt.Strong().Size(15)
 		}
-		c.AddSpace(8)
+		c.AddSpace(styletokens.GapItems(density))
 		badge.New(ids.PrepareStr("detail-kind"), kind).Tone(kindTone).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
 	}
-	c.AddSpace(2)
+	c.AddSpace(styletokens.PaddingHair(density))
 }
 
 // chipRow is a grid row whose value cell is a run of toned chips, one per
@@ -364,7 +366,7 @@ func renderTypeBlock(ids *c.WidgetIdStack, ct canonicaltypes.PrimitiveAstNodeI) 
 	for range c.Horizontal().KeepIter() {
 		canonicaltypesummary.New("schemaview-coltype").Render(ids.PrepareStr("cts-col"), canonicalOf(ct))
 	}
-	c.AddSpace(4)
+	c.AddSpace(styletokens.PaddingInner(styletokens.DensityFromEnv()))
 }
 
 // --- formatting helpers ---

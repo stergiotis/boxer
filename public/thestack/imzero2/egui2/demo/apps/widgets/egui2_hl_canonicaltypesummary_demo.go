@@ -3,6 +3,7 @@ package widgets
 import (
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -68,9 +69,10 @@ func init() {
 }
 
 func demoCanonicalTypeSummary(ids *c.WidgetIdStack) {
+	density := styletokens.DensityFromEnv()
 	c.Label("Each row summarises one canonical type; click a row's arrow-square-out glyph to open its inspector (the last row starts open):").Send()
 	c.Separator().Horizontal().Send()
-	c.AddSpace(6)
+	c.AddSpace(styletokens.GapInline(density))
 
 	now := time.Now()
 	for i, row := range ctSumDemoRows {
@@ -89,14 +91,14 @@ func demoCanonicalTypeSummary(ids *c.WidgetIdStack) {
 			// Fixed-width label column keeps every summary cell at the same x.
 			c.UiSetMinWidth(180)
 			c.Label(row.name).Send()
-			c.AddSpace(8)
+			c.AddSpace(styletokens.GapItems(density))
 			r.Render(ids.PrepareSeq(uint64(0xC7501000+i)), row.canonical)
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(density))
 	}
 
 	c.Separator().Horizontal().Send()
-	c.AddSpace(6)
+	c.AddSpace(styletokens.GapInline(density))
 	c.LabelAtoms(
 		c.Atoms().BeginRichText("Tip: the inspector reads any primitive or flat group; the footprint strip is type-level, not a byte-exact runtime encoding for non-network types.").
 			Small().Weak().End().Keep(),

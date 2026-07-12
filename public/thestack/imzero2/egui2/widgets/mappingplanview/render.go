@@ -167,6 +167,7 @@ func paneTabIDs(m *Model) []uint64 {
 }
 
 func renderEditor(ids *c.WidgetIdStack, m *Model) {
+	density := styletokens.DensityFromEnv()
 	renderVerdict(ids, m)
 	c.Separator().Send()
 
@@ -179,7 +180,7 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 	for rt := range c.RichTextLabel("the _-field identity the generated codec & SQL are built for") {
 		rt.Weak().Small()
 	}
-	c.AddSpace(2)
+	c.AddSpace(styletokens.PaddingHair(density))
 	for range c.Horizontal().KeepIter() {
 		if labeledField(ids, "kind", "entity kind",
 			"entity kind — the kind: declared on the _ field; names the entity this plan maps",
@@ -215,7 +216,7 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 				hasRemove = true
 			}
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(density))
 	}
 	if hasRemove {
 		m.removeByUID(removeUID)
@@ -230,7 +231,7 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 			m.AddRow() // empty membership ⇒ plain column
 			m.pager.GoToLast()
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(density))
 		if c.Button(ids.PrepareStr("add-tagged"), c.Atoms().Text("+ tagged field").Keep()).SendResp().HasPrimaryClicked() {
 			r := m.AddRow()
 			// Seed a clearly-placeholder tagged value field (non-empty membership
@@ -239,7 +240,7 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 			r.GoField, r.Membership = "NewField", "newMembership"
 			m.pager.GoToLast()
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(density))
 		// Seeds a complete dynamic-membership tuple over the anchor example
 		// schema's mixed-shape `text` section (ADR-0103) — one click shows the
 		// whole shape working: scalar `text` + zipped co-containers
@@ -327,13 +328,14 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 
 	glyph, word, catCol := rowCategory(r)
 	tagged := r.Membership != ""
+	density := styletokens.DensityFromEnv()
 
 	for range c.Horizontal().KeepIter() {
 		// Category colour bar — plain / value / const at a glance.
-		for range c.Frame(ids.PrepareStr("bar")).Fill(color.Hex(catCol.AsHex())).CornerRadius(3).KeepIter() {
+		for range c.Frame(ids.PrepareStr("bar")).Fill(color.Hex(catCol.AsHex())).CornerRadius(styletokens.RoundingSm).KeepIter() {
 			c.AddSpace(rowBarWidth)
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(density))
 
 		// Framed body — a bordered, fixed-size card. UiSetMin/MaxWidth pins the
 		// width and UiSetMinHeight pads shorter cards so every field is the same
@@ -341,9 +343,9 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 		// surrounding Horizontal otherwise).
 		for range c.Frame(ids.PrepareStr("body")).
 			Fill(color.Hex(styletokens.NeutralBgSurface.AsHex())).
-			Stroke(1, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
-			InnerMargin(8).
-			CornerRadius(4).
+			Stroke(styletokens.StrokeHair, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
+			InnerMargin(styletokens.PaddingDefault(density)).
+			CornerRadius(styletokens.RoundingMd).
 			KeepIter() {
 			for range c.Vertical().KeepIter() {
 				c.UiSetMinWidth(cardWidth)
@@ -461,7 +463,7 @@ func renderTupleRowBody(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 				e.GoField = "Label"
 			}
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
 		if c.Button(ids.PrepareStr("add-elem"), c.Atoms().Text("+ value element").Keep()).Small().SendResp().HasPrimaryClicked() {
 			e := m.AddElem(r)
 			e.GoField = "NewElem"
@@ -475,13 +477,14 @@ func renderTupleRowBody(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 // a value element binds a sub-column and authors its canonical value type.
 // Returns true if the element's remove button fired.
 func renderTupleElem(ids *c.WidgetIdStack, m *Model, e *TupleElemRow) (remove bool) {
+	density := styletokens.DensityFromEnv()
 	for range c.Horizontal().KeepIter() {
-		c.AddSpace(12) // indent under the tuple card
+		c.AddSpace(styletokens.PaddingOuter(density)) // indent under the tuple card
 		for range c.Frame(ids.PrepareStr("elem")).
 			Fill(color.Hex(styletokens.NeutralBgFaint.AsHex())).
-			Stroke(1, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
-			InnerMargin(4).
-			CornerRadius(3).
+			Stroke(styletokens.StrokeHair, color.Hex(styletokens.NeutralBorderDefault.AsHex())).
+			InnerMargin(styletokens.PaddingInner(density)).
+			CornerRadius(styletokens.RoundingSm).
 			KeepIter() {
 			for range c.Vertical().KeepIter() {
 				for range c.HorizontalTop().KeepIter() {
@@ -573,15 +576,16 @@ func renderRowHeader(ids *c.WidgetIdStack, r *FieldRow, glyph, word string, catC
 		r.fsmW.RenderChip()
 	}
 
+	density := styletokens.DensityFromEnv()
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabelColored(color.Hex(catCol.AsHex()).Keep(), color.Transparent.Keep(), glyph+" "+word) {
 			rt.Small()
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(density))
 		for rt := range c.RichTextLabel(name) {
 			rt.Strong()
 		}
-		c.AddSpace(8)
+		c.AddSpace(styletokens.GapItems(density))
 		for rt := range c.RichTextLabel(`lw:"` + r.LWTag() + `"`) {
 			rt.Weak().Small().Monospace()
 		}

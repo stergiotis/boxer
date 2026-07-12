@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mapping"
@@ -76,7 +77,7 @@ func demoSchemaView(ids *c.WidgetIdStack, st *schemaViewDemoState) {
 				}
 			}
 		}
-		c.AddSpace(6)
+		c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
 	}
 	schemaview.Render(schemaview.Input{Ids: ids, ScopeKey: "schemaview", Model: st.model})
 }

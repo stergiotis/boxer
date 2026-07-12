@@ -17,9 +17,9 @@
 //   - Audit rows (factsstore MembRuntimeApp) reference the Id as the
 //     stable cross-process identifier.
 //
-// AllowedSpecialIds exempts dotted runtime-service names (capbroker,
-// persist, fsbroker) that intentionally use NATS-aligned form rather
-// than a Go import path.
+// AllowedSpecialIds exempts dotted runtime-service names (the ADR-0026
+// broker fleet: capbroker, persist, fsbroker, clipboard, sysmetrics, …)
+// that intentionally use NATS-aligned form rather than a Go import path.
 //
 // Suppress per call site with `// designlint:ignore=L12 (reason)` on
 // the same or preceding line.
@@ -49,10 +49,13 @@ var AppPackagePath = "github.com/stergiotis/boxer/public/keelson/runtime/app"
 // NATS-aligned name. Extending this is a deliberate exception; document
 // in the new entry's PR.
 var AllowedSpecialIds = map[string]bool{
-	"runtime.broker":  true,
-	"runtime.persist": true,
-	"runtime.fs":      true,
-	"runtime.chlocal": true,
+	"runtime.broker":           true,
+	"runtime.persist":          true,
+	"runtime.fs":               true,
+	"runtime.chlocal":          true,
+	"runtime.clipboard":        true,
+	"runtime.sysmetrics":       true,
+	"runtime.introspect.query": true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.
