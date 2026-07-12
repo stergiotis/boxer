@@ -1274,10 +1274,18 @@ Regression tests: the leeway id extraction, the dispatcher stamp
 lifecycle with lane GC and the frame swap, the dangling-binding
 fallback, Detail's follow and its explicit-binding override, and the
 node-aware clamp (bound-node clamp, vanished-node retarget, in-range
-no-op). Live verification is deferred: the shared working tree's Go↔Rust
-FFI pair is mid-flight in a concurrent session (a clean pre-6c build
-fails to attach identically), so the Graph-view toggles should be driven
-live once that regen lands. Slice 6 is complete; the standing deferrals
+no-op). Live verification was initially deferred — the shared working
+tree's Go↔Rust FFI pair was mid-flight in a concurrent session (a clean
+pre-6c build failed to attach identically) — and completed 2026-07-13
+once the pair settled: binding Table to a split CTE via the Graph
+toggles renders the CTE's 50 rows under the "Table · recent" title
+while the status bar keeps tracking the sink's 8; clicking a bound-Table
+row retargets Detail to that node's row; the signals chrome shows the
+`selection`/`selection_node`/`selection_id` triple written by the click
+(typed, provenance `via table`, consecutive revisions), `selection_id`
+carrying the row's leeway id value; an unbound Schema keeps showing the
+active result throughout; and the bindings reset returns the sink and
+sends the cursor home. Slice 6 is complete; the standing deferrals
 (SD1, SD12, SD13, the D5 unification trigger, contracts-as-data, an
 ad-hoc key-column picker for `selection_id`) keep their recorded
 triggers.
