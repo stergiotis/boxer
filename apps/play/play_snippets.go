@@ -90,6 +90,13 @@ func (inst *PlayApp) renderSnippetsTab() {
 				case snippetButtonReplace:
 					inst.pendingSnippetReplace = act.Text
 				}
+				// Focus the Editor tab: the splice op rides the editor's
+				// TextEdit, and a hidden tab's body buffer is discarded
+				// uninterpreted — the insert would be silently lost (and
+				// invisible even if it landed). The activation applies this
+				// frame; the pending is consumed by renderSqlEditor on the
+				// next frame, when the editor is already showing.
+				inst.pendingDockActivate = dockTabEditor
 			}
 		}
 	}
