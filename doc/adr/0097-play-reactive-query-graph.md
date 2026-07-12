@@ -1294,6 +1294,9 @@ triggers.
 
 Internal:
 
+- [The play architecture](../explanation/play-architecture.md) — the
+  explanation-page snapshot of the shape this ADR's Updates arrived at
+  (orientation only; this ADR stays the record).
 - [ADR-0096](0096-play-geo-raster-map-panel.md) — the geo-raster Map panel whose
   reserved-param channel, panel-local lane, supersession, and `contentVersion`
   this generalizes (its SD1/SD2/SD9 become the general case).
