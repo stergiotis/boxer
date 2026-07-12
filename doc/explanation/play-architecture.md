@@ -150,6 +150,11 @@ node), the Detail tab follows `selection_node` by default, and
 `{selection_id:UInt64}` cross-filters correctly regardless of node or
 ordering because it is a key, not a position.
 
+The Graph tab renders this whole picture live — a layered drawing
+(constants and signals → query nodes → panel tabs, with the provenance
+write-backs looping back) that relayouts only when the topology changes,
+plus the writable Signals section and the per-node observe/bind controls.
+
 ## Tabs, panels, channels
 
 Every dock tab is a registered `TabSpec`; the dock block is one loop (slice

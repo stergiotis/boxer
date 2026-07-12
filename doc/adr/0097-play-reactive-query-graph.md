@@ -1290,6 +1290,28 @@ sends the cursor home. Slice 6 is complete; the standing deferrals
 ad-hoc key-column picker for `selection_id`) keep their recorded
 triggers.
 
+### 2026-07-13 — The system graph: the Graph tab opens with the drawing
+
+Observability chrome (SD7), not a semantics change: the Graph tab now
+leads with a live layered drawing of the whole reactive surface — prelude
+constants and signals (ellipses; unfilled ones tinted per D3) feeding the
+split's query nodes and the panel-authored bands/raster nodes, nodes
+feeding the panel tabs per their 6c resolution, and the store's
+provenance drawing the panel→signal write-backs as accent edges, so the
+reactive loop is visible end to end (and truthfully: a value the clamp
+last wrote shows no panel edge). Rendered through the layeredgraph widget
+(ADR-0069, Graphviz-in-WASM); the model is a pure per-frame projection of
+existing state, and the layout caches on a topology fingerprint that
+deliberately ignores value churn — a selection click never relayouts, a
+Run, a bind, or a first write to a new signal does. Node labels carry no
+live values (those stay in the Signals section) for the same reason.
+Clicking a query node observes it; pan/zoom via the widget's view state.
+Verified live: the split spine, the six labeled tab feeds, the write-back
+edges appearing exactly when a panel becomes a signal's last changer, and
+the relayout-on-bind. En passant the first mixed labeled/unlabeled edge
+consumer surfaced a widget defect (unlabeled edges reading back
+Graphviz's unexpanded `\E` default), fixed at the engine's parse seam.
+
 ## References
 
 Internal:

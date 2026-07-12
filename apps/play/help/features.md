@@ -224,11 +224,16 @@ cross-filter against the visible extent.
 
 ### Graph
 
-The reactive query-graph view (ADR-0097): each top-level CTE of the last-run
-buffer is a node, with the final `SELECT` as the sink the panels observe. Observe
-an intermediate node to point every result tab at that node's rows instead. The
-**signals** section at the top lists the live parameter values (see "Signals"
-above) and lets you set, add, or discard one.
+The reactive query-graph view (ADR-0097). It opens with the **system graph** —
+a live drawing of the whole reactive surface: constants and signals feed the
+buffer's query nodes, nodes feed the panel tabs, and panel writes loop back to
+the signals they set (accent edges). Unfilled signals tint amber; drag pans,
+ctrl+scroll zooms; clicking a query node observes it in the result panels.
+Below it, the **signals** section lists the live parameter values (see
+"Signals" above) and lets you set, add, or discard one; then each node of the
+last-run buffer follows as a collapsible entry — the final `SELECT` is the
+sink the panels observe, with per-node buttons to observe it in all panels or
+bind a single tab to it.
 
 ### Schema
 
