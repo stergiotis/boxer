@@ -30,19 +30,26 @@
 // Frame wins the pointer over buttons drawn inside it — placed inside, the card
 // would select but the buttons would never fire.
 //
-// # Sub-items
+// # Sub-items and grouping
 //
 // A [Card] may carry a ParentID naming another top-level card (one level only):
 // its sub-item. Sub-items are scheduled — placed in a column — independently of
-// their parent; moving a parent never moves its children. v1 renders every card
-// the same way and only surfaces the link (a "sub-item of …" trailer on a child,
-// a "◱ N sub" chip on a parent).
+// their parent; moving a parent never moves its children. A parent shows a
+// rollup pill (◱ k/n) counting how many children sit in a done column
+// ([Column.IsDone], or the last column when none is flagged).
 //
-// deferred: how sub-items should ultimately *present* on the board is an open
-// decision — three candidates are (a) independent badged cards in their own
-// columns (what v1 approximates), (b) an in-card sub-status list where only
-// parents are board cards, (c) nest-in-parent-until-moved. The flat Model +
-// neutral rendering above forecloses none of them; revisit once this lands.
+// How sub-items *present* is an [Input.Group] view mode over this one flat
+// model, not a fixed layout — the resolution of what was an open A/B/C question.
+// GroupNone lays every card out flat (children as ordinary cards with a
+// "sub-item of …" trailer). GroupByParent stacks a swimlane per parent — the
+// parent as the lane header (its rollup + own-status chip), its children in the
+// columns — plus a Standalone lane for childless top-level cards. GroupByField
+// generalizes the swimlane to any caller-supplied key ([Input.GroupField] — an
+// owner, priority, label): one lane per distinct value, plus an Unassigned lane.
+// The grouping attribute stays caller-side (a closure over the caller's own
+// data, keyed by card id), so Card itself stays lean. This mirrors how issue
+// trackers model hierarchy and swimlanes: first-class items + a grouping axis +
+// a rollup, rather than competing card layouts.
 //
 // # Dragging
 //
@@ -58,7 +65,12 @@
 //
 // # Scope
 //
-// Independent per-column vertical scrolling is deferred (the board scrolls
-// together) to avoid the width-pinned-column / nested-ScrollArea collapse
-// documented in the imzero2 skill; the single board ScrollArea sidesteps it.
+// GroupByParent is a read/select view for now: pointer-drag moves cards in flat
+// mode, and grouped-mode drag (horizontal to re-status, vertical to reparent) is
+// the next slice. Ordering is by slice position within a column; a fractional-
+// rank field is the recommended evolution once order is persisted or shared
+// (O(1) inserts, no renumbering). Independent per-column vertical scrolling is
+// deferred (the board scrolls together) to avoid the width-pinned-column /
+// nested-ScrollArea collapse documented in the imzero2 skill; the single board
+// ScrollArea sidesteps it.
 package kanban

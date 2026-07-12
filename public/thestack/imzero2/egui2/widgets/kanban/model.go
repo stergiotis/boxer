@@ -8,7 +8,28 @@ import "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 type Column struct {
 	ID    uint64
 	Title string
+	// IsDone marks a terminal column: a child sitting in a done column counts
+	// toward its parent's rollup (◱ k/n). If no column sets it, the last column
+	// is treated as done.
+	IsDone bool
 }
+
+// GroupModeE selects how the board arranges cards ([Input.Group]).
+type GroupModeE uint8
+
+const (
+	// GroupNone lays every card out flat in its column (children included, with
+	// a parent-link trailer).
+	GroupNone GroupModeE = iota
+	// GroupByParent stacks a swimlane per parent — its children in the columns,
+	// the parent as the lane header with a rollup — plus a trailing Standalone
+	// lane for childless top-level cards.
+	GroupByParent
+	// GroupByField stacks a swimlane per distinct value of a caller-supplied key
+	// ([Input.GroupField]) — e.g. owner, priority, label. Every card (parent or
+	// child) sits in its value's lane; an empty key becomes an Unassigned lane.
+	GroupByField
+)
 
 // Card is one item on the board. ColumnID names the lane it currently sits in
 // (matching a [Column.ID]); order within a lane is the order cards appear in
@@ -135,6 +156,112 @@ func (m *Model) childCount(parent uint64) (n int) {
 	for i := range m.Cards {
 		if m.Cards[i].ParentID == parent {
 			n++
+		}
+	}
+	return
+}
+
+// columnTitle returns the title of the column with id cid, or "".
+func (m *Model) columnTitle(cid uint64) string {
+	for i := range m.Columns {
+		if m.Columns[i].ID == cid {
+			return m.Columns[i].Title
+		}
+	}
+	return ""
+}
+
+// isDoneColumn reports whether cid is a terminal (done) column: one flagged
+// [Column.IsDone], or — when none are flagged — the last column.
+func (m *Model) isDoneColumn(cid uint64) bool {
+	last := uint64(0)
+	anyFlagged := false
+	for i := range m.Columns {
+		if m.Columns[i].IsDone {
+			anyFlagged = true
+			if m.Columns[i].ID == cid {
+				return true
+			}
+		}
+		last = m.Columns[i].ID
+	}
+	return !anyFlagged && cid == last && len(m.Columns) > 0
+}
+
+// rollup returns (done, total) over the children of parentID — the numbers the
+// ◱ k/n pill shows. done counts children sitting in a done column.
+func (m *Model) rollup(parentID uint64) (done, total int) {
+	return m.rollupOfIdxs(m.childIndicesOf(parentID))
+}
+
+// rollupOfIdxs returns (done, total) over an arbitrary set of card indices —
+// the general rollup a swimlane header shows (children for a parent lane, the
+// lane's cards for a field lane).
+func (m *Model) rollupOfIdxs(idxs []int) (done, total int) {
+	for _, i := range idxs {
+		if i < 0 || i >= len(m.Cards) {
+			continue
+		}
+		total++
+		if m.isDoneColumn(m.Cards[i].ColumnID) {
+			done++
+		}
+	}
+	return
+}
+
+// fieldLane is one attribute-grouped swimlane: its key + display label and the
+// slice indices of the cards that fall in it.
+type fieldLane struct {
+	key   string
+	label string
+	idxs  []int
+}
+
+// fieldLanes buckets every card by groupField (which maps a card to a key and a
+// display label), one lane per distinct key in first-appearance order.
+func (m *Model) fieldLanes(groupField func(*Card) (key, label string)) (lanes []fieldLane) {
+	byKey := make(map[string]int, len(m.Cards))
+	for i := range m.Cards {
+		k, lbl := groupField(&m.Cards[i])
+		li, ok := byKey[k]
+		if !ok {
+			li = len(lanes)
+			byKey[k] = li
+			lanes = append(lanes, fieldLane{key: k, label: lbl})
+		}
+		lanes[li].idxs = append(lanes[li].idxs, i)
+	}
+	return
+}
+
+// childIndicesOf returns the slice indices of the children of parentID, in order.
+func (m *Model) childIndicesOf(parentID uint64) (idxs []int) {
+	for i := range m.Cards {
+		if m.Cards[i].ParentID == parentID {
+			idxs = append(idxs, i)
+		}
+	}
+	return
+}
+
+// topLevelParentIndices returns the slice indices of top-level cards that have
+// at least one child, in order — one swimlane each under GroupByParent.
+func (m *Model) topLevelParentIndices() (idxs []int) {
+	for i := range m.Cards {
+		if m.Cards[i].ParentID == 0 && m.childCount(m.Cards[i].ID) > 0 {
+			idxs = append(idxs, i)
+		}
+	}
+	return
+}
+
+// standaloneIndices returns the slice indices of top-level cards with no
+// children, in order — the shared Standalone swimlane under GroupByParent.
+func (m *Model) standaloneIndices() (idxs []int) {
+	for i := range m.Cards {
+		if m.Cards[i].ParentID == 0 && m.childCount(m.Cards[i].ID) == 0 {
+			idxs = append(idxs, i)
 		}
 	}
 	return

@@ -28,7 +28,9 @@ func init() {
 
 // kanbanDemoState holds the board model across frames.
 type kanbanDemoState struct {
-	model *kanban.Model
+	model  *kanban.Model
+	group  kanban.GroupModeE
+	owners map[uint64]string // card id → owner, demoing GroupByField
 }
 
 // newKanbanState seeds a four-lane board with a few accented cards and one card
@@ -41,7 +43,7 @@ func newKanbanState() *kanbanDemoState {
 		{ID: 1, Title: "Backlog"},
 		{ID: 2, Title: "Todo"},
 		{ID: 3, Title: "Doing"},
-		{ID: 4, Title: "Done"},
+		{ID: 4, Title: "Done", IsDone: true},
 	}
 	cards := []kanban.Card{
 		{ID: 10, ColumnID: 3, Title: "Design board API", Subtitle: "concise imzero2 shape", Accent: acc(styletokens.AccentDefault)},
@@ -55,11 +57,42 @@ func newKanbanState() *kanbanDemoState {
 		{ID: 21, ColumnID: 3, ParentID: 10, Title: "Move helpers"},
 		{ID: 22, ColumnID: 2, ParentID: 10, Title: "Column layout"},
 	}
-	return &kanbanDemoState{model: kanban.NewModel(cols, cards)}
+	return &kanbanDemoState{
+		model: kanban.NewModel(cols, cards),
+		// Owners cut across the parent/child structure — the by-owner view
+		// shows a lane per person plus an Unassigned lane (#14 has no owner).
+		owners: map[uint64]string{
+			10: "Alice", 12: "Alice", 20: "Alice", 22: "Alice",
+			11: "Bob", 13: "Bob", 21: "Bob",
+		},
+	}
 }
 
 func demoKanban(ids *c.WidgetIdStack, st *kanbanDemoState) {
-	kanban.Render(kanban.Input{Ids: ids, ScopeKey: "kanban", Model: st.model})
+	// Group-mode toggle: flat (drag to move), a swimlane per parent, or a
+	// swimlane per owner (GroupByField over caller-side owner data).
+	for range c.Horizontal().KeepIter() {
+		if c.SelectableLabel(ids.PrepareStr("g-flat"), st.group == kanban.GroupNone, "Flat").
+			SendResp().HasPrimaryClicked() {
+			st.group = kanban.GroupNone
+		}
+		if c.SelectableLabel(ids.PrepareStr("g-parent"), st.group == kanban.GroupByParent, "By parent").
+			SendResp().HasPrimaryClicked() {
+			st.group = kanban.GroupByParent
+		}
+		if c.SelectableLabel(ids.PrepareStr("g-owner"), st.group == kanban.GroupByField, "By owner").
+			SendResp().HasPrimaryClicked() {
+			st.group = kanban.GroupByField
+		}
+	}
+	c.AddSpace(styletokens.GapInline(styletokens.DensityFromEnv()))
+	kanban.Render(kanban.Input{
+		Ids: ids, ScopeKey: "kanban", Model: st.model, Group: st.group,
+		GroupField: func(cd *kanban.Card) (key, label string) {
+			o := st.owners[cd.ID]
+			return o, o
+		},
+	})
 	// The demo doesn't persist; drain so the queue doesn't grow unbounded.
 	st.model.DrainMoves()
 }

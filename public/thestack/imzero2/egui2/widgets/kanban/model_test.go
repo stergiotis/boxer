@@ -132,6 +132,94 @@ func TestMoveToEmptyColumn(t *testing.T) {
 	eq(t, "col2", m.orderIn(2), []uint64{10})
 }
 
+func TestRollup(t *testing.T) {
+	m := NewModel(
+		[]Column{{ID: 1, Title: "todo"}, {ID: 2, Title: "doing"}, {ID: 3, Title: "done", IsDone: true}},
+		[]Card{
+			{ID: 1, ColumnID: 1, Title: "parent"},
+			{ID: 2, ColumnID: 3, ParentID: 1}, // done
+			{ID: 3, ColumnID: 2, ParentID: 1}, // not done
+			{ID: 4, ColumnID: 3, ParentID: 1}, // done
+			{ID: 5, ColumnID: 1, Title: "childless"},
+		},
+	)
+	if done, total := m.rollup(1); done != 2 || total != 3 {
+		t.Fatalf("rollup(1) = %d/%d, want 2/3", done, total)
+	}
+	if done, total := m.rollup(5); done != 0 || total != 0 {
+		t.Fatalf("rollup(childless) = %d/%d, want 0/0", done, total)
+	}
+}
+
+func TestIsDoneColumnFallback(t *testing.T) {
+	// No column flagged → the last column counts as done.
+	m := NewModel([]Column{{ID: 1}, {ID: 2}, {ID: 3}}, nil)
+	if !m.isDoneColumn(3) || m.isDoneColumn(1) {
+		t.Fatalf("fallback: only the last column should be done")
+	}
+	// Any flag disables the fallback.
+	m2 := NewModel([]Column{{ID: 1, IsDone: true}, {ID: 2}, {ID: 3}}, nil)
+	if !m2.isDoneColumn(1) || m2.isDoneColumn(3) {
+		t.Fatalf("flagged: only col 1 is done")
+	}
+}
+
+func TestGroupingIndices(t *testing.T) {
+	m := NewModel(
+		[]Column{{ID: 1}},
+		[]Card{
+			{ID: 10, ColumnID: 1, Title: "parent"}, // has children → parent lane
+			{ID: 11, ColumnID: 1, Title: "loose"},  // childless → standalone
+			{ID: 20, ColumnID: 1, ParentID: 10},
+			{ID: 21, ColumnID: 1, ParentID: 10},
+		},
+	)
+	if p := m.topLevelParentIndices(); len(p) != 1 || m.Cards[p[0]].ID != 10 {
+		t.Fatalf("topLevelParentIndices = %v, want [idx of 10]", p)
+	}
+	if sa := m.standaloneIndices(); len(sa) != 1 || m.Cards[sa[0]].ID != 11 {
+		t.Fatalf("standaloneIndices = %v, want [idx of 11]", sa)
+	}
+	if k := m.childIndicesOf(10); len(k) != 2 {
+		t.Fatalf("childIndicesOf(10) = %v, want 2", k)
+	}
+}
+
+func TestFieldLanes(t *testing.T) {
+	m := NewModel(
+		[]Column{{ID: 1}},
+		[]Card{{ID: 10, ColumnID: 1}, {ID: 11, ColumnID: 1}, {ID: 12, ColumnID: 1}, {ID: 13, ColumnID: 1}},
+	)
+	owner := map[uint64]string{10: "Alice", 11: "Bob", 12: "Alice"} // 13 → ""
+	lanes := m.fieldLanes(func(cd *Card) (string, string) { o := owner[cd.ID]; return o, o })
+	// One lane per distinct key, in first-appearance order: Alice, Bob, "".
+	if len(lanes) != 3 {
+		t.Fatalf("lanes = %d, want 3", len(lanes))
+	}
+	if lanes[0].key != "Alice" || len(lanes[0].idxs) != 2 {
+		t.Fatalf("lane0 = %+v, want Alice x2", lanes[0])
+	}
+	if lanes[1].key != "Bob" || len(lanes[1].idxs) != 1 {
+		t.Fatalf("lane1 = %+v, want Bob x1", lanes[1])
+	}
+	if lanes[2].key != "" || len(lanes[2].idxs) != 1 {
+		t.Fatalf("lane2 = %+v, want empty x1", lanes[2])
+	}
+}
+
+func TestRollupOfIdxs(t *testing.T) {
+	m := NewModel(
+		[]Column{{ID: 1}, {ID: 2, IsDone: true}},
+		[]Card{{ID: 1, ColumnID: 2}, {ID: 2, ColumnID: 1}, {ID: 3, ColumnID: 2}},
+	)
+	if done, total := m.rollupOfIdxs([]int{0, 1, 2}); done != 2 || total != 3 {
+		t.Fatalf("rollupOfIdxs = %d/%d, want 2/3", done, total)
+	}
+	if done, total := m.rollupOfIdxs(nil); done != 0 || total != 0 {
+		t.Fatalf("empty rollupOfIdxs = %d/%d, want 0/0", done, total)
+	}
+}
+
 func TestChildCountAndLookup(t *testing.T) {
 	m := NewModel(
 		[]Column{{ID: 1}},

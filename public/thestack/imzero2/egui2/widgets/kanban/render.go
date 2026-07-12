@@ -70,6 +70,16 @@ type Input struct {
 	ReadOnly bool
 	// ColumnWidth overrides the per-lane width; 0 uses defaultColumnWidth.
 	ColumnWidth float32
+	// Group selects the arrangement: GroupNone (flat, the default),
+	// GroupByParent (a swimlane per parent), or GroupByField (a swimlane per
+	// GroupField value). Pointer-drag is available in flat mode; grouped modes
+	// are a read/select view for now.
+	Group GroupModeE
+	// GroupField maps a card to its swimlane key + display label, used when
+	// Group == GroupByField (e.g. `return ownerByID[c.ID], ownerByID[c.ID]` to
+	// group by owner). The caller keeps the attribute; Card stays lean. Ignored
+	// in other modes; a nil func with GroupByField falls back to flat.
+	GroupField func(c *Card) (key, label string)
 }
 
 // Render draws the board: columns left-to-right inside one board ScrollArea,
@@ -86,6 +96,11 @@ func Render(in Input) {
 		colW = defaultColumnWidth
 	}
 	density := styletokens.DensityFromEnv()
+
+	if in.Group == GroupByParent || (in.Group == GroupByField && in.GroupField != nil) {
+		renderGrouped(in, m, colW, density)
+		return
+	}
 
 	var actCard uint64
 	var act moveKind
@@ -158,7 +173,7 @@ func renderColumn(in Input, m *Model, colIdx int, colW float32, density styletok
 				renderColumnHeader(ids, col, len(idxs), density)
 				c.AddSpace(styletokens.GapInline(density))
 				for _, ci := range idxs {
-					aCard, aKind := renderCard(in, m, ci, colW, atFirst, atLast, density)
+					aCard, aKind := renderCard(in, m, ci, colW, atFirst, atLast, density, !in.ReadOnly)
 					if aKind != mvNone {
 						actCard, act = aCard, aKind
 					}
@@ -195,7 +210,7 @@ func renderColumnHeader(ids *c.WidgetIdStack, col Column, count int, density sty
 }
 
 // renderCard draws one card Frame (click-sensed for selection) and its controls.
-func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, density styletokens.DensityE) (actCard uint64, act moveKind) {
+func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, density styletokens.DensityE, dragEnabled bool) (actCard uint64, act moveKind) {
 	ids := in.Ids
 	card := m.Cards[ci]
 	selected := m.sel == card.ID
@@ -226,7 +241,7 @@ func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, 
 				Stroke(strokeW, stroke).
 				InnerMargin(styletokens.PaddingTight(density)).
 				SenseClick()
-			if !in.ReadOnly {
+			if dragEnabled {
 				frame = frame.SenseDrag()
 			}
 			fid := frame.Id()
@@ -261,7 +276,7 @@ func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, 
 			if resp.HasPrimaryClicked() {
 				m.sel = card.ID
 			}
-			if !in.ReadOnly {
+			if dragEnabled {
 				if resp.HasDragStarted() {
 					beginDrag(m, card, ci)
 				}
@@ -300,13 +315,21 @@ func renderRelations(ids *c.WidgetIdStack, m *Model, card Card) {
 		}
 		return
 	}
-	if n := m.childCount(card.ID); n > 0 {
-		badge.New(ids.PrepareStr("kids"), "◱ "+strconv.Itoa(n)+" sub").
-			Tone(badge.ToneNeutral).
+	if done, total := m.rollup(card.ID); total > 0 {
+		badge.New(ids.PrepareStr("kids"), "◱ "+strconv.Itoa(done)+"/"+strconv.Itoa(total)).
+			Tone(rollupTone(done, total)).
 			Variant(badge.VariantSoft).
 			Size(badge.SizeSm).
 			Send()
 	}
+}
+
+// rollupTone greens the pill once every child is done, else stays neutral.
+func rollupTone(done, total int) badge.ToneE {
+	if total > 0 && done == total {
+		return badge.ToneSuccess
+	}
+	return badge.ToneNeutral
 }
 
 // renderControls draws the compact move row. Edge buttons are omitted (no ◀ in
@@ -426,4 +449,174 @@ func updateAndPaintDrag(m *Model, density styletokens.DensityE) {
 		c.PaintText(gx+pad, gy+pad, 0, 0, d.title, styletokens.ScaledPt(styletokens.BodyPt, density), color.Hex(styletokens.NeutralTextPrimary.AsHex())).Send()
 	}
 	c.PaintAbsoluteOverlay()
+}
+
+// --- GroupByParent (swimlanes) ---
+
+// swimlaneSpec describes one swimlane. parent is set for a GroupByParent lane
+// (the lane represents that card, drives the status chip); label is the header
+// text for a non-parent lane (a field value, or "Standalone"). cardIdxs are the
+// slice indices of the cards that fill the lane's columns.
+type swimlaneSpec struct {
+	key      string
+	label    string
+	parent   *Card
+	cardIdxs []int
+}
+
+// groupedSwimlanes builds the ordered swimlane list for the active grouped mode:
+// one lane per field value (GroupByField), or one lane per parent plus a
+// Standalone lane (GroupByParent).
+func groupedSwimlanes(in Input, m *Model) (lanes []swimlaneSpec) {
+	if in.Group == GroupByField {
+		for _, fl := range m.fieldLanes(in.GroupField) {
+			label := fl.label
+			if label == "" {
+				label = "Unassigned"
+			}
+			lanes = append(lanes, swimlaneSpec{key: "f:" + fl.key, label: label, cardIdxs: fl.idxs})
+		}
+		return
+	}
+	for _, pi := range m.topLevelParentIndices() {
+		parent := m.Cards[pi]
+		lanes = append(lanes, swimlaneSpec{
+			key:      "p" + strconv.FormatUint(parent.ID, 10),
+			parent:   &parent,
+			cardIdxs: m.childIndicesOf(parent.ID),
+		})
+	}
+	if sa := m.standaloneIndices(); len(sa) > 0 {
+		lanes = append(lanes, swimlaneSpec{key: "standalone", label: "Standalone", cardIdxs: sa})
+	}
+	return
+}
+
+// renderGrouped lays the board out as a vertical stack of swimlanes: the shared
+// column titles on top, then one band per lane. Grouped modes are a read/select
+// view — pointer-drag is disabled (flat mode owns moves), so any in-flight drag
+// is cancelled here.
+func renderGrouped(in Input, m *Model, colW float32, density styletokens.DensityE) {
+	m.drag = nil
+	m.dragStop = false
+	ids := in.Ids
+	lanes := groupedSwimlanes(in, m)
+	for range c.IdScope(ids.PrepareStr(in.ScopeKey)) {
+		if !in.FillHost {
+			c.UiSetMinHeight(boardMinHeight)
+		}
+		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
+			for range c.Vertical().KeepIter() {
+				renderColumnTitleRow(ids, m, colW, density)
+				for i := range lanes {
+					renderSwimlane(in, m, colW, density, lanes[i])
+				}
+			}
+		}
+	}
+}
+
+// renderColumnTitleRow draws the shared column headers above the swimlanes — one
+// colW-wide cell per column so they line up with every lane's columns below.
+func renderColumnTitleRow(ids *c.WidgetIdStack, m *Model, colW float32, density styletokens.DensityE) {
+	for range c.Horizontal().KeepIter() {
+		for i := range m.Columns {
+			for range c.IdScope(ids.PrepareStr("cth:" + strconv.FormatUint(m.Columns[i].ID, 10))) {
+				for range c.Vertical().KeepIter() {
+					c.UiSetMinWidth(colW)
+					c.UiSetMaxWidth(colW)
+					for rt := range c.RichTextLabel(m.Columns[i].Title) {
+						rt.Strong().Heading()
+					}
+				}
+			}
+			c.AddSpace(styletokens.GapItems(density))
+		}
+	}
+	c.AddSpace(styletokens.GapInline(density))
+}
+
+// renderSwimlane draws one lane: a faint full-width band with a header row
+// (parent + rollup + own-status chip, or a "Standalone" label) over a row of the
+// same columns, each showing this lane's cards.
+func renderSwimlane(in Input, m *Model, colW float32, density styletokens.DensityE, s swimlaneSpec) {
+	ids := in.Ids
+	pad := styletokens.PaddingTight(density)
+	for range c.IdScope(ids.PrepareStr("swim:" + s.key)) {
+		for range c.Frame(ids.PrepareStr("band")).
+			Fill(color.Hex(styletokens.NeutralBgFaint.AsHex())).
+			CornerRadius(styletokens.RoundingMd).
+			InnerMarginSides(0, 0, pad, pad).
+			KeepIter() {
+			for range c.Vertical().KeepIter() {
+				renderSwimlaneHeader(ids, m, density, s)
+				c.AddSpace(styletokens.GapInline(density))
+				for range c.Horizontal().KeepIter() {
+					for i := range m.Columns {
+						col := m.Columns[i]
+						for range c.IdScope(ids.PrepareStr("sc:" + strconv.FormatUint(col.ID, 10))) {
+							for range c.Vertical().KeepIter() {
+								c.UiSetMinWidth(colW)
+								c.UiSetMaxWidth(colW)
+								any := false
+								for _, ci := range s.cardIdxs {
+									if m.Cards[ci].ColumnID == col.ID {
+										renderCard(in, m, ci, colW, false, false, density, false)
+										any = true
+									}
+								}
+								if !any {
+									c.AddSpace(pad) // keep the empty cell colW wide
+								}
+							}
+						}
+						c.AddSpace(styletokens.GapItems(density))
+					}
+				}
+			}
+		}
+		c.AddSpace(styletokens.GapInline(density))
+	}
+}
+
+// renderSwimlaneHeader draws the lane label: for a parent lane, its accent +
+// title + rollup pill + its own column chip; for the Standalone lane, a plain
+// label.
+func renderSwimlaneHeader(ids *c.WidgetIdStack, m *Model, density styletokens.DensityE, s swimlaneSpec) {
+	for range c.Horizontal().KeepIter() {
+		c.AddSpace(styletokens.PaddingTight(density))
+		// Title: a parent lane shows the parent's accent bullet + title; a field
+		// or Standalone lane shows its label.
+		title := s.label
+		if s.parent != nil {
+			if s.parent.Accent.Kind() != color.ColorKindNone {
+				for rt := range c.RichTextLabelColored(s.parent.Accent, color.Transparent, "●") {
+					rt.Small()
+				}
+			}
+			title = s.parent.Title
+		}
+		for rt := range c.RichTextLabel(title) {
+			rt.Strong()
+		}
+		// Rollup over the lane's cards (children for a parent lane, the lane's
+		// own cards for a field/Standalone lane).
+		c.AddSpace(styletokens.GapInline(density))
+		done, total := m.rollupOfIdxs(s.cardIdxs)
+		badge.New(ids.PrepareStr("roll"), "◱ "+strconv.Itoa(done)+"/"+strconv.Itoa(total)).
+			Tone(rollupTone(done, total)).
+			Variant(badge.VariantSoft).
+			Size(badge.SizeSm).
+			Send()
+		// A parent lane also shows the parent's own column, since here it is a
+		// lane header rather than a card in a column.
+		if s.parent != nil {
+			c.AddSpace(styletokens.GapInline(density))
+			badge.New(ids.PrepareStr("st"), "in "+m.columnTitle(s.parent.ColumnID)).
+				Tone(badge.ToneNeutral).
+				Variant(badge.VariantOutline).
+				Size(badge.SizeSm).
+				Send()
+		}
+	}
 }
