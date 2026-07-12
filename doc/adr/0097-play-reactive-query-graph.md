@@ -1071,6 +1071,83 @@ Update are retired and both deferred halves are now built. Still deferred
 (SD12 triggers): SD1 operator-IVM, SD13 shared-intermediate
 materialization, explicit multi-cell authoring.
 
+### 2026-07-12 — Slice 6 (design): first-class tabs — the panel registry
+
+A design amendment settled in dialogue; the slices land as their own shipped
+Updates. The PanelI contract (slice 4) made panels well-described — channels,
+accept/reject, emit — but everything around it is hard-wired: the dock tabs
+are a `uint64` const enum, each tab body a hand-written case in Render's dock
+block, the scripted-focus knobs six hand-permuted copies of the tab order,
+the channel inputs assembled inline per call site, and the Graph view's panel
+inventory a hand-maintained list. One extension seam exists and is used in
+production by an out-of-tree embedder that reuses PlayApp whole:
+`SetDetailContent`, a body-level override on the Detail pane (the pluggable-
+detail how-to). The registry generalizes the surround the same way slice 5
+generalized the stranglers — and the repo already holds the idiom four times
+(env ADR-0009, help books, pass registry ADR-0108, widget demos ADR-0057);
+tabs are the odd subsystem still enum-wired.
+
+**Five decisions taken:**
+
+- **D1 — one registry for all dock tabs.** A tab registers
+  `TabSpec{ID, DockID, Title, NoScroll, Panel, Render}`: `ID` a stable human
+  slug (`"table"`, `"map"`), `Panel` a PanelI for result panels and nil for
+  chrome — SD7's chrome/panel split survives structurally, as a field, not a
+  parallel mechanism. The dock block becomes one loop; the panel inventory,
+  the focus knobs, and the future binding UI fold over the same enumeration.
+  Rejected: a result-panels-only registry — it leaves the tab enum, the
+  hand-written dock cases, and the six focus permutations alive, which is
+  most of the smell.
+- **D2 — behaviour first, state ownership later.** Slice 6a registers the
+  built-ins as closures over today's PlayApp state; `Render` takes a
+  per-frame view (`TabFrame`: rec/schema/numRows/loading/err/executed +
+  frameSig + emit) so the loop decouples even while state stays put.
+  Per-panel state ownership (factory + panel context) migrates
+  opportunistically, per tab, when something real needs it — an embedder
+  tab, or 6c's per-panel lanes. Rejected: a big-bang ownership migration —
+  wide churn through every panel with no behaviour change to show for it.
+- **D3 — two-level identity, dock ids frozen.** The slug keys the
+  human-facing surfaces (focus knobs, persistence namespaces, binding);
+  the `uint64` DockID keys the Rust-side persisted dock layout and is
+  frozen: built-ins keep their current 1..13, embedder tabs allocate ≥64,
+  the registry rejects duplicates. Existing saved layouts survive
+  unchanged. Rejected: derived/hashed dock ids — they orphan every
+  persisted layout and are opaque in the dock-state debugging story.
+- **D4 — instance-scoped, frozen at first render.** The tab set belongs to
+  the PlayApp instance — `Tabs().Add/Replace/Remove` between construction
+  and the first Render, frozen after — because the shell hosts multiple
+  PlayApp embedders in one process, so a package-global mutable registry
+  is wrong by construction. Initial layout comes from a `Zone` hint
+  (editor / body / side / preview); new tabs append to the body zone;
+  the focus knobs collapse to one reorder over the enumeration.
+  Rejected: package-global registration (two embedders fight); runtime
+  add/remove (no consumer, and it churns the persisted dock state).
+- **D5 — granularities stay distinct.** The registry is tab-level.
+  Body-level seams — `SetDetailContent` and the how-to's patterns — remain
+  panel-owned extension points, unchanged: a tab replacement that existed
+  only to append a section would have to re-implement the pane's gating.
+  The non-tab core stays fixed: the editor buffer and Run lifecycle, the
+  topbar, the status bar, the signal store. Rejected: subsuming the detail
+  hook into `Replace("detail", …)`.
+
+**Mechanics (subsidiary):** the per-tab ScrollArea wrappers move inside the
+tab bodies so the dock loop is uniform (`NoScroll` covers the Map's
+wheel-gesture opt-out); the `BOXER_PLAY_FOCUS_<ID>` env specs derive from
+the built-in tab definitions at package init — embedder tabs declare their
+own at their init, so ADR-0009's registration story is unchanged;
+`resultPanels()` and the Graph view's channel inventory read the registry.
+The TabSpec is deliberately where later work attaches: per-channel node
+bindings (6c) and, eventually, contracts-as-data for accurate eligibility.
+
+**Delivery slices:** **6a** the registry + the single dock loop + focus
+collapse, behaviour-identical (tests: enumeration, focus reorder, dock-id
+stability, unchanged channel inventory); **6b** the out-of-tree embedder
+adds a domain tab through the API — the cross-repo proof — while its
+`SetDetailContent` use stays untouched; **6c** per-panel/per-channel node
+binding over the enumeration, with its own design refinement when reached
+(binding lifetime across Runs, sink semantics when nothing observes it,
+per-panel staleness presentation).
+
 ## References
 
 Internal:
