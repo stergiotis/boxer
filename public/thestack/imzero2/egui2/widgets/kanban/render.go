@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -152,6 +153,50 @@ func Render(in Input) {
 	}
 }
 
+// RenderLegend draws the board's dot legend: an always-visible row of one
+// coloured "●" + Label pair per entry, each carrying dk.Tooltip as a hover
+// tooltip when set. It is a separate call from Render — not drawn
+// automatically — so the host places it wherever it fits (above the board, a
+// toolbar, a footer); a no-op when legend is empty, so it is safe to call
+// unconditionally every frame.
+func RenderLegend(legend []DotKind) {
+	if len(legend) == 0 {
+		return
+	}
+	density := styletokens.DensityFromEnv()
+	for range c.Horizontal().KeepIter() {
+		for i, dk := range legend {
+			renderLegendEntry(dk)
+			if i < len(legend)-1 {
+				c.AddSpace(styletokens.GapItems(density))
+			}
+		}
+	}
+}
+
+// renderLegendEntry draws one legend swatch + label. The tooltip (when set)
+// wraps only the label RichTextLabel call — a single widget, matching every
+// other HoverText call site in this codebase (badge.Tooltip, the schemaview
+// legend toggle, labeledField's HoverText-wrapped text field): wrapping a
+// whole multi-widget Horizontal in HoverText was tried first and silently
+// dropped its content, so the swatch dot stays outside the wrap.
+func renderLegendEntry(dk DotKind) {
+	for rt := range c.RichTextLabelColored(dk.Color, color.Transparent, "●") {
+		rt.Small()
+	}
+	if dk.Tooltip == "" {
+		for rt := range c.RichTextLabel(dk.Label) {
+			rt.Weak().Small()
+		}
+		return
+	}
+	for range c.HoverText(dk.Tooltip).KeepIter() {
+		for rt := range c.RichTextLabel(dk.Label) {
+			rt.Weak().Small()
+		}
+	}
+}
+
 // renderColumn draws one lane: a panel Frame around a width-pinned Vertical
 // carrying the header and the lane's cards.
 func renderColumn(in Input, m *Model, colIdx int, colW float32, density styletokens.DensityE) (actCard uint64, act moveKind) {
@@ -271,6 +316,7 @@ func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, 
 					}
 				}
 				renderRelations(ids, m, card)
+				renderDots(m, card.Dots, density)
 			}
 			resp := c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fid)
 			if resp.HasPrimaryClicked() {
@@ -301,6 +347,38 @@ func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, 
 		c.AddSpace(styletokens.GapInline(density))
 	}
 	return
+}
+
+// renderDots paints a packed tally of small "•" dots along the card's bottom
+// edge: up to 3 [DotTally] entries, each Count copies of "•" in its
+// [DotKind]'s colour, explained board-wide by [RenderLegend] rather than a
+// per-dot tooltip. Composed as a single multi-run LabelAtoms call rather than
+// one widget per dot, so runs sit with zero gap — same colour or different —
+// reading as one continuous tally rather than spaced badges. Entries past the
+// third, non-positive counts, and ids absent from the board's DotLegend are
+// silently skipped; a no-op when nothing resolves.
+func renderDots(m *Model, dots []DotTally, density styletokens.DensityE) {
+	if len(dots) > 3 {
+		dots = dots[:3]
+	}
+	pt := styletokens.ScaledPt(styletokens.MicroPt, density)
+	a := c.Atoms()
+	any := false
+	for _, dt := range dots {
+		if dt.Count <= 0 {
+			continue
+		}
+		dk, ok := m.dotKind(dt.ID)
+		if !ok {
+			continue
+		}
+		a = a.BeginRichTextColored(dk.Color, color.Transparent, strings.Repeat("•", dt.Count)).Size(pt).End()
+		any = true
+	}
+	if !any {
+		return
+	}
+	c.LabelAtoms(a.Keep()).Send()
 }
 
 // renderRelations surfaces the one-level parent link: a "sub-item of …" trailer

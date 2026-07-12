@@ -51,6 +51,19 @@
 // trackers model hierarchy and swimlanes: first-class items + a grouping axis +
 // a rollup, rather than competing card layouts.
 //
+// # Dots and legend
+//
+// A [Card] may also carry up to 3 Dots: [DotTally] entries, each naming a
+// [DotKind.ID] in the board's [Model.DotLegend] plus a repeat Count. Rendered
+// along the card's bottom edge as a packed tally — Count small "•" dots per
+// entry, back to back with no gap even where the colour changes — a compact
+// stand-in for labels or flags that would otherwise need a tooltip on every
+// card. [RenderLegend] draws that vocabulary once instead — a label and an
+// optional hover tooltip per DotKind — as a separate call the host places
+// wherever it fits (above the board, a toolbar, a footer); it is not drawn
+// automatically by Render. Dots past the third, non-positive counts, and any
+// id absent from DotLegend, are silently skipped.
+//
 // # Dragging
 //
 // Cards also move by drag-and-drop: grabbing a card body starts a drag (the card

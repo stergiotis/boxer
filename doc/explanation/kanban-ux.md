@@ -115,7 +115,7 @@ Deferred, roughly in priority order:
 | **WIP limits** per column | absent | The defining mechanic; cheap to add (a per-column cap, a `count / limit` header, an over-limit flag). The largest gap. |
 | **Keyboard** move + focus nav | absent | Accessibility and a baseline expectation; the non-pointer move path. |
 | **Fractional-rank ordering** | absent | Order is array position today — fine while ephemeral, a debt once persisted or shared. |
-| **Rich card content** | partial | Title, subtitle, and an accent only. A card-body render hook would let callers supply avatars, labels, due dates. |
+| **Rich card content** | partial | Title, subtitle, an accent, and up to 3 legend-backed dots (a compact stand-in for labels/flags — a board-wide legend gives each dot a label and a hover tooltip). A card-body render hook for avatars, due dates, and other richer content is still absent. |
 | **Grouped-mode drag / reparent** | absent | Grouped views are read/select; the flat view owns moves. |
 | **Filter / search**, collapsible lanes, multi-select | absent | Common conveniences, secondary to the above. |
 

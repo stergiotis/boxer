@@ -31,6 +31,26 @@ const (
 	GroupByField
 )
 
+// DotKind is one entry in a board's dot legend ([Model.DotLegend]): a small
+// coloured indicator a card can carry ([Card.Dots]), plus the label and hover
+// detail [RenderLegend] shows for it. ID must be unique and stable (it is what
+// a [Card.Dots] entry references); Label is the always-visible legend caption;
+// Tooltip is the hover detail text, or "" for none.
+type DotKind struct {
+	ID      uint64
+	Color   color.Color
+	Label   string
+	Tooltip string
+}
+
+// DotTally is one [Card.Dots] entry: Count small dots of DotKind ID's colour,
+// packed with no gap — a tally mark, not a single presence flag. Count <= 0
+// is silently skipped at render.
+type DotTally struct {
+	ID    uint64
+	Count int
+}
+
 // Card is one item on the board. ColumnID names the lane it currently sits in
 // (matching a [Column.ID]); order within a lane is the order cards appear in
 // [Model.Cards]. A card with ParentID != 0 is a sub-item of that (top-level)
@@ -46,6 +66,13 @@ type Card struct {
 	// Accent tints the card's title bullet and its selected stroke. The
 	// zero-value Color (kind none) falls back to the neutral theme accent.
 	Accent color.Color
+	// Dots names up to 3 [DotTally] entries (from [Model.DotLegend]) painted
+	// as a small packed run of coloured tally dots along the card's bottom
+	// edge — a compact stand-in for labels or flags, explained board-wide by
+	// [RenderLegend] rather than repeating a tooltip on every card. Entries
+	// past the third, and any id absent from the board's DotLegend, are
+	// silently skipped at render.
+	Dots []DotTally
 }
 
 // Move records a card that changed lane (or order) this frame. The widget
@@ -85,6 +112,11 @@ type dragState struct {
 type Model struct {
 	Columns []Column
 	Cards   []Card
+	// DotLegend is the board's dot vocabulary — [Card.Dots] entries reference
+	// it by [DotKind.ID]. Optional: nil means no card carries a dot. Render it
+	// with [RenderLegend], wherever the host wants the legend placed; it is
+	// not drawn automatically by [Render].
+	DotLegend []DotKind
 
 	sel      uint64 // selected card id; 0 = none
 	moves    []Move
@@ -159,6 +191,18 @@ func (m *Model) childCount(parent uint64) (n int) {
 		}
 	}
 	return
+}
+
+// dotKind looks up a [DotKind] by id in the board's DotLegend, for rendering a
+// [Card.Dots] entry. ok is false for an id absent from DotLegend (e.g. a stale
+// reference after the host edited its legend); the caller skips it.
+func (m *Model) dotKind(id uint64) (dk DotKind, ok bool) {
+	for i := range m.DotLegend {
+		if m.DotLegend[i].ID == id {
+			return m.DotLegend[i], true
+		}
+	}
+	return DotKind{}, false
 }
 
 // columnTitle returns the title of the column with id cid, or "".

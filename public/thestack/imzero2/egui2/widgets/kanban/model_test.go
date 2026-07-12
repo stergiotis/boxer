@@ -239,3 +239,17 @@ func TestChildCountAndLookup(t *testing.T) {
 		t.Fatalf("cardByID(99) should be nil")
 	}
 }
+
+func TestDotKindLookup(t *testing.T) {
+	m := NewModel([]Column{{ID: 1}}, nil)
+	m.DotLegend = []DotKind{
+		{ID: 5, Label: "Blocked"},
+		{ID: 7, Label: "Needs review"},
+	}
+	if dk, ok := m.dotKind(7); !ok || dk.Label != "Needs review" {
+		t.Fatalf("dotKind(7) = %+v, %v, want Needs review, true", dk, ok)
+	}
+	if _, ok := m.dotKind(99); ok {
+		t.Fatalf("dotKind(99) should be absent")
+	}
+}
