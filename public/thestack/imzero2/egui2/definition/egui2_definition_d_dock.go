@@ -51,6 +51,7 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 			PlainArg("tabTitles", ctabb.Sh).
 			PlainArg("initialLayout", ctabb.U8h).
 			PlainArg("noScrollTabIds", ctabb.U64h).
+			PlainArg("activateTabId", ctabb.U64).
 			Build()).
 		WithDeferredBlockMap("tabBody", ctabb.U64).
 		WithSettingImmediate(true).
@@ -94,6 +95,17 @@ func definitionsDock() []*ir.BuilderFactoryNode {
 		for &id in &tab_ids {
 			if !existing.contains(&id) {
 				dock_state.push_to_first_leaf(id);
+			}
+		}
+
+		// Programmatic tab activation (0 = none). Go-side affordances that
+		// deliver content INTO a tab body (the snippet-library Insert splicing
+		// into the editor) focus that tab first: a hidden tab's body buffer is
+		// discarded uninterpreted, so the delivery op would be silently lost —
+		// and the user could not see the result anyway.
+		if activate_tab_id != 0 {
+			if let Some(loc) = dock_state.find_tab(&activate_tab_id) {
+				let _ = dock_state.set_active_tab(loc);
 			}
 		}
 

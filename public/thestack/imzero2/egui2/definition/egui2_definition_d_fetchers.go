@@ -317,6 +317,27 @@ self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
 		AddReturnValue("maxY", ctabb.F32h).
 		Build())
 
+	// Drains the per-frame batch of texture ids that were interpreted this
+	// frame while STARVED: no usable cache entry AND no pixels in the
+	// payload to (re)build one. This is the state a send-once uploader
+	// lands in when its full-pixel send went into a skipped region — an
+	// inactive dock tab's discarded buffer, an ungated collapsed block —
+	// or when the idle cache eviction (~10 s unrendered) reaped the
+	// texture. Consumers re-arm their "already sent" memory and re-ship
+	// the pixels on the next frame (see ImageVersionTracker.PixelsToSendFor
+	// and the scrollingTexture fresh-texture report). Ids live in the
+	// sender's own id space (widget ids for image/scrollingTexture, the
+	// caller-chosen rasterId for the walkers mapRaster overlay) — a
+	// consumer only matches ids it itself sent.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchR22StarvedTextures").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.r22_starved_texture_ids.len();
+self.io.write_plain_u64h(len, self.r22_starved_texture_ids.drain(..))?;
+{{SendMessage}}
+`)).
+		AddReturnValue("ids", ctabb.U64h).
+		Build())
+
 	// Latest known pointer position in egui logical pixels (viewport-
 	// relative top-left origin), read from egui's InputState. `valid`
 	// is false until the pointer has been observed at least once

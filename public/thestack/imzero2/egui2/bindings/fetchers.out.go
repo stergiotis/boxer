@@ -128,6 +128,11 @@ func (inst *Fetcher) FetchR21UiRects() (seqs []uint64, minX []float32, minY []fl
 	maxY = inst.iterateF32h()
 	return
 }
+func (inst *Fetcher) FetchR22StarvedTextures() (ids iter.Seq[uint64]) {
+	inst.invoke(FuncProcIdFetchR22StarvedTextures)
+	ids = inst.iterateU64h()
+	return
+}
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchR7)
 	ids = inst.readU64h()

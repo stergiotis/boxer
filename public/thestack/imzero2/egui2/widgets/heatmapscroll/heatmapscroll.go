@@ -206,10 +206,21 @@ func (inst *HeatmapScroll) PushColumn(samples []float32) (stats colormap.ColumnS
 // PushColumn since the last Render, binds the r9_u64 / r10 databindings,
 // and advances head. Call once per frame, even if no columns were
 // pushed (the widget still needs to render its current texture content).
+//
+// Host starvation (StateManager.TextureStarved): the ring texture is
+// (re)created host-side on first show, on a slot-shape change, and after
+// the idle LRU evicted it while the widget went uninterpreted (a hidden
+// dock tab — imztop's panels). Columns shipped in that window are gone;
+// the host reports the id and Render resets head to 0 so the ring restarts
+// honestly from a blank texture instead of desyncing around a gap.
 func (inst *HeatmapScroll) Render() {
-	creator := inst.ids.PrepareStr(inst.scopeKey)
+	// Separate PrepareStr creators: same derived value, but each creator is
+	// a single-use state machine (a second Derive on one panics).
+	if c.CurrentApplicationState.StateManager.TextureStarved(inst.ids.PrepareStr(inst.scopeKey).Derive()) {
+		inst.head = 0
+	}
 	c.ScrollingTexture(
-		creator,
+		inst.ids.PrepareStr(inst.scopeKey),
 		inst.widthSlots,
 		inst.heightSlots,
 		uint8(inst.orientation),

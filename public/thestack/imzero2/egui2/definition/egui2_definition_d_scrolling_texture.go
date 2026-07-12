@@ -67,6 +67,14 @@ if {{EguiUiOptionalOuter}}.is_some() {
         display_width_px,
         display_height_px,
     );
+    if resp.fresh_texture {
+        // The ring texture was (re)created this frame: any columns the
+        // sender pushed while this widget went uninterpreted (hidden dock
+        // tab) or while the idle LRU held its entry are gone. Report so
+        // the Go side can reset its head honestly instead of desyncing
+        // (fetchR22StarvedTextures).
+        self.r22_starved_texture_ids.push({{Id}}.value());
+    }
     self.r9_u64_push({{Id}}.value(), resp.hover_rc);
     self.r10_push({{Id}}.value(), resp.clicked);
 }

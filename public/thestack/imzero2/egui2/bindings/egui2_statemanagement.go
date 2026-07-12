@@ -6,8 +6,8 @@ import (
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/containers/ragged"
 	"github.com/stergiotis/boxer/public/functional"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
 )
 
 // EtPrefetchValue is the per-table visible range reported by egui_table's
@@ -181,15 +181,21 @@ type StateManager struct {
 	// "fetchers run only at frame end" convention and deadlocked when
 	// the render scope was inside a deferred-block capture (e.g. a
 	// dock.Tab body).
-	r14CanvasPointer   CanvasPointerValue
-	r15PlotPointer     PlotPointerValue
-	r15WalkersCamera   WalkersCameraValue
-	r16ScrollDelta     ScrollDeltaValue
-	r17Modifiers       ModifiersValue
-	r18AvailableSize   AvailableSizeValue
-	r19ZoomDelta       ZoomDeltaValue
-	r20Pointer         PointerValue
-	r21UiRects         map[uint64]UiRectValue
+	r14CanvasPointer CanvasPointerValue
+	r15PlotPointer   PlotPointerValue
+	r15WalkersCamera WalkersCameraValue
+	r16ScrollDelta   ScrollDeltaValue
+	r17Modifiers     ModifiersValue
+	r18AvailableSize AvailableSizeValue
+	r19ZoomDelta     ZoomDeltaValue
+	r20Pointer       PointerValue
+	r21UiRects       map[uint64]UiRectValue
+	// r22StarvedTextures holds LAST frame's starved-texture report: ids the
+	// host interpreted with no pixels and no usable cache entry (a send-once
+	// upload lost to a discarded hidden-tab buffer, or an idle-LRU eviction).
+	// Per-frame set, replaced each Sync. Senders consult TextureStarved (the
+	// ImageVersionTracker does so via PixelsToSendFor) and re-ship.
+	r22StarvedTextures map[uint64]struct{}
 	// f1KeyPressed mirrors the per-frame fetchF1KeyPressed drain. True
 	// exactly once per physical F1 press (egui's consume_key removes
 	// the event from the input queue so other widgets in the same
@@ -197,11 +203,11 @@ type StateManager struct {
 	// this via GetF1KeyPressed and opens HelpHost on true; widgets
 	// inside an app should NOT poll, since they'd race the carousel
 	// for the same consumed event.
-	f1KeyPressed       bool
-	snarlEvents        SnarlEventsValue
-	graphEvents        GraphEventsValue
-	graphSelection     GraphSelectionValue
-	graphMetrics       GraphMetricsValue
+	f1KeyPressed   bool
+	snarlEvents    SnarlEventsValue
+	graphEvents    GraphEventsValue
+	graphSelection GraphSelectionValue
+	graphMetrics   GraphMetricsValue
 }
 
 func NewStateManager() *StateManager {
@@ -215,6 +221,7 @@ func NewStateManager() *StateManager {
 		overriddenBindingIds: containers.NewHashSet[uint64](128),
 		fetcher:              NewFetcher(),
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
+		r22StarvedTextures:   make(map[uint64]struct{}, 8),
 	}
 }
 
@@ -348,6 +355,19 @@ func (inst *StateManager) Fetcher() *Fetcher {
 // GetResponse returns the response flags for the widget identified by the given handle.
 func (inst *StateManager) GetResponse(h widgethandle.WidgetHandle) ResponseFlagsE {
 	return inst.responseFlags.GetDefault(h.Resolve(), NilResponseFlags)
+}
+
+// TextureStarved reports whether the host flagged the given texture id as
+// starved LAST frame: it was interpreted with no pixels and no usable cache
+// entry — a send-once upload that went into a discarded hidden-tab buffer,
+// or an entry the idle LRU evicted while the widget went uninterpreted. A
+// sender that keeps "already sent" memory (ImageVersionTracker, the Map
+// raster's lastSentVersion, heatmapscroll's head) must consult this and
+// re-ship. One-frame lag, like every register in this file. Ids are in the
+// sender's own id space (widget ids; the walkers mapRaster rasterId).
+func (inst *StateManager) TextureStarved(id uint64) bool {
+	_, ok := inst.r22StarvedTextures[id]
+	return ok
 }
 
 // GetResponseByIdRaw is the raw-id variant used by Fluid struct methods
@@ -662,6 +682,13 @@ func (inst *StateManager) Sync() {
 				MaxY: maxY,
 			}
 			i++
+		}
+	}
+	{
+		ids := fetcher.FetchR22StarvedTextures()
+		clear(inst.r22StarvedTextures)
+		for id := range ids {
+			inst.r22StarvedTextures[id] = struct{}{}
 		}
 	}
 	{

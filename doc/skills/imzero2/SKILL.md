@@ -668,6 +668,15 @@ Widgets that accept pointer bindings (`*string`, `*float64`, `*bool`) must be bo
   c.TextEdit(id, *valPtr).SendRespVal(valPtr)
   ```
 
+## Lost Sends (Host-Skippable Regions)
+* **The Symptom:** A texture/image renders 0×0 (or a one-shot setting never applies) — but *only* when its dock tab is activated by clicking, or after the tab was hidden for ~10 s. Scripted captures that start ON the tab look perfect.
+* **The Cause:** Go runs **every** dock-tab body every frame into a detached buffer, but the host interprets only the **active** tab's buffer and discards the rest (an ungated collapsed block is the same seam). Any protocol where Go remembers "already sent" and then sends less — a content-version tracker shipping empty "use cached" slices, a delta stream advancing its head, a `SetZoom` behind an `inited` flag — silently desynchronizes: the one full send landed in a discarded buffer. The host's idle texture LRU (~600 unrendered frames) adds the same failure for tabs that *were* shown once.
+* **The Pattern:** **A send is not a receipt.** Inside any host-skippable region, ops must be idempotent per frame, or Go-side "already sent" memory must be validated against host feedback:
+  * Content-versioned textures: use `ImageVersionTracker.PixelsToSendFor` (not `PixelsToSend`) — it consults the host's starved-texture report (`StateManager.TextureStarved`, `fetchR22StarvedTextures`) and re-ships automatically. Custom version fields (`lastSentVersion`) must check `TextureStarved(id)` themselves.
+  * Delta streams (`scrollingTexture`): on `TextureStarved(id)`, reset the ring (head = 0) — the lost columns are unrecoverable; restart honestly instead of desyncing (heatmapscroll does this).
+  * One-shot ops: keep sending until a host register proves receipt (the Map's `SetZoom` re-sends until the walkers camera register reports this map's id), or focus the target tab first (`DockAreaFluid.ActivateTab`) when delivering content into another tab's body (the snippet-library insert).
+  * Small static images: skip trackers entirely and re-send pixels every frame (the markdown widget's choice — fine below ~100 KB).
+
 ## Jumping UI (ID Drift)
 * **The Symptom:** Windows reset their positions when you click a button, or scroll areas jump wildly when a new item is added to a list.
 * **The Cause:** Widgets rely on a hash ID to remember their state (position, scroll, focus). If you rely on a single flat auto-incrementing ID stack, dynamically rendering a new element (like an error message or a new list item) shifts the auto-IDs of *everything rendered after it*. ImZero2 thinks the shifted widgets are completely new elements and resets their state.

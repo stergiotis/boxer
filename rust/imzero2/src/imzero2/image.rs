@@ -230,10 +230,16 @@ impl ImageCache {
 
     /// Show an image at the current ui cursor.
     ///
-    /// Returns `(Response, hover_rc)`. `hover_rc` packs `(row, col)` in
-    /// **image-pixel space** (`HOVER_RC_NONE` if the pointer is outside the
-    /// allocated widget rect). The Response is always returned — even when
-    /// nothing is drawn — so the caller can populate r7 flags uniformly.
+    /// Returns `(Response, hover_rc, starved)`. `hover_rc` packs `(row, col)`
+    /// in **image-pixel space** (`HOVER_RC_NONE` if the pointer is outside
+    /// the allocated widget rect). The Response is always returned — even
+    /// when nothing is drawn — so the caller can populate r7 flags uniformly.
+    /// `starved` is true when nothing could be drawn because there is no
+    /// usable cache entry AND the payload carried no pixels to build one —
+    /// the state a send-once uploader lands in when its full send went into
+    /// a skipped region (hidden dock tab) or the idle LRU evicted the entry.
+    /// Callers report it on the starved-textures register so the sender
+    /// re-ships (fetchR22StarvedTextures).
     #[allow(clippy::too_many_arguments)]
     pub fn show(
         &mut self,
@@ -249,7 +255,7 @@ impl ImageCache {
         filter: u8,
         tint_rgba: u32,
         pixels: &[u32],
-    ) -> (egui::Response, u64) {
+    ) -> (egui::Response, u64, bool) {
         let filter_opts = filter_to_options(filter);
 
         // Decide whether to upload. Three cases:
@@ -268,11 +274,18 @@ impl ImageCache {
             if pixels.is_empty() {
                 // No cached entry (or stale) and Go didn't ship pixels — can't
                 // draw. Allocate 0×0 so the widget id still gets a Response,
-                // and bail with a no-hover sentinel.
-                let (_rect, resp) =
-                    ui.allocate_exact_size(vec2(0.0, 0.0), Sense::hover().union(Sense::click()));
-                return (resp, HOVER_RC_NONE);
-            }
+                // and report starvation so the sender re-ships. A stale-entry
+                // hit (version moved, empty pixels) still draws the old frame
+                // below rather than starving.
+                if let Some(e) = self.entries.get_mut(&id) {
+                    e.last_touched_frame = self.frame;
+                    // fall through: draw the stale entry
+                } else {
+                    let (_rect, resp) = ui
+                        .allocate_exact_size(vec2(0.0, 0.0), Sense::hover().union(Sense::click()));
+                    return (resp, HOVER_RC_NONE, true);
+                }
+            } else {
             let expected = (w as usize).saturating_mul(h as usize);
             if pixels.len() != expected {
                 tracing::warn!(
@@ -288,6 +301,7 @@ impl ImageCache {
             } else {
                 self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
             }
+            }
         }
 
         // Either we just uploaded, or we're reusing. If still no entry, draw
@@ -295,9 +309,11 @@ impl ImageCache {
         let entry = match self.entries.get_mut(&id) {
             Some(e) => e,
             None => {
+                // Reachable only via the length-mismatch fall-through with no
+                // prior entry — a resend can heal it, so report starved too.
                 let (_rect, resp) =
                     ui.allocate_exact_size(vec2(0.0, 0.0), Sense::hover().union(Sense::click()));
-                return (resp, HOVER_RC_NONE);
+                return (resp, HOVER_RC_NONE, true);
             }
         };
         entry.last_touched_frame = self.frame;
@@ -346,6 +362,6 @@ impl ImageCache {
             HOVER_RC_NONE
         };
 
-        (resp, hover_rc)
+        (resp, hover_rc, false)
     }
 }

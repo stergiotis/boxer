@@ -48,6 +48,12 @@ pub struct ScrollingTextureResponse {
     pub hover_rc: u64,
     /// True on the frame egui recognises a primary click on the widget rect.
     pub clicked: bool,
+    /// True when the ring texture was (re)created this call — first show,
+    /// slot-shape change, or an idle-LRU eviction while the widget went
+    /// uninterpreted (hidden dock tab). Columns pushed before this frame are
+    /// gone; the interpreter reports the id on the starved-textures register
+    /// so the Go sender can reset its head instead of desyncing.
+    pub fresh_texture: bool,
 }
 
 impl ScrollingTextureResponse {
@@ -55,6 +61,7 @@ impl ScrollingTextureResponse {
         Self {
             hover_rc: HOVER_RC_NONE,
             clicked: false,
+            fresh_texture: false,
         }
     }
 }
@@ -164,7 +171,7 @@ impl ScrollingTextureCache {
         width_slots: u32,
         height_slots: u32,
         filter_opts: TextureOptions,
-    ) {
+    ) -> bool {
         let needs_new = match self.entries.get(&id) {
             None => true,
             Some(e) => e.width_slots != width_slots || e.height_slots != height_slots,
@@ -201,6 +208,7 @@ impl ScrollingTextureCache {
                 },
             );
         }
+        needs_new
     }
 
     /// Push `new_count` RGBA columns starting at `head` (mod `width_slots`)
@@ -248,7 +256,7 @@ impl ScrollingTextureCache {
             );
         }
 
-        self.ensure_entry(ctx, id, width_slots, height_slots, filter_opts);
+        let fresh_texture = self.ensure_entry(ctx, id, width_slots, height_slots, filter_opts);
         let entry = self.entries.get_mut(&id).expect("entry just ensured above");
         entry.last_touched_frame = self.frame;
 
@@ -586,6 +594,7 @@ impl ScrollingTextureCache {
         ScrollingTextureResponse {
             hover_rc,
             clicked: resp.clicked(),
+            fresh_texture,
         }
     }
 }

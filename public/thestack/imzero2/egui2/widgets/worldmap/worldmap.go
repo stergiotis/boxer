@@ -71,19 +71,7 @@ type Widget struct {
 
 	hoverRc uint64
 	hovered CountryIdx
-	// prevLive is whether last frame's Image opcode was actually interpreted
-	// by the render host (see hoverLiveProbe / renderImage).
-	prevLive bool
 }
-
-// hoverLiveProbe is a hover-readout value the host never emits: real hovers
-// pack (row<<32)|col with row bounded by the texture height, and "pointer
-// outside" is HOVER_RC_NONE (all-ones). renderImage seeds hoverRc with the
-// probe before every Send; the host writes r9 for EVERY interpreted image,
-// and Sync leaves bindings untouched for ids absent from the frame — so the
-// probe still being there one frame later means the widget was NOT
-// interpreted (its dock tab was hidden and the buffer discarded).
-const hoverLiveProbe = ^uint64(0) - 1
 
 // New constructs the widget. scopeKey seeds the widget ids and the texture
 // cache key — unique per instance within the caller's id scope. The embedded
@@ -297,24 +285,18 @@ func (inst *Widget) Render() (clicked CountryIdx, clickedOk bool) {
 // The version-tracker protocol assumes "sent once" means "uploaded once",
 // which a dock breaks: this body runs every frame into a detached buffer,
 // but the host interprets only the ACTIVE tab's buffer — a hidden tab's
-// upload is discarded, and every later frame would ship the empty slice
-// into a texture cache that never saw the pixels (the map then renders
-// 0×0). hoverLiveProbe detects interpretation per frame; on the
-// hidden→visible edge the tracker is re-armed so the next frame re-ships
-// the full pixels. Costs one blank frame on tab activation and nothing
-// while hidden; also covers the host cache's idle eviction (~10 s hidden).
+// upload is discarded, and the idle LRU can evict the texture while the
+// widget goes uninterpreted (~10 s). PixelsToSendFor closes the loop via
+// the host's starved-texture report (StateManager.TextureStarved): a
+// starved id drops the "already sent" record and the full pixels re-ship
+// the next frame. Costs one blank frame on tab activation, nothing while
+// hidden.
 func (inst *Widget) renderImage() c.ResponseFlagsE {
-	// lastHover is what the host wrote at the previous frame's Sync — or the
-	// probe, untouched, when the widget wasn't interpreted. Consume it for
-	// both liveness and the hover readout BEFORE re-seeding the probe.
-	lastHover := inst.hoverRc
-	live := lastHover != hoverLiveProbe
-	if live && !inst.prevLive {
-		inst.tracker.Forget(inst.scopeKey + "-img")
-	}
-	inst.prevLive = live
-	pixels := inst.tracker.PixelsToSend(inst.scopeKey+"-img", inst.version, inst.rgba)
-	inst.hoverRc = hoverLiveProbe // re-seed the probe for this frame's Send
+	// Two separate PrepareStr creators: they derive the same content-based
+	// value, but each is a single-use state machine — reusing one across
+	// Derive() and the Image call panics ("invalid state transition").
+	imgId := inst.ids.PrepareStr(inst.scopeKey + "-img").Derive()
+	pixels := inst.tracker.PixelsToSendFor(inst.scopeKey+"-img", imgId, inst.version, inst.rgba)
 	// FitAspectMax with a zero box scales the texture aspect-preserved into
 	// the local available size (the splashscreen idiom) — the width control
 	// sets raster *resolution*, the pane decides display size. The hover
@@ -325,7 +307,7 @@ func (inst *Widget) renderImage() c.ResponseFlagsE {
 		uint8(c.FilterLinearE), c.TintNoneRgba, pixels).
 		SendRespHoverPx(&inst.hoverRc)
 	inst.hovered = NoCountry
-	if row, col, hovered := c.UnpackHoverRc(lastHover); live && hovered {
+	if row, col, hovered := c.UnpackHoverRc(inst.hoverRc); hovered {
 		if int(row) < inst.rh && int(col) < inst.rw {
 			inst.hovered = inst.index[int(row)*inst.rw+int(col)]
 		}

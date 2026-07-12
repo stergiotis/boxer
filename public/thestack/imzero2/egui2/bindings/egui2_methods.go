@@ -208,15 +208,16 @@ type dockSplitS struct {
 // changes survive. Calling neither InitRoot nor Split keeps the
 // historical "everything in one leaf" default.
 type DockAreaFluid struct {
-	idGen        WidgetIdCreatorI
-	derivedId    uint64
-	ids          []uint64
-	titles       []string
-	bodies       [][]byte
-	noScrollTabs []uint64
-	rootTabs     []uint64
-	splits       []dockSplitS
-	nextLeafId   DockLeafIdT
+	idGen         WidgetIdCreatorI
+	derivedId     uint64
+	ids           []uint64
+	titles        []string
+	bodies        [][]byte
+	noScrollTabs  []uint64
+	rootTabs      []uint64
+	splits        []dockSplitS
+	nextLeafId    DockLeafIdT
+	activateTabId uint64
 }
 
 // DockArea opens an iter-style dock area scope.
@@ -275,6 +276,17 @@ func (inst *DockAreaFluid) Tab(tabId uint64, title string) iter.Seq[functional.N
 		}()
 		yield(functional.NilIteratorValue)
 	}
+}
+
+// ActivateTab programmatically focuses the given tab this frame (the user's
+// later clicks still win — this sets the active tab once, it does not pin
+// it). Use it when an affordance delivers content INTO a tab body — e.g. the
+// snippet-library Insert splicing into the editor: a hidden tab's body buffer
+// is discarded uninterpreted, so a delivery op would be silently lost, and
+// the user could not see the result anyway. Passing an id not present this
+// frame is a no-op.
+func (inst *DockAreaFluid) ActivateTab(tabId uint64) {
+	inst.activateTabId = tabId
 }
 
 // TabNoScroll declares a tab exactly like Tab, but with the dock's default
@@ -384,7 +396,7 @@ func (inst *DockAreaFluid) send() {
 		// documents for the u8 slice. Always send a real (empty) slice.
 		noScroll = []uint64{}
 	}
-	d := DockAreaRaw(AbsoluteWidgetId(inst.derivedId), inst.ids, inst.titles, inst.encodeInitialLayout(), noScroll)
+	d := DockAreaRaw(AbsoluteWidgetId(inst.derivedId), inst.ids, inst.titles, inst.encodeInitialLayout(), noScroll, inst.activateTabId)
 	fffi := typed.GetCurrentFffiCapture()
 	for i, id := range inst.ids {
 		d.BeginTabBody(id)

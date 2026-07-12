@@ -2184,6 +2184,13 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     r9_i64_values: Vec<i64>,
     r9_s_ids: Vec<u64>,
     r9_s_values: Vec<String>,
+    // Texture ids interpreted this frame while starved — no usable cache
+    // entry AND no pixels in the payload to (re)build one (a send-once
+    // uploader whose full send went into a discarded hidden-tab buffer, or
+    // whose entry the idle LRU evicted). Drained by fetchR22StarvedTextures;
+    // the Go sender re-arms and re-ships. Ids are in the sender's own id
+    // space (widget ids; the walkers mapRaster rasterId).
+    r22_starved_texture_ids: Vec<u64>,
     // Scratch slot for TextEditFluid.InsertAtCursor: the `insertAtCursor`
     // builder-method arm stashes the snippet here; the TextEdit apply code
     // splices it at the caret and clears the slot within the same handler
@@ -2515,6 +2522,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r9_i64_values: Vec::with_capacity(1024),
             r9_s_ids: Vec::with_capacity(1024),
             r9_s_values: Vec::with_capacity(1024),
+            r22_starved_texture_ids: Vec::with_capacity(8),
             text_edit_pending_insert: None,
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
@@ -4692,6 +4700,8 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                 let mut initial_layout = self.io.read_plain_u8h()?;
                 #[allow(unused_mut)]
                 let mut no_scroll_tab_ids = self.io.read_plain_u64h()?;
+                #[allow(unused_mut)]
+                let mut activate_tab_id = self.io.read_plain_u64()?;
                 // construct
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
@@ -4736,6 +4746,17 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     for &id in &tab_ids {
                         if !existing.contains(&id) {
                             dock_state.push_to_first_leaf(id);
+                        }
+                    }
+
+                    // Programmatic tab activation (0 = none). Go-side affordances that
+                    // deliver content INTO a tab body (the snippet-library Insert splicing
+                    // into the editor) focus that tab first: a hidden tab's body buffer is
+                    // discarded uninterpreted, so the delivery op would be silently lost —
+                    // and the user could not see the result anyway.
+                    if activate_tab_id != 0 {
+                        if let Some(loc) = dock_state.find_tab(&activate_tab_id) {
+                            let _ = dock_state.set_active_tab(loc);
                         }
                     }
 
@@ -5999,6 +6020,19 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_f32h(len, self.r21_ui_rect_min_y.drain(..))?;
                 self.io.write_plain_f32h(len, self.r21_ui_rect_max_x.drain(..))?;
                 self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
+                self.io.flush()?;
+            }
+            FuncProcId::FetchR22StarvedTextures => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR22StarvedTextures");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let len = self.r22_starved_texture_ids.len();
+                self.io.write_plain_u64h(len, self.r22_starved_texture_ids.drain(..))?;
                 self.io.flush()?;
             }
             FuncProcId::FetchR7 => {
@@ -7456,7 +7490,7 @@ egui::Grid::new(i);
 
                 if u.is_some() {
                     let ui = u.as_mut().unwrap();
-                    let (resp, hover_rc) = self.image_cache.show(
+                    let (resp, hover_rc, starved) = self.image_cache.show(
                         ui,
                         c,
                         i.value(),
@@ -7470,6 +7504,11 @@ egui::Grid::new(i);
                         tint_rgba,
                         &pixels,
                     );
+                    if starved {
+                        // Interpreted with no pixels and no cache entry — report so the
+                        // Go-side sender re-arms and re-ships (fetchR22StarvedTextures).
+                        self.r22_starved_texture_ids.push(i.value());
+                    }
                     if self.r8_response_flags_filter.match_response_any(&resp) {
                         let mut res = ResponseFlags::empty();
                         res.populate(&resp);
@@ -11047,6 +11086,14 @@ self.apply_widget(w,u,f,Some(i));
                         display_width_px,
                         display_height_px,
                     );
+                    if resp.fresh_texture {
+                        // The ring texture was (re)created this frame: any columns the
+                        // sender pushed while this widget went uninterpreted (hidden dock
+                        // tab) or while the idle LRU held its entry are gone. Report so
+                        // the Go side can reset its head honestly instead of desyncing
+                        // (fetchR22StarvedTextures).
+                        self.r22_starved_texture_ids.push(i.value());
+                    }
                     self.r9_u64_push(i.value(), resp.hover_rc);
                     self.r10_push(i.value(), resp.clicked);
                 }
@@ -13666,6 +13713,13 @@ egui::Window::new(label).id(i);
                     tex,
                     opacity: r.opacity,
                 });
+            } else {
+                // Nothing drawable: no cache entry and no pixels in the
+                // payload — the sender's full upload went into a discarded
+                // hidden-tab buffer, or the idle LRU evicted the texture.
+                // Report on the starved register so Go re-ships
+                // (fetchR22StarvedTextures; ids are rasterIds here).
+                self.r22_starved_texture_ids.push(r.id);
             }
         }
 

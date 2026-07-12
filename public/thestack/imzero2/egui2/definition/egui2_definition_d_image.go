@@ -60,7 +60,7 @@ func definitionsImage() (nodes []*ir.BuilderFactoryNode) {
 		WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
     let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
-    let (resp, hover_rc) = self.image_cache.show(
+    let (resp, hover_rc, starved) = self.image_cache.show(
         ui,
         c,
         {{Id}}.value(),
@@ -74,6 +74,11 @@ if {{EguiUiOptionalOuter}}.is_some() {
         tint_rgba,
         &pixels,
     );
+    if starved {
+        // Interpreted with no pixels and no cache entry — report so the
+        // Go-side sender re-arms and re-ships (fetchR22StarvedTextures).
+        self.r22_starved_texture_ids.push({{Id}}.value());
+    }
     if self.r8_response_flags_filter.match_response_any(&resp) {
         let mut res = ResponseFlags::empty();
         res.populate(&resp);

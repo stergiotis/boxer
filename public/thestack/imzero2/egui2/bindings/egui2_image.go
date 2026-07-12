@@ -114,6 +114,13 @@ func NewImageVersionTracker[K comparable]() (out *ImageVersionTracker[K]) {
 // If the supplied contentVersion matches the last version recorded for
 // `key`, returns an empty (non-nil) slice to signal "use cached".
 // Otherwise returns the supplied `pixels` and records the new version.
+//
+// CAUTION: "recorded as sent" is Go-side memory, and a send is NOT a
+// receipt — inside a host-skippable region (an inactive dock tab's
+// discarded body buffer, an ungated collapsed block) the upload never
+// reaches the host cache, and the idle LRU can evict a delivered texture
+// while the widget goes uninterpreted (~10 s). Use PixelsToSendFor, which
+// consults the host's starved-texture report and re-arms automatically.
 func (inst *ImageVersionTracker[K]) PixelsToSend(key K, contentVersion uint64, pixels []uint32) (out []uint32) {
 	if last, ok := inst.last[key]; ok && last == contentVersion {
 		out = []uint32{}
@@ -122,6 +129,19 @@ func (inst *ImageVersionTracker[K]) PixelsToSend(key K, contentVersion uint64, p
 	inst.last[key] = contentVersion
 	out = pixels
 	return
+}
+
+// PixelsToSendFor is PixelsToSend with the starvation feedback loop closed:
+// when the host reported `widgetId` starved last frame (interpreted with no
+// pixels and no cache entry — see StateManager.TextureStarved), the "already
+// sent" record is dropped so this call re-ships the full pixels. This is the
+// correct default for any content-versioned widget that can live inside a
+// dock tab or other host-skippable region.
+func (inst *ImageVersionTracker[K]) PixelsToSendFor(key K, widgetId uint64, contentVersion uint64, pixels []uint32) (out []uint32) {
+	if CurrentApplicationState.StateManager.TextureStarved(widgetId) {
+		delete(inst.last, key)
+	}
+	return inst.PixelsToSend(key, contentVersion, pixels)
 }
 
 // Forget drops the version record for `key`. Call after ImageRelease() so
