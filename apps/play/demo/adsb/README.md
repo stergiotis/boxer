@@ -1,3 +1,13 @@
+---
+type: how-to
+audience: play demo user
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # ADS-B demo data for the `play` Map panel
 
 Loads a Zürich-centred slice of ADS-B aircraft positions into a local

@@ -1,3 +1,13 @@
+---
+type: reference
+audience: worldmap widget maintainer
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # Natural Earth 110m admin-0 countries (vendored)
 
 `ne_110m_admin_0_countries.geojson.zst` is the **verbatim** upstream file,

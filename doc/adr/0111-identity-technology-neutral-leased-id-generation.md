@@ -139,6 +139,15 @@ it when they bump their pin.
 - **Keep the source embedded per backend (status quo).** Simple, but not neutral
   and cannot reach a network authority.
 
+## Status
+
+Proposed (2026-07-10) — pre-human-review. Awaiting review by a code owner of
+[`public/identity/identgen`](../../public/identity/identgen). Decision under
+consideration; do not implement as if accepted.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
+
 ## References
 
 - ADR-0106 — fibonacci-coded tags (the id format these generators mint into).
