@@ -19,15 +19,19 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 		c.Label(fmt.Sprintf("host: %s", host)).Send()
 		c.Separator().Vertical().Send()
 
-		paused := s.IsPaused()
-		pauseLabel := "Pause"
-		if paused {
-			pauseLabel = "Resume"
+		// Global freeze / disable-live. Sampler.Pause drops incoming frames so
+		// every panel renders the frozen snapshot; the sampler is a process
+		// singleton, so one click freezes live data across all imztop panels
+		// (and windows) at once.
+		frozen := s.IsPaused()
+		freezeLabel := "Freeze"
+		if frozen {
+			freezeLabel = "Go live"
 		}
-		if c.Button(inst.ids.PrepareStr("topbar-pause"), c.Atoms().Text(pauseLabel).Keep()).
-			Selected(paused).
+		if c.Button(inst.ids.PrepareStr("topbar-freeze"), c.Atoms().Text(freezeLabel).Keep()).
+			Selected(frozen).
 			SendResp().HasPrimaryClicked() {
-			s.Pause(!paused)
+			s.Pause(!frozen)
 		}
 		c.Separator().Vertical().Send()
 
@@ -38,6 +42,15 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 
 		ts := time.UnixMilli(snap.SampledAtUnixMs).Format("15:04:05")
 		c.Label(fmt.Sprintf("last: %s", ts)).Send()
+
+		// While frozen the "last:" timestamp stops advancing; call it out
+		// explicitly so a stale-but-plausible view is never mistaken for live.
+		if frozen {
+			c.Separator().Vertical().Send()
+			for rt := range c.RichTextLabelColored(colorWarn, colorBgClear, "FROZEN — live updates paused") {
+				rt.Strong()
+			}
+		}
 
 		if len(snap.Errors) > 0 {
 			c.Separator().Vertical().Send()

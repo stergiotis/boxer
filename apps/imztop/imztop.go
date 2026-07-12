@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
@@ -55,6 +56,15 @@ type App struct {
 	// MountCtx.Ids() at Mount time. The ctor seeds it with a fresh
 	// stack so tour mode and tests work without a Mount call.
 	ids *c.WidgetIdStack
+
+	// lazyPanes holds one widgets/lazypane gate per heavy dock tab, keyed
+	// by dock id and created on first use. While a tab is hidden the host
+	// discards its body buffer, so the pane emits only a probe + loading
+	// placeholder and skips the panel render; the CPU spectrograms
+	// (heatmapscroll / scrollingTexture) and the Proc Map treemap are the
+	// bodies that make this worth it. Persistent render-thread state — each
+	// pane carries its hidden/warming/live phase machine across frames.
+	lazyPanes map[uint64]*lazypane.Pane
 
 	// tasks is the keelson task API (task.ForApp at Mount). The embedded
 	// distsummary widgets thread it into their ECDF band warm-up so the
@@ -142,6 +152,30 @@ type App struct {
 	// topoActive aliases the latest cgroup-effective cpuset (CPUSnapshot.ActiveCPUs);
 	// PU boxes whose logical CPU is outside it render inactive (greyed).
 	topoActive []int32
+
+	// Proc Map panel state (imztop_panel_procmap.go). The process treemap nests
+	// live processes by PPID. Unlike the static topology tree it is rebuilt from
+	// every sample (reconcileProcTree), so process nodes are pooled by
+	// (PID,StartedAt) to keep the treemap's drill state stable across rebuilds.
+	//
+	//   procTreemap      the squarify widget; nil until the panel is first shown.
+	//   procRoot         stable synthetic forest root the widget is anchored to.
+	//   procNodes        pooled process node by EWMA key (stable pointer identity).
+	//   procNodeObj      layout node → source process + smoothed CPU% (tint + hover).
+	//   procMetric       the area encoding the user picked (RSS default / CPU%).
+	//   procBuiltMetric / procLastSampleMs gate the rebuild to sample/metric changes.
+	procTreemap      *treemap.Treemap
+	procRoot         *layout.Node
+	procNodes        map[procEWMAKey]*layout.Node
+	procNodeObj      map[*layout.Node]*procCell
+	procMetric       procMetricE
+	procBuiltMetric  procMetricE
+	procLastSampleMs int64
+
+	// activateTab, when non-zero, forces a dock tab active each frame. Zero
+	// (the production default) leaves tab focus entirely to the user; only the
+	// screenshot tour sets it, so a capture can target an otherwise-hidden tab.
+	activateTab uint64
 }
 
 var _ app.AppI = (*App)(nil)
@@ -154,6 +188,7 @@ func newApp() (inst *App) {
 		cpuHistoryDigest:  tdigest.NewTDigest(),
 		diskDistsumDigest: tdigest.NewTDigest(),
 		gpuDistsumDigest:  tdigest.NewTDigest(),
+		lazyPanes:         map[uint64]*lazypane.Pane{},
 	}
 	return
 }
@@ -219,7 +254,23 @@ const (
 	dockTabProc     uint64 = 8
 	dockTabTopo     uint64 = 9
 	dockTabPressure uint64 = 10
+	dockTabProcMap  uint64 = 11
 )
+
+// lazyBody gates a heavy dock-tab body through its persistent lazypane,
+// created on first use (widgets/lazypane). Call it as the first thing
+// inside the tab's for-range and return early on true: while the tab is
+// hidden the host discards its body buffer, so the pane emits only a probe
+// plus a loading placeholder and the panel render is skipped. title names
+// the region in the placeholder and seeds the (stable, unique) probe key.
+func (inst *App) lazyBody(dockID uint64, title string) (skip bool) {
+	pane := inst.lazyPanes[dockID]
+	if pane == nil {
+		pane = lazypane.New("imztop-dock-tab-"+title, title)
+		inst.lazyPanes[dockID] = pane
+	}
+	return pane.Skip()
+}
 
 // renderApp arranges the body inside the runtime-created window scope
 // (ADR-0026 Amendment 2026-05-12: the host wraps Frame in c.Window
@@ -250,18 +301,44 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 			// + I/O panels as a 3-tab leaf with Net active. PROC spans
 			// the bottom on its own leaf. Fewer leaves = more room per
 			// panel at the 1280×694 compositor-clamped viewport size.
-			cpuLeaf := dock.InitRoot(dockTabCPU, dockTabTopo, dockTabPressure, dockTabMem, dockTabBattery, dockTabSensors)
+			cpuLeaf := dock.InitRoot(dockTabCPU, dockTabTopo, dockTabProcMap, dockTabPressure, dockTabMem, dockTabBattery, dockTabSensors)
 			_ = dock.Split(cpuLeaf, c.DockBelow, 0.55, dockTabProc) // PROC at bottom (~45%)
 			_ = dock.Split(cpuLeaf, c.DockRight, 0.27, dockTabNet, dockTabDisk, dockTabGPU)
 
+			// Tour-only: force a specific tab active so a capture can target an
+			// otherwise-hidden one. Zero in production — tab focus stays the
+			// user's (ActivateTab does not pin, but calling it every frame in a
+			// non-interactive capture keeps the target tab selected).
+			if inst.activateTab != 0 {
+				dock.ActivateTab(inst.activateTab)
+			}
+
 			for range dock.Tab(dockTabCPU, "CPU") {
+				// Heaviest panel: imzrt spectrograms drive heatmapscroll
+				// (scrollingTexture). Safe to skip while hidden — the ring
+				// resets honestly on the starved-texture report when the tab
+				// re-shows (the r22 fix; see the lazypane / Lost Sends notes).
+				if inst.lazyBody(dockTabCPU, "CPU") {
+					continue
+				}
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderCPUPanel(snap)
 				}
 			}
 			for range dock.Tab(dockTabTopo, "Topology") {
+				if inst.lazyBody(dockTabTopo, "Topology") {
+					continue
+				}
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderTopologyPanel(snap)
+				}
+			}
+			for range dock.Tab(dockTabProcMap, "Proc Map") {
+				if inst.lazyBody(dockTabProcMap, "Proc Map") {
+					continue
+				}
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderProcMapPanel(snap)
 				}
 			}
 			for range dock.Tab(dockTabPressure, "Pressure") {

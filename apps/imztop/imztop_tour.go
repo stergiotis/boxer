@@ -38,15 +38,20 @@ const tourSamplerPeriod = 100 * time.Millisecond
 // imztopScenes is one entry per registered Demo: a name plus the process-table
 // filter to pin before rendering.
 var imztopScenes = []struct {
-	name   string
-	filter string
-	title  string
-	desc   string
+	name     string
+	filter   string
+	title    string
+	desc     string
+	activate uint64 // dock tab to force active for the capture; 0 = default (CPU)
 }{
 	{"imztop-running", "", icons.PhGauge + " imztop — processes",
-		"imztop's live system monitor — a docked layout of CPU/memory/network/disk/GPU/sensors panels plus the process table, unfiltered."},
+		"imztop's live system monitor — a docked layout of CPU/memory/network/disk/GPU/sensors panels plus the process table, unfiltered.", 0},
 	{"imztop-filtered", "imzero2", icons.PhGauge + " imztop — filtered",
-		"The same monitor with the process table filtered to \"imzero2\"."},
+		"The same monitor with the process table filtered to \"imzero2\".", 0},
+	// Proc Map scene is LAST: it forces its tab active every frame, which leaves
+	// the shared dock state on Proc Map, so any scene after it would inherit that.
+	{"imztop-procmap", "", icons.PhGauge + " imztop — process map",
+		"The process tree as a treemap: processes nested parent → child, each box sized by resident memory and tinted by CPU load.", dockTabProcMap},
 }
 
 func init() {
@@ -59,7 +64,7 @@ func init() {
 			Flags:          registry.DemoFlagNonDeterministic | registry.DemoFlagNeedsLargeArea,
 			Kind:           registry.DemoKindUX,
 			Description:    sc.desc,
-			Init:           makeTourInit(sc.filter),
+			Init:           makeTourInit(sc.filter, sc.activate),
 			RenderStateful: tourRenderStateful,
 			SourceFunc:     (*App).renderApp,
 		})
@@ -111,12 +116,13 @@ func ensureTourFeed() {
 
 // makeTourInit returns an Init that builds an imztop App bound to the host id
 // stack, wires the tour-local synthetic feed, and starts the consumer.
-func makeTourInit(filter string) func(ids *c.WidgetIdStack) (state any) {
+func makeTourInit(filter string, activate uint64) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
 		inst.ids = ids
-		ensureTourFeed()       // the tour has no host bus; feed the consumer locally
-		_, _ = ensureSampler() // start the singleton consumer; the feed sets the cadence
+		inst.activateTab = activate // 0 for most scenes; the Proc Map scene targets its tab
+		ensureTourFeed()            // the tour has no host bus; feed the consumer locally
+		_, _ = ensureSampler()      // start the singleton consumer; the feed sets the cadence
 		state = &imztopDemoState{app: inst, filter: filter}
 		return
 	}
