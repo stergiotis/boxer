@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
@@ -42,6 +43,11 @@ const (
 const (
 	defaultPageSize   = 100
 	editorDesiredRows = 10
+	// lazyPaneHoldFrames extends the widgets/lazypane loading placeholder by
+	// this many extra frames after a hidden tab is re-shown. 0 = reveal on
+	// the first frame after activation (a sub-frame loading tick); bump it if
+	// a specific host makes the flash objectionable. Applies to every Lazy tab.
+	lazyPaneHoldFrames = 0
 	// Column-width heuristic bounds (px).
 	colMinWidth      = 100.0
 	colMaxWidth      = 420.0
@@ -154,6 +160,11 @@ type PlayApp struct {
 	// registered TabSpec, frozen at the first Render. Embedders customize
 	// it via Tabs() between construction and mounting (D4).
 	tabs *TabRegistry
+	// lazyPanes holds one widgets/lazypane gate per Lazy tab, keyed by
+	// DockID and created on first use (embedder tabs land here too). The
+	// panes are persistent render-thread state — each carries the
+	// hidden/warming/live phase machine across frames.
+	lazyPanes map[uint64]*lazypane.Pane
 	// Slice-6c per-panel binding state. tabBindings maps a panel tab to the
 	// split node it renders (unbound tabs render the active result);
 	// boundLanes holds one lane per distinct bound node; boundViews and
@@ -556,6 +567,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		},
 		paramDrafts:       map[string]*string{},
 		paramSyncedValues: map[string]string{},
+		lazyPanes:         map[uint64]*lazypane.Pane{},
 		sigValDrafts:      map[string]*string{},
 		sigValSeeded:      map[string]string{},
 		// Range widget first so the Grafana-style picker (when the
@@ -795,12 +807,12 @@ func (inst *PlayApp) Render() error {
 				title := inst.boundTabTitle(&spec)
 				if spec.NoScroll {
 					for range dock.TabNoScroll(spec.DockID, title) {
-						spec.Render(&tabFrame)
+						inst.renderTabBody(&spec, title, &tabFrame)
 					}
 					continue
 				}
 				for range dock.Tab(spec.DockID, title) {
-					spec.Render(&tabFrame)
+					inst.renderTabBody(&spec, title, &tabFrame)
 				}
 			}
 		}
@@ -818,6 +830,28 @@ func (inst *PlayApp) Render() error {
 	inst.autoShotTick()
 	c.RequestRepaint()
 	return nil
+}
+
+// renderTabBody emits one tab's body, routed through its lazy pane when the
+// spec opts in (TabSpec.Lazy): while the host discards the tab's buffer, the
+// pane emits only a visibility probe plus a loading placeholder, and the
+// heavy body lands one frame after activation (widgets/lazypane). Send-once
+// protocols under a revealed body re-arm through the starved-texture report
+// as usual; the panes are per-DockID and persistent across frames.
+func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
+	if spec.Lazy {
+		pane := inst.lazyPanes[spec.DockID]
+		if pane == nil {
+			pane = lazypane.New("play-dock-tab-"+spec.ID, title)
+			pane.HoldFrames = lazyPaneHoldFrames
+			inst.lazyPanes[spec.DockID] = pane
+		}
+		pane.Title = title // bound tabs rename themselves (slice 6c)
+		if pane.Skip() {
+			return
+		}
+	}
+	spec.Render(f)
 }
 
 // executeRun is the Run path (manual and, since 5e, live-toggle-fired): split

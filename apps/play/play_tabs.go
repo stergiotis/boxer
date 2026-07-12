@@ -53,13 +53,18 @@ type TabFrame struct {
 // the frozen dock identity (D3). Panel is the PanelI for result panels and
 // nil for chrome. NoScroll opts out of the dock's default per-tab
 // ScrollArea — for panes that consume wheel/zoom gestures themselves (Map)
-// or size from the available remainder (World).
+// or size from the available remainder (World). Lazy routes the body
+// through a widgets/lazypane gate: while the host discards the tab's
+// buffer (inactive tab), only a probe + loading placeholder is emitted;
+// the real body lands one frame after activation. Opt in for heavy bodies
+// only — a lazy tab shows a one-frame loading tick on switch.
 type TabSpec struct {
 	ID       string
 	DockID   uint64
 	Title    string
 	Zone     TabZoneE
 	NoScroll bool
+	Lazy     bool
 	Panel    PanelI
 	Render   func(f *TabFrame)
 }
@@ -194,29 +199,40 @@ type builtinTabDef struct {
 	title    string
 	zone     TabZoneE
 	noScroll bool
+	lazy     bool
 }
 
+// Lazy marks (see TabSpec.Lazy): heavy bodies whose per-frame cost is wasted
+// while their tab is hidden — rasters (map, world), plots (timeline), the
+// etable-backed projection, the graph view, the schema inspector, and the
+// text-heavy history/diagnostics panes. Deliberately eager: editor (the
+// snippet-insert delivery target), table (the most-trafficked result view,
+// spared the one-frame loading tick), snippets (trivial body), and the
+// preview/detail tabs (each alone in its own leaf, so effectively always
+// visible — a gate would never fire). Data pipelines are unaffected either
+// way: lane demand, updatePreview and the diagnostics probe run before the
+// tab bodies (see Render), so a lazy tab reveals with fresh data.
 var builtinTabDefs = []builtinTabDef{
 	{id: "editor", dockID: dockTabEditor, title: "Editor", zone: TabZoneEditor},
-	{id: "history", dockID: dockTabHistory, title: "History", zone: TabZoneEditor},
+	{id: "history", dockID: dockTabHistory, title: "History", zone: TabZoneEditor, lazy: true},
 	{id: "preview", dockID: dockTabPreview, title: "Preview", zone: TabZonePreview},
 	{id: "table", dockID: dockTabTable, title: "Table"},
-	{id: "projection", dockID: dockTabProjection, title: "Projection"},
-	{id: "timeline", dockID: dockTabTimeline, title: "Timeline"},
+	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true},
+	{id: "timeline", dockID: dockTabTimeline, title: "Timeline", lazy: true},
 	{id: "snippets", dockID: dockTabSnippets, title: "Snippets"},
 	// NoScroll: the walkers map reads wheel/zoom input globally (no
 	// consumption), so the dock's default body ScrollArea would scroll the
 	// panel in the same gesture that pans/zooms the map.
-	{id: "map", dockID: dockTabMap, title: "Map", noScroll: true},
+	{id: "map", dockID: dockTabMap, title: "Map", noScroll: true, lazy: true},
 	// NoScroll: the world choropleth sizes its map image from
 	// ui.available_size() (zero-box FitAspectMax); inside the dock's
 	// auto-shrinking ScrollArea, zero is a stable fixed point after a
 	// tab-activation layout pass. A no-scroll leaf is bounded, so the
 	// available size is the real remainder; overflow clips, as on Map.
-	{id: "world", dockID: dockTabWorld, title: "World", noScroll: true},
-	{id: "graph", dockID: dockTabGraph, title: "Graph"},
-	{id: "schema", dockID: dockTabSchema, title: "Schema"},
-	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics"},
+	{id: "world", dockID: dockTabWorld, title: "World", noScroll: true, lazy: true},
+	{id: "graph", dockID: dockTabGraph, title: "Graph", lazy: true},
+	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
+	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
 	{id: "detail", dockID: dockTabDetail, title: "Detail", zone: TabZoneSide},
 }
 
@@ -294,7 +310,7 @@ func scrollTab(body func()) {
 func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 	reg = &TabRegistry{specs: make([]TabSpec, 0, len(builtinTabDefs))}
 	for _, def := range builtinTabDefs {
-		spec := TabSpec{ID: def.id, DockID: def.dockID, Title: def.title, Zone: def.zone, NoScroll: def.noScroll}
+		spec := TabSpec{ID: def.id, DockID: def.dockID, Title: def.title, Zone: def.zone, NoScroll: def.noScroll, Lazy: def.lazy}
 		switch def.id {
 		case "editor":
 			spec.Render = func(f *TabFrame) { inst.renderEditorTab() }
