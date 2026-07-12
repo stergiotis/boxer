@@ -1160,6 +1160,38 @@ binding over the enumeration, with its own design refinement when reached
 (binding lifetime across Runs, sink semantics when nothing observes it,
 per-panel staleness presentation).
 
+### 2026-07-12 — Slice 6a shipped (the tab registry; the dock block is one loop)
+
+As designed: `TabSpec`/`TabFrame`/`TabRegistry` in `play_tabs.go`, the
+built-ins registered as closures over PlayApp state (D2), dock ids frozen
+at their pre-registry values (D3), the set instance-scoped and frozen at
+the first Render with `Tabs().Add/Replace/Remove` as the embedder window
+(D4). Chrome tabs carry a nil PanelI (SD7 structural); the per-tab
+ScrollArea wrappers moved into the tab bodies so the loop is uniform, with
+`NoScroll` covering the Map's wheel-gesture opt-out and the World pane's
+available-size sizing.
+
+What the collapse surfaced, beyond parity:
+
+- The six hand-permuted `BOXER_PLAY_FOCUS_*` orderings hid a copy-paste
+  bug — the `FOCUS_MAP` permutation had silently dropped the Graph tab.
+  The reorder-over-the-enumeration cannot drop a tab (regression-tested).
+- The focus knobs now derive from the tab definitions, adding
+  `TABLE`/`PROJECTION`/`SNIPPETS` knobs the hand-written set lacked; with
+  two set, definition order picks (the old blocks let the last write win —
+  a degenerate scripting case either way).
+- The Graph view's channel inventory reads the registry and gains the
+  Schema and World panels, which the hand-maintained `resultPanels()` list
+  had omitted since their conversion.
+
+Verified live: the default layout renders unchanged, and the new
+`FOCUS_PROJECTION` knob activates Projection through the registry path.
+Tests: the built-in enumeration (ids, frozen dock ids, zones, scroll
+opt-outs, chrome/panel split), the mutation window (validation, replace
+positioning, freeze refusal), the focus reorder, the derived knob set, and
+the registry-backed inventory. Next: **6b** (embedder tab, cross-repo),
+then **6c**.
+
 ## References
 
 Internal:
