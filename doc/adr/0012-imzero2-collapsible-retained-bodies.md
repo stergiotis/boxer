@@ -432,6 +432,23 @@ Phase 2's `WithRetainedBlock(name, keyType)` is **widget-id-keyed**; Phase 3's `
 
 A widget body may use both (Phase 2 for the structural gate, Phase 3 for the data inside). The implementations are independent; the LRU cache from M3.1 can serve both retainers.
 
+### 2026-07-12: `widgets/lazypane` — an app-level probe-gate that ships ahead of O4
+
+O4 (retained bodies, Phase 2) remains ⬜ future work. In the meantime a lighter mechanism now covers the specific case that motivated the original perf concern — **dock-tab bodies whose per-frame cost is wasted while their tab is hidden** — without the O4 machinery (IDL annotation, Rust byte cache, eviction, invalidation keys). It lives at [`widgets/lazypane`](../../public/thestack/imzero2/egui2/widgets/lazypane) and is pure Go: no IDL, Rust, or codegen changes.
+
+**What it is.** A `Pane` emits a `captureUiRect` probe as the first opcode of a region every frame; `StateManager.GetUiRect(seq)` returning `ok=false` next frame means the probe was not interpreted — the region's buffer was discarded (inactive dock tab) or the region was culled — so the pane emits a spinner + "loading …" placeholder and tells the caller to skip the heavy body. The reveal lags one frame; a placeholder in a fixed-geometry tab reads as a deliberate loading state, not the empty flash that got the previous-frame gate removed in the first place (§Decision). `HoldFrames` extends the placeholder for anti-flash; `JustRevealed` lets a body eagerly re-arm send-once protocols.
+
+**Where it sits in the option space.** lazypane is essentially **O2 (gate removal) + app-level `IsBlockSkipped`**, with two adaptations that the Decision's app-level-skip bullet did not spell out:
+
+- **A probe substitutes for `BLOCK_SKIPPED`.** `IsBlockSkipped` reads the r7 `BLOCK_SKIPPED` flag, which only *collapsible* blocks set — dock tabs never do. The `captureUiRect`/`GetUiRect` probe is the same "was this rendered last frame?" signal generalised to any host-skippable region (dock tab, or a subtree inside a culled block), so the advisory that ADR-0012 confined to collapsibles now reaches dock tabs too.
+- **A placeholder covers the one-frame lag.** App-level skip reintroduces the click-to-open lag (§Decision, third bullet). Because a dock tab has fixed geometry, swapping placeholder→content causes no reflow, so that lag is a loading tick rather than a layout jump.
+
+**It does not replace O4.** O4's distinct win is zero cost even for *visible-but-unchanged* bodies — the body lambda never runs and opcodes replay from the id-keyed cache. lazypane still runs the body every frame the tab is *visible*; it only reclaims the *hidden* frames. For the dock workload (N−1 of N tabs hidden per leaf) that captures most of the benefit cheaply, but O4 stays the endgame for visible-unchanged bodies and for collapsibles, where the probe approach offers nothing.
+
+**Correctness rests on the r22 starved-texture fix** (committed 57c2cf9f). A body skipped while hidden re-arms its send-once uploads (content-versioned textures, delta streams) through the starved-texture report on reveal, exactly as after an idle-LRU eviction — see the imzero2 skill's "Lost Sends" pitfall and §18. Without that fix, skipping a texture-bearing body would desynchronise on activation.
+
+**Adopted in play** (commit e7434c1a): `TabSpec.Lazy` gates the heavy bodies (map, world, timeline, projection, graph, schema, diagnostics, history) through per-`DockID` panes; eager tabs are the editor, table, snippets, and the preview/detail panes that are effectively always visible. Live-verified via the dock-tab walk ([`doc/howto/verify-dock-tab-walk.md`](../howto/verify-dock-tab-walk.md)): every lazy tab shows placeholder→content on activation with no empty pane. The phase machine (hidden/warming/live) is pure and unit-tested; FFFI emission is isolated in `Skip()`.
+
 ## Status
 
 Accepted — 2026-06-21 (reviewed by @spx).

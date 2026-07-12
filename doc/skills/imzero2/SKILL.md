@@ -676,6 +676,7 @@ Widgets that accept pointer bindings (`*string`, `*float64`, `*bool`) must be bo
   * Delta streams (`scrollingTexture`): on `TextureStarved(id)`, reset the ring (head = 0) — the lost columns are unrecoverable; restart honestly instead of desyncing (heatmapscroll does this).
   * One-shot ops: keep sending until a host register proves receipt (the Map's `SetZoom` re-sends until the walkers camera register reports this map's id), or focus the target tab first (`DockAreaFluid.ActivateTab`) when delivering content into another tab's body (the snippet-library insert).
   * Small static images: skip trackers entirely and re-send pixels every frame (the markdown widget's choice — fine below ~100 KB).
+  * Skipping the region entirely (the cost-side complement): `widgets/lazypane` gates a heavy body on last frame's rendered-probe report (`captureUiRect`/`GetUiRect`) — while the host discards the region, Go emits only a probe + loading placeholder, and the body lands one frame after activation. Send-once ops underneath still re-arm via the starved report on reveal; see the package doc for when not to use it.
 
 ## Jumping UI (ID Drift)
 * **The Symptom:** Windows reset their positions when you click a button, or scroll areas jump wildly when a new item is added to a list.
@@ -1398,3 +1399,61 @@ Why two badges instead of a built-in: the close affordance needs its own widget 
 ### 17.4 Pill = `corner = 100.0`, not size-dependent
 
 `.Pill()` ignores the size-derived corner and writes 100.0 directly. egui's `CornerRadius` clamps internally to fit the rect, so the result is always a fully-rounded chip regardless of label width or `Size(...)`. Don't try to compute "half height" yourself — Go doesn't know the rendered height.
+
+## 18. lazypane — skip host-discarded region bodies
+
+Companion to [`widgets/lazypane`](../../../public/thestack/imzero2/egui2/widgets/lazypane). lazypane is the **cost-side** complement to the "Lost Sends" pitfall (§12): that pitfall keeps a send-once protocol *correct* when its region is skipped by the host; lazypane lets the Go side *skip building* a region's body in the first place when the host would only discard it. Pure Go over `captureUiRect` + `GetUiRect` — no IDL, Rust, or codegen. See ADR-0012's 2026-07-12 update for how it sits relative to `IsBlockSkipped` and the O4 retained-bodies endgame.
+
+### 18.1 The problem it addresses
+
+Go runs **every** dock-tab body every frame into a detached buffer, but the host interprets only the active tab of each dock leaf and discards the rest (§12 "Lost Sends", §13.4). The discarded body still cost: the render lambda ran, and its opcodes crossed the FFI. For heavy bodies — rasters, plots, etables, force-layout graphs — that wasted work is the dominant per-frame cost of an app whose tabs are mostly hidden (ADR-0049 traced imztop's `TabBody` scope at 405–428 KB/frame; ADR-0012 has the perf framing).
+
+### 18.2 Mechanism — a visibility probe
+
+`captureUiRect(seq)` is interpreted only when a live `Ui` is in scope; an inactive tab's buffer is discarded uninterpreted, and a culled block drains with `u=None`. So the probe's **presence** in last frame's r21 report (`StateManager.GetUiRect(seq)` returning `ok=true`) is a one-frame-lagged "this region reached the screen". lazypane emits the probe as the region's first opcode every frame and reads the previous frame's result:
+
+- **rendered last frame** → run the heavy body.
+- **not rendered** (discarded / culled / first frame) → emit a spinner + `"loading …"` placeholder and skip the body.
+
+The one-frame reveal lag is deliberate: a placeholder in a fixed-geometry tab reads as a loading state, not the empty flash that got the structural previous-frame gate removed (ADR-0012 §Decision). The rect *values* are unused — only presence matters — so the degenerate `min_rect` of a probe in an otherwise-empty Ui is fine.
+
+### 18.3 Usage
+
+One persistent `*Pane` per region (it carries the phase state machine across frames), keyed so it survives frame boundaries. Call `Skip()` once, first thing inside the region:
+
+```go
+// construct once (e.g. lazily into a map keyed by dock id)
+pane := lazypane.New("myapp-dock-tab-"+id, title)
+
+// each frame, inside the tab body:
+for range dock.Tab(dockID, title) {
+    if pane.Skip() {   // emits probe; emits placeholder + returns true when hidden
+        continue
+    }
+    renderHeavyBody()  // only runs when the host actually showed us last frame
+}
+```
+
+`New(key, title)` hashes `key` into the probe seq via the widget-id hash (the same derivation the inspector anchors and kanban lanes use), so `key` must be **stable across frames and unique among all r21 probe users in the process** — namespace it (`"play-dock-tab-map"`, not `"tab"`). A colliding seq makes two regions report each other's visibility.
+
+### 18.4 Knobs
+
+| Field | Effect |
+|---|---|
+| `Title` | Names the region in the default placeholder (`"loading Title…"`). May change between frames — bound/renamed tabs update it. |
+| `HoldFrames` | Keeps the placeholder up N extra frames after the region first reports rendered. Anti-flash only; it **delays** the body (and any texture re-ship the body triggers) — it does not overlap warm-up. Default 0. |
+| `Placeholder func(title string)` | Replaces the built-in spinner row. Runs on every skipped frame; keep it small (its output is discarded while hidden). Must manage its own ids — the pane has no id-stack access. |
+| `JustRevealed() bool` | True on the first body frame after a hidden period — the hook to eagerly re-arm send-once protocols (§12) instead of waiting a starved-report round-trip. |
+
+### 18.5 When *not* to use it
+
+- **Cheap bodies.** A probe + placeholder swap buys nothing over emitting a few labels; gate only bodies that measurably cost. In play, the table and snippets tabs are left eager for this reason.
+- **Bodies that tether floating `c.Window` children** that must stay visible while the host region is hidden — skipping the body hides them (§12 "c.Window escapes collapse clip" is the related seam).
+- **One-shot delivery into a hidden tab.** Pair `DockAreaFluid.ActivateTab` with a pending-op queue instead (the play snippet-insert pattern), so the op rides an activated tab rather than a skipped one.
+
+### 18.6 Composition and correctness
+
+- **Nesting** costs one placeholder frame per level (bounded, visually covered); while an outer region is skipped, inner code — including inner probes — never runs, so the signal composes with block culling automatically.
+- **No id drift.** Each tab body is its own capture buffer and the XOR id stack is unaffected by sibling content; egui memory (scroll, collapse) for a hidden body's ids persists and restores on re-show.
+- **Send-once protocols** under a revealed body re-arm through the starved-texture report (`StateManager.TextureStarved`, §12) exactly as after an idle-LRU eviction — that r22 fix is what makes skipping a texture-bearing body safe. Use `JustRevealed()` to re-arm eagerly and shave the round-trip.
+- **Verify in the real bounded host, not the tour.** The tour starts *on* the tab under test, so it never exercises the hidden→visible edge — walk the tabs interactively ([`doc/howto/verify-dock-tab-walk.md`](../../howto/verify-dock-tab-walk.md)).
