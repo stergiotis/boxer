@@ -31,109 +31,109 @@ var (
 	SQLOverride = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_SQL",
 		Description: "initial SQL buffer for the play HMI; non-empty wins over the persisted-session restore",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	TimelineBandsSQLOverride = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_TIMELINE_BANDS_SQL",
 		Description: "panel-local bands SQL for the Timeline tab; non-empty wins over the persisted-session restore",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	AutoRun = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_AUTORUN",
 		Description: "non-empty enables auto-run of the initial SQL on mount",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	ScreenshotPath = env.NewPath(env.Spec{
 		Name:        "BOXER_PLAY_SCREENSHOT",
 		Description: "if set, the play HMI captures a screenshot to this path after the first frame",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	ExitOnShot = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_EXIT_ON_SHOT",
 		Description: "non-empty exits the play HMI after writing BOXER_PLAY_SCREENSHOT",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	PreviewAsSent = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_PREVIEW_AS_SENT",
 		Description: "non-empty starts the Preview tab in 'as sent to server' mode (post-pass wire SQL) for scripted screenshots",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	FocusMap = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_FOCUS_MAP",
 		Description: "non-empty makes Map the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	FocusGraph = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_FOCUS_GRAPH",
 		Description: "non-empty makes Graph the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	FocusTimeline = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_FOCUS_TIMELINE",
 		Description: "non-empty makes Timeline the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	FocusSchema = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_FOCUS_SCHEMA",
 		Description: "non-empty makes Schema the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	FocusWorld = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_FOCUS_WORLD",
 		Description: "non-empty makes World (the ADR-0114 country choropleth) the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	FocusDiagnostics = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_FOCUS_DIAGNOSTICS",
 		Description: "non-empty makes Diagnostics (parse advice + full error texts) the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	ObserveNode = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_OBSERVE",
 		Description: "graph node id to observe in the result panels after a Run (scripted screenshots); silently ignored when the node is absent from the split",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	ShotSettleFrames = env.NewInt(env.Spec{
 		Name:        "BOXER_PLAY_SHOT_SETTLE",
 		Description: "settle frames before BOXER_PLAY_SCREENSHOT fires; a positive value overrides the default (5), e.g. to wait out an async panel fetch",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	MapTable = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_MAP_TABLE",
 		Description: "initial table for the Map panel; empty keeps the default (planes_mercator_sample100)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	MapZoom = env.NewFloat(env.Spec{
 		Name:        "BOXER_PLAY_MAP_ZOOM",
 		Description: "initial Map zoom level; a positive value overrides the default (4)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	MapCenter = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_MAP_CENTER",
 		Description: "initial Map center as \"lat,lon\" (WGS84); empty or unparseable keeps the default (40,0)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 
 	MapSize = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_MAP_SIZE",
 		Description: "pin a fixed Map widget size as \"WxH\" logical points (deterministic scripted screenshots); empty or unparseable keeps the default (the map fills the Map tab)",
-		Category:    env.CategoryE("spinnaker-play"),
+		Category:    env.CategoryE("boxer-play"),
 	})
 )
 
