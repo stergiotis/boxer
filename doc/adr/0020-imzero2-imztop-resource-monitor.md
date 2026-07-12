@@ -254,6 +254,19 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-07-12 — `Proc Map` panel (process-tree treemap) + freeze relabel
+
+Adds a `Proc Map` dock tab (`dockTabProcMap`) that draws the live process tree as a treemap: processes nested by PPID, each box sized by resident memory (RSS, the default) or CPU%, tinted by CPU load. It complements the text process-tree (the proc panel's `tree` toggle, 2026-05-30 Update): that view answers *who spawned whom* structurally; this one answers *where is memory / CPU going, by subtree* spatially. Built entirely over existing bus data (`ProcInfo.PID` / `PPID` / `RSSBytes` / `CPUPercent`, delivered on the [ADR-0090](./0090-sysmetrics-pubsub-data-plane.md) metric plane) and the existing `treemap` widget — no new dependency, IDL, or scraper change, so no separate ADR.
+
+- **Reuses the `treemap` widget and the `Topology` panel's idiom.** Same monochrome-depth + continuous-CPU-load `CompositeColoring`, same `WithMaxNestingDepth(0)` whole-forest render, same `SetContainerSize`-to-pane and hover-detail line. The area metric (RSS ⇄ CPU%) is a `ComboBox`, matching the Topology dim-switch. RSS is the default because CPU% is 0 for most processes, which the min-cell cull would otherwise hide.
+- **Self-leaves for a parent's own weight.** `layout.Node.TotalSize()` ignores an interior node's own `Size` (a parent's area is the sum of its children), so a process that *has* children is given a synthetic self-leaf carrying its own RSS/CPU; otherwise a heavyweight parent with light children reads as tiny.
+- **Rebuilt every sample, with stable node identity.** Unlike the static Topology tree, the process set and sizes change each snapshot, so the tree is rebuilt in `reconcileProcTree`. Process nodes are pooled by `(PID, StartedAt)` — the same key the per-process CPU EWMA uses — so their pointer identity (which the widget keys drill state off) survives rebuilds; the breadcrumb is healed (`DrillTo` / `Reset`) when the focused process is reparented or vanishes. Orphans (a child whose parent fell outside the sampler's top-N cap) reparent under a synthetic root; the forest builder is cycle-safe against PID reuse.
+- **Rebuild gated on the sample clock, not the frame.** The visible tab repaints at ~60 fps, but the process data changes only at the ~1 Hz sample cadence, so the O(n) rebuild is gated on `SampledAtUnixMs` and runs at most once per sample. A hidden tab is skipped entirely by the `widgets/lazypane` gate that co-landed for the heavy tabs (CPU / Topology / Proc Map): it is the general early-out for the `DockArea`'s otherwise-*late* cull, where an inactive tab would still run its whole Go body every frame ([ADR-0012](./0012-imzero2-collapsible-retained-bodies.md)). On re-show the stale sample clock triggers one catch-up rebuild.
+
+Also relabels the top-bar global freeze `Pause` / `Resume` → `Freeze` / `Go live` and adds a "FROZEN — live updates paused" indicator, so a frozen (stale-but-plausible) view is not mistaken for live; the underlying `Sampler.Pause` (a process-singleton frame-drop that freezes every panel at once) is unchanged.
+
+`status` and `reviewed-date` are deliberately not re-stamped: this adds one panel over existing bus data plus a label change, not a new decision.
+
 ### 2026-05-30 — Pressure tab + process-tree mode
 
 Two panel additions beyond the M1–M5 btop set:

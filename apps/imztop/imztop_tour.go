@@ -42,14 +42,16 @@ var imztopScenes = []struct {
 	filter   string
 	title    string
 	desc     string
-	activate uint64 // dock tab to force active for the capture; 0 = default (CPU)
+	activate uint64 // dock tab this scene forces active for its capture (every scene sets one)
 }{
+	// Each scene forces its own tab active (activateTab), never relying on capture
+	// order: the TestDriver renders all scenes through one shared id-stack → one
+	// shared dock state, and captures them sorted by Name, so without an explicit
+	// activate a scene would inherit whatever tab a prior capture left active.
 	{"imztop-running", "", icons.PhGauge + " imztop — processes",
-		"imztop's live system monitor — a docked layout of CPU/memory/network/disk/GPU/sensors panels plus the process table, unfiltered.", 0},
+		"imztop's live system monitor — a docked layout of CPU/memory/network/disk/GPU/sensors panels plus the process table, unfiltered.", dockTabCPU},
 	{"imztop-filtered", "imzero2", icons.PhGauge + " imztop — filtered",
-		"The same monitor with the process table filtered to \"imzero2\".", 0},
-	// Proc Map scene is LAST: it forces its tab active every frame, which leaves
-	// the shared dock state on Proc Map, so any scene after it would inherit that.
+		"The same monitor with the process table filtered to \"imzero2\".", dockTabCPU},
 	{"imztop-procmap", "", icons.PhGauge + " imztop — process map",
 		"The process tree as a treemap: processes nested parent → child, each box sized by resident memory and tinted by CPU load.", dockTabProcMap},
 }

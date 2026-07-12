@@ -10,14 +10,21 @@ import (
 type procMetricE uint8
 
 const (
-	// procMetricRSS sizes each box by resident memory. The default: RSS is
-	// always positive, so every process gets a visible cell (CPU% is 0 for
-	// most, which the min-cell cull would hide).
+	// procMetricRSS sizes each box by resident memory (the default). Most
+	// processes have meaningful RSS; the few with RSS==0 (kernel threads) floor
+	// to the smallest cell (procMetricFloor), same as an idle process under CPU%.
 	procMetricRSS procMetricE = iota
 	// procMetricCPU sizes each box by the EWMA-smoothed CPU%. Idle processes
-	// collapse to the layout's unit-weight floor.
+	// (cpu==0) floor to the smallest cell (procMetricFloor).
 	procMetricCPU
 )
+
+// procMetricFloor is the smallest area weight a leaf can take. It keeps
+// zero-valued leaves (idle CPU, kernel-thread RSS==0) strictly positive AND the
+// smallest cells: layout.Node.TotalSize maps a leaf Size of <=0 to a unit weight
+// (1), which would otherwise make a 0-value leaf out-size any leaf whose real
+// value lands in (0,1) — inverting the encoding at the low end.
+const procMetricFloor = 1e-3
 
 var procMetrics = []procMetricE{procMetricRSS, procMetricCPU}
 
@@ -28,23 +35,29 @@ func procMetricLabel(m procMetricE) string {
 	return "RSS"
 }
 
-// procCell is the payload hung off every Proc Map layout node: the source
-// process (a pointer into the immutable published snapshot slice) plus the
-// smoothed CPU% that drives the continuous load tint. A process's own container
-// node and its synthetic self-leaf point at the same procCell.
+// procCell is the payload hung off every Proc Map layout node: a COPY of the
+// source process (not a pointer into the snapshot's Procs backing array — that
+// array may be reused by a future pooling codec, and procNodeObj outlives the
+// snapshot until the next reconcile) plus the smoothed CPU% that drives the
+// continuous load tint. A process's own container node and its synthetic
+// self-leaf point at the same procCell. ProcInfo's strings are immutable, so the
+// value copy is self-contained and cheap.
 type procCell struct {
-	info *sysmsnap.ProcInfo
+	info sysmsnap.ProcInfo
 	cpu  float32 // EWMA-smoothed CPU% — colour tint + optional cell label
 }
 
-// procMetricValue returns a leaf's area weight in the active metric. RSS is
-// always positive; CPU% can be 0, which layout.Node.TotalSize floors to a unit
-// weight so the cell still appears (just minimal).
+// procMetricValue returns a leaf's area weight in the active metric, floored to
+// procMetricFloor so zero-valued leaves are the smallest cells (see that const).
 func procMetricValue(p *sysmsnap.ProcInfo, cpu float32, metric procMetricE) float64 {
+	v := float64(p.RSSBytes)
 	if metric == procMetricCPU {
-		return float64(cpu)
+		v = float64(cpu)
 	}
-	return float64(p.RSSBytes)
+	if v < procMetricFloor {
+		v = procMetricFloor
+	}
+	return v
 }
 
 // buildProcForest derives the parent→child adjacency of a process slice, keyed
@@ -107,10 +120,11 @@ func buildProcForest(infos []sysmsnap.ProcInfo) (children [][]int, roots []int) 
 // node's Size (a parent's area is the sum of its children); without the
 // self-leaf a heavyweight parent with light children would read as tiny.
 //
-// Called only when a new sample lands or the area metric changes
-// (imztop_panel_procmap.go), never per frame — a hidden dock tab still runs its
-// Go body every frame under the DockArea's late cull, so the O(n) rebuild is
-// gated on the sample clock, not the frame rate.
+// Called at most once per sample (imztop_panel_procmap.go gates on the sample
+// clock), never every frame: the visible tab repaints at ~60 fps but the process
+// data changes only at the ~1 Hz sample cadence, and a hidden tab is skipped
+// entirely by its lazypane gate (imztop.go), so the O(n) rebuild tracks the data,
+// not the frame rate.
 func (inst *App) reconcileProcTree(procs []sysmsnap.ProcInfo, smoothed []float32, metric procMetricE) {
 	n := len(procs)
 	children, roots := buildProcForest(procs)
@@ -135,7 +149,7 @@ func (inst *App) reconcileProcTree(procs []sysmsnap.ProcInfo, smoothed []float32
 		if i < len(smoothed) {
 			cpu = smoothed[i]
 		}
-		nodeObj[node] = &procCell{info: &procs[i], cpu: cpu}
+		nodeObj[node] = &procCell{info: procs[i], cpu: cpu}
 	}
 
 	// Link + size. A leaf process carries its metric directly; a parent gets a

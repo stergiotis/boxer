@@ -40,11 +40,18 @@ func (inst *App) initProcMap() {
 	// through to the monochrome depth base. Layer order matters: DepthColoring
 	// always returns ok, so depth is FIRST and the load override LAST
 	// (CompositeColoring is last-ok-wins) — the topology panel's idiom.
+	// Per-process CPU% reaches NumCPU*100 (a process pegging N cores reads
+	// N*100), so normalise by the logical-core count to a machine-fraction in
+	// [0,100] before the [0,100] tint domain — otherwise every process using
+	// >=1 core saturates to the top colour and the "colour = CPU load" encoding
+	// collapses to binary for exactly the busy multithreaded processes you hunt.
 	loadFn := func(n *layout.Node) float64 {
-		if pc := inst.procNodeObj[n]; pc != nil {
-			return float64(pc.cpu)
+		pc := inst.procNodeObj[n]
+		if pc == nil {
+			return math.NaN()
 		}
-		return math.NaN()
+		cores := max(inst.procCores, 1)
+		return float64(pc.cpu) / float64(cores)
 	}
 	coloring := treemap.CompositeColoring(
 		treemap.DepthColoring(topoDepthPalette()),
@@ -80,10 +87,10 @@ func (inst *App) procMapCellLabel(n *layout.Node) string {
 // ADR-0020 (Update).
 //
 // The tree is rebuilt only when a new sample lands or the area metric changes,
-// never per frame: a hidden dock tab still runs its whole Go body every frame
-// (the DockArea culls late, on the Rust paint side), so the O(n) rebuild is
-// gated on the sample clock to keep the hidden-tab cost to the treemap emission
-// alone — matching the Topology tab's profile.
+// never per frame: the visible tab repaints at ~60 fps but the process data
+// changes at the ~1 Hz sample cadence, so the O(n) rebuild is gated on the
+// sample clock. A hidden tab is skipped entirely by its lazypane gate
+// (imztop.go); on re-show the stale sample clock triggers one catch-up rebuild.
 func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 	inst.sectionHeader("Process Map")
 
@@ -96,6 +103,12 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 		inst.procLastSampleMs = snap.SampledAtUnixMs
 		inst.procBuiltMetric = inst.procMetric
 		inst.reconcileProcTree(snap.Procs, snap.ProcCPUSmoothed, inst.procMetric)
+	}
+
+	// Logical-core count for the CPU-load tint normalisation (loadFn). Machine-
+	// constant; refreshed from the snapshot so it's known before Render.
+	if snap != nil && snap.LatestCPU != nil && snap.LatestCPU.LogicalCores > 0 {
+		inst.procCores = int(snap.LatestCPU.LogicalCores)
 	}
 
 	if len(inst.procRoot.Children) == 0 {

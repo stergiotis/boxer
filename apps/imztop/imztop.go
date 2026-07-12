@@ -171,6 +171,9 @@ type App struct {
 	procMetric       procMetricE
 	procBuiltMetric  procMetricE
 	procLastSampleMs int64
+	// procCores is the logical-core count, for the CPU-load tint normalisation
+	// (per-process CPU% ranges [0, cores*100]). Refreshed from the snapshot.
+	procCores int
 
 	// activateTab, when non-zero, forces a dock tab active each frame. Zero
 	// (the production default) leaves tab focus entirely to the user; only the
