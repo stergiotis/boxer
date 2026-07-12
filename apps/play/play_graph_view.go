@@ -240,17 +240,12 @@ func joinNodeIDs(ids []NodeID) string {
 	return strings.Join(ss, ", ")
 }
 
-// resultPanels lists the PanelI result panels, for the channel inventory +
-// eligibility (4c). Editor/Preview/History/Snippets/Graph are chrome (SD7), not
-// panels. Constructed cheaply; Channels() needs no live data (the timeline
-// driver may be nil here — Channels() does not touch it).
+// resultPanels lists the PanelI result panels for the channel inventory +
+// eligibility (4c) — since slice 6a read off the tab registry (chrome tabs
+// carry no PanelI, SD7), so it covers every registered panel, including an
+// embedder's.
 func (inst *PlayApp) resultPanels() []PanelI {
-	return []PanelI{
-		tablePanel{app: inst},
-		projectionPanel{app: inst},
-		detailPanel{app: inst},
-		timelinePanel{driver: inst.timeline},
-	}
+	return inst.tabs.panels()
 }
 
 // channelInventory is the one-line panel × channel summary atop the Graph view

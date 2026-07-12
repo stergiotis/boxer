@@ -19,13 +19,16 @@ func TestNodeChannelEligibility(t *testing.T) {
 		"a plain result is only main-eligible (omitted)")
 }
 
-// channelInventory reads each result panel's declared channels straight off
-// Channels() — the channel model made visible (4c). nil timeline driver is fine
-// (Channels() touches no live data).
+// channelInventory reads each registered panel's declared channels straight
+// off Channels() — the channel model made visible (4c; registry-backed since
+// 6a, which also brought the previously omitted Schema and World into the
+// inventory).
 func TestChannelInventoryListsPanelsAndChannels(t *testing.T) {
-	inv := (&PlayApp{}).channelInventory()
+	inv := tabsTestApp().channelInventory()
 	require.Contains(t, inv, "table: main")
 	require.Contains(t, inv, "projection: main")
 	require.Contains(t, inv, "detail: main")
 	require.Contains(t, inv, "timeline: events+bands")
+	require.Contains(t, inv, "world: main")
+	require.Contains(t, inv, "schema: main")
 }

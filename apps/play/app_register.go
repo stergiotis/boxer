@@ -64,41 +64,9 @@ var (
 		Category:    env.CategoryE("boxer-play"),
 	})
 
-	FocusMap = env.NewString(env.Spec{
-		Name:        "BOXER_PLAY_FOCUS_MAP",
-		Description: "non-empty makes Map the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("boxer-play"),
-	})
-
-	FocusGraph = env.NewString(env.Spec{
-		Name:        "BOXER_PLAY_FOCUS_GRAPH",
-		Description: "non-empty makes Graph the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("boxer-play"),
-	})
-
-	FocusTimeline = env.NewString(env.Spec{
-		Name:        "BOXER_PLAY_FOCUS_TIMELINE",
-		Description: "non-empty makes Timeline the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("boxer-play"),
-	})
-
-	FocusSchema = env.NewString(env.Spec{
-		Name:        "BOXER_PLAY_FOCUS_SCHEMA",
-		Description: "non-empty makes Schema the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("boxer-play"),
-	})
-
-	FocusWorld = env.NewString(env.Spec{
-		Name:        "BOXER_PLAY_FOCUS_WORLD",
-		Description: "non-empty makes World (the ADR-0114 country choropleth) the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("boxer-play"),
-	})
-
-	FocusDiagnostics = env.NewString(env.Spec{
-		Name:        "BOXER_PLAY_FOCUS_DIAGNOSTICS",
-		Description: "non-empty makes Diagnostics (parse advice + full error texts) the default-active body tab (scripted screenshots)",
-		Category:    env.CategoryE("boxer-play"),
-	})
+	// The BOXER_PLAY_FOCUS_* knobs are registered per built-in body tab in
+	// play_tabs.go (registerFocusVars, slice 6a) — derived from the tab
+	// definitions instead of hand-written here.
 
 	ObserveNode = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_OBSERVE",

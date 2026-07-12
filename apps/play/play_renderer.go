@@ -148,6 +148,10 @@ type PlayApp struct {
 	// renderSnippetsTab, captured-and-cleared by renderSqlEditor.
 	pendingSnippetInsert  string
 	pendingSnippetReplace string
+	// tabs is the instance's dock-tab set (ADR-0097 slice 6a): every tab a
+	// registered TabSpec, frozen at the first Render. Embedders customize
+	// it via Tabs() between construction and mounting (D4).
+	tabs *TabRegistry
 	// pendingDockActivate focuses a dock tab on the next dock send (0 =
 	// none): set by affordances that deliver content into a tab body (the
 	// snippet library targeting the editor), consumed once per frame in the
@@ -553,8 +557,15 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
 	inst.diag = NewDiagnosticsDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
+	// Last: the tab set closes over the drivers above (slice 6a).
+	inst.tabs = defaultTabs(inst)
 	return inst
 }
+
+// Tabs is the instance's dock-tab set (ADR-0097 slice 6a, D4): an embedder
+// customizes it — Add/Replace/Remove — between construction and mounting;
+// the first Render freezes it. See TabSpec for the registration shape.
+func (inst *PlayApp) Tabs() *TabRegistry { return inst.tabs }
 
 // Close tears down the app's async machinery (Unmount): cancels in-flight
 // work, releases held results, and closes every lane. Late completions from
@@ -727,94 +738,43 @@ func (inst *PlayApp) Render() error {
 				dock.ActivateTab(inst.pendingDockActivate)
 				inst.pendingDockActivate = 0
 			}
-			editLeaf := dock.InitRoot(dockTabEditor, dockTabHistory)
-			bodyTabs := []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema, dockTabDiagnostics}
-			if FocusMap.Get() != "" {
-				// Scripted-screenshot focus: make Map the default-active body tab.
-				bodyTabs = []uint64{dockTabMap, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabWorld, dockTabSchema, dockTabDiagnostics}
+			// One loop over the tab registry (ADR-0097 slice 6a): the
+			// initial layout derives from the zones, the focus knob is a
+			// reorder over the body zone, and every tab body renders from
+			// the same per-frame view. First Render freezes the set (D4).
+			inst.tabs.freeze()
+			frame := TabFrame{
+				Rec: rec, Schema: schema, NumRows: numRows,
+				Loading: loading, Elapsed: elapsed, Summary: summary,
+				Executed: executed, Err: err,
+				Sig: inst.frameSig, Emit: inst.sigEmit,
 			}
-			if FocusGraph.Get() != "" {
-				// Scripted-screenshot focus: make Graph the default-active body tab.
-				bodyTabs = []uint64{dockTabGraph, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabSchema, dockTabDiagnostics}
+			editorIDs := dockIDsOf(inst.tabs.byZone(TabZoneEditor))
+			bodyIDs := bodyTabOrder(inst.tabs.byZone(TabZoneBody), focusedTabID())
+			rootIDs := editorIDs
+			if len(rootIDs) == 0 {
+				rootIDs = bodyIDs // an embedder removed the editor zone
 			}
-			if FocusTimeline.Get() != "" {
-				// Scripted-screenshot focus: make Timeline the default-active body tab.
-				bodyTabs = []uint64{dockTabTimeline, dockTabTable, dockTabProjection, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema, dockTabDiagnostics}
+			rootLeaf := dock.InitRoot(rootIDs...)
+			bodyLeaf := rootLeaf
+			if len(editorIDs) > 0 && len(bodyIDs) > 0 {
+				bodyLeaf = dock.Split(rootLeaf, c.DockBelow, 0.45, bodyIDs...)
 			}
-			if FocusSchema.Get() != "" {
-				// Scripted-screenshot focus: make Schema the default-active body tab.
-				bodyTabs = []uint64{dockTabSchema, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabDiagnostics}
+			if side := dockIDsOf(inst.tabs.byZone(TabZoneSide)); len(side) > 0 {
+				_ = dock.Split(bodyLeaf, c.DockRight, 0.70, side...)
 			}
-			if FocusWorld.Get() != "" {
-				// Scripted-screenshot focus: make World the default-active body tab.
-				bodyTabs = []uint64{dockTabWorld, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabGraph, dockTabSchema, dockTabDiagnostics}
+			if prev := dockIDsOf(inst.tabs.byZone(TabZonePreview)); len(prev) > 0 {
+				_ = dock.Split(rootLeaf, c.DockRight, 0.55, prev...)
 			}
-			if FocusDiagnostics.Get() != "" {
-				// Scripted-screenshot focus: make Diagnostics the default-active body tab.
-				bodyTabs = []uint64{dockTabDiagnostics, dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets, dockTabMap, dockTabWorld, dockTabGraph, dockTabSchema}
-			}
-			bodyLeaf := dock.Split(editLeaf, c.DockBelow, 0.45, bodyTabs...)
-			_ = dock.Split(bodyLeaf, c.DockRight, 0.70, dockTabDetail)
-			_ = dock.Split(editLeaf, c.DockRight, 0.55, dockTabPreview)
-
-			for range dock.Tab(dockTabEditor, "Editor") {
-				inst.renderEditorTab()
-			}
-			for range dock.Tab(dockTabPreview, "Preview") {
-				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-					inst.renderPreviewTab()
+			for _, spec := range inst.tabs.all() {
+				if spec.NoScroll {
+					for range dock.TabNoScroll(spec.DockID, spec.Title) {
+						spec.Render(&frame)
+					}
+					continue
 				}
-			}
-			for range dock.Tab(dockTabHistory, "History") {
-				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-					inst.renderHistoryTab()
-				}
-			}
-			for range dock.Tab(dockTabTable, "Table") {
-				inst.renderTableTab(rec, schema, numRows, loading, err)
-			}
-			for range dock.Tab(dockTabProjection, "Projection") {
-				inst.renderProjectionTab(rec, loading, err)
-			}
-			for range dock.Tab(dockTabTimeline, "Timeline") {
-				inst.renderTimelineTab(rec, schema, loading, err)
-			}
-			for range dock.Tab(dockTabSnippets, "Snippets") {
-				inst.renderSnippetsTab()
-			}
-			for range dock.Tab(dockTabDetail, "Detail") {
-				inst.renderDetailTab(rec, schema)
-			}
-			// TabNoScroll: the walkers map reads wheel/zoom input globally
-			// (no consumption), so the dock's default body ScrollArea would
-			// scroll the panel in the same gesture that pans/zooms the map —
-			// the map jitters while zooming. Overflow clips instead.
-			for range dock.TabNoScroll(dockTabMap, "Map") {
-				inst.mapDriver.Render(inst.frameSig, inst.sigEmit.as(signalWriterMap))
-			}
-			// TabNoScroll: the world choropleth sizes its map image from
-			// ui.available_size() (zero-box FitAspectMax). Inside the dock's
-			// default per-tab ScrollArea — auto-shrinking on both axes — zero
-			// is a stable fixed point: a tab activated by click first lays out
-			// with a zero remainder, the stored content size then excludes the
-			// image, and it never comes back (the FOCUS_WORLD first-frame path
-			// dodged this, which is why scripted captures kept working). A
-			// no-scroll leaf is bounded, so the available size is the real
-			// remainder; overflow clips, as on the Map tab.
-			for range dock.TabNoScroll(dockTabWorld, "World") {
-				inst.renderWorldTab(rec, schema, loading, err, executed)
-			}
-			for range dock.Tab(dockTabGraph, "Graph") {
-				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-					inst.renderGraphTab()
-				}
-			}
-			for range dock.Tab(dockTabSchema, "Schema") {
-				inst.renderSchemaTab(rec, schema, loading, err)
-			}
-			for range dock.Tab(dockTabDiagnostics, "Diagnostics") {
-				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-					inst.renderDiagnosticsTab(numRows, elapsed, summary, executed, err)
+				for range dock.Tab(spec.DockID, spec.Title) {
+					spec.Render(&frame)
 				}
 			}
 		}
