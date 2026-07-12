@@ -20,7 +20,7 @@ Built and committed: `widgets/worldmap` (asset + resolver + projection +
 rasterizer + widget, unit-tested; asset later moved from gzip to zstd with a
 json/v2 streaming decode — §SD1), the play World dock tab
 (`play_world_panel.go`, panel tests), a widgets-tour demo, the
-`SPINNAKER_PLAY_FOCUS_WORLD` knob, and a snippets-library entry whose
+`BOXER_PLAY_FOCUS_WORLD` knob, and a snippets-library entry whose
 `values()` row tuples also drove a grammar1 `tableArgExpr` fix. Verified per
 §Validation: unit suites green, and a live drive (egui inspection) confirmed
 hover ("Brazil (BRA) · 216.4") and click→selection (Detail followed to the

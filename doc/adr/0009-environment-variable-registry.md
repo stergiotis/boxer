@@ -275,7 +275,7 @@ ADRs are append-only; supersession is recorded, not deleted.
      string, regardless of internal type. This keeps the diagnostic /
      introspection surface trivially shared between the future doc
      generator (§4) and call sites that want "is this set" vs.
-     "relying on the default" (`SPINNAKER_PLAY_SQL`'s
+     "relying on the default" (`BOXER_PLAY_SQL`'s
      persisted-session-vs-env-override branch in
      `play/app_register.go` is the canonical user).
 

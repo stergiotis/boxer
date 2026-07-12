@@ -236,6 +236,6 @@ client-side rewrite was factored into `Client.BuildStatement`, called by both
 debounce as the canonical preview and only while the toggle is on (the rewrite
 re-parses per pass; paying that for a hidden view would be waste). Unlike the
 canonical view it renders even for SQL outside Grammar1, since that is what
-would be POSTed. `SPINNAKER_PLAY_PREVIEW_AS_SENT` starts the tab in this mode
+would be POSTed. `BOXER_PLAY_PREVIEW_AS_SENT` starts the tab in this mode
 for scripted screenshots. This makes the otherwise-invisible pre-execute stage
 directly observable to the user, complementing the `sql_passes` catalog.
