@@ -41,6 +41,15 @@ func (inst *ReportGenerator) Generate(ctx context.Context, git *GitRunner, w io.
 	until := inst.Until
 	topN := inst.topN()
 
+	// Canonicalize contributor identities through the repository's .mailmap
+	// (git's default source), so variant emails for one person fold into a
+	// single row. A missing .mailmap yields a nil map and the pre-mailmap
+	// behaviour.
+	mailmap, err := LoadMailmap(ctx, git)
+	if err != nil {
+		return eh.Errorf("unable to load mailmap: %w", err)
+	}
+
 	// ── Banner ──────────────────────────────────────────────────────────
 	err = wLine(w, "╔"+strings.Repeat("═", boxW)+"╗")
 	if err != nil {
@@ -78,7 +87,7 @@ func (inst *ReportGenerator) Generate(ctx context.Context, git *GitRunner, w io.
 	}
 
 	{ // Section: Contributors & Bus Factor
-		analyzer := &ContributorAnalyzer{Since: since, Until: until}
+		analyzer := &ContributorAnalyzer{Since: since, Until: until, Mailmap: mailmap}
 		var bf BusFactorResult
 		bf, err = analyzer.RunSummary(ctx, git)
 		if err != nil {

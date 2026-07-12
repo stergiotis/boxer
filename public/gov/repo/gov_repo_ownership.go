@@ -113,6 +113,13 @@ type OwnershipAnalyzer struct {
 	// never concurrently; implementations must return quickly and must
 	// not call back into the analyzer.
 	Progress func(done int, total int)
+	// Mailmap canonicalizes author and human co-author identities before they
+	// are keyed, so variant emails for one person fold into a single owner
+	// across the blame join and the commit stream. nil leaves identities as
+	// git emitted them (email lower-cased only). Built from a .mailmap at the
+	// repository root by callers; injected here so the same canonicalization
+	// feeds ownership, sponsors, and the co-author list.
+	Mailmap *Mailmap
 }
 
 // DefaultModelMatcher matches Co-Authored-By trailer values by vendor
@@ -142,6 +149,18 @@ type CommitRecord struct {
 	AuthorName  string `json:"authorName"`
 	Subject     string `json:"subject"`
 	ModelTag    string `json:"modelTag,omitempty"`
+	// CoAuthors lists the human Co-Authored-By identities on the commit,
+	// mailmap-canonicalized and de-duplicated (a co-author that folds into
+	// the commit's own author is dropped, as is a repeat). Model co-authors
+	// are excluded — they set ModelTag instead. Empty for purely human
+	// commits with no human co-author trailers.
+	CoAuthors []CoAuthor `json:"coAuthors,omitempty"`
+}
+
+// CoAuthor is one human Co-Authored-By identity, mailmap-canonicalized.
+type CoAuthor struct {
+	Name  string `json:"name"`
+	Email string `json:"email"` // lower-cased, canonicalized
 }
 
 // ownerKeyT is the map key for owner aggregation.
@@ -258,20 +277,42 @@ func (inst *OwnershipAnalyzer) RunCommits(ctx context.Context, git *GitRunner) i
 				continue
 			}
 			rec := CommitRecord{
-				Hash:        parts[0],
-				AuthorEmail: strings.ToLower(parts[2]),
-				AuthorName:  parts[3],
-				Subject:     parts[4],
+				Hash:       parts[0],
+				AuthorName: parts[3],
+				Subject:    parts[4],
 			}
+			rec.AuthorName, rec.AuthorEmail = inst.Mailmap.Resolve(parts[3], parts[2])
 			if sec, convErr := strconv.ParseInt(parts[1], 10, 64); convErr == nil {
 				rec.AuthorSec = sec
 			}
 			if parts[5] != "" {
+				// De-duplicate co-authors within the commit and against the
+				// commit's own (now-canonical) author: a co-author that the
+				// mailmap folds into the author would otherwise double-count
+				// that author's commit. seen is seeded with the author so a
+				// self-co-author is dropped without a separate lookup.
+				seen := map[string]bool{rec.AuthorEmail: true}
 				for co := range strings.SplitSeq(parts[5], coauthorSep) {
-					if tag, ok := matcher(strings.TrimSpace(co)); ok {
-						rec.ModelTag = tag
-						break
+					co = strings.TrimSpace(co)
+					if co == "" {
+						continue
 					}
+					if tag, ok := matcher(co); ok {
+						if rec.ModelTag == "" {
+							rec.ModelTag = tag
+						}
+						continue
+					}
+					name, email, ok := parseCoAuthor(co)
+					if !ok {
+						continue
+					}
+					cname, cemail := inst.Mailmap.Resolve(name, email)
+					if seen[cemail] {
+						continue
+					}
+					seen[cemail] = true
+					rec.CoAuthors = append(rec.CoAuthors, CoAuthor{Name: cname, Email: cemail})
 				}
 			}
 			if !yield(rec, nil) {
@@ -520,4 +561,20 @@ func isAllZeroHash(hash string) bool {
 		}
 	}
 	return len(hash) > 0
+}
+
+// parseCoAuthor splits a Co-Authored-By trailer value ("Name <email>") into
+// its name and email. ok is false when the value carries no <email> segment,
+// so a bare-name co-author (unkeyable by email) is skipped rather than
+// misparsed.
+func parseCoAuthor(co string) (name, email string, ok bool) {
+	start := strings.LastIndexByte(co, '<')
+	end := strings.LastIndexByte(co, '>')
+	if start < 0 || end <= start {
+		return
+	}
+	email = strings.TrimSpace(co[start+1 : end])
+	name = strings.TrimSpace(co[:start])
+	ok = email != ""
+	return
 }

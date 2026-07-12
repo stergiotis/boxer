@@ -26,6 +26,11 @@ type ContributorAnalyzer struct {
 	Since string
 	Until string
 	TopN  int
+	// Mailmap canonicalizes each shortlog identity before it is keyed, so
+	// variant emails for one person fold into a single contributor row whose
+	// email matches the ownership analyzer's human owner ids. nil leaves
+	// identities as git emitted them (email lower-cased only).
+	Mailmap *Mailmap
 }
 
 func (inst *ContributorAnalyzer) Run(ctx context.Context, git *GitRunner) iter.Seq2[ContributorRecord, error] {
@@ -122,11 +127,17 @@ func (inst *ContributorAnalyzer) collect(ctx context.Context, git *GitRunner) (r
 
 		author := parts[1]
 		email := extractEmail(author)
-		entry, ok := byEmail[email]
+		name := author
+		if i := strings.LastIndexByte(author, '<'); i > 0 {
+			name = strings.TrimSpace(author[:i])
+		}
+		cname, cemail := inst.Mailmap.Resolve(name, email)
+		display := cname + " <" + cemail + ">"
+		entry, ok := byEmail[cemail]
 		if !ok {
-			byEmail[email] = &emailEntry{
-				email:       email,
-				displayName: author,
+			byEmail[cemail] = &emailEntry{
+				email:       cemail,
+				displayName: display,
 				bestCount:   count,
 				totalCount:  count,
 			}
@@ -134,7 +145,7 @@ func (inst *ContributorAnalyzer) collect(ctx context.Context, git *GitRunner) (r
 			entry.totalCount += count
 			if count > entry.bestCount {
 				entry.bestCount = count
-				entry.displayName = author
+				entry.displayName = display
 			}
 		}
 	}

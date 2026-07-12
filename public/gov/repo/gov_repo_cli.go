@@ -156,10 +156,15 @@ func NewCliCommand() *cli.Command {
 				}),
 				Action: func(c *cli.Context) error {
 					git := gitFromContext(c)
+					mailmap, mmErr := LoadMailmap(c.Context, &git)
+					if mmErr != nil {
+						return eh.Errorf("unable to load mailmap: %w", mmErr)
+					}
 					analyzer := &ContributorAnalyzer{
-						Since: c.String("since"),
-						Until: c.String("until"),
-						TopN:  c.Int("top"),
+						Since:   c.String("since"),
+						Until:   c.String("until"),
+						TopN:    c.Int("top"),
+						Mailmap: mailmap,
 					}
 					if c.Bool("bus-factor") {
 						var result BusFactorResult
@@ -229,8 +234,13 @@ func NewCliCommand() *cli.Command {
 				}, fmtFlags),
 				Action: func(c *cli.Context) error {
 					git := gitFromContext(c)
+					mailmap, mmErr := LoadMailmap(c.Context, &git)
+					if mmErr != nil {
+						return eh.Errorf("unable to load mailmap: %w", mmErr)
+					}
 					analyzer := &OwnershipAnalyzer{
 						Parallelism: c.Int("parallelism"),
+						Mailmap:     mailmap,
 					}
 					if c.Bool("commits") {
 						for rec, iterErr := range analyzer.RunCommits(c.Context, &git) {
