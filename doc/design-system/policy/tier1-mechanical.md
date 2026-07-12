@@ -46,7 +46,7 @@ The `designlint` binary at `public/keelson/designsystem/lint/cmd/designlint/` sh
 | L9 — RadioButton `HasChanged` misuse | **shipped** | Syntactic chain-walk works; the chained form `c.RadioButton(...).<...>.HasChanged()` is the common case. Variable-broken chains are a known v1 false-negative; documented in the analyzer. |
 | L10 — Token-only stroke-width | **shipped** | Mirrors L3 / L4 on the stroke ladder (ADR-0032 §SD4). Trigger surface: `.Stroke(...)` with a numeric BasicLit in **either** positional arg, because the binding has both `Stroke(width, col)` (FrameFluid / TintedScopeFluid) and `Stroke(col, width)` (H3RegionFluid / MapPolylineFluid) forms; numeric literals only ever appear in the width position because color args are `color.Hex(...)` CallExprs, so the lit-vs-not-lit signal is reliable without type info. Sentinel allowlist: 0 / 0.0 (disable stroke). Painter free-functions (`c.PaintRectStroke`, `c.PaintCircleStroke`) are out of v1 scope — their positional shape mixes radius and width in receiver-specific orders. |
 | L11 — Token-only motion-duration | **shipped** | Mirrors L3 / L4 / L10 on the motion ladder (ADR-0032 §SD5). Trigger surface: `.AnimateBoolWithTime(...)` / `.AnimateBoolWithTimeBind(...)` / `.AnimateValueWithTime(...)` / `.AnimateValueWithTimeBind(...)` with a numeric BasicLit at arg index 2 (the `durSecs float32` slot). The arg-index is per-name (every wrapper today sits at index 2; the table keeps room for future signatures). Sentinel allowlist: 0 / 0.0 (instantaneous — matches the reduced-motion collapsed value). Required prereq: `styletokens.MotionQuickSecs()` / `MotionStandardSecs()` / `MotionSlowSecs()` accessors return the ladder values as float32 seconds (the wire form egui's `animate_*` API expects) and gate through the runtime `motionEnabled` flag so reduced-motion mode collapses to zero — a raw literal does not. Named-const fields (`defaultAnimDurSecs float32 = 0.28`) evade detection because they're not BasicLit nodes inside the trigger call; same shape as L3's named-const limitation. |
-| L12 — `Manifest.Id` matches package path | **shipped (warn at landing)** | Pattern rule, not a token rule — added to close the silent-drift hole in [ADR-0026 §SD12](../../adr/0026-app-runtime-and-capability-subjects.md) where `Manifest.Id` literals can diverge from the enclosing Go import path without any compiler signal. Trigger surface narrowed to two shapes (`app.Manifest{Id: …}` field assignment and package-scope `const|var X app.AppIdT = …` typed declarations) so cross-reference tables — `map[K]app.AppIdT{…}` and `[]app.AppIdT{…}`, e.g., the carousel's `legacyCodeToId` — pass through. Test files (`_test.go`) skipped: registry/broker tests use deliberate ad-hoc Ids and forcing them to match the package path would be churn for no signal. `AllowedSpecialIds` allowlist enumerates the four runtime services that use NATS-aligned dotted names rather than import paths (`runtime.broker`, `runtime.persist`, `runtime.fs`, `runtime.chlocal`). Tree was at zero L12 findings at landing; graduation to `error` after the AllowedSpecialIds list stabilises. |
+| L12 — `Manifest.Id` matches package path | **shipped (warn at landing)** | Pattern rule, not a token rule — added to close the silent-drift hole in [ADR-0026 §SD12](../../adr/0026-app-runtime-and-capability-subjects.md) where `Manifest.Id` literals can diverge from the enclosing Go import path without any compiler signal. Trigger surface narrowed to two shapes (`app.Manifest{Id: …}` field assignment and package-scope `const|var X app.AppIdT = …` typed declarations) so cross-reference tables — `map[K]app.AppIdT{…}` and `[]app.AppIdT{…}`, e.g., the carousel's `legacyCodeToId` — pass through. Test files (`_test.go`) skipped: registry/broker tests use deliberate ad-hoc Ids and forcing them to match the package path would be churn for no signal. `AllowedSpecialIds` allowlist enumerates the runtime services that use NATS-aligned dotted names rather than import paths (`runtime.broker`, `runtime.persist`, `runtime.fs`, `runtime.chlocal`, `runtime.clipboard`, `runtime.sysmetrics`, `runtime.introspect.query`). The list stabilised over the ADR-0026 broker fleet on 2026-07-12 and the rule graduated with the fleet flag-day (§Graduation lifecycle). |
 
 Adding any of the deferred rules is a Tier 3 decision per [tier3-human-review.md](./tier3-human-review.md); each follow-on ADR captures the API survey findings that unblock the rule plus the detector design.
 
@@ -135,7 +135,7 @@ L2:
 
 **Exemption.** Line-level annotation as above. The token module and the vendored scientific palette LUTs are allowlisted by default.
 
-**Recipe.** Step-by-step migration guide for fixing L2 findings in a widget: [howto/migrate-widget-to-ids-tokens.md](../howto/migrate-widget-to-ids-tokens.md). The recipe is sourced from the M5 backfill arc (commits `60703d41` through `888b5374`) and covers semantic + neutral + data-encoding + sentinel mappings plus the `color.Hex(styletokens.X.AsHex())` bridge.
+**Recipe.** Step-by-step migration guide for fixing L2 findings in a widget: [howto/migrate-widget-to-ids-tokens.md](../howto/migrate-widget-to-ids-tokens.md). The recipe is sourced from the M5 backfill arc and covers semantic + neutral + data-encoding + sentinel mappings plus the `color.Hex(styletokens.X.AsHex())` bridge.
 
 ### L3 — Token-only spacing
 
@@ -473,7 +473,7 @@ L9:
 - `app.Manifest{Id: <literal>}` composite-literal field assignment — the common case for every app's `app_register.go`.
 - Package-scope `const|var X app.AppIdT = <literal>` typed declarations — the `ManifestId` export pattern used by `apps/capinspector/` (so the carousel can call `host.Open(capinspector.ManifestId)`) and by the four runtime services (`capbroker.BrokerAppId`, `persist.ServiceAppId`, `fsbroker.ServiceAppId`, `chlocalbroker.ServiceAppId`).
 
-A literal passes when it (a) exactly equals the enclosing package's import path, (b) is prefixed by `<package-path>/` (synthetic-subpath case for folded demos like `…/apps/widgets/table`), or (c) appears in `AllowedSpecialIds` — NATS-aligned runtime services that use a dotted name rather than an import path: `runtime.broker`, `runtime.persist`, `runtime.fs`, `runtime.chlocal`.
+A literal passes when it (a) exactly equals the enclosing package's import path, (b) is prefixed by `<package-path>/` (synthetic-subpath case for folded demos like `…/apps/widgets/table`), or (c) appears in `AllowedSpecialIds` — NATS-aligned runtime services that use a dotted name rather than an import path: `runtime.broker`, `runtime.persist`, `runtime.fs`, `runtime.chlocal`, `runtime.clipboard`, `runtime.sysmetrics`, `runtime.introspect.query`.
 
 **Rationale.** [ADR-0026 §SD12](../../adr/0026-app-runtime-and-capability-subjects.md) makes `Manifest.Id` a public-stability surface and equates it with the Go import path. Three downstream consumers rely on the equation:
 
@@ -516,15 +516,18 @@ var manifest = app.Manifest{
 
 ```yaml
 L12:
-  severity: warn
+  severity: error
   allowed_special_ids:
     - "runtime.broker"
     - "runtime.persist"
     - "runtime.fs"
     - "runtime.chlocal"
+    - "runtime.clipboard"
+    - "runtime.sysmetrics"
+    - "runtime.introspect.query"
 ```
 
-`allowed_special_ids` is the configurable mirror of the analyzer's package-level `AllowedSpecialIds`; ships pre-populated with the four runtime services and accepts repo-local additions for new dotted-namespace runtime services as ADR-0026's broker fleet grows.
+`allowed_special_ids` is the configurable mirror of the analyzer's package-level `AllowedSpecialIds`; ships pre-populated with the runtime services (seven as of 2026-07-12) and accepts repo-local additions for new dotted-namespace runtime services as ADR-0026's broker fleet grows.
 
 **Exemption.** Line-level: `// designlint:ignore=L12 (reason)` on or immediately above the `Id:` field (per `ignoreann`'s line-N / line-N+1 coverage contract — the ignore must sit next to the keyvalue, not above the enclosing `var manifest = app.Manifest{` opener). Reason required because legitimate exemptions are rare and named — every existing one is documented either in this catalogue (`AllowedSpecialIds`) or in code.
 
@@ -540,11 +543,11 @@ The drift guard from [ADR-0013](../../adr/0013-imzero2-stateful-widget-contract.
 
 ## Annotations
 
-Three annotation forms are recognised by `designlint`:
+Three annotation forms are catalogued; **only the line-level ignore is implemented** (`internal/ignoreann`). The two strict forms were designed for the per-app graduation path that §Graduation lifecycle records as skipped — the fleet went to `error` in one flag-day, so nothing consumes them. They stay catalogued for a future rule that needs per-file graduation; implementing them then is part of that rule's landing.
 
-- **Line-level ignore.** `// designlint:ignore=<rule-id> (<reason>)` placed on the line before or at the end of the line containing the violation. Suppresses one rule at one site; reason is mandatory.
-- **Per-rule strict.** `// designlint:strict-rules=<rule-id>[,<rule-id>...]` placed at the top of a file (before any non-comment statement). Graduates the named rules from warn to error for the whole file.
-- **App-level strict.** `// designlint:strict` placed at the top of a file. Graduates *all* rules from warn to error for the whole file. Apps backfilled to clean status add this annotation to lock in their cleanliness.
+- **Line-level ignore** *(implemented)*. `// designlint:ignore=<rule-id> (<reason>)` placed on the line before or at the end of the line containing the violation. Suppresses one rule at one site; reason is mandatory.
+- **Per-rule strict** *(catalogued, not implemented)*. `// designlint:strict-rules=<rule-id>[,<rule-id>...]` placed at the top of a file (before any non-comment statement). Graduates the named rules from warn to error for the whole file.
+- **App-level strict** *(catalogued, not implemented)*. `// designlint:strict` placed at the top of a file. Graduates *all* rules from warn to error for the whole file.
 
 Annotations are read by the AST walker at lint time; they have no runtime presence in the app.
 
@@ -563,6 +566,8 @@ func renderPanel(c *Ctx) {
 ```
 
 ## Configuration: `designlint.yaml`
+
+> **Implementation status: not implemented.** The analyzer reads no configuration file — severities are fixed by the `lint.sh` gate (any finding fails the build since the M5 flag-day), and allowlists live in code next to the rule that owns them (e.g. `l12manifestid.AllowedSpecialIds`, the L3/L4/L10/L11 sentinel allowlists). The schema below is the designed shape, kept for the day a rule needs per-repo or per-package configuration; wiring the reader is part of that rule's landing.
 
 The repo-root `designlint.yaml` (or per-package `.designlintrc.yaml`) controls per-rule severity and allowlists. Schema sketch:
 
@@ -607,11 +612,11 @@ strict_apps:
 
 Per [ADR-0029 §SD14 M2 / M5](../../adr/0029-imzero2-design-system-and-policy-as-code.md):
 
-- **M2 — Rules ship as `warn`.** Apps that violate Tier 1 rules emit warnings; CI does not block.
-- **Per-app graduation (skipped).** The originally-planned `// designlint:strict` per-file annotation path was bypassed: with a single-maintainer fleet, sweeping each rule to zero across the tree was less ceremonial than per-file flipping.
-- **M5 — Fleet backfill complete.** Each of the five shipped rules (L1 / L2 / L3 / L5 / L9) reached zero findings tree-wide via the `refactor(designsystem/lint): backfill L*` commit series; the `lint.sh` designlint step then flipped from `step_end warn` to `step_end fail` on any output. Any new violation now fails CI; the `// designlint:ignore=<rule-id> (reason)` per-line annotation stays as the intentional-exception escape hatch.
+- **M2 — Rules ship as `warn`.** Landed 2026-06-24: designlint wired into `lint.sh` as a warn-only step. Apps that violate Tier 1 rules emit warnings; CI does not block.
+- **Per-app graduation (skipped).** The originally-planned `// designlint:strict` per-file annotation path was bypassed: with a single-maintainer fleet, sweeping each rule to zero across the tree was less ceremonial than per-file flipping. The strict annotations were consequently never implemented (§Annotations).
+- **M5 — Fleet backfill complete (2026-07-12).** Every shipped rule reached zero findings tree-wide in one sweep: L3 / L4 / L10 raw literals replaced with `styletokens` accessors (value-preserving at Standard density where the ladder allowed it), L1 casing fixed, the two intentional L5 sites given line-level ignores, and L12's `AllowedSpecialIds` stabilised over the ADR-0026 broker fleet (L2 / L9 / L11 were already at zero). The `lint.sh` designlint step then flipped from `step_end warn` to `step_end fail` on any output. Any new violation now fails CI; the `// designlint:ignore=<rule-id> (reason)` per-line annotation stays as the intentional-exception escape hatch.
 
-The graduation was a fleet-wide flag day, executed once all five rules sat at zero — no per-app `// designlint:strict` annotations were ever added in production. New Tier 1 rules added later (Tier 3 escalation per [tier3-human-review.md](./tier3-human-review.md)) ship at `warn` and follow the same backfill-then-graduate pattern.
+The graduation was a fleet-wide flag day, executed once every shipped rule sat at zero — no per-app `// designlint:strict` annotations were ever added. New Tier 1 rules added later (Tier 3 escalation per [tier3-human-review.md](./tier3-human-review.md)) ship at `warn` and follow the same backfill-then-graduate pattern.
 
 ## Adding new rules
 

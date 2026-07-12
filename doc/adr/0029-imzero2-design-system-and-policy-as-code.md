@@ -334,6 +334,14 @@ Other proposed paths (`rust/imzero2/imzero2_egui/src/style/tokens/`, `public/gov
 
 `status` stays `proposed` per the ADR convention.
 
+### 2026-07-12 — M5 designlint graduation: fleet at zero, `lint.sh` hard gate
+
+The §SD14 M5 backfill completed for the designlint surface and the step graduated from warn to a hard gate:
+
+1. **Fleet swept to zero.** All 52 outstanding findings cleared in one pass: L3 / L4 / L10 raw literals replaced with `styletokens` accessors (spacing sites value-preserving at Standard density where the ladder allowed; chip-shaped frames snapped to `RoundingSm`, cards to `RoundingMd`), the two L1 casing violations fixed, the two intentional L5 `AllocateUiAtRect` sites (spectrumdisplay's child-Ui-origin pattern) given `// designlint:ignore=L5` line annotations, and L12's `AllowedSpecialIds` stabilised over the ADR-0026 broker fleet (added `runtime.clipboard`, `runtime.sysmetrics`, `runtime.introspect.query`). L2 / L9 / L11 were already at zero.
+2. **`lint.sh` flipped.** The designlint step now sets `rc=1` on any output (finding or compile error); warn status is retired for this step. The per-line ignore annotation is the only escape hatch.
+3. **Per-app graduation path retired unused.** The M2 bullet's `// designlint:strict` opt-in was never implemented or used; the fleet went to error in one flag-day. tier1-mechanical.md §Annotations and §Configuration record the strict annotations and the `designlint.yaml` reader as catalogued-but-unimplemented, deferred until a rule needs per-file severity again.
+
 ## References
 
 - [ADR-0013 — ImZero2 stateful widget contract](./0013-imzero2-stateful-widget-contract.md) — precedent for mechanical enforcement of a stylistic rule via a Go test; `TestStatefulWidgetsAreGated` is the model for SD8.
