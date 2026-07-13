@@ -11,12 +11,24 @@ title: Example queries
 
 These run against `anchor.facts`, a self-contained demo table of leeway-encoded
 events (drone deliveries, cyber incidents, alpine sensor readings). They walk
-each tab of the playground. Column names are leeway physical names, so they must
-be backtick-quoted. Do not add a `FORMAT` clause — the app appends one.
+each tab of the playground.
+
+Leeway stores each attribute under a long *physical* column name that encodes
+its whole shape — `tv:symbol:value:val:s:m:0:24:0::data`. You do not type those.
+The playground resolves a short, backtick-quoted **handle** to the physical name
+before the query ships:
+
+- `` `section:column` `` — one column, e.g. `` `symbol:value` ``, `` `id:id` ``.
+- `` `section:*` `` — all of a section's value columns.
+
+A bare identifier is ordinary SQL. A handle that names no known section or
+column is flagged in the **Diagnostics** tab *before* you Run, with suggestions.
+Physical names still work if you paste them verbatim. The *Leeway column names*
+explanation covers the full story. Do not add a `FORMAT` clause — the app
+appends one.
 
 In a real boxer deployment the equivalent table is `spinnaker.facts`; the
-queries below transfer by swapping the table name (physical column names
-differ per schema).
+queries transfer by swapping the table name.
 
 ## Loading the demo table
 
@@ -45,30 +57,42 @@ SELECT * FROM anchor.facts LIMIT 50
 Run it, then click rows in **Table** — the **Detail** tab should show the tagged
 sections (symbol, text, geoPoint, geoArea, timeRange, …), not just the plain id.
 
-Narrow to one scenario to vary which sections are populated:
+Narrow to one scenario to vary which sections are populated. The `symbol` section
+holds the event kind (an array, so filter with `hasAny`):
 
 ```sql
 -- drone missions: always a geoPoint; sometimes geoArea / text
 SELECT * FROM anchor.facts
-WHERE hasAny(`tv:symbol:value:val:s:m:0:24:0::data`,
-             ['IN_TRANSIT', 'DELIVERED', 'HEARTBEAT'])
+WHERE hasAny(`symbol:value`, ['IN_TRANSIT', 'DELIVERED', 'HEARTBEAT'])
 
 -- cyber incidents
 SELECT * FROM anchor.facts
-WHERE hasAny(`tv:symbol:value:val:s:m:0:24:0::data`,
-             ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
+WHERE hasAny(`symbol:value`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
 
 -- alpine sensor events
 SELECT * FROM anchor.facts
-WHERE hasAny(`tv:symbol:value:val:s:m:0:24:0::data`,
-             ['SEISMIC_ANOMALY', 'SNOW_SHIFT'])
+WHERE hasAny(`symbol:value`, ['SEISMIC_ANOMALY', 'SNOW_SHIFT'])
 ```
 
 A single entity that carries the sparse `geoArea` section (ids 10005, 10010,
 10015, 10020, 500003 have one):
 
 ```sql
-SELECT * FROM anchor.facts WHERE `id:id:u64:2k:0:0:` = 10005
+SELECT * FROM anchor.facts WHERE `id:id` = 10005
+```
+
+## Whole sections at once — `section:*`
+
+`` `section:*` `` expands to all of a section's value columns. In the projection
+it lists them; in `ARRAY JOIN` it unnests them co-positionally — the natural way
+to explode a section's parallel arrays:
+
+```sql
+-- all three geoPoint value columns (pointLat, pointLng, h3)
+SELECT `geoPoint:*` FROM anchor.facts LIMIT 20
+
+-- one row per point, columns unnested together
+SELECT `id:id`, `geoPoint:*` FROM anchor.facts ARRAY JOIN `geoPoint:*` LIMIT 20
 ```
 
 ## Plotting time — the Timeline tab
@@ -78,11 +102,11 @@ them; timestamps must be `DateTime64`:
 
 ```sql
 SELECT
-  `tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`[1] AS _tl_time,
-  `tv:timeRange:endExcl:val:z64:2k:0:0:0::data`[1]   AS _tl_time_end,
-  `tv:symbol:value:val:s:m:0:24:0::data`[1]          AS _tl_lane
+  `timeRange:beginIncl`[1] AS _tl_time,
+  `timeRange:endExcl`[1]   AS _tl_time_end,
+  `symbol:value`[1]        AS _tl_lane
 FROM anchor.facts
-WHERE length(`tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`) > 0
+WHERE length(`timeRange:beginIncl`) > 0
 ORDER BY _tl_time
 ```
 
@@ -99,9 +123,9 @@ prefix grouping and Table shows a plain grid:
 
 ```sql
 SELECT
-  `id:id:u64:2k:0:0:`                       AS id,
-  `id:naturalKey:y:g:0:0:`                  AS natural_key,
-  `tv:symbol:value:val:s:m:0:24:0::data`[1] AS event_type
+  `id:id`            AS id,
+  `id:naturalKey`    AS natural_key,
+  `symbol:value`[1]  AS event_type
 FROM anchor.facts
 ORDER BY id
 ```
@@ -118,8 +142,7 @@ by ClickHouse:
 
 ```sql
 SET param_event = 'DDOS';
-SELECT * FROM anchor.facts
-WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, {event:String})
+SELECT * FROM anchor.facts WHERE has(`symbol:value`, {event:String})
 ```
 
 An *unbound* placeholder — no `SET` — is a live **signal** instead:
