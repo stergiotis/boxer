@@ -16,7 +16,6 @@ package capdemo
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -28,16 +27,6 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
-
-// ids is the package-level WidgetIdStack. Each frame's render wraps
-// the body in c.IdScope(ids.PrepareSeq(inst.seed)) so two open windows
-// produce disjoint Go-side widget IDs even though the stack is shared.
-var ids = c.NewWidgetIdStack()
-
-// instanceCounter feeds per-instance seeds. Every newApp() increments
-// and the post-increment value is the App's stable salt for the
-// lifetime of that window.
-var instanceCounter atomic.Uint64
 
 // scratchpadKey is the persist key the demo writes / reads on every
 // Save / Load click. Single NATS token (no dots) so the wire subject
@@ -80,7 +69,14 @@ var clipboardDoc = markdown.Parse([]byte("" +
 // Unmount is a no-op (the goroutine guards against use-after-unmount
 // by checking app state before mutating).
 type App struct {
-	seed   uint64
+	// ids is the per-instance WidgetIdStack. The host pre-pushes a
+	// window-unique salt onto it before every Frame() call (ADR-0026
+	// §SD9, windowhost.renderWindowBody), so every widget id the app
+	// derives is unique across all concurrently open instances — even
+	// when two apps share a label string ("topbar", …). Captured from
+	// ctx.Ids() in Mount; the app must NOT Reset() it.
+	ids *c.WidgetIdStack
+
 	logger zerolog.Logger
 
 	// density resolves IDS spacing tokens at the active preset
@@ -124,7 +120,7 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
-		seed:    instanceCounter.Add(1),
+		ids:     c.NewWidgetIdStack(),
 		density: styletokens.DensityFromEnv(),
 	}
 	return
@@ -138,6 +134,7 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // (carousel Phase A+B+C wiring) they are real inprocbus.Client /
 // persist.Client. Either way, Mount itself is infallible.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.storage = ctx.Storage()
@@ -146,19 +143,20 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 
-// Frame renders the three demo sections. Body is wrapped in
-// IdScope(seed) so per-instance widget ids stay disjoint across
-// multiple open windows.
+// Frame renders the demo sections. The host has already pre-pushed a
+// window-unique salt onto inst.ids via c.IdScope (windowhost.
+// renderWindowBody, ADR-0026 §SD9), so widget ids derived from inst.ids
+// are unique across all concurrently open instances — the app must not
+// Reset() the stack or wrap the body in its own instance salt (doing so
+// discards the host salt and collides with sibling apps that share a
+// label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	ids.Reset()
-	for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-		inst.renderApp()
-	}
+	inst.renderApp()
 	return
 }
 
 func (inst *App) renderApp() {
-	for range c.PanelTopInside(ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
+	for range c.PanelTopInside(inst.ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
 		c.Label("Capability broker demo — exercises fs.dialog.read + runtime.persist.scratchpad").Send()
 	}
 	for range c.PanelCentralInside().KeepIter() {
@@ -183,10 +181,10 @@ func (inst *App) renderApp() {
 // runPick). The broker enqueues the text; the host's windowed renderer
 // drains it into an egui copy_text op.
 func (inst *App) renderClipboardSection() {
-	for range c.CollapsingHeader(ids.PrepareStr("hdr-clipboard"),
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-clipboard"),
 		c.WidgetText().Text("clipboard.write — copy code blocks to the clipboard").Keep()).
 		DefaultOpen(true).KeepIter() {
-		for act := range clipboardDoc.RenderActions(ids, "Copy") {
+		for act := range clipboardDoc.RenderActions(inst.ids, "Copy") {
 			if inst.bus == nil {
 				continue
 			}
@@ -199,7 +197,7 @@ func (inst *App) renderClipboardSection() {
 }
 
 func (inst *App) renderFsSection() {
-	for range c.CollapsingHeader(ids.PrepareStr("hdr-fs"),
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-fs"),
 		c.WidgetText().Text("fs.dialog.read — Powerbox file pick").Keep()).
 		DefaultOpen(true).KeepIter() {
 		inst.mu.Lock()
@@ -214,13 +212,13 @@ func (inst *App) renderFsSection() {
 			if busy {
 				c.Label("Picker open… (resolve or cancel in the overlay)").Send()
 			} else {
-				if c.Button(ids.PrepareStr("pick"),
+				if c.Button(inst.ids.PrepareStr("pick"),
 					c.Atoms().Text("Pick a file…").Keep()).
 					SendResp().HasPrimaryClicked() {
 					go inst.runPick()
 				}
 				if handle != "" {
-					if c.Button(ids.PrepareStr("close"),
+					if c.Button(inst.ids.PrepareStr("close"),
 						c.Atoms().Text("Close handle").Keep()).
 						SendResp().HasPrimaryClicked() {
 						go inst.runClose(handle)
@@ -243,7 +241,7 @@ func (inst *App) renderFsSection() {
 }
 
 func (inst *App) renderPersistSection() {
-	for range c.CollapsingHeader(ids.PrepareStr("hdr-persist"),
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-persist"),
 		c.WidgetText().Text("runtime.persist.scratchpad — Set / Get / Delete").Keep()).
 		DefaultOpen(true).KeepIter() {
 		inst.mu.Lock()
@@ -255,24 +253,24 @@ func (inst *App) renderPersistSection() {
 		status := inst.persistStatus
 		inst.mu.Unlock()
 
-		_ = c.TextEdit(ids.PrepareStr("scratchpad"), inst.scratchpad, true).
+		_ = c.TextEdit(inst.ids.PrepareStr("scratchpad"), inst.scratchpad, true).
 			CodeEditor().
 			DesiredRows(3).
 			HintText("type something to save…").
 			SendRespVal(&inst.scratchpad)
 
 		for range c.Horizontal().KeepIter() {
-			if c.Button(ids.PrepareStr("save"),
+			if c.Button(inst.ids.PrepareStr("save"),
 				c.Atoms().Text("Save").Keep()).
 				SendResp().HasPrimaryClicked() {
 				go inst.runPersistSet(inst.scratchpad)
 			}
-			if c.Button(ids.PrepareStr("load"),
+			if c.Button(inst.ids.PrepareStr("load"),
 				c.Atoms().Text("Load").Keep()).
 				SendResp().HasPrimaryClicked() {
 				go inst.runPersistGet()
 			}
-			if c.Button(ids.PrepareStr("delete"),
+			if c.Button(inst.ids.PrepareStr("delete"),
 				c.Atoms().Text("Delete").Keep()).
 				SendResp().HasPrimaryClicked() {
 				go inst.runPersistDelete()
@@ -419,7 +417,7 @@ func (inst *App) setPersistStatus(s string) {
 }
 
 func (inst *App) renderWatchSection() {
-	for range c.CollapsingHeader(ids.PrepareStr("hdr-watch"),
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-watch"),
 		c.WidgetText().Text("fs.dialog.watch — folder change notifications").Keep()).
 		DefaultOpen(true).KeepIter() {
 		inst.mu.Lock()
@@ -439,33 +437,33 @@ func (inst *App) renderWatchSection() {
 		inst.mu.Unlock()
 
 		for range c.Horizontal().KeepIter() {
-			_ = c.Checkbox(ids.PrepareStr("usepoller"), usePoller, "Force poller backend").
+			_ = c.Checkbox(inst.ids.PrepareStr("usepoller"), usePoller, "Force poller backend").
 				SendRespVal(&inst.watchUsePoller)
-			_ = c.Checkbox(ids.PrepareStr("recursive"), recursive, "Recursive (subtree)").
+			_ = c.Checkbox(inst.ids.PrepareStr("recursive"), recursive, "Recursive (subtree)").
 				SendRespVal(&inst.watchRecursive)
 		}
 
 		for range c.Horizontal().KeepIter() {
 			if !active {
-				if c.Button(ids.PrepareStr("watchpick"),
+				if c.Button(inst.ids.PrepareStr("watchpick"),
 					c.Atoms().Text("Pick folder to watch…").Keep()).
 					SendResp().HasPrimaryClicked() {
 					go inst.runWatchPick()
 				}
 				if prefix != "" {
-					if c.Button(ids.PrepareStr("watchclose"),
+					if c.Button(inst.ids.PrepareStr("watchclose"),
 						c.Atoms().Text("Close handle").Keep()).
 						SendResp().HasPrimaryClicked() {
 						go inst.runWatchClose()
 					}
 				}
 			} else {
-				if c.Button(ids.PrepareStr("watchstop"),
+				if c.Button(inst.ids.PrepareStr("watchstop"),
 					c.Atoms().Text("Stop watching").Keep()).
 					SendResp().HasPrimaryClicked() {
 					go inst.runWatchStop()
 				}
-				if c.Button(ids.PrepareStr("watchclose-active"),
+				if c.Button(inst.ids.PrepareStr("watchclose-active"),
 					c.Atoms().Text("Close handle").Keep()).
 					SendResp().HasPrimaryClicked() {
 					go inst.runWatchClose()

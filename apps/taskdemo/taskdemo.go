@@ -15,7 +15,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -26,14 +25,6 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/taskmonitor"
 )
-
-// ids is the package-level WidgetIdStack. Mirrors capdemo — every
-// Frame wraps the body in IdScope(PrepareSeq(seed)) so two open
-// windows produce disjoint widget ids.
-var ids = c.NewWidgetIdStack()
-
-// instanceCounter feeds per-instance seeds.
-var instanceCounter atomic.Uint64
 
 const (
 	// minDurationSec / maxDurationSec bound the duration slider.
@@ -62,7 +53,14 @@ const (
 
 // App is the per-window taskdemo instance.
 type App struct {
-	seed   uint64
+	// ids is the per-instance WidgetIdStack. The host pre-pushes a
+	// window-unique salt onto it before every Frame() call (ADR-0026
+	// §SD9, windowhost.renderWindowBody), so every widget id the app
+	// derives is unique across all concurrently open instances — even
+	// when two apps share a label string ("topbar", …). Captured from
+	// ctx.Ids() in Mount; the app must NOT Reset() it.
+	ids *c.WidgetIdStack
+
 	logger zerolog.Logger
 
 	// tasks is the host-supplied high-level API.
@@ -94,7 +92,7 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
-		seed:        instanceCounter.Add(1),
+		ids:         c.NewWidgetIdStack(),
 		durationSec: 5.0,
 		density:     styletokens.DensityFromEnv(),
 	}
@@ -108,11 +106,12 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // can cancel in-flight tasks immediately rather than waiting on the
 // host's reapClosed path.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.tasks = task.ForApp(ctx)
 	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
 
-	inst.monitor = taskmonitor.New(inst.tasks, ids, "tm", taskmonitor.Opts{
+	inst.monitor = taskmonitor.New(inst.tasks, inst.ids, "tm", taskmonitor.Opts{
 		DefaultOpen: true,
 	})
 	if startErr := inst.monitor.Start(); startErr != nil {
@@ -148,11 +147,15 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	return
 }
 
+// Frame renders one frame of the taskdemo window body. The host has
+// already pre-pushed a window-unique salt onto inst.ids via c.IdScope
+// (windowhost.renderWindowBody, ADR-0026 §SD9), so widget ids derived
+// from inst.ids are unique across all concurrently open instances — the
+// app must not Reset() the stack or wrap the body in its own instance
+// salt (doing so discards the host salt and collides with sibling apps
+// that share a label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	ids.Reset()
-	for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-		inst.renderApp()
-	}
+	inst.renderApp()
 	return
 }
 
@@ -243,7 +246,7 @@ func titleForUnit(u task.UnitE, durationMs int64) (s string) {
 // --- render ----------------------------------------------------------
 
 func (inst *App) renderApp() {
-	for range c.PanelTopInside(ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
+	for range c.PanelTopInside(inst.ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
 		c.Label("Background task demo — spawn fake tasks; watch the humanized-change emission gate at work").Send()
 	}
 	for range c.PanelCentralInside().KeepIter() {
@@ -262,29 +265,29 @@ func (inst *App) renderApp() {
 }
 
 func (inst *App) renderControls() {
-	for range c.CollapsingHeader(ids.PrepareStr("hdr-controls"),
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-controls"),
 		c.WidgetText().Text("Spawn").Keep()).
 		DefaultOpen(true).KeepIter() {
 
-		_ = c.SliderF64(ids.PrepareStr("duration"), inst.durationSec, minDurationSec, maxDurationSec).
+		_ = c.SliderF64(inst.ids.PrepareStr("duration"), inst.durationSec, minDurationSec, maxDurationSec).
 			Text("duration (s)").
 			SendRespVal(&inst.durationSec)
 
-		_ = c.Checkbox(ids.PrepareStr("simerr"), inst.simulateError, "Simulate error at 80%").
+		_ = c.Checkbox(inst.ids.PrepareStr("simerr"), inst.simulateError, "Simulate error at 80%").
 			SendRespVal(&inst.simulateError)
 
 		for range c.Horizontal().KeepIter() {
-			if c.Button(ids.PrepareStr("start-items"),
+			if c.Button(inst.ids.PrepareStr("start-items"),
 				c.Atoms().Text("Start items task").Keep()).
 				SendResp().HasPrimaryClicked() {
 				inst.startTask(task.UnitItems)
 			}
-			if c.Button(ids.PrepareStr("start-bytes"),
+			if c.Button(inst.ids.PrepareStr("start-bytes"),
 				c.Atoms().Text("Start bytes task").Keep()).
 				SendResp().HasPrimaryClicked() {
 				inst.startTask(task.UnitBytes)
 			}
-			if c.Button(ids.PrepareStr("start-steps"),
+			if c.Button(inst.ids.PrepareStr("start-steps"),
 				c.Atoms().Text("Start steps task").Keep()).
 				SendResp().HasPrimaryClicked() {
 				inst.startTask(task.UnitSteps)
