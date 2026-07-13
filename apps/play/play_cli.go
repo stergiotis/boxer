@@ -5,7 +5,6 @@ import (
 	"os"
 	"slices"
 
-	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
@@ -77,11 +76,6 @@ func NewCliCommand() *cli.Command {
 				Password: ctx.String(flagPassword),
 			}
 			client := NewClient(clientCfg, nil)
-			// Schema-aware leeway name resolution: rewrite friendly column
-			// handles (`geoPoint:pointLat`, `symbol:*`) to physical names before
-			// a query ships. Gives the client its own registry (standard set +
-			// resolver), so it must come after NewClient.
-			resolver := installLeewayNameResolution(client)
 
 			var initSQL string
 			if p := ctx.Path(flagInitSQL); p != "" {
@@ -94,9 +88,11 @@ func NewCliCommand() *cli.Command {
 				initSQL = "SELECT 1 AS hello, now() AS ts;"
 			}
 
-			graph := newLiveQueryGraph(client, memory.NewGoAllocator(), 100)
-			playApp := NewPlayApp(client, graph, initSQL)
-			playApp.SetColumnResolver(resolver)
+			// NewLivePlayApp wires the live query graph and installs the
+			// client's pre-execute SQL pipeline (standard passes + schema-aware
+			// leeway name resolver, ADR-0108/0116), feeding the resolver to the
+			// Diagnostics pane.
+			playApp := NewLivePlayApp(client, initSQL, 100)
 
 			unm := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 			app, err := application.NewApplication(appCfg, unm)

@@ -113,9 +113,26 @@ var (
 // external module cannot call NewPlayApp directly. maxHistory bounds each lane's
 // result-history ring (the shipped launcher uses 100). See
 // doc/howto/play-pluggable-detail.md.
+//
+// It also installs the client's pre-execute SQL pipeline — the standard pass
+// set (ADR-0108, e.g. LW_ID_* macro expansion) plus the schema-aware leeway
+// name resolver (ADR-0116) — and feeds that resolver to the Diagnostics pane.
+// That wiring is unexported (it sets the client's private pass registry), so an
+// embedder cannot reproduce it; folding it in here is what lets every embedder
+// pre-process SQL identically to the standalone CLI and the launcher instead of
+// re-implementing launcher internals. A nil client — the result-less test
+// shells that never run a query — skips the install.
 func NewLivePlayApp(client *Client, initialSQL string, maxHistory int) *PlayApp {
 	graph := newLiveQueryGraph(client, memory.NewGoAllocator(), maxHistory)
-	return NewPlayApp(client, graph, initialSQL)
+	app := NewPlayApp(client, graph, initialSQL)
+	if client != nil {
+		// installLeewayNameResolution points client.passes at a fresh registry
+		// (standard set + resolver) and returns the resolver so the Diagnostics
+		// pane can surface client-side pre-execution warnings.
+		resolver := installLeewayNameResolution(client)
+		app.SetColumnResolver(resolver)
+	}
+	return app
 }
 
 // PlayLauncher is the AppI wrapper for the SQL Playground. Late binding —
@@ -199,12 +216,12 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		Password: clickhouseenv.Password.Get(),
 	}
 	client := NewClient(cfg, nil)
-	// Schema-aware leeway name resolution (ADR-0116): the carousel-embedded
-	// play is its own host, so — like the standalone CLI — it must install the
-	// resolver itself, or friendly column handles never get rewritten here.
-	resolver := installLeewayNameResolution(client)
+	// NewLivePlayApp installs the pre-execute SQL pipeline on the client
+	// (standard passes + schema-aware leeway name resolver, ADR-0108/0116) and
+	// wires the resolver into the Diagnostics pane. The carousel-embedded play
+	// is its own host, so — like the standalone CLI — it relies on that shared
+	// install rather than repeating it here.
 	inner := NewLivePlayApp(client, initSQL, 100)
-	inner.SetColumnResolver(resolver)
 	inner.AutoRun = AutoRun.Get() != ""
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""
