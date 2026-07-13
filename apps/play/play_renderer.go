@@ -697,6 +697,23 @@ func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Sche
 	return inst.graph.MainSnapshot()
 }
 
+// MainSnapshot returns a retained view of the `main` node's current result —
+// the sink result the Table tab shows by default — with its metadata. It is the
+// thread-safe embedder seam for reading the live resultset OFF the render loop
+// (e.g. an on-demand report server behind a re-user's own pane): the read is
+// guarded by the main lane's QueryStore lock, so it is safe from any goroutine,
+// unlike the render-thread-only activeSnapshot (which observes the intermediate
+// lane and per-frame split state). The caller MUST Release the returned record
+// (nil-safe); rec is nil until the first result lands, with loading/err then
+// reflecting the lane state. See doc/howto/play-pluggable-detail.md for the
+// companion body/tab seams.
+func (inst *PlayApp) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+	if inst.graph == nil {
+		return
+	}
+	return inst.graph.MainSnapshot()
+}
+
 func (inst *PlayApp) Render() error {
 	ids := inst.ids
 	ids.Reset()
