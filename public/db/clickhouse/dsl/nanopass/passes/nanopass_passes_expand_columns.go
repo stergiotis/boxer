@@ -109,6 +109,13 @@ func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns
 			timestamp time.Time
 			columns   []string
 		}{timestamp: t, columns: cs2}
+		// Return what we just fetched — not the zero-valued named returns.
+		// Missing this made every first (cache-miss) lookup report not-found,
+		// so a delegate result was cached yet never surfaced until the *second*
+		// call for the same table.
+		columns = slices.Values(cs2)
+		nColumns = len(cs2)
+		found = true
 	}
 	return
 }
