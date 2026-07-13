@@ -57,7 +57,10 @@ func (inst *chSchemaProvider) GetColumns(dbName string, tableName string) (colum
 // handles like `symbol` or `` `geoPoint:lat` `` are rewritten to physical names
 // before a query ships. It is wired per-client rather than into passreg.Default
 // because the schema provider closes over this client's live endpoint.
-func installLeewayNameResolution(client *Client) {
+// It returns the resolver so the host can also feed it to the Diagnostics
+// pane's client-side pre-execution warnings (a nil sink on the execution path
+// keeps rewriting silent; the Diagnostics run supplies a collecting sink).
+func installLeewayNameResolution(client *Client) *lwsql.Resolver {
 	provider := passes.NewCachingSchemaProvider(schemaCacheTTL, &chSchemaProvider{
 		fetch: client.fetchColumnNames,
 	}, schemaCacheMaxTables)
@@ -68,7 +71,7 @@ func installLeewayNameResolution(client *Client) {
 		log.Warn().Err(err).Msg("play: standard pass registration failed")
 	}
 	if err := reg.Register(passreg.Entry{
-		Pass:        passes.ResolveColumnNames(resolver, ""),
+		Pass:        passes.ResolveColumnNames(resolver, "", nil),
 		Stage:       passreg.StagePreExecute,
 		Order:       leewayResolveOrder,
 		Description: "resolve friendly leeway column handles to physical names",
@@ -77,4 +80,5 @@ func installLeewayNameResolution(client *Client) {
 		log.Warn().Err(err).Msg("play: leeway name-resolution pass registration failed")
 	}
 	client.passes = reg
+	return resolver
 }

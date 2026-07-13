@@ -65,46 +65,57 @@ A schema-aware nanopass pass rewrites friendly column handles to physical names
 before a query ships; the reverse mapping labels result columns in the UI. No
 transformation happens in ClickHouse.
 
-### SD1 — Handle syntax: bare section, or quoted `section:column`, style-folded
+### SD1 — Handle syntax: `section:column` or `section:*`, colon-always
 
-- A section with a single value column is named **bare**: `SELECT symbol`.
-- A specific column of a multi-value section is named with a colon composite,
-  which must be **quoted** because it is a single identifier:
-  `` SELECT `geoPoint:lat` ``.
-- Both sides are folded to `LowerSpinalCase` before matching (the
-  style-independent canonical form; `naming.Compare` uses the same reduction),
-  so `` `geoPoint:lat` ``, `` `geo_point:lat` ``, and `` `geo-point:lat` `` are
-  one handle.
+The colon is the **sole** marker of a leeway handle; a bare identifier is always
+ordinary SQL. That single rule is what makes the client-side warnings (SD8)
+false-positive-free: a `:` cannot occur in a bare SQL identifier, so anything
+carrying one is unambiguously a handle to resolve or warn about.
 
-The colon is deliberate: it is neither SQL's `.` qualification nor `::` cast.
-A **bare** `geoPoint:lat` cannot be used because in the grammar (grammar1) a
-lone `COLON` only appears as the ternary tail `cond ? a : b`, so `geoPoint:lat`
-is a parse error — and the pass works on the parse tree. Quoting sidesteps that
-with zero grammar change. An unquoted colon form is a possible future grammar
-extension (a `nestedIdentifier COLON nestedIdentifier` alternative), deferred
-because it must be proven unambiguous against the ternary and it touches
-generated parser code.
+- `` `section:column` `` — one column. Sections are the tagged sections
+  (`geoPoint`, `symbol`, …) plus six plain/backbone sections derived from the
+  physical item type — `id`, `routing`, `timestamp`, `lifecycle`, `transaction`,
+  `opaque` — so the backbone columns are reachable too (`` `id:id` ``,
+  `` `routing:naturalKey` ``), with no bare-name exception.
+- `` `section:*` `` — all of the section's value columns.
+- Both are **quoted** (a colon-bearing identifier is a single identifier), and
+  both sides fold to `LowerSpinalCase`, so `geoPoint:pointLat` and
+  `geo_point:point-lat` are one handle.
+
+A bare unquoted `geoPoint:pointLat` cannot parse — in grammar1 a lone `COLON` is
+only the ternary tail `cond ? a : b`, and the pass works on the parse tree — so
+the handle must be quoted; zero grammar change. An unquoted colon form is a
+deferred grammar extension.
+
+Rejected: keeping **bare section names** for single-value sections (a shorter
+`symbol` for the common case). It reintroduces an overlap between handles and
+ordinary columns, which reopens the false-positive problem SD8 relies on the
+colon to close; the plain-section names above make the backbone columns
+reachable without it.
 
 ### SD2 — A generic substitution pass, leeway-agnostic
 
-`ResolveColumnNames(resolver ColumnResolverI, defaultDatabase string)` lives in
-`nanopass/passes`. It is domain-agnostic: `ColumnResolverI.Resolve(db, table,
-handle) (physical, ok)` is the only seam, and the leeway implementation lives
-elsewhere. This keeps the SQL framework free of any leeway dependency — the same
-separation `SchemaProviderI` already models, and the same shape as the
-`identsql.ExpandPass` precedent (a domain pass registered through `passreg`,
-ADR-0106/0108).
+`ResolveColumnNames(resolver, defaultDatabase, sink)` lives in `nanopass/passes`.
+It is domain-agnostic: `ColumnResolverI.Resolve(db, table, handle) ResolveResult`
+is the only seam — a verdict (`NotAHandle` / `OK` with physical name(s) /
+`UnknownSection` / `UnknownColumn` with candidates) — and the leeway
+implementation, including the colon policy, lives elsewhere. This keeps the SQL
+framework free of any leeway dependency — the same separation `SchemaProviderI`
+already models, and the `identsql.ExpandPass` precedent (a domain pass registered
+through `passreg`, ADR-0106/0108).
 
-The pass is **scope-aware** (`BuildScopes`) and rewrites bare and
-table-qualified column references **wherever a column appears** — projection,
-`WHERE`, `GROUP BY`, `ORDER BY`, `HAVING`, nested expressions — not only the
-SELECT list. That reach is the reason it substitutes identifiers rather than
-wrapping them (see Alternatives). It is one-directional (input only) and never
-renames output. A bare handle that resolves in exactly one in-scope table is
-rewritten to the quoted physical name; zero or several matches (a real column, a
-SELECT alias, or a genuinely ambiguous reference) are left untouched for the
-server to interpret. A qualified `alias.handle` resolves against that alias's
-table and keeps the `alias.` prefix.
+The pass is **scope-aware** (`BuildScopes`) and rewrites column references
+**wherever a column appears** — projection, `WHERE`, `GROUP BY`, `ORDER BY`,
+`HAVING`, `ARRAY JOIN`, nested expressions — not only the SELECT list. It
+substitutes identifiers rather than wrapping them in `COLUMNS(…)` (see
+Alternatives), and is one-directional (input only). An `OK` verdict splices in
+its physical name(s): one for `section:column`, several — a comma-separated list
+— for `section:*`, so a `:*` expands co-positionally inside `ARRAY JOIN` as well
+as the projection (ClickHouse validates positions where a list is illegal). A
+bare handle that resolves in exactly one in-scope table wins; several is
+ambiguous (left untouched). A qualified `alias.handle` resolves against that
+alias's table, and a qualified `:*` prefixes the alias onto every expanded
+column.
 
 ### SD3 — Catalog source: `system.columns` + `DiscoverTableFromColumnNames`
 
@@ -122,16 +133,19 @@ included), and issued through a **direct** client call that bypasses the pass
 registry — otherwise resolving names *inside* the `system.columns` query would
 recurse.
 
-### SD4 — Only value columns are handles
+### SD4 — Every column resolves by `section:column`; `:*` is value columns
 
-Support columns (length, ref, cardinality) are named after their role
-(`tv:blobArray:lr:…`); they are machinery, not something a user names. A single
-`classifyColumns` helper parses the physical names once, takes the reconstructed
-`TableDesc.TaggedValuesSections[*].ValueColumnNames` as the authority for which
-`(section, column)` pairs are value columns, and both the resolver and the label
-builder key off it — so the query vocabulary and the display vocabulary are
-identical. Plain/backbone columns (`id`, `ts`, `naturalKey`) are named by their
-bare name.
+A single `classifyColumns` helper parses the physical names once and is the
+shared authority for the resolver and the label builder. It maps each column to
+its section — the tagged section, or, for a plain column, the item-type section
+(SD1) — and marks value columns via `TaggedValuesSections[*].ValueColumnNames`
+(plain columns are value columns; support columns — length, ref, cardinality,
+named after their role like `tv:blobArray:lr:…` — are not). Two consequences:
+
+- `` `section:column` `` resolves **any** column, value or support, so a
+  specific handle never mis-warns "no such column" on real machinery.
+- `` `section:*` `` and the "did you mean …?" candidates use the **value**
+  columns only — the data, not the membership machinery.
 
 ### SD5 — Result labels are display-time, physical-on-hover
 
@@ -142,17 +156,12 @@ the physical name on hover. Keeping physical names the ground truth means nothin
 downstream that keys on them — the reactive query graph, re-fusing, the Schema
 tab — is disturbed.
 
-Labels intentionally **diverge** from the resolver's input vocabulary (SD4).
-The resolver resolves value columns only, because those are what a user queries
-by name; but a raw `SELECT *` on a leeway table returns many more support
-columns (membership refs, cardinalities, lengths) than value columns, so
-labelling only value columns leaves the table reading as mostly unlabelled. The
-label builder therefore covers **every** leeway column: a value column labels as
-its handle form (a section's sole default `value` column as the bare section,
-else `section:column`), and a support column labels as `section:role` (e.g.
-`symbol:lr`). A support label is display-only — it is not a handle the resolver
-accepts — which is sound, since labels never need to round-trip through the
-input path.
+Every leeway column labels as `section:column` — value, support, and the six
+plain/backbone sections (`id:id`, `routing:naturalKey`) alike — so a header
+reads exactly as a user would type it. The display vocabulary is thus symmetric
+with the input vocabulary (both cover every column; only `:*` and candidate
+suggestions narrow to value columns), and the raw `SELECT *` on a leeway table,
+dominated by support columns, reads friendly throughout.
 
 ### SD6 — Wiring: a per-client registry at `StagePreExecute`
 
@@ -172,10 +181,25 @@ standalone CLI in `play_cli.go`, and the carousel-embedded launcher in
   catalog source. Multi-membership packing (ADR-0109) is why this is inherent,
   not an oversight.
 - **Bare unquoted colon** is deferred (SD1).
-- **Whole-section expansion** — a bare multi-value section expanding to all its
-  columns via `COLUMNS('^tv:section:…')` — is the one place `COLUMNS` is the
-  correct construct, but it is not built in v1; a bare multi-value section is
-  simply left unresolved (the specific `section:column` handles work).
+- **A derived `AS` alias for a `:*` expanded inside `ARRAY JOIN`** is deferred —
+  the columns array-join co-positionally without one for now.
+
+Whole-section expansion is *not* descoped: `section:*` is built (SD1/SD2/SD4) and
+expands as a plain comma-separated column list wherever the identifier sits.
+
+### SD8 — Client-side resolution warnings in Diagnostics
+
+Because the colon marks intent unambiguously (SD1), a handle that names no known
+section, or a known section's non-existent column, is a confident error worth
+flagging **before** the query runs. `ResolveColumnNames` takes an optional
+`sink func(ColumnDiagnostic)`; the execution-path pass passes nil (silent
+rewrite), while play's Diagnostics pane runs the resolver with a collecting sink
+on the debounced buffer — off the render thread, since the schema probe may hit
+the network the first time (cached thereafter; latest-wins, polled like the
+EXPLAIN probe) — and lists the unresolved handles, with candidate suggestions
+for an unknown column. Bare identifiers are never flagged (ordinary SQL). The
+only cost is the cached `system.columns` probe; the user's actual query never
+runs.
 
 ## Alternatives considered
 
@@ -208,32 +232,37 @@ standalone CLI in `play_cli.go`, and the carousel-embedded launcher in
   package, following the `identsql` precedent.
 - A per-table `system.columns` round trip on first touch (then cached), issued
   inline on the execution path before the main query.
-- Because `StagePreExecute` passes run best-effort, a resolver that leaves a
-  handle unresolved (ambiguous bare section, unknown handle) surfaces only as the
-  server's own error plus the Preview "as sent" view — there is no dedicated
-  client-side diagnostic yet. Follow-ups, not gates: surface those in the UI;
-  reset the resolver cache on endpoint switch (a `Reset` exists, unwired); and
-  the client-scoped pass is not listed by the `keelson('sql_passes')` catalog
-  (ADR-0108/0094), which reads `passreg.Default`.
+- `StagePreExecute` passes run best-effort, so on the execution path an
+  unresolved handle still just passes through to the server. The Diagnostics pane
+  now warns about the confident cases client-side first (SD8), so this is far
+  less silent than it was. Remaining follow-ups, not gates: reset the resolver
+  cache on endpoint switch (a `Reset` exists, unwired); and the client-scoped
+  pass is not listed by the `keelson('sql_passes')` catalog (ADR-0108/0094),
+  which reads `passreg.Default`.
 
 ## Validation
 
-- `ResolveColumnNames` unit tests (`nanopass/passes`): resolution in projection
-  and in `WHERE`/`GROUP BY`/`ORDER BY`, alias-preserving qualified refs,
-  cross-join ambiguity left untouched, subquery scoping, idempotence, and the
-  bare-colon parse error.
+- `ResolveColumnNames` unit tests (`nanopass/passes`): colon handles resolved
+  everywhere (projection, `WHERE`/`GROUP BY`/`ORDER BY`), bare identifiers left
+  untouched, `:*` expansion in the projection *and* in `ARRAY JOIN`,
+  alias-preserving qualified refs (and per-column alias on a qualified `:*`),
+  diagnostics for unknown-section and unknown-column (with candidates),
+  cross-join ambiguity, idempotence, and the bare-colon parse error.
 - `lwsql` unit tests: a known table built through the manipulator, its real
-  generated physical names driving folding, single vs multi-value-column
-  sections, plain columns, non-leeway passthrough, and a label↔resolve
-  round-trip (which caught a labeler bug where a multi-value section's `value`
-  column was labelled bare and so did not round-trip).
+  generated physical names driving folding, `section:column` and `section:*`,
+  plain/backbone sections (`id:id`), unknown-section / unknown-column verdicts
+  with candidates, non-leeway passthrough, and a label↔resolve round-trip over
+  every column.
 - `go build` and `go test` pass for the touched packages including `apps/play`.
 - Live drive (GPU-less `headless_svg` host, one-shot `BOXER_PLAY_SCREENSHOT` →
-  SVG → PNG) against a running ClickHouse with `anchor.facts`: `SELECT * …`
-  renders every header friendly (value and support), and `SELECT id, symbol …`
-  rewrites to physical names in the "as sent" view and returns rows. The drive
-  surfaced two defects, both fixed: `PlayLauncher.Mount` never installed the
-  resolver (only the CLI did), and the reused `CachingSchemaProvider` returned
-  not-found on every first (cache-miss) lookup — it cached the delegate's
-  columns but never surfaced them until the second call, so no table ever
-  resolved on first touch (a latent `ExpandColumns` bug too).
+  SVG → PNG) against a running ClickHouse with `anchor.facts`:
+  `` SELECT `id:id`, `geoPoint:*` … `` rewrites in the "as sent" view to the id
+  column plus geoPoint's three value columns, the Table headers read `id:id`,
+  `geoPoint:pointLat`, `geoPoint:pointLng`, and rows return;
+  `` SELECT `geoPoint:lat`, `nope:x` … `` shows the Diagnostics "Column
+  resolution" warnings client-side before the query runs — "section geoPoint has
+  no column lat — did you mean: pointLat, pointLng, h3?" and "unknown leeway
+  section nope". (Two defects an earlier drive surfaced were fixed en route:
+  `PlayLauncher.Mount` never installed the resolver, and `CachingSchemaProvider`
+  reported not-found on every first/cache-miss lookup — a latent `ExpandColumns`
+  bug too.)

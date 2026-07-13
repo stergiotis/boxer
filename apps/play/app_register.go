@@ -202,8 +202,9 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// Schema-aware leeway name resolution (ADR-0116): the carousel-embedded
 	// play is its own host, so — like the standalone CLI — it must install the
 	// resolver itself, or friendly column handles never get rewritten here.
-	installLeewayNameResolution(client)
+	resolver := installLeewayNameResolution(client)
 	inner := NewLivePlayApp(client, initSQL, 100)
+	inner.SetColumnResolver(resolver)
 	inner.AutoRun = AutoRun.Get() != ""
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""

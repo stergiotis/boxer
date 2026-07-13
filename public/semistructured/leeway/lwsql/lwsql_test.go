@@ -19,11 +19,10 @@ const testTable = "mytable"
 
 // buildKnownNames constructs a small leeway table and returns its generated
 // physical column names — the same names a real ClickHouse table would carry:
-//   - plain id (backbone)
-//   - string:value      — single-value section
-//   - timeRange:value   — single-value section (multi-word, exercises folding)
-//   - symbol:value, :ref — a two-value-column section (bare is ambiguous); this
-//     is the shipped addSymbol/addSymbolRef shape, guaranteed to validate
+//   - plain id (backbone → section "id")
+//   - string:value       — single-value section
+//   - timeRange:value    — single-value section (multi-word)
+//   - symbol:value, :ref — a two-value-column section (shipped addSymbol shape)
 func buildKnownNames(t *testing.T) []string {
 	t.Helper()
 	manip, err := common.NewTableManipulator()
@@ -61,53 +60,62 @@ func newTestResolver(names []string) *Resolver {
 	return NewResolver(passes.NewStaticSchemaProvider(map[string][]string{testTable: names}))
 }
 
-func TestResolver_KnownTable(t *testing.T) {
+func TestResolver_ColonHandles(t *testing.T) {
 	names := buildKnownNames(t)
 	r := newTestResolver(names)
-	resolves := func(handle string) string {
+	ok := func(handle string) []string {
 		t.Helper()
-		p, ok := r.Resolve("", testTable, handle)
-		require.Truef(t, ok, "handle %q should resolve", handle)
-		require.Containsf(t, names, p, "resolved name %q not among the table's columns", p)
-		return p
+		res := r.Resolve("", testTable, handle)
+		require.Equalf(t, passes.ResolveOK, res.Kind, "handle %q should resolve", handle)
+		require.NotEmptyf(t, res.Physical, "handle %q", handle)
+		for _, p := range res.Physical {
+			require.Containsf(t, names, p, "resolved %q not among the table's columns", p)
+		}
+		return res.Physical
 	}
-	notResolves := func(handle string) {
-		t.Helper()
-		_, ok := r.Resolve("", testTable, handle)
-		require.Falsef(t, ok, "handle %q should NOT resolve", handle)
+	kind := func(handle string) passes.ResolveKind {
+		return r.Resolve("", testTable, handle).Kind
 	}
 
-	// Single-value section: bare and section:column both resolve to it.
-	require.Equal(t, resolves("string"), resolves("string:value"))
+	// section:column, style-folded
+	require.Equal(t, ok("string:value"), ok("String:Value"))
+	require.Len(t, ok("string:value"), 1)
 
-	// Multi-word section name folds across every naming style.
-	require.Equal(t, resolves("timeRange"), resolves("time_range"))
-	require.Equal(t, resolves("timeRange"), resolves("TIME-RANGE"))
-	require.Equal(t, resolves("timeRange"), resolves("timeRange:value"))
+	// two value columns in one section, distinct
+	require.NotEqual(t, ok("symbol:value")[0], ok("symbol:ref")[0])
 
-	// Two-value-column section: bare is ambiguous; the specific columns resolve
-	// and are distinct.
-	notResolves("symbol")
-	require.Equal(t, resolves("symbol:value"), resolves("Symbol:Value"))
-	require.NotEqual(t, resolves("symbol:value"), resolves("symbol:ref"))
+	// :* expands to all the section's value columns
+	require.Len(t, ok("symbol:*"), 2)
+	require.Len(t, ok("string:*"), 1)
 
-	// Plain / backbone column.
-	resolves("id")
+	// plain/backbone section
+	ok("id:id")
 
-	// Non-handles are left for the server.
-	notResolves("value")       // a bare column name is not a section handle
-	notResolves("nonexistent") // unknown
-	notResolves("string:nope") // known section, unknown column
+	// colon-always: a bare identifier is never a handle
+	require.Equal(t, passes.ResolveNotAHandle, kind("symbol"))
+	require.Equal(t, passes.ResolveNotAHandle, kind("value"))
+	// a physical name typed verbatim (many colons) is not a handle — it must
+	// pass through untouched, not warn as an unknown section
+	require.Equal(t, passes.ResolveNotAHandle, kind("tv:symbol:value:val:s:m:0:24:0::data"))
+
+	// known section, unknown column → candidates
+	res := r.Resolve("", testTable, "symbol:nope")
+	require.Equal(t, passes.ResolveUnknownColumn, res.Kind)
+	require.Contains(t, res.Candidates, "value")
+	require.Contains(t, res.Candidates, "ref")
+
+	// unknown section
+	require.Equal(t, passes.ResolveUnknownSection, kind("nope:x"))
+	// (that support columns resolve via section:column — never false-warn — is
+	// covered by TestBuildLabels_RoundTrip, which resolves every labelled column.)
 }
 
 func TestResolver_NonLeewayTable(t *testing.T) {
 	r := NewResolver(passes.NewStaticSchemaProvider(map[string][]string{
 		"plain": {"user_id", "amount", "created_at"},
 	}))
-	_, ok := r.Resolve("", "plain", "user_id")
-	require.False(t, ok, "plain SQL columns are not leeway handles")
-	_, ok = r.Resolve("", "unknown", "x")
-	require.False(t, ok, "unknown table has no handles")
+	require.Equal(t, passes.ResolveNotAHandle, r.Resolve("", "plain", "foo:bar").Kind)
+	require.Equal(t, passes.ResolveNotAHandle, r.Resolve("", "unknown", "foo:bar").Kind)
 }
 
 func TestBuildLabels_RoundTrip(t *testing.T) {
@@ -116,30 +124,21 @@ func TestBuildLabels_RoundTrip(t *testing.T) {
 	require.NotEmpty(t, labels)
 
 	r := newTestResolver(names)
-	// Labels cover value AND support columns. The value-column labels round-trip
-	// through the resolver (resolving one yields exactly the column it labels);
-	// support-column labels are display-only and do not resolve — the resolver's
-	// input vocabulary is deliberately value-only.
-	resolvable := 0
+	// Every label is `section:column` and round-trips: resolving it yields
+	// exactly the physical column it labels.
 	for phys, label := range labels {
-		got, ok := r.Resolve("", testTable, label)
-		if !ok {
-			continue // support-column label — display only
-		}
-		resolvable++
-		require.Equalf(t, phys, got, "label %q should round-trip to its column", label)
+		require.Containsf(t, label, ":", "label %q should be section:column", label)
+		res := r.Resolve("", testTable, label)
+		require.Equalf(t, passes.ResolveOK, res.Kind, "label %q should resolve", label)
+		require.Equalf(t, []string{phys}, res.Physical, "label %q should round-trip", label)
 	}
-	require.Positive(t, resolvable, "value-column labels must resolve")
-	require.Greater(t, len(labels), resolvable, "support columns should also be labelled (display-only)")
 
-	// A single default `value` column labels as the bare section; a named
-	// column labels as section:column. Compare by folded identity so the
-	// assertion is independent of stored casing.
-	folded := make(map[string]struct{}, len(labels))
-	for _, label := range labels {
-		folded[foldHandle(label)] = struct{}{}
+	// Spot-check specific forms (single-word, case-insensitive).
+	lower := make(map[string]struct{}, len(labels))
+	for _, l := range labels {
+		lower[strings.ToLower(l)] = struct{}{}
 	}
-	require.Contains(t, folded, foldHandle("string"), "expected a bare 'string' section label")
-	require.Contains(t, folded, foldHandle("symbol:value"), "expected a 'symbol:value' label")
-	require.Contains(t, folded, foldHandle("symbol:ref"), "expected a 'symbol:ref' label")
+	require.Contains(t, lower, "symbol:value")
+	require.Contains(t, lower, "symbol:ref")
+	require.Contains(t, lower, "id:id")
 }

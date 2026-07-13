@@ -1,21 +1,24 @@
 // Package lwsql bridges leeway physical column names to the nanopass SQL
-// pipeline. Its Resolver maps human-friendly column handles — a section name,
-// or a quoted `section:column` composite — onto the technical physical column
-// names leeway generates (e.g. `tv:geoPoint:lat:val:f64:…`), so that a
-// nanopass ResolveColumnNames pass can rewrite a readable query into the
-// physical one ClickHouse stores. BuildLabels is the inverse, used to show
-// friendly labels for result columns without touching the SQL sent to the
-// server.
+// pipeline. Its Resolver maps human-friendly column handles onto the technical
+// physical column names leeway generates (e.g. `tv:geoPoint:pointLat:val:f32:…`),
+// so a nanopass ResolveColumnNames pass can rewrite a readable query into the
+// physical one ClickHouse stores. BuildLabels is the inverse, for showing
+// friendly labels on result columns without touching the SQL sent to the server.
 //
-// Only value columns are exposed as handles. Support columns (length, ref,
-// cardinality) are named after their role and excluded — a table's value
-// columns are the authority, taken from the reconstructed TableDesc. The
-// friendly vocabulary here is exactly the one the schemaview widget shows, so
-// the browser and the query resolver speak the same names.
+// Handle syntax (a colon is the sole marker; a bare identifier is ordinary SQL):
 //
-// Scope note (v1): the descriptive identity of a membership-packed field
-// (e.g. `droneStatus` sharing the `symbol` column) is row data, not part of
-// the physical name, and is out of scope here — see the ADR.
+//   - `section:column`  — one column. Sections are the tagged sections
+//     (`geoPoint`, `symbol`, …) and six plain/backbone sections derived from
+//     the physical item type: id, routing, timestamp, lifecycle, transaction,
+//     opaque (so `id:id`, `routing:naturalKey`, …). Any column resolves —
+//     value or support — so a `section:column` never false-warns.
+//   - `section:*`        — all of the section's *value* columns (the data;
+//     support columns are excluded). Expanded wherever it appears, including
+//     ARRAY JOIN.
+//
+// Scope note (v1): a membership-packed field's descriptive identity (e.g.
+// `droneStatus` sharing the `symbol` column) is row data, not part of the
+// physical name, and is out of scope here — see the ADR.
 package lwsql
 
 import (
@@ -23,15 +26,16 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-// Resolver resolves friendly leeway column handles to physical names for one
-// endpoint. It implements passes.ColumnResolverI. Per-table indexes are built
-// lazily from a passes.SchemaProviderI (which supplies the physical column
-// list) and cached for the session; negatives (non-leeway tables) are cached
-// too so a table is probed at most once.
+// Resolver resolves leeway column handles for one endpoint. It implements
+// passes.ColumnResolverI. Per-table indexes are built lazily from a
+// passes.SchemaProviderI (the physical column list) and cached for the session;
+// negatives (non-leeway tables) are cached too, so a table is probed at most
+// once.
 type Resolver struct {
 	provider passes.SchemaProviderI
 
@@ -39,17 +43,28 @@ type Resolver struct {
 	cache map[string]*tableIndex // key: db\x00table; nil value == not leeway
 }
 
-// tableIndex maps a folded handle to the physical column name(s) it selects.
-// A bare section with more than one value column maps to several names — that
-// is ambiguous and deliberately left unresolved (the user must pick a column
-// via `section:column`).
+// tableIndex maps each section (by its style-folded name) to its columns.
 type tableIndex struct {
-	byHandle map[string][]string
+	sections map[string]*sectionIndex
 }
 
-// NewResolver builds a Resolver over a schema provider. The provider is
-// expected to be caching (see passes.NewCachingSchemaProvider) — the Resolver
-// caches the derived indexes, not the raw column lists.
+// sectionIndex holds one section's columns. byColumn covers ALL of them (value
+// and support) so a specific `section:column` never mistakenly reports "no such
+// column"; valueCols is the ordered value-column subset used for `section:*`
+// expansion and for candidate suggestions.
+type sectionIndex struct {
+	display   string            // section name as authored, e.g. "geoPoint"
+	byColumn  map[string]string // folded column name → physical
+	valueCols []columnRef       // value columns only, in order
+}
+
+type columnRef struct {
+	display  string // column name as authored, e.g. "pointLat"
+	physical string
+}
+
+// NewResolver builds a Resolver over a schema provider (expected to be caching;
+// the Resolver caches the derived indexes, not the raw column lists).
 func NewResolver(provider passes.SchemaProviderI) *Resolver {
 	return &Resolver{
 		provider: provider,
@@ -59,19 +74,36 @@ func NewResolver(provider passes.SchemaProviderI) *Resolver {
 
 var _ passes.ColumnResolverI = (*Resolver)(nil)
 
-// Resolve implements passes.ColumnResolverI. It returns ok=false for a handle
-// that names no value column, or that is ambiguous — the pass then leaves the
-// identifier untouched.
-func (inst *Resolver) Resolve(dbName string, tableName string, handle string) (physical string, ok bool) {
+// Resolve implements passes.ColumnResolverI.
+func (inst *Resolver) Resolve(dbName string, tableName string, handle string) passes.ResolveResult {
+	section, column, isHandle := splitHandle(handle)
+	if !isHandle {
+		return passes.ResolveResult{Kind: passes.ResolveNotAHandle} // no colon → ordinary SQL
+	}
 	idx := inst.indexFor(dbName, tableName)
 	if idx == nil {
-		return
+		return passes.ResolveResult{Kind: passes.ResolveNotAHandle} // table not leeway-shaped → can't judge
 	}
-	phys := idx.byHandle[foldHandle(handle)]
-	if len(phys) == 1 {
-		return phys[0], true
+	si, ok := idx.sections[fold(section)]
+	if !ok {
+		return passes.ResolveResult{Kind: passes.ResolveUnknownSection, Section: section}
 	}
-	return
+	if column == "*" {
+		phys := make([]string, len(si.valueCols))
+		for i, c := range si.valueCols {
+			phys[i] = c.physical
+		}
+		return passes.ResolveResult{Kind: passes.ResolveOK, Physical: phys, Section: si.display}
+	}
+	if p, ok := si.byColumn[fold(column)]; ok {
+		return passes.ResolveResult{Kind: passes.ResolveOK, Physical: []string{p}, Section: si.display, Column: column}
+	}
+	return passes.ResolveResult{
+		Kind:       passes.ResolveUnknownColumn,
+		Section:    si.display,
+		Column:     column,
+		Candidates: valueColumnNames(si),
+	}
 }
 
 // Reset clears the cached indexes — call when the endpoint or its schema may
@@ -90,9 +122,7 @@ func (inst *Resolver) indexFor(dbName string, tableName string) *tableIndex {
 	if hit {
 		return idx
 	}
-	// Build outside the lock — building fetches columns, which can hit the
-	// network. A concurrent duplicate build is harmless (idempotent).
-	idx = inst.build(dbName, tableName)
+	idx = inst.build(dbName, tableName) // build outside the lock (may hit the network)
 	inst.mu.Lock()
 	if existing, hit := inst.cache[key]; hit {
 		idx = existing
@@ -103,9 +133,6 @@ func (inst *Resolver) indexFor(dbName string, tableName string) *tableIndex {
 	return idx
 }
 
-// build derives the friendly index for one table. Any failure to parse the
-// columns as leeway physical names (a plain SQL table, an aggregation result,
-// an unreachable server) yields a nil index — the table simply has no handles.
 func (inst *Resolver) build(dbName string, tableName string) *tableIndex {
 	cols, n, found := inst.provider.GetColumns(dbName, tableName)
 	if !found || n == 0 {
@@ -120,33 +147,41 @@ func (inst *Resolver) build(dbName string, tableName string) *tableIndex {
 		return nil // not leeway-shaped
 	}
 
-	idx := &tableIndex{byHandle: make(map[string][]string, len(infos))}
+	idx := &tableIndex{sections: make(map[string]*sectionIndex, 8)}
 	for _, ci := range infos {
-		if !ci.isValue {
-			continue
-		}
 		if ci.section == "" {
-			// Plain / backbone column (id, ts, naturalKey, …) — bare name.
-			fc := fold(ci.column)
-			idx.byHandle[fc] = append(idx.byHandle[fc], ci.physical)
 			continue
 		}
-		// A section resolves bare (all its value columns) and by `section:column`.
-		fs, fc := fold(ci.section), fold(ci.column)
-		idx.byHandle[fs] = append(idx.byHandle[fs], ci.physical)
-		idx.byHandle[fs+":"+fc] = append(idx.byHandle[fs+":"+fc], ci.physical)
+		fs := fold(ci.section)
+		si := idx.sections[fs]
+		if si == nil {
+			si = &sectionIndex{display: ci.section, byColumn: make(map[string]string, 4)}
+			idx.sections[fs] = si
+		}
+		si.byColumn[fold(ci.column)] = ci.physical
+		if ci.isValue {
+			si.valueCols = append(si.valueCols, columnRef{display: ci.column, physical: ci.physical})
+		}
 	}
-	if len(idx.byHandle) == 0 {
+	if len(idx.sections) == 0 {
 		return nil
 	}
 	return idx
 }
 
-// columnInfo is one physical column decomposed into its section (empty for a
-// plain/backbone column), its leeway column name, and whether it is a
-// user-facing value column. Support columns (length, ref, cardinality) are
-// named after their role and are not value columns. The Resolver and
-// BuildLabels both key off this, so they expose exactly the same vocabulary.
+func valueColumnNames(si *sectionIndex) []string {
+	out := make([]string, len(si.valueCols))
+	for i, c := range si.valueCols {
+		out[i] = c.display
+	}
+	return out
+}
+
+// columnInfo is one physical column decomposed into its section, its column
+// name, and whether it is a value column (vs a support column — length, ref,
+// cardinality). Plain/backbone columns carry the section name derived from
+// their item type and are always value columns. The Resolver and BuildLabels
+// both key off this.
 type columnInfo struct {
 	physical string
 	section  string
@@ -156,8 +191,7 @@ type columnInfo struct {
 
 // classifyColumns parses a table's physical column names and classifies each.
 // ok is false when the names are not leeway-shaped (a plain SQL table, an
-// aggregation result, an unreachable server) — there are then no handles or
-// labels to offer.
+// aggregation result, an unreachable server).
 func classifyColumns(names []string) (infos []columnInfo, ok bool) {
 	conv, err := ddl.NewHumanReadableNamingConvention(detectSeparator(names))
 	if err != nil {
@@ -172,7 +206,7 @@ func classifyColumns(names []string) (infos []columnInfo, ok bool) {
 		return nil, false
 	}
 	// The reconstructed TableDesc is the authority for which (section, column)
-	// pairs are value columns; support columns are excluded.
+	// pairs are value columns; support columns are excluded from that set.
 	valueCols := make(map[string]struct{}, len(table.TaggedValuesSections))
 	for _, sec := range table.TaggedValuesSections {
 		fs := fold(string(sec.Name))
@@ -190,30 +224,64 @@ func classifyColumns(names []string) (infos []columnInfo, ok bool) {
 		if secErr != nil {
 			continue
 		}
-		ci := columnInfo{physical: names[i], section: string(sec), column: string(col)}
-		if sec == "" {
-			ci.isValue = true // plain/backbone columns are user-facing
-		} else {
+		ci := columnInfo{physical: names[i], column: string(col)}
+		if sec != "" {
+			ci.section = string(sec)
 			_, ci.isValue = valueCols[fold(string(sec))+"\x00"+fold(string(col))]
+		} else {
+			// Plain/backbone column — its section is its item-type name.
+			pit, pErr := conv.ExtractPlainItemType(phy)
+			if pErr != nil {
+				continue
+			}
+			ci.section = plainSectionName(pit)
+			if ci.section == "" {
+				continue // unmapped item type
+			}
+			ci.isValue = true
 		}
 		infos = append(infos, ci)
 	}
 	return infos, true
 }
 
-// foldHandle canonicalises a user-typed handle to the same key form the index
-// is built with: split on the first ':' into section[:column] and fold each
-// part to LowerSpinalCase so any naming style the user types matches.
-func foldHandle(handle string) string {
-	if sec, col, found := strings.Cut(handle, ":"); found {
-		return fold(sec) + ":" + fold(col)
+// plainSectionName maps a plain/backbone item type to its user-facing section
+// name (the six TableDescDto plain groups). Empty for PlainItemTypeNone.
+func plainSectionName(pit common.PlainItemTypeE) string {
+	switch pit {
+	case common.PlainItemTypeEntityId:
+		return "id"
+	case common.PlainItemTypeEntityTimestamp:
+		return "timestamp"
+	case common.PlainItemTypeEntityRouting:
+		return "routing"
+	case common.PlainItemTypeEntityLifecycle:
+		return "lifecycle"
+	case common.PlainItemTypeTransaction:
+		return "transaction"
+	case common.PlainItemTypeOpaque:
+		return "opaque"
 	}
-	return fold(handle)
+	return ""
+}
+
+// splitHandle splits `section:column` on its single ':'. isHandle is false
+// unless there is exactly one colon: a bare identifier (none) is ordinary SQL,
+// and a physical name typed verbatim (`tv:symbol:value:…`, many colons) is not
+// a handle either — it must pass through untouched, not warn as an "unknown
+// section". Section and column names cannot themselves contain a colon, so
+// exactly one is the rule.
+func splitHandle(handle string) (section string, column string, isHandle bool) {
+	if strings.Count(handle, ":") != 1 {
+		return "", "", false
+	}
+	sec, col, _ := strings.Cut(handle, ":")
+	return sec, col, true
 }
 
 // fold renders a name component to LowerSpinalCase, the style-independent
 // canonical form (naming.Compare uses the same reduction), so `geoPoint`,
-// `geo_point`, and `geo-point` all collapse to one key.
+// `geo_point`, and `geo-point` collapse to one key.
 func fold(s string) string {
 	return naming.ConvertNameStyle(strings.TrimSpace(s), naming.LowerSpinalCase)
 }

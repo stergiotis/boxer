@@ -1,43 +1,73 @@
 package passes
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// ColumnResolverI maps a user-written column handle within a specific table to
-// that table's physical column name. It is deliberately domain-agnostic: the
-// leeway implementation lives in leeway/lwsql, keeping this SQL framework free
-// of any leeway dependency (the same reason SchemaProviderI is generic).
-//
-// Resolve reports ok=false to mean "leave this identifier untouched". That
-// covers both "the handle is not a known alias for this table" and "the handle
-// is ambiguous" — in either case the pass leaves the identifier as written, so
-// real ClickHouse columns, SELECT-list aliases, and genuinely ambiguous
-// references all fall through to the server unchanged rather than being
-// mis-rewritten.
-type ColumnResolverI interface {
-	Resolve(dbName string, tableName string, handle string) (physical string, ok bool)
+// ResolveKind classifies what a ColumnResolverI made of one identifier.
+type ResolveKind uint8
+
+const (
+	// ResolveNotAHandle: the identifier is not a resolvable handle (e.g. an
+	// ordinary column, an alias, or a table whose schema is unknown). Leave it
+	// untouched and say nothing.
+	ResolveNotAHandle ResolveKind = iota
+	// ResolveOK: Physical carries one or more physical column names to
+	// substitute (several for a whole-section `:*` expansion).
+	ResolveOK
+	// ResolveUnknownSection: a handle whose section part names no known section.
+	ResolveUnknownSection
+	// ResolveUnknownColumn: the section is known but the column is not one of
+	// its columns; Candidates lists the section's columns.
+	ResolveUnknownColumn
+)
+
+// ResolveResult is a ColumnResolverI's verdict for one identifier.
+type ResolveResult struct {
+	Kind       ResolveKind
+	Physical   []string // ResolveOK: the physical name(s) to splice in
+	Section    string   // display form, for diagnostics
+	Column     string   // display form, for diagnostics
+	Candidates []string // ResolveUnknownColumn: the section's column names
 }
 
-// ResolveColumnNames returns a Pass that rewrites bare and table-qualified
-// column identifiers to their physical names via the resolver, wherever a
-// column reference appears — the projection, WHERE, GROUP BY, ORDER BY, HAVING,
-// and nested expressions — not only the SELECT list. That is the whole reason
-// this is a substitution pass rather than a COLUMNS('…') wrapper: COLUMNS is
-// projection-only, whereas an identifier substitution is legal everywhere a
-// column is.
+// ColumnResolverI maps a user-written column handle within a table to its
+// physical name(s), or reports why it could not. It is domain-agnostic — the
+// leeway implementation (and the policy for what even counts as a handle) lives
+// in leeway/lwsql. The pass calls Resolve for every bare/qualified identifier;
+// a ResolveNotAHandle verdict means "leave it alone", so ordinary SQL passes
+// through untouched.
+type ColumnResolverI interface {
+	Resolve(dbName string, tableName string, handle string) ResolveResult
+}
+
+// ColumnDiagnostic is a warning about one handle that a ResolveColumnNames pass
+// could not resolve. It is emitted only when a sink is supplied (the execution
+// path passes none), so a host can surface it — e.g. play's Diagnostics pane —
+// before the query round-trips to the server.
+type ColumnDiagnostic struct {
+	Handle     string   // the handle as written, e.g. "geoPoint:lat"
+	Message    string   // human-readable explanation
+	Candidates []string // suggested column names (may be empty)
+}
+
+// ResolveColumnNames returns a Pass that rewrites column handles to their
+// physical names via the resolver, wherever a column reference appears —
+// projection, WHERE, GROUP BY, ORDER BY, HAVING, ARRAY JOIN, nested
+// expressions. A `:*` handle expands to a comma-separated list of the section's
+// columns, so it works in ARRAY JOIN (co-array unnest) and the projection
+// alike; ClickHouse validates positions where a list is illegal.
 //
-// Resolution is scope-aware. Each SELECT's own FROM/JOIN tables are the
-// candidates for its bare identifiers; a qualified `alias.handle` is resolved
-// against that alias's table only. A bare handle that resolves in exactly one
-// in-scope table is rewritten; zero or multiple matches are left untouched.
-// CTE, subquery, and table-function sources are skipped (they have no physical
-// schema to resolve against). The rewrite is one-directional and never renames
-// output columns — result-side friendly labels are a presentation concern.
-func ResolveColumnNames(resolver ColumnResolverI, defaultDatabase string) nanopass.Pass {
+// If sink is non-nil, unresolved handles (unknown section / unknown column)
+// are reported through it instead of silently passing through; supply nil on
+// the execution path and a collector where you want to warn the user first.
+func ResolveColumnNames(resolver ColumnResolverI, defaultDatabase string, sink func(ColumnDiagnostic)) nanopass.Pass {
 	return nanopass.LiftBodyPass(
 		"ResolveColumnNames",
 		func(sql string) (result string, err error) {
@@ -54,7 +84,7 @@ func ResolveColumnNames(resolver ColumnResolverI, defaultDatabase string) nanopa
 				return
 			}
 			for _, scope := range nanopass.FlattenScopes(scopes) {
-				resolveNamesInScope(rw, scope, resolver)
+				resolveNamesInScope(rw, scope, resolver, sink)
 			}
 
 			result = nanopass.GetText(rw)
@@ -69,14 +99,12 @@ func ResolveColumnNames(resolver ColumnResolverI, defaultDatabase string) nanopa
 }
 
 // resolveNamesInScope walks one SELECT's whole subtree (not just its
-// projection) and resolves every bare column identifier it owns. Nested scopes
-// are pruned via isScopeBoundary — FlattenScopes visits each one in its own
-// turn, so descending here would resolve them against the wrong table set.
-func resolveNamesInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, resolver ColumnResolverI) {
+// projection — ARRAY JOIN and the rest carry column refs too) and resolves
+// every column identifier it owns. Nested scopes are pruned; FlattenScopes
+// visits each one against its own table set.
+func resolveNamesInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, resolver ColumnResolverI, sink func(ColumnDiagnostic)) {
 	stmt := scope.Node
 	nanopass.WalkCST(stmt, func(ctx antlr.ParserRuleContext) bool {
-		// Prune nested scopes, but never the root stmt itself (it is a
-		// SelectStmtContext, hence a scope boundary too).
 		if ctx != antlr.ParserRuleContext(stmt) && isScopeBoundary(ctx) {
 			return false
 		}
@@ -84,14 +112,12 @@ func resolveNamesInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, res
 		if !ok {
 			return true
 		}
-		resolveColumnIdentifier(rw, scope, resolver, identExpr)
-		// A column identifier carries no further column references worth
-		// descending into.
+		resolveColumnIdentifier(rw, scope, resolver, sink, identExpr)
 		return false
 	})
 }
 
-func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope, resolver ColumnResolverI, identExpr *grammar1.ColumnExprIdentifierContext) {
+func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope, resolver ColumnResolverI, sink func(ColumnDiagnostic), identExpr *grammar1.ColumnExprIdentifierContext) {
 	colId := identExpr.ColumnIdentifier()
 	if colId == nil {
 		return
@@ -105,12 +131,7 @@ func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope,
 		return
 	}
 	nestedCtx, ok := nested.(*grammar1.NestedIdentifierContext)
-	if !ok {
-		return
-	}
-	// Only a single-part identifier is a handle. A dotted nested identifier
-	// (`col.field` tuple/nested access) is left alone.
-	if len(nestedCtx.AllIdentifier()) != 1 {
+	if !ok || len(nestedCtx.AllIdentifier()) != 1 {
 		return
 	}
 	handle := nanopass.DecodeIdentifier(nestedCtx.GetText())
@@ -118,47 +139,78 @@ func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope,
 		return
 	}
 
-	var physical string
-	var resolved bool
+	var aliasPrefix string
+	var res ResolveResult
 	if tid := colIdCtx.TableIdentifier(); tid != nil {
-		// Qualified `alias.handle` — resolve against that one table.
 		src, found := scope.ResolveAlias(nanopass.DecodeIdentifier(tid.GetText()))
 		if !found || src.IsCTE || src.IsSubquery || src.IsFunction {
 			return
 		}
-		physical, resolved = resolver.Resolve(src.ResolvedDatabase(scope), src.Table, handle)
+		aliasPrefix = tid.GetText() + "."
+		res = resolver.Resolve(src.ResolvedDatabase(scope), src.Table, handle)
 	} else {
-		physical, resolved = resolveBareHandle(scope, resolver, handle)
+		res = resolveBareAcrossScope(scope, resolver, handle)
 	}
-	if !resolved {
-		return
+
+	switch res.Kind {
+	case ResolveOK:
+		if len(res.Physical) == 0 {
+			return
+		}
+		parts := make([]string, len(res.Physical))
+		for i, p := range res.Physical {
+			parts[i] = aliasPrefix + nanopass.QuoteIdentifier(p)
+		}
+		// Replace the whole identifier (not just its nested part), so a
+		// qualified `:*` gets the alias on every expanded column.
+		nanopass.ReplaceNode(rw, identExpr, strings.Join(parts, ", "))
+	case ResolveUnknownSection:
+		if sink != nil {
+			sink(ColumnDiagnostic{Handle: handle, Message: fmt.Sprintf("unknown leeway section %q", res.Section)})
+		}
+	case ResolveUnknownColumn:
+		if sink != nil {
+			sink(ColumnDiagnostic{
+				Handle:     handle,
+				Message:    fmt.Sprintf("leeway section %q has no column %q", res.Section, res.Column),
+				Candidates: res.Candidates,
+			})
+		}
 	}
-	// Rewrite only the nested-identifier node: for a bare reference this is the
-	// whole column, and for a qualified `alias.handle` it keeps the `alias.`
-	// prefix intact (which is what disambiguates a JOIN). Physical names carry
-	// ':' separators, so they always need quoting — QuoteIdentifier handles it.
-	nanopass.ReplaceNode(rw, nestedCtx, nanopass.QuoteIdentifier(physical))
 }
 
-// resolveBareHandle resolves an unqualified handle against every real table in
-// scope. Exactly one match wins; zero or several leave the identifier
-// untouched (a non-leeway column, or an ambiguous reference the server should
-// report).
-func resolveBareHandle(scope *nanopass.SelectScope, resolver ColumnResolverI, handle string) (physical string, ok bool) {
-	matches := 0
+// resolveBareAcrossScope resolves an unqualified handle against every real
+// table in scope. Exactly one table resolving it wins; several is ambiguous
+// (left untouched). With none, the most specific failure is returned for a
+// diagnostic — an unknown-column (the section exists somewhere) outranks an
+// unknown-section.
+func resolveBareAcrossScope(scope *nanopass.SelectScope, resolver ColumnResolverI, handle string) ResolveResult {
+	oks := 0
+	var win ResolveResult
+	best := ResolveResult{Kind: ResolveNotAHandle}
 	for i := range scope.Tables {
 		ts := &scope.Tables[i]
 		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
 			continue
 		}
-		p, r := resolver.Resolve(ts.ResolvedDatabase(scope), ts.Table, handle)
-		if r {
-			physical = p
-			matches++
+		r := resolver.Resolve(ts.ResolvedDatabase(scope), ts.Table, handle)
+		switch r.Kind {
+		case ResolveOK:
+			oks++
+			win = r
+		case ResolveUnknownColumn:
+			best = r
+		case ResolveUnknownSection:
+			if best.Kind == ResolveNotAHandle {
+				best = r
+			}
 		}
 	}
-	if matches == 1 {
-		return physical, true
+	if oks == 1 {
+		return win
 	}
-	return "", false
+	if oks > 1 {
+		return ResolveResult{Kind: ResolveNotAHandle} // ambiguous — leave it
+	}
+	return best
 }

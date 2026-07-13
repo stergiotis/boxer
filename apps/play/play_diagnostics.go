@@ -5,10 +5,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -70,6 +72,17 @@ type DiagnosticsDriver struct {
 	// wanted); probeNode is its compiled EXPLAIN AST demand.
 	probeFor  string
 	probeNode compiledNode
+
+	// resolveDiag runs the leeway column resolver over a buffer with a
+	// collecting sink and returns the handles it could not resolve. Injected via
+	// PlayApp.SetColumnResolver; nil when no resolver is wired. It is computed
+	// off the render thread (a first schema probe may hit the network) and
+	// polled from Render, mirroring the probe lane — latest-wins via colDiagGen.
+	resolveDiag func(sql string) []passes.ColumnDiagnostic
+	colDiagMu   sync.Mutex
+	colDiagGen  uint64
+	colDiagFor  string
+	colDiags    []passes.ColumnDiagnostic
 }
 
 // probeExecutor is the probe lane's nodeExecutorI: a verdict-only POST via
@@ -114,6 +127,9 @@ func (inst *DiagnosticsDriver) close() {
 // kept — flipping back to a recently probed buffer serves the memo without
 // re-asking the server.
 func (inst *DiagnosticsDriver) noteParse(raw string, parseErr error) {
+	// Column-resolution warnings are independent of the EXPLAIN probe: they want
+	// the parseable case (the probe wants the rejected one).
+	inst.armColumnDiag(raw, parseErr)
 	if parseErr == nil || raw == "" || inst.lane == nil || inst.buildResidual == nil {
 		inst.probeFor = ""
 		return
@@ -124,6 +140,46 @@ func (inst *DiagnosticsDriver) noteParse(raw string, parseErr error) {
 	residual, params := inst.buildResidual(raw)
 	inst.probeFor = raw
 	inst.probeNode = compiledNode{SQL: diagProbePrefix + residual, Params: params}
+}
+
+// armColumnDiag recomputes the client-side column-resolution warnings for a
+// newly parsed buffer, off the render thread. A parseable buffer is resolved on
+// a goroutine (the resolver's first schema probe per table may hit the network,
+// cached thereafter); an unparseable or empty one simply clears the warnings.
+// Latest-wins via colDiagGen; Render polls columnDiagnostics.
+func (inst *DiagnosticsDriver) armColumnDiag(raw string, parseErr error) {
+	if inst.resolveDiag == nil {
+		return
+	}
+	inst.colDiagMu.Lock()
+	if raw == inst.colDiagFor {
+		inst.colDiagMu.Unlock()
+		return
+	}
+	inst.colDiagGen++
+	gen := inst.colDiagGen
+	inst.colDiagFor = raw
+	inst.colDiags = nil
+	inst.colDiagMu.Unlock()
+	if parseErr != nil || raw == "" {
+		return
+	}
+	go func() {
+		diags := inst.resolveDiag(raw)
+		inst.colDiagMu.Lock()
+		if gen == inst.colDiagGen {
+			inst.colDiags = diags
+		}
+		inst.colDiagMu.Unlock()
+	}()
+}
+
+// columnDiagnostics returns the latest computed column-resolution warnings.
+// Render-thread safe.
+func (inst *DiagnosticsDriver) columnDiagnostics() []passes.ColumnDiagnostic {
+	inst.colDiagMu.Lock()
+	defer inst.colDiagMu.Unlock()
+	return inst.colDiags
 }
 
 // probeView demands the armed probe (non-blocking; unchanged demands memo-hit)
@@ -189,9 +245,53 @@ func adjustProbeLineNumbers(s string) string {
 func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
 	inst.renderDiagStatement()
 	c.Separator().Send()
+	if inst.diag != nil && inst.diag.resolveDiag != nil {
+		inst.renderDiagColumnResolution()
+		c.Separator().Send()
+	}
 	inst.renderDiagSplit()
 	c.Separator().Send()
 	inst.renderDiagLastRun(numRows, elapsed, summary, executed, err)
+}
+
+// renderDiagColumnResolution lists the leeway column handles the resolver could
+// not resolve in the current buffer — computed client-side, so a typo like
+// `geoPoint:lat` is caught before any round-trip to the server. Empty when
+// every handle resolves.
+func (inst *PlayApp) renderDiagColumnResolution() {
+	diagHeading("Column resolution")
+	if inst.diag == nil {
+		return
+	}
+	diags := inst.diag.columnDiagnostics()
+	if len(diags) == 0 {
+		diagWeak("Every leeway column handle resolves.")
+		return
+	}
+	for _, d := range diags {
+		line := d.Handle + " — " + d.Message
+		if len(d.Candidates) > 0 {
+			line += " — did you mean: " + strings.Join(d.Candidates, ", ") + "?"
+		}
+		for rt := range c.RichTextLabel(line) {
+			rt.Monospace()
+		}
+	}
+}
+
+// SetColumnResolver wires the leeway column resolver into the Diagnostics pane,
+// so it can warn — client-side, before a Run — about `section:column` handles
+// that name no known section or column. Safe to call with nil (no resolver).
+func (inst *PlayApp) SetColumnResolver(resolver passes.ColumnResolverI) {
+	if inst.diag == nil || resolver == nil {
+		return
+	}
+	inst.diag.resolveDiag = func(sql string) (diags []passes.ColumnDiagnostic) {
+		_, _ = passes.ResolveColumnNames(resolver, "", func(d passes.ColumnDiagnostic) {
+			diags = append(diags, d)
+		}).Run(sql)
+		return diags
+	}
 }
 
 func diagHeading(text string) {

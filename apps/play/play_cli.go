@@ -78,10 +78,10 @@ func NewCliCommand() *cli.Command {
 			}
 			client := NewClient(clientCfg, nil)
 			// Schema-aware leeway name resolution: rewrite friendly column
-			// handles (`symbol`, `geoPoint:lat`) to physical names before a
-			// query ships. Gives the client its own registry (standard set +
+			// handles (`geoPoint:pointLat`, `symbol:*`) to physical names before
+			// a query ships. Gives the client its own registry (standard set +
 			// resolver), so it must come after NewClient.
-			installLeewayNameResolution(client)
+			resolver := installLeewayNameResolution(client)
 
 			var initSQL string
 			if p := ctx.Path(flagInitSQL); p != "" {
@@ -96,6 +96,7 @@ func NewCliCommand() *cli.Command {
 
 			graph := newLiveQueryGraph(client, memory.NewGoAllocator(), 100)
 			playApp := NewPlayApp(client, graph, initSQL)
+			playApp.SetColumnResolver(resolver)
 
 			unm := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 			app, err := application.NewApplication(appCfg, unm)
