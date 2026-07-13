@@ -10,13 +10,16 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 )
 
 // play_diagnostics.go is the Diagnostics dock tab: the single owner of the
 // playground's error prose. The result tabs render only a short pointer here
-// (renderResultsFailed); this pane carries the full texts, in three sections:
+// (renderResultsFailed); this pane carries the full texts, in these sections:
 //
 //   - Statement — what the parsers make of the current editor buffer. When
 //     boxer's grammar rejects it, an `EXPLAIN AST` probe against the LIVE
@@ -25,6 +28,12 @@ import (
 //     degraded-features list is spelled out); ClickHouse rejecting it means
 //     the SQL itself is broken, and the server's message — usually better
 //     positioned than the grammar's — is shown.
+//   - Column resolution — the leeway column handles the client-side resolver
+//     could not map, when a resolver is wired (SetColumnResolver).
+//   - Security context — the passthrough ("1:1 as stored") base tables the
+//     buffer returns verbatim (ADR-0117), an "information-retrieval" badge
+//     flagging any non-empty set. Purely structural, so it speaks only for
+//     buffers boxer's grammar parses.
 //   - Query graph — the ADR-0097 split status of the last Run (a split
 //     failure demotes the buffer to a single raw statement).
 //   - Last run — the active result's execution error, or the same summary
@@ -83,6 +92,15 @@ type DiagnosticsDriver struct {
 	colDiagGen  uint64
 	colDiagFor  string
 	colDiags    []passes.ColumnDiagnostic
+
+	// passthruFor is the buffer whose passthrough ("1:1 as stored") base tables
+	// passthruTables holds — the security-context lens (ADR-0117). The
+	// classification is purely structural (parse + BuildScopes, no round-trip),
+	// so unlike the column diagnostics it is computed synchronously in noteParse
+	// and read straight back — no lane, no goroutine. Render-thread-only,
+	// memoised by buffer like probeFor.
+	passthruFor    string
+	passthruTables []analysis.TableRef
 }
 
 // probeExecutor is the probe lane's nodeExecutorI: a verdict-only POST via
@@ -127,9 +145,11 @@ func (inst *DiagnosticsDriver) close() {
 // kept — flipping back to a recently probed buffer serves the memo without
 // re-asking the server.
 func (inst *DiagnosticsDriver) noteParse(raw string, parseErr error) {
-	// Column-resolution warnings are independent of the EXPLAIN probe: they want
-	// the parseable case (the probe wants the rejected one).
+	// Column-resolution warnings and the passthrough-table lens are independent
+	// of the EXPLAIN probe: they want the parseable case (the probe wants the
+	// rejected one).
 	inst.armColumnDiag(raw, parseErr)
+	inst.armSecurityContext(raw, parseErr)
 	if parseErr == nil || raw == "" || inst.lane == nil || inst.buildResidual == nil {
 		inst.probeFor = ""
 		return
@@ -180,6 +200,44 @@ func (inst *DiagnosticsDriver) columnDiagnostics() []passes.ColumnDiagnostic {
 	inst.colDiagMu.Lock()
 	defer inst.colDiagMu.Unlock()
 	return inst.colDiags
+}
+
+// armSecurityContext reclassifies the newly parsed buffer's passthrough base
+// tables — the ones it returns "1:1 as stored" (analysis.ExtractPassthroughTables,
+// ADR-0117). The extraction is purely structural (parse + BuildScopes, no
+// round-trip), so it runs synchronously on the render thread and its result is
+// read straight back — no lane. A buffer boxer's grammar cannot parse, or one
+// whose scope construction fails, has no passthrough tables: ADR-0117 requires
+// the caller to treat "can't classify" as NOT passthrough (never a false
+// information-retrieval claim). Memoised by buffer like the column diagnostics.
+func (inst *DiagnosticsDriver) armSecurityContext(raw string, parseErr error) {
+	if raw == inst.passthruFor {
+		return
+	}
+	inst.passthruFor = raw
+	inst.passthruTables = nil
+	if parseErr != nil || raw == "" {
+		return
+	}
+	pr, err := nanopass.Parse(raw)
+	if err != nil {
+		return
+	}
+	// defaultDatabase is "": play has no configured connection default (the
+	// server resolves unqualified reads via currentDatabase()), so unqualified
+	// tables stay unqualified in the reported refs.
+	refs, err := analysis.ExtractPassthroughTables(pr, "")
+	if err != nil {
+		return
+	}
+	inst.passthruTables = refs
+}
+
+// securityContext returns the latest passthrough-table classification of the
+// current buffer. Render-thread-only (the slice is computed inline in
+// noteParse, never off-thread).
+func (inst *DiagnosticsDriver) securityContext() []analysis.TableRef {
+	return inst.passthruTables
 }
 
 // probeView demands the armed probe (non-blocking; unchanged demands memo-hit)
@@ -249,6 +307,8 @@ func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, 
 		inst.renderDiagColumnResolution()
 		c.Separator().Send()
 	}
+	inst.renderDiagSecurityContext()
+	c.Separator().Send()
 	inst.renderDiagSplit()
 	c.Separator().Send()
 	inst.renderDiagLastRun(numRows, elapsed, summary, executed, err)
@@ -338,6 +398,62 @@ func (inst *PlayApp) renderDiagStatement() {
 		}
 		diagWeak("boxer parser: " + inst.formattedErr.Error())
 	}
+}
+
+// renderDiagSecurityContext is the passthrough-table lens (ADR-0117): the base
+// tables whose stored rows the current buffer returns 1:1, set apart from the
+// aggregates, derivations, and joins a policy cannot govern by table alone. A
+// non-empty set earns an "information-retrieval" badge — the statement hands
+// back stored rows verbatim, so a table/row/column policy bounds exactly what
+// it can expose. The classification is structural, so it speaks only for
+// buffers boxer's grammar parses.
+func (inst *PlayApp) renderDiagSecurityContext() {
+	diagHeading("Security context")
+	if inst.diag == nil {
+		return
+	}
+	// Keyed off the same debounced buffer as the classification (armSecurityContext
+	// runs in noteParse on the trimmed raw): until the editor settles onto a
+	// parseable buffer, there is nothing meaningful to show.
+	raw := strings.TrimSpace(inst.sql)
+	switch {
+	case raw == "":
+		diagWeak("Type SQL in the Editor tab.")
+		return
+	case inst.sql != inst.formattedFor:
+		diagWeak("Waiting for the editor to settle…")
+		return
+	case inst.formattedErr != nil:
+		diagWeak("Classified only for statements boxer's grammar parses.")
+		return
+	}
+	tables := inst.diag.securityContext()
+	if len(tables) == 0 {
+		diagWeak("No passthrough tables — this statement aggregates, derives, joins, or otherwise transforms its inputs rather than returning stored rows 1:1.")
+		return
+	}
+	for range c.Horizontal().KeepIter() {
+		badge.New(inst.ids.PrepareStr("sec-info-retrieval"), "information-retrieval").
+			Tone(badge.ToneInfo).Size(badge.SizeSm).
+			Tooltip("The query returns these tables' stored rows 1:1 — a pure information-retrieval read that a row/column policy governs directly.").
+			Send()
+	}
+	for _, t := range tables {
+		for rt := range c.RichTextLabel(passthroughTableName(t)) {
+			rt.Monospace()
+		}
+	}
+}
+
+// passthroughTableName renders a classified table for the list: `db.table` when
+// the reference carried a database, the bare table name otherwise (play has no
+// configured default database, so unqualified reads stay unqualified — see
+// armSecurityContext).
+func passthroughTableName(t analysis.TableRef) string {
+	if t.Database != "" {
+		return t.Database + "." + t.Table
+	}
+	return t.Table
 }
 
 // renderDiagSplit is the ADR-0097 split status of the last Run.

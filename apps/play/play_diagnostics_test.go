@@ -129,6 +129,40 @@ func TestDiagnosticsDriverNilSafety(t *testing.T) {
 	assert.Empty(t, detail)
 }
 
+func TestDiagnosticsSecurityContext(t *testing.T) {
+	// A bare driver (no lane, no resolver) is enough: the passthrough lens is
+	// purely structural and computed inline in noteParse.
+	d := &DiagnosticsDriver{}
+
+	// A single-source bare projection returns stored rows 1:1 → the table is
+	// classified as information-retrieval.
+	d.noteParse("SELECT id, name FROM users WHERE id > 10", nil)
+	tables := d.securityContext()
+	require.Len(t, tables, 1)
+	assert.Equal(t, "users", tables[0].Table)
+	assert.Empty(t, tables[0].Database, "no configured default database ⇒ unqualified")
+	assert.Equal(t, "users", passthroughTableName(tables[0]))
+
+	// An aggregate is not 1:1 → empty (drives the badge off).
+	d.noteParse("SELECT count() FROM users", nil)
+	assert.Empty(t, d.securityContext())
+
+	// A joined row is not a stored row of any single table → empty.
+	d.noteParse("SELECT a.id FROM a JOIN b ON a.id = b.id", nil)
+	assert.Empty(t, d.securityContext())
+
+	// A buffer boxer's grammar rejects has no passthrough tables — ADR-0117's
+	// conservative rule: never a false information-retrieval claim.
+	d.noteParse("SELEC 1", errors.New("grammar1: nope"))
+	assert.Empty(t, d.securityContext())
+
+	// A qualified reference keeps its database in the displayed name.
+	d.noteParse("SELECT * FROM sales.orders", nil)
+	tables = d.securityContext()
+	require.Len(t, tables, 1)
+	assert.Equal(t, "sales.orders", passthroughTableName(tables[0]))
+}
+
 func TestClassifyProbeError(t *testing.T) {
 	v, detail := classifyProbeError(errors.New("clickhouse http 400: Code: 62. DB::Exception: boom"))
 	assert.Equal(t, probeRejected, v)
