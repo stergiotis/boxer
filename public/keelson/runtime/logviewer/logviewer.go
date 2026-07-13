@@ -29,22 +29,21 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/errorview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fieldview"
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/logbridge"
 )
 
 // sinkRef holds the host-registered Sink. An atomic.Pointer keeps the
 // access lock-free on the render-loop hot path; the host writes it
 // exactly once during App.Before, and every Frame call reads it.
 var sinkRef atomic.Pointer[logbridge.Sink]
-
 
 // RegisterSink lets the host hand the logbridge.Sink to every
 // logviewer instance. Must be called before the first Frame of any
@@ -365,6 +364,18 @@ func (inst *LogViewerApp) renderFilterRow() {
 	c.AddSpace(styletokens.PaddingHair(inst.density))
 }
 
+// Per-widget id namespaces for the tail table. renderTailTable and
+// cellTint mint ids with PrepareSeq (allocation-free) rather than
+// fmt.Sprintf; the disjoint bases keep cell, badge and header ids from
+// colliding within the app's id scope. Bases sit far above
+// maxRows*lvNumCols so raising maxRows cannot overlap them.
+const (
+	lvNumCols     = 5           // time, level, app, caller, message
+	lvIdCellBase  = 0x1000_0000 // per-cell TintedScope ids: base + row*lvNumCols + col
+	lvIdBadgeBase = 0x2000_0000 // per-row level-badge ids:  base + row
+	lvIdHdrBase   = 0x3000_0000 // per-column header ids:    base + col
+)
+
 // renderTailTable virtualises the filtered rows via egui_table's
 // deferred-block API. When follow is active and there is at least one
 // row, we scroll to the last index every frame — egui_table picks up
@@ -374,10 +385,10 @@ func (inst *LogViewerApp) renderFilterRow() {
 //
 // Per-cell visuals:
 //   - Time:    SelectableLabel — clicking toggles row selection, which
-//              drives the detail pane below the table.
+//     drives the detail pane below the table.
 //   - Level:   small Pill badge whose tone is derived from the level
-//              string (debug/trace = Neutral, info = Info,
-//              warn = Warning, error/fatal/panic = Error).
+//     string (debug/trace = Neutral, info = Info,
+//     warn = Warning, error/fatal/panic = Error).
 //   - App:     plain Label, shortened by shortAppId.
 //   - Caller:  monospace plain Label so file:line columns line up.
 //   - Message: plain Label with subtle Strong styling on warn+ rows.
@@ -429,7 +440,7 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 	headerTexts := [...]string{"Time", "Level", "App", "Caller", "Message"}
 	for col, text := range headerTexts {
 		for range et.Headers(0, uint32(col)) {
-			for range c.Frame(inst.ids.PrepareStr(fmt.Sprintf("hdr-%d", col))).
+			for range c.Frame(inst.ids.PrepareSeq(lvIdHdrBase + uint64(col))).
 				InnerMargin(styletokens.PaddingInner(inst.density)).
 				KeepIter() {
 				hdrAtoms := c.Atoms().BeginRichText(text).Strong().End().Keep()
@@ -443,7 +454,21 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 		selectedKey = rowKey(inst.selected)
 	}
 
-	for i, r := range rows {
+	// Emit only the rows egui_table will draw this frame. Without this gate
+	// every one of the up-to-maxRows rows builds a deferred block (and cell
+	// ids) each frame, ~90% of which egui_table immediately culls — the
+	// dominant allocation source in this app. VisibleRange reports the
+	// previous frame's window (one-frame lag, self-correcting); ok is false
+	// on the first frame a table is shown, where we emit the full range.
+	rowBegin, rowEnd := 0, len(rows)
+	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
+		rowBegin = int(rb)
+		if int(re) < rowEnd {
+			rowEnd = int(re)
+		}
+	}
+	for i := rowBegin; i < rowEnd; i++ {
+		r := rows[i]
 		isSelected := selectedKey != "" && rowKey(r) == selectedKey
 		tint, hasTint := rowTint(r.Level)
 		clicked := false
@@ -464,7 +489,7 @@ func (inst *LogViewerApp) renderTailTable(rows []factsstore.LogRow) {
 
 		et.BeginCells(uint64(i), 1)
 		if inst.cellTint(i, 1, hasTint, tint, isSelected, func() {
-			badge.New(inst.ids.PrepareStr(fmt.Sprintf("rlvl-%d", i)), levelLabel(r.Level)).
+			badge.New(inst.ids.PrepareSeq(lvIdBadgeBase+uint64(i)), levelLabel(r.Level)).
 				Tone(levelTone(r.Level)).
 				Variant(badge.VariantSolid).
 				Size(badge.SizeSm).
@@ -555,7 +580,7 @@ func (inst *LogViewerApp) cellTint(row, col int, hasTint bool, tint color.Color,
 		strokeWidth = 1.5
 		stroke = selectionStroke
 	}
-	ts := c.TintedScope(inst.ids.PrepareStr(fmt.Sprintf("rcell-%d-%d", row, col)), fill).
+	ts := c.TintedScope(inst.ids.PrepareSeq(lvIdCellBase+uint64(row)*lvNumCols+uint64(col)), fill).
 		Stroke(strokeWidth, stroke).
 		OuterMargin(0).
 		InnerMargin(styletokens.PaddingInner(inst.density)).
