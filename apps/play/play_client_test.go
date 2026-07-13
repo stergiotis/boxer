@@ -17,6 +17,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 )
@@ -296,6 +297,75 @@ func TestExecuteArrowStreamFailingPreExecutePassFallsBack(t *testing.T) {
 
 	if !strings.Contains(string(gotBody), "SELECT 1") {
 		t.Errorf("fallback SQL missing from body: %q", string(gotBody))
+	}
+}
+
+// stubColumnResolver rewrites exactly the handle "sec:col" → "phys_col" and
+// treats everything else as ordinary SQL. It stands in for the leeway
+// system.columns-backed resolver so the wiring can be exercised without a
+// server.
+type stubColumnResolver struct{}
+
+func (stubColumnResolver) Resolve(dbName, tableName, handle string) passes.ResolveResult {
+	if handle == "sec:col" {
+		return passes.ResolveResult{Kind: passes.ResolveOK, Physical: []string{"phys_col"}}
+	}
+	return passes.ResolveResult{Kind: passes.ResolveNotAHandle}
+}
+
+// TestExecuteArrowStreamRealisesLateBoundFactory drives the ADR-0108 §SD7
+// wiring end to end: with the standard set (which registers ResolveColumnNames
+// as a late-bound factory, ADR-0116 §SD6) in the client's registry and a
+// ColumnResolverI as the client's binding, ApplyBestEffortBound realises the
+// factory and the friendly handle is rewritten on the wire. This is exactly
+// the seam installLeewayNameResolution uses — it sets passBinding to the live
+// resolver. With the binding cleared, the same factory declines and the handle
+// ships verbatim, proving the rewrite came from the binding and not the entry
+// set.
+func TestExecuteArrowStreamRealisesLateBoundFactory(t *testing.T) {
+	body := emptyArrowStream(t)
+
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	reg := passreg.NewRegistry()
+	if err := passregdefaults.RegisterStandard(reg); err != nil {
+		t.Fatalf("RegisterStandard: %v", err)
+	}
+	c.passes = reg
+	c.passBinding = stubColumnResolver{}
+
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), "SELECT `sec:col` FROM t", memory.NewGoAllocator(), nil, nil)
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+
+	bs := string(gotBody)
+	if !strings.Contains(bs, "phys_col") {
+		t.Errorf("late-bound factory not realised; handle not resolved, body: %q", bs)
+	}
+	if strings.Contains(bs, "sec:col") {
+		t.Errorf("friendly handle leaked to the wire: %q", bs)
+	}
+
+	gotBody = nil
+	c.passBinding = nil
+	rdr2, closer2, _, err := c.ExecuteArrowStream(context.Background(), "SELECT `sec:col` FROM t", memory.NewGoAllocator(), nil, nil)
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream (unbound): %v", err)
+	}
+	t.Cleanup(func() { _ = closer2.Close() })
+	t.Cleanup(rdr2.Release)
+	if !strings.Contains(string(gotBody), "sec:col") {
+		t.Errorf("with no binding the handle must ship verbatim, body: %q", string(gotBody))
 	}
 }
 

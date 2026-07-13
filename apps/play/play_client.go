@@ -38,6 +38,14 @@ type Client struct {
 	// registry here.
 	passes *passreg.Registry
 
+	// passBinding is the per-consumer value the pre-execute stage's late-bound
+	// factories are realised against (ADR-0108 §SD7) — here, the leeway schema
+	// resolver installLeewayNameResolution builds, which closes over this
+	// client's live endpoint (ADR-0116 §SD6). It stays nil until installed;
+	// ApplyBestEffortBound then declines every factory, so the client applies
+	// only the concrete entries (e.g. identsql), exactly as before.
+	passBinding any
+
 	// mu guards targetURL, the live endpoint. It starts at cfg.URL and can be
 	// switched at runtime via SetURL — e.g. play's endpoint switcher points at
 	// the in-process keelson introspection /query endpoint (ADR-0094 §SD6).
@@ -248,7 +256,7 @@ func (inst *Client) buildResidual(sql string) (residual string, params map[strin
 		residual = sql
 		params = nil
 	}
-	residual = inst.passes.ApplyBestEffort(passreg.StagePreExecute, residual, log.Logger)
+	residual = inst.passes.ApplyBestEffortBound(passreg.StagePreExecute, residual, inst.passBinding, log.Logger)
 	return
 }
 

@@ -8,8 +8,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
-	"github.com/stergiotis/boxer/public/keelson/data/passreg"
-	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 
@@ -21,9 +19,6 @@ const (
 	// that fronts the probe. A table is re-probed at most this often.
 	schemaCacheTTL       = 5 * time.Minute
 	schemaCacheMaxTables = 256
-	// leewayResolveOrder places the resolver after identsql (100) so it rewrites
-	// already-macro-expanded SQL.
-	leewayResolveOrder = 200
 )
 
 // chSchemaProvider implements passes.SchemaProviderI by asking the live
@@ -50,35 +45,27 @@ func (inst *chSchemaProvider) GetColumns(dbName string, tableName string) (colum
 	return slices.Values(names), len(names), true
 }
 
-// installLeewayNameResolution gives client its own pass registry — the standard
-// pre-execute set plus the schema-aware leeway name resolver — and points the
-// client at it. The resolver learns each queried table's schema from
+// installLeewayNameResolution builds this client's leeway column-handle
+// resolver and hands it to the client as the binding for the late-bound
+// ResolveColumnNames factory in the standard pre-execute set (ADR-0108 §SD7,
+// ADR-0116 §SD6). The resolver learns each queried table's schema from
 // system.columns via the client itself (a cached, lazy probe), so friendly
 // handles like `symbol` or `` `geoPoint:lat` `` are rewritten to physical names
-// before a query ships. It is wired per-client rather than into passreg.Default
-// because the schema provider closes over this client's live endpoint.
+// before a query ships: buildResidual passes the binding to
+// ApplyBestEffortBound, which realises the factory against this client's live
+// endpoint. The factory lives in passreg.Default (wired once per host by
+// RegisterDefaults), so — unlike the retired per-client registry — it also
+// shows in keelson('sql_passes').
+//
 // It returns the resolver so the host can also feed it to the Diagnostics
-// pane's client-side pre-execution warnings (a nil sink on the execution path
-// keeps rewriting silent; the Diagnostics run supplies a collecting sink).
+// pane's client-side pre-execution warnings (the execution-path factory uses a
+// nil sink and rewrites silently; the Diagnostics run supplies a collecting
+// sink).
 func installLeewayNameResolution(client *Client) *lwsql.Resolver {
 	provider := passes.NewCachingSchemaProvider(schemaCacheTTL, &chSchemaProvider{
 		fetch: client.fetchColumnNames,
 	}, schemaCacheMaxTables)
 	resolver := lwsql.NewResolver(provider)
-
-	reg := passreg.NewRegistry()
-	if err := passregdefaults.RegisterStandard(reg); err != nil {
-		log.Warn().Err(err).Msg("play: standard pass registration failed")
-	}
-	if err := reg.Register(passreg.Entry{
-		Pass:        passes.ResolveColumnNames(resolver, "", nil),
-		Stage:       passreg.StagePreExecute,
-		Order:       leewayResolveOrder,
-		Description: "resolve friendly leeway column handles to physical names",
-		Provenance:  "github.com/stergiotis/boxer/public/semistructured/leeway/lwsql",
-	}); err != nil {
-		log.Warn().Err(err).Msg("play: leeway name-resolution pass registration failed")
-	}
-	client.passes = reg
+	client.passBinding = resolver
 	return resolver
 }

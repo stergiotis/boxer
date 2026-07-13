@@ -12,12 +12,13 @@ date: 2026-07-13
 
 ## Status
 
-Proposed. v1 implemented (uncommitted at time of writing): the generic
-`ResolveColumnNames` pass and `ColumnResolverI` in
-`public/db/clickhouse/dsl/nanopass/passes`, the leeway resolver and label
-builder in `public/semistructured/leeway/lwsql`, and the play wiring
-(`system.columns` probe, per-client registry, display-time labels) in
-`apps/play`.
+Proposed. Implemented: the generic `ResolveColumnNames` pass and
+`ColumnResolverI` in `public/db/clickhouse/dsl/nanopass/passes`, the leeway
+resolver and label builder in `public/semistructured/leeway/lwsql`, and the play
+wiring (`system.columns` probe, per-client factory binding, display-time labels)
+in `apps/play`. The pre-execute pass is registered as a late-bound
+`passreg.Factory` (ADR-0108 §SD7); an earlier cut used a per-client
+`passreg.Registry` (see SD6).
 
 ## Context
 
@@ -163,15 +164,30 @@ with the input vocabulary (both cover every column; only `:*` and candidate
 suggestions narrow to value columns), and the raw `SELECT *` on a leeway table,
 dominated by support columns, reads friendly throughout.
 
-### SD6 — Wiring: a per-client registry at `StagePreExecute`
+### SD6 — Wiring: a late-bound factory at `StagePreExecute`
 
-play gives its `Client` its own `passreg.Registry` — the standard set plus the
-resolver — ordered after `identsql` (100 → 200) so names resolve on
-already-macro-expanded SQL. It is client-scoped rather than added to
-`passreg.Default` because the schema provider closes over this client's live
-endpoint. Both hosts must wire it themselves (the `identsql` precedent): the
-standalone CLI in `play_cli.go`, and the carousel-embedded launcher in
-`PlayLauncher.Mount`.
+The resolver's pass closes over this client's live endpoint (its schema provider
+probes `system.columns` there), so it cannot be a process-global `Pass` value.
+It is registered as a `passreg.Factory` — the "second entry kind" of ADR-0108
+§SD7 — in the standard set (`defaults.RegisterStandard`), ordered after
+`identsql` (100 → 200) so names resolve on already-macro-expanded SQL. The
+factory's `Build` type-asserts its binding to `passes.ColumnResolverI`, keeping
+the standard set leeway-free; play supplies that binding *per client* via
+`Client.passBinding` (set by `installLeewayNameResolution`), and
+`Client.buildResidual` applies the stage with `ApplyBestEffortBound`.
+`Client.passes` itself stays `passreg.Default`.
+
+The descriptor being process-global while the binding stays per client is what
+lets the resolver show in `keelson('sql_passes')` — as a `late_bound` row. Only
+the *binding* is wired per host (the `identsql` precedent): the standalone CLI in
+`play_cli.go` and the carousel launcher in `PlayLauncher.Mount`; the factory
+itself rides each host's existing `RegisterDefaults` call.
+
+Rejected: giving each `Client` its own `passreg.Registry` (the standard set plus
+a concrete resolver pass). It was the first cut, but a client-scoped registry
+never reaches `passreg.Default`, so the resolver was invisible to the
+`sql_passes` catalog — the factory keeps the per-client *binding* while restoring
+catalog visibility, and removes the duplicated standard-set registration.
 
 ### SD7 — Scope cull
 
@@ -235,10 +251,11 @@ runs.
 - `StagePreExecute` passes run best-effort, so on the execution path an
   unresolved handle still just passes through to the server. The Diagnostics pane
   now warns about the confident cases client-side first (SD8), so this is far
-  less silent than it was. Remaining follow-ups, not gates: reset the resolver
-  cache on endpoint switch (a `Reset` exists, unwired); and the client-scoped
-  pass is not listed by the `keelson('sql_passes')` catalog (ADR-0108/0094),
-  which reads `passreg.Default`.
+  less silent than it was. Remaining follow-up, not a gate: reset the resolver
+  cache on endpoint switch (a `Reset` exists, unwired). The resolver *is* listed
+  by the `keelson('sql_passes')` catalog (ADR-0108/0094) — as a `late_bound`
+  factory row (ADR-0108 §SD7) — now that its descriptor lives in
+  `passreg.Default` rather than a per-client registry.
 
 ## Validation
 
@@ -254,6 +271,12 @@ runs.
   with candidates, non-leeway passthrough, and a label↔resolve round-trip over
   every column.
 - `go build` and `go test` pass for the touched packages including `apps/play`.
+- `passreg`/`defaults` tests cover the factory path: registration and the shared
+  `(stage, name)` namespace, `ApplyBestEffortBound` merging entries and factories
+  in `(Order, Name)` order while skipping a declined binding, `Catalog()` marking
+  the resolver `late_bound`, and `RegisterStandard` placing `ResolveColumnNames`
+  at order 200 with a `Build` that accepts a `ColumnResolverI` and declines
+  anything else. The `sql_passes` provider test asserts the `late_bound` column.
 - Live drive (GPU-less `headless_svg` host, one-shot `BOXER_PLAY_SCREENSHOT` →
   SVG → PNG) against a running ClickHouse with `anchor.facts`:
   `` SELECT `id:id`, `geoPoint:*` … `` rewrites in the "as sent" view to the id

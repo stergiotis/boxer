@@ -239,3 +239,57 @@ canonical view it renders even for SQL outside Grammar1, since that is what
 would be POSTed. `BOXER_PLAY_PREVIEW_AS_SENT` starts the tab in this mode
 for scripted screenshots. This makes the otherwise-invisible pre-execute stage
 directly observable to the user, complementing the `sql_passes` catalog.
+
+## Update — 2026-07-13: factory entries — the SD7 "second entry kind"
+
+SD7 deferred *pass factories as entries* ("Needed only for passes parameterised
+per call site … A second entry kind can arrive with its first real registrant").
+That registrant has arrived: play's leeway column-handle resolver (ADR-0116),
+whose pass closes over a per-*client* schema provider (a live `system.columns`
+probe) and so cannot be a process-global `Pass` value. ADR-0116 v1 handled this
+by giving each `Client` its own `Registry`, which kept the pass out of
+`passreg.Default` and therefore out of the `keelson('sql_passes')` catalog — its
+own Consequences noted the gap. This Update builds the deferred mechanism and
+closes it.
+
+**`passreg.Factory`.** A second registrable kind alongside `Entry`: static
+catalog metadata (name, stage, order, description, provenance, declared
+`PassProperties`) plus `Build(binding any) (nanopass.Pass, bool)`. It is
+registered once — into `Default`, by the aggregator (`defaults.RegisterStandard`,
+SD4) — so it appears in the catalog, and is realised into a concrete pass at each
+consumer's application site by calling `Build` with that consumer's binding.
+`Build` returns `ok=false` when the binding does not carry what it needs, and the
+consumer skips it. `(Stage, Name)` is one namespace across both kinds; neither
+may shadow the other.
+
+**Two application modes, deliberately distinct.**
+
+- `ApplyBestEffort(stage, sql, logger)` — unchanged; concrete entries only.
+  Factories are **never** applied here. The introspection `/query` path (SD6)
+  keeps using it, so a per-client rewrite it holds no binding for cannot leak
+  onto it.
+- `ApplyBestEffortBound(stage, sql, binding, logger)` — concrete entries plus
+  the factories that accept `binding`, merged in `(Order, Name)` order, each
+  best-effort. Play's `Client.buildResidual` uses this, passing the leeway
+  resolver as its binding.
+
+Per-client scoping (correct: leeway resolution must not touch `/query`, and the
+pass is endpoint-parameterised) is thereby made orthogonal to catalog
+visibility — the runtime binding is per consumer, the descriptor is
+process-global.
+
+**Catalog.** `Registry.Catalog()` returns a unified read model (`CatalogRow`)
+over entries and factory descriptors; `keelson('sql_passes')` gains a
+`late_bound` boolean column (true for factories). A late-bound row means "this
+rewrite applies only where a consumer supplies a binding", so the catalog again
+reflects every rewrite the process can apply — including play's resolver — the
+SD5/Consequences promise ADR-0116 v1 had quietly broken.
+
+**First (and, in v1, only) registrant.** `defaults.RegisterStandard` registers
+`ResolveColumnNames` as a `Factory` at `StagePreExecute`, order 200 (after
+`identsql`, 100), whose `Build` type-asserts the binding to
+`passes.ColumnResolverI` — so the standard set stays leeway-free, resting only on
+the `nanopass/passes` abstraction. Play no longer builds a per-client registry:
+`installLeewayNameResolution` sets `Client.passBinding` to the resolver and lets
+`Client.passes` default to `Default`. The `QualifyTables(db)`-style factory SD7
+also mentioned remains a future registrant; the mechanism now exists for it.
