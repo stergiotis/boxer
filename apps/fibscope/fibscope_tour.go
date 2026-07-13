@@ -63,39 +63,35 @@ func init() {
 	})
 }
 
-func fibTourInit(_ *c.WidgetIdStack) (state any) {
-	return newApp()
+func fibTourInit(ids *c.WidgetIdStack) (state any) {
+	inst := newApp()
+	inst.ids = ids
+	return inst
 }
 
-func fibTourRenderExplore(_ *c.WidgetIdStack, state any) {
+func fibTourRenderExplore(ids *c.WidgetIdStack, state any) {
 	if inst, ok := state.(*App); ok && inst != nil {
-		ids.Reset()
-		for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-			inst.renderExplore()
-		}
+		inst.ids = ids
+		inst.renderExplore()
 	}
 }
 
-func fibTourRenderTradeoff(_ *c.WidgetIdStack, state any) {
+func fibTourRenderTradeoff(ids *c.WidgetIdStack, state any) {
 	if inst, ok := state.(*App); ok && inst != nil {
-		ids.Reset()
-		for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-			inst.renderTradeoff()
-		}
+		inst.ids = ids
+		inst.renderTradeoff()
 	}
 }
 
 // fibTourRenderExhaust renders just the stats table (with the exhaustion
 // columns) so the tour captures it unclipped, above the fold.
-func fibTourRenderExhaust(_ *c.WidgetIdStack, state any) {
+func fibTourRenderExhaust(ids *c.WidgetIdStack, state any) {
 	if inst, ok := state.(*App); ok && inst != nil {
-		ids.Reset()
-		for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-			recWidth := 0
-			if lo, _, err := fibonacci.SelectFittingTagValueRange(clampMaxExp(inst.maxExp)); err == nil {
-				recWidth = lo.GetTag().GetTagWidth()
-			}
-			inst.renderStatsTable(recWidth)
+		inst.ids = ids
+		recWidth := 0
+		if lo, _, err := fibonacci.SelectFittingTagValueRange(clampMaxExp(inst.maxExp)); err == nil {
+			recWidth = lo.GetTag().GetTagWidth()
 		}
+		inst.renderStatsTable(recWidth)
 	}
 }

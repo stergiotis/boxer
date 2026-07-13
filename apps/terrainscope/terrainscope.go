@@ -27,7 +27,6 @@ import (
 	"math"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -85,14 +84,6 @@ var SwissTilesDir = env.NewPath(env.Spec{
 	Category:    env.CategoryE("swisstopo"),
 	Default:     "~/data/swisstopo",
 })
-
-// ids is the package-level WidgetIdStack. Each frame's render wraps the body
-// in c.IdScope(ids.PrepareSeq(inst.seed)) so two open windows produce
-// disjoint Go-side widget ids even though the stack is shared.
-var ids = c.NewWidgetIdStack()
-
-// instanceCounter feeds per-instance seeds.
-var instanceCounter atomic.Uint64
 
 // Package-shared sampler, built lazily on first request. Shared across
 // windows because it is read-only after construction and the tile-index scan
@@ -168,7 +159,13 @@ type sweepResult struct {
 
 // App is the per-window terrainscope instance.
 type App struct {
-	seed   uint64
+	// ids is the per-instance WidgetIdStack. The host pre-pushes a
+	// window-unique salt onto it before every Frame() call (ADR-0026
+	// §SD9, windowhost.renderWindowBody), so every widget id the app
+	// derives is unique across all concurrently open instances. Captured
+	// from ctx.Ids() in Mount; the app must NOT Reset() it.
+	ids *c.WidgetIdStack
+
 	logger zerolog.Logger
 
 	stage  selectionStageE
@@ -220,7 +217,7 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
-		seed:         instanceCounter.Add(1),
+		ids:          c.NewWidgetIdStack(),
 		logger:       log.Logger,
 		observerH:    defaultObserverH,
 		targetH:      defaultTargetH,
@@ -238,6 +235,7 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	return
 }
@@ -256,22 +254,23 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	return
 }
 
-// Frame renders the app body. Wrapped in IdScope(seed) so per-instance widget
-// ids stay disjoint across multiple open windows.
+// Frame renders the app body. The host has already pre-pushed a window-unique
+// salt onto inst.ids via c.IdScope (windowhost.renderWindowBody, ADR-0026
+// §SD9), so widget ids derived from inst.ids are unique across all
+// concurrently open instances — the app must not Reset() the stack or wrap the
+// body in its own instance salt (doing so discards the host salt and collides
+// with sibling apps that share a label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	ids.Reset()
-	for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-		inst.renderBody()
-	}
+	inst.renderBody()
 	return
 }
 
 func (inst *App) renderBody() {
-	for range c.PanelTopInside(ids.PrepareStr("controls")).Resizable(false).KeepIter() {
+	for range c.PanelTopInside(inst.ids.PrepareStr("controls")).Resizable(false).KeepIter() {
 		inst.renderControls()
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		for dock := range c.DockArea(ids.PrepareStr("ts-dock")) {
+		for dock := range c.DockArea(inst.ids.PrepareStr("ts-dock")) {
 			// Map + the two plots open as tabs in one leaf; drag a tab to
 			// split them into side-by-side panes.
 			dock.InitRoot(dockTabMap, dockTabSweep, dockTabDist)
@@ -319,21 +318,21 @@ func (inst *App) renderControls() {
 
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipObserverH).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("obsH"), inst.observerH, 0, 100).
+			_ = c.SliderF64(inst.ids.PrepareStr("obsH"), inst.observerH, 0, 100).
 				Text("observer").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.observerH)
 		}
 		for range c.HoverText(tipTargetH).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("tgtH"), inst.targetH, 0, 100).
+			_ = c.SliderF64(inst.ids.PrepareStr("tgtH"), inst.targetH, 0, 100).
 				Text("target").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.targetH)
 		}
 	}
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipSweepHalf).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("half"), inst.sweepHalfDeg, 0, 30).
+			_ = c.SliderF64(inst.ids.PrepareStr("half"), inst.sweepHalfDeg, 0, 30).
 				Text("sweep ±").Suffix("°").FixedDecimals(1).SendRespVal(&inst.sweepHalfDeg)
 		}
 		for range c.HoverText(tipSweepStep).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("step"), inst.sweepStepDeg, 0.1, 5).
+			_ = c.SliderF64(inst.ids.PrepareStr("step"), inst.sweepStepDeg, 0.1, 5).
 				Text("step").Suffix("°").FixedDecimals(2).SendRespVal(&inst.sweepStepDeg)
 		}
 	}
@@ -341,31 +340,31 @@ func (inst *App) renderControls() {
 	// fan stays deterministic.
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipSigObsPos).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("sigObsPos"), inst.sigmaObsPos, 0, 50).
+			_ = c.SliderF64(inst.ids.PrepareStr("sigObsPos"), inst.sigmaObsPos, 0, 50).
 				Text("σ obs pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsPos)
 		}
 		for range c.HoverText(tipSigTgtPos).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("sigTgtPos"), inst.sigmaTgtPos, 0, 50).
+			_ = c.SliderF64(inst.ids.PrepareStr("sigTgtPos"), inst.sigmaTgtPos, 0, 50).
 				Text("σ tgt pos").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtPos)
 		}
 	}
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipSigObsH).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("sigObsH"), inst.sigmaObsH, 0, 30).
+			_ = c.SliderF64(inst.ids.PrepareStr("sigObsH"), inst.sigmaObsH, 0, 30).
 				Text("σ obs ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaObsH)
 		}
 		for range c.HoverText(tipSigTgtH).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("sigTgtH"), inst.sigmaTgtH, 0, 30).
+			_ = c.SliderF64(inst.ids.PrepareStr("sigTgtH"), inst.sigmaTgtH, 0, 30).
 				Text("σ tgt ht").Suffix(" m").FixedDecimals(1).SendRespVal(&inst.sigmaTgtH)
 		}
 	}
 	for range c.Horizontal().KeepIter() {
 		for range c.HoverText(tipSamples).KeepIter() {
-			_ = c.SliderF64(ids.PrepareStr("samples"), inst.samples, 0, 64).
+			_ = c.SliderF64(inst.ids.PrepareStr("samples"), inst.samples, 0, 64).
 				Text("samples").FixedDecimals(0).SendRespVal(&inst.samples)
 		}
 	}
-	if c.Button(ids.PrepareStr("reset"), c.Atoms().Text(icons.IconClose+" Reset").Keep()).
+	if c.Button(inst.ids.PrepareStr("reset"), c.Atoms().Text(icons.IconClose+" Reset").Keep()).
 		SendResp().HasPrimaryClicked() {
 		inst.resetSelection()
 	}
@@ -421,8 +420,8 @@ func (inst *App) renderMap() {
 
 	sm := c.CurrentApplicationState.StateManager
 
-	ids.PrepareStr("ts-map")
-	mapId := ids.Derive()
+	inst.ids.PrepareStr("ts-map")
+	mapId := inst.ids.Derive()
 
 	cam := sm.GetWalkersCamera()
 	if cam.Found && cam.Clicked && cam.HoverValid && cam.MapId == mapId {
@@ -445,8 +444,8 @@ func (inst *App) renderMap() {
 		inst.renderFanOverlay(res)
 	}
 
-	ids.PrepareStr("ts-map")
-	mw := c.WalkersMap(ids, swissCenterLat, swissCenterLon, false).
+	inst.ids.PrepareStr("ts-map")
+	mw := c.WalkersMap(inst.ids, swissCenterLat, swissCenterLon, false).
 		Width(mapStageW).Height(mapStageH)
 	if inst.applyZoom {
 		mw = mw.SetZoom(inst.overrideZoom)
@@ -628,7 +627,7 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 	// rays → many entries) has room to overflow without colliding with the
 	// labels above or the panel edge below.
 	c.AddSpace(plotMargin)
-	c.Plot(ids.PrepareStr(fmt.Sprintf("sweep-plot-%d", inst.plotEpoch))).
+	c.Plot(inst.ids.PrepareStr(fmt.Sprintf("sweep-plot-%d", inst.plotEpoch))).
 		Width(mapStageW).Height(plotHeight).
 		XAxisLabel("Distance along ray (m)").YAxisLabel("Elevation (m a.s.l.)").
 		Legend().AllowZoom(true).AllowDrag(true).AllowScroll(false).Send()
@@ -654,7 +653,7 @@ func (inst *App) renderDistPane(res *sweepResult) {
 		c.PlotLine(in.Name, xs, ys).Color(distColorAt(i)).Width(1.8).Send()
 	}
 	c.AddSpace(plotMargin)
-	c.Plot(ids.PrepareStr(fmt.Sprintf("dist-plot-%d", inst.plotEpoch))).
+	c.Plot(inst.ids.PrepareStr(fmt.Sprintf("dist-plot-%d", inst.plotEpoch))).
 		Width(mapStageW).Height(ecdfHeight).
 		XAxisLabel("deviation from nominal (m)").YAxisLabel("cumulative probability").
 		Legend().AllowZoom(true).AllowDrag(true).AllowScroll(false).

@@ -68,36 +68,36 @@ type capTourState struct {
 // the scene's cap pre-selected. seedTourBackends is idempotent, so running it
 // for every Demo's Init is harmless.
 func makeCapTourInit(capId CapId) func(ids *c.WidgetIdStack) (state any) {
-	return func(_ *c.WidgetIdStack) (state any) {
+	return func(ids *c.WidgetIdStack) (state any) {
 		seedTourBackends()
 		inst := newApp()
+		inst.ids = ids
 		inst.selectedCap = capId
 		return &capTourState{app: inst, capId: capId}
 	}
 }
 
-func capTourRenderStateful(_ *c.WidgetIdStack, state any) {
+func capTourRenderStateful(ids *c.WidgetIdStack, state any) {
 	st, ok := state.(*capTourState)
 	if !ok || st == nil {
 		return
 	}
 	seedTourBackends()
 	inst := st.app
+	// Bind the tour-provided id stack onto the App each frame. The TestDriver has
+	// already scoped it (testdriver.go) before calling RenderStateful — the same
+	// role the host salt plays for App.Frame live — so we render on it directly,
+	// with no Reset() or instance-salt scope of our own.
+	inst.ids = ids
 	inst.selectedCap = st.capId
 	spec, ok := Registry[inst.selectedCap]
 	if !ok {
 		return
 	}
-	// The inspector's widgets emit through the package-level id stack (App.Frame
-	// resets + scopes it by the per-instance seed). Reproduce that scope here so
-	// the picker and schematic get disjoint, stable ids.
-	ids.Reset()
-	for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-		inst.renderPicker()
-		c.AddSpace(styletokens.GapItems(inst.density))
-		heading(spec.Display)
-		inst.renderGraph(spec)
-	}
+	inst.renderPicker()
+	c.AddSpace(styletokens.GapItems(inst.density))
+	heading(spec.Display)
+	inst.renderGraph(spec)
 }
 
 // seedTourBackends marks one effective backend per cap, mirroring the carousel's

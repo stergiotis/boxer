@@ -17,7 +17,6 @@ import (
 	"embed"
 	"sort"
 	"sync"
-	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
 
@@ -51,15 +50,6 @@ func init() {
 		capDocs[capId] = markdown.Parse(body)
 	}
 }
-
-// ids is the package-level WidgetIdStack. Frame wraps its body in
-// IdScope(seed) so widget ids are disjoint across multiple inspector
-// windows.
-var ids = c.NewWidgetIdStack()
-
-// instanceCounter feeds per-instance seeds. Stamps each newApp() with
-// a unique uint64.
-var instanceCounter atomic.Uint64
 
 // pendingMu guards pendingSelections — the FIFO queue of cap ids the
 // status-bar clicks push into before opening an inspector. Each
@@ -100,7 +90,13 @@ func popSelection() (capId CapId) {
 // mutable so the in-window picker can switch caps without opening
 // another window.
 type App struct {
-	seed        uint64
+	// ids is the per-instance WidgetIdStack. The host pre-pushes a
+	// window-unique salt onto it before every Frame() call (ADR-0026
+	// §SD9, windowhost.renderWindowBody), so every widget id the app
+	// derives is unique across all concurrently open instances. Captured
+	// from ctx.Ids() in Mount; the app must NOT Reset() it.
+	ids *c.WidgetIdStack
+
 	selectedCap CapId
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at newApp.
@@ -111,27 +107,36 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
-		seed:        instanceCounter.Add(1),
+		ids:         c.NewWidgetIdStack(),
 		selectedCap: popSelection(),
 		density:     styletokens.DensityFromEnv(),
 	}
 	return
 }
 
-func (inst *App) Manifest() (m app.Manifest)                { m = manifest; return }
-func (inst *App) Mount(ctx app.MountContextI) (err error)   { return }
+func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
+
+func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ids = ctx.Ids()
+	return
+}
+
 func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 
+// Frame renders the inspector body. The host has already pre-pushed a
+// window-unique salt onto inst.ids via c.IdScope (windowhost.
+// renderWindowBody, ADR-0026 §SD9), so widget ids derived from inst.ids
+// are unique across all concurrently open instances — the app must not
+// Reset() the stack or wrap the body in its own instance salt (doing so
+// discards the host salt and collides with sibling apps that share a
+// label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	ids.Reset()
-	for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-		inst.renderBody()
-	}
+	inst.renderBody()
 	return
 }
 
 func (inst *App) renderBody() {
-	for range c.PanelTopInside(ids.PrepareStr("hdr")).Resizable(false).KeepIter() {
+	for range c.PanelTopInside(inst.ids.PrepareStr("hdr")).Resizable(false).KeepIter() {
 		inst.renderPicker()
 	}
 	for range c.PanelCentralInside().KeepIter() {
@@ -153,7 +158,7 @@ func (inst *App) renderPicker() {
 		for _, capId := range allCapIdsOrdered() {
 			spec := Registry[capId]
 			active := capId == inst.selectedCap
-			if c.SelectableLabel(ids.PrepareStr("pick-"+string(capId)), active, spec.Display).
+			if c.SelectableLabel(inst.ids.PrepareStr("pick-"+string(capId)), active, spec.Display).
 				SendResp().HasPrimaryClicked() {
 				inst.selectedCap = capId
 			}
@@ -206,8 +211,8 @@ func (inst *App) renderCapDoc(spec CapSpec) {
 		c.Label(spec.Description).Send()
 		return
 	}
-	for range c.IdScope(ids.PrepareStr("doc-" + string(spec.Id))) {
-		doc.Render(ids)
+	for range c.IdScope(inst.ids.PrepareStr("doc-" + string(spec.Id))) {
+		doc.Render(inst.ids)
 	}
 }
 

@@ -53,24 +53,29 @@ func init() {
 // makeTourInit returns an Init that builds a splash App fixed to tab. Mount
 // normally loads the bundled artwork/NOTICE, but the gallery and tour build
 // instances without Mount, so the (idempotent, sync.Once) loadAssets runs
-// here. newApp assigns a process-unique seed used to scope widget ids.
+// here. The App is bound to the tour-provided id stack (inst.ids), onto
+// which the host/tour pushes a window-unique salt before each frame.
 func makeTourInit(tab tabE) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		loadAssets()
 		inst := newApp()
 		inst.tab = tab
+		inst.ids = ids
 		state = inst
 		return
 	}
 }
 
-// tourRenderStateful renders the splash App. splashscreen manages its own
-// package-global id stack scoped by inst.seed inside Frame, so the
-// host-supplied id stack is intentionally unused here.
-func tourRenderStateful(_ *c.WidgetIdStack, state any) {
+// tourRenderStateful renders the splash App on the host/tour-provided id
+// stack: it rebinds inst.ids to the freshly-scoped stack each frame, then
+// drives Frame, which renders on inst.ids without Reset()ing it — the
+// window-unique salt on that stack keeps widget ids disjoint across
+// instances.
+func tourRenderStateful(ids *c.WidgetIdStack, state any) {
 	inst, ok := state.(*App)
 	if !ok || inst == nil {
 		return
 	}
+	inst.ids = ids
 	_ = inst.Frame(nil)
 }

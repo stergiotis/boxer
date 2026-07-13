@@ -122,11 +122,15 @@ func ensureArchLayout() (*layeredgraph.Layout, map[string]nodeMeta, error) {
 	return capArchLayout, capArchNodeMeta, capArchLayoutErr
 }
 
-// archIDSalt is a high-entropy constant; graphIDBase adds the per-instance seed
-// so two open inspector windows don't collide their canvas / sense-region ids.
+// archIDSalt is a high-entropy constant that namespaces this widget's canvas /
+// sense-region ids. view.Render lays its own fresh WidgetIdStack over the base
+// graphIDBase returns, so the base must carry the per-window entropy itself:
+// graphIDBase XORs archIDSalt with the window-unique host salt already on
+// inst.ids (pushed by windowhost.renderWindowBody, ADR-0026 §SD9) so two open
+// inspector windows derive disjoint canvas / sense-region ids.
 const archIDSalt uint64 = 0x9e3779b97f4a7c15
 
-func (inst *App) graphIDBase() uint64 { return archIDSalt + inst.seed }
+func (inst *App) graphIDBase() uint64 { return inst.ids.PrepareHighEntropy(archIDSalt).Derive() }
 
 const (
 	// chromeW reserves room for the ScrollArea's vertical scrollbar so the
@@ -347,7 +351,7 @@ func (inst *App) renderActivityStrip(canvasW float32, selected CapId) {
 			c.PaintRectFilled(bx0, baselineY-bh, bx1, baselineY, 0.0, color.Hex(bc)).Send()
 		}
 	}
-	c.PaintCanvas(ids.PrepareStr("activity-strip"), canvasW, archStripH).
+	c.PaintCanvas(inst.ids.PrepareStr("activity-strip"), canvasW, archStripH).
 		Background(color.Hex(bgFill)).
 		Send()
 }

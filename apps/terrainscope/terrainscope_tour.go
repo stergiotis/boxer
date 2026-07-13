@@ -54,28 +54,25 @@ func init() {
 	})
 }
 
-func terrainTourInit(_ *c.WidgetIdStack) (state any) {
+func terrainTourInit(ids *c.WidgetIdStack) (state any) {
 	inst := newApp()
+	inst.ids = ids
 	inst.stage = selectionStagePt2
 	inst.result = synthSweepResult()
 	return inst
 }
 
-func terrainTourRenderSweep(_ *c.WidgetIdStack, state any) {
+func terrainTourRenderSweep(ids *c.WidgetIdStack, state any) {
 	if inst, ok := state.(*App); ok && inst != nil {
-		ids.Reset()
-		for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-			inst.renderSweepPanel(inst.result)
-		}
+		inst.ids = ids
+		inst.renderSweepPanel(inst.result)
 	}
 }
 
-func terrainTourRenderDist(_ *c.WidgetIdStack, state any) {
+func terrainTourRenderDist(ids *c.WidgetIdStack, state any) {
 	if inst, ok := state.(*App); ok && inst != nil {
-		ids.Reset()
-		for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-			inst.renderDistPane(inst.result)
-		}
+		inst.ids = ids
+		inst.renderDistPane(inst.result)
 	}
 }
 

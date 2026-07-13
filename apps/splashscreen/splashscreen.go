@@ -7,7 +7,6 @@ import (
 	_ "image/png" // register the PNG decoder for the embedded splash asset
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -30,14 +29,6 @@ const (
 // splashImgKey is both the widget-id key and the version-tracker key for the
 // splash texture; the two must stay 1:1 (see ImageVersionTracker docs).
 const splashImgKey = "splash-img"
-
-// ids is the package-level widget-id stack. Frame scopes its body under a
-// per-instance seed (IdScope) so two splashscreen windows keep disjoint
-// widget ids.
-var ids = c.NewWidgetIdStack()
-
-// instanceCounter stamps each newApp() with a unique seed.
-var instanceCounter atomic.Uint64
 
 const (
 	splashAssetPath = "assets/splash.png"
@@ -128,13 +119,19 @@ func loadAssets() {
 
 // App is the per-window splashscreen instance.
 type App struct {
-	seed    uint64
+	// ids is the per-instance WidgetIdStack. The host pre-pushes a
+	// window-unique salt onto it before every Frame() call (ADR-0026
+	// §SD9, windowhost.renderWindowBody), so every widget id the app
+	// derives is unique across all concurrently open instances. Captured
+	// from ctx.Ids() in Mount; the app must NOT Reset() it.
+	ids *c.WidgetIdStack
+
 	density styletokens.DensityE
 	tab     tabE
 	// imgTracker gates the splash texture upload: full pixels on the first
 	// render, an empty slice ("use cached") thereafter. Per-instance because
 	// the widget id — and thus the Rust-side GPU cache key — is scoped by
-	// inst.seed.
+	// the host-salted inst.ids stack.
 	imgTracker *c.ImageVersionTracker[string]
 }
 
@@ -142,7 +139,7 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
-		seed:       instanceCounter.Add(1),
+		ids:        c.NewWidgetIdStack(),
 		density:    styletokens.DensityFromEnv(),
 		tab:        tabSplash,
 		imgTracker: c.NewImageVersionTracker[string](),
@@ -153,6 +150,7 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ids = ctx.Ids()
 	loadAssets()
 	if splashErr != nil {
 		// Expected when the git-ignored artwork is absent (e.g. a fresh
@@ -166,16 +164,22 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 
+// Frame renders one frame of the splashscreen window body. The host has
+// already pre-pushed a window-unique salt onto inst.ids via c.IdScope
+// (windowhost.renderWindowBody, ADR-0026 §SD9), so widget ids derived
+// from inst.ids are unique across all concurrently open instances — the
+// app must not Reset() the stack or wrap the body in its own instance
+// salt (doing so discards the host salt and collides with sibling apps
+// that share a label string). When driven outside the host (the tour
+// calls Frame directly), the caller must bind inst.ids to its own
+// scoped stack first.
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	ids.Reset()
-	for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-		inst.renderBody()
-	}
+	inst.renderBody()
 	return
 }
 
 func (inst *App) renderBody() {
-	for range c.PanelTopInside(ids.PrepareStr("tabs")).Resizable(false).KeepIter() {
+	for range c.PanelTopInside(inst.ids.PrepareStr("tabs")).Resizable(false).KeepIter() {
 		inst.renderTabBar()
 	}
 	for range c.PanelCentralInside().KeepIter() {
@@ -201,7 +205,7 @@ func (inst *App) renderTabBar() {
 
 func (inst *App) tabButton(tab tabE, key string, label string) {
 	active := inst.tab == tab
-	if c.SelectableLabel(ids.PrepareStr(key), active, label).SendResp().HasPrimaryClicked() {
+	if c.SelectableLabel(inst.ids.PrepareStr(key), active, label).SendResp().HasPrimaryClicked() {
 		if tab == tabSplash {
 			// Force one re-upload on re-entry: while another tab was shown the
 			// Image widget did not render, so the Rust-side texture may have
@@ -233,7 +237,7 @@ func (inst *App) renderSplash() {
 	// so when another app renders in the same frame it clobbers the value and
 	// the image shrinks to whatever box that other window left behind.
 	for range c.VerticalCentered().KeepIter() {
-		c.Image(ids.PrepareStr(splashImgKey), splashW, splashH, 1,
+		c.Image(inst.ids.PrepareStr(splashImgKey), splashW, splashH, 1,
 			uint8(c.FitAspectMaxE), 0, 0,
 			uint8(c.FilterLinearE), c.TintNoneRgba, pixels).
 			Send()

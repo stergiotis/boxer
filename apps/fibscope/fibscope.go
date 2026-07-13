@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"sync/atomic"
 
 	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog"
@@ -110,18 +109,16 @@ var ingressRates = []struct {
 	{"10MHz", 1e7},
 }
 
-// ids is the package-level WidgetIdStack. Each frame's render wraps the body in
-// c.IdScope(ids.PrepareSeq(inst.seed)) so two open windows produce disjoint
-// Go-side widget ids even though the stack is shared. (terrainscope pattern.)
-var ids = c.NewWidgetIdStack()
-
-// instanceCounter feeds per-instance seeds.
-var instanceCounter atomic.Uint64
-
 // App is the per-window fibscope instance. The only state is the id under
 // inspection plus the advisor's magnitude input; everything else derives.
 type App struct {
-	seed   uint64
+	// ids is the per-instance WidgetIdStack. The host pre-pushes a
+	// window-unique salt onto it before every Frame() call (ADR-0026
+	// §SD9, windowhost.renderWindowBody), so every widget id the app
+	// derives is unique across all concurrently open instances. Captured
+	// from ctx.Ids() in Mount; the app must NOT Reset() it.
+	ids *c.WidgetIdStack
+
 	logger zerolog.Logger
 
 	// id is the single source of truth on the Explore tab — a TaggedId's raw
@@ -159,7 +156,7 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{
-		seed:               instanceCounter.Add(1),
+		ids:                c.NewWidgetIdStack(),
 		logger:             log.Logger,
 		id:                 defaultId,
 		maxExp:             1e6,
@@ -171,25 +168,27 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
+	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	return
 }
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 
-// Frame renders the app body. Wrapped in IdScope(seed) so per-instance widget
-// ids stay disjoint across multiple open windows.
+// Frame renders the app body. The host has already pre-pushed a window-unique
+// salt onto inst.ids via c.IdScope (windowhost.renderWindowBody, ADR-0026
+// §SD9), so every widget id the app derives from inst.ids is unique across all
+// concurrently open instances — the app must not Reset() the stack or wrap the
+// body in its own instance salt (doing so would discard the host salt and
+// collide with sibling apps that share a label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
-	ids.Reset()
-	for range c.IdScope(ids.PrepareSeq(inst.seed)) {
-		inst.renderBody()
-	}
+	inst.renderBody()
 	return
 }
 
 func (inst *App) renderBody() {
 	for range c.PanelCentralInside().KeepIter() {
-		for dock := range c.DockArea(ids.PrepareStr("fib-dock")) {
+		for dock := range c.DockArea(inst.ids.PrepareStr("fib-dock")) {
 			dock.InitRoot(dockTabExplore, dockTabTradeoff)
 			for range dock.Tab(dockTabExplore, "Explore") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
@@ -302,7 +301,7 @@ func (inst *App) renderControls() {
 	for range c.Horizontal().KeepIter() {
 		tv := inst.tagScrub.sync(uint64(d.tagValue))
 		for range c.HoverText(tipTagValue).KeepIter() {
-			if c.DragValueU64(ids.PrepareStr("tagval"), tv).Speed(1).Prefix("tag ").
+			if c.DragValueU64(inst.ids.PrepareStr("tagval"), tv).Speed(1).Prefix("tag ").
 				SendRespVal(&inst.tagScrub.draft).HasChanged() {
 				inst.setTagValue(inst.tagScrub.draft)
 				inst.tagScrub.commit(uint64(decode(inst.id).tagValue))
@@ -310,7 +309,7 @@ func (inst *App) renderControls() {
 		}
 		b := inst.bodyScrub.sync(uint64(d.body))
 		for range c.HoverText(tipBody).KeepIter() {
-			if c.DragValueU64(ids.PrepareStr("body"), b).Speed(1).Prefix("body ").
+			if c.DragValueU64(inst.ids.PrepareStr("body"), b).Speed(1).Prefix("body ").
 				SendRespVal(&inst.bodyScrub.draft).HasChanged() {
 				inst.setBody(inst.bodyScrub.draft)
 				inst.bodyScrub.commit(uint64(decode(inst.id).body))
@@ -323,15 +322,15 @@ func (inst *App) renderControls() {
 			// always > 2^53) and manages its own text draft — including
 			// re-seeding when inst.id changes from a preset or a tag/body edit
 			// (its "Stubborn Text" override). Decimal or 0x-hex both parse.
-			_ = c.U64Edit(ids.PrepareStr("raw"), inst.id).
+			_ = c.U64Edit(inst.ids.PrepareStr("raw"), inst.id).
 				DesiredWidth(320).HintText("id — decimal or 0x-hex").
 				SendRespVal(&inst.id)
 		}
-		if c.Button(ids.PrepareStr("preset-ex"), c.Atoms().Text("example").Keep()).
+		if c.Button(inst.ids.PrepareStr("preset-ex"), c.Atoms().Text("example").Keep()).
 			SendResp().HasPrimaryClicked() {
 			inst.id = defaultId
 		}
-		if c.Button(ids.PrepareStr("preset-inv"), c.Atoms().Text("invalid").Keep()).
+		if c.Button(inst.ids.PrepareStr("preset-inv"), c.Atoms().Text("invalid").Keep()).
 			SendResp().HasPrimaryClicked() {
 			inst.id = invalidId
 		}
@@ -492,7 +491,7 @@ func (inst *App) renderTradeoff() {
 	c.Separator().Send()
 
 	for range c.HoverText(tipMaxExp).KeepIter() {
-		_ = c.SliderF64(ids.PrepareStr("maxexp"), inst.maxExp, 1, advisorMaxExpCeil).
+		_ = c.SliderF64(inst.ids.PrepareStr("maxexp"), inst.maxExp, 1, advisorMaxExpCeil).
 			Logarithmic(true).Text("max ids / category").FixedDecimals(0).
 			SendRespVal(&inst.maxExp)
 	}
@@ -537,7 +536,7 @@ func (inst *App) renderTradeoffPlot(recWidth int) {
 			Color(colComma).Width(1.5).Send()
 	}
 	c.AddSpace(margin)
-	c.Plot(ids.PrepareStr("tradeoff-plot")).Width(stageW).Height(240).
+	c.Plot(inst.ids.PrepareStr("tradeoff-plot")).Width(stageW).Height(240).
 		XAxisLabel("tag width (bits)").YAxisLabel("bits (log2)").
 		Legend().AllowZoom(true).AllowDrag(true).AllowScroll(false).Send()
 	c.AddSpace(margin)
@@ -587,7 +586,7 @@ func (inst *App) renderStatsTable(recWidth int) {
 	}
 	rows := len(classes)
 
-	t := c.Table(ids.PrepareStr("stats"), 20, uint64(rows)).Striped(true).Vscroll(true).MaxScrollHeight(320)
+	t := c.Table(inst.ids.PrepareStr("stats"), 20, uint64(rows)).Striped(true).Vscroll(true).MaxScrollHeight(320)
 	// Scroll the recommended row into view when it changes, but leave the user
 	// free to scroll otherwise.
 	if markerRow >= 0 && recWidth != inst.statsScrolledWidth {
