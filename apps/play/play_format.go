@@ -13,7 +13,15 @@ import (
 // formatCell turns (col, row) of a RecordBatch into a display string.
 // Returns the empty string for NULL or out-of-range.
 func formatCell(rec arrow.RecordBatch, col int, row int64) string {
-	arr := rec.Column(col)
+	return formatArrayElem(rec.Column(col), row)
+}
+
+// formatArrayElem formats the row-th element of an arbitrary Arrow array as a
+// display string, empty for NULL or out-of-range. formatCell is the top-level
+// (rec, col) entry point; the per-attribute leeway view (play_table_attr.go)
+// reuses this on the *inner* array of a List value column to render a single
+// exploded scalar, so an exploded cell reads exactly as its per-DB-row cell.
+func formatArrayElem(arr arrow.Array, row int64) string {
 	if row < 0 || int(row) >= arr.Len() {
 		return ""
 	}

@@ -1312,6 +1312,79 @@ the relayout-on-bind. En passant the first mixed labeled/unlabeled edge
 consumer surfaced a widget defect (unlabeled edges reading back
 Graphviz's unexpanded `\E` default), fixed at the engine's parse seam.
 
+### 2026-07-13 — Table pane leeway display modes (the options bar)
+
+Presentation-side extension of the Table panel (slice 2), not a semantics
+change: a collapsible **Leeway display** bar above the grid whose three
+controls *combine* (they are orthogonal, not mutually-exclusive modes) to
+reshape the same result through leeway's own structure —
+
+- **row granularity** — *one grid row per DB row* (the columnar grid) vs
+  *one grid row per tagged-value attribute* (the un-pivoted walk);
+- **reveal support columns** — the machine-readable `card`/`len` structure,
+  hidden by default;
+- **reveal membership columns** — the set-membership encoding, hidden by
+  default.
+
+The bar appears only for a leeway-shaped result (a non-leeway aggregation or
+join has no structure to reshape), so it doubles as the "this result is
+leeway" affordance.
+
+The three controls share one classification. A new
+`streamreadaccess.ClassifyArrowColumns` walks the IR the schema-driven
+Driver already builds and returns, per physical Arrow column, its section
+(a tagged `SectionName` or a backbone `PlainItemType`), its display bucket
+(value / support / membership — collapsing the dozen `ColumnRoleE` variants
+and the IR sub-type), its backbone flag, and its collection shape. It reuses
+the Driver's own name resolver (factored out of `prepareFromSchema`, so the
+two cannot drift) but keeps *every* resolved column, including the
+cardinality/length support columns the Driver consumes internally as cursors
+and never surfaces. `CardDriver.ColumnClasses` caches it per schema — the
+same single leeway-schema reconstruction point the Detail and Schema panes
+read, so the whole app agrees on what each column is.
+
+- **per-DB-row** is a pure column-visibility filter over the existing
+  egui_table grid: value + backbone columns always show, support/membership
+  show only when toggled, unrecognised columns (implicit `_`-columns,
+  projected-in expressions) are treated as data and shown. One grid row still
+  equals one DB row and the row-click → `selection` contract (SD8) is
+  untouched. The zero-value default (both reveals off) drops the
+  machine-readable encoding detail, so a leeway `SELECT *` reads as its
+  values and backbone rather than the raw physical dump.
+- **per-attribute** keeps the *same columns* as the per-DB-row grid but
+  explodes each section down its own rows so every cell holds one scalar. A
+  section with N attributes for a DB row occupies N stacked rows; a non-scalar
+  (array/set) value column further explodes each item to its own row; sections
+  un-nest independently, so cells align only *within* a section, never across
+  them. No value repeats — the `#` gutter and the backbone columns show once on
+  the DB row's top row (blank below), a per-attribute membership/support value
+  shows once on its attribute's first row, array items fill straight down, and
+  everything else is empty. The exploded value + backbone cells come from the
+  Driver's walk (it owns the nested-array cardinality); the revealed
+  membership/support columns are read raw per attribute from the batch — the
+  same physical value the per-DB-row grid shows — so the sink does not
+  implement MembershipSinkI (the Driver skips membership rendering). A row click
+  selects the **source DB row** (`pageStart + entityIdx`, exact because the
+  Driver walks one entity per Arrow row), so per-attribute rows cross-filter the
+  app exactly as DB rows do.
+
+Deliberately not built: section-grouped column *bands* / reordering in the
+per-DB-row grid (a visibility filter in physical order — where a section's
+columns are already contiguous — meets the ask without it).
+
+Verified live against a leeway facts table (backbone + tagged sections +
+verbatim memberships + cardinality/length support): the bar gates on
+leeway-shape; the default grid shows backbone + values only; the reveal
+toggles add the support/membership columns; the per-attribute view explodes
+each section down its own rows (one scalar per cell, membership/support as raw
+per-attribute columns aligned within the section, `#`/backbone once per DB
+row); and a per-attribute row click — including a continuation row — drives the
+Detail card to the right DB row. En passant a layout defect surfaced and was fixed — a
+`c.Separator()` in the bar's horizontal control row is a *vertical* rule that
+egui sizes to the available height, and inside the dock's unbounded-height
+body `ScrollArea` it ballooned and pushed the grid off the bottom of the
+pane; replaced with a fixed horizontal gap.
+
 ## References
 
 Internal:

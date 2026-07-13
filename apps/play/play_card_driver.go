@@ -41,8 +41,9 @@ type CardDriver struct {
 	schema  *arrow.Schema
 	driver  *streamreadaccess.Driver
 	emitter *leewaywidgets.Table2CardEmitter
-	usable  bool              // false if the schema is not leeway-shaped
-	table   *common.TableDesc // reconstructed leeway schema, nil when not leeway-shaped
+	usable  bool                          // false if the schema is not leeway-shaped
+	table   *common.TableDesc             // reconstructed leeway schema, nil when not leeway-shaped
+	classes []streamreadaccess.ColumnClass // per-Arrow-column leeway classification, nil when not leeway-shaped
 }
 
 // NewCardDriver returns an empty driver. EnsureFor must be called before the
@@ -63,6 +64,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		inst.emitter = nil
 		inst.usable = false
 		inst.table = nil
+		inst.classes = nil
 		return false
 	}
 	// Pointer-identity cache (same idiom as the Projector's forSchema and
@@ -79,6 +81,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	inst.emitter = nil
 	inst.usable = false
 	inst.table = nil
+	inst.classes = nil
 
 	nFields := schema.NumFields()
 	colNames := make([]string, 0, nFields)
@@ -131,6 +134,11 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		log.Warn().Err(err).Msg("play: ir load failed — falling back")
 		return false
 	}
+	// Classify every physical column now that the IR is built. Like inst.table
+	// this is published before the (heavier, card-only) Driver construction, so
+	// the Table pane's display modes still get the classification on a schema
+	// where the Driver build later fails. Keyed by Arrow column index.
+	inst.classes = streamreadaccess.ClassifyArrowColumns(ir, conv, schema, tableRowConfig)
 	driver, err := streamreadaccess.NewDriverFromSchema(
 		&tblDesc, ir,
 		streamreadaccess.DefaultFormatters(),
@@ -163,6 +171,18 @@ func (inst *CardDriver) Driver() *streamreadaccess.Driver {
 // current schema first (it is, every frame, via the Detail card).
 func (inst *CardDriver) TableDesc() *common.TableDesc {
 	return inst.table
+}
+
+// ColumnClasses returns the per-Arrow-column leeway classification for the
+// current result — each column's section, role bucket (value / support /
+// membership), backbone flag, and collection shape — or nil when the schema is
+// not leeway-shaped. Like TableDesc it is derived once per schema in EnsureFor
+// (the play app's single leeway-schema reconstruction point); the Table pane
+// reads it to group and filter result columns by section for its leeway display
+// modes. Keyed by ArrowIdx — a schema column absent from the slice is
+// un-classified (non-leeway, implicit, or projected-in) and shown verbatim.
+func (inst *CardDriver) ColumnClasses() []streamreadaccess.ColumnClass {
+	return inst.classes
 }
 
 // SetTagClickHandler wires a clipboard / filter pivot callback through to the

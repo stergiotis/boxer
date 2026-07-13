@@ -192,6 +192,13 @@ type PlayApp struct {
 	cards               *CardDriver
 	projector           *Projector
 
+	// tableOpts holds the Table pane's leeway display-mode configuration — the
+	// options bar's three orthogonal controls (row granularity, reveal support
+	// columns, reveal membership columns; see play_table_leeway.go). The zero
+	// value is the default view (one row per DB row, support + membership hidden);
+	// the bar only appears when the result is leeway-shaped.
+	tableOpts tableDisplayOpts
+
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
 	// a leeway TableDesc inferred from the active result's Arrow schema (plain
 	// opaque columns — tagged sections/memberships aren't recoverable from an
@@ -1662,6 +1669,13 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 		inst.pager.Reset()
 	}
 	inst.pager.Configure(rec.NumRows())
+	// Leeway display-mode bar: a collapsible toolbar of the three orthogonal
+	// controls (row granularity, reveal support / membership columns). Shown only
+	// for a leeway-shaped result — a non-leeway result has no structure to reshape
+	// — so it also serves as the "this result is leeway" affordance.
+	if inst.leewayColumnClasses(schema) != nil {
+		inst.renderTableOptionsBar()
+	}
 	// Give the pager strip vertical breathing room off the tab bar and rule it
 	// off from the grid, so the toolbar reads as its own band rather than being
 	// jammed against the table's first header row.
@@ -1863,7 +1877,14 @@ func (inst *PlayApp) renderResultsFailed() {
 
 func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, selectedRow int64, emit SignalEmitterI) {
 	ids := inst.ids
-	ncols := int(rec.NumCols())
+	// visCols is the ordered set of Arrow columns to render: every column for a
+	// non-leeway result, or the value + backbone columns plus whichever support /
+	// membership columns the options bar reveals for a leeway result. egui_table
+	// column positions are 1-based after the "#" selector, so table position p
+	// renders visCols[p-1]. Button ids key on the Arrow column index (not the
+	// display position) so revealing/hiding a column never shifts another
+	// column's cell identity.
+	visCols := inst.visibleTableCols(schema)
 	totalRows := rec.NumRows()
 
 	// egui_table draws cell content flush to the cell edge ("Does not add any
@@ -1899,8 +1920,8 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// changes, i.e. on a new query.
 	inst.ensureColLabels(schema)
 	inst.ensureColWidths(rec, schema, pageStart, pageEnd)
-	for col := 0; col < ncols; col++ {
-		c.EtColumn(inst.colWidths[col]).Resizable(true).Send()
+	for _, arrowCol := range visCols {
+		c.EtColumn(inst.colWidths[arrowCol]).Resizable(true).Send()
 	}
 
 	et := c.EndETable(ids.PrepareStr("results"),
@@ -1932,13 +1953,14 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			}
 		}
 	}
-	for col := 0; col < ncols; col++ {
-		if vis, _ := et.ColVisible(uint32(col + 1)); !vis {
+	for pos, arrowCol := range visCols {
+		colPos := uint32(pos + 1)
+		if vis, _ := et.ColVisible(colPos); !vis {
 			continue
 		}
-		for range et.Headers(0, uint32(col+1)) {
+		for range et.Headers(0, colPos) {
 			c.AddSpace(cellPadX)
-			field := schema.Field(col)
+			field := schema.Field(arrowCol)
 			if label := inst.colLabels[field.Name]; label != "" {
 				// Friendly leeway handle; the physical name is on hover so it
 				// stays available (e.g. to copy) without cluttering the header.
@@ -1992,15 +2014,15 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				}
 			}
 		}
-		for col := 0; col < ncols; col++ {
-			colPlus1 := uint32(col + 1)
-			if vis, _ := et.ColVisible(colPlus1); !vis {
+		for pos, arrowCol := range visCols {
+			colPos := uint32(pos + 1)
+			if vis, _ := et.ColVisible(colPos); !vis {
 				continue
 			}
-			for range et.Cells(local, colPlus1) {
+			for range et.Cells(local, colPos) {
 				c.AddSpace(cellPadX)
-				text := formatCell(rec, col, absRow)
-				if c.Button(ids.PrepareSeq(rowBase+uint64(col)+1),
+				text := formatCell(rec, arrowCol, absRow)
+				if c.Button(ids.PrepareSeq(rowBase+uint64(arrowCol)+1),
 					c.Atoms().BeginRichText(text).Monospace().End().Keep()).
 					Frame(false).
 					Selected(selected).
