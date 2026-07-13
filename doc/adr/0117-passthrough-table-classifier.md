@@ -135,3 +135,39 @@ set-op exclusion including a mid-chain `UNION DISTINCT`; resolve-through
 subqueries and CTEs with an impure inner layer stopping, a recursive CTE
 excluded, and a set operator inside a `WHERE … IN` filter not tainting the outer
 table. `go build`, `go vet`, `go test` pass for the touched package.
+
+## Updates
+
+### 2026-07-13 — duplicate CTE names in one WITH clause fail closed
+
+A fourth fork, found after acceptance and resolved to the conservative side like
+the other three. A `WITH` clause may bind the same name twice —
+`WITH t AS (SELECT * FROM t1), t AS (SELECT * FROM t2) SELECT * FROM t`. Grammar1
+parses it, so `BuildScopes` produced two `t` definitions and resolve-through took
+the **first** (`t1`). That is the one answer no ClickHouse gives: the default
+analyzer rejects the query outright — `Code 179 MULTIPLE_EXPRESSIONS_FOR_ALIAS`,
+"CTE with name t already exists" — so it never runs, while the legacy analyzer
+(`enable_analyzer=0`) lets the **last** definition win (`t2`). First-in-source
+matched neither.
+
+For this classifier that is the dangerous direction. The query would be badged as
+a 1:1 read of `t1`, inviting a row/column policy on `t1`, while under legacy
+execution it returns `t2` and under the default it returns nothing — so
+`WITH t AS (SELECT * FROM public), t AS (SELECT * FROM secret) SELECT * FROM t`
+would name the wrong table as the one to secure.
+
+The fix flags, during scope construction, every definition of a name bound more
+than once in a single clause (`CTEDef.Ambiguous`, set per-clause in
+`buildCTEDefs`), and `ExtractPassthroughTables` then reports **no** tables for any
+query containing such a clause — empty, not an error, leaving the caller's
+fail-closed handling unchanged. The check is global, matching the engine, which
+rejects at `WITH`-clause construction regardless of use: an unreferenced
+duplicate, or one beside an otherwise-clean sibling, poisons the whole query too.
+
+The boundary is same-clause rebinding only. Legal cross-clause shadowing — an
+inner `WITH` redefining an outer name — binds each name once per clause, is
+accepted by both analyzers, and still classifies (resolving to the inner table);
+it is built by a separate pass and never flagged. Five cases were added to the
+table for the duplicate (referenced, unreferenced, beside a clean sibling, nested
+in a subquery) and the shadowing it must not over-reject, their expected values
+cross-checked against clickhouse-local 26.6 under the default analyzer.

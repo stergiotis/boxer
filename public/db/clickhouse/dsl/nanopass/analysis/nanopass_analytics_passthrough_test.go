@@ -111,6 +111,29 @@ func TestExtractPassthroughTables(t *testing.T) {
 		{"cte_inner_derived", `WITH cte AS (SELECT a, b+1 AS c FROM t) SELECT a FROM cte`, []string{}},
 		{"cte_chained", `WITH a AS (SELECT x FROM t), b AS (SELECT x FROM a) SELECT x FROM b`, []string{"t"}},
 		{"cte_recursive", `WITH RECURSIVE r AS (SELECT a FROM t UNION ALL SELECT a FROM r) SELECT a FROM r`, []string{}},
+
+		// A WITH clause that binds one name twice is rejected outright by
+		// ClickHouse's default analyzer ("CTE with name t already exists",
+		// MULTIPLE_EXPRESSIONS_FOR_ALIAS) — the query never runs — so classify
+		// fail-closed to empty rather than resolve to one arbitrary binding.
+		// Resolving to the *first* binding (t1) was the former behaviour and is
+		// what neither analyzer does: the default rejects, the legacy analyzer
+		// takes the last. All expectations here are verified against
+		// clickhouse-local 26.6 with enable_analyzer=1 (the default).
+		{"cte_duplicate_name", `WITH t AS (SELECT * FROM t1), t AS (SELECT * FROM t2) SELECT * FROM t`, []string{}},
+		// The duplicate poisons the whole query even when no branch references
+		// it — the engine rejects at WITH-clause construction, regardless of use —
+		// so the otherwise-clean `other` is not reported either.
+		{"cte_duplicate_unreferenced", `WITH t AS (SELECT * FROM t1), t AS (SELECT * FROM t2) SELECT * FROM other`, []string{}},
+		{"cte_duplicate_with_clean_sibling", `WITH t AS (SELECT * FROM t1), t AS (SELECT * FROM t2), u AS (SELECT * FROM t3) SELECT * FROM u`, []string{}},
+		// A duplicate in a nested subquery's WITH poisons the whole query the
+		// same way (the flag rides the descendant scope reached by FlattenScopes).
+		{"cte_duplicate_nested", `SELECT * FROM (WITH t AS (SELECT * FROM t1), t AS (SELECT * FROM t2) SELECT * FROM t)`, []string{}},
+		// Legal cross-clause shadowing (an inner WITH redefining an outer name)
+		// binds each name once per clause; ClickHouse accepts it (reads the inner
+		// table) and it must still classify — only a same-clause rebinding fails
+		// closed.
+		{"cte_nested_shadow_ok", `WITH t AS (SELECT * FROM outer_t) SELECT * FROM (WITH t AS (SELECT * FROM inner_t) SELECT * FROM t)`, []string{"inner_t"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

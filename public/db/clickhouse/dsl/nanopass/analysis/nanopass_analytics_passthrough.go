@@ -41,6 +41,15 @@ const maxPassthroughDepth = 64
 // body — makes that whole chain non-1:1, since it dedups or set-combines the
 // multiset.
 //
+// A WITH clause that binds one name more than once is rejected outright by
+// ClickHouse's default analyzer ("CTE with name t already exists") — the query
+// never runs — so the whole query classifies as empty (fail closed) rather than
+// resolve the reference to one arbitrary binding: first-in-source (this code's
+// former behaviour) is what neither analyzer does, since the default rejects and
+// the legacy analyzer takes the last. The check is global, matching the engine:
+// even a duplicate no branch references still poisons the query. Legal
+// cross-clause shadowing (an inner WITH redefining an outer name) is unaffected.
+//
 // err is non-nil only when scope construction fails (a tree not produced by
 // [nanopass.Parse]); "no passthrough tables" is an empty slice, not an error.
 // A query that does not parse has no passthrough tables by definition: call
@@ -58,8 +67,29 @@ func ExtractPassthroughTables(pr *nanopass.ParseResult, defaultDatabase string) 
 		return
 	}
 	out := make(map[TableRef]struct{}, 4)
-	collectChain(scopes, topLevelUnionStmt(pr), out, 0)
+	if !anyAmbiguousCTE(scopes) {
+		collectChain(scopes, topLevelUnionStmt(pr), out, 0)
+	}
 	refs = sortedTableRefs(out)
+	return
+}
+
+// anyAmbiguousCTE reports whether any WITH clause in the query binds one name
+// more than once (a CTEDef flagged Ambiguous by scope construction). ClickHouse's
+// default analyzer rejects such a query outright — it never runs — so the
+// classifier fails closed on it, reporting nothing rather than resolving the
+// reference to one arbitrary binding. The scan is global (every reachable scope):
+// even a duplicate no branch references still poisons the whole query, matching
+// the engine, which rejects at WITH-clause construction regardless of use.
+func anyAmbiguousCTE(scopes []*nanopass.SelectScope) (ambiguous bool) {
+	for _, scope := range nanopass.FlattenScopes(scopes) {
+		for i := range scope.CTEDefs {
+			if scope.CTEDefs[i].Ambiguous {
+				ambiguous = true
+				return
+			}
+		}
+	}
 	return
 }
 

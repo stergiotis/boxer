@@ -90,6 +90,17 @@ type CTEDef struct {
 	// IsCTE. The self-entry placed in the body's CTEDefs carries nil Scopes —
 	// traversals therefore never descend from a body back into itself.
 	Recursive bool
+
+	// Ambiguous marks a definition whose name is bound more than once in the
+	// same WITH clause. ClickHouse's default analyzer rejects such a query
+	// outright ("CTE with name t already exists", MULTIPLE_EXPRESSIONS_FOR_ALIAS)
+	// so it never runs; the legacy analyzer instead silently lets the last
+	// definition win. Every definition sharing the repeated name is flagged, so
+	// a consumer that resolves the name can decline to classify rather than pick
+	// one arbitrary binding. This is distinct from legal cross-clause shadowing
+	// (an inner WITH redefining an outer name): that binds each name once per
+	// clause and is never flagged.
+	Ambiguous bool
 }
 
 // ResolveAlias looks up a table alias or table name in this scope's Tables.
@@ -580,7 +591,29 @@ func buildCTEDefs(withContainer antlr.ParserRuleContext, parent *SelectScope, in
 		}
 		defs = append(defs, def)
 	}
+	flagDuplicateCTENames(defs)
 	return
+}
+
+// flagDuplicateCTENames sets Ambiguous on every definition whose name appears
+// more than once among defs — the one-WITH-clause rebinding that ClickHouse's
+// default analyzer rejects. defs holds a single clause's definitions in source
+// order (the recursive self-entry is never appended here), so a repeated Name
+// is a same-clause duplicate, not the cross-clause shadowing that combineCTEDefs
+// handles.
+func flagDuplicateCTENames(defs []CTEDef) {
+	if len(defs) < 2 {
+		return
+	}
+	counts := make(map[string]int, len(defs))
+	for i := range defs {
+		counts[defs[i].Name]++
+	}
+	for i := range defs {
+		if counts[defs[i].Name] > 1 {
+			defs[i].Ambiguous = true
+		}
+	}
 }
 
 // withClauseIsRecursive reports whether a WITH container (the query-level
