@@ -327,30 +327,16 @@ func (inst *Driver) prepareFromSchema(
 	// Build name → Arrow index lookup from schema. Each schema column
 	// contributes up to two keys: the raw column name, and (when it
 	// differs) the canonical form produced by conv.CanonicalizeSchemaName.
-	// The canonical form re-styles StylableName components — section
-	// names, column names — to match what MapIntermediateToPhysicalColumns
-	// emits from the IR; without it a section authored as "geoPoint"
-	// would round-trip as "geo-point" and silently fail every value
-	// column lookup. See the doc comment on
-	// NamingConventionFwdI.CanonicalizeSchemaName for the full story.
-	nFields := schema.NumFields()
-	nameToIdx := make(map[string]int, nFields*2)
-	for i := 0; i < nFields; i++ {
-		n := schema.Field(i).Name
-		nameToIdx[n] = i
-		if canon := conv.CanonicalizeSchemaName(n); canon != n {
-			nameToIdx[canon] = i
-		}
-	}
-
 	// resolveArrowIdx maps a PhysicalColumnDesc to an Arrow column index, or -1.
-	resolveArrowIdx := func(phy common.PhysicalColumnDesc) int {
-		physName := phy.String()
-		if idx, ok := nameToIdx[physName]; ok {
-			return idx
-		}
-		return -1
-	}
+	// The resolver indexes the schema by both raw and canonicalized field names
+	// (see newArrowColumnResolver): the canonical form re-styles StylableName
+	// components — section names, column names — to match what
+	// MapIntermediateToPhysicalColumns emits from the IR; without it a section
+	// authored as "geoPoint" would round-trip as "geo-point" and silently fail
+	// every value column lookup. Shared with ClassifyArrowColumns so the two
+	// resolutions cannot drift.
+	resolver := newArrowColumnResolver(schema, conv)
+	resolveArrowIdx := resolver.resolve
 
 	inst.plainSections = make([]plainSectionLayout, 0, len(inst.ir.PlainValueDesc))
 	inst.sections = make([]sectionLayout, 0, len(inst.ir.TaggedValueDesc))
