@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
@@ -280,6 +281,14 @@ type PlayApp struct {
 	// string lengths.
 	colWidthsForSchema *arrow.Schema
 	colWidths          []float32
+
+	// Friendly leeway column labels for the current result: physical column
+	// name → display label (section / section:column, via lwsql.BuildLabels).
+	// Rebuilt on schema change like colWidths; nil when the result is not
+	// leeway-shaped, in which case raw physical names are shown. The SQL sent
+	// to the server always keeps physical names — this is presentation only.
+	colLabelsForSchema *arrow.Schema
+	colLabels          map[string]string
 
 	// Analytical FunctionEvaluator that runs alongside the canonicalisers in
 	// updatePreview. Its handlers return ControlFlow{PassDiscardOutput} so
@@ -1872,6 +1881,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// time the pager advances, since different pages have different string
 	// lengths. The cache is invalidated when the Arrow *Schema pointer
 	// changes, i.e. on a new query.
+	inst.ensureColLabels(schema)
 	inst.ensureColWidths(rec, schema, pageStart, pageEnd)
 	for col := 0; col < ncols; col++ {
 		c.EtColumn(inst.colWidths[col]).Resizable(true).Send()
@@ -1913,8 +1923,18 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		for range et.Headers(0, uint32(col+1)) {
 			c.AddSpace(cellPadX)
 			field := schema.Field(col)
-			for rt := range c.RichTextLabel(field.Name) {
-				rt.Strong().Monospace()
+			if label := inst.colLabels[field.Name]; label != "" {
+				// Friendly leeway handle; the physical name is on hover so it
+				// stays available (e.g. to copy) without cluttering the header.
+				for range c.HoverText(field.Name).KeepIter() {
+					for rt := range c.RichTextLabel(label) {
+						rt.Strong().Monospace()
+					}
+				}
+			} else {
+				for rt := range c.RichTextLabel(field.Name) {
+					rt.Strong().Monospace()
+				}
 			}
 			for rt := range c.RichTextLabel(field.Type.String()) {
 				rt.Small().Weak().Monospace()
@@ -1998,7 +2018,13 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	// padded cell doesn't truncate content that would otherwise fit.
 	cellPadX := styletokens.PaddingTight(inst.density)
 	for col := 0; col < ncols; col++ {
-		maxChars := len(schema.Field(col).Name)
+		// The header shows the friendly label when there is one, so size to it
+		// rather than the (longer) physical name.
+		headerText := schema.Field(col).Name
+		if lbl := inst.colLabels[headerText]; lbl != "" {
+			headerText = lbl
+		}
+		maxChars := len(headerText)
 		for r := int64(0); r < sampleN; r++ {
 			if n := len(formatCell(rec, col, pageStart+r)); n > maxChars {
 				maxChars = n
@@ -2015,6 +2041,24 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	}
 	inst.colWidthsForSchema = schema
 	inst.colWidths = widths
+}
+
+// ensureColLabels rebuilds the friendly column-label map when the result schema
+// changes (cheap pointer compare, same idiom as ensureColWidths). Physical
+// leeway column names map to readable section / section:column labels via
+// lwsql.BuildLabels; a non-leeway result yields a nil map and the raw physical
+// names are shown. This is display-only — the SQL sent to the server keeps
+// physical names.
+func (inst *PlayApp) ensureColLabels(schema *arrow.Schema) {
+	if schema == inst.colLabelsForSchema {
+		return
+	}
+	names := make([]string, 0, schema.NumFields())
+	for i := 0; i < schema.NumFields(); i++ {
+		names = append(names, schema.Field(i).Name)
+	}
+	inst.colLabels = lwsql.BuildLabels(names)
+	inst.colLabelsForSchema = schema
 }
 
 func historyLabel(e HistoryEntry) string {

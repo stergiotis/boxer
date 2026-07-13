@@ -77,6 +77,11 @@ func NewCliCommand() *cli.Command {
 				Password: ctx.String(flagPassword),
 			}
 			client := NewClient(clientCfg, nil)
+			// Schema-aware leeway name resolution: rewrite friendly column
+			// handles (`symbol`, `geoPoint:lat`) to physical names before a
+			// query ships. Gives the client its own registry (standard set +
+			// resolver), so it must come after NewClient.
+			installLeewayNameResolution(client)
 
 			var initSQL string
 			if p := ctx.Path(flagInitSQL); p != "" {

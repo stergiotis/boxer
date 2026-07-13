@@ -199,6 +199,10 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		Password: clickhouseenv.Password.Get(),
 	}
 	client := NewClient(cfg, nil)
+	// Schema-aware leeway name resolution (ADR-0116): the carousel-embedded
+	// play is its own host, so — like the standalone CLI — it must install the
+	// resolver itself, or friendly column handles never get rewritten here.
+	installLeewayNameResolution(client)
 	inner := NewLivePlayApp(client, initSQL, 100)
 	inner.AutoRun = AutoRun.Get() != ""
 	inner.ScreenshotPath = ScreenshotPath.Get()

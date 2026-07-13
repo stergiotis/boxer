@@ -173,6 +173,69 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 	return
 }
 
+// fetchColumnNames returns the physical column names of db.table in position
+// order by querying system.columns directly. It deliberately bypasses the pass
+// registry (so it cannot recurse through the leeway-name resolver that calls
+// it) and the Arrow decode. An empty db resolves to the server's current
+// database. The schema-aware pre-execute resolver uses this to learn a leeway
+// table's schema before a query ships; failures degrade to "no schema".
+func (inst *Client) fetchColumnNames(ctx context.Context, db string, table string) (names []string, err error) {
+	const q = "SELECT name FROM system.columns " +
+		"WHERE table = {tbl:String} AND database = if({db:String} = '', currentDatabase(), {db:String}) " +
+		"ORDER BY position FORMAT TabSeparated"
+	reqURL := inst.URL()
+	qs := url.Values{}
+	qs.Set("param_tbl", table)
+	qs.Set("param_db", db)
+	sep := "?"
+	if strings.Contains(reqURL, "?") {
+		sep = "&"
+	}
+	reqURL = reqURL + sep + qs.Encode()
+
+	var req *http.Request
+	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(q))
+	if err != nil {
+		err = eh.Errorf("unable to build system.columns request: %w", err)
+		return
+	}
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if inst.cfg.User != "" {
+		req.Header.Set("X-ClickHouse-User", inst.cfg.User)
+	}
+	if inst.cfg.Password != "" {
+		req.Header.Set("X-ClickHouse-Key", inst.cfg.Password)
+	}
+	var resp *http.Response
+	resp, err = inst.http.Do(req)
+	if err != nil {
+		err = eh.Errorf("system.columns request failed: %w", err)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(raw))).Errorf("system.columns http %d", resp.StatusCode)
+		return
+	}
+	raw, rerr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if rerr != nil {
+		err = eh.Errorf("unable to read system.columns response: %w", rerr)
+		return
+	}
+	// Single-column TabSeparated: one name per line. Physical leeway names
+	// contain only ':' and identifier characters, so no TSV unescaping is
+	// needed.
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		names = append(names, line)
+	}
+	return
+}
+
 // buildResidual is steps 1–2 of BuildStatement — the SET-prelude harvest and
 // the pre-execute rewrites — shared with the diagnostics EXPLAIN probe, which
 // wraps the residual in `EXPLAIN AST` instead of appending a FORMAT clause
