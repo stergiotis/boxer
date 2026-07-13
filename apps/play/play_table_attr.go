@@ -1,7 +1,6 @@
 package play
 
 import (
-	"maps"
 	"strconv"
 	"strings"
 
@@ -50,20 +49,27 @@ const (
 	attrColStride  = uint64(0x00010000)
 )
 
-// attrGridRow is one exploded visual row: the cells (keyed by Arrow column
-// index; absent = empty) of one section-row of one entity. absRow is the source
-// DB row; firstOfEntity marks the entity's top row (where the `#` gutter and the
+// attrGridRow is one exploded visual row: its cells are indexed by *position in
+// visCols* ("" = empty), so a lookup is an index rather than a map probe and the
+// whole row is one slice allocation instead of a map. absRow is the source DB
+// row; firstOfEntity marks the entity's top row (where the `#` gutter and the
 // once-per-entity backbone cells appear).
 type attrGridRow struct {
 	absRow        int64
 	firstOfEntity bool
-	cells         map[int]string
+	cells         []string
 }
 
 // attrExplodeSink walks a leeway batch into the exploded grid rows. It
 // implements streamreadaccess.SinkI (structure + values) but deliberately not
 // MembershipSinkI: membership *columns* are read raw per attribute in
 // flushAttr, so the Driver's rendered memberships are neither needed nor driven.
+//
+// It is pooled on PlayApp and re-driven every frame the per-attribute view is
+// shown, so it holds all its working storage as reusable buffers: reset()
+// rebinds the per-drive inputs and BeginBatch reslices the output to [:0],
+// letting the steady-state render reuse last frame's backing arrays rather than
+// allocating fresh maps/slices per cell.
 type attrExplodeSink struct {
 	rec       arrow.RecordBatch // the page slice — for raw per-attribute reads
 	pageStart int64
@@ -73,19 +79,35 @@ type attrExplodeSink struct {
 	taggedExtra map[string][]int
 	plainExtra  map[common.PlainItemTypeE][]int
 
-	rows []attrGridRow // output
+	// colToVis maps an Arrow column index to its position in visCols (-1 when not
+	// visible); nCols is len(visCols), the width of every output row. Rebuilt in
+	// place each drive by reset → setVisCols.
+	colToVis []int
+	nCols    int
 
-	// Per-entity: each section's list of row-maps, transposed at EndEntity.
-	entityIdx      int
-	entitySections [][]map[int]string
+	rows []attrGridRow // output (backing array reused across frames)
+
+	// Per-entity / per-section running state. entityStart is the index in rows
+	// where the current entity's first visual row sits; secRow is the running
+	// visual-row offset (from entityStart) within the current section — sections
+	// overlay from offset 0, attributes stack down within a section.
+	entityIdx   int
+	entityStart int
+	secRow      int
 
 	// Current section.
-	curExtras []int              // revealed member/support arrowIdx for the section
-	curAttr   int                // attribute index within the section (for raw reads)
-	secRows   []map[int]string   // the section's accumulated exploded rows
+	curExtras []int // revealed member/support arrowIdx for the section
+	curAttr   int   // attribute index within the section (for raw reads)
 
-	// Current attribute (Begin{Plain,Tagged}Value): value columns' item lists.
-	attrCols map[int][]string
+	// Current attribute (Begin{Plain,Tagged}Value): value columns as parallel
+	// arrays (Arrow index + its item list), recycled per attribute. inAttr guards
+	// EndColumn against columns driven outside an attribute. itemsFree pools the
+	// per-column item slices so EndColumn reuses backing arrays across attributes
+	// and frames.
+	inAttr       bool
+	attrColIdx   []int
+	attrColItems [][]string
+	itemsFree    [][]string
 
 	// Per-column scratch.
 	curCol       int
@@ -98,38 +120,88 @@ type attrExplodeSink struct {
 
 var _ streamreadaccess.SinkI = (*attrExplodeSink)(nil)
 
+// reset rebinds the pooled sink to a new page drive, keeping every backing array
+// so the steady-state render (same page, same schema) reuses them. The output
+// slice and per-drive flags are reset in BeginBatch (the Driver's entry point).
+func (inst *attrExplodeSink) reset(rec arrow.RecordBatch, pageStart int64, taggedExtra map[string][]int, plainExtra map[common.PlainItemTypeE][]int, visCols []int, nFields int) {
+	inst.rec = rec
+	inst.pageStart = pageStart
+	inst.taggedExtra = taggedExtra
+	inst.plainExtra = plainExtra
+	inst.setVisCols(visCols, nFields)
+}
+
+// setVisCols rebuilds the Arrow-index → visCols-position lookup in place.
+func (inst *attrExplodeSink) setVisCols(visCols []int, nFields int) {
+	inst.nCols = len(visCols)
+	if cap(inst.colToVis) >= nFields {
+		inst.colToVis = inst.colToVis[:nFields]
+	} else {
+		inst.colToVis = make([]int, nFields)
+	}
+	for i := range inst.colToVis {
+		inst.colToVis[i] = -1
+	}
+	for pos, arrowIdx := range visCols {
+		if arrowIdx >= 0 && arrowIdx < nFields {
+			inst.colToVis[arrowIdx] = pos
+		}
+	}
+}
+
+// visPos is the output-column index for an Arrow column, or -1 when not visible.
+func (inst *attrExplodeSink) visPos(arrowIdx int) int {
+	if arrowIdx < 0 || arrowIdx >= len(inst.colToVis) {
+		return -1
+	}
+	return inst.colToVis[arrowIdx]
+}
+
 // --- batch / entity ---
 
 func (inst *attrExplodeSink) BeginBatch() {
 	inst.rows = inst.rows[:0]
 	inst.entityIdx = 0
+	inst.inAttr = false
+	inst.err = nil
 }
 func (inst *attrExplodeSink) EndBatch() error { return inst.err }
 
-func (inst *attrExplodeSink) BeginEntity() { inst.entitySections = inst.entitySections[:0] }
+func (inst *attrExplodeSink) BeginEntity() { inst.entityStart = len(inst.rows) }
 
-// EndEntity transposes the entity's sections into visual rows: the entity spans
-// max(section lengths) rows, and visual row r merges each section's r-th
-// row-map (a section shorter than r contributes nothing → empty cells).
+// EndEntity just advances the entity counter: the exploded rows were written
+// straight into inst.rows as sections/attributes were flushed (flushAttr →
+// ensureRow), so no transpose or per-row map merge is needed.
 func (inst *attrExplodeSink) EndEntity() error {
-	maxLen := 0
-	for _, sec := range inst.entitySections {
-		if len(sec) > maxLen {
-			maxLen = len(sec)
-		}
-	}
-	absRow := inst.pageStart + int64(inst.entityIdx)
-	for r := 0; r < maxLen; r++ {
-		cells := make(map[int]string, 8)
-		for _, sec := range inst.entitySections {
-			if r < len(sec) {
-				maps.Copy(cells, sec[r])
-			}
-		}
-		inst.rows = append(inst.rows, attrGridRow{absRow: absRow, firstOfEntity: r == 0, cells: cells})
-	}
 	inst.entityIdx++
 	return inst.err
+}
+
+// ensureRow returns the cells slice for the current entity's visual row at the
+// given offset (from entityStart), creating or recycling it. flushAttr fills
+// offsets densely from 0, so the target index is always ≤ len(rows): an index
+// below len(rows) is an existing row of this entity (a later section overlaying
+// its own columns onto an earlier section's row), and one equal to len(rows)
+// appends — reusing the slot's backing []string when the pooled rows slice still
+// has capacity from a previous frame.
+func (inst *attrExplodeSink) ensureRow(off int) []string {
+	vrow := inst.entityStart + off
+	if vrow < len(inst.rows) {
+		return inst.rows[vrow].cells
+	}
+	absRow := inst.pageStart + int64(inst.entityIdx)
+	first := vrow == inst.entityStart
+	if vrow < cap(inst.rows) {
+		inst.rows = inst.rows[:vrow+1]
+		r := &inst.rows[vrow]
+		r.absRow = absRow
+		r.firstOfEntity = first
+		r.cells = clearAndSize(r.cells, inst.nCols)
+		return r.cells
+	}
+	cells := make([]string, inst.nCols)
+	inst.rows = append(inst.rows, attrGridRow{absRow: absRow, firstOfEntity: first, cells: cells})
+	return cells
 }
 
 // --- sections ---
@@ -153,57 +225,72 @@ func (inst *attrExplodeSink) EndSection() error { return inst.endSection() }
 func (inst *attrExplodeSink) beginSection(extras []int) {
 	inst.curExtras = extras
 	inst.curAttr = 0
-	inst.secRows = nil
+	inst.secRow = 0
 }
-func (inst *attrExplodeSink) endSection() error {
-	inst.entitySections = append(inst.entitySections, inst.secRows)
-	inst.secRows = nil
-	return inst.err
-}
+func (inst *attrExplodeSink) endSection() error { return inst.err }
 
 // --- attributes ---
 
-func (inst *attrExplodeSink) BeginPlainValue()   { inst.attrCols = make(map[int][]string, 4) }
+func (inst *attrExplodeSink) BeginPlainValue() { inst.beginAttr() }
 func (inst *attrExplodeSink) EndPlainValue() error {
 	inst.flushAttr()
 	return inst.err
 }
-func (inst *attrExplodeSink) BeginTaggedValue() { inst.attrCols = make(map[int][]string, 4) }
+func (inst *attrExplodeSink) BeginTaggedValue() { inst.beginAttr() }
 func (inst *attrExplodeSink) EndTaggedValue() error {
 	inst.flushAttr()
 	inst.curAttr++
 	return inst.err
 }
 
+func (inst *attrExplodeSink) beginAttr() {
+	inst.inAttr = true
+	inst.attrColIdx = inst.attrColIdx[:0]
+	inst.attrColItems = inst.attrColItems[:0]
+}
+
 // flushAttr turns the current attribute's buffered value columns into
-// K = max(item count, 1) exploded rows and appends them to the section. Row j
-// takes each value column's j-th item (empty when that column has fewer — no
-// repeat); row 0 additionally carries the revealed membership/support columns,
-// read raw at this attribute's index.
+// K = max(item count, 1) exploded rows written straight into inst.rows at the
+// section's running offset. Row j takes each value column's j-th item (empty
+// when that column has fewer — no repeat); row 0 additionally carries the
+// revealed membership/support columns, read raw at this attribute's index. The
+// per-column item slices are then recycled into itemsFree.
 func (inst *attrExplodeSink) flushAttr() {
 	k := 1
-	for _, items := range inst.attrCols {
+	for _, items := range inst.attrColItems {
 		if len(items) > k {
 			k = len(items)
 		}
 	}
 	for j := 0; j < k; j++ {
-		row := make(map[int]string, len(inst.attrCols)+len(inst.curExtras))
-		for arrowIdx, items := range inst.attrCols {
+		cells := inst.ensureRow(inst.secRow + j)
+		for e, arrowIdx := range inst.attrColIdx {
+			items := inst.attrColItems[e]
 			if j < len(items) {
-				row[arrowIdx] = items[j]
+				if p := inst.visPos(arrowIdx); p >= 0 {
+					cells[p] = items[j]
+				}
 			}
 		}
 		if j == 0 {
 			for _, ax := range inst.curExtras {
+				p := inst.visPos(ax)
+				if p < 0 {
+					continue
+				}
 				if v := listInnerScalar(inst.rec, ax, inst.entityIdx, inst.curAttr); v != "" {
-					row[ax] = v
+					cells[p] = v
 				}
 			}
 		}
-		inst.secRows = append(inst.secRows, row)
 	}
-	inst.attrCols = nil
+	inst.secRow += k
+	for _, items := range inst.attrColItems {
+		inst.itemsFree = append(inst.itemsFree, items[:0])
+	}
+	inst.attrColIdx = inst.attrColIdx[:0]
+	inst.attrColItems = inst.attrColItems[:0]
+	inst.inAttr = false
 }
 
 // --- columns / values ---
@@ -215,16 +302,39 @@ func (inst *attrExplodeSink) BeginColumn(colAddr streamreadaccess.PhysicalColumn
 	inst.isCollection = false
 }
 func (inst *attrExplodeSink) EndColumn() {
-	if inst.attrCols == nil {
+	if !inst.inAttr {
 		return
 	}
-	var items []string
+	items := inst.takeItems()
 	if inst.isCollection {
 		items = append(items, inst.curItems...) // may be empty (card 0)
 	} else {
-		items = []string{utfsafe.EnsureUTF8(inst.curBuf.String())}
+		items = append(items, utfsafe.EnsureUTF8(inst.curBuf.String()))
 	}
-	inst.attrCols[inst.curCol] = items
+	inst.attrColIdx = append(inst.attrColIdx, inst.curCol)
+	inst.attrColItems = append(inst.attrColItems, items)
+}
+
+// takeItems returns a reset item slice, reused from itemsFree when available.
+func (inst *attrExplodeSink) takeItems() []string {
+	n := len(inst.itemsFree)
+	if n == 0 {
+		return make([]string, 0, 4)
+	}
+	items := inst.itemsFree[n-1]
+	inst.itemsFree = inst.itemsFree[:n-1]
+	return items[:0]
+}
+
+// clearAndSize returns a length-n []string reusing s's backing array when it is
+// large enough (zeroing it so no last-frame string is retained), else a fresh one.
+func clearAndSize(s []string, n int) []string {
+	if cap(s) >= n {
+		s = s[:n]
+		clear(s)
+		return s
+	}
+	return make([]string, n)
 }
 
 func (inst *attrExplodeSink) BeginScalarValue()                { inst.isCollection = false }
@@ -322,7 +432,8 @@ func (inst *PlayApp) renderAttrTable(rec arrow.RecordBatch, schema *arrow.Schema
 
 	visCols := inst.visibleTableCols(schema)
 	taggedExtra, plainExtra := buildAttrExtras(classes, visCols)
-	sink := &attrExplodeSink{rec: slice, pageStart: pageStart, taggedExtra: taggedExtra, plainExtra: plainExtra}
+	sink := &inst.attrSink
+	sink.reset(slice, pageStart, taggedExtra, plainExtra, visCols, schema.NumFields())
 	if err := driver.DriveRecordBatch(sink, slice); err != nil {
 		log.Warn().Err(err).Msg("play: per-attribute drive failed — falling back to per-DB-row grid")
 		inst.renderMasterTable(rec, schema, numRows, selectedRow, emit)
@@ -436,7 +547,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				}
 			}
 		}
-		for pos, arrowCol := range visCols {
+		for pos := range visCols {
 			colPos := uint32(pos + 1)
 			if vis, _ := et.ColVisible(colPos); !vis {
 				continue
@@ -444,7 +555,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 			for range et.Cells(local, colPos) {
 				c.AddSpace(cellPadX)
 				if c.Button(ids.PrepareSeq(rowBase+uint64(pos)+1),
-					c.Atoms().BeginRichText(row.cells[arrowCol]).Monospace().End().Keep()).
+					c.Atoms().BeginRichText(row.cells[pos]).Monospace().End().Keep()).
 					Frame(false).Selected(selected).Truncate().
 					SendResp().HasPrimaryClicked() {
 					emit.Emit(signalSelection, row.absRow)
@@ -473,7 +584,7 @@ func (inst *PlayApp) attrColWidths(schema *arrow.Schema, visCols []int, rows []a
 			maxChars = len(lbl)
 		}
 		for r := 0; r < len(rows) && r < sampleRows; r++ {
-			if v, ok := rows[r].cells[arrowCol]; ok && len(v) > maxChars {
+			if v := rows[r].cells[i]; len(v) > maxChars {
 				maxChars = len(v)
 			}
 		}

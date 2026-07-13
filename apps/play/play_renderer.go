@@ -297,6 +297,13 @@ type PlayApp struct {
 	colLabelsForSchema *arrow.Schema
 	colLabels          map[string]string
 
+	// attrSink is the per-attribute Table view's exploder (play_table_attr.go),
+	// pooled across frames: the per-attribute grid is re-driven every frame it is
+	// shown, so keeping one sink and resetting its backing arrays with [:0] keeps
+	// the render path allocation-free in steady state instead of building a fresh
+	// sink (and thousands of throwaway row maps) each frame.
+	attrSink attrExplodeSink
+
 	// Analytical FunctionEvaluator that runs alongside the canonicalisers in
 	// updatePreview. Its handlers return ControlFlow{PassDiscardOutput} so
 	// the runner forwards the input unchanged; the side channel is the
