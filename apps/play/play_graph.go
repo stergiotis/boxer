@@ -600,3 +600,7 @@ func (inst *queryGraph) MainHistory() []HistoryEntry { return inst.mainLane.Hist
 func (inst *queryGraph) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
 	return inst.mainLane.Snapshot()
 }
+
+// MainSQL returns the executed SQL text of the `main` node's last-good result,
+// or "" when none has landed. Companion to MainSnapshot.
+func (inst *queryGraph) MainSQL() string { return inst.mainLane.SQL() }

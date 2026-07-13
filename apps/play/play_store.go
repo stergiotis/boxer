@@ -44,8 +44,11 @@ type QueryStore struct {
 	// callers where a momentary skew is harmless — the Run guard, the
 	// autoshot gate, the results-loading spinners.
 	loading bool
-	history []HistoryEntry
-	maxHist int
+	// executedSQL is the SQL text of the run that produced the current record —
+	// set by finish alongside it, so SQL() and Snapshot() name the same run.
+	executedSQL string
+	history     []HistoryEntry
+	maxHist     int
 
 	// closed (under mu) marks a torn-down store: a late finish() from an
 	// already-running goroutine is dropped instead of resurrecting state.
@@ -91,6 +94,15 @@ func (inst *QueryStore) Snapshot() (rec arrow.RecordBatch, schema *arrow.Schema,
 		inst.record.Retain()
 	}
 	return inst.record, inst.schema, inst.numRows, inst.loading, inst.elapsed, inst.summary, inst.executed, inst.err
+}
+
+// SQL returns the SQL text of the run that produced the current Snapshot
+// result, or "" before the first run finishes. Guarded by the same lock as
+// Snapshot; as a separate call it can race a concurrent finish (see PlayApp.MainSQL).
+func (inst *QueryStore) SQL() string {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.executedSQL
 }
 
 func (inst *QueryStore) History() []HistoryEntry {
@@ -229,6 +241,7 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 	inst.elapsed = time.Since(start)
 	inst.err = err
 	inst.executed = time.Now()
+	inst.executedSQL = sql
 	inst.loading = false
 
 	entry := HistoryEntry{

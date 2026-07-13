@@ -723,6 +723,22 @@ func (inst *PlayApp) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema
 	return inst.graph.MainSnapshot()
 }
 
+// MainSQL returns the executed SQL text behind the `main` node's current result
+// — the query MainSnapshot's record was produced by — or "" when none has
+// landed yet. It is the thread-safe companion to MainSnapshot for embedders
+// that need the query behind the live result (e.g. deriving per-result query
+// lineage): the read is guarded by the main lane's lock, so it is safe off the
+// render loop. Being a second, independent lock acquisition, a result that
+// completes between a MainSnapshot and a MainSQL call can momentarily pair rows
+// from one query with the SQL of the next; for human-driven single-query flows
+// that window is not observable.
+func (inst *PlayApp) MainSQL() string {
+	if inst.graph == nil {
+		return ""
+	}
+	return inst.graph.MainSQL()
+}
+
 func (inst *PlayApp) Render() error {
 	ids := inst.ids
 	ids.Reset()
