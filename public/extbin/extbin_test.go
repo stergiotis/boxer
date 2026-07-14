@@ -198,3 +198,44 @@ func TestRegistry_IncludesDeclaredProgramsSorted(t *testing.T) {
 		}
 	}
 }
+
+func TestKindString(t *testing.T) {
+	cases := map[Kind]string{Host: "host", GoTool: "gotool", GoToolchain: "gotoolchain", Local: "local", Kind(99): "unknown"}
+	for k, want := range cases {
+		if got := k.String(); got != want {
+			t.Errorf("Kind(%d).String() = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestResolve_HostAndLocal(t *testing.T) {
+	dir := t.TempDir()
+	fakeBin(t, dir, "boxer-resolve-host", "x")
+	prependPATH(t, dir)
+
+	// Host present on PATH → resolved path + available.
+	host := &Program{Name: "boxer-resolve-host", Kind: Host}
+	path, ok := host.Resolve()
+	if !ok || path != filepath.Join(dir, "boxer-resolve-host") {
+		t.Errorf("Host resolve = (%q, %v), want the PATH binary + true", path, ok)
+	}
+
+	// Host absent → ("", false).
+	absent := &Program{Name: "boxer-resolve-absent-xyz", Kind: Host}
+	if path, ok := absent.Resolve(); ok || path != "" {
+		t.Errorf("absent Host resolve = (%q, %v), want ('', false)", path, ok)
+	}
+
+	// Local needs a caller path → ("", false).
+	local := &Program{Name: "some-artifact", Kind: Local}
+	if path, ok := local.Resolve(); ok || path != "" {
+		t.Errorf("Local resolve = (%q, %v), want ('', false)", path, ok)
+	}
+
+	// OverrideEnv wins.
+	t.Setenv("BOXER_RESOLVE_OV", "/opt/custom/tool")
+	ov := &Program{Name: "boxer-resolve-absent-xyz", Kind: Host, OverrideEnv: "BOXER_RESOLVE_OV"}
+	if path, ok := ov.Resolve(); !ok || path != "/opt/custom/tool" {
+		t.Errorf("override resolve = (%q, %v), want ('/opt/custom/tool', true)", path, ok)
+	}
+}

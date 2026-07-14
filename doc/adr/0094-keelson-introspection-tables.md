@@ -278,6 +278,25 @@ change any §SD decision.
 The §SD6 console widget remains deferred; this update gives play (a separate
 backend by §Consequences) the same reach without building that widget.
 
+## Update (2026-07-14) — `keelson.extbin` (external-program registry)
+
+ADR-0118 added a static provider `keelson.extbin` exposing the extbin
+external-program registry: one row per declared host binary boxer can invoke.
+
+  | table | source | freshness |
+  |-------|--------|-----------|
+  | `keelson.extbin` | `extbin.Registry()` + live `Program.Resolve()` + blake3 | Live |
+
+Columns: `name`, `kind`, `module`, `override_env`, `install_hint`, plus the live
+`resolved_path` / `available` (where it resolves on this host) and `blake3` — a
+`blake3:`-prefixed digest of the resolved binary. The digest read is the one
+non-trivial cost: it is computed lazily (skipped unless the column is projected,
+on the in-process path) and cached per (path, size, mtime), so a re-query
+re-hashes a binary only when it changes on disk. `url()` mode, having no
+pushdown (see Alternatives), always materialises it. This makes supply-chain
+attestation of the external tools — not just their presence, but their identity
+— a query, alongside `keelson.build`/`keelson.sbom`.
+
 ## References
 
 - [ADR-0009 — environment variable registry](./0009-environment-variable-registry.md)

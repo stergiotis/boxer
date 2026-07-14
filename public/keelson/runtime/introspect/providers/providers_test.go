@@ -9,13 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
 func TestRegisterStatic(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, RegisterStatic(r))
-	assert.Equal(t, []string{"apps", "build", "env", "sbom", "sql_passes"}, r.Names())
+	assert.Equal(t, []string{"apps", "build", "env", "extbin", "sbom", "sql_passes"}, r.Names())
 }
 
 func TestProvidersSnapshotWell(t *testing.T) {
@@ -58,6 +59,33 @@ func TestEnvProviderProjection(t *testing.T) {
 	defer rec.Release()
 	require.EqualValues(t, 1, rec.NumCols())
 	assert.Equal(t, "name", rec.Schema().Field(0).Name)
+}
+
+func TestExtbinProviderHasRows(t *testing.T) {
+	// extbin's package init declares the central host programs (git, scc, …),
+	// so the live registry is non-empty.
+	rec, err := extbinProvider{}.Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer rec.Release()
+	assert.Positive(t, rec.NumRows())
+	for _, col := range []string{"name", "kind", "module", "override_env", "install_hint", "available", "resolved_path", "blake3"} {
+		require.NotEmpty(t, rec.Schema().FieldIndices(col), "missing column %q", col)
+	}
+}
+
+func TestExtbinTableRendersKindAndPath(t *testing.T) {
+	// Drive the table directly with fixed rows (no dependency on the host's
+	// installed binaries); blake3 is best-effort and unread here.
+	rows := []extbinRow{
+		{prog: &extbin.Program{Name: "git", Kind: extbin.Host, InstallHint: "install git"}, resolved: "/usr/bin/git", available: true},
+		{prog: &extbin.Program{Name: "some-artifact", Kind: extbin.Local}, resolved: "", available: false},
+	}
+	rec := extbinTable(rows).Build(introspect.AllColumns(), len(rows))
+	defer rec.Release()
+	require.EqualValues(t, 2, rec.NumRows())
+	assert.Equal(t, "git", firstString(t, rec, "name"))
+	assert.Equal(t, "host", firstString(t, rec, "kind"))
+	assert.Equal(t, "/usr/bin/git", firstString(t, rec, "resolved_path"))
 }
 
 // firstString returns the row-0 value of the named Utf8 column.

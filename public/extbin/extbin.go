@@ -51,6 +51,23 @@ const (
 	Local
 )
 
+// String returns the lowercase kind name (host, gotool, gotoolchain, local),
+// suitable for a table column or a log field.
+func (k Kind) String() string {
+	switch k {
+	case Host:
+		return "host"
+	case GoTool:
+		return "gotool"
+	case GoToolchain:
+		return "gotoolchain"
+	case Local:
+		return "local"
+	default:
+		return "unknown"
+	}
+}
+
 // Program is a declared external-program dependency of boxer. Declare programs
 // as package-level vars via [Declare]; the set of declarations is the audit
 // surface.
@@ -190,6 +207,43 @@ func (p *Program) capture(ctx context.Context, o Opts, combined bool, args []str
 		err = eh.Errorf("%w (and no %q on PATH to fall back to)", err, p.Name)
 	}
 	return
+}
+
+// Resolve reports where p currently resolves on this host and whether it is
+// available, without running it — the read-only counterpart to [Program.Command],
+// for introspection and supply-chain attestation.
+//
+// path is the concrete executable file to attest, when there is one: the PATH
+// lookup for a Host program, the `go` binary for GoToolchain, and — for a
+// GoTool — the PATH binary of the same name if present. A GoTool that resolves
+// only via the pinned `go tool <Name>` form reports (path="", available=true):
+// its artifact lives in the go build cache and is attested by [Program.Module]
+// + go.sum rather than a file hash. A Local program needs a caller-supplied
+// path and reports ("", false).
+func (p *Program) Resolve() (path string, available bool) {
+	if bin, ok := p.override(); ok {
+		return bin, true
+	}
+	switch p.Kind {
+	case Host:
+		if bin, err := exec.LookPath(p.Name); err == nil {
+			return bin, true
+		}
+	case GoToolchain:
+		if bin, err := exec.LookPath("go"); err == nil {
+			return bin, true
+		}
+	case GoTool:
+		if bin, err := exec.LookPath(p.Name); err == nil {
+			return bin, true // a concrete PATH binary to attest
+		}
+		if _, err := exec.LookPath("go"); err == nil {
+			return "", true // runnable via `go tool`, but no single binary file
+		}
+	case Local:
+		// Needs a caller-supplied Opts.Path; not resolvable from the registry.
+	}
+	return "", false
 }
 
 // resolve computes the primary executable name and any leading args for p under

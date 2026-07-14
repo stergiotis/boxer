@@ -1,6 +1,7 @@
 // Package providers implements the GUI-free introspection table
 // providers — env, apps, build, sbom (ADR-0094 §SD8), sql_passes
-// (ADR-0108 §SD5) — and registers them into an introspect.Registry.
+// (ADR-0108 §SD5), extbin (ADR-0118) — and registers them into an
+// introspect.Registry.
 // The two GUI-coupled providers (demos, windows) live with the runtime
 // wiring, where the egui2 host and its window-host instance exist, so
 // this package stays importable from headless contexts.
@@ -19,10 +20,10 @@ import (
 )
 
 // RegisterStatic registers the GUI-free providers (env, apps, build,
-// sbom, sql_passes) into r (ADR-0094 §SD8, ADR-0108 §SD5).
+// sbom, sql_passes, extbin) into r (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118).
 func RegisterStatic(r *introspect.Registry) (err error) {
 	for _, p := range []introspect.Provider{
-		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{},
+		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
 	} {
 		if err = r.Register(p); err != nil {
 			return
@@ -43,9 +44,9 @@ func RegisterDefaults() error { return RegisterStatic(introspect.Default) }
 // process.
 type envProvider struct{}
 
-func (envProvider) Name() string                        { return "env" }
+func (envProvider) Name() string                         { return "env" }
 func (envProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
-func (envProvider) Schema() *arrow.Schema               { return envTable(nil).Schema() }
+func (envProvider) Schema() *arrow.Schema                { return envTable(nil).Schema() }
 
 func (envProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	specs := env.All()
@@ -83,9 +84,9 @@ func envTable(specs []env.Spec) *introspect.Table {
 // appsProvider exposes the registered app manifests as keelson.apps.
 type appsProvider struct{}
 
-func (appsProvider) Name() string                        { return "apps" }
+func (appsProvider) Name() string                         { return "apps" }
 func (appsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (appsProvider) Schema() *arrow.Schema               { return appsTable(nil).Schema() }
+func (appsProvider) Schema() *arrow.Schema                { return appsTable(nil).Schema() }
 
 func (appsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	ms := app.AllManifests() // sorted by Id
@@ -123,9 +124,9 @@ func appsTable(ms []app.Manifest) *introspect.Table {
 // empty rather than erroring.
 type buildProvider struct{}
 
-func (buildProvider) Name() string                        { return "build" }
+func (buildProvider) Name() string                         { return "build" }
 func (buildProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (buildProvider) Schema() *arrow.Schema               { return buildTable(nil).Schema() }
+func (buildProvider) Schema() *arrow.Schema                { return buildTable(nil).Schema() }
 
 func (buildProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	var rows []*runinfo.Inst
