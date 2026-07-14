@@ -1,16 +1,17 @@
-// Package scctree converts `go tool scc --by-file --format json` output
-// into a *layout.Node hierarchy keyed on directory path, suitable for
-// visualization with the treemap widget.
+// Package scctree converts `scc --by-file --format json` output into a
+// *layout.Node hierarchy keyed on directory path, suitable for visualization
+// with the treemap widget. scc is run via extbin (the pinned `go tool scc`,
+// falling back to an `scc` binary on PATH) — see [RunScc].
 package scctree
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"math"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
 )
@@ -167,10 +168,13 @@ func isJsTsTestName(name string) (yes bool) {
 	return
 }
 
-// RepoRoot returns the git top-level directory for the current working directory.
-func RepoRoot() (root string, err error) {
+// RepoRootAt returns the git top-level directory containing dir. An empty dir
+// resolves against the current working directory. It errors when dir is not
+// inside a git worktree (or git is unavailable); callers that can visualize a
+// plain directory should fall back to dir itself.
+func RepoRootAt(dir string) (root string, err error) {
 	var out []byte
-	out, err = exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	out, err = extbin.Git.Output(context.Background(), extbin.Opts{Dir: dir}, "rev-parse", "--show-toplevel")
 	if err != nil {
 		err = eh.Errorf("git rev-parse --show-toplevel: %w", err)
 		return
@@ -179,36 +183,55 @@ func RepoRoot() (root string, err error) {
 	return
 }
 
-// RunScc shells out to `go tool scc` in root with the project's agreed flags
-// and returns the parsed per-language groups. Passing an empty root runs in
-// the current working directory.
+// RepoRoot returns the git top-level directory for the current working
+// directory. It is [RepoRootAt] with an empty dir.
+func RepoRoot() (root string, err error) {
+	return RepoRootAt("")
+}
+
+// RunScc shells out to scc in root with the project's agreed flags and returns
+// the parsed per-language groups. Passing an empty root runs in the current
+// working directory.
+//
+// scc resolution lives in extbin ([extbin.SCC]): it runs the pinned `go tool
+// scc` (matching the version in go.mod), falling back to an `scc` binary on
+// PATH. The fallback lets the widget work in trees where the module's tool
+// cache isn't available (e.g. a trimmed checkout, or a build host with scc
+// installed some other way). The pinned attempt fails fast — without walking
+// the tree — so the fallback adds no redundant scan on the common path.
 //
 // All files scc finds are returned — including those that look generated.
 // Use IsGenerated and a caller-side filter (e.g., the keep parameter of
 // BuildColormappedTree) to drop generated files when needed; the previous
 // `--not-match` regex baked into this function made the toggle uniformly
 // impossible at the consumer.
+//
+// It is [RunSccContext] with a background context.
 func RunScc(root string) (groups []SccGroup, err error) {
-	cmd := exec.Command("go", "tool", "scc",
+	return RunSccContext(context.Background(), root)
+}
+
+// RunSccContext is [RunScc] with cancellation: killing ctx terminates the scc
+// child process, so a caller running the scan on a worker goroutine (e.g.
+// behind a bgjob.Runner) can abort an in-flight scan. It applies the same scc
+// resolution order and flags as RunScc.
+func RunSccContext(ctx context.Context, root string) (groups []SccGroup, err error) {
+	// Flags are identical whichever scc extbin resolves to; extbin owns the
+	// `go tool scc` → PATH `scc` fallback.
+	sccArgs := []string{
 		"--sort", "code",
 		"--by-file",
 		"--format", "json",
 		"--gen",
 		"--no-cocomo",
 		".",
-	)
-	if root != "" {
-		cmd.Dir = root
 	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err = cmd.Run()
+	var stdout []byte
+	stdout, err = extbin.SCC.Output(ctx, extbin.Opts{Dir: root}, sccArgs...)
 	if err != nil {
-		err = eh.Errorf("go tool scc: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
 		return
 	}
-	err = json.Unmarshal(stdout.Bytes(), &groups)
+	err = json.Unmarshal(stdout, &groups)
 	if err != nil {
 		err = eh.Errorf("decode scc json: %w", err)
 		return
