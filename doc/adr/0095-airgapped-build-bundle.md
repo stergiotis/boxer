@@ -24,7 +24,7 @@ head), so a Go-only answer is insufficient.
 
 Two scripts produce and consume a self-contained tarball:
 [scripts/dev/airgap-bundle.sh](../../scripts/dev/airgap-bundle.sh) packs on a
-connected host; [scripts/dev/airgap-unpack.sh](../../scripts/dev/airgap-unpack.sh)
+connected host; [scripts/dev/airgap-unbundle.sh](../../scripts/dev/airgap-unbundle.sh)
 provisions and builds on the target. The recipe is
 [doc/howto/airgapped-build.md](../howto/airgapped-build.md).
 
@@ -40,7 +40,7 @@ provisions and builds on the target. The recipe is
     offline (`CARGO_NET_OFFLINE=true`, vendored sources).
   - `go-only`: ship imzero2 **prebuilt**, dropping the Rust toolchain, the
     vendored crates, and the build-time C-compiler requirement.
-- **Non-vendorable residue** the environment must still supply (the unpacker
+- **Non-vendorable residue** the environment must still supply (the unbundler
   preflights both): a C compiler + `pkg-config` at build time (`libmimalloc-sys`
   compiles bundled C; `full` scope only), and a Vulkan loader + ICD at runtime
   for wgpu (hardware driver, or lavapipe for software rendering).
@@ -89,9 +89,32 @@ provisions and builds on the target. The recipe is
   provided, not bundled; the OpenAI-compatible client points at the
   environment's ollama.
 
+## Updates
+
+### 2026-07-14 — core extracted to `airgap-lib.sh` (now consumed downstream)
+
+The repo-agnostic primitives behind these scripts were extracted into
+[scripts/dev/airgap-lib.sh](../../scripts/dev/airgap-lib.sh) (compressor
+selection, `git archive` export, toolchain shipping, rust-sysroot resolution,
+cargo vendoring, offline env-file/preflight helpers, and the Go vendoring
+modes). `airgap-bundle.sh` and `airgap-unbundle.sh` are now thin wrappers over it.
+Behaviour is unchanged — the generated `boxer-airgap.env` is byte-identical
+pre/post refactor for both scopes (verified by diff).
+
+The library gained a second Go dependency mode, **`workspace`** (a pruned
+`go.work` + `go work vendor`, where the `use`d modules stay editable source and
+only their external deps are vendored), alongside boxer's original
+single-module `go mod vendor`; **boxer itself keeps single-module** and is
+unaffected. The `workspace` mode exists for a **downstream consumer** that ships
+boxer as a dependency and tracks an *unreleased* boxer ahead of its module pin:
+such a consumer can now build its own airgap bundle by sourcing this library
+(reference, don't copy) and shipping boxer + itself as one co-developed
+workspace, rather than forking these scripts. This is a mechanism/packaging
+change only; the ADR-0095 decision stands.
+
 ## Status
 
-Accepted (2026-06-23).
+Accepted (2026-06-23; updated 2026-07-14).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
@@ -99,5 +122,5 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 ## References
 
 - [How to build boxer on an airgapped host](../howto/airgapped-build.md)
-- [scripts/dev/airgap-bundle.sh](../../scripts/dev/airgap-bundle.sh), [scripts/dev/airgap-unpack.sh](../../scripts/dev/airgap-unpack.sh)
+- [scripts/dev/airgap-bundle.sh](../../scripts/dev/airgap-bundle.sh), [scripts/dev/airgap-unbundle.sh](../../scripts/dev/airgap-unbundle.sh)
 - [ENGINEERING_PRACTICES §6](../ENGINEERING_PRACTICES.md) — the no-vendor policy this carves out from

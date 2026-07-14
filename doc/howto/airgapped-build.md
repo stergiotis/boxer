@@ -12,7 +12,7 @@ Boxer can be packaged so it builds — and runs — on a host with no network an
 no Go or Rust package access, using only the two languages' native vendoring.
 Two scripts implement it: [scripts/dev/airgap-bundle.sh](../../scripts/dev/airgap-bundle.sh)
 packs a tarball on a connected host, and
-[scripts/dev/airgap-unpack.sh](../../scripts/dev/airgap-unpack.sh) provisions it
+[scripts/dev/airgap-unbundle.sh](../../scripts/dev/airgap-unbundle.sh) provisions it
 on the target. The decision and trade-offs are recorded in
 [ADR-0095](../adr/0095-airgapped-build-bundle.md).
 
@@ -50,7 +50,7 @@ need to rebuild the Rust render host on the target.
 
 **Provided by the environment, deliberately not bundled** (the deploy contract):
 `systemd`, `clickhouse`, `ffmpeg`, and `ollama` (the OpenAI-compatible API
-endpoint). The unpacker preflights for these but does not supply them.
+endpoint). The unbundler preflights for these but does not supply them.
 
 **Not bundled and the target still needs** (no language vendoring covers these):
 
@@ -89,12 +89,12 @@ scripts/dev/airgap-bundle.sh --scope go-only
 
 # 3. Provision on the target:
 tar -I zstd -xf boxer-airgap-*.tar.zst        # or: tar -xzf ... for the .gz form
-boxer/scripts/dev/airgap-unpack.sh            # provisions toolchains + builds
+boxer/scripts/dev/airgap-unbundle.sh            # provisions toolchains + builds
 ```
 
 The bundle script self-checks the **Go** vendor by building `./public/app` and
 the imzero2 Go host offline before packing — the step most people skip. The
-unpacker writes `boxer-airgap.env` (an offline-configured `GOROOT`/`PATH`, plus
+unbundler writes `boxer-airgap.env` (an offline-configured `GOROOT`/`PATH`, plus
 `GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`, `GOFLAGS=-mod=vendor`, and in
 `full` scope the Rust toolchain and a `CARGO_HOME` with the vendored-sources
 config). `source boxer-airgap.env` in any later shell to get the toolchains back.
@@ -104,7 +104,7 @@ config). `source boxer-airgap.env` in any later shell to get the toolchains back
 ### Before shipping — on the build host, network truly down
 
 You can confirm the bundle unpacks and builds offline without a target, by
-running the unpacker inside a rootless network namespace (`unshare -rn`) so any
+running the unbundler inside a rootless network namespace (`unshare -rn`) so any
 stray fetch fails loudly rather than silently succeeding:
 
 ```bash
@@ -114,20 +114,20 @@ cd "$work/boxer"
 unshare -rn bash -c '
   # this probe should FAIL — the namespace has no connectivity:
   timeout 3 bash -c "exec 3<>/dev/tcp/1.1.1.1/443" && { echo "network up — not isolated"; exit 1; }
-  ./scripts/dev/airgap-unpack.sh          # provisions + builds, all offline
+  ./scripts/dev/airgap-unbundle.sh          # provisions + builds, all offline
   source boxer-airgap.env
   ./app dev entry-points
 '
 cd - >/dev/null && rm -rf "$work"          # several GB in full scope
 ```
 
-`airgap-unpack.sh` is non-destructive: it positions the shipped toolchains inside
+`airgap-unbundle.sh` is non-destructive: it positions the shipped toolchains inside
 the extracted tree (`_airgap/toolchains/`) and points `CARGO_HOME` there too, so
 it never touches your `~/.rustup` or `~/.cargo`. A same-host run proves the
 offline build path but not cross-distro portability — the shipped toolchains are
 dynamically linked (see Notes below).
 
-### On the target, after `airgap-unpack.sh`
+### On the target, after `airgap-unbundle.sh`
 
 ```bash
 source boxer-airgap.env
