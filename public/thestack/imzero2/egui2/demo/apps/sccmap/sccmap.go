@@ -1,22 +1,26 @@
 package sccmap
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/dustin/go-humanize"
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/scctree"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
@@ -148,44 +152,96 @@ const (
 	// drag deltas (~2 px/frame) — slow-drag-up feels sluggish, but
 	// tearing down the growth loop matters more.
 	containerGrowGuardPx float32 = 24
+	// repoPathWidth is the desired width of the header "Repository:" path box.
+	repoPathWidth float32 = 420
+	// scanProgressWidth bounds the header progress block (bar + note + Cancel)
+	// so it reads as a compact widget beside the path box rather than filling
+	// the row and shoving the Cancel button off-screen.
+	scanProgressWidth float32 = 380
 )
 
-// sccDataOnce gates the one-shot RunScc invocation. The raw SccGroups
-// and repo basename are read-only after Do() returns and safely shared
-// across every open window's per-instance *Treemap. Caching the raw
-// groups (rather than the final tree) lets the metric switcher rebuild
-// the *layout.Node + colorFn cheaply without re-running the scc
-// subprocess.
-var (
-	sccDataOnce sync.Once
-	sccGroups   []scctree.SccGroup
-	sccRootName string
-	sccDataErr  error
-)
+// repoEnv seeds the initial scan target when a window opens; empty scans the
+// git worktree the host runs in (resolved to its toplevel by the first scan).
+// Each window can then retarget through the header path box.
+var repoEnv = env.NewPath(env.Spec{
+	Name:        "SCCMAP_REPO",
+	Description: "initial repository path explored by the Repo code exploration app; empty scans the host's worktree",
+	Category:    env.CategoryDev,
+})
 
-func ensureSccData() {
-	sccDataOnce.Do(func() {
-		root, err := scctree.RepoRoot()
-		if err != nil {
-			sccDataErr = eh.Errorf("scctree.RepoRoot: %w", err)
-			log.Warn().Err(sccDataErr).Msg("sccmap: scc subprocess failed")
-			return
+// sccData is one repository's scc result: the raw per-language groups plus the
+// resolved root and its basename (the treemap root label). It is built off the
+// render thread by scanScc and handed to the render thread consume-once via
+// the bgjob Runner, so render code never reads a half-built scan. Caching the
+// raw groups (rather than the final tree) lets the metric switcher rebuild the
+// *layout.Node + colormap cheaply without re-running the scc subprocess.
+type sccData struct {
+	repoPath     string // the path the scan was started with
+	resolvedRoot string // git toplevel of repoPath (or the path/worktree itself)
+	rootName     string // basename of resolvedRoot; the treemap root label
+	groups       []scctree.SccGroup
+}
+
+// scanScc resolves path to a git worktree root — falling back to the path
+// itself, then the working directory, when it is not a git repository (scc
+// needs no VCS) — and runs scc there. It executes on the bgjob worker
+// goroutine; a cancelled ctx kills the scc child. report publishes the two
+// indeterminate phases so the header bar animates while scc runs.
+func scanScc(ctx context.Context, path string, report bgjob.Reporter) (data *sccData, err error) {
+	if report == nil {
+		report = func(uint64, uint64, string) {}
+	}
+	report(0, 0, "resolving worktree")
+	root, rootErr := scctree.RepoRootAt(path)
+	if rootErr != nil || root == "" {
+		// Not a git worktree (or git unavailable): visualize the entered
+		// directory directly. An empty path resolves to the working dir so the
+		// header box can show a concrete target after the scan lands.
+		root = path
+		if root == "" {
+			if wd, wdErr := os.Getwd(); wdErr == nil {
+				root = wd
+			}
 		}
-		groups, err := scctree.RunScc(root)
-		if err != nil {
-			sccDataErr = eh.Errorf("scctree.RunScc: %w", err)
-			log.Warn().Err(sccDataErr).Msg("sccmap: scc subprocess failed")
-			return
-		}
-		sccGroups = groups
-		sccRootName = filepath.Base(root)
-	})
+	}
+	report(0, 0, "running scc")
+	var groups []scctree.SccGroup
+	groups, err = scctree.RunSccContext(ctx, root)
+	if err != nil {
+		err = eh.Errorf("scctree.RunScc: %w", err)
+		return
+	}
+	data = &sccData{
+		repoPath:     path,
+		resolvedRoot: root,
+		rootName:     displayName(root),
+		groups:       groups,
+	}
+	return
+}
+
+// scanSccSync runs a scan on the calling goroutine. The demo tour uses it:
+// blocking is fine in a screenshot harness, and each scene needs its data
+// ready at Init time rather than a frame or two later.
+func scanSccSync(path string) (data *sccData, err error) {
+	return scanScc(context.Background(), path, nil)
+}
+
+// displayName names the treemap root after the repository directory, falling
+// back to "repo" for a root with no usable basename.
+func displayName(root string) (name string) {
+	name = filepath.Base(root)
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		name = "repo"
+	}
+	return
 }
 
 // buildTreeForMetrics builds a fresh tree + value extractor + colormap
-// upper-bound under the chosen size/color weights. Always returns a usable
-// (non-nil) root so the widget never sees nil — error and empty-tree cases
-// collapse to a single-leaf placeholder.
+// upper-bound under the chosen size/color weights from the instance's current
+// scan (inst.data). Always returns a usable (non-nil) root so the widget never
+// sees nil — the no-data and empty-tree cases collapse to a single-leaf
+// placeholder.
 //
 // keep is the leaf-inclusion predicate (see App.keepFunc): nil keeps every
 // file, otherwise a file is included only when keep(f) is true. The same
@@ -195,16 +251,16 @@ func ensureSccData() {
 // maxValue is the colormap upper bound. minValue is fixed at 1 to keep
 // NewLogColormap valid; raw values below 1 (or zero-complexity leaves)
 // clamp to palette[0] on the legend.
-func buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.SccFile) bool) (root *layout.Node, valueFn func(*layout.Node) float64, maxValue float64) {
-	if sccDataErr != nil {
-		root = &layout.Node{Name: fmt.Sprintf("scc failed: %v", sccDataErr), Size: 1}
+func (inst *App) buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.SccFile) bool) (root *layout.Node, valueFn func(*layout.Node) float64, maxValue float64) {
+	if inst.data == nil {
+		root = &layout.Node{Name: "no scan data", Size: 1}
 		valueFn = func(*layout.Node) float64 { return 0 }
 		maxValue = 1
 	} else {
 		sizeW := sccMetrics[sizeIdx].W
 		colorW := sccMetrics[colorIdx].W
 		root, valueFn, maxValue = scctree.BuildColormappedTree(
-			sccGroups, sccRootName,
+			inst.data.groups, inst.data.rootName,
 			sizeW, colorW,
 			keep,
 		)
@@ -216,10 +272,10 @@ func buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.SccFile) bool
 	}
 	// NewLogColormap requires strictly min < max with both > 0. Clamp the
 	// upper bound to a value safely above 1 so the panic contract holds for
-	// every degenerate dataset. This must run on ALL paths — the scc-failed
-	// branch above used to return early with maxValue=1, which slipped past
-	// the clamp and panicked NewLogColormap(palette, 1, 1) when the demo had
-	// no source tree to analyse.
+	// every degenerate dataset. This must run on ALL paths — the no-data
+	// branch above returns maxValue=1, which would otherwise slip past the
+	// clamp and panic NewLogColormap(palette, 1, 1) before the first scan
+	// lands (or when a repo has no source tree to analyse).
 	if maxValue < 2 {
 		maxValue = 2
 	}
@@ -232,7 +288,18 @@ func buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.SccFile) bool
 // are process-static, computed once via sccDataOnce on first Mount.
 type App struct {
 	ids *c.WidgetIdStack
-	tm  *treemap.Treemap
+
+	// repoPath is the scan target, bound to the header path box. job runs the
+	// scc scan off the render thread; data is the last completed scan, owned by
+	// the render thread and read by every render helper. tasks and instanceKey
+	// wire the host background-task UI and the Cancel button's stable id.
+	repoPath    string
+	job         bgjob.Runner[sccData]
+	data        *sccData
+	tasks       task.TaskApiI
+	instanceKey uint64
+
+	tm *treemap.Treemap
 	// cs is the gradient legend bound to the same *treemap.Colormap that
 	// drives the treemap's ContinuousColoring, so the two stay in sync
 	// automatically (treemap.Colormap is shared by pointer).
@@ -397,8 +464,12 @@ func (inst *App) makeCellLabelFn(valueFn func(*layout.Node) float64) func(*layou
 // gradient and the treemap cell colors are guaranteed to agree.
 func (inst *App) rebuildTreemap() {
 	keep := inst.keepFunc()
-	root, valueFn, maxValue := buildTreeForMetrics(inst.sizeMetricIdx, inst.colorMetricIdx, keep)
-	inst.sizeDigest, inst.sizeTotal = computeMetricDigest(sccGroups, sccMetrics[inst.sizeMetricIdx].W, keep)
+	root, valueFn, maxValue := inst.buildTreeForMetrics(inst.sizeMetricIdx, inst.colorMetricIdx, keep)
+	var groups []scctree.SccGroup
+	if inst.data != nil {
+		groups = inst.data.groups
+	}
+	inst.sizeDigest, inst.sizeTotal = computeMetricDigest(groups, sccMetrics[inst.sizeMetricIdx].W, keep)
 	if inst.colorMetricIdx == inst.sizeMetricIdx {
 		// Both axes share a single distribution — alias the pointer so
 		// downstream code can detect the collapse via pointer equality
@@ -406,7 +477,7 @@ func (inst *App) rebuildTreemap() {
 		inst.colorDigest = inst.sizeDigest
 		inst.colorTotal = inst.sizeTotal
 	} else {
-		inst.colorDigest, inst.colorTotal = computeMetricDigest(sccGroups, sccMetrics[inst.colorMetricIdx].W, keep)
+		inst.colorDigest, inst.colorTotal = computeMetricDigest(groups, sccMetrics[inst.colorMetricIdx].W, keep)
 	}
 	cm := treemap.NewLogColormap(scctree.ComplexityPalette, 1, maxValue)
 	inst.hoverBand = colorscale.NewHoverBand(
@@ -449,14 +520,37 @@ func (inst *App) rebuildTreemap() {
 
 func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
-	ensureSccData()
-	inst.rebuildTreemap()
+	inst.tasks = task.ForApp(ctx)
+	inst.instanceKey = ctx.InstanceKey()
+	if inst.repoPath == "" {
+		inst.repoPath = repoEnv.Get()
+	}
+	// The treemap + digests are built by drainScan when the first scan lands;
+	// until then Frame renders the scanning placeholder (inst.data == nil).
+	inst.startScan()
 	return
 }
 
-func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) { return }
+func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) {
+	inst.job.Invalidate()
+	return
+}
 
 func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
+	// Consume a completed scan (if any) before rendering, so the header box and
+	// the treemap reflect the newest data this frame.
+	inst.drainScan()
+
+	inst.renderHeader()
+	c.AddSpace(styletokens.GapItems(inst.density))
+
+	// Before the first scan lands (or after a failure) there is no tree yet;
+	// show the reason and skip the metric controls / treemap entirely.
+	if inst.data == nil {
+		inst.renderNoData()
+		return
+	}
+
 	prevSize, prevColor := inst.sizeMetricIdx, inst.colorMetricIdx
 	// Checkbox uses r10 databinding for state, which has one-frame lag:
 	// inst.includeGenerated is updated by StateManager.Sync BEFORE Frame
@@ -528,6 +622,101 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	// because its sample tree has no leaf children at the top level.
 	inst.cs.Render()
 	return
+}
+
+// startScan launches the background scc scan for the current path. The path is
+// snapshotted here on the render thread; the worker only shells out and builds
+// pure data, so it never touches imzero2 state.
+func (inst *App) startScan() {
+	path := inst.repoPath
+	title := "scc scan: " + path
+	if path == "" {
+		title = "scc scan: current repository"
+	}
+	inst.job.StartReporting(inst.tasks, bgjob.Spec{
+		Kind:  "sccmap.scan",
+		Title: title,
+	}, func(ctx context.Context, report bgjob.Reporter) (*sccData, error) {
+		return scanScc(ctx, path, report)
+	})
+}
+
+// drainScan consumes a completed scan exactly once on the render thread: it
+// swaps in the new dataset, upgrades an empty/"." path box to the resolved
+// root so the box shows a concrete target, and rebuilds the treemap + digests
+// against the new groups.
+func (inst *App) drainScan() {
+	res, _, ok := inst.job.TakeResult()
+	if !ok {
+		return
+	}
+	inst.data = res
+	if (inst.repoPath == "" || inst.repoPath == ".") && res.resolvedRoot != "" {
+		inst.repoPath = res.resolvedRoot
+	}
+	inst.rebuildTreemap()
+}
+
+// renderHeader draws the "Repository:" path box and the scan/rescan control
+// inline (no panel), so the same Frame body renders both in the windowed host
+// and in the demo tour's host Ui scope.
+func (inst *App) renderHeader() {
+	for range c.Horizontal().KeepIter() {
+		c.Label("Repository:").Send()
+		c.TextEdit(inst.ids.PrepareStr("repo-path"), inst.repoPath, false).
+			DesiredWidth(repoPathWidth).SendRespVal(&inst.repoPath)
+		inst.renderScanOrProgress()
+	}
+}
+
+// renderScanOrProgress renders the jobprogress bar + Cancel while a scan is in
+// flight (with a render-thread heartbeat repaint), or the Scan button and the
+// last error otherwise. The worker never calls c.* itself.
+func (inst *App) renderScanOrProgress() {
+	snap := inst.job.Snapshot()
+	if snap.State == bgjob.StateRunning {
+		// jobprogress stacks title / bar / status+Cancel vertically; give it a
+		// bounded block of its own — inline in the header row the bar would
+		// fill the remaining width and push the Cancel button off-screen.
+		for range c.Vertical().KeepIter() {
+			c.UiSetMaxWidth(scanProgressWidth)
+			if jobprogress.Render(jobprogress.Input{
+				Title:    "Scanning repository",
+				Fraction: snap.Fraction,
+				EtaMs:    snap.EtaMs,
+				Note:     snap.Note,
+				CancelId: c.MakeAbsoluteIdStr(fmt.Sprintf("sccmap-scan-cancel-%d", inst.instanceKey)),
+			}) {
+				inst.job.Cancel()
+			}
+		}
+		c.RequestRepaintAfter(0.05)
+		return
+	}
+	if c.Button(inst.ids.PrepareStr("scan-btn"), c.Atoms().Text("Scan").Keep()).
+		SendResp().HasPrimaryClicked() {
+		inst.startScan()
+	}
+	if snap.State == bgjob.StateFailed && snap.Err != nil {
+		c.Label("⚠ scan failed: " + snap.Err.Error()).Send()
+	}
+}
+
+// renderNoData fills the body before the first scan completes (or after a
+// failure), reading the job snapshot for the reason.
+func (inst *App) renderNoData() {
+	snap := inst.job.Snapshot()
+	switch snap.State {
+	case bgjob.StateRunning:
+		c.Label("Scanning repository…").Send()
+	case bgjob.StateFailed:
+		c.Label("The scan failed. Check the repository path and press Scan.").Send()
+		if snap.Err != nil {
+			c.Label(snap.Err.Error()).Send()
+		}
+	default:
+		c.Label("No scan yet. Set a repository path and press Scan.").Send()
+	}
 }
 
 // availableContainerSize reports the (w, h) the treemap should fill

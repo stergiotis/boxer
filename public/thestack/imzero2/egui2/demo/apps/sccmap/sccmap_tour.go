@@ -2,8 +2,8 @@
 // (ADR-0057). sccmap is a stateful AppI, so each scene registers via the
 // Init / RenderStateful pair: Init builds an App bound to the host-supplied
 // WidgetIdStack — pinned to a size/color metric and to the include-tests /
-// show-values toggles the scene means to showcase — runs the one-shot scc
-// data fetch, and builds the treemap; RenderStateful draws the app body into
+// show-values toggles the scene means to showcase — runs a synchronous scc
+// scan, and builds the treemap; RenderStateful draws the app body into
 // the host Ui scope each frame via App.Frame (no c.Window — the driver owns
 // the wrapping). The central TestDriver (widgets) captures one PNG per scene.
 //
@@ -63,10 +63,12 @@ func init() {
 }
 
 // makeTourInit returns an Init that builds an App bound to the host-supplied
-// id stack, pins the scene's metric/toggle state, runs the one-shot scc
-// fetch, and builds the treemap + legend against that stack (mirroring
-// App.Mount). ids must be set before rebuildTreemap, since the treemap and
-// colorscale derive their widget ids from it.
+// id stack, pins the scene's metric/toggle state, runs a synchronous scc scan,
+// and builds the treemap + legend against that stack. Where App.Mount kicks
+// off a background scan and lets Frame render a placeholder until it lands, the
+// tour scans inline so the scene's data is ready before the first capture. ids
+// must be set before rebuildTreemap, since the treemap and colorscale derive
+// their widget ids from it.
 func makeTourInit(sizeIdx, colorIdx int, includeTests, showValues bool) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
@@ -75,7 +77,14 @@ func makeTourInit(sizeIdx, colorIdx int, includeTests, showValues bool) func(ids
 		inst.colorMetricIdx = colorIdx
 		inst.includeTests = includeTests
 		inst.showValues = showValues
-		ensureSccData()
+		// Screenshot harness: scan synchronously so the scene has data at Init
+		// time (the interactive app scans on a background job instead). The
+		// header box shows "." — the current repo — rather than a
+		// machine-specific absolute path that would leak into a committed PNG.
+		inst.repoPath = "."
+		if d, scanErr := scanSccSync(inst.repoPath); scanErr == nil {
+			inst.data = d
+		}
 		inst.rebuildTreemap()
 		state = inst
 		return

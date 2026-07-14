@@ -1,9 +1,16 @@
 // Package sccmap is the "Repo code exploration" app — visualises
-// `go tool scc` output over the current repository as a frame-based
+// `go tool scc` output over a chosen repository as a frame-based
 // treemap with one or two distsummary widgets reporting the
 // statistical distribution of the currently-selected size / color
 // metrics. Cell area defaults to lines-of-code, cell colour to
 // log-scaled cyclomatic complexity (green → yellow → red).
+//
+// The scan target is entered in the header path box — the git worktree the
+// host runs in by default, or the SCCMAP_REPO env var — and resolves to that
+// path's git toplevel (falling back to the path itself for a plain, non-repo
+// directory). Each scan runs on a background job (keelson/runtime/bgjob), so
+// the view shows a scanning placeholder rather than freezing while scc walks a
+// large tree, and a Cancel affordance aborts an in-flight scan.
 //
 // Two checkboxes filter what the statistics survey: "Include generated"
 // (scctree.IsGenerated) and "Include tests" (scctree.IsTest); both default

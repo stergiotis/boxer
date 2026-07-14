@@ -1,7 +1,6 @@
 package sccmap
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/scctree"
@@ -15,39 +14,21 @@ import (
 //
 //	panic: colormap: NewConfig requires min < max
 //
-// when the "repo analyzer" had no source tree: the scc-failed branch returned
-// early with maxValue=1, slipping past the clamp, so NewLogColormap(_, 1, 1)
-// blew up. Both degenerate inputs (scc failed, empty dataset) must now land on
-// the shared clamp.
+// The two degenerate inputs — no scan has landed yet (inst.data == nil) and an
+// empty dataset — must both land on the shared maxValue clamp rather than
+// slipping through with maxValue == 1.
 func TestBuildTreeForMetricsDegenerateRange(t *testing.T) {
-	// buildTreeForMetrics reads package globals; snapshot and restore so a
-	// case does not leak into the rest of the package's tests.
-	savedErr, savedGroups, savedRoot := sccDataErr, sccGroups, sccRootName
-	t.Cleanup(func() { sccDataErr, sccGroups, sccRootName = savedErr, savedGroups, savedRoot })
-
 	cases := []struct {
-		name  string
-		setup func()
+		name string
+		data *sccData
 	}{
-		{
-			name: "scc failed (no source tree)",
-			setup: func() {
-				sccDataErr = errors.New("scctree.RepoRoot: no repo root")
-				sccGroups, sccRootName = nil, ""
-			},
-		},
-		{
-			name: "empty dataset",
-			setup: func() {
-				sccDataErr = nil
-				sccGroups, sccRootName = nil, "root"
-			},
-		},
+		{name: "no scan data (nil)", data: nil},
+		{name: "empty dataset", data: &sccData{rootName: "root"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.setup()
-			_, _, maxValue := buildTreeForMetrics(defaultSizeMetricIdx, defaultColorMetricIdx, nil)
+			inst := &App{data: tc.data}
+			_, _, maxValue := inst.buildTreeForMetrics(defaultSizeMetricIdx, defaultColorMetricIdx, nil)
 			if !(1 < maxValue) {
 				t.Fatalf("maxValue = %v; want > 1 so NewLogColormap(palette, 1, maxValue) holds", maxValue)
 			}
