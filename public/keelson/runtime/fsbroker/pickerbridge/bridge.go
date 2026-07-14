@@ -128,13 +128,38 @@ func (inst *Bridge) CurrentRequestId() (id string) {
 func (inst *Bridge) startPicker(req *fsbroker.PendingRequest) {
 	mode, title := pickerOptionsFor(req.Op, inst.cfg.TitleOverride)
 	idStr := "fs-picker-" + req.Id
-	inst.picker = filepicker.New(idStr, mode,
+	opts := []filepicker.Option{
 		filepicker.WithFsBackend(inst.fsys),
 		filepicker.WithStartDir(inst.cfg.StartDir),
 		filepicker.WithTitle(title),
-	)
+	}
+	// Pre-fill the "Save as" filename when the requesting app suggested one.
+	if hint := saveFilenameHint(mode, req.SuggestedName); hint != "" {
+		opts = append(opts, filepicker.WithDefaultFilename(hint))
+	}
+	inst.picker = filepicker.New(idStr, mode, opts...)
 	inst.picker.Show()
 	inst.curReq = req
+}
+
+// saveFilenameHint returns the filename the picker should pre-fill for this
+// dialog, or "" when there is nothing to pre-fill. Only ModeSave ("Save as")
+// pre-fills — WithDefaultFilename is a no-op in the open/folder modes, but the
+// gate keeps the intent explicit. The suggestion is reduced to its base
+// component so an app-supplied hint can't seed a directory path (or a
+// traversal) into the filename box; the resolved write path still comes from
+// the user's picker selection, never this hint. Extracted from startPicker so
+// the gating is testable without a real egui render context (same reason as
+// pickerOptionsFor).
+func saveFilenameHint(mode filepicker.ModeE, suggested string) (name string) {
+	if mode != filepicker.ModeSave {
+		return ""
+	}
+	suggested = strings.TrimSpace(suggested)
+	if suggested == "" {
+		return ""
+	}
+	return filepath.Base(suggested)
 }
 
 // pickerOptionsFor maps a fs.dialog.{op} subject to the filepicker

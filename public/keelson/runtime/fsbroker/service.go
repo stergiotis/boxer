@@ -88,6 +88,12 @@ type PendingRequest struct {
 	Id    string
 	Op    string
 	AppId app.AppIdT
+	// SuggestedName is the optional filename the requesting app asked the
+	// picker to pre-fill (from the DialogRequest payload). Meaningful only for
+	// the "Save as" dialog (op "write"); empty otherwise. The bridge feeds it
+	// to filepicker.WithDefaultFilename — the user may overwrite it, and the
+	// broker never derives the resolved path from it.
+	SuggestedName string
 }
 
 // handle stores a resolved file grant. Path is never exposed back to the
@@ -101,13 +107,15 @@ type handle struct {
 }
 
 // pendingEntry tracks an in-flight dialog. replySubject is the inbox the
-// requesting app's Request is waiting on.
+// requesting app's Request is waiting on; suggestedName is the optional
+// picker pre-fill decoded from the DialogRequest payload.
 type pendingEntry struct {
-	id           string
-	op           string
-	appId        app.AppIdT
-	replySubject string
-	created      time.Time
+	id            string
+	op            string
+	appId         app.AppIdT
+	replySubject  string
+	suggestedName string
+	created       time.Time
 }
 
 // Service subscribes to fs.> and dispatches dialog opens, handle ops, and
@@ -190,7 +198,7 @@ func (inst *Service) Pending() (out []PendingRequest) {
 	defer inst.mu.Unlock()
 	out = make([]PendingRequest, 0, len(inst.pending))
 	for _, p := range inst.pending {
-		out = append(out, PendingRequest{Id: p.id, Op: p.op, AppId: p.appId})
+		out = append(out, PendingRequest{Id: p.id, Op: p.op, AppId: p.appId, SuggestedName: p.suggestedName})
 	}
 	return
 }
@@ -289,13 +297,24 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 
 func (inst *Service) queuePending(msg *app.Msg, op string) {
 	reqId := mintRequestId(msg.Sender, op)
+	// Optional advisory hints (currently just a suggested filename the "Save
+	// as" dialog pre-fills). A nil / empty payload carries no hints; a
+	// malformed one degrades to "no hint" rather than failing the dialog — the
+	// hint is advisory and the user still confirms the path in the picker.
+	var suggestedName string
+	if req, derr := UnmarshalDialogRequest(msg.Payload); derr == nil {
+		suggestedName = req.SuggestedName
+	} else {
+		inst.log.Debug().Err(derr).Str("op", op).Msg("fsbroker: ignoring malformed dialog request hint")
+	}
 	inst.mu.Lock()
 	inst.pending[reqId] = &pendingEntry{
-		id:           reqId,
-		op:           op,
-		appId:        msg.Sender,
-		replySubject: msg.Reply,
-		created:      time.Now(),
+		id:            reqId,
+		op:            op,
+		appId:         msg.Sender,
+		replySubject:  msg.Reply,
+		suggestedName: suggestedName,
+		created:       time.Now(),
 	}
 	inst.mu.Unlock()
 	inst.log.Info().Str("reqId", reqId).Str("op", op).Str("from", string(msg.Sender)).
@@ -320,6 +339,8 @@ func (inst *Service) handleHandleOp(msg *app.Msg) {
 	switch op {
 	case "read":
 		inst.handleRead(msg.Reply, h)
+	case "write":
+		inst.handleWrite(msg, h)
 	case "close":
 		inst.handleClose(msg.Reply, uuid)
 	case "watch":
@@ -362,6 +383,30 @@ func (inst *Service) handleRead(reply string, h *handle) {
 		return
 	}
 	_ = inst.busClient.Publish(reply, buf.Bytes())
+}
+
+// handleWrite persists the request payload to the handle's path. Rejected
+// unless the handle was minted via fs.dialog.write (HandleModeWrite) — a
+// read-mode handle can never be turned into a write. The payload is written
+// whole with os.WriteFile (create-or-truncate, 0o644): it already sits in
+// memory as the inbound bus message, so there is no incremental streaming or
+// additional size cap to impose beyond what the bus itself already did when it
+// delivered the message. On success the broker replies DialogReply{Granted:
+// true}; a mode mismatch or filesystem error replies DialogReply{Granted:
+// false, Reason:...} through replyError — the same shape every other handle op
+// uses — so the app gets an explicit positive or negative acknowledgement it
+// can surface to the user (a "Save" needs to report whether the bytes landed).
+func (inst *Service) handleWrite(msg *app.Msg, h *handle) {
+	if h.mode != HandleModeWrite {
+		inst.replyError(msg.Reply, "handle not opened for write")
+		return
+	}
+	err := os.WriteFile(h.path, msg.Payload, 0o644)
+	if err != nil {
+		inst.replyError(msg.Reply, "write: "+err.Error())
+		return
+	}
+	_ = inst.replyDialog(msg.Reply, DialogReply{Granted: true})
 }
 
 func (inst *Service) handleClose(reply string, uuid string) {

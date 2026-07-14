@@ -149,6 +149,135 @@ func TestService_Handle_UnknownUuid(t *testing.T) {
 	assert.Contains(t, dr.Reason, "unknown handle")
 }
 
+func TestService_DialogWrite_ResolveGrantsHandleAndWrites(t *testing.T) {
+	inst, svc, _, cleanup := newSetup(t)
+	defer cleanup()
+
+	// The write path needs its own client: newSetup's app is granted only
+	// fs.dialog.read. The broker augments fs.handle.{uuid}.> on Resolve.
+	writer := inst.NewClient("test.writer", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogWrite, Direction: app.CapDirectionPub, Reason: "test app may request writes"},
+	})
+
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "out.structdto")
+	want := []byte("structdto-container-bytes")
+
+	type res struct {
+		reply []byte
+		err   error
+	}
+	resultCh := make(chan res, 1)
+	go func() {
+		reply, err := writer.Request(fsbroker.SubjectDialogWrite, nil)
+		resultCh <- res{reply, err}
+	}()
+
+	req := pendingOnce(t, svc)
+	assert.Equal(t, "write", req.Op)
+	assert.Equal(t, app.AppIdT("test.writer"), req.AppId)
+	assert.Empty(t, req.SuggestedName, "nil payload carries no filename hint")
+
+	handleUuid, err := svc.Resolve(req.Id, path)
+	require.NoError(t, err)
+	require.NotEmpty(t, handleUuid)
+
+	r := <-resultCh
+	require.NoError(t, r.err)
+	reply, err := fsbroker.UnmarshalDialogReply(r.reply)
+	require.NoError(t, err)
+	require.True(t, reply.Granted)
+	require.Equal(t, fsbroker.HandleSubjectPrefix+handleUuid, reply.HandleSubjectPrefix)
+
+	// Write via the granted handle subject; the ack is a DialogReply so the
+	// app can tell success (Granted) from a filesystem error (Reason).
+	ackRaw, err := writer.Request(reply.HandleSubjectPrefix+".write", want)
+	require.NoError(t, err)
+	ack, err := fsbroker.UnmarshalDialogReply(ackRaw)
+	require.NoError(t, err)
+	require.True(t, ack.Granted, "write ack should be granted, got reason %q", ack.Reason)
+
+	// The bytes landed at the resolved path, byte-for-byte.
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
+func TestService_DialogWrite_SurfacesSuggestedName(t *testing.T) {
+	inst, svc, _, cleanup := newSetup(t)
+	defer cleanup()
+
+	writer := inst.NewClient("test.writer", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogWrite, Direction: app.CapDirectionPub, Reason: "test app may request writes"},
+	})
+
+	payload, err := fsbroker.MarshalDialogRequest(fsbroker.DialogRequest{SuggestedName: "out.structdto"})
+	require.NoError(t, err)
+
+	type res struct {
+		reply []byte
+		err   error
+	}
+	resultCh := make(chan res, 1)
+	go func() {
+		reply, rerr := writer.Request(fsbroker.SubjectDialogWrite, payload)
+		resultCh <- res{reply, rerr}
+	}()
+
+	// The suggested filename rides the pending request through to the picker
+	// bridge, which pre-fills the "Save as" dialog with it.
+	req := pendingOnce(t, svc)
+	assert.Equal(t, "write", req.Op)
+	assert.Equal(t, "out.structdto", req.SuggestedName)
+
+	// Complete the dialog so the app goroutine doesn't leak on the reply inbox.
+	_, err = svc.Resolve(req.Id, filepath.Join(t.TempDir(), "out.structdto"))
+	require.NoError(t, err)
+	<-resultCh
+}
+
+func TestService_Handle_WriteRejectedOnReadHandle(t *testing.T) {
+	inst, svc, appBus, cleanup := newSetup(t)
+	defer cleanup()
+	_ = inst
+
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "ro.txt")
+	require.NoError(t, os.WriteFile(path, []byte("existing"), 0o644))
+
+	type res struct {
+		reply []byte
+		err   error
+	}
+	resultCh := make(chan res, 1)
+	go func() {
+		reply, err := appBus.Request(fsbroker.SubjectDialogRead, nil)
+		resultCh <- res{reply, err}
+	}()
+	req := pendingOnce(t, svc)
+	_, err := svc.Resolve(req.Id, path)
+	require.NoError(t, err)
+	r := <-resultCh
+	require.NoError(t, r.err)
+	dr, err := fsbroker.UnmarshalDialogReply(r.reply)
+	require.NoError(t, err)
+	require.True(t, dr.Granted)
+
+	// A write on a read-mode handle is refused by the service, and the file on
+	// disk is left untouched — the mode gate is what keeps a read grant from
+	// being escalated into a write.
+	ackRaw, err := appBus.Request(dr.HandleSubjectPrefix+".write", []byte("nope"))
+	require.NoError(t, err)
+	ack, err := fsbroker.UnmarshalDialogReply(ackRaw)
+	require.NoError(t, err)
+	assert.False(t, ack.Granted)
+	assert.Contains(t, ack.Reason, "not opened for write")
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("existing"), got, "read handle must not permit overwriting")
+}
+
 func TestService_Handle_CloseEvictsHandle(t *testing.T) {
 	inst, svc, appBus, cleanup := newSetup(t)
 	defer cleanup()
@@ -229,4 +358,20 @@ func TestService_AppCannotAccessOtherAppsHandle(t *testing.T) {
 	// Today: succeeds because the service does not check Msg.Sender
 	// against handle.appId. M4 NKey identity will tighten this.
 	assert.Equal(t, []byte("secret"), bReply, "hygiene-mode: documenting cross-app handle access")
+}
+
+func TestDialogRequest_RoundTrip(t *testing.T) {
+	orig := fsbroker.DialogRequest{SuggestedName: "résultset.structdto"}
+	b, err := fsbroker.MarshalDialogRequest(orig)
+	require.NoError(t, err)
+	require.NotEmpty(t, b)
+	got, err := fsbroker.UnmarshalDialogRequest(b)
+	require.NoError(t, err)
+	assert.Equal(t, orig, got)
+
+	// A nil / empty payload is the "no hints" wire shape and must decode to a
+	// zero DialogRequest without error (nil-payload dialog opens stay valid).
+	zero, err := fsbroker.UnmarshalDialogRequest(nil)
+	require.NoError(t, err)
+	assert.Equal(t, fsbroker.DialogRequest{}, zero)
 }

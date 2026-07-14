@@ -131,3 +131,25 @@ func TestPickerOptionsFor_EmptyOverrideKeepsDefault(t *testing.T) {
 	_, title := pickerOptionsFor("bundle", "")
 	assert.Equal(t, "Pick folder", title)
 }
+
+func TestSaveFilenameHint(t *testing.T) {
+	cases := []struct {
+		name string
+		mode filepicker.ModeE
+		in   string
+		want string
+	}{
+		{"save prefills the suggestion", filepicker.ModeSave, "resultset.structdto", "resultset.structdto"},
+		{"save trims surrounding space", filepicker.ModeSave, "  spaced.bin  ", "spaced.bin"},
+		{"save strips a directory component", filepicker.ModeSave, "sub/dir/name.x", "name.x"},
+		{"save reduces a traversal to its base", filepicker.ModeSave, "../../etc/passwd", "passwd"},
+		{"save with empty suggestion prefills nothing", filepicker.ModeSave, "   ", ""},
+		{"open never prefills", filepicker.ModeOpen, "resultset.structdto", ""},
+		{"pick-folder never prefills", filepicker.ModePickFolder, "resultset.structdto", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, saveFilenameHint(tc.mode, tc.in))
+		})
+	}
+}

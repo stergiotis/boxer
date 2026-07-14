@@ -44,6 +44,52 @@ func UnmarshalDialogReply(b []byte) (r DialogReply, err error) {
 	return
 }
 
+// DialogRequest is the OPTIONAL payload an app may publish on an
+// fs.dialog.{op} open to carry advisory hints for the picker. Today it holds
+// only a suggested filename for the "Save as" dialog (fs.dialog.write). A nil
+// or empty payload means "no hints", so callers that publish nil to open a
+// dialog stay wire-compatible.
+//
+// Unlike the DialogReply / Watch* payloads — leeway-coded per-type codecs,
+// shaped for replay into the runtime.facts store — this ephemeral control-plane
+// hint rides the buscodec DEFAULT (canonical CBOR) path. buscodec routes
+// unregistered types there by design (ADR-0036; the leeway migration is
+// "opt-in per payload type"), so no codec/dialogrequest package or vdd
+// vocabulary term is added for a value that never enters the facts store. Field
+// keys therefore come from the `cbor:` tag, not a leeway membership.
+type DialogRequest struct {
+	// SuggestedName is the filename the picker pre-fills in ModeSave ("Save
+	// as"); non-save dialogs ignore it. Advisory only — the user may overwrite
+	// it, and the broker NEVER derives the write path from it (the resolved
+	// path comes from the picker selection). A basename is expected; the
+	// picker reduces any directory component away.
+	SuggestedName string `cbor:"suggestedName"`
+}
+
+// MarshalDialogRequest serialises a DialogRequest via the canonical bus codec
+// (the default CBOR path — DialogRequest registers no per-type codec).
+func MarshalDialogRequest(r DialogRequest) (b []byte, err error) {
+	b, err = buscodec.Encode(r)
+	if err != nil {
+		err = eh.Errorf("fsbroker: marshal dialog request: %w", err)
+	}
+	return
+}
+
+// UnmarshalDialogRequest is the inverse of MarshalDialogRequest. An empty byte
+// slice yields a zero DialogRequest without error, so a nil-payload dialog open
+// (no hints) stays wire-compatible — mirrors UnmarshalWatchRequest.
+func UnmarshalDialogRequest(b []byte) (r DialogRequest, err error) {
+	if len(b) == 0 {
+		return
+	}
+	r, err = buscodec.Decode[DialogRequest](b)
+	if err != nil {
+		err = eh.Errorf("fsbroker: unmarshal dialog request: %w", err)
+	}
+	return
+}
+
 // MarshalWatchRequest serialises a WatchRequest. Empty payload (zero-
 // length b) is also a valid watch request, so callers may publish nil
 // when defaults suffice; UnmarshalWatchRequest tolerates that on the
