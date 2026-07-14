@@ -162,8 +162,14 @@ if [ "$scope" = full ]; then
         tmp_cargo="$(mktemp -d)"
         sed -E "s#^directory = .*#directory = \"$src/rust/vendor\"#" \
             "$src/_airgap/cargo-config.toml.in" > "$tmp_cargo/config.toml"
+        # Pin every rustc to the toolchain we ship. The rustup `rustc` proxy on
+        # PATH otherwise resolves per-crate by cwd, and the vendored crates carry
+        # no rust-toolchain pin — so it falls back to the host default (often
+        # `stable`), compiling the deps with the wrong compiler and, if that
+        # toolchain isn't fully installed, racing parallel auto-installs.
         ( cd "$src/rust/imzero2" && \
           CARGO_HOME="$tmp_cargo" CARGO_NET_OFFLINE=true \
+          RUSTUP_TOOLCHAIN="$(basename "$rust_sysroot")" \
             "$rust_sysroot/bin/cargo" build --release --frozen --no-default-features --features headless \
               --target-dir "$tmp_cargo/target" )
         rm -rf -- "$tmp_cargo"
