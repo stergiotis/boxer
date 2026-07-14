@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"os/exec"
 	"sort"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -21,9 +21,7 @@ type BoundaryCrossing struct {
 // BlameOwners returns the set of author and co-author emails for a file,
 // derived from the current git blame snapshot.
 func BlameOwners(ctx context.Context, repoDir string, filePath string, coAuthorCache map[string][]string) (owners []string, err error) {
-	cmd := exec.CommandContext(ctx, "git", "blame", "--porcelain", "--", filePath)
-	cmd.Dir = repoDir
-	out, cmdErr := cmd.Output()
+	out, cmdErr := extbin.Git.Output(ctx, extbin.Opts{Dir: repoDir}, "blame", "--porcelain", "--", filePath)
 	if cmdErr != nil {
 		// file may be deleted, binary, or empty — no owners
 		return nil, nil
@@ -71,9 +69,7 @@ func BlameOwners(ctx context.Context, repoDir string, filePath string, coAuthorC
 
 // commitCoAuthors extracts emails from Co-authored-by trailers in a commit body.
 func commitCoAuthors(ctx context.Context, repoDir string, hash string) (emails []string) {
-	cmd := exec.CommandContext(ctx, "git", "log", "-1", "--format=%b", hash)
-	cmd.Dir = repoDir
-	out, err := cmd.Output()
+	out, err := extbin.Git.Output(ctx, extbin.Opts{Dir: repoDir}, "log", "-1", "--format=%b", hash)
 	if err != nil {
 		return nil
 	}
@@ -91,9 +87,7 @@ func commitCoAuthors(ctx context.Context, repoDir string, hash string) (emails [
 
 // commitModifiedFiles returns file paths modified by a commit using diff-tree.
 func commitModifiedFiles(ctx context.Context, repoDir string, hash string) (files []string, err error) {
-	cmd := exec.CommandContext(ctx, "git", "diff-tree", "--no-commit-id", "--name-only", "-r", hash)
-	cmd.Dir = repoDir
-	out, cmdErr := cmd.Output()
+	out, cmdErr := extbin.Git.Output(ctx, extbin.Opts{Dir: repoDir}, "diff-tree", "--no-commit-id", "--name-only", "-r", hash)
 	if cmdErr != nil {
 		err = eb.Build().Str("hash", hash).Errorf("git diff-tree --name-only failed: %w", cmdErr)
 		return

@@ -2,15 +2,16 @@ package adr
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -45,13 +46,17 @@ var overviewQueries = []namedQuery{
          FROM adr WHERE last_date != '' ORDER BY last_date DESC LIMIT 12`},
 }
 
-func resolveChBinary() (bin string, ok bool) {
-	bin = chlocalpool.DefaultBinaryPath
-	if _, err := os.Stat(bin); err == nil {
-		return bin, true
+// resolveChBinary reports whether clickhouse-local is reachable and, when it is
+// via the bundled path, returns that path as an explicit override. An empty
+// path with ok=true means "resolve on PATH at call time" (left to extbin).
+func resolveChBinary() (path string, ok bool) {
+	if _, err := os.Stat(chlocalpool.DefaultBinaryPath); err == nil {
+		return chlocalpool.DefaultBinaryPath, true
 	}
-	if resolved, err := exec.LookPath("clickhouse-local"); err == nil {
-		return resolved, true
+	// Command resolves the binary (PATH lookup) without running it; a nil error
+	// means clickhouse-local is installed.
+	if _, err := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{}); err == nil {
+		return "", true
 	}
 	return "", false
 }
@@ -79,14 +84,18 @@ func RunQuery(adrArrow, coderefArrow, query, format string, stdout io.Writer) (o
 		format = "PrettyCompact"
 	}
 	script := chTablePrelude(filepath.Base(adrArrow), filepath.Base(coderefArrow)) + query
-	cmd := exec.Command(bin, "--multiquery", "--output-format", format)
-	cmd.Dir = filepath.Dir(adrArrow)
+	cmd, err := extbin.ClickHouseLocal.Command(context.Background(),
+		extbin.Opts{Path: bin, Dir: filepath.Dir(adrArrow)},
+		"--multiquery", "--output-format", format)
+	if err != nil {
+		return true, eb.Build().Str("query", query).Errorf("resolve clickhouse-local: %w", err)
+	}
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Stdout = stdout
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if runErr := cmd.Run(); runErr != nil {
-		return true, eb.Build().Str("stderr", stderr.String()).Str("bin", bin).
+		return true, eb.Build().Str("stderr", stderr.String()).Str("bin", cmd.Path).
 			Str("query", query).Errorf("clickhouse-local: %w", runErr)
 	}
 	return true, nil

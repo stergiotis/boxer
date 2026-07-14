@@ -20,7 +20,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -31,8 +30,25 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+)
+
+// Built release artifacts this package executes. Their paths are computed at
+// run time (under a release dir), so they are Local extbin programs — declared
+// here purely so they appear in the audited program registry.
+var (
+	deployCarrier = extbin.Declare(extbin.Program{
+		Name:        "deploy-carrier",
+		Kind:        extbin.Local,
+		InstallHint: "built by the deploy build step (main_go)",
+	})
+	deployWsProbe = extbin.Declare(extbin.Program{
+		Name:        "deploy-ws-probe",
+		Kind:        extbin.Local,
+		InstallHint: "built by the deploy build step (imzero2_ws_probe)",
+	})
 )
 
 // Config is a deploy run's configuration. Phase 1 takes it from cli flags;
@@ -111,7 +127,7 @@ func Run(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err
 // with its commit signature verified against the same trusted keys as tags. The
 // release is named by `git describe`, which doubles as its SD12 version floor.
 func runRef(ctx context.Context, lg zerolog.Logger, cfg Config) (deployed bool, err error) {
-	if err = step(ctx, lg, "fetch", cfg.Workspace, nil, "git", "fetch", "--tags", "--prune", cfg.Remote); err != nil {
+	if err = step(ctx, lg, "fetch", extbin.Git, extbin.Opts{Dir: cfg.Workspace}, "fetch", "--tags", "--prune", cfg.Remote); err != nil {
 		return false, err
 	}
 	commit, err := resolveCommit(ctx, cfg.Workspace, cfg.Ref)
@@ -207,10 +223,10 @@ func deployResolved(ctx context.Context, lg zerolog.Logger, cfg Config, committi
 // --- steps ---
 
 func resolveTags(ctx context.Context, lg zerolog.Logger, cfg Config) (newest, current string, err error) {
-	if err = step(ctx, lg, "fetch", cfg.Workspace, nil, "git", "fetch", "--tags", "--prune", cfg.Remote); err != nil {
+	if err = step(ctx, lg, "fetch", extbin.Git, extbin.Opts{Dir: cfg.Workspace}, "fetch", "--tags", "--prune", cfg.Remote); err != nil {
 		return "", "", err
 	}
-	out, e := run(ctx, cfg.Workspace, nil, "git", "tag", "--list")
+	out, e := run(ctx, extbin.Git, extbin.Opts{Dir: cfg.Workspace}, "tag", "--list")
 	if e != nil {
 		return "", "", eb.Build().Str("output", tail(out, 1000)).Errorf("deploy: git tag list: %w", e)
 	}
@@ -222,7 +238,7 @@ func resolveTags(ctx context.Context, lg zerolog.Logger, cfg Config) (newest, cu
 }
 
 func checkout(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) error {
-	return step(ctx, lg, "checkout", cfg.Workspace, nil, "git", "checkout", "--force", "--detach", tag)
+	return step(ctx, lg, "checkout", extbin.Git, extbin.Opts{Dir: cfg.Workspace}, "checkout", "--force", "--detach", tag)
 }
 
 // verifyTag enforces SD8: the tag must carry a valid GPG/SSH signature from a
@@ -234,7 +250,7 @@ func verifyTag(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) e
 		lg.Warn().Str("tag", tag).Msg("deploy: signed-tag verification DISABLED — dev/loopback only, do NOT use on an internet-exposed box")
 		return nil
 	}
-	out, err := run(ctx, cfg.Workspace, nil, "git", "verify-tag", tag)
+	out, err := run(ctx, extbin.Git, extbin.Opts{Dir: cfg.Workspace}, "verify-tag", tag)
 	if err != nil {
 		return eb.Build().Str("tag", tag).Str("output", tail(out, 1500)).
 			Errorf("deploy: tag %s has no valid signature from a trusted key — refusing to build: %w", tag, err)
@@ -247,7 +263,7 @@ func verifyTag(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) e
 // it does not name one — e.g. a ref that was never pushed to the remote the box
 // fetches. Operator --ref path (SD10).
 func resolveCommit(ctx context.Context, workspace, ref string) (string, error) {
-	out, err := run(ctx, workspace, nil, "git", "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	out, err := run(ctx, extbin.Git, extbin.Opts{Dir: workspace}, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
 	if c := strings.TrimSpace(out); err == nil && c != "" {
 		return c, nil
 	}
@@ -262,7 +278,7 @@ func resolveCommit(ctx context.Context, workspace, ref string) (string, error) {
 // name [floorVersion] reads as zero floor, so any tag then supersedes (and which
 // can never be mis-parsed as a version the way a bare all-digits hash could).
 func describeName(ctx context.Context, workspace, commit string) string {
-	out, err := run(ctx, workspace, nil, "git", "describe", "--tags", commit)
+	out, err := run(ctx, extbin.Git, extbin.Opts{Dir: workspace}, "describe", "--tags", commit)
 	name := strings.TrimSpace(out)
 	if err != nil || name == "" {
 		return "commit-" + short(commit)
@@ -281,7 +297,7 @@ func verifyCommit(ctx context.Context, lg zerolog.Logger, cfg Config, commit str
 		lg.Warn().Str("commit", short(commit)).Msg("deploy: commit signature verification DISABLED (interim break-glass) — dev/loopback only, do NOT use on an internet-exposed box")
 		return nil
 	}
-	out, err := run(ctx, cfg.Workspace, nil, "git", "verify-commit", commit)
+	out, err := run(ctx, extbin.Git, extbin.Opts{Dir: cfg.Workspace}, "verify-commit", commit)
 	if err != nil {
 		return eb.Build().Str("commit", short(commit)).Str("output", tail(out, 1500)).
 			Errorf("deploy: commit %s has no valid signature from a trusted key — refusing to build: %w", short(commit), err)
@@ -380,17 +396,17 @@ func firstEnv(keys ...string) string {
 func build(ctx context.Context, lg zerolog.Logger, cfg Config) error {
 	rustDir := filepath.Join(cfg.Workspace, rustDirRel)
 	// The headless Rust client (+ assets), via the project's own script.
-	if err := step(ctx, lg, "build-rust", rustDir, nil, "bash", "build_rust_headless.sh"); err != nil {
+	if err := step(ctx, lg, "build-rust", extbin.Bash, extbin.Opts{Dir: rustDir}, "build_rust_headless.sh"); err != nil {
 		return err
 	}
 	// ws_probe (the gate client) shares the headless target-dir.
-	if err := step(ctx, lg, "build-ws_probe", rustDir, nil,
-		"cargo", "build", "--release", "--no-default-features", "--features", "headless",
+	if err := step(ctx, lg, "build-ws_probe", extbin.Cargo, extbin.Opts{Dir: rustDir},
+		"build", "--release", "--no-default-features", "--features", "headless",
 		"--bin", "imzero2_ws_probe", "--target-dir", "target/headless"); err != nil {
 		return err
 	}
 	// The Go launcher (carries this very `deploy` subcommand for the next run).
-	return step(ctx, lg, "build-go", rustDir, nil, "bash", "build_go.sh")
+	return step(ctx, lg, "build-go", extbin.Bash, extbin.Opts{Dir: rustDir}, "build_go.sh")
 }
 
 func stage(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) (string, error) {
@@ -441,12 +457,13 @@ func relabelSELinux(ctx context.Context, lg zerolog.Logger, dir string) {
 	if _, err := os.Stat("/sys/fs/selinux/enforce"); err != nil {
 		return // SELinux not enabled on this box
 	}
-	bin, err := exec.LookPath("restorecon")
-	if err != nil {
+	// Command resolves restorecon (PATH lookup) without running it; a non-nil
+	// error means it isn't installed.
+	if _, err := extbin.Restorecon.Command(ctx, extbin.Opts{}); err != nil {
 		lg.Warn().Str("dir", dir).Msg("deploy: SELinux enabled but restorecon not found (policycoreutils); relying on fcontext + inheritance")
 		return
 	}
-	if out, rErr := run(ctx, "", nil, bin, "-RF", dir); rErr != nil {
+	if out, rErr := run(ctx, extbin.Restorecon, extbin.Opts{}, "-RF", dir); rErr != nil {
 		lg.Warn().Str("dir", dir).Str("output", tail(out, 500)).Err(rErr).
 			Msg("deploy: SELinux relabel failed; if the demo will not exec, label the releases tree bin_t (showcase/ansible/README.md)")
 		return
@@ -492,14 +509,19 @@ func gate(ctx context.Context, lg zerolog.Logger, cfg Config, relDir string) err
 		args = append(args, "--fallbackFontTTF", f)
 	}
 
-	cmd := exec.CommandContext(gctx, filepath.Join(relDir, "main_go"), args...)
+	cmd, err := deployCarrier.Command(gctx, extbin.Opts{
+		Path: filepath.Join(relDir, "main_go"),
+		Env: envWith(
+			"IMZERO2_HEADLESS_LISTEN=127.0.0.1:"+strconv.Itoa(cfg.ScratchPort),
+			"IMZERO2_HEADLESS_FPS=30",
+			"IMZERO2_HEADLESS_ENCODER_ARGS="+cfg.EncoderArgs,
+			"LIBGL_ALWAYS_SOFTWARE=1",
+		),
+	}, args...)
+	if err != nil {
+		return eh.Errorf("deploy: gate resolve carrier: %w", err)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // own group → kill the whole tree
-	cmd.Env = envWith(
-		"IMZERO2_HEADLESS_LISTEN=127.0.0.1:"+strconv.Itoa(cfg.ScratchPort),
-		"IMZERO2_HEADLESS_FPS=30",
-		"IMZERO2_HEADLESS_ENCODER_ARGS="+cfg.EncoderArgs,
-		"LIBGL_ALWAYS_SOFTWARE=1",
-	)
 	var buf lockedBuffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -548,7 +570,7 @@ func atomicSymlink(link, target string) error {
 }
 
 func restart(ctx context.Context, lg zerolog.Logger, cfg Config) error {
-	return step(ctx, lg, "restart", "", nil, "systemctl", "restart", cfg.ServiceName)
+	return step(ctx, lg, "restart", extbin.Systemctl, extbin.Opts{}, "restart", cfg.ServiceName)
 }
 
 // --- Phase 2: activate / health re-probe / rollback / retention (SD6) ---
@@ -596,7 +618,7 @@ func probeStream(ctx context.Context, wsProbeBin string, port, wantAUs int) (aus
 		return 0, 0, "", eh.Errorf("carrier did not come up: %w", err)
 	}
 	outFile := filepath.Join(os.TempDir(), fmt.Sprintf("imzero2-probe-%d.h264", port))
-	out, perr := run(ctx, "", nil, wsProbeBin, fmt.Sprintf("ws://127.0.0.1:%d/", port), outFile, strconv.Itoa(wantAUs))
+	out, perr := run(ctx, deployWsProbe, extbin.Opts{Path: wsProbeBin}, fmt.Sprintf("ws://127.0.0.1:%d/", port), outFile, strconv.Itoa(wantAUs))
 	_ = os.Remove(outFile)
 	aus, keyframes = parseProbe(out)
 	if perr != nil {
@@ -775,9 +797,9 @@ func currentTag(cfg Config) string {
 	return ""
 }
 
-func step(ctx context.Context, lg zerolog.Logger, what, dir string, env []string, name string, args ...string) error {
-	lg.Info().Str("step", what).Str("cmd", name+" "+strings.Join(args, " ")).Msg("deploy: step")
-	out, err := run(ctx, dir, env, name, args...)
+func step(ctx context.Context, lg zerolog.Logger, what string, prog *extbin.Program, o extbin.Opts, args ...string) error {
+	lg.Info().Str("step", what).Str("cmd", prog.Name+" "+strings.Join(args, " ")).Msg("deploy: step")
+	out, err := run(ctx, prog, o, args...)
 	if err != nil {
 		return eb.Build().Str("step", what).Str("output", tail(out, 2000)).Errorf("deploy: step %q failed: %w", what, err)
 	}
@@ -818,11 +840,10 @@ func envWith(kv ...string) []string {
 	return append(out, kv...)
 }
 
-func run(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+func run(ctx context.Context, prog *extbin.Program, o extbin.Opts, args ...string) (string, error) {
+	cmd, err := prog.Command(ctx, o, args...)
+	if err != nil {
+		return "", err
 	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -862,7 +883,7 @@ func resolveFont(override, family string) string {
 	if override != "" {
 		return override
 	}
-	out, err := exec.Command("fc-match", "-f", "%{file}", family).Output()
+	out, err := extbin.FcMatch.Output(context.Background(), extbin.Opts{}, "-f", "%{file}", family)
 	if err != nil {
 		return ""
 	}
@@ -926,12 +947,12 @@ func orNone(s string) string {
 // the running demo's runinfo will report it — ADR-0085 SD7's deployed-revision
 // agreement, by construction.
 func headInfo(ctx context.Context, workspace string) (commit string, clean bool, err error) {
-	rev, e := run(ctx, workspace, nil, "git", "rev-parse", "HEAD")
+	rev, e := run(ctx, extbin.Git, extbin.Opts{Dir: workspace}, "rev-parse", "HEAD")
 	if e != nil {
 		return "", false, eb.Build().Str("output", tail(rev, 400)).Errorf("deploy: rev-parse HEAD: %w", e)
 	}
 	commit = strings.TrimSpace(rev)
-	st, e := run(ctx, workspace, nil, "git", "status", "--porcelain")
+	st, e := run(ctx, extbin.Git, extbin.Opts{Dir: workspace}, "status", "--porcelain")
 	if e != nil {
 		return commit, false, eh.Errorf("deploy: git status: %w", e)
 	}

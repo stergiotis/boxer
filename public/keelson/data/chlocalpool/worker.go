@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -61,7 +62,15 @@ func newWorker(ctx context.Context, p *Pool) (w *Worker, err error) {
 		"--logger.console", "0",
 	}
 
-	cmd := exec.Command(cfg.BinaryPath, args...)
+	// context.Background(), not the spawn ctx: the worker is pooled and
+	// outlives this call, and its lifetime is managed manually (spawn-timeout
+	// select below, SIGTERM→SIGKILL in Close). Binding the process to the spawn
+	// ctx would let a cancelled Acquire kill a live pooled worker.
+	cmd, err := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{Path: cfg.BinaryPath}, args...)
+	if err != nil {
+		err = eh.Errorf("chlocalpool: resolve clickhouse-local: %w", err)
+		return
+	}
 	stderr := &capBuffer{cap: int(cfg.StderrCapBytes)}
 	cmd.Stderr = stderr
 

@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"context"
 	"iter"
-	"os/exec"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -23,8 +23,11 @@ func (inst *GitRunner) repoDir() (dir string) {
 
 func (inst *GitRunner) RunLines(ctx context.Context, args ...string) iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
-		cmd := exec.CommandContext(ctx, "git", args...)
-		cmd.Dir = inst.repoDir()
+		cmd, err := extbin.Git.Command(ctx, extbin.Opts{Dir: inst.repoDir()}, args...)
+		if err != nil {
+			yield("", eh.Errorf("unable to resolve git command: %w", err))
+			return
+		}
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {

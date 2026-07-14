@@ -11,11 +11,11 @@ import (
 	"bytes"
 	"context"
 	"iter"
-	"os/exec"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -32,15 +32,17 @@ type LocalExecutor struct {
 // persisted under path (a directory; created by clickhouse-local on first
 // use). Returns an error when the binary is not on PATH.
 func NewLocalExecutor(path string, alloc memory.Allocator) (inst *LocalExecutor, err error) {
-	bin, err := exec.LookPath("clickhouse-local")
+	// Resolve once at construction (Command does the PATH lookup without
+	// running), caching the concrete path and failing fast when it is absent.
+	probe, err := extbin.ClickHouseLocal.Command(context.Background(), extbin.Opts{})
 	if err != nil {
-		err = eh.Errorf("clickhouse-local not on PATH: %w", err)
+		err = eh.Errorf("clickhouse-local not available: %w", err)
 		return
 	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
-	inst = &LocalExecutor{binary: bin, path: path, alloc: alloc}
+	inst = &LocalExecutor{binary: probe.Path, path: path, alloc: alloc}
 	return
 }
 
@@ -50,7 +52,11 @@ func (inst *LocalExecutor) run(ctx context.Context, sql string, outputFormat str
 		args = append(args, "--output-format", outputFormat)
 	}
 	args = append(args, "--query", sql)
-	cmd := exec.CommandContext(ctx, inst.binary, args...)
+	cmd, err := extbin.ClickHouseLocal.Command(ctx, extbin.Opts{Path: inst.binary}, args...)
+	if err != nil {
+		err = eh.Errorf("resolve clickhouse-local: %w", err)
+		return
+	}
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}

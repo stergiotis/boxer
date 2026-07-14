@@ -2,14 +2,15 @@ package driver
 
 import (
 	"bytes"
+	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/golangci/gofmt"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -155,10 +156,11 @@ func overwriteCodeAtMarker(candidateFiles []string, marker string, content strin
 // the pin and surfaces as spurious drift in the committed tree. rustfmt.toml is
 // discovered by walking up from the file, so it applies regardless of the cwd.
 //
-// Formatting is best-effort: an absent rustfmt (rustfmtPath == "") or a format
-// failure is logged and ignored so code generation never fails on it.
-func rustfmtFile(rustfmtPath string, path string) {
-	if rustfmtPath == "" {
+// Formatting is best-effort: an unavailable rustfmt (available == false, or a
+// resolution failure via extbin) or a format failure is logged and ignored so
+// code generation never fails on it.
+func rustfmtFile(available bool, path string) {
+	if !available {
 		return
 	}
 	absP, err := filepath.Abs(path)
@@ -167,11 +169,17 @@ func rustfmtFile(rustfmtPath string, path string) {
 		return
 	}
 	buf := bytes.NewBuffer(nil)
-	c := exec.Command(rustfmtPath, absP)
-	c.Dir = filepath.Dir(absP) // resolve the crate's pinned rust-toolchain via the rustup proxy
+	// Dir is load-bearing: running rustfmt from the file's own directory makes
+	// the ~/.cargo/bin/rustfmt rustup proxy resolve the crate's pinned
+	// rust-toolchain rather than the rustup default.
+	c, err := extbin.Rustfmt.Command(context.Background(), extbin.Opts{Dir: filepath.Dir(absP)}, absP)
+	if err != nil {
+		log.Warn().Err(err).Str("file", absP).Msg("unable to resolve rustfmt, skipping format")
+		return
+	}
 	c.Stderr = buf
 	if err = c.Run(); err != nil {
-		log.Warn().Err(err).Str("rustfmtPath", rustfmtPath).Str("file", absP).Str("stderr", buf.String()).Msg("unable to format rust file using rustfmt, ignoring")
+		log.Warn().Err(err).Str("file", absP).Str("stderr", buf.String()).Msg("unable to format rust file using rustfmt, ignoring")
 	}
 }
 
@@ -211,15 +219,16 @@ func GenerateRustFiles(basePath string) (err error) {
 		err = eb.Build().Str("basePath", basePath).Errorf("unable to glob rust files: %w", err)
 		return
 	}
-	var rustfmtPath string
-	rustfmtPath, err = exec.LookPath("rustfmt")
-	if err != nil {
+	// Resolve rustfmt once up front so the "not found" note is emitted a single
+	// time rather than per formatted file; extbin owns the resolution.
+	rustfmtAvailable := true
+	if _, lookErr := extbin.Rustfmt.Command(context.Background(), extbin.Opts{}); lookErr != nil {
 		log.Warn().Msg("rustfmt not found in path, generated files will not be reformatted")
-		err = nil
+		rustfmtAvailable = false
 	}
 	// enums_out.rs was written raw above; format it through the pin too, so a bare
 	// `egui2gen generate rust` leaves no drift behind for fmt_rust.sh to mop up.
-	rustfmtFile(rustfmtPath, filepath.Join(basePath, "enums_out.rs"))
+	rustfmtFile(rustfmtAvailable, filepath.Join(basePath, "enums_out.rs"))
 	for marker, content := range functional.MakeIter2FromAlternatedValue("//IMZERO2_INCLUDE_FFFI_DISPATCH_OUT", dispatchBuf.String()) {
 		var p string
 		p, err = overwriteCodeAtMarker(candidates, marker, content)
@@ -228,7 +237,7 @@ func GenerateRustFiles(basePath string) (err error) {
 			return
 		}
 		log.Info().Int("lines", strings.Count(content, "\n")).Str("marker", marker).Str("path", p).Msg("inserted code at marker")
-		rustfmtFile(rustfmtPath, p)
+		rustfmtFile(rustfmtAvailable, p)
 	}
 
 	return

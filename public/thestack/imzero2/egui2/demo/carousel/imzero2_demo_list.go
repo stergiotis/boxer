@@ -2,10 +2,10 @@ package demo
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,10 +15,11 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
+	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 )
 
 // listSchema is the Arrow schema for one row per registered app. Stable
@@ -164,27 +165,30 @@ func runChLocalQuery(arrowBytes []byte, query, format string, stdout io.Writer) 
 	if format == "" {
 		format = "PrettyCompact"
 	}
-	binPath := chlocalpool.DefaultBinaryPath
-	if _, statErr := os.Stat(binPath); statErr != nil {
-		resolved, lookErr := exec.LookPath("clickhouse-local")
-		if lookErr != nil {
-			return
-		}
-		binPath = resolved
+	// Prefer the bundled path; leave it empty to let extbin resolve on PATH.
+	chPath := ""
+	if _, statErr := os.Stat(chlocalpool.DefaultBinaryPath); statErr == nil {
+		chPath = chlocalpool.DefaultBinaryPath
 	}
-	ok = true
-	cmd := exec.Command(binPath,
+	cmd, err := extbin.ClickHouseLocal.Command(context.Background(),
+		extbin.Opts{Path: chPath},
 		"--input-format", "ArrowStream",
 		"--output-format", format,
 		"--query", query,
 	)
+	if err != nil {
+		// Unreachable (not at the bundled path, not on PATH): signal ok=false
+		// with no error so callers fall back to the ASCII renderer.
+		return false, nil
+	}
+	ok = true
 	cmd.Stdin = bytes.NewReader(arrowBytes)
 	cmd.Stdout = stdout
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
 	runErr := cmd.Run()
 	if runErr != nil {
-		err = eb.Build().Str("stderr", stderrBuf.String()).Str("bin", binPath).
+		err = eb.Build().Str("stderr", stderrBuf.String()).Str("bin", cmd.Path).
 			Str("query", query).Errorf("clickhouse-local: %w", runErr)
 		return
 	}

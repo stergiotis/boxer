@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
 	"encoding/json/v2"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -106,9 +106,7 @@ func ValidateCursorHash(ctx context.Context, repoDir string, hash string) (err e
 		err = eh.Errorf("empty hash: %w", ErrCursorHashNotFound)
 		return
 	}
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", hash+"^{commit}")
-	cmd.Dir = repoDir
-	if runErr := cmd.Run(); runErr != nil {
+	if runErr := extbin.Git.Run(ctx, extbin.Opts{Dir: repoDir}, "rev-parse", "--verify", hash+"^{commit}"); runErr != nil {
 		err = eb.Build().Str("hash", hash).Errorf("hash not found in repo: %w", ErrCursorHashNotFound)
 		return
 	}

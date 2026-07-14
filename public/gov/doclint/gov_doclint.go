@@ -1,14 +1,14 @@
 package doclint
 
 import (
-	"bytes"
+	"context"
 	"io/fs"
 	"iter"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -169,11 +169,9 @@ func gitIgnoredSet(root string) (ignored map[string]struct{}) {
 // error alone signals failure, which every caller treats as "fall back to
 // no filtering".
 func runGit(dir string, args ...string) (out string, err error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	err = cmd.Run()
-	out = buf.String()
+	var b []byte
+	b, err = extbin.Git.Output(context.Background(), extbin.Opts{}, append([]string{"-C", dir}, args...)...)
+	out = string(b)
 	return
 }
 

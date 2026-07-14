@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -61,8 +61,11 @@ func (inst *AnalyzerService) adjudicateE(ctx context.Context, singleMainRoot boo
 	args = append(args, inst.BuildFlags...)
 	args = append(args, inst.patterns()...)
 
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir = inst.Dir
+	cmd, cmdErr := extbin.Go.Command(ctx, extbin.Opts{Dir: inst.Dir}, args...)
+	if cmdErr != nil {
+		err = eb.Build().Strs("args", args).Errorf("callsites adjudicate: go build command: %w", cmdErr)
+		return
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err = cmd.Run()

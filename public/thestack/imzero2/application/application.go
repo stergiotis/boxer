@@ -4,6 +4,7 @@ package application
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
@@ -22,6 +24,16 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
 )
+
+// imzero2Client is the render-client binary launched over the FFI transport.
+// Its path is caller-supplied (Config.ClientBinary), so it is a Local program;
+// the profiler wrappers below (flamegraph/valgrind/heaptrack) are Host tools
+// that re-exec that same client path.
+var imzero2Client = extbin.Declare(extbin.Program{
+	Name:        "imzero2-client",
+	Kind:        extbin.Local,
+	InstallHint: "build the imzero2 client and point Config.ClientBinary at it",
+})
 
 type Application[U runtime.UnmarshallReaderI] struct {
 	endianess                   binary.ByteOrder
@@ -129,9 +141,12 @@ func (inst *Application[U]) Launch() (err error) {
 		log.Info().Strs("args", args).Str("binary", cfg.ClientBinary).Msg("launching imzero client")
 		var cmd *exec.Cmd
 		debugMode := imzero2env.DebugMode.Get()
+		// context.Background(): the client is long-lived and its lifetime is
+		// managed via the FFI pipe EOF handshake + background cmd.Wait below,
+		// not by any spawn context. extbin only resolves the binary here.
 		switch debugMode {
 		case "":
-			cmd = exec.Command(cfg.ClientBinary, args...)
+			cmd, err = imzero2Client.Command(context.Background(), extbin.Opts{Path: cfg.ClientBinary}, args...)
 			break
 		case "flamegraph":
 			args = slices.Concat([]string{
@@ -139,7 +154,7 @@ func (inst *Application[U]) Launch() (err error) {
 				"--",
 				cfg.ClientBinary}, args)
 			log.Info().Strs("args", args).Msg("starting imzero2 client executable with flamegraph (cargo install flamegraph)")
-			cmd = exec.Command("flamegraph", args...)
+			cmd, err = extbin.Flamegraph.Command(context.Background(), extbin.Opts{}, args...)
 			break
 		case "memcheck":
 			args = slices.Concat([]string{
@@ -147,7 +162,7 @@ func (inst *Application[U]) Launch() (err error) {
 				"--",
 				cfg.ClientBinary}, args)
 			log.Info().Strs("args", args).Msg("starting imzero2 client executable with valgrind memcheck")
-			cmd = exec.Command("valgrind", args...)
+			cmd, err = extbin.Valgrind.Command(context.Background(), extbin.Opts{}, args...)
 			break
 		case "massif":
 			args = slices.Concat([]string{
@@ -156,16 +171,19 @@ func (inst *Application[U]) Launch() (err error) {
 				"--",
 				cfg.ClientBinary}, args)
 			log.Info().Strs("args", args).Msg("starting imzero2 client executable with valgrind massif")
-			cmd = exec.Command("valgrind", args...)
+			cmd, err = extbin.Valgrind.Command(context.Background(), extbin.Opts{}, args...)
 			break
 		case "heaptrack":
 			args = slices.Concat([]string{cfg.ClientBinary}, args)
 			log.Info().Strs("args", args).Msg("starting imzero2 client executable with heaptrack")
-			cmd = exec.Command("heaptrack", args...)
+			cmd, err = extbin.Heaptrack.Command(context.Background(), extbin.Opts{}, args...)
 			break
 		default:
 			err = eb.Build().Str("debugMode", debugMode).Strs("possible", []string{"memcheck", "massif", "heaptrack"}).Errorf("unhandled debug mode BOXER_IMZERO_DEBUG_MODE")
 			return
+		}
+		if err != nil {
+			return eb.Build().Str("debugMode", debugMode).Str("binary", cfg.ClientBinary).Errorf("resolve imzero client binary: %w", err)
 		}
 		var si io.WriteCloser
 		var so io.ReadCloser

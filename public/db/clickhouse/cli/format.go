@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -38,8 +38,8 @@ func debugMarkupHiliteOutput(hilitedOutput string) (marked string) {
 }
 
 type Formater struct {
-	opts FormaterOptions
-	args []string
+	opts      FormaterOptions
+	args      []string
 	buf       *bytes.Buffer
 	stderrBuf *bytes.Buffer
 }
@@ -115,7 +115,11 @@ func (inst *Formater) FormatToWriter(sql io.Reader, out io.Writer) (err error) {
 		defer cancel()
 	}
 	stderrBuf := inst.stderrBuf
-	cmd := exec.CommandContext(ctx, inst.opts.BinaryPath, inst.args...)
+	cmd, err := extbin.ClickHouseLocal.Command(ctx, extbin.Opts{Path: inst.opts.BinaryPath}, inst.args...)
+	if err != nil {
+		err = eb.Build().Str("binary", inst.opts.BinaryPath).Errorf("resolve clickhouse-local: %w", err)
+		return
+	}
 	cmd.Stdin = sql
 	cmd.Stdout = out
 	cmd.Stderr = stderrBuf

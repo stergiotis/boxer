@@ -4,11 +4,11 @@ import (
 	_ "embed"
 	"io"
 	"os"
-	"os/exec"
 
 	"encoding/json/v2"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
@@ -34,12 +34,6 @@ func newMineTrendsCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			bin := c.String("clickhouse-binary")
-			binPath, lookupErr := exec.LookPath(bin)
-			if lookupErr != nil {
-				return eb.Build().Str("binary", bin).Errorf(
-					"clickhouse-local not found; install from https://clickhouse.com/docs/en/install "+
-						"or set --clickhouse-binary to an absolute path: %w", lookupErr)
-			}
 
 			inputData, err := io.ReadAll(os.Stdin)
 			if err != nil {
@@ -76,18 +70,21 @@ func newMineTrendsCommand() *cli.Command {
 				return eh.Errorf("unable to close flat-rows tempfile: %w", closeErr)
 			}
 
-			cmd := exec.CommandContext(c.Context, binPath,
+			cmd, cmdErr := extbin.ClickHouseLocal.Command(c.Context, extbin.Opts{Path: bin},
 				"--input-format=JSONEachRow",
 				"--structure="+FlatCommitChangeStructure,
 				"--file="+flatFile.Name(),
 				"--output_format_json_escape_forward_slashes=0",
 				"--query="+trendMiningSQL,
 			)
+			if cmdErr != nil {
+				return eb.Build().Str("binary", bin).Errorf("unable to build clickhouse-local command: %w", cmdErr)
+			}
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			err = cmd.Run()
 			if err != nil {
-				return eb.Build().Str("binPath", binPath).Errorf("clickhouse-local failed: %w", err)
+				return eb.Build().Str("binary", bin).Errorf("clickhouse-local failed: %w", err)
 			}
 			return nil
 		},

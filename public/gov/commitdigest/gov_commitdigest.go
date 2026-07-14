@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -58,17 +58,13 @@ func CollectDigest(ctx context.Context, repoPath string, since string, author st
 	digest.RepoName = filepath.Base(absPath)
 
 	// check if the directory is actually a git repository
-	check := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
-	check.Dir = absPath
-	if checkErr := check.Run(); checkErr != nil {
+	if checkErr := extbin.Git.Run(ctx, extbin.Opts{Dir: absPath}, "rev-parse", "--git-dir"); checkErr != nil {
 		err = eb.Build().Str("path", absPath).Errorf("not a git repository: %w", ErrNotAGitRepo)
 		return
 	}
 
 	// check if the repo has any commits at all
-	headCheck := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "HEAD")
-	headCheck.Dir = absPath
-	if checkErr := headCheck.Run(); checkErr != nil {
+	if checkErr := extbin.Git.Run(ctx, extbin.Opts{Dir: absPath}, "rev-parse", "--verify", "HEAD"); checkErr != nil {
 		err = eb.Build().Str("path", absPath).Errorf("git repository has no commits: %w", ErrNoCommits)
 		return
 	}
@@ -85,9 +81,7 @@ func CollectDigest(ctx context.Context, repoPath string, since string, author st
 		args = append(args, "--since="+normalizeSince(since))
 	}
 
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = absPath
-	out, cmdErr := cmd.Output()
+	out, cmdErr := extbin.Git.Output(ctx, extbin.Opts{Dir: absPath}, args...)
 	if cmdErr != nil {
 		err = eb.Build().Str("path", absPath).Errorf("git log failed: %w", cmdErr)
 		return
@@ -163,9 +157,7 @@ func normalizeSince(s string) string {
 }
 
 func commitStat(ctx context.Context, repoDir string, hash string) (stat string, err error) {
-	cmd := exec.CommandContext(ctx, "git", "diff-tree", "--stat", "--no-commit-id", hash)
-	cmd.Dir = repoDir
-	out, cmdErr := cmd.Output()
+	out, cmdErr := extbin.Git.Output(ctx, extbin.Opts{Dir: repoDir}, "diff-tree", "--stat", "--no-commit-id", hash)
 	if cmdErr != nil {
 		err = eh.Errorf("git diff-tree failed: %w", cmdErr)
 		return
@@ -179,9 +171,7 @@ func commitStat(ctx context.Context, repoDir string, hash string) (stat string, 
 // Rename/copy entries use git's "{old => new}" path syntax verbatim — callers
 // that care can post-process; for trend mining the new path is what matters.
 func commitNumstat(ctx context.Context, repoDir string, hash string) (entries []StatEntry, err error) {
-	cmd := exec.CommandContext(ctx, "git", "diff-tree", "--numstat", "--no-commit-id", "-r", hash)
-	cmd.Dir = repoDir
-	out, cmdErr := cmd.Output()
+	out, cmdErr := extbin.Git.Output(ctx, extbin.Opts{Dir: repoDir}, "diff-tree", "--numstat", "--no-commit-id", "-r", hash)
 	if cmdErr != nil {
 		err = eh.Errorf("git diff-tree --numstat failed: %w", cmdErr)
 		return

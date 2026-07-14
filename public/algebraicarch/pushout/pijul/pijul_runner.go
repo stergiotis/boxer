@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -54,7 +55,7 @@ type cliRunner struct {
 var _ RunnerI = (*cliRunner)(nil)
 
 // NewCliRunner returns a runner that drives the system `pijul` binary
-// via os/exec with conservative timeouts. The zero-valued [cliRunner]
+// via extbin with conservative timeouts. The zero-valued [cliRunner]
 // is also usable. Callers seed the [pijulTextBackend] with it.
 func NewCliRunner() (inst *cliRunner) {
 	inst = &cliRunner{
@@ -92,8 +93,15 @@ func (inst *cliRunner) runCmd(ctx context.Context, dir string, name string, args
 
 	cmdStr := fmt.Sprintf("$ %s %s", name, strings.Join(args, " "))
 
-	cmd := exec.CommandContext(cctx, name, args...)
-	cmd.Dir = dir
+	// extbin.Pijul resolves the pijul binary; the returned *exec.Cmd is driven
+	// exactly as before so cmd.Run()'s *exec.ExitError propagates unchanged for
+	// Pull's conflict (exit-code 1) inspection.
+	cmd, cerr := extbin.Pijul.Command(cctx, extbin.Opts{Dir: dir}, args...)
+	if cerr != nil {
+		audit = fmt.Sprintf("%s\n[ERROR] %v", cmdStr, cerr)
+		err = eh.Errorf("command failed: %s: %w", cmdStr, cerr)
+		return
+	}
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -176,8 +184,12 @@ func (inst *cliRunner) Log(ctx context.Context, repoDir string) (entries []LogEn
 	defer cancel()
 
 	cmdStr := "$ pijul log --output-format json"
-	cmd := exec.CommandContext(cctx, "pijul", "log", "--output-format", "json")
-	cmd.Dir = repoDir
+	cmd, cerr := extbin.Pijul.Command(cctx, extbin.Opts{Dir: repoDir}, "log", "--output-format", "json")
+	if cerr != nil {
+		audit = fmt.Sprintf("%s\n[ERROR] %v", cmdStr, cerr)
+		err = eh.Errorf("pijul log error: %w", cerr)
+		return
+	}
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -220,8 +232,12 @@ func (inst *cliRunner) Credit(ctx context.Context, repoDir string, file string) 
 	defer cancel()
 
 	cmdStr := "$ pijul credit " + file
-	cmd := exec.CommandContext(cctx, "pijul", "credit", file)
-	cmd.Dir = repoDir
+	cmd, cerr := extbin.Pijul.Command(cctx, extbin.Opts{Dir: repoDir}, "credit", file)
+	if cerr != nil {
+		audit = fmt.Sprintf("%s\n[ERROR] %v", cmdStr, cerr)
+		err = eh.Errorf("pijul credit error: %w", cerr)
+		return
+	}
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
