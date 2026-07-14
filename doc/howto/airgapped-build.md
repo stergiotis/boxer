@@ -101,7 +101,33 @@ config). `source boxer-airgap.env` in any later shell to get the toolchains back
 
 ## Verification
 
-On the target, after `airgap-unpack.sh`:
+### Before shipping — on the build host, network truly down
+
+You can confirm the bundle unpacks and builds offline without a target, by
+running the unpacker inside a rootless network namespace (`unshare -rn`) so any
+stray fetch fails loudly rather than silently succeeding:
+
+```bash
+work=$(mktemp -d)                 # if /tmp is tmpfs (RAM), use: mktemp -d -p /some/disk
+tar -I zstd -xf boxer-airgap-*.tar.zst -C "$work"
+cd "$work/boxer"
+unshare -rn bash -c '
+  # this probe should FAIL — the namespace has no connectivity:
+  timeout 3 bash -c "exec 3<>/dev/tcp/1.1.1.1/443" && { echo "network up — not isolated"; exit 1; }
+  ./scripts/dev/airgap-unpack.sh          # provisions + builds, all offline
+  source boxer-airgap.env
+  ./app dev entry-points
+'
+cd - >/dev/null && rm -rf "$work"          # several GB in full scope
+```
+
+`airgap-unpack.sh` is non-destructive: it positions the shipped toolchains inside
+the extracted tree (`_airgap/toolchains/`) and points `CARGO_HOME` there too, so
+it never touches your `~/.rustup` or `~/.cargo`. A same-host run proves the
+offline build path but not cross-distro portability — the shipped toolchains are
+dynamically linked (see Notes below).
+
+### On the target, after `airgap-unpack.sh`
 
 ```bash
 source boxer-airgap.env
