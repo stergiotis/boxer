@@ -3,10 +3,10 @@ package widgets
 import (
 	"fmt"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 )
 
 // senseRegionTestDemoState carries the per-window click-count array.

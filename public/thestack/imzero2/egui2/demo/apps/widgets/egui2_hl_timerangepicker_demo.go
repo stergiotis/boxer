@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
@@ -20,15 +20,15 @@ import (
 // show how the same expression yields different epoch-ms bounds under
 // different IANA zones.
 type timeRangePickerInstanceState struct {
-	tzName       string
-	tzID         uint16
-	intervalMs   uint32
-	idSlot       string
-	packedRange  string
-	fromExpr     string
-	toExpr       string
-	lastEval     timerangepicker.EvaluatedRange
-	lastEvalErr  error
+	tzName      string
+	tzID        uint16
+	intervalMs  uint32
+	idSlot      string
+	packedRange string
+	fromExpr    string
+	toExpr      string
+	lastEval    timerangepicker.EvaluatedRange
+	lastEvalErr error
 }
 
 type timeRangePickerDemoState struct {

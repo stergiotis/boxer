@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"

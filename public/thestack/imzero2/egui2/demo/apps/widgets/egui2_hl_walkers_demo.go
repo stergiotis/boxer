@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/science/geo/h3"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/science/geo/h3"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
