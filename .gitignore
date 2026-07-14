@@ -42,6 +42,13 @@ go.work
 # Rust build artifacts — cargo target directories under rust/<crate>/target.
 rust/*/target/
 
+# Airgap build bundles produced at repo root by airgap-bundle.sh (ADR-0095):
+# the tarball (boxer-airgap-<scope>-<arch>-<date>.tar.zst, or .tar.gz with the
+# gzip fallback) ships toolchains + vendored sources and must not be committed.
+# Anchored so identically-suffixed files in subdirs are unaffected.
+/boxer-airgap-*.tar.zst
+/boxer-airgap-*.tar.gz
+
 # boxer adr tool cache — the `boxer adr build` default --out dir. It can be
 # created in any working directory (the command takes --root), so not anchored.
 .adrcache/
