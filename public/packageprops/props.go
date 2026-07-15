@@ -64,6 +64,9 @@ func (k Kind) String() (str string) {
 // overview table. The zero value asserts nothing. New properties are added as
 // fields over time (purity, determinism, ownership, stability, …); wasm
 // amenability is the first.
+//
+// Every field is a scalar, so Props stays copyable by value — [Entry], [Table]
+// and the [All] snapshot all hold it that way.
 type Props struct {
 	// WASM* record the TinyGo/wasm compile state per target (ADR-0078):
 	// wasi (GOOS=wasip1), js (browser), and freestanding wasm-unknown.
@@ -75,4 +78,25 @@ type Props struct {
 	// integration-test) when it is not ordinary library code. Human-curated;
 	// the zero value KindUnspecified asserts nothing (ADR-0080 §SD4).
 	Kind Kind
+
+	// Caps* record the capslock capability verdict (ADR-0120): what privileged
+	// operations the package's own code exercises (CapsDirect), and everything
+	// it can reach once its dependencies are followed (CapsReachable).
+	//
+	// CapsReachable is the closure, so CapsDirect is always a subset of it. The
+	// capabilities a package reaches *only* through its dependencies are
+	// therefore CapsReachable minus CapsDirect — the closure is stored rather
+	// than that difference because the question worth asking is "can this
+	// package do X at all?", which is one lookup against CapsReachable instead
+	// of a lookup against each of two sets.
+	//
+	// Read CapsDirect first. Reachability saturates — nearly every package
+	// reaches nearly everything through the standard library — so as a positive
+	// claim CapsReachable says little. Its value is in the negative: an absent
+	// bit proves the package cannot reach that capability by any path.
+	//
+	// A zero set means *not surveyed*, not "safe": a completed survey that finds
+	// nothing privileged records CapabilitySafe (ADR-0120 SD4).
+	CapsDirect    CapabilitySet
+	CapsReachable CapabilitySet
 }
