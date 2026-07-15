@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/gov/adrcorpus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -36,6 +37,9 @@ var adrSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "code_langs", Type: strList()},
 	{Name: "code_qualifiers", Type: strList()},
 	{Name: "impl_evidence", Type: arrow.BinaryTypes.String},
+	{Name: "subtasks_total", Type: arrow.PrimitiveTypes.Int32},
+	{Name: "subtasks_done", Type: arrow.PrimitiveTypes.Int32},
+	{Name: "subtasks_cited", Type: arrow.PrimitiveTypes.Int32},
 	{Name: "path", Type: arrow.BinaryTypes.String},
 }, nil)
 
@@ -49,8 +53,20 @@ var coderefSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "snippet", Type: arrow.BinaryTypes.String},
 }, nil)
 
+var subtaskSchema = arrow.NewSchema([]arrow.Field{
+	{Name: "num", Type: arrow.PrimitiveTypes.Int32},
+	{Name: "marker", Type: arrow.BinaryTypes.String},
+	{Name: "kind", Type: arrow.BinaryTypes.String},
+	{Name: "ordinal", Type: arrow.PrimitiveTypes.Int32},
+	{Name: "title", Type: arrow.BinaryTypes.String},
+	{Name: "done", Type: arrow.FixedWidthTypes.Boolean},
+	{Name: "shape", Type: arrow.BinaryTypes.String},
+	{Name: "line", Type: arrow.PrimitiveTypes.Int32},
+	{Name: "code_refs", Type: arrow.PrimitiveTypes.Int32},
+}, nil)
+
 // WriteAdrArrow writes the adr registry + code-evidence rows as an Arrow IPC file.
-func WriteAdrArrow(path string, adrs []Adr) (err error) {
+func WriteAdrArrow(path string, adrs []adrcorpus.Adr) (err error) {
 	rb := array.NewRecordBuilder(memory.DefaultAllocator, adrSchema)
 	defer rb.Release()
 	for _, a := range adrs {
@@ -75,13 +91,34 @@ func WriteAdrArrow(path string, adrs []Adr) (err error) {
 		appendStrList(rb.Field(18).(*array.ListBuilder), a.CodeLangs)
 		appendStrList(rb.Field(19).(*array.ListBuilder), a.CodeQualifiers)
 		rb.Field(20).(*array.StringBuilder).Append(a.ImplEvidence)
-		rb.Field(21).(*array.StringBuilder).Append(a.Path)
+		rb.Field(21).(*array.Int32Builder).Append(int32(a.SubtasksTotal))
+		rb.Field(22).(*array.Int32Builder).Append(int32(a.SubtasksDone))
+		rb.Field(23).(*array.Int32Builder).Append(int32(a.SubtasksCited))
+		rb.Field(24).(*array.StringBuilder).Append(a.Path)
 	}
 	return writeRecord(path, adrSchema, rb)
 }
 
+// WriteSubtaskArrow writes the per-sub-item rows as an Arrow IPC file.
+func WriteSubtaskArrow(path string, subs []adrcorpus.Subtask) (err error) {
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, subtaskSchema)
+	defer rb.Release()
+	for _, s := range subs {
+		rb.Field(0).(*array.Int32Builder).Append(int32(s.Num))
+		rb.Field(1).(*array.StringBuilder).Append(s.Marker)
+		rb.Field(2).(*array.StringBuilder).Append(s.Kind)
+		rb.Field(3).(*array.Int32Builder).Append(int32(s.Ordinal))
+		rb.Field(4).(*array.StringBuilder).Append(s.Title)
+		rb.Field(5).(*array.BooleanBuilder).Append(s.Done)
+		rb.Field(6).(*array.StringBuilder).Append(s.Shape)
+		rb.Field(7).(*array.Int32Builder).Append(int32(s.Line))
+		rb.Field(8).(*array.Int32Builder).Append(int32(s.CodeRefs))
+	}
+	return writeRecord(path, subtaskSchema, rb)
+}
+
 // WriteCoderefArrow writes the per-citation detail rows as an Arrow IPC file.
-func WriteCoderefArrow(path string, refs []CodeRef) (err error) {
+func WriteCoderefArrow(path string, refs []adrcorpus.CodeRef) (err error) {
 	rb := array.NewRecordBuilder(memory.DefaultAllocator, coderefSchema)
 	defer rb.Release()
 	for _, r := range refs {

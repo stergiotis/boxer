@@ -1,17 +1,28 @@
-// Package adr is the `boxer adr` command: it turns the doc/adr corpus into two
-// ClickHouse-queryable Arrow tables so the state of every ADR — both its
-// decision lifecycle (frontmatter `status`) and its implementation degree
-// (evidence: how, where and to what depth its number is cited in source code)
-// — can be inspected with SQL via clickhouse-local.
+// Package adrcorpus reads the doc/adr corpus into a queryable model: one [Adr]
+// per decision, the [Subtask] sub-items each one declares for itself, and every
+// [CodeRef] citing an ADR number from source.
 //
-// The two axes are deliberately separate: `status` answers "was this decided?"
-// while the code-evidence columns answer "was this built, and how far?". An
-// `accepted` ADR with zero code references and a `proposed` ADR cited across a
-// dozen packages are exactly the drift cases this tool surfaces.
+// It reports three deliberately separate axes:
 //
-// The design, and the ADR-reference convention the evidence axis depends on, are
-// recorded in ADR-0092.
-package adr
+//   - The decision lifecycle — frontmatter `status`. "Was this decided?"
+//   - Implementation degree — evidence, derived by [ScanCodeRefs] and folded in
+//     by [Aggregate]: how, where and to what depth an ADR's number is cited in
+//     source. "Was this built, and how far?" An `accepted` ADR with zero code
+//     references and a `proposed` ADR cited across a dozen packages are exactly
+//     the drift cases this surfaces.
+//   - Sub-item progress — how much of what an ADR decomposed itself into it
+//     declares done. Unlike the evidence axis this one is *declared*, not
+//     inferred; [Subtask] explains why.
+//
+// The package is a pure library over markdown: no CLI, no Arrow, no
+// clickhouse. Those belong to its consumers — `boxer adr`
+// (public/app/commands/adr) adds the Arrow tables and the clickhouse-local
+// query surface, and the adrboard app renders the same model as a board — so
+// neither a GUI app nor a lint has to link a command to read the corpus.
+//
+// The design, and the ADR-reference convention the evidence axis depends on,
+// are recorded in ADR-0092.
+package adrcorpus
 
 import (
 	"fmt"
@@ -52,6 +63,18 @@ type Adr struct {
 	CodeLangs      []string
 	CodeQualifiers []string
 	ImplEvidence   string
+	// Subtasks are the sub-items the ADR declares for itself. They are rows of
+	// the separate `subtask` table, not a column of this one — [AllSubtasks]
+	// flattens them; the rollups below stay here.
+	Subtasks      []Subtask
+	SubtasksTotal int
+	SubtasksDone  int
+	// SubtasksCited counts sub-items with at least one §-pinned citation,
+	// filled by [Aggregate]. It is independent of SubtasksDone rather than
+	// disjoint from it — a sub-item can be both declared done and cited — so
+	// do not subtract one from the other. Read a per-sub-item verdict off
+	// [Subtask.Done] and [Subtask.CodeRefs].
+	SubtasksCited int
 }
 
 var (
@@ -138,6 +161,16 @@ func parseFile(path, numStr, slug, today string) (a Adr, err error) {
 	}
 
 	a.PlanMarkers, a.PlanMaxPhase = extractPlanMarkers(body)
+
+	// body is a suffix of src, so the frontmatter's line count is the offset
+	// that turns body-relative lines into file-relative ones.
+	a.Subtasks = extractSubtasks(a.Num, body, strings.Count(string(src[:len(src)-len(body)]), "\n"))
+	a.SubtasksTotal = len(a.Subtasks)
+	for _, s := range a.Subtasks {
+		if s.Done {
+			a.SubtasksDone++
+		}
+	}
 	return a, nil
 }
 

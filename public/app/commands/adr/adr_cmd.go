@@ -1,3 +1,17 @@
+// Package adr is the `boxer adr` command: it turns the doc/adr corpus — parsed
+// by [github.com/stergiotis/boxer/public/gov/adrcorpus] — into ClickHouse-
+// queryable Arrow tables, so the state of every ADR can be inspected with SQL
+// via clickhouse-local.
+//
+// Three tables are emitted and bound by name: `adr` (one row per decision,
+// carrying both the lifecycle status and the code-evidence columns), `coderef`
+// (one row per citation, for drill-down) and `subtask` (one row per sub-item an
+// ADR declares for itself, with its declared done-ness).
+//
+// The axes and the ADR-reference convention the evidence axis depends on are
+// recorded in ADR-0092. Everything here is the *query surface*; the corpus
+// model itself lives in adrcorpus, which the adrboard app renders as a board
+// without linking this command.
 package adr
 
 import (
@@ -6,6 +20,7 @@ import (
 	"path/filepath"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/gov/adrcorpus"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
@@ -14,7 +29,16 @@ import (
 const (
 	adrArrowName     = "adr.arrow"
 	coderefArrowName = "coderef.arrow"
+	subtaskArrowName = "subtask.arrow"
 )
+
+// artifacts are the emitted Arrow files, bound as the query tables of the same
+// name.
+type artifacts struct {
+	adrArrow     string
+	coderefArrow string
+	subtaskArrow string
+}
 
 func rootFlags() []cli.Flag {
 	return []cli.Flag{
@@ -31,7 +55,7 @@ func NewCliCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			{
 				Name:   "build",
-				Usage:  "parse ADRs, scan code references, and emit adr.arrow + coderef.arrow",
+				Usage:  "parse ADRs, scan code references, and emit adr.arrow + coderef.arrow + subtask.arrow",
 				Flags:  append(rootFlags(), &cli.StringFlag{Name: "out", Value: ".adrcache", Usage: "output directory for the Arrow files (relative to --root unless absolute)"}),
 				Action: actionBuild,
 			},
@@ -43,7 +67,7 @@ func NewCliCommand() *cli.Command {
 			},
 			{
 				Name:      "query",
-				Usage:     "run an arbitrary SQL query against the `adr` and `coderef` tables",
+				Usage:     "run an arbitrary SQL query against the `adr`, `coderef` and `subtask` tables",
 				ArgsUsage: "<SQL>",
 				Flags:     append(rootFlags(), &cli.StringFlag{Name: "format", Value: "PrettyCompact", Usage: "clickhouse-local --output-format"}),
 				Action:    actionQuery,
@@ -62,29 +86,36 @@ func resolvePaths(c *cli.Context) (root, adrDir string) {
 }
 
 // buildArtifacts parses the corpus, scans code references, folds the evidence
-// into the rows, and emits both Arrow files into outDir. outDir is excluded
+// into the rows, and emits the Arrow files into outDir. outDir is excluded
 // from the code scan so emitted files never count as references.
-func buildArtifacts(c *cli.Context, outDir string) (adrs []Adr, refs []CodeRef, adrArrow, coderefArrow string, err error) {
+func buildArtifacts(c *cli.Context, outDir string) (adrs []adrcorpus.Adr, refs []adrcorpus.CodeRef, subs []adrcorpus.Subtask, arts artifacts, err error) {
 	root, adrDir := resolvePaths(c)
-	if adrs, err = ParseDir(adrDir); err != nil {
-		return nil, nil, "", "", err
+	if adrs, err = adrcorpus.ParseDir(adrDir); err != nil {
+		return nil, nil, nil, arts, err
 	}
-	if refs, err = ScanCodeRefs(root, adrDir, outDir); err != nil {
-		return nil, nil, "", "", err
+	if refs, err = adrcorpus.ScanCodeRefs(root, adrDir, outDir); err != nil {
+		return nil, nil, nil, arts, err
 	}
-	adrs = Aggregate(adrs, refs)
+	adrs = adrcorpus.Aggregate(adrs, refs)
+	subs = adrcorpus.AllSubtasks(adrs)
 	if err = os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, nil, "", "", eh.Errorf("unable to create out dir %q: %w", outDir, err)
+		return nil, nil, nil, arts, eh.Errorf("unable to create out dir %q: %w", outDir, err)
 	}
-	adrArrow = filepath.Join(outDir, adrArrowName)
-	coderefArrow = filepath.Join(outDir, coderefArrowName)
-	if err = WriteAdrArrow(adrArrow, adrs); err != nil {
-		return nil, nil, "", "", err
+	arts = artifacts{
+		adrArrow:     filepath.Join(outDir, adrArrowName),
+		coderefArrow: filepath.Join(outDir, coderefArrowName),
+		subtaskArrow: filepath.Join(outDir, subtaskArrowName),
 	}
-	if err = WriteCoderefArrow(coderefArrow, refs); err != nil {
-		return nil, nil, "", "", err
+	if err = WriteAdrArrow(arts.adrArrow, adrs); err != nil {
+		return nil, nil, nil, arts, err
 	}
-	return adrs, refs, adrArrow, coderefArrow, nil
+	if err = WriteCoderefArrow(arts.coderefArrow, refs); err != nil {
+		return nil, nil, nil, arts, err
+	}
+	if err = WriteSubtaskArrow(arts.subtaskArrow, subs); err != nil {
+		return nil, nil, nil, arts, err
+	}
+	return adrs, refs, subs, arts, nil
 }
 
 func actionBuild(c *cli.Context) error {
@@ -93,12 +124,13 @@ func actionBuild(c *cli.Context) error {
 	if !filepath.IsAbs(outDir) {
 		outDir = filepath.Join(root, outDir)
 	}
-	adrs, refs, adrArrow, coderefArrow, err := buildArtifacts(c, outDir)
+	adrs, refs, subs, arts, err := buildArtifacts(c, outDir)
 	if err != nil {
 		return err
 	}
-	log.Info().Int("adrs", len(adrs)).Int("coderefs", len(refs)).
-		Str("adrArrow", adrArrow).Str("coderefArrow", coderefArrow).
+	log.Info().Int("adrs", len(adrs)).Int("coderefs", len(refs)).Int("subtasks", len(subs)).
+		Str("adrArrow", arts.adrArrow).Str("coderefArrow", arts.coderefArrow).
+		Str("subtaskArrow", arts.subtaskArrow).
 		Msg("emitted ADR Arrow tables")
 	return nil
 }
@@ -109,11 +141,11 @@ func actionOverview(c *cli.Context) error {
 		return eh.Errorf("unable to create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	adrs, _, adrArrow, coderefArrow, err := buildArtifacts(c, tmp)
+	adrs, _, _, arts, err := buildArtifacts(c, tmp)
 	if err != nil {
 		return err
 	}
-	ok, err := RunOverview(adrArrow, coderefArrow, os.Stdout)
+	ok, err := RunOverview(arts.adrArrow, arts.coderefArrow, arts.subtaskArrow, os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -138,11 +170,11 @@ func actionQuery(c *cli.Context) error {
 		return eh.Errorf("unable to create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	_, _, adrArrow, coderefArrow, err := buildArtifacts(c, tmp)
+	_, _, _, arts, err := buildArtifacts(c, tmp)
 	if err != nil {
 		return err
 	}
-	ok, err := RunQuery(adrArrow, coderefArrow, sql, c.String("format"), os.Stdout)
+	ok, err := RunQuery(arts.adrArrow, arts.coderefArrow, arts.subtaskArrow, sql, c.String("format"), os.Stdout)
 	if err != nil {
 		return err
 	}

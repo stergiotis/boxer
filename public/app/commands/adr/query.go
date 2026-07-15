@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/gov/adrcorpus"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -44,6 +45,20 @@ var overviewQueries = []namedQuery{
 	{"Most recently touched (latest date mentioned in the ADR)",
 		`SELECT num, status, impl_evidence, last_date, title
          FROM adr WHERE last_date != '' ORDER BY last_date DESC LIMIT 12`},
+	{"Sub-item progress: what each ADR declares done of what it decomposed into",
+		`SELECT num, status, subtasks_done AS done, subtasks_total AS total,
+                round(100 * subtasks_done / subtasks_total) AS pct, title
+         FROM adr WHERE subtasks_total > 0
+         ORDER BY pct DESC, total DESC LIMIT 20`},
+	{"Sub-item vocabulary: what the corpus actually decomposes into",
+		`SELECT kind, count() AS declared, countIf(done) AS done,
+                countIf(code_refs > 0) AS cited,
+                countIf(shape='heading') AS as_heading, countIf(shape='list') AS as_list
+         FROM subtask GROUP BY kind ORDER BY declared DESC`},
+	{"Sub-item drift: code names it, but no ADR declares it done (the ✓ worklist)",
+		`SELECT s.num AS num, s.marker AS marker, s.code_refs AS refs, substring(s.title, 1, 44) AS title
+         FROM subtask s WHERE s.code_refs > 0 AND NOT s.done
+         ORDER BY s.code_refs DESC, s.num LIMIT 20`},
 }
 
 // resolveChBinary reports whether clickhouse-local is reachable and, when it is
@@ -61,21 +76,22 @@ func resolveChBinary() (path string, ok bool) {
 	return "", false
 }
 
-// chTablePrelude binds the two Arrow files to the table names `adr` and
-// `coderef`. The files are referenced by basename and clickhouse-local is run
-// with its working directory set to where they live (see RunQuery), so no
-// absolute-path file()-access policy is involved.
-func chTablePrelude(adrArrowBase, coderefArrowBase string) string {
+// chTablePrelude binds the three Arrow files to the table names `adr`,
+// `coderef` and `subtask`. The files are referenced by basename and
+// clickhouse-local is run with its working directory set to where they live
+// (see RunQuery), so no absolute-path file()-access policy is involved.
+func chTablePrelude(adrArrowBase, coderefArrowBase, subtaskArrowBase string) string {
 	return fmt.Sprintf(
 		"CREATE TEMPORARY TABLE adr AS SELECT * FROM file(%s, 'Arrow');\n"+
-			"CREATE TEMPORARY TABLE coderef AS SELECT * FROM file(%s, 'Arrow');\n",
-		sqlQuote(adrArrowBase), sqlQuote(coderefArrowBase))
+			"CREATE TEMPORARY TABLE coderef AS SELECT * FROM file(%s, 'Arrow');\n"+
+			"CREATE TEMPORARY TABLE subtask AS SELECT * FROM file(%s, 'Arrow');\n",
+		sqlQuote(adrArrowBase), sqlQuote(coderefArrowBase), sqlQuote(subtaskArrowBase))
 }
 
-// RunQuery executes one SQL statement against the adr/coderef tables via
-// clickhouse-local. ok=false means the binary is unreachable; callers decide
+// RunQuery executes one SQL statement against the adr/coderef/subtask tables
+// via clickhouse-local. ok=false means the binary is unreachable; callers decide
 // whether to error or fall back.
-func RunQuery(adrArrow, coderefArrow, query, format string, stdout io.Writer) (ok bool, err error) {
+func RunQuery(adrArrow, coderefArrow, subtaskArrow, query, format string, stdout io.Writer) (ok bool, err error) {
 	bin, found := resolveChBinary()
 	if !found {
 		return false, nil
@@ -83,7 +99,7 @@ func RunQuery(adrArrow, coderefArrow, query, format string, stdout io.Writer) (o
 	if format == "" {
 		format = "PrettyCompact"
 	}
-	script := chTablePrelude(filepath.Base(adrArrow), filepath.Base(coderefArrow)) + query
+	script := chTablePrelude(filepath.Base(adrArrow), filepath.Base(coderefArrow), filepath.Base(subtaskArrow)) + query
 	cmd, err := extbin.ClickHouseLocal.Command(context.Background(),
 		extbin.Opts{Path: bin, Dir: filepath.Dir(adrArrow)},
 		"--multiquery", "--output-format", format)
@@ -103,7 +119,7 @@ func RunQuery(adrArrow, coderefArrow, query, format string, stdout io.Writer) (o
 
 // RunOverview runs the canned overview queries, each under a heading. ok=false
 // means clickhouse-local is unreachable (callers fall back to RenderBoardASCII).
-func RunOverview(adrArrow, coderefArrow string, stdout io.Writer) (ok bool, err error) {
+func RunOverview(adrArrow, coderefArrow, subtaskArrow string, stdout io.Writer) (ok bool, err error) {
 	if _, found := resolveChBinary(); !found {
 		return false, nil
 	}
@@ -111,7 +127,7 @@ func RunOverview(adrArrow, coderefArrow string, stdout io.Writer) (ok bool, err 
 		if _, err = fmt.Fprintf(stdout, "\n── %s ──\n", q.title); err != nil {
 			return true, err
 		}
-		if _, err = RunQuery(adrArrow, coderefArrow, q.sql, "PrettyCompact", stdout); err != nil {
+		if _, err = RunQuery(adrArrow, coderefArrow, subtaskArrow, q.sql, "PrettyCompact", stdout); err != nil {
 			return true, err
 		}
 	}
@@ -125,19 +141,30 @@ func sqlQuote(s string) string {
 // RenderBoardASCII prints the two-axis board as a plain padded table. It is the
 // no-clickhouse fallback so `boxer adr overview` is still useful where the
 // binary is absent.
-func RenderBoardASCII(adrs []Adr, w io.Writer) error {
-	sorted := make([]Adr, len(adrs))
+func RenderBoardASCII(adrs []adrcorpus.Adr, w io.Writer) error {
+	sorted := make([]adrcorpus.Adr, len(adrs))
 	copy(sorted, adrs)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Num < sorted[j].Num })
-	headers := []string{"num", "status", "evidence", "refs", "pkgs", "last_date", "title"}
+	headers := []string{"num", "status", "evidence", "refs", "pkgs", "sub_done", "last_date", "title"}
 	rows := make([][]string, 0, len(sorted))
 	for _, a := range sorted {
 		rows = append(rows, []string{
 			strconv.Itoa(a.Num), a.Status, a.ImplEvidence,
-			strconv.Itoa(a.CodeRefs), strconv.Itoa(a.CodePkgs), a.LastDate, a.Title,
+			strconv.Itoa(a.CodeRefs), strconv.Itoa(a.CodePkgs),
+			formatRollup(a.SubtasksDone, a.SubtasksTotal), a.LastDate, a.Title,
 		})
 	}
 	return renderTable(headers, rows, w)
+}
+
+// formatRollup renders a sub-item rollup as "k/n", or "-" when the ADR declares
+// no sub-items at all (distinct from "0/n", which means it declared some and
+// has marked none done).
+func formatRollup(done, total int) string {
+	if total == 0 {
+		return "-"
+	}
+	return strconv.Itoa(done) + "/" + strconv.Itoa(total)
 }
 
 func renderTable(headers []string, rows [][]string, w io.Writer) (err error) {

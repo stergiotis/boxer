@@ -1,4 +1,4 @@
-package adr
+package adrcorpus
 
 import (
 	"bytes"
@@ -27,8 +27,18 @@ type CodeRef struct {
 
 var (
 	// ADR-0080, ADR 0080, (ADR-0080), optionally pinned to a §section such as
-	// §SD10, §4 or §M2.7 (a trailing sentence period is not captured).
-	adrRefRe = regexp.MustCompile(`ADR[- ]?(\d{4})\b(?:[ ]*§[ ]*([A-Za-z]*\d+(?:\.\d+)*))?`)
+	// §SD10, §B1, §Q3, §4 or §M2.7 (a trailing sentence period is not
+	// captured). The section vocabulary is deliberately open — the corpus pins
+	// subsidiary design decisions (SD), milestones (M), design-space questions
+	// (Q3), lettered options (B1) and plain section numbers.
+	//
+	// The two alternatives exist to keep a *date* from reading as a section:
+	// "ADR-0026 §2026-05-12 follow-up" pins a dated Update, not a section, and
+	// an unbounded \d+ would capture "2026" from it. A bare number is therefore
+	// capped at two digits and anchored with \b, so no prefix of a year matches
+	// and the qualifier is correctly left empty; a letter-prefixed section is
+	// unambiguous and stays unbounded.
+	adrRefRe = regexp.MustCompile(`ADR[- ]?(\d{4})\b(?:[ ]*§[ ]*([A-Za-z]+\d+(?:\.\d+)*[a-z]?|\d{1,2}(?:\.\d+)*)\b)?`)
 	// path-style citation, e.g. doc/adr/0066-...
 	adrPathRe = regexp.MustCompile(`adr/(\d{4})-`)
 )
@@ -48,25 +58,43 @@ var skipDirs = map[string]struct{}{
 }
 
 // ScanCodeRefs walks root collecting ADR citations from source files. The ADR
-// corpus dir (excludeDir) and the artifact dir (outDir) are skipped. Markdown
-// is excluded entirely — "the code", not the prose.
+// corpus dir (excludeDir) and the artifact dir (outDir) are skipped, as are
+// empty values for either. Markdown is excluded entirely — "the code", not the
+// prose.
 func ScanCodeRefs(root, excludeDir, outDir string) (refs []CodeRef, err error) {
-	excludeAbs, _ := filepath.Abs(excludeDir)
-	outAbs, _ := filepath.Abs(outDir)
+	// An empty dir must not become an exclusion: filepath.Abs("") is the
+	// *working directory*, which would silently drop it from the scan.
+	rootAbs, _ := filepath.Abs(root)
+	var excludeAbs, outAbs string
+	if excludeDir != "" {
+		excludeAbs, _ = filepath.Abs(excludeDir)
+	}
+	if outDir != "" {
+		outAbs, _ = filepath.Abs(outDir)
+	}
 	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, e error) error {
 		if e != nil {
 			return e
 		}
 		if d.IsDir() {
 			abs, _ := filepath.Abs(path)
-			if abs == excludeAbs || (outAbs != "" && abs == outAbs) {
+			if (excludeAbs != "" && abs == excludeAbs) || (outAbs != "" && abs == outAbs) {
 				return filepath.SkipDir
+			}
+			// The name-based rules below classify *descendants*. The walk root
+			// is whatever the caller asked to scan and is never skipped for
+			// its name: a relative root ("..", "../../..") has basename "..",
+			// which the hidden-directory rule would read as a dotfile and skip
+			// — abandoning the whole walk and reporting zero citations rather
+			// than an error, so every ADR would read as un-built.
+			if abs == rootAbs {
+				return nil
 			}
 			name := d.Name()
 			if _, skip := skipDirs[name]; skip {
 				return filepath.SkipDir
 			}
-			if name != "." && strings.HasPrefix(name, ".") {
+			if strings.HasPrefix(name, ".") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -147,12 +175,16 @@ func trimSnippet(line string) string {
 }
 
 // Aggregate folds the code references into the Adr rows (matched by Num) and
-// assigns the heuristic ImplEvidence bucket. References whose number has no
-// ADR file are ignored here but remain in the coderef table.
+// assigns the heuristic ImplEvidence bucket. It also pushes the §-qualified
+// citations down onto each [Subtask.CodeRefs], matching a citation's qualifier
+// against the sub-item's marker, so evidence is readable at the granularity the
+// ADR decomposed itself into. References whose number has no ADR file are
+// ignored here but remain in the coderef table.
 func Aggregate(adrs []Adr, refs []CodeRef) []Adr {
 	type agg struct {
 		refs                      int
 		files, pkgs, langs, quals map[string]struct{}
+		byQual                    map[string]int
 	}
 	byNum := make(map[int]*agg)
 	for _, r := range refs {
@@ -161,6 +193,7 @@ func Aggregate(adrs []Adr, refs []CodeRef) []Adr {
 			a = &agg{
 				files: map[string]struct{}{}, pkgs: map[string]struct{}{},
 				langs: map[string]struct{}{}, quals: map[string]struct{}{},
+				byQual: map[string]int{},
 			}
 			byNum[r.Num] = a
 		}
@@ -170,6 +203,7 @@ func Aggregate(adrs []Adr, refs []CodeRef) []Adr {
 		a.langs[r.Lang] = struct{}{}
 		if r.Qualifier != "" {
 			a.quals[r.Qualifier] = struct{}{}
+			a.byQual[r.Qualifier]++
 		}
 	}
 	for i := range adrs {
@@ -178,6 +212,7 @@ func Aggregate(adrs []Adr, refs []CodeRef) []Adr {
 		a := byNum[adrs[i].Num]
 		if a == nil {
 			adrs[i].ImplEvidence = "none"
+			aggregateSubtaskRefs(&adrs[i], nil)
 			continue
 		}
 		adrs[i].CodeRefs = a.refs
@@ -186,8 +221,24 @@ func Aggregate(adrs []Adr, refs []CodeRef) []Adr {
 		adrs[i].CodeLangs = sortedKeys(a.langs)
 		adrs[i].CodeQualifiers = sortedKeys(a.quals)
 		adrs[i].ImplEvidence = evidenceBucket(adrs[i].CodeRefs, adrs[i].CodeFiles, adrs[i].CodePkgs)
+		aggregateSubtaskRefs(&adrs[i], a.byQual)
 	}
 	return adrs
+}
+
+// aggregateSubtaskRefs matches each sub-item's marker against the ADR's
+// §-qualified citation counts. A nil map clears the counts, so re-aggregating
+// a previously-folded slice never leaves stale evidence behind.
+func aggregateSubtaskRefs(a *Adr, byQual map[string]int) {
+	cited := 0
+	for j := range a.Subtasks {
+		n := byQual[a.Subtasks[j].Marker]
+		a.Subtasks[j].CodeRefs = n
+		if n > 0 {
+			cited++
+		}
+	}
+	a.SubtasksCited = cited
 }
 
 // evidenceBucket is a deliberately coarse, heuristic read of implementation

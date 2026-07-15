@@ -1,4 +1,4 @@
-package adr
+package adrcorpus
 
 import (
 	"os"
@@ -115,6 +115,44 @@ func TestParseDir(t *testing.T) {
 	}
 }
 
+// TestScanCodeRefsRelativeRoot is a regression test: the walk root must be
+// scanned whatever its basename. A relative root ("..", "../../..") has
+// basename "..", which the descendant hidden-directory rule read as a dotfile
+// — skipping the entire walk and returning zero citations with no error, so
+// every ADR in the corpus would have read as un-built.
+func TestScanCodeRefsRelativeRoot(t *testing.T) {
+	root, adrDir := fixture(t)
+	abs, err := ScanCodeRefs(root, adrDir, "")
+	if err != nil {
+		t.Fatalf("absolute root: %v", err)
+	}
+	if len(abs) == 0 {
+		t.Fatalf("fixture should yield citations from an absolute root")
+	}
+
+	// Walk the same tree via a root whose basename is "..".
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	defer func() {
+		if cerr := os.Chdir(wd); cerr != nil {
+			t.Fatalf("restore cwd: %v", cerr)
+		}
+	}()
+	if err = os.Chdir(filepath.Join(root, "code")); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	rel, err := ScanCodeRefs("..", adrDir, "")
+	if err != nil {
+		t.Fatalf("relative root: %v", err)
+	}
+	if len(rel) != len(abs) {
+		t.Errorf("relative root %q found %d citations, absolute root found %d — the walk root must not be skipped for its name",
+			"..", len(rel), len(abs))
+	}
+}
+
 func TestScanAndAggregate(t *testing.T) {
 	root, adrDir := fixture(t)
 	adrs, err := ParseDir(adrDir)
@@ -152,27 +190,3 @@ func TestScanAndAggregate(t *testing.T) {
 	}
 }
 
-func TestEmitArrow(t *testing.T) {
-	root, adrDir := fixture(t)
-	adrs, err := ParseDir(adrDir)
-	if err != nil {
-		t.Fatalf("ParseDir: %v", err)
-	}
-	refs, err := ScanCodeRefs(root, adrDir, "")
-	if err != nil {
-		t.Fatalf("ScanCodeRefs: %v", err)
-	}
-	adrs = Aggregate(adrs, refs)
-
-	out := t.TempDir()
-	adrArrow := filepath.Join(out, adrArrowName)
-	if err := WriteAdrArrow(adrArrow, adrs); err != nil {
-		t.Fatalf("WriteAdrArrow: %v", err)
-	}
-	if err := WriteCoderefArrow(filepath.Join(out, coderefArrowName), refs); err != nil {
-		t.Fatalf("WriteCoderefArrow: %v", err)
-	}
-	if fi, err := os.Stat(adrArrow); err != nil || fi.Size() == 0 {
-		t.Fatalf("adr.arrow not written or empty: %v", err)
-	}
-}
