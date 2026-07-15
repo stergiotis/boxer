@@ -109,7 +109,7 @@ func TestProbeBuild_Smoke(t *testing.T) {
 	// load-bearing tags, as the real survey does — without them, tag-gated
 	// deps trip "build constraints exclude all Go files" (an inconclusive
 	// harness error, not a verdict).
-	tags := readTagsFile(filepath.Join(root, "tags"))
+	tags := godepcollect.ReadTagsFile(filepath.Join(root, "tags"))
 	pkg := "github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	dir := filepath.Join(root, "public/analytics/stats/tdigest")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)

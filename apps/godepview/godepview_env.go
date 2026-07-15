@@ -2,8 +2,6 @@ package godepview
 
 import (
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep/godepcollect"
 	"github.com/stergiotis/boxer/public/config/env"
@@ -46,31 +44,6 @@ func resolveCollectorConfig() (cfg godepcollect.Config) {
 		}
 	}
 	cfg.Dir = root // "" → collector falls back to the process working dir
-
-	if raw := envTags.Get(); raw != "" {
-		cfg.Tags = splitTags(raw)
-	} else if root != "" {
-		cfg.Tags = readTagsFile(filepath.Join(root, "tags"))
-	}
+	cfg.Tags = godepcollect.ResolveTags(envTags.Get(), root)
 	return
-}
-
-// splitTags parses a comma-separated tag list, trimming blanks.
-func splitTags(csv string) (tags []string) {
-	for t := range strings.SplitSeq(csv, ",") {
-		if t = strings.TrimSpace(t); t != "" {
-			tags = append(tags, t)
-		}
-	}
-	return
-}
-
-// readTagsFile reads a build-tag file (newline- or comma-separated),
-// returning nil when it is absent or empty.
-func readTagsFile(path string) (tags []string) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	return splitTags(strings.ReplaceAll(string(data), "\n", ","))
 }

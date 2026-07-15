@@ -2,7 +2,6 @@ package wasmsurvey
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -93,7 +92,7 @@ func wasmSurveyOptions(c *cli.Context) (opts Options, err error) {
 		IncludeExternal: c.Bool("include-external"),
 		Jobs:            c.Int("jobs"),
 		ProbeTimeout:    c.Duration("timeout"),
-		AssumeClean:     splitTags(c.String("assume-clean")),
+		AssumeClean:     godepcollect.SplitTags(c.String("assume-clean")),
 	}
 	return opts, nil
 }
@@ -128,45 +127,9 @@ func runWasmSurvey(c *cli.Context) (err error) {
 	return RenderText(survey, os.Stdout, c.Bool("show-green"))
 }
 
-// resolveTags resolves the build-tag list: the --tags flag wins, else the
-// module root's `tags` file, else the `-tags=` carried in GOFLAGS (the boxer
-// launcher exports the repo's load-bearing tags there). Mirrors godepview's
-// resolution so both collectors see the same files.
+// resolveTags resolves the build-tag list for root. The resolution itself lives
+// in godepcollect, beside ModuleRoot, so that every package-loading tool in the
+// tree agrees on which files it is looking at.
 func resolveTags(flagVal string, root string) (tags []string) {
-	if flagVal != "" {
-		return splitTags(flagVal)
-	}
-	if root != "" {
-		if t := readTagsFile(filepath.Join(root, "tags")); len(t) > 0 {
-			return t
-		}
-	}
-	if gf := os.Getenv("GOFLAGS"); gf != "" { //boxer:lint disable=CS011 reason="GOFLAGS is a Go-toolchain variable owned by the toolchain, not a boxer config var; read here only to mirror the toolchain's own -tags resolution as the last-resort fallback"
-		for f := range strings.SplitSeq(gf, " ") {
-			if after, ok := strings.CutPrefix(strings.TrimSpace(f), "-tags="); ok {
-				return splitTags(after)
-			}
-		}
-	}
-	return nil
-}
-
-// splitTags parses a comma-separated tag list, trimming blanks.
-func splitTags(csv string) (tags []string) {
-	for t := range strings.SplitSeq(csv, ",") {
-		if t = strings.TrimSpace(t); t != "" {
-			tags = append(tags, t)
-		}
-	}
-	return
-}
-
-// readTagsFile reads a build-tag file (newline- or comma-separated), nil when
-// absent or empty.
-func readTagsFile(path string) (tags []string) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	return splitTags(strings.ReplaceAll(string(data), "\n", ","))
+	return godepcollect.ResolveTags(flagVal, root)
 }
