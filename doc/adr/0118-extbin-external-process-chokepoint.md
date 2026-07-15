@@ -8,7 +8,7 @@ date: 2026-07-14
 > in-tree call sites migrated, and the CS012 enforcement rule added (2026-07-14)
 > — see the Status section. Awaiting review before acceptance.
 
-# ADR-0118: a single audited chokepoint for external-process invocation
+# ADR-0118: a single audited chokepoint for external-binary resolution
 
 ## Status
 
@@ -17,10 +17,13 @@ working code:
 
 - `public/extbin` — the `Program` registry, `Kind`-based resolution, and the
   `Command`/`Output`/`CombinedOutput`/`Run` surface, with tests.
-- Every `os/exec` call site in the tree resolved through it (the one exemption
-  is `observability/eh`, below `extbin` in the import graph — see Consequences).
+- Every `os/exec` **resolution** site in the tree routed through it (the one
+  exemption is `observability/eh`, below `extbin` in the import graph — see
+  Consequences). Process *spawning* deliberately stays with callers; §Scope
+  below states exactly what that does and does not buy.
 - `codelint` rule **CS012** bans direct `os/exec` outside `extbin`; it reports
-  zero findings across `./public/...`.
+  zero findings across `./public/...`. What that attests to is narrower than it
+  looks — again, §Scope.
 - A `keelson.extbin` introspection table (ADR-0094) exposes the registry: each
   program's name, kind, module, override_env, install_hint, its live resolution
   on this host (`resolved_path`, `available` via `Program.Resolve`), and a
@@ -93,13 +96,74 @@ kind-specific:
 
 **Enforcement.** codelint CS012 (severity Error) flags
 `exec.Command`/`CommandContext`/`LookPath` outside `extbin`. Referencing the
-`*exec.Cmd` *type* is fine; only the resolving/spawning calls are banned.
+`*exec.Cmd` *type* is fine; only the resolving calls are banned.
+
+## Scope: what is centralised, and what is not
+
+The distinction between resolution and ownership above is a design choice with a
+consequence worth stating plainly, because the phrase "chokepoint" invites a
+stronger reading than the design supports. Added 2026-07-15, after the capability
+survey (ADR-0120) made the boundary measurable.
+
+**Centralised: resolution.** *Which* binary runs, found *how* — PATH lookup vs
+pinned `go tool` vs an `OverrideEnv` absolute path vs a caller-supplied `Local`
+path — happens in exactly one package, for every external program in the tree.
+`extbin.Registry()` enumerates the full set, and `keelson.extbin` makes it a
+query. This is the property the ADR actually delivers, and CS012 does enforce it:
+constructing an `exec.Cmd` requires importing `os/exec`, which CS012 denies.
+
+**Not centralised: spawning.** `Program.Command` hands back a live `*exec.Cmd`
+and the caller invokes it. **Eleven packages** outside `extbin` call `.Run()`,
+`.Start()` or `.CombinedOutput()` on a Cmd they were handed:
+
+```
+public/algebraicarch/pushout/pijul      public/keelson/data/chlocalpool
+public/app/commands/adr                 public/storage/recordstore/chexec
+public/db/clickhouse/cli                public/thestack/imzero2/application
+public/gov/callsites                    public/thestack/imzero2/egui2/demo/carousel
+public/gov/commitdigest                 showcase/deploy
+public/gov/repo
+```
+
+This is intended — it is what keeps the four streaming sites (pipes, process
+groups, signals) expressible, and rejecting the lifecycle-owning wrapper was a
+considered choice (see Alternatives). The point is only that "every external
+process is spawned from one place" is **not** among this ADR's claims, and should
+not be cited as though it were.
+
+**CS012 cannot see the spawn.** Calling a method on a value you were handed needs
+no import, so **eight of those eleven do not import `os/exec` at all**. The other
+three import it solely for type references (`exec.Cmd`, `exec.ExitError`), which
+the rule permits by design. CS012 therefore flags none of the eleven — correct
+behaviour for what it checks, and precisely the point: its zero-findings result
+attests that nothing *resolves* an external binary outside `extbin`, and nothing
+more. Two further gaps follow from the same fact:
+
+- The returned `*exec.Cmd` is mutable. A caller can reassign `cmd.Path` or
+  `cmd.Args` after resolution and before `Start`, and nothing in the registry,
+  the lint, or the `keelson.extbin` digest would notice. The audit surface is
+  *what extbin resolved*, not *what actually ran*. No call site does this today;
+  nothing prevents one.
+- `keelson.extbin`'s blake3 digest attests the binary at the resolved path at
+  query time — not the one a given process actually exec'd, which may have been
+  a different file at a different moment (TOCTOU).
+
+**Corroboration, and its limits.** The capability survey (ADR-0120) records
+`CapsDirect` per package from capslock; it independently attributes direct `exec`
+to six of the eleven, plus `extbin` itself and the exempt `eh`. It finds six
+rather than eleven because capslock reasons over the call graph reachable from a
+package's public API: `pijul`'s runner, for instance, is a method on an
+unexported type that nothing in the analysed set constructs, so its `cmd.Run()`
+is invisible to the analysis. `CapsDirect` is therefore a **lower bound** and the
+eleven above come from the source census, not from the survey. The survey is a
+useful cross-check on this boundary; it is not the authority for it.
 
 ## Consequences
 
 - One place to read, grep, or lint the host-binary surface; one uniform
   override + install-hint path; the pinned-over-ambient policy applied
-  everywhere.
+  everywhere. All three are properties of *resolution* — see §Scope for what
+  this does not cover.
 - **`observability/eh` is exempt.** `extbin` imports `eh`, so `eh`'s own
   `go env GOROOT` call (stack-trace path shortening) cannot route through
   `extbin` without a cycle. CS012 exempts `eh` by prefix, as CS001 already does.
@@ -131,3 +195,11 @@ kind-specific:
   designed-for but not built.
 - CS012 covers `os/exec` only; `syscall.Exec` / `os.StartProcess` are not in
   use and not yet gated.
+- **Gating the spawn is not attempted** (§Scope). Making `extbin` a chokepoint
+  for spawning too — rather than only for resolution — would need something CS012
+  cannot express as an import rule: a check that `(*exec.Cmd).Start`/`Run` is
+  only called on a Cmd obtained from `extbin` and unmutated since. An opaque
+  handle type (`extbin.Cmd` wrapping `*exec.Cmd`, exposing the lifecycle
+  explicitly) would make it structural instead, at the cost of re-exposing the
+  streaming surface the Alternatives section rejected doing. Worth revisiting
+  only if a hermetic mode needs to attest what ran, not just what resolved.
