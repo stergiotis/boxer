@@ -241,13 +241,13 @@ colours a dot from the ramp by its position instead, and the ramp is tuned for
 exactly this reading — the three below come out the same green, amber and grey
 the block above names explicitly.
 
-The three `countIf`s are worth reading closely, because they are a Go function
-(`cardDots` in `apps/adrboard/board.go`) written declaratively. There it is a
-first-match switch, and the rule "an author's ✓ outranks code evidence" is
-implicit in the case order — invisible in the code that implements it. SQL has
-no case order to inherit, so the same rule has to be said out loud:
-`NOT done AND code_refs > 0`. The buckets are disjoint and sum to `count()`
-either way; only one of the two forms *can* leave the rule unsaid.
+The three `countIf`s are worth reading closely. This board was a Go program
+once, and there the buckets were a first-match switch, where the rule "an
+author's ✓ outranks code evidence" was implicit in the case order — invisible in
+the code that implemented it. SQL has no case order to inherit, so the same rule
+has to be said out loud: `NOT done AND code_refs > 0`. The buckets are disjoint
+and sum to `count()` either way; only one of the two forms *can* leave the rule
+unsaid.
 
 ```sql
 WITH
@@ -274,43 +274,34 @@ GROUP BY adr, status
 ORDER BY indexOf(lifecycle, lane) = 0, indexOf(lifecycle, lane), title
 ```
 
-## ADR board (the adrboard app, as one query)
+## ADR board (this repository's decisions)
 
-The `adrboard` app folds this repository's decision corpus into a board in Go
-(`buildBoard` / `cardDots` in `apps/adrboard/board.go`). This is that fold as a
-single query — the exercise the Kanban pane was built for (ADR-0122). It needs
-the `adr` and `subtask` tables, which `boxer adr` emits as Arrow; the loader
-below reads their schema back out with `clickhouse-local` so no column list has
-to be repeated here, and needs no filesystem access on the server:
+This repository's own decision corpus, as a board. It needs no setup and no
+ClickHouse: `keelson('adr')` and `keelson('subtask')` read `doc/adr` in-process,
+so point the **Endpoint** menu at *Keelson introspection* and Run. The rows are
+the same ones `boxer adr` emits, under the same names — a query written here
+runs verbatim against its Arrow dump, and a test pins the two schema sets equal
+(ADR-0122 §SD4).
 
-```sh
-boxer adr build --root . --out .adrcache   # adr.arrow, subtask.arrow, coderef.arrow
-CH=http://localhost:8123/
-curl -s --data-binary 'CREATE DATABASE IF NOT EXISTS adrboard' "$CH"
-for t in adr subtask coderef; do
-  cols=$(clickhouse-local --query "DESCRIBE TABLE file('.adrcache/$t.arrow','Arrow')" \
-         --format TSV | awk -F'\t' 'NF>1 {printf "%s`%s` %s", (NR>1?", ":""), $1, $2}')
-  curl -s --data-binary "DROP TABLE IF EXISTS adrboard.$t" "$CH"
-  curl -s --data-binary "CREATE TABLE adrboard.$t ($cols) ENGINE=Memory" "$CH"
-  curl -s --data-binary "@.adrcache/$t.arrow" "$CH?query=INSERT+INTO+adrboard.$t+FORMAT+Arrow"
-done
-```
-
-The two folds agree: over one snapshot of the corpus, every card matches the Go
-board on lane, title, subtitle and all three tallies. Re-running the dump while
-another change lands will disagree, which is the honest behaviour — the Arrow
-files are a snapshot and the corpus is files on disk that move under you.
+The tables read the corpus per query, so an edited ADR shows up on the next Run;
+that costs about half a second, most of it parsing rather than the citation
+scan.
 
 The `lanes` CTE is the board's lane vocabulary: its rows are the lanes, in
-order, whether or not a card sits in one — which is how the board can say
-"nothing is withdrawn" rather than dropping the lane. A status `lanes` does not
-name is appended after them rather than lost, so a new word in the corpus shows
-up on the board instead of vanishing from it. Nothing in the main `SELECT`
-references the CTE; an unused CTE is legal and costs the query nothing.
+order, whether or not a card sits in one — which is how the board says "nothing
+is withdrawn" rather than dropping the lane. A status `lanes` does not name is
+appended after them rather than lost, so a new word in the corpus shows up on the
+board instead of vanishing from it. Nothing in the main `SELECT` references the
+CTE; an unused CTE is legal and costs the query nothing.
 
-The `n_done` aliases must not be named `done`: ClickHouse substitutes a `SELECT`
-alias into the expression that defines it, so `countIf(done) AS done` becomes
-`countIf(countIf(done))` and is rejected as a nested aggregate.
+The three `countIf`s are the whole board. `done` is the author's `✓` — the only
+claim of completion — and `code_refs > 0` is evidence that something cites the
+sub-item by its `§marker`, which is weaker. The buckets are disjoint and sum to
+`count()`, and the order matters: a `✓` outranks evidence, so the cited bucket
+has to say `NOT done` out loud. The `n_done` aliases must not be named `done`:
+ClickHouse substitutes a `SELECT` alias into the expression that defines it, so
+`countIf(done) AS done` becomes `countIf(countIf(done))` and is rejected as a
+nested aggregate.
 
 ```sql
 WITH
@@ -322,7 +313,7 @@ WITH
            countIf(done)                       AS n_done,
            countIf(NOT done AND code_refs > 0) AS n_cited,
            countIf(NOT done AND code_refs = 0) AS n_todo
-    FROM adrboard.subtask
+    FROM keelson('subtask')
     GROUP BY num
   )
 SELECT
@@ -332,21 +323,17 @@ SELECT
   t.n_done  AS `dot_done@success`,
   t.n_cited AS `dot_cited@warning`,
   t.n_todo  AS `dot_todo@disabled`
-FROM adrboard.adr AS a
+FROM keelson('adr') AS a
 LEFT JOIN tally AS t ON t.num = a.num
 ORDER BY a.num
 ```
-
-The one thing the Go board still does that this cannot: its legend carries a
-sentence per dot kind explaining what the colour claims. A column name is a
-label, not a paragraph, so the legend names the column instead.
 
 The sub-item worklist the board's amber dots point at — cited by code, and not
 declared done by anyone:
 
 ```sql
 SELECT s.num, s.marker, s.code_refs, substring(s.title, 1, 60) AS title
-FROM adrboard.subtask AS s
+FROM keelson('subtask') AS s
 WHERE s.code_refs > 0 AND NOT s.done
 ORDER BY s.code_refs DESC, s.num
 LIMIT 25
