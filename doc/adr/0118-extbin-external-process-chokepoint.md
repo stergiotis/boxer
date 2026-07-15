@@ -102,8 +102,8 @@ kind-specific:
 
 The distinction between resolution and ownership above is a design choice with a
 consequence worth stating plainly, because the phrase "chokepoint" invites a
-stronger reading than the design supports. Added 2026-07-15, after the capability
-survey (ADR-0120) made the boundary measurable.
+stronger reading than the design supports. Added 2026-07-15, after a source
+census of the call sites made the boundary measurable.
 
 **Centralised: resolution.** *Which* binary runs, found *how* — PATH lookup vs
 pinned `go tool` vs an `OverrideEnv` absolute path vs a caller-supplied `Local`
@@ -148,14 +148,14 @@ more. Two further gaps follow from the same fact:
   query time — not the one a given process actually exec'd, which may have been
   a different file at a different moment (TOCTOU).
 
-**Corroboration, and its limits.** The capability survey (ADR-0120) records
-`CapsDirect` per package from capslock; it independently attributes direct `exec`
-to six of the eleven, plus `extbin` itself and the exempt `eh`. It finds six
-rather than eleven because capslock reasons over the call graph reachable from a
-package's public API: `pijul`'s runner, for instance, is a method on an
-unexported type that nothing in the analysed set constructs, so its `cmd.Run()`
-is invisible to the analysis. `CapsDirect` is therefore a **lower bound** and the
-eleven above come from the source census, not from the survey. The survey is a
+**Corroboration, and its limits.** capslock (ADR-0026 §SD10), run over the tree,
+independently attributes direct `exec` to six of the eleven, plus `extbin` itself
+and the exempt `eh`. It finds six rather than eleven because its call graph is
+built by VTA and links only calls whose receiver it can resolve: `pijul`'s runner
+is a method on an unexported type that nothing outside a test constructs, so the
+concrete type never flows to the interface and its `cmd.Run()` is invisible to
+the analysis. A capability verdict is therefore a **lower bound**, and the eleven
+above come from the source census, not from capslock. Capability analysis is a
 useful cross-check on this boundary; it is not the authority for it.
 
 ## Consequences
