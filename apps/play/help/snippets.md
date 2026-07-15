@@ -301,22 +301,22 @@ board on lane, title, subtitle and all three tallies. Re-running the dump while
 another change lands will disagree, which is the honest behaviour — the Arrow
 files are a snapshot and the corpus is files on disk that move under you.
 
-Two things the Go board does that this query cannot. It always draws the five
-lifecycle lanes even when one is empty, so the board still says "nothing is
-withdrawn"; here a lane exists only because a card sits in it, since a lane is
-read off the rows. And its legend carries a sentence per dot kind explaining
-what the colour claims — a result set has nowhere to put that, so the legend
-falls back to naming the column.
+The `lanes` CTE is the board's lane vocabulary: its rows are the lanes, in
+order, whether or not a card sits in one — which is how the board can say
+"nothing is withdrawn" rather than dropping the lane. A status `lanes` does not
+name is appended after them rather than lost, so a new word in the corpus shows
+up on the board instead of vanishing from it. Nothing in the main `SELECT`
+references the CTE; an unused CTE is legal and costs the query nothing.
 
-`indexOf` returns 0 for a status the list does not carry, so the `= 0` key sorts
-an unrecognised status *after* the canonical five, which is where the Go board
-appends it. The `n_done` aliases must not be named `done`: ClickHouse
-substitutes a `SELECT` alias into the expression that defines it, so
-`countIf(done) AS done` becomes `countIf(countIf(done))` and is rejected as a
-nested aggregate.
+The `n_done` aliases must not be named `done`: ClickHouse substitutes a `SELECT`
+alias into the expression that defines it, so `countIf(done) AS done` becomes
+`countIf(countIf(done))` and is rejected as a nested aggregate.
 
 ```sql
-WITH ['proposed', 'accepted', 'superseded', 'withdrawn', 'deferred'] AS lifecycle,
+WITH
+  lanes AS (
+    SELECT arrayJoin(['proposed', 'accepted', 'superseded', 'withdrawn', 'deferred']) AS lane
+  ),
   tally AS (
     SELECT num,
            countIf(done)                       AS n_done,
@@ -334,8 +334,12 @@ SELECT
   t.n_todo  AS `dot_todo@disabled`
 FROM adrboard.adr AS a
 LEFT JOIN tally AS t ON t.num = a.num
-ORDER BY indexOf(lifecycle, lane) = 0, indexOf(lifecycle, lane), a.num
+ORDER BY a.num
 ```
+
+The one thing the Go board still does that this cannot: its legend carries a
+sentence per dot kind explaining what the colour claims. A column name is a
+label, not a paragraph, so the legend names the column instead.
 
 The sub-item worklist the board's amber dots point at — cited by code, and not
 declared done by anyone:

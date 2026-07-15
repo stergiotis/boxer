@@ -613,7 +613,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.timeline = NewTimelineDriver(timelineIds, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
 	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
 	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
-	inst.kanbanDriver = NewKanbanDriver(c.NewWidgetIdStack())
+	inst.kanbanDriver = NewKanbanDriver(c.NewWidgetIdStack(), client)
 	inst.diag = NewDiagnosticsDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
@@ -644,6 +644,9 @@ func (inst *PlayApp) Close() {
 	}
 	if inst.timeline != nil && inst.timeline.bandsLane != nil {
 		inst.timeline.bandsLane.close()
+	}
+	if inst.kanbanDriver != nil && inst.kanbanDriver.lanesLane != nil {
+		inst.kanbanDriver.lanesLane.close()
 	}
 	if inst.diag != nil {
 		inst.diag.close()
@@ -1844,14 +1847,55 @@ func (inst *PlayApp) renderKanbanTab(rec arrow.RecordBatch, schema *arrow.Schema
 		return
 	}
 	inst.kanbanDriver.noteExecuted(executed)
-	reject := dispatchPanel(kanbanPanel{driver: inst.kanbanDriver}, map[ChannelID]channelInput{
+	// Demand the lanes node (its own lane) for the chLanes channel. Both nil
+	// (no `lanes` CTE in the buffer) → the channel stays unfilled and the board
+	// reads its lanes off the rows; a schema-only view still fills it, so an
+	// inventory that legitimately returned nothing reads as "no lanes
+	// declared" rather than as "pending".
+	lanesRec, lanesSchema := inst.demandKanbanLanes()
+	if lanesRec != nil {
+		defer lanesRec.Release()
+	}
+	inputs := map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("kanban"), rec: rec, schema: schema, sig: inst.frameSig},
-	}, inst.sigEmit)
+	}
+	if lanesRec != nil || lanesSchema != nil {
+		inputs[chLanes] = channelInput{node: kanbanLanesNodeID, rec: lanesRec, schema: lanesSchema, sig: inst.frameSig}
+	}
+	reject := dispatchPanel(kanbanPanel{driver: inst.kanbanDriver}, inputs, inst.sigEmit)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {
 			rt.Small().Weak()
 		}
 	}
+}
+
+// demandKanbanLanes compiles the board query's `lanes` CTE — if it has one —
+// and demands it on the Kanban driver's lane, returning the retained result for
+// the chLanes channel (ADR-0122 §SD6; the caller MUST Release rec).
+//
+// The node comes from the last Run's split, so the lane inventory is part of
+// the user's own query rather than a second buffer to keep in sync. Its signal
+// reads resolve like any other node's; a name the prelude bound is a constant
+// and travels inside the fused SQL instead.
+func (inst *PlayApp) demandKanbanLanes() (rec arrow.RecordBatch, schema *arrow.Schema) {
+	d := inst.kanbanDriver
+	if d == nil || d.lanesLane == nil {
+		return
+	}
+	node, ok := findSplitNode(inst.currentSplit, kanbanLanesNodeID)
+	if !ok {
+		d.lanesLoading = false
+		d.lanesErr = nil
+		return
+	}
+	view := d.lanesLane.demand(compiledNode{
+		SQL:    fuseNode(inst.currentSplit, kanbanLanesNodeID),
+		Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
+	})
+	d.lanesLoading = view.loading
+	d.lanesErr = view.err // mirrored every demand — nil clears (no latch)
+	return view.rec, view.schema
 }
 
 // renderDetailTab is the Detail dock tab body: the leeway card stack for the

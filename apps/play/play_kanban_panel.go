@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -14,8 +15,8 @@ import (
 )
 
 // play_kanban_panel.go is the ADR-0122 Kanban dock tab: a result set rendered as
-// a board. The panel is a plain PanelI observer (chMain), like Table and World —
-// no panel-local lane, no query of its own.
+// a board. The panel observes the active result on chMain, like Table and World,
+// and optionally reads a lane inventory on chLanes (§SD6).
 //
 // The contract is named columns rather than detection (§SD1): `lane` and `title`
 // are required, `subtitle` and up to three `dot_<label>` tallies optional.
@@ -27,6 +28,12 @@ const (
 	kanbanTitleCol    = "title"
 	kanbanSubtitleCol = "subtitle"
 	kanbanDotPrefix   = "dot_"
+	// kanbanLanesNodeID is the CTE whose rows declare the board's lanes
+	// (§SD6). It is a node of the user's own split graph, not a
+	// panel-authored query: a board and its lane vocabulary are one thought,
+	// and a second editor would be a second thing to keep in sync. A query
+	// without it renders lanes off the rows, as before.
+	kanbanLanesNodeID NodeID = "lanes"
 	// kanbanTokenSep introduces a dot column's colour token —
 	// `dot_cited@warning`. Not ':' (ADR-0116's splitHandle claims any
 	// identifier with exactly one colon as a leeway `section:column` handle,
@@ -110,18 +117,32 @@ type kanbanClaim struct {
 	selRow   int64
 }
 
-// KanbanDriver owns the Kanban tab state: the board model and its build cache.
+// KanbanDriver owns the Kanban tab state: the board model, its build cache, and
+// the lane for the optional lanes node (§SD6).
 type KanbanDriver struct {
 	ids   *c.WidgetIdStack
 	model *kanban.Model
 
+	// lanesLane runs the `lanes` CTE when the board query carries one. It is a
+	// node of the user's split graph demanded on its own lane, so a lane
+	// vocabulary that is expensive to compute does not block the board.
+	lanesLane *nodeLane
+	// lanesLoading / lanesErr mirror the lane's last demand for the status
+	// line — a lanes query that fails must say so rather than silently
+	// reverting the board to row-derived lanes.
+	lanesLoading bool
+	lanesErr     error
+
 	// Fold cache key: the result identity (executed timestamp — the same
 	// freshness token the pager and the World pane use) + the schema the claim
-	// was resolved from. Caching here is not only about the per-frame
-	// allocation: kanban.Model owns the widget's selection, so a Model rebuilt
-	// every frame would clear the highlight every frame.
+	// was resolved from, + the declared lanes, which are an input to the fold
+	// and can change without the result changing. Caching here is not only
+	// about the per-frame allocation: kanban.Model owns the widget's
+	// selection, so a Model rebuilt every frame would clear the highlight
+	// every frame.
 	forExecuted time.Time
 	forSchema   *arrow.Schema
+	forLanes    string
 
 	// truncated counts cards dropped by kanbanMaxCards, for the status line.
 	truncated int64
@@ -132,8 +153,15 @@ type KanbanDriver struct {
 	pendingExecuted time.Time
 }
 
-func NewKanbanDriver(ids *c.WidgetIdStack) *KanbanDriver {
-	return &KanbanDriver{ids: ids}
+// NewKanbanDriver builds the driver. client may be nil (tests, an unwired
+// host): the lanes lane is then absent and the board reads lanes off the rows.
+func NewKanbanDriver(ids *c.WidgetIdStack, client *Client) (inst *KanbanDriver) {
+	inst = &KanbanDriver{ids: ids}
+	if client != nil {
+		inst.lanesLane = newNodeLane(clientExecutor{client: client, opts: newExecOptions("kanban-lanes")},
+			memory.NewGoAllocator(), 0)
+	}
+	return
 }
 
 // noteExecuted hands the driver the active result's freshness token before
@@ -150,12 +178,29 @@ type kanbanPanel struct {
 func (inst kanbanPanel) ID() PanelID { return "kanban" }
 
 func (inst kanbanPanel) Channels() []ChannelSpec {
-	return []ChannelSpec{{ID: chMain, Required: true, Label: "cards"}}
+	return []ChannelSpec{
+		{ID: chMain, Required: true, Label: "cards"},
+		{ID: chLanes, Required: false, Label: "lanes"},
+	}
 }
 
 func (inst kanbanPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
 	if schema == nil {
 		reason = "Run a query to see the board."
+		if ch == chLanes {
+			reason = "no lanes result"
+		}
+		return
+	}
+	if ch == chLanes {
+		// The lanes node only has to name lanes; the claim is that column.
+		for ci, f := range schema.Fields() {
+			if f.Name == kanbanLaneCol {
+				claim = ci
+				return
+			}
+		}
+		reason = "the `lanes` CTE needs a `lane` column"
 		return
 	}
 	k, reason := resolveKanbanColumns(schema)
@@ -173,7 +218,32 @@ func (inst kanbanPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 	if !ok {
 		return
 	}
-	inst.driver.render(main.Rec, main.Rec.Schema(), k, emit)
+	var declared []string
+	if l, filledLanes := filled[chLanes]; filledLanes {
+		if col, isCol := l.Claim.(int); isCol {
+			declared = kanbanDeclaredLanes(l.Rec, col)
+		}
+	}
+	inst.driver.render(main.Rec, main.Rec.Schema(), k, declared, emit)
+}
+
+// kanbanDeclaredLanes reads the lanes node's rows in order, de-duplicated. An
+// empty cell is a lane too — it is where a card with no lane value lands, and
+// declaring it is the only way to show that lane empty.
+func kanbanDeclaredLanes(rec arrow.RecordBatch, col int) (out []string) {
+	if rec == nil || col < 0 || col >= int(rec.NumCols()) {
+		return
+	}
+	seen := make(map[string]struct{}, rec.NumRows())
+	for row := range rec.NumRows() {
+		v := formatCell(rec, col, row)
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return
 }
 
 // resolveKanbanColumns applies the §SD1 contract to a schema. Pure and
@@ -283,8 +353,8 @@ func isKanbanCountType(dt arrow.DataType) bool {
 
 // render folds the result into a board (cached), draws it, and carries the
 // selection both ways.
-func (inst *KanbanDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k kanbanClaim, emit SignalEmitterI) {
-	inst.rebuild(rec, schema, k)
+func (inst *KanbanDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k kanbanClaim, declared []string, emit SignalEmitterI) {
+	inst.rebuild(rec, schema, k, declared)
 	m := inst.model
 	if m == nil || len(m.Cards) == 0 {
 		for rt := range c.RichTextLabel("The query returned no rows, so the board has no cards.") {
@@ -326,15 +396,25 @@ func (inst *KanbanDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	}
 }
 
-// rebuild folds the result into a kanban model, keyed on (executed, schema).
-// Lanes are created in first-seen row order, so the query's ORDER BY controls
-// the board's left-to-right layout with no second mechanism.
-func (inst *KanbanDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k kanbanClaim) {
-	if inst.model != nil && schema == inst.forSchema && inst.pendingExecuted.Equal(inst.forExecuted) {
+// rebuild folds the result into a kanban model, keyed on (executed, schema,
+// declared lanes).
+//
+// Lanes come from the declared inventory first, in its order, and then from the
+// rows — so a declared lane no card sits in still renders, empty, and a lane the
+// inventory does not name is appended rather than dropped. That is
+// adrboard's buildColumns exactly, with the canonical list supplied by a query
+// instead of a Go slice. With no inventory the rows are the only source and
+// first-seen row order decides the layout, so the query's ORDER BY controls it
+// with no second mechanism.
+func (inst *KanbanDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k kanbanClaim, declared []string) {
+	lanesKey := strings.Join(declared, "\x00")
+	if inst.model != nil && schema == inst.forSchema &&
+		inst.pendingExecuted.Equal(inst.forExecuted) && lanesKey == inst.forLanes {
 		return
 	}
 	inst.forSchema = schema
 	inst.forExecuted = inst.pendingExecuted
+	inst.forLanes = lanesKey
 
 	rows := rec.NumRows()
 	inst.truncated = 0
@@ -345,18 +425,27 @@ func (inst *KanbanDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k
 
 	laneOf := make(map[string]uint64, 8)
 	var cols []kanban.Column
+	addLane := func(name string) (id uint64) {
+		id = uint64(len(cols) + 1)
+		title := name
+		if title == "" {
+			title = kanbanNoLane
+		}
+		cols = append(cols, kanban.Column{ID: id, Title: title})
+		laneOf[name] = id
+		return
+	}
+	for _, name := range declared {
+		if _, dup := laneOf[name]; !dup {
+			addLane(name)
+		}
+	}
 	cards := make([]kanban.Card, 0, rows)
 	for row := range rows {
 		lane := formatCell(rec, k.laneCol, row)
 		id, seen := laneOf[lane]
 		if !seen {
-			id = uint64(len(cols) + 1)
-			title := lane
-			if title == "" {
-				title = kanbanNoLane
-			}
-			cols = append(cols, kanban.Column{ID: id, Title: title})
-			laneOf[lane] = id
+			id = addLane(lane)
 		}
 		card := kanban.Card{
 			// Position, not any column's value. Card ids must be unique (the
@@ -416,6 +505,15 @@ func (inst *KanbanDriver) statusLine() string {
 	if inst.truncated > 0 {
 		fmt.Fprintf(&b, " · %d more rows not shown (the board caps at %d — add a LIMIT or GROUP BY)",
 			inst.truncated, kanbanMaxCards)
+	}
+	// A lanes node that failed must not read as "there were no declared
+	// lanes": the board silently falls back to row-derived lanes, which looks
+	// like a working board with lanes missing.
+	switch {
+	case inst.lanesErr != nil:
+		fmt.Fprintf(&b, " · lanes query failed: %v", inst.lanesErr)
+	case inst.lanesLoading:
+		b.WriteString(" · lanes…")
 	}
 	return b.String()
 }

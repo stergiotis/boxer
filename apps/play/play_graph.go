@@ -68,6 +68,7 @@ const (
 	chMain   ChannelID = "main"   // the lone channel of single-input panels (Table, Projection, Detail)
 	chEvents ChannelID = "events" // the Timeline's foreground marks
 	chBands  ChannelID = "bands"  // the Timeline's background bands (slice 4b-2)
+	chLanes  ChannelID = "lanes"  // the Kanban board's lane inventory (ADR-0122 §SD6)
 )
 
 // ChannelSpec declares one of a panel's input channels. A panel is renderable iff

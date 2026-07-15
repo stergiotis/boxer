@@ -76,15 +76,17 @@ Substrate facts that shape the design:
 ## Decision
 
 A new `play` result pane ("Kanban" dock tab) that renders any result carrying a
-lane column and a title column as a `kanban` board, plus three `keelson`
+lane column and a title column as a `kanban` board, reading its lane vocabulary
+from an optional `lanes` CTE of the same query (§SD6), plus three `keelson`
 introspection tables that put the ADR corpus in SQL reach so the pane has a
 worked example. The `kanban` widget gains one method (`Model.SetSelected`,
 §SD3) and nothing else.
 
 ### SD1 — Panel contract: named columns, not detection
 
-The pane is a `PanelI` observer of the active node (one required channel). It
-claims a schema carrying, **by name**:
+The pane is a `PanelI` observer of the active node: one required channel
+(`main`, the cards) and one optional (`lanes`, §SD6). It claims a `main` schema
+carrying, **by name**:
 
 | column | type | required | meaning |
 | --- | --- | --- | --- |
@@ -231,6 +233,49 @@ error), and its root is pinned by an explicit env var rather than discovered
 silently. If review finds the tension decisive, §SD4 can split into its own ADR
 without touching §SD1-3 — the pane needs *a* table, not *this* table.
 
+### SD6 — The lane inventory: a `lanes` CTE, not a second editor
+
+A board query may carry a top-level CTE named `lanes`. Its rows, in order, are
+the board's lane inventory: each becomes a lane whether or not a card sits in
+it, and a lane a card carries that the inventory does not name is **appended**
+after them. That is `adrboard`'s `buildColumns` exactly — canonical list first,
+unknown appended — with the canonical list supplied by a query instead of a Go
+slice. Without the CTE, lanes are read off the rows as before.
+
+```sql
+WITH lanes AS (SELECT arrayJoin(['proposed', 'accepted', 'withdrawn']) AS lane)
+SELECT status AS lane, … FROM adr …
+```
+
+This is what an empty lane costs. Lanes-off-the-rows cannot express one — a lane
+is read from a row and a row *is* a card — so "nothing is withdrawn" was
+unsayable, which §Consequences recorded as the one structural gap against the Go
+board.
+
+**Why a CTE rather than a second editor.** The Timeline's `chBands` is the
+precedent for an optional second channel, and it pays for a whole apparatus: a
+second SQL buffer, its own editor box, a persist key with a Restore/Persist pair
+and a manifest entry, and an env knob. That is the right shape for bands, which
+are a *different subject* from the events they shade — a different table, often
+a different time grain. A board and its lane vocabulary are one thought, and
+splitting them across two buffers would make them two things to keep in sync,
+with a board that silently loses its lanes when only one is re-run.
+
+The split graph (ADR-0097) already turns every top-level CTE into a node, and
+`PlayApp` already holds the last Run's `currentSplit`. So the inventory needs no
+new buffer, no persistence and no knob: the panel looks for a node named `lanes`
+and demands it on its own lane. The node also shows up in the Graph tab like any
+other, for free — an inventory is inspectable and observable without the panel
+teaching the Graph view anything.
+
+An unused CTE is legal SQL and rides through the fused sink untouched
+(ClickHouse ignores it), so declaring lanes costs the board query nothing.
+`lanes` is a plausible name for an unrelated CTE, and a collision degrades
+quietly: a `lanes` node without a `lane` column rejects the optional channel and
+the board falls back to row-derived lanes. A lanes node that *fails*, though,
+does not fall back silently — the error rides the status line, since a board
+quietly missing its declared lanes looks like a working board.
+
 ### SD5 — Deferred
 
 The parent axis (`ParentID`, `GroupByParent`, `GroupByField`), `Column.IsDone`
@@ -282,23 +327,22 @@ the parent axis would introduce.
   change to `cardDots` semantics now has a second site to update. The shared
   schemas (§SD4) keep the *inputs* from drifting; nothing keeps the *folds* in
   step but the corpus test.
-- **The fold ports exactly; the chrome does not.** Run against the real corpus,
-  the SQL board agrees with `buildBoard` on every card — lane, title, subtitle
-  and all three tallies (§Validation). Three things the Go board does that a
-  result set cannot express, all of them chrome rather than fold:
-  - **An empty lane.** `buildColumns` emits the five lifecycle lanes
-    unconditionally, so the board still says "nothing is withdrawn". A lane here
-    is read off the rows, and a row is a card — so a lane with no cards cannot
-    exist. This is structural, not an omission: the only fix would be a phantom
-    card or a second channel carrying the lane inventory.
+- **The fold ports exactly; the editorial does not.** Run against the real
+  corpus, the SQL board agrees with `buildBoard` on every card — lane, title,
+  subtitle and all three tallies (§Validation). What the Go board does that a
+  result set cannot:
+  - **An empty lane** — the one structural gap, and the reason §SD6 exists. A
+    lane read off the rows cannot have no cards. The `lanes` CTE closes it: the
+    inventory is a query, so a lane may be declared and stay empty.
   - **Legend prose.** `dotLegend` gives each kind a sentence about what the
     colour claims ("a ✓ is the only claim of completion"). A column name carries
     a label, not a paragraph, so the legend names the column instead.
   - **A corpus headline.** `corpusSummary`'s one-liner has no slot in the
     contract; the status line counts cards and lanes.
-  None of the three is reason to widen §SD1 today, but they are the honest
-  answer to "can the query do everything the app does": the arithmetic, yes;
-  the editorial, no.
+  The two that remain are editorial — prose about what the board *means* — and
+  a result set is not a place to put prose. That is the honest answer to "can
+  the query do everything the app does": the arithmetic yes, the vocabulary yes
+  (§SD6), the commentary no.
 - The `keelson` table family stops being uniformly about the running process
   (§SD4), and that boundary is now a judgement call rather than a rule.
 - The board is capped at three dot kinds by the widget, with no headroom.
@@ -312,6 +356,12 @@ the parent axis would introduce.
   identity, first-seen lane order, the zero-tally skip, the 2000-card cap and
   its status line, the selection claim, and the fold cache — which is asserted
   to *preserve* a selection, since rebuilding the Model would clear it.
+- Unit (done, §SD6): the optional `lanes` channel and its `lane` claim; the
+  inventory read in row order and de-duplicated; **a declared lane with no cards
+  renders**; an undeclared lane is appended, not dropped; the inventory keys the
+  fold cache (it is an input that changes without the result changing); and a
+  failed lanes query reaches the status line rather than silently reverting the
+  board to row-derived lanes.
 - Unit (with §SD4): the `keelson('adr')` / `('subtask')` / `('coderef')` schemas
   equal `arrowemit.go`'s, field for field; empty tables when no corpus resolves.
 - Isomorphism (**done once by hand; not yet a test**): `buildBoard` dumped as
