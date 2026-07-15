@@ -1,38 +1,50 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-07-15
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
+> **Status: accepted (2026-07-15).** Built and committed — see the Status section.
 
 # ADR-0122: `play` kanban result pane — a board from a query result
 
 ## Status
 
-Proposed, pre-human-review.
+Accepted 2026-07-15, same-day as proposed. The design dialogue settled the
+column contract (§SD1) and the dot separator (§SD2) before implementation; §SD4
+and §SD6 were decided during it, and the app this generalises was removed on the
+strength of it (ADR-0092's 2026-07-15 update).
 
-The pane (§SD1-3) is built: `play_kanban_panel.go` with its tests, the Kanban
-dock tab and its `BOXER_PLAY_FOCUS_KANBAN` knob, `kanban.Model.SetSelected`, and
-two snippet-library entries (the contract, and the `countIf` aggregation that
-builds one).
-Verified per §Validation — unit suites green, and a live run against a
-`values()`-literal board confirmed the lanes, the tallies, the zero-tally skip
-and the `@token` colours (the exported SVG carries the three legend swatches as
-`#8bd28d` / `#e6b55d` / `#616466`, which are `adrboard`'s three legend tokens
-exactly).
+Built and committed:
 
-The corpus tables (§SD4) are built: `keelson('adr')` / `('subtask')` /
-`('coderef')`, with the corpus resolution moved out of `adrboard` into
-`adrcorpus` (where it outlives the app) under `BOXER_ADR_DIR` / `BOXER_ADR_ROOT`.
-The board now renders in `play` against the in-process keelson endpoint with no
-ClickHouse server and no load step. The §SD4 tension stands as recorded and
-still deserves review.
+- **The pane** (§SD1-3): `play_kanban_panel.go` with its tests, the Kanban dock
+  tab and its `BOXER_PLAY_FOCUS_KANBAN` knob, `kanban.Model.SetSelected`, and
+  three snippet-library entries.
+- **The lane inventory** (§SD6): the `lanes` CTE, which closed the one thing the
+  Go board could do that a result set could not.
+- **The corpus tables** (§SD4): `keelson('adr')` / `('subtask')` / `('coderef')`,
+  with the corpus resolution moved out of `adrboard` into `adrcorpus` — where it
+  outlives the app — under `BOXER_ADR_DIR` / `BOXER_ADR_ROOT`.
+
+Verified per §Validation. The ADR board renders against the in-process keelson
+endpoint with no ClickHouse server and no load step, which is what made removing
+`adrboard` a consolidation rather than a regression — before §SD4 it was the only
+route to the board that needed no server.
+
+**What acceptance is accepting.** Two of these are worth naming, because neither
+is comfortable. §SD4 crosses the line ADR-0094 draws for the `keelson` family:
+those tables describe the running process, and these three describe the
+repository, reading the filesystem at query time. And the pane is *larger* than
+the app it replaced (§Consequences) — it pays for itself from the second board
+on, not this one. Both were accepted with the measurements in hand rather than
+in spite of them.
 
 ## Context
+
+*Written while `adrboard` still existed; it was removed as a consequence of this
+decision, so the present tense below is the situation at the time.*
 
 The `adrboard` app (ADR-0092) renders the ADR corpus as a read-only kanban
 board: lanes are the frontmatter `status`, cards are ADRs, and each card carries
@@ -54,7 +66,8 @@ declarative route.
 
 That second route is worth having for its own sake. The two implementations are
 a natural cross-check on each other, and the exercise makes an asymmetry visible
-that neither route states on its own (§SD2).
+that neither route states on its own (§SD2). (In the event the second route
+replaced the first rather than sitting beside it — see §Consequences.)
 
 Substrate facts that shape the design:
 
@@ -81,11 +94,15 @@ Substrate facts that shape the design:
 A new `play` result pane ("Kanban" dock tab) that renders any result carrying a
 lane column and a title column as a `kanban` board, reading its lane vocabulary
 from an optional `lanes` CTE of the same query (§SD6), plus three `keelson`
-introspection tables that put the ADR corpus in SQL reach so the pane has a
-worked example. The `kanban` widget gains one method (`Model.SetSelected`,
-§SD3) and nothing else.
+introspection tables that put the ADR corpus in SQL reach (§SD4). The `kanban`
+widget gains one method (`Model.SetSelected`, §SD3) and nothing else.
 
-### SD1 — Panel contract: named columns, not detection
+The tables began as a way to give the pane a worked example. They ended up
+carrying more weight than that: with `adrboard` gone they are the only route to
+the ADR board, so §SD4 is load-bearing rather than illustrative, and the
+tension it records is a live one.
+
+### SD1 — Panel contract: named columns, not detection ✓
 
 The pane is a `PanelI` observer of the active node: one required channel
 (`main`, the cards) and one optional (`lanes`, §SD6). It claims a `main` schema
@@ -124,7 +141,7 @@ row. The excess is dropped and counted in the status line — not silently, and
 not by rejecting, since a bounded look at a big table is a reasonable thing to
 want on the way to a `GROUP BY`.
 
-### SD2 — Dot contract: `dot_<label>` and `dot_<label>@<token>`
+### SD2 — Dot contract: `dot_<label>` and `dot_<label>@<token>` ✓
 
 Any integer column named `dot_*` is a dot kind. Column order is dot order. The
 legend label is the `<label>` part, so `dot_cited` legends as "cited".
@@ -185,7 +202,7 @@ invisible in the code that implements it; the SQL cannot express the buckets
 without stating it. Neither form is more correct, but the declarative one is the
 one that cannot leave the rule unsaid.
 
-### SD3 — Read-only, and the selection carries both ways
+### SD3 — Read-only, and the selection carries both ways ✓
 
 `ReadOnly: true`; `DrainMoves` stays unused. A `play` result is a query output —
 there is nothing to write a dragged card back to, and inventing a
@@ -205,7 +222,7 @@ nothing else agreed was current — showing a selection that is no longer true.
 The method is three lines and a host that never calls it keeps the widget's
 existing behaviour.
 
-### SD4 — The corpus in SQL: three `keelson` tables
+### SD4 — The corpus in SQL: three `keelson` tables ✓
 
 `keelson('adr')`, `keelson('subtask')` and `keelson('coderef')` expose
 `adrcorpus` through the ADR-0094 introspection registry, carrying the **same
@@ -251,7 +268,7 @@ error), and its root is pinned by an explicit env var rather than discovered
 silently. If review finds the tension decisive, §SD4 can split into its own ADR
 without touching §SD1-3 — the pane needs *a* table, not *this* table.
 
-### SD6 — The lane inventory: a `lanes` CTE, not a second editor
+### SD6 — The lane inventory: a `lanes` CTE, not a second editor ✓
 
 A board query may carry a top-level CTE named `lanes`. Its rows, in order, are
 the board's lane inventory: each becomes a lane whether or not a card sits in
@@ -347,11 +364,17 @@ on the strength of a deferral that was really a wrong guess.
   construction (§SD2), but the space of unclaimed column-name syntax is now
   visibly finite, and a fourth convention should probably prompt a shared
   registry rather than a fourth ad-hoc grammar.
-- `adrboard` and the SQL board can disagree. That is the point — they are a
-  cross-check — but it does mean two implementations of one picture, and a
-  change to `cardDots` semantics now has a second site to update. The shared
-  schemas (§SD4) keep the *inputs* from drifting; nothing keeps the *folds* in
-  step but the corpus test.
+- **The cross-check was temporary, and knowing that changes what it was for.**
+  While both existed the two folds checked each other, at the price of two
+  implementations of one picture. That reads like a standing arrangement and was
+  not one: it lasted exactly as long as the migration. Once the SQL board proved
+  faithful, keeping the Go one only to disagree with it was a second thing to
+  maintain, so it went (ADR-0092's 2026-07-15 update) and the check went with it
+  — an oracle cannot outlive the implementation it oracles. What survives is the
+  parity test between `keelson` and `boxer adr`'s dump, which pins the *inputs*
+  the board reads; nothing now pins the fold but its own tests. Read the
+  isomorphism result in §Validation as a gate that passed, not as a property
+  under guard.
 - **The fold ported exactly; the editorial did not.** Run against the real
   corpus, the SQL board agreed with `buildBoard` on every card — lane, title,
   subtitle and all three tallies (§Validation). What the Go board did that a
@@ -427,20 +450,25 @@ on the strength of a deferral that was really a wrong guess.
   `boxer adr` binds.
 - Live (done, §SD4): the board renders in `play` against the **in-process
   keelson endpoint** — no ClickHouse server, no `boxer adr build`, no load step.
-- Isomorphism (**done once by hand; not yet a test**): `buildBoard` dumped as
-  rows and diffed against the snippet-library query over the same corpus
-  snapshot, loaded from `boxer adr build`'s Arrow into a server. Every card
-  agrees on lane, title, subtitle and all three tallies, and the lane inventory
-  matches with its counts. Two traps it surfaced: the comparison must not run
-  through TabSeparated, which escapes `'` and `\` in a title and reads as a
-  false difference; and the two sides must be dumped at the same moment, since
+- Isomorphism (**done once, by hand — a gate, and it can never be a test**):
+  `buildBoard` dumped as rows and diffed against the snippet-library query over
+  the same corpus snapshot, loaded from `boxer adr build`'s Arrow into a server.
+  Every card agreed on lane, title, subtitle and all three tallies, and the lane
+  inventory matched with its counts. Two traps it surfaced: the comparison must
+  not run through TabSeparated, which escapes `'` and `\` in a title and reads as
+  a false difference; and the two sides must be dumped at the same moment, since
   a first attempt disagreed on one ADR purely because a concurrent edit added a
   citation between the dump and the fold — the corpus moved under the read,
-  which is the case for §SD4's Live freshness stated as evidence.
+  which is §SD4's Live-freshness argument stated as evidence rather than as
+  reasoning.
 
-  This wants to be a standing test rather than a one-off. It cannot be, until a
-  corpus table exists that a test can reach without a server (§SD4) — that is
-  what §SD4 buys, beyond convenience.
+  An earlier draft of this section said the check "wants to be a standing test"
+  and was blocked only on §SD4. That was wrong twice: §SD4 landed, and the check
+  is still impossible — deleting `adrboard` deleted the oracle. A test that pins
+  SQL against Go needs the Go, and keeping it only for that is the duplicate this
+  decision removed. So the gate is what it is: it licensed the switch, it does
+  not guard it. What guards the board now is the pane's own tests and the
+  keelson-versus-dump parity above.
 - Integration (done): a scripted capture against a `values()` literal board —
   verifiable with no corpus and no ADR table — confirming the lanes and their
   counts, the per-card tallies against the source rows, the zero-tally skip, and
