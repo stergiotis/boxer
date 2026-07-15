@@ -115,18 +115,18 @@ func ParseTargetE(s string) (t TargetID, ok bool) {
 type ReasonKind uint8
 
 const (
-	ReasonNone               ReasonKind = iota
-	ReasonUnsupportedStdlib             // imports a stdlib package TinyGo does not provide on wasm (os/exec, plugin, net…)
-	ReasonReflect                       // uses reflect — TinyGo implements only a subset
-	ReasonUnsafe                        // uses unsafe — portability/ABI risk under wasm
-	ReasonGoexperimentJSONv2            // reaches encoding/json/v2 (the goexperiment.jsonv2 surface)
-	ReasonUnknownExternal               // depends on an external module not on the allow/deny list — unverified
-	ReasonUnsupportedExternal           // depends on an external module known not to build under TinyGo/wasm
-	ReasonSyscall                       // empirical: missing/again unsupported syscall surface
-	ReasonCgo                           // empirical: cgo reached (no cgo for wasm)
-	ReasonLinker                        // empirical: link-stage failure (missing symbol/intrinsic)
-	ReasonToolchain                     // empirical: tinygo cannot use the active Go toolchain (version ceiling)
-	ReasonProbeOther                    // empirical: a build failure that did not match a known bucket
+	ReasonNone                ReasonKind = iota
+	ReasonUnsupportedStdlib              // imports a stdlib package TinyGo does not provide on wasm (os/exec, plugin, net…)
+	ReasonReflect                        // uses reflect — TinyGo implements only a subset
+	ReasonUnsafe                         // uses unsafe — portability/ABI risk under wasm
+	ReasonGoexperimentJSONv2             // reaches encoding/json/v2 (the goexperiment.jsonv2 surface)
+	ReasonUnknownExternal                // depends on an external module not on the allow/deny list — unverified
+	ReasonUnsupportedExternal            // depends on an external module known not to build under TinyGo/wasm
+	ReasonSyscall                        // empirical: missing/again unsupported syscall surface
+	ReasonCgo                            // empirical: cgo reached (no cgo for wasm)
+	ReasonLinker                         // empirical: link-stage failure (missing symbol/intrinsic)
+	ReasonToolchain                      // empirical: tinygo cannot use the active Go toolchain (version ceiling)
+	ReasonProbeOther                     // empirical: a build failure that did not match a known bucket
 )
 
 // String renders the reason kind as a stable kebab token for reports/JSON.
@@ -177,10 +177,10 @@ type Reason struct {
 type TargetVerdict struct {
 	Target      TargetID `json:"target"`
 	Static      Tier     `json:"static"`
-	Empirical   Tier     `json:"empirical"`           // TierUnknown ⇒ not probed
-	Probed      bool     `json:"probed"`              // whether the empirical TinyGo build ran
+	Empirical   Tier     `json:"empirical"`             // TierUnknown ⇒ not probed
+	Probed      bool     `json:"probed"`                // whether the empirical TinyGo build ran
 	BuildMillis int64    `json:"buildMillis,omitempty"` // wall time of the probe build
-	Reasons     []Reason `json:"reasons,omitempty"`   // why not Green (static seeds + empirical findings)
+	Reasons     []Reason `json:"reasons,omitempty"`     // why not Green (static seeds + empirical findings)
 }
 
 // Tier is the verdict that stands: the empirical result when the package was
@@ -214,9 +214,9 @@ type PackageReport struct {
 type Survey struct {
 	RootModule string          `json:"rootModule"`
 	Tags       []string        `json:"tags"`
-	Mode       string          `json:"mode"`              // static | empirical | both
-	TinyGoVer  string          `json:"tinyGoVer"`         // empty when no probe ran
-	Targets    []string        `json:"targets"`           // surveyed target names
+	Mode       string          `json:"mode"`               // static | empirical | both
+	TinyGoVer  string          `json:"tinyGoVer"`          // empty when no probe ran
+	Targets    []string        `json:"targets"`            // surveyed target names
 	Warnings   []string        `json:"warnings,omitempty"` // e.g. "probe skipped: tinygo not found"
 	Packages   []PackageReport `json:"packages"`
 }
