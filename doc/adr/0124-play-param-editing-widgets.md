@@ -111,7 +111,7 @@ dispatch (§SD2), capability late-binding (§SD3), and the value path (§SD4) �
 set the fold policy (§SD5), its opt-out (§SD6), and its legibility (§SD7) inside
 them.
 
-### SD1 — Detection: a grammar production, deduped by name
+### SD1 — Detection: a grammar production, deduped by name ✓
 
 A placeholder is a parse result, not a text match. `paramSlot` is a production in
 the ClickHouse grammar — `(LBRACE identifier COLON columnTypeExpr RBRACE)`,
@@ -143,7 +143,7 @@ chrome warn `⚠ type conflict across nodes` when two nodes declare one name
 differently. The editor's hot path uses `extractSlotsAndParams`, which produces
 the slot list and the prelude values from a single parse.
 
-### SD2 — Registration: an ordered chain with a catch-all tail
+### SD2 — Registration: an ordered chain with a catch-all tail ✓
 
 Widgets implement `paramWidgetI` (`play_param_widget.go:23`): `Matches` scans
 slots and returns the indices it claims, `Render` draws its claim, `IsGroup`
@@ -179,7 +179,7 @@ because they are what make it safe to extend:
 Adding a widget is therefore a registration, not a modification: insert it ahead
 of the tail, and the slots it declines fall through unchanged.
 
-### SD3 — Capability absence is a different widget, not a broken one
+### SD3 — Capability absence is a different widget, not a broken one ✓
 
 The range picker needs a Phase-4 evaluator
 ([ADR-0016](./0016-imzero2-time-range-picker.md)) to resolve expressions like
@@ -204,7 +204,7 @@ without evaluator".
 The cost is that two visibly different controls exist for one query shape, with
 nothing on screen saying why — which §SD7 addresses.
 
-### SD4 — The value path: a draft string is a widget's only writable surface
+### SD4 — The value path: a draft string is a widget's only writable surface ✓
 
 A widget never writes SQL, never touches the URL, and never sees the request. It
 reads and writes one `*string` per claimed slot, handed to it in `paramCtx`. The
@@ -247,7 +247,7 @@ query text, reproducible by copy-paste. A slot left without a `SET` is a live
 (`play_client.go:384`). The pane is thus the instrument that turns a signal into a
 constant.
 
-### SD5 — Fold policy: pair by stem, not by position
+### SD5 — Fold policy: pair by stem, not by position ✓
 
 A slot name decomposes into a stem and a suffix: it either equals a suffix (empty
 stem) or ends with `_` followed by one. Two slots pair when their stems are equal,
@@ -277,7 +277,7 @@ use §SD2's re-dispatch loop has ever had.
 `isDateTimeType` is unchanged, so the fold stays DateTime-only. The range and pair
 widgets keep sharing one matcher, so they cannot drift on what counts as foldable.
 
-### SD6 — The opt-out: `-- play: ungroup`
+### SD6 — The opt-out: `-- play: ungroup` ✓
 
 A fold is an inference from names, and names are weak evidence of intent. When the
 inference is wrong the user must be able to refuse it, so the buffer carries an
@@ -304,7 +304,7 @@ query that has never bitten. §SD5 makes several pairs possible and so makes it
 reachable, which is what puts a per-pair marker in §SD8 rather than in this
 decision.
 
-### SD7 — Legibility: a declined fold says so
+### SD7 — Legibility: a declined fold says so ✓
 
 The matcher knows why it declined and currently returns a bare `false`, throwing
 the reason away. It will instead surface the near-miss, in the register the
@@ -444,6 +444,37 @@ one stem; the ungroup case reports the comment rather than a failure.
 Live, per the `play` screenshot recipe: launch with the timeline snippet, confirm
 the picker renders over `tl_min`/`tl_max`, that filling it authors the prelude,
 and that the Timeline's own writes stop landing once it does (§SD4's shadowing).
+
+## Updates
+
+### 2026-07-15 — §SD5 and §SD7 shipped
+
+The stem matcher (`matchRangePair`, `splitRangeSuffix` and the `rangeSuffixes`
+table), the fold label, and the near-miss line are in, with the snippet library's
+`Time range` entry and the `features.md` restatement §SD7 called for. Live-verified
+per §Validation: `tl_min` / `tl_max` folds into the range picker seeded from its
+`SET` prelude, and two DateTime slots that share no stem draw the near-miss line.
+
+Three things the decision did not anticipate:
+
+- **The adjacency assertion was pinned twice, not once.** §Status named only
+  `TestDateTimePairWidgetRejectsNonAdjacent`; the range widget carried its own
+  mirror, `TestDateTimeRangeWidgetRejectsNonAdjacent`. Both were inverted. The
+  duplication is the shared matcher working as intended — the two widgets cannot
+  drift on what folds — but it means "one pinned assertion" understated the
+  retirement by half.
+- **The fold label is decided by the orchestrator, not the widget.** §SD7 reads
+  as though the pair widget announces its own stand-in status. It cannot without
+  learning that an evaluator exists, which would couple it to §SD3 for a label
+  and cost the seam its point. `renderFoldLabel` therefore draws the label
+  immediately above whichever group widget claimed the pair, which is the same
+  thing on screen.
+- **The label separates bounds with an en dash, not an arrow.** The host's main
+  font carries no `U+2192`, so an arrow renders only via the CJK mono fallback —
+  wrong metrics in a proportional label, and tofu if that fallback moves. Noted
+  because `play` renders `→` in three older strings (`play_bindings.go:228`,
+  `play_projection.go:550`, `play_affordance.go:329`) that lean on the same
+  fallback; whether they should is not this ADR's question.
 
 ## References
 
