@@ -217,11 +217,12 @@ Where no corpus resolves — a shipped binary running off-repo — the tables ar
 **empty rather than erroring**, following `keelson('build')` with no `runinfo`.
 
 **Known tension: this crosses the line the other `keelson` tables hold.**
-`packagecaps.go:13-18` states it explicitly — those tables answer "what does
-*this process* contain?" (its env, its apps, its build, its linked packages'
-verdicts), not "what does the repository contain". `keelson('adr')` answers the
-second question, and it is the first provider to do filesystem I/O at query
-time, which means its rows depend on where the process was started. That was
+[ADR-0094](./0094-keelson-introspection-tables.md) founds the family on state
+that "exists *only inside a running process*" — the env, the apps, the build,
+the registered passes — not on what the repository contains. `keelson('adr')`
+answers the second question, and it is the first provider to do filesystem I/O
+at query time, which means its rows depend on where the process was started
+rather than on what the process is. That was
 accepted deliberately: the alternative (§Alternatives) puts a ClickHouse server
 and a load step between a user and a board of the repo's own decisions, for a
 dataset the binary can already parse in milliseconds. The mitigations are that
