@@ -22,11 +22,16 @@ import (
 //
 // Read caps_direct first. caps_reachable is the closure — nearly every package
 // reaches nearly everything through the standard library — so as a positive
-// claim it says little; its value is in the negative, where an absent capability
-// proves the package cannot reach it by any path:
+// claim it says little. An absent capability is the more informative direction:
 //
 //	SELECT import_path FROM keelson('package_capabilities')
 //	WHERE surveyed AND NOT has(caps_reachable, 'network')
+//
+// Read that as "no path was found", not as "cannot". Every row here is a lower
+// bound: a listed capability is a fact, an unlisted one is the absence of a
+// finding by an analysis with blind spots by construction (ADR-0120 SD5a). This
+// table is for finding what a package does and for noticing drift; it is not an
+// authority for what a package cannot do.
 //
 // For one row per package × capability, arrayJoin the column.
 //

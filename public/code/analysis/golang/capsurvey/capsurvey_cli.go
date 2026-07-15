@@ -24,7 +24,8 @@ func NewCliCommand() *cli.Command {
 			"CapsReachable (everything it can reach once dependencies are followed).\n\n" +
 			"Read CapsDirect first. Reachability saturates — nearly every package\n" +
 			"reaches nearly everything through the standard library — so its value is in the\n" +
-			"negative: an absent bit proves a package cannot reach a capability at all.\n\n" +
+			"negative: an absent bit means no path was found -- evidence, not proof. Every\n" +
+			"verdict is a lower bound (ADR-0120 SD5a).\n\n" +
 			"The survey builds SSA for the whole module and is correspondingly hungry:\n" +
 			"expect several GB of peak RSS and tens of seconds for ./... — it is a codegen\n" +
 			"step, not part of a build.",

@@ -66,8 +66,10 @@ almost every capability; the direct axis is where the discrimination lives:
 | `FILES` | 70 | 264 |
 
 As a positive claim ("this package can reach X") transitive is nearly vacuous.
-Its value is in the **negative**: ~100 packages provably never reach the network,
-and that is an assertion worth recording.
+Its value is in the **negative**: ~100 packages have no path to the network in
+the analysed call graph, and that is an assertion worth recording — with the
+caveat, developed in SD5a, that it is evidence of absence rather than proof of
+it.
 
 **capslock's scope is wider than `packageprops`'s.** capslock covers 440
 packages; `packageprops` covers 380. The gap is `main` and `internal/**`, which

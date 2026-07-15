@@ -92,8 +92,17 @@ type Props struct {
 	//
 	// Read CapsDirect first. Reachability saturates — nearly every package
 	// reaches nearly everything through the standard library — so as a positive
-	// claim CapsReachable says little. Its value is in the negative: an absent
-	// bit proves the package cannot reach that capability by any path.
+	// claim CapsReachable says little. An absent bit is the more informative
+	// direction, but it is evidence, not proof: it means no path was found in
+	// the analysed call graph, which is an under-approximation of what the code
+	// can actually do (ADR-0120 SD5a). Do not read it as "cannot".
+	//
+	// Both fields are lower bounds. A set bit is a fact — some path exists. An
+	// unset bit is the absence of a finding, and the analysis has blind spots by
+	// construction: reflection, unsafe, cgo and linkname carry no static edges,
+	// and interface dispatch resolves only where a concrete type demonstrably
+	// flows. Use these fields to find what a package does and to detect drift;
+	// for "this package cannot do X", a source census is the sound instrument.
 	//
 	// A zero set means *not surveyed*, not "safe": a completed survey that finds
 	// nothing privileged records CapabilitySafe (ADR-0120 SD4).
