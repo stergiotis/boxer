@@ -114,17 +114,14 @@ func runPropsHarvest(c *cli.Context) (err error) {
 		return nil
 	case "table", "":
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "package\twasi\tjs\tfreestanding\tkind\tcaps-direct")
+		fmt.Fprintln(tw, "package\twasi\tjs\tfreestanding\tkind")
 		for _, r := range scoped {
 			kind := "" // blank for the common ordinary-code case
 			if r.Kind != packageprops.KindUnspecified {
 				kind = r.Kind.String()
 			}
-			// Only the direct capabilities are shown: transitive saturates, so a
-			// column of it would be near-constant noise across every row
-			// (ADR-0120 SD5). `capsurvey report` shows both.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
-				strings.TrimPrefix(r.ImportPath, modPath+"/"), r.WASMWASI, r.WASMJS, r.WASMFreestanding, kind, r.CapsDirect)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+				strings.TrimPrefix(r.ImportPath, modPath+"/"), r.WASMWASI, r.WASMJS, r.WASMFreestanding, kind)
 		}
 		_ = tw.Flush()
 		fmt.Fprintf(os.Stdout, "%d declared package(s)\n", len(scoped))
