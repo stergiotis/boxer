@@ -230,6 +230,7 @@ var builtinTabDefs = []builtinTabDef{
 	// tab-activation layout pass. A no-scroll leaf is bounded, so the
 	// available size is the real remainder; overflow clips, as on Map.
 	{id: "world", dockID: dockTabWorld, title: "World", noScroll: true, lazy: true},
+	{id: "kanban", dockID: dockTabKanban, title: "Kanban", lazy: true},
 	{id: "graph", dockID: dockTabGraph, title: "Graph", lazy: true},
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
 	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
@@ -336,6 +337,9 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 		case "world":
 			spec.Panel = worldPanel{driver: inst.worldDriver}
 			spec.Render = func(f *TabFrame) { inst.renderWorldTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) }
+		case "kanban":
+			spec.Panel = kanbanPanel{driver: inst.kanbanDriver}
+			spec.Render = func(f *TabFrame) { inst.renderKanbanTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) }
 		case "graph":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphTab) }
 		case "schema":

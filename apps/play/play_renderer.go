@@ -77,6 +77,7 @@ const (
 	dockTabSchema      uint64 = 11
 	dockTabWorld       uint64 = 12
 	dockTabDiagnostics uint64 = 13
+	dockTabKanban      uint64 = 14
 )
 
 type PlayApp struct {
@@ -238,6 +239,10 @@ type PlayApp struct {
 	// worldDriver is the ADR-0114 schematic world-choropleth panel (World dock
 	// tab): a plain observer of the active result — no lane, nothing to Close.
 	worldDriver *WorldDriver
+
+	// kanbanDriver is the ADR-0122 board panel (Kanban dock tab): likewise a
+	// plain observer of the active result — no lane, nothing to Close.
+	kanbanDriver *KanbanDriver
 
 	// diag owns the Diagnostics dock tab's EXPLAIN AST probe (its own lane
 	// against the live endpoint); the pane itself is the single owner of the
@@ -608,6 +613,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.timeline = NewTimelineDriver(timelineIds, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
 	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
 	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
+	inst.kanbanDriver = NewKanbanDriver(c.NewWidgetIdStack())
 	inst.diag = NewDiagnosticsDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
@@ -1811,6 +1817,35 @@ func (inst *PlayApp) renderWorldTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	inst.worldDriver.noteExecuted(executed)
 	reject := dispatchPanel(worldPanel{driver: inst.worldDriver}, map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("world"), rec: rec, schema: schema, sig: inst.frameSig},
+	}, inst.sigEmit)
+	if reject != "" {
+		for rt := range c.RichTextLabel(reject) {
+			rt.Small().Weak()
+		}
+	}
+}
+
+// renderKanbanTab is the Kanban dock tab body (ADR-0122): the active result as
+// a board. A plain PanelI observer with the same guards as the World tab, plus
+// the executed timestamp handed to the driver as its fold-cache key.
+func (inst *PlayApp) renderKanbanTab(rec arrow.RecordBatch, schema *arrow.Schema, loading bool, err error, executed time.Time) {
+	if loading && rec == nil {
+		inst.renderResultsLoading()
+		return
+	}
+	if err != nil && rec == nil {
+		inst.renderResultsFailed()
+		return
+	}
+	if rec == nil {
+		for rt := range c.RichTextLabel("Run a query naming a `lane` and a `title` column to see a board.") {
+			rt.Small().Weak()
+		}
+		return
+	}
+	inst.kanbanDriver.noteExecuted(executed)
+	reject := dispatchPanel(kanbanPanel{driver: inst.kanbanDriver}, map[ChannelID]channelInput{
+		chMain: {node: inst.resolvedTabNode("kanban"), rec: rec, schema: schema, sig: inst.frameSig},
 	}, inst.sigEmit)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {

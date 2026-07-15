@@ -144,6 +144,14 @@ func (m *Model) DrainMoves() (out []Move) {
 // Selected returns the id of the selected card, or 0 for none.
 func (m *Model) Selected() uint64 { return m.sel }
 
+// SetSelected selects a card by id (0 = none), the write side of [Model.Selected].
+// It is for hosts whose selection is owned elsewhere — a board fed by a shared
+// cursor follows it here before [Render], and reads back the user's own click
+// after. An id no card carries selects nothing, which is what a cursor pointing
+// outside this board should do. Render writes the same field on a click, so a
+// host that does not call this keeps the widget's own selection behaviour.
+func (m *Model) SetSelected(id uint64) { m.sel = id }
+
 // columnIndex returns the position of column cid in Columns, or -1.
 func (m *Model) columnIndex(cid uint64) int {
 	for i := range m.Columns {
