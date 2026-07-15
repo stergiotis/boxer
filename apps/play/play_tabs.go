@@ -351,7 +351,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			}
 		case "detail":
 			spec.Panel = detailPanel{app: inst}
-			spec.Render = func(f *TabFrame) { inst.renderDetailTab(f.Rec, f.Schema) }
+			spec.Render = func(f *TabFrame) { inst.renderDetailTab(f.Rec, f.Schema, f.Executed) }
 		}
 		if err := reg.Add(spec); err != nil {
 			// The defs are a static table; a duplicate here is a

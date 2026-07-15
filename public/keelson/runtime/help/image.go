@@ -1,22 +1,11 @@
 package help
 
 import (
-	"bytes"
-	"image"
 	"io/fs"
 	"strings"
 
-	// Format decoders: blank-imported so [image.Decode] auto-detects
-	// PNG/JPEG/GIF from their magic prefixes. WebP / AVIF / BMP are
-	// deliberately not pulled in — they add ~1 MB to every binary
-	// shipping help docs, and the typical help asset is a PNG
-	// screenshot or a JPEG photo. Apps that need exotic formats can
-	// blank-import the relevant decoder themselves.
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 )
 
 // FSImageResolver decodes inline image references in help docs
@@ -54,9 +43,14 @@ func NewFSImageResolver(fsys fs.FS) (r FSImageResolver) {
 // LoadImage reads ref from the backing fs.FS and decodes it into
 // RGBA8 pixels for the markdown widget's inline image run. ok=false
 // (and a nil pixel slice) is returned when the file is missing, the
-// FS is nil, or the bytes don't decode as one of the registered
-// image formats — the markdown widget then falls back to the
-// glyph-prefixed hyperlink rendering.
+// FS is nil, or the bytes don't decode as one of the formats
+// [imagedecode.DecodeRGBA8] registers — the markdown widget then falls
+// back to the glyph-prefixed hyperlink rendering.
+//
+// The decode is bounded by [imagedecode.DefaultMaxPixels] even though
+// help assets ship inside the binary and are not attacker-supplied: a
+// bound costs one header read, and FSImageResolver is constructed from
+// whatever fs.FS a caller hands it, which need not be an embed.FS.
 func (inst FSImageResolver) LoadImage(ref string) (pixels []uint32, widthPx uint32, heightPx uint32, ok bool) {
 	if inst.fsys == nil {
 		return
@@ -69,31 +63,13 @@ func (inst FSImageResolver) LoadImage(ref string) (pixels []uint32, widthPx uint
 	if err != nil {
 		return
 	}
-	img, _, decodeErr := image.Decode(bytes.NewReader(data))
-	if decodeErr != nil {
+	pixels, widthPx, heightPx, err = imagedecode.DecodeRGBA8(data, imagedecode.DefaultMaxPixels)
+	if err != nil {
+		pixels = nil
+		widthPx = 0
+		heightPx = 0
 		return
 	}
-	bounds := img.Bounds()
-	w := bounds.Dx()
-	h := bounds.Dy()
-	if w <= 0 || h <= 0 {
-		return
-	}
-	pixels = make([]uint32, w*h)
-	i := 0
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, a := img.At(x, y).RGBA()
-			// RGBA() returns 16-bit components (0..65535). The
-			// markdown widget consumes 0xRRGGBBAA in row-major
-			// order — pack the 8-bit-truncated values into one
-			// uint32 per pixel.
-			pixels[i] = uint32(r>>8)<<24 | uint32(g>>8)<<16 | uint32(b>>8)<<8 | uint32(a>>8)
-			i++
-		}
-	}
-	widthPx = uint32(w)
-	heightPx = uint32(h)
 	ok = true
 	return
 }

@@ -121,6 +121,11 @@ func (inst *PlayApp) SetDetailContent(fn DetailContentFunc) {
 // The body is inst.detailContent when a re-user installed one, else the built-in
 // RenderDefaultDetailContent.
 func (inst *PlayApp) renderDetailPane(rec arrow.RecordBatch, schema *arrow.Schema, row int64) {
+	// Before any body runs: a new row or a new result invalidates the
+	// ADR-0123 cell artifacts. Harmless on the leeway path, which never
+	// reaches renderDetailSection — and it must sit here rather than inside
+	// that section loop so an installed DetailContentFunc gets it too.
+	inst.richCells.syncTo(row)
 	for range c.Vertical().KeepIter() {
 		entityLabel, natKey := entityHeader(rec, row)
 
@@ -204,17 +209,15 @@ func entityHeader(rec arrow.RecordBatch, row int64) (typeLabel string, natKey st
 
 // renderDetailSection prints all non-empty columns whose sectionForColumn
 // matches `section`. Skipped columns save vertical space in the card.
+//
+// A column named `<label>@<mime>` renders as that media type instead
+// (ADR-0123, play_detail_rich.go). Declared columns are read through cellRaw,
+// never formatCell — formatCell hex-encodes Binary, so an image column would
+// cost two bytes of string per byte of blob on every frame just to reach the
+// empty-skip below.
 func (inst *PlayApp) renderDetailSection(rec arrow.RecordBatch, schema *arrow.Schema, row int64, section, heading string) {
 	rowsShown := 0
-	for i := 0; i < schema.NumFields(); i++ {
-		name := schema.Field(i).Name
-		if sectionForColumn(name) != section {
-			continue
-		}
-		val := formatCell(rec, i, row)
-		if val == "" || val == "[len=0]" {
-			continue
-		}
+	emitHeading := func() {
 		if rowsShown == 0 {
 			c.Separator().Horizontal().Send()
 			for rt := range c.RichTextLabel(strings.ToUpper(heading)) {
@@ -222,6 +225,26 @@ func (inst *PlayApp) renderDetailSection(rec arrow.RecordBatch, schema *arrow.Sc
 			}
 		}
 		rowsShown++
+	}
+	for i := 0; i < schema.NumFields(); i++ {
+		name := schema.Field(i).Name
+		if sectionForColumn(name) != section {
+			continue
+		}
+		if d, declared := parseRichColumn(name); declared {
+			raw, ok := cellRaw(rec, i, row)
+			if !ok || raw == "" {
+				continue
+			}
+			emitHeading()
+			inst.renderRichCell(i, d, raw)
+			continue
+		}
+		val := formatCell(rec, i, row)
+		if val == "" || val == "[len=0]" {
+			continue
+		}
+		emitHeading()
 		for range c.Horizontal().KeepIter() {
 			for rt := range c.RichTextLabel(shortColumnLabel(name)) {
 				rt.Weak()

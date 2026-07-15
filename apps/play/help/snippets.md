@@ -135,6 +135,11 @@ bands query that doesn't reference them runs on its own, without waiting for
 events. This one shades the middle 50% of the visible window — adjust the
 `0.25` / `0.75` fractions to move or resize the region.
 
+`tl_min` / `tl_max` are a range pair (stem `tl`), so the editor offers one range
+picker for the two of them — see **Time range** below. Filling it writes a `SET`
+that pins the extent, which stops the Timeline driving it; clear the `SET` lines
+to hand the range back.
+
 ```sql
 WITH {tl_min:DateTime64(3, 'UTC')} AS lo,
      {tl_max:DateTime64(3, 'UTC')} AS hi
@@ -157,6 +162,60 @@ SELECT
   `tv:symbol:value:val:s:m:0:24:0::data`[1] AS event_type
 FROM anchor.facts
 ORDER BY id
+```
+
+## Time range (one picker from two bounds)
+
+Two DateTime parameters that name the bounds of one range fold into a single
+range control instead of two separate fields (ADR-0124). They pair by **stem**:
+strip a `from`/`to`, `min`/`max`, `start`/`end`, `lo`/`hi` or `since`/`until`
+suffix, and two placeholders left with the same stem are one range. Bare `from`
+and `to` are the empty-stem case; `tl_min` / `tl_max` above is the same rule
+with the stem `tl`.
+
+Order does not matter and neither does distance — the two bounds can sit
+anywhere in the query with anything between them. Both halves must be DateTime
+or DateTime64; a mismatch gets two plain fields and the pane says why. Add a
+`-- play: ungroup` comment to refuse the fold and edit the bounds as text.
+
+```sql
+SELECT toStartOfHour(now() - INTERVAL number MINUTE) AS bucket,
+       count()                                       AS n
+FROM numbers(600)
+WHERE now() - INTERVAL number MINUTE
+      BETWEEN {from:DateTime64(3, 'UTC')} AND {to:DateTime64(3, 'UTC')}
+GROUP BY bucket
+ORDER BY bucket
+```
+
+## Content-typed cells (markdown, images, code)
+
+A column named `` `<label>@<mime>` `` renders its cell as that media type in the
+**Detail** tab, instead of as the truncated one line every other ad-hoc column
+gets (ADR-0123). Run this, then click the row in **Table** — Detail draws
+whatever the selection points at. Table-free; runs against any server.
+
+Declared, never sniffed: nothing renders as markdown unless it says so. The
+backticks are not optional — unquoted, both the `@` and the `/` are syntax
+errors, which is the point of choosing them. Known types are `text/markdown`,
+`text/plain`, `application/json`, `application/sql`, `text/x-go`, `image/png`,
+`image/jpeg` and `image/gif`. A type outside that set, or a typo in one, renders
+the cell plainly and says why rather than pretending. A column with an `@` but
+no `/` — `dot_done@success`, an email address — is an ordinary column and is
+left alone.
+
+Image columns hold the encoded bytes verbatim: ClickHouse `String` is
+byte-arbitrary, so a stored PNG round-trips untouched. `unhex` supplies one
+here (a 16×16 PNG) in place of a `SELECT` from a blob column.
+
+```sql
+SELECT
+  'boxer'                                          AS name,
+  '# Heading\n\nA *rendered* cell — `code`, a [link](https://example.com), and:\n\n- a list\n- of items\n\n> a quote' AS `notes@text/markdown`,
+  '{"lane":"proposed","dots":[0,1,4],"nested":{"ok":true}}' AS `req@application/json`,
+  'SELECT count() FROM anchor.facts WHERE ts > now() - 3600' AS `q@application/sql`,
+  'no wrapping,\nno truncation,\njust the bytes'   AS `stack@text/plain`,
+  unhex('89504e470d0a1a0a0000000d4948445200000010000000100203000000629d17f200000009504c5445202020e6b55d3b6ea563f88312000000414944415478da620003a955ab9630a8ad5a35834173d5aa0c06adac952b18b4662d5bc1a0b56cd60a06ad95593002cc054b8094801583b5810d000140000000ffff54231bef9464752c0000000049454e44ae426082') AS `shot@image/png`
 ```
 
 ## Parameter prelude
