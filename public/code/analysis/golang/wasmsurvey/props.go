@@ -3,15 +3,13 @@ package wasmsurvey
 import (
 	"context"
 	"fmt"
-	"go/ast"
 	"go/format"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/code/analysis/golang/propsfile"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/packageprops"
 )
@@ -37,60 +35,6 @@ func tierToState(t Tier) (s packageprops.WASMState) {
 		return packageprops.WASMBlocked
 	default:
 		return packageprops.WASMUnknown
-	}
-}
-
-// stateToken is the packageprops identifier for a state, used in generated
-// source and to compare against harvested tokens.
-func stateToken(s packageprops.WASMState) (tok string) {
-	switch s {
-	case packageprops.WASMCompiles:
-		return "WASMCompiles"
-	case packageprops.WASMBlocked:
-		return "WASMBlocked"
-	default:
-		return "WASMUnknown"
-	}
-}
-
-// parseStateToken is the inverse of stateToken.
-func parseStateToken(tok string) (s packageprops.WASMState) {
-	switch tok {
-	case "WASMCompiles":
-		return packageprops.WASMCompiles
-	case "WASMBlocked":
-		return packageprops.WASMBlocked
-	default:
-		return packageprops.WASMUnknown
-	}
-}
-
-// kindToken is the packageprops identifier for a Kind, used in generated source
-// and to compare against harvested tokens (mirrors stateToken).
-func kindToken(k packageprops.Kind) (tok string) {
-	switch k {
-	case packageprops.KindDemo:
-		return "KindDemo"
-	case packageprops.KindExample:
-		return "KindExample"
-	case packageprops.KindIntegrationTest:
-		return "KindIntegrationTest"
-	default:
-		return "KindUnspecified"
-	}
-}
-
-// parseKindToken is the inverse of kindToken.
-func parseKindToken(tok string) (k packageprops.Kind) {
-	switch tok {
-	case "KindDemo":
-		return packageprops.KindDemo
-	case "KindExample":
-		return packageprops.KindExample
-	case "KindIntegrationTest":
-		return packageprops.KindIntegrationTest
-	default:
-		return packageprops.KindUnspecified
 	}
 }
 
@@ -183,20 +127,31 @@ func GenerateProps(ctx context.Context, opts Options, overwrite bool) (res Gener
 			res.Skipped++
 			continue // never clobber a curated declaration
 		}
-		// Kind is human-owned, not survey-computable: preserve a curated value
-		// across a re-seed, and only fall back to the directory-name heuristic
-		// when nothing is declared yet (ADR-0080 §SD3 hybrid lifecycle).
-		kind := packageprops.KindUnspecified
+		// Read the existing declaration so a re-seed overlays only the fields
+		// this survey owns. Everything else — a curated Kind, the capability
+		// survey's verdicts — is preserved by Merge rather than by a per-field
+		// special case here (ADR-0120 SD7).
+		var base packageprops.Props
 		if exists {
-			if fields, e := parsePropsFile(path); e == nil {
-				kind = parseKindToken(fields["Kind"])
+			if p, e := propsfile.Parse(path); e == nil {
+				base = p
 			}
 		}
+		// Kind is human-owned, not survey-computable: a curated value wins, and
+		// the directory-name heuristic only seeds a declaration that has none
+		// (ADR-0080 §SD3 hybrid lifecycle).
+		kind := base.Kind
 		if kind == packageprops.KindUnspecified {
 			kind = heuristicKind(pr)
 		}
+		merged := propsfile.Merge(base, packageprops.Props{
+			WASMWASI:         stateFor(pr, TargetWASI),
+			WASMJS:           stateFor(pr, TargetJS),
+			WASMFreestanding: stateFor(pr, TargetWasmUnknown),
+			Kind:             kind,
+		}, propsfile.FieldsWASM|propsfile.FieldsKind)
 		var src []byte
-		src, err = renderPropsFile(pr, kind)
+		src, err = propsfile.Render(pr.Name, pr.ImportPath, merged)
 		if err != nil {
 			return
 		}
@@ -214,34 +169,6 @@ func GenerateProps(ctx context.Context, opts Options, overwrite bool) (res Gener
 	return
 }
 
-// renderPropsFile emits the gofmt-clean source of a package's props file. kind
-// is the package's declared role (KindUnspecified for ordinary code, in which
-// case no Kind field is emitted so the common case stays terse and the zero
-// value keeps asserting nothing).
-func renderPropsFile(pr PackageReport, kind packageprops.Kind) (src []byte, err error) {
-	var b strings.Builder
-	fmt.Fprintf(&b, "package %s\n\n", pr.Name)
-	fmt.Fprintf(&b, "import %q\n\n", propsImportPath)
-	b.WriteString("// PackageProps records this package's curated properties (ADR-0080).\n")
-	b.WriteString("// Seeded by `wasmsurvey props generate`; curate by hand, then `wasmsurvey props verify`.\n")
-	b.WriteString("var PackageProps = packageprops.Props{\n")
-	fmt.Fprintf(&b, "WASMWASI: packageprops.%s,\n", stateToken(stateFor(pr, TargetWASI)))
-	fmt.Fprintf(&b, "WASMJS: packageprops.%s,\n", stateToken(stateFor(pr, TargetJS)))
-	fmt.Fprintf(&b, "WASMFreestanding: packageprops.%s,\n", stateToken(stateFor(pr, TargetWasmUnknown)))
-	if kind != packageprops.KindUnspecified {
-		fmt.Fprintf(&b, "Kind: packageprops.%s,\n", kindToken(kind))
-	}
-	b.WriteString("}\n\n")
-	// Self-register from init so packageprops.All() enumerates this package
-	// when it is linked into a binary (ADR-0080 registry surface).
-	fmt.Fprintf(&b, "func init() { packageprops.Register(%q, PackageProps) }\n", pr.ImportPath)
-	src, err = format.Source([]byte(b.String()))
-	if err != nil {
-		err = eb.Build().Str("pkg", pr.ImportPath).Errorf("format props file: %w", err)
-	}
-	return
-}
-
 // renderHarvestGo emits the harvested rows as a gofmt-clean Go file declaring
 // `var Table = packageprops.Table{...}` in pkgName — the whole-repo static
 // snapshot for embedding into a binary that does not link every package
@@ -254,12 +181,10 @@ func renderHarvestGo(rows []HarvestRow, pkgName string) (src []byte, err error) 
 	b.WriteString("// Table is every package's declared PackageProps, harvested from source.\n")
 	b.WriteString("var Table = packageprops.Table{\n")
 	for _, r := range rows {
-		props := fmt.Sprintf("WASMWASI: packageprops.%s, WASMJS: packageprops.%s, WASMFreestanding: packageprops.%s",
-			stateToken(r.WASMWASI), stateToken(r.WASMJS), stateToken(r.WASMFreestanding))
-		if r.Kind != packageprops.KindUnspecified {
-			props += fmt.Sprintf(", Kind: packageprops.%s", kindToken(r.Kind))
-		}
-		fmt.Fprintf(&b, "{ImportPath: %q, Props: packageprops.Props{%s}},\n", r.ImportPath, props)
+		// One row per line, sharing propsfile's field rendering so the table and
+		// the per-package declarations cannot disagree about a field.
+		fmt.Fprintf(&b, "{ImportPath: %q, Props: packageprops.Props{%s}},\n",
+			r.ImportPath, strings.Join(propsfile.Fields(r.Props), ", "))
 	}
 	b.WriteString("}\n")
 	src, err = format.Source([]byte(b.String()))
@@ -271,11 +196,8 @@ func renderHarvestGo(rows []HarvestRow, pkgName string) (src []byte, err error) 
 
 // HarvestRow is one package's declared props, read from its package_props.go.
 type HarvestRow struct {
-	ImportPath       string
-	WASMWASI         packageprops.WASMState
-	WASMJS           packageprops.WASMState
-	WASMFreestanding packageprops.WASMState
-	Kind             packageprops.Kind
+	ImportPath string
+	packageprops.Props
 }
 
 // HarvestProps walks root for package_props.go files and parses their
@@ -295,7 +217,7 @@ func HarvestProps(root string, rootModule string) (rows []HarvestRow, err error)
 		if d.Name() != propsFileName {
 			return nil
 		}
-		fields, e := parsePropsFile(path)
+		props, e := propsfile.Parse(path)
 		if e != nil {
 			return nil // skip unparseable files rather than abort the whole harvest
 		}
@@ -304,11 +226,8 @@ func HarvestProps(root string, rootModule string) (rows []HarvestRow, err error)
 			return nil
 		}
 		rows = append(rows, HarvestRow{
-			ImportPath:       rootModule + "/" + filepath.ToSlash(rel),
-			WASMWASI:         parseStateToken(fields["WASMWASI"]),
-			WASMJS:           parseStateToken(fields["WASMJS"]),
-			WASMFreestanding: parseStateToken(fields["WASMFreestanding"]),
-			Kind:             parseKindToken(fields["Kind"]),
+			ImportPath: rootModule + "/" + filepath.ToSlash(rel),
+			Props:      props,
 		})
 		return nil
 	})
@@ -318,63 +237,6 @@ func HarvestProps(root string, rootModule string) (rows []HarvestRow, err error)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ImportPath < rows[j].ImportPath })
 	return
-}
-
-// parsePropsFile extracts the PackageProps composite-literal field→token map
-// from a package_props.go via go/ast (no type checking, no build).
-func parsePropsFile(path string) (fields map[string]string, err error) {
-	fset := token.NewFileSet()
-	var f *ast.File
-	f, err = parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return nil, err
-	}
-	fields = make(map[string]string, 4)
-	for _, decl := range f.Decls {
-		gd, ok := decl.(*ast.GenDecl)
-		if !ok || gd.Tok != token.VAR {
-			continue
-		}
-		for _, spec := range gd.Specs {
-			vs, ok := spec.(*ast.ValueSpec)
-			if !ok {
-				continue
-			}
-			for i, name := range vs.Names {
-				if name.Name != "PackageProps" || i >= len(vs.Values) {
-					continue
-				}
-				cl, ok := vs.Values[i].(*ast.CompositeLit)
-				if !ok {
-					continue
-				}
-				for _, elt := range cl.Elts {
-					kv, ok := elt.(*ast.KeyValueExpr)
-					if !ok {
-						continue
-					}
-					key, ok := kv.Key.(*ast.Ident)
-					if !ok {
-						continue
-					}
-					fields[key.Name] = exprToken(kv.Value)
-				}
-			}
-		}
-	}
-	return fields, nil
-}
-
-// exprToken renders a packageprops.WASMX selector (or a bare ident) as its
-// trailing identifier ("WASMCompiles").
-func exprToken(e ast.Expr) (tok string) {
-	switch v := e.(type) {
-	case *ast.SelectorExpr:
-		return v.Sel.Name
-	case *ast.Ident:
-		return v.Name
-	}
-	return ""
 }
 
 // Mismatch is one declared-vs-computed disagreement found by verify.

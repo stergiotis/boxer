@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/code/analysis/golang/propsfile"
 	"github.com/stergiotis/boxer/public/packageprops"
 )
 
@@ -36,7 +37,7 @@ func TestPatternsToPrefixes(t *testing.T) {
 
 func TestRenderHarvestGo(t *testing.T) {
 	rows := []HarvestRow{
-		{ImportPath: "example.com/a", WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMUnknown},
+		{ImportPath: "example.com/a", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMUnknown}},
 	}
 	src, err := renderHarvestGo(rows, "proptable")
 	if err != nil {
@@ -70,63 +71,64 @@ func TestInScope(t *testing.T) {
 	}
 }
 
-// TestPropsRenderParseRoundTrip renders a props file from a verdict and parses
-// it back, exercising both the generator and the harvester's ast parse without
-// TinyGo or touching the tree.
-func TestPropsRenderParseRoundTrip(t *testing.T) {
+// TestStateFor pins the wasm-specific half of generation: turning a package's
+// per-target verdicts into the declared WASM* states. The file rendering and
+// parsing it feeds are propsfile's, and tested there.
+func TestStateFor(t *testing.T) {
 	pr := PackageReport{
 		ImportPath: "example.com/foo",
 		Name:       "foo",
 		Targets: []TargetVerdict{
 			{Target: TargetWASI, Static: TierGreen},
 			{Target: TargetJS, Static: TierRed},
-			{Target: TargetWasmUnknown, Static: TierUnknown},
 		},
 	}
-	src, err := renderPropsFile(pr, packageprops.KindUnspecified)
+	for target, want := range map[TargetID]packageprops.WASMState{
+		TargetWASI:        packageprops.WASMCompiles,
+		TargetJS:          packageprops.WASMBlocked,
+		TargetWasmUnknown: packageprops.WASMUnknown, // no verdict recorded: asserts nothing
+	} {
+		if got := stateFor(pr, target); got != want {
+			t.Errorf("stateFor(%v) = %v, want %v", target, got, want)
+		}
+	}
+}
+
+// TestGenerateRoundTripsThroughPropsfile is the seam check: the states this
+// survey computes survive a render/parse cycle, so a re-seed reads back what it
+// wrote rather than silently dropping a verdict.
+func TestGenerateRoundTripsThroughPropsfile(t *testing.T) {
+	pr := PackageReport{
+		ImportPath: "example.com/foo",
+		Name:       "foo",
+		Targets: []TargetVerdict{
+			{Target: TargetWASI, Static: TierGreen},
+			{Target: TargetJS, Static: TierRed},
+		},
+	}
+	want := packageprops.Props{
+		WASMWASI:         stateFor(pr, TargetWASI),
+		WASMJS:           stateFor(pr, TargetJS),
+		WASMFreestanding: stateFor(pr, TargetWasmUnknown),
+		Kind:             packageprops.KindExample,
+	}
+	src, err := propsfile.Render(pr.Name, pr.ImportPath, want)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(src), "package foo") {
 		t.Errorf("missing package clause:\n%s", src)
 	}
-	if strings.Contains(string(src), "Kind:") {
-		t.Errorf("KindUnspecified must not emit a Kind field:\n%s", src)
-	}
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, propsFileName)
+	path := filepath.Join(t.TempDir(), propsFileName)
 	if err = os.WriteFile(path, src, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	fields, err := parsePropsFile(path)
+	got, err := propsfile.Parse(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for field, want := range map[string]string{
-		"WASMWASI":         "WASMCompiles",
-		"WASMJS":           "WASMBlocked",
-		"WASMFreestanding": "WASMUnknown",
-	} {
-		if fields[field] != want {
-			t.Errorf("%s: parsed %q, want %q", field, fields[field], want)
-		}
-	}
-}
-
-func TestKindTokenRoundTrip(t *testing.T) {
-	for _, k := range []packageprops.Kind{
-		packageprops.KindUnspecified,
-		packageprops.KindDemo,
-		packageprops.KindExample,
-		packageprops.KindIntegrationTest,
-	} {
-		if got := parseKindToken(kindToken(k)); got != k {
-			t.Errorf("round-trip %v: token %q parsed back as %v", k, kindToken(k), got)
-		}
-	}
-	if got := parseKindToken("bogus"); got != packageprops.KindUnspecified {
-		t.Errorf("unknown token should parse to KindUnspecified, got %v", got)
+	if got != want {
+		t.Errorf("round trip: got %+v, want %+v", got, want)
 	}
 }
 
@@ -145,43 +147,12 @@ func TestHeuristicKind(t *testing.T) {
 	}
 }
 
-// TestRenderPropsFileKind renders and re-parses a declaration carrying a Kind,
-// covering the seed/preserve path (a curated Kind must survive a re-render).
-func TestRenderPropsFileKind(t *testing.T) {
-	pr := PackageReport{
-		ImportPath: "example.com/foo",
-		Name:       "foo",
-		Targets:    []TargetVerdict{{Target: TargetWASI, Static: TierGreen}},
-	}
-	src, err := renderPropsFile(pr, packageprops.KindExample)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// gofmt aligns the struct's colons, so match the field and value loosely
-	// (the re-parse below is the exact check).
-	if !strings.Contains(string(src), "Kind:") || !strings.Contains(string(src), "packageprops.KindExample") {
-		t.Errorf("missing Kind field:\n%s", src)
-	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, propsFileName)
-	if err = os.WriteFile(path, src, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	fields, err := parsePropsFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := parseKindToken(fields["Kind"]); got != packageprops.KindExample {
-		t.Errorf("harvested Kind = %v, want KindExample", got)
-	}
-}
-
 // TestRenderHarvestGoKind checks the static Table emits Kind only when set, so
 // the overwhelmingly-common unspecified rows stay unchanged.
 func TestRenderHarvestGoKind(t *testing.T) {
 	rows := []HarvestRow{
-		{ImportPath: "example.com/plain", WASMWASI: packageprops.WASMCompiles},
-		{ImportPath: "example.com/ex", WASMWASI: packageprops.WASMBlocked, Kind: packageprops.KindExample},
+		{ImportPath: "example.com/plain", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles}},
+		{ImportPath: "example.com/ex", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, Kind: packageprops.KindExample}},
 	}
 	src, err := renderHarvestGo(rows, "proptable")
 	if err != nil {
