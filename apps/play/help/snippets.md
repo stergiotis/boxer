@@ -202,6 +202,78 @@ FROM values('country String, population Float64',
   ('XK', 1.7), ('atlantis', 0.1))
 ```
 
+## Kanban board (lanes and cards)
+
+A result naming a `lane` and a `title` column renders as a board in the
+**Kanban** tab (ADR-0122). `subtitle` is optional, and up to three `dot_<label>`
+integer columns become a tally of coloured dots along each card's bottom edge.
+Lanes appear in first-seen row order, so `ORDER BY` decides the layout;
+clicking a card selects its row, so Detail and Table follow. Both blocks are
+table-free and run against any server.
+
+The first block is the contract itself. `@success`, `@warning` and `@disabled`
+name design-system tones — `accent`, `error`, `info` and `neutral` are the rest.
+The backticks are not optional: unquoted, the `@` is a syntax error. A zero
+tally paints no dot, so the `ADR-0066` row carries none at all, and the last
+row's empty `lane` lands in a `(none)` column. `indexOf` returns 0 for a value
+its list does not carry, which is why the `= 0` sort key comes first — without
+it an unrecognised lane sorts *before* the canonical ones rather than after.
+
+```sql
+WITH ['proposed', 'accepted', 'superseded', 'withdrawn', 'deferred'] AS lifecycle
+SELECT *
+FROM values('lane String, title String, subtitle String,
+             `dot_done@success` UInt64, `dot_cited@warning` UInt64, `dot_todo@disabled` UInt64',
+  ('proposed',   'ADR-0122 — kanban result pane',   '2026-07-15',   0, 1, 4),
+  ('proposed',   'ADR-0112 — DimensionStore',       '2026-07-09',   0, 0, 3),
+  ('accepted',   'ADR-0114 — world choropleth',     '2026-07-11',   7, 0, 0),
+  ('accepted',   'ADR-0097 — reactive query graph', '2026-07-02',   6, 2, 1),
+  ('accepted',   'ADR-0066 — DQL read-back',        '2026-06-24',   0, 0, 0),
+  ('superseded', 'ADR-0085 — operator break-glass', '→ ADR-P-0001', 2, 1, 3),
+  ('withdrawn',  'ADR-0010 — leeway CBOR codec',    '2026-05-02',   0, 0, 2),
+  ('',           'ADR-0119 — (frontmatter has no status)', '',      0, 0, 0))
+ORDER BY indexOf(lifecycle, lane) = 0, indexOf(lifecycle, lane)
+```
+
+Real boards are aggregations rather than literal tuples: one row per card, with
+the dots built by `countIf` over that card's parts. Dropping the `@token`
+colours a dot from the ramp by its position instead, and the ramp is tuned for
+exactly this reading — the three below come out the same green, amber and grey
+the block above names explicitly.
+
+The three `countIf`s are worth reading closely, because they are a Go function
+(`cardDots` in `apps/adrboard/board.go`) written declaratively. There it is a
+first-match switch, and the rule "an author's ✓ outranks code evidence" is
+implicit in the case order — invisible in the code that implements it. SQL has
+no case order to inherit, so the same rule has to be said out loud:
+`NOT done AND code_refs > 0`. The buckets are disjoint and sum to `count()`
+either way; only one of the two forms *can* leave the rule unsaid.
+
+```sql
+WITH
+  ['proposed', 'accepted', 'superseded'] AS lifecycle,
+  sub AS (
+    SELECT * FROM values(
+      'adr String, status String, marker String, done Bool, code_refs UInt32',
+      ('ADR-0122', 'proposed', 'SD1', false, 2), ('ADR-0122', 'proposed', 'SD2', false, 1),
+      ('ADR-0122', 'proposed', 'SD3', false, 0), ('ADR-0122', 'proposed', 'SD4', false, 0),
+      ('ADR-0114', 'accepted', 'SD1', true,  3), ('ADR-0114', 'accepted', 'SD2', true,  1),
+      ('ADR-0114', 'accepted', 'SD3', true,  4), ('ADR-0114', 'accepted', 'SD4', false, 2),
+      ('ADR-0097', 'accepted', 'SD1', true,  5), ('ADR-0097', 'accepted', 'SD2', false, 0),
+      ('ADR-0085', 'superseded', 'M1', true, 1), ('ADR-0085', 'superseded', 'M2', false, 0))
+  )
+SELECT
+  status                              AS lane,
+  adr                                 AS title,
+  concat(toString(countIf(done)), ' of ', toString(count()), ' declared done') AS subtitle,
+  countIf(done)                       AS dot_done,
+  countIf(NOT done AND code_refs > 0) AS dot_cited,
+  countIf(NOT done AND code_refs = 0) AS dot_todo
+FROM sub
+GROUP BY adr, status
+ORDER BY indexOf(lifecycle, lane) = 0, indexOf(lifecycle, lane), title
+```
+
 ## ADS-B geo-raster (demo loader)
 
 These target `planes_mercator`, the aircraft-position table loaded by

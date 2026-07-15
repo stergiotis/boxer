@@ -16,7 +16,9 @@ date: 2026-07-15
 Proposed, pre-human-review.
 
 The pane (§SD1-3) is built: `play_kanban_panel.go` with its tests, the Kanban
-dock tab and its `BOXER_PLAY_FOCUS_KANBAN` knob, and `kanban.Model.SetSelected`.
+dock tab and its `BOXER_PLAY_FOCUS_KANBAN` knob, `kanban.Model.SetSelected`, and
+two snippet-library entries (the contract, and the `countIf` aggregation that
+builds one).
 Verified per §Validation — unit suites green, and a live run against a
 `values()`-literal board confirmed the lanes, the tallies, the zero-tally skip
 and the `@token` colours (the exported SVG carries the three legend swatches as
@@ -299,9 +301,10 @@ the parent axis would introduce.
   is the test that gives the second route its value; it runs over the real
   corpus, not a fixture, so it also fails if either fold drifts. It cannot be
   written until a corpus table exists.
-- Integration (done for the capture): a scripted capture against a `values()`
-  literal board — verifiable with no corpus and no ADR table — confirming the
-  lanes and their counts, the per-card tallies against the source rows, the
-  zero-tally skip, and the legend colours by their hex. Still to do: a live
-  drive confirming a card click moves Detail to that row (the read direction,
-  Detail following the board's own click, is the half a capture cannot show).
+- Integration (done): a scripted capture against a `values()` literal board —
+  verifiable with no corpus and no ADR table — confirming the lanes and their
+  counts, the per-card tallies against the source rows, the zero-tally skip, and
+  the legend colours by their hex. Plus a live drive (egui inspection) through
+  the whole loop: the snippet's **Replace** into the editor, Run, and a card
+  click moving Detail to that row (row 3 of 8, `ADR-0114`) — the viewof duality
+  in both directions.
