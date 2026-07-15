@@ -421,11 +421,17 @@ func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection str
 }
 
 // renderSource draws the raw .md source inside a syntax-highlighted
-// CodeView. codeview.PrepareMarkdown returns an interned retained
-// holder (content-addressed via unique.Handle) so calling it per
-// frame with the same source is amortised to a single hashmap probe
-// past the first invocation — no need for HelpHost to maintain its
-// own job cache.
+// CodeView. codeview.PrepareMarkdown memoises, so calling it per frame
+// with the same source costs a probe rather than a re-tokenise, and
+// HelpHost needs no job cache of its own (ADR-0125).
+//
+// That was not true when this was written. The claim then was that the
+// unique.Handle interning inside Keep() made the repeat call free; it
+// does not — interning dedups the *already-serialized* buffer, which is
+// downstream of the tokenise it would have had to skip, so every frame
+// re-highlighted the whole document (~1.1 ms for a 10 KB doc). ADR-0125
+// made Prepare* memoise for real, which is what this comment always
+// assumed.
 func renderSource(ids *c.WidgetIdStack, src []byte) {
 	job := codeview.PrepareMarkdown(string(src))
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {

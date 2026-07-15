@@ -51,15 +51,18 @@ func jsonHighlight(src string) (out []section) {
 	return
 }
 
-// BuildJson highlights JSON and returns a retained CodeViewJob. Each
-// call re-tokenises; use PrepareJson for static documents.
+// BuildJson highlights JSON and returns a retained CodeViewJob. Every call
+// re-tokenises — use it for one-shot work, or when you already hold a cheaper
+// key than the source text. Use [PrepareJson] otherwise.
 func BuildJson(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	return build(jsonSpec, src)
 }
 
-// PrepareJson is identical to BuildJson — use this name for static /
-// global documents where the retained holder is built once and reused
-// across frames.
+// PrepareJson highlights JSON through the package memo: the same source
+// prepared again returns the same retained holder without re-tokenising
+// (ADR-0125).
 func PrepareJson(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	return build(jsonSpec, src)
+	return memo.prepare(memoKey{lang: langJSON, src: src}, func() job {
+		return build(jsonSpec, src)
+	})
 }

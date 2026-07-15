@@ -1,19 +1,31 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-07-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0125: `codeview.Prepare*` memoises; `Build*` is the escape hatch
 
 ## Status
 
-Proposed, pre-human-review. Nothing is built.
+Accepted 2026-07-15.
+
+Two claims were checked against the code before acceptance, because either would
+have sunk the design:
+
+- **Sharing one holder across widget ids is safe.** `RetainedFffiHolder`
+  carries a `widgetIdOffset`, which looked like a widget id baked into the
+  buffer — two widgets sharing one cached job would then corrupt each other. It
+  is read-only (`GetWidgetHandle` reads it; nothing patches it, and `content`
+  aliases an immutable interned string). Sharing is already the proven pattern:
+  the demos' package-level vars and `markdown/visitor.go`'s segment tree render
+  one holder under many ids.
+- **Concurrent builds are safe** (§SD3). ADR-0084's `dfaCache` holds a
+  read-lock for the duration of a parse specifically so "parses run fully
+  concurrently and may mutate the shared DFA under the ATN's own internal
+  mutexes, exactly as antlr4-go intends".
 
 ## Context
 
@@ -175,11 +187,17 @@ than either alone.
   every retained widget, not just `codeview`. It is orthogonal, it is downstream
   of the tokenize this ADR is about, and it belongs to `fffi2`.
 - **The SQL highlighter's cost.** 180 bytes producing 30 849 allocations and
-  3.5 ms is worth its own investigation — the shape suggests ANTLR adaptive
-  prediction with a DFA cache that is not warm across `Parse` calls (ADR-0084
-  made that cache resettable at `Parse` seams). A 10× win there would still leave
-  ~350 µs per node per frame, so it does not remove the need for this memo, and
-  this memo does not remove the reason to look.
+  3.5 ms is worth its own investigation. The obvious explanation is **not** the
+  one: ADR-0084's `dfaCache` is a process-local holder that parses share under a
+  read-lock, so it is warm across `Parse` calls by construction, and the figure
+  above is a steady-state cost measured over 500 iterations of one query (a
+  rebuild needs `MaxDFAStates` = 8192 states to be exceeded, and
+  `DFACheckInterval` is 256). So the cost is not cold-cache warmup, and this ADR
+  does not know what it is — full-context LL prediction on the `WITH … AS`
+  ambiguity and the `semanticRefine` CST walk are both unmeasured suspects.
+  Whatever it is, a 10× win still leaves ~350 µs per node per frame, so it does
+  not remove the need for this memo, and this memo does not remove the reason to
+  look.
 - **Eviction telemetry.** A hit-rate counter would tell us whether 8 MB is right.
   Not built until the budget is doubted.
 
@@ -229,6 +247,50 @@ consequence, which is what a reader already assumes they are.
 `codeview` has **zero tests** today. This ADR should not land a cache into an
 untested package; the benchmark that produced §Context's table lands with it as
 the regression guard.
+
+## Update 2026-07-15 — built
+
+Implemented as decided: `memo.go` (a `simplelru.LRU` under one mutex, byte-charged
+at `2 × len(src)`), the five `Prepare*` entry points rewired, `Build*` untouched,
+and `codeview`'s first tests — 12 unit tests plus the benchmark, race-clean.
+
+Three corrections to the record above, none of which changed the decision:
+
+- **Five per-frame sites, not four.** `intro.go:126` calls `BuildGoLines` inline
+  inside a `CollapsingHeader` body, so it re-highlights while the header is
+  expanded. Switched with the rest. The two remaining `Build*` callers outside
+  `play_detail_rich` — `mappingplanview`'s `buildJob` (called on recompute) and
+  `canonicaltypesummary` (guarded by `goViewSrc != src`) — are genuinely
+  caller-cached and stay on `Build*`.
+- **`langGoLines` is a distinct key from `langGo`.** `PrepareGoLines(src, 0, 0)`
+  clamps to an empty window; keyed only by language it would have collided with
+  `PrepareGo(src)` and served the whole highlighted file. Caught while writing
+  §SD1's key, and covered by a test that fails when the two share an id.
+- **§SD5's DFA speculation was wrong and is retracted** — see the corrected
+  bullet. The cost is steady-state with a warm shared cache; its cause is still
+  unidentified.
+
+Measured after (`-benchtime 200000x`, so the cold miss amortises out; the
+`-benchtime 300x` figures in §Context are dominated by it — 31 023 allocs ÷ 300
+is the "102 allocs/op" a short run reports):
+
+| | `Build*` | `Prepare*` hit | ratio |
+| --- | --- | --- | --- |
+| SQL one-liner | 137 µs | 164 ns | ~840× |
+| SQL 3-line CTE | 3.87 ms | 208 ns | ~18 600× |
+| markdown ~0.5 KB | 75 µs | 124 ns | ~600× |
+| markdown ~10 KB | 1.13 ms | 357 ns | ~3 200× |
+| JSON ~15 KB | 14.4 µs | 464 ns | ~31× |
+
+A miss costs the build plus ~576 ns of bookkeeping (4.84 µs against `BuildJson`'s
+4.26 µs on the same source) — the price when the cache cannot help.
+
+Live: the Graph tab on a two-CTE query, with the Preview pane rendering the
+whole highlighted CTE every frame, reports **Go 1.2–1.3 ms** at 63 fps. That
+source alone costs 3.87 ms through `BuildSql`, so a frame budget under it is only
+reachable with the highlight cached. The before/after was **not** measured live:
+getting a "before" means mutating a worktree shared with concurrent sessions, and
+the benchmark carries the delta more precisely anyway.
 
 ## Validation
 

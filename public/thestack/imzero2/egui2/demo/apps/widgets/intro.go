@@ -121,9 +121,11 @@ func RenderDemoOutro(ids *c.WidgetIdStack, d *registry.Demo) {
 		ids.PrepareStr("source-"+d.Name),
 		c.WidgetText().Text("source code").Keep(),
 	).KeepIter() {
+		// PrepareGoLines: this body runs every frame the header is expanded,
+		// over an unchanging source (ADR-0125).
 		c.CodeView(
 			ids.PrepareStr("source-view-"+d.Name),
-			codeview.BuildGoLines(fullSrc, firstLine, lastLine),
+			codeview.PrepareGoLines(fullSrc, firstLine, lastLine),
 		).Send()
 	}
 }

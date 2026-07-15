@@ -83,17 +83,20 @@ func goHighlight(src string) (out []section) {
 	return
 }
 
-// BuildGo highlights Go source and returns a retained CodeViewJob. Each
-// call re-highlights; use PrepareGo for static snippets.
+// BuildGo highlights Go source and returns a retained CodeViewJob. Every call
+// re-highlights — use it for one-shot work, or when you already hold a cheaper
+// key than the source text. Use [PrepareGo] otherwise.
 func BuildGo(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	return build(goSpec, src)
 }
 
-// PrepareGo is identical to BuildGo — use this name for static / global
-// Go snippets where the retained holder is built once and reused across
-// frames.
+// PrepareGo highlights Go source through the package memo: the same source
+// prepared again returns the same retained holder without re-highlighting
+// (ADR-0125).
 func PrepareGo(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	return build(goSpec, src)
+	return memo.prepare(memoKey{lang: langGo, src: src}, func() job {
+		return build(goSpec, src)
+	})
 }
 
 // BuildGoLines highlights src and renders the byte slice covering 1-based
@@ -108,9 +111,13 @@ func BuildGoLines(src string, firstLine int32, lastLine int32) typed.RetainedFff
 	return buildLines(goSpec, src, firstLine, lastLine)
 }
 
-// PrepareGoLines is identical to BuildGoLines — use this name for static
-// / global slices so it is clear the retained holder is built once and
-// reused across frames.
+// PrepareGoLines renders a line window through the package memo: the same
+// (source, window) prepared again returns the same retained holder without
+// re-highlighting (ADR-0125). The window is part of the key, so two windows over
+// one source are two entries — and neither collides with [PrepareGo] over that
+// source, which would otherwise serve the whole file for PrepareGoLines(src, 0, 0).
 func PrepareGoLines(src string, firstLine int32, lastLine int32) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	return buildLines(goSpec, src, firstLine, lastLine)
+	return memo.prepare(
+		memoKey{lang: langGoLines, firstLine: firstLine, lastLine: lastLine, src: src},
+		func() job { return buildLines(goSpec, src, firstLine, lastLine) })
 }

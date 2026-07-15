@@ -138,8 +138,11 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 					rt.Small().Weak().Monospace()
 				}
 			}
+			// PrepareSql, not BuildSql: this runs per node, per frame, and SQL
+			// highlighting is a full nanopass.Parse — ~3.5 ms for a CTE, which
+			// is what a graph's nodes usually are (ADR-0125).
 			c.CodeView(ids.PrepareStr("graphSql-"+string(n.ID)),
-				codeview.BuildSql(n.SQL)).Wrap().Send()
+				codeview.PrepareSql(n.SQL)).Wrap().Send()
 		}
 	}
 }

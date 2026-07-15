@@ -64,14 +64,20 @@ func sqlHighlight(src string) (out []section) {
 	return
 }
 
-// BuildSql highlights SQL and returns a retained CodeViewJob. Each call
-// re-tokenises; use PrepareSql for static SQL.
+// BuildSql highlights SQL and returns a retained CodeViewJob. Every call
+// re-tokenises — and SQL is the expensive one: highlight.Highlight runs a full
+// nanopass.Parse plus a CST walk, so this is ~129 µs for a one-line query and
+// ~3.5 ms for a three-line CTE. Use it for one-shot work, or when you already
+// hold a cheaper key than the SQL text. Use [PrepareSql] otherwise.
 func BuildSql(sql string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	return build(sqlSpec, sql)
 }
 
-// PrepareSql is identical to BuildSql — use this name for static / global
-// SQL where the retained holder is built once and reused across frames.
+// PrepareSql highlights SQL through the package memo: the same statement
+// prepared again returns the same retained holder without re-parsing
+// (ADR-0125). Prefer this anywhere the same SQL is shown across frames.
 func PrepareSql(sql string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	return build(sqlSpec, sql)
+	return memo.prepare(memoKey{lang: langSQL, src: sql}, func() job {
+		return build(sqlSpec, sql)
+	})
 }

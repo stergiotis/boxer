@@ -1478,8 +1478,10 @@ func (inst *PlayApp) renderPreviewTab() {
 			rt.Small().Weak()
 		}
 	case inst.formatted != "":
+		// PrepareSql: this body runs every frame the Preview pane is open, and
+		// the formatted SQL only changes when the editor does (ADR-0125).
 		c.CodeView(ids.PrepareStr("sqlPreview"),
-			codeview.BuildSql(inst.formatted)).
+			codeview.PrepareSql(inst.formatted)).
 			Wrap().
 			Send()
 	default:
@@ -1528,8 +1530,10 @@ func (inst *PlayApp) renderWirePreview() {
 				rt.Small().Weak()
 			}
 		}
+		// PrepareSql: per-frame body; the wire text changes only with the
+		// editor or the signal set (ADR-0125).
 		c.CodeView(ids.PrepareStr("sqlWire"),
-			codeview.BuildSql(inst.wireBody)).
+			codeview.PrepareSql(inst.wireBody)).
 			Wrap().
 			Send()
 	}
