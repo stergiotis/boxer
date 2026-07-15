@@ -65,6 +65,14 @@ var subtaskSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "code_refs", Type: arrow.PrimitiveTypes.Int32},
 }, nil)
 
+// AdrArrowSchema, SubtaskArrowSchema and CoderefArrowSchema expose the emitted
+// schemas so the keelson tables of the same names can be pinned equal to them
+// (ADR-0122 §SD4). The symmetry — one query, either source — is a claim, and
+// these let a test hold it.
+func AdrArrowSchema() *arrow.Schema     { return adrSchema }
+func SubtaskArrowSchema() *arrow.Schema { return subtaskSchema }
+func CoderefArrowSchema() *arrow.Schema { return coderefSchema }
+
 // WriteAdrArrow writes the adr registry + code-evidence rows as an Arrow IPC file.
 func WriteAdrArrow(path string, adrs []adrcorpus.Adr) (err error) {
 	rb := array.NewRecordBuilder(memory.DefaultAllocator, adrSchema)

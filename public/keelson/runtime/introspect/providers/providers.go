@@ -1,7 +1,7 @@
 // Package providers implements the GUI-free introspection table
 // providers — env, apps, build, sbom (ADR-0094 §SD8), sql_passes
-// (ADR-0108 §SD5), extbin (ADR-0118) — and registers them into an
-// introspect.Registry.
+// (ADR-0108 §SD5), extbin (ADR-0118), adr/subtask/coderef (ADR-0122
+// §SD4) — and registers them into an introspect.Registry.
 // The two GUI-coupled providers (demos, windows) live with the runtime
 // wiring, where the egui2 host and its window-host instance exist, so
 // this package stays importable from headless contexts.
@@ -20,10 +20,16 @@ import (
 )
 
 // RegisterStatic registers the GUI-free providers (env, apps, build,
-// sbom, sql_passes, extbin) into r (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118).
+// sbom, sql_passes, extbin, adr/subtask/coderef) into r (ADR-0094 §SD8,
+// ADR-0108 §SD5, ADR-0118, ADR-0122 §SD4).
+//
+// The three ADR tables register unconditionally, like the rest: off-repo they
+// are empty rather than absent, so the set of table names does not depend on
+// where the process was started (see adr.go).
 func RegisterStatic(r *introspect.Registry) (err error) {
 	for _, p := range []introspect.Provider{
 		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
+		adrProvider{}, subtaskProvider{}, coderefProvider{},
 	} {
 		if err = r.Register(p); err != nil {
 			return

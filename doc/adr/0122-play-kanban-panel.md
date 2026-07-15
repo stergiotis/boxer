@@ -25,9 +25,12 @@ and the `@token` colours (the exported SVG carries the three legend swatches as
 `#8bd28d` / `#e6b55d` / `#616466`, which are `adrboard`'s three legend tokens
 exactly).
 
-The corpus tables (§SD4) are **not built** — the pane is useful and testable
-without them, and the tension recorded there deserves review before a provider
-lands.
+The corpus tables (§SD4) are built: `keelson('adr')` / `('subtask')` /
+`('coderef')`, with the corpus resolution moved out of `adrboard` into
+`adrcorpus` (where it outlives the app) under `BOXER_ADR_DIR` / `BOXER_ADR_ROOT`.
+The board now renders in `play` against the in-process keelson endpoint with no
+ClickHouse server and no load step. The §SD4 tension stands as recorded and
+still deserves review.
 
 ## Context
 
@@ -215,6 +218,21 @@ Freshness is **Live**: the corpus is files on disk that change under a running
 process, which is why `adrboard` has a Reload button at all. A `Static` table
 would go stale the first time an ADR is edited, silently.
 
+Live is qualified by a short shared-read window (`adrcorpus.LoadWindow`), for
+consistency before cost. A query joining `adr` and `subtask` reads the corpus
+twice, and a read is slow enough that an edit landing between them would produce
+a **torn join** — two tables describing different repositories, with no error to
+show for it. One read per window makes them one snapshot; halving the cost is
+the side effect.
+
+The cost is not where it looks. Measured on this corpus, parsing dominates at
+~380 ms for ~120 files while the whole-tree citation scan is ~86 ms — the
+opposite of what `adrboard`'s own comment implies. That also kills the obvious
+alternative: an mtime key over the scanned tree costs ~340 ms to compute, about
+as much as the work it would skip. A board query lands at ~640 ms end to end,
+which is the same order as `adrboard`'s Reload and is paid per Run, not per
+frame.
+
 Where no corpus resolves — a shipped binary running off-repo — the tables are
 **empty rather than erroring**, following `keelson('build')` with no `runinfo`.
 
@@ -389,8 +407,15 @@ the parent axis would introduce.
   fold cache (it is an input that changes without the result changing); and a
   failed lanes query reaches the status line rather than silently reverting the
   board to row-derived lanes.
-- Unit (with §SD4): the `keelson('adr')` / `('subtask')` / `('coderef')` schemas
-  equal `arrowemit.go`'s, field for field; empty tables when no corpus resolves.
+- Unit (done, §SD4): the `keelson('adr')` / `('subtask')` / `('coderef')` schemas
+  equal `arrowemit.go`'s field for field; the **cells** equal it too, on
+  identical input with distinct same-typed values — a schema check alone would
+  pass a `code_files`/`code_pkgs` swap and misreport the repository forever. Plus:
+  the tables are Live; they are empty rather than erroring off-repo and on an
+  unresolvable `BOXER_ADR_DIR`; and all three register under the names
+  `boxer adr` binds.
+- Live (done, §SD4): the board renders in `play` against the **in-process
+  keelson endpoint** — no ClickHouse server, no `boxer adr build`, no load step.
 - Isomorphism (**done once by hand; not yet a test**): `buildBoard` dumped as
   rows and diffed against the snippet-library query over the same corpus
   snapshot, loaded from `boxer adr build`'s Arrow into a server. Every card

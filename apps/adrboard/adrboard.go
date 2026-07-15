@@ -66,7 +66,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // reload its synchrony. A scan failure degrades to no amber dots rather than no
 // board — evidence enriches the corpus, it is not the corpus.
 func (inst *App) load() {
-	inst.adrDir, inst.root, inst.loadErr = resolveCorpus()
+	inst.adrDir, inst.root, inst.loadErr = adrcorpus.ResolveCorpus()
 	if inst.loadErr != nil {
 		inst.model = nil
 		return
@@ -80,7 +80,7 @@ func (inst *App) load() {
 	var refs []adrcorpus.CodeRef
 	if inst.root == "" {
 		inst.logger.Info().Str("adrDir", inst.adrDir).
-			Msgf("adrboard: no source tree resolved; code-evidence dots omitted (set %s)", envAdrRootName)
+			Msgf("adrboard: no source tree resolved; code-evidence dots omitted (set %s)", adrcorpus.EnvAdrRootName)
 	} else if refs, err = adrcorpus.ScanCodeRefs(inst.root, inst.adrDir, ""); err != nil {
 		refs = nil
 		inst.logger.Warn().Err(err).Str("root", inst.root).
@@ -145,7 +145,7 @@ func (inst *App) renderLoadError() {
 		rt.Strong()
 	}
 	c.Label(inst.loadErr.Error()).Wrap().Send()
-	for rt := range c.RichTextLabel("Set " + envAdrDirName + " to the ADR markdown directory, then press Reload.") {
+	for rt := range c.RichTextLabel("Set " + adrcorpus.EnvAdrDirName + " to the ADR markdown directory, then press Reload.") {
 		rt.Weak().Small()
 	}
 }
