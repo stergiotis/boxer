@@ -1,29 +1,25 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0124: `play` parameter editing widgets — detection, registration, mechanics
 
 ## Status
 
-Proposed, pre-human-review.
+Accepted — 2026-07-15 (reviewed-by: p@stergiotis).
 
-The subsystem is built and has been for some time; no ADR has ever covered it.
-§SD1-4 and §SD6 record what exists — they document an as-built design, and
-reviewing them is reviewing whether that design was right, not whether to adopt
-it.
+The subsystem was built long before this record; no ADR had ever covered it.
+§SD1-4 and §SD6 document that as-built design — the review covered whether the
+design was right, not whether to adopt it.
 
-§SD5 and §SD7 are the two proposed changes, and neither is built. §SD5 retires a
-deliberately pinned assertion (`TestDateTimePairWidgetRejectsNonAdjacent`,
-`apps/play/play_param_widget_test.go:25`), so it wants review before the test is
-touched.
+§SD5 and §SD7 are the changes the review authorises, including §SD5's retirement
+of a deliberately pinned assertion (`TestDateTimePairWidgetRejectsNonAdjacent`,
+`apps/play/play_param_widget_test.go:25`). Neither is built at acceptance; a
+dated `## Updates` entry records what ships.
 
 ## Context
 
