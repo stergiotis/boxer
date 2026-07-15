@@ -346,6 +346,33 @@ the parent axis would introduce.
 - The `keelson` table family stops being uniformly about the running process
   (§SD4), and that boundary is now a judgement call rather than a rule.
 - The board is capped at three dot kinds by the widget, with no headroom.
+- **The pane is bigger than the app it generalises, and its win is amortized,
+  not immediate.** Measured against `adrboard` — which renders the same board
+  from the same widget, so the widget cancels out:
+
+  | | `adrboard` | Kanban pane |
+  | --- | --- | --- |
+  | non-test Go | 486 | 611 |
+  | tests | 230 | 428 |
+  | renders | one corpus | any result |
+  | the next board costs | ~486 more Go | ~25 lines of SQL |
+
+  The pane is **~26% more code**, not less. But the fold — the part that
+  actually computes the board — is a wash: 114 lines against `board.go`'s 96,
+  and the pane's does more (declared lanes, the card cap). The whole difference
+  is contract (168) and host plumbing (150): the price of *not knowing your
+  data*, and of living somewhere async and negotiated rather than calling
+  `ParseDir` inline. `adrboard` hardcodes what the pane must be told — its dot
+  vocabulary is 27 lines of Go where the pane needs a token grammar, a parser
+  and six reject paths.
+
+  Two things the line counts do not show, both favouring the app for a *single*
+  board: `adrboard` is synchronous and self-contained (launch it and there is a
+  board — no server, no load step), and it can be read top to bottom, where the
+  pane has a claim, a fold cache whose invalidation is load-bearing (it holds
+  the selection), an async lane and a channel negotiation. And one favouring the
+  pane, which no count captures: changing what `adrboard` shows means editing Go
+  and relaunching; changing the pane's board means editing SQL and pressing Run.
 
 ## Validation
 
