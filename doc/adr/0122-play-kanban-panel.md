@@ -13,8 +13,19 @@ date: 2026-07-15
 
 ## Status
 
-Proposed. Nothing built yet; this records the shape agreed in design dialogue
-before implementation.
+Proposed, pre-human-review.
+
+The pane (§SD1-3) is built: `play_kanban_panel.go` with its tests, the Kanban
+dock tab and its `BOXER_PLAY_FOCUS_KANBAN` knob, and `kanban.Model.SetSelected`.
+Verified per §Validation — unit suites green, and a live run against a
+`values()`-literal board confirmed the lanes, the tallies, the zero-tally skip
+and the `@token` colours (the exported SVG carries the three legend swatches as
+`#8bd28d` / `#e6b55d` / `#616466`, which are `adrboard`'s three legend tokens
+exactly).
+
+The corpus tables (§SD4) are **not built** — the pane is useful and testable
+without them, and the tension recorded there deserves review before a provider
+lands.
 
 ## Context
 
@@ -65,7 +76,8 @@ Substrate facts that shape the design:
 A new `play` result pane ("Kanban" dock tab) that renders any result carrying a
 lane column and a title column as a `kanban` board, plus three `keelson`
 introspection tables that put the ADR corpus in SQL reach so the pane has a
-worked example. No changes to the `kanban` widget.
+worked example. The `kanban` widget gains one method (`Model.SetSelected`,
+§SD3) and nothing else.
 
 ### SD1 — Panel contract: named columns, not detection
 
@@ -74,9 +86,9 @@ claims a schema carrying, **by name**:
 
 | column | type | required | meaning |
 | --- | --- | --- | --- |
-| `lane` | String | yes | the lane title this card sits in |
-| `title` | String | yes | the card title |
-| `subtitle` | String | no | the card's second line |
+| `lane` | any | yes | the lane title this card sits in |
+| `title` | any | yes | the card title |
+| `subtitle` | any | no | the card's second line |
 | `dot_*` | integer | no | a dot tally (§SD2) |
 
 Detection was rejected. The World pane can detect its country column because
@@ -86,12 +98,24 @@ flip. Named columns cost one `AS` per query — `SELECT status AS lane` — and 
 what they mean. This follows the Map pane, which likewise requires
 `mercator_x` / `mercator_y` by name rather than guessing.
 
+The three text columns carry **no type requirement**. They are read through
+`formatCell`, which is total over Arrow types, so a type check would reject
+queries that would have rendered correctly — `SELECT num AS lane` is a board
+with numbered lanes. Dot columns are the exception (§SD2): they are counts, and
+a fractional or textual tally is not a weaker board but a meaningless one.
+
 Lane **order** is first-seen row order, so the query's `ORDER BY` controls the
 board's left-to-right layout with no second mechanism. Lane identity is
 positional; so is card identity (row index + 1, non-zero because the widget
 reads `ParentID == 0` as "no parent"). A result set has no guaranteed unique
 key, and the widget's ID scoping punishes collisions — the same reasoning that
 made `adrboard` positional.
+
+The fold is **capped at 2000 cards**. A board is a tens-to-hundreds instrument;
+without a cap, naming `lane` and `title` over a large table would lay out every
+row. The excess is dropped and counted in the status line — not silently, and
+not by rejecting, since a bounded look at a big table is a reasonable thing to
+want on the way to a `GROUP BY`.
 
 ### SD2 — Dot contract: `dot_<label>` and `dot_<label>@<token>`
 
@@ -154,7 +178,7 @@ invisible in the code that implements it; the SQL cannot express the buckets
 without stating it. Neither form is more correct, but the declarative one is the
 one that cannot leave the rule unsaid.
 
-### SD3 — Read-only, click emits `selection`
+### SD3 — Read-only, and the selection carries both ways
 
 `ReadOnly: true`; `DrainMoves` stays unused. A `play` result is a query output —
 there is nothing to write a dragged card back to, and inventing a
@@ -163,6 +187,16 @@ strength of a drag gesture. Clicking a card emits the `selection` signal for its
 row, the same viewof duality the Table and World panes implement, so Detail and
 Table follow the click. `dispatchPanel` stamps `selection_node` / `selection_id`
 and provenance; the pane does not.
+
+Unlike the World pane, the board also **follows** the signal, which needs one
+new widget method: `Model.SetSelected`, the write side of the existing
+`Model.Selected`. The pane reads the shared cursor before `Render` and reads the
+user's own click back after. Emit-only was the smaller change and is wrong here:
+the World pane has no selected state to contradict, but a board *paints* its
+selection, so a cursor moved in Table would leave the board highlighting a card
+nothing else agreed was current — showing a selection that is no longer true.
+The method is three lines and a host that never calls it keeps the widget's
+existing behaviour.
 
 ### SD4 — The corpus in SQL: three `keelson` tables
 
@@ -251,17 +285,23 @@ the parent axis would introduce.
 
 ## Validation
 
-- Unit: `AcceptForChannel` over synthetic schemas — missing `lane`, missing
-  `title`, non-string `lane`, no `dot_*` (accepted, dotless board), four `dot_*`
-  columns (rejected, §SD2), unknown `@` token (rejected), `@`-suffixed and bare
-  `dot_*` mixed. Card/lane positional identity and the zero-tally skip.
-- Unit: the `keelson('adr')` / `('subtask')` / `('coderef')` schemas equal
-  `arrowemit.go`'s, field for field; empty tables when no corpus resolves.
-- Isomorphism: the SQL board and `buildBoard` agree on the same corpus — same
-  lanes in the same order, same cards, same per-card tallies. This is the test
-  that gives the second route its value; it runs over the real corpus, not a
-  fixture, so it also fails if either fold drifts.
-- Integration: a live drive (egui inspection) confirming the board renders, the
-  legend matches the `@` tokens, and a card click moves Detail to that row;
-  scripted capture against a `VALUES`-literal board so the pane is verifiable
-  with no corpus and no server.
+- Unit (done): `AcceptForChannel` over synthetic schemas — missing `lane`,
+  missing `title`, no `dot_*` (accepted, dotless board), four `dot_*` columns
+  (rejected, §SD2), float tally, unknown `@` token, empty `@`, unlabelled
+  `dot_`, and `@`-suffixed / bare `dot_*` mixed. Card and lane positional
+  identity, first-seen lane order, the zero-tally skip, the 2000-card cap and
+  its status line, the selection claim, and the fold cache — which is asserted
+  to *preserve* a selection, since rebuilding the Model would clear it.
+- Unit (with §SD4): the `keelson('adr')` / `('subtask')` / `('coderef')` schemas
+  equal `arrowemit.go`'s, field for field; empty tables when no corpus resolves.
+- Isomorphism (with §SD4): the SQL board and `buildBoard` agree on the same
+  corpus — same lanes in the same order, same cards, same per-card tallies. This
+  is the test that gives the second route its value; it runs over the real
+  corpus, not a fixture, so it also fails if either fold drifts. It cannot be
+  written until a corpus table exists.
+- Integration (done for the capture): a scripted capture against a `values()`
+  literal board — verifiable with no corpus and no ADR table — confirming the
+  lanes and their counts, the per-card tallies against the source rows, the
+  zero-tally skip, and the legend colours by their hex. Still to do: a live
+  drive confirming a card click moves Detail to that row (the read direction,
+  Detail following the board's own click, is the half a capture cannot show).
