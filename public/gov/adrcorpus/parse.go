@@ -17,8 +17,9 @@
 // The package is a pure library over markdown: no CLI, no Arrow, no
 // clickhouse. Those belong to its consumers — `boxer adr`
 // (public/app/commands/adr) adds the Arrow tables and the clickhouse-local
-// query surface, and the adrboard app renders the same model as a board — so
-// neither a GUI app nor a lint has to link a command to read the corpus.
+// query surface, and the keelson introspection providers expose the same model
+// as keelson.adr / subtask / coderef (ADR-0122 §SD4) — so neither a GUI nor a
+// lint has to link a command to read the corpus.
 //
 // The design, and the ADR-reference convention the evidence axis depends on,
 // are recorded in ADR-0092.

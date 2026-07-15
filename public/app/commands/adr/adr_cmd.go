@@ -10,8 +10,9 @@
 //
 // The axes and the ADR-reference convention the evidence axis depends on are
 // recorded in ADR-0092. Everything here is the *query surface*; the corpus
-// model itself lives in adrcorpus, which the adrboard app renders as a board
-// without linking this command.
+// model itself lives in adrcorpus, which the keelson providers expose as tables
+// of the same names and schemas (ADR-0122 §SD4) without linking this command —
+// a test pins the two schema sets equal, so a query written here runs there.
 package adr
 
 import (

@@ -24,20 +24,25 @@ import (
 //
 // # The shape of the current debt
 //
-// Both entries are real filesystem access from app code. Neither is dangerous;
-// both are an app reaching past the §SD7 picker substrate to touch the disk
-// directly, which is the thing §SD10 exists to make visible.
+// The remaining entry is real filesystem access from app code. It is not
+// dangerous; it is an app reaching past the §SD7 picker substrate to touch the
+// disk directly, which is the thing §SD10 exists to make visible.
 //
-// This list was six entries when the gate was first enforced. The other four
-// were CAPABILITY_READ_SYSTEM_STATE incurred by os.Getwd or os.Getpid, and they
-// were retired by splitting that mapping row rather than by four manifest edits
-// — see [refineCapability] and ADR-0026's 2026-07-15 update. They are worth
-// remembering as the shape of a bad baseline entry: an accepted finding that
-// no app could honestly act on is a defect in the table, not debt in the app.
+// This list was six entries when the gate was first enforced, and each way one
+// left is worth remembering, because they are three different things:
+//
+//   - Four were CAPABILITY_READ_SYSTEM_STATE incurred by os.Getwd or os.Getpid,
+//     retired by splitting that mapping row rather than by four manifest edits
+//     — see [refineCapability] and ADR-0026's 2026-07-15 update. That is the
+//     shape of a bad baseline entry: an accepted finding no app could honestly
+//     act on is a defect in the table, not debt in the app.
+//   - One (adrboard, stat-ing the ADR corpus) left because the app did — its
+//     board is now a query against keelson.adr in play's Kanban pane
+//     (ADR-0122). Debt can leave by the code leaving; that is not a fix, and
+//     nothing here was made safer by it.
+//   - None so far has left the way the list wants: an app declaring the subject
+//     it needs, or reading through the broker.
 var baseline = map[string][]string{
-	"github.com/stergiotis/boxer/apps/adrboard": {
-		"CAPABILITY_FILES",
-	},
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets": {
 		"CAPABILITY_FILES",
 	},
@@ -47,11 +52,6 @@ var baseline = map[string][]string{
 // "<appId> :: <capability>". Each names the call site that incurs the
 // capability, so an entry can be checked rather than taken on trust.
 var baselineReasons = map[string]string{
-	"github.com/stergiotis/boxer/apps/adrboard :: CAPABILITY_FILES": "" +
-		"adrboard.isDir -> os.Stat: resolves the ADR corpus directory by walking the " +
-		"filesystem rather than going through the fs Powerbox (§SD7). adrboard declares " +
-		"no Caps at all, so this is the app's gap, not the table's: it should either " +
-		"declare an fs.* subject or read the corpus through fsbroker.",
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets :: CAPABILITY_FILES": "" +
 		"widgets.RenderLoopHandlerTestDriver -> os.MkdirAll: the screenshot TestDriver " +
 		"(ADR-0057) creates its capture output directory. Harness code compiled into the " +

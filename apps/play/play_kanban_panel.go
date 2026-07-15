@@ -64,9 +64,8 @@ const (
 //
 // The *Subtle tones are deliberately absent. They are background fills
 // (L≈0.2 — NeutralSubtle is 27/27/27) and land within a few points of the
-// card's own NeutralBgSurface, so a dot painted in one is invisible. That is
-// the trap adrboard's dot legend documents; here it is excluded by
-// construction rather than by comment.
+// card's own NeutralBgSurface, so a dot painted in one is invisible. The
+// vocabulary excludes them by construction rather than warning about them.
 var kanbanDotTokens = map[string]styletokens.RGBA8{
 	"success":  styletokens.SuccessDefault,
 	"warning":  styletokens.WarningDefault,
@@ -401,9 +400,9 @@ func (inst *KanbanDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 //
 // Lanes come from the declared inventory first, in its order, and then from the
 // rows — so a declared lane no card sits in still renders, empty, and a lane the
-// inventory does not name is appended rather than dropped. That is
-// adrboard's buildColumns exactly, with the canonical list supplied by a query
-// instead of a Go slice. With no inventory the rows are the only source and
+// inventory does not name is appended rather than dropped: a vocabulary word the
+// data has outgrown shows up on the board instead of vanishing from it. With no
+// inventory the rows are the only source and
 // first-seen row order decides the layout, so the query's ORDER BY controls it
 // with no second mechanism.
 func (inst *KanbanDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k kanbanClaim, declared []string) {
@@ -451,8 +450,9 @@ func (inst *KanbanDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k
 			// Position, not any column's value. Card ids must be unique (the
 			// widget scopes each card's widget ids by its id) and non-zero (it
 			// reads a zero ParentID as "no parent"). A result set has no
-			// guaranteed unique key — the same reasoning that makes adrboard's
-			// cards positional despite every ADR carrying a number.
+			// guaranteed unique key, and the tempting one is usually not unique
+			// either — two rows can share the id a query selected as "the" id.
+			// Position always is.
 			ID:       uint64(row + 1),
 			ColumnID: id,
 			Title:    formatCell(rec, k.titleCol, row),

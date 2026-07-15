@@ -248,6 +248,32 @@ intra-corpus links point at sub-item anchors and would need updating if those
 particular headings are marked. Neither doclint nor any other check yet
 reconciles the declared set against the surveyed inventory.
 
+### 2026-07-15 — The board moves into `play`; `adrboard` is removed
+
+The board this ADR's previous update describes — `apps/adrboard`, one card per
+ADR, sub-items as a three-bucket dot tally — is gone. The same board is now a
+**query**: play's Kanban pane (ADR-0122) renders any result naming a `lane` and
+a `title`, and the corpus reaches SQL as `keelson('adr')` / `('subtask')` /
+`('coderef')`, the same table names and schemas `boxer adr` binds over its Arrow
+dump. The board query lives in play's snippet library. Nothing about the axes,
+the declaration grammar or the three buckets changes; only where the fold runs.
+
+The two folds were diffed before the Go one was deleted: over one corpus
+snapshot every card agreed on lane, title, subtitle and all three tallies, and
+the lane inventory matched with its counts. What did *not* port is editorial —
+`dotLegend`'s sentence per colour and `corpusSummary`'s headline. A result set
+has a place for a label, not for prose about what the label claims. The board is
+poorer by exactly that, which was judged an acceptable price for one
+implementation instead of two.
+
+Two things are worth recording honestly. The pane is **larger** than the app it
+replaced (~611 non-test lines against 486): the fold is the same size either way,
+and the difference is a schema contract and host plumbing — the price of not
+knowing your data. It pays for itself only from the second board on, where a
+board is ~25 lines of SQL rather than another app. And deleting the app removed
+the only oracle the SQL board had: the cross-check was a migration gate, not a
+standing test, and it cannot be one once the reference is gone.
+
 ## References
 
 - [How to survey ADR status and implementation degree](../howto/adr-overview.md)

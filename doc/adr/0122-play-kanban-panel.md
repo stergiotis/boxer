@@ -345,9 +345,9 @@ the parent axis would introduce.
   change to `cardDots` semantics now has a second site to update. The shared
   schemas (§SD4) keep the *inputs* from drifting; nothing keeps the *folds* in
   step but the corpus test.
-- **The fold ports exactly; the editorial does not.** Run against the real
-  corpus, the SQL board agrees with `buildBoard` on every card — lane, title,
-  subtitle and all three tallies (§Validation). What the Go board does that a
+- **The fold ported exactly; the editorial did not.** Run against the real
+  corpus, the SQL board agreed with `buildBoard` on every card — lane, title,
+  subtitle and all three tallies (§Validation). What the Go board did that a
   result set cannot:
   - **An empty lane** — the one structural gap, and the reason §SD6 exists. A
     lane read off the rows cannot have no cards. The `lanes` CTE closes it: the
@@ -364,9 +364,11 @@ the parent axis would introduce.
 - The `keelson` table family stops being uniformly about the running process
   (§SD4), and that boundary is now a judgement call rather than a rule.
 - The board is capped at three dot kinds by the widget, with no headroom.
-- **The pane is bigger than the app it generalises, and its win is amortized,
-  not immediate.** Measured against `adrboard` — which renders the same board
-  from the same widget, so the widget cancels out:
+- **The pane is bigger than the app it replaced, and its win is amortized, not
+  immediate.** Measured against `adrboard` while both existed — same board, same
+  widget, so the widget cancels out. `adrboard` has since been deleted
+  (ADR-0092's 2026-07-15 update), so these are the numbers as of that decision,
+  not something a reader can re-measure:
 
   | | `adrboard` | Kanban pane |
   | --- | --- | --- |
@@ -384,13 +386,15 @@ the parent axis would introduce.
   vocabulary is 27 lines of Go where the pane needs a token grammar, a parser
   and six reject paths.
 
-  Two things the line counts do not show, both favouring the app for a *single*
-  board: `adrboard` is synchronous and self-contained (launch it and there is a
-  board — no server, no load step), and it can be read top to bottom, where the
-  pane has a claim, a fold cache whose invalidation is load-bearing (it holds
-  the selection), an async lane and a channel negotiation. And one favouring the
-  pane, which no count captures: changing what `adrboard` shows means editing Go
-  and relaunching; changing the pane's board means editing SQL and pressing Run.
+  Two things the line counts did not show, both favouring the app for a *single*
+  board: `adrboard` was synchronous and self-contained, and could be read top to
+  bottom, where the pane has a claim, a fold cache whose invalidation is
+  load-bearing (it holds the selection), an async lane and a channel
+  negotiation. Its self-containedness is what §SD4 had to answer before the app
+  could go — a board that needs a server and a load step is not a replacement
+  for one that needs a launch. And one favouring the pane, which no count
+  captures: changing what `adrboard` showed meant editing Go and relaunching;
+  changing the pane's board means editing SQL and pressing Run.
 
 ## Validation
 

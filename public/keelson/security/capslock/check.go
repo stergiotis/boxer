@@ -42,9 +42,9 @@
 //	     context.AfterFunc anywhere in the program.
 //
 // Requiring the app to make the call itself drops 17 of 27 such pairs, and every
-// pair that survives names a real call site (adrboard.isDir -> os.Stat,
-// play.newExecOptions -> os.Getpid). Both rules are lower bounds; this is the
-// tighter one. What it gives up is capabilities reached through a higher-order
+// pair that survives names a real call site (play.newExecOptions -> os.Getpid;
+// the widgets TestDriver -> os.MkdirAll). Both rules are lower bounds; this is
+// the tighter one. What it gives up is capabilities reached through a higher-order
 // stdlib wrapper (io.Copy, io.ReadAll) — precisely the cases where VTA cannot
 // tell an *os.File from a net.Conn, so the verdict was a coin flip either way.
 //
@@ -85,7 +85,6 @@ import (
 	// package that registers an app must therefore appear here — an app missing
 	// from this list is silently unchecked, which is why TestAppSetIsComplete
 	// asserts the list against the tree rather than trusting it.
-	_ "github.com/stergiotis/boxer/apps/adrboard"
 	_ "github.com/stergiotis/boxer/apps/capdemo"
 	_ "github.com/stergiotis/boxer/apps/capinspector"
 	_ "github.com/stergiotis/boxer/apps/fibscope"

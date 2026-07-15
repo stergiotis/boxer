@@ -352,8 +352,8 @@ func TestKanbanDeclaredLanesRenderEmpty(t *testing.T) {
 	assert.Equal(t, 0, counts["withdrawn"], "the lane exists and is empty — the §SD6 point")
 }
 
-// A lane no inventory names is appended rather than dropped — adrboard's
-// unknown-status behaviour.
+// A lane no inventory names is appended rather than dropped: a value the
+// vocabulary has not caught up with shows up on the board instead of vanishing.
 func TestKanbanUndeclaredLaneIsAppended(t *testing.T) {
 	rec := kanbanRec(t, []string{"accepted", "rejected"}, []string{"A", "B"}, nil, make([][]uint64, 2))
 	defer rec.Release()
