@@ -24,32 +24,38 @@ func NewTableNormalizer(namingStyle naming.NamingStyleE) *TableNormalizer {
 func (inst *TableNormalizer) Equal(other *TableNormalizer) (same bool) {
 	return inst.namingStyle == other.namingStyle
 }
-func (inst *TableNormalizer) Scramble(table *TableDesc, rnd *rand.Rand) {
 
+// Scramble is the inverse of Normalize: it rewrites the table into a random
+// styling and column order that Normalize must map back to the canonical form.
+// It is ScrambleNames plus ScrambleOrder, i.e. the inverse of both halves of
+// Normalize, and produces a table the validator accepts — a scrambled table
+// Normalize would reject would test nothing.
+func (inst *TableNormalizer) Scramble(table *TableDesc, rnd *rand.Rand) {
+	inst.ScrambleNames(table, rnd)
+	inst.ScrambleOrder(table, rnd)
 }
 
 // ScrambleNames is the inverse of normalizeNames: it rewrites every name in
 // the table to a randomly-chosen NamingStyle so tests can exercise the
 // Normalize path against an input that is guaranteed to need re-styling.
+//
+// The style is drawn once for the whole table, not once per name: a name only
+// counts towards the styles it is already spelled in, and TableValidator
+// requires every name in a slice to share at least one style. A per-name draw
+// therefore yields a table that fails validation ("found names in multiple
+// naming styles") and so is rejected by Normalize before it can be re-styled,
+// except by luck when every drawn name happens to agree.
 func (inst *TableNormalizer) ScrambleNames(table *TableDesc, rnd *rand.Rand) {
-	l := len(naming.AllNamingStyles)
+	style := naming.AllNamingStyles[rnd.IntN(len(naming.AllNamingStyles))]
 	for i, name := range table.PlainValuesNames {
-		ns := naming.AllNamingStyles[rnd.IntN(l)]
-		newName := naming.ConvertNameStyle(name, ns)
-		table.PlainValuesNames[i] = newName
+		table.PlainValuesNames[i] = naming.ConvertNameStyle(name, style)
 	}
-	for i, sec := range table.TaggedValuesSections {
-		{
-			ns := naming.AllNamingStyles[rnd.IntN(l)]
-			newName := naming.ConvertNameStyle(sec.Name, ns)
-			sec.Name = newName
-		}
+	for i := range table.TaggedValuesSections {
+		sec := &table.TaggedValuesSections[i]
+		sec.Name = naming.ConvertNameStyle(sec.Name, style)
 		for j, name := range sec.ValueColumnNames {
-			ns := naming.AllNamingStyles[rnd.IntN(l)]
-			newName := naming.ConvertNameStyle(name, ns)
-			sec.ValueColumnNames[j] = newName
+			sec.ValueColumnNames[j] = naming.ConvertNameStyle(name, style)
 		}
-		table.TaggedValuesSections[i] = sec
 	}
 }
 
