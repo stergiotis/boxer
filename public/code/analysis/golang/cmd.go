@@ -1,6 +1,7 @@
 package golang
 
 import (
+	"github.com/stergiotis/boxer/public/code/analysis/golang/capsurvey"
 	"github.com/stergiotis/boxer/public/code/analysis/golang/llmuse"
 	"github.com/stergiotis/boxer/public/code/analysis/golang/stubber"
 	"github.com/stergiotis/boxer/public/code/analysis/golang/wasmsurvey"
@@ -11,6 +12,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "golang",
 		Subcommands: []*cli.Command{
+			capsurvey.NewCliCommand(),
 			llmuse.NewCliCommand(),
 			stubber.NewCliCommand(),
 			wasmsurvey.NewCliCommand(),
