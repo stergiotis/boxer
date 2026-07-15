@@ -65,6 +65,72 @@ func TestCapRequirements_Unanalyzed_FallsToDefault(t *testing.T) {
 	assert.False(t, alwaysOK)
 }
 
+// --- READ_SYSTEM_STATE refinement ----------------------------------------
+
+// capslock uses one category for 36 functions spanning four unrelated
+// concerns. Only the sink function can tell them apart.
+func TestRefineCapability(t *testing.T) {
+	for _, tc := range []struct{ sink, want string }{
+		// ambient facts about the process itself
+		{"os.Getwd", capReadProcessSelf},
+		{"os.Getpid", capReadProcessSelf},
+		{"os.Executable", capReadProcessSelf},
+		// the environment — CS011's domain
+		{"os.Getenv", capReadEnv},
+		{"os.Environ", capReadEnv},
+		{"syscall.Getenv", capReadEnv},
+		// what the sysmetrics row is actually for
+		{"net.Interfaces", capReadSystemState},
+		{"os/user.Current", capReadSystemState},
+		{"os.Hostname", capReadSystemState},
+		{"os.UserHomeDir", capReadSystemState},
+	} {
+		assert.Equal(t, tc.want, refineCapability(capReadSystemState, tc.sink), "sink=%s", tc.sink)
+	}
+}
+
+// Only READ_SYSTEM_STATE is refined; every other capability passes through.
+func TestRefineCapability_LeavesOtherCapabilitiesAlone(t *testing.T) {
+	assert.Equal(t, "CAPABILITY_FILES", refineCapability("CAPABILITY_FILES", "os.Stat"))
+	assert.Equal(t, "CAPABILITY_EXEC", refineCapability("CAPABILITY_EXEC", "os.Getwd"))
+}
+
+func TestCapRequirements_RefinedReadSystemState(t *testing.T) {
+	for _, capName := range []string{capReadProcessSelf, capReadEnv} {
+		_, hardFail, alwaysOK := capRequirements(capName)
+		assert.True(t, alwaysOK, "cap=%s", capName)
+		assert.False(t, hardFail, "cap=%s", capName)
+	}
+	// The unrefined remainder keeps the sysmetrics requirement.
+	prefixes, hardFail, alwaysOK := capRequirements(capReadSystemState)
+	assert.Equal(t, []string{"sysmetrics."}, prefixes)
+	assert.False(t, hardFail)
+	assert.False(t, alwaysOK)
+}
+
+// End to end through the aggregation: os.Getwd must not raise a finding, while
+// net.Interfaces in the same package still must.
+func TestOwnCapabilities_RefinesReadSystemStateBySink(t *testing.T) {
+	out := ownCapabilities(cil(
+		rec("READ_SYSTEM_STATE", cpb.CapabilityType_CAPABILITY_TYPE_DIRECT, "p", "os"),
+	))
+	// path[last] name is empty in this synthetic record, so it stays unrefined.
+	assert.Contains(t, out["p"], capReadSystemState)
+
+	out = ownCapabilities(cil(
+		recNamed("READ_SYSTEM_STATE", cpb.CapabilityType_CAPABILITY_TYPE_DIRECT,
+			[]string{"p", "os"}, []string{"p.resolveCorpus", "os.Getwd"}),
+	))
+	assert.Contains(t, out["p"], capReadProcessSelf)
+	assert.NotContains(t, out["p"], capReadSystemState)
+
+	out = ownCapabilities(cil(
+		recNamed("READ_SYSTEM_STATE", cpb.CapabilityType_CAPABILITY_TYPE_DIRECT,
+			[]string{"p", "net"}, []string{"p.listIfaces", "net.Interfaces"}),
+	))
+	assert.Contains(t, out["p"], capReadSystemState)
+}
+
 // --- capability-name normalisation ---------------------------------------
 
 // The library reports the classifier's bare category string; the JSON output
@@ -107,6 +173,17 @@ func rec(capName string, ctype cpb.CapabilityType, path ...string) (ci *cpb.Capa
 	n := capName
 	t := ctype
 	ci = &cpb.CapabilityInfo{CapabilityName: &n, CapabilityType: &t, Path: fnPath(path...)}
+	return
+}
+
+// recNamed is rec with function names on the path steps, which the
+// READ_SYSTEM_STATE refinement reads. pkgs and names must be the same length.
+func recNamed(capName string, ctype cpb.CapabilityType, pkgs []string, names []string) (ci *cpb.CapabilityInfo) {
+	ci = rec(capName, ctype, pkgs...)
+	for i := range ci.Path {
+		n := names[i]
+		ci.Path[i].Name = &n
+	}
 	return
 }
 

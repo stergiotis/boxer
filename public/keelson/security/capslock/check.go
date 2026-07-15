@@ -270,10 +270,79 @@ func ownCapabilities(cil *cpb.CapabilityInfoList) (out map[string]map[string]str
 		if capName == "" {
 			continue
 		}
+		capName = refineCapability(capName, path[len(path)-1].GetName())
 		if out[pkg] == nil {
 			out[pkg] = make(map[string]struct{})
 		}
 		out[pkg][capName] = struct{}{}
+	}
+	return
+}
+
+// The §SD10 vocabulary for capabilities capslock reports too coarsely to
+// decide on. The "/" qualifier follows capslock's own category convention;
+// these names are produced after [normaliseCapability] has cut any qualifier
+// capslock itself attached, and nothing downstream cuts again.
+const (
+	capReadSystemState = "CAPABILITY_READ_SYSTEM_STATE"
+	capReadProcessSelf = capReadSystemState + "/process-self"
+	capReadEnv         = capReadSystemState + "/env"
+)
+
+// processSelfFuncs report an ambient fact about the calling process itself.
+// They confer no effect and disclose nothing beyond the process, and every use
+// of them that matters is classified on its own — a path built from os.Getwd is
+// FILES when it is opened, an address resolved from the environment is NETWORK
+// when it is dialled. Requiring a subject to justify the *discovery* as well
+// would count the same act twice, and there is no subject that would honestly
+// justify it: see the READ_SYSTEM_STATE discussion in ADR-0026's 2026-07-15
+// update.
+var processSelfFuncs = map[string]struct{}{
+	"os.Getwd":       {},
+	"os.Getpid":      {},
+	"os.Getppid":     {},
+	"os.Executable":  {},
+	"os.Getpagesize": {},
+}
+
+// envFuncs read the process environment. This gate defers to codelint CS011,
+// which bans them outright outside public/config/env (ADR-0009) — a stricter
+// rule than any subject filter, and one that applies to the whole tree rather
+// than to apps. Deferring keeps §SD10 from issuing the wrong remedy: "declare a
+// sysmetrics.* subject" is not the fix for reading an env var, "declare it in
+// public/config/env" is.
+//
+// These cannot reach the gate today: apps read configuration through
+// public/config/env, which is a non-stdlib hop and therefore transitive. The
+// entry is here so that a direct call gets CS011's diagnosis alone rather than
+// CS011's plus a misleading one.
+var envFuncs = map[string]struct{}{
+	"os.Getenv":      {},
+	"os.LookupEnv":   {},
+	"os.Environ":     {},
+	"os.ExpandEnv":   {},
+	"syscall.Getenv": {},
+}
+
+// refineCapability sharpens a capability using the function that incurs it,
+// where capslock's category is too coarse for the §SD10 mapping table to decide
+// on. Only READ_SYSTEM_STATE needs this: capslock uses it for 36 functions
+// spanning network topology (net.Interfaces), the environment (os.Getenv), user
+// and host identity (os/user.Current, os.Hostname) and ambient process facts
+// (os.Getwd) — one row cannot answer for all four. Everything it does not
+// recognise keeps the unrefined name and the table's existing verdict.
+func refineCapability(capName string, sink string) (out string) {
+	out = capName
+	if capName != capReadSystemState {
+		return
+	}
+	if _, ok := processSelfFuncs[sink]; ok {
+		out = capReadProcessSelf
+		return
+	}
+	if _, ok := envFuncs[sink]; ok {
+		out = capReadEnv
+		return
 	}
 	return
 }
@@ -385,7 +454,17 @@ func capRequirements(capName string) (prefixes []string, hardFail bool, alwaysOK
 		prefixes = []string{"fs."}
 	case "CAPABILITY_NETWORK":
 		prefixes = []string{"nats.", "ch.", "kafka.", "net."}
-	case "CAPABILITY_READ_SYSTEM_STATE":
+	case capReadProcessSelf, capReadEnv:
+		// Refined out of READ_SYSTEM_STATE by [refineCapability]; the reasons
+		// are on processSelfFuncs and envFuncs.
+		alwaysOK = true
+	case capReadSystemState:
+		// What is left after the refinement: network topology, and user and
+		// host identity. Note that no app triggers this today, and imztop —
+		// the app the sysmetrics row was written for — cannot: it reads /proc
+		// through the sysmetrics packages, a non-stdlib hop, so its access is
+		// transitive and invisible here. The row stands for an app that reads
+		// the machine directly.
 		prefixes = []string{"sysmetrics."}
 	case "CAPABILITY_RUNTIME", "CAPABILITY_SAFE", "CAPABILITY_UNSPECIFIED":
 		alwaysOK = true

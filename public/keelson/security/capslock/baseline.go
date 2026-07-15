@@ -24,32 +24,19 @@ import (
 //
 // # The shape of the current debt
 //
-// Four of the six entries are CAPABILITY_READ_SYSTEM_STATE incurred by os.Getwd
-// or os.Getpid. They are grouped here because they are one problem, not four:
-// ADR-0026 §SD10 maps READ_SYSTEM_STATE onto `sysmetrics.*` subjects, a row
-// written for imztop reading system metrics over the bus. capslock's
-// READ_SYSTEM_STATE is wider than that — it also covers ambient process facts
-// (os.Getwd, os.Getpid, os.Environ, os.Executable). Declaring a `sysmetrics.*`
-// subject in order to call os.Getwd would be nonsense, so these four are not
-// apps failing to declare a capability; they are the mapping row being too
-// coarse to separate "read the machine's metrics" from "ask the runtime where I
-// am". Splitting that row is the next §SD10 decision, and it is what should
-// retire these entries — not four manifest edits.
+// Both entries are real filesystem access from app code. Neither is dangerous;
+// both are an app reaching past the §SD7 picker substrate to touch the disk
+// directly, which is the thing §SD10 exists to make visible.
 //
-// The remaining two are real filesystem access from app code.
+// This list was six entries when the gate was first enforced. The other four
+// were CAPABILITY_READ_SYSTEM_STATE incurred by os.Getwd or os.Getpid, and they
+// were retired by splitting that mapping row rather than by four manifest edits
+// — see [refineCapability] and ADR-0026's 2026-07-15 update. They are worth
+// remembering as the shape of a bad baseline entry: an accepted finding that
+// no app could honestly act on is a defect in the table, not debt in the app.
 var baseline = map[string][]string{
 	"github.com/stergiotis/boxer/apps/adrboard": {
 		"CAPABILITY_FILES",
-		"CAPABILITY_READ_SYSTEM_STATE",
-	},
-	"github.com/stergiotis/boxer/apps/godepview": {
-		"CAPABILITY_READ_SYSTEM_STATE",
-	},
-	"github.com/stergiotis/boxer/apps/play": {
-		"CAPABILITY_READ_SYSTEM_STATE",
-	},
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/sccmap": {
-		"CAPABILITY_READ_SYSTEM_STATE",
 	},
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets": {
 		"CAPABILITY_FILES",
@@ -65,19 +52,6 @@ var baselineReasons = map[string]string{
 		"filesystem rather than going through the fs Powerbox (§SD7). adrboard declares " +
 		"no Caps at all, so this is the app's gap, not the table's: it should either " +
 		"declare an fs.* subject or read the corpus through fsbroker.",
-	"github.com/stergiotis/boxer/apps/adrboard :: CAPABILITY_READ_SYSTEM_STATE": "" +
-		"adrboard.resolveCorpus -> os.Getwd: locates the repository root relative to the " +
-		"process working directory. See the READ_SYSTEM_STATE note above.",
-	"github.com/stergiotis/boxer/apps/godepview :: CAPABILITY_READ_SYSTEM_STATE": "" +
-		"godepview.resolveCollectorConfig -> os.Getwd: resolves the module root to analyse. " +
-		"See the READ_SYSTEM_STATE note above.",
-	"github.com/stergiotis/boxer/apps/play :: CAPABILITY_READ_SYSTEM_STATE": "" +
-		"play.newExecOptions -> os.Getpid: tags query runs with the process id. play's FILES " +
-		"and NETWORK are already justified by its fsbroker and ch.* subjects and raise no " +
-		"finding. See the READ_SYSTEM_STATE note above.",
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/sccmap :: CAPABILITY_READ_SYSTEM_STATE": "" +
-		"sccmap.scanScc -> os.Getwd: defaults the scan root to the working directory. " +
-		"See the READ_SYSTEM_STATE note above.",
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets :: CAPABILITY_FILES": "" +
 		"widgets.RenderLoopHandlerTestDriver -> os.MkdirAll: the screenshot TestDriver " +
 		"(ADR-0057) creates its capture output directory. Harness code compiled into the " +
