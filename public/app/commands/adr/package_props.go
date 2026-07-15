@@ -3,14 +3,12 @@ package adr
 import "github.com/stergiotis/boxer/public/packageprops"
 
 // PackageProps records this package's curated properties (ADR-0080).
-// Seeded by `wasmsurvey props generate` (WASM*) and `capsurvey generate`
-// (Caps*); curate by hand, then run the matching verify.
+// The command walks the filesystem and shells out to clickhouse-local, so it
+// is not WASM-amenable on any target.
 var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMBlocked,
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMBlocked,
-	CapsDirect:       packageprops.Caps(packageprops.CapabilityFiles, packageprops.CapabilityNetwork),
-	CapsReachable:    packageprops.Caps(packageprops.CapabilityFiles, packageprops.CapabilityNetwork, packageprops.CapabilityRuntime, packageprops.CapabilityReadSystemState, packageprops.CapabilityModifySystemState, packageprops.CapabilityOperatingSystem, packageprops.CapabilitySystemCalls, packageprops.CapabilityArbitraryExecution, packageprops.CapabilityCgo, packageprops.CapabilityUnsafePointer, packageprops.CapabilityReflect, packageprops.CapabilityExec),
 }
 
 func init() {

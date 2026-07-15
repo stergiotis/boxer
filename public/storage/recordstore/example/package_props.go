@@ -3,14 +3,12 @@ package example
 import "github.com/stergiotis/boxer/public/packageprops"
 
 // PackageProps records this package's curated properties (ADR-0080).
-// Seeded by `wasmsurvey props generate` (WASM*) and `capsurvey generate`
-// (Caps*); curate by hand, then run the matching verify.
+// Blocked like recordstore: the arrow dependency does not compile under
+// TinyGo.
 var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMBlocked,
 	WASMJS:           packageprops.WASMBlocked,
 	WASMFreestanding: packageprops.WASMBlocked,
-	CapsDirect:       packageprops.Caps(packageprops.CapabilitySafe),
-	CapsReachable:    packageprops.Caps(packageprops.CapabilityFiles, packageprops.CapabilityNetwork, packageprops.CapabilityRuntime, packageprops.CapabilityReadSystemState, packageprops.CapabilityModifySystemState, packageprops.CapabilityOperatingSystem, packageprops.CapabilitySystemCalls, packageprops.CapabilityArbitraryExecution, packageprops.CapabilityCgo, packageprops.CapabilityUnsafePointer, packageprops.CapabilityReflect, packageprops.CapabilityExec),
 }
 
 func init() {
