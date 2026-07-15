@@ -1,213 +1,361 @@
-// Package capslock cross-references google/capslock JSON output against
-// runtime/app manifests per ADR-0026 §SD10. M2.7 advisory mode: prints
-// findings to stdout and always returns exit code 0 — CI does not gate
-// on this until a later promotion phase. Findings format:
+// Package capslock cross-references google/capslock capability findings against
+// runtime/app manifests per ADR-0026 §SD10.
 //
-//	[FILES]   github.com/.../someapp      — no fs.* cap declared
-//	[NETWORK] github.com/.../play         — ok (matches ch.query.>)
+// The gate asks one question per registered app: does the app's own code
+// exercise a privileged capability that its Manifest.Caps subject filters do
+// not justify? Findings format:
 //
-// The mapping table comes from ADR-0026 §SD10:
+//	[MISSING_CAP] github.com/.../someapp :: CAPABILITY_FILES — no manifest cap matches fs.
+//	[HARD_FAIL]   github.com/.../someapp :: CAPABILITY_EXEC   — no subject filter justifies this
 //
-//	FILES                    → fs.*
-//	NETWORK                  → nats.* | ch.* | kafka.* | net.*
-//	READ_SYSTEM_STATE        → sysmetrics.*
-//	RUNTIME, SAFE, UNSPECIFIED → always allowed
-//	OS / EXEC / SYS_CALLS / ARBITRARY_EXECUTION / CGO / UNSAFE_POINTER /
-//	REFLECT / MODIFY_SYSTEM_STATE → hard fail (no subject justifies)
-//	UNANALYZED               → investigation required
+// The analysis runs in-process: [Analyse] loads the app packages itself and
+// calls the capslock library. There is no external `capslock` binary, no JSON
+// contract and no wrapper script in the path — see the 2026-07-15 update to
+// ADR-0026 for why the shape changed.
 //
-// The cmd/capslock-check binary is a thin shim over [Run].
+// # What counts as the app's own capability
+//
+// A finding is raised only for capabilities the app's *own code* exercises.
+// That takes two conditions, and capslock's own verdict supplies only the first.
+//
+// First, the record must be CAPABILITY_TYPE_DIRECT. Transitive reachability is
+// no signal at all here: it saturates completely. Measured over the app
+// packages, every one of them reaches every capability capslock reports — 190 of
+// 190 (package, capability) pairs — because the standard library and the runtime
+// reach everything. A gate that fires on transitive reach fires on everything.
+//
+// Second — and this is not what DIRECT means — the capability-classified
+// function must be called *by the app's own code*: the second-to-last function
+// on the path must be in the originating package. capslock demotes a path to
+// TRANSITIVE only when it passes through a non-stdlib package other than the
+// originator (analyzer.go, `n != pName && !isStdLib(pName)`), so a stdlib hop
+// never demotes and DIRECT really means "no third-party package on the path".
+// The capability may still be incurred far inside the standard library, over an
+// edge VTA guessed rather than proved:
+//
+//	imztop.formatPercent -> strconv.FormatFloat -> … -> internal/strconv.float32bits
+//	  => DIRECT UNSAFE_POINTER, i.e. formatting a float hard-fails the gate.
+//
+//	godepview.Mount -> context.WithCancel$1 -> (*context.cancelCtx).cancel
+//	  -> (*context.afterFuncCtx).cancel$1 -> (*net.netFD).connect$1
+//	  => DIRECT NETWORK, because VTA links every func() ever passed to
+//	     context.AfterFunc anywhere in the program.
+//
+// Requiring the app to make the call itself drops 17 of 27 such pairs, and every
+// pair that survives names a real call site (adrboard.isDir -> os.Stat,
+// play.newExecOptions -> os.Getpid). Both rules are lower bounds; this is the
+// tighter one. What it gives up is capabilities reached through a higher-order
+// stdlib wrapper (io.Copy, io.ReadAll) — precisely the cases where VTA cannot
+// tell an *os.File from a net.Conn, so the verdict was a coin flip either way.
+//
+// This also subsumes the trust-boundary carve-out ADR-0026 §SD10 and ADR-0028
+// §SD7 describe: a capability an app reaches only by calling fsbroker,
+// inprocbus or another broker is reached through a non-stdlib package, so it is
+// already TRANSITIVE and never raises a finding. The carve-out needed an
+// explicit package list only because the previous implementation could not tell
+// direct from transitive at all.
+//
+// # Bounds
+//
+// Verdicts are a lower bound. capslock builds its call graph with VTA, which
+// links a call only where a concrete type demonstrably flows to it; reflection,
+// unsafe, cgo and linkname carry no static edges. An absent capability is the
+// absence of a finding, not proof of absence. The threat model is hygiene, not
+// security: this raises the bar on accident, not on adversarial intent.
 package capslock
 
 import (
-	"encoding/json"
+	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"sort"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/google/capslock/analyzer"
+	cpb "github.com/google/capslock/proto"
+	"golang.org/x/tools/go/packages"
 
-	// Side-effect imports: each app's init() registers into app.DefaultRegistry.
+	"github.com/stergiotis/boxer/public/code/analysis/golang/godep/godepcollect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/observability/eh"
+
+	// Side-effect imports: each app's init() registers into app.DefaultRegistry,
+	// and the gate can only evaluate apps registered in *this* binary. Every
+	// package that registers an app must therefore appear here — an app missing
+	// from this list is silently unchecked, which is why TestAppSetIsComplete
+	// asserts the list against the tree rather than trusting it.
 	_ "github.com/stergiotis/boxer/apps/adrboard"
+	_ "github.com/stergiotis/boxer/apps/capdemo"
+	_ "github.com/stergiotis/boxer/apps/capinspector"
 	_ "github.com/stergiotis/boxer/apps/fibscope"
+	_ "github.com/stergiotis/boxer/apps/godepview"
+	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"
+	_ "github.com/stergiotis/boxer/apps/splashscreen"
+	_ "github.com/stergiotis/boxer/apps/taskdemo"
 	_ "github.com/stergiotis/boxer/apps/terrainscope"
+	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/idsshowcase"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/leewaywidgets"
+	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/logdemo"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/regex_explorer"
+	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/sccmap"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
 )
 
 const widgetsPkgPath = "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
 
-// capslockReport mirrors the relevant fields of the JSON capslock emits
-// with -output=json. The rest of the structure is ignored.
-type capslockReport struct {
-	CapabilityInfo []capInfo `json:"capabilityInfo"`
+// defaultPatterns are the package patterns the gate analyses: everything that
+// can register an app. Keeping the analysis app-scoped is deliberate — a
+// whole-tree run costs minutes and gigabytes to answer a question about
+// packages that are not apps.
+var defaultPatterns = []string{
+	"./apps/...",
+	"./public/thestack/imzero2/egui2/demo/apps/...",
 }
 
-type capInfo struct {
-	Capability string     `json:"capability"`
-	Path       []pathStep `json:"path"`
+// Options configures [Analyse].
+type Options struct {
+	// Root is the module root to analyse. It is passed to packages.Config.Dir
+	// rather than chdir'd into: capslock's own analyzer.LoadPackages sets no
+	// Dir and loads from the process working directory, which a library may not
+	// mutate.
+	Root string
+	// Tags are the build tags to load with. Nil resolves them from Root, which
+	// is what callers should normally do — the tags are load-bearing here, and
+	// a load that omits them analyses a tree that does not exist.
+	Tags []string
+	// Patterns are the package patterns to analyse. Nil uses defaultPatterns.
+	Patterns []string
 }
 
-type pathStep struct {
-	Package string `json:"package"`
-}
-
-// finding is one (app, capability) pair from the cross-reference.
-type finding struct {
+// Finding is one (app, capability) pair from the cross-reference.
+type Finding struct {
 	AppId  string
 	Cap    string
-	Status findingStatus
-	Reason string // empty when status == findingOK
+	Status Status
+	Reason string // empty when Status == StatusOK
 }
 
-type findingStatus uint8
+// Status classifies a Finding against the §SD10 mapping table.
+type Status uint8
 
 const (
-	findingOK            findingStatus = 0
-	findingMissingCap    findingStatus = 1 // capability present, no manifest cap covers it
-	findingHardFail      findingStatus = 2 // capability cannot be justified by any subject
-	findingNeedsAnalysis findingStatus = 3 // CAPABILITY_UNANALYZED
+	StatusOK         Status = 0
+	StatusMissingCap Status = 1 // capability present, no manifest cap covers it
+	StatusHardFail   Status = 2 // capability cannot be justified by any subject
 )
 
-// Run executes the cross-check against capslock JSON read from the file
-// named by -in (or stdin when -in=-). args is the os.Args-shaped slice
-// from the caller (binary name at index 0). Returns the exit code the
-// binary should propagate: 0 always in M2.7 advisory mode, 1 on
-// I/O/decode failure, 2 on flag-parse failure.
-func Run(args []string) (exitCode int) {
-	fs := flag.NewFlagSet("capslock-check", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	in := fs.String("in", "-", "capslock JSON file path; '-' reads stdin")
-	err := fs.Parse(args[1:])
+// Analyse runs capslock over the app packages under opts.Root and cross-checks
+// each registered app's direct capabilities against its manifest. The returned
+// findings are ordered by app then capability.
+func Analyse(ctx context.Context, opts Options) (findings []Finding, err error) {
+	capsByPkg, err := directCapabilities(ctx, opts)
 	if err != nil {
-		exitCode = 2
 		return
 	}
-	var r io.Reader
-	switch *in {
-	case "-":
-		r = os.Stdin
-	default:
-		var f *os.File
-		f, err = os.Open(*in)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "capslock-check: open %q: %v\n", *in, err)
-			exitCode = 1
-			return
-		}
-		defer f.Close()
-		r = f
-	}
-	var report capslockReport
-	dec := json.NewDecoder(r)
-	err = dec.Decode(&report)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "capslock-check: decode: %v\n", err)
-		exitCode = 1
-		return
-	}
-	capsByPkg := aggregateByPackage(report)
-	findings := evaluateAll(app.All(), capsByPkg)
-	printFindings(findings)
-	// Advisory mode: never return non-zero on findings. Promotion happens
-	// in a later phase per ADR-0026 §SD10.
+	findings = evaluateAll(app.All(), capsByPkg)
 	return
 }
 
-// trustBoundaryPackages are runtime-internal packages that interpose
-// a capability-mediated subject interface between apps and privileged
-// syscalls. A capability reached ONLY through one of these packages
-// is absorbed by the broker — the importing app sees the bus subject,
-// not the syscall — and is therefore not propagated for the app
-// manifest cross-check. ADR-0026 §SD10 names this carve-out; ADR-0028
-// §SD7 extends it to chlocalbroker / chlocalpool.
+// directCapabilities loads the packages and reduces capslock's per-function
+// records to the set of capabilities each package's own code exercises.
+func directCapabilities(ctx context.Context, opts Options) (capsByPkg map[string]map[string]struct{}, err error) {
+	root := opts.Root
+	if root == "" {
+		root = "."
+	}
+	tags := opts.Tags
+	if tags == nil {
+		tags = godepcollect.ResolveTags("", root)
+	}
+	patterns := opts.Patterns
+	if len(patterns) == 0 {
+		patterns = defaultPatterns
+	}
+	cfg := &packages.Config{
+		Mode:    analyzer.PackagesLoadModeNeeded,
+		Dir:     root,
+		Context: ctx,
+	}
+	if len(tags) > 0 {
+		cfg.BuildFlags = []string{"-tags=" + strings.Join(tags, ",")}
+	}
+	pkgs, err := packages.Load(cfg, patterns...)
+	if err != nil {
+		err = eh.Errorf("unable to load app packages: %w", err)
+		return
+	}
+	// A pattern that matches nothing, or a package that fails to type-check,
+	// yields an empty capability set — which reads as "no findings" and passes
+	// the gate. Refuse to report a clean bill from a load that did not happen.
+	if len(pkgs) == 0 {
+		err = eh.Errorf("no packages matched %v under %q", patterns, root)
+		return
+	}
+	var loadErrs []string
+	packages.Visit(pkgs, nil, func(p *packages.Package) {
+		for _, e := range p.Errors {
+			loadErrs = append(loadErrs, p.PkgPath+": "+e.Error())
+		}
+	})
+	if len(loadErrs) > 0 {
+		sort.Strings(loadErrs)
+		err = eh.Errorf("package load reported %d error(s), the analysis would be incomplete:\n\t%s",
+			len(loadErrs), strings.Join(loadErrs, "\n\t"))
+		return
+	}
+	queried := analyzer.GetQueriedPackages(pkgs)
+	cil := analyzer.GetCapabilityInfo(pkgs, queried, &analyzer.Config{
+		// excludeUnanalyzed=true is capslock's own CLI default, and it is the
+		// right choice here rather than an inherited one. The classifier's
+		// "unanalyzed" set is 39 higher-order standard-library functions —
+		// sort.Slice, io.Copy, sync.Once.Do, errors.Is, the bufio Reader/Writer
+		// methods — whose behaviour depends on a value the caller supplies.
+		// Including them would make each a *sink*: the walk stops there and
+		// reports CAPABILITY_UNANALYZED instead of continuing into the concrete
+		// callee. That trades real findings for noise, since every non-trivial
+		// Go program calls sort.Slice or io.Copy. Measured over the app
+		// packages: excluding them yields 27 direct (package, capability)
+		// pairs, including them yields 26 plus UNANALYZED on 3 packages.
+		Classifier: analyzer.GetClassifier(true),
+		// GranularityFunction, aggregated below — NOT GranularityPackage. At
+		// package granularity capslock keeps only the sort-first function's
+		// record per (capability, package), so the surviving record's
+		// capabilityType is one arbitrary representative's rather than the
+		// package's strongest. Filtering DIRECT there finds 4 pairs where this
+		// aggregation finds 27.
+		Granularity: analyzer.GranularityFunction,
+	})
+	capsByPkg = ownCapabilities(cil)
+	return
+}
+
+// ownCapabilities keeps the capabilities a package's own code exercises. A
+// (package, capability) pair qualifies when *any* function record for it does:
+// capslock emits one record per originating function, so a pair is the app's as
+// soon as one of its functions demonstrably incurs it, and a transitive record
+// for the same pair must not mask a direct one. Filtering at
+// GranularityPackage instead would ask capslock for one arbitrary
+// representative's verdict — see the Granularity note in directCapabilities.
 //
-// An app that imports os/exec directly (without going through one of
-// these packages) is still flagged.
-var trustBoundaryPackages = []string{
-	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker",
-	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool",
-	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker",
-	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker",
-	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus",
-	"github.com/stergiotis/boxer/public/keelson/runtime/persist",
-}
-
-func pathTraversesTrustBoundary(path []pathStep) (yes bool) {
-	// Skip the originator (Path[0]); inspect intermediate steps for a
-	// hop through a runtime-internal trust boundary.
-	for i := 1; i < len(path); i++ {
-		for _, b := range trustBoundaryPackages {
-			if path[i].Package == b || strings.HasPrefix(path[i].Package, b+"/") {
-				yes = true
-				return
-			}
-		}
-	}
-	return
-}
-
-// aggregateByPackage walks the capslock report and returns a map
-// pkgPath → set-of-capability-strings. Capabilities reached through a
-// runtime trust boundary (trustBoundaryPackages) are skipped — the
-// broker absorbs them.
-func aggregateByPackage(report capslockReport) (out map[string]map[string]struct{}) {
+// The two conditions are documented at the package level: the record must be
+// DIRECT, and the classified function must be called by the originating
+// package's own code.
+func ownCapabilities(cil *cpb.CapabilityInfoList) (out map[string]map[string]struct{}) {
 	out = make(map[string]map[string]struct{}, 16)
-	for _, ci := range report.CapabilityInfo {
-		if len(ci.Path) == 0 {
+	for _, ci := range cil.GetCapabilityInfo() {
+		if ci.GetCapabilityType() != cpb.CapabilityType_CAPABILITY_TYPE_DIRECT {
 			continue
 		}
-		if pathTraversesTrustBoundary(ci.Path) {
+		path := ci.GetPath()
+		if len(path) == 0 {
 			continue
 		}
-		pkg := ci.Path[0].Package
+		// Path[0] is the originating function and Path[len-1] the one that
+		// incurs the capability. (CapabilityInfo.PackageDir carries the same
+		// import path as Path[0]'s package despite its name, but the path is
+		// what the attribution is about.)
+		pkg := path[0].GetPackage()
+		if pkg == "" {
+			continue
+		}
+		if callerOfSink(path) != pkg {
+			// The classified function is reached from somewhere other than this
+			// package's code — a deeper stdlib frame. Not the app's operation.
+			continue
+		}
+		capName := normaliseCapability(ci.GetCapabilityName())
+		if capName == "" {
+			continue
+		}
 		if out[pkg] == nil {
 			out[pkg] = make(map[string]struct{})
 		}
-		out[pkg][ci.Capability] = struct{}{}
+		out[pkg][capName] = struct{}{}
 	}
 	return
 }
 
-// evaluateAll cross-references every registered app's capabilities (as
-// reported by capslock) against its Manifest.Caps subject filters.
-func evaluateAll(apps []app.AppI, capsByPkg map[string]map[string]struct{}) (findings []finding) {
+// callerOfSink returns the package of the function that calls the
+// capability-incurring function at the end of path. A single-element path is
+// its own caller: the originating function is itself classified.
+func callerOfSink(path []*cpb.Function) (pkg string) {
+	if len(path) == 1 {
+		pkg = path[0].GetPackage()
+		return
+	}
+	pkg = path[len(path)-2].GetPackage()
+	return
+}
+
+// normaliseCapability renders a capslock capability name in the CAPABILITY_*
+// vocabulary ADR-0026 §SD10's mapping table is written in.
+//
+// The library reports the classifier's category string, which is unprefixed
+// ("FILES", "NETWORK", "UNANALYZED") — unlike the JSON output's `capability`
+// field, which serialises the proto enum and so reads "CAPABILITY_FILES".
+// Feeding the raw name to [capRequirements] would send every capability to its
+// defensive default and hard-fail the whole tree. The enum
+// (CapabilityInfo.Capability) is prefixed already, but capslock's own proto
+// marks it superseded by capability_name and it cannot represent a capability
+// added after this pin — an unknown name must reach capRequirements intact so
+// the default fires and a reviewer updates the table.
+func normaliseCapability(name string) (out string) {
+	// A category may carry a "/"-suffixed qualifier; capslock's own enum
+	// mapping cuts at the first "/", so do the same.
+	name, _, _ = strings.Cut(name, "/")
+	if name == "" {
+		return
+	}
+	if strings.HasPrefix(name, "CAPABILITY_") {
+		out = name
+		return
+	}
+	out = "CAPABILITY_" + name
+	return
+}
+
+// evaluateAll cross-references every registered app's direct capabilities
+// against its Manifest.Caps subject filters.
+func evaluateAll(apps []app.AppI, capsByPkg map[string]map[string]struct{}) (findings []Finding) {
+	type appEntry struct {
+		id       string
+		pkgPath  string
+		declared []app.SubjectFilter
+	}
+	entries := make([]appEntry, 0, len(apps))
 	for _, a := range apps {
 		m := a.Manifest()
-		pkgPath := packageForManifest(m.Id)
-		capabilities := capsByPkg[pkgPath]
+		entries = append(entries, appEntry{
+			id:       string(m.Id),
+			pkgPath:  packageForManifest(m.Id),
+			declared: m.Caps,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].id < entries[j].id })
+	for _, e := range entries {
+		capabilities := capsByPkg[e.pkgPath]
 		if capabilities == nil {
 			continue
 		}
-		caps := sortedKeys(capabilities)
-		for _, capName := range caps {
-			f := evaluate(string(m.Id), capName, m.Caps)
-			findings = append(findings, f)
+		for _, capName := range sortedKeys(capabilities) {
+			findings = append(findings, evaluate(e.id, capName, e.declared))
 		}
 	}
 	return
 }
 
 // evaluate applies the §SD10 mapping table to one (app, capability) pair.
-func evaluate(appId, cap string, declared []app.SubjectFilter) (f finding) {
-	f = finding{AppId: appId, Cap: cap, Status: findingOK}
-	prefixes, hardFail, alwaysOK := capRequirements(cap)
+func evaluate(appId string, capName string, declared []app.SubjectFilter) (f Finding) {
+	f = Finding{AppId: appId, Cap: capName, Status: StatusOK}
+	prefixes, hardFail, alwaysOK := capRequirements(capName)
 	if alwaysOK {
 		return
 	}
-	if cap == "CAPABILITY_UNANALYZED" {
-		f.Status = findingNeedsAnalysis
-		f.Reason = "capslock could not analyse the call site; treat as build-system bug"
-		return
-	}
 	if hardFail {
-		f.Status = findingHardFail
+		f.Status = StatusHardFail
 		f.Reason = "no subject filter justifies this capability; reviewer sign-off required"
 		return
 	}
@@ -218,17 +366,21 @@ func evaluate(appId, cap string, declared []app.SubjectFilter) (f finding) {
 			}
 		}
 	}
-	f.Status = findingMissingCap
+	f.Status = StatusMissingCap
 	f.Reason = "no manifest cap matches " + strings.Join(prefixes, " | ")
 	return
 }
 
-// capRequirements maps a capslock capability string to the subject
-// prefixes that justify it. alwaysOK is true when the capability is
-// universally permitted (CAPABILITY_RUNTIME, SAFE, UNSPECIFIED).
-// hardFail is true when no manifest cap can justify it.
-func capRequirements(cap string) (prefixes []string, hardFail bool, alwaysOK bool) {
-	switch cap {
+// capRequirements maps a capslock capability to the subject prefixes that
+// justify it. alwaysOK is true when the capability is universally permitted
+// (CAPABILITY_RUNTIME, SAFE, UNSPECIFIED). hardFail is true when no manifest
+// cap can justify it.
+//
+// CAPABILITY_UNANALYZED has no row: the classifier is configured never to
+// report it (see directCapabilities), so it can only arrive here as an unknown,
+// where the default already does the right thing.
+func capRequirements(capName string) (prefixes []string, hardFail bool, alwaysOK bool) {
+	switch capName {
 	case "CAPABILITY_FILES":
 		prefixes = []string{"fs."}
 	case "CAPABILITY_NETWORK":
@@ -242,9 +394,6 @@ func capRequirements(cap string) (prefixes []string, hardFail bool, alwaysOK boo
 		"CAPABILITY_CGO", "CAPABILITY_UNSAFE_POINTER",
 		"CAPABILITY_REFLECT", "CAPABILITY_MODIFY_SYSTEM_STATE":
 		hardFail = true
-	case "CAPABILITY_UNANALYZED":
-		// Handled by caller as findingNeedsAnalysis.
-		hardFail = true
 	default:
 		// Unknown capability — defensive default is hard fail so reviewers
 		// notice and the mapping table is updated.
@@ -253,9 +402,10 @@ func capRequirements(cap string) (prefixes []string, hardFail bool, alwaysOK boo
 	return
 }
 
-// packageForManifest returns the Go package path that capslock reports
-// for an app. For folded demos (Id = "<widgets>/<demo>") the underlying
-// package IS widgets — strip the demo segment.
+// packageForManifest returns the Go package path capslock reports for an app.
+// For folded demos (Id = "<widgets>/<demo>") the underlying package IS widgets —
+// strip the demo segment. Every other manifest Id equals its package path
+// verbatim, an invariant the l12manifestid designlint rule enforces.
 func packageForManifest(id app.AppIdT) (pkg string) {
 	s := string(id)
 	if strings.HasPrefix(s, widgetsPkgPath+"/") {
@@ -275,24 +425,60 @@ func sortedKeys(m map[string]struct{}) (out []string) {
 	return
 }
 
-func printFindings(findings []finding) {
-	var ok, missing, hard, unanalysed int
+// Run executes the cross-check and reports findings against the accepted
+// baseline. args is the os.Args-shaped slice from the caller (binary name at
+// index 0). Returns the exit code the binary should propagate: 0 when every
+// finding is already in the baseline, 1 on drift or analysis failure, 2 on
+// flag-parse failure.
+func Run(args []string) (exitCode int) {
+	fs := flag.NewFlagSet("capslock-check", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	root := fs.String("root", ".", "module root to analyse")
+	tags := fs.String("tags", "", "build tags (default: the root's tags file)")
+	err := fs.Parse(args[1:])
+	if err != nil {
+		exitCode = 2
+		return
+	}
+	opts := Options{Root: *root}
+	if *tags != "" {
+		opts.Tags = godepcollect.SplitTags(*tags)
+	}
+	findings, err := Analyse(context.Background(), opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "capslock-check: %v\n", err)
+		exitCode = 1
+		return
+	}
+	drift, stale := CompareToBaseline(findings)
+	printFindings(findings, drift, stale)
+	if len(drift) > 0 || len(stale) > 0 {
+		exitCode = 1
+	}
+	return
+}
+
+func printFindings(findings []Finding, drift []Finding, stale []string) {
+	var ok, missing, hard int
 	for _, f := range findings {
 		switch f.Status {
-		case findingOK:
+		case StatusOK:
 			ok++
-		case findingMissingCap:
+		case StatusMissingCap:
 			missing++
 			fmt.Printf("[MISSING_CAP] %s :: %s — %s\n", f.AppId, f.Cap, f.Reason)
-		case findingHardFail:
+		case StatusHardFail:
 			hard++
 			fmt.Printf("[HARD_FAIL]   %s :: %s — %s\n", f.AppId, f.Cap, f.Reason)
-		case findingNeedsAnalysis:
-			unanalysed++
-			fmt.Printf("[INVESTIGATE] %s :: %s — %s\n", f.AppId, f.Cap, f.Reason)
 		}
 	}
+	for _, f := range drift {
+		fmt.Fprintf(os.Stderr, "[DRIFT]       %s :: %s — not in the accepted baseline\n", f.AppId, f.Cap)
+	}
+	for _, s := range stale {
+		fmt.Fprintf(os.Stderr, "[STALE]       %s — in the baseline but no longer reported; remove it\n", s)
+	}
 	fmt.Fprintf(os.Stderr,
-		"capslock-check: %d ok, %d missing-cap, %d hard-fail, %d investigate (M2.7 advisory — exit 0)\n",
-		ok, missing, hard, unanalysed)
+		"capslock-check: %d ok, %d missing-cap, %d hard-fail; %d drift, %d stale\n",
+		ok, missing, hard, len(drift), len(stale))
 }
