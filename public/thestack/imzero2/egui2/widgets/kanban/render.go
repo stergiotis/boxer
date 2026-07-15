@@ -306,9 +306,14 @@ func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, 
 							rt.Small()
 						}
 					}
-					for rt := range c.RichTextLabel(card.Title) {
-						rt.Strong()
-					}
+					// Wrapped, not plain: an unwrapped label is sized by its
+					// text, and a title longer than the lane pushes straight
+					// through the UiSetMaxWidth pin above — widening the card,
+					// the lane, and every lane after it. Wrapping keeps the
+					// card at colW and lets it grow downwards instead.
+					titleAtoms := c.Atoms()
+					titleAtoms = titleAtoms.BeginRichText(card.Title).Strong().End()
+					c.LabelAtoms(titleAtoms.Keep()).Wrap().Send()
 				}
 				if card.Subtitle != "" {
 					for rt := range c.RichTextLabel(card.Subtitle) {
