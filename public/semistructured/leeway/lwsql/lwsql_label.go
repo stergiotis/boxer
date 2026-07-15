@@ -14,7 +14,7 @@ func BuildLabels(columnNames []string) (labels map[string]string) {
 	if len(columnNames) == 0 {
 		return nil
 	}
-	infos, ok := classifyColumns(columnNames)
+	infos, _, ok := classifyColumns(columnNames)
 	if !ok {
 		return nil // not leeway-shaped — caller uses raw names
 	}

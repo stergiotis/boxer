@@ -669,6 +669,8 @@ the connection default; there is no ambient inheritance from sibling tables.
 | `CanonicalizeFull(maxIter)` | the full canonicalisation `Sequence` (see above) | — |
 | `QualifyTables(defaultDB)` | prefix unqualified tables with a default database; skip CTEs | Idempotent |
 | `ExpandColumns(schema, defaultDB)` | expand `*`, `t.*`, `COLUMNS('regex')` via a `SchemaProviderI` | Idempotent |
+| `ResolveColumnNames(resolver, defaultDB, sink)` | domain column handles → physical names, wherever a column appears; `:*` expands to a list; policy behind `ColumnResolverI` (ADR-0116) | Idempotent |
+| `ExposeSelectionConditions(config)` | WHERE's maximal OR-free parts → `cond_<n>` columns in the projection, WHERE rebuilt from the names, so a row reports which condition admitted it; gated on `ExtractPassthroughTables`; opt-in, NOT in the standard set; attributes a row to part of the *query*, so NOT why-/how-/where-provenance or lineage (ADR-0121) | Idempotent |
 | `WrapColumnsWithDynamic(pattern)` | wrap matching column names in `COLUMNS('^name$')` | Idempotent |
 | `SetFormat(name)` / `RemoveFormat` | set/replace/remove the FORMAT clause; mirror into `env.Format` | Idempotent |
 | `WriteSettings(map)` / `ModifySettings(fn)` | set / read-modify-write the SETTINGS clause; mirror into `env.StatementSettings` | Idempotent / factory |
@@ -853,7 +855,11 @@ workload's structural diversity exceeds the cap and the cache is sawtoothing.
 4. **`GetChild(i)` returns `antlr.Tree`**, not `ParserRuleContext` — always type
    assert: `if s, ok := node.GetChild(i).(*grammar1.SelectStmtContext); ok {…}`.
 5. **`NOT(x)` is a function call** (`ColumnExprFunctionContext`); only `NOT x`
-   (no parens) is `ColumnExprNotContext`.
+   (no parens) is `ColumnExprNotContext`. **Whitespace does not save you** —
+   `NOT (a = 5)`, the usual way to write it, is the *function* form too, so a
+   pass that handles only `ColumnExprNot` silently misses the common spelling
+   while catching the rare one. Match the call form by
+   `NormalizeCallName(id.GetText())` as well (`and` / `or` / `not` likewise).
 6. **`IN (expr)` with a single value** parses the `(expr)` as
    `ColumnExprParens`, not `ColumnExprTuple` — guard paren-removal against IN's
    right operand.

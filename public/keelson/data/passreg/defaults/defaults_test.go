@@ -81,3 +81,23 @@ func TestStandardSetRegistersResolveColumnNamesFactory(t *testing.T) {
 	_, ok = f.Build(nil)
 	require.False(t, ok, "a nil binding must be declined")
 }
+
+// TestStandardSetOmitsExposeSelectionConditions pins ADR-0121 §SD7: ExposeSelectionConditions changes a
+// query's result schema, so it is opt-in per host (play applies it from
+// buildResidual behind a toggle) and must never join the standard set — a bound
+// stage must leave a retrieval query's SELECT and WHERE exactly as written.
+func TestStandardSetOmitsExposeSelectionConditions(t *testing.T) {
+	r := passreg.NewRegistry()
+	require.NoError(t, RegisterStandard(r))
+
+	for _, f := range r.Factories(passreg.StagePreExecute) {
+		require.NotEqual(t, "ExposeSelectionConditions", f.Name, "ExposeSelectionConditions must stay opt-in, not standard")
+	}
+	for _, e := range r.Entries(passreg.StagePreExecute) {
+		require.NotEqual(t, "ExposeSelectionConditions", e.Pass.Name, "ExposeSelectionConditions must stay opt-in, not standard")
+	}
+
+	const q = "SELECT a FROM tt WHERE c = 1"
+	out := r.ApplyBestEffortBound(passreg.StagePreExecute, q, stubResolver{}, zerolog.Nop())
+	require.Equal(t, q, out, "the standard set must not add condition columns")
+}

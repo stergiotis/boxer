@@ -120,7 +120,7 @@ type PlayApp struct {
 	// consumer in a frame sees a single revision (glitch-freedom as frame
 	// semantics); an emit lands next frame. lastSentSigParams /
 	// lastRunBound record what the last Run resolved (URL-keyed) and which
-	// names its prelude bound — the signal half of the staleness witness
+	// names its prelude bound — the signal half of the staleness condition
 	// and the observed intermediates' resolution inputs. wireSignals
 	// mirrors the would-be resolution for the "as sent" preview caption.
 	frameSig SignalEnvI
@@ -145,6 +145,11 @@ type PlayApp struct {
 	liveMain         bool
 	runIsAuto        bool
 	runBlockedReason string
+	// exposeConditions is the top-bar toggle for the opt-in selection-condition
+	// rewrite (ADR-0121), default off. The Client owns the authoritative
+	// (atomic) flag the query path reads; this is the render thread's copy,
+	// pushed to the client whenever the checkbox changes it.
+	exposeConditions bool
 	sigValDrafts     map[string]*string
 	sigValSeeded     map[string]string
 	sigAddName       string
@@ -244,6 +249,10 @@ type PlayApp struct {
 	// plain observer of the active result — no lane, nothing to Close.
 	kanbanDriver *KanbanDriver
 
+	// richCells memoises the ADR-0123 content-typed cells of the Detail pane's
+	// selected row (a parsed markdown doc, a highlighted job, decoded pixels).
+	richCells *richCellCache
+
 	// diag owns the Diagnostics dock tab's EXPLAIN AST probe (its own lane
 	// against the live endpoint); the pane itself is the single owner of the
 	// playground's error prose — result tabs only point here.
@@ -280,6 +289,10 @@ type PlayApp struct {
 	wireFor       string
 	wireBody      string
 	wireParams    map[string]string
+	// wireConditions keys the cache on the condition-columns toggle too (ADR-0121): it
+	// changes what ships without touching the buffer, and a view whose whole
+	// job is to show what ships must not go stale behind it.
+	wireConditions bool
 
 	// Results pagination. pagerSeenExecuted tracks the QueryStore's
 	// "executed" timestamp — when it advances, the pager snaps back to
@@ -614,6 +627,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
 	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
 	inst.kanbanDriver = NewKanbanDriver(c.NewWidgetIdStack(), client)
+	inst.richCells = newRichCellCache(c.NewWidgetIdStack())
 	inst.diag = NewDiagnosticsDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
@@ -932,7 +946,7 @@ func (inst *PlayApp) executeRun(auto bool) {
 	// Resolve the buffer's unbound param slots against the frame's
 	// signal snapshot (slice 5a): the values ride the request URL and
 	// the run's history entry snapshots them (D4). The resolution and
-	// the bound-name set also feed the staleness witness and the
+	// the bound-name set also feed the staleness condition and the
 	// observed intermediates.
 	sigParams, boundNames, unfilled := inst.resolveRunSignals(sql)
 	// An unfilled input (referenced, neither SET-bound nor signal-written)
@@ -1227,6 +1241,23 @@ func (inst *PlayApp) renderTopBar() {
 			c.Separator().Vertical().Send()
 			c.Checkbox(ids.PrepareStr("liveMain"), inst.liveMain, "Live").
 				SendRespVal(&inst.liveMain)
+		}
+
+		// The conditions toggle (ADR-0121), off by default: it rewrites an
+		// information-retrieval query so each condition of its WHERE becomes a
+		// result column. Offered only where a rewrite could happen — the pass
+		// needs the schema probe installLeewayNameResolution builds — and it
+		// pushes to the Client, which owns the flag the query path reads.
+		if inst.client != nil && inst.client.conditionsPass.Apply != nil {
+			c.Separator().Vertical().Send()
+			c.Checkbox(ids.PrepareStr("exposeConditions"), inst.exposeConditions, "Conditions").
+				SendRespVal(&inst.exposeConditions)
+			// Pushed unconditionally rather than on an observed change:
+			// SendRespVal does not write the field synchronously, so comparing
+			// it against a value read moments earlier never sees the flip. The
+			// store is a plain atomic; paying it per frame is cheaper than a
+			// timing assumption about when the response lands.
+			inst.client.SetExposeConditions(inst.exposeConditions)
 		}
 
 		// Unfilled inputs (D3): the buffer references a name nothing fills —
@@ -1578,7 +1609,11 @@ func (inst *PlayApp) updatePreview() {
 // hidden view would be waste. Toggling the checkbox on picks the current
 // buffer up on the next frame (wireFor is stale and the debounce window
 // has long elapsed). The signal caption additionally refreshes when the
-// store revision moves (a signal can change without a buffer edit).
+// store revision moves (a signal can change without a buffer edit), and the
+// condition-columns toggle likewise rewrites the wire SQL without an edit
+// (ADR-0121) — all three key the cache, or the view silently shows the
+// previous query while a different one ships. Only a *buffer* change is
+// debounced: a toggle is a deliberate act with nothing to settle.
 func (inst *PlayApp) updateWirePreview() {
 	if !inst.previewAsSent || inst.client == nil {
 		return
@@ -1587,7 +1622,8 @@ func (inst *PlayApp) updateWirePreview() {
 	if inst.frameSig != nil {
 		sigRev = inst.frameSig.Revision()
 	}
-	if inst.sql == inst.wireFor && sigRev == inst.wireSigRev {
+	conds := inst.client.ExposeConditions()
+	if inst.sql == inst.wireFor && sigRev == inst.wireSigRev && conds == inst.wireConditions {
 		return
 	}
 	if inst.sql != inst.wireFor && time.Since(inst.lastEditAt) < previewDebounce {
@@ -1595,6 +1631,7 @@ func (inst *PlayApp) updateWirePreview() {
 	}
 	inst.wireFor = inst.sql
 	inst.wireSigRev = sigRev
+	inst.wireConditions = conds
 	raw := strings.TrimSpace(inst.sql)
 	if raw == "" {
 		inst.wireBody = ""
@@ -1902,18 +1939,21 @@ func (inst *PlayApp) demandKanbanLanes() (rec arrow.RecordBatch, schema *arrow.S
 // currently selected row. Detail is an ADR-0097 PanelI observer of the `main`
 // node and the consumer of the `selection` signal the Timeline/Table/Projection
 // publish — this method runs the panel's Accept (which reads the selection from
-// the signal env) and renders its reject reason or the card body. renderDetailPane
+// the signal env) and renders its reject reason or the card body. The executed
+// timestamp is handed to the ADR-0123 cell cache as half its key (the row is
+// the other half). renderDetailPane
 // scrolls its own content (the leeway card table owns its scroll; the ad-hoc
 // fallback adds one), so the dock tab must NOT add an outer ScrollArea —
 // wrapping the self-scrolling card table hands it unbounded height and crops its
 // tail (tagged) sections.
-func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema) {
+func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema, executed time.Time) {
 	if rec == nil {
 		for rt := range c.RichTextLabel("Run a query, then select a row to see its detail.") {
 			rt.Small().Weak()
 		}
 		return
 	}
+	inst.richCells.noteExecuted(executed)
 	reject := dispatchPanel(detailPanel{app: inst}, map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("detail"), rec: rec, schema: schema, sig: inst.frameSig},
 	}, nil)

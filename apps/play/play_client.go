@@ -16,6 +16,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -45,6 +46,18 @@ type Client struct {
 	// ApplyBestEffortBound then declines every factory, so the client applies
 	// only the concrete entries (e.g. identsql), exactly as before.
 	passBinding any
+
+	// conditionsPass is the opt-in selection-condition rewrite (ADR-0121),
+	// realised by installLeewayNameResolution against this client's schema
+	// probe. It is NOT in the pass registry — it changes a query's result
+	// schema, so it is a per-host opt-in rather than part of the standard
+	// pre-execute set. A zero Pass (never installed) means the toggle does
+	// nothing.
+	conditionsPass nanopass.Pass
+	// exposeConditions is the toggle itself, default off. Written from the render
+	// thread (the top-bar checkbox) and read wherever a query is built, hence
+	// atomic.
+	exposeConditions atomic.Bool
 
 	// mu guards targetURL, the live endpoint. It starts at cfg.URL and can be
 	// switched at runtime via SetURL — e.g. play's endpoint switcher points at
@@ -257,6 +270,44 @@ func (inst *Client) buildResidual(sql string) (residual string, params map[strin
 		params = nil
 	}
 	residual = inst.passes.ApplyBestEffortBound(passreg.StagePreExecute, residual, inst.passBinding, log.Logger)
+	residual = inst.applyExposeConditions(residual)
+	return
+}
+
+// applyExposeConditions runs the opt-in selection-condition rewrite (ADR-0121) when the
+// top-bar toggle is on, naming the WHERE predicate's condition columns as columns of the
+// result. It sits outside the pass registry deliberately: the rewrite changes a
+// query's result schema, so it is this host's opt-in rather than part of the
+// standard pre-execute set every consumer shares. It runs after that stage so a
+// condition lifted out of the WHERE carries physical column names, not friendly
+// leeway handles.
+//
+// Best-effort, like the registry stage: a refusal — a condition name colliding
+// with a real column of the table (§SD4), say — logs and ships the query as the
+// user wrote it, rather than failing the Run.
+func (inst *Client) applyExposeConditions(sql string) (out string) {
+	out = sql
+	if !inst.exposeConditions.Load() || inst.conditionsPass.Apply == nil {
+		return
+	}
+	next, err := inst.conditionsPass.Run(sql)
+	if err != nil {
+		log.Warn().Err(err).Msg("play: selection-condition rewrite declined; query sent as written")
+		return
+	}
+	out = next
+	return
+}
+
+// SetExposeConditions turns the opt-in selection-condition rewrite (ADR-0121)
+// on or off.
+func (inst *Client) SetExposeConditions(on bool) {
+	inst.exposeConditions.Store(on)
+}
+
+// ExposeConditions reports whether the selection-condition rewrite is on.
+func (inst *Client) ExposeConditions() (on bool) {
+	on = inst.exposeConditions.Load()
 	return
 }
 

@@ -26,26 +26,32 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
-// Resolver resolves leeway column handles for one endpoint. It implements
-// passes.ColumnResolverI. Per-table indexes are built lazily from a
-// passes.SchemaProviderI (the physical column list) and cached for the session;
-// negatives (non-leeway tables) are cached too, so a table is probed at most
-// once.
+// Resolver holds one endpoint's leeway schema knowledge. It implements both
+// passes.ColumnResolverI (handles → physical names, ADR-0116) and
+// passes.ConditionNamerI (selection-condition columns, ADR-0121); a host binds
+// a single Resolver and every pass factory asserts the interface it needs off
+// it. Per-table indexes are built lazily from a passes.SchemaProviderI (the
+// physical column list) and cached for the session; negatives (non-leeway
+// tables) are cached too, so a table is probed at most once.
 type Resolver struct {
-	provider passes.SchemaProviderI
+	provider   passes.SchemaProviderI
+	conditionSection naming.StylableName // folded; the condition section name
 
 	mu    sync.Mutex
 	cache map[string]*tableIndex // key: db\x00table; nil value == not leeway
 }
 
-// tableIndex maps each section (by its style-folded name) to its columns.
+// tableIndex maps each section (by its style-folded name) to its columns, and
+// carries the table-wide properties needed to compose new names for it.
 type tableIndex struct {
 	sections map[string]*sectionIndex
+	meta     tableMeta
 }
 
 // sectionIndex holds one section's columns. byColumn covers ALL of them (value
@@ -64,15 +70,39 @@ type columnRef struct {
 }
 
 // NewResolver builds a Resolver over a schema provider (expected to be caching;
-// the Resolver caches the derived indexes, not the raw column lists).
+// the Resolver caches the derived indexes, not the raw column lists), with the
+// default condition section name.
 func NewResolver(provider passes.SchemaProviderI) *Resolver {
-	return &Resolver{
-		provider: provider,
-		cache:    make(map[string]*tableIndex, 8),
+	inst, err := NewResolverWithConditionSection(provider, DefaultConditionSection)
+	if err != nil {
+		// Unreachable: DefaultConditionSection is a compile-time constant this
+		// package's tests validate.
+		panic(err)
 	}
+	return inst
+}
+
+// NewResolverWithConditionSection is NewResolver with the condition section
+// name (ADR-0121 §SD5) chosen explicitly. The name is folded to LowerSpinalCase,
+// so `myAudit`, `my_audit`, and `my-audit` are one name; err is non-nil if it is
+// not a valid leeway name.
+func NewResolverWithConditionSection(provider passes.SchemaProviderI, section string) (inst *Resolver, err error) {
+	folded := fold(section)
+	name, err := naming.MakeStylableName(folded)
+	if err != nil {
+		err = eb.Build().Str("section", section).Errorf("invalid condition section name: %w", err)
+		return
+	}
+	inst = &Resolver{
+		provider:   provider,
+		conditionSection: name,
+		cache:      make(map[string]*tableIndex, 8),
+	}
+	return
 }
 
 var _ passes.ColumnResolverI = (*Resolver)(nil)
+var _ passes.ConditionNamerI = (*Resolver)(nil)
 
 // Resolve implements passes.ColumnResolverI.
 func (inst *Resolver) Resolve(dbName string, tableName string, handle string) passes.ResolveResult {
@@ -142,12 +172,12 @@ func (inst *Resolver) build(dbName string, tableName string) *tableIndex {
 	for c := range cols {
 		names = append(names, c)
 	}
-	infos, ok := classifyColumns(names)
+	infos, meta, ok := classifyColumns(names)
 	if !ok {
 		return nil // not leeway-shaped
 	}
 
-	idx := &tableIndex{sections: make(map[string]*sectionIndex, 8)}
+	idx := &tableIndex{sections: make(map[string]*sectionIndex, 8), meta: meta}
 	for _, ci := range infos {
 		if ci.section == "" {
 			continue
@@ -189,22 +219,34 @@ type columnInfo struct {
 	isValue  bool
 }
 
+// tableMeta carries the table-wide properties recovered alongside the per-column
+// classification: the separator its physical names are joined with, and its
+// tableRowConfig. Both are needed to compose a *new* physical name for the same
+// table (ADR-0121 §SD5) — a name joined with the wrong separator, or carrying a
+// foreign row config, will not parse back into the table.
+type tableMeta struct {
+	separator      string
+	tableRowConfig common.TableRowConfigE
+}
+
 // classifyColumns parses a table's physical column names and classifies each.
 // ok is false when the names are not leeway-shaped (a plain SQL table, an
 // aggregation result, an unreachable server).
-func classifyColumns(names []string) (infos []columnInfo, ok bool) {
-	conv, err := ddl.NewHumanReadableNamingConvention(detectSeparator(names))
+func classifyColumns(names []string) (infos []columnInfo, meta tableMeta, ok bool) {
+	meta.separator = detectSeparator(names)
+	conv, err := ddl.NewHumanReadableNamingConvention(meta.separator)
 	if err != nil {
-		return nil, false
+		return nil, tableMeta{}, false
 	}
 	phys, err := conv.ParseColumns(names)
 	if err != nil {
-		return nil, false
+		return nil, tableMeta{}, false
 	}
-	table, _, err := conv.DiscoverTableFromPhysicalColumns(phys)
+	table, trc, err := conv.DiscoverTableFromPhysicalColumns(phys)
 	if err != nil {
-		return nil, false
+		return nil, tableMeta{}, false
 	}
+	meta.tableRowConfig = trc
 	// The reconstructed TableDesc is the authority for which (section, column)
 	// pairs are value columns; support columns are excluded from that set.
 	valueCols := make(map[string]struct{}, len(table.TaggedValuesSections))
@@ -242,7 +284,7 @@ func classifyColumns(names []string) (infos []columnInfo, ok bool) {
 		}
 		infos = append(infos, ci)
 	}
-	return infos, true
+	return infos, meta, true
 }
 
 // plainSectionName maps a plain/backbone item type to its user-facing section

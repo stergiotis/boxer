@@ -151,6 +151,8 @@ state, structural reordering, or a node-conditional token rename
 | `QualifyTables(db)` | Adds default database prefix to unqualified tables, skips CTEs | Yes |
 | `ExpandColumns(schema, defaultDB)` | Expands `*`, `table.*`, `COLUMNS('regex')` using schema | Yes |
 | `WrapColumnsWithDynamic(pattern)` | Wraps matching column names in `COLUMNS('^name$')` | Yes |
+| `ResolveColumnNames(resolver, defaultDB, sink)` | Rewrites domain column handles to physical names wherever a column appears (projection, WHERE, GROUP BY, ARRAY JOIN, …); a `:*` handle expands to a column list. The domain policy lives behind the `ColumnResolverI` seam ([ADR-0116](../../../../../doc/adr/0116-play-leeway-column-handle-resolution.md)) | Yes |
+| `ExposeSelectionConditions(config)` | Reports which part of a retrieval query's WHERE admitted each row: every condition — a maximal OR-free part of the predicate — becomes a `cond_<n>` column in the projection, and the WHERE is rebuilt from the names. Gated on the [ADR-0117](../../../../../doc/adr/0117-passthrough-table-classifier.md) passthrough classifier — which, rejecting aliases, also rejects this pass's own output, so idempotency needs no guard. Opt-in: it changes the result schema, so it is **not** in the standard pre-execute set. Attributes a row to part of the *query*; it is **not** why-/how-/where-provenance or lineage, which attribute to part of the *data* ([ADR-0121](../../../../../doc/adr/0121-selection-condition-columns.md)) | Yes |
 
 ### Expression Canonicalisation
 

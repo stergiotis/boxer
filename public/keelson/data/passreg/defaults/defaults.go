@@ -22,6 +22,10 @@ import (
 //     names, ADR-0116) at StagePreExecute, as a late-bound Factory
 //     (ADR-0108 §SD7): it needs a per-consumer schema resolver, so it is
 //     realised at the application site. See below.
+//
+// Deliberately NOT here: passes.ExposeSelectionConditions (ADR-0121). It changes a
+// query's result schema, so it is opt-in per host rather than standard —
+// play applies it from buildResidual behind a UI toggle, default off.
 func RegisterStandard(r *passreg.Registry) (err error) {
 	for _, e := range []passreg.Entry{
 		{
