@@ -64,9 +64,6 @@ func (k Kind) String() (str string) {
 // overview table. The zero value asserts nothing. New properties are added as
 // fields over time (purity, determinism, ownership, stability, …); wasm
 // amenability is the first.
-//
-// Every field is a scalar, so Props stays copyable by value — [Entry], [Table]
-// and the [All] snapshot all hold it that way.
 type Props struct {
 	// WASM* record the TinyGo/wasm compile state per target (ADR-0078):
 	// wasi (GOOS=wasip1), js (browser), and freestanding wasm-unknown.
@@ -78,34 +75,4 @@ type Props struct {
 	// integration-test) when it is not ordinary library code. Human-curated;
 	// the zero value KindUnspecified asserts nothing (ADR-0080 §SD4).
 	Kind Kind
-
-	// Caps* record the capslock capability verdict (ADR-0120): what privileged
-	// operations the package's own code exercises (CapsDirect), and everything
-	// it can reach once its dependencies are followed (CapsReachable).
-	//
-	// CapsReachable is the closure, so CapsDirect is always a subset of it. The
-	// capabilities a package reaches *only* through its dependencies are
-	// therefore CapsReachable minus CapsDirect — the closure is stored rather
-	// than that difference because the question worth asking is "can this
-	// package do X at all?", which is one lookup against CapsReachable instead
-	// of a lookup against each of two sets.
-	//
-	// Read CapsDirect first. Reachability saturates — nearly every package
-	// reaches nearly everything through the standard library — so as a positive
-	// claim CapsReachable says little. An absent bit is the more informative
-	// direction, but it is evidence, not proof: it means no path was found in
-	// the analysed call graph, which is an under-approximation of what the code
-	// can actually do (ADR-0120 SD5a). Do not read it as "cannot".
-	//
-	// Both fields are lower bounds. A set bit is a fact — some path exists. An
-	// unset bit is the absence of a finding, and the analysis has blind spots by
-	// construction: reflection, unsafe, cgo and linkname carry no static edges,
-	// and interface dispatch resolves only where a concrete type demonstrably
-	// flows. Use these fields to find what a package does and to detect drift;
-	// for "this package cannot do X", a source census is the sound instrument.
-	//
-	// A zero set means *not surveyed*, not "safe": a completed survey that finds
-	// nothing privileged records CapabilitySafe (ADR-0120 SD4).
-	CapsDirect    CapabilitySet
-	CapsReachable CapabilitySet
 }
