@@ -28,6 +28,7 @@ import (
 	// Side-effect imports — each app's init() registers itself into
 	// app.DefaultRegistry. Carousel is the single import site that pulls all
 	// M3-migrated apps; the dock host iterates the registry directly.
+	_ "github.com/stergiotis/boxer/apps/adrboard"
 	_ "github.com/stergiotis/boxer/apps/capdemo"
 	_ "github.com/stergiotis/boxer/apps/capinspector"
 	_ "github.com/stergiotis/boxer/apps/fibscope"
