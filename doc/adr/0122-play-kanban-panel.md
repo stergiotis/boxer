@@ -282,6 +282,23 @@ the parent axis would introduce.
   change to `cardDots` semantics now has a second site to update. The shared
   schemas (§SD4) keep the *inputs* from drifting; nothing keeps the *folds* in
   step but the corpus test.
+- **The fold ports exactly; the chrome does not.** Run against the real corpus,
+  the SQL board agrees with `buildBoard` on every card — lane, title, subtitle
+  and all three tallies (§Validation). Three things the Go board does that a
+  result set cannot express, all of them chrome rather than fold:
+  - **An empty lane.** `buildColumns` emits the five lifecycle lanes
+    unconditionally, so the board still says "nothing is withdrawn". A lane here
+    is read off the rows, and a row is a card — so a lane with no cards cannot
+    exist. This is structural, not an omission: the only fix would be a phantom
+    card or a second channel carrying the lane inventory.
+  - **Legend prose.** `dotLegend` gives each kind a sentence about what the
+    colour claims ("a ✓ is the only claim of completion"). A column name carries
+    a label, not a paragraph, so the legend names the column instead.
+  - **A corpus headline.** `corpusSummary`'s one-liner has no slot in the
+    contract; the status line counts cards and lanes.
+  None of the three is reason to widen §SD1 today, but they are the honest
+  answer to "can the query do everything the app does": the arithmetic, yes;
+  the editorial, no.
 - The `keelson` table family stops being uniformly about the running process
   (§SD4), and that boundary is now a judgement call rather than a rule.
 - The board is capped at three dot kinds by the widget, with no headroom.
@@ -297,11 +314,20 @@ the parent axis would introduce.
   to *preserve* a selection, since rebuilding the Model would clear it.
 - Unit (with §SD4): the `keelson('adr')` / `('subtask')` / `('coderef')` schemas
   equal `arrowemit.go`'s, field for field; empty tables when no corpus resolves.
-- Isomorphism (with §SD4): the SQL board and `buildBoard` agree on the same
-  corpus — same lanes in the same order, same cards, same per-card tallies. This
-  is the test that gives the second route its value; it runs over the real
-  corpus, not a fixture, so it also fails if either fold drifts. It cannot be
-  written until a corpus table exists.
+- Isomorphism (**done once by hand; not yet a test**): `buildBoard` dumped as
+  rows and diffed against the snippet-library query over the same corpus
+  snapshot, loaded from `boxer adr build`'s Arrow into a server. Every card
+  agrees on lane, title, subtitle and all three tallies, and the lane inventory
+  matches with its counts. Two traps it surfaced: the comparison must not run
+  through TabSeparated, which escapes `'` and `\` in a title and reads as a
+  false difference; and the two sides must be dumped at the same moment, since
+  a first attempt disagreed on one ADR purely because a concurrent edit added a
+  citation between the dump and the fold — the corpus moved under the read,
+  which is the case for §SD4's Live freshness stated as evidence.
+
+  This wants to be a standing test rather than a one-off. It cannot be, until a
+  corpus table exists that a test can reach without a server (§SD4) — that is
+  what §SD4 buys, beyond convenience.
 - Integration (done): a scripted capture against a `values()` literal board —
   verifiable with no corpus and no ADR table — confirming the lanes and their
   counts, the per-card tallies against the source rows, the zero-tally skip, and

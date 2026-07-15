@@ -274,6 +274,80 @@ GROUP BY adr, status
 ORDER BY indexOf(lifecycle, lane) = 0, indexOf(lifecycle, lane), title
 ```
 
+## ADR board (the adrboard app, as one query)
+
+The `adrboard` app folds this repository's decision corpus into a board in Go
+(`buildBoard` / `cardDots` in `apps/adrboard/board.go`). This is that fold as a
+single query — the exercise the Kanban pane was built for (ADR-0122). It needs
+the `adr` and `subtask` tables, which `boxer adr` emits as Arrow; the loader
+below reads their schema back out with `clickhouse-local` so no column list has
+to be repeated here, and needs no filesystem access on the server:
+
+```sh
+boxer adr build --root . --out .adrcache   # adr.arrow, subtask.arrow, coderef.arrow
+CH=http://localhost:8123/
+curl -s --data-binary 'CREATE DATABASE IF NOT EXISTS adrboard' "$CH"
+for t in adr subtask coderef; do
+  cols=$(clickhouse-local --query "DESCRIBE TABLE file('.adrcache/$t.arrow','Arrow')" \
+         --format TSV | awk -F'\t' 'NF>1 {printf "%s`%s` %s", (NR>1?", ":""), $1, $2}')
+  curl -s --data-binary "DROP TABLE IF EXISTS adrboard.$t" "$CH"
+  curl -s --data-binary "CREATE TABLE adrboard.$t ($cols) ENGINE=Memory" "$CH"
+  curl -s --data-binary "@.adrcache/$t.arrow" "$CH?query=INSERT+INTO+adrboard.$t+FORMAT+Arrow"
+done
+```
+
+The two folds agree: over one snapshot of the corpus, every card matches the Go
+board on lane, title, subtitle and all three tallies. Re-running the dump while
+another change lands will disagree, which is the honest behaviour — the Arrow
+files are a snapshot and the corpus is files on disk that move under you.
+
+Two things the Go board does that this query cannot. It always draws the five
+lifecycle lanes even when one is empty, so the board still says "nothing is
+withdrawn"; here a lane exists only because a card sits in it, since a lane is
+read off the rows. And its legend carries a sentence per dot kind explaining
+what the colour claims — a result set has nowhere to put that, so the legend
+falls back to naming the column.
+
+`indexOf` returns 0 for a status the list does not carry, so the `= 0` key sorts
+an unrecognised status *after* the canonical five, which is where the Go board
+appends it. The `n_done` aliases must not be named `done`: ClickHouse
+substitutes a `SELECT` alias into the expression that defines it, so
+`countIf(done) AS done` becomes `countIf(countIf(done))` and is rejected as a
+nested aggregate.
+
+```sql
+WITH ['proposed', 'accepted', 'superseded', 'withdrawn', 'deferred'] AS lifecycle,
+  tally AS (
+    SELECT num,
+           countIf(done)                       AS n_done,
+           countIf(NOT done AND code_refs > 0) AS n_cited,
+           countIf(NOT done AND code_refs = 0) AS n_todo
+    FROM adrboard.subtask
+    GROUP BY num
+  )
+SELECT
+  if(a.status = '', '(no status)', a.status)                            AS lane,
+  concat('ADR-', leftPad(toString(a.num), 4, '0'), ' — ', a.title)      AS title,
+  if(a.superseded_by != '', concat('→ ', a.superseded_by), a.last_date) AS subtitle,
+  t.n_done  AS `dot_done@success`,
+  t.n_cited AS `dot_cited@warning`,
+  t.n_todo  AS `dot_todo@disabled`
+FROM adrboard.adr AS a
+LEFT JOIN tally AS t ON t.num = a.num
+ORDER BY indexOf(lifecycle, lane) = 0, indexOf(lifecycle, lane), a.num
+```
+
+The sub-item worklist the board's amber dots point at — cited by code, and not
+declared done by anyone:
+
+```sql
+SELECT s.num, s.marker, s.code_refs, substring(s.title, 1, 60) AS title
+FROM adrboard.subtask AS s
+WHERE s.code_refs > 0 AND NOT s.done
+ORDER BY s.code_refs DESC, s.num
+LIMIT 25
+```
+
 ## ADS-B geo-raster (demo loader)
 
 These target `planes_mercator`, the aircraft-position table loaded by
