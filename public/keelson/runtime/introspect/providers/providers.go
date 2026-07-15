@@ -1,7 +1,7 @@
 // Package providers implements the GUI-free introspection table
 // providers — env, apps, build, sbom (ADR-0094 §SD8), sql_passes
-// (ADR-0108 §SD5), extbin (ADR-0118) — and registers them into an
-// introspect.Registry.
+// (ADR-0108 §SD5), extbin (ADR-0118), package_capabilities (ADR-0120) —
+// and registers them into an introspect.Registry.
 // The two GUI-coupled providers (demos, windows) live with the runtime
 // wiring, where the egui2 host and its window-host instance exist, so
 // this package stays importable from headless contexts.
@@ -20,10 +20,16 @@ import (
 )
 
 // RegisterStatic registers the GUI-free providers (env, apps, build,
-// sbom, sql_passes, extbin) into r (ADR-0094 §SD8, ADR-0108 §SD5, ADR-0118).
+// sbom, sql_passes, extbin, package_capabilities) into r (ADR-0094 §SD8,
+// ADR-0108 §SD5, ADR-0118, ADR-0120).
+//
+// package_capabilities is registered unconditionally; the
+// boxer_disable_packagecaps build tag empties it rather than removing it, so
+// the set of table names does not depend on build flags.
 func RegisterStatic(r *introspect.Registry) (err error) {
 	for _, p := range []introspect.Provider{
 		envProvider{}, appsProvider{}, buildProvider{}, sbomProvider{}, sqlPassesProvider{}, extbinProvider{},
+		packageCapsProvider{},
 	} {
 		if err = r.Register(p); err != nil {
 			return
