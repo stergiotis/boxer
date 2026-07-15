@@ -43,7 +43,12 @@ func TestDateTimeRangeWidgetMatchesGatesOnEvaluator(t *testing.T) {
 	}
 }
 
-func TestDateTimeRangeWidgetRejectsNonAdjacent(t *testing.T) {
+// The range widget's mirror of the retired adjacency assertion (ADR-0124 §SD5);
+// its pair-widget twin is TestDateTimePairWidgetMatchesAcrossInterleavedSlot.
+// Both widgets share one matcher, so the pair is what pins them in lockstep on
+// what counts as foldable — the point of the shared matcher is that these two
+// tests can never disagree.
+func TestDateTimeRangeWidgetMatchesAcrossInterleavedSlot(t *testing.T) {
 	w := newDateTimeRangeWidget()
 	w.SetTimeRangeEvaluator(&stubEvaluator{})
 	slots := []paramSlot{
@@ -51,8 +56,12 @@ func TestDateTimeRangeWidgetRejectsNonAdjacent(t *testing.T) {
 		{Name: "x", Type: "UInt64"},
 		{Name: "to", Type: "DateTime"},
 	}
-	if _, ok := w.Matches(slots); ok {
-		t.Error("should not match non-adjacent from/to")
+	idx, ok := w.Matches(slots)
+	if !ok {
+		t.Fatal("expected match on from/to separated by an unrelated slot")
+	}
+	if len(idx) != 2 || idx[0] != 0 || idx[1] != 2 {
+		t.Errorf("idx = %v, want [0 2]", idx)
 	}
 }
 

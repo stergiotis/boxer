@@ -1,13 +1,14 @@
 package play
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-func TestDateTimePairWidgetMatchesAdjacentFromTo(t *testing.T) {
+func TestDateTimePairWidgetMatchesFromTo(t *testing.T) {
 	w := newDateTimePairWidget()
 	slots := []paramSlot{
 		{Name: "from", Type: "DateTime"},
@@ -15,22 +16,246 @@ func TestDateTimePairWidgetMatchesAdjacentFromTo(t *testing.T) {
 	}
 	idx, ok := w.Matches(slots)
 	if !ok {
-		t.Fatal("expected match on adjacent from/to DateTime")
+		t.Fatal("expected match on from/to DateTime")
 	}
 	if len(idx) != 2 || idx[0] != 0 || idx[1] != 1 {
 		t.Errorf("idx = %v, want [0 1]", idx)
 	}
 }
 
-func TestDateTimePairWidgetRejectsNonAdjacent(t *testing.T) {
+// The inverse of the retired TestDateTimePairWidgetRejectsNonAdjacent, which
+// pinned the adjacency rule ADR-0124 §SD5 removed. Kept as its mirror image so
+// the record shows adjacency was retired deliberately rather than lost: an
+// unrelated placeholder between the bounds must no longer cost the user a
+// picker.
+func TestDateTimePairWidgetMatchesAcrossInterleavedSlot(t *testing.T) {
 	w := newDateTimePairWidget()
 	slots := []paramSlot{
 		{Name: "from", Type: "DateTime"},
 		{Name: "x", Type: "UInt64"},
 		{Name: "to", Type: "DateTime"},
 	}
-	if _, ok := w.Matches(slots); ok {
-		t.Error("should not match non-adjacent from/to")
+	idx, ok := w.Matches(slots)
+	if !ok {
+		t.Fatal("expected match on from/to separated by an unrelated slot")
+	}
+	if len(idx) != 2 || idx[0] != 0 || idx[1] != 2 {
+		t.Errorf("idx = %v, want [0 2]", idx)
+	}
+}
+
+func TestMatchRangePairStems(t *testing.T) {
+	cases := []struct {
+		name  string
+		slots []paramSlot
+		want  []int // nil means "must not fold"
+	}{{
+		name: "timeline contract folds",
+		slots: []paramSlot{
+			{Name: "tl_min", Type: "DateTime64(3, 'UTC')"},
+			{Name: "tl_max", Type: "DateTime64(3, 'UTC')"},
+		},
+		want: []int{0, 1},
+	}, {
+		name: "stemmed from/to folds",
+		slots: []paramSlot{
+			{Name: "a_from", Type: "DateTime"},
+			{Name: "a_to", Type: "DateTime"},
+		},
+		want: []int{0, 1},
+	}, {
+		// Reversed editor order still yields lo-then-hi, which is the order
+		// both widgets' Render assumes for its two bounds.
+		name: "hi before lo folds, lo-then-hi",
+		slots: []paramSlot{
+			{Name: "to", Type: "DateTime"},
+			{Name: "from", Type: "DateTime"},
+		},
+		want: []int{1, 0},
+	}, {
+		name: "nullable unwraps",
+		slots: []paramSlot{
+			{Name: "since", Type: "Nullable(DateTime64(3))"},
+			{Name: "until", Type: "DateTime"},
+		},
+		want: []int{0, 1},
+	}, {
+		name: "case insensitive",
+		slots: []paramSlot{
+			{Name: "Start", Type: "DateTime"},
+			{Name: "END", Type: "DateTime"},
+		},
+		want: []int{0, 1},
+	}, {
+		name: "distinct stems do not cross-pair",
+		slots: []paramSlot{
+			{Name: "a_min", Type: "DateTime"},
+			{Name: "b_max", Type: "DateTime"},
+		},
+		want: nil,
+	}, {
+		name: "half a pair does not fold",
+		slots: []paramSlot{
+			{Name: "x_from", Type: "DateTime"},
+			{Name: "unrelated", Type: "DateTime"},
+		},
+		want: nil,
+	}, {
+		name: "mixed vocabularies do not cross-pair",
+		slots: []paramSlot{
+			{Name: "x_from", Type: "DateTime"},
+			{Name: "x_max", Type: "DateTime"},
+		},
+		want: nil,
+	}, {
+		// `photo` ends in "to" but carries no `_to` suffix; the separator is
+		// what makes a suffix a suffix.
+		name: "suffix needs its separator",
+		slots: []paramSlot{
+			{Name: "from", Type: "DateTime"},
+			{Name: "photo", Type: "DateTime"},
+		},
+		want: nil,
+	}, {
+		name: "type mismatch does not fold",
+		slots: []paramSlot{
+			{Name: "x_from", Type: "DateTime"},
+			{Name: "x_to", Type: "String"},
+		},
+		want: nil,
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			idx, ok := matchRangePair(tc.slots)
+			if tc.want == nil {
+				if ok {
+					t.Fatalf("matchRangePair folded %v, want no fold (idx=%v)", tc.slots, idx)
+				}
+				return
+			}
+			if !ok {
+				t.Fatalf("matchRangePair declined %v, want fold at %v", tc.slots, tc.want)
+			}
+			if len(idx) != len(tc.want) || idx[0] != tc.want[0] || idx[1] != tc.want[1] {
+				t.Errorf("idx = %v, want %v", idx, tc.want)
+			}
+		})
+	}
+}
+
+// Two stems in one query fold into two pairs. Before §SD5 this was
+// unreachable: dedup-by-name meant only one `from` could exist, so the
+// dispatcher's re-dispatch loop never had a second group match to make.
+func TestMatchRangePairTwoStems(t *testing.T) {
+	slots := []paramSlot{
+		{Name: "a_from", Type: "DateTime"},
+		{Name: "b_from", Type: "DateTime"},
+		{Name: "a_to", Type: "DateTime"},
+		{Name: "b_to", Type: "DateTime"},
+	}
+	idx, ok := matchRangePair(slots)
+	if !ok || idx[0] != 0 || idx[1] != 2 {
+		t.Fatalf("first pair = %v (ok=%v), want [0 2]", idx, ok)
+	}
+	rest := []paramSlot{slots[1], slots[3]}
+	idx, ok = matchRangePair(rest)
+	if !ok || idx[0] != 0 || idx[1] != 1 {
+		t.Fatalf("second pair = %v (ok=%v), want [0 1]", idx, ok)
+	}
+}
+
+func TestSplitRangeSuffix(t *testing.T) {
+	cases := []struct {
+		name       string
+		stem, suff string
+		ok         bool
+	}{
+		{"from", "", "from", true},
+		{"tl_min", "tl", "min", true},
+		{"TL_MAX", "tl", "max", true},
+		{"a_b_since", "a_b", "since", true},
+		{"photo", "", "", false},
+		{"minimum", "", "", false},
+		{"x", "", "", false},
+		{"", "", "", false},
+	}
+	for _, tc := range cases {
+		stem, suff, ok := splitRangeSuffix(tc.name)
+		if ok != tc.ok || stem != tc.stem || suff != tc.suff {
+			t.Errorf("splitRangeSuffix(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				tc.name, stem, suff, ok, tc.stem, tc.suff, tc.ok)
+		}
+	}
+}
+
+func TestNearMissNote(t *testing.T) {
+	cases := []struct {
+		name     string
+		unfolded []paramSlot
+		ungroup  bool
+		wantSub  string // "" means "must stay quiet"
+	}{{
+		name: "two datetimes that do not pair",
+		unfolded: []paramSlot{
+			{Name: "created", Type: "DateTime"},
+			{Name: "deleted", Type: "DateTime"},
+		},
+		wantSub: "do not pair",
+	}, {
+		name: "type mismatch names both types",
+		unfolded: []paramSlot{
+			{Name: "x_from", Type: "DateTime"},
+			{Name: "x_to", Type: "String"},
+		},
+		wantSub: "needs both DateTime",
+	}, {
+		// Bounds that agree on a non-DateTime type are somebody's string
+		// range; a picker was never plausible, so saying so would be noise.
+		name: "agreeing non-datetime bounds stay quiet",
+		unfolded: []paramSlot{
+			{Name: "x_from", Type: "String"},
+			{Name: "x_to", Type: "String"},
+		},
+		wantSub: "",
+	}, {
+		name: "ungroup explains itself",
+		unfolded: []paramSlot{
+			{Name: "from", Type: "DateTime"},
+			{Name: "to", Type: "DateTime"},
+		},
+		ungroup: true,
+		wantSub: "ungroup",
+	}, {
+		// Nothing would have folded anyway, so the comment is not the reason
+		// for anything and mentioning it would mislead.
+		name: "ungroup with nothing foldable stays quiet",
+		unfolded: []paramSlot{
+			{Name: "a", Type: "UInt64"},
+		},
+		ungroup: true,
+		wantSub: "",
+	}, {
+		name:     "one datetime stays quiet",
+		unfolded: []paramSlot{{Name: "at", Type: "DateTime"}},
+		wantSub:  "",
+	}, {
+		name:     "no datetimes stay quiet",
+		unfolded: []paramSlot{{Name: "a", Type: "UInt64"}, {Name: "b", Type: "String"}},
+		wantSub:  "",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := nearMissNote(tc.unfolded, tc.ungroup)
+			if tc.wantSub == "" {
+				if got != "" {
+					t.Fatalf("nearMissNote = %q, want silence", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.wantSub) {
+				t.Errorf("nearMissNote = %q, want a mention of %q", got, tc.wantSub)
+			}
+		})
 	}
 }
 

@@ -90,7 +90,7 @@ func (w *dateTimeRangeWidget) Matches(slots []paramSlot) (consumedIdx []int, ok 
 	if w.eval == nil {
 		return
 	}
-	return matchAdjacentFromToDateTime(slots)
+	return matchRangePair(slots)
 }
 
 func (w *dateTimeRangeWidget) Render(ctx *paramCtx) {

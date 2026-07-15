@@ -59,16 +59,30 @@ the request URL, so the placeholder is substituted server-side either way.
 
 The widget chosen for a slot depends on its shape:
 
-- **Time-range picker** — an adjacent `{from:…}` + `{to:…}` pair becomes a single
-  Grafana-style range control (two expression fields, presets, a timezone dropdown,
-  an Apply button). Expressions like `now() - INTERVAL 1 HOUR` are resolved to exact
-  bounds when the host has wired the time-range evaluator; the resolved values show
-  beneath the control.
-- **Date/time pair** — the same `from`/`to` pair falls back to two independent
-  calendar pickers when the evaluator isn't available. Add a `-- play: ungroup`
-  comment to force the pair into plain text fields instead.
+- **Time-range picker** — two DateTime parameters naming the bounds of one range
+  become a single Grafana-style range control (two expression fields, presets, a
+  timezone dropdown, an Apply button). Expressions like `now() - INTERVAL 1 HOUR`
+  are resolved to exact bounds when the host has wired the time-range evaluator;
+  the resolved values show beneath the control.
+- **Date/time pair** — the same pair falls back to two independent calendar
+  pickers when the evaluator isn't available. The control says so when it is
+  standing in.
 - **Text field** — every other slot gets a single text input (hint
   `value for {<name> : <Type>}`) where you type the literal value or expression.
+
+Bounds pair by **stem**: strip a `from`/`to`, `min`/`max`, `start`/`end`,
+`lo`/`hi` or `since`/`until` suffix, and two placeholders left with the same stem
+are one range — `{from:…}` + `{to:…}` (the empty stem), `{tl_min:…}` +
+`{tl_max:…}` (stem `tl`), `{a_start:…}` + `{a_end:…}` (stem `a`). Order and
+distance don't matter: the bounds can sit anywhere in the query, in either order,
+with anything between them. Both halves must be DateTime or DateTime64.
+
+When two DateTime parameters *don't* fold, the pane says why in one line beneath
+the widgets — usually that they share no stem, or that one half isn't DateTime.
+A fold that did happen is labelled with the two names it claimed, so you can
+always see what the editor inferred. Add a **`-- play: ungroup`** comment line
+anywhere in the query to refuse every fold and get one plain text field per
+parameter.
 
 The **Hide prelude** checkbox (top bar, shown only when the query has parameters)
 collapses the `SET param_*` lines: the prelude renders as a read-only label above

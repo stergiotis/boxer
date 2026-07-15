@@ -135,27 +135,169 @@ func newDateTimePairWidget() *dateTimePairWidget {
 	return &dateTimePairWidget{state: map[string]*dateTimePairSlotState{}}
 }
 
-// matchAdjacentFromToDateTime scans slots for the first adjacent (from, to)
-// pair where both names match case-insensitively and both are DateTime-typed,
-// returning the two indices consumed. Shared by the pair and range widgets
-// (the range widget additionally gates on having an evaluator wired) so the
-// two stay in lockstep on what counts as a foldable range.
-func matchAdjacentFromToDateTime(slots []paramSlot) (consumedIdx []int, ok bool) {
-	for i := 0; i+1 < len(slots); i++ {
-		a, b := slots[i], slots[i+1]
-		if !strings.EqualFold(a.Name, "from") || !strings.EqualFold(b.Name, "to") {
+// rangeSuffixes is the closed vocabulary of range-bound names (ADR-0124 §SD5),
+// each entry the (lo, hi) halves of one range idiom. `first`/`last` is excluded:
+// it names an ordering, not a bound. `t0`/`t1` is excluded: a digit suffix needs
+// a different decomposition and earns little.
+var rangeSuffixes = [...]struct{ lo, hi string }{
+	{"from", "to"},
+	{"min", "max"},
+	{"start", "end"},
+	{"lo", "hi"},
+	{"since", "until"},
+}
+
+// splitRangeSuffix decomposes a slot name into a stem and one of the
+// rangeSuffixes halves: the name either equals a half (empty stem) or ends with
+// `_` followed by one. Both returns are lower-cased so callers can compare
+// stems directly. ok=false means the name carries no range suffix.
+//
+// A name that ends with two halves resolves against the first table entry that
+// matches (`a_min_max` is stem `a_min`, suffix `max`) — deterministic, and the
+// alternative readings are not ones a caller could act on.
+func splitRangeSuffix(name string) (stem, suffix string, ok bool) {
+	lower := strings.ToLower(name)
+	for _, e := range rangeSuffixes {
+		for _, half := range [2]string{e.lo, e.hi} {
+			if lower == half {
+				return "", half, true
+			}
+			if strings.HasSuffix(lower, "_"+half) {
+				return lower[:len(lower)-len(half)-1], half, true
+			}
+		}
+	}
+	return
+}
+
+// rangeHiFor returns the hi half of the rangeSuffixes entry whose lo half is
+// suffix. ok=false means suffix is not a lo half — it is a hi half, or not a
+// range suffix at all.
+func rangeHiFor(suffix string) (hi string, ok bool) {
+	for _, e := range rangeSuffixes {
+		if e.lo == suffix {
+			return e.hi, true
+		}
+	}
+	return
+}
+
+// findRangeHalf returns the index of the slot whose name decomposes to
+// (stem, suffix), or -1. collectParamSlots dedupes by name, so at most one
+// slot can match.
+func findRangeHalf(slots []paramSlot, stem, suffix string) int {
+	for i, s := range slots {
+		st, sf, ok := splitRangeSuffix(s.Name)
+		if ok && st == stem && sf == suffix {
+			return i
+		}
+	}
+	return -1
+}
+
+// matchRangePair scans slots for the first foldable range (ADR-0124 §SD5): two
+// slots whose names share a stem, whose suffixes are the two halves of one
+// rangeSuffixes entry, and whose types are both DateTime after Nullable unwrap.
+//
+// Position is not consulted — dedup-by-name means a stem admits at most one
+// pair per table entry, so there is nothing for adjacency to disambiguate. The
+// scan is anchored on the lo half, so "first" is the first lo in editor order
+// and the result is deterministic.
+//
+// The returned indices are lo-then-hi regardless of editor order, which is the
+// order both widgets' Render assumes; a `{to:…}`-before-`{from:…}` query
+// therefore still draws its bounds the right way round.
+//
+// Shared by the pair and range widgets (the range widget additionally gates on
+// having an evaluator wired) so the two stay in lockstep on what counts as a
+// foldable range.
+func matchRangePair(slots []paramSlot) (consumedIdx []int, ok bool) {
+	for i, lo := range slots {
+		stem, suffix, decomposed := splitRangeSuffix(lo.Name)
+		if !decomposed {
 			continue
 		}
-		if !isDateTimeType(a.Type) || !isDateTimeType(b.Type) {
+		hiSuffix, isLo := rangeHiFor(suffix)
+		if !isLo {
 			continue
 		}
-		return []int{i, i + 1}, true
+		j := findRangeHalf(slots, stem, hiSuffix)
+		if j < 0 {
+			continue
+		}
+		if !isDateTimeType(lo.Type) || !isDateTimeType(slots[j].Type) {
+			continue
+		}
+		return []int{i, j}, true
 	}
 	return
 }
 
 func (w *dateTimePairWidget) Matches(slots []paramSlot) (consumedIdx []int, ok bool) {
-	return matchAdjacentFromToDateTime(slots)
+	return matchRangePair(slots)
+}
+
+// findTypeMismatchedPair finds the first stem whose two range halves are both
+// present but whose types keep them from folding, with at least one half
+// DateTime. Two halves that agree on some other type are somebody's string or
+// numeric bounds, not a near-miss, so they are left alone — a picker was never
+// plausible there and saying so would be noise.
+func findTypeMismatchedPair(slots []paramSlot) (lo, hi paramSlot, found bool) {
+	for _, s := range slots {
+		stem, suffix, ok := splitRangeSuffix(s.Name)
+		if !ok {
+			continue
+		}
+		hiSuffix, isLo := rangeHiFor(suffix)
+		if !isLo {
+			continue
+		}
+		j := findRangeHalf(slots, stem, hiSuffix)
+		if j < 0 {
+			continue
+		}
+		a, b := s, slots[j]
+		if isDateTimeType(a.Type) == isDateTimeType(b.Type) {
+			// Both DateTime: matchRangePair already folded them. Neither:
+			// they agree on something else and want no picker.
+			continue
+		}
+		return a, b, true
+	}
+	return
+}
+
+// nearMissNote is the one line the pane says about folds that did not happen
+// (ADR-0124 §SD7), or "" when there is nothing worth saying. Pure over the slot
+// list, so it is testable without a frame.
+//
+// unfolded is the slots no group widget claimed. Cases are ordered by how much
+// they explain: the ungroup opt-out accounts for every missing fold at once, so
+// it wins; a stem whose halves disagree on type is next, being the one case
+// where intent is unambiguous; the generic note is the fallback.
+func nearMissNote(unfolded []paramSlot, ungroup bool) string {
+	if ungroup {
+		if _, would := matchRangePair(unfolded); would {
+			return `"-- play: ungroup" is in effect — a range pair below is split into plain fields`
+		}
+		return ""
+	}
+	if lo, hi, found := findTypeMismatchedPair(unfolded); found {
+		return "{" + lo.Name + " : " + lo.Type + "} and {" + hi.Name + " : " + hi.Type +
+			"} — a range picker needs both DateTime"
+	}
+	names := make([]string, 0, len(unfolded))
+	for _, s := range unfolded {
+		if isDateTimeType(s.Type) {
+			names = append(names, s.Name)
+		}
+	}
+	if len(names) < 2 {
+		return ""
+	}
+	return strings.Join(names, ", ") +
+		" are DateTime but do not pair — a range picker needs one stem and two bounds" +
+		" (from/to, min/max, start/end, lo/hi, since/until — bare or as x_from/x_to)"
 }
 
 func (w *dateTimePairWidget) Render(ctx *paramCtx) {

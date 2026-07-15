@@ -68,6 +68,11 @@ func (inst *PlayApp) renderParamSlots() {
 	}
 
 	consumed := make([]bool, len(slots))
+	// grouped tracks the slots a group widget folded, which is what §SD7's
+	// near-miss pass reports on. It cannot read `consumed` instead: the tail
+	// scalarTextWidget claims every remaining slot, so by the end of dispatch
+	// nothing is unconsumed and the interesting set would be empty.
+	grouped := make([]bool, len(slots))
 	ungroup := scanUngroupHint(inst.sql)
 	for _, w := range inst.paramWidgets {
 		if ungroup && w.IsGroup() {
@@ -102,6 +107,10 @@ func (inst *PlayApp) renderParamSlots() {
 			}
 			for _, a := range absoluteIdx {
 				consumed[a] = true
+				grouped[a] = w.IsGroup()
+			}
+			if w.IsGroup() {
+				inst.renderFoldLabel(subset)
 			}
 			w.Render(&paramCtx{
 				Ids:    inst.ids,
@@ -115,10 +124,58 @@ func (inst *PlayApp) renderParamSlots() {
 		}
 	}
 
+	inst.renderNearMissNote(slots, grouped, ungroup)
+
 	// Divider between the parameter block and the SQL editor below it.
 	c.Separator().Horizontal().Send()
 
 	inst.syncParamDriftToPrelude()
+}
+
+// renderFoldLabel names a fold the registry inferred and its opt-out, so the
+// inference is legible and reversible rather than magic (ADR-0124 §SD7).
+//
+// The evaluator note closes the one gap §SD3 leaves open: a picker that
+// degraded to two calendar buttons because no evaluator was wired is otherwise
+// two different UIs for one query shape with nothing saying why. It is decided
+// here rather than in the widget because a widget that had to explain why it
+// was chosen would need to know about the alternatives it was chosen over —
+// dateTimePairWidget does not know an evaluator exists, and coupling it to
+// §SD3 for a label would be the wrong trade.
+func (inst *PlayApp) renderFoldLabel(subset []paramSlot) {
+	if len(subset) != 2 {
+		return
+	}
+	// En dash, not U+2192: the host's main font (NotoSans) has no arrow glyph,
+	// so one would render only via the CJK mono fallback — a wrong-metric glyph
+	// in a proportional label, and tofu if that fallback ever goes away.
+	note := "range · " + subset[0].Name + " – " + subset[1].Name
+	if inst.paramEvaluator == nil {
+		note += " · no evaluator: expressions unavailable"
+	}
+	note += ` · "-- play: ungroup" splits it`
+	for rt := range c.RichTextLabel(note) {
+		rt.Small().Weak()
+	}
+}
+
+// renderNearMissNote draws §SD7's single advisory line about folds that did not
+// happen. Advisory only: it never gates execution, and a query that ignores it
+// behaves exactly as it did.
+func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool) {
+	unfolded := make([]paramSlot, 0, len(slots))
+	for i, s := range slots {
+		if !grouped[i] {
+			unfolded = append(unfolded, s)
+		}
+	}
+	note := nearMissNote(unfolded, ungroup)
+	if note == "" {
+		return
+	}
+	for rt := range c.RichTextLabel(note) {
+		rt.Small().Weak()
+	}
 }
 
 // syncParamDriftToPrelude compares each draft to its last-synced
