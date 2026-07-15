@@ -5,11 +5,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
-	encodingaspects2 "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 )
 
 type TableOperations struct {
@@ -65,35 +61,6 @@ func (inst *TableOperations) MergeTables(tbl1, tbl2 *TableDesc) (out *TableDesc,
 	return
 }
 
-type CriteriaOperationTypeE uint8
-
-const (
-	CriteriaTypeWhitelist CriteriaOperationTypeE = 0
-	CriteriaTypeBlacklist CriteriaOperationTypeE = 1
-)
-
-type TableSubsetPredicateI interface {
-	ShouldKeepTagged(sectionName string, columnName string, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects.AspectSet, membership MembershipSpecE) bool
-	ShouldKeepPlain(sectionName string, columnName string, ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, valueSemantics valueaspects.AspectSet, aspectSet useaspects.AspectSet, membership MembershipSpecE) bool
-}
-
-type TableSubsetSectionByNamePredicate struct {
-	SectionNames []string
-	Type         CriteriaOperationTypeE
-}
-type TableSubsetSectionByUseCriteriaPredicate struct {
-	UseCriteria useaspects.AspectSet
-	Type        CriteriaOperationTypeE
-}
-type TableSubsetCriteria struct {
-	KeepSectionByName []string
-}
-
-func (inst *TableOperations) Subset(tbl *TableDesc, criteria TableSubsetCriteria) (out *TableDesc, err error) {
-	// Fail loud instead of silently returning (nil, nil) — review A-6.
-	err = eh.Errorf("TableOperations.Subset: %w", ErrNotImplemented)
-	return
-}
 func (inst *TableOperations) MustCompare(tbl1, tbl2 *TableDesc) (r int) {
 	var err error
 	r, err = inst.Compare(tbl1, tbl2)

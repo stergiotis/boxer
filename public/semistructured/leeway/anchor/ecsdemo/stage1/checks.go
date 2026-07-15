@@ -169,7 +169,7 @@ func Unmarshal[T any](data []byte) (v T, err error) {
 
 // Subset reports whether component A is a field-subset of B: every json field of
 // A appears in B under the same name and Go type (A ⊆ B). It is the
-// pure-reflection analogue of leeway's TableOperations.Subset, and the level
+// pure-reflection analogue of leeway's TableOperations.IsSubset, and the level
 // Archetype.SubsetOf lifts to component sets.
 func Subset[A, B any]() bool {
 	fieldsB := jsonFields[B]()
