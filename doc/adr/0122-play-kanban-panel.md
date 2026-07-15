@@ -298,10 +298,17 @@ quietly missing its declared lanes looks like a working board.
 
 The parent axis (`ParentID`, `GroupByParent`, `GroupByField`), `Column.IsDone`
 (inert without parents — it exists to roll a child up into a done lane), lane
-colour/accent, move-to-`UPDATE`, and caching the corpus scan behind an mtime
-check. None of them changes the contract above. `Column.IsDone` and the parent
-axis are one deferral, not two: the widget only reads `IsDone` for the rollup
-the parent axis would introduce.
+colour/accent, and move-to-`UPDATE`. None of them changes the contract above.
+`Column.IsDone` and the parent axis are one deferral, not two: the widget only
+reads `IsDone` for the rollup the parent axis would introduce.
+
+**Not deferred — ruled out.** An earlier draft deferred "caching the corpus scan
+behind an mtime check". Measurement killed it rather than postponed it: the scan
+is not the expensive part (§SD4), and an mtime key over the scanned tree costs
+about as much to compute as the work it would skip. What shipped instead is a
+short shared read, which is a consistency device that happens to halve the cost —
+a different thing for a different reason. Nobody should re-attempt the mtime key
+on the strength of a deferral that was really a wrong guess.
 
 ## Alternatives
 
