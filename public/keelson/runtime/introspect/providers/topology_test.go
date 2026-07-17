@@ -132,4 +132,45 @@ func TestTopologyProviders_PlaneFed(t *testing.T) {
 	assert.Equal(t, int64(4711), col(t, srec, "pid").(*array.Int64).Value(0))
 	assert.Equal(t, uint64(777), col(t, srec, "inode").(*array.Uint64).Value(0))
 	assert.Equal(t, int64(41_500), col(t, srec, "collected_at_unix_ms").(*array.Int64).Value(0))
+
+	// The graph projection: the marked component's key carries BOTH
+	// origins (registry-declared + mark-observed) — the drift join's
+	// substrate — and the listener edge attributes the socket.
+	nodes, ok := reg.Lookup("topology_nodes")
+	require.True(t, ok)
+	nrec, err := nodes.Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer nrec.Release()
+	kinds := col(t, nrec, "kind").(*array.String)
+	keys := col(t, nrec, "key").(*array.String)
+	origins := col(t, nrec, "origin").(*array.String)
+	var sawDeclared, sawObserved bool
+	for i := 0; i < int(nrec.NumRows()); i++ {
+		if kinds.Value(i) == "component" && keys.Value(i) == "component:imzero2-demo" {
+			switch origins.Value(i) {
+			case "declared":
+				sawDeclared = true
+			case "observed":
+				sawObserved = true
+			}
+		}
+	}
+	assert.True(t, sawDeclared, "component:imzero2-demo declared row")
+	assert.True(t, sawObserved, "component:imzero2-demo observed row")
+
+	edges, ok := reg.Lookup("topology_edges")
+	require.True(t, ok)
+	erec, err := edges.Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer erec.Release()
+	ekinds := col(t, erec, "edge_kind").(*array.String)
+	srcs := col(t, erec, "src_key").(*array.String)
+	dsts := col(t, erec, "dst_key").(*array.String)
+	foundListens := false
+	for i := 0; i < int(erec.NumRows()); i++ {
+		if ekinds.Value(i) == "proc-listens" && srcs.Value(i) == "proc:4711" && dsts.Value(i) == "sock:tcp/127.0.0.1:8089" {
+			foundListens = true
+		}
+	}
+	assert.True(t, foundListens, "proc-listens edge for the attributed socket")
 }

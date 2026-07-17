@@ -98,4 +98,36 @@ func TestQuery_TopologyTables(t *testing.T) {
 		"SELECT count() FROM keelson('components') WHERE has(needs, 'imzero2-demo')", "TabSeparated")
 	require.NoError(t, err)
 	assert.Equal(t, "1", strings.TrimSpace(string(body)), "caddy needs imzero2-demo")
+
+	// THE drift query (ADR-0126 §SD1): declared-but-not-observed
+	// components as a single-table GROUP BY over origins. Only
+	// imzero2-demo runs in the fixture, so every other registry
+	// component is drift — spot-check one and the running one's absence.
+	body, _, err = e.Query(context.Background(),
+		"SELECT key FROM keelson('topology_nodes') WHERE kind = 'component' GROUP BY key HAVING NOT has(groupArray(origin), 'observed') ORDER BY key",
+		"TabSeparated")
+	require.NoError(t, err)
+	drift := strings.TrimSpace(string(body))
+	assert.Contains(t, drift, "component:caddy")
+	assert.NotContains(t, drift, "component:imzero2-demo")
+
+	// The socket-owner walk over the graph rows alone: listener edge →
+	// containment edge, no typed tables involved.
+	body, _, err = e.Query(context.Background(),
+		"SELECT c.dst_key FROM keelson('topology_edges') AS l INNER JOIN keelson('topology_edges') AS c ON l.src_key = c.src_key AND l.host = c.host WHERE l.edge_kind = 'proc-listens' AND l.dst_key = 'sock:tcp/127.0.0.1:8089' AND c.edge_kind = 'proc-in-component'",
+		"TabSeparated")
+	require.NoError(t, err)
+	assert.Equal(t, "component:imzero2-demo", strings.TrimSpace(string(body)))
+
+	// The dependency closure from the howto (WITH RECURSIVE over
+	// component-needs): caddy's closure is exactly the carrier.
+	body, _, err = e.Query(context.Background(),
+		"WITH RECURSIVE closure AS ("+
+			" SELECT dst_key FROM keelson('topology_edges') WHERE edge_kind = 'component-needs' AND src_key = 'component:caddy'"+
+			" UNION ALL"+
+			" SELECT e.dst_key FROM keelson('topology_edges') AS e INNER JOIN closure AS c ON e.src_key = c.dst_key WHERE e.edge_kind = 'component-needs'"+
+			") SELECT DISTINCT dst_key FROM closure",
+		"TabSeparated")
+	require.NoError(t, err)
+	assert.Equal(t, "component:imzero2-demo", strings.TrimSpace(string(body)))
 }

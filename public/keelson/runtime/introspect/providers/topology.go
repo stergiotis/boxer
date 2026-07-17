@@ -9,6 +9,7 @@ package providers
 import (
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
@@ -16,18 +17,87 @@ import (
 )
 
 // RegisterTopology registers the plane-fed observed-topology providers
-// (procs, sockets) reading holder's latest snapshots. Call from a host
-// that stands up a metric-plane consumer (ADR-0126 §SD5); rows are
-// empty until a scraper publishes.
+// (procs, sockets) and the graph projection (topology_nodes,
+// topology_edges) reading holder's latest snapshots. Call from a host
+// that stands up a metric-plane consumer (ADR-0126 §SD5); observed rows
+// are empty until a scraper publishes, declared rows are always there.
 func RegisterTopology(r *introspect.Registry, holder *sysmetricsbus.LatestHolder) (err error) {
 	for _, p := range []introspect.Provider{
 		procsProvider{holder: holder}, socketsProvider{holder: holder},
+		topologyNodesProvider{holder: holder}, topologyEdgesProvider{holder: holder},
 	} {
 		if err = r.Register(p); err != nil {
 			return
 		}
 	}
 	return
+}
+
+// graphInput assembles the topo.Input both graph providers share: the
+// declared side (manifests; the registry is compiled into topo) plus the
+// observed side (holder) plus this process's own mark for the
+// app-in-component edges.
+func graphInput(holder *sysmetricsbus.LatestHolder) (in topo.Input) {
+	hosts := holder.Hosts()
+	obs := make([]topo.HostObservation, 0, len(hosts))
+	for _, hs := range hosts {
+		obs = append(obs, topo.HostObservation{Host: hs.Host, Snap: hs.Snap})
+	}
+	return topo.Input{
+		Manifests:     app.AllManifests(),
+		SelfComponent: topo.Self(),
+		SelfHost:      sysmetricsbus.DefaultHostToken(),
+		Observations:  obs,
+	}
+}
+
+// --- topology_nodes (graph projection) ---------------------------------------
+
+// topologyNodesProvider exposes the assembled node rows as
+// keelson.topology_nodes — the ADR-0126 §SD5 vocabulary made executable.
+type topologyNodesProvider struct{ holder *sysmetricsbus.LatestHolder }
+
+func (topologyNodesProvider) Name() string                         { return "topology_nodes" }
+func (topologyNodesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (topologyNodesProvider) Schema() *arrow.Schema                { return topologyNodesTable(nil).Schema() }
+
+func (p topologyNodesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	nodes := topo.AssembleNodes(graphInput(p.holder))
+	return topologyNodesTable(nodes).Build(proj, len(nodes)), nil
+}
+
+func topologyNodesTable(nodes []topo.Node) *introspect.Table {
+	return introspect.NewTable().
+		String("kind", func(i int) string { return nodes[i].Kind }).
+		String("key", func(i int) string { return nodes[i].Key }).
+		String("host", func(i int) string { return nodes[i].Host }).
+		String("origin", func(i int) string { return nodes[i].Origin }).
+		String("source", func(i int) string { return nodes[i].Source })
+}
+
+// --- topology_edges (graph projection) ---------------------------------------
+
+// topologyEdgesProvider exposes the assembled edge rows as
+// keelson.topology_edges.
+type topologyEdgesProvider struct{ holder *sysmetricsbus.LatestHolder }
+
+func (topologyEdgesProvider) Name() string                         { return "topology_edges" }
+func (topologyEdgesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (topologyEdgesProvider) Schema() *arrow.Schema                { return topologyEdgesTable(nil).Schema() }
+
+func (p topologyEdgesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	edges := topo.AssembleEdges(graphInput(p.holder))
+	return topologyEdgesTable(edges).Build(proj, len(edges)), nil
+}
+
+func topologyEdgesTable(edges []topo.Edge) *introspect.Table {
+	return introspect.NewTable().
+		String("edge_kind", func(i int) string { return edges[i].Kind }).
+		String("src_key", func(i int) string { return edges[i].SrcKey }).
+		String("dst_key", func(i int) string { return edges[i].DstKey }).
+		String("host", func(i int) string { return edges[i].Host }).
+		String("origin", func(i int) string { return edges[i].Origin }).
+		String("source", func(i int) string { return edges[i].Source })
 }
 
 // --- components (topo registry) ----------------------------------------------
