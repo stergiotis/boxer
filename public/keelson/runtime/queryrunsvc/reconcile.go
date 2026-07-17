@@ -2,7 +2,10 @@ package queryrunsvc
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"math"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
@@ -36,6 +39,17 @@ func (s *Service) Reconcile(ctx context.Context) (err error) {
 		err = eh.Errorf("queryrunsvc: reconcile: facts ddl: %w", err)
 		return
 	}
+	// SetupTable is CREATE IF NOT EXISTS — it cannot reconcile a table
+	// from an older schema generation. Verify the destination actually
+	// carries the columns the pipeline references before creating the MV:
+	// without this, a drifted table fails later with ClickHouse's
+	// misleading "correlated subqueries are not supported" (the missing
+	// column inside the anti-join subquery binds to the outer url() scope
+	// instead). Migration is deliberately not this service's job.
+	err = s.checkDestinationSchema(ctx)
+	if err != nil {
+		return
+	}
 	// The bare form (no table argument) works across ClickHouse
 	// versions; our own reconcile queries above guarantee there is
 	// something to flush on a fresh server, so system.query_log
@@ -66,6 +80,54 @@ func (s *Service) Reconcile(ctx context.Context) (err error) {
 	err = s.cli.Exec(ctx, mv)
 	if err != nil {
 		err = eh.Errorf("queryrunsvc: reconcile: create mv: %w", err)
+		return
+	}
+	return
+}
+
+// checkDestinationSchema verifies the destination carries every column
+// of the current facts schema. A table from an older schema generation
+// (e.g. pre-array-section, z32 timestamps) passes CREATE IF NOT EXISTS
+// untouched and then breaks the pipeline downstream with misleading
+// errors; failing here names the drift and leaves the decision — a
+// leeway migration, or moving the old table aside — to the operator.
+func (s *Service) checkDestinationSchema(ctx context.Context) (err error) {
+	want, err := queryrunfacts.DdlColumnNames()
+	if err != nil {
+		return
+	}
+	sql := fmt.Sprintf(
+		"SELECT name FROM system.columns WHERE database = '%s' AND table = '%s' FORMAT TabSeparated",
+		strings.ReplaceAll(s.cfg.Database, "'", "''"), strings.ReplaceAll(s.cfg.Table, "'", "''"))
+	body, err := s.cli.Query(ctx, sql)
+	if err != nil {
+		err = eh.Errorf("queryrunsvc: reconcile: destination columns: %w", err)
+		return
+	}
+	defer func() { _ = body.Close() }()
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		err = eh.Errorf("queryrunsvc: reconcile: destination columns read: %w", err)
+		return
+	}
+	// Leeway wire names contain only ':' and identifier characters — no
+	// TSV unescaping needed (the fetchColumnNames precedent).
+	have := make(map[string]bool, len(want))
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		if line = strings.TrimRight(line, "\r"); line != "" {
+			have[line] = true
+		}
+	}
+	missing := make([]string, 0, 4)
+	for _, name := range want {
+		if !have[name] {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		example := missing[0]
+		err = eh.Errorf("queryrunsvc: destination %s exists but lacks %d of the %d current facts columns (e.g. %q) — an older schema generation; migrate it or move it aside, this service will not mutate an existing table",
+			s.FactsTable(), len(missing), len(want), example)
 		return
 	}
 	return

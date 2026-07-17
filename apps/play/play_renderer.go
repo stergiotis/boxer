@@ -164,6 +164,10 @@ type PlayApp struct {
 	// renderSnippetsTab, captured-and-cleared by renderSqlEditor.
 	pendingSnippetInsert  string
 	pendingSnippetReplace string
+	// runsHist backs the History tab's "Recorded runs" section (ADR-0115
+	// S2): captured KindQueryRun facts read back from the live endpoint,
+	// fetched manually and on first reveal (play_runs_history.go).
+	runsHist *runsHistoryDriver
 	// tabs is the instance's dock-tab set (ADR-0097 slice 6a): every tab a
 	// registered TabSpec, frozen at the first Render. Embedders customize
 	// it via Tabs() between construction and mounting (D4).
@@ -633,6 +637,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.kanbanDriver = NewKanbanDriver(c.NewWidgetIdStack(), client)
 	inst.richCells = newRichCellCache(c.NewWidgetIdStack())
 	inst.diag = NewDiagnosticsDriver(client)
+	inst.runsHist = newRunsHistoryDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
 	inst.tabs = defaultTabs(inst)
@@ -1697,6 +1702,8 @@ func (inst *PlayApp) renderHistoryTab() {
 			}
 		}
 	}
+	// The durable half: captured runs from runtime.facts (ADR-0115 S2).
+	inst.renderRecordedRuns()
 }
 
 // renderTableTab is the Table dock tab body: pager strip atop the master

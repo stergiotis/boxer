@@ -72,6 +72,37 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 		scratchDb, probe1, lmrCol, vocab.MembRuntimeRun.GetId().Value(), mrhpCol, runId)
 	require.Equal(t, "1", queryScalar(t, cli, sql), "the stamp's run_id must be lifted into the mixed membership")
 
+	// --- S2 readback: the history pivots reconstruct the captured run ---
+	histSql, err := queryrunfacts.ComposeHistorySql(scratchDb+".facts", 50)
+	require.NoError(t, err)
+	histRows, err := queryrunfacts.ParseHistoryRows([]byte(queryRaw(t, cli, histSql)))
+	require.NoError(t, err)
+	var probeRow *queryrunfacts.HistoryRow
+	for i := range histRows {
+		if histRows[i].QueryId == probe1 {
+			probeRow = &histRows[i]
+			break
+		}
+	}
+	require.NotNil(t, probeRow, "the stamped probe must appear in the history readback")
+	require.Equal(t, "QueryFinish", probeRow.Event)
+	require.Equal(t, "Select", probeRow.Kind)
+	require.Equal(t, "it.app", probeRow.App)
+	require.Equal(t, runId, probeRow.RunId)
+	require.Equal(t, "l1", probeRow.Lane)
+	require.Contains(t, probeRow.QueryText, "SELECT 42")
+	require.NotZero(t, probeRow.Id&queryrunfacts.IdBand)
+	require.NotZero(t, probeRow.NormalizedHash)
+	require.Zero(t, probeRow.ExceptionCode)
+
+	profSql, err := queryrunfacts.ComposeProfileEventsSql(scratchDb+".facts", probeRow.Id)
+	require.NoError(t, err)
+	profRaw := queryRaw(t, cli, profSql+" FORMAT TabSeparated")
+	require.NotEmpty(t, strings.TrimSpace(profRaw), "even SELECT 42 carries ProfileEvents counters")
+	for line := range strings.SplitSeq(strings.TrimSpace(profRaw), "\n") {
+		require.Len(t, strings.Split(line, "\t"), 2, "profile drill-down rows are (event, count) pairs")
+	}
+
 	// --- statelessness: back-to-back reads both answer; the table keeps one row ---
 	// (No strict equality between the two reads: a refresh landing between
 	// them legitimately advances the watermark. The property that matters —
@@ -109,6 +140,32 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 		fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:g:0:0:` = '%s'", scratchDb, probe2)))
 }
 
+// TestLiveReconcileRefusesDriftedDestination pins the schema-drift
+// guard: a destination table from an older schema generation (here: one
+// missing every current column) must fail reconciliation with the
+// actionable message, not proceed into the MV's misleading
+// correlated-subquery error.
+func TestLiveReconcileRefusesDriftedDestination(t *testing.T) {
+	ctx := context.Background()
+	cli := chclient.New(chclient.Defaults(), nil)
+	if cli.Ping(ctx) != nil {
+		t.Skip("no live ClickHouse at localhost:8123")
+	}
+	const db = scratchDb + "_drift"
+	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db))
+	t.Cleanup(func() { _ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+db) })
+	require.NoError(t, cli.Exec(ctx, "CREATE DATABASE "+db))
+	require.NoError(t, cli.Exec(ctx,
+		"CREATE TABLE "+db+".facts (`legacy` UInt64) ENGINE MergeTree() ORDER BY legacy"))
+
+	svc, err := New(Config{Listen: "127.0.0.1:0", Cadence: time.Second, Database: db}, zerolog.Nop())
+	require.NoError(t, err)
+	err = svc.Start(ctx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "older schema generation")
+	require.Contains(t, err.Error(), db+".facts")
+}
+
 // runTaggedQuery issues SELECT 42 under the given query_id (the natural
 // key the assertions look up) and optional log_comment stamp.
 func runTaggedQuery(t *testing.T, queryId string, logComment string) {
@@ -138,12 +195,19 @@ func waitForFactCount(t *testing.T, cli *chclient.Client, naturalKey string, n i
 // queryScalar runs sql (single value) and returns the trimmed result.
 func queryScalar(t *testing.T, cli *chclient.Client, sql string) (out string) {
 	t.Helper()
-	body, err := cli.Query(context.Background(), sql+" FORMAT TabSeparated")
+	out = strings.TrimSpace(queryRaw(t, cli, sql+" FORMAT TabSeparated"))
+	return
+}
+
+// queryRaw runs sql (its own FORMAT clause included) and returns the body.
+func queryRaw(t *testing.T, cli *chclient.Client, sql string) (out string) {
+	t.Helper()
+	body, err := cli.Query(context.Background(), sql)
 	require.NoError(t, err)
 	defer func() { _ = body.Close() }()
 	raw, err := io.ReadAll(body)
 	require.NoError(t, err)
-	out = strings.TrimSpace(string(raw))
+	out = string(raw)
 	return
 }
 

@@ -19,15 +19,12 @@ const MvBaseName = "mv_queryruns"
 // by the MV, so duplicates need adversarial timing beyond a day to land.
 const AntiJoinWindow = "INTERVAL 1 DAY"
 
-// UrlStructure derives the url() structure clause from the generated
-// runtime.facts DDL — every leeway wire column with its ClickHouse type,
-// codecs stripped, names backtick-quoted: "`id:id:u64:2k:0:0:` UInt64,
-// …". Deriving (rather than duplicating) the list keeps the pipeline
-// DDL moving with the schema; the parse is strict so a DDL-shape change
-// fails loudly here instead of misdeclaring the wire.
-func UrlStructure() (structure string, err error) {
+// ddlColumns parses the generated runtime.facts DDL column block into
+// (name, ClickHouse type) pairs, codecs stripped. The parse is strict so
+// a DDL-shape change fails loudly here instead of misdeclaring the wire.
+func ddlColumns() (cols [][2]string, err error) {
 	lines := strings.Split(factsddl.ColumnsSQL, "\n")
-	parts := make([]string, 0, len(lines))
+	cols = make([][2]string, 0, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSuffix(strings.TrimSpace(line), ",")
 		if line == "" {
@@ -52,11 +49,44 @@ func UrlStructure() (structure string, err error) {
 			err = eh.Errorf("queryrunfacts: ddl column %q with empty type: %q", name, line)
 			return
 		}
-		parts = append(parts, "`"+name+"` "+chType)
+		cols = append(cols, [2]string{name, chType})
 	}
-	if len(parts) == 0 {
+	if len(cols) == 0 {
 		err = eh.Errorf("queryrunfacts: ddl column block parsed to zero columns")
 		return
+	}
+	return
+}
+
+// DdlColumnNames returns the wire-column names of the current facts
+// schema — the reconciler compares them against a live destination to
+// detect an older schema generation before the pipeline references a
+// column that is not there.
+func DdlColumnNames() (names []string, err error) {
+	cols, err := ddlColumns()
+	if err != nil {
+		return
+	}
+	names = make([]string, len(cols))
+	for i, col := range cols {
+		names[i] = col[0]
+	}
+	return
+}
+
+// UrlStructure derives the url() structure clause from the generated
+// runtime.facts DDL — every leeway wire column with its ClickHouse type,
+// names backtick-quoted: "`id:id:u64:2k:0:0:` UInt64, …". Deriving
+// (rather than duplicating) the list keeps the pipeline DDL moving with
+// the schema.
+func UrlStructure() (structure string, err error) {
+	cols, err := ddlColumns()
+	if err != nil {
+		return
+	}
+	parts := make([]string, len(cols))
+	for i, col := range cols {
+		parts[i] = "`" + col[0] + "` " + col[1]
 	}
 	structure = strings.Join(parts, ", ")
 	return
