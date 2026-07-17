@@ -65,6 +65,11 @@ type Client struct {
 	// cfg.User/cfg.Password are not switchable in v1.
 	mu        sync.RWMutex
 	targetURL string
+	// stampRunId / stampAppId are the SD7 identity halves of the
+	// log_comment stamp (play_stamp.go), set once via SetStampIdentity
+	// at Mount; empty outside the runtime (standalone CLI, tests).
+	stampRunId string
+	stampAppId string
 }
 
 func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
@@ -89,6 +94,10 @@ func (inst *Client) PassRegistry() *passreg.Registry { return inst.passes }
 type ExecOptions struct {
 	QueryID             string
 	ReplaceRunningQuery bool
+	// Label is the human lane name ("main", "map", "diagnostics", …) the
+	// QueryID embeds — carried separately so the SD7 log_comment stamp
+	// can record it without parsing it back out of the id.
+	Label string
 }
 
 // execQueryIDSeq disambiguates lanes within one process; the pid disambiguates
@@ -101,6 +110,7 @@ func newExecOptions(label string) *ExecOptions {
 	return &ExecOptions{
 		QueryID:             fmt.Sprintf("play-%s-%d-%d", label, os.Getpid(), execQueryIDSeq.Add(1)),
 		ReplaceRunningQuery: true,
+		Label:               label,
 	}
 }
 
@@ -155,6 +165,11 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 		if opts.ReplaceRunningQuery {
 			qs.Set("replace_running_query", "1")
 		}
+	}
+	// Attribution-only SD7 stamp — a probe is not an executed definition,
+	// so it carries identity without fingerprints (play_stamp.go).
+	if lc := inst.composeProbeLogComment(opts); lc != "" {
+		qs.Set("log_comment", lc)
 	}
 	if len(qs) > 0 {
 		sep := "?"
@@ -393,6 +408,13 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		if opts.ReplaceRunningQuery {
 			qs.Set("replace_running_query", "1")
 		}
+	}
+	// SD7 identity stamp (ADR-0115): {run_id, app, lane, four
+	// fingerprints} as compact JSON, so the server's query_log row is
+	// attributable and the capture pipeline lifts the identity. Endpoints
+	// that don't know the setting ignore the parameter, like query_id.
+	if lc := inst.composeLogComment(sql, q, params, signals, opts); lc != "" {
+		qs.Set("log_comment", lc)
 	}
 	if len(qs) > 0 {
 		sep := "?"

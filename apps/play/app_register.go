@@ -216,6 +216,12 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		Password: clickhouseenv.Password.Get(),
 	}
 	client := NewClient(cfg, nil)
+	// SD7 identity for the log_comment stamp (ADR-0115): the runtime's
+	// run id joins captured query runs to the runtime-start fact, the
+	// Manifest Id is the app identity the facts vocabulary already keys
+	// on. The standalone CLI path never sets these — its runs stamp lane
+	// and fingerprints only.
+	client.SetStampIdentity(ctx.RunId(), string(inst.Manifest().Id))
 	// NewLivePlayApp installs the pre-execute SQL pipeline on the client
 	// (standard passes + schema-aware leeway name resolver, ADR-0108/0116) and
 	// wires the resolver into the Diagnostics pane. The carousel-embedded play

@@ -81,14 +81,17 @@ func (inst Row) Ts() time.Time {
 // Stamp is the client-side identity riding log_comment (ADR-0115 SD7).
 // All fields optional — a stamp is whatever subset the client set; rows
 // without a parseable stamp still capture, just without lifted identity.
+// Producers marshal this struct directly (play's composeLogComment), so
+// the JSON keys are single-sourced with the parser below; omitempty
+// keeps absent fields out of the wire stamp.
 type Stamp struct {
-	RunId      string `json:"run_id"`
-	App        string `json:"app"`
-	Lane       string `json:"lane"`
-	AuthoredFp string `json:"authored_fp"`
-	SentFp     string `json:"sent_fp"`
-	ChainFp    string `json:"chain_fp"`
-	EnvFp      string `json:"env_fp"`
+	RunId      string `json:"run_id,omitempty"`
+	App        string `json:"app,omitempty"`
+	Lane       string `json:"lane,omitempty"`
+	AuthoredFp string `json:"authored_fp,omitempty"`
+	SentFp     string `json:"sent_fp,omitempty"`
+	ChainFp    string `json:"chain_fp,omitempty"`
+	EnvFp      string `json:"env_fp,omitempty"`
 }
 
 // ParseStamp decodes a log_comment stamp. ok is false when the comment
