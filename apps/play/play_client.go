@@ -74,6 +74,10 @@ func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 	return &Client{cfg: cfg, http: httpClient, passes: passreg.Default, targetURL: cfg.URL}
 }
 
+// PassRegistry exposes the registry Execute applies at StagePreExecute — the
+// Passes tab draws its catalog (ADR-0119 M3).
+func (inst *Client) PassRegistry() *passreg.Registry { return inst.passes }
+
 // ExecOptions carries per-lane execution settings for ExecuteArrowStream.
 // QueryID is a stable per-lane ClickHouse query_id: combined with
 // ReplaceRunningQuery, a superseding run REPLACES its still-running

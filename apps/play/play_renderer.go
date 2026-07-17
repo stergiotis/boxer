@@ -78,6 +78,7 @@ const (
 	dockTabWorld       uint64 = 12
 	dockTabDiagnostics uint64 = 13
 	dockTabKanban      uint64 = 14
+	dockTabPasses      uint64 = 15
 )
 
 type PlayApp struct {
@@ -188,6 +189,9 @@ type PlayApp struct {
 	vizErr    error
 	vizView   view.ViewState
 	vizSeed   uint64
+	// Passes-tab drawing state (play_passes_tab.go, ADR-0119 M3): the
+	// pipelineview layout cached on the pass-catalog fingerprint.
+	passesTab passesTabState
 	// pendingDockActivate focuses a dock tab on the next dock send (0 =
 	// none): set by affordances that deliver content into a tab body (the
 	// snippet library targeting the editor), consumed once per frame in the

@@ -234,6 +234,7 @@ var builtinTabDefs = []builtinTabDef{
 	{id: "graph", dockID: dockTabGraph, title: "Graph", lazy: true},
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
 	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
+	{id: "passes", dockID: dockTabPasses, title: "Passes", lazy: true},
 	{id: "detail", dockID: dockTabDetail, title: "Detail", zone: TabZoneSide},
 }
 
@@ -360,6 +361,8 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) {
 				scrollTab(func() { inst.renderDiagnosticsTab(f.NumRows, f.Elapsed, f.Summary, f.Executed, f.Err) })
 			}
+		case "passes":
+			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPassesTab) }
 		case "detail":
 			spec.Panel = detailPanel{app: inst}
 			spec.Render = func(f *TabFrame) { inst.renderDetailTab(f.Rec, f.Schema, f.Executed) }
