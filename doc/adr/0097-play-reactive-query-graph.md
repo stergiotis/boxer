@@ -1454,6 +1454,62 @@ one. Topbar, status bar, signal store: fixed as before.
 Replace-supersedes-Insert preserved), and an embedder example in the
 how-tos when the first external consumer lands.
 
+### 2026-07-17 — Prior-art survey addendum: Malloy (the semantic-model inversion)
+
+**Why this entry.** The external survey (§References) draws entirely on the
+reactive-DAG lineage — incremental computation, reactive notebooks,
+dashboards. It has no representative of the other post-SQL line, the
+semantic-model languages; Malloy (malloydata.dev, from the Looker/LookML
+lineage) is the entry examined here. It did not inform the original
+decision; it is recorded after the fact because the contrast sharpens
+premises this ADR otherwise states only positively (SD3, SD8, SD12, SD13).
+No design change follows.
+
+**What it is.** An open-source language for modeling and querying data: a
+semantic model (`source:` carrying dimensions, measures, joins, views) plus
+a query language over it, compiled to dialect SQL and pushed down to the
+engine. Its documented targets (BigQuery, Postgres, DuckDB over
+Parquet/CSV) do not include ClickHouse.
+
+**The inversion.** Malloy and this ADR answer the same discomfort —
+composable, inspectable analytics over a SQL engine — with opposite
+artifact directions. Malloy makes the *model* the source of truth and SQL
+the compiler output; `play` keeps the *SQL buffer* the artifact, with the
+graph recovered by analysis and never authored beside the text (SD3). One
+premise recurs independently on both sides, which is worth recording:
+neither builds an executor. Malloy ships generated SQL to the engine; a
+demanded node here fuses its unobserved ancestors into one pushed-down CTE
+query (SD13).
+
+**The rhymes.** Three load-bearing shapes of this ADR recur in Malloy from
+the other direction — convergence, not influence: named intermediate
+queries as first-class, individually queryable units (Malloy sources/views
+≈ the node↔CTE isomorphism, SD13); an exploration UI derived from the
+query structure rather than authored beside it (Malloy Composer ≈ the
+panels); and named inputs threaded through queries (Malloy source
+parameters ≈ SD8's signals — though Malloy's bind when a query is
+compiled, while signals are written at interaction rate by panels, the
+half Malloy-the-language does not attempt).
+
+**What the language bet buys that this stance cannot.** Malloy's symmetric
+aggregates make fan-out-safe aggregation over joins a guarantee of the
+language, and a measure is defined once and reused across queries. Keeping
+the buffer plain SQL forfeits both: a guarantee here reaches only as far
+as static analysis of the SQL text sees. That is the honest cost of SD3,
+now stated with a concrete witness.
+
+**Why not adopted.** A language between the author and the engine is
+precisely the dependency the buffer-is-the-artifact premise declines: the
+pasted text would stop being the executable truth (SD3), and even *within*
+SQL this ADR defers explicit authoring surfaces behind a failure trigger
+(SD12). Where model-level semantics are wanted, the direction is tooling
+beside the buffer, not a language above it — the pre-execute pass seam
+(ADR-0108), column handles (ADR-0116), and leeway's plan-derived read-back
+SQL (ADR-0066) are the distributed analogs. Should define-once-reuse
+measures become a real need, the recorded direction is that pass/macro
+seam, not a source language. Separately, ClickHouse is not a Malloy
+target, so adoption was never live as an engineering option.
+
 ## References
 
 Internal:
