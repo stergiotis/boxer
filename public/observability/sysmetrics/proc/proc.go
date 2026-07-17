@@ -36,6 +36,17 @@ const (
 	// btop's 1000-byte cap (btop_collect.cpp:3126) so very long
 	// command lines do not blow up Snapshot memory.
 	CmdMaxBytes = 1000
+
+	// DefaultComponentEnvVar is the environment variable carrying the
+	// ADR-0126 topology mark. The literal mirrors keelson/runtime/topo
+	// EnvVarName — this package sits below keelson and cannot import it;
+	// a sysmscrape test asserts the two stay equal.
+	DefaultComponentEnvVar = "BOXER_COMPONENT"
+
+	// ComponentValueMaxBytes caps the reported mark value. Registry
+	// tokens are short; the cap keeps a pathological environ entry from
+	// bloating every snapshot.
+	ComponentValueMaxBytes = 128
 )
 
 // CollectorI is the public surface a process-table sampler implements.
@@ -77,14 +88,22 @@ type Options struct {
 	// CPU% and RSS are available, then the slice is truncated to MaxProcs
 	// entries ordered by CPU% desc (RSS desc tiebreak — keeps freshly-
 	// spawned heavyweights visible before their first CPU delta).
-	// /proc/[pid]/cmdline and /proc/[pid]/status are only read for the
-	// survivors, which is where most of the per-tick syscall and heap
-	// pressure live on a busy host.
+	// Component-marked processes (ADR-0126) are cap-exempt: the
+	// appliance's own components must stay visible regardless of CPU
+	// rank, so the result holds at most MaxProcs unmarked processes plus
+	// every marked one. /proc/[pid]/cmdline and /proc/[pid]/status are
+	// only read for the survivors, which is where most of the per-tick
+	// syscall and heap pressure live on a busy host.
 	MaxProcs uint32
 
 	// IncludeKernelThreads, when true, includes kthreadd (pid 2) and its
 	// children in the snapshot. Default false.
 	IncludeKernelThreads bool
+
+	// ComponentEnvVar names the environment variable read from
+	// /proc/[pid]/environ as the ADR-0126 topology mark. Empty means
+	// [DefaultComponentEnvVar].
+	ComponentEnvVar string
 }
 
 // Collector samples the Linux process table.
@@ -117,10 +136,30 @@ type Collector struct {
 	primed     bool
 	prev       map[uint32]procTick
 	prevGlobal uint64
+
+	// componentEnvVar is the mark variable name; componentEnvPrefix is
+	// its precomputed "NAME=" byte form the environ scan matches on.
+	componentEnvVar    string
+	componentEnvPrefix []byte
+
+	// identCache holds the per-instance identity reads (ADR-0126):
+	// environ is exec-frozen and the cgroup migrates only rarely, so
+	// both are read once per (pid, starttime) — including denied reads,
+	// which are stable for the instance and must not be retried every
+	// tick. Pruned alongside prev.
+	identCache map[uint32]procIdent
 }
 
 type procTick struct {
 	cpuTotal uint64 // utime + stime in clock ticks
+}
+
+// procIdent is one process instance's cached identity. starttimeTicks
+// detects pid reuse: a recycled pid re-reads.
+type procIdent struct {
+	starttimeTicks uint64
+	component      string
+	cgroupUnit     string
 }
 
 // New returns a process Collector configured by opts. The returned
@@ -147,17 +186,23 @@ func New(opts Options) (inst *Collector, err error) {
 	if numCPUs == 0 {
 		numCPUs = uint64(runtime.NumCPU())
 	}
+	if opts.ComponentEnvVar == "" {
+		opts.ComponentEnvVar = DefaultComponentEnvVar
+	}
 	inst = &Collector{
-		proc:          opts.Proc,
-		nowFn:         opts.NowFunc,
-		userLookup:    opts.UserLookup,
-		clkTck:        uint64(opts.ClkTckHz),
-		pageSize:      pageSize,
-		numCPUs:       numCPUs,
-		maxProcs:      opts.MaxProcs,
-		includeKernel: opts.IncludeKernelThreads,
-		userCache:     map[uint32]string{},
-		prev:          map[uint32]procTick{},
+		proc:               opts.Proc,
+		nowFn:              opts.NowFunc,
+		userLookup:         opts.UserLookup,
+		clkTck:             uint64(opts.ClkTckHz),
+		pageSize:           pageSize,
+		numCPUs:            numCPUs,
+		maxProcs:           opts.MaxProcs,
+		includeKernel:      opts.IncludeKernelThreads,
+		userCache:          map[uint32]string{},
+		prev:               map[uint32]procTick{},
+		componentEnvVar:    opts.ComponentEnvVar,
+		componentEnvPrefix: []byte(opts.ComponentEnvVar + "="),
+		identCache:         map[uint32]procIdent{},
 	}
 	return
 }
@@ -250,6 +295,8 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 	// Phase 2: cap by CPU% desc, RSS desc tiebreak. The tiebreak keeps a
 	// freshly-spawned heavyweight visible even when its first sample has
 	// no prior tick to delta against (CPUPercent==0 on first sighting).
+	// Component-marked processes are cap-exempt (ADR-0126): an idle
+	// appliance daemon must not vanish from the table by CPU rank.
 	if inst.maxProcs > 0 && uint32(len(infos)) > inst.maxProcs {
 		slices.SortFunc(infos, func(a, b sysmsnap.ProcInfo) int {
 			switch {
@@ -264,7 +311,17 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 			}
 			return 0
 		})
-		infos = infos[:inst.maxProcs]
+		kept := infos[:0]
+		var unmarked uint32
+		for _, info := range infos {
+			if info.Component != "" {
+				kept = append(kept, info)
+			} else if unmarked < inst.maxProcs {
+				kept = append(kept, info)
+				unmarked++
+			}
+		}
+		infos = kept
 	}
 
 	// Phase 3: fill in Cmd + UID/GID/User for the survivors only.
@@ -278,6 +335,11 @@ func (inst *Collector) collectAll(ctx context.Context) (infos []sysmsnap.ProcInf
 	for k := range inst.prev {
 		if _, ok := seen[k]; !ok {
 			delete(inst.prev, k)
+		}
+	}
+	for k := range inst.identCache {
+		if _, ok := seen[k]; !ok {
+			delete(inst.identCache, k)
 		}
 	}
 
@@ -333,6 +395,17 @@ func (inst *Collector) readBasicPID(pid uint32, bootTime time.Time, deltaGlobal 
 		info.StartedAtUnixMs = bootTime.Add(time.Duration(startSec * float64(time.Second))).UnixMilli()
 	}
 
+	// Identity (ADR-0126): the topology mark from environ and the owning
+	// unit from cgroup. Read here in phase 1 — not the phase-3 detail
+	// pass — because the phase-2 cap exemption needs Component before
+	// capping, and the once-per-instance cache keeps the added cost to
+	// first sightings. Kernel threads carry neither.
+	if !info.KernelThread {
+		ident := inst.identFor(pid, parsed.starttimeTicks, dir)
+		info.Component = ident.component
+		info.CgroupUnit = ident.cgroupUnit
+	}
+
 	cpuTotal := parsed.utime + parsed.stime
 	if prev, primedPid := inst.prev[pid]; primedPid && deltaGlobal > 0 && cpuTotal >= prev.cpuTotal {
 		// Per-CPU view: pct = deltaPid * 100 * N / deltaGlobal.
@@ -375,6 +448,101 @@ func (inst *Collector) enrichDetailPID(info *sysmsnap.ProcInfo) {
 			info.User = inst.lookupUser(uid)
 		}
 	}
+}
+
+// identFor returns pid's cached identity, reading /proc/[pid]/environ +
+// /proc/[pid]/cgroup only on first sight of this (pid, starttime)
+// instance. Failed reads (privilege boundaries, dead-pid races) cache as
+// empty — stable for the instance, so no per-tick retry.
+func (inst *Collector) identFor(pid uint32, starttimeTicks uint64, dir string) (ident procIdent) {
+	if cached, ok := inst.identCache[pid]; ok && cached.starttimeTicks == starttimeTicks {
+		return cached
+	}
+	ident.starttimeTicks = starttimeTicks
+	if raw, rerr := inst.proc.ReadFileInto(filepath.Join(dir, "environ"), inst.scratch); rerr == nil {
+		inst.scratch = raw
+		ident.component = scanEnvironValue(raw, inst.componentEnvPrefix)
+	}
+	if raw, rerr := inst.proc.ReadFileInto(filepath.Join(dir, "cgroup"), inst.scratch); rerr == nil {
+		inst.scratch = raw
+		ident.cgroupUnit = parseCgroupUnit(raw)
+	}
+	inst.identCache[pid] = ident
+	return
+}
+
+// scanEnvironValue scans NUL-separated environ content for the entry
+// starting with prefix ("NAME=") and returns its value, capped at
+// [ComponentValueMaxBytes].
+func scanEnvironValue(content []byte, prefix []byte) (value string) {
+	for len(content) > 0 {
+		entry := content
+		if i := bytes.IndexByte(content, 0); i >= 0 {
+			entry = content[:i]
+			content = content[i+1:]
+		} else {
+			content = nil
+		}
+		if bytes.HasPrefix(entry, prefix) {
+			v := entry[len(prefix):]
+			if len(v) > ComponentValueMaxBytes {
+				v = v[:ComponentValueMaxBytes]
+			}
+			value = string(v)
+			return
+		}
+	}
+	return
+}
+
+// cgroup v2 line marker, field separator, and the unit suffixes a
+// process cgroup can sit in. Slices are hoisted so the per-instance
+// parse allocates only the returned unit string.
+var (
+	cgroupV2Prefix = []byte("0::")
+	cgroupColon    = []byte(":")
+	suffixService  = []byte(".service")
+	suffixScope    = []byte(".scope")
+)
+
+// parseCgroupUnit extracts the owning systemd unit from /proc/[pid]/cgroup
+// content: the nearest ancestor path element with a .service or .scope
+// suffix (ADR-0126 §SD3). The v2 entry ("0::<path>") wins over v1-hybrid
+// controller lines; empty when no unit-shaped ancestor exists.
+func parseCgroupUnit(content []byte) (unit string) {
+	var chosen []byte
+	for line := range procfs.IterLines(content) {
+		// hierarchy-id:controller-list:path — the path may itself
+		// contain ':', so split on the first two colons only.
+		_, rest, ok1 := bytes.Cut(line, cgroupColon)
+		if !ok1 {
+			continue
+		}
+		_, path, ok2 := bytes.Cut(rest, cgroupColon)
+		if !ok2 {
+			continue
+		}
+		if len(chosen) == 0 {
+			chosen = path
+		}
+		if bytes.HasPrefix(line, cgroupV2Prefix) {
+			chosen = path
+			break
+		}
+	}
+	for len(chosen) > 0 {
+		i := bytes.LastIndexByte(chosen, '/')
+		seg := chosen[i+1:]
+		if bytes.HasSuffix(seg, suffixService) || bytes.HasSuffix(seg, suffixScope) {
+			unit = string(seg)
+			return
+		}
+		if i < 0 {
+			return
+		}
+		chosen = chosen[:i]
+	}
+	return
 }
 
 func (inst *Collector) lookupUser(uid uint32) (name string) {

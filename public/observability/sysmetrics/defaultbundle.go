@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/psi"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sockets"
 )
 
 // DefaultProcSampleCap bounds the number of processes fully sampled per tick
@@ -78,6 +79,11 @@ func DefaultBundleOptions() (bopts BundleOptions, err error) {
 		log.Warn().Err(psierr).Msg("sysmetrics: build PSI collector failed; pressure disabled")
 	} else {
 		bopts.PSI = psiC
+	}
+	if sockC, sockerr := sockets.New(sockets.Options{}); sockerr != nil {
+		log.Warn().Err(sockerr).Msg("sysmetrics: build sockets collector failed; listener table disabled")
+	} else {
+		bopts.Sockets = sockC
 	}
 	// GPU is vendor-build-tag-gated (gpu_rocm wires AMD; a no-op otherwise).
 	wireGPU(&bopts)

@@ -34,7 +34,17 @@ func TestCBORCodec_RoundTrip(t *testing.T) {
 		},
 		Procs: []sysmsnap.ProcInfo{
 			{PID: 1, PPID: 0, Name: "init", Cmd: "/sbin/init", CPUPercent: 1.5, RSSBytes: 4096},
-			{PID: 4242, PPID: 1, Name: "imztop", Cmd: "imztop --headless", CPUPercent: 12.25, RSSBytes: 1 << 20},
+			{
+				PID: 4242, PPID: 1, Name: "imztop", Cmd: "imztop --headless", CPUPercent: 12.25, RSSBytes: 1 << 20,
+				Component: "imzero2-demo", CgroupUnit: "imzero2-demo.service", // ADR-0126 identity fields
+			},
+		},
+		Sockets: &sysmsnap.SocketsSnapshot{
+			CollectedAtUnixMs: 1_700_000_000_100,
+			Sockets: []sysmsnap.SocketInfo{
+				{Proto: sysmsnap.SocketProtoTCP, Addr: "127.0.0.1", Port: 8089, Inode: 12345, UID: 1000, PID: 4242},
+				{Proto: sysmsnap.SocketProtoUnix, Addr: "@abstract.sock", Inode: 12346},
+			},
 		},
 		// Topology rides the bundle (ADR-0090 SD6): a recursive *TopoObject tree
 		// with a *FreqPolicy leaf must survive the CBOR round-trip, or the
@@ -77,6 +87,7 @@ func TestCBORCodec_RoundTrip(t *testing.T) {
 	require.Equal(t, orig.Mem, got.Mem)
 	require.Equal(t, orig.Procs, got.Procs)
 	require.Equal(t, orig.Topology, got.Topology) // recursive tree + FreqPolicy leaf survive the wire
+	require.Equal(t, orig.Sockets, got.Sockets)   // ADR-0126 listener table survives the wire
 
 	// Errors round-trip as messages: CBORCodec carries .Error() strings and
 	// rebuilds them with errors.New, so the concrete type differs but the

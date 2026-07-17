@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/proc"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/psi"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sensors"
+	"github.com/stergiotis/boxer/public/observability/sysmetrics/sockets"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
@@ -42,6 +43,11 @@ type BundleOptions struct {
 
 	// PSI is the Pressure Stall Information sampler (/proc/pressure).
 	PSI *psi.Collector
+
+	// Sockets is the listening-socket sampler (ADR-0126 observed
+	// topology). It owns its slower cadence internally, so wiring it
+	// here does not add per-tick cost beyond a cache hit.
+	Sockets *sockets.Collector
 
 	// NowFunc, when non-nil, overrides the wall clock used to stamp
 	// [sysmsnap.BundleSnapshot.SampledAtUnixMs]. Defaults to [time.Now].
@@ -239,6 +245,19 @@ func (inst *Bundle) Sample(ctx context.Context) (snap sysmsnap.BundleSnapshot, e
 			captureErr(sysmsnap.DomainGPU, e)
 		}()
 	}
+	if inst.opts.Sockets != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s, e := inst.opts.Sockets.Sample(ctx)
+			if e == nil {
+				mu.Lock()
+				snap.Sockets = s
+				mu.Unlock()
+			}
+			captureErr(sysmsnap.DomainSockets, e)
+		}()
+	}
 
 	wg.Wait()
 
@@ -269,6 +288,7 @@ func (inst *Bundle) Close() (err error) {
 		inst.opts.Container,
 		inst.opts.GPU,
 		inst.opts.PSI,
+		inst.opts.Sockets,
 	}
 	var errs []error
 	for _, c := range candidates {

@@ -41,4 +41,21 @@ type ProcInfo struct {
 
 	// KernelThread is true when PID == 2 or PPID == 2.
 	KernelThread bool
+
+	// Component is the ADR-0126 topology mark: the BOXER_COMPONENT value
+	// from /proc/[pid]/environ, read once per process instance (the
+	// environ image is exec-frozen) and reported verbatim. Empty when the
+	// process is unmarked or its environ is unreadable (a privilege
+	// boundary — the mark is cooperative identity, not a security
+	// boundary).
+	Component string
+
+	// CgroupUnit is the systemd unit owning the process per
+	// /proc/[pid]/cgroup — the nearest ancestor path element with a
+	// .service or .scope suffix. Kernel-maintained corroboration for
+	// Component; empty when no unit-shaped ancestor exists (non-systemd
+	// hosts, containers) or the read failed. Cached per process instance:
+	// a rare post-exec cgroup migration goes stale until the process
+	// restarts.
+	CgroupUnit string
 }

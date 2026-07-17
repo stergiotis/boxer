@@ -16,6 +16,7 @@ const (
 	DomainContainer Domain = "container"
 	DomainGPU       Domain = "gpu"
 	DomainPSI       Domain = "psi"
+	DomainSockets   Domain = "sockets"
 )
 
 // BundleSnapshot is the per-domain union of all configured collectors'
@@ -40,6 +41,12 @@ type BundleSnapshot struct {
 	// collector was not wired (or when the cpu collector is wired and
 	// already includes per-cpu temperatures inline).
 	Sensors []TempReading
+
+	// Sockets is the listening-socket table (ADR-0126 observed topology).
+	// nil when the sockets collector was not wired. The collector samples
+	// on its own slower cadence, so consecutive bundles may carry the
+	// same snapshot; CollectedAtUnixMs dates it.
+	Sockets *SocketsSnapshot
 
 	// Topology is the static CPU containment hierarchy (ADR-0090 SD6 fork:
 	// published on the metric plane rather than read in-process by the
