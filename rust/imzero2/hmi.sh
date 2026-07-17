@@ -139,6 +139,10 @@ if [ -f "$projectRoot/tags" ]; then
 	export GODEPVIEW_TAGS="$(tr -d '\n' < "$projectRoot/tags")"
 fi
 cd "$projectRoot"
+# ADR-0126 topology mark: the launcher is this run's supervisor, so it injects
+# the carrier's component identity (environment is exec-frozen — a bare
+# un-launched run shows none). Respect an already-set value.
+export BOXER_COMPONENT="${BOXER_COMPONENT:-imzero2-demo}"
 "$here/main_go" --logFormat=console \
 	--logLevel=info \
        	--pprofHttpListenAddress "localhost:6060" \

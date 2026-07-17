@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
+	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/urfave/cli/v2"
 )
@@ -72,6 +73,7 @@ func run(c *cli.Context) (err error) {
 		return eh.Errorf("sysmetricsd: %w", err)
 	}
 	log.Info().Str("subject", sysmetricsbus.BundleSubject(host)).Stringer("interval", c.Duration("interval")).
+		Str("component", topo.Self()).
 		Msg("sysmetricsd: publishing system metrics over NATS")
 	<-ctx.Done()
 

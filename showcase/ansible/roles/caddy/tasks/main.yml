@@ -57,6 +57,9 @@
         content: |
           [Service]
           EnvironmentFile=/etc/caddy/imzero2.env
+          # ADR-0126 topology mark: component identity for the observed-topology
+          # layer; token matches the topo registry verbatim.
+          Environment=BOXER_COMPONENT=caddy
 
     - name: Enable + (re)start Caddy
       when: imzero2_domain | length > 0 and imzero2_basic_auth_hash | length > 0

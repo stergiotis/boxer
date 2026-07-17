@@ -16,6 +16,9 @@ Environment=IMZERO2_HEADLESS_IGNORE_CLOSE=1
 Environment=IMZERO2_HEADLESS_FPS=30
 Environment="IMZERO2_HEADLESS_ENCODER_ARGS=-c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 100000"
 Environment=LIBGL_ALWAYS_SOFTWARE=1
+# ADR-0126 topology mark: component identity, inherited by every child this
+# unit spawns. The token must match the topo registry verbatim.
+Environment=BOXER_COMPONENT=imzero2-demo
 ExecStart=/opt/imzero2/run-current.sh
 # always (not on-failure): the host can exit cleanly (status 0) on a UI-driven
 # viewport-close, which on-failure would NOT restart — that took the demo down

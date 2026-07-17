@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
+	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -126,6 +127,7 @@ func NewCommand() *cli.Command {
 					Str("vcs_revision", runInst.VcsRevision).
 					Bool("vcs_modified", runInst.VcsModified).
 					Str("module_path", runInst.ModulePath).
+					Str("component", topo.Self()).
 					Msg("runinfo: process boot")
 			}
 			facts, isChStore := chstore.NewWithFallback(chstore.Defaults(), log.Logger, 2*time.Second)

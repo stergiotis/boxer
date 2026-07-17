@@ -104,6 +104,23 @@
           </clickhouse>
       notify: Restart clickhouse-server
 
+    - name: Ensure the clickhouse-server drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/clickhouse-server.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Mark clickhouse-server with its topology component (ADR-0126)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/clickhouse-server.service.d/10-imzero2.conf
+        mode: "0644"
+        content: |
+          [Service]
+          # ADR-0126 topology mark: component identity for the observed-topology
+          # layer; token matches the topo registry verbatim.
+          Environment=BOXER_COMPONENT=clickhouse
+      notify: Restart clickhouse-server
+
     - name: Enable + start clickhouse-server
       ansible.builtin.systemd:
         name: clickhouse-server

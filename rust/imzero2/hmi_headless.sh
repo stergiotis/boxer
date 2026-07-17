@@ -24,6 +24,11 @@ set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 
+# ADR-0126 topology mark: the launcher is this run's supervisor, so it injects
+# the carrier's component identity. Respect an already-set value; the sandbox
+# path forwards it explicitly (systemd-run does not inherit our environment).
+export BOXER_COMPONENT="${BOXER_COMPONENT:-imzero2-demo}"
+
 # --sandbox (ours, NOT a main_go flag): run the demo inside a transient systemd
 # unit whose filesystem + syscall sandbox mirrors the deployed
 # imzero2-demo.service drop-in (showcase/onbox/20-hardening.conf), so the box's
@@ -172,6 +177,7 @@ export LIBGL_ALWAYS_SOFTWARE IMZERO2_HEADLESS_ENCODER_ARGS XDG_CACHE_HOME
 sandbox_env=()
 for _v in "${!IMZERO2_@}"; do sandbox_env+=(--setenv="$_v=${!_v}"); done
 sandbox_env+=(--setenv="LIBGL_ALWAYS_SOFTWARE=$LIBGL_ALWAYS_SOFTWARE" --setenv="XDG_CACHE_HOME=$XDG_CACHE_HOME")
+sandbox_env+=(--setenv="BOXER_COMPONENT=$BOXER_COMPONENT")
 
 echo "hmi_headless.sh: --sandbox → transient systemd unit (ProtectSystem=strict; homes hidden;" >&2
 echo "hmi_headless.sh:   only $projectRoot visible, read-only). IPAddress* is parsed but NOT enforced" >&2

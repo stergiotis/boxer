@@ -1,7 +1,9 @@
 ---
-# Restart only when a config.d drop-in actually changed (the daily ansible-pull
-# must not bounce a running server every converge).
+# Restart only when a drop-in actually changed (the daily ansible-pull must not
+# bounce a running server every converge). daemon_reload covers the systemd
+# unit drop-in (10-imzero2.conf); it is a no-op for the config.d XML ones.
 - name: Restart clickhouse-server
   ansible.builtin.systemd:
     name: clickhouse-server
     state: restarted
+    daemon_reload: true

@@ -18,3 +18,6 @@ ExecStart=/opt/imzero2/current/main_go --logFormat=console --logLevel=info imzer
 TimeoutStartSec=infinity
 Environment=HOME=/opt/imzero2
 Environment=CARGO_HOME=/opt/imzero2/.cargo
+# ADR-0126 topology mark: shared with the poll service — break-glass is the
+# same deploy component; its distinct unit stays visible via the cgroup.
+Environment=BOXER_COMPONENT=imzero2-deploy

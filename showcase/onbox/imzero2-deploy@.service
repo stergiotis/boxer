@@ -20,5 +20,7 @@ TimeoutStartSec=infinity
 # git/cargo/go state lives under the deploy root.
 Environment=HOME=/opt/imzero2
 Environment=CARGO_HOME=/opt/imzero2/.cargo
+# ADR-0126 topology mark: shared with the poll service (see there).
+Environment=BOXER_COMPONENT=imzero2-deploy
 # Restart of imzero2-demo.service is allowed via the polkit rule
 # (49-imzero2-deploy.rules), exactly as for the poll service.
