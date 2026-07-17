@@ -85,3 +85,26 @@ func TestQualitativeCycleAlphaOpaque(t *testing.T) {
 		}
 	}
 }
+
+// TestQualitativeCyclePairwiseDistinct guards the qualitative palette's core
+// contract: every pair of cycle entries must be visually tellable apart.
+// batlowS is prefix-ordered by categorical distinctness, so the vendored
+// first-10 subset satisfies this; a resampling regression in the vendor
+// pipeline (which once produced pairs ~4 RGB units apart) fails here.
+func TestQualitativeCyclePairwiseDistinct(t *testing.T) {
+	const minDist2 = 15 * 15 // squared RGB Euclidean floor
+	for i := range 10 {
+		for j := i + 1; j < 10; j++ {
+			a := styletokens.QualitativeCycle(i)
+			b := styletokens.QualitativeCycle(j)
+			dr := int(a.R) - int(b.R)
+			dg := int(a.G) - int(b.G)
+			db := int(a.B) - int(b.B)
+			d2 := dr*dr + dg*dg + db*db
+			if d2 < minDist2 {
+				t.Errorf("cycle entries %d and %d are near-duplicates: (%d,%d,%d) vs (%d,%d,%d), dist²=%d < %d",
+					i, j, a.R, a.G, a.B, b.R, b.G, b.B, d2, minDist2)
+			}
+		}
+	}
+}

@@ -412,6 +412,16 @@ strong  = { L = 0.90, C = 0.13 }       # unchanged
 
 `status` stays `proposed` per the ADR convention; the M0a + 2026-05-16 + 2026-05-17 amendment chain is owed a single review pass.
 
+### 2026-07-17 — batlowS qualitative subset corrected: even resampling → upstream first-10
+
+**Defect.** The vendor pipeline derived the 10-entry `batlow_s` LUT by *evenly resampling* Crameri's 100-entry `batlowS.txt` (rows 0, 11, 22, …, 99). batlowS is **prefix-ordered by categorical distinctness** — the first N rows *are* the intended N-color qualitative palette, and later rows progressively subdivide the batlow ramp, converging on earlier entries. Even resampling therefore lands in fine-subdivision territory and produced near-duplicate cycle entries: pairs (0, 8) at ~3.7, (1, 9) at ~4.6, and (2, 5) at ~7.5 RGB units apart — far below any just-noticeable difference. In consumers that color adjacent categorical entities from `QualitativeCycle` (treemap cells, series colors, category chips), distinct categories rendered visually identical, silently breaking §SD4's "Default qualitative (10 categorical colors)" contract.
+
+**Fix.** The vendor converter now truncates to the upstream **first 10 rows** (`#011959`, `#faccfa`, `#828231`, `#226061`, `#f19d6b`, `#4d734d`, `#114360`, `#fdb4b4`, `#c09036`, `#175262`; minimum pairwise distance ≈16 RGB units, ≈34 among the first 9) and the emitted provenance line reads "first-10 subset per ADR-0033 §SD4". Entry 0 (batlow's navy anchor) is unchanged; entries 1–9 all change. Both generated artefacts (Go `styletokens/data_encoding/batlow_s.go` and Rust `data_encoding/batlow_s.rs`) were regenerated together. A regression test (`TestQualitativeCyclePairwiseDistinct`) now enforces a squared-distance floor over every cycle pair, so a resampling regression fails CI rather than shipping.
+
+**Pipeline repairs in the same pass** (the vendor tool had been unrunnable since the repository restructure): upstream/emit paths repointed `src/rust/…` → `rust/imzero2/…`; generated-file headers now name the real invocation (`./boxer.sh designsystem colors vendor`); the Rust emitter now writes rustfmt-stable output (unpadded tuples, name-sorted `mod.rs` declarations matching rustfmt's `reorder_modules`/`reorder_imports`), verified with `rustfmt --check` over every emitted `.rs` file so `cargo fmt` no longer drifts the artefacts. Non-`batlow_s` palette *data* is byte-identical to the previous vendoring (headers only).
+
+**Why this is an Amendment, not a new ADR.** §SD4 already commits to vendoring batlowS verbatim as the 10-color qualitative default; the even-resampling was an implementation error against that commitment, not a decision. No palette is added or removed, no consumer API changes; downstream surfaces simply regain the distinctness §SD4 always promised.
+
 ## References
 
 - [ADR-0029 — design system + policy-as-code](./0029-imzero2-design-system-and-policy-as-code.md) — §SD12 IP boundary check cross-cuts §SD7 here.
