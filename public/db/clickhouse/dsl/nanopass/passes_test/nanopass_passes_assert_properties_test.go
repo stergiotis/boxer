@@ -93,6 +93,7 @@ func TestAssertProperties(t *testing.T) {
 		{name: "CanonicalizeMultiIf", pass: passes.CanonicalizeMultiIf},
 		{name: "RemoveRedundantParens", pass: passes.RemoveRedundantParens},
 
+		{name: "CanonicalizeFull", pass: passes.CanonicalizeFull(100), nested: true},
 		{name: "CanonicalizeSugar", pass: passes.CanonicalizeSugar, nested: true},
 		{name: "CanonicalizeCaseConditionals", pass: passes.CanonicalizeCaseConditionals, nested: true},
 		{name: "CanonicalizeTernary", pass: passes.CanonicalizeTernary, nested: true},

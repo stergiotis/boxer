@@ -7,7 +7,7 @@ import "github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 // passes that declare NeedsFixedPoint; passes already declared idempotent
 // run once.
 func CanonicalizeFull(maxIter int) nanopass.Pass {
-	return nanopass.Sequence(
+	p := nanopass.Sequence(
 		"CanonicalizeFull",
 		CanonicalizeWhitespaceSingleLine,
 		CanonicalizeEquals,
@@ -22,4 +22,14 @@ func CanonicalizeFull(maxIter int) nanopass.Pass {
 		CanonicalizeKeywordCase,
 		CanonicalizeIdentifiers,
 	)
+	// Sequence carries no properties of its own; declare the composite's so
+	// catalog surfaces (passreg, keelson.sql_passes) describe it truthfully.
+	// Idempotency of the whole pipeline is corpus-checked in
+	// TestFullPipelineIdempotent and TestAssertProperties.
+	p.Properties = nanopass.PassProperties{
+		Idempotent: true,
+		Reads:      nanopass.RegionBody,
+		Writes:     nanopass.RegionBody,
+	}
+	return p
 }
