@@ -53,6 +53,18 @@ func (t *Table) Int64(name string, get func(row int) int64) *Table {
 		func(b array.Builder, i int) { b.(*array.Int64Builder).Append(get(i)) })
 }
 
+// Uint64 declares a non-nullable Uint64 column filled by get.
+func (t *Table) Uint64(name string, get func(row int) uint64) *Table {
+	return t.add(arrow.Field{Name: name, Type: arrow.PrimitiveTypes.Uint64},
+		func(b array.Builder, i int) { b.(*array.Uint64Builder).Append(get(i)) })
+}
+
+// Float64 declares a non-nullable Float64 column filled by get.
+func (t *Table) Float64(name string, get func(row int) float64) *Table {
+	return t.add(arrow.Field{Name: name, Type: arrow.PrimitiveTypes.Float64},
+		func(b array.Builder, i int) { b.(*array.Float64Builder).Append(get(i)) })
+}
+
 // Bool declares a non-nullable Boolean column filled by get.
 func (t *Table) Bool(name string, get func(row int) bool) *Table {
 	return t.add(arrow.Field{Name: name, Type: arrow.FixedWidthTypes.Boolean},

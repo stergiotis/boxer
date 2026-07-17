@@ -44,6 +44,27 @@ func BundleSubjectWildcard() (subject string) {
 	return
 }
 
+// ParseBundleSubjectHost extracts the {host} token from a whole-bundle
+// subject ("sysmetrics.{host}.bundle"). ok is false for any other
+// subject shape. The inverse of [BundleSubject]; consumers that fan in
+// several boxes (the ADR-0126 latest-holder) key their state by it.
+func ParseBundleSubjectHost(subject string) (host string, ok bool) {
+	const prefix = SubjectRoot + "."
+	const suffix = ".bundle"
+	if len(subject) <= len(prefix)+len(suffix) ||
+		subject[:len(prefix)] != prefix || subject[len(subject)-len(suffix):] != suffix {
+		return
+	}
+	host = subject[len(prefix) : len(subject)-len(suffix)]
+	for i := 0; i < len(host); i++ {
+		if host[i] == '.' { // deeper hierarchy — not the bundle leaf
+			return "", false
+		}
+	}
+	ok = true
+	return
+}
+
 // HostToken sanitises s into a single bus subject token: every character
 // outside [A-Za-z0-9_-] becomes '_' (the inprocbus/NATS token rule). An
 // empty result falls back to "local".

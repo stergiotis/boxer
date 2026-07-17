@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
 	introspectproviders "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	introspectprovidersgui "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -45,6 +46,10 @@ const queryPoolName = "introspect"
 
 // queryBusAppId is the bus client identity the `/query` runner publishes as.
 const queryBusAppId runtimeapp.AppIdT = "runtime.introspect.query"
+
+// topoBusAppId is the bus client identity of the metric-plane consumer
+// feeding the observed-topology tables (ADR-0126 §SD5).
+const topoBusAppId runtimeapp.AppIdT = "runtime.introspect.topo"
 
 // Deps are the host-supplied collaborators [Start] needs.
 type Deps struct {
@@ -85,6 +90,25 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if e := introspectprovidersgui.RegisterAll(reg, deps.WindowHost); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: GUI provider registration failed")
 	}
+	// ADR-0126 §SD5: a process-lifetime metric-plane consumer feeds the
+	// observed-topology tables (keelson.procs, keelson.sockets). imztop's
+	// consumer is mount-gated, so the host holds its own. Best-effort: no
+	// bus, no tables — the rest of the source still stands.
+	var topoHolder *sysmetricsbus.LatestHolder
+	if deps.Bus != nil {
+		topoBus := deps.Bus.NewClient(topoBusAppId, []runtimeapp.SubjectFilter{
+			{Pattern: sysmetricsbus.SubjectWildcard, Direction: runtimeapp.CapDirectionSub, Reason: "keelson.procs/keelson.sockets serve the latest metric-plane snapshot (ADR-0126)"},
+		})
+		holder, herr := sysmetricsbus.StartLatestHolder(sysmetricsbus.LatestHolderOptions{Bus: topoBus, Log: deps.Log})
+		if herr != nil {
+			deps.Log.Warn().Err(herr).Msg("introspecthost: metric-plane consumer failed; keelson.procs/sockets unavailable")
+		} else {
+			topoHolder = holder
+			if e := introspectproviders.RegisterTopology(reg, holder); e != nil {
+				deps.Log.Warn().Err(e).Msg("introspecthost: topology provider registration failed")
+			}
+		}
+	}
 	if e := introspect.RegisterCatalog(reg); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: catalog registration failed")
 	}
@@ -115,6 +139,9 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	srv := introspecthttp.New(cfg, deps.Log)
 	if startErr := srv.Start(); startErr != nil {
 		deps.Log.Warn().Err(startErr).Msg("introspecthost: HTTP table source start failed; keelson.* url()/query endpoint unavailable")
+		if topoHolder != nil {
+			_ = topoHolder.Close()
+		}
 		return noopStop, startErr
 	}
 	endpoint := srv.BaseURL() + "/query"
@@ -134,6 +161,9 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 
 	stop = func(ctx context.Context) error {
 		introspect.SetLocalQueryEndpoint("")
+		if topoHolder != nil {
+			_ = topoHolder.Close()
+		}
 		return srv.Stop(ctx)
 	}
 	return stop, nil
