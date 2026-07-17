@@ -58,6 +58,7 @@ glibc matches by construction.
    install -m755 run-current.sh /opt/imzero2/run-current.sh
    install -m644 building.html  /opt/imzero2/holding/building.html
    install -m644 imzero2-demo.service imzero2-deploy.service imzero2-deploy.timer /etc/systemd/system/
+   install -m644 queryrunsd.service /etc/systemd/system/   # optional: query-run capture (ADR-0115); needs a local ClickHouse
    install -m644 'imzero2-deploy@.service' 'imzero2-deploy-breakglass@.service' /etc/systemd/system/
    install -m755 deploy-ref.sh /opt/imzero2/deploy-ref.sh
    install -m644 49-imzero2-deploy.rules /etc/polkit-1/rules.d/

@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/iconsgen"
 	"github.com/stergiotis/boxer/public/app/commands/keelsoncodec"
 	"github.com/stergiotis/boxer/public/app/commands/key"
+	"github.com/stergiotis/boxer/public/app/commands/queryrunsd"
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
 	"github.com/stergiotis/boxer/public/app/commands/sample"
 	"github.com/stergiotis/boxer/public/app/commands/swisstopo"
@@ -101,6 +102,7 @@ func mainC() (exitCode int) {
 			findAnchor.NewCliCommand(),
 			http.NewCliCommand(),
 			key.NewCliCommand(),
+			queryrunsd.NewCliCommand(),
 			runtimecodegen.NewCliCommand(),
 			sample.NewCliCommand(),
 			swisstopo.NewCliCommand(),

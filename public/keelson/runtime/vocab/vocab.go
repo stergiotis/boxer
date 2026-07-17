@@ -137,13 +137,54 @@ var (
 	MembLogStack   = NkRegistry.MustBegin("runtimeLogStack").End()
 	MembLogService = NkRegistry.MustBegin("runtimeLogService").End()
 	MembLogField   = NkRegistry.MustBegin("runtimeLogField").End()
+
+	// Query-run fields (ADR-0115 S1) — applied on rows tagged
+	// MembKindQueryRun by the queryrunsd capture pipeline
+	// (runtime/queryrunfacts): one fact per terminal system.query_log
+	// event. The natural key is the ClickHouse query_id; app / run
+	// identity reuses MembRuntimeApp / MembRuntimeRun above, lifted from
+	// the client's log_comment stamp (ADR-0115 SD7).
+	//
+	// Event type ("QueryFinish" / "ExceptionBeforeStart" /
+	// "ExceptionWhileProcessing"), query kind ("Select" / "Insert" / …)
+	// and the stamped play lane are process-stable enumerations on the
+	// symbol section. Counters (duration, IO, result size, peak memory,
+	// normalized_query_hash) live on the u64 section; the exception code
+	// on the i64 section; exception text, the capped inline query text
+	// (interning is deferred to ADR-0112) and the four identity
+	// fingerprints on the string section. MembQueryRunProfileEvent is the
+	// per-ProfileEvents-counter membership, always applied as
+	// MembershipSpecMixedLowCardRefHighCardParameters with the event NAME
+	// as the high-card parameter and the count on the u64 section — the
+	// MembLogField pattern.
+	MembKindQueryRun            = NkRegistry.MustBegin("runtimeKindQueryRun").End()
+	MembQueryRunEventType       = NkRegistry.MustBegin("runtimeQueryRunEventType").End()
+	MembQueryRunQueryKind       = NkRegistry.MustBegin("runtimeQueryRunQueryKind").End()
+	MembQueryRunLane            = NkRegistry.MustBegin("runtimeQueryRunLane").End()
+	MembQueryRunDurationMs      = NkRegistry.MustBegin("runtimeQueryRunDurationMs").End()
+	MembQueryRunReadRows        = NkRegistry.MustBegin("runtimeQueryRunReadRows").End()
+	MembQueryRunReadBytes       = NkRegistry.MustBegin("runtimeQueryRunReadBytes").End()
+	MembQueryRunWrittenRows     = NkRegistry.MustBegin("runtimeQueryRunWrittenRows").End()
+	MembQueryRunWrittenBytes    = NkRegistry.MustBegin("runtimeQueryRunWrittenBytes").End()
+	MembQueryRunResultRows      = NkRegistry.MustBegin("runtimeQueryRunResultRows").End()
+	MembQueryRunResultBytes     = NkRegistry.MustBegin("runtimeQueryRunResultBytes").End()
+	MembQueryRunMemoryPeakBytes = NkRegistry.MustBegin("runtimeQueryRunMemoryPeakBytes").End()
+	MembQueryRunNormalizedHash  = NkRegistry.MustBegin("runtimeQueryRunNormalizedHash").End()
+	MembQueryRunExceptionCode   = NkRegistry.MustBegin("runtimeQueryRunExceptionCode").End()
+	MembQueryRunExceptionText   = NkRegistry.MustBegin("runtimeQueryRunExceptionText").End()
+	MembQueryRunQueryText       = NkRegistry.MustBegin("runtimeQueryRunQueryText").End()
+	MembQueryRunAuthoredFp      = NkRegistry.MustBegin("runtimeQueryRunAuthoredFp").End()
+	MembQueryRunSentFp          = NkRegistry.MustBegin("runtimeQueryRunSentFp").End()
+	MembQueryRunChainFp         = NkRegistry.MustBegin("runtimeQueryRunChainFp").End()
+	MembQueryRunEnvFp           = NkRegistry.MustBegin("runtimeQueryRunEnvFp").End()
+	MembQueryRunProfileEvent    = NkRegistry.MustBegin("runtimeQueryRunProfileEvent").End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
 // iterate to assert invariants (non-zero ids, unique ids).
 var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindGrant, MembKindAudit, MembKindState, MembKindEvent, MembKindLog,
-	MembKindRuntimeRun, MembKindAppLifecycle,
+	MembKindRuntimeRun, MembKindRuntimeHeartbeat, MembKindAppLifecycle,
 	MembRuntimeApp, MembRuntimeRun,
 	MembGrantSubjectPattern, MembGrantDirection, MembGrantReason, MembGrantSticky, MembGrantedVia,
 	MembAuditRequestSubject, MembAuditResult, MembAuditLatencyMs, MembAuditRequestSizeB, MembAuditResponseSizeB,
@@ -152,4 +193,11 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembRunHostname, MembRunPid, MembRunGoVersion, MembRunVcsRevision, MembRunVcsModified, MembRunVcsBuildInfo, MembRunModulePath,
 	MembLifecyclePhase, MembLifecycleStopReason, MembLifecycleTileKey,
 	MembLogLevel, MembLogMessage, MembLogCaller, MembLogError, MembLogStack, MembLogService, MembLogField,
+	MembKindQueryRun, MembQueryRunEventType, MembQueryRunQueryKind, MembQueryRunLane,
+	MembQueryRunDurationMs, MembQueryRunReadRows, MembQueryRunReadBytes,
+	MembQueryRunWrittenRows, MembQueryRunWrittenBytes, MembQueryRunResultRows, MembQueryRunResultBytes,
+	MembQueryRunMemoryPeakBytes, MembQueryRunNormalizedHash,
+	MembQueryRunExceptionCode, MembQueryRunExceptionText, MembQueryRunQueryText,
+	MembQueryRunAuthoredFp, MembQueryRunSentFp, MembQueryRunChainFp, MembQueryRunEnvFp,
+	MembQueryRunProfileEvent,
 }

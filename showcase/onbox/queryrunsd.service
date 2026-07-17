@@ -1,0 +1,56 @@
+[Unit]
+Description=queryrunsd — capture terminal query_log events into runtime.facts (ADR-0115 S1)
+# Ordering only (no Requires): ClickHouse may be packaged differently per box
+# (native service, container). If it is absent at start, the boot reconciler
+# fails fast and Restart=always retries until it appears — pull-shape capture
+# loses nothing while waiting (bounded by the query_log TTL).
+After=network-online.target clickhouse-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/imzero2/current/main_go --logFormat=console queryrunsd
+# Fail-fast reconcile + steady retry: a down ClickHouse is the expected failure
+# mode, not a crash loop worth parking on the start limiter (5 starts / 10 s
+# default burst is never reached at this pace).
+Restart=always
+RestartSec=5
+# Stricter than the GUI carrier's 20-hardening.conf (ADR-0115 SD4): this
+# daemon is stateless (watermarks live in the destination table), needs no
+# /proc, no devices, no home, and only loopback networking — ClickHouse pulls
+# /pull on 127.0.0.1 and the extract targets 127.0.0.1:8123. DynamicUser gives
+# a transient UID with no writable state anywhere.
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectProc=invisible
+ProcSubset=pid
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+UMask=0077
+# No AF_NETLINK etc.: plain TCP to loopback plus the resolver socket.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressAllow=localhost
+IPAddressDeny=any
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Unlike the carrier there is no JIT in this process; W^X can be enforced.
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

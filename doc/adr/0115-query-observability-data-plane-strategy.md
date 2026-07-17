@@ -313,7 +313,11 @@ Within the chosen family, three drivers were weighed:
   `query_kind`, event type, exception code/text) on typed sections;
   `ProfileEvents` fanned out per event via the `LogField` mixed-ref pattern
   (event name as high-card parameter); identity lifted from `log_comment`;
-  capped inline query text until interning lands.
+  capped inline query text until interning lands. The deterministic id
+  hashes `(query_id, event_time, event type)`, not the `query_id` alone:
+  play deliberately reuses a stable per-lane `query_id` (ADR-0097 SD5),
+  so successive runs of one lane share the natural key while remaining
+  distinct events.
 - **Packages.** `runtime/queryrunfacts` (layout, vocab additions, extract
   SQL, row→entity encoding — pure library) and `runtime/queryrunsvc`
   (`/pull` + `/healthz`, boot reconciliation, loopback refusal);
@@ -326,12 +330,31 @@ REFRESH EVERY 5 SECOND APPEND TO runtime.facts
 AS SELECT * FROM url('http://127.0.0.1:8127/pull', 'ArrowStream', '<facts columns>')
 WHERE `id:id:u64:2k:0:0:` NOT IN (
   SELECT `id:id:u64:2k:0:0:` FROM runtime.facts
-  WHERE `ts:ts:z64:2k:0:0:` > now64() - INTERVAL 1 DAY);
+  WHERE `ts:ts:z64:2k:0:0:` > now64(9) - INTERVAL 1 DAY
+    AND has(`tv:symbol:lr:lr:u64:2q:0:0:0::data`, <KindQueryRun id>)
+)
+SETTINGS log_comment='queryrunsd-refresh',
+         allow_suspicious_low_cardinality_types=1, http_max_tries=1;
 ```
 
+  Two settings are load-bearing (measured on 26.6): the url() structure
+  instantiates the leeway `LowCardinality(UInt64)` columns, which sit
+  behind the same suspicious-type gate the facts DDL unlocks; and
+  `http_max_tries=1` disables url()'s intra-query retry backoff — under
+  pull-shape the next refresh *is* the retry, and a dead endpoint must
+  fail the tick fast instead of holding the refresh slot through a
+  backoff loop (which otherwise blocks the boot reconciler's DROP for
+  its duration; the reconciler also issues a best-effort
+  `SYSTEM CANCEL VIEW` first).
+
   The service's extract (tagged `log_comment='queryrunsd-extract'`) selects
-  `query_log` rows newer than the newest KindQueryRun fact, excluding its own
-  tag and the refresh inserts.
+  `query_log` rows newer than the newest KindQueryRun fact (minus a
+  60-second overlap absorbing near-boundary flush reordering — re-served
+  rows dedup structurally), excluding its own tag, the refresh tag, and
+  any query whose text references the pull URL (the belt for a server
+  that does not apply the MV body's SETTINGS to refresh queries), in
+  ascending event time with a batch cap so a first-boot backfill of the
+  whole source TTL advances watermark-by-watermark.
 - **Environment** (ADR-0009 registry): `IMZERO2_QUERYRUNS_LISTEN`
   (`127.0.0.1:8127`), `IMZERO2_QUERYRUNS_CH_URL`, `IMZERO2_QUERYRUNS_CADENCE`
   (`5s`), `IMZERO2_QUERYRUNS_SCOPE` (`all` | `stamped` | `off`; default
