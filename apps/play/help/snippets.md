@@ -290,7 +290,7 @@ FROM values('lane String, title String, subtitle String,
   ('accepted',   'ADR-0066 — DQL read-back',        '2026-06-24',   0, 0, 0),
   ('superseded', 'ADR-0085 — operator break-glass', '→ ADR-P-0001', 2, 1, 3),
   ('withdrawn',  'ADR-0010 — leeway CBOR codec',    '2026-05-02',   0, 0, 2),
-  ('',           'ADR-0119 — (frontmatter has no status)', '',      0, 0, 0))
+  ('',           'ADR-0999 — (frontmatter has no status)', '',      0, 0, 0))
 ORDER BY indexOf(lifecycle, lane) = 0, indexOf(lifecycle, lane)
 ```
 

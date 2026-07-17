@@ -8,7 +8,7 @@ date: 2026-07-17
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0126: imzero2 pipelineview widget — schematic pipelines with classed side ports
+# ADR-0119: imzero2 pipelineview widget — schematic pipelines with classed side ports
 
 ## Context
 
