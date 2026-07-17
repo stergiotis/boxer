@@ -139,6 +139,22 @@ The topology fork is resolved by **publishing CPU topology on the plane** (the c
 
 Net effect: the production `imztop` App imports zero collector packages and reads neither `/proc` nor `/sys` — both §SD6 production gaps (the panel's sysfs read and the data-type coupling) are closed. The last in-package reach was the screenshot-tour harness (`imztop_tour.go`, ADR-0057 Demo enrollment), which used to start an in-proc scraper for live capture; it now feeds the consumer a synthetic, live-looking `BundleSampler` through the same `sysmetricsbus.Producer` instead, so `go list -deps ./apps/imztop` shows **zero** collector packages — the whole package, not just the production App, is collector-free. (The `BundleSampler` seam introduced for the decoupling is what makes the synthetic feed a drop-in.)
 
+### 2026-07-18 — ADR-0126: the `sockets` domain, proc identity fields, per-domain cadence
+
+[ADR-0126](./0126-appliance-topology-as-data.md) extends the plane with
+observed topology. The SD1 domain token list gains `sockets` (the
+listening-socket table, pid-attributed via the fd socket-inode walk);
+the `proc` domain's rows gain two additive identity fields, `Component`
+(the supervisor-injected `BOXER_COMPONENT` mark from the exec-frozen
+environ, read once per process instance) and `CgroupUnit` (the owning
+systemd unit per `/proc/[pid]/cgroup`). Both reads stay inside the SD2
+capability envelope. Cadence remains scraper-owned per SD5, and is now
+per-domain: the sockets collector samples on its own slower default
+(15 s) internally and serves its cached snapshot between due times, so
+the bundle tick loop is unchanged. Marked processes are exempt from the
+proc collector's `MaxProcs` cap so an idle appliance daemon stays
+visible. The SD8 sensitivity posture covers the new fields unchanged.
+
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) sysmetrics collector · [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) imztop · [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) remote access · [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) auth/TLS

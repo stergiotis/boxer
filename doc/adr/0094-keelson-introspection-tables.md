@@ -297,6 +297,26 @@ pushdown (see Alternatives), always materialises it. This makes supply-chain
 attestation of the external tools — not just their presence, but their identity
 — a query, alongside `keelson.build`/`keelson.sbom`.
 
+## Update (2026-07-18) — the ADR-0126 topology tables
+
+[ADR-0126](./0126-appliance-topology-as-data.md) added five tables. Four are
+the first *plane-fed* providers: a process-lifetime `sysmetricsbus`
+latest-holder (subscribed to every host's bundle subject; imztop's consumer is
+mount-gated) feeds them, so they register via `RegisterTopology` only where a
+bus exists, and their rows are empty — not absent — until a scraper publishes.
+
+  | table | source | freshness |
+  |-------|--------|-----------|
+  | `keelson.components` | `topo.Registry()` (compiled-in declared inventory) | Static |
+  | `keelson.procs` | metric plane, `proc` domain (per host, staleness-stamped) | Live |
+  | `keelson.sockets` | metric plane, `sockets` domain (per host, staleness-stamped) | Live |
+  | `keelson.topology_nodes` | `topo.AssembleNodes` (registry + manifests + plane) | Live |
+  | `keelson.topology_edges` | `topo.AssembleEdges` (registry + manifests + plane) | Live |
+
+`keelson.procs` lands the `sysmetrics`/`procs` entry §SD8 deferred to v2. The
+§SD2 Table builder gained `Uint64` and `Float64` columns. Canonical queries
+over the set live in [doc/howto/topology-queries.md](../howto/topology-queries.md).
+
 ## References
 
 - [ADR-0009 — environment variable registry](./0009-environment-variable-registry.md)

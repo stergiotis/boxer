@@ -68,8 +68,9 @@ judgment — so the work below is mostly seam-completion, not an ML stack.
 | Synthetic verification | `ws_probe`, screenshot tours ([ADR-0057](../adr/0057-demo-registry-and-drivers.md)), [egui-mcp](../howto/egui-mcp.md) | built |
 | Task supervision | background tasks ([ADR-0038](../adr/0038-keelson-background-task-primitive.md)), `bgjob` | built, in-process |
 | Liveness | heartbeat ticks as facts (`keelson/runtime/heartbeat`) | GUI host only |
+| Topology as data | component marks + scraper-observed procs/sockets + the `keelson.topology_*` node/edge graph with an `origin` column ([ADR-0126](../adr/0126-appliance-topology-as-data.md), [howto](../howto/topology-queries.md)) | built, live-only; unit states deferred |
 | Runbooks | [doc/howto/](../howto/adr-overview.md) corpus | human prose only |
-| Health verdicts, backup/restore, alerting, topology-as-data | — | absent |
+| Health verdicts, backup/restore, alerting | — | absent |
 
 ## The observation inventory
 
@@ -83,8 +84,8 @@ history persist, and can it be queried?
 | Go runtime metrics (heap, GC, scheduler) | yes (`observability/goruntime`) | no | no | feeds imzrt in-process only ([ADR-0061](../adr/0061-imzero2-imzrt-go-runtime-dashboard.md)) |
 | Frame / render metrics | yes (per-app frame cost, fps distributions) | no | no | pixels only |
 | App-defined instruments | no primitive | no | no | see below |
-| Topology — declared | partially (unit files; manifest `Caps` in `keelson.apps`) | n/a | in git | the intended service and bus graph |
-| Topology — observed (units, ports, proc↔app) | no | no | no | no node/edge vocabulary exists |
+| Topology — declared | yes (component registry → `keelson.components`; manifest `Caps` in `keelson.apps`; unit files remain in git) | n/a | in git / compiled in | [ADR-0126](../adr/0126-appliance-topology-as-data.md) |
+| Topology — observed (marks, ports, proc↔component) | yes (`BOXER_COMPONENT` marks + cgroup + listening sockets, scraper-collected) | yes | no | node/edge vocabulary is `keelson.topology_*`; unit *states* deferred ([ADR-0126 §SD6](../adr/0126-appliance-topology-as-data.md)) |
 | pprof profiles / execution traces | opt-in (`observability/profiling`, flight recorder in `observability/tracing`) | no | no | file- or endpoint-shaped; never becomes data |
 | Linux perf | no | — | — | descoped; would ride extbin if ever wanted |
 | ClickHouse internals | server-side `system.*` | — | server TTL | queryable in place; [ADR-0115](../adr/0115-query-observability-data-plane-strategy.md) is the lift-to-facts path |
@@ -112,16 +113,18 @@ removes. High-rate paths aggregate in-process (the existing ring and
 t-digest primitives) and snapshot summaries on a cadence, following the
 ADR-0090 rule: publish raw counters, derive rates consumer-side.
 
-**Topology is missing its observed half.** The declared half already exists
-as data — manifest capability filters are the intended bus graph, unit files
-carry ordering and dependency edges. Absent are the observed side (live unit
-states, listening sockets, the process↔unit↔app mapping, ClickHouse, NATS,
-and the TLS front as nodes) and the join between the two — which is exactly
-the desired-versus-observed reconciliation the rest of this page turns on.
-The natural home for the observed side is the scraper: it already holds the
-machine-state trust boundary, and systemd state is the same class of read as
-`/proc`. The node/edge vocabulary is a real design decision, because every
-later diagnosis join builds on it.
+**Topology has both halves, minus unit states.**
+[ADR-0126](../adr/0126-appliance-topology-as-data.md) built the layer
+marking-first: every deliberately-run process carries a supervisor-injected
+component mark, the scraper observes marks, cgroups, and listening sockets,
+and `keelson.topology_nodes`/`keelson.topology_edges` carry one node/edge
+vocabulary with an `origin` column — so declared-versus-observed drift is a
+single-table `GROUP BY`, and ClickHouse, NATS, and the TLS front appear as
+marked components with sockets. The recorded blind spot: without supervisor
+interrogation (the deferred D-Bus collector), a `failed` unit is
+indistinguishable from an absent one — unit-state verdicts belong with the
+health work. History is the other limit: the tables are latest-snapshot only
+until the persistence tee exists.
 
 **Profiling should become a verb, not a stack.** Collection exists — CPU
 profile to file, an opt-in pprof HTTP endpoint, a signal-triggered
@@ -241,9 +244,11 @@ surfaces and warrant a record before code.
    lint or test gate in the capslock mold — so an app that skips the
    contract fails CI, not the operator during an incident.
 2. **`keelson.health` and `keelson.services`.** Health as a provider
-   (per-process) plus observed topology — systemd unit state and the
-   node/edge graph — as data; the scraper is the natural collector for the
-   host-level half. The vocabulary is the *(ADR)* part.
+   (per-process) plus observed topology as data. The topology half is
+   built — the node/edge vocabulary, marks, and socket observation shipped
+   as [ADR-0126](../adr/0126-appliance-topology-as-data.md) — with unit
+   *states* (`keelson.services`, the D-Bus read) explicitly deferred into
+   this item's remaining half, beside the health verdicts.
 3. **The ops verb family.** Audited request/reply subjects with CLI parity,
    dry-run, typed errors, idempotency keys. The
    [ADR-0085](../adr/0085-imzero2-demo-pull-build-atomic-deploy.md) derived

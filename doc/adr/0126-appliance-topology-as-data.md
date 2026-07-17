@@ -319,6 +319,41 @@ by ADR-XXXX)`. Post-acceptance edits follow
 [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 tiers (Tier 2 dated `## Updates`).
 
+## Updates
+
+### 2026-07-18 — P2–P5 implemented
+
+The marking contract, collectors, typed tables, and graph projection are
+built and merged; only the SD7 P6 documentation pass remained (this
+entry). What landed, and where it deviates from the letter of the SDs:
+
+- **SD2/SD3 as designed**, with one addition the design pass missed: the
+  proc collector's `MaxProcs` cap ranks by CPU, which would silently
+  evict an idle marked daemon — exactly the processes topology exists to
+  see. Marked processes are now cap-exempt (at most `MaxProcs` unmarked
+  rows plus every marked one), and the identity reads moved to the
+  cheap phase so the exemption can act before capping; the
+  once-per-instance cache keeps the added cost to first sightings.
+- **SD4**: the per-domain cadence is collector-owned (the sockets
+  collector caches internally between due times) rather than a scraper
+  scheduler change — the bundle tick loop is untouched.
+- **SD5 deviation**: the "error column" for a silent plane is not
+  built. The tables carry `sampled_at`/`received_at`/`collected_at`
+  staleness stamps instead, and zero rows mean no scraper has published;
+  per-domain collector errors still ride the bundle's error map,
+  currently unexposed as a table. Revisit if the detection layer needs
+  them relationally. The `keelson.build` `pid` column the Consequences
+  anticipated already existed — the app→carrier-process join works
+  unchanged.
+- The canonical queries in
+  [doc/howto/topology-queries.md](../howto/topology-queries.md) — the
+  drift `GROUP BY` both directions, the socket-owner walk in typed and
+  edges-only forms, the recursive dependency closure — are each
+  verified end-to-end against clickhouse-local in the engine tests, as
+  are the exec-frozen environ read (a spawn-env'd test binary observes
+  its own mark on live `/proc`) and listener attribution (a test-owned
+  listener attributes to the test's pid).
+
 ## References
 
 - [aiops-operability](../explanation/aiops-operability.md) — the gap map this
