@@ -1385,6 +1385,75 @@ egui sizes to the available height, and inside the dock's unbounded-height
 body `ScrollArea` it ballooned and pushed the grid off the bottom of the
 pane; replaced with a fixed horizontal gap.
 
+### 2026-07-17 — Editor delivery (design): exported delivery ops (amends slice-6 D5)
+
+**The gap, by counterexample.** The tab registry fails its own dogfood
+test for one class of pane: the built-in Snippets tab cannot be written
+against the public contract it sits beside. Snippets is chrome that
+*delivers into the editor* — Insert splices at the caret
+(`TextEditFluid.InsertAtCursor`, ADR-0063), Replace swaps the whole
+buffer, and both focus the Editor tab first. The activation is a
+correctness step, not presentation: a hidden tab's body buffer is
+discarded uninterpreted, so an unactivated insert is silently lost. All
+three moves ride private instance state (the pending-snippet pair, the
+pending dock activation, the unexported dock ids). The widget mechanism
+is public egui2 API; the access path into *this* editor — its widget id,
+its buffer — is not. A registered embedder tab gets the frame view (the
+result snapshot, signal read/write) and none of this, so a snippet-like
+pane — a saved-query library, a schema-driven query generator, an
+affordance offering a rewrite — cannot be built outside the package.
+Slice 6b's cross-repo proof was a read-only consumer, which is why the
+gap stayed invisible; D5's boundary ("the non-tab core stays fixed: the
+editor buffer and Run lifecycle, …") froze exactly the capability this
+class needs.
+
+**Decision: semantic delivery ops, exported on the instance.** Three
+methods, op-shaped rather than state-shaped:
+
+- `InsertSqlAtCaret(text)` — splice at the editor caret;
+- `ReplaceSql(text)` — swap the whole editor buffer;
+- `ActivateTab(id) error` — focus a dock tab by registry slug (an
+  unknown slug errors, matching the registry's validation style).
+
+The SQL ops bundle the Editor-tab activation: the visibility invariant
+is the API's to keep, not each caller's to remember. Consumption is the
+editor's existing pending contract, unchanged: applied at the next
+editor render (one-frame latency), per-op last-write-wins within a
+frame, Replace supersedes a same-frame Insert. Like the registry, the
+ops are render-thread state — not safe for concurrent use. The pending
+fields remain as the implementation; the Snippets tab rewires onto the
+public ops, becoming the in-tree dogfood proof that 6b's read-only tab
+could not be. Naming follows the `PersistSql` casing precedent.
+
+**D5 narrows by one item; the rest holds.** The editor *buffer* leaves
+the fixed core — writable through the delivery ops alone; the raw
+buffer stays private, so callers cannot bypass the caret mechanics. Two
+adjacent capabilities are deferred, each with a trigger: a `RequestRun`
+twin (insert-and-run) waits for the first external pane that needs to
+*execute*, not just deliver; a buffer *read* accessor waits for the
+first transforming pane (read-modify-write) — the write ops don't need
+one. Topbar, status bar, signal store: fixed as before.
+
+**Rejected:**
+
+- *A host-capability handle on the frame view* (a `TabFrame.Host`
+  carrying the same ops): the scoping benefit is notional — every
+  existing extension point already reaches the PlayApp by capture
+  (`SetDetailContent` renderers, embedder `TabSpec` closures), and a
+  closure could stash the handle anyway. It adds surface without
+  preventing anything; instance methods match the established embedder
+  idiom.
+- *The buffer as a signal* (an `sql` pseudo-param over the store):
+  insert-at-caret is an edit operation, not a value write; a param that
+  unifies by name but must never ride the URL channel corrupts SD8's
+  semantics; and the dedup/provenance chrome would present the buffer as
+  something it is not.
+
+**Delivery:** one slice — the three ops, the Snippets rewire, tests
+(each op sets its pending plus the activation; the unknown-slug error;
+Replace-supersedes-Insert preserved), and an embedder example in the
+how-tos when the first external consumer lands.
+
 ## References
 
 Internal:
