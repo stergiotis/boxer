@@ -100,6 +100,39 @@ func TestEncodeRequestThinkingFlag(t *testing.T) {
 		"chat_template_kwargs.enable_thinking=true must round-trip; got %s", s)
 }
 
+// TestEncodeRequestInlinesExtra proves Extra members land at the top level of
+// the wire object (llama.cpp-style sampler passthrough) and that a nil map
+// leaves the body untouched.
+func TestEncodeRequestInlinesExtra(t *testing.T) {
+	inst, err := NewClient("https://example.com/v1/", "")
+	require.NoError(t, err)
+	body, err := inst.encodeRequest(CompletionRequest{
+		ModelId:  "test-model",
+		Messages: []Message{{Role: ChatRoleUser, Content: "hi"}},
+		Extra:    map[string]any{"dry_multiplier": 0.0, "top_k": 1},
+	})
+	require.NoError(t, err)
+	s := string(body)
+	assert.Contains(t, s, `"dry_multiplier":0`)
+	assert.Contains(t, s, `"top_k":1`)
+
+	body, err = inst.encodeRequest(userReq("test-model"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "dry_multiplier", "nil Extra must add nothing")
+}
+
+// TestEncodeRequestExtraCollisionFails pins the collision guarantee: an Extra
+// key duplicating an emitted member must fail the encode, not override it.
+func TestEncodeRequestExtraCollisionFails(t *testing.T) {
+	inst, err := NewClient("https://example.com/v1/", "")
+	require.NoError(t, err)
+	req := userReq("test-model")
+	req.Extra = map[string]any{"model": "other-model"}
+	_, err = inst.encodeRequest(req)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate")
+}
+
 // --- inline thought extraction ----------------------------------------------
 
 func TestExtractInlineThought(t *testing.T) {

@@ -21,7 +21,9 @@
 // chat-completions fields and are all opt-in (a zero value is omitted from the
 // wire). Tool calls come back on CompletionResponse.ToolCalls alongside
 // FinishReason "tool_calls". ResponseFormat stays in the OpenAI response_format
-// shape — Ollama's native top-level "format" field is out of scope.
+// shape — Ollama's native top-level "format" field is out of scope. Extra
+// merges provider-specific members (llama.cpp sampler knobs and the like)
+// verbatim into the top-level request object for backends that accept them.
 //
 // Transport: by default Complete and ListModels perform a single round-trip.
 // WithRetry enables bounded exponential backoff with jitter (honoring
@@ -36,8 +38,8 @@ package openaichat
 import (
 	"bytes"
 	"context"
-	"encoding/json/v2"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"math/rand/v2"
@@ -148,6 +150,13 @@ func JSONSchemaFormat(name string, schema jsontext.Value, strict bool) *Response
 // Seed pairs with Temperature=0 for reproducibility where the provider honors
 // it. ToolChoice is "auto" / "none" / "required", or a function name to force
 // that one tool.
+//
+// Extra carries provider-specific request members that have no first-class
+// field — for example llama.cpp server sampler knobs (dry_multiplier, top_k,
+// min_p). Members are merged verbatim into the top level of the wire request;
+// a key that collides with a member the encoder emits fails the encode rather
+// than silently overriding it. Leave it nil for providers that reject unknown
+// fields (Gemini's OpenAI-compat shim does).
 type CompletionRequest struct {
 	ModelId        string
 	Messages       []Message
@@ -160,6 +169,7 @@ type CompletionRequest struct {
 	Tools          []Tool
 	ToolChoice     string
 	ResponseFormat *ResponseFormat
+	Extra          map[string]any
 }
 
 // CompletionResponse is the decoded result of a single completion. FinishReason
@@ -381,6 +391,11 @@ type wireRequest struct {
 	ResponseFormat     *wireResponseFormat `json:"response_format,omitempty"`
 	Tools              []wireTool          `json:"tools,omitempty"`
 	ToolChoice         any                 `json:"tool_choice,omitempty"`
+	// Extra flattens into the enclosing object (json/v2 inline fallback); a
+	// key duplicating an emitted member makes Marshal fail with a duplicate-
+	// name error, which is the collision guarantee CompletionRequest.Extra
+	// documents.
+	Extra map[string]any `json:",inline"`
 }
 
 type wireChoice struct {
@@ -784,6 +799,7 @@ func (inst *Client) encodeRequest(req CompletionRequest) (body []byte, err error
 		Seed:        req.Seed,
 		Stop:        req.Stop,
 		Stream:      false,
+		Extra:       req.Extra,
 	}
 	if req.NumCtx > 0 {
 		wreq.Options = &wireOptions{NumCtx: req.NumCtx}
