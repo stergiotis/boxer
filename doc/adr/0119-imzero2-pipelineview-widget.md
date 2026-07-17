@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-17
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-07-17
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0119: imzero2 pipelineview widget — schematic pipelines with classed side ports
 
@@ -97,42 +95,70 @@ structure; volumes are secondary here.
 
 ## Decision
 
-We will build **`pipelineview`** (working name), a read-only imzero2 widget
-that renders a data-processing pipeline schematically: the main path as a
-left-to-right spine of stage boxes, side channels leaving each stage at sides
-fixed by port class, endpoint artifacts (files, stores, streams) as
-distinctly-shaped leaves. Layout is bespoke, deterministic, host-side Go;
-rendering goes through the existing painter (no new IDL expected), following
-the `layeredgraph` precedent.
+We will build **`pipelineview`**, a read-only imzero2 widget that renders a
+data-processing pipeline schematically: the main path as a left-to-right
+spine of stage boxes, side channels leaving each stage at sides fixed by
+port class, endpoint artifacts (files, stores, streams) as distinctly-shaped
+leaves. Layout is bespoke, deterministic, host-side Go; rendering goes
+through the existing painter (no new IDL — confirmed by the implementation),
+following the `layeredgraph` precedent.
 
-### SD1 — Model: series/parallel stage tree with classed ports
+Implemented (M1+M2, 2026-07-17): `widgets/pipelineview` (model + layout,
+UI-free), `widgets/pipelineview/view` (the only UI-importing half), and the
+gallery demo `egui2_hl_pipelineview_demo.go` (tour-captured). The SD texts
+below were adopted to what the implementation settled.
+
+### SD1 — Model: series/parallel stage tree with classed ports ✓
 
 The primary input is the structure the consumers already have, not a flat
-edge list:
+edge list. As implemented:
 
 ```go
-type PortClass uint8 // Primary | Diagnostic | Artifact | Config
-type EndpointKind uint8 // File | Store | Stream | Null
+type PortClass uint8    // Primary | Diagnostic | Config | Artifact (closed set)
+type EndpointKind uint8 // File | Store | Stream | Null (glyph vocabulary)
 
 type Stage struct {
     ID, Label string
-    Ports     []Port // class + name; declaration order is display order
+    Ports     []Port // named SIDE ports only; primary west/east anchors are implicit
 }
-type Group struct { // series or parallel composition of children
-    Seq      bool
+type Group struct { // Par composes children as stacked branches; the zero
+    Par      bool   // value is a series segment
     Children []Element // Stage or Group
 }
+type Endpoint struct{ ID, Label, Sublabel string; Kind EndpointKind }
+// Sublabel: optional detail line (a URL, a database, a path), drawn smaller
+// under Label; the box grows to fit. Store cylinders add cap padding so the
+// text block sits in the body, not under the ellipse lids.
+type Ref struct{ Stage, Port, Endpoint string } // names one of stage/endpoint;
+                                                // Port "" = the primary anchor
 type Edge struct {
-    From, To PortRef // stage.port, or an Endpoint
-    Volume   float64 // optional; 0 = unknown (reserved for the overlay)
+    From, To Ref
+    Label    string
+    Volume   float64 // reserved for the SD5 overlay; 0 = unknown
 }
 ```
 
 Port class → side is a closed mapping: `Primary` = east/west (the spine),
-`Diagnostic` = south, `Config` = north, `Artifact` = south-east leaf.
-Extending the class set is a Tier-2 ADR update, not an ad-hoc widget option.
+`Diagnostic` = south, `Config` = north, `Artifact` = south, east of the
+diagnostics. Extending the class set is a Tier-2 ADR update, not an ad-hoc
+widget option. Decisions the implementation settled:
 
-### SD2 — Layout: grid recursion over the tree, not structure recovery
+- **Spine edges are implied by the tree** (exits of each series element →
+  entries of the next); explicit edges cover side channels, axial endpoints
+  (a `> file` sink east, a `< file` source west), skips and feedback. An
+  explicit forward-adjacent primary edge *replaces* its implied twin, so a
+  caller can label a pipe without drawing it twice.
+- **Endpoints are homed by their first referencing edge** (model order):
+  south for diagnostic/artifact sources, north for config targets,
+  east/west for primary-anchor edges.
+- **Validation is directional**: a named source port must be an output class
+  (diagnostic, artifact), a named target port an input class (config);
+  stages and endpoints share one id namespace (the sense-region key).
+- **Stage-to-stage edges on named ports are rejected in v1** (an artifact
+  feeding a later stage's config directly): model the file, route both edges
+  through it. Deferred, not designed away — the error message says so.
+
+### SD2 — Layout: grid recursion over the tree, not structure recovery ✓
 
 Spine ranks become columns; a parallel group stacks its branches as rows;
 side nodes hang off their stage's column at fixed offsets. Port sides and
@@ -145,6 +171,27 @@ tiebreak, no randomness, no map-iteration dependence. (The port-constraint
 engine this survey drew on retrofitted exactly this as its model-order
 options; we get it by construction.)
 
+What the implementation added to the plan:
+
+- **The shelf rule.** A stage's north/south endpoints form a
+  non-overlapping row (a *shelf*) centred on the stage, and the shelf's
+  width participates in the **column** width. Both naive placements fail:
+  centring each endpoint on its own pin overlaps neighbouring endpoints
+  (pins are closer together than label boxes are wide), and letting a shelf
+  spill into the inter-column gaps collides with the gap tracks that route
+  vertical edge segments there. Column-owns-shelf removes both, at the cost
+  of wider columns. Edges elbow from pin to shelf box when the two drift
+  apart (straight drop into the near edge when aligned, entry via the
+  facing side otherwise).
+- **Label sizing** is an injectable `MeasureText` with a deterministic
+  monospace-flavoured estimate as the default (0.60×size per rune,
+  1.45×size line height). The v1 renderer keeps the estimator; a host
+  wanting tighter boxes injects real measurements (`MeasureTextBind`) —
+  the "uniform boxes vs one-frame settle" trade from the Consequences
+  resolved into this seam instead.
+- Layout runs as two small recursions (column span/assignment, vertical
+  extents/line placement) plus flat passes — no virtual nodes anywhere.
+
 ### SD3 — Degradation path for flat inputs
 
 A consumer with only a flat edge list gets: greedy cycle removal
@@ -153,7 +200,14 @@ exactly — at pipeline scale (columns of ≤ ~8 items) exact beats heuristics
 for free. Genuinely arbitrary DAGs are out of scope: the widget documents a
 handoff to `layeredgraph`, and the two models stay mechanically convertible.
 
-### SD4 — Edge routing: three tiers, closed-form first
+**v1 ships only the convertibility half**: `Pipeline.ToGraphModel()`
+flattens stages, endpoints and (implied + explicit) edges into the
+`layeredgraph` model. The flat-input *builder* (edge list → stage tree) is
+deferred until a consumer without a tree exists — every consumer named in
+the Context knows its structure, and descoping beats gating (house rule).
+The algorithm choices above stand as the recorded plan for when it lands.
+
+### SD4 — Edge routing: three tiers, closed-form first ✓ (tiers 1–2)
 
 1. Spine edges: straight horizontal segments.
 2. Side, skip (`a → c` past `b`), and feedback edges: closed-form rounded
@@ -163,15 +217,33 @@ handoff to `layeredgraph`, and the two models stay mechanically convertible.
 3. Corridor-fitted Béziers (the dot look) — deferred until wanted; the
    painter already has the required primitives.
 
-### SD5 — Overlays: status in v1, quantity and motion deferred
+As implemented: fan-out/fan-in verticals ride per-gap tracks (offsets 0,
++1, −1, … × 10 pt around the gap centre, assigned in model order); skip
+edges run through stacked lanes above the content, feedback through lanes
+below (dashed via the dashed-line primitive — dashes keep sharp corners,
+since a dash pattern cannot follow a Bézier); virtual gaps beyond the first
+and last column let feedback exit the far end and re-enter column 0; solid
+edges round interior corners with one quarter cubic Bézier each and end in
+a filled-triangle head. Side-edge labels render beside the wire (schematic
+net-label style) — centred-above collides in the tight pin-to-shelf band.
+Accepted v1 cosmetics: a skip edge shares its source anchor with the spine
+edge (collinear first run), and multiple arrowheads overlap at a shared
+target anchor (fan-in), as in the surveyed CI UIs.
+
+### SD5 — Overlays: status in v1, quantity and motion deferred ✓ (v1 scope)
 
 v1 ships per-stage/per-edge color hooks (the `RenderOpts` override pattern
-from `layeredgraph/view`) so a host can mark running/failed/selected. The
-volume overlay (edge thickness and ribbons ∝ `Edge.Volume`, links at a node
-sorted by far-end y) and dash-march animation for live flow are specified by
-the sources below but deferred until a live consumer exists.
+from `layeredgraph/view`: `NodeFill`/`NodeText`/`EdgeStroke`) so a host can
+mark running/failed/selected; the demo's click-to-select uses exactly this
+seam. The volume overlay (edge thickness and ribbons ∝ `Edge.Volume`, links
+at a node sorted by far-end y) and dash-march animation for live flow are
+specified by the sources below but deferred until a live consumer exists —
+`Volume` already flows through `EdgeLayout` untouched. The view is
+fit-to-canvas only (no pan/zoom): a spine schematic is expected to fit its
+host; `layeredgraph`'s `ViewState` pattern is the ready-made recipe if that
+expectation ever breaks.
 
-### SD6 — Clean-room protocol
+### SD6 — Clean-room protocol ✓
 
 The implementation is written from the papers and public reference
 documentation named in [§References](#references) — never from project source
@@ -179,17 +251,47 @@ code. For EPL/LGPL/GPL projects (Graphviz, ELK, libavoid, OGDF) source is
 off-limits outright; for permissively-licensed projects (dagre, d3-dag,
 d3-sankey, ReactFlow, Jenkins plugins) reading source would be lawful, but
 the bar is the same: method-level extraction, all geometry and code
-re-derived.
+re-derived. The protocol held for M1+M2: no external layout/routing source
+was consulted; the shipped code needs nothing beyond the constraint-ladder
+vocabulary, the lane/track idea, and the closed-form corner geometry.
 
 ### Milestones
 
-- **M1 — model + layout core.** Pure Go, no UI imports; golden-file layout
-  tests asserting determinism.
-- **M2 — painter renderer + gallery demo.** Canned shell-style pipeline
-  (stderr, files written, one skip edge, one feedback edge) in the demo
-  gallery, tour-captured.
-- **M3 — first real consumer.** Candidate: extbin-resolved command chains or
-  the videopipeline status view; pick at review.
+- **M1 — model + layout core.** ✓ Pure Go, no UI imports
+  (`widgets/pipelineview`); golden-file layout test
+  (`testdata/shell_pipeline.golden`) plus determinism (two runs deep-equal)
+  and invariant tests (spine straightness, semantic sides, shelf
+  non-overlap, lanes outside content, track separation, validation
+  rejects).
+- **M2 — painter renderer + gallery demo.** ✓ `widgets/pipelineview/view` +
+  `egui2_hl_pipelineview_demo.go`: the canned shell-style pipeline (stderr,
+  config, written files, store sink, one skip edge, one feedback edge, one
+  parallel group), tour-captured and visually verified.
+- **M3 — first real consumer: the nanopass pass pipeline in play** ✓
+  (picked at review 2026-07-17, over the earlier extbin/videopipeline
+  candidates; implemented same day as the Passes dock tab,
+  `apps/play/play_passes_tab.go`) — the structure behind a play query is
+  already known in-process (passreg, ADR-0108), so the tab draws the
+  registry's pre-execute catalog with no discovery step: passes on the
+  spine in (Order, Name) apply order, the editor entering west
+  (stream glyph), the executor east (store glyph, sublabelled with the
+  client's live endpoint URL), a `NeedsFixedPoint`
+  pass carrying a dashed self-feedback loop, late-bound factory
+  descriptors recessed (they apply only where the client binding accepts
+  them, ADR-0116 §SD6). Clicking a stage shows its catalog row
+  (description, order, kind, properties, provenance). The canvas sizes to
+  the pane via a width probe (a full-width separator then the seq-keyed
+  `captureUiRect` snapshot — play's single-slot `CaptureAvailableSize`
+  register is owned by the editor tab). The layout caches on
+  a catalog fingerprint (which includes the executor URL, so switching
+  endpoints relayouts); the drawing is the catalog, not a per-run trace —
+  per-run outcomes (pass failed-and-skipped, factory declined) need an
+  observed apply seam in passreg and are the tab's natural next slice.
+  Live-verified via the scripted play capture (`BOXER_PLAY_FOCUS_PASSES`,
+  a derived focus knob). Caveat for future captures: the SVG-export →
+  cairosvg path drops the glyph after an `fi` pair (a capture-path trait,
+  not a rendering bug — the pane avoids `fixpoint` for `fixed point` all
+  the same).
 - **M4 — overlays.** Volume thickness/ribbons and live animation, once M3's
   consumer emits volumes.
 
@@ -245,23 +347,26 @@ re-derived.
   overlap.
 - The closed port-class set will eventually pinch (e.g. metrics taps,
   control-plane ports); extensions require an ADR update by design.
-- Go-side label sizing via `MeasureText` implies either a one-frame settle or
-  uniform stage boxes with truncation; the ADR accepts that trade and leaves
-  the choice to M2.
-- Consumers without a stage tree get the degraded flat path, which is
-  strictly weaker (no nesting, heuristic-free but structure-blind).
+- Go-side label sizing defaults to a deterministic estimate (SD2), so box
+  widths are approximate — generous padding hides it; a host wanting exact
+  boxes injects `MeasureText` and accepts the measurement round-trip.
+- Consumers without a stage tree have no path yet (the SD3 builder is
+  deferred); their interim option is `ToGraphModel` + `layeredgraph`.
 
 ### Neutral
 
-- The widget name (`pipelineview` vs `spineview`) and the M3 consumer are
-  open at review.
+- The name settled on `pipelineview` at implementation (the `*view` family:
+  schemaview, mappingplanview); the M3 consumer is open at review.
 - Tier-3 spline routing may never be needed; the deferral costs nothing.
 
 ## Status
 
-Proposed — awaiting review by the repo owner. Open at review: the widget
-name, the M3 first consumer, and whether the volume overlay is promoted into
-v1.
+Accepted 2026-07-17, after M1+M2+M3 were implemented and this text was
+adopted to the implementation in place (pre-acceptance editing policy).
+M4 (the volume overlay and live animation) stays a deferred milestone until
+a consumer emits volumes; the per-run trace slice for the play Passes tab
+(an observed apply seam in passreg) is recorded under M3 as its natural
+next step. Post-acceptance changes follow the Tier-2 dated-update policy.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
