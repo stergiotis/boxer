@@ -1,0 +1,27 @@
+size 952.8 x 229.9 font 14.0
+node stage    fetch      "fetch (curl)" c=(106.4,114.9) w=128.8 h=38.3
+node stage    decompress "gunzip" c=(266.0,114.9) w=78.4 h=38.3
+node stage    transform  "transform (jq)" c=(468.3,57.1) w=145.6 h=38.3
+node stage    stats      "stats (awk)" c=(468.3,172.7) w=120.4 h=38.3
+node stage    load       "load (ch-client)" c=(712.6,114.9) w=162.4 h=38.3
+node endpoint netrc      "~/.netrc" c=(106.4,59.2) w=77.1 h=29.3
+node endpoint errlog     "errors.log" c=(406.9,112.9) w=91.4 h=29.3
+node endpoint rejfile    "rejects.jsonl" c=(519.0,112.9) w=112.8 h=29.3
+node endpoint journald   "journald" c=(712.6,170.7) w=77.1 h=29.3
+node endpoint warehouse  "warehouse" c=(886.3,114.9) w=105.0 h=63.9
+pin  fetch.auth class=2 (106.4,95.8)
+pin  transform.stderr class=1 (444.0,76.3)
+pin  transform.rejects class=3 (492.6,76.3)
+pin  load.stderr class=1 (712.6,134.1)
+edge spine    fetch->decompress (170.8,114.9) (226.8,114.9)
+edge spine    decompress->transform (305.2,114.9) (333.2,114.9) (333.2,57.1) (395.5,57.1)
+edge spine    decompress->stats (305.2,114.9) (343.2,114.9) (343.2,172.7) (408.1,172.7)
+edge spine    transform->load (541.1,57.1) (603.4,57.1) (603.4,114.9) (631.4,114.9)
+edge spine    stats->load (528.5,172.7) (613.4,172.7) (613.4,114.9) (631.4,114.9)
+edge side     netrc->fetch (106.4,73.8) (106.4,95.8)
+edge side     transform->errlog (444.0,76.3) (444.0,98.3)
+edge side     transform->rejfile "rejected rows" (492.6,76.3) (492.6,98.3)
+edge side     load->journald (712.6,134.1) (712.6,156.1)
+edge spine    load->warehouse (793.8,114.9) (833.8,114.9)
+edge skip     fetch->load "manifest" (170.8,114.9) (198.8,114.9) (198.8,14.0) (593.4,14.0) (593.4,114.9) (631.4,114.9)
+edge feedback load->fetch "retry" dashed (793.8,114.9) (821.8,114.9) (821.8,215.9) (14.0,215.9) (14.0,114.9) (42.0,114.9)
