@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
+	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -64,10 +65,14 @@ func NewCliCommand() *cli.Command {
 
 			// ADR-0108 §SD4: the standalone play binary is its own host, so
 			// it registers the standard SQL pass set (e.g. LW_ID_* macro
-			// expansion) itself; the carousel host does the same for the
-			// embedded app. Best-effort, never blocks boot.
+			// expansion) plus play's own additions (statement
+			// canonicalisation) itself; the carousel host does the same for
+			// the embedded app. Best-effort, never blocks boot.
 			if passErr := passregdefaults.RegisterDefaults(); passErr != nil {
 				log.Warn().Err(passErr).Msg("play: standard pass registration failed")
+			}
+			if passErr := RegisterPasses(passreg.Default); passErr != nil {
+				log.Warn().Err(passErr).Msg("play: host pass registration failed")
 			}
 
 			clientCfg := ClientConfig{

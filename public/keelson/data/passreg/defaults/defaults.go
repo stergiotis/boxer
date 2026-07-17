@@ -26,6 +26,14 @@ import (
 // Deliberately NOT here: passes.ExposeSelectionConditions (ADR-0121). It changes a
 // query's result schema, so it is opt-in per host rather than standard —
 // play applies it from buildResidual behind a UI toggle, default off.
+//
+// Also deliberately NOT here: passes.CanonicalizeFull. It is result-schema-
+// neutral but rewrites the whole statement, and pipelines that already
+// canonicalise themselves (text2sql, genbuildertest) must not inherit a
+// second copy via the registry. Hosts that want executed statements
+// canonical register it at their wiring site — see play.RegisterPasses,
+// which orders it ahead of the standard entries so they consume canonical
+// shapes.
 func RegisterStandard(r *passreg.Registry) (err error) {
 	for _, e := range []passreg.Entry{
 		{

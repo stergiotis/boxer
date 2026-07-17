@@ -493,3 +493,81 @@ func TestExecuteArrowStreamExpandsLwIdMacrosViaStandardSet(t *testing.T) {
 		t.Errorf("wrong-arity macro must ship verbatim, got: %q", bs)
 	}
 }
+
+// TestExecuteArrowStreamCanonicalizesViaHostSet drives the play host pass set
+// (CanonicalizeFull first, then the standard entries — see RegisterPasses)
+// through the client: the shipped body leaves in canonical form, and LW_ID_*
+// macros expand from the canonicalised text — the expander matches quoted
+// call names through DecodeIdentifier.
+func TestExecuteArrowStreamCanonicalizesViaHostSet(t *testing.T) {
+	body := emptyArrowStream(t)
+
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	reg := passreg.NewRegistry()
+	if err := passregdefaults.RegisterStandard(reg); err != nil {
+		t.Fatalf("RegisterStandard: %v", err)
+	}
+	if err := RegisterPasses(reg); err != nil {
+		t.Fatalf("RegisterPasses: %v", err)
+	}
+	c.passes = reg
+
+	run := func(sql string) string {
+		t.Helper()
+		rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil)
+		if err != nil {
+			t.Fatalf("ExecuteArrowStream(%q): %v", sql, err)
+		}
+		t.Cleanup(func() { _ = closer.Close() })
+		t.Cleanup(rdr.Release)
+		return string(gotBody)
+	}
+
+	// (1) sugar and operator spellings leave canonical, and the wire SQL
+	// still parses.
+	bs := run(`SELECT a == b FROM t WHERE d = DATE '2024-01-01'`)
+	if strings.Contains(bs, "==") {
+		t.Errorf("== not canonicalised on the wire: %q", bs)
+	}
+	if !strings.Contains(bs, `"toDate"('2024-01-01')`) {
+		t.Errorf("DATE sugar not canonicalised on the wire: %q", bs)
+	}
+	if strings.Contains(bs, "DATE '") {
+		t.Errorf("DATE sugar survived on the wire: %q", bs)
+	}
+	if _, err := nanopass.Parse(bs); err != nil {
+		t.Errorf("canonical wire SQL does not parse: %v (%q)", err, bs)
+	}
+
+	// (2) ordering: canonicalisation runs first, and the macro still expands
+	// from its quoted canonical spelling — no LW_ID_ residue in any spelling.
+	bs = run(`SELECT LW_ID_BODY(id) FROM t`)
+	if strings.Contains(strings.ToUpper(bs), "LW_ID_") {
+		t.Errorf("macro survived canonicalisation ordering: %q", bs)
+	}
+	if _, err := nanopass.Parse(bs); err != nil {
+		t.Errorf("expanded canonical wire SQL does not parse: %v (%q)", err, bs)
+	}
+
+	// (3) a line comment must not swallow trailing clauses when whitespace
+	// collapses (the lexer folds the terminating newline into the comment
+	// token), and param slots pass through untouched.
+	bs = run("SELECT a FROM t -- note\nWHERE x == {id:UInt64}")
+	if !strings.Contains(bs, "WHERE") {
+		t.Errorf("clause after a line comment lost on the wire: %q", bs)
+	}
+	if !strings.Contains(bs, "{id") {
+		t.Errorf("param slot lost during canonicalisation: %q", bs)
+	}
+	if strings.Contains(bs, "==") {
+		t.Errorf("== not canonicalised after a comment: %q", bs)
+	}
+}
