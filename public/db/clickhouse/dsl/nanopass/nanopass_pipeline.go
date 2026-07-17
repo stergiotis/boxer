@@ -110,6 +110,12 @@ type Pass struct {
 	Name       string
 	Apply      ApplyFunc
 	Properties PassProperties
+	// Children lists a combinator's direct members (Sequence steps; the
+	// wrapped body of FixedPoint, Validating, Conditional); nil for leaf
+	// passes. Introspection only — Apply closes over the members
+	// independently, so editing Children after construction does not change
+	// what the pass does.
+	Children []Pass
 }
 
 // PassProperties declares behavioural metadata for a Pass.
@@ -274,7 +280,8 @@ var ErrNoFixPointReached = eh.ErrorfWithDataWithoutStack(nil, "did not converge,
 // observation side channels) composable with normal rewriters.
 func Sequence(name string, ps ...Pass) Pass {
 	return Pass{
-		Name: name,
+		Name:     name,
+		Children: ps,
 		Apply: func(e *env.Environment, body string) (string, error) {
 			cur := body
 			for _, child := range ps {
@@ -304,6 +311,7 @@ func FixedPoint(p Pass, maxIter int) Pass {
 	return Pass{
 		Name:       "FixedPoint(" + p.Name + ")",
 		Properties: props,
+		Children:   []Pass{p},
 		Apply: func(e *env.Environment, body string) (string, error) {
 			return runFixedPoint(p.Name, p.Apply, e, body, maxIter)
 		},
@@ -321,6 +329,7 @@ func Validating(g Grammar, p Pass) Pass {
 	return Pass{
 		Name:       "Validating(" + p.Name + ")",
 		Properties: p.Properties.withoutExecutionStrategy(),
+		Children:   []Pass{p},
 		Apply: func(e *env.Environment, body string) (string, error) {
 			out, err := p.applyWithProps(e, body)
 			if err != nil {
@@ -345,6 +354,7 @@ func Conditional(name string, pred func(*env.Environment) bool, p Pass) Pass {
 	return Pass{
 		Name:       name,
 		Properties: p.Properties.withoutExecutionStrategy(),
+		Children:   []Pass{p},
 		Apply: func(e *env.Environment, body string) (string, error) {
 			if !pred(e) {
 				return body, nil

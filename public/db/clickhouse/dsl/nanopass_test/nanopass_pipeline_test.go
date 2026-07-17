@@ -82,3 +82,28 @@ func TestFixedPointDoesNotConverge(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "did not converge")
 }
+
+func TestCombinatorsRecordChildren(t *testing.T) {
+	seq := nanopass.Sequence("s",
+		passes.CanonicalizeKeywordCase,
+		nanopass.FixedPoint(passes.CanonicalizeSugar, 5),
+	)
+	require.Len(t, seq.Children, 2)
+	assert.Equal(t, "CanonicalizeKeywordCase", seq.Children[0].Name)
+	assert.Equal(t, "FixedPoint(CanonicalizeSugar)", seq.Children[1].Name)
+	// The wrapper records its body, and the body keeps its own declared
+	// properties (the loop flag the wrapper's own row hides).
+	require.Len(t, seq.Children[1].Children, 1)
+	assert.Equal(t, "CanonicalizeSugar", seq.Children[1].Children[0].Name)
+	assert.True(t, seq.Children[1].Children[0].Properties.NeedsFixedPoint)
+	// Leaf passes carry no children.
+	assert.Nil(t, seq.Children[0].Children)
+
+	val := nanopass.Validating(nanopass.GrammarG1, passes.CanonicalizeKeywordCase)
+	require.Len(t, val.Children, 1)
+	assert.Equal(t, "CanonicalizeKeywordCase", val.Children[0].Name)
+
+	cond := nanopass.Conditional("c", func(*env.Environment) bool { return true }, passes.CanonicalizeKeywordCase)
+	require.Len(t, cond.Children, 1)
+	assert.Equal(t, "CanonicalizeKeywordCase", cond.Children[0].Name)
+}
