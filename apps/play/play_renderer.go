@@ -1406,6 +1406,25 @@ func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint stri
 	b.SendRespVal(valuePtr)
 }
 
+// consumePendingSnippet applies the snippet-library delivery ops staged since
+// the last frame (InsertSqlAtCaret / ReplaceSql, play_delivery.go) and returns
+// the insert text handed to whichever editor renders this frame (empty when
+// none, or when superseded). Replace swaps the whole buffer here — before the
+// mode branch — so it works in both: non-hide binds inst.sql directly, and
+// hide-mode recomposeMirror re-derives the residual from the new canonical. A
+// same-frame Replace supersedes an Insert. Both pendings are cleared eagerly,
+// so each click applies exactly once.
+func (inst *PlayApp) consumePendingSnippet() (insert string) {
+	insert = inst.pendingSnippetInsert
+	inst.pendingSnippetInsert = ""
+	if replace := inst.pendingSnippetReplace; replace != "" {
+		inst.pendingSnippetReplace = ""
+		inst.sql = replace
+		insert = ""
+	}
+	return
+}
+
 // renderSqlEditor wires the main SQL TextEdit and the show/hide
 // parameter-prelude toggle. Default mode binds the editor to
 // inst.sql verbatim — the user sees and can hand-edit the SET
@@ -1414,20 +1433,7 @@ func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint stri
 // sliced-off prelude as a read-only label above the residual editor.
 func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	const mainHint = "-- type SQL, press Run"
-	// Consume any pending snippet-library actions once per frame. Replace
-	// swaps the whole buffer — assign inst.sql before the mode branch so it
-	// works in both: non-hide binds inst.sql directly, and hide-mode
-	// recomposeMirror re-derives the residual from the new canonical. Insert
-	// is handed to whichever editor renders below (exactly one does); Replace
-	// supersedes a same-frame Insert. Cleared eagerly so each click applies
-	// exactly once.
-	pending := inst.pendingSnippetInsert
-	inst.pendingSnippetInsert = ""
-	if replace := inst.pendingSnippetReplace; replace != "" {
-		inst.pendingSnippetReplace = ""
-		inst.sql = replace
-		pending = ""
-	}
+	pending := inst.consumePendingSnippet()
 	if !inst.paramHidePrelude {
 		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows, pending)
 		return

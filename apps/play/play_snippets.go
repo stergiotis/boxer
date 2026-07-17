@@ -84,19 +84,18 @@ func (inst *PlayApp) renderSnippetsTab() {
 				if act.Lang != "sql" && act.Lang != "" {
 					continue
 				}
+				// Deliver through the public seam (play_delivery.go): both
+				// ops focus the Editor tab, so the splice lands where the
+				// buffer is live (a hidden editor discards its body buffer
+				// uninterpreted, losing the insert). Snippets is the in-tree
+				// consumer of the same ops an embedder's snippet-class pane
+				// uses (ADR-0097 slice-6 D5 Update).
 				switch act.Button {
 				case snippetButtonInsert:
-					inst.pendingSnippetInsert = act.Text
+					inst.InsertSqlAtCaret(act.Text)
 				case snippetButtonReplace:
-					inst.pendingSnippetReplace = act.Text
+					inst.ReplaceSql(act.Text)
 				}
-				// Focus the Editor tab: the splice op rides the editor's
-				// TextEdit, and a hidden tab's body buffer is discarded
-				// uninterpreted — the insert would be silently lost (and
-				// invisible even if it landed). The activation applies this
-				// frame; the pending is consumed by renderSqlEditor on the
-				// next frame, when the editor is already showing.
-				inst.pendingDockActivate = dockTabEditor
 			}
 		}
 	}

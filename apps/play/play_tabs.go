@@ -286,6 +286,17 @@ func bodyTabOrder(specs []TabSpec, focusedID string) (out []uint64) {
 	return
 }
 
+// dockIDForSlug resolves a tab's human slug to its frozen DockID (D3) — the
+// editor-delivery seam's ActivateTab reads it. ok is false for an unknown slug.
+func (inst *TabRegistry) dockIDForSlug(id string) (dockID uint64, ok bool) {
+	for i := range inst.specs {
+		if inst.specs[i].ID == id {
+			return inst.specs[i].DockID, true
+		}
+	}
+	return
+}
+
 // dockIDsOf projects specs onto their dock ids, in order.
 func dockIDsOf(specs []TabSpec) (out []uint64) {
 	out = make([]uint64, len(specs))
