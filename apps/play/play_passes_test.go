@@ -50,3 +50,38 @@ func TestRegisterPassesOrdering(t *testing.T) {
 		}
 	}
 }
+
+// TestRegisterPassesExposesSubPasses pins the surface the Passes tab's detail
+// panel reads (entryPassForRow → Pass.Children): the registered composite
+// names its members in apply order.
+func TestRegisterPassesExposesSubPasses(t *testing.T) {
+	reg := passreg.NewRegistry()
+	if err := RegisterPasses(reg); err != nil {
+		t.Fatalf("RegisterPasses: %v", err)
+	}
+	p, ok := entryPassForRow(reg, passreg.CatalogRow{Stage: passreg.StagePreExecute, Name: "CanonicalizeFull"})
+	if !ok {
+		t.Fatal("CanonicalizeFull entry not resolvable")
+	}
+	want := []string{
+		"CanonicalizeWhitespaceSingleLine",
+		"CanonicalizeEquals",
+		"CanonicalizeSugar",
+		"FixedPoint(CanonicalizeConstructors)",
+		"FixedPoint(CanonicalizeCaseConditionals)",
+		"CanonicalizeMultiIf",
+		"FixedPoint(CanonicalizeCasts)",
+		"CanonicalizeJoin",
+		"FixedPoint(CanonicalizeTernary)",
+		"CanonicalizeKeywordCase",
+		"CanonicalizeIdentifiers",
+	}
+	if len(p.Children) != len(want) {
+		t.Fatalf("children = %d, want %d", len(p.Children), len(want))
+	}
+	for i := range want {
+		if p.Children[i].Name != want[i] {
+			t.Fatalf("child %d = %q, want %q", i, p.Children[i].Name, want[i])
+		}
+	}
+}

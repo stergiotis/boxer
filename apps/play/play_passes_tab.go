@@ -151,6 +151,39 @@ func joinFormTags(tags []nanopass.FormTag) string {
 	return strings.Join(parts, ",")
 }
 
+// entryPassForRow returns the registered concrete Pass behind a catalog row,
+// so the detail panel can look inside composites. Late-bound factory rows
+// have no process-global Pass (they are realised per client binding) and
+// report ok=false.
+func entryPassForRow(reg *passreg.Registry, row passreg.CatalogRow) (p nanopass.Pass, ok bool) {
+	if row.LateBound {
+		return
+	}
+	for _, e := range reg.Entries(row.Stage) {
+		if e.Pass.Name == row.Name {
+			return e.Pass, true
+		}
+	}
+	return
+}
+
+// passChildrenLines flattens a composite pass's member tree (Pass.Children)
+// into indented display lines ("name · properties"), depth-first, two spaces
+// per level — a combinator wrapper is followed by its body, whose own line
+// carries the properties the wrapper hides (e.g. the fixed-point flag).
+// Empty for leaf passes; the caller skips the block entirely.
+func passChildrenLines(p nanopass.Pass) (lines []string) {
+	var walk func(ps []nanopass.Pass, depth int)
+	walk = func(ps []nanopass.Pass, depth int) {
+		for _, ch := range ps {
+			lines = append(lines, strings.Repeat("  ", depth)+ch.Name+" · "+passPropsText(ch.Properties))
+			walk(ch.Children, depth+1)
+		}
+	}
+	walk(p.Children, 0)
+	return
+}
+
 // renderPassesTab draws the Passes tab body (inside the dock's scroll host).
 func (inst *PlayApp) renderPassesTab() {
 	ids := inst.ids
@@ -301,6 +334,18 @@ func (inst *PlayApp) renderPassesTab() {
 		if row.Provenance != "" {
 			for rt := range c.RichTextLabel(row.Provenance) {
 				rt.Small().Monospace()
+			}
+		}
+		if p, ok := entryPassForRow(reg, *row); ok {
+			if lines := passChildrenLines(p); len(lines) > 0 {
+				for rt := range c.RichTextLabel(fmt.Sprintf("composed of %d sub-passes, in apply order:", len(p.Children))) {
+					rt.Small().Weak()
+				}
+				for _, ln := range lines {
+					for rt := range c.RichTextLabel(ln) {
+						rt.Small().Monospace()
+					}
+				}
 			}
 		}
 	}

@@ -123,3 +123,51 @@ func TestPassPropsText(t *testing.T) {
 		}
 	}
 }
+
+// TestPassChildrenLines pins the detail panel's sub-pass flattening: members
+// in apply order, wrapper bodies indented under their wrapper, leaf passes
+// producing no block at all.
+func TestPassChildrenLines(t *testing.T) {
+	leaf := nanopass.Pass{Name: "leafA", Properties: nanopass.PassProperties{Idempotent: true}}
+	looping := nanopass.Pass{Name: "leafB", Properties: nanopass.PassProperties{NeedsFixedPoint: true}}
+	comp := nanopass.Sequence("comp", leaf, nanopass.FixedPoint(looping, 5))
+
+	if got := passChildrenLines(leaf); len(got) != 0 {
+		t.Fatalf("leaf pass must yield no lines, got %v", got)
+	}
+	got := passChildrenLines(comp)
+	want := []string{
+		"leafA · idempotent",
+		"FixedPoint(leafB) · idempotent",
+		"  leafB · fixed-point",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("lines = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("line %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// TestEntryPassForRow: concrete rows resolve to their registered Pass;
+// late-bound factory rows (no process-global Pass) and unknown names do not.
+func TestEntryPassForRow(t *testing.T) {
+	reg := passreg.NewRegistry()
+	comp := nanopass.Sequence("comp", nanopass.Pass{Name: "leafA"})
+	if err := reg.Register(passreg.Entry{Pass: comp, Stage: passreg.StagePreExecute, Order: 100}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	p, ok := entryPassForRow(reg, passreg.CatalogRow{Stage: passreg.StagePreExecute, Name: "comp"})
+	if !ok || len(p.Children) != 1 || p.Children[0].Name != "leafA" {
+		t.Fatalf("concrete row must resolve with children, got ok=%t children=%v", ok, p.Children)
+	}
+	if _, ok := entryPassForRow(reg, passreg.CatalogRow{Stage: passreg.StagePreExecute, Name: "comp", LateBound: true}); ok {
+		t.Fatal("late-bound row must not resolve to a Pass")
+	}
+	if _, ok := entryPassForRow(reg, passreg.CatalogRow{Stage: passreg.StagePreExecute, Name: "ghost"}); ok {
+		t.Fatal("unknown row must not resolve")
+	}
+}
