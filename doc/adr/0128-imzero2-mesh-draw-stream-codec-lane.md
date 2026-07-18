@@ -206,7 +206,14 @@ enabling step for the appliance target, without writing a CPU rasterizer.
 Proposed. Spike evidence measured 2026-07-17/18 on the demo carousel at
 1280×800 @ 30 fps; interactive loopback session exercised input, scrolling,
 multi-viewer fan-out, and the viewer-density fix (verified crisp). M1 is the
-acceptance gate.
+acceptance gate — **landed 2026-07-18** (`3567db31`: `VideoCodec::Mesh`
+through the ADR-0088 seams, the `meshlane` wire module, `0x04` broadcast in
+the carrier with per-connection content-addressed dedup, the WebGL2 painter
+in the embedded viewer; spike retired). Verified over the carrier protocol
+end-to-end, with the H.264 lane regression-tested beside it. M1's recorded
+cut: the lane is session-global (per-viewer mixing stays M4), and a
+mesh ↔ video runtime switch reloads the viewer page (a canvas is bound to
+its first context kind). Awaiting acceptance review.
 
 ## References
 
