@@ -128,6 +128,10 @@ type PlayApp struct {
 	sqlHlJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	sqlHlOk  bool
 
+	// sqlSem is the L2 tier on top: a bgjob-backed semantic upgrade that
+	// replaces the lex job once the buffer sits quiescent (play_sql_highlight.go).
+	sqlSem sqlSemanticHl
+
 	// Slice-5a signal-store state. frameSig is the per-frame immutable
 	// snapshot of the graph's signal store, taken at Render top so every
 	// consumer in a frame sees a single revision (glitch-freedom as frame
@@ -1447,6 +1451,12 @@ func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint stri
 func (inst *PlayApp) sqlEditorHighlightJob(src string) (job typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool) {
 	if src == "" {
 		return job, false
+	}
+	// L2: a quiescent buffer gets the semantic tier (async; see
+	// sqlSemanticHl); while typing — or while the parse is still in
+	// flight — the lex tier below answers.
+	if sem, semOk := inst.sqlSem.jobFor(src); semOk {
+		return sem, true
 	}
 	if !inst.sqlHlOk || inst.sqlHlSrc != src {
 		inst.sqlHlJob = codeview.BuildSqlLex(src)
