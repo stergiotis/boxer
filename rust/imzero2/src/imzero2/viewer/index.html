@@ -473,7 +473,9 @@ const glTextures = new Map(); // texKey -> {tex, w, h}
 
 function glInit() {
   if (gl) return true;
-  gl = canvas.getContext("webgl2", { premultipliedAlpha: true, antialias: false });
+  // alpha:false — an opaque backbuffer, so page compositing can never tint
+  // the stream (parity with how a <video> element presents).
+  gl = canvas.getContext("webgl2", { premultipliedAlpha: true, antialias: false, alpha: false });
   if (!gl) return false;
   canvasMode = "gl";
   const vsrc = `#version 300 es
@@ -481,6 +483,14 @@ in vec2 a_pos; in vec2 a_uv; in vec4 a_col;
 uniform vec2 u_res; out vec2 v_uv; out vec4 v_col;
 void main(){ v_uv=a_uv; v_col=a_col;
   gl_Position=vec4(a_pos.x/u_res.x*2.0-1.0, 1.0-a_pos.y/u_res.y*2.0, 0.0, 1.0); }`;
+  // Gamma parity (ADR-0128 M2): this IS egui_wgpu's fs_main_gamma_framebuffer
+  // for the headless host's exact configuration — Bgra8Unorm target (gamma
+  // framebuffer), Rgba8Unorm textures (no sRGB decode on sampling), vertex
+  // colors gamma premultiplied, `color * texel` in gamma space, premultiplied
+  // ONE/ONE_MINUS_SRC_ALPHA blending. No linear conversion anywhere, and no
+  // dithering: the host renderer sets `dithering: false` (headless.rs). The
+  // host's manual 4-tap bilinear (predictable_texture_filtering) is the same
+  // math as this LINEAR sampler at pixel centers.
   const fsrc = `#version 300 es
 precision mediump float; in vec2 v_uv; in vec4 v_col; uniform sampler2D u_tex; out vec4 o;
 void main(){ o = v_col * texture(u_tex, v_uv); }`;
@@ -562,8 +572,14 @@ function meshDraw(order) {
     if (!m) continue; // body dropped in flight — the server resyncs us next frame
     const t = glTextures.get(m.texKey);
     if (t) gl.bindTexture(gl.TEXTURE_2D, t.tex);
-    const [x0, y0, x1, y1] = m.clip;
-    gl.scissor(Math.floor(x0), Math.floor(H - y1), Math.ceil(x1 - x0) + 1, Math.ceil(y1 - y0) + 1);
+    // Exact ScissorRect::new semantics (egui_wgpu): round min/max to
+    // integer pixels independently, clamp into the target, skip zero-sized.
+    const sx0 = Math.min(Math.max(Math.round(m.clip[0]), 0), W);
+    const sy0 = Math.min(Math.max(Math.round(m.clip[1]), 0), H);
+    const sx1 = Math.min(Math.max(Math.round(m.clip[2]), sx0), W);
+    const sy1 = Math.min(Math.max(Math.round(m.clip[3]), sy0), H);
+    if (sx1 - sx0 === 0 || sy1 - sy0 === 0) continue;
+    gl.scissor(sx0, H - sy1, sx1 - sx0, sy1 - sy0);
     gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
     gl.enableVertexAttribArray(glAttrs.pos); gl.vertexAttribPointer(glAttrs.pos, 2, gl.FLOAT, false, 16, 0);
     gl.enableVertexAttribArray(glAttrs.uv);  gl.vertexAttribPointer(glAttrs.uv, 2, gl.FLOAT, false, 16, 8);
