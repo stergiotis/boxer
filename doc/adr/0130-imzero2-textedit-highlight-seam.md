@@ -222,6 +222,26 @@ Accepted 2026-07-18.
 
 ## Updates
 
+### 2026-07-18 — L2 (async semantic refine) implemented and live-verified
+
+The quiescent semantic tier shipped on top of the seam, honoring the
+constraint recorded below (the full parse never touches the render thread):
+a `bgjob.Runner` worker computes `highlight.Highlight` — pure Go, no `c.*`
+calls — and the render thread pays only span→`CodeViewJob` serialization
+(`codeview.BuildSqlFromSpans`, the split-out tail of the existing builder).
+Launch requires the buffer unchanged for 400 ms and no installed job for the
+current content; supersession is by content (the run's `Tag` carries the
+parsed text, and a drained result installs only while the buffer still
+equals it — an edit falls back to the lex tier the same frame and the stale
+result is dropped on arrival, freeing the slot for a relaunch). An
+unparseable buffer installs its lex-equivalent spans as a visual no-op,
+which also stops relaunch churn for that content. State machine
+race-clean under `-race`; three unit tests cover quiescence, supersession,
+and typing-never-launches. Live-verified: a CTE buffer upgrades at rest
+(CTE/table/column names in the semantic palette, matching the read-only
+preview), and text typed after a pause re-upgrades ~450 ms later including
+the fresh identifiers.
+
 ### 2026-07-18 — implemented and live-verified
 
 Shipped as designed, same day as acceptance: `highlightJob` IDL method +
