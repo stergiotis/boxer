@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
@@ -116,6 +117,17 @@ type PlayApp struct {
 
 	sql         string
 	lastSentSql string
+
+	// ADR-0130 editor-highlight cache: the lex-tier CodeViewJob describing
+	// sqlHlSrc, rebuilt only when the rendered buffer changed since the last
+	// frame. Deliberately BuildSqlLex (uncached): per-keystroke content is
+	// new by construction, so the ADR-0125 memo would only churn. The job is
+	// one frame stale while typing; reconciling that against the live buffer
+	// is the Rust layouter's job, not ours.
+	sqlHlSrc string
+	sqlHlJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	sqlHlOk  bool
+
 	// Slice-5a signal-store state. frameSig is the per-frame immutable
 	// snapshot of the graph's signal store, taken at Render top so every
 	// consumer in a frame sees a single revision (glitch-freedom as frame
@@ -1419,7 +1431,29 @@ func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint stri
 	if pendingInsert != "" {
 		b = b.InsertAtCursor(pendingInsert)
 	}
+	// Lex-tier syntax color (ADR-0130): sections describe the buffer as of
+	// this frame's binding; the Rust layouter applies them advisorily.
+	if job, ok := inst.sqlEditorHighlightJob(*valuePtr); ok {
+		b = b.HighlightJob(job)
+	}
 	b.SendRespVal(valuePtr)
+}
+
+// sqlEditorHighlightJob returns the retained lex-tier CodeViewJob for the
+// editor buffer, rebuilding only when the buffer changed since the last
+// frame (~26 µs per rebuild at CTE sizes; idle frames re-splice the retained
+// holder for free). An empty buffer renders plain — the hint text has no
+// bytes to color.
+func (inst *PlayApp) sqlEditorHighlightJob(src string) (job typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool) {
+	if src == "" {
+		return job, false
+	}
+	if !inst.sqlHlOk || inst.sqlHlSrc != src {
+		inst.sqlHlJob = codeview.BuildSqlLex(src)
+		inst.sqlHlSrc = src
+		inst.sqlHlOk = true
+	}
+	return inst.sqlHlJob, true
 }
 
 // consumePendingSnippet applies the snippet-library delivery ops staged since
