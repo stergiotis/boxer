@@ -62,6 +62,10 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 	if st.widget == nil {
 		st.widget = worldmap.New(ids, "worldmap-demo")
 		st.widget.SetPixelWidth(st.width)
+		// Cap the on-screen height: the gallery hosts demos in a vertical
+		// ScrollArea, where a fill-available map reads a ~0 available height
+		// and collapses to nothing. The cap also fits inside the tour stage.
+		st.widget.SetDisplayHeight(340)
 	}
 
 	for range c.Horizontal().KeepIter() {

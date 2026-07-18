@@ -69,6 +69,12 @@ type Widget struct {
 	wantW, wantH int
 	wantSince    time.Time
 
+	// displayH caps the map's on-screen height in points (0 = fill the
+	// available pane). See SetDisplayHeight — a caller inside a vertical
+	// ScrollArea must set it, because the pane-fills-available default reads a
+	// zero available height there and the map collapses to nothing.
+	displayH int
+
 	hoverRc uint64
 	hovered CountryIdx
 }
@@ -119,6 +125,22 @@ func (inst *Widget) SetPixelWidth(px float64) {
 
 // PixelWidth returns the current target raster width (for binding a control).
 func (inst *Widget) PixelWidth() float64 { return float64(inst.wantW) }
+
+// SetDisplayHeight caps the map's on-screen height in points; the width then
+// follows the projection aspect (FitAspectMax against the available width).
+// Pass 0 (the default) to fill the available pane instead — correct inside a
+// bounded leaf such as the play World tab. Set a finite height when the widget
+// renders inside a vertical ScrollArea (e.g. the widget gallery): there the
+// available height is unreliable — it reads ~0 whenever the pane is scrolled
+// low — and the zero-box fit would collapse the map to nothing. Display size
+// is independent of the raster resolution set by SetPixelWidth.
+func (inst *Widget) SetDisplayHeight(px float64) {
+	if px <= 0 {
+		inst.displayH = 0
+		return
+	}
+	inst.displayH = max(int(px), 1)
+}
 
 // Atlas exposes the shared country atlas (nil when loading failed) so the
 // caller can resolve its identifiers to CountryIdx values.
@@ -297,13 +319,18 @@ func (inst *Widget) renderImage() c.ResponseFlagsE {
 	// Derive() and the Image call panics ("invalid state transition").
 	imgId := inst.ids.PrepareStr(inst.scopeKey + "-img").Derive()
 	pixels := inst.tracker.PixelsToSendFor(inst.scopeKey+"-img", imgId, inst.version, inst.rgba)
-	// FitAspectMax with a zero box scales the texture aspect-preserved into
-	// the local available size (the splashscreen idiom) — the width control
-	// sets raster *resolution*, the pane decides display size. The hover
-	// readout stays texture-space under any fit, so hit-testing is unaffected.
+	// FitAspectMax scales the texture aspect-preserved into a bounding box.
+	// fixedW 0 means "use the available width" — the width control sets raster
+	// *resolution*, not display size. fixedH is displayH when the caller
+	// capped the on-screen height and 0 otherwise: 0 fills the available
+	// height (the splashscreen idiom, correct in a bounded leaf like the play
+	// World tab), a cap is required inside a vertical ScrollArea whose
+	// available height reads ~0 when scrolled low (see SetDisplayHeight). The
+	// hover readout stays texture-space under any fit, so hit-testing is
+	// unaffected.
 	resp := c.Image(inst.ids.PrepareStr(inst.scopeKey+"-img"),
 		uint32(inst.rw), uint32(inst.rh), inst.version,
-		uint8(c.FitAspectMaxE), 0, 0,
+		uint8(c.FitAspectMaxE), 0, uint32(inst.displayH),
 		uint8(c.FilterLinearE), c.TintNoneRgba, pixels).
 		SendRespHoverPx(&inst.hoverRc)
 	inst.hovered = NoCountry
