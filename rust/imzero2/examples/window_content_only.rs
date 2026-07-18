@@ -45,11 +45,11 @@ fn main() {
     // (first pass reserves Shape::Noop slots that the second pass
     // fills with real Rect/Text shapes).
     for _ in 0..2 {
-        let _ = ctx.run(raw.clone(), |ctx| show(ctx, id));
+        let _ = ctx.run_ui(raw.clone(), |ctx| show(ctx, id));
     }
 
     let mut variants: Vec<(&str, Option<String>)> = Vec::new();
-    let _ = ctx.run(raw, |ctx| {
+    let _ = ctx.run_ui(raw, |ctx| {
         show(ctx, id);
         variants.push((
             "faithful-dark",

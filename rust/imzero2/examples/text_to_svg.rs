@@ -100,7 +100,7 @@ fn main() {
     let resolver = svgexport::FontResolver::default();
     let embed_fonts = std::env::args().any(|a| a == "--embed-fonts");
     let svg = svgexport::render_svg_from_shapes(
-        ctx.screen_rect(),
+        ctx.content_rect(),
         &resolver,
         embed_fonts,
         full.shapes.iter(),

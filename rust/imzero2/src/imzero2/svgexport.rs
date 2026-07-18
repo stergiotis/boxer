@@ -2441,11 +2441,11 @@ mod tests {
             });
         };
         for _ in 0..2 {
-            let _ = ctx.run(raw.clone(), |ctx| show_ui(ctx));
+            let _ = ctx.run_ui(raw.clone(), |ctx| show_ui(ctx));
         }
         let mut alpha_svg: Option<String> = None;
         let mut beta_svg: Option<String> = None;
-        let _ = ctx.run(raw, |ctx| {
+        let _ = ctx.run_ui(raw, |ctx| {
             show_ui(ctx);
             alpha_svg = render_svg_window(
                 ctx,
@@ -2518,12 +2518,12 @@ mod tests {
             });
         };
         for _ in 0..2 {
-            let _ = ctx.run(raw.clone(), |ctx| show_ui(ctx));
+            let _ = ctx.run_ui(raw.clone(), |ctx| show_ui(ctx));
         }
         let mut faithful: Option<String> = None;
         let mut content_only: Option<String> = None;
         let mut content_only_transparent: Option<String> = None;
-        let _ = ctx.run(raw, |ctx| {
+        let _ = ctx.run_ui(raw, |ctx| {
             show_ui(ctx);
             faithful = render_svg_window(
                 ctx,
@@ -2651,7 +2651,7 @@ mod tests {
         let raw = egui::RawInput::default();
 
         let mut result: Option<String> = None;
-        let _ = ctx.run(raw, |ctx| {
+        let _ = ctx.run_ui(raw, |ctx| {
             result = render_svg_window(
                 ctx,
                 &resolver,
