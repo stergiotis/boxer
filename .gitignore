@@ -56,3 +56,8 @@ rust/*/target/
 # Local Claude Code settings (machine-specific); the .claude/skills symlink stays tracked.
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Local `crush` agent config (machine-specific): points at a localhost model
+# server, so it is developer-environment state, not shared project config.
+# Anchored — the repo-root file only.
+/crush.json
