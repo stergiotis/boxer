@@ -34,6 +34,12 @@ type nodeLane struct {
 	loading   bool
 	gen       uint64 // bumped on each start; a stale (superseded) completion is discarded
 	cancel    context.CancelFunc
+	// progress is the in-flight run's latest in-band tick (ADR-0115
+	// plane A) — written by the transport goroutine through a
+	// generation-guarded sink, cleared when the run lands or is
+	// superseded. Meaningful only while loading (transient glass state).
+	progress      Summary
+	progressFresh bool
 	// closed marks a torn-down lane: a straggler frame's demand after close
 	// (the Unmount window) is dropped instead of starting a query nothing will
 	// consume — the QueryStore `closed` guard, mirrored here.
@@ -69,6 +75,11 @@ type laneView struct {
 	elapsed     time.Duration // its wall-clock
 	loading     bool
 	err         error
+	// progress is the in-flight run's latest in-band tick, set only while
+	// loading (ADR-0115 plane A); progressFresh distinguishes "no tick
+	// yet" from a zero-valued tick.
+	progress      Summary
+	progressFresh bool
 }
 
 // demand requests the node's result for the compiled (SQL, signal values)
@@ -122,6 +133,21 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 		view.err = inst.result.err
 	}
 	view.loading = inst.loading
+	if inst.loading && inst.progressFresh {
+		view.progress = inst.progress
+		view.progressFresh = true
+	}
+	return
+}
+
+// progressView returns the in-flight run's latest progress tick without
+// demanding anything — the render-thread read for badges.
+func (inst *nodeLane) progressView() (p Summary, fresh bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.loading && inst.progressFresh {
+		return inst.progress, true
+	}
 	return
 }
 
@@ -164,6 +190,8 @@ func (inst *nodeLane) startLocked(c compiledNode, demandKey string) {
 	}
 	inst.cancel = cancel
 	inst.loading = true
+	inst.progress = Summary{}
+	inst.progressFresh = false
 	go inst.run(ctx, cancel, gen, c, demandKey)
 }
 
@@ -173,7 +201,25 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	// armed until the deadline — 60s per map fetch (review finding).
 	defer cancel()
 	start := time.Now()
-	rec, schema, summary, err := inst.exec.execute(ctx, c, inst.alloc)
+	var rec arrow.RecordBatch
+	var schema *arrow.Schema
+	var summary Summary
+	var err error
+	if pe, ok := inst.exec.(progressAwareExecutorI); ok {
+		// The sink is generation-guarded: a superseded run's late ticks
+		// must not paint the new run's badge.
+		sink := func(p Summary) {
+			inst.mu.Lock()
+			if gen == inst.gen && inst.loading {
+				inst.progress = p
+				inst.progressFresh = true
+			}
+			inst.mu.Unlock()
+		}
+		rec, schema, summary, err = pe.executeWithProgress(ctx, c, inst.alloc, sink)
+	} else {
+		rec, schema, summary, err = inst.exec.execute(ctx, c, inst.alloc)
+	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if gen != inst.gen {

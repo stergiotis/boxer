@@ -1991,6 +1991,12 @@ func (inst *PlayApp) renderResultsLoading() {
 		c.AddSpace(styletokens.Px(inst.density, 7))
 		c.Spinner().Size(32).Send()
 		c.Label("Executing query…").Send()
+		// Live tick from the in-band progress headers (ADR-0115 plane A);
+		// absent until the first tick lands or when the endpoint cannot
+		// stream them (non-http, mocks).
+		if p, fresh := inst.activeProgress(); fresh {
+			diagWeak(formatProgressLine(p))
+		}
 	}
 }
 

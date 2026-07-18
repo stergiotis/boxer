@@ -23,7 +23,10 @@ type clientExecutor struct {
 	opts *ExecOptions
 }
 
-var _ nodeExecutorI = clientExecutor{}
+var (
+	_ nodeExecutorI          = clientExecutor{}
+	_ progressAwareExecutorI = clientExecutor{}
+)
 
 // execute runs the compiled node synchronously and returns the single
 // concatenated record plus the engine summary. The node's signal values ride
@@ -32,7 +35,22 @@ var _ nodeExecutorI = clientExecutor{}
 // lane; the synchronous form is correct for tests and for the suspending
 // scheduler's worker goroutine (SD5, slice 3).
 func (inst clientExecutor) execute(ctx context.Context, c compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
-	rdr, body, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, inst.opts, c.Params)
+	return inst.executeWithProgress(ctx, c, alloc, nil)
+}
+
+// executeWithProgress is execute plus the live-progress sink (ADR-0115
+// plane A): a non-nil onProgress rides a per-call copy of the lane's
+// stable ExecOptions, opting the request into the in-band progress
+// headers. The lane's identity options (query_id, label, supersession)
+// are untouched — OnProgress is the only per-run field.
+func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(Summary)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	opts := inst.opts
+	if onProgress != nil && opts != nil {
+		o := *opts
+		o.OnProgress = onProgress
+		opts = &o
+	}
+	rdr, body, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params)
 	if xErr != nil {
 		err = eh.Errorf("clientExecutor.execute: %w", xErr)
 		return

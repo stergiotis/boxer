@@ -34,7 +34,7 @@ why the requirements outlived them. Restated:
 
 | # | requirement | origin | state |
 |---|---|---|---|
-| R1 | Live progress per running query (rows/bytes/memory, cancel) | 0050 | in-band HTTP progress headers verified available; client consumption open (plane A) |
+| R1 | Live progress per running query (rows/bytes/memory, cancel) | 0050 | shipped — in-band progress headers consumed live (an incremental-header transport; Go's stock client only delivers the block at completion) into the status-bar and loading badges; cancel via the Run/Cancel toggle + server-side supersession |
 | R2 | Result batches to the glass as they arrive | 0050 | inline Arrow on the response shipped; incremental rendering open |
 | R3 | Terminal run accounting (profile events, peak memory, exceptions) | 0050 | decided — [ADR-0115](../adr/0115-query-observability-data-plane-strategy.md) (plane B) |
 | R4 | A facts substrate absorbing operational records | 0050 | shipped — `runtime.facts` (ADR-0026 §SD6), recordstore, DimensionStore in flight |

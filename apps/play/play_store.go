@@ -54,6 +54,13 @@ type QueryStore struct {
 	// already-running goroutine is dropped instead of resurrecting state.
 	closed bool
 
+	// progress is the in-flight run's latest in-band tick (ADR-0115
+	// plane A), written by the transport goroutine while loading and
+	// meaningful only then — finish() leaves it gated behind the loading
+	// flag rather than racing to clear it.
+	progress      Summary
+	progressFresh bool
+
 	// opts is the store's stable query_id + replace_running_query (SD5): a
 	// Run after a Cancel replaces the maybe-still-running predecessor
 	// server-side (ClickHouse does not kill read-only HTTP queries on
@@ -105,6 +112,17 @@ func (inst *QueryStore) SQL() string {
 	return inst.executedSQL
 }
 
+// Progress returns the in-flight run's latest in-band progress tick;
+// fresh is false when no run is loading or no tick has arrived yet.
+func (inst *QueryStore) Progress() (p Summary, fresh bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if inst.loading && inst.progressFresh {
+		return inst.progress, true
+	}
+	return
+}
+
 func (inst *QueryStore) History() []HistoryEntry {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
@@ -123,6 +141,8 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string) {
 	}
 	inst.mu.Lock()
 	inst.loading = true
+	inst.progress = Summary{}
+	inst.progressFresh = false
 	inst.mu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
 	inst.cancelMu.Lock()
@@ -148,8 +168,22 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string) {
 			inst.cancelMu.Unlock()
 		}()
 
+		// Per-run options copy carrying the live-progress sink (ADR-0115
+		// plane A): ticks land under mu while this run is loading; the
+		// isLoading gate above means no second run can be in flight, so
+		// no generation counter is needed here.
+		opts := *inst.opts
+		opts.OnProgress = func(p Summary) {
+			inst.mu.Lock()
+			if inst.loading && !inst.closed {
+				inst.progress = p
+				inst.progressFresh = true
+			}
+			inst.mu.Unlock()
+		}
+
 		start := time.Now()
-		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, inst.opts, sigs)
+		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs)
 		if err != nil {
 			inst.finish(sql, sigs, start, nil, nil, 0, summary, err)
 			return

@@ -149,6 +149,17 @@ type nodeExecutorI interface {
 	execute(ctx context.Context, c compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
 }
 
+// progressAwareExecutorI is the optional executor upgrade for live query
+// progress (ADR-0115 plane A / S3): a lane that finds it routes execution
+// through executeWithProgress, handing a per-run sink the transport fires
+// for each in-band X-ClickHouse-Progress tick. Kept an optional interface
+// so the mock executors and the verdict-only diagnostics probe stay
+// untouched; a lane whose executor lacks it simply shows no mid-run
+// numbers.
+type progressAwareExecutorI interface {
+	executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(Summary)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
+}
+
 // Node is a query node. Compile produces the pushed-down SQL plus the signal
 // values it reads from the current signal env (ADR-0097: editor SQL →
 // nanopass pipeline → param resolution). In slice 1 Compile is supplied
@@ -605,3 +616,7 @@ func (inst *queryGraph) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Sch
 // MainSQL returns the executed SQL text of the `main` node's last-good result,
 // or "" when none has landed. Companion to MainSnapshot.
 func (inst *queryGraph) MainSQL() string { return inst.mainLane.SQL() }
+
+// MainProgress returns the `main` lane's live progress tick, fresh only
+// while a run is in flight (ADR-0115 plane A — transient glass state).
+func (inst *queryGraph) MainProgress() (p Summary, fresh bool) { return inst.mainLane.Progress() }

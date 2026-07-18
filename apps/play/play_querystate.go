@@ -263,6 +263,11 @@ func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summ
 		s = "type SQL and press Run"
 	case queryStateRunning:
 		s = "executing…"
+		// Live tick from the in-band progress headers (ADR-0115 plane A):
+		// the badge counts up while the server reads.
+		if p, fresh := inst.activeProgress(); fresh {
+			s = "executing… " + formatProgressLine(p)
+		}
 	case queryStateRows:
 		s = fmt.Sprintf("%d rows · %s · %s read · %s",
 			numRows, elapsed.Round(time.Millisecond), humanBytes(summary.ReadBytes), humanizeAgo(executed))

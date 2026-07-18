@@ -98,6 +98,15 @@ type ExecOptions struct {
 	// QueryID embeds — carried separately so the SD7 log_comment stamp
 	// can record it without parsing it back out of the id.
 	Label string
+	// OnProgress, when set, opts the request into ClickHouse's in-band
+	// progress headers (ADR-0115 plane A): the server streams
+	// X-ClickHouse-Progress lines inside the open response-header block,
+	// and the streaming transport fires this callback for each one while
+	// the query still runs. Called from the transport goroutine — keep it
+	// cheap and thread-safe. Live delivery needs a plain-http endpoint
+	// (see progressTransport); elsewhere the run degrades to the final
+	// summary with no mid-run ticks. nil = off (no wire change).
+	OnProgress func(Summary)
 }
 
 // execQueryIDSeq disambiguates lanes within one process; the pid disambiguates
@@ -416,6 +425,20 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if lc := inst.composeLogComment(sql, q, params, signals, opts); lc != "" {
 		qs.Set("log_comment", lc)
 	}
+	// Live progress (ADR-0115 plane A): ask the server to stream
+	// X-ClickHouse-Progress inside the response-header block, and swap in
+	// the incremental-header transport that can actually surface those
+	// lines mid-run — Go's stock client delivers headers only once the
+	// block completes. Non-http endpoints keep the stock client: the
+	// params are ignored or the ticks simply arrive at completion.
+	httpClient := inst.http
+	if opts != nil && opts.OnProgress != nil {
+		qs.Set("send_progress_in_http_headers", "1")
+		qs.Set("http_headers_progress_interval_ms", strconv.Itoa(progressIntervalMs))
+		if sc := newProgressClient(reqURL, opts.OnProgress); sc != nil {
+			httpClient = sc
+		}
+	}
 	if len(qs) > 0 {
 		sep := "?"
 		if strings.Contains(reqURL, "?") {
@@ -438,7 +461,7 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	}
 
 	var resp *http.Response
-	resp, err = inst.http.Do(req)
+	resp, err = httpClient.Do(req)
 	if err != nil {
 		err = eh.Errorf("clickhouse request failed: %w", err)
 		return
@@ -472,6 +495,9 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 }
 
 // Summary mirrors ClickHouse's X-ClickHouse-Summary JSON-ish header values.
+// The in-band X-ClickHouse-Progress headers carry the same shape (a prefix
+// of these fields plus memory_usage), so live progress ticks reuse this
+// struct and parseSummaryHeader (ADR-0115 plane A).
 type Summary struct {
 	ReadRows        uint64
 	ReadBytes       uint64
@@ -481,6 +507,7 @@ type Summary struct {
 	ResultRows      uint64
 	ResultBytes     uint64
 	ElapsedNs       uint64
+	MemoryUsage     uint64
 }
 
 func parseSummaryHeader(s string) (out Summary) {
@@ -506,6 +533,7 @@ func parseSummaryHeader(s string) (out Summary) {
 	out.ResultRows = parseU64("result_rows")
 	out.ResultBytes = parseU64("result_bytes")
 	out.ElapsedNs = parseU64("elapsed_ns")
+	out.MemoryUsage = parseU64("memory_usage")
 	return
 }
 
