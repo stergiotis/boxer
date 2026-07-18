@@ -236,6 +236,8 @@ Families outside the four primary routes, with shorter verdicts:
   in sync with `grammar1` (token-level only; the upstream lexer changes
   rarely), plus a Rust-side keyword table. Best understood as an alternative
   *span source* for the recommended seam (§8), not a different architecture.
+  *(Rejected in the ADR-0130 design dialogue: a second in-tree dialect
+  definition outside `grammar1` is not an option for this repository.)*
 - **Rust-side grammar files (syntect + a ClickHouse TextMate grammar).** No
   ready-made ClickHouse TextMate/Sublime grammar surfaced — the VSCode
   ecosystem covers ClickHouse via a SQLTools *driver* riding generic SQL
@@ -306,7 +308,11 @@ Families outside the four primary routes, with shorter verdicts:
 Close the narrow gap rather than import an editor. The repo already holds the
 exact lexer (`grammar1`), a span container that crosses the FFI
 (`CodeViewJob`), and a Rust-side span→`LayoutJob` cache; egui already provides
-`TextEdit::layouter`. What is missing is one seam and one discipline:
+`TextEdit::layouter`. What is missing is one seam and one discipline —
+*the L1 seam design is now recorded in
+[ADR-0130](../adr/0130-imzero2-textedit-highlight-seam.md), which settled the
+span-source question (Go-side lex; the Rust-side lexer was rejected) and adds
+measured lex/parse cost numbers:*
 
 - **L0 — interim, zero IDL change.** The focus-swap from §6: `codeView` at
   rest, plain `TextEdit` behind an explicit edit affordance. Highlighted
