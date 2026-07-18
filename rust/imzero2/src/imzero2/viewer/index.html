@@ -382,10 +382,14 @@ async function probeAndSendCapabilities() {
   sendDecodeCapabilities(caps);
 }
 function sendDecodeCapabilities(caps) {
-  const dc = new Writer(); // DecodeCapabilities { repeated CodecCapability codecs = 1 }
+  const dc = new Writer(); // DecodeCapabilities { repeated CodecCapability codecs = 1, bool webgl2 = 2 }
   for (const c of caps) {
     dc.sub(1, new Writer().str(1, c.codec).bool(2, c.supported).bool(3, c.smooth).bool(4, c.powerEfficient));
   }
+  // ADR-0128: WebGL2 availability is the mesh draw-stream lane's decode
+  // requirement (no WebCodecs string to probe), so the host can offer codec
+  // id 4 (mesh). Geometry-independent — the same bit rides every (re)probe.
+  dc.bool(2, HAS_GL2);
   sendFramed(PREFIX_SESSION, new Writer().sub(5, dc)); // SessionControl.decode_capabilities = 5
 }
 

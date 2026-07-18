@@ -38,15 +38,21 @@ default = ["desktop", "inspection"]
 # `NativeOptions::vsync` field). headless already enables it; headless_svg does
 # not, keeping that host GPU-less.
 desktop = ["dep:eframe", "dep:egui-wgpu"]
+# ADR-0128 M3 — the appliance-host split. `headless` is the carrier + FFFI2
+# host with NO wgpu and NO ffmpeg: the mesh draw-stream lane only (SD6), which
+# is the lean appliance build. `headless_wgpu` adds the offscreen wgpu renderer
+# + GPU→CPU readback that the video codecs, the PNG dump, and the H264_OUT file
+# sink all require; it is the full dev/desktop-adjacent host. The mesh *wire* is
+# byte-identical between the two, so a stream verified under `headless_wgpu` is
+# exactly what the lean `headless` build serves. `cargo tree --features headless`
+# carries no wgpu — the hard guarantee the appliance target needs.
 headless = [
-    "dep:wgpu",
-    "dep:egui-wgpu",
-    "dep:pollster",
     "dep:tokio",
     "dep:tokio-tungstenite",
     "dep:prost",
     "dep:futures-util",
 ]
+headless_wgpu = ["headless", "dep:wgpu", "dep:egui-wgpu", "dep:pollster"]
 # GPU-less, SVG-only host (headless_svg.rs). Drives the shared FFFI2
 # interpreter with `ctx.run_ui` and lets the always-registered SVG-export
 # plugin (apphost::init_common) write files on ExportSvg / ExportSvgWindow.

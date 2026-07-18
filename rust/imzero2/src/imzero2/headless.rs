@@ -15,6 +15,14 @@
 //! The interpreter and all context setup are shared verbatim with the
 //! desktop host via [`apphost::init_common`].
 //!
+//! Feature split (ADR-0128 M3): wgpu — the offscreen renderer plus the
+//! GPU→CPU readback — is gated behind `headless_wgpu`. The bare `headless`
+//! build is the lean appliance host (SD6): the carrier, the FFFI2 interpreter,
+//! and the mesh draw-stream lane only — `ctx.run` + `ctx.tessellate` +
+//! serialize, no GPU, no ffmpeg. The PNG dump, the H264_OUT file sink, the
+//! video-encode probe, and every video codec live under `headless_wgpu`; the
+//! lean build offers only the mesh lane, so those env vars are inert there.
+//!
 //! Configuration rides env vars (precedent: IMZERO2_RENDER_CADENCE,
 //! IMZERO2_SCREENSHOT_DIR — the Go launcher inherits its environment to
 //! the client process, so no Go-side flag plumbing is needed at v1):
@@ -58,7 +66,9 @@
 use crate::imzero2::appconfig::AppConfig;
 use crate::imzero2::apphost;
 use crate::imzero2::codeclane::{CodecLane, LaneProbe, VideoCodec};
+#[cfg(feature = "headless_wgpu")]
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
+#[cfg(feature = "headless_wgpu")]
 use crate::imzero2::framesink::{FrameSink, NullSink, PngDumpSink};
 use crate::imzero2::inputmap::InputTranslator;
 use crate::imzero2::interpreter::InterpretError;
@@ -66,14 +76,19 @@ use crate::imzero2::wscarrier::WsCarrier;
 
 #[derive(thiserror::Error, Debug)]
 pub enum HeadlessError {
+    #[cfg(feature = "headless_wgpu")]
     #[error("no wgpu adapter available: {0}")]
     Adapter(#[from] wgpu::RequestAdapterError),
+    #[cfg(feature = "headless_wgpu")]
     #[error("wgpu device request failed: {0}")]
     Device(#[from] wgpu::RequestDeviceError),
+    #[cfg(feature = "headless_wgpu")]
     #[error("wgpu poll failed: {0}")]
     Poll(#[from] wgpu::PollError),
+    #[cfg(feature = "headless_wgpu")]
     #[error("readback buffer mapping failed: {0}")]
     BufferMap(#[from] wgpu::BufferAsyncError),
+    #[cfg(feature = "headless_wgpu")]
     #[error("readback channel closed before map completed")]
     MapChannelClosed,
     #[error("io error: {0}")]
@@ -84,9 +99,14 @@ pub enum HeadlessError {
 struct HeadlessOpts {
     fps: f32,
     max_frames: u64,
+    /// PNG-dump directory — raster only, so `headless_wgpu`.
+    #[cfg(feature = "headless_wgpu")]
     dump_dir: Option<std::path::PathBuf>,
+    #[cfg(feature = "headless_wgpu")]
     dump_every: u64,
     pixels_per_point: f32,
+    /// H.264 file-sink target — raster + encoder, so `headless_wgpu`.
+    #[cfg(feature = "headless_wgpu")]
     h264_out: Option<std::path::PathBuf>,
     lane: CodecLane,
     /// WebSocket carrier bind address (e.g. "127.0.0.1:8089"); the viewer
@@ -104,6 +124,7 @@ impl HeadlessOpts {
         fn parse<T: std::str::FromStr>(name: &str, default: T) -> T {
             std::env::var(name).ok().and_then(|v| v.parse::<T>().ok()).unwrap_or(default)
         }
+        #[cfg(feature = "headless_wgpu")]
         fn path_var(name: &str) -> Option<std::path::PathBuf> {
             std::env::var(name).ok().filter(|v| !v.is_empty()).map(std::path::PathBuf::from)
         }
@@ -119,24 +140,32 @@ impl HeadlessOpts {
                 })
                 .unwrap_or(false)
         }
-        let h264_out = path_var("IMZERO2_HEADLESS_H264_OUT");
         let listen = std::env::var("IMZERO2_HEADLESS_LISTEN").ok().filter(|v| !v.is_empty());
-        // Resolve (and thus probe) the encoder lane only when something will
-        // actually encode — a remote carrier or the file dump. PNG-only / null
-        // runs never spawn ffmpeg, so probing the VAAPI lane (CodecLane::best)
-        // would be pure startup cost (L2). The placeholder lane is never used in
-        // that case (no encoder reads it).
+        // Resolve (and thus probe) the encoder lane only under `headless_wgpu`,
+        // and only when something will actually encode — a remote carrier or the
+        // file dump. PNG-only / null runs never spawn ffmpeg, so probing the
+        // VAAPI lane (CodecLane::best) would be pure startup cost (L2). The lean
+        // (no-wgpu) build has no encoder at all, so it forces the mesh
+        // draw-stream lane (ADR-0128 SD6) — the only lane it can serve.
+        #[cfg(feature = "headless_wgpu")]
+        let h264_out = path_var("IMZERO2_HEADLESS_H264_OUT");
+        #[cfg(feature = "headless_wgpu")]
         let lane = if listen.is_some() || h264_out.is_some() {
             build_codec_lane()
         } else {
             CodecLane::software(VideoCodec::H264)
         };
+        #[cfg(not(feature = "headless_wgpu"))]
+        let lane = CodecLane::mesh();
         Self {
             fps: parse("IMZERO2_HEADLESS_FPS", 60.0f32).clamp(1.0, 240.0),
             max_frames: parse("IMZERO2_HEADLESS_MAX_FRAMES", 0u64),
+            #[cfg(feature = "headless_wgpu")]
             dump_dir: path_var("IMZERO2_HEADLESS_DUMP_DIR"),
+            #[cfg(feature = "headless_wgpu")]
             dump_every: parse("IMZERO2_HEADLESS_DUMP_EVERY", 60u64).max(1),
             pixels_per_point: parse("IMZERO2_HEADLESS_PIXELS_PER_POINT", 1.0f32).clamp(0.25, 4.0),
+            #[cfg(feature = "headless_wgpu")]
             h264_out,
             lane,
             listen,
@@ -155,6 +184,10 @@ impl HeadlessOpts {
 /// short-circuits that with the given args verbatim — the escape hatch to
 /// force software (`-c:v libopenh264 …`) or pin a specific encoder — so an
 /// existing deployment that sets it behaves exactly as before.
+///
+/// Under `headless_wgpu` only — the lean build has no encoder and forces the
+/// mesh lane (see [`HeadlessOpts::from_env`]).
+#[cfg(feature = "headless_wgpu")]
 fn build_codec_lane() -> CodecLane {
     let codec = std::env::var("IMZERO2_HEADLESS_CODEC")
         .ok()
@@ -176,10 +209,17 @@ fn build_codec_lane() -> CodecLane {
 
 /// ADR-0088: combine the host-encode probe with the viewer's reported decode
 /// capabilities into the (codecId, flags) packing `fetchVideoCapabilities`
-/// hands to Go. codecId 0=H.264, 1=VP9, 2=AV1; flags bit0=sw-encode,
-/// bit1=decode-supported, bit2=decode-smooth, bit3=decode-hardware,
-/// bit4=hw-encode, bits5-7=hardware-lane fail reason, bits8-10=software-lane
-/// fail reason (0=ok, see codeclane::LaneProbe::reason_code).
+/// hands to Go. codecId 0=H.264, 1=VP9, 2=AV1, 3=AV1 4:4:4, 4=mesh
+/// (ADR-0128); flags bit0=sw-encode, bit1=decode-supported, bit2=decode-smooth,
+/// bit3=decode-hardware, bit4=hw-encode, bits5-7=hardware-lane fail reason,
+/// bits8-10=software-lane fail reason (0=ok, see
+/// codeclane::LaneProbe::reason_code).
+///
+/// The mesh lane (ADR-0128) is not a probed video codec — it has no encoder,
+/// so it never appears in `host`. It is appended unconditionally (the lane is
+/// compiled in every current build; the M3 appliance build compiles *only* it),
+/// with no encode bits and decode-supported set iff the viewer reported a
+/// usable WebGL2 context — its sole decode requirement.
 fn build_video_caps(
     host: &[(VideoCodec, LaneProbe, LaneProbe)],
     decode: Option<&crate::imzero2::inputproto::DecodeCapabilities>,
@@ -209,7 +249,9 @@ fn build_video_caps(
             (codec_id(c), f)
         })
         .collect();
+    let mut webgl2 = false;
     if let Some(dc) = decode {
+        webgl2 = dc.webgl2;
         for cap in &dc.codecs {
             let id = if cap.codec.starts_with("avc") {
                 0u8
@@ -236,11 +278,17 @@ fn build_video_caps(
             }
         }
     }
+    // ADR-0128: append the mesh draw-stream lane (id 4). No encoder to probe,
+    // so no encode bits; decode-supported (bit1) iff the viewer has WebGL2.
+    // Unconditional here because the lane is always compiled today — M3's
+    // appliance build gates the video lanes instead, leaving this the only one.
+    out.push((4, if webgl2 { 2 } else { 0 }));
     out
 }
 
 /// Offscreen wgpu state: device/queue, render target, the reused staging
 /// buffer for readback, and the egui renderer.
+#[cfg(feature = "headless_wgpu")]
 struct Gpu {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -259,8 +307,10 @@ struct Gpu {
 /// readback bytes are sRGB-encoded BGRA — exactly what both the PNG dump
 /// and the future `rawvideo -pix_fmt bgra` encoder input (ADR-0024 SD3)
 /// expect.
+#[cfg(feature = "headless_wgpu")]
 const TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
+#[cfg(feature = "headless_wgpu")]
 fn init_gpu(width_px: u32, height_px: u32) -> Result<Gpu, HeadlessError> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::from_env()
@@ -337,6 +387,7 @@ fn init_gpu(width_px: u32, height_px: u32) -> Result<Gpu, HeadlessError> {
     })
 }
 
+#[cfg(feature = "headless_wgpu")]
 impl Gpu {
     /// Consume a pass's texture deltas without rendering. Used when no
     /// sink wants pixels (no viewer, no dump): deltas are incremental, so
@@ -582,15 +633,29 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         pixels_per_point = ppp,
         fps = opts.fps,
         max_frames = opts.max_frames,
-        dump_dir = ?opts.dump_dir,
         "headless host up and running (ADR-0024 Phase 1)"
     );
 
+    // wgpu offscreen renderer — full build only. The lean (ADR-0128 SD6) build
+    // carries no GPU: it tessellates and serializes the mesh lane instead.
+    #[cfg(feature = "headless_wgpu")]
     let mut gpu = init_gpu(width_px, height_px)?;
+    #[cfg(feature = "headless_wgpu")]
     let mut screen = egui_wgpu::ScreenDescriptor {
         size_in_pixels: [width_px, height_px],
         pixels_per_point: ppp,
     };
+    #[cfg(not(feature = "headless_wgpu"))]
+    tracing::info!(
+        "mesh-only appliance host (no-wgpu build, ADR-0128 SD6): the draw-stream lane is the only \
+         codec; video codecs, PNG dump (IMZERO2_HEADLESS_DUMP_DIR), and H264_OUT are unavailable here"
+    );
+    // The GPU device reports a max texture side; without one (lean build) clamp
+    // resizes to a conservative WebGL2 MAX_TEXTURE_SIZE floor instead.
+    #[cfg(feature = "headless_wgpu")]
+    let max_texture_side = gpu.max_texture_side;
+    #[cfg(not(feature = "headless_wgpu"))]
+    let max_texture_side: usize = 8192;
 
     let ctx = egui::Context::default();
     let (mut fffi, reactive) = apphost::init_common(
@@ -609,10 +674,14 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         "render cadence (IMZERO2_RENDER_CADENCE; runtime-switchable via the wire)"
     );
 
+    // Pixel sinks (PNG dump, H.264 file) — raster, so full build only.
+    #[cfg(feature = "headless_wgpu")]
     let mut sinks: Vec<Box<dyn FrameSink>> = Vec::new();
+    #[cfg(feature = "headless_wgpu")]
     if let Some(dir) = &opts.dump_dir {
         sinks.push(Box::new(PngDumpSink::new(dir.clone(), opts.dump_every)?));
     }
+    #[cfg(feature = "headless_wgpu")]
     if let Some(out) = &opts.h264_out {
         sinks.push(Box::new(EncoderSink::new(
             width_px,
@@ -648,7 +717,10 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     // control via fetchVideoCapabilities so unavailable codecs aren't offered.
     // Only worth running when a viewer can connect: the probe is a handful of
     // ffmpeg trial-encodes and its result is consumed solely on the connected-
-    // carrier path below, so with no carrier it is pure startup cost (L2).
+    // carrier path below, so with no carrier it is pure startup cost (L2). The
+    // lean build has no encoder at all — the probe is compiled out and the caps
+    // stay empty, so `build_video_caps` offers only the mesh lane (ADR-0128).
+    #[cfg(feature = "headless_wgpu")]
     let host_encode_caps = if carrier.is_some() {
         let caps = crate::imzero2::codeclane::probe_host_encode();
         tracing::info!(
@@ -659,11 +731,14 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     } else {
         Vec::new()
     };
+    #[cfg(not(feature = "headless_wgpu"))]
+    let host_encode_caps: Vec<(VideoCodec, LaneProbe, LaneProbe)> = Vec::new();
     // Wire-bitrate EMA state (ADR-0088 telemetry), updated ~4×/s from the
     // carrier's cumulative byte counter.
     let mut bitrate_prev_bytes = 0u64;
     let mut bitrate_prev_inst = std::time::Instant::now();
     let mut bitrate_kbps = 0u64;
+    #[cfg(feature = "headless_wgpu")]
     if sinks.is_empty() && carrier.is_none() {
         sinks.push(Box::new(NullSink));
     }
@@ -679,6 +754,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     // Latch so an app that re-emits ViewportCommand::Close every frame under
     // `ignore_close` logs once, not once per frame.
     let mut warned_ignore_close = false;
+    #[cfg(feature = "headless_wgpu")]
     let mut bgra_frame: Vec<u8> = Vec::new();
     let mut translator = InputTranslator::default();
     let mut wire_events: Vec<crate::imzero2::inputproto::input_event::Event> = Vec::new();
@@ -746,16 +822,22 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         if let Some(c) = &mut carrier {
             if let Some(req) = c.take_resize() {
                 if let Some((nw, nh, nppp)) =
-                    clamp_resize(&req, gpu.max_texture_side, width_px, height_px, ppp)
+                    clamp_resize(&req, max_texture_side, width_px, height_px, ppp)
                 {
+                    // Full build rebuilds the offscreen target; the lean build
+                    // only tracks geometry (mesh coords cross in points).
+                    #[cfg(feature = "headless_wgpu")]
                     gpu.resize(nw, nh);
                     width_px = nw;
                     height_px = nh;
                     ppp = nppp;
-                    screen = egui_wgpu::ScreenDescriptor {
-                        size_in_pixels: [nw, nh],
-                        pixels_per_point: nppp,
-                    };
+                    #[cfg(feature = "headless_wgpu")]
+                    {
+                        screen = egui_wgpu::ScreenDescriptor {
+                            size_in_pixels: [nw, nh],
+                            pixels_per_point: nppp,
+                        };
+                    }
                     screen_rect = egui::Rect::from_min_size(
                         egui::Pos2::ZERO,
                         egui::vec2(nw as f32 / nppp, nh as f32 / nppp),
@@ -791,7 +873,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
 
         let mut raw_input = egui::RawInput {
             screen_rect: Some(screen_rect),
-            max_texture_side: Some(gpu.max_texture_side),
+            max_texture_side: Some(max_texture_side),
             time: Some(start.elapsed().as_secs_f64()),
             predicted_dt: frame_dt.as_secs_f32(),
             focused: true,
@@ -931,26 +1013,32 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 }
             }
         }
-        let need_pixels = !sinks.is_empty()
-            || carrier.as_ref().map(|c| c.connected() && c.wants_pixels()).unwrap_or(false);
-        if need_pixels {
-            gpu.render_and_readback(&ctx, out, &screen, &mut bgra_frame)?;
-            for sink in &mut sinks {
-                sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
-            }
-            if let Some(c) = &mut carrier {
-                c.on_frame(&bgra_frame, width_px, height_px, frame_idx);
-            }
-        } else {
-            // Nobody consumes pixels: skip tessellation, the render pass
-            // and the readback, but keep the renderer's texture state
-            // current. The empty on_frame lets the carrier reap a
-            // just-disconnected session's encoder promptly (a race to
-            // connected here only feeds a zero-length frame, which the
-            // encoder ignores).
-            gpu.apply_textures_only(out);
-            if let Some(c) = &mut carrier {
-                c.on_frame(&[], width_px, height_px, frame_idx);
+        // Pixel path — full build only. The lean build already emitted this
+        // frame on the mesh lane above (or has no viewer), and has no GPU to
+        // rasterize with, so it does nothing here.
+        #[cfg(feature = "headless_wgpu")]
+        {
+            let need_pixels = !sinks.is_empty()
+                || carrier.as_ref().map(|c| c.connected() && c.wants_pixels()).unwrap_or(false);
+            if need_pixels {
+                gpu.render_and_readback(&ctx, out, &screen, &mut bgra_frame)?;
+                for sink in &mut sinks {
+                    sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
+                }
+                if let Some(c) = &mut carrier {
+                    c.on_frame(&bgra_frame, width_px, height_px, frame_idx);
+                }
+            } else {
+                // Nobody consumes pixels: skip tessellation, the render pass
+                // and the readback, but keep the renderer's texture state
+                // current. The empty on_frame lets the carrier reap a
+                // just-disconnected session's encoder promptly (a race to
+                // connected here only feeds a zero-length frame, which the
+                // encoder ignores).
+                gpu.apply_textures_only(out);
+                if let Some(c) = &mut carrier {
+                    c.on_frame(&[], width_px, height_px, frame_idx);
+                }
             }
         }
         frame_idx += 1;
@@ -972,4 +1060,48 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         "headless host done"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::imzero2::inputproto::DecodeCapabilities;
+
+    // ADR-0128: build_video_caps appends the mesh lane (id 4) even though it
+    // never appears in the host-encode probe. It carries no encode bits
+    // (bit0 sw / bit4 hw stay clear) and its decode-supported bit (bit1)
+    // tracks the viewer's WebGL2 signal — mesh's sole decode requirement.
+    #[test]
+    fn build_video_caps_appends_mesh_gated_on_webgl2() {
+        const ENCODE_BITS: u32 = 0b1_0001; // bit0 sw-encode | bit4 hw-encode
+        const DECODE_SUPPORTED: u32 = 0b10; // bit1
+        let host = [(VideoCodec::H264, LaneProbe::Ok, LaneProbe::Ok)];
+
+        // No decode caps yet: mesh is still offered structurally, but with
+        // nothing set — no encoder is ever advertised, decode not yet known.
+        let mesh = |caps: &[(u8, u32)]| caps.iter().find(|(id, _)| *id == 4).map(|&(_, f)| f);
+        let f = mesh(&build_video_caps(&host, None)).expect("mesh id 4 present");
+        assert_eq!(f & (ENCODE_BITS | DECODE_SUPPORTED), 0);
+
+        // WebGL2 present → decode-supported; still never an encoder.
+        let dc = DecodeCapabilities {
+            webgl2: true,
+            ..Default::default()
+        };
+        let f = mesh(&build_video_caps(&host, Some(&dc))).unwrap();
+        assert_eq!(
+            f & DECODE_SUPPORTED,
+            DECODE_SUPPORTED,
+            "WebGL2 → mesh decodable"
+        );
+        assert_eq!(f & ENCODE_BITS, 0, "mesh never advertises an encoder");
+
+        // WebGL2 absent → not decodable (viewer would black-screen on switch).
+        let dc = DecodeCapabilities {
+            webgl2: false,
+            ..Default::default()
+        };
+        let f = mesh(&build_video_caps(&host, Some(&dc))).unwrap();
+        assert_eq!(f & DECODE_SUPPORTED, 0, "no WebGL2 → mesh not decodable");
+    }
 }

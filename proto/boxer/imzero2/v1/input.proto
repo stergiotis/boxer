@@ -173,6 +173,13 @@ message ClipboardData {
 // of browser-can-decode and host-can-encode in the output control.
 message DecodeCapabilities {
   repeated CodecCapability codecs = 1;
+  // ADR-0128: the browser has a usable WebGL2 context — the mesh draw-stream
+  // lane's decode requirement (it has no WebCodecs codec string to probe). Its
+  // own value is geometry-independent, but it rides on this message because
+  // build_video_caps already reads it; with it set the host offers codec id 4
+  // (mesh) in the Go video-output control. Additive (field 2), per the
+  // versioning policy above.
+  bool webgl2 = 2;
 }
 
 // One probed WebCodecs configuration.

@@ -86,12 +86,22 @@ func TestExpandLaunchExpr_NonIdentifierPassesThroughVerbatim(t *testing.T) {
 	assert.Equal(t, "time-range", expandLaunchExpr("time-range"))
 }
 
+// TestResolveLaunchSql_Shorthand: a bare alias takes the ADR-0128 M3 fast path
+// — a direct SubjectAlias match against the registry — so it resolves WITHOUT
+// clickhouse-local (deliberately no skip; this is the appliance boot path).
 func TestResolveLaunchSql_Shorthand(t *testing.T) {
-	skipIfNoClickhouseLocal(t)
 	apps, err := resolveLaunchSql("play")
 	require.NoError(t, err)
 	require.Len(t, apps, 1)
 	assert.Equal(t, app.AppIdT(idPlay), apps[0].Manifest().Id)
+}
+
+// TestResolveLaunchSql_BareAliasNoMatch: an unknown bare alias returns empty
+// (no error, no clickhouse-local), matching CH's zero-rows behaviour.
+func TestResolveLaunchSql_BareAliasNoMatch(t *testing.T) {
+	apps, err := resolveLaunchSql("nosuchbarealias")
+	require.NoError(t, err)
+	assert.Empty(t, apps)
 }
 
 func TestResolveLaunchSql_SubjectAlias(t *testing.T) {

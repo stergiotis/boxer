@@ -10,6 +10,12 @@
 // bindings.Fetcher.FetchVideoCapabilities; the flag bit layout is a
 // cross-language contract with the Rust host's build_video_caps
 // (headless.rs) — see the flag constants and the test.
+//
+// The mesh draw-stream lane ([CodecMesh], ADR-0128) is a sibling in the same
+// model and picker, not a video codec: the host has no encoder for it (it
+// tessellates + serializes) and the browser paints it with WebGL2 rather than
+// WebCodecs. It is host-served whenever compiled in ([CodecCaps.HostServes]),
+// and its decode-supported bit carries the viewer's WebGL2 standing.
 package videopipeline
 
 import "iter"
@@ -23,6 +29,12 @@ const (
 	CodecVP9      Codec = 1
 	CodecAV1      Codec = 2
 	CodecAV1Hi444 Codec = 3 // AV1 High profile, 4:4:4 chroma
+	// CodecMesh is the ADR-0128 draw-stream lane: tessellated meshes + texture
+	// deltas instead of encoded video. It is a sibling lane in the same picker,
+	// not a video codec — the host has no encoder for it (it tessellates and
+	// serializes) and the browser paints it with WebGL2, not WebCodecs. Several
+	// of the display methods below special-case it accordingly.
+	CodecMesh Codec = 4
 )
 
 func (c Codec) String() string {
@@ -33,6 +45,8 @@ func (c Codec) String() string {
 		return "AV1"
 	case CodecAV1Hi444:
 		return "AV1 4:4:4"
+	case CodecMesh:
+		return "Mesh"
 	default:
 		return "H.264"
 	}
@@ -40,12 +54,17 @@ func (c Codec) String() string {
 
 // PixelFormat is the chroma subsampling + bit depth the codec's lane encodes,
 // for the control's "Pixels" column — only AV1 4:4:4 differs from the 4:2:0
-// 8-bit the other lanes use.
+// 8-bit the video lanes use. Mesh encodes no pixels at all (tessellated
+// geometry + a texture atlas), so it reads "meshes".
 func (c Codec) PixelFormat() string {
-	if c == CodecAV1Hi444 {
+	switch c {
+	case CodecMesh:
+		return "meshes"
+	case CodecAV1Hi444:
 		return "4:4:4 8-bit"
+	default:
+		return "4:2:0 8-bit"
 	}
-	return "4:2:0 8-bit"
 }
 
 // hardwareEncoderName and softwareEncoderName name the VAAPI and the software
@@ -141,16 +160,32 @@ type CodecCaps struct {
 	EncodeSoftwareFail ProbeFailReason
 }
 
-// HostCanEncode is true when the host has a working encoder (HW or SW).
+// HostCanEncode is true when the host has a working encoder (HW or SW). It is
+// false for mesh, which has no encoder — use [CodecCaps.HostServes] for "can
+// the host produce this stream at all".
 func (c CodecCaps) HostCanEncode() bool { return c.EncodeSoftware || c.EncodeHardware }
 
-// Offerable: the host can encode it and the browser can decode it — the
-// precondition for selecting it.
-func (c CodecCaps) Offerable() bool { return c.HostCanEncode() && c.DecodeSupported }
+// HostServes reports whether the host can produce this codec's stream. For the
+// video codecs that means a working encoder ([CodecCaps.HostCanEncode]); the
+// mesh draw-stream lane (ADR-0128) has no encoder — the host tessellates and
+// serializes — so it is served whenever it is compiled in, which is exactly
+// when the host publishes id 4 in the capabilities. This, not HostCanEncode,
+// is the "show it in the picker" gate.
+func (c CodecCaps) HostServes() bool { return c.Codec == CodecMesh || c.HostCanEncode() }
+
+// Offerable: the host can produce it and the browser can display it — the
+// precondition for selecting it. For mesh, DecodeSupported carries the viewer's
+// WebGL2 standing (build_video_caps packs it into bit1) rather than a WebCodecs
+// probe.
+func (c CodecCaps) Offerable() bool { return c.HostServes() && c.DecodeSupported }
 
 // EncoderName is the ffmpeg encoder the host would use for this codec — the
 // VAAPI encoder when hardware encode is available here, else the software lane.
+// Mesh has no encoder (the host tessellates), so it reads "none".
 func (c CodecCaps) EncoderName() string {
+	if c.Codec == CodecMesh {
+		return "none"
+	}
 	if c.EncodeHardware {
 		return c.Codec.hardwareEncoderName()
 	}
@@ -165,6 +200,11 @@ func (c CodecCaps) EncoderName() string {
 // representative string for the control's table.
 func (c CodecCaps) CodecString(width, height int) string {
 	switch c.Codec {
+	case CodecMesh:
+		// Not a WebCodecs string: "mesh" is the literal hello codec field that
+		// switches the viewer onto its WebGL2 painter (mirrors codeclane.rs's
+		// webcodecs_codec_string). The level tables below never apply to it.
+		return "mesh"
 	case CodecVP9:
 		return "vp09.00." + vp9Level(width, height) + ".08"
 	case CodecAV1:
@@ -247,8 +287,13 @@ func h264Level(w, h int) string {
 	}
 }
 
-// EncodeBackend / DecodeBackend name the hardware/software path for the table.
+// EncodeBackend / DecodeBackend name the host and browser paths for the table.
+// Mesh has no encoder — the host tessellates + serializes ("tessellate") — and
+// the browser decodes it by painting with WebGL2 rather than a video decoder.
 func (c CodecCaps) EncodeBackend() string {
+	if c.Codec == CodecMesh {
+		return "tessellate"
+	}
 	if c.EncodeHardware {
 		return "hardware"
 	}
@@ -256,6 +301,12 @@ func (c CodecCaps) EncodeBackend() string {
 }
 
 func (c CodecCaps) DecodeBackend() string {
+	if c.Codec == CodecMesh {
+		if c.DecodeSupported {
+			return "WebGL2"
+		}
+		return "no WebGL2"
+	}
 	switch {
 	case !c.DecodeSupported:
 		return "unsupported"
@@ -372,13 +423,14 @@ func (m *Model) Find(codec Codec) CodecCaps {
 	return CodecCaps{Codec: codec}
 }
 
-// Offered returns the codecs worth showing in the control (host-encodable).
+// Offered returns the codecs worth showing in the control (anything the host
+// can produce — an encoder for the video lanes, or the mesh lane itself).
 // Decode standing is annotated per entry so the UI can describe rather than
 // hide — keeping the picker stable as the browser's capabilities load.
 func (m *Model) Offered() []CodecCaps {
 	out := make([]CodecCaps, 0, len(m.Caps))
 	for _, c := range m.Caps {
-		if c.HostCanEncode() {
+		if c.HostServes() {
 			out = append(out, c)
 		}
 	}
@@ -408,6 +460,9 @@ type DisabledEncoder struct {
 func (m *Model) DisabledEncoders() []DisabledEncoder {
 	out := make([]DisabledEncoder, 0, 2*len(m.Caps))
 	for _, c := range m.Caps {
+		if c.Codec == CodecMesh {
+			continue // the draw-stream lane has no encoder lanes to disable
+		}
 		if !c.EncodeHardware {
 			out = append(out, DisabledEncoder{
 				Codec:   c.Codec,

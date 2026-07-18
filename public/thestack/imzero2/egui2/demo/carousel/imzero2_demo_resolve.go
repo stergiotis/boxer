@@ -236,6 +236,31 @@ func expandLaunchExpr(raw string) (whereExpr string) {
 // runChLocalQuery diagnostic envelope (stderr + executed query in the
 // returned error's structured fields).
 func resolveLaunchSql(whereExpr string) (apps []app.AppI, err error) {
+	// Bare-alias fast path (ADR-0128 M3): a plain identifier resolves directly
+	// against the registry by SubjectAlias — no clickhouse-local — so the mesh
+	// appliance boot path needs no CH binary for the common `--launch <alias>`.
+	// Aliases are registry-unique (Register enforces distinctness), so the match
+	// is unambiguous; a miss returns empty, matching clickhouse-local's zero
+	// rows. Anything with SQL shape (operators, IN, LIKE, a quoted value, a full
+	// id, …) misses bareAliasRe and falls through to the CH path below. This
+	// supersedes expandLaunchExpr's `subject_alias = '…'` spelling for bare
+	// aliases; that expansion stays as the CH-side form and stays unit-tested.
+	if trimmed := strings.TrimSpace(whereExpr); bareAliasRe.MatchString(trimmed) {
+		for _, m := range app.AllManifests() {
+			if m.Id.SubjectAlias() != trimmed {
+				continue
+			}
+			a, lookupOk := app.Lookup(m.Id)
+			if !lookupOk {
+				err = eb.Build().Str("id", string(m.Id)).Str("alias", trimmed).
+					Errorf("launch alias: registry inconsistency: manifest present but app not registered")
+				return
+			}
+			apps = append(apps, a)
+			return
+		}
+		return
+	}
 	expanded := expandLaunchExpr(whereExpr)
 	if expanded == "" {
 		return

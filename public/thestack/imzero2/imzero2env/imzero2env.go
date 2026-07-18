@@ -25,6 +25,7 @@ const (
 	HeadlessCodecVP9    = "vp9"
 	HeadlessCodecAV1    = "av1"
 	HeadlessCodecAV1444 = "av1-444" // AV1 High profile, 4:4:4 chroma
+	HeadlessCodecMesh   = "mesh"    // ADR-0128 draw-stream lane (no encoder; viewer paints via WebGL2)
 )
 
 var (
@@ -191,10 +192,10 @@ var (
 	// output" control. Read by the Rust client (codeclane.rs), not by Go.
 	HeadlessCodec = env.NewCategorialString(env.Spec{
 		Name:        "IMZERO2_HEADLESS_CODEC",
-		Description: "startup video codec lane: h264 (default; honours ENCODER_ARGS) | vp9 | av1 | av1-444 (AV1 4:4:4); runtime-switchable from the Go control",
+		Description: "startup stream lane: h264 (default; honours ENCODER_ARGS) | vp9 | av1 | av1-444 (AV1 4:4:4) | mesh (ADR-0128 draw-stream, WebGL2 viewer); runtime-switchable from the Go control",
 		Category:    env.CategoryDev,
 		Default:     HeadlessCodecH264,
-	}, []string{HeadlessCodecH264, HeadlessCodecVP9, HeadlessCodecAV1, HeadlessCodecAV1444})
+	}, []string{HeadlessCodecH264, HeadlessCodecVP9, HeadlessCodecAV1, HeadlessCodecAV1444, HeadlessCodecMesh})
 
 	// HeadlessMaxFrames stops the host after N rendered frames (0 =
 	// unbounded). A smoke-test hook.

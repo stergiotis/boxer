@@ -40,6 +40,59 @@ func TestDecodeFlagContract(t *testing.T) {
 	}
 }
 
+// TestMeshLane covers the ADR-0128 draw-stream lane: a sibling in the same
+// picker with no encoder (build_video_caps packs it as (4, bit1?webgl2), so
+// DecodeSupported carries the viewer's WebGL2 standing), host-served whenever
+// published, and never a disabled-encoder row.
+func TestMeshLane(t *testing.T) {
+	// WebGL2 present → decode-supported, no encode bits.
+	m := Decode([]uint64{4}, slices.Values([]uint32{2}))[0]
+	if m.Codec != CodecMesh || m.HostCanEncode() {
+		t.Errorf("mesh has no encoder: %+v", m)
+	}
+	if !m.HostServes() || !m.DecodeSupported || !m.Offerable() {
+		t.Errorf("mesh with WebGL2 should be host-served and offerable: %+v", m)
+	}
+	// Display columns: the mesh row describes itself, never borrowing an
+	// encoder name or a WebCodecs string.
+	for _, tc := range []struct{ got, want string }{
+		{m.Codec.String(), "Mesh"},
+		{m.EncoderName(), "none"},
+		{m.EncodeBackend(), "tessellate"},
+		{m.DecodeBackend(), "WebGL2"},
+		{m.CodecString(1280, 800), "mesh"},
+		{m.Codec.PixelFormat(), "meshes"},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("mesh column: got %q want %q", tc.got, tc.want)
+		}
+	}
+
+	// No WebGL2 → host-served but not offerable (shown, not selectable),
+	// mirroring the "describe rather than hide" policy for undecodable codecs.
+	nogl := Decode([]uint64{4}, slices.Values([]uint32{0}))[0]
+	if !nogl.HostServes() || nogl.Offerable() {
+		t.Errorf("mesh without WebGL2: host-served but not offerable: %+v", nogl)
+	}
+	if got := nogl.DecodeBackend(); got != "no WebGL2" {
+		t.Errorf("mesh no-WebGL2 DecodeBackend: got %q want 'no WebGL2'", got)
+	}
+
+	// Mesh appears in Offered beside a video codec but contributes no
+	// disabled-encoder rows (it has no encoder lanes to fail a probe).
+	model := &Model{}
+	model.Update([]CodecCaps{
+		{Codec: CodecH264, EncodeSoftware: true, EncodeHardware: true, DecodeSupported: true},
+		m,
+	})
+	if len(model.Offered()) != 2 {
+		t.Errorf("want mesh + H.264 offered, got %d", len(model.Offered()))
+	}
+	if dis := model.DisabledEncoders(); len(dis) != 0 {
+		t.Errorf("no disabled lanes expected (H.264 both work, mesh has none): %+v", dis)
+	}
+}
+
 func TestDecodeStreamInfo(t *testing.T) {
 	s := DecodeStreamInfo(slices.Values([]uint64{1920, 986, 30}))
 	if s.Width != 1920 || s.Height != 986 || s.Fps != 30 || !s.Valid() {

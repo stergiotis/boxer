@@ -52,11 +52,13 @@ func renderVideoOutputDemo(ids *c.WidgetIdStack, st *videoOutputDemoState) {
 	videooutput.ShowGallery(ids, st.st)
 }
 
-// videoOutputDemoModel is a representative capability model: all three codecs
-// encode in software while the host's VAAPI lanes were probed unusable (the
-// Fedora-mesa class), and the browser decodes H.264/VP9 but not AV1 — so the
-// picker shows an offerable pair, one host-encodable-but-undecodable codec, and
-// a full disabled-encoder table.
+// videoOutputDemoModel is a representative capability model: the three video
+// codecs encode in software while the host's VAAPI lanes were probed unusable
+// (the Fedora-mesa class), and the browser decodes H.264/VP9 but not AV1. The
+// mesh draw-stream lane (ADR-0128) rides alongside with no encoder and WebGL2
+// decode — so the picker shows an offerable set spanning both stream kinds, one
+// host-encodable-but-undecodable codec, and a full disabled-encoder table (to
+// which mesh contributes nothing).
 func videoOutputDemoModel() videopipeline.Model {
 	return videopipeline.Model{
 		Active: videopipeline.CodecH264,
@@ -68,6 +70,8 @@ func videoOutputDemoModel() videopipeline.Model {
 			{Codec: videopipeline.CodecH264, EncodeSoftware: true, EncodeHardwareFail: videopipeline.ProbeEncodeRejected, DecodeSupported: true, DecodeSmooth: true, DecodeHardware: true},
 			{Codec: videopipeline.CodecVP9, EncodeSoftware: true, EncodeHardwareFail: videopipeline.ProbeEncodeRejected, DecodeSupported: true, DecodeSmooth: true},
 			{Codec: videopipeline.CodecAV1, EncodeSoftware: true, EncodeHardwareFail: videopipeline.ProbeEncodeRejected, DecodeSupported: false},
+			// Mesh: no encoder (host tessellates), decode-supported = viewer WebGL2.
+			{Codec: videopipeline.CodecMesh, DecodeSupported: true},
 		},
 	}
 }
