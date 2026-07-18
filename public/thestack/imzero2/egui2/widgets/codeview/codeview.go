@@ -58,7 +58,14 @@ func build(spec highlighterSpec, src string) typed.RetainedFffiHolderTyped[c.Cod
 	if spec.tabReplace != "" {
 		src = strings.ReplaceAll(src, "\t", spec.tabReplace)
 	}
-	secs := spec.highlight(src)
+	return buildFromSections(src, spec.highlight(src))
+}
+
+// buildFromSections serializes already-resolved sections into a retained
+// CodeViewJob — the tail half of build, split out so callers that computed
+// spans elsewhere (e.g. on a background goroutine, ADR-0130 L2) can do the
+// c.*-touching serialization on the render thread.
+func buildFromSections(src string, secs []section) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	job := c.CodeViewJob(src)
 	for _, sec := range secs {
 		job = job.Section(sec.start, sec.stop, sec.col)

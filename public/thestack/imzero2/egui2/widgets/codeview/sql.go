@@ -113,3 +113,13 @@ func PrepareSql(sql string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 func BuildSqlLex(sql string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	return build(sqlLexSpec, sql)
 }
+
+// BuildSqlFromSpans serializes highlighter spans somebody else already
+// computed into a retained CodeViewJob with the SQL palette. This is the
+// render-thread half of the ADR-0130 L2 split: a background goroutine runs
+// the expensive highlight.Highlight (pure Go, no c.* calls), and the render
+// thread pays only this serialization. `sql` must be the exact text the
+// spans describe — like BuildSqlLex, no tab expansion is applied.
+func BuildSqlFromSpans(sql string, spans []highlight.Span) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+	return buildFromSections(sql, sqlSpansToSections(spans))
+}
