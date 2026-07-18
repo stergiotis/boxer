@@ -296,11 +296,23 @@ if {{EguiUiOptionalOuter}}.is_some() {
         hi_center_parent, hi_center_parent_set,
         hi_orientation, hi_orientation_set,
     );
-    render_graph_with_layout(
+    let graph_resp = render_graph_with_layout(
         state, ui, size, gid, layout_kind,
         reset_layout_flag, fast_forward_steps,
         &interaction, &navigation, &style, &sink,
     );
+    // Capture-scroll (widget-gallery composition): a navigable
+    // graph owns the wheel while the pointer is over it. Swallow
+    // any plain scroll delta so a parent ScrollArea — the gallery
+    // stacks every demo in one Vscroll — does not also scroll the
+    // page out from under the cursor. egui routes the wheel to
+    // zoom XOR scroll, so Ctrl/Cmd+scroll zoom already leaves
+    // smooth_scroll_delta at zero and is unaffected; a static
+    // graph (zoom_and_pan == false) lets the wheel pass through so
+    // it can still be scrolled into view.
+    if zoom_and_pan && graph_resp.contains_pointer() {
+        ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
+    }
     // Snapshot selection + metrics AFTER the render so they reflect
     // anything egui_graphs did this frame (drag, click-select, layout
     // step increment). Fetchers drain these vecs on the Go side.
