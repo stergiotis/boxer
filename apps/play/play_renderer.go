@@ -80,6 +80,7 @@ const (
 	dockTabDiagnostics uint64 = 13
 	dockTabKanban      uint64 = 14
 	dockTabPasses      uint64 = 15
+	dockTabNetwork     uint64 = 16
 )
 
 type PlayApp struct {
@@ -277,6 +278,11 @@ type PlayApp struct {
 	// kanbanDriver is the ADR-0122 board panel (Kanban dock tab): likewise a
 	// plain observer of the active result — no lane, nothing to Close.
 	kanbanDriver *KanbanDriver
+
+	// networkDriver is the ADR-0129 layered-graph panel (Network dock tab): a
+	// node-link view whose vertices and edges come from two named CTEs of the
+	// user's query, each on its own lane (closed in Close).
+	networkDriver *NetworkDriver
 
 	// richCells memoises the ADR-0123 content-typed cells of the Detail pane's
 	// selected row (a parsed markdown doc, a highlighted job, decoded pixels).
@@ -656,6 +662,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
 	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
 	inst.kanbanDriver = NewKanbanDriver(c.NewWidgetIdStack(), client)
+	inst.networkDriver = NewNetworkDriver(c.NewWidgetIdStack(), client)
 	inst.richCells = newRichCellCache(c.NewWidgetIdStack())
 	inst.diag = NewDiagnosticsDriver(client)
 	inst.runsHist = newRunsHistoryDriver(client)
@@ -693,6 +700,14 @@ func (inst *PlayApp) Close() {
 	}
 	if inst.kanbanDriver != nil && inst.kanbanDriver.lanesLane != nil {
 		inst.kanbanDriver.lanesLane.close()
+	}
+	if inst.networkDriver != nil {
+		if inst.networkDriver.edgesLane != nil {
+			inst.networkDriver.edgesLane.close()
+		}
+		if inst.networkDriver.verticesLane != nil {
+			inst.networkDriver.verticesLane.close()
+		}
 	}
 	if inst.diag != nil {
 		inst.diag.close()
@@ -1012,6 +1027,17 @@ func (inst *PlayApp) executeRun(auto bool) {
 	// Bound lanes re-execute against the possibly-changed data too; the
 	// bindings themselves survive the Run (they revive by node name, 6c).
 	inst.forgetBoundLanes()
+	// The Network panel's `edges`/`vertices` CTEs are nodes of this query on
+	// their own lanes (ADR-0129); forget them on Run so a corrected endpoint or
+	// changed data is picked up, rather than memo-hitting a prior error (whose
+	// key is the SQL, which a re-Run leaves unchanged).
+	inst.networkDriver.forgetLanes()
+	// The Kanban panel's `lanes` CTE (ADR-0122 §SD6) is likewise a node of this
+	// query on its own lane; forget it on Run for the same reason — a re-Run
+	// after a transient failure would otherwise memo-hit the stored error (its
+	// key is the SQL, unchanged) and the lane inventory would stay stuck-errored
+	// though the board recovered.
+	inst.kanbanDriver.forgetLanes()
 	// Scripted-screenshot affordance: observe a named node on run so a
 	// capture can show the panels rendering an intermediate (mirrors
 	// BOXER_PLAY_FOCUS_*). Ignored when the node is absent.

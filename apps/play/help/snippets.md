@@ -398,6 +398,63 @@ ORDER BY s.code_refs DESC, s.num
 LIMIT 25
 ```
 
+## Decision graph (ADRs and the code that cites them)
+
+The same corpus as a node-link graph in the **Network** tab (ADR-0129), and the
+same no-setup path as the board above: `keelson('adr')` and `keelson('coderef')`
+read `doc/adr` in-process, so point the **Endpoint** menu at *Keelson
+introspection*, focus the Network tab, and Run.
+
+The panel reads two CTEs of this query **by name**. `edges` — required — carries
+a `source` and a `target` column; here one arc per ADR→package citation, its
+`label` the number of references. `vertices` — optional — decorates the nodes it
+names: an `id` (the key `source`/`target` reference), a `label`, a `group` that
+colours the node, and a `shape`. So each ADR is a `box` in one colour and each
+package an `ellipse` in another. The package `id` is the full import path (unique,
+so the edges resolve) while its `label` is the last two segments (readable) — a
+`vertices` row can name a node more briefly than its key. Drop the whole
+`vertices` CTE and the panel still draws, inferring plain nodes from the edge
+endpoints alone.
+
+The picked ADRs fan out to the packages that cite them, and `apps/play` is the
+hub they all reach — that shared node is what makes this a graph rather than a
+row of separate stars. Edit the `num IN (…)` list to point it at a different
+slice of the corpus.
+
+```sql
+WITH
+  picked AS (
+    SELECT num FROM keelson('adr') WHERE num IN (97, 114, 122, 123, 124, 129)
+  ),
+  refs AS (
+    SELECT num, pkg, count() AS n
+    FROM keelson('coderef')
+    WHERE pkg != '' AND num IN (SELECT num FROM picked)
+    GROUP BY num, pkg
+  ),
+  vertices AS (
+    SELECT concat('ADR-', leftPad(toString(num), 4, '0')) AS id,
+           concat('ADR-', leftPad(toString(num), 4, '0')) AS label,
+           'decision'                                     AS `group`,
+           'box'                                          AS shape
+    FROM picked
+    UNION ALL
+    SELECT DISTINCT
+           pkg                                                            AS id,
+           arrayStringConcat(arraySlice(splitByChar('/', pkg), -2), '/')  AS label,
+           'package'                                                      AS `group`,
+           'ellipse'                                                      AS shape
+    FROM refs
+  ),
+  edges AS (
+    SELECT concat('ADR-', leftPad(toString(num), 4, '0')) AS source,
+           pkg                                            AS target,
+           toString(n)                                    AS label
+    FROM refs
+  )
+SELECT * FROM edges
+```
+
 ## ADS-B geo-raster (demo loader)
 
 These target `planes_mercator`, the aircraft-position table loaded by

@@ -231,6 +231,9 @@ var builtinTabDefs = []builtinTabDef{
 	// available size is the real remainder; overflow clips, as on Map.
 	{id: "world", dockID: dockTabWorld, title: "World", noScroll: true, lazy: true},
 	{id: "kanban", dockID: dockTabKanban, title: "Kanban", lazy: true},
+	// The Network tab draws the result as a node-link graph (ADR-0129). Its
+	// title is deliberately not "Graph" — that is the dataflow chrome below.
+	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true},
 	{id: "graph", dockID: dockTabGraph, title: "Graph", lazy: true},
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
 	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
@@ -352,6 +355,13 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 		case "kanban":
 			spec.Panel = kanbanPanel{driver: inst.kanbanDriver}
 			spec.Render = func(f *TabFrame) { inst.renderKanbanTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) }
+		case "network":
+			// The panel reads its two named CTEs off the split (not the active
+			// result), so the body ignores the frame; scrollTab mirrors the
+			// System graph chrome, whose view.Render canvas pans/zooms inside a
+			// ScrollArea.
+			spec.Panel = layeredGraphPanel{driver: inst.networkDriver}
+			spec.Render = func(f *TabFrame) { scrollTab(inst.renderNetworkTab) }
 		case "graph":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphTab) }
 		case "schema":
