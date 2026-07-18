@@ -223,6 +223,32 @@ picture — a query's definition, environment, run, profile, and result
 stored as leeway data in the same ClickHouse and traversable in both
 directions — is the companion page's subject.
 
+`queryrunsd` is a **separately-managed daemon, not something play
+launches**. On a deployed box a hardened, loopback-only systemd unit
+(`showcase/onbox/queryrunsd.service`, `Restart=always`) runs `main_go
+queryrunsd` against a local ClickHouse; in development you run that same
+verb by hand. Capture is optional and operator-enabled, and ClickHouse —
+not the daemon — owns the schedule and the insert, so the durable
+server-side face of History exists only where someone turned it on. With
+no daemon, a finished run still stamps `system.query_log` (attributable
+after the fact), but nothing lifts it into `runtime.facts`.
+
+Those captured rows are leeway facts, not a flat table: the
+human-readable, 20-column projection is machine-generated
+(`queryrunfacts.ComposeHistorySql`), which the History tab runs and its
+"Open as query" / "Profile events as query" buttons drop into the editor
+verbatim. The raw selector is a single membership test — every `QueryRun`
+fact carries the `KindQueryRun` membership in the symbol section's
+label-reference array — so a one-line check that capture is flowing needs
+no pivot:
+
+```sql
+SELECT count()
+FROM runtime.facts
+WHERE has(`tv:symbol:lr:lr:u64:2q:0:0:0::data`,
+          6917529027641081896)  -- KindQueryRun (vocab.MembKindQueryRun)
+```
+
 ## What is deliberately absent
 
 - **A scoping subsystem.** Scope *is* the reference graph — a name is

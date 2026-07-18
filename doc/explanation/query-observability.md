@@ -131,6 +131,31 @@ today the shipped entities correlate on the stamped anchors instead (the
 run's natural key is the `query_id`, pins carry `query_id`/`run_id`), and
 the ref-tuple lift lands with the weave slice.
 
+The pipeline that writes these rows is a **separately-managed daemon,
+decoupled from any app**: `main_go queryrunsd`, run on a deployed box by a
+hardened, loopback-only systemd unit (`showcase/onbox/queryrunsd.service`,
+`Restart=always`) and by hand in development. It is optional and
+operator-enabled — where it is not running, a finished query still stamps
+`system.query_log` (so the record is recoverable later) but nothing lifts
+it into `runtime.facts`. ClickHouse owns the schedule and the insert;
+stopping the daemon only pauses capture, which resumes from the
+destination watermark (bounded by the `query_log` TTL).
+
+Reading the runs back is a leeway-shred pivot, not a flat `SELECT`: the
+projection over the symbol/u64/i64/string sections is machine-generated
+(`queryrunfacts.ComposeHistorySql`) — play's History tab runs it, and its
+"Open as query" / "Profile events as query" affordances hand the exact
+SQL to the editor. Every `QueryRun` fact is selected by one membership
+test on the symbol section's label-reference array, so a hand check that
+capture is flowing needs no pivot:
+
+```sql
+SELECT count()
+FROM runtime.facts
+WHERE has(`tv:symbol:lr:lr:u64:2q:0:0:0::data`,
+          6917529027641081896)  -- KindQueryRun (vocab.MembKindQueryRun)
+```
+
 ### RunProfile — performance at three depths, three lifetimes
 
 - **live**: progress ticks from the in-band HTTP headers — transient glass
