@@ -232,6 +232,16 @@ Use these canonical verb pairs rather than invented synonyms, so that symmetrica
     extension. Be aware that they count as production code for `go list`
     purposes and pull their imports into the production dependency graph.
 
+## Adversarial Code Review
+
+Review-critical code is reviewed **adversarially** — the reviewer's job is to refute the change, not to bless it — and the review is recorded where the next reader, human or agent, will look. Trunk-based development has no merge gate (see [Version Control](#version-control)), so the recorded review, not a pull request, is what attests that a subsystem was examined and marks when that examination has gone stale. The decision and its rejected alternatives are [ADR-0131](./doc/adr/0131-systematic-adversarial-code-review.md); the marker mechanics extend `packageprops` ([ADR-0080](./doc/adr/0080-packageprops-per-package-declarations.md)).
+
+*   **Scope is opt-in.** A package acquires a review obligation once it declares a `packageprops.Review` marker or is designated review-critical; the zero value asserts nothing, exactly as `Kind` does. Start with the subsystems where a latent defect is expensive — leeway's pipeline stages, the nanopass passes, the FFI boundary, identity and marshalling — not every leaf package.
+*   **Review adversarially, scaled to blast radius.** Run `/code-review` at a tier matched to the change (low/medium for leaf code, high/max for the review-critical core), or `ultra` for the highest-blast-radius subsystems. Every finding must carry a concrete failure scenario (inputs → wrong output); a finding without a repro is not yet actionable. Verify a finding — attempt to refute it — before acting on it.
+*   **Record the review in the package's marker.** Set `packageprops.Review` in `package_props.go`: the gofmt-normalized source digest the review covered, the reviewer (`code-review@<tier>` or `ultra`), the commit, the date, and a reference to the findings sidecar. The marker is the summary; the findings themselves — repros, dispositions — live in the sidecar, keeping `Props` a clean vocabulary ([ADR-0080](./doc/adr/0080-packageprops-per-package-declarations.md) §SD5).
+*   **Re-review is triggered by drift.** A review-aware `props verify` recomputes each marked package's normalized digest and flags the packages that have changed since their recorded review — that mismatch is the re-review signal. It is advisory while its false-positive rate is being bounded, and graduates to a CI gate per the calibration lifecycle in ADR-0131. Comment- and whitespace-only churn does not trigger it (the digest is normalized).
+*   **Every finding gets a disposition.** Close each finding as fixed, accepted-risk (with the reason), or wontfix (with the reason); an open finding is tracked debt, not a silent omission. A re-review confirms the fix landed — the marker's digest advances only when the reviewed source does.
+
 ## Documentation
 *   **Self-documenting code:** Do not document obvious methods or fields.
 *   **No Tautologies:** Do not repeat literal values in comments.

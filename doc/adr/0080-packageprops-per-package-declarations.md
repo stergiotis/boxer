@@ -224,3 +224,14 @@ The static `proptable` regen was deferred: a full `harvest --emit go` currently
 folds in an untracked in-flight `package_props.go` from concurrent work, and no
 consumer reads Kind from the static table yet (the source declarations and the
 runtime registry already carry it). A later regen on a settled tree picks it up.
+
+### 2026-07-18 — `Review` field group proposed (ADR-0131)
+
+[ADR-0131](./0131-systematic-adversarial-code-review.md) *(proposed)* adds a
+per-package adversarial-review marker as the next `Props` field group — the
+growth SD4 anticipated. It pairs a gofmt-normalized source digest and review
+provenance (reconciled by a review-aware `props verify`, the way the WASM*
+verdicts are) with a human-curated `ReviewState` verdict (unreconciled, like
+`Kind`); the heavy findings content stays in a sidecar, keeping `Props` a clean
+vocabulary (§SD5). This entry is a signpost — the full field-group description
+lands here when ADR-0131 is accepted and the field is implemented.
