@@ -2200,6 +2200,14 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // invocation for the same widget id (so it never leaks across widgets,
     // even when the editor is culled). See ADR-0063.
     text_edit_pending_insert: Option<String>,
+    // Scratch slot for TextEditFluid.HighlightJob (ADR-0130): the
+    // `highlightJob` builder-method arm stashes the evaluated CodeViewJob
+    // here; the TextEdit apply code turns it into a layouter for the same
+    // widget and clears the slot within the same handler invocation.
+    // Sections are advisory — text_edit_highlight reconciles them against
+    // the live buffer and gap-fills, so a stale or malformed job degrades
+    // to plain text, never to dropped glyphs.
+    text_edit_pending_highlight: Option<code_view::CodeViewJobData>,
     // ADR-0088 runtime codec pipeline: `setVideoPipeline` stashes the
     // requested codec here (0=H.264, 1=VP9, 2=AV1); the headless host drains
     // it after dispatch and re-points the encoder. `video_cap_*` are pushed
@@ -2527,6 +2535,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r9_s_values: Vec::with_capacity(1024),
             r22_starved_texture_ids: Vec::with_capacity(8),
             text_edit_pending_insert: None,
+            text_edit_pending_highlight: None,
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
             r10_true_ids: Vec::with_capacity(1024),
@@ -12490,12 +12499,41 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             let mut snippet = self.io.read_plain_s()?;
                             self.text_edit_pending_insert = Some(snippet);
                         }
+                        TextEditBuilderMethodId::HighlightJob => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TextEditBuilderMethodId::HighlightJob");
+
+                            let job = {
+                                let (f2, _) = self.read_from_repr(FuncProcId::from_repr)?;
+                                let u2: &mut Option<&mut egui::Ui> = &mut None;
+                                if u2.is_some() {
+                                    self.interpret_inner(c, u2, &f2, d + 1)?;
+                                } else {
+                                    self.interpret_inner(c, u, &f2, d + 1)?;
+                                }
+
+                                std::mem::take(&mut self.r12_code_view_job)
+                            };
+                            self.text_edit_pending_highlight = Some(job);
+                        }
                     }
                 }
                 if d == 0 {
                     self.end_consume_message()?;
                 }
                 // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                // ADR-0130: a builder method stashed an evaluated CodeViewJob on
+                // self.text_edit_pending_highlight. Build the layouter closure as a stack
+                // local — closure and widget are same-scope locals, and the widget is
+                // consumed by apply below, so the &mut FnMut borrow stays sound.
+                let mut hl_layouter = self
+                    .text_edit_pending_highlight
+                    .take()
+                    .map(crate::imzero2::text_edit_highlight::make_layouter);
+                if let Some(cl) = hl_layouter.as_mut() {
+                    w = w.layouter(cl);
+                }
                 let resp =
 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 self.apply_widget(w,u,f,Some(i));

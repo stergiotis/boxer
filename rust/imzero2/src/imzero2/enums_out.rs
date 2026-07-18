@@ -1389,6 +1389,7 @@ pub enum TextEditBuilderMethodId {
     ClipText = 10,
     CharLimit = 11,
     InsertAtCursor = 12,
+    HighlightJob = 13,
 }
 
 #[allow(dead_code)]

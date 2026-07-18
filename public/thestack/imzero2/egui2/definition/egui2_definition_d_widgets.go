@@ -464,6 +464,15 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("clip_text").Arg("val", ctabb.B).EndMethod().
 				BeginMethod("char_limit").Arg("chars", ctabb.U32).CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.char_limit(chars as usize);\n")).EndMethod().
 				BeginMethod("insertAtCursor").Arg("snippet", ctabb.S).CodeClientRust(rustClientCode("self.text_edit_pending_insert = Some(snippet);\n")).EndMethod().
+				// highlightJob (ADR-0130): stage an evaluated CodeViewJob whose
+				// sections the apply code below applies ADVISORILY via a
+				// TextEdit layouter — reconciled against the live buffer and
+				// gap-filled Rust-side (text_edit_highlight.rs), so a one-frame
+				// -stale or malformed job degrades to plain text.
+				BeginMethod("highlightJob").
+				EvaluatedArg("job", structCodeViewJob()).
+				CodeClientRust(rustClientCode("self.text_edit_pending_highlight = Some(job);\n")).
+				EndMethod().
 				Build()...).
 			WithConstructionCodeClientRust(rustClientCode("if multiline { egui::TextEdit::multiline(&mut text).id({{Id}}) } else { egui::TextEdit::singleline(&mut text).id({{Id}}) };\n")).
 			WithSettingImmediate(true).
@@ -473,7 +482,18 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 			// gated on a single `changed` (user-edited OR snippet-inserted) —
 			// pushing twice would move text twice. See ADR-0063.
 			WithApplyCodeClientRust(ir.MergeVerbatimCode(
-				rustClientCode("let resp ="),
+				rustClientCode(`// ADR-0130: a builder method stashed an evaluated CodeViewJob on
+// self.text_edit_pending_highlight. Build the layouter closure as a stack
+// local — closure and widget are same-scope locals, and the widget is
+// consumed by apply below, so the &mut FnMut borrow stays sound.
+let mut hl_layouter = self
+    .text_edit_pending_highlight
+    .take()
+    .map(crate::imzero2::text_edit_highlight::make_layouter);
+if let Some(cl) = hl_layouter.as_mut() {
+    {{Instance}} = {{Instance}}.layouter(cl);
+}
+let resp =`),
 				applyCodeWidgetRust(true),
 				rustClientCode(`
 let mut changed = resp.is_some() && resp.unwrap().changed();

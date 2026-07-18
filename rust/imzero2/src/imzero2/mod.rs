@@ -31,6 +31,7 @@ pub mod meshlane;
 pub mod nutreader;
 pub mod scrolling_texture;
 pub mod svgexport;
+pub mod text_edit_highlight;
 pub mod time_range_picker;
 #[cfg(feature = "headless")]
 pub mod wscarrier;

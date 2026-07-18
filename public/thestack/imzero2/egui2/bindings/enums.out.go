@@ -928,6 +928,7 @@ const (
 	TextEditMethodIdClipText       TextEditMethodIdE = 10
 	TextEditMethodIdCharLimit      TextEditMethodIdE = 11
 	TextEditMethodIdInsertAtCursor TextEditMethodIdE = 12
+	TextEditMethodIdHighlightJob   TextEditMethodIdE = 13
 )
 
 const (

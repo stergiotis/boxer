@@ -4621,6 +4621,14 @@ func (inst TextEditFluid) InsertAtCursor(snippet string) TextEditFluid {
 	return inst
 }
 
+func (inst TextEditFluid) HighlightJob(job typed.RetainedFffiHolderTyped[CodeViewJobS]) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdHighlightJob))
+	r.SpliceRetained(job.Untype())
+
+	return inst
+}
+
 func (inst TextEditFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(TextEditMethodIdBuild))
