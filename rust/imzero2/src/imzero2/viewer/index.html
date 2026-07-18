@@ -76,7 +76,7 @@
 <script>
 "use strict";
 
-const PREFIX_VIDEO = 0x01, PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
+const PREFIX_VIDEO = 0x01, PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03, PREFIX_MESH = 0x04;
 
 // The serving port accepts WebSocket upgrades too, so the data channel is
 // same-origin by default — which keeps one TLS-terminating reverse proxy
@@ -93,7 +93,11 @@ const takeBtn = document.getElementById("takeBtn");
 const rosterEl = document.getElementById("roster");
 const pasteTrap = document.getElementById("pasteTrap");
 const canvas = document.getElementById("screen");
-const ctx2d = canvas.getContext("2d");
+// A canvas is permanently bound to its first context kind — "2d" for the
+// WebCodecs path, "webgl2" for the mesh lane (ADR-0128) — so both are
+// acquired lazily; a runtime codec switch across kinds reloads the page
+// (see onHello) and the reconnect lands in the right mode.
+let ctx2d = null, canvasMode = null;
 
 // Optional device label shown in everyone's roster ("?label=iPad").
 const LABEL = new URLSearchParams(location.search).get("label") || "";
@@ -411,6 +415,7 @@ function setupDecoder(codec) {
   decoder = new VideoDecoder({
     output(frame) {
       framesDecoded++;
+      if (!ctx2d) { ctx2d = canvas.getContext("2d"); canvasMode = "2d"; }
       ctx2d.drawImage(frame, 0, 0);
       frame.close();
       if (framesDecoded === 1 || framesDecoded % 5 === 0) sendPing(framesDecoded);
@@ -454,6 +459,157 @@ function onVideo(payload) {
     timestamp: Number(chunk.timestampMicros),
     data: chunk.data,
   }));
+}
+
+// ---- draw-stream lane (ADR-0128) ----
+// PREFIX_MESH payloads: [1] = mesh frame (ordered u64 hash list + the bodies
+// this connection has not seen), [2] = texture whole/partial update. Bodies
+// are content-addressed: each is parsed once into static GL buffers and
+// reused by hash for the rest of the session (and across reconnects — same
+// content, same name).
+let gl = null, glAttrs = null, glURes = null;
+const glMeshes = new Map();   // hashHex -> {vb, cb, eb, n, wide, clip, texKey}
+const glTextures = new Map(); // texKey -> {tex, w, h}
+
+function glInit() {
+  if (gl) return true;
+  gl = canvas.getContext("webgl2", { premultipliedAlpha: true, antialias: false });
+  if (!gl) return false;
+  canvasMode = "gl";
+  const vsrc = `#version 300 es
+in vec2 a_pos; in vec2 a_uv; in vec4 a_col;
+uniform vec2 u_res; out vec2 v_uv; out vec4 v_col;
+void main(){ v_uv=a_uv; v_col=a_col;
+  gl_Position=vec4(a_pos.x/u_res.x*2.0-1.0, 1.0-a_pos.y/u_res.y*2.0, 0.0, 1.0); }`;
+  const fsrc = `#version 300 es
+precision mediump float; in vec2 v_uv; in vec4 v_col; uniform sampler2D u_tex; out vec4 o;
+void main(){ o = v_col * texture(u_tex, v_uv); }`;
+  const sh = (t, src) => { const h = gl.createShader(t); gl.shaderSource(h, src); gl.compileShader(h); return h; };
+  const pr = gl.createProgram();
+  gl.attachShader(pr, sh(gl.VERTEX_SHADER, vsrc));
+  gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fsrc));
+  gl.linkProgram(pr);
+  gl.useProgram(pr);
+  glURes = gl.getUniformLocation(pr, "u_res");
+  glAttrs = { pos: gl.getAttribLocation(pr, "a_pos"), uv: gl.getAttribLocation(pr, "a_uv"),
+              col: gl.getAttribLocation(pr, "a_col") };
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.enable(gl.SCISSOR_TEST);
+  return true;
+}
+
+function glTexFor(key, w, h) {
+  let t = glTextures.get(key);
+  if (!t || t.w !== w || t.h !== h) {
+    if (t) gl.deleteTexture(t.tex);
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    t = { tex, w, h };
+    glTextures.set(key, t);
+  }
+  return t;
+}
+
+// Mesh body: clip u16×4 (1/8 px), tex u32, n_verts u32, idx_width u8,
+// n_idx u32, verts n×(pos u16×2 @1/8 px, uv u16norm×2, rgba u32), indices.
+function meshRegisterBody(hh, dv, raw, off, len) {
+  const end = off + len;
+  const clip = [dv.getUint16(off, true) / 8, dv.getUint16(off + 2, true) / 8,
+                dv.getUint16(off + 4, true) / 8, dv.getUint16(off + 6, true) / 8];
+  off += 8;
+  const texKey = dv.getUint32(off, true), nv = dv.getUint32(off + 4, true);
+  off += 8;
+  const iw = raw[off]; off += 1;
+  const ni = dv.getUint32(off, true); off += 4;
+  const posuv = new Float32Array(nv * 4), col = new Uint8Array(nv * 4);
+  for (let v = 0; v < nv; v++) {
+    posuv[v * 4 + 0] = dv.getUint16(off, true) / 8;
+    posuv[v * 4 + 1] = dv.getUint16(off + 2, true) / 8;
+    posuv[v * 4 + 2] = dv.getUint16(off + 4, true) / 65535;
+    posuv[v * 4 + 3] = dv.getUint16(off + 6, true) / 65535;
+    col[v * 4 + 0] = raw[off + 8]; col[v * 4 + 1] = raw[off + 9];
+    col[v * 4 + 2] = raw[off + 10]; col[v * 4 + 3] = raw[off + 11];
+    off += 12;
+  }
+  let idx;
+  if (iw === 2) { idx = new Uint16Array(ni); for (let i = 0; i < ni; i++) { idx[i] = dv.getUint16(off, true); off += 2; } }
+  else { idx = new Uint32Array(ni); for (let i = 0; i < ni; i++) { idx[i] = dv.getUint32(off, true); off += 4; } }
+  if (off !== end) return; // malformed body — drop it, the order list skips
+  const prev = glMeshes.get(hh);
+  if (prev) { gl.deleteBuffer(prev.vb); gl.deleteBuffer(prev.cb); gl.deleteBuffer(prev.eb); }
+  const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+  gl.bufferData(gl.ARRAY_BUFFER, posuv, gl.STATIC_DRAW);
+  const cb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, cb);
+  gl.bufferData(gl.ARRAY_BUFFER, col, gl.STATIC_DRAW);
+  const eb = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, eb);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  glMeshes.set(hh, { vb, cb, eb, n: ni, wide: iw === 4, clip, texKey });
+}
+
+function meshDraw(order) {
+  const W = canvas.width, H = canvas.height;
+  gl.viewport(0, 0, W, H);
+  gl.scissor(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.uniform2f(glURes, W, H);
+  for (const hh of order) {
+    const m = glMeshes.get(hh);
+    if (!m) continue; // body dropped in flight — the server resyncs us next frame
+    const t = glTextures.get(m.texKey);
+    if (t) gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    const [x0, y0, x1, y1] = m.clip;
+    gl.scissor(Math.floor(x0), Math.floor(H - y1), Math.ceil(x1 - x0) + 1, Math.ceil(y1 - y0) + 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
+    gl.enableVertexAttribArray(glAttrs.pos); gl.vertexAttribPointer(glAttrs.pos, 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(glAttrs.uv);  gl.vertexAttribPointer(glAttrs.uv, 2, gl.FLOAT, false, 16, 8);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.cb);
+    gl.enableVertexAttribArray(glAttrs.col); gl.vertexAttribPointer(glAttrs.col, 4, gl.UNSIGNED_BYTE, true, 4, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.eb);
+    gl.drawElements(gl.TRIANGLES, m.n, m.wide ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+  }
+}
+
+function onMesh(raw) {
+  if (!glInit()) return;
+  const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  if (raw[0] === 2) {
+    // texture update: key u32, full_w, full_h, x, y, w, h, rgba
+    const key = dv.getUint32(1, true);
+    const fullW = dv.getUint32(5, true), fullH = dv.getUint32(9, true);
+    const x = dv.getUint32(13, true), y = dv.getUint32(17, true);
+    const w = dv.getUint32(21, true), h = dv.getUint32(25, true);
+    const t = glTexFor(key, fullW, fullH);
+    gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw.subarray(29));
+    return;
+  }
+  if (raw[0] !== 1) return;
+  const w = Math.round(dv.getFloat32(5, true)), h = Math.round(dv.getFloat32(9, true));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  let off = 13;
+  const count = dv.getUint32(off, true); off += 4;
+  const order = new Array(count);
+  for (let i = 0; i < count; i++) { order[i] = dv.getBigUint64(off, true).toString(16); off += 8; }
+  const nBodies = dv.getUint32(off, true); off += 4;
+  for (let b = 0; b < nBodies; b++) {
+    const hh = dv.getBigUint64(off, true).toString(16); off += 8;
+    const len = dv.getUint32(off, true); off += 4;
+    meshRegisterBody(hh, dv, raw, off, len);
+    off += len;
+  }
+  meshDraw(order);
+  framesDecoded++;
+  if (framesDecoded === 1 || framesDecoded % 5 === 0) sendPing(framesDecoded);
+  const now = performance.now();
+  if (now - lastStatus > 1000) {
+    lastStatus = now;
+    statusEl.textContent = `connected — ${hello.width}×${hello.height} @ppp ${hello.ppp} — ${framesDecoded} frames painted (mesh lane) — ${glMeshes.size} cached bodies`;
+  }
 }
 
 // ---- input capture ----
@@ -693,9 +849,11 @@ function connect() {
   ws.onopen = () => {
     reconnectDelay = 1000;
     statusEl.textContent = "connected — waiting for stream";
-    // Announce capabilities + label (ADR-0086 SD8). WebCodecs is implied — the
-    // page only connects when VideoDecoder exists (see the bottom guard).
-    sendClientHello(true, LABEL);
+    // Announce capabilities + label (ADR-0086 SD8). The flag gates takeover:
+    // it means "can drive this session's lane class" — WebCodecs for the
+    // video lanes, WebGL2 for the mesh lane (ADR-0128). The page connects
+    // when either exists (bottom guard).
+    sendClientHello(HAS_WEBCODECS || HAS_GL2, LABEL);
   };
   ws.onclose = () => {
     statusEl.textContent = "disconnected — reconnecting…";
@@ -713,6 +871,7 @@ function connect() {
     if (data.length < 1) return;
     const payload = data.subarray(1);
     if (data[0] === PREFIX_VIDEO) onVideo(payload);
+    else if (data[0] === PREFIX_MESH) onMesh(payload);
     else if (data[0] === PREFIX_SESSION) {
       const ctl = parseSessionControl(payload);
       if (!ctl) return;
@@ -726,6 +885,19 @@ function connect() {
 function onHello(h) {
   const changed = !hello || hello.width !== h.width || hello.height !== h.height || hello.ppp !== h.ppp || hello.codec !== h.codec;
   hello = h;
+  // Codec-class boundary (ADR-0128 SD3): a canvas is bound to its first
+  // context kind, so a runtime mesh ↔ video switch restarts the page; the
+  // reconnect acquires the right context and bootstraps fresh.
+  const wantMode = h.codec === "mesh" ? "gl" : "2d";
+  if (canvasMode && canvasMode !== wantMode) {
+    statusEl.textContent = "codec class changed — reloading viewer";
+    location.reload();
+    return;
+  }
+  if (wantMode === "gl" && !glInit()) {
+    statusEl.textContent = "this session streams meshes (ADR-0128) but WebGL2 is unavailable in this browser";
+    return;
+  }
   if (changed) {
     canvas.width = h.width;
     canvas.height = h.height;
@@ -816,8 +988,10 @@ function flushClipboardWrite() {
     .catch(() => { /* no user activation yet — a later gesture retries this */ });
 }
 
-if (!("VideoDecoder" in window)) {
-  statusEl.textContent = "WebCodecs is not available in this browser (need Chromium, Safari 16.4+, or Firefox 130+)";
+const HAS_WEBCODECS = "VideoDecoder" in window;
+const HAS_GL2 = (() => { try { return !!document.createElement("canvas").getContext("webgl2"); } catch (_) { return false; } })();
+if (!HAS_WEBCODECS && !HAS_GL2) {
+  statusEl.textContent = "neither WebCodecs nor WebGL2 is available in this browser (need Chromium, Safari 16.4+, or Firefox 130+)";
 } else {
   connect();
 }

@@ -26,6 +26,13 @@ pub enum VideoCodec {
     /// decode is software (dav1d) on most GPUs; the capability handshake hides
     /// it from viewers that cannot decode it.
     Av1Hi444,
+    /// The draw-stream lane (ADR-0128): tessellated meshes + texture deltas
+    /// instead of encoded video. Not an encoder codec — no ffmpeg, no probe;
+    /// the carrier broadcasts mesh frames and the viewer paints via WebGL2.
+    /// Selected like any codec (`IMZERO2_HEADLESS_CODEC=mesh`, runtime
+    /// `setVideoPipeline`), announced to the viewer as the hello codec string
+    /// `"mesh"`.
+    Mesh,
 }
 
 impl VideoCodec {
@@ -35,6 +42,7 @@ impl VideoCodec {
             VideoCodec::Vp9 => "vp9",
             VideoCodec::Av1 => "av1",
             VideoCodec::Av1Hi444 => "av1-444",
+            VideoCodec::Mesh => "mesh",
         }
     }
 
@@ -46,17 +54,19 @@ impl VideoCodec {
             "vp9" | "vp09" => Some(VideoCodec::Vp9),
             "av1" | "av01" | "aom" => Some(VideoCodec::Av1),
             "av1-444" | "av1_444" | "av1444" | "av1-hi444" => Some(VideoCodec::Av1Hi444),
+            "mesh" | "draw-stream" | "drawstream" => Some(VideoCodec::Mesh),
             _ => None,
         }
     }
 
     /// Map the Go-side codec id (ADR-0088 `setVideoPipeline`): 1=VP9, 2=AV1,
-    /// 3=AV1 4:4:4, anything else = H.264.
+    /// 3=AV1 4:4:4, 4=mesh (ADR-0128), anything else = H.264.
     pub fn from_u8(v: u8) -> Self {
         match v {
             1 => VideoCodec::Vp9,
             2 => VideoCodec::Av1,
             3 => VideoCodec::Av1Hi444,
+            4 => VideoCodec::Mesh,
             _ => VideoCodec::H264,
         }
     }
@@ -128,6 +138,9 @@ impl CodecLane {
     /// and the Go `videopipeline` model — keep the three in sync.
     pub fn webcodecs_codec_string(&self, width: u32, height: u32) -> String {
         match self.codec {
+            // Not a WebCodecs string: the literal `"mesh"` switches the viewer
+            // page onto its WebGL2 painter (ADR-0128 SD3).
+            VideoCodec::Mesh => "mesh".to_owned(),
             VideoCodec::H264 => String::new(),
             VideoCodec::Vp9 => format!("vp09.00.{}.08", vp9_level(width, height)),
             VideoCodec::Av1 => format!("av01.0.{}M.08", av1_level(width, height)),
@@ -177,6 +190,8 @@ impl CodecLane {
         // software encoders reject (libvpx-vp9 picks gbrap and fails to open).
         // Forcing 4:2:0 also matches the chroma the browser path assumes.
         let args: &[&str] = match codec {
+            // Defensive: mesh has no software encoder lane (see `best`).
+            VideoCodec::Mesh => return Self::mesh(),
             VideoCodec::H264 => &[
                 "-c:v",
                 "libopenh264",
@@ -235,7 +250,7 @@ impl CodecLane {
             encoder_args: args.iter().map(|s| (*s).to_owned()).collect(),
             bsf: match codec {
                 VideoCodec::H264 => Some(H264_BSF),
-                VideoCodec::Vp9 | VideoCodec::Av1 | VideoCodec::Av1Hi444 => None,
+                VideoCodec::Vp9 | VideoCodec::Av1 | VideoCodec::Av1Hi444 | VideoCodec::Mesh => None,
             },
         }
     }
@@ -252,6 +267,9 @@ impl CodecLane {
             VideoCodec::Vp9 => ("vp9_vaapi", "nv12"),
             VideoCodec::Av1 => ("av1_vaapi", "nv12"),
             VideoCodec::Av1Hi444 => ("av1_vaapi", "vuyx"),
+            // Defensive: the mesh lane never reaches an encoder constructor
+            // (best() short-circuits); route it back to the encoderless lane.
+            VideoCodec::Mesh => return Self::mesh(),
         };
         let mut encoder_args = vec![
             "-vaapi_device".to_owned(),
@@ -279,16 +297,29 @@ impl CodecLane {
             encoder_args,
             bsf: match codec {
                 VideoCodec::H264 => Some(H264_BSF),
-                VideoCodec::Vp9 | VideoCodec::Av1 | VideoCodec::Av1Hi444 => None,
+                VideoCodec::Vp9 | VideoCodec::Av1 | VideoCodec::Av1Hi444 | VideoCodec::Mesh => None,
             },
+        }
+    }
+
+    /// The draw-stream lane (ADR-0128): no encoder, no args, no probe.
+    pub fn mesh() -> Self {
+        Self {
+            codec: VideoCodec::Mesh,
+            encoder_args: Vec::new(),
+            bsf: None,
         }
     }
 
     /// The best working lane for a codec on this host: hardware (VAAPI) if it
     /// actually encodes here, else the portable software lane (SD5). The same
     /// rule drives the startup default and the runtime switch, so the encode
-    /// backend reported to the Go control matches what is used.
+    /// backend reported to the Go control matches what is used. The mesh lane
+    /// (ADR-0128) has no encoder to probe and short-circuits.
     pub fn best(codec: VideoCodec) -> Self {
+        if codec == VideoCodec::Mesh {
+            return Self::mesh();
+        }
         let hw = Self::hardware(codec);
         if probe_lane(&hw).is_ok() {
             return hw;

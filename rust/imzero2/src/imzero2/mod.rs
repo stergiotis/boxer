@@ -26,6 +26,8 @@ pub mod inputmap;
 pub mod inputproto;
 pub mod interpreter;
 #[cfg(feature = "headless")]
+pub mod meshlane;
+#[cfg(feature = "headless")]
 pub mod nutreader;
 pub mod scrolling_texture;
 pub mod svgexport;

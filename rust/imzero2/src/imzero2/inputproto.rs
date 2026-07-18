@@ -13,5 +13,9 @@
 pub const PREFIX_VIDEO: u8 = 0x01;
 pub const PREFIX_INPUT: u8 = 0x02;
 pub const PREFIX_SESSION: u8 = 0x03;
+/// Draw-stream lane messages server→client (ADR-0128): the byte after the
+/// prefix selects `1` = mesh frame (ordered hash list + unseen bodies) or
+/// `2` = texture whole/partial update.
+pub const PREFIX_MESH: u8 = 0x04;
 
 include!(concat!(env!("OUT_DIR"), "/boxer.imzero2.v1.rs"));

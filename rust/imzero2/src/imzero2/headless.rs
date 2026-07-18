@@ -146,7 +146,8 @@ impl HeadlessOpts {
 }
 
 /// Select the startup codec lane (ADR-0088 SD4). `IMZERO2_HEADLESS_CODEC`
-/// picks `h264` | `vp9` | `av1` | `av1-444` (AV1 4:4:4; default `h264`); the runtime
+/// picks `h264` | `vp9` | `av1` | `av1-444` | `mesh` (the ADR-0128
+/// draw-stream lane; default `h264`); the runtime
 /// `setVideoPipeline` switch re-selects the same way. The backend is
 /// `CodecLane::best` — hardware (VAAPI) when it encodes on this host, else the
 /// portable software lane (SD5; avoids the Fedora-mesa `h264_vaapi` ENOSYS
@@ -188,6 +189,9 @@ fn build_video_caps(
         VideoCodec::Vp9 => 1,
         VideoCodec::Av1 => 2,
         VideoCodec::Av1Hi444 => 3,
+        // ADR-0128: never probed (no encoder) and not yet in the Go video
+        // dialog; selected via IMZERO2_HEADLESS_CODEC=mesh or setVideoPipeline.
+        VideoCodec::Mesh => 4,
     };
     let mut out: Vec<(u8, u32)> = host
         .iter()
@@ -684,6 +688,11 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         egui::vec2(width_px as f32 / ppp, height_px as f32 / ppp),
     );
 
+    // Draw-stream lane (ADR-0128 SD3): the callback sentinel warns once —
+    // content the mesh lane cannot carry; the M4 fallback policy will switch
+    // codecs instead.
+    let mut warned_mesh_callback = false;
+
     loop {
         match cadence {
             Cadence::Continuous => {
@@ -893,8 +902,37 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 next_deadline = std::time::Instant::now();
             }
         }
-        let need_pixels =
-            !sinks.is_empty() || carrier.as_ref().map(WsCarrier::connected).unwrap_or(false);
+        // Draw-stream lane (ADR-0128): mirror texture deltas every frame —
+        // cheap when empty, and a later runtime switch to the mesh lane must
+        // find the complete store for joiner bootstrap. While the lane is
+        // active, serialize this frame's tessellation and broadcast it in
+        // place of rasterizing; `mesh_reap` covers the no-viewer transition.
+        if let Some(c) = &mut carrier {
+            c.ingest_textures(&out.textures_delta);
+            if c.is_mesh() {
+                if c.connected() {
+                    let clipped = ctx.tessellate(out.shapes.clone(), out.pixels_per_point);
+                    let frame = crate::imzero2::meshlane::serialize(&clipped, out.pixels_per_point);
+                    if frame.callbacks > 0 && !warned_mesh_callback {
+                        warned_mesh_callback = true;
+                        tracing::warn!(
+                            callbacks = frame.callbacks,
+                            "paint callbacks under the mesh lane are dropped (ADR-0128 SD3) — use a video codec for this content"
+                        );
+                    }
+                    c.on_meshes(
+                        out.pixels_per_point,
+                        width_px as f32,
+                        height_px as f32,
+                        &frame,
+                    );
+                } else {
+                    c.mesh_reap();
+                }
+            }
+        }
+        let need_pixels = !sinks.is_empty()
+            || carrier.as_ref().map(|c| c.connected() && c.wants_pixels()).unwrap_or(false);
         if need_pixels {
             gpu.render_and_readback(&ctx, out, &screen, &mut bgra_frame)?;
             for sink in &mut sinks {

@@ -12,7 +12,9 @@
 //!
 //! A single binary WebSocket carries everything with a one-byte type
 //! prefix (SD6): 0x01 video chunks server→client, 0x02 protobuf input
-//! events client→server, 0x03 session control both ways.
+//! events client→server, 0x03 session control both ways, 0x04 draw-stream
+//! lane messages server→client (ADR-0128 — mesh frames + texture updates,
+//! active when the session codec is `mesh`; the shared encoder never runs).
 //!
 //! Session model (ADR-0086): connections are first-class — a [`Registry`]
 //! holds each [`Conn`] with its role (`active` | `passive`) and a
@@ -39,10 +41,11 @@
 //! it only through atomics, mutex-guarded vectors, the registry, and the
 //! bounded encoder channel.
 
-use crate::imzero2::codeclane::CodecLane;
+use crate::imzero2::codeclane::{CodecLane, VideoCodec};
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
 use crate::imzero2::framesink::FrameSink as _;
 use crate::imzero2::inputproto as pb;
+use crate::imzero2::meshlane;
 use futures_util::{SinkExt as _, StreamExt as _};
 use prost::Message as _;
 
@@ -82,6 +85,16 @@ struct Conn {
     label: String,
     /// Outbound queue for this connection (video + per-recipient control).
     tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+    /// Draw-stream lane (ADR-0128 SD2): the content hashes of mesh bodies
+    /// already sent to this connection — bodies are content-addressed and
+    /// immutable, so each crosses the wire once per connection.
+    mesh_sent: std::collections::HashSet<u64>,
+    /// Needs the mesh bootstrap (full texture store + all-bodies frame):
+    /// set on admit and again whenever a queued mesh send is dropped — a
+    /// content-addressed stream has no retransmit, so the recovery from any
+    /// gap is a full resync (the cheap analogue of the video lane's
+    /// decode-error reconnect).
+    mesh_fresh: bool,
 }
 
 /// The set of live connections and the single active slot (ADR-0086 SD1).
@@ -132,6 +145,8 @@ impl Registry {
             webcodecs: false,
             label: String::new(),
             tx,
+            mesh_sent: std::collections::HashSet::new(),
+            mesh_fresh: true,
         });
         Some(id)
     }
@@ -255,6 +270,17 @@ pub struct WsCarrier {
     /// skipped (no encode, no wire bytes). Reset whenever the encoder is
     /// (re)spawned so a fresh stream always begins with a real frame.
     last_frame_hash: Option<blake3::Hash>,
+    /// Draw-stream lane state (ADR-0128). The texture store accumulates
+    /// every frame regardless of the active codec, so a runtime switch to
+    /// the mesh lane finds the complete atlas/image state for bootstrap.
+    mesh_textures: meshlane::TextureStore,
+    /// Incremental texture messages produced since the last mesh broadcast
+    /// (kept only while the mesh lane is active).
+    mesh_pending_tex: Vec<Vec<u8>>,
+    /// blake3 over the last broadcast frame's hash list — the mesh analogue
+    /// of `last_frame_hash`: an unchanged frame with no pending textures and
+    /// no fresh connection sends nothing at all.
+    last_mesh_sig: Option<blake3::Hash>,
 }
 
 impl WsCarrier {
@@ -351,7 +377,32 @@ impl WsCarrier {
             fps,
             lane,
             last_frame_hash: None,
+            mesh_textures: meshlane::TextureStore::default(),
+            mesh_pending_tex: Vec::new(),
+            last_mesh_sig: None,
         })
+    }
+
+    /// True when the session codec is the draw-stream lane (ADR-0128).
+    pub fn is_mesh(&self) -> bool {
+        self.lane.codec == VideoCodec::Mesh
+    }
+
+    /// True when the host must rasterize pixels for this carrier — every
+    /// codec except the mesh lane, which consumes tessellation output only.
+    pub fn wants_pixels(&self) -> bool {
+        !self.is_mesh()
+    }
+
+    /// Mirror this frame's texture deltas into the lane's CPU store. Called
+    /// every frame regardless of codec (cheap when the delta is empty);
+    /// incremental messages are queued for broadcast only while the mesh
+    /// lane is active.
+    pub fn ingest_textures(&mut self, delta: &egui::TexturesDelta) {
+        let msgs = self.mesh_textures.ingest(delta);
+        if self.is_mesh() {
+            self.mesh_pending_tex.extend(msgs);
+        }
     }
 
     /// True while ≥ 1 viewer is connected — the host skips rendering pixels
@@ -459,6 +510,11 @@ impl WsCarrier {
         }
         self.encoder.take(); // flush old stream; on_frame respawns the new lane
         self.last_frame_hash = None;
+        // Mesh-lane per-session state restarts with the codec switch; viewers
+        // reconnect on the announced codec-class change (canvas contexts are
+        // single-kind), arriving fresh.
+        self.last_mesh_sig = None;
+        self.mesh_pending_tex.clear();
         let hello = self.inner.hello.lock().map(|h| (*h).clone()).unwrap_or_default();
         broadcast_hello(&self.inner, hello);
         tracing::info!(
@@ -497,6 +553,12 @@ impl WsCarrier {
     /// skipped, except the first frame of a fresh encoder.
     pub fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, frame_idx: u64) {
         use std::sync::atomic::Ordering::{Acquire, Relaxed};
+        // The mesh lane never encodes (ADR-0128): pixels reaching here under
+        // it are the host's empty reap call; session state is handled by
+        // `on_meshes` / `mesh_reap`.
+        if self.is_mesh() {
+            return;
+        }
         let connected = self.inner.connected.load(Acquire);
         if !connected {
             if self.encoder.take().is_some() {
@@ -556,6 +618,88 @@ impl WsCarrier {
             enc.on_frame(bgra, width, height, frame_idx);
             self.last_frame_hash = Some(hash);
         }
+    }
+
+    /// Broadcast one tessellated frame on the draw-stream lane (ADR-0128
+    /// SD2). Per connection: a fresh one first gets the whole texture store
+    /// (joiner bootstrap), others get this frame's incremental texture
+    /// updates; then a frame message carrying the full draw order plus only
+    /// the bodies that connection has not seen. All sends are non-blocking
+    /// `try_send` (SD9); any drop marks the connection fresh, so the next
+    /// frame is its full resync — content-addressed streams have no
+    /// retransmit. An unchanged frame with no pending textures and no fresh
+    /// connection sends nothing (the measured idle silence).
+    ///
+    /// The host calls this only while the mesh lane is active and ≥ 1 viewer
+    /// is connected; [`Self::mesh_reap`] covers the N→0 transition.
+    pub fn on_meshes(&mut self, ppp: f32, w_px: f32, h_px: f32, frame: &meshlane::SerializedFrame) {
+        use std::sync::atomic::Ordering::Relaxed;
+        let mut sig_h = blake3::Hasher::new();
+        for h in &frame.hashes {
+            sig_h.update(&h.to_le_bytes());
+        }
+        let sig = sig_h.finalize();
+        let pending_tex = std::mem::take(&mut self.mesh_pending_tex);
+        let Ok(mut reg) = self.inner.registry.lock() else {
+            return;
+        };
+        let fresh_any = reg.conns.iter().any(|c| c.mesh_fresh);
+        if pending_tex.is_empty() && !fresh_any && self.last_mesh_sig == Some(sig) {
+            return;
+        }
+        let active_id = reg.active_id;
+        for c in &mut reg.conns {
+            let mut ok = true;
+            if c.mesh_fresh {
+                c.mesh_sent.clear();
+                for m in self.mesh_textures.full_messages() {
+                    ok &= c.tx.try_send(m).is_ok();
+                }
+            } else {
+                for m in &pending_tex {
+                    ok &= c.tx.try_send(m.clone()).is_ok();
+                }
+            }
+            let missing: Vec<usize> = (0..frame.hashes.len())
+                .filter(|&i| !c.mesh_sent.contains(&frame.hashes[i]))
+                .collect();
+            let msg = meshlane::frame_message(ppp, w_px, h_px, frame, &missing);
+            let msg_len = msg.len() as u64;
+            ok &= c.tx.try_send(msg).is_ok();
+            if ok {
+                for &i in &missing {
+                    c.mesh_sent.insert(frame.hashes[i]);
+                }
+                c.mesh_fresh = false;
+                if Some(c.id) == active_id {
+                    // Stream-rate telemetry (not aggregate egress), mirroring
+                    // the video path: count the active connection's bytes.
+                    self.inner.bytes_sent.fetch_add(msg_len, Relaxed);
+                    self.inner.frames_sent.fetch_add(1, Relaxed);
+                }
+            } else {
+                tracing::debug!(
+                    id = c.id,
+                    "mesh send dropped — connection marked for full resync"
+                );
+                c.mesh_fresh = true;
+            }
+        }
+        self.last_mesh_sig = Some(sig);
+    }
+
+    /// Draw-stream analogue of the encoder reap on N→0: clear per-session
+    /// lane state and telemetry so the next 0→1 starts fresh. Called by the
+    /// host each frame the mesh lane is active with no viewer connected.
+    pub fn mesh_reap(&mut self) {
+        use std::sync::atomic::Ordering::Relaxed;
+        if self.last_mesh_sig.take().is_some() {
+            tracing::info!("all viewers disconnected — draw-stream lane state cleared");
+            self.inner.bytes_sent.store(0, Relaxed);
+            self.inner.frames_sent.store(0, Relaxed);
+            self.inner.frames_decoded.store(0, Relaxed);
+        }
+        self.mesh_pending_tex.clear();
     }
 }
 
