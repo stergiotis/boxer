@@ -24,6 +24,11 @@ ADRs, and their live status is tool-derived
 ([ADR-0092](../adr/0092-adr-overview-tool.md))
 rather than maintained here.
 
+The in-app half of the story — the reactive query-graph of lanes, signals,
+and panels that authors these queries and renders their results — is the
+companion page, [the play architecture](play-architecture.md). This page
+picks a query up at the wire and follows it into the data it becomes.
+
 ## Where the requirements come from
 
 [ADR-0050](../adr/0050-clickhouse-observability-pipeline.md) and

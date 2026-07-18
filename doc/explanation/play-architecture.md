@@ -95,7 +95,36 @@ exist, all the same machinery: the `main` lane (Run-gated, and the only one
 carrying run history and the status-bar FSM), the observe lane (the Graph
 view's all-panels override), per-node bound lanes (slice 6c), and the
 panel-authored lanes (the Map's raster template, the Timeline's bands).
-Everything executes over ClickHouse HTTP; results arrive as Arrow.
+Everything executes over ClickHouse HTTP. Between a lane's compiled
+`(SQL, params)` and the wire sits the pre-execute pass pipeline
+(ADR-0108). The standard rewrites are `LW_ID_*` identity-macro expansion
+(ADR-0106) and friendly leeway column-handle resolution (ADR-0116); play
+front-loads a full canonicalisation so those consume a canonical shape,
+and carries an opt-in selection-condition rewrite (ADR-0121) behind a
+top-bar toggle. `BuildStatement` then lifts the top-level `SET param_*`
+onto the URL channel and rewrites the tail to `FORMAT ArrowStream`: the
+residual body is POSTed, the parameters and live signal values ride the
+query string as `param_*`, progress (rows, bytes, memory) streams back
+in the response headers while the run is in flight, and the result
+arrives as an Arrow IPC batch. The Preview tab shows either face — the
+buffer as authored, or this post-pass body as sent.
+
+## The endpoint is a dialect, not a server
+
+What `play` speaks on the wire — POST a statement, read `FORMAT
+ArrowStream` back — is all it assumes of the far end, and
+`--clickHouseUrl` names whatever answers it. Usually that is a real
+ClickHouse. But the running shell serves the same dialect from its own
+introspection facility (ADR-0094): env vars, registered apps, open
+windows, the SBOM, and the live pass registry become Arrow tables built
+from in-process snapshots, no ClickHouse server involved. Those tables
+are named with the `keelson('…')` macro — itself a nanopass pass — and
+it resolves two ways: the introspection endpoint's own engine expands
+`keelson('x')` to the table directly, while against a real ClickHouse the
+same macro rewrites to a `url()` reference that federates back to the
+endpoint. Point the playground at the endpoint's `/query` path and it
+browses the runtime's own state through the same editor, lanes, and
+panels it renders data with — the tool observing itself.
 
 ## Signals: live values as unbound parameters
 
@@ -178,6 +207,22 @@ fused sink and the status bar keeps tracking `main`. They key on CTE names,
 survive Runs, sit inert while a split lacks the name, and revive when it
 returns.
 
+## After the run: observable by construction
+
+A query does not vanish when its lane settles. Every statement `play`
+sends carries a compact `log_comment` stamp — `run_id`, `app`, `lane`,
+and four content fingerprints: the buffer as authored, the body as sent,
+the transform chain between them, and the parameter environment it was
+applied to. That makes ClickHouse's own `system.query_log` attributable
+with no boxer process running. The `queryrunsd` capture pipeline
+(ADR-0115) then lifts each terminal log event into a `runtime.facts`
+`QueryRun`, which the History and run-detail panels read back as ordinary
+SQL. So History has two faces: the client-side ring of last-good lane
+results, and this durable, cross-session server-side record. The whole
+picture — a query's definition, environment, run, profile, and result
+stored as leeway data in the same ClickHouse and traversable in both
+directions — is the companion page's subject.
+
 ## What is deliberately absent
 
 - **A scoping subsystem.** Scope *is* the reference graph — a name is
@@ -201,10 +246,18 @@ re-reading the recorded reasoning first, not re-deriving it.
   the primary record — laws, prior-art survey, and every slice's dated
   Update (the split, lanes, channels, the signal store, the tab registry,
   bindings).
+- [Query observability, db to glass](query-observability.md): the
+  companion overview — what a query *becomes* after it runs (its
+  definition, environment, run, profile, and result as leeway data in the
+  same ClickHouse), and which ADR decides each part.
 - [ADR-0096 — the geo-raster Map panel](../adr/0096-play-geo-raster-map-panel.md):
   the panel-authored node pattern and the reserved `vp_*` viewport slots.
 - [ADR-0108 — the SQL pass registry](../adr/0108-keelson-sql-pass-registry.md):
   the pre-execute rewrite seam and the "as sent" wire preview.
+- [ADR-0094 — keelson introspection tables](../adr/0094-keelson-introspection-tables.md):
+  the runtime-state-as-tables endpoint and the `keelson('…')` macro.
+- [ADR-0115 — the query-observability data plane](../adr/0115-query-observability-data-plane-strategy.md):
+  the `queryrunsd` capture pipeline and the `log_comment` identity stamp.
 - [ADR-0114 — the World choropleth](../adr/0114-play-world-choropleth-panel.md):
   a result panel built against the channel contract.
 - [ADR-0009 — the env-var registry](../adr/0009-environment-variable-registry.md):
