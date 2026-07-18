@@ -163,6 +163,20 @@ func NewKanbanDriver(ids *c.WidgetIdStack, client *Client) (inst *KanbanDriver) 
 	return
 }
 
+// forgetLanes clears the lanes lane memo so the next demand re-executes even
+// for an unchanged (SQL, params) pair — the Run hook (executeRun). Without it
+// a re-Run after a transient failure (a wrong endpoint, a server that was
+// down) memo-hits the stored error — its key is the SQL, which a re-Run
+// leaves unchanged — so the lane inventory never recovers though the board does.
+func (inst *KanbanDriver) forgetLanes() {
+	if inst == nil {
+		return
+	}
+	if inst.lanesLane != nil {
+		inst.lanesLane.forget()
+	}
+}
+
 // noteExecuted hands the driver the active result's freshness token before
 // dispatch; the fold keys its cache on it.
 func (inst *KanbanDriver) noteExecuted(t time.Time) { inst.pendingExecuted = t }

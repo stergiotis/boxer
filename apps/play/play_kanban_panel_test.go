@@ -1,8 +1,11 @@
 package play
 
 import (
+	"context"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -403,6 +406,81 @@ func TestKanbanLanesErrorSurfaces(t *testing.T) {
 	d.lanesErr = nil
 	d.lanesLoading = true
 	assert.Contains(t, d.statusLine(), "lanes…")
+}
+
+// flakyLanesExecutor errors on its first failUntil calls, then returns a
+// record — the wrong-endpoint-then-corrected sequence, used to prove
+// forgetLanes clears a memoised error.
+type flakyLanesExecutor struct {
+	mu        sync.Mutex
+	calls     int
+	failUntil int
+}
+
+func (inst *flakyLanesExecutor) execute(ctx context.Context, c compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	inst.mu.Lock()
+	inst.calls++
+	n := inst.calls
+	inst.mu.Unlock()
+	if n <= inst.failUntil {
+		err = eh.Errorf("simulated endpoint failure (call %d)", n)
+		return
+	}
+	rec = int64Rec("n", 1)
+	schema = rec.Schema()
+	return
+}
+
+func (inst *flakyLanesExecutor) callCount() int {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.calls
+}
+
+// The endpoint-switch bug (ADR-0122 §SD6, mirroring ADR-0129's Network fix): a
+// lanes demand against a bad endpoint memoises the error keyed on the SQL; a
+// re-Run leaves the SQL unchanged, so without forgetLanes the demand memo-hits
+// the stored error and the lane inventory stays stuck-errored — the board
+// silently falls back to row-derived lanes — though the main result recovers.
+// forgetLanes (the executeRun Run hook) clears the memo so the re-Run
+// re-executes. Kanban's symptom is softer than Network's (it has a row-derived
+// fallback), which is why the same root cause needs its own fix here.
+func TestKanbanForgetLanesRecoversFromError(t *testing.T) {
+	exec := &flakyLanesExecutor{failUntil: 1}
+	d := &KanbanDriver{lanesLane: newNodeLane(exec, memory.NewGoAllocator(), 0)}
+	defer d.lanesLane.close()
+
+	cn := compiledNode{SQL: "SELECT lane FROM lanes"}
+
+	// First demand → the error lands and is memoised.
+	d.lanesLane.demand(cn)
+	require.Eventually(t, func() bool {
+		v := d.lanesLane.demand(cn)
+		if v.rec != nil {
+			v.rec.Release()
+		}
+		return !v.loading && v.err != nil
+	}, 2*time.Second, time.Millisecond, "the first demand memoises the error")
+
+	// A same-SQL re-demand memo-hits the stored error — no retry (the bug).
+	before := exec.callCount()
+	v := d.lanesLane.demand(cn)
+	if v.rec != nil {
+		v.rec.Release()
+	}
+	require.Equal(t, before, exec.callCount(), "same SQL memo-hits the stored error without re-executing")
+
+	// forgetLanes clears the memo → the next demand re-executes → success.
+	d.forgetLanes()
+	require.Eventually(t, func() bool {
+		v := d.lanesLane.demand(cn)
+		ok := !v.loading && v.err == nil && v.rec != nil
+		if v.rec != nil {
+			v.rec.Release()
+		}
+		return ok
+	}, 2*time.Second, time.Millisecond, "forgetLanes makes the re-Run re-execute and recover")
+	require.Greater(t, exec.callCount(), before, "forgetLanes forced a re-execution")
 }
 
 // The board caps its fold and says so rather than laying out a million cards.
