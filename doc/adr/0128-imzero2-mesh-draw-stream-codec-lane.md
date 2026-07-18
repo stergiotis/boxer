@@ -135,6 +135,30 @@ per-frame work is `ctx.run` + tessellate + serialize (≈ 0.5 ms measured). A
 statically-linked host with no GL, no mesa, no ffmpeg becomes feasible — the
 enabling step for the appliance target, without writing a CPU rasterizer.
 
+The M3 topology keeps this a *mode of the existing host*, not a second host
+binary. wgpu — the offscreen renderer and its GPU→CPU readback — moves behind a
+`headless_wgpu` Cargo feature; the bare `headless` feature is the carrier +
+FFFI2 interpreter + the mesh lane, with no wgpu and no ffmpeg in the dependency
+tree. `cargo tree --features headless` carries no `wgpu`/`naga`/`pollster` — a
+hard guarantee (the feature never names them), not a soft promise that every
+`#[cfg]` was placed correctly. `headless_wgpu` remains the full dev host (all
+video codecs, the PNG dump, `H264_OUT`); because the mesh *wire* is byte-
+identical between the two, a stream verified under `headless_wgpu` is exactly
+what the lean build serves. Everything wgpu- or encoder-bound compiles out of
+the lean build and its env vars go inert there — the PNG dump
+(`IMZERO2_HEADLESS_DUMP_DIR`), the `H264_OUT` file sink, and the SD5 host-encode
+probe — so `build_video_caps` offers only the mesh lane. Verifying the lean host
+therefore runs on the full `headless_wgpu` build (PNG + all lanes) or on
+`headless_svg` (a GPU-less SVG snapshot); the lean binary is the deployment
+artifact, not the dev one.
+
+One boot-path dependency is separable and was cut: the demo `--launch <alias>`
+selector shelled out to `clickhouse-local` even for a bare alias. A bare
+identifier now resolves directly against the app registry by `SubjectAlias`
+(which the registry keeps unique), so the appliance boot path needs no CH binary
+for the common launch; SQL-predicate selectors (operators, `IN`, `LIKE`, a full
+id) keep the clickhouse-local path.
+
 ### SD7 — Deferrals, recorded
 
 - **Mesh-granularity splitting** — egui batches a layer into few meshes, so
@@ -151,7 +175,10 @@ enabling step for the appliance target, without writing a CPU rasterizer.
 - **M1** — lane in the carrier behind ADR-0088 negotiation, tied to carrier
   lifecycle (no serve outliving FFFI2 shutdown); probe retired into it.
 - **M2** — painter to product grade: gamma parity, DPR adoption, reconnect.
-- **M3** — appliance host feature (mesh lane only; no wgpu/ffmpeg deps).
+- **M3** — appliance host feature: the `headless_wgpu`/`headless` split (SD6),
+  then a musl-static target and a gokrazy QEMU boot probe. The appliance
+  *image* is out of scope here — it relates the ADR-P-0001 deployment substrate
+  and gets its own ADR once the probe confirms viability.
 - **M4** — runtime fallback policy (callback sentinel, bandwidth guard).
 
 ## Alternatives
@@ -229,6 +256,24 @@ of pixels beyond 2/255, all AA-edge rasterization minutiae). The spike-era
 adoption. Reconnect reviewed: content-addressed bodies stay valid across
 reconnects and the fresh-connection bootstrap covers the rest — no code
 needed. Awaiting acceptance review.
+
+**M3 in progress (2026-07-18).** The host split landed (SD6): wgpu moved behind
+a `headless_wgpu` Cargo feature, and the bare `headless` feature is the lean
+mesh-only host. Proofs measured on the demo carousel build: `cargo tree
+--features headless` carries no `wgpu`/`naga`/`pollster`; the release binary
+drops from 47.9 MB to 40.6 MB and holds **0** wgpu/vulkan/naga symbols (2071 in
+the full host), so it never `dlopen`s vulkan/mesa; the PNG dump, `H264_OUT`, and
+the SD5 encode probe compile out, leaving the capability report to offer only
+the mesh lane. Both feature sets build and test green (59 tests each), including
+the mesh-caps contract test. A separable boot-path dependency was also cut: the
+demo `--launch <alias>` selector now resolves a bare alias directly by
+`SubjectAlias` (no `clickhouse-local`), with SQL predicates keeping the CH path.
+Deferred to the next step: a musl-static client target, then a gokrazy QEMU boot
+probe (`gok` instance; `main_go` as the Go package carrying the repo tags +
+`binary_log` in `GoBuildFlags`; the static client + fonts as `ExtraFilePaths`).
+The appliance *image* scope — and whether it becomes its own ADR or an
+ADR-P-0001 update — is deferred until the probe lands; it is not this ADR's
+decision.
 
 ## References
 

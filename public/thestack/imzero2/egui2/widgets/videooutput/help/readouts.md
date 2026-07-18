@@ -54,13 +54,19 @@ The second line is the live telemetry.
 
 ## Codec table
 
-One row per codec the host can encode here. The active codec's name is
+One row per stream lane the host can produce here. The active lane's name is
 highlighted; click another to switch (a brief glitch while the pipeline
 re-opens is expected). Encode and decode acceleration are reported
 **separately** — the host and the browser accelerate independently, and
 either can be hardware while the other is software.
 
-- **Codec** — H.264, VP9, or AV1.
+Most rows are video codecs. One may be **Mesh** — the draw-stream lane
+(ADR-0128) that ships tessellated geometry + a texture atlas instead of encoded
+video, painted in the browser with WebGL2. It has no host encoder, so its
+columns read differently (noted below); switching to or from it reloads the
+viewer page, because the canvas binds to one context kind for its lifetime.
+
+- **Codec** — H.264, VP9, AV1, or Mesh.
 - **Encoder** — the ffmpeg encoder the host would use: a `*_vaapi` entry for
   hardware (e.g. `h264_vaapi`), or the software library otherwise
   (`libopenh264`, `libvpx-vp9`, `libsvtav1`).
@@ -79,6 +85,13 @@ either can be hardware while the other is software.
   from the bitstream.
 - **Pixels** — the pixel format the pipeline encodes: `4:2:0 8-bit` chroma
   subsampling, the broadly-decodable baseline these codecs share.
+
+For the **Mesh** lane those columns read differently, since nothing is encoded:
+Encoder `none`, Encode `tessellate` (the host's per-frame work), Decode `WebGL2`
+(or `no WebGL2` when the browser lacks it), WebCodecs `mesh` (the literal string
+that switches the viewer's painter, not a codec descriptor), and Pixels
+`meshes`. Mesh never appears in the disabled-encoders table below — it has no
+encoder to disable.
 
 ## Disabled encoders
 
