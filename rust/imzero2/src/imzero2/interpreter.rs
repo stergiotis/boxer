@@ -778,8 +778,11 @@ pub fn render_graph_with_layout(
     navigation: &egui_graphs::SettingsNavigation,
     style: &egui_graphs::SettingsStyle,
     sink: &dyn egui_graphs::events::EventSink,
-) {
+) -> egui::Response {
     // Each arm: (optional) reset_layout → (optional) fast_forward → add_sized.
+    // The final `add_sized` is the tail expression of every arm, so the match
+    // (and this function) yields the GraphView's Response — the caller reads
+    // its `contains_pointer()` to decide whether to swallow the wheel.
     // The inner GraphView generic alias keeps each arm readable; macros were
     // an option but hide the type params that matter for maintenance here.
     let id = Some(gid.to_string());
@@ -816,7 +819,7 @@ pub fn render_graph_with_layout(
                 .with_navigations(navigation)
                 .with_styles(style)
                 .with_event_sink(sink);
-            ui.add_sized(size, &mut view);
+            ui.add_sized(size, &mut view)
         }};
     }
     match layout_kind {
@@ -6870,7 +6873,7 @@ self.apply_widget(w,u,f,Some(i));
                         hi_orientation,
                         hi_orientation_set,
                     );
-                    render_graph_with_layout(
+                    let graph_resp = render_graph_with_layout(
                         state,
                         ui,
                         size,
@@ -6883,6 +6886,18 @@ self.apply_widget(w,u,f,Some(i));
                         &style,
                         &sink,
                     );
+                    // Capture-scroll (widget-gallery composition): a navigable
+                    // graph owns the wheel while the pointer is over it. Swallow
+                    // any plain scroll delta so a parent ScrollArea — the gallery
+                    // stacks every demo in one Vscroll — does not also scroll the
+                    // page out from under the cursor. egui routes the wheel to
+                    // zoom XOR scroll, so Ctrl/Cmd+scroll zoom already leaves
+                    // smooth_scroll_delta at zero and is unaffected; a static
+                    // graph (zoom_and_pan == false) lets the wheel pass through so
+                    // it can still be scrolled into view.
+                    if zoom_and_pan && graph_resp.contains_pointer() {
+                        ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
+                    }
                     // Snapshot selection + metrics AFTER the render so they reflect
                     // anything egui_graphs did this frame (drag, click-select, layout
                     // step increment). Fetchers drain these vecs on the Go side.
