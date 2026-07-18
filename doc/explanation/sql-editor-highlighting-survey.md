@@ -10,22 +10,24 @@ status: draft
 > `play.html` as served by a local ClickHouse 26.6.1 instance (read in full),
 > the `egui` / `egui_extras` 0.35.0 crate sources this repo already builds
 > against, and the public repositories/documentation of micro, neovim and the
-> tree-sitter ecosystem (see §8). This is a survey with a recommendation, not
+> tree-sitter ecosystem (see §9). This is a survey with a recommendation, not
 > a design; if the recommendation is adopted, the editor-side FFI seam should
 > go through a design dialogue (and likely an ADR) first.
 
 # Syntax-highlighted SQL editing in imzero2 — a survey
 
 The play app's SQL editor is a plain monospace `TextEdit`; syntax color exists
-only in read-only views. This survey compares four ways to get a highlighted
-*editing* experience for ClickHouse SQL: imitating ClickHouse's own
-`play.html`, building on what egui already provides, embedding the
+only in read-only views. This survey compares four primary routes to a
+highlighted *editing* experience for ClickHouse SQL — imitating ClickHouse's
+own `play.html`, building on what egui already provides, embedding the
 [micro](https://github.com/micro-editor/micro) editor, and embedding neovim as
-an editor server. The short version: the repo already owns the two hard parts
-(an exact-dialect lexer and a span→`LayoutJob` render cache), egui already
-ships the hook that connects spans to an editable widget, and none of the
-embedding options improves highlighting fidelity — so the gap is one FFI seam,
-not a subsystem.
+an editor server — and adds a second pass (§6) over the remaining families:
+other editor servers, Rust-side lexing variants, web editors, LSP, escape
+hatches. The short version: the repo already owns the two hard parts (an
+exact-dialect lexer and a span→`LayoutJob` render cache), egui already ships
+the hook that connects spans to an editable widget, and none of the embedding
+options improves highlighting fidelity — so the gap is one FFI seam, not a
+subsystem.
 
 ## 1. Current state in this repository
 
@@ -211,24 +213,104 @@ where it adds a subsystem and an external dependency while *lowering* dialect
 fidelity. Worth revisiting only if an editor-pane requirement materialises on
 its own merits.
 
-## 6. Comparison
+## 6. Second-pass options
+
+Families outside the four primary routes, with shorter verdicts:
+
+- **Highlight at rest, plain while editing — no IDL change.** Render the
+  existing `codeView` when the buffer is not being edited and swap in today's
+  plain `TextEdit` behind an explicit edit affordance (button or
+  double-click), swapping back on blur. Ships with existing opcodes today.
+  The costs sit at the seam: the caret cannot be placed at the clicked
+  character across the swap, and a selectable label and an edit surface fight
+  over clicks, so the affordance must be explicit. Viable as an interim while
+  the layouter seam is designed; not an endpoint.
+- **Rust-side exact lexer — the play.html move, applied natively.**
+  play.html demonstrates that ClickHouse's `src/Parsers/Lexer` is
+  freestanding enough to compile to an ~8 KB dependency-free WASM module. The
+  same source (Apache-2.0) could be vendored into `rust/imzero2` via the `cc`
+  crate — or hand-ported (it is a few hundred lines) — and called directly
+  inside the L1 layouter. Baseline highlighting then needs **no per-keystroke
+  FFI span traffic and has no one-frame lag**; the Go side still owns the
+  semantic tier on quiescence. Trades: a second in-tree lexer to keep loosely
+  in sync with `grammar1` (token-level only; the upstream lexer changes
+  rarely), plus a Rust-side keyword table. Best understood as an alternative
+  *span source* for the recommended seam (§8), not a different architecture.
+- **Rust-side grammar files (syntect + a ClickHouse TextMate grammar).** No
+  ready-made ClickHouse TextMate/Sublime grammar surfaced — the VSCode
+  ecosystem covers ClickHouse via a SQLTools *driver* riding generic SQL
+  highlighting — so this route means authoring and maintaining a third
+  in-house dialect definition, at regex fidelity, plus the syntect dependency
+  tree. Dominated by the option above on every axis.
+- **kakoune as the editor server.** The only other editor genuinely designed
+  for external frontends:
+  [`kak -ui json`](https://github.com/mawww/kakoune/blob/master/doc/json_ui.asciidoc)
+  speaks newline-delimited JSON-RPC over stdio (draw commands out;
+  key/mouse/resize events in). Same verdict as neovim — a renderer plus an
+  external binary for generic-SQL fidelity — with a smaller ecosystem behind
+  the protocol. helix, by contrast, has no embedding protocol at all today.
+- **Replace the widget instead of the layouter.** Rust editor cores exist
+  ([`lapce`](https://github.com/lapce/lapce)'s core crates;
+  [cosmic-text](https://github.com/pop-os/cosmic-text)'s `Editor`, which
+  cosmic-edit pairs with syntect) and could back a from-scratch egui editing
+  widget — as could a Go-side editor built on imzero2 painter primitives.
+  All of these re-solve what `TextEdit` already provides (caret, selection,
+  IME, clipboard, undo) and pay off only if editing requirements outgrow it:
+  multi-cursor, folding, very large buffers — none of which bind for SQL
+  snippets. Foreign-toolkit components (Scintilla, GtkSourceView) have no
+  egui backend at all. Prior art worth keeping: Dear ImGui's
+  [ImGuiColorTextEdit](https://github.com/BalazsJako/ImGuiColorTextEdit)
+  (unmaintained upstream, active forks) demonstrates a per-line incremental
+  colorizer pattern that would matter if buffers ever grow beyond snippets.
+- **Web editors in a webview (Monaco / CodeMirror 6).** The industry-default
+  answer. imzero2 has no webview widget; adopting one (wry/CEF-class) is a
+  dependency far heavier than the problem and against the repo's premises —
+  and CodeMirror's `lang-sql` dialect set does not include ClickHouse anyway.
+  Web techniques become natural only where a DOM already exists: the
+  [ADR-0077](../adr/0077-keelson-browser-wasm-execution.md) browser-wasm
+  build could someday borrow play.html's own machinery in its native habitat.
+- **LSP semantic tokens.** Generic SQL language servers exist; none is
+  ClickHouse-dialect-exact, and the protocol's payoff is
+  completion/hover/diagnostics rather than highlighting. If those follow-ons
+  are wanted, the in-process route (nanopass plus schema knowledge from
+  keelson) starts ahead of any external server. Out of scope for
+  highlighting; noted for the completion follow-on.
+- **`$EDITOR` escape hatch.** Spawn the user's own editor on a temp file and
+  reload on save (git-commit style). Cheap and maximally faithful to user
+  preference, but it leaves the pane — and it breaks under remote/
+  pixel-streamed sessions
+  ([ADR-0024](../adr/0024-imzero2-remote-access-browser-viewer.md)) where the
+  editor would open host-side, outside the streamed UI. A complement at best,
+  not an answer.
+- **Generate a tree-sitter grammar from `grammar1`.** ANTLR→tree-sitter
+  conversion tooling is experimental at best, highlight-query authoring is
+  its own project, and incremental parsing buys nothing at snippet sizes
+  (§3). Kill.
+
+## 7. Comparison
 
 | Approach | CH-SQL fidelity | Editing UX gained | Integration cost | Accessibility / egui_mcp | New dependencies |
 | --- | --- | --- | --- | --- | --- |
 | play.html imitation (overlay) | exact (their lexer) | none (textarea-grade) | n/a — DOM-specific workaround | n/a | n/a |
-| egui layouter + in-repo lexer | **exact (`grammar1`)** | TextEdit as today, plus color/error marks | one IDL seam + span source | native (TextEdit unchanged) | none |
+| codeView ⇄ TextEdit focus-swap (interim) | exact at rest | none while editing (plain) | none — existing opcodes | native | none |
+| egui layouter + in-repo lexer spans over FFI | **exact (`grammar1`)** | TextEdit as today, plus color/error marks | one IDL seam + span source | native (TextEdit unchanged) | none |
+| egui layouter + Rust-side CH lexer | exact (token-level) | as above, without the one-frame lag | one IDL seam + lexer vendor/port | native | optional `cc` (C++), or none if hand-ported |
 | `egui_extras` syntect | generic SQL | as above | feature flag + theme mapping | native | syntect tree |
 | `egui_code_editor` | keyword-set | line numbers, completion | vendor/adapt widget | native-ish | small crate |
 | micro (any route) | regex tier | full small editor | PTY+terminal widget, or fork | opaque | micro (+ terminal widget / fork) |
 | neovim (`--embed`) | generic SQL (no CH grammar) | full modal editor, plugins, LSP | grid-renderer subsystem + process mgmt | partial | nvim binary + go-client |
+| kakoune (`-ui json`) | generic SQL | full modal editor | draw-protocol renderer + process mgmt | partial | kak binary |
 
-## 7. Recommendation
+## 8. Recommendation
 
 Close the narrow gap rather than import an editor. The repo already holds the
 exact lexer (`grammar1`), a span container that crosses the FFI
 (`CodeViewJob`), and a Rust-side span→`LayoutJob` cache; egui already provides
 `TextEdit::layouter`. What is missing is one seam and one discipline:
 
+- **L0 — interim, zero IDL change.** The focus-swap from §6: `codeView` at
+  rest, plain `TextEdit` behind an explicit edit affordance. Highlighted
+  reading today, at the cost of seam jank; superseded by L1.
 - **L1 — the seam.** A `TextEdit` builder method (sketch: `HighlightJob(job)`)
   that installs a Rust-side layouter consuming the same `CodeViewJob` section
   machinery `codeView` uses. Because Go computes spans from the buffer it
@@ -238,11 +320,14 @@ exact lexer (`grammar1`), a span container that crosses the FFI
   undescribed suffixes. Text remains authoritative in the TextEdit; color is
   presentation only. (Design dialogue before implementation; this touches the
   IDL.)
-- **L1 — the span source.** Export the lex-only phase of
-  `highlight.Highlight` (today's unexported `lexHighlight`) and use it per
-  keystroke: it is the same fidelity/cost point play.html ships, from a
-  better lexer. Function-vs-identifier can use play.html's one-token
-  peek-ahead on the token stream.
+- **L1 — the span source.** Two candidates, a design-dialogue decision rather
+  than an architecture fork. Either export the lex-only phase of
+  `highlight.Highlight` (today's unexported `lexHighlight`) and ship spans
+  per keystroke — the same fidelity/cost point play.html ships, from a better
+  lexer, accepting the one-frame lag; or lex Rust-side with a vendored/ported
+  ClickHouse `src/Parsers/Lexer` (§6), removing the lag and the per-keystroke
+  FFI traffic at the cost of a second in-tree lexer. Function-vs-identifier
+  classification uses play.html's one-token peek-ahead in either case.
 - **L2 — semantic refinement, off the keystroke path.** Run the full
   parse + CST refine (the existing phase two) only when the buffer goes
   quiescent, upgrading colors after the fact — the same two-tier scheme
@@ -255,11 +340,13 @@ exact lexer (`grammar1`), a span container that crosses the FFI
   line-number gutter with `egui_code_editor` as a reference implementation.
 
 Kill-reasons recorded above for the descoped options: micro (unimportable
-core, terminal island, accessibility opacity, no fidelity gain) and neovim
+core, terminal island, accessibility opacity, no fidelity gain), neovim
 (subsystem-scale cost and an external binary for *lower* dialect fidelity;
-re-enters only if a general editor-pane requirement appears).
+re-enters only if a general editor-pane requirement appears), and the
+second-pass families in §6 (kakoune, grammar-file syntect, widget
+replacement, webview, LSP, `$EDITOR`, generated tree-sitter).
 
-## 8. Sources
+## 9. Sources
 
 - `play.html` served by a local ClickHouse 26.6.1.1193 (`GET /play.html`,
   192 KB single file; backdrop CSS, embedded lexer WASM, `tokenize()`,
@@ -277,6 +364,14 @@ re-enters only if a general editor-pane requirement appears).
   [neovim/go-client](https://github.com/neovim/go-client),
   [goneovim](https://github.com/akiyosi/goneovim),
   [tree-sitter-sql](https://github.com/derekstride/tree-sitter-sql).
+- Second pass: [kakoune](https://github.com/mawww/kakoune)
+  ([JSON UI protocol](https://github.com/mawww/kakoune/blob/master/doc/json_ui.asciidoc)),
+  [ImGuiColorTextEdit](https://github.com/BalazsJako/ImGuiColorTextEdit),
+  [cosmic-text](https://github.com/pop-os/cosmic-text),
+  [lapce](https://github.com/lapce/lapce),
+  [SQLTools ClickHouse driver](https://github.com/ultram4rine/sqltools-clickhouse-driver)
+  (evidence that the VSCode ecosystem has no dedicated ClickHouse TextMate
+  grammar).
 - In-repo: [`apps/play/play_renderer.go`](../../apps/play/play_renderer.go),
   [`widgets/codeview`](../../public/thestack/imzero2/egui2/widgets/codeview),
   [`nanopass/highlight`](../../public/db/clickhouse/dsl/nanopass/highlight),
