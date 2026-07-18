@@ -111,11 +111,13 @@ this lane.
 ### SD4 — Viewer painter: small, exact, density-aware
 
 One shader, per-mesh scissor, premultiplied blend, static buffers. Two
-things are contractual, both spike-learned: the painter replicates
-`egui_glow`'s gamma/blending semantics exactly, and the host tessellates at
-the active viewer's devicePixelRatio × zoom via the existing ViewportResize
-handling (verified crisp at zero wire cost), with input crossing in points.
-Golden images never compare across lanes or backends.
+things are contractual, both spike-learned: the painter replicates the host
+renderer's semantics exactly — `egui_wgpu`'s `fs_main_gamma_framebuffer`
+with `dithering: false`, i.e. the pure gamma pipeline (see Status for the
+measured proof) — and the host tessellates at the active viewer's
+devicePixelRatio × zoom via the existing ViewportResize handling (verified
+crisp at zero wire cost), with input crossing in points. Golden images
+never compare across lanes or backends.
 
 ### SD5 — Session semantics unchanged
 
@@ -213,7 +215,20 @@ in the embedded viewer; spike retired). Verified over the carrier protocol
 end-to-end, with the H.264 lane regression-tested beside it. M1's recorded
 cut: the lane is session-global (per-viewer mixing stays M4), and a
 mesh ↔ video runtime switch reloads the viewer page (a canvas is bound to
-its first context kind). Awaiting acceptance review.
+its first context kind).
+
+**M2 landed 2026-07-18.** Gamma parity closed by proof rather than shader
+work: the headless reference renders `fs_main_gamma_framebuffer` with
+`dithering: false` and non-sRGB textures — the pure gamma pipeline the
+painter already implements — so the painter changes reduce to `egui_wgpu`'s
+exact `ScissorRect` rounding and an opaque backbuffer. An exact-pipeline
+software oracle fed from the live wire measures **0.009 % mean absolute
+difference** against the host's own wgpu render of the same screen (0.2 %
+of pixels beyond 2/255, all AA-edge rasterization minutiae). The spike-era
+"dull" was entirely the viewer-density issue already fixed at M1's DPR
+adoption. Reconnect reviewed: content-addressed bodies stay valid across
+reconnects and the fresh-connection bootstrap covers the rest — no code
+needed. Awaiting acceptance review.
 
 ## References
 
