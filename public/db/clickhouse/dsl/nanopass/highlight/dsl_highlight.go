@@ -56,7 +56,10 @@ func Highlight(sql string) (spans []Span) {
 	// Phase 2: Parse + semantic refinement
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		return // lexical-only fallback
+		// Lexical-only fallback — apply the same function-name lookahead
+		// HighlightLex uses, so both lex-tier paths color identically.
+		refineFunctionCalls(spans)
+		return
 	}
 
 	// Build a token index → span index map for fast lookup
