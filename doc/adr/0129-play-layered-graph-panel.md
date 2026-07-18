@@ -138,13 +138,21 @@ binding.
 
 ### SD4 — Interaction
 
-- **Selection.** A vertex click (`RenderResult.Clicked`) emits `selection` (the
-  clicked vertex's ordinal in the vertices record), plus `selection_id` (its
-  leeway `id` value when the result carries one) and `selection_node`, through the
-  existing `selectionStamper` in `dispatchPanel`. So clicking a node drives the
-  Detail tab and any `{selection_id:UInt64}` cross-filter, the same loop Table,
-  Timeline and Kanban already close. The selected vertex is marked via the
-  `NodeFill` hook, which reads `selection` from the frame's signal env.
+- **Selection (local in v1).** A vertex click (`RenderResult.Clicked`) marks the
+  node — the driver holds a `selectedID`, the `NodeFill` hook paints it in the
+  accent tone, and clicking it again clears it. The highlight is **local**: the
+  panel publishes nothing to the shared `selection` signal. This is a considered
+  cut, not an oversight. The graph's vertices come from a private lane (SD3), not
+  an observable split node, and the `selection` signal is node-scoped
+  (`syncSelectionClamp` sends a cursor whose `selection_node` is neither the
+  active node nor a bound view *home* — resetting it to row 0). So emitting
+  `selection` for a vertex would be clamped away *and* would jerk Table and
+  Detail to their row 0. Cross-panel selection (Detail showing the clicked
+  vertex, a `{selection_id}` cross-filter) waits for the graph's CTEs to become
+  observable nodes — the SD7 observe/bind direction — at which point the standard
+  `selectionStamper` path applies unchanged. *(This is the one place live-driving
+  corrected the design: the first cut emitted `selection` and the clamp erased
+  it; verified via egui_mcp, then reduced to the local highlight.)*
 - **Layout direction.** A control row toggles `RankDir` (top-bottom default,
   left-right), like the Map and Kanban control rows.
 - **Pan / zoom.** The panel holds one `view.ViewState` and passes it through
@@ -179,9 +187,10 @@ the query *pipeline*, the other draws the query *result*, and sharing the word
 Parallel/multi-edges (v1 collapses) · undirected layout · edge-weight→thickness ·
 explicit per-vertex colour tokens (v1 is `group`→auto-palette) · above-cap
 clustering/filtering · `chEdges` from an observed/bound node (the slice-6c path;
-see Alternatives). Each is a triggered deferral, not a defect — none blocks the
-first cut, and the seams (the `Engine` interface, the channel contract) are where
-they would land.
+see Alternatives) · cross-panel selection (SD4 — the local highlight is v1; a
+`selection`/`selection_id` publish waits on the observable-node work). Each is a
+triggered deferral, not a defect — none blocks the first cut, and the seams (the
+`Engine` interface, the channel contract) are where they would land.
 
 ## Alternatives
 
@@ -222,10 +231,10 @@ crosses no line: it reads query results, introduces no filesystem-at-query-time
 providers, and needs no server it did not already need.
 
 What it buys: any graph-shaped result becomes visible declaratively, by naming
-two CTEs, with the selection loop into Detail already wired. The honest limit is
-that layered layout suits directed, DAG-ish data; a dense cyclic graph will read
-poorly, and that is a property of Graphviz `dot`, not of this panel — the seam is
-where a different layout would go.
+two CTEs, with a clicked node highlighted in place (SD4 — cross-panel selection
+is the deferred half). The honest limit is that layered layout suits directed,
+DAG-ish data; a dense cyclic graph will read poorly, and that is a property of
+Graphviz `dot`, not of this panel — the seam is where a different layout would go.
 
 ## Validation
 
@@ -234,19 +243,34 @@ against a graph-shaped fixture — candidates already in the tree: the ADR
 supersession edges (`keelson('adr')`), foreign-key relations (`tv:foreignKey:*`),
 or the ADR-0126 topology marking edges. Confirm: (1) an edges-only query draws
 with endpoint-inferred vertices; (2) adding a `vertices` CTE decorates them
-(label, `group` colour, `shape`); (3) a vertex click drives Detail (selection
-follow) and marks the node; (4) the RankDir toggle re-lays-out and the layout
-cache holds across selection clicks; (5) the cap shows in the status line on an
-over-large result. Unit tests cover the row→`GraphModel` mapping (by-name
-binding, endpoint synthesis, vertex de-duplication, parallel-edge collapse)
-without the widget harness, as the kanban fold tests do.
+(label, `group` colour, `shape`); (3) a vertex click highlights the node locally
+and the highlight persists when the pointer leaves (SD4); (4) the RankDir toggle
+re-lays-out; (5) the cap shows in the status line on an over-large result. Unit
+tests cover the row→`GraphModel` mapping (by-name binding, endpoint synthesis,
+vertex de-duplication, parallel-edge collapse, cap) without the widget harness,
+as the kanban fold tests do.
+
+**Verified 2026-07-18** (build + `apps/play` suite green; live-driven via
+egui_mcp against a small dependency-DAG fixture — a `vertices` CTE of `id`/
+`label`/`group`/`shape` and an `edges` CTE of `source`/`target`): the Network tab
+rendered "6 nodes · 7 edges" as a directed layered graph, the `group` column
+coloured the two categories distinctly (box shapes, id labels), the RankDir
+toggle re-laid-out top-down↔left-right, and a node click highlighted in place and
+persisted with the pointer away (2 and 3 above). (1) and (5) rest on the unit
+tests; the live cross-fixtures remain a follow-up.
 
 ## Status
 
 Proposed 2026-07-18. The design dialogue settled the binding model (SD1 — edges
 required, vertices inferred when absent) and the column contract (SD2 —
-`source`/`target` for edges, `id` for vertices, all by name) before any code. Not
-yet built.
+`source`/`target` for edges, `id` for vertices, all by name) before any code.
+
+**Built the same day and live-verified** (see Validation) in the working tree,
+not yet committed: `apps/play/play_layeredgraph_panel.go` (+ tests), the Network
+dock tab (`dockTabNetwork`, `BOXER_PLAY_FOCUS_NETWORK`), and the driver wiring.
+Live-driving corrected SD4 from a shared-signal selection to a local highlight
+(recorded there). Awaiting human review — reviewed-by / a status flip to
+`accepted` is the reviewer's, per the ADR lifecycle.
 
 ## References
 
