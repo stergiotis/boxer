@@ -15,6 +15,9 @@ var sqlColors [highlight.CatParamSlot + 1]color.Color
 // sqlSpec is the highlighter spec consumed by build / buildLines.
 var sqlSpec highlighterSpec
 
+// sqlLexSpec is the lex-only spec behind BuildSqlLex (ADR-0130 editor path).
+var sqlLexSpec highlighterSpec
+
 func init() {
 	defaultColor := internRgb(212, 212, 212) // light gray
 	blue := internRgb(86, 156, 214)
@@ -49,10 +52,25 @@ func init() {
 		gutterColor: defaultColor,
 		plainColor:  defaultColor,
 	}
+	sqlLexSpec = highlighterSpec{
+		highlight:   sqlLexHighlight,
+		gutterColor: defaultColor,
+		plainColor:  defaultColor,
+	}
 }
 
 func sqlHighlight(src string) (out []section) {
-	spans := highlight.Highlight(src)
+	return sqlSpansToSections(highlight.Highlight(src))
+}
+
+// sqlLexHighlight is the lex-only variant: token classification plus the
+// function-name lookahead, no parse. Same palette, so a buffer upgraded
+// later by the semantic tier only changes identifier colors.
+func sqlLexHighlight(src string) (out []section) {
+	return sqlSpansToSections(highlight.HighlightLex(src))
+}
+
+func sqlSpansToSections(spans []highlight.Span) (out []section) {
 	out = make([]section, len(spans))
 	for i, s := range spans {
 		out[i] = section{
@@ -80,4 +98,18 @@ func PrepareSql(sql string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	return memo.prepare(memoKey{lang: langSQL, src: sql}, func() job {
 		return build(sqlSpec, sql)
 	})
+}
+
+// BuildSqlLex highlights SQL at the lexical tier only (no parse): keywords,
+// literals, comments, operators, and peek-ahead function names — ~26 µs for a
+// 180 B statement vs ~5.7 ms for the full semantic build. This is the
+// per-keystroke span source for the ADR-0130 editor path
+// (TextEdit.HighlightJob), which is why it is deliberately uncached: editor
+// content is new on every keystroke, so the ADR-0125 memo would only churn.
+//
+// The job's text must equal the editor buffer byte-for-byte for the Rust-side
+// reconcile to line up, so — unlike the read-only builders — no tab expansion
+// is applied.
+func BuildSqlLex(sql string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+	return build(sqlLexSpec, sql)
 }
