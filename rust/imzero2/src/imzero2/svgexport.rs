@@ -1944,6 +1944,16 @@ impl SvgBuilder {
     // ------------------------------------------------------------------
 
     fn emit_rect(&mut self, r: &RectShape) {
+        // egui 0.35 paints fully-transparent rects behind text: fill alpha 0
+        // with no visible stroke. They render nothing, so drop them rather
+        // than padding the SVG with invisible `<rect fill="none"/>` noise. The
+        // guard mirrors the visibility predicates in `fill_attr` (alpha 0 →
+        // `fill="none"`) and `stroke_attr` (zero width or alpha 0 → no stroke);
+        // a transparent-fill rect with a visible stroke is an outline and must
+        // still emit.
+        if r.fill.a() == 0 && (r.stroke.width <= 0.0 || r.stroke.color.a() == 0) {
+            return;
+        }
         // SVG `<rect>` strokes are centered; egui's StrokeKind (Inside/Middle/
         // Outside) doesn't have a direct analog. v0 ignores stroke_kind and
         // emits centered strokes — small visual drift at narrow widths.
@@ -2584,18 +2594,13 @@ mod tests {
             content_only.contains("fill=\"#ffffff\""),
             "content-only+white SVG should have white baseline rect"
         );
-        // Be specific: the only `<rect>` candidates for a baseline
-        // come from `finish()` and start with `  <rect x=`. The
-        // transparent variant should emit none of those.
-        // The baseline rect from `finish()` has a distinctive
-        // attribute set: just `x y width height fill` with an opaque
-        // colour — no `rx`, no `fill-opacity`, no `stroke`. Two kinds
-        // of egui chrome rect share the bare `<rect x=` prefix and
-        // must be excluded: visible chrome carries `rx`/`fill-opacity`/
-        // `stroke`, and fully-transparent widget/content rects, which
-        // `emit_rect` writes as `fill="none"` with no extras (egui 0.35
-        // paints these behind text). A real baseline always has a colour
-        // fill, so require `fill="#..."`, never `fill="none"`.
+        // A baseline `<rect>` comes only from `finish()`: a bare
+        // `x y width height fill` with an opaque colour — no `rx`,
+        // `fill-opacity`, or `stroke`. Visible egui chrome shares the
+        // `  <rect x=` prefix but carries those attributes, so exclude
+        // them. The `fill="none"` guard is now defensive: `emit_rect`
+        // drops fully-transparent content rects at emission, so the only
+        // bare colour-filled rect that can reach here is a real baseline.
         let baseline_rect_present = |svg: &str| -> bool {
             svg.lines().any(|line| {
                 line.starts_with("  <rect x=\"")
