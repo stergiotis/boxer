@@ -220,13 +220,36 @@ Implementation mechanics (all expressed in the IDL definition +
 
 Accepted 2026-07-18.
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-07-18 — implemented and live-verified
+
+Shipped as designed, same day as acceptance: `highlightJob` IDL method +
+regenerated dispatch, `text_edit_highlight.rs` (reconcile/normalize, 9 unit
+tests), `highlight.HighlightLex` export with the `(`-peek-ahead (applied to
+`Highlight`'s parse-failure fallback too, so both lex-tier paths color
+identically), `codeview.BuildSqlLex`, and the play `sqlTextEditField` wiring
+with a text-change-keyed job cache. Live-verified under a headless compositor
+via the inspection tooling: colors at rest match the read-only preview,
+typing re-colors within a frame (keyword/function/number/string on freshly
+typed text), no glyph loss, `SendRespVal` and downstream staleness signals
+unaffected — and an *unparseable* mid-edit buffer keeps its lexical colors
+while the full-parse preview correctly reports "no canonical form", i.e. the
+lex-tier independence this ADR argued for.
+
+Two findings from the bring-up, both outside the seam:
+
+- The editor's accessibility surface is unchanged (`MultilineTextInput`
+  value + text runs still exposed), confirming the survey's
+  "native accessibility" claim for this route.
+- Unmasking collateral: fixing the crate's test-target compile (pre-existing
+  `Context::run` → `run_ui` rename from the egui 0.35 bump, in
+  `svgexport.rs` tests and two examples) revealed one genuinely failing
+  svgexport test (`render_svg_window_content_only_shrinks_viewbox_and_strips_bg`):
+  egui 0.35's `run_ui` wraps the pass in an implicit full-screen `Ui` whose
+  background the content-only exporter does not strip. Pre-existing 0.35
+  migration debt in svgexport, not a seam regression; left failing rather
+  than papered over.
 
 ## References
 
