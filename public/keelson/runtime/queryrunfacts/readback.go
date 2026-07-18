@@ -216,15 +216,15 @@ func ParseHistoryRows(raw []byte) (rows []HistoryRow, err error) {
 			return
 		}
 		row.Ts = time.Unix(int64(tsSec), 0).UTC()
-		row.QueryId = unescapeTabSeparated(parts[2])
-		row.Event = unescapeTabSeparated(parts[3])
-		row.Kind = unescapeTabSeparated(parts[4])
-		row.Lane = unescapeTabSeparated(parts[5])
-		row.App = unescapeTabSeparated(parts[6])
-		row.RunId = unescapeTabSeparated(parts[7])
+		row.QueryId = UnescapeTabSeparated(parts[2])
+		row.Event = UnescapeTabSeparated(parts[3])
+		row.Kind = UnescapeTabSeparated(parts[4])
+		row.Lane = UnescapeTabSeparated(parts[5])
+		row.App = UnescapeTabSeparated(parts[6])
+		row.RunId = UnescapeTabSeparated(parts[7])
 		row.ExceptionCode = excCode
-		row.Exception = unescapeTabSeparated(parts[18])
-		row.QueryText = unescapeTabSeparated(parts[19])
+		row.Exception = UnescapeTabSeparated(parts[18])
+		row.QueryText = UnescapeTabSeparated(parts[19])
 		rows = append(rows, row)
 	}
 	return
@@ -260,10 +260,10 @@ ORDER BY count DESC`,
 	return
 }
 
-// unescapeTabSeparated reverses ClickHouse's TabSeparated string
+// UnescapeTabSeparated reverses ClickHouse's TabSeparated string
 // escaping (the chstore recentlogs convention): \\, \t, \n, \0; other
 // escapes pass through unchanged.
-func unescapeTabSeparated(s string) (out string) {
+func UnescapeTabSeparated(s string) (out string) {
 	if !strings.ContainsRune(s, '\\') {
 		out = s
 		return

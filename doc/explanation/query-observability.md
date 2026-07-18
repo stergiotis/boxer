@@ -38,7 +38,7 @@ why the requirements outlived them. Restated:
 | R2 | Result batches to the glass as they arrive | 0050 | inline Arrow on the response shipped; incremental rendering open |
 | R3 | Terminal run accounting (profile events, peak memory, exceptions) | 0050 | decided — [ADR-0115](../adr/0115-query-observability-data-plane-strategy.md) (plane B) |
 | R4 | A facts substrate absorbing operational records | 0050 | shipped — `runtime.facts` (ADR-0026 §SD6), recordstore, DimensionStore in flight |
-| R5 | Result archival routed by shape, with provenance to source rows | 0050+0051 | open — plane C, tiered (below) |
+| R5 | Result archival routed by shape, with provenance to source rows | 0050+0051 | Tier 1 shipped — a pin freezes the batch as-is into a per-pin ClickHouse table with the result's own schema plus a metadata row (content fingerprint, query/run/lane anchors); opening a pin is plain SQL. Ref-tuple lineage and Tier-2 weaving stay open (S6) |
 | R6 | Auditable query categorization; governed ingestion for data products | 0051 | open — rescoped from gate to affordance (below) |
 | R7 | Machine-consumable export without re-implementing the CH protocol | 0050 | facts + `url()` cover pull; NATS-core forwarding decided as the push leg, built at consumer trigger (plane E) |
 
@@ -139,11 +139,32 @@ The rows a run produced, identified by content fingerprint (play already
 fingerprints every lane result) and ref-tupled to their run:
 
 - **Tier 0 — ephemeral** (default): the lane memo. Today's behaviour; free.
-- **Tier 1 — pin**: persist the Arrow batch as-is into a resultsets store,
-  any query, no classification required.
+- **Tier 1 — pin** (shipped): persist the Arrow batch as-is, any query, no
+  classification required. A pin is a per-pin ClickHouse table carrying the
+  result's own schema (the batch bytes go in verbatim) plus one metadata row
+  in `runtime.resultsets` — so the "resultsets store" is ordinary queryable
+  tables on the user's endpoint, and opening a pin is plain SQL every panel
+  already renders.
 - **Tier 2 — weave**: when shape analysis proves the result data-mart-shaped
   or lineage-carrying, rows land as typed leeway rows with ref-tuple lineage
-  to source rows.
+  to source rows. A candidate first cut, to be decided at the S6 ADR: for
+  results the passthrough classifier (ADR-0117) proves 1:1-as-stored, land
+  the pinned rows in an on-demand *sibling* of the base table
+  (`T` → `T_pinned`) carrying a pin-provenance column and partitioned by pin
+  id — per-pin reads prune on the partition, unpinning is a partition drop,
+  and base-schema joins plus row lineage come nearly free, at the price of
+  the classification gate Tier 1 deliberately avoids.
+
+Two native ClickHouse neighbours were considered for Tier 1 and deliberately
+not used. The **query result cache** (`use_query_cache`) answers a different
+question: it is keyed by the *query*, TTL-bounded, in-memory, evicted, and
+opaque — recompute avoidance, where a pin is a durable, *content*-addressed
+snapshot that arbitrary new SQL can query; staleness is the cache's risk and
+the pin's point, and the two compose (the cache accelerates re-runs, the pin
+preserves what a run returned). Plain `CREATE TABLE … AS SELECT` is the
+closer relative — a pin is CTAS plus content-addressed identity (idempotent
+re-pins), run provenance, and a browser; CTAS also *re-executes* the query
+server-side, while a pin freezes the batch the client actually received.
 
 ## From gate to affordance (rescoping ADR-0051)
 
