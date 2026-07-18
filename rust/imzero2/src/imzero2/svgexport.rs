@@ -2588,14 +2588,19 @@ mod tests {
         // come from `finish()` and start with `  <rect x=`. The
         // transparent variant should emit none of those.
         // The baseline rect from `finish()` has a distinctive
-        // attribute set: just `x y width height fill` — no `rx`,
-        // no `fill-opacity`, no `stroke`. Window chrome rects from
-        // egui always carry at least one of those extras. Look for
-        // a line whose attribute set is exactly the finish() pattern.
+        // attribute set: just `x y width height fill` with an opaque
+        // colour — no `rx`, no `fill-opacity`, no `stroke`. Two kinds
+        // of egui chrome rect share the bare `<rect x=` prefix and
+        // must be excluded: visible chrome carries `rx`/`fill-opacity`/
+        // `stroke`, and fully-transparent widget/content rects, which
+        // `emit_rect` writes as `fill="none"` with no extras (egui 0.35
+        // paints these behind text). A real baseline always has a colour
+        // fill, so require `fill="#..."`, never `fill="none"`.
         let baseline_rect_present = |svg: &str| -> bool {
             svg.lines().any(|line| {
                 line.starts_with("  <rect x=\"")
                     && line.contains(" fill=\"")
+                    && !line.contains(" fill=\"none\"")
                     && line.ends_with("/>")
                     && !line.contains(" rx=\"")
                     && !line.contains(" fill-opacity=\"")
