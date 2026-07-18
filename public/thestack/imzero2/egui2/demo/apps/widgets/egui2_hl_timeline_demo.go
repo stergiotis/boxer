@@ -67,7 +67,7 @@ func init() {
 			c.Label("Top rug strip: ~150 PCG-seeded synthetic git commits over 3 days. Lane bars: 20 LLM sessions in three provider rows (claude / gpt / gemini).").Send()
 			c.Label("Annotation flags at the very top mark deploys/alerts/releases (6 sample markers); click a flag or its dashed line to select. The alert + hotfix pair sits too close for one row, so those flags stagger into a second row instead of overlapping.").Send()
 			c.Label("Background bands (iter.Seq, computed each frame from the view range): muted weekend shade + warm office-hours overlay 09–17. Bright vertical line = now.").Send()
-			c.Label("Hover for tooltip · click to select (outline + card below) · Ctrl+scroll over a session zooms anchored at the cursor.").Send()
+			c.Label("Hover for tooltip · click to select (outline + card below) · Ctrl+scroll over a session zooms anchored at the cursor · drag to pan through time.").Send()
 			s.tl.Render()
 			c.Separator().Send()
 			renderStrongLabel("Selection")

@@ -51,6 +51,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/axisruler"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -223,6 +224,13 @@ const (
 	annotationMaxFlagRows int32   = 3
 	nowLineWidthPx        float32 = 1.5
 	emptyFallback                 = 1 * time.Hour
+	// canvasIdKey names the PaintCanvas this widget drains into. It is a
+	// const because the id is derived twice per frame: once at the top of
+	// renderBody to read last frame's response flags (the pan gate), and
+	// once when the canvas is actually built at the end. Both derivations
+	// run inside the same IdScope, and Derive is a pure hash XOR of the
+	// stack top, so the two agree by construction.
+	canvasIdKey = "canvas"
 )
 
 // SelectionKindE discriminates what a Timeline currently has selected.
@@ -357,8 +365,9 @@ var defaultLODScales = []time.Duration{
 // Timeline is a calendar-axis interval-event visualization. It is constructed
 // with New and reused across frames via Render. SetIntervals / SetRange
 // mutate the widget between frames without losing identity (the scopeKey
-// stays stable, so any future stateful sub-widget — hover handle, pan/zoom
-// memory — survives data updates).
+// stays stable, so the drag-pan anchor and the pinned viewport survive data
+// updates — though SetIntervals / SetPoints / SetAnnotations deliberately
+// drop a user-driven pin so new data auto-fits; see dropInteractivePin).
 type Timeline struct {
 	ids      *c.WidgetIdStack
 	scopeKey string
@@ -375,6 +384,15 @@ type Timeline struct {
 	interactivePin bool
 	viewMinMS      int64
 	viewMaxMS      int64
+
+	// Drag-pan state. dragging turns true on the frame a press lands on the
+	// canvas and stays true until the button releases; lastPtrX is the global
+	// pointer x that frame saw. The press frame only seeds the anchor, so a
+	// plain click (press + release without motion) pans by nothing and still
+	// selects — egui hands us `clicked()` only when the gesture stayed under
+	// its drag threshold.
+	dragging bool
+	lastPtrX float32
 
 	containerW float32
 
@@ -923,13 +941,16 @@ func (inst *Timeline) renderBody() {
 	avail := stateMgr.GetAvailableSize()
 
 	effW := inst.effectiveContainerW(avail)
+	// Lane packing and the label band are view-independent (they read only
+	// inst.intervals), and pan needs labelW to know the true axis width, so
+	// both run before the input block rather than after it.
+	inst.laneAssn = layout.PackLanes(inst.intervals)
+	labelW := inst.computeLabelW()
 	if inst.interactionEnabled {
 		c.CaptureAvailableSize()
 		inst.applyZoomInput(zoom, cp, effW)
+		inst.applyPanInput(stateMgr, labelW, effW)
 	}
-
-	inst.laneAssn = layout.PackLanes(inst.intervals)
-	labelW := inst.computeLabelW()
 
 	viewMin, viewMax := inst.computeViewRange()
 	viewMinMS := viewMin.UnixMilli()
@@ -962,10 +983,14 @@ func (inst *Timeline) renderBody() {
 		inst.cursorTimeValid = false
 	}
 
-	canvas := c.PaintCanvas(inst.ids.PrepareStr("canvas"), effW, vl.totalH).
+	canvas := c.PaintCanvas(inst.ids.PrepareStr(canvasIdKey), effW, vl.totalH).
 		Background(inst.visuals.BgColor)
 	if inst.interactionEnabled {
-		canvas = canvas.Sense(true, false, true)
+		// Drag sense feeds applyPanInput next frame. It also makes egui
+		// arbitrate click vs drag for us: a gesture that travels past the
+		// drag threshold stops reporting clicked(), so a pan never lands a
+		// selection on the bar it started over.
+		canvas = canvas.Sense(true, true, true)
 	}
 	canvas.Send()
 
@@ -1141,6 +1166,69 @@ func (inst *Timeline) applyZoomInput(zoom c.ZoomDeltaValue, cp c.CanvasPointerVa
 	newSpan := max(int64(float64(spanMS)*float64(mul)), 1)
 	inst.viewMinMS = anchorMS - int64(float64(anchorFrac)*float64(newSpan))
 	inst.viewMaxMS = inst.viewMinMS + newSpan
+}
+
+// applyPanInput mutates the viewport from a pointer drag over the canvas:
+// grab-and-drag semantics, so whatever moment sits under the pointer stays
+// under it and the data appears to follow the cursor.
+//
+// Three deliberate choices, mirroring widgets/layeredgraph/view — the other
+// PaintCanvas widget with user pan:
+//
+//   - The gate is HasIsPointerButtonDown on THIS canvas's response, not the
+//     global canvas-pointer register. It stays true once the cursor leaves the
+//     rect, so a pan doesn't stall at the edge, and it can't be clobbered by
+//     another canvas drained later in the same frame.
+//   - The delta comes from the GLOBAL pointer (GetPointer / egui's
+//     latest_pos), because the per-canvas hover x goes NaN the moment the
+//     cursor leaves the canvas — exactly when a pan is most likely mid-flight.
+//   - The press frame only seeds the anchor; panning starts on the next frame
+//     with motion. That keeps a click (press + release in place) a pure
+//     selection.
+//
+// Horizontal only: the widget's height is content-driven (every lane always
+// renders), so there is no vertical viewport to move.
+func (inst *Timeline) applyPanInput(stateMgr *c.StateManager, labelW, effW float32) {
+	resp := stateMgr.GetResponse(widgethandle.Make(inst.ids.PrepareStr(canvasIdKey).Derive()))
+	gp := stateMgr.GetPointer()
+	if !resp.HasIsPointerButtonDown() || !gp.Valid {
+		inst.dragging = false
+		return
+	}
+	if inst.dragging {
+		inst.panBy(gp.X-inst.lastPtrX, labelW, effW)
+	}
+	inst.dragging = true
+	inst.lastPtrX = gp.X
+}
+
+// panBy shifts the viewport by dx screen pixels of pointer travel, converting
+// through the same px↔ms scale ComputeTickMap uses — the axis spans
+// [labelW, effW], so the lane-label band must come off the width or the pan
+// would drift against the ticks it moves. Positive dx (dragging right) walks
+// the view backwards in time, so content tracks the cursor.
+//
+// Unbounded by intent: the viewport is free to leave the data extent entirely,
+// matching the pan in widgets/layeredgraph/view. Hosts that want the view back
+// on the data call SetRange(time.Time{}, time.Time{}) to restore auto-fit.
+func (inst *Timeline) panBy(dx, labelW, effW float32) {
+	if dx == 0 {
+		return
+	}
+	axisW := effW - labelW
+	if axisW <= 0 {
+		return
+	}
+	if !inst.pinToCurrentView() {
+		return
+	}
+	spanMS := inst.viewMaxMS - inst.viewMinMS
+	if spanMS <= 0 {
+		return
+	}
+	deltaMS := int64(-float64(dx) * float64(spanMS) / float64(axisW))
+	inst.viewMinMS += deltaMS
+	inst.viewMaxMS += deltaMS
 }
 
 // pinToCurrentView materializes the auto-fit viewport into explicit

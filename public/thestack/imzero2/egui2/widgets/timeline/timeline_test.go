@@ -287,6 +287,77 @@ func TestPinToCurrentView_Idempotent(t *testing.T) {
 	}
 }
 
+// TestPanBy_ShiftsViewWithoutResizing locks in the grab-and-drag contract:
+// dragging right walks the view backwards in time (content follows the
+// cursor) and the span is untouched — pan translates, only zoom scales.
+func TestPanBy_ShiftsViewWithoutResizing(t *testing.T) {
+	tl := newTestTimeline(t, nil, WithRange(
+		time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC()))
+	// 1000 ms over a 100-px axis (labelW=0) → 10 ms/px. Drag right by 10 px
+	// → the view moves 100 ms earlier.
+	tl.panBy(10, 0, 100)
+	if tl.viewMinMS != -100 || tl.viewMaxMS != 900 {
+		t.Errorf("drag right: got [%d,%d] want [-100,900]", tl.viewMinMS, tl.viewMaxMS)
+	}
+	tl.panBy(-10, 0, 100)
+	if tl.viewMinMS != 0 || tl.viewMaxMS != 1000 {
+		t.Errorf("drag back left should restore: got [%d,%d] want [0,1000]", tl.viewMinMS, tl.viewMaxMS)
+	}
+}
+
+// TestPanBy_ExcludesLabelBandFromScale guards the drift bug: the tick map maps
+// [labelW, effW] onto the view, so pan must divide by the axis width, not the
+// container width, or the data slides against the ticks under the cursor.
+func TestPanBy_ExcludesLabelBandFromScale(t *testing.T) {
+	tl := newTestTimeline(t, nil, WithRange(
+		time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC()))
+	// effW=200, labelW=100 → axis is 100 px wide → 10 ms/px, as above. If the
+	// label band leaked into the scale it would be 5 ms/px and drift by half.
+	tl.panBy(10, 100, 200)
+	if tl.viewMinMS != -100 || tl.viewMaxMS != 900 {
+		t.Errorf("with label band: got [%d,%d] want [-100,900]", tl.viewMinMS, tl.viewMaxMS)
+	}
+}
+
+// TestPanBy_PinsAutoFitView locks in that the first pan materializes the
+// auto-fit range as a user-driven pin, so a later data swap reverts to
+// auto-fit rather than stranding the user over stale coordinates.
+func TestPanBy_PinsAutoFitView(t *testing.T) {
+	tl := newTestTimeline(t, []*layout.IntervalEvent{{FromMS: 0, ToMS: 1000}})
+	if tl.explicitRange {
+		t.Fatal("setup: auto-fit expected before pan")
+	}
+	tl.panBy(10, 0, 100)
+	if !tl.explicitRange || !tl.interactivePin {
+		t.Errorf("pan should pin interactively: explicitRange=%v interactivePin=%v",
+			tl.explicitRange, tl.interactivePin)
+	}
+}
+
+// TestPanBy_DegenerateInputsAreNoOps covers the guards: a zero delta, and an
+// axis fully consumed by the label band (labelW >= effW, reachable when a
+// narrow pane meets a long lane hint) must not move or corrupt the view.
+func TestPanBy_DegenerateInputsAreNoOps(t *testing.T) {
+	cases := []struct {
+		name             string
+		dx, labelW, effW float32
+	}{
+		{"zero delta", 0, 0, 100},
+		{"label band eats the axis", 10, 200, 200},
+		{"label band wider than container", 10, 300, 200},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tl := newTestTimeline(t, nil, WithRange(
+				time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC()))
+			tl.panBy(tc.dx, tc.labelW, tc.effW)
+			if tl.viewMinMS != 0 || tl.viewMaxMS != 1000 {
+				t.Errorf("view moved: got [%d,%d] want [0,1000]", tl.viewMinMS, tl.viewMaxMS)
+			}
+		})
+	}
+}
+
 func TestSetIntervals_DropsInteractivePin(t *testing.T) {
 	ev := &layout.IntervalEvent{FromMS: 0, ToMS: 100}
 	tl := newTestTimeline(t, []*layout.IntervalEvent{ev})
