@@ -36,7 +36,7 @@ why the requirements outlived them. Restated:
 |---|---|---|---|
 | R1 | Live progress per running query (rows/bytes/memory, cancel) | 0050 | shipped — in-band progress headers consumed live (an incremental-header transport; Go's stock client only delivers the block at completion) into the status-bar and loading badges; cancel via the Run/Cancel toggle + server-side supersession |
 | R2 | Result batches to the glass as they arrive | 0050 | inline Arrow on the response shipped; incremental rendering open |
-| R3 | Terminal run accounting (profile events, peak memory, exceptions) | 0050 | decided — [ADR-0115](../adr/0115-query-observability-data-plane-strategy.md) (plane B) |
+| R3 | Terminal run accounting (profile events, peak memory, exceptions) | 0050 | shipped — the `queryrunsd` pipeline ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md), plane B) captures every terminal `query_log` event as a KindQueryRun fact: counters and peak memory as typed attributes, ProfileEvents fanned out per counter, exceptions with code and text, identity lifted from the SD7 stamp |
 | R4 | A facts substrate absorbing operational records | 0050 | shipped — `runtime.facts` (ADR-0026 §SD6), recordstore, DimensionStore in flight |
 | R5 | Result archival routed by shape, with provenance to source rows | 0050+0051 | Tier 1 shipped — a pin freezes the batch as-is into a per-pin ClickHouse table with the result's own schema plus a metadata row (content fingerprint, query/run/lane anchors); opening a pin is plain SQL. Ref-tuple lineage and Tier-2 weaving stay open (S6) |
 | R6 | Auditable query categorization; governed ingestion for data products | 0051 | open — rescoped from gate to affordance (below) |
@@ -95,13 +95,15 @@ appear in `system.query_log` — there is no parameters column and they are not
 recorded in the `Settings` map. Environment capture is therefore
 **client-side by necessity**:
 
-- parameter **names and declared types**: always recorded;
-- **values**: inline up to a size cap, content-hash beyond it (values can be
-  large — the URL channel exists precisely because they exceed comfortable
-  SQL-literal size; the client documents the URI-size ceiling);
 - an **environment fingerprint** (hash over the canonical name→value
-  binding) rides the `log_comment` stamp so runs with identical definitions
-  but different environments are distinguishable server-side from day one;
+  binding, SET-bound constants shadowing same-named signals exactly as
+  sent) rides the `log_comment` stamp — shipped, so runs with identical
+  definitions but different environments are distinguishable server-side
+  from day one;
+- parameter **names, declared types and values** (inline up to a size cap,
+  content-hash beyond it — values can be large; the URL channel exists
+  precisely because they exceed comfortable SQL-literal size): recorded at
+  the S5 interning slice;
 - interning of large or recurring values is deferred to the DimensionStore
   substrate.
 
@@ -116,9 +118,13 @@ the result it produced.
 One execution: a `runtime.facts` row (kind `QueryRun`), captured by the
 ADR-0115 pipeline, deterministic identity, stamped with
 `{run_id, app, lane, authored_fp, sent_fp, chain_fp, env_fp}` via
-`log_comment` so the server's own log is independently attributable. Every
-other entity hangs off the run by ref-tuple membership
-([ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md)).
+`log_comment` so the server's own log is independently attributable — all
+shipped. In the full model every other entity hangs off the run by
+ref-tuple membership
+([ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md));
+today the shipped entities correlate on the stamped anchors instead (the
+run's natural key is the `query_id`, pins carry `query_id`/`run_id`), and
+the ref-tuple lift lands with the weave slice.
 
 ### RunProfile — performance at three depths, three lifetimes
 
@@ -191,10 +197,10 @@ natural delivery vehicle for the interactive case.
 
 | plane | carries | mechanism | persistence |
 |---|---|---|---|
-| A — live | progress, cancel | HTTP progress headers → lane → node badge | none (glass state) |
-| B — record | terminal run + profile + identity | ADR-0115 pipeline (`queryrunsd`) | `runtime.facts` |
-| C — weave | results, tiered, lineage | pin/weave affordances; recordstore + ref tuples | resultsets + typed tables |
-| D — glass | history, run detail, per-def trends, resultset browser | play panels over plain SQL; "open as query" everywhere | reads B+C |
+| A — live | progress, cancel | in-band progress headers, read live by an incremental-header transport → lane state → status-bar and loading badges (shipped) | none (glass state) |
+| B — record | terminal run + profile + identity | ADR-0115 pipeline (`queryrunsd`) (shipped) | `runtime.facts` |
+| C — weave | results, tiered, lineage | Tier-1 pin affordance + browser (shipped: per-pin tables, `runtime.resultsets` metadata); weave = ref tuples + typed archival, at S6 | per-pin tables + metadata now; typed tables at S6 |
+| D — glass | history, run detail, per-def trends, resultset browser | play panels over plain SQL; "open as query" everywhere (shipped: History runs + detail + drill-downs, pin browser; open: per-definition trends) | reads B+C |
 | E — export | push to external consumers | NATS-core forwarding (ADR-0090 pattern) | at consumer trigger |
 
 ## Slices
