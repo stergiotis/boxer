@@ -148,6 +148,59 @@ WHERE edge_kind IN ('app-pub', 'app-sub')
 Edge patterns are the manifests' filter strings verbatim; overlap
 between a pub pattern and a sub pattern is not computed here.
 
+## Visualize: the play Network tab
+
+The layered-graph result panel
+([ADR-0129](../adr/0129-play-layered-graph-panel.md)) draws any query with
+an `edges` CTE (`source`/`target` columns) and an optional `vertices` CTE
+(`id`, `label`, `group`, `shape`) as a node-link diagram. The topology
+graph is a natural fit — this query draws the component graph with drift
+as colour (the `group` column is the origin set, so a declared-but-absent
+component is tinted differently from a running one) and each component's
+listeners as ellipses:
+
+```sql
+WITH
+  comp AS (
+    SELECT key,
+           arrayStringConcat(arraySort(groupArray(DISTINCT origin)), '+') AS origins
+    FROM keelson('topology_nodes')
+    WHERE kind = 'component'
+    GROUP BY key
+  ),
+  lst AS (
+    SELECT c.dst_key AS source, l.dst_key AS target
+    FROM keelson('topology_edges') AS l
+    INNER JOIN keelson('topology_edges') AS c
+      ON l.src_key = c.src_key AND l.host = c.host
+    WHERE l.edge_kind = 'proc-listens'
+      AND c.edge_kind = 'proc-in-component'
+  ),
+  vertices AS (
+    SELECT key AS id, substring(key, 11) AS label, origins AS `group`, 'box' AS shape
+    FROM comp
+    UNION ALL
+    SELECT DISTINCT target AS id, substring(target, 6) AS label, 'listener' AS `group`, 'ellipse' AS shape
+    FROM lst
+  ),
+  edges AS (
+    SELECT src_key AS source, dst_key AS target, 'needs' AS label
+    FROM keelson('topology_edges')
+    WHERE edge_kind = 'component-needs'
+    UNION ALL
+    SELECT source, target, 'listens' AS label
+    FROM lst
+  )
+SELECT * FROM edges
+```
+
+Point play at the introspection endpoint first (the toolbar's Endpoint →
+"Keelson introspection" preset, or launch with `CLICKHOUSE_URL` set to the
+`/query` URL — that is the variable play reads, not `CLICKHOUSE_ENDPOINT`).
+The panel caps at a few hundred vertices, so keep raw `proc` nodes out of
+the drawing on a busy box — the query above deliberately collapses
+processes away, walking listeners straight to their component.
+
 ## Staleness
 
 The observed tables carry their provenance clocks — check them before
