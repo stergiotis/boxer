@@ -17,21 +17,25 @@ SoA columns plus generic `<Kind>BuildEntities` / `<Kind>FillFromArrow`
 helpers that bind to any leeway DML / RA via Go's type inference at the
 call site.
 
-The DTO model itself is not defined here. The `Plan`, the `lw:` tag
-grammar (`SplitLW`), per-field validation and assembly (`PlanBuilder`),
-the `MembershipChannel` enum, section grouping (`ComputeGroups`), and
-field-shape classification (`ClassifyBegin`) all live in the sibling
-[`mappingplan`](../../../mappingplan/) package. `marshallgen` is the go/ast
-front-end plus emitter over that model; the reflect-driven
-[`marshallreflect`](../marshallreflect/) is the other front-end and a
-runtime codec over the same model. The two front-ends share `mappingplan`
-and do not depend on each other.
+The DTO model itself is not defined here. The `Plan` and the
+`MembershipChannel` table live in [`mappingplan`](../../../mappingplan/); the
+`lw:` tag grammar (`SplitLW`), per-field validation and assembly
+(`PlanBuilder`), section grouping (`ComputeGroups`), and field-shape
+classification (`ClassifyBegin`) live in the sibling
+[`goplan`](../goplan/) toolkit, shared with the reflect front-end.
+`marshallgen` is the go/ast front-end plus emitter over that stack; the
+reflect-driven [`marshallreflect`](../marshallreflect/) is the other
+front-end and a runtime codec over the same stack. The two front-ends share
+`mappingplan` + `goplan` and do not depend on each other; the front-end
+**parity corpus** (`marshallreflect_test/parity_corpus_test.go`) gates their
+accept sets against each other mechanically.
 
 Schema-specific wiring (membership-id resolution, builder pools,
 Marshal / Unmarshal / bus-codec wrappers) lives behind a
-`WrapperEmitterI` hook the caller passes in. Pebble's `factswrapper`
-implements the hook for `runtime.facts`; anchor uses the bundled
-`NoOpWrapper`. The same generator drives both.
+`WrapperEmitterI` hook the caller passes in. The keelson facts target
+(`keelson/runtime/codec/factswrapper`) implements the hook for
+`runtime.facts`; anchor uses the bundled `NoOpWrapper`. The same generator
+drives both.
 
 ## Background
 
@@ -44,17 +48,28 @@ codec on top — given a DTO whose fields name memberships, it emits
 the per-row chain that drives the DML and the matching per-row read
 from the RA.
 
-The lift up to boxerstaging was motivated by (i) two consumer
+The lift into this repository was motivated by (i) two consumer
 schemas (`runtime.facts`, `anchor`) demonstrating the same emit
 shape works generically, and (ii) the wrapper / core split letting
 schema-coupled code live in the consumer instead of behind a
 target flag in the generator.
 
+**Who authors DTOs** is settled by
+[ADR-0113](../../../../../../doc/adr/0113-leeway-marshall-nested-primary-consolidation.md):
+humans hand-write simple DTOs and escalate via the nested attribute model;
+rich models are **generated**, and generators target the flat spellings —
+including the frozen escalation spellings (`:column`, `@membership`) — as
+their permanent IR (plain tags, no marker imports, compile-time safety moot
+for machine output). The full authoring reference is the
+[marshalling how-to](../../../../../../doc/howto/leeway-marshalling.md);
+this document explains how the generator works underneath it.
+
 ## How it works
 
 ### Inputs
 
-A DTO is a single struct in a single file. The grammar:
+A DTO is a single struct in a single file (plus any tuple / nested element
+structs it references, in the same file). The flat grammar:
 
 ```go
 type MyDTO struct {
@@ -79,8 +94,8 @@ optionally targeting a sub-column (`:<col>`, e.g. `u32Range:beginIncl`).
 ### Go-shape × flag matrix
 
 The DTO field's Go type plus the trailing lw: flags determine the
-wire shape. There are five disjoint cases, classified by
-`mappingplan.ClassifyBegin`:
+wire shape. There are four disjoint cases, classified by
+`goplan.ClassifyBegin`:
 
 | Go shape                    | Flags          | Wire shape                                | Per-attribute call            |
 |-----------------------------|----------------|-------------------------------------------|-------------------------------|
@@ -88,12 +103,12 @@ wire shape. There are five disjoint cases, classified by
 | `T`                         | `,unit`        | 1 attr · 1 val (HA section, single-slot)  | `BeginAttributeSingle(v)`     |
 | `Option[T]`                 | (Has guard)    | 0–1 attr · 1 val                          | per scalar above              |
 | `[]T` / `*roaring.Bitmap`   | —              | 1 attr · N vals                           | `BeginAttribute()` + `AddToContainerP(v)*N` |
-| `[]T` / `*roaring.Bitmap`   | `,explode`     | N attrs · 1 val                           | per-element `BeginAttribute(v)` |
-| `[]T` / `*roaring.Bitmap`   | `,explode,unit`| N attrs · 1 val (HA, single-slot)         | per-element `BeginAttributeSingle(v)` |
 
 The flag is the load-bearing signal — section names are not
-inspected. `,unit` alone on a multi-element shape and `,explode`
-alone on a scalar shape are rejected; everything else composes.
+inspected. `,unit` requires a scalar shape. The former N×1 shapes
+(`,explode` / `,explode,unit` — one attribute per element) were removed by
+ADR-0113 D1; the per-element spelling is a nested `[]Attr` section, whose
+emit reuses the tuple machinery below.
 
 ### Multi-sub-column sections (incl. mixed shapes)
 
@@ -112,12 +127,13 @@ classes ([ADR-0101](../../../../../../doc/adr/0101-leeway-marshall-mixed-shape-s
 
 Within each class the DTO declaration order must match the schema's
 column order — the same positional contract the all-scalar tuple
-already carried. With S ≥ 1 scalars the attribute always emits (empty
+already carried (the schema-generated named `Add` removes the hazard for
+hand-written DML). With S ≥ 1 scalars the attribute always emits (empty
 containers are legal, N = 0); an all-container tuple with every
 container empty is spliced, and its row decodes to nil slices. The
 read side pairs a direct accessor per scalar sub-column with an
 `iter.Seq` accessor per container sub-column. `Option[T]`,
-`*roaring.Bitmap`, `,unit`, `,explode`, consts and carrier channels
+`*roaring.Bitmap`, `,unit`, consts and carrier channels
 are rejected in such sections at plan time (`goplan.PlanBuilder.Finish`),
 so both front-ends and `marshallreflect.Validate` refuse the same DTOs.
 
@@ -125,12 +141,12 @@ so both front-ends and `marshallreflect.Validate` refuse the same DTOs.
 
 A static multi-sub-column section carries a **single** membership; a
 DTO needing MANY attributes in one section — each with its own
-membership — declares a **dynamic-membership tuple**
-([ADR-0103](../../../../../../doc/adr/0103-leeway-marshall-dynamic-membership-tuples.md)):
+membership(s) — declares a **dynamic-membership tuple**
+([ADR-0103](../../../../../../doc/adr/0103-leeway-marshall-dynamic-membership-tuples.md),
+extended by [ADR-0109](../../../../../../doc/adr/0109-leeway-marshall-multi-membership-ref-tuples.md)):
 a slice of a named element struct, tagged with the bare section name.
-The element struct spells one `@membership` field (string or []byte
-scalar; an explicit verbatim channel flag is mandatory) plus one value
-field per sub-column as `<section>:<column>`:
+The element struct spells **one or more** `@membership` fields plus one
+value field per sub-column as `<section>:<column>`:
 
 ```go
 type LabeledText struct {
@@ -143,32 +159,65 @@ Texts []LabeledText `lw:"text"` // N elements → N attributes
 ```
 
 Each element emits one attribute — the multi-sub-column call sequence
-above with `AddMembership<Verbatim>P(<element's membership field>)` —
-in slice order; the zip-length guard applies per element; an element
-always emits (no per-element splice) and zero elements emit zero
-attributes. The element struct must live in the DTO's file (the go/ast
-front-end resolves it there; a file may declare the DTO plus its tuple
+above with one `AddMembership…P` call per membership field — in slice
+order; the zip-length guard applies per element; an element always emits
+(no per-element splice) and zero elements emit zero attributes.
+
+A membership field is `string` / `[]byte` on a **verbatim** channel (the
+literal name embeds on the wire) or `uint64` on a **ref** channel — the id
+is carried **directly** per element, no `kindXxx` symbol and no lookup
+(ADR-0109). An element may declare several membership fields, possibly on
+heterogeneous channels, and a repeated `[]T` membership field carries N
+memberships on one attribute (the sole membership of its channel). Carrier
+channels are rejected inside a tuple — their identity is per-row carrier
+data, not an element field.
+
+The element struct must live in the DTO's file (the go/ast
+front-end resolves it there; a file may declare the DTO plus its
 element structs — the DTO is the one carrying the `_` kind field). The
-tuple owns its section exclusively, works at any sub-column count
-(S + C ≥ 1), and rejects ref/carrier channels — a ref membership is a
-compile-time `kindXxx` symbol `BuildEntities` cannot parameterise per
-element. The SoA column is the outer `[][]Elem` slice — jagged like
+tuple owns its section exclusively and works at any sub-column count
+(S + C ≥ 1). The SoA column is the outer `[][]Elem` slice — jagged like
 every `[][]T` container column, with a struct leaf, so within one row's
 attribute list the sub-column values are interleaved per element (AoS
 at attribute grain; the wire stays one Arrow array per physical
 sub-column, and columnar scans belong on the Arrow record, not on the
-staging `Columns`). `FillFromArrow`
-appends one element per (attribute, membership value) in wire order;
-`ReadRow` does not cover tuple kinds (like carriers and explode).
+staging `Columns`). `FillFromArrow` appends one element per attribute in
+wire order; `ReadRow` does not cover tuple kinds (like carriers and
+const-only kinds — `ReadRowSupported` names the reason).
+
+### Nested attribute sections
+
+The nested model
+([ADR-0113](../../../../../../doc/adr/0113-leeway-marshall-nested-primary-consolidation.md),
+the primary hand-authoring escalation surface) reaches the same machinery
+through types instead of tag spellings: an attribute struct's fields are
+classified into membership markers (`lw.Ref` / `lw.Verbatim` / …), scalar
+sub-columns, and container sub-columns; the *section field's* multiplicity
+(`S` / `option.Option[S]` / `[]S`) is the attributes-per-row cardinality.
+Static-membership nested sections and dynamic-membership `[]Attr` tuples
+both lower onto the tuple emit path above (`goplan.AddNestedSliceField` /
+`AddTupleSliceField` feed the same builder); an Optional section's SoA
+column decomposes into `<F>Val []S` + `<F>Has []bool`, mirroring the
+scalar-Option split.
+
+One deliberate front-end asymmetry: **entity-level value markers**
+(`lw.Single`, the lane types) ship in reflect only — this generator
+rejects them with a clear plan-time error (the top-level marker→plain
+bridge across SoA / `Append` / decode was attempted once and reverted, and
+with generation settled on the flat IR it is not planned). A codegen'd DTO
+spells those `,unit` / `,ct=`. The parity corpus records each asymmetry
+with its documentation reference.
 
 ### Membership channel
 
 Default `LowCardRef` emits a uint64 id via `AddMembershipLowCardRefP`;
-the id is declared as a package-level `kindXxx` variable (FactsWrapper
-resolves it from vdd in `init()`; NoOpWrapper assigns it as a const
-in declaration order). The `,verbatim` flag switches to
+the id is declared as a package-level `kindXxx` variable (the facts
+wrapper resolves it from `vdd` in `init()`; NoOpWrapper assigns it as a
+const in declaration order). The `,verbatim` flag switches to
 `AddMembershipLowCardVerbatimP([]byte("<membership-name>"))` — the
 literal name embeds directly on the wire and no kindXxx is declared.
+(`highCardVerbatim` survives only as a tuple `@membership` / nested /
+DML channel — its value-field spelling was removed by ADR-0113 D1.)
 A section's fields must agree on the channel; mixing is rejected
 because the read-side dispatch iterator type differs (`iter.Seq[uint64]`
 vs `iter.Seq[[]byte]`). The eight channels and their per-channel facts
@@ -188,20 +237,14 @@ carrier section is restricted to one such membership (a per-row identity
 cannot be matched against a fixed id on read).
 
 The value field takes the same Go-shape × flag matrix as any other field —
-scalar `T`, `option.Option[T]`, a container `[]T`, or `[]T,explode`
-(ADR-0008 OQ#4) — with one rule: **the carrier's multiplicity mirrors the
-attribute count.** Every shape except `,explode` emits one carrier per
-attribute and pairs with a scalar carrier (`marshalltypes.X`); `,explode`
-emits one attribute per element and pairs with a slice carrier
-(`[]marshalltypes.X`) zipped element-wise with the value slice. The
-carrier's slice-ness is its Go type, not a flag — `,explode` stays on the
-value field. `PlanBuilder.Finish` rejects a multiplicity mismatch, and the
-per-row `len(value) == len(carrier)` agreement is a marshal-time check
-(both are independent Go fields). `*roaring.Bitmap` is not accepted on a
-carrier channel — a bitmap has no stable element index to pair with a
-carrier slice. An empty container value emits no attribute, so its carrier
-is not on the wire (splice semantics; SD8's carrier-presence signal is per
-*emitted* attribute).
+scalar `T`, `option.Option[T]`, or a container `[]T` (ADR-0008 OQ#4) — and
+the carrier is always **scalar** (`marshalltypes.X`, one per attribute; the
+element-wise `[]marshalltypes.X` slice pairing was removed with `,explode`,
+ADR-0113 D1). `*roaring.Bitmap` is not accepted on a carrier channel. An
+empty container value emits no attribute, so its carrier is not on the wire
+(splice semantics; SD8's carrier-presence signal is per *emitted*
+attribute). The parametrized pair currently has no consumer and is parked
+under a re-arm trigger (ADR-0113 D5).
 
 ### Constants
 
@@ -214,7 +257,7 @@ by the schema's membership-spec declaration).
 
 Const fields still need a kindXxx symbol when the channel is ref:
 the wrapper's init() resolves the membership name through whatever
-registry it consults (pebble's FactsWrapper hits `vdd.Memb<Name>`),
+registry it consults (the facts wrapper hits `vdd.Memb<Name>`),
 so a const + ref pair requires the membership to be registered the
 same way a regular ref field does. Const + `,verbatim` skips the
 registry — the literal name embeds directly at the call site.
@@ -243,10 +286,19 @@ the interfaces.
 
 ## Invariants
 
+- **Byte-identity across producers.** For one DTO, `<Kind>BuildEntities`,
+  `marshallreflect.Marshal`, and a hand-written DML loop must emit equal
+  bytes (`array.RecordEqual` + Arrow IPC equality + cross-decode +
+  nested-vs-flat equal records), and every in-tree `.out.go` regenerates
+  byte-stable.
+- **Front-end parity is gated mechanically.** The parity corpus runs one
+  DTO set through `ParsePlan` and `PlanFor`, asserting identical
+  accept / reject and, where both accept, equal plans; a divergence
+  without a documentation citation fails.
 - **Splice semantics.** Empty `[]T` / `Option[T].Has=false` /
   empty `*roaring.Bitmap` produce zero attributes on the wire.
   Leeway has no "present-but-empty" non-scalar representation.
-- **No registry consulted during parsing.** Neither `mappingplan`'s
+- **No registry consulted during parsing.** Neither `goplan`'s
   grammar + validation (`SplitLW`, `PlanBuilder`) nor `marshallgen`'s
   go/ast front-end consult a membership registry. Membership-name typos,
   section / Go-type incompatibilities, and verbatim-vs-ref channel
@@ -260,33 +312,35 @@ the interfaces.
   section string is trusted verbatim; the Go compiler verifies the
   resulting `GetSection<X>()` call.
 - **One channel per section.** All fields targeting a section must
-  agree on `Verbatim`. The read-side decode iterates one channel and
+  agree on the channel. The read-side decode iterates one channel and
   switches on one value type (uint64 or []byte).
 - **AttrI carries no F-bounded `[Self]` parameter.** Per-attribute
   methods are P-variants (void); chain returns don't appear in the
   derived interfaces. EntityI's per-section constraint is
   `<Sec>Attr <Kind><Sec>AttrI` (non-recursive), not the F-bounded
   `<Sec>Attr <Kind><Sec>AttrI[<Sec>Attr, <Sec>Sec]` form.
-- **One membership per attribute on write.** Both
-  `marshallgen.<Kind>BuildEntities` and `marshallreflect.Marshal`
-  call `AddMembership*P` exactly once per attribute. The leeway
-  wire format permits more, but the codec writers never do.
+- **One membership per attribute on static-section write.** For static
+  sections both codecs call `AddMembership*P` exactly once per attribute.
+  Dynamic tuples legitimately carry several memberships per attribute —
+  one call per element membership field / repeated-membership element
+  (ADR-0109) — decoded by the dedicated tuple path.
 
 ## Read-side asymmetry between codegen and reflect
 
-The codegen-emitted `<Kind>FillFromArrow` uses an inline switch
-inside the membership loop, so if a single attribute happens to carry
-memberships for both `Foo` and `Bar`, the value is consumed once per
-matched DTO field — both `Foo`'s and `Bar`'s accumulators advance.
+For **static** sections, the codegen-emitted `<Kind>FillFromArrow` uses an
+inline switch inside the membership loop, so if a single attribute happens
+to carry memberships for both `Foo` and `Bar`, the value is consumed once
+per matched DTO field — both `Foo`'s and `Bar`'s accumulators advance.
 The reflect-driven `marshallreflect.Unmarshal` dispatches on the
 first matching membership and stops. Both behaviours produce the
-same result for codec-written wire (one membership per attribute, by
-the invariant above) but diverge for third-party producers of leeway-
-shaped data with multi-membership attributes. Codec-wire round-trip
-parity is preserved; cross-producer compatibility on multi-membership
-input is not. A fix path (split dispatch into "list all matched
-fields", consume value per match) is straightforward when a real
-consumer surfaces the need.
+same result for codec-written wire (one membership per static-section
+attribute, by the invariant above) but diverge for third-party producers
+of leeway-shaped data with multi-membership attributes on static
+sections. Codec-wire round-trip parity is preserved; cross-producer
+compatibility on such input is not. A fix path (split dispatch into
+"list all matched fields", consume value per match) is straightforward
+when a real consumer surfaces the need. (Tuple sections are unaffected —
+their decode path handles multi-membership attributes by design.)
 
 ## Trade-offs
 
@@ -318,7 +372,8 @@ consumer surfaces the need.
 
 ## Further reading
 
-- Model: [`mappingplan/`](../../../mappingplan/) — the shared DTO model both front-ends build on: `Plan`, the `lw:` grammar (`SplitLW`), `PlanBuilder` validation, the membership channels, section grouping, and field-shape classification.
-- Sibling: [`marshallreflect/`](../marshallreflect/) — runtime-reflection codec over the same `mappingplan.Plan` model.
-- Wrapper consumer: `keelson/runtime/codec/factswrapper/` — facts target.
-- Splice semantics: project-memory note `reference_leeway_splice_semantics.md` — empty non-scalars vanish on the wire (codec authors must emit 0 attributes for empty collections).
+- Authoring: [doc/howto/leeway-marshalling.md](../../../../../../doc/howto/leeway-marshalling.md) — the single recipe (simple subset, nested escalation, frozen flat spellings).
+- Decision record: [ADR-0113](../../../../../../doc/adr/0113-leeway-marshall-nested-primary-consolidation.md) — nested primary, the D1 cull, the generation-IR resolution.
+- Model: [`mappingplan/`](../../../mappingplan/) — the shared Plan IR + the membership channel table; [`goplan/`](../goplan/) — the shared grammar, `PlanBuilder` validation, grouping, and shape classification.
+- Sibling: [`marshallreflect/`](../marshallreflect/) — runtime-reflection codec over the same stack.
+- Wrapper consumer: `keelson/runtime/codec/factswrapper/` — the facts target.

@@ -25,10 +25,20 @@
 // recording mock DML and (transitively) against the typed DMLs that
 // already round-trip in the per-kind keelson codec test suites.
 //
-// The membership-id resolver is pluggable via LookupI — pebble's
+// The membership-id resolver is pluggable via LookupI — the keelson
 // facts target wraps vdd.KeelsonHrNkRegistry; an anchor or schema-
 // agnostic target can use NoLookup if every membership in its DTOs
 // carries `,verbatim`.
+//
+// The authoring surface — the flat simple subset, the nested attribute
+// model (the primary escalation surface), and the frozen flat escalation
+// spellings — is documented in doc/howto/leeway-marshalling.md; ADR-0113
+// is the decision record. A nested DTO parses to the same mappingplan.Plan
+// and drives exactly the DML / RA contracts below. Entity-level value
+// markers (lw.Single, the lane types) ship in this front-end only —
+// marshallgen rejects them with a clear error; the parity corpus
+// (marshallreflect_test/parity_corpus_test.go) records each deliberate
+// accept-set asymmetry.
 //
 // # Round-trip recipe
 //
@@ -77,7 +87,7 @@
 // the setter's argument type (strict 1:1, no conversion).
 //
 // Section frame, on the Sec from GetSection<X>:
-//   - BeginAttribute(v) Attr — scalar value (ShapeScalarBegin / exploded element).
+//   - BeginAttribute(v) Attr — scalar value (ShapeScalarBegin).
 //   - BeginAttributeSingle(v) Attr — scalar value with `,unit`.
 //   - BeginAttribute() Attr — container open, no args (default multi shape).
 //   - BeginAttribute(s1, s2, …) Attr — multi-sub-column section: one arg per
@@ -92,18 +102,19 @@
 // must have equal length per row (co-containers zip element-wise; checked at
 // marshal time). With at least one scalar sub-column the attribute always
 // emits (empty containers are legal, N = 0); an all-container tuple with every
-// container empty is spliced. Option / roaring / `unit` / `explode` / const /
+// container empty is spliced. Option / roaring / `unit` / const /
 // carrier channels are rejected at plan time in such sections.
 //
-// Dynamic-membership tuple contract (ADR-0103): a slice-of-struct field maps
-// MANY attributes into ONE section, each element carrying its own membership —
-// the shape the static grammar rejects as "multi-sub-column section with
-// multiple memberships". The outer field's tag is the bare section name; the
-// element struct (a named struct in the DTO's package; for marshallgen, in the
-// DTO's file) declares exactly one `@membership` field — a string or []byte
-// scalar with a mandatory verbatim channel flag — plus one value field per
-// sub-column, spelled `<section>:<column>` (`,ct=` composes; column defaults
-// to "value"):
+// Dynamic-membership tuple contract (ADR-0103, extended by ADR-0109): a
+// slice-of-struct field maps MANY attributes into ONE section, each element
+// carrying its own membership(s) — the shape the static grammar rejects as
+// "multi-sub-column section with multiple memberships". The outer field's tag
+// is the bare section name; the element struct (a named struct in the DTO's
+// package; for marshallgen, in the DTO's file) declares ONE OR MORE
+// `@membership` fields — string / []byte on a verbatim channel (the literal
+// name), or uint64 on a ref channel (the id carried DIRECTLY per element, no
+// kindXxx and no lookup) — plus one value field per sub-column, spelled
+// `<section>:<column>` (`,ct=` composes; column defaults to "value"):
 //
 //	type LabeledText struct {
 //	    Label      string   `lw:"@membership,verbatim"` // per-attribute membership
@@ -114,18 +125,21 @@
 //	Texts []LabeledText `lw:"text"` // N elements → N attributes
 //
 // Elements emit in slice order, one attribute each: the multi-sub-column call
-// sequence with the membership taken from the element's field. The zip rule
-// applies per element; an element always emits (its presence in the slice is
-// the signal — there is no per-element splice), and zero elements emit zero
-// attributes. Ref and carrier channels are rejected (a ref membership is a
-// compile-time kindXxx symbol the generated BuildEntities cannot parameterise
-// per element); the section belongs to the tuple field exclusively — no other
-// field, const or second tuple may target it. On read, every attribute of the
-// section yields one element per membership value it carries (codec-written
-// wire carries exactly one), in wire order; zero attributes decode to a nil
+// sequence with one AddMembership…P call per element membership field. Several
+// membership fields — possibly on heterogeneous channels — put several
+// memberships on one attribute; a repeated `[]T` membership field is the sole
+// membership of its channel. The zip rule applies per element; an element
+// always emits (its presence in the slice is the signal — there is no
+// per-element splice), and zero elements emit zero attributes. Carrier
+// channels are rejected (their identity is per-row carrier data, not an
+// element field); the section belongs to the tuple field exclusively — no
+// other field, const or second tuple may target it. On read, each attribute
+// decodes to one element in wire order; zero attributes decode to a nil
 // slice. The multi-sub-column shape rejections (Option / roaring / unit /
-// explode / const) apply to element fields identically. Membership names
-// starting with `@` are reserved in top-level tags.
+// const) apply to element fields identically. Membership names starting with
+// `@` are reserved in top-level tags. The nested model's `[]Attr` sections
+// (membership markers lw.Ref / lw.Verbatim as typed fields) lower onto this
+// same contract.
 //
 // Attribute frame, on the Attr from a Begin call:
 //   - AddToContainerP(v) — append one container value.
@@ -153,7 +167,7 @@
 // Attribute reader, per section:
 //   - GetNumberOfAttributes(e) int64 — attribute count for entity e.
 //   - GetAttrValueValue(e, a) iter.Seq[T] — container / multi values (also the
-//     scalar or exploded-element single value).
+//     scalar shape's single value, returned as T).
 //   - GetAttrValueSingleOrDefault(e, a) T — single value for HA / single-slot shapes.
 //   - GetAttrValue<Col>(e, a) T — multi-sub-column scalar sub-column accessor;
 //     Col = UpperFirst(sub-column).

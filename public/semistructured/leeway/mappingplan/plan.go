@@ -58,7 +58,7 @@ type Plan struct {
 // HasNonConstField reports whether the plan declares at least one
 // non-const tagged field. It is the exact condition under which the
 // generated codec uses the eb package (the FillFromArrow occurrence /
-// carrier-count checks and the BuildEntities explode-length check) — a
+// carrier-count checks) — a
 // plain-only or const-only DTO has none, so eb must not be imported.
 // Both marshallgen (core import gating) and codegen wrappers (deciding
 // whether to supply eb themselves) read this so they cannot disagree.
@@ -497,7 +497,7 @@ type TaggedField struct {
 	LWSection    string // second comma-segment ("" if author omitted; section[:column])
 	LWColumn     string // sub-column suffix after ':' (e.g. "beginIncl" / "endExcl") or ""
 
-	Flags FieldFlags // trailing comma-separated flag tokens (unit / explode / verbatim / const)
+	Flags FieldFlags // trailing comma-separated flag tokens (unit / channel / const= / ct=)
 
 	// IsConst marks fields that emit a fixed string value on every row
 	// rather than reading from a Go DTO field. Declared on `_` blank-

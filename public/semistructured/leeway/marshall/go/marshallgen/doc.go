@@ -17,4 +17,12 @@
 // — lives behind WrapperEmitterI hooks the caller passes in. NoOpWrapper
 // produces the schema-agnostic surface only; consumers layer their own
 // wrapper for full-stack emit.
+//
+// The authoring grammar — the flat simple subset, the nested attribute
+// model, and the frozen flat escalation spellings that DTO generators
+// target as their IR — is documented in doc/howto/leeway-marshalling.md
+// (ADR-0113 is the decision record); EXPLANATION.md in this directory
+// explains the emitter. Entity-level value markers (lw.Single, lanes) are
+// reflect-only — this front-end rejects them with a clear error, an
+// asymmetry recorded by the parity corpus.
 package marshallgen

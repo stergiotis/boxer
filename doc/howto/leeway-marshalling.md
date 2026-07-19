@@ -59,13 +59,13 @@ They round-trip through each other. Author the DTO once; pick the driver per use
   leeway packages fail to compile with misleading "undefined" errors
   ([AGENTS.md §Build & test](../../AGENTS.md)).
 - **A leeway schema with generated DML + RA classes** — e.g. `anchor`, or
-  pebble's `runtime.facts`. The codec *drives* those builder/reader classes; it
+  keelson's `runtime.facts`. The codec *drives* those builder/reader classes; it
   does not define the schema. A DTO field names a membership and a section that
   the schema already declares; the Go compiler (codegen) or `Validate` (reflect)
   checks the binding.
 - **A membership resolver for ref channels** (the default channel). codegen
   declares a package-level `kindXxx` symbol per ref membership and lets a
-  `WrapperEmitterI` fill it (pebble's `factswrapper` resolves it from `vdd`);
+  `WrapperEmitterI` fill it (keelson's `factswrapper` resolves it from `vdd`);
   reflect takes a `LookupI` at call time — or `NoLookup{}` when every membership
   in the DTO carries `,verbatim`.
 - **The `lw` marker package** (nested model only) — channel markers (`lw.Ref`,
@@ -519,7 +519,7 @@ Run the generator over the DTO source file:
 ```
 
 `--target` picks the `WrapperEmitterI` (`anchor` = `NoOpWrapper`, schema-agnostic
-surface only; `facts` = pebble's `factswrapper`, adds `kindXxx` resolution +
+surface only; `facts` = keelson's `factswrapper`, adds `kindXxx` resolution +
 `Marshal` / `Unmarshal` / bus codec). It writes `mydto.out.go` next to the source
 carrying:
 

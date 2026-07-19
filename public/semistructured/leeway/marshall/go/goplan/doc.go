@@ -13,10 +13,13 @@
 // What a new front-end — a sibling of marshallgen (go/ast) and marshallreflect
 // (reflect) — builds on:
 //
-//   - SplitLW / ParsedLWTag: the lw: tag grammar.
-//   - PlanBuilder (NewPlanBuilder, AddField, AddUnderscoreField, Finish): the
-//     per-field validation + whole-DTO assembly shared by both front-ends, so
-//     the go/ast and reflect paths cannot drift on what they accept.
+//   - SplitLW / ParsedLWTag and the tuple-grammar parsers (SplitTupleOuterLW,
+//     SplitTupleElemLW): the lw: tag grammar, one shared flag vocabulary.
+//   - PlanBuilder (NewPlanBuilder; AddField / AddUnderscoreField /
+//     AddTupleSliceField / AddNestedSliceField; Finish): the per-field
+//     validation + whole-DTO assembly shared by both front-ends, so the
+//     go/ast and reflect paths cannot drift on what they accept — the parity
+//     corpus (marshallreflect_test) gates the two accept sets mechanically.
 //   - FieldShape: the front-end-agnostic value-type classification a front-end
 //     fills in per field.
 //   - ScalarCanonicalForGoType: the Go→canonical half of the classifiers.
