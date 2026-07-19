@@ -183,12 +183,18 @@ from the result's column names:
   columns are grouped by name prefix into pinned / relations / data / meta sections.
 
 Above either card, when the selected row carries one or more **datetime attributes**,
-a compact **timeline** plots them on a shared UTC axis — a numbered flag per attribute,
-with a legend beneath naming each flag and its value (hover a flag for the same
-`name: value`). It recognises `DateTime64` and `Date` columns, and leeway time
+a compact **timeline** plots them on a shared UTC axis. Each attribute is one legend
+entry — a coloured swatch, its name, and a value summary; on the axis:
+
+- a scalar timestamp, or each item of a datetime array, is a numbered flag (all of
+  one attribute's items share its number and colour; hover a flag for its value);
+- a leeway begin/end range pair — a co-section such as `tv:timeRange:beginIncl` +
+  `tv:timeRange:endExcl` — is drawn as interval bars on a lane labelled with the
+  attribute.
+
+It recognises `DateTime64` / `Date` columns and arrays of them, and leeway time
 attributes (`tv:time:` and the entity timestamp, which often arrive as whole-second
-integers). A row with no such attribute shows no timeline, and array-valued time
-attributes aren't plotted.
+integers). A row with no datetime attribute shows no timeline.
 
 Before a query it reads *Run a query, then select a row to see its detail.* When a
 result lands the first row is selected automatically, so the card populates straight
