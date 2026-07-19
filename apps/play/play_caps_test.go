@@ -153,7 +153,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	// Three declared Caps: fs dialog + fs handle wildcard +
 	// chlocalbroker pool for the time-range evaluator.
-	require.Len(t, m.Caps, 3)
+	require.Len(t, m.Caps, 4)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)

@@ -331,6 +331,19 @@ func NewCommand() *cli.Command {
 			if appletCount > 0 {
 				log.Info().Int("applets", appletCount).Msg("sqlapplet: manifests minted")
 			}
+			// ADR-0132 Update "O4": the runtime applet store — loads
+			// persisted applets (minted after the committed books, which
+			// win slug collisions) and serves `applet.store.save` so play
+			// can author applets at runtime. Best-effort, never blocks
+			// boot.
+			if bus != nil {
+				appletStore, storeErr := sqlapplet.StartStore(bus, log.Logger)
+				if storeErr != nil {
+					log.Warn().Err(storeErr).Msg("sqlapplet: applet store unavailable")
+				} else {
+					defer appletStore.Stop()
+				}
+			}
 
 			launchApps, resolveErr := resolveLaunchSql(context.String("launch"))
 			if resolveErr != nil {

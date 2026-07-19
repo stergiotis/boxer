@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 // appletIdPrefix is the synthetic-id namespace minted manifests live under
@@ -167,13 +168,24 @@ func ParseBook(bookID string, fsys fs.FS) (defs []*AppletDef, errs []error) {
 	return
 }
 
-// parseDoc parses one document. A nil def with a nil error is a prose page.
+// parseDoc parses one book document. A nil def with a nil error is a prose
+// page.
 func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef, err error) {
 	src, ok := book.Source(info.Path)
 	if !ok {
 		err = eh.Errorf("sqlapplet: %s/%s: source unavailable", bookID, info.Path)
 		return
 	}
+	def, err = ParseDocSource(bookID, info.Path, src)
+	return
+}
+
+// ParseDocSource parses one applet document from raw markdown — the shared
+// core behind the committed-book path and the runtime store's save gate
+// (ADR-0132 Update "O4"): both submit the identical document shape and are
+// judged by the identical rules. A nil def with a nil error is a prose
+// page.
+func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err error) {
 	fences := scanFences(src)
 	var primary, bands *fence
 	for i := range fences {
@@ -191,37 +203,33 @@ func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef
 			}
 		case "bands":
 			if bands != nil {
-				err = eh.Errorf("sqlapplet: %s/%s: more than one `sql bands` fence", bookID, info.Path)
+				err = eh.Errorf("sqlapplet: %s/%s: more than one `sql bands` fence", bookID, path)
 				return
 			}
 			bands = f
 		default:
-			err = eh.Errorf("sqlapplet: %s/%s: unknown fence role %q (known: bands)", bookID, info.Path, f.Role)
+			err = eh.Errorf("sqlapplet: %s/%s: unknown fence role %q (known: bands)", bookID, path, f.Role)
 			return
 		}
 	}
 	if primary == nil {
 		if bands != nil {
-			err = eh.Errorf("sqlapplet: %s/%s: aux fence without a buffer (no role-less `sql` fence)", bookID, info.Path)
+			err = eh.Errorf("sqlapplet: %s/%s: aux fence without a buffer (no role-less `sql` fence)", bookID, path)
 		}
 		// No fences at all: a prose page, not an applet.
 		return
 	}
 	sql := strings.TrimSpace(primary.Text)
 	if sql == "" {
-		err = eh.Errorf("sqlapplet: %s/%s: empty sql buffer", bookID, info.Path)
+		err = eh.Errorf("sqlapplet: %s/%s: empty sql buffer", bookID, path)
 		return
 	}
-	slug := strings.TrimSuffix(info.Path, ".md")
+	slug := strings.TrimSuffix(path, ".md")
 	if !slugPattern.MatchString(slug) {
-		err = eh.Errorf("sqlapplet: %s/%s: slug %q must match %s", bookID, info.Path, slug, slugPattern.String())
+		err = eh.Errorf("sqlapplet: %s/%s: slug %q must match %s", bookID, path, slug, slugPattern.String())
 		return
 	}
-	doc, _, ok := book.Doc(info.Path)
-	if !ok {
-		err = eh.Errorf("sqlapplet: %s/%s: doc unavailable", bookID, info.Path)
-		return
-	}
+	doc := markdown.Parse(src)
 	fm := map[string]any{}
 	if kv := doc.Frontmatter(); kv != nil {
 		maps.Insert(fm, kv.IteratePairs())
@@ -231,7 +239,7 @@ func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef
 	// explicit authoring decision.
 	title, _ := fm["title"].(string)
 	if title == "" {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `title` is required", bookID, info.Path)
+		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `title` is required", bookID, path)
 		return
 	}
 	def = &AppletDef{
@@ -246,15 +254,15 @@ func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef
 	if icon, has := fm["icon"]; has {
 		s, isStr := icon.(string)
 		if !isStr {
-			err = eh.Errorf("sqlapplet: %s/%s: frontmatter `icon` must be a string", bookID, info.Path)
+			err = eh.Errorf("sqlapplet: %s/%s: frontmatter `icon` must be a string", bookID, path)
 			return
 		}
 		def.Icon = s
 	}
-	if def.Endpoint, err = parseEndpoint(bookID, info.Path, fm["endpoint"]); err != nil {
+	if def.Endpoint, err = parseEndpoint(bookID, path, fm["endpoint"]); err != nil {
 		return
 	}
-	if def.Tabs, err = parseTabs(bookID, info.Path, fm["tabs"]); err != nil {
+	if def.Tabs, err = parseTabs(bookID, path, fm["tabs"]); err != nil {
 		return
 	}
 	// The §SD5 class, computed once per corpus at parse time. An
@@ -262,12 +270,12 @@ func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef
 	// surprise — the conservative direction with the corpus as the gate.
 	pr, perr := nanopass.Parse(sql)
 	if perr != nil {
-		err = eh.Errorf("sqlapplet: %s/%s: buffer does not parse (cannot classify, ADR-0132 §SD5/§SD6): %w", bookID, info.Path, perr)
+		err = eh.Errorf("sqlapplet: %s/%s: buffer does not parse (cannot classify, ADR-0132 §SD5/§SD6): %w", bookID, path, perr)
 		return
 	}
 	class, _, cerr := analysis.ClassifyQuerySecurity(pr)
 	if cerr != nil {
-		err = eh.Errorf("sqlapplet: %s/%s: classify: %w", bookID, info.Path, cerr)
+		err = eh.Errorf("sqlapplet: %s/%s: classify: %w", bookID, path, cerr)
 		return
 	}
 	def.Class = class

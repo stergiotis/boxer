@@ -380,6 +380,15 @@ type PlayApp struct {
 	// user-typed string (the multiMatch* / multiFuzzyMatch* families).
 	affordanceTestInput string
 
+	// Save-applet drafts + async reply line (play_save_applet.go, the
+	// ADR-0132 "O4" authoring seam). The status is written from the reply
+	// goroutine, hence the mutex.
+	saveAppletSlug   string
+	saveAppletTitle  string
+	saveAppletIcon   string
+	saveAppletMu     sync.Mutex
+	saveAppletStatus string
+
 	// toolbarMinimal attenuates the top bar to the applet surface
 	// (ADR-0132 §SD3): Load .sql, the endpoint switcher, the prelude and
 	// conditions toggles disappear, and a "Copy SQL" escape hatch appears
@@ -1346,6 +1355,13 @@ func (inst *PlayApp) renderTopBar() {
 			}
 		}
 
+		// Save applet (ADR-0132 "O4") — authoring surface only: attenuated
+		// windows are consumers, and the request needs the bus.
+		if inst.bus != nil && !inst.toolbarMinimal {
+			c.Separator().Vertical().Send()
+			inst.renderSaveAppletMenu()
+		}
+
 		if inst.client != nil && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			inst.renderEndpointSwitcher()
@@ -2183,7 +2199,24 @@ func (inst *PlayApp) renderResultsFailed() {
 
 func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, selectedRow int64, emit SignalEmitterI) {
 	ids := inst.ids
+	// visCols is the ordered set of Arrow columns to render: every column for a
+	// non-leeway result, or the value + backbone columns plus whichever support /
+	// membership columns the options bar reveals for a leeway result. egui_table
+	// column positions are 1-based after the "#" selector, so table position p
+	// renders visCols[p-1]. Button ids key on the Arrow column index (not the
+	// display position) so revealing/hiding a column never shifts another
+	// column's cell identity.
+	visCols := inst.visibleTableCols(schema)
 	totalRows := rec.NumRows()
+
+	// egui_table draws cell content flush to the cell edge ("Does not add any
+	// margins to cells" — egui_table's own docs say to add them yourself). We
+	// lead every header and body cell with a horizontal AddSpace so content
+	// isn't jammed against the gridline or the neighbouring column's header
+	// type string. The cell ui is laid out left-to-right, so AddSpace advances
+	// the cursor along the row → a left inset. ensureColWidths reserves the
+	// same amount so the inset doesn't eat into a column's fitted width.
+	cellPadX := styletokens.PaddingTight(inst.density)
 	if totalRows > numRows {
 		totalRows = numRows
 	}
@@ -2198,26 +2231,6 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		pageStart = pageEnd
 	}
 	displayRows := pageEnd - pageStart
-
-	// visCols is the ordered set of Arrow columns to render: every column for a
-	// non-leeway result, or the value + backbone columns plus whichever support /
-	// membership columns the options bar reveals for a leeway result, minus any
-	// tagged section the hide-empty-sections toggle drops for having no
-	// attribute on this page (needs pageStart/pageEnd, hence computed above).
-	// egui_table column positions are 1-based after the "#" selector, so table
-	// position p renders visCols[p-1]. Button ids key on the Arrow column index
-	// (not the display position) so revealing/hiding a column never shifts
-	// another column's cell identity.
-	visCols := inst.visibleTableCols(rec, schema, pageStart, pageEnd)
-
-	// egui_table draws cell content flush to the cell edge ("Does not add any
-	// margins to cells" — egui_table's own docs say to add them yourself). We
-	// lead every header and body cell with a horizontal AddSpace so content
-	// isn't jammed against the gridline or the neighbouring column's header
-	// type string. The cell ui is laid out left-to-right, so AddSpace advances
-	// the cursor along the row → a left inset. ensureColWidths reserves the
-	// same amount so the inset doesn't eat into a column's fitted width.
-	cellPadX := styletokens.PaddingTight(inst.density)
 
 	// Leading "#" selector column (click to select row) + the data columns.
 	c.EtColumn(44.0).Resizable(false).Send()

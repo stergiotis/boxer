@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -181,6 +182,11 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Pattern:   chlocalbroker.SubjectExecPrefix + timerangepicker.PoolName,
 				Direction: app.CapDirectionPub,
 				Reason:    "evaluate user time-range expressions (ADR-0016 Phase 4)",
+			},
+			{
+				Pattern:   appletstore.SubjectSave,
+				Direction: app.CapDirectionPub,
+				Reason:    "save the buffer as a runtime applet (ADR-0132 O4)",
 			},
 		},
 		// PersistedKeys → host auto-injects
