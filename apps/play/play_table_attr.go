@@ -430,7 +430,7 @@ func (inst *PlayApp) renderAttrTable(rec arrow.RecordBatch, schema *arrow.Schema
 	slice := rec.NewSlice(pageStart, pageEnd)
 	defer slice.Release()
 
-	visCols := inst.visibleTableCols(schema)
+	visCols := inst.visibleTableCols(rec, schema, pageStart, pageEnd)
 	taggedExtra, plainExtra := buildAttrExtras(classes, visCols)
 	sink := &inst.attrSink
 	sink.reset(slice, pageStart, taggedExtra, plainExtra, visCols, schema.NumFields())

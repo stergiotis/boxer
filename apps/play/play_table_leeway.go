@@ -2,6 +2,7 @@ package play
 
 import (
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -25,15 +26,16 @@ const attrSelFrameSalt uint64 = 1 << 40
 var attrSelFill = color.Hex((styletokens.AccentDefault.AsHex() & 0xffffff00) | 0x59)
 
 // play_table_leeway.go carries the Table pane's leeway display modes (ADR-0097
-// Update): a collapsible options bar above the grid whose three orthogonal
+// Update): a collapsible options bar above the grid whose four orthogonal
 // controls reshape the same result through leeway's own structure —
 //
 //   - row granularity: one grid row per DB row (the columnar grid, selection
 //     intact) vs one grid row per tagged-value attribute (the un-pivoted walk);
 //   - reveal support columns (the machine-readable card/len structure);
-//   - reveal membership columns (the set-membership encoding).
+//   - reveal membership columns (the set-membership encoding);
+//   - hide tagged sections with no attribute anywhere on the current page.
 //
-// The classification that drives all three comes from the CardDriver
+// The classification that drives all four comes from the CardDriver
 // (ColumnClasses) — the app's single per-schema leeway reconstruction point —
 // so the bar and both renderers agree on what each physical column is. A
 // non-leeway result (aggregation, join, arbitrary SQL) is not classifiable, so
@@ -60,9 +62,10 @@ const (
 // grid, so a result that has just become leeway-shaped renders the same columns
 // it always did minus the machine-readable encoding detail.
 type tableDisplayOpts struct {
-	granularity    tableRowGranularityE
-	showSupport    bool // reveal the card / len / cusum support columns
-	showMembership bool // reveal the ref / verbatim / parametrized membership columns
+	granularity       tableRowGranularityE
+	showSupport       bool // reveal the card / len / cusum support columns
+	showMembership    bool // reveal the ref / verbatim / parametrized membership columns
+	hideEmptySections bool // suppress tagged sections with no attribute on the current page
 }
 
 // leewayColumnClasses returns the per-Arrow-column leeway classification for the
@@ -79,13 +82,16 @@ func (inst *PlayApp) leewayColumnClasses(schema *arrow.Schema) []streamreadacces
 }
 
 // visibleTableCols returns the Arrow column indices the per-DB-row grid should
-// show, in schema order, honouring the support/membership reveal toggles. For a
-// non-leeway result every column is shown (unchanged from the plain grid). For a
-// leeway result, value and backbone columns always show; support and membership
-// columns show only when their toggle is on; and a column the classifier did not
-// recognise (an implicit `_`-column, a projected-in expression) is treated as
-// data and shown.
-func (inst *PlayApp) visibleTableCols(schema *arrow.Schema) []int {
+// show, in schema order, honouring the support/membership reveal toggles and
+// the hide-empty-sections toggle. For a non-leeway result every column is
+// shown (unchanged from the plain grid). For a leeway result, value and
+// backbone columns always show, unless hide-empty-sections is on and their
+// tagged section has no attribute anywhere in [pageStart, pageEnd); support and
+// membership columns additionally require their own reveal toggle. A column
+// the classifier did not recognise (an implicit `_`-column, a projected-in
+// expression) is treated as data and always shown. rec and the page bounds
+// (absolute row indices) are only consulted when hide-empty-sections is on.
+func (inst *PlayApp) visibleTableCols(rec arrow.RecordBatch, schema *arrow.Schema, pageStart, pageEnd int64) []int {
 	ncols := schema.NumFields()
 	classes := inst.leewayColumnClasses(schema)
 	if classes == nil {
@@ -95,19 +101,26 @@ func (inst *PlayApp) visibleTableCols(schema *arrow.Schema) []int {
 		}
 		return vis
 	}
-	classOf := make(map[int]streamreadaccess.ColumnRoleClassE, len(classes))
+	classOf := make(map[int]streamreadaccess.ColumnClass, len(classes))
 	for _, cl := range classes {
-		classOf[cl.ArrowIdx] = cl.Class
+		classOf[cl.ArrowIdx] = cl
 	}
 	opts := inst.tableOpts
+	var emptySections map[string]bool
+	if opts.hideEmptySections {
+		emptySections = emptyTaggedSections(classes, rec, pageStart, pageEnd)
+	}
 	vis := make([]int, 0, ncols)
 	for col := range ncols {
-		cls, classified := classOf[col]
+		cl, classified := classOf[col]
 		if !classified {
 			vis = append(vis, col) // unclassified → data, always shown
 			continue
 		}
-		switch cls {
+		if !cl.Backbone() && emptySections[string(cl.SectionName)] {
+			continue
+		}
+		switch cl.Class {
 		case streamreadaccess.ColumnRoleClassValue:
 			vis = append(vis, col)
 		case streamreadaccess.ColumnRoleClassSupport:
@@ -121,6 +134,69 @@ func (inst *PlayApp) visibleTableCols(schema *arrow.Schema) []int {
 		}
 	}
 	return vis
+}
+
+// emptyTaggedSections returns the tagged section names with no attribute
+// instance anywhere in rows [lo, hi) of rec — sections whose columns would
+// render entirely blank on the current page. Only tagged sections are
+// considered: a plain/backbone column carries exactly one attribute per
+// entity by construction (Driver.drivePlainSection always drives nAttrs=1),
+// so it is never "empty" in this sense, and hiding it would just discard a
+// backbone value that happens to be NULL on this page.
+//
+// leeway's physical mapping wraps every tagged column in List/LargeList
+// regardless of scalar/array/set shape (streamreadaccess/EXPLANATION.md), so
+// a row's outer list length is that entity's attribute count for the
+// section — 0 when the entity lacks the tag — and every value column in a
+// section shares that same outer length. So checking any one Value-class
+// column per section suffices; the first one found in classes is used.
+func emptyTaggedSections(classes []streamreadaccess.ColumnClass, rec arrow.RecordBatch, lo, hi int64) map[string]bool {
+	rep := make(map[string]int, len(classes))
+	for _, cl := range classes {
+		if cl.Class != streamreadaccess.ColumnRoleClassValue || cl.Backbone() {
+			continue
+		}
+		name := string(cl.SectionName)
+		if _, ok := rep[name]; !ok {
+			rep[name] = cl.ArrowIdx
+		}
+	}
+	empty := make(map[string]bool, len(rep))
+	for name, arrowIdx := range rep {
+		if !sectionHasAttrInRange(rec.Column(arrowIdx), lo, hi) {
+			empty[name] = true
+		}
+	}
+	return empty
+}
+
+// sectionHasAttrInRange reports whether a tagged value column carries at
+// least one attribute instance across rows [lo, hi) of arr — the outer
+// List/LargeList length at each row is the entity's attribute count (see
+// emptyTaggedSections). Any other Arrow shape is treated as always present:
+// this codebase's leeway DDL never produces a non-list tagged value column,
+// so hitting one here means the classification doesn't match the physical
+// layout as expected — safer to show the column than to guess it away.
+func sectionHasAttrInRange(arr arrow.Array, lo, hi int64) bool {
+	switch a := arr.(type) {
+	case *array.List:
+		for row := lo; row < hi; row++ {
+			beg, end := a.ValueOffsets(int(row))
+			if end > beg {
+				return true
+			}
+		}
+	case *array.LargeList:
+		for row := lo; row < hi; row++ {
+			beg, end := a.ValueOffsets(int(row))
+			if end > beg {
+				return true
+			}
+		}
+	default:
+		return true
+	}
+	return false
 }
 
 // renderTableOptionsBar draws the collapsible leeway display-mode bar above the
@@ -163,6 +239,12 @@ func (inst *PlayApp) renderTableOptionsBar() {
 			c.Checkbox(ids.PrepareStr("table-show-membership"),
 				inst.tableOpts.showMembership, "Membership columns").
 				SendRespVal(&inst.tableOpts.showMembership)
+			c.AddSpace(24)
+			for range c.HoverText("Drops a tagged section once none of its attributes appear on the current page — which sections that is can change as you page through.").KeepIter() {
+				c.Checkbox(ids.PrepareStr("table-hide-empty-sections"),
+					inst.tableOpts.hideEmptySections, "Hide empty sections").
+					SendRespVal(&inst.tableOpts.hideEmptySections)
+			}
 		}
 	}
 }
