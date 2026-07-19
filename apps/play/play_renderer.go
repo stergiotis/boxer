@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -596,13 +597,39 @@ func (inst *PlayApp) setLoadErr(s string) {
 	inst.pickMu.Unlock()
 }
 
+// playInstanceSeq numbers PlayApp constructions within the process; mixed
+// into each instance's widget-id base salt by playInstanceSalt.
+var playInstanceSeq atomic.Uint64
+
+// playInstanceSalt derives a per-instance widget-id base salt. Two PlayApp
+// instances rendering in the same frame (two applet windows, two play
+// windows) would otherwise derive identical effective ids from their
+// root-seeded stacks — colliding in the global seenIds registry and sharing
+// egui widget state across windows. The app fleet fixed this by adopting the
+// host-salted ctx.Ids() stack (ADR-0026 §SD9); play deviates from that
+// literal shape because one instance spans a dozen driver-owned stacks, so
+// the equivalent here is salting every stack's base with one per-instance
+// value (SetBaseSalt survives the per-frame Reset). The play-unique constant
+// keeps another package's equal counter from colliding on a shared label —
+// the cross-app parity failure the fleet migration was about.
+func playInstanceSalt() uint64 {
+	const playSaltTag = 0x506c6179_41707021 // "PlayApp!"
+	return (playInstanceSeq.Add(1) * 0x9e3779b97f4a7c15) ^ playSaltTag
+}
+
 func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
-	cardIds := c.NewWidgetIdStack()
-	pagerIds := c.NewWidgetIdStack()
-	projectorIds := c.NewWidgetIdStack()
-	projFSMIds := c.NewWidgetIdStack()
-	queryFSMIds := c.NewWidgetIdStack()
-	timelineIds := c.NewWidgetIdStack()
+	salt := playInstanceSalt()
+	mk := func() *c.WidgetIdStack {
+		s := c.NewWidgetIdStack()
+		s.SetBaseSalt(salt)
+		return s
+	}
+	cardIds := mk()
+	pagerIds := mk()
+	projectorIds := mk()
+	projFSMIds := mk()
+	queryFSMIds := mk()
+	timelineIds := mk()
 	cards := NewCardDriver(cardIds, nil)
 	projFSM := newProjectorFSM()
 	queryFSM := newQueryFSM()
@@ -614,7 +641,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		launchURL = client.URL()
 	}
 	inst := &PlayApp{
-		ids:              c.NewWidgetIdStack(),
+		ids:              mk(),
 		graph:            graph,
 		client:           client,
 		intermediateLane: newNodeLane(clientExecutor{client: client, opts: newExecOptions("intermediate")}, memory.NewGoAllocator(), 0),
@@ -660,12 +687,12 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		},
 	}
 	inst.timeline = NewTimelineDriver(timelineIds, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
-	inst.mapDriver = NewMapDriver(c.NewWidgetIdStack(), client)
-	inst.worldDriver = NewWorldDriver(c.NewWidgetIdStack())
-	inst.kanbanDriver = NewKanbanDriver(c.NewWidgetIdStack(), client)
-	inst.networkDriver = NewNetworkDriver(c.NewWidgetIdStack(), client)
-	inst.richCells = newRichCellCache(c.NewWidgetIdStack())
-	inst.detailTimeline = NewDetailTimeline(c.NewWidgetIdStack())
+	inst.mapDriver = NewMapDriver(mk(), client)
+	inst.worldDriver = NewWorldDriver(mk())
+	inst.kanbanDriver = NewKanbanDriver(mk(), client)
+	inst.networkDriver = NewNetworkDriver(mk(), client)
+	inst.richCells = newRichCellCache(mk())
+	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.diag = NewDiagnosticsDriver(client)
 	inst.runsHist = newRunsHistoryDriver(client)
 	inst.pins = newPinDriver(client)

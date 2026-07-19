@@ -5,10 +5,10 @@ import (
 	"iter"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/hashing/splitmix64"
-	"github.com/stergiotis/boxer/public/compiletimeflags"
 	"github.com/zeebo/xxh3"
 )
 
@@ -111,6 +111,7 @@ type WidgetIdStack struct {
 	idStack     *containers.Stack[uint64]
 	currentName string
 	currentId   uint64
+	baseSalt    uint64
 	state       WidgetIdStackStateE
 }
 
@@ -121,6 +122,19 @@ func NewWidgetIdStack() *WidgetIdStack {
 		currentId:   0,
 		state:       WidgetIdStackInitial,
 	}
+}
+
+// SetBaseSalt installs a permanent instance salt: it acts as the empty
+// stack's base id, so every derived id — and every scope built on the stack
+// — XORs with it, and unlike a pushed scope it survives Reset. A multi-stack
+// component (e.g. a PlayApp instance and its per-driver stacks) salts all
+// its stacks with one per-instance value so two instances rendering in the
+// same frame cannot collide in the global seenIds registry or share egui
+// widget state. Zero (the default) reproduces the unsalted behaviour.
+// Set it before the first Prepare/Derive; changing it mid-frame would
+// unbalance PopIdFromStackChecked expectations.
+func (inst *WidgetIdStack) SetBaseSalt(salt uint64) {
+	inst.baseSalt = salt
 }
 
 var _ WidgetIdCreatorI = (*WidgetIdStack)(nil)
@@ -198,7 +212,7 @@ func (inst *WidgetIdStack) PopIdFromStackChecked(expectedId uint64) {
 	}
 }
 func (inst *WidgetIdStack) peekIdFromStack() uint64 {
-	return inst.idStack.PeekDefault(0)
+	return inst.idStack.PeekDefault(inst.baseSalt)
 }
 func (inst *WidgetIdStack) Depth() int {
 	return inst.idStack.Depth()
