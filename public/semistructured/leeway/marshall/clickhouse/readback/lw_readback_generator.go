@@ -30,8 +30,11 @@ import (
 //     exact check, and the redundant-looking Presence conjuncts are what carry
 //     skip-index pruning.
 //
-// All fragments reference the leeway DQL helper UDFs (HelperUDFsSQL). See
-// ADR-0066 and EXPLANATION.md.
+// Presence and the non-const Validator / Filter use ClickHouse built-ins only
+// (has / hasAll / countEqual) — the property that lets a single-statement
+// executor embed them with no UDF install (ADR-0100 S2). Only the Projection,
+// and a Validator carrying const fields, reference the leeway DQL helper UDFs
+// (HelperUDFsSQL). See ADR-0066 and EXPLANATION.md.
 type Artefacts struct {
 	Kind       string
 	Presence   string

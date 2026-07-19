@@ -3,7 +3,7 @@ package marshallreflect_test
 import "time"
 
 // parityStarWindow / parityAsymStarNested: the `*S` nested-Optional spelling —
-// a DOCUMENTED front-end asymmetry (nested how-to, front-end status table).
+// a DOCUMENTED front-end asymmetry (marshalling how-to, deferred surfaces).
 // Reflect accepts the pointer as a second Optional spelling; codegen rejects
 // it under the scalar-pointer policy, because its Optional emit arms assume
 // option.Option[S] and would emit non-compiling code for a pointer

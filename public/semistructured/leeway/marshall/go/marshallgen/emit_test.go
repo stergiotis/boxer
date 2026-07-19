@@ -832,7 +832,7 @@ type MyDTO struct {
 	mustContain(t, out, "membership count mismatch on read")
 	mustContain(t, out, "Label: string(textLowCardVerbatimMembs[0]),")
 	mustContain(t, out, "c.Texts = append(c.Texts, textTextsElems)")
-	// ReadRow does not cover tuple kinds (like carriers / explode).
+	// ReadRow does not cover tuple kinds (like carriers).
 	mustContain(t, out, "MyDTOReadRow is not emitted: field Texts is a dynamic-membership tuple")
 	// No static membership emit leaks into the tuple driver.
 	mustNotContain(t, out, `AddMembershipLowCardVerbatimP([]byte(""))`)
@@ -1010,4 +1010,25 @@ type MyDTO struct {
 	parseGo(t, out)
 	mustContain(t, out, "Bs [][]Block")
 	mustContain(t, out, "AddMembershipLowCardRefP(kindTags)")
+}
+
+func TestReadRowSupported_ConstOnly(t *testing.T) {
+	// A const-only kind would decode permanently absent: the match loops
+	// skip consts, so presence could never be set. Rejected like plain-only
+	// (ADR-0113 review fallout).
+	plan, err := tryParse(t, `package demo
+type MyDTO struct {
+	_  struct{}  `+"`kind:\"my\"`"+`
+	_  struct{}  `+"`lw:\"env,symbol,const=prod\"`"+`
+	Id uint64    `+"`lw:\",id\"`"+`
+	Ts time.Time `+"`lw:\",ts\"`"+`
+}
+`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	ok, reason := marshallgen.ReadRowSupported(plan)
+	if ok || !strings.Contains(reason, "const-only") {
+		t.Fatalf("expected const-only rejection, got ok=%v reason=%q", ok, reason)
+	}
 }

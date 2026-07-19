@@ -101,7 +101,7 @@ func checkWriteContract(dmlType reflect.Type, plan *mappingplan.Plan, groups []g
 func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.SectionGroup, problems *[]string) {
 	needBegin := map[string]bool{}
 	needContainer := false
-	beginArgs := -1         // BeginAttribute arity; -1 skips the check
+	beginArgs := -1         // BeginAttribute arity; -1 = shape mix reported, skip the check
 	coContainerMethod := "" // multi-sub-column container append (AddTo(Co)Container(s)P)
 	coContainerArgs := 0
 	ts, isTuple := g.TupleSpec()
@@ -119,16 +119,32 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 			coContainerArgs = len(containers)
 		}
 	} else {
+		// Single-sub-column: BeginAttribute's arity differs per shape —
+		// scalar shapes pass the value (1 arg), the container shape opens
+		// empty (0 args). A section demanding both cannot resolve to one
+		// signature; report the mix here rather than panicking mid-marshal
+		// (the codegen emitter rejects the same mix at AttrsRead emission).
+		wantScalar, wantContainer := false, false
 		for _, f := range g.SubColumns[0].Fields {
 			switch goplan.ClassifyBegin(f) {
 			case goplan.ShapeScalarBegin:
 				needBegin["BeginAttribute"] = true
+				wantScalar = true
 			case goplan.ShapeScalarBeginSingle:
 				needBegin["BeginAttributeSingle"] = true
 			case goplan.ShapeContainer:
 				needBegin["BeginAttribute"] = true
+				wantContainer = true
 				needContainer = true
 			}
+		}
+		switch {
+		case wantScalar && wantContainer:
+			*problems = append(*problems, ctx+": mixes scalar-value and container field shapes — BeginAttribute cannot take both a value (1 arg) and no arguments")
+		case wantScalar:
+			beginArgs = 1
+		case wantContainer:
+			beginArgs = 0
 		}
 	}
 
@@ -140,8 +156,12 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 			continue
 		}
 		wantArgs := -1
-		if name == "BeginAttribute" {
+		switch name {
+		case "BeginAttribute":
 			wantArgs = beginArgs
+		case "BeginAttributeSingle":
+			// Always exactly one argument: the single element value.
+			wantArgs = 1
 		}
 		if ret, ok := requireMethod(secType, ctx, name, wantArgs, problems); ok && attrType == nil {
 			attrType = ret

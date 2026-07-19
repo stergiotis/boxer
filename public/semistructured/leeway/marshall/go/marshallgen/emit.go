@@ -2075,12 +2075,16 @@ func writeMultiSubMatchLoops(sb *strings.Builder, g goplan.SectionGroup, attrsVa
 // ReadRowSupported reports whether <Kind>ReadRow is emitted for the plan,
 // and the reason when it is not. Shared with downstream generators
 // (recordstore/gen) so the store generator and this emission cannot
-// disagree about coverage. Carrier (mixed / parametrized) channels and
-// exploded fields are not covered yet; a plain-only kind has no sections
-// to read.
+// disagree about coverage. Carrier (mixed / parametrized) channels are not
+// covered yet; a plain-only kind has no sections to read, and a const-only
+// kind is rejected because the match loops skip consts — presence could
+// never be set, so the component would read back permanently absent.
 func ReadRowSupported(plan *mappingplan.Plan) (ok bool, reason string) {
 	if len(plan.Fields) == 0 {
 		return false, "plain-only kind (no tagged sections)"
+	}
+	if !plan.HasNonConstField() {
+		return false, "const-only kind (no non-const field can set presence)"
 	}
 	for _, f := range plan.Fields {
 		if f.TupleField != "" {

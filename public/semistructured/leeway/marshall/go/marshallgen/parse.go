@@ -184,7 +184,8 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 		// row, present-or-absent for Optional). `*X` is NOT an Optional
 		// spelling here — the emitter's Optional arms assume option.Option[X],
 		// so it falls through to classifyType's pointer rejection (reflect
-		// accepts `*X`; see the nested how-to's front-end status table).
+		// accepts `*X`; a documented asymmetry, gated by the parity corpus
+		// and listed under the marshalling how-to's deferred surfaces).
 		if elemName, elemStruct, card, isNested := nestedSectionCardinalityAst(field.Type, structDecls, kindType); isNested {
 			usedTupleStructs[elemName] = true
 			var elems []goplan.TupleElem

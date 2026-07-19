@@ -291,8 +291,9 @@ func nestedSectionCardinality(ft reflect.Type) (elemType reflect.Type, card mapp
 // with the shared reflect classifier, and hands them to
 // goplan.PlanBuilder.AddNestedSliceField — the static-membership sibling of
 // addReflectTupleField. Unlike a tuple element, a nested sub-column field need
-// not carry an `lw:` tag (its column defaults to the lower-cased field name);
-// the tag, when present, names the column and may carry a `,ct=` override.
+// not carry an `lw:` tag (its column defaults to "value", the flat
+// single-sub-column default); the tag, when present, names the column and may
+// carry a `,ct=` override.
 func addNestedSectionField(b *goplan.PlanBuilder, dto reflect.Type, goFieldName, lwTag string, elemType reflect.Type, card mappingplan.AttrCardinalityE) (err error) {
 	if elemType.PkgPath() != dto.PkgPath() {
 		// Front-end parity with the go/ast path, which resolves the struct from

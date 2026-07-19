@@ -80,7 +80,7 @@ var parityCases = []parityCase{
 		file:      "parity_dto_asym_starnested_test.go",
 		plan:      func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[parityAsymStarNested]() },
 		genErr:    "pointer types forbidden",
-		asymmetry: "nested how-to front-end status table: reflect accepts `*S` as Optional; codegen rejects it (scalar-pointer policy — its Optional emit arms assume option.Option[S]; ADR-0113 review fallout)",
+		asymmetry: "marshalling how-to, deferred surfaces: reflect accepts `*S` as Optional; codegen rejects it (scalar-pointer policy — its Optional emit arms assume option.Option[S]; ADR-0113 review fallout)",
 	},
 	{
 		name:      "asym-entity-level-lane-marker",

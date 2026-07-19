@@ -1,5 +1,5 @@
 // Package lw declares the marker types for the leeway nested-struct marshalling
-// front-end (doc/howto/leeway-marshalling-nested.md). A nested attribute struct
+// front-end (doc/howto/leeway-marshalling.md). A nested attribute struct
 // carries its sub-column and membership roles by field TYPE; these markers are
 // those types. They are pure data — no methods, no imports beyond the standard
 // library — so a DTO can embed them anywhere.
