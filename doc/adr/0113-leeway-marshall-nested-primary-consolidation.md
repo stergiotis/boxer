@@ -140,7 +140,9 @@ retired.
 ## Review fallout (2026-07-19)
 
 Marshall-family defects and drift found by the adversarial review — ordinary
-fixes, none waiting on this ADR's acceptance:
+fixes, none waiting on this ADR's acceptance. The two acceptance defects and
+the parity gate landed (f202c473); the doc / comment drift and the two
+hardening items remain open:
 
 - **Codegen accepts `*S` nested-Optional and emits non-compiling code.** The
   emitter's Optional arms assume `option.Option[S]` (`Val` / `Has` SoA), so the
