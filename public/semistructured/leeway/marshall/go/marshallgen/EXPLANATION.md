@@ -18,14 +18,15 @@ helpers that bind to any leeway DML / RA via Go's type inference at the
 call site.
 
 The DTO model itself is not defined here. The `Plan` and the
-`MembershipChannel` table live in [`mappingplan`](../../../mappingplan/); the
-`lw:` tag grammar (`SplitLW`), per-field validation and assembly
-(`PlanBuilder`), section grouping (`ComputeGroups`), and field-shape
-classification (`ClassifyBegin`) live in the sibling
-[`goplan`](../goplan/) toolkit, shared with the reflect front-end.
-`marshallgen` is the go/ast front-end plus emitter over that stack; the
-reflect-driven [`marshallreflect`](../marshallreflect/) is the other
-front-end and a runtime codec over the same stack. The two front-ends share
+`MembershipChannel` table live in
+[the `mappingplan` model](../../../mappingplan/); the `lw:` tag grammar
+(`SplitLW`), per-field validation and assembly (`PlanBuilder`), section
+grouping (`ComputeGroups`), and field-shape classification
+(`ClassifyBegin`) live in [the sibling `goplan` toolkit](../goplan/),
+shared with the reflect front-end. `marshallgen` is the go/ast front-end
+plus emitter over that stack;
+[the reflect-driven `marshallreflect` codec](../marshallreflect/) is the
+other front-end and a runtime codec over the same stack. The two front-ends share
 `mappingplan` + `goplan` and do not depend on each other; the front-end
 **parity corpus** (`marshallreflect_test/parity_corpus_test.go`) gates their
 accept sets against each other mechanically.
