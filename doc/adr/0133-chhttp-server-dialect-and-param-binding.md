@@ -215,6 +215,20 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Update (2026-07-19) — M1 shipped; the SD2 verification item is retired
+
+**M1** landed: `public/db/clickhouse/chhttp` with tests pinning the request
+and response shapes (statement extraction errors on oversize rather than
+silently truncating — a deliberate divergence from the pre-extraction
+endpoint; the FORMAT-tail mapping is carried over verbatim so the M3
+adoption is a drop-in). No consumer changes yet.
+
+**SD2's empirical check passed** against the installed clickhouse-local
+(26.6): `SET param_lim = 5; SELECT {lim:UInt64} + 1` submitted as a
+multi-statement stdin script substitutes correctly. The SET-prelude
+injection therefore proceeds as designed and the cold-spawn argv fallback
+is not needed.
+
 ## References
 
 - [ADR-0094 — keelson introspection tables](./0094-keelson-introspection-tables.md)
