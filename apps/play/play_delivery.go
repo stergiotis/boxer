@@ -64,6 +64,15 @@ func (inst *PlayApp) SetLiveMain(on bool) {
 	inst.liveMain = on
 }
 
+// SetToolbarMinimal attenuates the top bar to the applet surface (ADR-0132
+// §SD3): Load .sql, the endpoint switcher, and the prelude/conditions
+// toggles disappear; Run/Cancel, the Live toggle, and the unfilled-inputs
+// hint stay; a "Copy SQL" escape hatch appears when a bus is wired. Call it
+// between construction and mount, like the tab registry.
+func (inst *PlayApp) SetToolbarMinimal(on bool) {
+	inst.toolbarMinimal = on
+}
+
 // BindTab points a panel tab at a split node by CTE name (ADR-0097 slice 6c).
 // An unknown tab id is an error, matching ActivateTab's validation style; an
 // unknown node name is deliberately NOT one — bindings key on CTE names, sit

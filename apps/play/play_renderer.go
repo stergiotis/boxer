@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
@@ -379,6 +380,13 @@ type PlayApp struct {
 	// user-typed string (the multiMatch* / multiFuzzyMatch* families).
 	affordanceTestInput string
 
+	// toolbarMinimal attenuates the top bar to the applet surface
+	// (ADR-0132 §SD3): Load .sql, the endpoint switcher, the prelude and
+	// conditions toggles disappear, and a "Copy SQL" escape hatch appears
+	// (the buffer is the artifact — the clipboard is a faithful export).
+	// Set via SetToolbarMinimal between construction and mount.
+	toolbarMinimal bool
+
 	// Param-slot UI (see play_param_render.go). paramSlots mirrors what
 	// the debounced parse extracted from inst.sql; paramDrafts owns the
 	// stable string pointers each widget binds via SendRespVal;
@@ -709,6 +717,14 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 // the first Render freezes it. See TabSpec for the registration shape.
 func (inst *PlayApp) Tabs() *TabRegistry { return inst.tabs }
 
+// editorTabPresent reports whether the tab set still carries the Editor tab.
+// An embedder that removed it (a sqlapplet window, ADR-0132 §SD3) gets the
+// params strip pinned into the top panel instead of above the editor.
+func (inst *PlayApp) editorTabPresent() bool {
+	_, ok := inst.tabs.dockIDForSlug("editor")
+	return ok
+}
+
 // Close tears down the app's async machinery (Unmount): cancels in-flight
 // work, releases held results, and closes every lane. Late completions from
 // still-running goroutines hit their generation/closed guards and are
@@ -916,6 +932,15 @@ func (inst *PlayApp) Render() error {
 	// dock_state on the Rust side wins.
 	for range c.PanelTopInside(ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
 		inst.renderTopBar()
+		// The params strip (ADR-0132 §SD3): with the Editor tab removed, the
+		// param widgets — normally drawn above the SQL editor — re-home here,
+		// pinned. Exactly one site renders per frame (the editor path when
+		// the tab exists, this strip when it does not), so the drafts and
+		// widget ids stay single-writer. refreshParamSlotsFromParse runs in
+		// updatePreview, so the slots are fresh without an editor.
+		if !inst.editorTabPresent() {
+			inst.renderParamSlots()
+		}
 	}
 	for range c.PanelBottomInside(ids.PrepareStr("status")).Resizable(false).KeepIter() {
 		inst.renderStatus(numRows, elapsed, summary, executed, err)
@@ -1276,13 +1301,29 @@ func (inst *PlayApp) renderTopBar() {
 			}
 		}
 
+		// Copy SQL — the toolbarMinimal escape hatch (ADR-0132 §SD3): the
+		// whole buffer over clipboard.write, off the frame goroutine
+		// (Request blocks until the broker acks — the helphost Copy
+		// precedent). Needs a bus with the clipboard cap declared; without
+		// one the button would be a silent no-op, so it is not offered.
+		if inst.toolbarMinimal && inst.bus != nil {
+			c.Separator().Vertical().Send()
+			if c.Button(ids.PrepareStr("copySql"), c.Atoms().Text("Copy SQL").Keep()).
+				SendResp().HasPrimaryClicked() {
+				text := inst.sql
+				go func() {
+					_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
+				}()
+			}
+		}
+
 		// Load .sql via fs Powerbox — only when the runtime wired a
 		// bus client. The picker overlay lives at the host level
 		// (carousel renders pickerbridge between Frame and metrics);
 		// this button only kicks the fs.dialog.read request that puts
 		// a pending entry on the broker's queue.
 		var pickErr string
-		if inst.bus != nil {
+		if inst.bus != nil && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			inst.pickMu.Lock()
 			busy := inst.pickInFlight
@@ -1305,17 +1346,18 @@ func (inst *PlayApp) renderTopBar() {
 			}
 		}
 
-		if inst.client != nil {
+		if inst.client != nil && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			inst.renderEndpointSwitcher()
 		}
 
 		// Hide-prelude toggle (visible only when there's at least one
 		// param slot — no point in offering it for queries with no
-		// placeholders). Mutates the canonical state on the next
+		// placeholders, nor under toolbarMinimal, where no editor shows
+		// a prelude to hide). Mutates the canonical state on the next
 		// frame; the editor binding flips at the start of the next
 		// renderEditorTab.
-		if len(inst.paramSlots) > 0 {
+		if len(inst.paramSlots) > 0 && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			c.Checkbox(ids.PrepareStr("hidePrelude"), inst.paramHidePrelude, "Hide prelude").
 				SendRespVal(&inst.paramHidePrelude)
@@ -1335,7 +1377,7 @@ func (inst *PlayApp) renderTopBar() {
 		// result column. Offered only where a rewrite could happen — the pass
 		// needs the schema probe installLeewayNameResolution builds — and it
 		// pushes to the Client, which owns the flag the query path reads.
-		if inst.client != nil && inst.client.conditionsPass.Apply != nil {
+		if inst.client != nil && inst.client.conditionsPass.Apply != nil && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			c.Checkbox(ids.PrepareStr("exposeConditions"), inst.exposeConditions, "Conditions").
 				SendRespVal(&inst.exposeConditions)
@@ -2266,14 +2308,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Cells(local, 0) {
-				c.AddSpace(cellPadX)
-				marker := fmt.Sprintf("%d", absRow+1)
-				if c.Button(ids.PrepareSeq(rowBase),
-					c.Atoms().BeginRichText(marker).Monospace().End().Keep()).
-					Frame(false).
-					Selected(selected).
-					Truncate().
-					SendResp().HasPrimaryClicked() {
+				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}
@@ -2284,14 +2319,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				continue
 			}
 			for range et.Cells(local, colPos) {
-				c.AddSpace(cellPadX)
-				text := formatCell(rec, arrowCol, absRow)
-				if c.Button(ids.PrepareSeq(rowBase+uint64(arrowCol)+1),
-					c.Atoms().BeginRichText(text).Monospace().End().Keep()).
-					Frame(false).
-					Selected(selected).
-					Truncate().
-					SendResp().HasPrimaryClicked() {
+				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, formatCell(rec, arrowCol, absRow), false, selected) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}
