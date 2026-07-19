@@ -65,6 +65,7 @@ func init() {
 		Category: "Charts & plots",
 		Title:    icons.IconChartLine + " ecdf",
 		Stage:    [2]float32{960, 640},
+		Flags:    registry.DemoFlagNeedsLargeArea,
 		Kind:     registry.DemoKindUX,
 		Description: "Empirical CDF with a finite-sample exact simultaneous " +
 			"confidence band. Four peer-reviewed band families selectable " +

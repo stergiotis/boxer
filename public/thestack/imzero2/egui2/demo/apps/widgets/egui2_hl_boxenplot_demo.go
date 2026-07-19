@@ -67,6 +67,7 @@ func init() {
 		Category: "Charts & plots",
 		Title:    icons.IconChartBar + " boxenplot",
 		Stage:    [2]float32{1024, 700},
+		Flags:    registry.DemoFlagNeedsLargeArea,
 		Kind:     registry.DemoKindUX,
 		Description: "Hofmann/Wickham/Kafadar letter-value plot composing the boxer tdigest + " +
 			"letterval packages with the egui2 plotBoxes primitive. Four Gaussian variants pre-fed " +

@@ -14,6 +14,7 @@ func init() {
 		Category:    "Layout & widgets",
 		Title:       icons.IconTreeStructure + " tree view",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindMixed,
 		Description: "NodeDir / NodeLeaf showcase on biological taxonomy: a hand-coded Carnivora subtree plus a recursive renderer driven by a Go data fixture covering Animalia.",
 		Init: func(_ *c.WidgetIdStack) (state any) {

@@ -35,6 +35,7 @@ func init() {
 	registry.Register(registry.Demo{
 		Name: "etables", Category: "Tables", Title: icons.IconTable + " etables (deferred)",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Seven deferred-block etable variants — virtual scrolling, rich headers, interactive cells, variable row heights, plus 10k-row dense + sparse stress tests. Cells are captured as deferred opcode blocks and replayed on demand inside egui_table's TableDelegate.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
@@ -69,6 +70,7 @@ func init() {
 	registry.Register(registry.Demo{
 		Name: "tables", Category: "Tables", Title: icons.IconTable + " tables (register-drain)",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Five classic register-drain Table variants — mixed/auto column sizing, headless layout, large (10k rows), rich text and simple plain-text cells. Cell data is pre-collected via tableCellText / tableCellRichText registers and drained in one shot at the Table node.",
 		Render: func(ids *c.WidgetIdStack) {
@@ -92,6 +94,7 @@ func init() {
 	registry.Register(registry.Demo{
 		Name: "plots", Category: "Charts & plots", Title: icons.IconChartLine + " plots",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Line, scatter and bar plots plus a combined view that overlays multiple series with horizontal-line and text annotations.",
 		Render: func(ids *c.WidgetIdStack) {
@@ -184,6 +187,7 @@ func init() {
 	registry.Register(registry.Demo{
 		Name: "go", Category: "Text & code", Title: "Go highlighter",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Go syntax highlighter driven by go/scanner + go/parser: identifiers are walked through the AST so func decls, calls, type names, struct fields, and package qualifiers each receive a distinct color. Includes line-range slicing with a numbered gutter.",
 		Render:      func(ids *c.WidgetIdStack) { demoGoView(ids) },
@@ -191,6 +195,7 @@ func init() {
 	registry.Register(registry.Demo{
 		Name: "json", Category: "Text & code", Title: icons.IconBracketsCurly + " JSON highlighter",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "JSON syntax highlighter driven by encoding/json/jsontext: object keys, string/number/bool/null values and structural delimiters each receive a distinct color. Object keys are disambiguated from value strings via the decoder's stack-position state. Malformed input degrades gracefully — the parsed prefix stays highlighted and the unparseable tail falls through to the default color.",
 		Render:      func(ids *c.WidgetIdStack) { demoJsonView(ids) },

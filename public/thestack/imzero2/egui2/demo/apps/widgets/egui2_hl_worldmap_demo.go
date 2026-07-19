@@ -40,6 +40,7 @@ func init() {
 		Category: "Charts & plots",
 		Title:    icons.IconChartBar + " worldmap",
 		Stage:    [2]float32{1024, 700},
+		Flags:    registry.DemoFlagNeedsLargeArea,
 		Kind:     registry.DemoKindUX,
 		Description: "Schematic world choropleth (ADR-0114): Natural Earth 110m outlines, " +
 			"Natural Earth projection, Go-side scanline rasterization into a content-versioned " +

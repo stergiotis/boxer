@@ -58,6 +58,7 @@ func init() {
 		Category:    "Inspectors & feedback",
 		Title:       "progress bar (Holt ETA)",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Progress bar with a Holt double-exponential smoothing ETA estimator that updates as work progresses.",
 		Init: func(_ *c.WidgetIdStack) (state any) {

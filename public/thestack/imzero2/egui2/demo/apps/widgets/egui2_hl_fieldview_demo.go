@@ -47,6 +47,7 @@ func init() {
 		Category:    "Inspectors & feedback",
 		Title:       icons.IconSearch + " fieldview",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Reusable widgets/fieldview package: tagged-union typed fields (str/int/uint/float/bool/bytes/time) with optional Object/Array nesting. Live config knobs (ShowKind / DefaultOpen / Indent / BytesMax) over three sample fixtures — every primitive kind, a deep object/array tree, and a long-value wrap demo.",
 		Init: func(_ *c.WidgetIdStack) (state any) {

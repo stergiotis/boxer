@@ -30,6 +30,7 @@ func init() {
 		Category: "Inputs & pickers",
 		Title:    icons.IconFolderOpen + " filepicker",
 		Stage:    [2]float32{960, 700},
+		Flags:    registry.DemoFlagNeedsLargeArea,
 		Kind:     registry.DemoKindUX,
 		Description: "In-app open / save / pick-folder dialog rendered as an " +
 			"egui::Window. Directory listing is walked Go-side (default " +

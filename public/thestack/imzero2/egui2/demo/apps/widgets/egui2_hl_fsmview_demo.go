@@ -30,6 +30,7 @@ func init() {
 		Category:    "Inspectors & feedback",
 		Title:       icons.IconTreeStructure + " fsmview",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Two-level FSM viewer (statetrooper-backed). Level 1: compact chip showing the current state + an optional \"Xs ago\" subscript. Level 2 (click chip): floating popup with Table, Graph (Graphviz layered / Sugiyama layout, in-process WASM — ADR-0069), and History views. Init seeds a few transitions so all three tabs have content to render in the tour.",
 		Init: func(ids *c.WidgetIdStack) (state any) {

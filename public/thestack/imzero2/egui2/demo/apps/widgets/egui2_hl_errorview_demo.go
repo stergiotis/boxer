@@ -65,6 +65,7 @@ func init() {
 		Category:    "Inspectors & feedback",
 		Title:       icons.IconError + " errorview",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "Reusable widgets/errorview package: renders an eh.MarshalError-shaped chain (per-stream collapsing headers, per-fact message + frame triple + dark-canvas CBOR diagnostic of structured-data payloads). Live config (DefaultOpen / Indent) over four fixtures — single stackless, multi-stream wrap, structured-data leaf, plus an end-to-end real-boxer-error section that runs FromBoxerError → rowmarshall → leewayrender so the SAME error renders side-by-side through errorview AND the leeway fact-table widget.",
 		Init: func(ids *c.WidgetIdStack) (state any) {

@@ -22,6 +22,7 @@ func init() {
 		Category:    "Graphics & canvas",
 		Title:       icons.IconPaintBucket + " painter (shapes / clock / bezier)",
 		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindMixed,
 		Description: "Direct shape drawing on a Painter: primitives, an animated analog clock and parametric Bézier curves.",
 		Init: func(_ *c.WidgetIdStack) (state any) {

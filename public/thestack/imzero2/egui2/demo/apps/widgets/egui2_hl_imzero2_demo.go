@@ -35,7 +35,7 @@ func init() {
 		Category:    "Layout & widgets",
 		Title:       icons.IconLightning + " imzero2 (catch-all)",
 		Stage:       [2]float32{1024, 700},
-		Flags:       registry.DemoFlagNonDeterministic, // renders live time.Date(...) timestamp
+		Flags:       registry.DemoFlagNonDeterministic | registry.DemoFlagNeedsLargeArea, // renders live time.Date(...) timestamp
 		Kind:        registry.DemoKindDX,
 		Description: "Mixed widget showcase: buttons, text-edit, slider, checkbox, radio, combobox, grid, scroll area, tree.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
