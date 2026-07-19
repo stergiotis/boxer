@@ -440,3 +440,39 @@ type MyDTO struct {
 `)
 	assertErrContains(t, err, "cannot target a sub-column")
 }
+
+func TestParse_RejectsUnexportedTaggedField(t *testing.T) {
+	// An unexported tagged field would generate a codec that compiles
+	// in-package while marshallreflect rejects the same DTO — an accept-set
+	// divergence between the front-ends (ADR-0113 review fallout). Parity
+	// with marshallreflect's plan-build rejection.
+	_, err := tryParse(t, `package foo
+type MyDTO struct {
+	_      struct{}  `+"`kind:\"my\"`"+`
+	Id     uint64    `+"`lw:\",id\"`"+`
+	Ts     time.Time `+"`lw:\",ts\"`"+`
+	status string    `+"`lw:\"deviceStatus,symbol\"`"+`
+}
+`)
+	assertErrContains(t, err, "unexported field carries an `lw:` tag")
+}
+
+func TestParse_RejectsNestedPointerSection(t *testing.T) {
+	// `*S` nested-Optional is a reflect-only spelling: the emitter's Optional
+	// arms assume option.Option[S], so accepting `*S` here would emit
+	// non-compiling code (ADR-0113 review fallout). It must fall through to
+	// the scalar-pointer rejection instead of routing to the nested builder.
+	_, err := tryParse(t, `package foo
+type Window struct {
+	Begin time.Time `+"`lw:\"beginIncl\"`"+`
+	End   time.Time `+"`lw:\"endExcl\"`"+`
+}
+type MyDTO struct {
+	_   struct{}  `+"`kind:\"my\"`"+`
+	Id  uint64    `+"`lw:\",id\"`"+`
+	Ts  time.Time `+"`lw:\",ts\"`"+`
+	Win *Window   `+"`lw:\"win,timeRange\"`"+`
+}
+`)
+	assertErrContains(t, err, "pointer types forbidden")
+}

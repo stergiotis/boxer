@@ -99,7 +99,9 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 
 		// An unexported tagged field cannot be read or set through reflection;
 		// the plan would build and then mustCall would panic at marshal time
-		// (review E-2). Reject at plan-build, like the AST front-end.
+		// (review E-2). Reject at plan-build; marshallgen.ParsePlan applies
+		// the same rejection, and the parity corpus gates the two accept
+		// sets against each other.
 		if !f.IsExported() {
 			err = eb.Build().Str("field", f.Name).Errorf("unexported field carries an `lw:` tag; tagged fields must be exported")
 			return

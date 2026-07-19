@@ -138,6 +138,16 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 		}
 		goFieldName := field.Names[0].Name
 
+		// An unexported tagged field would generate a codec that compiles
+		// in-package while marshallreflect rejects the same DTO (it cannot
+		// read or set the field through reflection). Reject at plan-build,
+		// matching marshallreflect's message — the parity corpus gates the
+		// two accept sets against each other.
+		if !ast.IsExported(goFieldName) {
+			err = eb.Build().Str("input", inputPath).Str("field", goFieldName).Errorf("unexported field carries an `lw:` tag; tagged fields must be exported")
+			return
+		}
+
 		// `[]X` where X is a struct declared in this file: either a flat
 		// dynamic-membership tuple (ADR-0103 — the element carries `@membership`
 		// fields) or a static-membership NESTED section (the outer tag names the
@@ -169,9 +179,12 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 			continue
 		}
 
-		// `X` / `*X` / `option.Option[X]` where X is a struct declared in this
-		// file: a nested section with One / Optional cardinality (one attribute
-		// per row, present-or-absent for Optional).
+		// `X` / `option.Option[X]` where X is a struct declared in this file:
+		// a nested section with One / Optional cardinality (one attribute per
+		// row, present-or-absent for Optional). `*X` is NOT an Optional
+		// spelling here — the emitter's Optional arms assume option.Option[X],
+		// so it falls through to classifyType's pointer rejection (reflect
+		// accepts `*X`; see the nested how-to's front-end status table).
 		if elemName, elemStruct, card, isNested := nestedSectionCardinalityAst(field.Type, structDecls, kindType); isNested {
 			usedTupleStructs[elemName] = true
 			var elems []goplan.TupleElem
@@ -304,11 +317,14 @@ func elemHasAtMembershipAst(st *ast.StructType) bool {
 }
 
 // nestedSectionCardinalityAst reports whether expr is a non-slice NESTED section:
-// a struct value `S` (One), a pointer `*S` (Optional), or `option.Option[S]`
-// (Optional), where S is a struct declared in this file (not the DTO). Mirrors
-// marshallreflect.nestedSectionCardinality. A scalar `option.Option[T]`, a
-// `*roaring.Bitmap`, and a plain scalar Ident are NOT nested (they fall through
-// to classifyType).
+// a struct value `S` (One) or `option.Option[S]` (Optional), where S is a struct
+// declared in this file (not the DTO). Mirrors
+// marshallreflect.nestedSectionCardinality EXCEPT for `*S`, which reflect also
+// accepts as Optional: here it deliberately falls through to classifyType's
+// pointer rejection, because the emitter's Optional arms (the Val/Has SoA
+// split) assume `option.Option[S]` and would emit non-compiling code for a
+// pointer. A scalar `option.Option[T]`, a `*roaring.Bitmap`, and a plain
+// scalar Ident are NOT nested (they fall through to classifyType).
 func nestedSectionCardinalityAst(expr ast.Expr, structDecls map[string]*ast.StructType, kindType string) (name string, st *ast.StructType, card mappingplan.AttrCardinalityE, ok bool) {
 	local := func(id *ast.Ident) (*ast.StructType, bool) {
 		if id == nil || id.Name == kindType {
@@ -321,12 +337,6 @@ func nestedSectionCardinalityAst(expr ast.Expr, structDecls map[string]*ast.Stru
 	case *ast.Ident: // S → One
 		if s, found := local(v); found {
 			return v.Name, s, mappingplan.AttrCardinalityOne, true
-		}
-	case *ast.StarExpr: // *S → Optional
-		if id, isIdent := v.X.(*ast.Ident); isIdent {
-			if s, found := local(id); found {
-				return id.Name, s, mappingplan.AttrCardinalityOptional, true
-			}
 		}
 	case *ast.IndexExpr: // option.Option[S] → Optional
 		if sel, sok := v.X.(*ast.SelectorExpr); sok && sel.Sel.Name == "Option" {
