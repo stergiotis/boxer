@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "@spx"
-reviewed-date: 2026-06-21
+reviewed-date: 2026-07-19
 ---
 
 # AGENTS.md
@@ -101,6 +101,34 @@ Authorship and AI-assistance provenance are tracked via **git trailers**, not
 in-file build tags. The former `llm_generated` build-tag governance was retired
 (ADR-0083) — do **not** reintroduce `//go:build llm_generated` (or similar)
 markers on generated or AI-assisted files.
+
+## Screenshots
+
+Reach for the most specific built-in capture path before a generic one — each
+step below only earns its keep once the step above can't reach the state you
+need:
+
+1. **Single widget, isolated.** The demo registry's `TestDriver`
+   ([ADR-0057](./doc/adr/0057-demo-registry-and-drivers.md)) — set
+   `IMZERO2_SCREENSHOT_DIR` (plus `IMZERO2_SCREENSHOT_SIZE`,
+   `IMZERO2_SCREENSHOT_DETERMINISTIC`; see [doc/env-vars.md](./doc/env-vars.md))
+   and run `hmi.sh`. Captures one PNG + one SVG per registered `Demo`.
+2. **One app, a real scenario.** An app's own scripted-capture env vars,
+   declared per [ADR-0009](./doc/adr/0009-environment-variable-registry.md) —
+   e.g. play's `BOXER_PLAY_SCREENSHOT` / `BOXER_PLAY_SHOT_SETTLE` /
+   `BOXER_PLAY_EXIT_ON_SHOT` / `BOXER_PLAY_FOCUS_*`
+   (`apps/play/play_renderer.go`), which also race a PNG capture against an
+   SVG export. `play` is the only app with this today — a new app that needs
+   scripted screenshots should follow its pattern rather than skip to (3) or
+   (4).
+3. **Interactive / exploratory.** [`egui-mcp`](./doc/howto/egui-mcp.md) —
+   `EGUI_INSPECTION=1` attaches an agent to the live widget tree to click,
+   type, and `screenshot` mid-session. Use it to drive the UI into a state,
+   not to capture one you already know how to reach directly.
+4. **OS-level screenshot.** Last resort, for when 1–3 genuinely can't reach
+   the target state (e.g. a transient dialog outside imzero2's control).
+   This is the generic method the other three exist to avoid — if you land
+   here, say so and note why.
 
 ## Subsystem notes (when you touch them)
 
