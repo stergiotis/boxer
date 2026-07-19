@@ -608,7 +608,8 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 		}
 		_, err := marshallreflect.PlanFor[bad]()
 		require.Error(t, err)
-		require.ErrorContains(t, err, "not supported inside a tuple element")
+		// The flag is gone from the grammar entirely (ADR-0113 D1).
+		require.ErrorContains(t, err, "removed (ADR-0113 D1)")
 	})
 	t.Run("channel flag on a value field", func(t *testing.T) {
 		type elem struct {

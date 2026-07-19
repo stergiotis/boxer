@@ -363,20 +363,14 @@ func TestNested_Optional_ByteIdenticalToFlatOption(t *testing.T) {
 }
 
 // Slice A, Step 3 — static-Many cardinality (`[]S` with a static membership): N
-// attributes per row, all carrying the SAME static membership. A single-scalar
-// static-Many section is byte-identical to the flat `,explode` shape (N single-value
-// attributes, one membership), which the flat grammar reaches only for a single
-// sub-column. The `[]S` form is disambiguated from a dynamic-membership tuple by
-// the tag naming a membership (`tags,symbol` vs a bare `symbol`).
+// attributes per row, all carrying the SAME static membership — the N×1 wire
+// shape, whose flat spelling (`,explode`) was removed by ADR-0113 D1; the
+// per-row attribute counts below pin the shape directly. The `[]S` form is
+// disambiguated from a dynamic-membership tuple by the tag naming a
+// membership (`tags,symbol` vs a bare `symbol`).
 
 type symOne struct {
 	Val string
-}
-type flatExplodeSym struct {
-	_        struct{} `kind:"manyDrone"`
-	ID       uint64   `lw:",id"`
-	Tracking []byte   `lw:",naturalKey"`
-	Tags     []string `lw:"tags,symbol,explode"`
 }
 type nestedManySym struct {
 	_        struct{} `kind:"manyDrone"`
@@ -385,14 +379,9 @@ type nestedManySym struct {
 	Blocks   []symOne `lw:"tags,symbol"`
 }
 
-func TestNested_StaticMany_ByteIdenticalToFlatExplode(t *testing.T) {
+func TestNested_StaticMany_WireShapeAndRoundTrip(t *testing.T) {
 	lookup := marshallreflect.MapLookup{"tags": 1}
 
-	flat := []flatExplodeSym{
-		{ID: 1, Tracking: []byte("M1"), Tags: []string{"a", "b", "c"}},
-		{ID: 2, Tracking: []byte("M2"), Tags: []string{"x"}},
-		{ID: 3, Tracking: []byte("M3"), Tags: nil},
-	}
 	nested := []nestedManySym{
 		{ID: 1, Tracking: []byte("M1"), Blocks: []symOne{{Val: "a"}, {Val: "b"}, {Val: "c"}}},
 		{ID: 2, Tracking: []byte("M2"), Blocks: []symOne{{Val: "x"}}},
@@ -401,14 +390,8 @@ func TestNested_StaticMany_ByteIdenticalToFlatExplode(t *testing.T) {
 
 	require.NoError(t, marshallreflect.Validate[nestedManySym](anchor.NewInEntityTestTable(memory.NewGoAllocator(), len(nested))))
 
-	flatRec, r1 := marshalToRecord(t, flat, lookup)
-	defer r1()
 	nestedRec, r2 := marshalToRecord(t, nested, lookup)
 	defer r2()
-
-	require.True(t, array.RecordEqual(flatRec, nestedRec),
-		"records differ:\nflat=%s\nnested=%s", flatRec, nestedRec)
-	require.Equal(t, ipcBytes(t, flatRec), ipcBytes(t, nestedRec), "Arrow IPC bytes differ")
 
 	idReader, rID := loadIdReader(t, nestedRec)
 	defer rID()

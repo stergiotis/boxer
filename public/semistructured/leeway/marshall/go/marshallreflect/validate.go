@@ -121,9 +121,9 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 	} else {
 		for _, f := range g.SubColumns[0].Fields {
 			switch goplan.ClassifyBegin(f) {
-			case goplan.ShapeScalarBegin, goplan.ShapeExplodeBegin:
+			case goplan.ShapeScalarBegin:
 				needBegin["BeginAttribute"] = true
-			case goplan.ShapeScalarBeginSingle, goplan.ShapeExplodeBeginSingle:
+			case goplan.ShapeScalarBeginSingle:
 				needBegin["BeginAttributeSingle"] = true
 			case goplan.ShapeContainer:
 				needBegin["BeginAttribute"] = true

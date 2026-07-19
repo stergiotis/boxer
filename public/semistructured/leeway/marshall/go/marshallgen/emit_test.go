@@ -181,37 +181,6 @@ type MyDTO struct {
 	mustContain(t, out, ".AddToContainerP(it.Next())")
 }
 
-func TestEmit_Explode_Slice(t *testing.T) {
-	out := generate(t, `package demo
-type MyDTO struct {
-	_     struct{}  `+"`kind:\"my\"`"+`
-	Id    uint64    `+"`lw:\",id\"`"+`
-	Ts    time.Time `+"`lw:\",ts\"`"+`
-	Ids   []string  `+"`lw:\"foreignId,symbol,explode\"`"+`
-}
-`)
-	parseGo(t, out)
-	mustContain(t, out, "BeginAttribute(value string) Attr")
-	mustContain(t, out, "for _, v := range c.Ids[i] {")
-	mustContain(t, out, "symbolSec.BeginAttribute(v)")
-	mustNotContain(t, out, "\tAddToContainerP(")
-	mustNotContain(t, out, ".AddToContainerP(")
-}
-
-func TestEmit_Explode_Slice_Unit(t *testing.T) {
-	out := generate(t, `package demo
-type MyDTO struct {
-	_     struct{}  `+"`kind:\"my\"`"+`
-	Id    uint64    `+"`lw:\",id\"`"+`
-	Ts    time.Time `+"`lw:\",ts\"`"+`
-	Ids   []string  `+"`lw:\"foreignId,stringArray,explode,unit\"`"+`
-}
-`)
-	parseGo(t, out)
-	mustContain(t, out, "BeginAttributeSingle(value string) Attr")
-	mustContain(t, out, "stringArraySec.BeginAttributeSingle(v)")
-}
-
 // --- structural tests. ---
 
 // TestEmit_ScalarFirstOrdering confirms ADR-0008 D2: within one
@@ -330,23 +299,28 @@ type MyDTO struct {
 }
 
 // TestEmit_HighCardVerbatim confirms ADR-0008 D3's HighCardVerbatim
-// channel flag. Mirrors LowCardVerbatim but routes through the high-
-// card accessors; no kindXxx is declared.
+// channel on its surviving grammar surface: a tuple `@membership` field
+// (the value-field spelling was removed by ADR-0113 D1). Routes through
+// the high-card accessors; no kindXxx is declared.
 func TestEmit_HighCardVerbatim(t *testing.T) {
 	out := generate(t, `package demo
+type HcvTag struct {
+	Label []byte `+"`lw:\"@membership,highCardVerbatim\"`"+`
+	Value string `+"`lw:\"symbol\"`"+`
+}
 type MyDTO struct {
-	_   struct{}  `+"`kind:\"my\"`"+`
-	Id  uint64    `+"`lw:\",id\"`"+`
-	Ts  time.Time `+"`lw:\",ts\"`"+`
-	App string    `+"`lw:\"my-app,symbol,highCardVerbatim\"`"+`
+	_    struct{}  `+"`kind:\"my\"`"+`
+	Id   uint64    `+"`lw:\",id\"`"+`
+	Ts   time.Time `+"`lw:\",ts\"`"+`
+	Tags []HcvTag  `+"`lw:\"symbol\"`"+`
 }
 `)
 	parseGo(t, out)
 	mustContain(t, out, "dmlruntime.InAttributeMembershipHighCardVerbatimPI")
-	mustContain(t, out, `AddMembershipHighCardVerbatimP([]byte("my-app"))`)
+	mustContain(t, out, "AddMembershipHighCardVerbatimP(")
 	mustContain(t, out, "GetMembValueHighCardVerbatim")
 	mustContain(t, out, "iter.Seq[[]byte]")
-	mustNotContain(t, out, "kindApp")
+	mustNotContain(t, out, "kindLabel")
 }
 
 // TestParse_RejectsStagedChannels confirms the four complex channel
@@ -497,27 +471,6 @@ type MyDTO struct {
 	mustNotContain(t, out, ".AddMembershipLowCardRefP(")
 }
 
-func TestEmit_Roaring_Explode(t *testing.T) {
-	// *roaring.Bitmap + ,explode: per-bit BeginAttribute(uint32) loop
-	// (vs the default container path's single BeginAttribute() + N×
-	// AddToContainerP). Empty/nil bitmap = zero iterations = zero attrs.
-	out := generate(t, `package demo
-type MyDTO struct {
-	_    struct{}        `+"`kind:\"my\"`"+`
-	Id   uint64          `+"`lw:\",id\"`"+`
-	Ts   time.Time       `+"`lw:\",ts\"`"+`
-	Bits *roaring.Bitmap `+"`lw:\"bits,u32,explode\"`"+`
-}
-`)
-	parseGo(t, out)
-	mustContain(t, out, "if c.Bits[i] != nil {")
-	mustContain(t, out, "it := c.Bits[i].Iterator()")
-	mustContain(t, out, "for it.HasNext() {")
-	mustContain(t, out, "u32Sec.BeginAttribute(it.Next())")
-	mustNotContain(t, out, ".AddToContainerP(")              // explode does NOT use container append
-	mustContain(t, out, "BeginAttribute(value uint32) Attr") // scalar section signature
-}
-
 func TestEmit_MultiSubColumnSection(t *testing.T) {
 	// u32Range with beginIncl + endExcl sub-columns sharing one
 	// membership — SecI emits BeginAttribute(beginIncl T1, endExcl T2).
@@ -662,28 +615,23 @@ type MyDTO struct {
 	mustContain(t, out, "AddMembershipMixedLowCardRefP(c.ReadingsC[i].Id, c.ReadingsC[i].Params)")
 }
 
-func TestEmit_CarrierExplode_SliceCarrier(t *testing.T) {
-	// An exploded ([]T,explode) carrier value pairs a []marshalltypes.X slice
-	// carrier, one element per emitted attribute, with a runtime length guard.
-	out := generate(t, `package demo
+func TestEmit_SliceCarrierRejected(t *testing.T) {
+	// The []marshalltypes.X slice carrier went with `,explode` (ADR-0113 D1)
+	// — carriers are scalar-only, one per attribute.
+	_, err := generateMay(t, `package demo
 type MyDTO struct {
 	_         struct{}                        `+"`kind:\"my\"`"+`
 	Id        uint64                          `+"`lw:\",id\"`"+`
-	Readings  []uint32                        `+"`lw:\"sensor,u32Array,explode,mixedLowCardRef\"`"+`
+	Readings  []uint32                        `+"`lw:\"sensor,u32Array,mixedLowCardRef\"`"+`
 	ReadingsC []marshalltypes.MixedLowCardRef `+"`lw:\"sensor,u32Array,mixedLowCardRef\"`"+`
 }
 `)
-	parseGo(t, out)
-	// Slice carrier column (extra slice dimension).
-	mustContain(t, out, "ReadingsC [][]marshalltypes.MixedLowCardRef")
-	// Runtime length guard before the per-element loop.
-	mustContain(t, out, "if len(c.ReadingsC[i]) != len(c.Readings[i]) {")
-	mustContain(t, out, "different lengths")
-	// Per-element value loop + element-indexed carrier.
-	mustContain(t, out, "for k, v := range c.Readings[i] {")
-	mustContain(t, out, "AddMembershipMixedLowCardRefP(c.ReadingsC[i][k].Id, c.ReadingsC[i][k].Params)")
-	// Read accumulates parallel value + carrier slices.
-	mustContain(t, out, "c.ReadingsC = append(c.ReadingsC,")
+	if err == nil {
+		t.Fatal("expected slice-carrier rejection, got nil")
+	}
+	if !strings.Contains(err.Error(), "removed with `,explode` (ADR-0113 D1)") {
+		t.Fatalf("expected slice-carrier removal error, got: %v", err)
+	}
 }
 
 // --- mixed-shape multi-sub-column sections (ADR-0101). ---
@@ -808,22 +756,6 @@ type MyDTO struct {
 	mustContain(t, out, "BeginAttribute() Attr")
 	mustContain(t, out, "AddToContainerP(value uint8)")
 	mustContain(t, out, "for _, v := range c.Data[i] {")
-}
-
-func TestEmit_U8ArrayCt_ComposesWithExplode(t *testing.T) {
-	// The override resolves before the flag × shape checks, so
-	// `,ct=u8h,explode` sees a multi-element shape.
-	out := generate(t, `package demo
-type MyDTO struct {
-	_    struct{} `+"`kind:\"my\"`"+`
-	Id   uint64   `+"`lw:\",id\"`"+`
-	Data []uint8  `+"`lw:\"m,u8Array,ct=u8h,explode\"`"+`
-}
-`)
-	parseGo(t, out)
-	mustContain(t, out, "BeginAttribute(value uint8) Attr")
-	mustContain(t, out, "for _, v := range c.Data[i] {")
-	mustNotContain(t, out, "AddToContainerP(value")
 }
 
 func TestParse_RejectsCtReshape(t *testing.T) {

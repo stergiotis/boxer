@@ -178,7 +178,7 @@ func marshalMultiSubColumn(sec, row reflect.Value, g goplan.SectionGroup, lookup
 			mustCall(attr, addMethod, elemArgs...)
 		}
 	}
-	err = addMembership(attr, row, g.Memberships[0], lookup, reflect.Value{})
+	err = addMembership(attr, row, g.Memberships[0], lookup)
 	if err != nil {
 		return
 	}
@@ -293,7 +293,7 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 			// STATIC nested section: one membership from the section tag,
 			// resolved (ref lookup / verbatim literal) exactly like a flat
 			// multi-sub-column section.
-			if err = addMembership(attr, row, g.Memberships[0], lookup, reflect.Value{}); err != nil {
+			if err = addMembership(attr, row, g.Memberships[0], lookup); err != nil {
 				return
 			}
 		} else {
@@ -393,10 +393,6 @@ func marshalField(sec, row reflect.Value, f mappingplan.TaggedField, lookup Look
 		err = marshalScalarOne(sec, row, f, lookup, "BeginAttributeSingle")
 	case goplan.ShapeContainer:
 		err = marshalContainer(sec, row, f, lookup)
-	case goplan.ShapeExplodeBegin:
-		err = marshalExplode(sec, row, f, lookup, "BeginAttribute")
-	case goplan.ShapeExplodeBeginSingle:
-		err = marshalExplode(sec, row, f, lookup, "BeginAttributeSingle")
 	}
 	return
 }
@@ -420,7 +416,7 @@ func marshalScalarOne(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 		val = reslicedIfFixedByte(unwrapLwSingle(row.FieldByName(f.GoFieldName)), f)
 	}
 	attr := mustCall(sec, beginMethod, val)[0]
-	if err = addMembership(attr, row, f, lookup, reflect.Value{}); err != nil {
+	if err = addMembership(attr, row, f, lookup); err != nil {
 		return
 	}
 	mustCall(attr, "EndAttributeP")
@@ -444,7 +440,7 @@ func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 			mustCall(attr, "AddToContainerP", v)
 		}
 		// One carrier (scalar) for the whole container attribute, if any.
-		err = addMembership(attr, row, f, lookup, reflect.Value{})
+		err = addMembership(attr, row, f, lookup)
 		if err != nil {
 			return
 		}
@@ -459,7 +455,7 @@ func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 			v := reslicedIfFixedByte(fld.Index(i), f)
 			mustCall(attr, "AddToContainerP", v)
 		}
-		err = addMembership(attr, row, f, lookup, reflect.Value{})
+		err = addMembership(attr, row, f, lookup)
 		if err != nil {
 			return
 		}
@@ -470,67 +466,13 @@ func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 	return
 }
 
-func marshalExplode(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI, beginMethod string) (err error) {
-	switch {
-	case f.IsRoaring():
-		// Roaring carriers are rejected by PlanBuilder, so there is never a
-		// carrier to index in this arm.
-		bm := row.FieldByName(f.GoFieldName)
-		if bm.IsNil() {
-			return
-		}
-		it := mustCall(bm, "Iterator")[0]
-		for mustCall(it, "HasNext")[0].Bool() {
-			v := mustCall(it, "Next")[0]
-			attr := mustCall(sec, beginMethod, v)[0]
-			err = addMembership(attr, row, f, lookup, reflect.Value{})
-			if err != nil {
-				return
-			}
-			mustCall(attr, "EndAttributeP")
-		}
-	case f.IsSlice():
-		fld := row.FieldByName(f.GoFieldName)
-		// A slice carrier pairs element-wise with the value slice; the two are
-		// independent Go fields, so their lengths must agree at runtime.
-		var carrierFld reflect.Value
-		if f.CarrierField != "" {
-			carrierFld = row.FieldByName(f.CarrierField)
-			if carrierFld.Len() != fld.Len() {
-				err = eb.Build().Str("field", f.GoFieldName).Int("valueLen", fld.Len()).Int("carrierLen", carrierFld.Len()).Errorf("explode value and carrier slices have different lengths")
-				return
-			}
-		}
-		for i := 0; i < fld.Len(); i++ {
-			v := reslicedIfFixedByte(fld.Index(i), f)
-			attr := mustCall(sec, beginMethod, v)[0]
-			carrierElem := reflect.Value{}
-			if carrierFld.IsValid() {
-				carrierElem = carrierFld.Index(i)
-			}
-			err = addMembership(attr, row, f, lookup, carrierElem)
-			if err != nil {
-				return
-			}
-			mustCall(attr, "EndAttributeP")
-		}
-	default:
-		err = eb.Build().Str("field", f.GoFieldName).Errorf("explode shape on non-slice / non-roaring field")
-	}
-	return
-}
-
 // addMembership pushes the per-attribute membership, dispatching on the
 // field's MembershipChannel. Carrier channels (UsesCarrier) read the
-// membership-side data from the sibling carrier — handled first below.
-// Otherwise the Verbatim pair embeds the lw: tag name as []byte and the Ref
-// pair pushes the Lookup-resolved uint64.
-//
-// carrierElem selects the carrier struct: an invalid (zero) Value reads the
-// scalar carrier field from the row (scalar / Option / container values); a
-// valid Value is one element of a slice carrier, supplied per-element by the
-// explode path.
-func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup LookupI, carrierElem reflect.Value) (err error) {
+// membership-side data from the row's scalar carrier sibling — one carrier
+// per attribute — handled first below. Otherwise the Verbatim pair embeds
+// the lw: tag name as []byte and the Ref pair pushes the Lookup-resolved
+// uint64.
+func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
 	// Carrier channels (Cut-2): the membership-side data is per-row, read
@@ -540,10 +482,7 @@ func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 		// pass (value field Id/Name, Params); parametrized channels — whose
 		// membership is the opaque blob alone — pass (Params) only. The
 		// method suffix already selects the right AddMembership…P.
-		carrier := carrierElem
-		if !carrier.IsValid() {
-			carrier = row.FieldByName(f.CarrierField)
-		}
+		carrier := row.FieldByName(f.CarrierField)
 		if vf := ch.CarrierValueField(); vf != "" {
 			mustCall(attr, method, carrier.FieldByName(vf), carrier.FieldByName("Params"))
 		} else {

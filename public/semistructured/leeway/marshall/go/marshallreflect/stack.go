@@ -265,10 +265,6 @@ func fieldEmitsForFilter(row reflect.Value, f mappingplan.TaggedField, filter ca
 	if !hasData {
 		return false
 	}
-	if f.Flags.Explode {
-		// Each element emits a size-1 attribute. Never multi-value.
-		return filter == cardFilterSingleValue
-	}
 	if size == 1 {
 		return filter == cardFilterSingleValue
 	}
@@ -277,8 +273,7 @@ func fieldEmitsForFilter(row reflect.Value, f mappingplan.TaggedField, filter ca
 
 // containerSize returns the element count of a slice / roaring
 // field and a bool indicating whether the field has any data at
-// all. Used to decide cardFilter matching for non-explode multi-
-// shape fields.
+// all. Used to decide cardFilter matching for multi-shape fields.
 func containerSize(row reflect.Value, f mappingplan.TaggedField) (n int, hasData bool) {
 	fld := row.FieldByName(f.GoFieldName)
 	if f.IsRoaring() {

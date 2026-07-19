@@ -433,15 +433,10 @@ func writeColumnsStruct(sb *strings.Builder, plan *mappingplan.Plan) {
 		default:
 			linef(sb, 1, "%s []%s", f.GoFieldName, f.GoType())
 		}
-		// Cut-2 carrier sibling: its own SoA column, emits no attribute. A
-		// scalar carrier is []X (one per attribute); an exploded value's slice
-		// carrier is [][]X (one carrier per emitted element).
+		// Cut-2 carrier sibling: its own SoA column, emits no attribute —
+		// one scalar carrier per attribute, so []X in the SoA.
 		if f.CarrierField != "" {
-			if f.CarrierIsSlice {
-				linef(sb, 1, "%s [][]marshalltypes.%s", f.CarrierField, f.CarrierType)
-			} else {
-				linef(sb, 1, "%s []marshalltypes.%s", f.CarrierField, f.CarrierType)
-			}
+			linef(sb, 1, "%s []marshalltypes.%s", f.CarrierField, f.CarrierType)
 		}
 	}
 	line(sb, 0, "}\n")
@@ -695,10 +690,6 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 			case goplan.ShapeContainer:
 				needContainerOpen = true
 				needAddToContainer = elemType(f)
-			case goplan.ShapeExplodeBegin:
-				needBeginScalarVal = elemType(f)
-			case goplan.ShapeExplodeBeginSingle:
-				needBeginSingleVal = elemType(f)
 			}
 		}
 	}
@@ -1068,7 +1059,7 @@ func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 		line(sb, depth, "}")
 	}
 	if len(ts.Memberships) == 0 {
-		writeMembershipAdd(sb, strings.Repeat("\t", depth), attrVar, g.Memberships[0], "", elemSrc)
+		writeMembershipAdd(sb, strings.Repeat("\t", depth), attrVar, g.Memberships[0], elemSrc)
 	} else {
 		for _, m := range ts.Memberships {
 			suffix := m.Channel.AddMethodSuffix()
@@ -1156,7 +1147,7 @@ func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVa
 		linef(sb, depth+1, "%sAttr.%sP(%s)", secVar, goplan.ContainerAddMethod(len(containers)), strings.Join(elems, ", "))
 		linef(sb, depth, "}")
 	}
-	writeMembershipAdd(sb, indent, secVar+"Attr", memb, "", src)
+	writeMembershipAdd(sb, indent, secVar+"Attr", memb, src)
 	linef(sb, depth, "%sAttr.EndAttributeP()", secVar)
 	if depth == 3 {
 		line(sb, 2, "}")
@@ -1171,17 +1162,15 @@ func writeMultiSubColumnDriver(sb *strings.Builder, g goplan.SectionGroup, secVa
 // membership data from the sibling carrier column. carrierIdx is "" for a
 // scalar carrier (`c.<C>[i]`) and the explode loop variable (e.g. "k") for a
 // slice carrier paired element-wise with an exploded value (`c.<C>[i][k]`).
-func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingplan.TaggedField, carrierIdx string, src valueSrc) {
+func writeMembershipAdd(sb *strings.Builder, indent, attrVar string, f mappingplan.TaggedField, src valueSrc) {
 	ch := f.Flags.Channel
 	method := "AddMembership" + ch.AddMethodSuffix() + "P"
 	if ch.UsesCarrier() {
-		// Cut-2: per-row membership data from the sibling carrier column.
-		// Mixed channels pass (value field Id/Name, Params); parametrized
-		// channels pass (Params) only. The method suffix selects the channel.
+		// Cut-2: per-row membership data from the sibling carrier column —
+		// one scalar carrier per attribute. Mixed channels pass (value field
+		// Id/Name, Params); parametrized channels pass (Params) only. The
+		// method suffix selects the channel.
 		carrier := src.field(f.CarrierField)
-		if carrierIdx != "" {
-			carrier = fmt.Sprintf("%s[%s]", src.field(f.CarrierField), carrierIdx)
-		}
 		if vf := ch.CarrierValueField(); vf != "" {
 			linef(sb, 0, "%s%s.%s(%s.%s, %s.Params)", indent, attrVar, method, carrier, vf, carrier)
 		} else {
@@ -1214,13 +1203,13 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 		if f.IsOption {
 			linef(sb, 2, "if %s {", src.optionHas(f.GoFieldName))
 			linef(sb, 3, "%s := %s.BeginAttribute(%s)", attrVar, secVar, valExpr)
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 			return
 		}
 		linef(sb, 2, "%s := %s.BeginAttribute(%s)", attrVar, secVar, valExpr)
-		writeMembershipAdd(sb, "\t\t", attrVar, f, "", src)
+		writeMembershipAdd(sb, "\t\t", attrVar, f, src)
 		linef(sb, 2, "%s.EndAttributeP()", attrVar)
 
 	case goplan.ShapeScalarBeginSingle:
@@ -1228,13 +1217,13 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 		if f.IsOption {
 			linef(sb, 2, "if %s {", src.optionHas(f.GoFieldName))
 			linef(sb, 3, "%s := %s.BeginAttributeSingle(%s)", attrVar, secVar, valExpr)
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 			return
 		}
 		linef(sb, 2, "%s := %s.BeginAttributeSingle(%s)", attrVar, secVar, valExpr)
-		writeMembershipAdd(sb, "\t\t", attrVar, f, "", src)
+		writeMembershipAdd(sb, "\t\t", attrVar, f, src)
 		linef(sb, 2, "%s.EndAttributeP()", attrVar)
 
 	case goplan.ShapeContainer:
@@ -1249,7 +1238,7 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			line(sb, 3, "for it.HasNext() {")
 			linef(sb, 4, "%s.AddToContainerP(it.Next())", attrVar)
 			line(sb, 3, "}")
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		case f.IsSlice():
@@ -1258,48 +1247,11 @@ func writeFieldDriver(sb *strings.Builder, f mappingplan.TaggedField, secVar str
 			linef(sb, 3, "for _, v := range %s {", src.field(f.GoFieldName))
 			linef(sb, 4, "%s.AddToContainerP(%s)", attrVar, sliceElemExpr(f, "v"))
 			line(sb, 3, "}")
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
+			writeMembershipAdd(sb, "\t\t\t", attrVar, f, src)
 			linef(sb, 3, "%s.EndAttributeP()", attrVar)
 			line(sb, 2, "}")
 		default:
 			err = eb.Build().Str("field", f.GoFieldName).Errorf("container shape on non-slice / non-roaring field — should have been caught by parser")
-		}
-
-	case goplan.ShapeExplodeBegin, goplan.ShapeExplodeBeginSingle:
-		beginMethod := "BeginAttribute"
-		if shape == goplan.ShapeExplodeBeginSingle {
-			beginMethod = "BeginAttributeSingle"
-		}
-		switch {
-		case f.IsRoaring():
-			linef(sb, 2, "if %s != nil {", src.field(f.GoFieldName))
-			linef(sb, 3, "it := %s.Iterator()", src.field(f.GoFieldName))
-			line(sb, 3, "for it.HasNext() {")
-			linef(sb, 4, "%s := %s.%s(it.Next())", attrVar, secVar, beginMethod)
-			writeMembershipAdd(sb, "\t\t\t\t", attrVar, f, "", src)
-			linef(sb, 4, "%s.EndAttributeP()", attrVar)
-			line(sb, 3, "}")
-			line(sb, 2, "}")
-		case f.IsSlice() && f.CarrierField != "":
-			// Exploded value with a slice carrier: one attribute per element,
-			// each pairing value[k] with carrier[k]. Lengths must agree.
-			linef(sb, 2, "if len(%s) != len(%s) {", src.field(f.CarrierField), src.field(f.GoFieldName))
-			linef(sb, 3, "err = eb.Build()%s.Str(\"field\", %q).Errorf(\"explode value and carrier slices have different lengths\")", src.rowErrCtx, f.GoFieldName)
-			line(sb, 3, "return")
-			line(sb, 2, "}")
-			linef(sb, 2, "for k, v := range %s {", src.field(f.GoFieldName))
-			linef(sb, 3, "%s := %s.%s(%s)", attrVar, secVar, beginMethod, sliceElemExpr(f, "v"))
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "k", src)
-			linef(sb, 3, "%s.EndAttributeP()", attrVar)
-			line(sb, 2, "}")
-		case f.IsSlice():
-			linef(sb, 2, "for _, v := range %s {", src.field(f.GoFieldName))
-			linef(sb, 3, "%s := %s.%s(%s)", attrVar, secVar, beginMethod, sliceElemExpr(f, "v"))
-			writeMembershipAdd(sb, "\t\t\t", attrVar, f, "", src)
-			linef(sb, 3, "%s.EndAttributeP()", attrVar)
-			line(sb, 2, "}")
-		default:
-			err = eb.Build().Str("field", f.GoFieldName).Errorf("explode shape on non-slice / non-roaring field — should have been caught by parser")
 		}
 	}
 	return
@@ -1319,8 +1271,8 @@ func scalarValueExpr(f mappingplan.TaggedField, src valueSrc) string {
 	return blobSliceMaybe(f, src.field(f.GoFieldName))
 }
 
-// sliceElemExpr renders the per-element expression inside an explode
-// or container loop. Re-slices fixed-width byte arrays so the AttrI's
+// sliceElemExpr renders the per-element expression inside a container
+// loop. Re-slices fixed-width byte arrays so the AttrI's
 // AddToContainerP / SecI's BeginAttribute (which take []byte for blob
 // sections) accepts them.
 func sliceElemExpr(f mappingplan.TaggedField, elemVar string) string {
@@ -1380,9 +1332,9 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 	for _, sc := range g.SubColumns {
 		for _, f := range sc.Fields {
 			switch goplan.ClassifyBegin(f) {
-			case goplan.ShapeScalarBegin, goplan.ShapeExplodeBegin:
+			case goplan.ShapeScalarBegin:
 				hasScalarValue = true
-			case goplan.ShapeScalarBeginSingle, goplan.ShapeExplodeBeginSingle:
+			case goplan.ShapeScalarBeginSingle:
 				hasSingleVal = true
 			case goplan.ShapeContainer:
 				hasIterVal = true
@@ -1793,8 +1745,6 @@ func writeCarrierSectionDecode(sb *strings.Builder, g goplan.SectionGroup, attrs
 	}
 
 	switch {
-	case f.IsSlice() && f.Flags.Explode:
-		writeCarrierExplodeDecode(sb, f, attrsVar, membsVar, prefix)
 	case f.IsSlice():
 		writeCarrierContainerDecode(sb, f, attrsVar, membsVar, prefix)
 	case f.IsOption:
@@ -1940,34 +1890,6 @@ func writeCarrierContainerDecode(sb *strings.Builder, f mappingplan.TaggedField,
 	line(sb, 2, "}")
 	linef(sb, 2, "c.%s = append(c.%s, %s)", f.GoFieldName, f.GoFieldName, sliceVar)
 	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierVar)
-}
-
-// writeCarrierExplodeDecode decodes an exploded ([]T,explode) carrier value: N
-// attributes, each one value + one carrier, accumulated into a value slice and
-// a parallel carrier slice.
-func writeCarrierExplodeDecode(sb *strings.Builder, f mappingplan.TaggedField, attrsVar, membsVar, prefix string) {
-	sliceVar := prefix + f.GoFieldName + "Slice"
-	carrierSliceVar := prefix + f.GoFieldName + "CarrierSlice"
-	elemVar := prefix + f.GoFieldName + "Elem"
-	elemCarrierVar := prefix + f.GoFieldName + "ElemCarrier"
-	readMethod := "GetMembValue" + f.Flags.Channel.CarrierReadMethodSuffix()
-	valRead := fmt.Sprintf("%s.%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, goplan.SingleValueReadAccessor(f))
-
-	linef(sb, 2, "var %s []%s", sliceVar, f.GoType())
-	linef(sb, 2, "var %s []marshalltypes.%s", carrierSliceVar, f.CarrierType)
-	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
-	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
-	linef(sb, 3, "var %s %s", elemVar, f.GoType())
-	writeCarrierValueRead(sb, 3, f, elemVar, valRead)
-	linef(sb, 3, "var %s marshalltypes.%s", elemCarrierVar, f.CarrierType)
-	writeCarrierMembLoopHeader(sb, 3, f, membsVar, readMethod)
-	linef(sb, 4, "%s = %s", elemCarrierVar, carrierStructLiteral(f, carrierMembValExpr(f), "params"))
-	line(sb, 3, "}")
-	linef(sb, 3, "%s = append(%s, %s)", sliceVar, sliceVar, elemVar)
-	linef(sb, 3, "%s = append(%s, %s)", carrierSliceVar, carrierSliceVar, elemCarrierVar)
-	line(sb, 2, "}")
-	linef(sb, 2, "c.%s = append(c.%s, %s)", f.GoFieldName, f.GoFieldName, sliceVar)
-	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierSliceVar)
 }
 
 func writeFieldAccumulatorDecl(sb *strings.Builder, f mappingplan.TaggedField, prefix string) {
@@ -2166,9 +2088,6 @@ func ReadRowSupported(plan *mappingplan.Plan) (ok bool, reason string) {
 		}
 		if f.Flags.Channel.UsesCarrier() {
 			return false, fmt.Sprintf("field %s uses a carrier channel", f.GoFieldName)
-		}
-		if f.Flags.Explode {
-			return false, fmt.Sprintf("field %s is exploded", f.GoFieldName)
 		}
 	}
 	return true, ""

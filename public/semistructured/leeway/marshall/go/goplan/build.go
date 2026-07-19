@@ -60,14 +60,6 @@ type FieldShape struct {
 	// package + struct name; PlanBuilder pairs the carrier with its value
 	// sibling. A carrier field's other shape bits are unused.
 	CarrierType string
-
-	// CarrierIsSlice is true when the carrier field's Go type is a slice of
-	// the carrier struct (`[]marshalltypes.X`) rather than a scalar
-	// (`marshalltypes.X`). A slice carrier pairs with an exploded value field
-	// — one carrier element per emitted attribute; a scalar carrier pairs with
-	// every other value shape (one carrier for the single / container
-	// attribute). PlanBuilder.Finish checks this matches the value shape.
-	CarrierIsSlice bool
 }
 
 // ScalarCanonicalForGoType maps a scalar Go-type spelling to its leeway
@@ -229,11 +221,12 @@ type PlanBuilder struct {
 }
 
 // carrierInfo records a parsed carrier field pending pairing in Finish.
+// Carriers are scalar-only — one `marshalltypes.X` per attribute (the
+// `[]marshalltypes.X` slice form went with `,explode`, ADR-0113 D1).
 type carrierInfo struct {
 	goField     string
 	carrierType string
 	channel     mappingplan.MembershipChannel
-	isSlice     bool // []marshalltypes.X (pairs with an exploded value)
 }
 
 // NewPlanBuilder returns a builder seeded with the plan-level identity.
@@ -299,8 +292,7 @@ func (b *PlanBuilder) AddUnderscoreField(kindTag, plainTag, lwTag string) (err e
 		err = eb.Build().Str("tag", lwTag).Errorf("const declaration cannot target a sub-column")
 		return
 	}
-	if pt.Flags.Explode {
-		err = eb.Build().Str("tag", lwTag).Errorf("const declaration cannot combine with `explode`")
+	if err = rejectRemovedValueChannel(pt.Flags.Channel, "", lwTag); err != nil {
 		return
 	}
 	b.plan.Fields = append(b.plan.Fields, mappingplan.TaggedField{
@@ -368,8 +360,8 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 			err = eb.Build().Str("tag", lwTag).Errorf("plain field cannot carry sub-column (`:<col>`)")
 			return
 		}
-		if flags.Unit || flags.Explode || flags.HasConst || flags.CanonicalType != "" || flags.Channel != mappingplan.MembershipChannelLowCardRef {
-			err = eb.Build().Str("field", goFieldName).Errorf("plain field cannot carry channel / `unit` / `explode` / `const` / `ct=` flags (flags apply to tagged-value attributes only)")
+		if flags.Unit || flags.HasConst || flags.CanonicalType != "" || flags.Channel != mappingplan.MembershipChannelLowCardRef {
+			err = eb.Build().Str("field", goFieldName).Errorf("plain field cannot carry channel / `unit` / `const` / `ct=` flags (flags apply to tagged-value attributes only)")
 			return
 		}
 		if shape.IsOption || isRoaring || isSlice {
@@ -446,12 +438,11 @@ func (b *PlanBuilder) AddField(goFieldName, lwTag string, shape FieldShape) (err
 
 	// Flag × shape consistency.
 	isMulti := isSlice || isRoaring
-	if flags.Explode && !isMulti {
-		err = eb.Build().Str("field", goFieldName).Str("flag", "explode").Errorf("`explode` requires a multi-element shape (`[]T`, `*roaring.Bitmap`, `[][]byte`)")
+	if flags.Unit && isMulti {
+		err = eb.Build().Str("field", goFieldName).Str("flag", "unit").Errorf("`unit` requires a scalar shape — the container shape has no per-element call to switch")
 		return
 	}
-	if flags.Unit && isMulti && !flags.Explode {
-		err = eb.Build().Str("field", goFieldName).Str("flag", "unit").Errorf("`unit` on a multi-element shape requires `explode` (otherwise the default container shape has no per-element call to switch)")
+	if err = rejectRemovedValueChannel(flags.Channel, goFieldName, lwTag); err != nil {
 		return
 	}
 	if flags.HasConst {
@@ -552,8 +543,8 @@ func (b *PlanBuilder) addCarrierField(goFieldName, membership, section, column s
 		err = eb.Build().Str("field", goFieldName).Str("carrier", shape.CarrierType).Str("channel", flags.Channel.String()).Str("wantCarrier", want).Errorf("carrier type does not match the channel flag")
 		return
 	}
-	if flags.Unit || flags.Explode || flags.HasConst || flags.CanonicalType != "" {
-		err = eb.Build().Str("field", goFieldName).Errorf("carrier field cannot carry `unit` / `explode` / `const` / `ct=` flags")
+	if flags.Unit || flags.HasConst || flags.CanonicalType != "" {
+		err = eb.Build().Str("field", goFieldName).Errorf("carrier field cannot carry `unit` / `const` / `ct=` flags")
 		return
 	}
 	key := membership + "\x00" + section
@@ -561,7 +552,19 @@ func (b *PlanBuilder) addCarrierField(goFieldName, membership, section, column s
 		err = eb.Build().Str("membership", membership).Str("section", section).Str("first", prev.goField).Str("second", goFieldName).Errorf("two carrier fields share one membership+section")
 		return
 	}
-	b.carriers[key] = carrierInfo{goField: goFieldName, carrierType: shape.CarrierType, channel: flags.Channel, isSlice: shape.CarrierIsSlice}
+	b.carriers[key] = carrierInfo{goField: goFieldName, carrierType: shape.CarrierType, channel: flags.Channel}
+	return
+}
+
+// rejectRemovedValueChannel enforces ADR-0113 D1's grammar cull on value
+// fields (and `_` consts): the `,highCardVerbatim` spelling is no longer
+// authorable there. The channel itself survives — on tuple `@membership`
+// fields and nested static memberships, and at the DML level — so the token
+// stays in the shared flag vocabulary for those grammars.
+func rejectRemovedValueChannel(ch mappingplan.MembershipChannel, goFieldName, lwTag string) (err error) {
+	if ch == mappingplan.MembershipChannelHighCardVerbatim {
+		err = eb.Build().Str("field", goFieldName).Str("tag", lwTag).Errorf("the `,highCardVerbatim` value-field spelling was removed (ADR-0113 D1) — the channel remains available on tuple `@membership` fields, nested memberships, and via hand-written DML")
+	}
 	return
 }
 
@@ -677,8 +680,8 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			// channel) so an attribute carries several memberships
 			// (`membership-card > 1`), possibly on heterogeneous channels
 			// (ADR-0109 (a)). The channel is per-field.
-			if pt.Flags.Unit || pt.Flags.Explode || pt.Flags.HasConst || pt.Flags.CanonicalType != "" {
-				err = ctx.Errorf("`%s` field takes only a channel flag (no unit / explode / const / ct=)", TupleMembershipMarker)
+			if pt.Flags.Unit || pt.Flags.HasConst || pt.Flags.CanonicalType != "" {
+				err = ctx.Errorf("`%s` field takes only a channel flag (no unit / const / ct=)", TupleMembershipMarker)
 				return
 			}
 			if isRoaring {
@@ -732,8 +735,8 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			return
 		}
 		usedCols[col] = e.GoFieldName
-		if pt.Flags.Unit || pt.Flags.Explode || pt.Flags.HasConst {
-			err = ctx.Errorf("`unit` / `explode` / `const` not supported inside a tuple element — each element is one tuple attribute plus zipped co-containers")
+		if pt.Flags.Unit || pt.Flags.HasConst {
+			err = ctx.Errorf("`unit` / `const` not supported inside a tuple element — each element is one tuple attribute plus zipped co-containers")
 			return
 		}
 		if pt.Flags.Channel != mappingplan.MembershipChannelLowCardRef {
@@ -925,8 +928,8 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 			// untagged fields would both claim "value" and collide below.
 			column = "value"
 		}
-		if flags.Unit || flags.Explode || flags.HasConst || flags.Channel != mappingplan.MembershipChannelLowCardRef {
-			err = ctx.Errorf("nested sub-column tag takes only `ct=` (no unit / explode / const / channel — the channel is on the membership)")
+		if flags.Unit || flags.HasConst || flags.Channel != mappingplan.MembershipChannelLowCardRef {
+			err = ctx.Errorf("nested sub-column tag takes only `ct=` (no unit / const / channel — the channel is on the membership)")
 			return
 		}
 		if prev, dup := usedCols[column]; dup {
@@ -1009,8 +1012,8 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 			err = eb.Build().Str("field", goFieldName).Errorf("nested section field names the whole section, not a sub-column (`:<col>`) — the sub-columns are the struct's fields")
 			return
 		}
-		if pt.Flags.Unit || pt.Flags.Explode || pt.Flags.HasConst || pt.Flags.CanonicalType != "" {
-			err = eb.Build().Str("field", goFieldName).Errorf("nested section field tag takes only a channel flag (no unit / explode / const / ct=)")
+		if pt.Flags.Unit || pt.Flags.HasConst || pt.Flags.CanonicalType != "" {
+			err = eb.Build().Str("field", goFieldName).Errorf("nested section field tag takes only a channel flag (no unit / const / ct=)")
 			return
 		}
 		if pt.Flags.Channel.UsesCarrier() {
@@ -1222,23 +1225,11 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 			err = eb.Build().Str("field", f.GoFieldName).Str("carrierField", c.goField).Str("valueChannel", f.Flags.Channel.String()).Str("carrierChannel", c.channel.String()).Errorf("value field and its carrier sibling declare different channels")
 			return
 		}
-		// Carrier multiplicity must match the value shape: an exploded value
-		// emits N attributes (one carrier each → []marshalltypes.X); every
-		// other shape (scalar / Option / container) emits one carrier per
-		// attribute (scalar marshalltypes.X). Roaring values were rejected at
-		// AddField, so f.IsSlice fully determines the multi case here.
-		valueIsExplode := f.IsSlice() && f.Flags.Explode
-		if valueIsExplode != c.isSlice {
-			want := "a scalar `marshalltypes." + c.carrierType + "`"
-			if valueIsExplode {
-				want = "a slice `[]marshalltypes." + c.carrierType + "`"
-			}
-			err = eb.Build().Str("field", f.GoFieldName).Str("carrierField", c.goField).Str("channel", f.Flags.Channel.String()).Errorf("carrier multiplicity must match the value shape: this value needs %s carrier", want)
-			return
-		}
+		// Carriers are scalar-only: one marshalltypes.X per attribute,
+		// whatever the value shape (scalar / Option / container). The
+		// element-wise slice pairing went with `,explode` (ADR-0113 D1).
 		f.CarrierField = c.goField
 		f.CarrierType = c.carrierType
-		f.CarrierIsSlice = c.isSlice
 		delete(b.carriers, key)
 	}
 	for key, c := range b.carriers {
@@ -1301,10 +1292,6 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 		}
 		if f.Flags.Unit {
 			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Errorf("`unit` not supported in a multi-sub-column section")
-			return
-		}
-		if f.Flags.Explode {
-			err = eb.Build().Str("section", f.LWSection).Str("field", f.GoFieldName).Errorf("`explode` not supported in a multi-sub-column section — the attribute is one tuple plus zipped co-containers per row")
 			return
 		}
 	}

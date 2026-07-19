@@ -319,10 +319,10 @@ func renderVerdict(ids *c.WidgetIdStack, m *Model) {
 // min height so the cards line up) and returns true if its remove button fired.
 func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 	// A const is a fixed literal declared on a `_` field: no Go field, no
-	// Option, no explode. Normalise those off so the row stays valid and the
-	// type editor + flags below render disabled.
-	if r.IsConst && (r.IsOption || r.Explode) {
-		r.IsOption, r.Explode = false, false
+	// Option. Normalise that off so the row stays valid and the type editor
+	// + flags below render disabled.
+	if r.IsConst && r.IsOption {
+		r.IsOption = false
 		m.dirty = true
 	}
 
@@ -647,17 +647,16 @@ func renderTypeEditor(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 }
 
 // renderRowFlags draws the channel picker, the Option[T] presence flag, and the
-// unit/explode/const flags, disabling any control whose toggle would compose an
+// unit/const flags, disabling any control whose toggle would compose an
 // invalid field. Multiplicity ([]T / roaring) now lives in the canonical type
 // (HomogenousArray / Set modifier), not separate toggles; it is read back here
-// to gate explode/unit/Option. A control stays interactive while on, so a state
+// to gate unit/Option. A control stays interactive while on, so a state
 // that became invalid (e.g. by editing the type) can always be backed out.
 func renderRowFlags(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 	mod, _ := canonicaltypes.GetScalarModifier(r.typeModel.Node())
 	isMulti := mod == canonicaltypes.ScalarModifierHomogenousArray || mod == canonicaltypes.ScalarModifierSet
-	optEnabled := !r.IsConst && (r.IsOption || !isMulti)   // Option only over a scalar value type
-	explodeEnabled := !r.IsConst && (r.Explode || isMulti) // explode requires a multi shape
-	unitEnabled := r.Unit || !(isMulti && !r.Explode)      // unit on a multi shape requires explode
+	optEnabled := !r.IsConst && (r.IsOption || !isMulti) // Option only over a scalar value type
+	unitEnabled := r.Unit || !isMulti                    // unit requires a scalar shape
 
 	for range c.Horizontal().KeepIter() {
 		renderChannelCombo(ids, m, r)
@@ -665,9 +664,6 @@ func renderRowFlags(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 			m.dirty = true
 		}
 		if toggle(ids, "unit", "unit", &r.Unit, unitEnabled) {
-			m.dirty = true
-		}
-		if toggle(ids, "explode", "explode", &r.Explode, explodeEnabled) {
 			m.dirty = true
 		}
 		if toggle(ids, "const", "const", &r.IsConst, true) {

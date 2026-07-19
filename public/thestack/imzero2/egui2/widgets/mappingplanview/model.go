@@ -47,7 +47,6 @@ type FieldRow struct {
 
 	Channel mappingplan.MembershipChannel // one of the four Cut-1 channels in v1
 	Unit    bool                          // ,unit
-	Explode bool                          // ,explode
 
 	IsConst    bool   // declared on a `_` field as ,const=<value>
 	ConstValue string // the constant value
@@ -180,7 +179,7 @@ func (r *FieldRow) TupleElemSpecs() []goplan.TupleElem {
 // LWTag assembles the lw: struct-tag *value* this row represents — the string
 // PlanBuilder parses via SplitLW. Plain columns produce ",<col>"; const rows
 // produce "<memb>,<sec>,const=<value>"; value fields produce
-// "<memb>,<sec>[:<col>][,unit][,explode][,<channel>]". The default channel
+// "<memb>,<sec>[:<col>][,unit][,<channel>]". The default channel
 // (LowCardRef) contributes no flag, matching mappingplan.MembershipChannel.String.
 // A tuple row's outer tag is the bare section name (SplitTupleOuterLW).
 func (r *FieldRow) LWTag() string {
@@ -205,9 +204,6 @@ func (r *FieldRow) LWTag() string {
 	}
 	if r.Unit {
 		sb.WriteString(",unit")
-	}
-	if r.Explode {
-		sb.WriteString(",explode")
 	}
 	if flag := r.Channel.String(); flag != "" {
 		sb.WriteByte(',')

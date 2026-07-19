@@ -66,11 +66,11 @@ func (FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err erro
 // `Range`. This preserves the pre-flag emit behaviour where the
 // runtime.facts generator automatically picked BeginAttributeSingle for
 // scalar values landing in homogeneous-array section types. DTOs that
-// declare an explicit `,unit` or `,explode` are left untouched.
+// declare an explicit `,unit` are left untouched.
 func inferUnitFromSectionSuffix(plan *mappingplan.Plan) {
 	for i := range plan.Fields {
 		f := &plan.Fields[i]
-		if f.Flags.Unit || f.Flags.Explode {
+		if f.Flags.Unit {
 			continue
 		}
 		if f.IsSlice() || f.IsRoaring() {

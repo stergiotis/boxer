@@ -528,15 +528,12 @@ func classifyType(expr ast.Expr) (shape goplan.FieldShape, err error) {
 			shape.Canonical, err = goplan.ScalarCanonicalForGoType("[]byte")
 			return
 		}
-		// []marshalltypes.X — a slice carrier, paired element-wise with an
-		// exploded value field (one carrier per emitted attribute). Recognised
-		// by the slice element being a marshalltypes selector, like the scalar
-		// carrier branch below; PlanBuilder pairs it and checks the value is
-		// `,explode`.
+		// []marshalltypes.X — the former element-wise slice carrier, removed
+		// with `,explode` (ADR-0113 D1). Carriers are scalar-only: one
+		// marshalltypes.X per attribute (the scalar branch below).
 		if sel, isSel := at.Elt.(*ast.SelectorExpr); isSel {
 			if pkg, pkgOk := sel.X.(*ast.Ident); pkgOk && pkg.Name == "marshalltypes" {
-				shape.CarrierType = sel.Sel.Name
-				shape.CarrierIsSlice = true
+				err = eb.Build().Str("carrier", sel.Sel.Name).Errorf("slice carriers (`[]marshalltypes.%s`) were removed with `,explode` (ADR-0113 D1) — a carrier is a scalar `marshalltypes.%s`, one per attribute", sel.Sel.Name, sel.Sel.Name)
 				return
 			}
 		}

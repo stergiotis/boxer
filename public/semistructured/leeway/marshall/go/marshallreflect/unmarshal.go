@@ -799,21 +799,6 @@ func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, me
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 
 	switch {
-	case f.IsSlice() && f.Flags.Explode:
-		// N attributes → a value slice paired with a carrier slice.
-		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType())), 0, 0)
-		carrierSlice := reflect.MakeSlice(reflect.SliceOf(carrierType), 0, 0)
-		for attrJ := int64(0); attrJ < n; attrJ++ {
-			carrierVal, ok := readCarrierStruct(membs, f, carrierType, readMethod, i, attrJ)
-			if !ok {
-				continue
-			}
-			valSlice = reflect.Append(valSlice, readCarrierValue(attrs, f, valMethod, i, attrJ))
-			carrierSlice = reflect.Append(carrierSlice, carrierVal)
-		}
-		row.FieldByName(f.GoFieldName).Set(valSlice)
-		row.FieldByName(f.CarrierField).Set(carrierSlice)
-
 	case f.IsSlice():
 		// Container: one attribute carrying N values (a Seq) + one carrier.
 		valSlice := reflect.MakeSlice(reflect.SliceOf(goTypeReflect(f.GoType())), 0, 0)
@@ -868,14 +853,11 @@ func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, me
 	return
 }
 
-// carrierStructType returns the carrier *struct* reflect.Type: the field type
-// for a scalar carrier, or its element type for a slice carrier ([]X → X).
+// carrierStructType returns the carrier struct reflect.Type — carriers are
+// scalar fields (one marshalltypes.X per attribute), so this is the field
+// type directly.
 func carrierStructType(row reflect.Value, f *mappingplan.TaggedField) reflect.Type {
-	t := row.FieldByName(f.CarrierField).Type()
-	if f.CarrierIsSlice {
-		return t.Elem()
-	}
-	return t
+	return row.FieldByName(f.CarrierField).Type()
 }
 
 // readCarrierStruct reconstructs one carrier struct (value of carrierType)

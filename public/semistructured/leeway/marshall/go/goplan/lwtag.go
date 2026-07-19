@@ -104,11 +104,11 @@ func parseFlagTokens(tokens []string, flags *mappingplan.FieldFlags) (err error)
 			}
 			flags.Unit = true
 		case "explode":
-			if flags.Explode {
-				err = eb.Build().Str("flag", token).Errorf("flag declared twice")
-				return
-			}
-			flags.Explode = true
+			// Removed by ADR-0113 D1: the per-element (N×1) write shape is
+			// authored as a nested `[]Attr` section; the default container
+			// one-liner (1×N) needs no flag.
+			err = eb.Build().Str("flag", token).Errorf("`,explode` was removed (ADR-0113 D1) — author a nested `[]Attr` section for one attribute per element")
+			return
 		case "verbatim", "lowCardVerbatim":
 			// `,verbatim` retained as alias for `,lowCardVerbatim` per
 			// ADR-0008 D3 SD9 — existing DTOs compile unchanged.
@@ -158,7 +158,7 @@ func parseFlagTokens(tokens []string, flags *mappingplan.FieldFlags) (err error)
 				return
 			}
 		default:
-			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, explode, verbatim / lowCardVerbatim, highCardRef, highCardVerbatim, const=<value>, ct=<canonical>)")
+			err = eb.Build().Str("flag", token).Errorf("unknown flag token (recognised: unit, verbatim / lowCardVerbatim, highCardRef, highCardVerbatim, const=<value>, ct=<canonical>)")
 			return
 		}
 	}

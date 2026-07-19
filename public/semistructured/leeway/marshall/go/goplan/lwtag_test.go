@@ -29,8 +29,6 @@ func TestSplitLW_Accept(t *testing.T) {
 		{tag: ",s", sec: "s"},                 // empty membership tolerated (plain column)
 		{tag: " m , s ", memb: "m", sec: "s"}, // whitespace trimmed
 		{tag: "m,s,unit", memb: "m", sec: "s", flags: mappingplan.FieldFlags{Unit: true}},
-		{tag: "m,s,explode", memb: "m", sec: "s", flags: mappingplan.FieldFlags{Explode: true}},
-		{tag: "m,s,unit,explode", memb: "m", sec: "s", flags: mappingplan.FieldFlags{Unit: true, Explode: true}},
 		{tag: "m,s,verbatim", memb: "m", sec: "s", flags: ch(mappingplan.MembershipChannelLowCardVerbatim)},
 		{tag: "m,s,lowCardVerbatim", memb: "m", sec: "s", flags: ch(mappingplan.MembershipChannelLowCardVerbatim)},
 		{tag: "m,s,highCardRef", memb: "m", sec: "s", flags: ch(mappingplan.MembershipChannelHighCardRef)},
@@ -60,7 +58,7 @@ func TestSplitLW_Reject(t *testing.T) {
 	}{
 		{"unknown token", "m,s,bogus", "unknown flag token"},
 		{"unit twice", "m,s,unit,unit", "declared twice"},
-		{"explode twice", "m,s,explode,explode", "declared twice"},
+		{"explode removed (ADR-0113 D1)", "m,s,explode", "removed (ADR-0113 D1)"},
 		{"two channels", "m,s,verbatim,highCardRef", "channel flag declared twice"},
 		{"two channels b", "m,s,highCardRef,lowCardVerbatim", "channel flag declared twice"},
 		{"const twice", "m,s,const=a,const=b", "declared twice"},

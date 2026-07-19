@@ -17,93 +17,13 @@ import (
 )
 
 // ADR-0008 OQ#4 lifted the scalar-only restriction on carrier (mixed /
-// parametrized) value fields. A value may now be Option[T], a container []T
-// (one attribute, N values, one scalar carrier), or []T,explode (N attributes,
-// one value + one carrier each, paired by a []marshalltypes.X slice carrier).
-// These drive all three through the reflect codec — write via the recording
-// mock, read via per-attribute mocks — plus the explode length-mismatch guard
-// and the RowComposer multi-value path. mixedLowCardVerbatim is used because
-// the recording DML already implements its AddMembership method.
-
-// --- explode: value slice + slice carrier, paired element-wise. ---
-
-type explodeCarrierDrone struct {
-	_          struct{}                             `kind:"ecd"`
-	Id         uint64                               `lw:",id"`
-	NaturalKey []byte                               `lw:",naturalKey"`
-	Tags       []string                             `lw:"sensor,symbol,explode,mixedLowCardVerbatim"`
-	TagsC      []marshalltypes.MixedLowCardVerbatim `lw:"sensor,symbol,mixedLowCardVerbatim"`
-}
-
-func TestCarrierExplode_Write(t *testing.T) {
-	dml := &recordingDML{}
-	rows := []explodeCarrierDrone{{
-		Id: 1, NaturalKey: []byte("k"),
-		Tags: []string{"a", "b"},
-		TagsC: []marshalltypes.MixedLowCardVerbatim{
-			{Name: []byte("na"), Params: []byte("pa")},
-			{Name: []byte("nb"), Params: []byte("pb")},
-		},
-	}}
-	require.NoError(t, marshallreflect.Marshal(dml, rows, marshallreflect.NoLookup{}))
-	joined := strings.Join(dml.log, "\n")
-	require.Equal(t, 2, strings.Count(joined, "Symbol.BeginAttribute(")) // one attribute per element
-	require.Contains(t, joined, `Symbol.BeginAttribute("a")`)
-	require.Contains(t, joined, `AddMembershipMixedLowCardVerbatimP("na", "pa")`)
-	require.Contains(t, joined, `Symbol.BeginAttribute("b")`)
-	require.Contains(t, joined, `AddMembershipMixedLowCardVerbatimP("nb", "pb")`)
-}
-
-func TestCarrierExplode_LengthMismatchErrors(t *testing.T) {
-	dml := &recordingDML{}
-	rows := []explodeCarrierDrone{{
-		Id: 1, NaturalKey: []byte("k"),
-		Tags:  []string{"a", "b"},
-		TagsC: []marshalltypes.MixedLowCardVerbatim{{Name: []byte("na"), Params: []byte("pa")}}, // len 1 != 2
-	}}
-	err := marshallreflect.Marshal(dml, rows, marshallreflect.NoLookup{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "different lengths")
-}
-
-type explodeAttrsMock struct{ vals [][]string }
-
-func (m explodeAttrsMock) GetNumberOfAttributes(e raruntime.EntityIdx) int64 {
-	return int64(len(m.vals[int(e)]))
-}
-func (m explodeAttrsMock) GetAttrValueValue(e raruntime.EntityIdx, a raruntime.AttributeIdx) string {
-	return m.vals[int(e)][int(a)]
-}
-
-type explodeMembsMock struct{ names, params [][][]byte }
-
-func (m explodeMembsMock) GetMembValueLowCardVerbatimHighCardParams(e raruntime.EntityIdx, a raruntime.AttributeIdx) iter.Seq2[[]byte, []byte] {
-	return func(yield func([]byte, []byte) bool) {
-		yield(m.names[int(e)][int(a)], m.params[int(e)][int(a)])
-	}
-}
-
-func TestCarrierExplode_Read(t *testing.T) {
-	idArr, nkArr := buildIDNK(t, []uint64{1}, [][]byte{[]byte("k")})
-	defer idArr.Release()
-	defer nkArr.Release()
-
-	attrs := explodeAttrsMock{vals: [][]string{{"a", "b"}}}
-	membs := explodeMembsMock{
-		names:  [][][]byte{{[]byte("na"), []byte("nb")}},
-		params: [][][]byte{{[]byte("pa"), []byte("pb")}},
-	}
-	var got []explodeCarrierDrone
-	require.NoError(t, marshallreflect.Unmarshal(carrierArgs(idArr, nkArr, attrs, membs), &got, marshallreflect.NoLookup{}))
-
-	require.Len(t, got, 1)
-	require.Equal(t, []string{"a", "b"}, got[0].Tags)
-	require.Len(t, got[0].TagsC, 2)
-	require.Equal(t, []byte("na"), got[0].TagsC[0].Name)
-	require.Equal(t, []byte("pa"), got[0].TagsC[0].Params)
-	require.Equal(t, []byte("nb"), got[0].TagsC[1].Name)
-	require.Equal(t, []byte("pb"), got[0].TagsC[1].Params)
-}
+// parametrized) value fields. A value may be Option[T] or a container []T
+// (one attribute, N values, one scalar carrier). These drive both through
+// the reflect codec — write via the recording mock, read via per-attribute
+// mocks — plus the RowComposer multi-value path. mixedLowCardVerbatim is
+// used because the recording DML already implements its AddMembership
+// method. (The former []T,explode + slice-carrier pairing was removed by
+// ADR-0113 D1.)
 
 // --- container: value slice + one scalar carrier. ---
 

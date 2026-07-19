@@ -293,7 +293,9 @@ func TestPlanFor_MixedSectionRejections(t *testing.T) {
 		}
 		_, err := marshallreflect.PlanFor[bad]()
 		require.Error(t, err)
-		require.ErrorContains(t, err, "`explode` not supported in a multi-sub-column section")
+		// The flag is gone from the grammar entirely (ADR-0113 D1), so the
+		// rejection fires at tag-parse time rather than the section rule.
+		require.ErrorContains(t, err, "removed (ADR-0113 D1)")
 	})
 	t.Run("unit", func(t *testing.T) {
 		type bad struct {

@@ -419,15 +419,8 @@ func init() {
 // trailing flag positions. They are orthogonal:
 //
 //   - Unit selects BeginAttributeSingle over BeginAttribute when
-//     emitting per-attribute value calls. Meaningful on scalar shapes
-//     (T, Option[T]) and on per-element calls under Explode.
-//
-//   - Explode iterates the multi-element value and emits one attribute
-//     per element instead of one container attribute carrying every
-//     value. Meaningful on multi-element shapes ([]T, *roaring.Bitmap,
-//     [][]byte). Without it, the default for multi-element fields is
-//     one attribute with N container values (the bitmap-style 1×N
-//     wire shape).
+//     emitting the per-attribute value call. Meaningful on scalar
+//     shapes (T, Option[T]).
 //
 //   - Channel selects one of the eight leeway membership channels.
 //     Default is LowCardRef (uint64 id resolved via lookup). Each
@@ -437,20 +430,19 @@ func init() {
 //
 // Begin-shape combinations:
 //
-//	(none)         scalar    → BeginAttribute(v)                       1×1
-//	Unit           scalar    → BeginAttributeSingle(v)                 1×1
-//	(none)         multi     → BeginAttribute()+AddToContainer*N+End   1×N
-//	Explode        multi     → for v: BeginAttribute(v)                N×1
-//	Explode+Unit   multi     → for v: BeginAttributeSingle(v)          N×1
+//	(none)   scalar → BeginAttribute(v)                       1×1
+//	Unit     scalar → BeginAttributeSingle(v)                 1×1
+//	(none)   multi  → BeginAttribute()+AddToContainer*N+End   1×N
 //
-// Unit alone on a multi shape or Explode on a scalar shape is rejected
-// by ParsePlan. Channel is orthogonal to the above and may combine
-// with any. All fields targeting the same section must agree on the
-// Channel — mixed-channel sections rejected because the read-side
-// dispatch iterator type differs per channel.
+// Unit on a multi shape is rejected by ParsePlan. (The former
+// `,explode` flag — one attribute per element, the N×1 shapes — was
+// removed by ADR-0113 D1; the nested `[]Attr` section is the
+// per-element spelling.) Channel is orthogonal to the above and may
+// combine with any. All fields targeting the same section must agree
+// on the Channel — mixed-channel sections rejected because the
+// read-side dispatch iterator type differs per channel.
 type FieldFlags struct {
 	Unit    bool
-	Explode bool
 	Channel MembershipChannel
 
 	// HasConst signals that `,const=<value>` appeared in the lw: tag.
@@ -524,12 +516,6 @@ type TaggedField struct {
 	// Cut-1 channels.
 	CarrierField string
 	CarrierType  string
-
-	// CarrierIsSlice is true when the sibling carrier is a slice
-	// (`[]marshalltypes.X`), paired element-wise with an exploded value
-	// field; false for a scalar carrier paired with a scalar / Option /
-	// container value (one carrier per attribute). Set by PlanBuilder.Finish.
-	CarrierIsSlice bool
 
 	// TupleField / TupleStructType / TupleMemberships wire a sub-column field
 	// of a dynamic-membership tuple section (ADR-0103, extended by ADR-0109):

@@ -71,9 +71,11 @@ type explodeScalar struct {
 	S  string   `lw:"s,symbol,explode"`
 }
 
-func TestPlanFor_RejectsExplodeOnScalar(t *testing.T) {
+func TestPlanFor_RejectsExplodeRemoved(t *testing.T) {
+	// ADR-0113 D1 cull: the flag errors at the shared grammar with the
+	// nested replacement named.
 	_, err := marshallreflect.PlanFor[explodeScalar]()
-	require.ErrorContains(t, err, "`explode` requires a multi-element shape")
+	require.ErrorContains(t, err, "removed (ADR-0113 D1)")
 }
 
 type dupMemb struct {

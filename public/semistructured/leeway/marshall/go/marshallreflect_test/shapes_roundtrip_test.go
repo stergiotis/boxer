@@ -17,18 +17,18 @@ import (
 
 // These round-trips cover the marshallreflect codec shapes the existing
 // anchor_roundtrip_test.go leaves at 0%: multi-sub-column sections
-// (timeRange beginIncl/endExcl), 1×N container emits (roaring bitmap and
-// plain slice into u32Array), and the `,explode` flag (one attribute per
-// element). marshallgen emits + asserts these shapes in its emit_test.go;
-// before this file the reflect runtime codec had never been exercised on
-// them, so a marshal/unmarshal wire-parity bug would have gone unseen.
+// (timeRange beginIncl/endExcl) and 1×N container emits (roaring bitmap
+// and plain slice into u32Array). marshallgen emits + asserts these shapes
+// in its emit_test.go; before this file the reflect runtime codec had
+// never been exercised on them, so a marshal/unmarshal wire-parity bug
+// would have gone unseen.
 //
 // Each test drives marshallreflect.Marshal against anchor's
 // InEntityTestTable, transfers to an Arrow record, reads back via anchor's
 // RA helpers + marshallreflect.Unmarshal, and asserts row-in == row-out.
-// Where the wire shape is the point (explode vs container), the per-row
-// attribute count is asserted too, so a test passing by coincidence
-// (reconstructing the same slice through the wrong wire shape) still fails.
+// Where the wire shape is the point, the per-row attribute count is
+// asserted too, so a test passing by coincidence (reconstructing the same
+// slice through the wrong wire shape) still fails.
 
 // marshalToRecord marshals rows into a fresh InEntityTestTable and returns
 // the first transferred Arrow record plus a release closure. The DTOs here
@@ -211,105 +211,10 @@ func TestRoundTrip_Container_Slice(t *testing.T) {
 	}
 }
 
-// --- Explode: one attribute per element, into u32Array (BeginAttributeSingle). ---
-
-// explodeDrone differs from sliceDrone only in the `,explode,unit` flags:
-// the same []uint32 emits N single-value attributes instead of one
-// container attribute. The reconstructed slice must be identical to the
-// container case; the per-row attribute count proves the wire shape
-// genuinely differs.
-type explodeDrone struct {
-	_        struct{} `kind:"explodeDrone"`
-	ID       uint64   `lw:",id"`
-	Tracking []byte   `lw:",naturalKey"`
-	Codes    []uint32 `lw:"codes,u32Array,explode,unit"`
-}
-
-func TestRoundTrip_Explode(t *testing.T) {
-	original := []explodeDrone{
-		{ID: 1, Tracking: []byte("E1"), Codes: []uint32{30, 10, 20}},
-		{ID: 2, Tracking: []byte("E2"), Codes: []uint32{99}},
-	}
-	lookup := marshallreflect.MapLookup{"codes": 1}
-
-	rec, release := marshalToRecord(t, original, lookup)
-	defer release()
-	idReader, relID := loadIdReader(t, rec)
-	defer relID()
-
-	u32Reader := anchor.NewReadAccessTestTableTaggedU32Array()
-	u32Reader.SetColumnIndices(u32Reader.GetColumnIndices())
-	require.NoError(t, u32Reader.LoadFromRecord(rec))
-	defer u32Reader.Release()
-
-	// Explode shape: one attribute per element (3 for row 0, 1 for row 1) —
-	// in contrast to the container test's single attribute per row.
-	require.Equal(t, int64(3), u32Reader.GetAttributes().GetNumberOfAttributes(0))
-	require.Equal(t, int64(1), u32Reader.GetAttributes().GetNumberOfAttributes(1))
-
-	args := idReaders(idReader).
-		Section("u32Array", u32Reader.GetAttributes(), u32Reader.GetMemberships())
-	var got []explodeDrone
-	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
-
-	require.Equal(t, len(original), len(got))
-	for i := range original {
-		require.Equal(t, original[i].Codes, got[i].Codes, "row %d codes (explode round-trip, order preserved)", i)
-	}
-}
-
-// --- Explode of a roaring bitmap: one attribute per set bit. ---
-
-// roaringExplodeDrone exercises the marshalExplode roaring branch
-// (iterate the bitmap, emit one BeginAttributeSingle per bit) — distinct
-// from roaringDrone's single container attribute. Read-back collapses the
-// per-bit attributes back into one bitmap.
-type roaringExplodeDrone struct {
-	_        struct{}        `kind:"roaringExplodeDrone"`
-	ID       uint64          `lw:",id"`
-	Tracking []byte          `lw:",naturalKey"`
-	Sensors  *roaring.Bitmap `lw:"sensors,u32Array,explode,unit"`
-}
-
-func TestRoundTrip_Explode_Roaring(t *testing.T) {
-	bm := func(vals ...uint32) *roaring.Bitmap {
-		b := roaring.New()
-		b.AddMany(vals)
-		return b
-	}
-	original := []roaringExplodeDrone{
-		{ID: 1, Tracking: []byte("RE1"), Sensors: bm(5, 100, 4000)},
-		{ID: 2, Tracking: []byte("RE2"), Sensors: bm(7)},
-	}
-	lookup := marshallreflect.MapLookup{"sensors": 1}
-
-	rec, release := marshalToRecord(t, original, lookup)
-	defer release()
-	idReader, relID := loadIdReader(t, rec)
-	defer relID()
-
-	u32Reader := anchor.NewReadAccessTestTableTaggedU32Array()
-	u32Reader.SetColumnIndices(u32Reader.GetColumnIndices())
-	require.NoError(t, u32Reader.LoadFromRecord(rec))
-	defer u32Reader.Release()
-
-	// Explode shape: one attribute per set bit (3 for row 0, 1 for row 1) —
-	// in contrast to TestRoundTrip_Container_RoaringBitmap's single attribute.
-	require.Equal(t, int64(3), u32Reader.GetAttributes().GetNumberOfAttributes(0))
-	require.Equal(t, int64(1), u32Reader.GetAttributes().GetNumberOfAttributes(1))
-
-	args := idReaders(idReader).
-		Section("u32Array", u32Reader.GetAttributes(), u32Reader.GetMemberships())
-	var got []roaringExplodeDrone
-	require.NoError(t, marshallreflect.Unmarshal(args, &got, lookup))
-
-	require.Equal(t, len(original), len(got))
-	for i := range original {
-		require.NotNil(t, got[i].Sensors, "row %d bitmap present", i)
-		require.True(t, original[i].Sensors.Equals(got[i].Sensors), "row %d bitmap members: want %v got %v",
-			i, original[i].Sensors.ToArray(), got[i].Sensors.ToArray())
-	}
-}
+// The former `,explode` / `,explode,unit` round-trips (one attribute per
+// element / per set bit) were removed with the flag (ADR-0113 D1); the N×1
+// wire shape is authored as a nested `[]Attr` section now, covered by
+// nestedsection_roundtrip_test.go.
 
 // --- Option[T] scalar read-back (Has=true and Has=false rows). ---
 

@@ -66,9 +66,6 @@ func optionShp(goType string) goplan.FieldShape {
 func carrierShp(name string) goplan.FieldShape {
 	return goplan.FieldShape{CarrierType: name}
 }
-func carrierSliceShp(name string) goplan.FieldShape {
-	return goplan.FieldShape{CarrierType: name, CarrierIsSlice: true}
-}
 
 // Common building blocks.
 var (
@@ -154,15 +151,7 @@ func TestPlanBuilder_Accept(t *testing.T) {
 				{name: "V", lw: "m,sec,mixedLowCardRef", shape: sliceShp("uint32")},
 				{name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierShp("MixedLowCardRef")},
 			},
-			check: func(t *testing.T, p *mappingplan.Plan) { require.False(t, p.Fields[0].CarrierIsSlice) },
-		},
-		{
-			name: "carrier exploded value pairs a slice carrier (ADR-0008 OQ#4)",
-			specs: []fld{kindUS, idCol,
-				{name: "V", lw: "m,sec,explode,mixedLowCardRef", shape: sliceShp("uint32")},
-				{name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierSliceShp("MixedLowCardRef")},
-			},
-			check: func(t *testing.T, p *mappingplan.Plan) { require.True(t, p.Fields[0].CarrierIsSlice) },
+			check: func(t *testing.T, p *mappingplan.Plan) { require.Equal(t, "C", p.Fields[0].CarrierField) },
 		},
 		{
 			name: "carrier Option value pairs a scalar carrier (ADR-0008 OQ#4)",
@@ -203,8 +192,10 @@ func TestPlanBuilder_Reject(t *testing.T) {
 		{"duplicate plain column", []fld{kindUS, idCol, {name: "Id2", lw: ",id", shape: shp("uint64")}}, "plain column declared on two"},
 		{"slice elem not supported", []fld{kindUS, idCol, {name: "V", lw: "v,arr", shape: sliceShp("time.Time")}}, "slice element type not yet supported"},
 		{"duplicate membership+column", []fld{kindUS, idCol, {name: "A", lw: "m,sym", shape: shp("string")}, {name: "B", lw: "m,sym", shape: shp("string")}}, "membership+column appears on two"},
-		{"explode on scalar", []fld{kindUS, idCol, {name: "V", lw: "v,sym,explode", shape: shp("string")}}, "requires a multi-element"},
-		{"unit on multi without explode", []fld{kindUS, idCol, {name: "V", lw: "v,arr,unit", shape: sliceShp("uint32")}}, "requires `explode`"},
+		{"explode removed (ADR-0113 D1)", []fld{kindUS, idCol, {name: "V", lw: "v,sym,explode", shape: shp("string")}}, "removed (ADR-0113 D1)"},
+		{"unit on multi", []fld{kindUS, idCol, {name: "V", lw: "v,arr,unit", shape: sliceShp("uint32")}}, "requires a scalar shape"},
+		{"highCardVerbatim value spelling removed (ADR-0113 D1)", []fld{kindUS, idCol, {name: "V", lw: "v,sym,highCardVerbatim", shape: shp("string")}}, "removed (ADR-0113 D1)"},
+		{"highCardVerbatim const spelling removed (ADR-0113 D1)", []fld{kindUS, idCol, {us: true, lw: "m,sec,highCardVerbatim,const=x"}}, "removed (ADR-0113 D1)"},
 		{"const on non-underscore field", []fld{kindUS, idCol, {name: "V", lw: "v,sym,const=x", shape: shp("string")}}, "only valid on `_`"},
 		{"section mixes channels", []fld{kindUS, idCol, {name: "A", lw: "a,sym", shape: shp("string")}, {name: "B", lw: "b,sym,verbatim", shape: shp("string")}}, "section mixes membership channels"},
 		{"const+value share ref membership", []fld{kindUS, idCol, {us: true, lw: "m,secA,const=x"}, {name: "V", lw: "m,secB", shape: shp("string")}}, "kindXxx symbols would collide"},
@@ -215,13 +206,10 @@ func TestPlanBuilder_Reject(t *testing.T) {
 		{"bare underscore lw without const", []fld{kindUS, idCol, {us: true, lw: "m,sec"}}, "must declare `,const="},
 		{"const without section", []fld{kindUS, idCol, {us: true, lw: "m,,const=x"}}, "requires a section name"},
 		{"const targeting sub-column", []fld{kindUS, idCol, {us: true, lw: "m,sec:col,const=x"}}, "cannot target a sub-column"},
-		{"const with explode", []fld{kindUS, idCol, {us: true, lw: "m,sec,explode,const=x"}}, "cannot combine with `explode`"},
 
 		// Carrier (mixed / parametrized) pairing.
 		{"carrier value with sub-column", []fld{kindUS, idCol, {name: "V", lw: "m,sec:col,mixedLowCardRef", shape: shp("uint32")}}, "cannot target a sub-column"},
 		{"carrier value roaring forbidden", []fld{kindUS, idCol, {name: "V", lw: "m,sec,mixedLowCardRef", shape: goplan.FieldShape{Canonical: canonicaltypes.PromoteScalarPrim(goplan.RoaringElemCanonical(), canonicaltypes.ScalarModifierSet)}}, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierShp("MixedLowCardRef")}}, "cannot be a roaring bitmap"},
-		{"exploded value needs slice carrier", []fld{kindUS, idCol, {name: "V", lw: "m,sec,explode,mixedLowCardRef", shape: sliceShp("uint32")}, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierShp("MixedLowCardRef")}}, "carrier multiplicity must match"},
-		{"container value needs scalar carrier", []fld{kindUS, idCol, {name: "V", lw: "m,sec,mixedLowCardRef", shape: sliceShp("uint32")}, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierSliceShp("MixedLowCardRef")}}, "carrier multiplicity must match"},
 		{"value carrier-channel without carrier", []fld{kindUS, idCol, {name: "V", lw: "m,sec,mixedLowCardRef", shape: shp("uint32")}}, "needs a sibling carrier"},
 		{"carrier without value sibling", []fld{kindUS, idCol, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierShp("MixedLowCardRef")}}, "has no value sibling"},
 		{"carrier type mismatches channel", []fld{kindUS, idCol, {name: "V", lw: "m,sec,mixedLowCardRef", shape: shp("uint32")}, {name: "C", lw: "m,sec,mixedLowCardRef", shape: carrierShp("Parametrized")}}, "carrier type does not match"},

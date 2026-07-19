@@ -58,9 +58,8 @@ func (g SectionGroup) Channel() mappingplan.MembershipChannel {
 //
 // Within each section the fields are partitioned scalar-first
 // (ShapeScalarBegin / ShapeScalarBeginSingle / consts) ahead of
-// non-scalars (ShapeContainer / ShapeExplodeBegin*). The partition is
-// stable: declaration order is preserved within each class. Per
-// ADR-0008 D2.
+// non-scalars (ShapeContainer). The partition is stable: declaration
+// order is preserved within each class. Per ADR-0008 D2.
 //
 // Wrappers that emit per-section helpers (e.g. FactsWrapper's Reader
 // struct + Unmarshal-call argument list) MUST iterate sections in the
@@ -110,8 +109,8 @@ func ComputeGroups(plan *mappingplan.Plan) (out []SectionGroup) {
 // partitionScalarsFirst reorders fields in-place so all scalar-shaped
 // fields (ShapeScalarBegin / ShapeScalarBeginSingle, which includes
 // consts since they classify as scalar) precede non-scalar fields
-// (ShapeContainer / ShapeExplodeBegin / ShapeExplodeBeginSingle).
-// Declaration order is preserved within each class via a stable sort.
+// (ShapeContainer). Declaration order is preserved within each class
+// via a stable sort.
 func partitionScalarsFirst(fields []mappingplan.TaggedField) {
 	sort.SliceStable(fields, func(i, j int) bool {
 		return isScalarShape(fields[i]) && !isScalarShape(fields[j])
@@ -260,22 +259,15 @@ const (
 	// BeginAttribute opens a container (no args); AttrI carries
 	// AddToContainerP for per-value append.
 	ShapeContainer
-	// ShapeExplodeBegin: []T,explode. Per-element loop with
-	// `sec.BeginAttribute(v)` (scalar BeginAttribute signature).
-	ShapeExplodeBegin
-	// ShapeExplodeBeginSingle: []T,explode,unit. Per-element loop with
-	// `sec.BeginAttributeSingle(v)`.
-	ShapeExplodeBeginSingle
 )
 
-// ClassifyBegin maps a TaggedField to its FieldBeginShape.
+// ClassifyBegin maps a TaggedField to its FieldBeginShape. (The former
+// N×1 explode shapes were removed by ADR-0113 D1 — a multi-element field
+// always emits one container attribute; the per-element spelling is a
+// nested `[]Attr` section.)
 func ClassifyBegin(f mappingplan.TaggedField) FieldBeginShape {
 	isMulti := f.IsMulti()
 	switch {
-	case isMulti && f.Flags.Explode && f.Flags.Unit:
-		return ShapeExplodeBeginSingle
-	case isMulti && f.Flags.Explode:
-		return ShapeExplodeBegin
 	case isMulti:
 		return ShapeContainer
 	case f.Flags.Unit:
@@ -287,16 +279,16 @@ func ClassifyBegin(f mappingplan.TaggedField) FieldBeginShape {
 
 // SingleValueReadAccessor returns the RA accessor that yields a field's
 // single per-attribute value: GetAttrValueValue for the scalar-section
-// shapes (ShapeScalarBegin / ShapeExplodeBegin, whose section exposes the
-// value directly), GetAttrValueSingleOrDefault otherwise (the HA /
-// single-slot sections). Both back-ends route their single-value reads
-// through here — the codegen emitter prints the returned name, the reflect
-// codec calls it via mustCall — so the accessor choice cannot drift between
-// them (it previously lived as four hand-copied switches, two of which
-// silently omitted ShapeExplodeBegin).
+// shape (ShapeScalarBegin, whose section exposes the value directly),
+// GetAttrValueSingleOrDefault otherwise (the HA / single-slot sections).
+// Both back-ends route their single-value reads through here — the codegen
+// emitter prints the returned name, the reflect codec calls it via
+// mustCall — so the accessor choice cannot drift between them (it
+// previously lived as four hand-copied switches, two of which silently
+// omitted a shape).
 func SingleValueReadAccessor(f mappingplan.TaggedField) string {
 	switch ClassifyBegin(f) {
-	case ShapeScalarBegin, ShapeExplodeBegin:
+	case ShapeScalarBegin:
 		return "GetAttrValueValue"
 	default:
 		return "GetAttrValueSingleOrDefault"

@@ -238,12 +238,11 @@ func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 			s.Canonical, err = goplan.ScalarCanonicalForGoType("[]byte")
 			return
 		}
-		// []marshalltypes.X — a slice carrier, paired element-wise with an
-		// exploded value field (mirrors the AST classifier). PlanBuilder pairs
-		// it and checks the value field is `,explode`.
+		// []marshalltypes.X — the former element-wise slice carrier, removed
+		// with `,explode` (ADR-0113 D1; mirrors the AST classifier). Carriers
+		// are scalar-only: one marshalltypes.X per attribute.
 		if elem.Kind() == reflect.Struct && elem.PkgPath() == marshalltypesPkgPath {
-			s.CarrierType = elem.Name()
-			s.CarrierIsSlice = true
+			err = eb.Build().Str("carrier", elem.Name()).Errorf("slice carriers (`[]marshalltypes.%s`) were removed with `,explode` (ADR-0113 D1) — a carrier is a scalar `marshalltypes.%s`, one per attribute", elem.Name(), elem.Name())
 			return
 		}
 		// []option.Option[T] forbidden.

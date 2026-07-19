@@ -50,7 +50,7 @@ type MyDTO struct {
 	if len(plan.Fields) != 1 {
 		t.Fatalf("expected 1 tagged field, got %d", len(plan.Fields))
 	}
-	if plan.Fields[0].Flags.Unit || plan.Fields[0].Flags.Explode {
+	if plan.Fields[0].Flags.Unit {
 		t.Fatalf("expected no flags, got %+v", plan.Fields[0].Flags)
 	}
 }
@@ -67,7 +67,7 @@ type MyDTO struct {
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
-	if !plan.Fields[0].Flags.Unit || plan.Fields[0].Flags.Explode {
+	if !plan.Fields[0].Flags.Unit {
 		t.Fatalf("expected Unit-only, got %+v", plan.Fields[0].Flags)
 	}
 }
@@ -101,42 +101,8 @@ type MyDTO struct {
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
-	if !plan.Fields[0].IsSlice() || plan.Fields[0].Flags.Explode {
+	if !plan.Fields[0].IsSlice() {
 		t.Fatalf("expected slice default (no flags), got %+v", plan.Fields[0])
-	}
-}
-
-func TestParse_SliceT_Explode(t *testing.T) {
-	plan, err := tryParse(t, `package foo
-type MyDTO struct {
-	_    struct{}   `+"`kind:\"my\"`"+`
-	Id   uint64     `+"`lw:\",id\"`"+`
-	Ts   time.Time  `+"`lw:\",ts\"`"+`
-	Tags []string   `+"`lw:\"tag,symbol,explode\"`"+`
-}
-`)
-	if err != nil {
-		t.Fatalf("expected success, got: %v", err)
-	}
-	if !plan.Fields[0].Flags.Explode || plan.Fields[0].Flags.Unit {
-		t.Fatalf("expected Explode-only, got %+v", plan.Fields[0].Flags)
-	}
-}
-
-func TestParse_SliceT_ExplodeUnit(t *testing.T) {
-	plan, err := tryParse(t, `package foo
-type MyDTO struct {
-	_    struct{}   `+"`kind:\"my\"`"+`
-	Id   uint64     `+"`lw:\",id\"`"+`
-	Ts   time.Time  `+"`lw:\",ts\"`"+`
-	Tags []string   `+"`lw:\"tag,symbolArray,explode,unit\"`"+`
-}
-`)
-	if err != nil {
-		t.Fatalf("expected success, got: %v", err)
-	}
-	if !plan.Fields[0].Flags.Explode || !plan.Fields[0].Flags.Unit {
-		t.Fatalf("expected Explode+Unit, got %+v", plan.Fields[0].Flags)
 	}
 }
 
@@ -152,7 +118,7 @@ type MyDTO struct {
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
-	if !plan.Fields[0].IsRoaring() || plan.Fields[0].Flags.Explode {
+	if !plan.Fields[0].IsRoaring() {
 		t.Fatalf("expected roaring default, got %+v", plan.Fields[0])
 	}
 }
@@ -176,31 +142,35 @@ type MyDTO struct {
 
 // --- Flag-rejection rules. ---
 
-func TestParse_RejectsExplodeOnScalar(t *testing.T) {
+func TestParse_RejectsExplodeRemoved(t *testing.T) {
+	// ADR-0113 D1 cull: the flag token errors at the grammar with the nested
+	// replacement named, whatever the field shape.
+	_, err := tryParse(t, `package foo
+type MyDTO struct {
+	_    struct{}  `+"`kind:\"my\"`"+`
+	Id   uint64    `+"`lw:\",id\"`"+`
+	Ts   time.Time `+"`lw:\",ts\"`"+`
+	Tags []string  `+"`lw:\"tag,symbol,explode\"`"+`
+}
+`)
+	assertErrContains(t, err, "removed (ADR-0113 D1)")
+}
+
+func TestParse_RejectsHighCardVerbatimValueField(t *testing.T) {
+	// ADR-0113 D1 cull: the value-field spelling is gone; the channel
+	// survives on tuple `@membership` fields and at the DML level.
 	_, err := tryParse(t, `package foo
 type MyDTO struct {
 	_   struct{}  `+"`kind:\"my\"`"+`
 	Id  uint64    `+"`lw:\",id\"`"+`
 	Ts  time.Time `+"`lw:\",ts\"`"+`
-	Src string    `+"`lw:\"src,symbol,explode\"`"+`
+	App string    `+"`lw:\"my-app,symbol,highCardVerbatim\"`"+`
 }
 `)
-	assertErrContains(t, err, "`explode` requires a multi-element shape")
+	assertErrContains(t, err, "removed (ADR-0113 D1)")
 }
 
-func TestParse_RejectsExplodeOnOption(t *testing.T) {
-	_, err := tryParse(t, `package foo
-type MyDTO struct {
-	_   struct{}              `+"`kind:\"my\"`"+`
-	Id  uint64                `+"`lw:\",id\"`"+`
-	Ts  time.Time             `+"`lw:\",ts\"`"+`
-	Src option.Option[string]  `+"`lw:\"src,symbol,explode\"`"+`
-}
-`)
-	assertErrContains(t, err, "`explode` requires a multi-element shape")
-}
-
-func TestParse_RejectsUnitOnSliceWithoutExplode(t *testing.T) {
+func TestParse_RejectsUnitOnSlice(t *testing.T) {
 	_, err := tryParse(t, `package foo
 type MyDTO struct {
 	_    struct{}  `+"`kind:\"my\"`"+`
@@ -209,7 +179,7 @@ type MyDTO struct {
 	Tags []string  `+"`lw:\"tag,stringArray,unit\"`"+`
 }
 `)
-	assertErrContains(t, err, "`unit` on a multi-element shape requires `explode`")
+	assertErrContains(t, err, "`unit` requires a scalar shape")
 }
 
 func TestParse_RejectsUnknownFlag(t *testing.T) {
@@ -244,7 +214,7 @@ type MyDTO struct {
 	Ts  time.Time `+"`lw:\",ts\"`"+`
 }
 `)
-	assertErrContains(t, err, "plain field cannot carry channel / `unit` / `explode`")
+	assertErrContains(t, err, "plain field cannot carry channel / `unit` / `const`")
 }
 
 // --- Shape rejection (carried over from current codegen/parse_test.go). ---
