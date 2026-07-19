@@ -2,9 +2,27 @@ package play
 
 import (
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
+
+// attrSelFrameSalt lifts a selected per-attribute cell's *background-frame* id
+// off the cell's own (button) id-sequence. Cell ids live below 2^26 (see
+// play_table_attr.go's attrCellIdBase/attrColStride), so setting a high bit
+// guarantees the frame seq never equals a button seq — the frame and the
+// button it wraps get distinct widget ids.
+const attrSelFrameSalt uint64 = 1 << 40
+
+// attrSelFill is the accent wash painted behind a selected per-attribute cell.
+// It is styletokens.AccentDefault at ~35% alpha — the same accent, and roughly
+// the same weight, as egui_table's own selected-row tint
+// (ACCENT_DEFAULT.gamma_multiply(0.35), interpreter.rs) that the per-DB-row grid
+// gets from et.SelectedRow. Built via color.Hex(token.AsHex()) with the alpha
+// byte overridden, so it stays a token reference (designlint L2 flags raw
+// color.RGBA, not Hex).
+var attrSelFill = color.Hex((styletokens.AccentDefault.AsHex() & 0xffffff00) | 0x59)
 
 // play_table_leeway.go carries the Table pane's leeway display modes (ADR-0097
 // Update): a collapsible options bar above the grid whose three orthogonal
@@ -147,6 +165,60 @@ func (inst *PlayApp) renderTableOptionsBar() {
 				SendRespVal(&inst.tableOpts.showMembership)
 		}
 	}
+}
+
+// selectableCell renders one grid cell as a full-width, cross-justified
+// selectable button so a primary click anywhere in the cell — not only on the
+// painted glyphs — selects the row. Both Table grids need this: egui sizes a
+// frameless button to its content, and egui_table senses no clicks of its own
+// (our delegate implements no row_ui), so a bare per-cell button leaves the
+// cell's left inset and every blank cell as a dead click target. That reads as
+// "finicky" in the per-DB-row grid (short values sit in wide columns) and
+// outright breaks the per-attribute grid, whose design blanks most cells (no
+// value is ever repeated). The cross-justified wrapper stretches the button to
+// the column width; a non-small egui Button already floors its height at
+// interact_size.y, so the hit area covers the whole row-height cell. The button
+// id and its click routing are unchanged by the justify wrapper: it adds no
+// id-stack scope, so ids stay keyed exactly as before. Returns true on a
+// primary click. cellPadX is the same left inset the headers lead with, kept
+// outside the fill so cell text still aligns under its header.
+//
+// selBg turns on a per-cell accent background when the cell is selected. The
+// per-DB-row grid leaves it off (false): its whole-row highlight comes from
+// et.SelectedRow, which egui_table paints per row_nr. The per-attribute grid
+// turns it on (true): there one source DB row explodes to several egui_table
+// rows, which a single SelectedRow index cannot cover, so each selected cell
+// paints its own accent band — together highlighting the whole entity. A
+// frameless egui Button never paints a background even when Selected (see
+// button.rs), which is why the band is a wrapping Frame rather than the button's
+// own fill; InnerMargin(0) keeps the text from shifting versus the unselected
+// cell, and the Frame fills the column width because its justified child does.
+func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg bool) (clicked bool) {
+	c.AddSpace(cellPadX)
+	for range c.VerticalCenteredJustified().KeepIter() {
+		emitButton := func() {
+			rt := c.Atoms().BeginRichText(text).Monospace()
+			if weak {
+				rt = rt.Weak()
+			}
+			clicked = c.Button(inst.ids.PrepareSeq(id), rt.End().Keep()).
+				Frame(false).
+				Selected(selected).
+				Truncate().
+				SendResp().HasPrimaryClicked()
+		}
+		if selBg && selected {
+			for range c.Frame(inst.ids.PrepareSeq(id ^ attrSelFrameSalt)).
+				Fill(attrSelFill).
+				InnerMargin(0).
+				KeepIter() {
+				emitButton()
+			}
+		} else {
+			emitButton()
+		}
+	}
+	return
 }
 
 // renderTableBody dispatches the Table pane's grid to the granularity the

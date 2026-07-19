@@ -2308,7 +2308,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Cells(local, 0) {
-				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected) {
+				if inst.selectableCell(rowBase, cellPadX, fmt.Sprintf("%d", absRow+1), false, selected, false) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}
@@ -2319,7 +2319,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				continue
 			}
 			for range et.Cells(local, colPos) {
-				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, formatCell(rec, arrowCol, absRow), false, selected) {
+				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, formatCell(rec, arrowCol, absRow), false, selected, false) {
 					emit.Emit(signalSelection, absRow)
 				}
 			}

@@ -534,15 +534,11 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 
 		if vis, _ := et.ColVisible(0); vis {
 			for range et.Cells(local, 0) {
-				c.AddSpace(cellPadX)
 				marker := ""
 				if row.firstOfEntity {
 					marker = strconv.FormatInt(row.absRow+1, 10)
 				}
-				if c.Button(ids.PrepareSeq(rowBase),
-					c.Atoms().BeginRichText(marker).Weak().Monospace().End().Keep()).
-					Frame(false).Selected(selected).Truncate().
-					SendResp().HasPrimaryClicked() {
+				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}
@@ -553,11 +549,7 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				continue
 			}
 			for range et.Cells(local, colPos) {
-				c.AddSpace(cellPadX)
-				if c.Button(ids.PrepareSeq(rowBase+uint64(pos)+1),
-					c.Atoms().BeginRichText(row.cells[pos]).Monospace().End().Keep()).
-					Frame(false).Selected(selected).Truncate().
-					SendResp().HasPrimaryClicked() {
+				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}
