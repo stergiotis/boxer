@@ -47,3 +47,32 @@ func (inst *PlayApp) ActivateTab(id string) (err error) {
 	inst.pendingDockActivate = dockID
 	return
 }
+
+// SetTimelineBandsSql seeds the Timeline panel's bands editor (the
+// panel-local SQL of ADR-0097 slice 5d). An embedder whose own definition
+// carries bands SQL — e.g. a sqlapplet aux fence (ADR-0132 §SD1) — applies
+// it between construction and mount; empty is a valid value (no bands).
+func (inst *PlayApp) SetTimelineBandsSql(sql string) {
+	inst.timelineBandsSql = sql
+}
+
+// SetLiveMain presets the `main` lane's Live toggle (ADR-0097 slice 5e, D2).
+// The toggle stays user-reachable in the top bar; presetting it on lets an
+// embedder open with signal-driven re-runs active (e.g. a sqlapplet whose
+// buffer reads `{selection_id:UInt64}`, ADR-0132 §SD3).
+func (inst *PlayApp) SetLiveMain(on bool) {
+	inst.liveMain = on
+}
+
+// BindTab points a panel tab at a split node by CTE name (ADR-0097 slice 6c).
+// An unknown tab id is an error, matching ActivateTab's validation style; an
+// unknown node name is deliberately NOT one — bindings key on CTE names, sit
+// inert while a split lacks the name, and revive when it returns.
+func (inst *PlayApp) BindTab(tabID string, cteName string) (err error) {
+	if _, ok := inst.tabs.dockIDForSlug(tabID); !ok {
+		err = eh.Errorf("play: BindTab: unknown tab %q", tabID)
+		return
+	}
+	inst.bindTab(tabID, NodeID(cteName))
+	return
+}

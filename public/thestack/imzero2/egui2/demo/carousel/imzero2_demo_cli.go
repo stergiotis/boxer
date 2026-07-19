@@ -20,6 +20,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/apps/play"
+	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
@@ -318,6 +319,19 @@ func NewCommand() *cli.Command {
 			status := buildStatusSnapshot(runInst, isChStore, bus, fsSvc, persistSvc)
 
 			u := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
+
+			// ADR-0132 §SD2: mint one Manifest per registered SQL-applet doc
+			// before launch resolution, so `--launch <appletId>` and the Apps
+			// menu see the minted set. Best-effort per doc — the corpus test
+			// is the hard gate; a partially minted set never blocks boot.
+			appletCount, appletErrs := sqlapplet.MintManifests(log.Logger)
+			for _, mintErr := range appletErrs {
+				log.Warn().Err(mintErr).Msg("sqlapplet: mint")
+			}
+			if appletCount > 0 {
+				log.Info().Int("applets", appletCount).Msg("sqlapplet: manifests minted")
+			}
+
 			launchApps, resolveErr := resolveLaunchSql(context.String("launch"))
 			if resolveErr != nil {
 				return eb.Build().Str("launch", context.String("launch")).
