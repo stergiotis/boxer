@@ -57,7 +57,7 @@ type MyDTO struct {
 
     Id       uint64 `lw:",id"`                   // plain row column (entity header)
     Name     string `lw:"name,symbol"`           // tagged value → membership `name`, section `symbol`
-    Tags     []string `lw:"tag,symbol,explode"`  // one attribute per element
+    Tags     []string `lw:"tag,symbol"`          // one container attribute carrying N values
 }
 ```
 
@@ -97,14 +97,14 @@ the wire shape (classified by `mappingplan.ClassifyBegin`):
 | `T`                       | `,unit`          | 1 attr · 1 val (HA)  | `BeginAttributeSingle(v)` |
 | `option.Option[T]`        | (Has guard)      | 0–1 attr · 1 val     | as scalar above |
 | `[]T` / `*roaring.Bitmap` | —                | 1 attr · N vals      | `BeginAttribute()` + `AddToContainerP(v)`×N |
-| `[]T` / `*roaring.Bitmap` | `,explode`       | N attrs · 1 val      | per element `BeginAttribute(v)` |
-| `[]T` / `*roaring.Bitmap` | `,explode,unit`  | N attrs · 1 val (HA) | per element `BeginAttributeSingle(v)` |
 
-The flag is the signal; section names are not inspected. `,unit` alone on a
-multi-element shape and `,explode` alone on a scalar are rejected; everything
-else composes. `,ct=<canonical>` may **relabel** a field's canonical type (e.g. a
-`uint32` as IPv4, or a `[]byte` blob as the `u8` array lane) without reshaping
-its Go type.
+The flag is the signal; section names are not inspected. `,unit` requires a
+scalar shape. The former N×1 shapes (`,explode` — one attribute per element)
+were removed by [ADR-0113](../adr/0113-leeway-marshall-nested-primary-consolidation.md)
+D1: author a nested `[]Attr` section instead (see the
+[nested how-to](leeway-marshalling-nested.md)). `,ct=<canonical>` may
+**relabel** a field's canonical type (e.g. a `uint32` as IPv4, or a `[]byte`
+blob as the `u8` array lane) without reshaping its Go type.
 
 **Splice semantics.** An empty `[]T`, a `*roaring.Bitmap` that is nil/empty, and
 `Option[T]{Has:false}` all emit **zero attributes**. Leeway has no
@@ -126,7 +126,7 @@ there is deliberately no mixed-high-card channel.
 | *(none)* / `lowCardRef` | `uint64` id | `kindXxx` (codegen) / `LookupI` (reflect) |
 | `highCardRef` | `uint64` id | same |
 | `verbatim` / `lowCardVerbatim` | the literal name as `[]byte` | none — embeds directly |
-| `highCardVerbatim` | literal name `[]byte` | none |
+| `highCardVerbatim` — tuple `@membership` / nested memberships / DML only (the value-field spelling was removed, ADR-0113 D1) | literal name `[]byte` | none |
 | `mixedLowCardRef` | per-row `uint64` id **+ params** | a `marshalltypes.MixedLowCardRef` sibling |
 | `mixedLowCardVerbatim` | per-row `[]byte` name **+ params** | a `marshalltypes.MixedLowCardVerbatim` sibling |
 | `lowCardRefParametrized` / `highCardRefParametrized` | per-row opaque params blob | a `marshalltypes.Parametrized` sibling |
@@ -143,11 +143,14 @@ high card only picks the dictionary the section builds — the Go shape is
 identical:
 
 ```go
-Author  string `lw:"author,symbol"`                  // lowCardRef (default): membership `author` → kindAuthor uint64
-Session string `lw:"session,symbol,highCardRef"`     // highCardRef: same identity, high-card dictionary
-Locale  string `lw:"locale,symbol,verbatim"`         // lowCardVerbatim: the bytes "locale" embed on the wire
-Header  string `lw:"header,symbol,highCardVerbatim"` // highCardVerbatim: literal name, high-card
+Author  string `lw:"author,symbol"`              // lowCardRef (default): membership `author` → kindAuthor uint64
+Session string `lw:"session,symbol,highCardRef"` // highCardRef: same identity, high-card dictionary
+Locale  string `lw:"locale,symbol,verbatim"`     // lowCardVerbatim: the bytes "locale" embed on the wire
 ```
+
+(`highCardVerbatim` has no value-field spelling — reach it from a tuple
+element's `@membership` field, a nested membership marker, or hand-written
+DML; ADR-0113 D1.)
 
 **The four carrier channels** let the membership identity vary **row by row**, so
 it can't be a fixed name in the tag: it rides in a `marshalltypes` sibling field
@@ -173,12 +176,12 @@ Trace  string                     `lw:"span,symbol,highCardRefParametrized"`
 TraceC marshalltypes.Parametrized `lw:"span,symbol,highCardRefParametrized"`
 ```
 
-A scalar / `Option` / container value pairs with a **scalar** carrier; `,explode`
-instead pairs with a **slice** carrier (`[]marshalltypes.X`), one carrier element
-per exploded attribute. `Parametrized` serves both parametrized channels — the
-flag, not the carrier type, picks low- vs high-card. `Params` is wire-emitted
-even when empty: carrier *presence*, not params content, is the "attribute is
-here" signal.
+Carriers are **scalar-only** — one `marshalltypes.X` per attribute, whatever
+the value shape (scalar / `Option` / container; the element-wise
+`[]marshalltypes.X` slice pairing went with `,explode`, ADR-0113 D1).
+`Parametrized` serves both parametrized channels — the flag, not the carrier
+type, picks low- vs high-card. `Params` is wire-emitted even when empty:
+carrier *presence*, not params content, is the "attribute is here" signal.
 
 **One channel per section.** All fields targeting a section must agree on the
 channel — the read-side decode iterates a single channel whose iterator element
@@ -315,12 +318,14 @@ layer, that whole matrix is your regression gate.
 Both front-ends reject these before any wire is written, so an unrepresentable
 DTO fails at `PlanFor` / `Validate`, never as a `reflect` panic:
 
-- **Plain field** carrying a channel / `unit` / `explode` / `const` / `ct=` flag,
+- **Removed grammar** (ADR-0113 D1): `,explode` anywhere, and
+  `,highCardVerbatim` on a value field — each names its replacement in the
+  error.
+- **Plain field** carrying a channel / `unit` / `const` / `ct=` flag,
   or an `Option` / slice / roaring shape; a missing `id`; an unknown role.
 - **Multi-sub-column section** with: more than one field on a sub-column; more
-  than one membership; a const, `Option[T]`, `*roaring.Bitmap`, `,unit`,
-  `,explode`, or carrier channel. (This is the rule the tuple exists to work
-  around.)
+  than one membership; a const, `Option[T]`, `*roaring.Bitmap`, `,unit`, or
+  carrier channel. (This is the rule the tuple exists to work around.)
 - **Tuple**: a second field/const/tuple on a tuple-owned section; a missing or
   wrongly-typed `@membership`; a ref-typed field on a verbatim channel (or the
   reverse); a repeated `@membership` mixed with another field on one channel; a
@@ -329,8 +334,8 @@ DTO fails at `PlanFor` / `Validate`, never as a `reflect` panic:
   identifier; a top-level membership beginning with `@` (reserved for tuples).
 - **Carrier** value without its sibling (or a channel/multiplicity mismatch).
 
-`<Kind>ReadRow` (ADR-0100 store reads) additionally excludes tuple, carrier, and
-`,explode` kinds — `ReadRowSupported` reports the reason.
+`<Kind>ReadRow` (ADR-0100 store reads) additionally excludes tuple and carrier
+kinds — `ReadRowSupported` reports the reason.
 
 ## Shape cheat-sheet
 
@@ -340,7 +345,7 @@ DTO fails at `PlanFor` / `Validate`, never as a `reflect` panic:
 | one value | `T` | `lw:"m,section"` |
 | an optional value | `option.Option[T]` | `lw:"m,section"` |
 | a bag of values (one attribute) | `[]T` | `lw:"m,section"` |
-| a value per element (N attributes) | `[]T` | `lw:"m,section,explode"` |
+| a value per element (N attributes) | `[]Attr` nested section | see the [nested how-to](leeway-marshalling-nested.md) |
 | a literal-named membership | `T` / `[]T` | `lw:"m,section,verbatim"` |
 | a scalar + co-containers as one attribute | one field per sub-column | `lw:"m,section:col"` |
 | many attributes, membership per attribute | `[]ElemStruct` | `lw:"section"` (element uses `@membership`) |

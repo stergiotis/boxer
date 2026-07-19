@@ -221,8 +221,8 @@ always `lw:"membership,section"`.
 ## Attribute cardinality
 
 Make the section field a slice for N attributes; an `Option`/pointer for 0-or-1.
-This **subsumes the flat grammar's `,explode`** — "N attributes" is now a
-property of the section field, not a flag on a sub-column.
+This **replaced the flat grammar's `,explode`** (removed by ADR-0113 D1) —
+"N attributes" is a property of the section field, not a flag on a sub-column.
 
 ```go
 Body  Prose          `lw:"body,text"`   // exactly one attribute
@@ -351,9 +351,10 @@ type Telemetry struct {
 ```
 
 `lw.Single` co-exists with scalars and memberships in one struct, and a `[]Attr`
-of such structs is the flat grammar's `,explode,unit` shape (N attributes, each a
-single-element container). The one constraint: a section's containers are all
-`lw.Single` (unit) or all plain `[]T`, never mixed.
+of such structs is the N×1-with-unit shape the flat grammar formerly spelled
+`,explode,unit` (N attributes, each a single-element container; removed by
+ADR-0113 D1). The one constraint: a section's containers are all `lw.Single`
+(unit) or all plain `[]T`, never mixed.
 
 It also stands alone at the **entity** level as sugar — a known `lw.*` type, so
 it reads like a scalar one-liner, not a user attribute struct:
