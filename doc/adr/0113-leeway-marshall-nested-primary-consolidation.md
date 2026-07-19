@@ -281,9 +281,11 @@ Consequences:
   named, to revive it.
 - D3's negative-test plan (each removed spelling failing with its replacement
   named) is moot.
-- The **D5 trigger has fired** — "when D3's contingencies resolve" — so the
-  parametrized carrier pair is due its re-justify-or-cut decision; the
-  disposition is recorded separately once made.
+- The **D5 trigger fired** — "when D3's contingencies resolve" — and the
+  disposition is **re-justified** (2026-07-19): the statements-consumer
+  commitment stands on the adopter's roadmap, so the parametrized pair stays
+  parked. The trigger's remaining leg re-arms it — if that commitment is
+  dropped, the pair follows D1 out of the authoring grammar and the codecs.
 - Open question 2 settles with the same stroke: `,unit` / `,ct=` **stay** —
   they are generator-friendly spellings of the permanent IR.
 - The recorded read-cursor alternative (retiring both grammars for generated
