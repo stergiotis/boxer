@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -281,6 +282,126 @@ func TestAttrSummary(t *testing.T) {
 
 	manySpan := temporalAttr{kind: kindIntervals, spans: []temporalSpan{{400, 900}, {1000, 1200}}}
 	assert.Contains(t, manySpan.summary(), "2 windows")
+}
+
+// tsDictCol builds a one-row Dictionary(Timestamp[ms]) holding one value —
+// the shape a low-cardinality leeway datetime column arrives as.
+func tsDictCol(mem memory.Allocator, v int64) arrow.Array {
+	dt := &arrow.DictionaryType{
+		IndexType: arrow.PrimitiveTypes.Int32,
+		ValueType: &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"},
+	}
+	b := array.NewDictionaryBuilder(mem, dt).(*array.TimestampDictionaryBuilder)
+	b.Append(arrow.Timestamp(v))
+	return b.NewArray()
+}
+
+// tsFixedListCol builds a one-row FixedSizeList(2, Timestamp[ms]).
+func tsFixedListCol(mem memory.Allocator, a, b int64) arrow.Array {
+	lb := array.NewFixedSizeListBuilder(mem, 2, &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"})
+	vb := lb.ValueBuilder().(*array.TimestampBuilder)
+	lb.Append(true)
+	vb.Append(arrow.Timestamp(a))
+	vb.Append(arrow.Timestamp(b))
+	return lb.NewArray()
+}
+
+// TestDetectTemporalSupportColumnsExcluded is the regression for the screenshot
+// bug: a leeway tv:time: attribute expands to a datetime value column plus
+// integer support columns (len, lvcard) that share the prefix. Only the value
+// column is a moment; the support columns must not become 1970-01-01 00:00:01
+// flags. Detection gates on Class==Value, so the name prefix no longer sweeps
+// the support columns in.
+func TestDetectTemporalSupportColumnsExcluded(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	rec, schema := oneRowRec(
+		"tv:time:value", uint32Col(mem, 1_765_002_720), // width-32 DateTime → uint32 epoch seconds
+		"tv:time:len", uint32Col(mem, 1),
+		"tv:time:lvcard", uint32Col(mem, 1),
+	)
+	classes := []streamreadaccess.ColumnClass{
+		{ArrowIdx: 0, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "time", LeewayName: "value", CanonicalType: ctabb.Z32},
+		{ArrowIdx: 1, Class: streamreadaccess.ColumnRoleClassSupport, SectionName: "time", LeewayName: "len", CanonicalType: ctabb.U32},
+		{ArrowIdx: 2, Class: streamreadaccess.ColumnRoleClassSupport, SectionName: "time", LeewayName: "lvcard", CanonicalType: ctabb.U32},
+	}
+	got, _ := detectTemporalAttrs(rec, schema, 0, classes)
+	require.Len(t, got, 1, "only the value column is temporal; len/lvcard are excluded")
+	assert.Equal(t, kindInstants, got[0].kind)
+	require.Equal(t, []int64{int64(1_765_002_720) * 1000}, got[0].points)
+}
+
+// TestDetectTemporalByCanonicalTypeNotName proves detection is type-driven, not
+// name-driven: a datetime value column with no tv:time: hint is detected via its
+// canonical type, and the same uint32 column classified as a non-temporal
+// integer is not.
+func TestDetectTemporalByCanonicalTypeNotName(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	rec, schema := oneRowRec("observedAt", uint32Col(mem, 1_700_000_000))
+
+	temporal := []streamreadaccess.ColumnClass{
+		{ArrowIdx: 0, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "obs", LeewayName: "observedAt", CanonicalType: ctabb.Z32},
+	}
+	got, _ := detectTemporalAttrs(rec, schema, 0, temporal)
+	require.Len(t, got, 1, "temporal by canonical type despite no tv:time: name")
+	require.Equal(t, []int64{int64(1_700_000_000) * 1000}, got[0].points)
+
+	integer := []streamreadaccess.ColumnClass{
+		{ArrowIdx: 0, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "obs", LeewayName: "observedAt", CanonicalType: ctabb.U32},
+	}
+	none, _ := detectTemporalAttrs(rec, schema, 0, integer)
+	assert.Empty(t, none, "a non-temporal canonical type is not a moment")
+}
+
+// TestDetectTemporalRangeFailSafe: two datetime columns in one section that are
+// NOT a begin/end pair render as two instants (never a fabricated interval),
+// while a beginIncl/endExcl pair in a section collapses to one interval.
+func TestDetectTemporalRangeFailSafe(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	rec, schema := oneRowRec(
+		"tv:audit:created", tsCol(mem, arrow.Millisecond, true, 100),
+		"tv:audit:modified", tsCol(mem, arrow.Millisecond, true, 500),
+	)
+	unrelated := []streamreadaccess.ColumnClass{
+		{ArrowIdx: 0, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "audit", LeewayName: "created", CanonicalType: ctabb.Z64},
+		{ArrowIdx: 1, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "audit", LeewayName: "modified", CanonicalType: ctabb.Z64},
+	}
+	got, _ := detectTemporalAttrs(rec, schema, 0, unrelated)
+	require.Len(t, got, 2, "created/modified are not a begin/end pair → two instants")
+	assert.Equal(t, kindInstants, got[0].kind)
+	assert.Equal(t, kindInstants, got[1].kind)
+
+	rec2, schema2 := oneRowRec(
+		"tv:window:beginIncl", tsCol(mem, arrow.Millisecond, true, 100),
+		"tv:window:endExcl", tsCol(mem, arrow.Millisecond, true, 500),
+	)
+	pair := []streamreadaccess.ColumnClass{
+		{ArrowIdx: 0, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "window", LeewayName: "beginIncl", CanonicalType: ctabb.Z64},
+		{ArrowIdx: 1, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "window", LeewayName: "endExcl", CanonicalType: ctabb.Z64},
+	}
+	iv, _ := detectTemporalAttrs(rec2, schema2, 0, pair)
+	require.Len(t, iv, 1, "beginIncl/endExcl in one section → one interval")
+	assert.Equal(t, kindIntervals, iv[0].kind)
+	assert.Equal(t, "window", iv[0].label)
+	require.Equal(t, []temporalSpan{{100, 500}}, iv[0].spans)
+}
+
+// TestDetectTemporalDictionaryAndFixedList covers the added Arrow surfaces: a
+// dictionary-encoded timestamp resolves through to its value, and a
+// FixedSizeList of timestamps explodes one flag per item.
+func TestDetectTemporalDictionaryAndFixedList(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	recD, schemaD := oneRowRec("seen", tsDictCol(mem, 1_700_000_000_000))
+	gotD, _ := detectTemporalAttrs(recD, schemaD, 0, nil)
+	require.Len(t, gotD, 1, "dictionary(Timestamp) is temporal by resolved value type")
+	require.Equal(t, []int64{1_700_000_000_000}, gotD[0].points)
+
+	recF, schemaF := oneRowRec("bounds", tsFixedListCol(mem, 100, 500))
+	gotF, _ := detectTemporalAttrs(recF, schemaF, 0, nil)
+	require.Len(t, gotF, 1)
+	assert.Equal(t, kindInstants, gotF[0].kind)
+	require.Equal(t, []int64{100, 500}, gotF[0].points)
 }
 
 // TestDetailTimelineSyncEarlyCutoff verifies re-detection is gated on the

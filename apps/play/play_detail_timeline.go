@@ -24,22 +24,28 @@ import (
 //
 //   - a scalar timestamp, or each item of an instant array, is a numbered flag
 //     (all items of one attribute share the attribute's number and colour);
-//   - a leeway co-section begin/end pair (e.g. tv:timeRange:beginIncl +
-//     tv:timeRange:endExcl) is a set of interval bars on a labelled lane.
+//   - a begin/end datetime pair (e.g. a leeway timeRange section's
+//     beginIncl + endExcl) is a set of interval bars on a labelled lane.
 //
 // It reuses the timeline widget unmodified (annotations + intervals in one
 // view). See RenderDefaultDetailContent for the placement.
 //
 // Detection is Arrow-type-first: a Timestamp / Date32 / Date64 column — or a
-// List of those — is temporal by type, which also skips the leeway
-// support/membership columns (their inner type is integer/string). It is
-// widened for the leeway path to integer-encoded scalar temporal (tv:time: and
-// the backbone entity-timestamp, read as epoch seconds — the width-32
-// DateTime('UTC') → Arrow uint32 case). Range pairing uses the leeway
-// classification: two temporal value columns sharing one SectionName are a
-// co-section begin/end pair. Integer-encoded temporal *arrays* are out of scope
-// for this cut (they'd need Class==Value gating to tell the value column from a
-// same-typed support column).
+// List / FixedSizeList of those, and dictionary-encoded variants — is temporal
+// by type. On the leeway path it is widened by the column's *canonical type*,
+// not its name: ColumnClass.Temporal() gated to Class==Value marks the datetime
+// value columns (whatever Arrow width they arrive as — a width-32 DateTime('UTC')
+// is a bare uint32), and structurally excludes the len / card support columns
+// and the membership columns that a name-prefix match would wrongly sweep in.
+// Off the leeway path (no classification) there is no type to consult, so an
+// integer column is temporal only if its name carries the tv:time: prefix.
+//
+// Range pairing is convention-based and fail-safe. Leeway has no first-class
+// interval type — a range is two datetime columns in a section (beginIncl /
+// endExcl) — so a begin-boundary column paired with an end-boundary column in
+// one section becomes an interval, and any other datetime column renders as
+// instants. Two unrelated datetimes in a section are therefore never fabricated
+// into a false duration.
 
 const (
 	msPerDay = 86_400_000
@@ -90,12 +96,13 @@ func detectTemporalAttrs(rec arrow.RecordBatch, schema *arrow.Schema, row int64,
 		classByIdx[cl.ArrowIdx] = cl
 	}
 
-	// Pass 1: collect every temporal column with its moment(s) and, when it is a
-	// leeway value column, its section (the range-pairing key).
+	// Pass 1: collect every temporal column with its moment(s), its section (the
+	// range-pairing key) and, for a range, its begin/end boundary role.
 	type tcol struct {
-		name    string
-		section string
-		moments []int64
+		name     string
+		section  string
+		boundary boundaryRole
+		moments  []int64
 	}
 	var tcols []tcol
 	var buf []int64
@@ -106,7 +113,20 @@ func detectTemporalAttrs(rec arrow.RecordBatch, schema *arrow.Schema, row int64,
 		}
 		name := schema.Field(i).Name
 		cl, hasCl := classByIdx[i]
-		leewayTemporal := (hasCl && cl.PlainItemType == common.PlainItemTypeEntityTimestamp) || hasLeewayTimePrefix(name)
+		// Temporality is type-driven on the leeway path: a value column whose
+		// canonical type is a datetime (or the backbone entity-timestamp, which is
+		// one by definition). This excludes the len / card support columns and the
+		// membership columns that share a tv:time: prefix but are structural, not
+		// moments — reading those as epoch seconds is what put spurious 1970 flags
+		// on the strip. Off the leeway path (no classification) there is no type to
+		// consult, so fall back to the name prefix.
+		var leewayTemporal bool
+		if hasCl {
+			leewayTemporal = cl.Class == streamreadaccess.ColumnRoleClassValue &&
+				(cl.Temporal() || cl.PlainItemType == common.PlainItemTypeEntityTimestamp)
+		} else {
+			leewayTemporal = hasLeewayTimePrefix(name)
+		}
 		buf = cellMoments(arr, int(row), leewayTemporal, buf[:0])
 		if len(buf) == 0 {
 			continue
@@ -115,16 +135,41 @@ func detectTemporalAttrs(rec arrow.RecordBatch, schema *arrow.Schema, row int64,
 		if hasCl && cl.Class == streamreadaccess.ColumnRoleClassValue {
 			section = cl.SectionName.String()
 		}
-		tcols = append(tcols, tcol{name: name, section: section, moments: append([]int64(nil), buf...)})
+		tcols = append(tcols, tcol{
+			name:     name,
+			section:  section,
+			boundary: columnBoundary(cl, hasCl, name),
+			moments:  append([]int64(nil), buf...),
+		})
 	}
 
-	// Pass 2: a section holding exactly two temporal value columns is a
-	// co-section begin/end pair → one interval attribute; everything else is an
-	// instants attribute. Emitted in first-encounter order.
-	bySection := make(map[string][]int)
+	// Pass 2: within a section, a begin-boundary column paired with an
+	// end-boundary column is a range → one interval attribute; every other
+	// temporal column is an instants attribute. Leeway has no first-class interval
+	// type — a range is two datetime columns in a section (beginIncl / endExcl) —
+	// so pairing keys on the boundary-naming convention and fails safe: two
+	// datetime columns that are NOT a begin/end pair render as separate flags,
+	// never a fabricated duration. Emitted in first-encounter (physical) order.
+	type beIdx struct{ begin, end int }
+	secBounds := make(map[string]*beIdx)
 	for i, tc := range tcols {
-		if tc.section != "" {
-			bySection[tc.section] = append(bySection[tc.section], i)
+		if tc.section == "" {
+			continue
+		}
+		b := secBounds[tc.section]
+		if b == nil {
+			b = &beIdx{begin: -1, end: -1}
+			secBounds[tc.section] = b
+		}
+		switch tc.boundary {
+		case boundaryBegin:
+			if b.begin < 0 {
+				b.begin = i
+			}
+		case boundaryEnd:
+			if b.end < 0 {
+				b.end = i
+			}
 		}
 	}
 	consumed := make([]bool, len(tcols))
@@ -132,14 +177,15 @@ func detectTemporalAttrs(rec arrow.RecordBatch, schema *arrow.Schema, row int64,
 		if consumed[i] {
 			continue
 		}
-		if members := bySection[tc.section]; tc.section != "" && len(members) == 2 {
-			a, b := tcols[members[0]], tcols[members[1]]
-			consumed[members[0]] = true
-			consumed[members[1]] = true
+		if b := secBounds[tc.section]; tc.section != "" && b != nil && b.begin >= 0 && b.end >= 0 &&
+			(i == b.begin || i == b.end) {
+			lo, hi := tcols[b.begin], tcols[b.end]
+			consumed[b.begin] = true
+			consumed[b.end] = true
 			attrs = append(attrs, temporalAttr{
-				label: sectionLabel(tc.section),
+				label: tc.section,
 				kind:  kindIntervals,
-				spans: zipSpans(a.moments, b.moments),
+				spans: zipSpans(lo.moments, hi.moments),
 			})
 			continue
 		}
@@ -158,16 +204,82 @@ func detectTemporalAttrs(rec arrow.RecordBatch, schema *arrow.Schema, row int64,
 	return attrs, dropped
 }
 
+type boundaryRole uint8
+
+const (
+	boundaryNone boundaryRole = iota
+	boundaryBegin
+	boundaryEnd
+)
+
+// columnBoundary classifies a temporal column's role in a begin/end range from
+// its leeway sub-column name — LeewayName on the leeway path, else the physical
+// name's sub-column segment. Recognition is naming-convention based by necessity:
+// leeway encodes an interval as two datetime columns in a section with no
+// structural marker separating it from two unrelated datetimes (see
+// detectTemporalAttrs Pass 2), so keying on the boundary convention
+// (beginIncl / endExcl and the common begin/end, start/end, from/to, since/until
+// variants) is the available signal, and one that fails safe to instants.
+func columnBoundary(cl streamreadaccess.ColumnClass, hasCl bool, physical string) boundaryRole {
+	sub := ""
+	if hasCl {
+		sub = cl.LeewayName.String()
+	}
+	if sub == "" {
+		sub = leewaySubColumn(physical)
+	}
+	switch {
+	case boundaryWord(sub, "begin"), boundaryWord(sub, "start"),
+		boundaryWord(sub, "from"), boundaryWord(sub, "since"):
+		return boundaryBegin
+	case boundaryWord(sub, "end"), boundaryWord(sub, "stop"),
+		boundaryWord(sub, "to"), boundaryWord(sub, "until"), boundaryWord(sub, "till"):
+		return boundaryEnd
+	}
+	return boundaryNone
+}
+
+// boundaryWord reports whether name starts with the boundary word at a word
+// boundary — the whole name, or followed by a camelCase hump or an underscore —
+// so "beginIncl", "begin_at" and "begin" match "begin" but "beginning" does not.
+func boundaryWord(name, word string) bool {
+	if len(name) < len(word) || !strings.EqualFold(name[:len(word)], word) {
+		return false
+	}
+	if len(name) == len(word) {
+		return true
+	}
+	c := name[len(word)]
+	return c == '_' || (c >= 'A' && c <= 'Z')
+}
+
+// leewaySubColumn returns the sub-column segment of a leeway physical name
+// ("tv:timeRange:beginIncl:…" → "beginIncl"), or "" for a non-tv column. It backs
+// columnBoundary when the classification's LeewayName is unavailable (the ad-hoc
+// path, or a class with no name).
+func leewaySubColumn(name string) string {
+	if strings.HasPrefix(name, "tv:") {
+		parts := strings.SplitN(name, ":", 4)
+		if len(parts) >= 3 {
+			return parts[2]
+		}
+	}
+	return ""
+}
+
 // cellMoments appends every epoch-ms moment in the (non-null) cell at row to
-// dst: a scalar temporal → one moment; a List / LargeList of temporal → one per
-// item (null items skipped). leewayTemporal lets an integer scalar read as epoch
-// seconds. A non-temporal column appends nothing.
+// dst: a scalar temporal → one moment; a List / LargeList / FixedSizeList of
+// temporal → one per item (null items skipped). leewayTemporal lets an integer
+// scalar read as epoch seconds. A non-temporal column appends nothing.
 func cellMoments(arr arrow.Array, row int, leewayTemporal bool, dst []int64) []int64 {
 	switch a := arr.(type) {
 	case *array.List:
 		start, end := a.ValueOffsets(row)
 		return listMoments(a.ListValues(), start, end, leewayTemporal, dst)
 	case *array.LargeList:
+		start, end := a.ValueOffsets(row)
+		return listMoments(a.ListValues(), start, end, leewayTemporal, dst)
+	case *array.FixedSizeList:
 		start, end := a.ValueOffsets(row)
 		return listMoments(a.ListValues(), start, end, leewayTemporal, dst)
 	default:
@@ -178,11 +290,15 @@ func cellMoments(arr arrow.Array, row int, leewayTemporal bool, dst []int64) []i
 	return dst
 }
 
-// listMoments appends the temporal moments of inner[start:end]. A non-temporal
-// inner type yields nothing (temporalCellMS rejects every element), so a leeway
-// support array (List of UInt64, etc.) contributes no moments.
+// listMoments appends the temporal moments of inner[start:end], skipping null
+// items. A non-temporal inner type yields nothing (temporalCellMS rejects every
+// element), so a leeway support array (List of UInt64, etc.) contributes no
+// moments.
 func listMoments(inner arrow.Array, start, end int64, leewayTemporal bool, dst []int64) []int64 {
 	for idx := start; idx < end; idx++ {
+		if inner.IsNull(int(idx)) {
+			continue
+		}
 		if ms, ok := temporalCellMS(inner, int(idx), leewayTemporal); ok {
 			dst = append(dst, ms)
 		}
@@ -196,7 +312,7 @@ func listMoments(inner arrow.Array, start, end int64, leewayTemporal bool, dst [
 func zipSpans(a, b []int64) (spans []temporalSpan) {
 	n := min(len(a), len(b))
 	spans = make([]temporalSpan, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		lo, hi := a[i], b[i]
 		if hi < lo {
 			lo, hi = hi, lo
@@ -238,11 +354,12 @@ func capMarks(in []temporalAttr) (out []temporalAttr, dropped int) {
 }
 
 // temporalCellMS resolves the (non-null) cell at row to epoch milliseconds
-// (UTC). Arrow temporal types are recognised by type unconditionally. When
-// leewayTemporal is set — the column is a leeway tv:time: attribute or the
-// backbone entity-timestamp — an integer cell is read as epoch *seconds*, the
-// shape a width-32 DateTime('UTC') leeway column takes on the Arrow wire. A
-// non-temporal cell returns ok=false.
+// (UTC). Arrow temporal types are recognised by type unconditionally. A
+// dictionary-encoded cell (a low-cardinality leeway column arrives this way) is
+// resolved to its value and recursed into. When leewayTemporal is set — the
+// column is a leeway datetime value column or the backbone entity-timestamp — an
+// integer cell is read as epoch *seconds*, the shape a width-32 DateTime('UTC')
+// leeway column takes on the Arrow wire. A non-temporal cell returns ok=false.
 func temporalCellMS(arr arrow.Array, row int, leewayTemporal bool) (ms int64, ok bool) {
 	switch a := arr.(type) {
 	case *array.Timestamp:
@@ -255,6 +372,13 @@ func temporalCellMS(arr arrow.Array, row int, leewayTemporal bool) (ms int64, ok
 		return int64(a.Value(row)) * msPerDay, true
 	case *array.Date64:
 		return int64(a.Value(row)), true
+	case *array.Dictionary:
+		vals := a.Dictionary()
+		idx := a.GetValueIndex(row)
+		if vals.IsNull(idx) {
+			return 0, false
+		}
+		return temporalCellMS(vals, idx, leewayTemporal)
 	}
 	if leewayTemporal {
 		if sec, isInt := readEpochSeconds(arr, row); isInt {
@@ -283,15 +407,12 @@ func readEpochSeconds(arr arrow.Array, row int) (sec int64, ok bool) {
 
 // hasLeewayTimePrefix reports whether a physical column name is a leeway
 // tv:time: temporal attribute under either naming convention — the canonical
-// ':' separator or the '_' ClickHouse column dumps mangle it to.
+// ':' separator or the '_' ClickHouse column dumps mangle it to. This is the
+// fallback temporality signal used only off the leeway path (no column
+// classification); on the leeway path ColumnClass.Temporal() supersedes it,
+// telling datetime value columns from the support columns that share this prefix.
 func hasLeewayTimePrefix(name string) bool {
 	return strings.HasPrefix(name, "tv:time:") || strings.HasPrefix(name, "tv_time_")
-}
-
-// sectionLabel renders a leeway SectionName (canonicalised, e.g. "time-range")
-// as the descriptive label for a range attribute.
-func sectionLabel(section string) string {
-	return section
 }
 
 // formatEpochMS renders an epoch-ms moment as a compact UTC wall-clock string
@@ -395,21 +516,16 @@ func buildDetailIntervals(attrs []temporalAttr) (ivs []*layout.IntervalEvent) {
 func fitRange(attrs []temporalAttr) (lo, hi time.Time, ok bool) {
 	var minMS, maxMS int64
 	have := false
-	track := func(t int64) {
-		if !have {
-			minMS, maxMS, have = t, t, true
-			return
-		}
-		minMS, maxMS = min(minMS, t), max(maxMS, t)
-	}
 	for _, a := range attrs {
-		for _, p := range a.points {
-			track(p)
+		alo, ahi, aok := a.extent()
+		if !aok {
+			continue
 		}
-		for _, s := range a.spans {
-			track(s.fromMS)
-			track(s.toMS)
+		if !have {
+			minMS, maxMS, have = alo, ahi, true
+			continue
 		}
+		minMS, maxMS = min(minMS, alo), max(maxMS, ahi)
 	}
 	if !have {
 		return time.Time{}, time.Time{}, false

@@ -188,13 +188,16 @@ entry — a coloured swatch, its name, and a value summary; on the axis:
 
 - a scalar timestamp, or each item of a datetime array, is a numbered flag (all of
   one attribute's items share its number and colour; hover a flag for its value);
-- a leeway begin/end range pair — a co-section such as `tv:timeRange:beginIncl` +
-  `tv:timeRange:endExcl` — is drawn as interval bars on a lane labelled with the
-  attribute.
+- a begin/end datetime pair in one section — such as a leeway `timeRange`'s
+  `beginIncl` + `endExcl` — is drawn as interval bars on a lane labelled with the
+  attribute. Two unrelated datetimes in a section are shown as separate flags, not
+  as a fabricated interval.
 
-It recognises `DateTime64` / `Date` columns and arrays of them, and leeway time
-attributes (`tv:time:` and the entity timestamp, which often arrive as whole-second
-integers). A row with no datetime attribute shows no timeline.
+It recognises datetime **value** columns by their type — `DateTime64` / `Date`,
+arrays and dictionary-encoded forms, and leeway datetime attributes (including the
+whole-second-integer form and the entity timestamp). The structural support
+columns (`len`, `card`) that accompany a leeway datetime attribute are not
+plotted. A row with no datetime attribute shows no timeline.
 
 Before a query it reads *Run a query, then select a row to see its detail.* When a
 result lands the first row is selected automatically, so the card populates straight
