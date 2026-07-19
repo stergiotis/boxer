@@ -142,6 +142,15 @@ type Table2CardEmitter struct {
 	// never fires from this emitter.
 	OnTagClicked func(displayText string, detail string)
 
+	// DeferRender suppresses the automatic flush at EndBatch: the drive still
+	// buffers unified rows, but nothing is drawn until Render is called
+	// explicitly. A caller sets this when it must read the buffered rows
+	// (SectionDigests) between the drive and the draw — e.g. the Detail pane
+	// drives once, labels its timeline from the digests, then draws the card.
+	// Default false preserves the drive-and-draw-in-one behaviour other
+	// consumers rely on.
+	DeferRender bool
+
 	err error
 }
 
@@ -280,10 +289,67 @@ func (inst *Table2CardEmitter) flushPendingHeader() {
 }
 
 func (inst *Table2CardEmitter) EndBatch() (err error) {
-	if len(inst.unified) > 0 {
+	if !inst.DeferRender && len(inst.unified) > 0 {
 		inst.flushUnified()
 	}
 	return inst.err
+}
+
+// Render draws the rows buffered by the last drive into the current ui scope.
+// It is the deferred half of EndBatch, for the DeferRender path: a caller drives
+// (DriveRecordBatch), reads SectionDigests, then calls Render to draw. A no-op
+// when nothing was buffered. Do not call it when DeferRender is unset — EndBatch
+// has already drawn, and a second call would duplicate the widgets.
+func (inst *Table2CardEmitter) Render() {
+	if len(inst.unified) > 0 {
+		inst.flushUnified()
+	}
+}
+
+// SectionValue is one value pair (column name + rendered value) of a section.
+type SectionValue struct {
+	Name  string
+	Value string
+}
+
+// SectionDigest is a read-only summary of one tagged section's data row: the
+// membership chips split into primary / secondary exactly as the card's columns,
+// and every value pair (the section's co-attributes). It lets a caller reuse the
+// card's already-decoded, already-classified per-section content instead of
+// re-driving the leeway stream — e.g. the Detail timeline labels a temporal flag
+// with its owning section's chips and co-attributes, matching the card below it.
+type SectionDigest struct {
+	SectionName string
+	Primary     []string // primary membership chip display strings
+	Secondary   []string // secondary membership chip display strings
+	Values      []SectionValue
+}
+
+// SectionDigests returns one digest per tagged / co-section data row buffered by
+// the last drive, in first-encounter order. Plain / backbone sections are
+// excluded: they carry no memberships and fan out one row per column. Valid
+// after DriveRecordBatch (typically with DeferRender set, before Render); the
+// returned slices are fresh copies, so they survive the next drive.
+func (inst *Table2CardEmitter) SectionDigests() (digests []SectionDigest) {
+	for i := range inst.unified {
+		row := &inst.unified[i]
+		if row.kind != rowKindData ||
+			(row.sectionType != sectionTypeTagged && row.sectionType != sectionTypeCo) {
+			continue
+		}
+		d := SectionDigest{SectionName: row.sectionName}
+		for _, t := range row.primary {
+			d.Primary = append(d.Primary, t.display)
+		}
+		for _, t := range row.secondary {
+			d.Secondary = append(d.Secondary, t.display)
+		}
+		for _, p := range row.valuePairs {
+			d.Values = append(d.Values, SectionValue{Name: p.name, Value: p.value})
+		}
+		digests = append(digests, d)
+	}
+	return digests
 }
 
 func (inst *Table2CardEmitter) BeginEntity() {
