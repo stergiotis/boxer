@@ -25,15 +25,22 @@ func buildClassifyFixture(t *testing.T) (ir *common.IntermediateTableRepresentat
 		t.Fatalf("new manipulator: %v", err)
 	}
 	manip.SetTableName("classifyfix")
-	// Backbone: one plain entity-id column.
+	// Backbone: a plain entity-id column and an entity-timestamp (a datetime), so
+	// the temporal test can assert the backbone datetime is Temporal() straight
+	// from the classification.
 	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.U64).
 		AddColumnValueSemantics(valueaspects.AspectHumanReadable, valueaspects.AspectMachineReadable)
-	// Tagged section "metric": a scalar value, a set value (→ support column),
-	// and a low-card-ref membership (→ membership + membership-support columns).
+	manip.PlainValueColumn(common.PlainItemTypeEntityTimestamp, "eventTime", ctabb.Z64).
+		AddColumnValueSemantics(valueaspects.AspectHumanReadable, valueaspects.AspectMachineReadable)
+	// Tagged section "metric": a scalar value, a scalar datetime value, a set value
+	// (→ support column), and a low-card-ref membership (→ membership +
+	// membership-support columns).
 	metric := manip.TaggedValueSection("metric").
 		SectionStreamingGroup("data").
 		AddSectionMembership(common.MembershipSpecLowCardRef)
 	metric.TaggedValueColumn("value", ctabb.F64).
+		AddColumnValueSemantics(valueaspects.AspectHumanReadable, valueaspects.AspectMachineReadable)
+	metric.TaggedValueColumn("seen", ctabb.Z64).
 		AddColumnValueSemantics(valueaspects.AspectHumanReadable, valueaspects.AspectMachineReadable)
 	metric.TaggedValueColumn("tags", ctabb.Sh).
 		AddColumnValueSemantics(valueaspects.AspectHumanReadable, valueaspects.AspectMachineReadable)
@@ -133,6 +140,61 @@ func TestClassifyArrowColumns_buckets(t *testing.T) {
 	// No backbone column is ever classified as membership.
 	if got := count(func(c ColumnClass) bool { return c.Backbone() && c.Class == ColumnRoleClassMembership }); got != 0 {
 		t.Errorf("backbone columns must not be membership, got %d", got)
+	}
+}
+
+// TestClassifyArrowColumns_temporal asserts the classifier populates a temporal
+// canonical type end-to-end, so ColumnClass.Temporal() — the signal the play
+// Detail timeline uses to find datetime columns — is true for a datetime value
+// column and the backbone entity-timestamp, and false for a non-temporal value
+// column and every support / membership column.
+func TestClassifyArrowColumns_temporal(t *testing.T) {
+	ir, conv, schema, rowCfg := buildClassifyFixture(t)
+	classes := ClassifyArrowColumns(ir, conv, schema, rowCfg)
+
+	find := func(pred func(ColumnClass) bool) (ColumnClass, bool) {
+		for _, cl := range classes {
+			if pred(cl) {
+				return cl, true
+			}
+		}
+		return ColumnClass{}, false
+	}
+
+	// A tagged Z64 value column is Temporal by canonical type — no name match.
+	if seen, ok := find(func(c ColumnClass) bool {
+		return string(c.LeewayName) == "seen" && c.Class == ColumnRoleClassValue
+	}); !ok {
+		t.Fatal("no metric.seen value column")
+	} else if !seen.Temporal() {
+		t.Errorf("seen (Z64) must be Temporal; canonicalType=%v", seen.CanonicalType)
+	}
+
+	// The backbone entity-timestamp is Temporal — detection does not, in practice,
+	// depend on the PlainItemType==EntityTimestamp fallback.
+	if ts, ok := find(func(c ColumnClass) bool {
+		return c.PlainItemType == common.PlainItemTypeEntityTimestamp
+	}); !ok {
+		t.Fatal("no backbone entity-timestamp column")
+	} else if !ts.Temporal() {
+		t.Errorf("backbone entity-timestamp must be Temporal; canonicalType=%v", ts.CanonicalType)
+	}
+
+	// A non-temporal (F64) value column is not Temporal.
+	if val, ok := find(func(c ColumnClass) bool {
+		return string(c.LeewayName) == "value" && c.Class == ColumnRoleClassValue
+	}); !ok {
+		t.Fatal("no metric.value column")
+	} else if val.Temporal() {
+		t.Error("value (F64) must not be Temporal")
+	}
+
+	// No support or membership column is Temporal — this is what keeps len / card
+	// support columns off the timeline even though they share a datetime section.
+	for _, cl := range classes {
+		if (cl.Class == ColumnRoleClassSupport || cl.Class == ColumnRoleClassMembership) && cl.Temporal() {
+			t.Errorf("support/membership column %q must not be Temporal", cl.Physical)
+		}
 	}
 }
 

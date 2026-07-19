@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
@@ -68,6 +69,25 @@ type ColumnClass struct {
 	PlainItemType common.PlainItemTypeE // backbone item type; None for a tagged column
 	LeewayName    naming.StylableName   // the leeway column / attribute name
 	SubType       common.IntermediateColumnSubTypeE
+	// CanonicalType is the column's leeway value type (nil when the group carried
+	// none, e.g. a membership column resolves to its referenced scalar type). It
+	// lets a display layer ask type questions — "is this a datetime?" — that the
+	// physical name and the Arrow wire type answer only fragilely: a width-32
+	// DateTime('UTC') arrives as a bare uint32, indistinguishable from a
+	// cardinality support column by Arrow type alone. See Temporal.
+	CanonicalType canonicaltypes.PrimitiveAstNodeI
+}
+
+// Temporal reports whether the column carries a datetime/time value — the
+// type-driven signal a display layer uses to find temporal columns, in place of
+// matching physical-name prefixes. Derived from the canonical type, it holds
+// regardless of the Arrow width the column arrives as (a width-32 DateTime on
+// the wire is a uint32, not an Arrow Timestamp) and regardless of collection
+// shape (scalar, array, or set of datetimes are all temporal). A support or
+// membership column is never Temporal: its canonical type is the structural
+// integer or the referenced scalar, not a datetime.
+func (inst ColumnClass) Temporal() bool {
+	return inst.CanonicalType != nil && inst.CanonicalType.IsTemporalNode()
 }
 
 // Backbone reports whether the column is a plain/backbone column (an entity id,
@@ -132,6 +152,13 @@ func ClassifyArrowColumns(
 			if arrowIdx < 0 {
 				continue
 			}
+			// CanonicalType is index-aligned with Names within a column-props
+			// group; guard the length in case a group carries fewer types than
+			// names (a malformed group leaves the type nil, i.e. untyped).
+			var ct canonicaltypes.PrimitiveAstNodeI
+			if j < len(cp.CanonicalType) {
+				ct = cp.CanonicalType[j]
+			}
 			classes = append(classes, ColumnClass{
 				ArrowIdx:      arrowIdx,
 				Physical:      schema.Field(arrowIdx).Name,
@@ -140,6 +167,7 @@ func ClassifyArrowColumns(
 				PlainItemType: cc.PlainItemType,
 				LeewayName:    name,
 				SubType:       cc.SubType,
+				CanonicalType: ct,
 			})
 		}
 	}
