@@ -32,6 +32,13 @@ parametrized channels have **no** consumer anywhere, demos included. The
 maintenance cost is multiplicative: the byte-identity invariant must hold across
 gen × reflect × (flat | nested) × hand-DML.
 
+*Census precision (2026-07-19, cross-repo check):* the adopter's tree holds one
+**exploratory, reflect-only probe test** pairing `,explode` with a mixed carrier
+(an edge-as-membership sketch, predating the census); no production usage. D1
+stands — at enactment the probe migrates to hand-DML (D5's peer path for shapes
+past the DTO model) or retires. It is also the first concrete trace of the
+adopter-side carrier interest the D5 parking anticipates.
+
 A **2026-07-19 review** added three findings that narrow the decision:
 
 - **Read is grammar-neutral.** The batch read codec (`Unmarshal` / `FillFromArrow`)
