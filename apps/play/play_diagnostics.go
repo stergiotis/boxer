@@ -101,6 +101,16 @@ type DiagnosticsDriver struct {
 	// memoised by buffer like probeFor.
 	passthruFor    string
 	passthruTables []analysis.TableRef
+
+	// secClass / secWitnesses carry the ADR-0132 §SD5 security class of the
+	// same buffer passthruFor names, computed from the same parse. secKnown is
+	// false when the buffer did not parse — "cannot classify" — and secClass
+	// then already holds the strongest class (QuerySecurityMutating is the
+	// enum's fail-closed zero value), per the ClassifyQuerySecurity caller
+	// contract.
+	secKnown     bool
+	secClass     analysis.QuerySecurityClassE
+	secWitnesses []analysis.SecurityWitness
 }
 
 // probeExecutor is the probe lane's nodeExecutorI: a verdict-only POST via
@@ -202,26 +212,39 @@ func (inst *DiagnosticsDriver) columnDiagnostics() []passes.ColumnDiagnostic {
 	return inst.colDiags
 }
 
-// armSecurityContext reclassifies the newly parsed buffer's passthrough base
-// tables — the ones it returns "1:1 as stored" (analysis.ExtractPassthroughTables,
-// ADR-0117). The extraction is purely structural (parse + BuildScopes, no
-// round-trip), so it runs synchronously on the render thread and its result is
-// read straight back — no lane. A buffer boxer's grammar cannot parse, or one
-// whose scope construction fails, has no passthrough tables: ADR-0117 requires
-// the caller to treat "can't classify" as NOT passthrough (never a false
-// information-retrieval claim). Memoised by buffer like the column diagnostics.
+// armSecurityContext reclassifies the newly parsed buffer's security lenses:
+// the passthrough base tables it returns "1:1 as stored"
+// (analysis.ExtractPassthroughTables, ADR-0117) and the ADR-0132 §SD5 security
+// class (analysis.ClassifyQuerySecurity), both from one parse. The analyses are
+// purely structural (no round-trip), so they run synchronously on the render
+// thread and their results are read straight back — no lane. A buffer boxer's
+// grammar cannot parse follows each analysis's conservative direction: no
+// passthrough tables (never a false information-retrieval claim) and an
+// unknown class treated as the strongest one (mutating). Memoised by buffer
+// like the column diagnostics.
 func (inst *DiagnosticsDriver) armSecurityContext(raw string, parseErr error) {
 	if raw == inst.passthruFor {
 		return
 	}
 	inst.passthruFor = raw
 	inst.passthruTables = nil
+	inst.secKnown = false
+	inst.secClass = analysis.QuerySecurityMutating
+	inst.secWitnesses = nil
 	if parseErr != nil || raw == "" {
 		return
 	}
 	pr, err := nanopass.Parse(raw)
 	if err != nil {
 		return
+	}
+	// The ADR-0132 §SD5 class rides the same parse. A classifier error (a
+	// malformed tree) leaves secKnown=false — rendered, and to be treated,
+	// as the strongest class.
+	if class, wits, cerr := analysis.ClassifyQuerySecurity(pr); cerr == nil {
+		inst.secKnown = true
+		inst.secClass = class
+		inst.secWitnesses = wits
 	}
 	// defaultDatabase is "": play has no configured connection default (the
 	// server resolves unqualified reads via currentDatabase()), so unqualified
@@ -238,6 +261,15 @@ func (inst *DiagnosticsDriver) armSecurityContext(raw string, parseErr error) {
 // noteParse, never off-thread).
 func (inst *DiagnosticsDriver) securityContext() []analysis.TableRef {
 	return inst.passthruTables
+}
+
+// securityClass returns the ADR-0132 §SD5 class of the current buffer plus the
+// witnesses that forced a class below "read". known=false means the buffer did
+// not parse — cannot classify — and class then already holds the strongest
+// value (mutating), which is also how a consumer must treat it.
+// Render-thread-only, like securityContext.
+func (inst *DiagnosticsDriver) securityClass() (class analysis.QuerySecurityClassE, witnesses []analysis.SecurityWitness, known bool) {
+	return inst.secClass, inst.secWitnesses, inst.secKnown
 }
 
 // probeView demands the armed probe (non-blocking; unchanged demands memo-hit)
@@ -400,13 +432,16 @@ func (inst *PlayApp) renderDiagStatement() {
 	}
 }
 
-// renderDiagSecurityContext is the passthrough-table lens (ADR-0117): the base
-// tables whose stored rows the current buffer returns 1:1, set apart from the
+// renderDiagSecurityContext is the security lens over the current buffer: the
+// ADR-0132 §SD5 class line (read / read-egress / mutating, with the witnesses
+// that forced a non-read class), then the passthrough-table lens (ADR-0117) —
+// the base tables whose stored rows the buffer returns 1:1, set apart from the
 // aggregates, derivations, and joins a policy cannot govern by table alone. A
 // non-empty set earns an "information-retrieval" badge — the statement hands
 // back stored rows verbatim, so a table/row/column policy bounds exactly what
-// it can expose. The classification is structural, so it speaks only for
-// buffers boxer's grammar parses.
+// it can expose. Both analyses are structural; a buffer the grammar rejects
+// gets the conservative presentation of each (strongest class, no passthrough
+// claim).
 func (inst *PlayApp) renderDiagSecurityContext() {
 	diagHeading("Security context")
 	if inst.diag == nil {
@@ -423,8 +458,10 @@ func (inst *PlayApp) renderDiagSecurityContext() {
 	case inst.sql != inst.formattedFor:
 		diagWeak("Waiting for the editor to settle…")
 		return
-	case inst.formattedErr != nil:
-		diagWeak("Classified only for statements boxer's grammar parses.")
+	}
+	inst.renderDiagSecurityClass()
+	if inst.formattedErr != nil {
+		diagWeak("Passthrough tables are classified only for statements boxer's grammar parses.")
 		return
 	}
 	tables := inst.diag.securityContext()
@@ -440,6 +477,40 @@ func (inst *PlayApp) renderDiagSecurityContext() {
 	}
 	for _, t := range tables {
 		for rt := range c.RichTextLabel(passthroughTableName(t)) {
+			rt.Monospace()
+		}
+	}
+}
+
+// renderDiagSecurityClass is the ADR-0132 §SD5 class line: a badge for the
+// buffer's security class plus one monospace line per witness. A buffer the
+// grammar rejects cannot be classified and is presented — and must be treated
+// downstream — as the strongest class (mutating), the ADR's conservative
+// direction.
+func (inst *PlayApp) renderDiagSecurityClass() {
+	class, witnesses, known := inst.diag.securityClass()
+	label := class.String()
+	tone := badge.ToneError
+	tooltip := "The buffer changes state — the witnesses below name the construct (ADR-0132 §SD5)."
+	switch {
+	case !known:
+		label = "mutating (unclassified)"
+		tooltip = "Boxer's grammar does not parse this buffer, so it cannot be classified; the conservative direction treats it as the strongest class (ADR-0132 §SD5)."
+	case class == analysis.QuerySecurityRead:
+		tone = badge.ToneSuccess
+		tooltip = "Provably retrieval-only against the endpoint's own data — the class a readonly setting can enforce on the wire (ADR-0132 §SD5)."
+	case class == analysis.QuerySecurityReadEgress:
+		tone = badge.ToneWarning
+		tooltip = "Retrieval-only, but it reaches beyond the endpoint — the witnesses below name the egress constructs (ADR-0132 §SD5)."
+	}
+	for range c.Horizontal().KeepIter() {
+		badge.New(inst.ids.PrepareStr("sec-class"), label).
+			Tone(tone).Size(badge.SizeSm).
+			Tooltip(tooltip).
+			Send()
+	}
+	for _, w := range witnesses {
+		for rt := range c.RichTextLabel(w.Name + " — " + w.Kind.String()) {
 			rt.Monospace()
 		}
 	}

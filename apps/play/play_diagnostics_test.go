@@ -9,6 +9,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -161,6 +162,50 @@ func TestDiagnosticsSecurityContext(t *testing.T) {
 	tables = d.securityContext()
 	require.Len(t, tables, 1)
 	assert.Equal(t, "sales.orders", passthroughTableName(tables[0]))
+}
+
+func TestDiagnosticsSecurityClass(t *testing.T) {
+	// Same bare-driver setup as the passthrough lens: the ADR-0132 §SD5 class
+	// is structural and computed inline in noteParse from the same parse.
+	d := &DiagnosticsDriver{}
+
+	// A plain retrieval is read, witness-free.
+	d.noteParse("SELECT id FROM users", nil)
+	class, wits, known := d.securityClass()
+	assert.True(t, known)
+	assert.Equal(t, analysis.QuerySecurityRead, class)
+	assert.Empty(t, wits)
+
+	// The param prelude is the parameter channel, not a settings change.
+	d.noteParse("SET param_a = 1; SELECT {a:UInt64}", nil)
+	class, wits, known = d.securityClass()
+	assert.True(t, known)
+	assert.Equal(t, analysis.QuerySecurityRead, class)
+	assert.Empty(t, wits)
+
+	// An egress table function downgrades to read-egress with a witness.
+	d.noteParse("SELECT * FROM url('http://host/x', 'CSV')", nil)
+	class, wits, known = d.securityClass()
+	assert.True(t, known)
+	assert.Equal(t, analysis.QuerySecurityReadEgress, class)
+	require.Len(t, wits, 1)
+	assert.Equal(t, "url", wits[0].Name)
+
+	// A non-param SET is a settings change → mutating.
+	d.noteParse("SET max_threads = 4; SELECT 1", nil)
+	class, wits, known = d.securityClass()
+	assert.True(t, known)
+	assert.Equal(t, analysis.QuerySecurityMutating, class)
+	require.Len(t, wits, 1)
+	assert.Equal(t, "max_threads", wits[0].Name)
+
+	// A grammar-rejected buffer cannot be classified: known=false and the
+	// class already holds the fail-closed strongest value.
+	d.noteParse("INSERT INTO t VALUES (1)", errors.New("grammar1: nope"))
+	class, wits, known = d.securityClass()
+	assert.False(t, known)
+	assert.Equal(t, analysis.QuerySecurityMutating, class)
+	assert.Empty(t, wits)
 }
 
 func TestClassifyProbeError(t *testing.T) {
