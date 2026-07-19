@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-19
+reviewed-by: "@spx"
+reviewed-date: 2026-07-19
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0133: `chhttp` — the server-side ClickHouse HTTP dialect, and parameter binding for the in-process `/query`
 
@@ -206,7 +205,7 @@ Adopt **O1** for parameters and **OA** for the extraction.
 
 ## Status
 
-Proposed (2026-07-19). Implementation slices when accepted: **M1** the
+Accepted (2026-07-19). Implementation slices: **M1** the
 `chhttp` package plus tests pinning the request/response shapes;
 **M2** `ExecRequest.Params` — validation, cache fold, prelude injection,
 and the SD2 verification against the pinned server; **M3** `introspecthttp`
