@@ -257,6 +257,39 @@ impossible signature); `ReadRowSupported` rejects const-only kinds (presence
 could never be set); the reflect sub-column-default and readback-UDF comments
 now match the code. All fallout items are closed.
 
+## Update (2026-07-19): the generation question is settled — D3 resolves to *keep*
+
+The open question "will rich-model escalation DTOs be generated or
+hand-authored?" is answered: **generated**. By D3's second contingency, exactly
+as recorded, that resolves the deferred removal to **never fires**: the frozen
+flat escalation spellings (`:column`, `@membership`) are the **permanent
+generation IR** — plain tags, no marker imports, compile-time safety moot for
+generated code — and no nested migration is asked of the adopter, whose DTO
+generator already targets exactly that IR. Nested remains the primary
+**hand-authoring** escalation surface (D2 stands); the two surfaces are
+permanent peers with distinct audiences, no longer an interim state, and the
+"lingers indefinitely" risk recorded under Consequences is now the settled
+end-state, by decision rather than by default.
+
+Consequences:
+
+- The codegen **value-marker bridge** (known-hard; once reverted) drops from
+  "deferred on consumer demand" to **not planned**: with generation settled,
+  hand-authored DTOs stay in the simple subset per D5's policy, so the bridge's
+  only possible demand — hand-authored marker DTOs needing codegen — is not
+  expected to arise. It would take a new dated update, with that consumer
+  named, to revive it.
+- D3's negative-test plan (each removed spelling failing with its replacement
+  named) is moot.
+- The **D5 trigger has fired** — "when D3's contingencies resolve" — so the
+  parametrized carrier pair is due its re-justify-or-cut decision; the
+  disposition is recorded separately once made.
+- Open question 2 settles with the same stroke: `,unit` / `,ct=` **stay** —
+  they are generator-friendly spellings of the permanent IR.
+- The recorded read-cursor alternative (retiring both grammars for generated
+  readers) gains direction from generation-first, but remains its own future
+  ADR.
+
 ## Status
 
 Accepted (2026-07-19; proposed 2026-07-10, revised same-day per below). Origin:

@@ -26,9 +26,11 @@ One authoring model, two levels
 
 The simple subset is the nested model's degenerate case — one spelling, not
 two systems. The older **flat escalation spellings** (`:column` sub-columns and
-`@membership` tuples) remain supported but **frozen** — no new features — and
-are documented [near the end](#the-frozen-flat-escalation-spellings) for
-existing DTOs.
+`@membership` tuples) remain supported but **frozen** — no new features. They
+are also the **generation IR**: DTO generators emit them (plain tags, no marker
+imports — ADR-0113's settled generated-over-hand-authored answer), so they are
+documented [near the end](#the-frozen-flat-escalation-spellings) for existing
+DTOs and generator authors.
 
 Two front-ends share the model. [The `marshallgen` generator](../../public/semistructured/leeway/marshall/go/marshallgen/)
 emits a codec at build time; [the `marshallreflect` codec](../../public/semistructured/leeway/marshall/go/marshallreflect/)
@@ -448,9 +450,11 @@ data, that is the bug.
 
 ## The frozen flat escalation spellings
 
-Frozen by ADR-0113 D2: supported for existing DTOs, no new features. New
-escalation is authored nested (above). Both spellings stay wire-identical and
-regenerate byte-stable.
+Frozen by ADR-0113 D2: supported, no new features. New **hand-written**
+escalation is authored nested (above); **DTO generators** target these
+spellings as their permanent IR (ADR-0113's D3 resolution — plain tags, no
+marker imports, compile-time safety moot for generated code). Both spellings
+stay wire-identical and regenerate byte-stable.
 
 ### Multi-sub-column (`:column`)
 
