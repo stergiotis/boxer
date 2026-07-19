@@ -226,6 +226,7 @@ type PlayApp struct {
 	pendingDockActivate uint64
 	requestRun          bool
 	cards               *CardDriver
+	detailTimeline      *DetailTimeline
 	projector           *Projector
 
 	// tableOpts holds the Table pane's leeway display-mode configuration — the
@@ -664,6 +665,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.kanbanDriver = NewKanbanDriver(c.NewWidgetIdStack(), client)
 	inst.networkDriver = NewNetworkDriver(c.NewWidgetIdStack(), client)
 	inst.richCells = newRichCellCache(c.NewWidgetIdStack())
+	inst.detailTimeline = NewDetailTimeline(c.NewWidgetIdStack())
 	inst.diag = NewDiagnosticsDriver(client)
 	inst.runsHist = newRunsHistoryDriver(client)
 	inst.pins = newPinDriver(client)

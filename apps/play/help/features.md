@@ -182,6 +182,14 @@ from the result's column names:
 - **Ad-hoc grouping** — for ordinary SQL results (aliased or aggregated columns),
   columns are grouped by name prefix into pinned / relations / data / meta sections.
 
+Above either card, when the selected row carries one or more **datetime attributes**,
+a compact **timeline** plots them on a shared UTC axis — a numbered flag per attribute,
+with a legend beneath naming each flag and its value (hover a flag for the same
+`name: value`). It recognises `DateTime64` and `Date` columns, and leeway time
+attributes (`tv:time:` and the entity timestamp, which often arrive as whole-second
+integers). A row with no such attribute shows no timeline, and array-valued time
+attributes aren't plotted.
+
 Before a query it reads *Run a query, then select a row to see its detail.* When a
 result lands the first row is selected automatically, so the card populates straight
 away; click another row in **Table** (or a point in **Projection** / an event in

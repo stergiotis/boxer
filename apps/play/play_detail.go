@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -167,8 +168,29 @@ func (inst *PlayApp) renderDetailPane(rec arrow.RecordBatch, schema *arrow.Schem
 // demo's renderActiveView. The ad-hoc fallback has no self-scrolling widget, so
 // it keeps an explicit ScrollArea.
 func (inst *PlayApp) RenderDefaultDetailContent(rec arrow.RecordBatch, schema *arrow.Schema, row int64) {
+	// Probe leeway-shape once (EnsureFor is per-schema cached), so the temporal
+	// overview can read the leeway classification and the body switch reuses the
+	// same verdict.
+	leeway := inst.cards != nil && inst.cards.EnsureFor(schema)
+
+	// Temporal overview: when the row has datetime attributes, plot them on a
+	// compact timeline above the card. It sits outside the ad-hoc ScrollArea (a
+	// fixed-height strip) and above the self-scrolling leeway card. classes is
+	// nil off the leeway path — detection then leans on Arrow types + the
+	// tv:time: prefix. A false return means no temporal attributes: no strip, no
+	// separator.
+	if inst.detailTimeline != nil {
+		var classes []streamreadaccess.ColumnClass
+		if leeway {
+			classes = inst.cards.ColumnClasses()
+		}
+		if inst.detailTimeline.render(rec, schema, row, classes) {
+			c.Separator().Horizontal().Send()
+		}
+	}
+
 	switch {
-	case inst.cards != nil && inst.cards.EnsureFor(schema):
+	case leeway:
 		if err := inst.cards.Render(rec, row); err != nil {
 			c.Label(fmt.Sprintf("card render error: %s", err)).Wrap().Send()
 		}
