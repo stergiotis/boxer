@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-19
+reviewed-by: "@spx"
+reviewed-date: 2026-07-19
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0132: sqlapplet — SQL-defined applets over the play engine
 
@@ -317,7 +316,7 @@ an attenuated embedded play. O4 is deferred, not killed (see Alternatives).
 
 ## Status
 
-Proposed (2026-07-19). Prior-art note: this ADR extends the external survey
+Accepted (2026-07-19). Prior-art note: this ADR extends the external survey
 of [ADR-0097](./0097-play-reactive-query-graph.md) along the **publication
 axis** it deliberately left uncovered — freezing an exploration into a
 curated artifact — rather than duplicating the reactive-DAG entries.
