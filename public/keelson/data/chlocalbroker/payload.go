@@ -1,8 +1,8 @@
 package chlocalbroker
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // wireRequest is the envelope sent on ch.local.exec.<pool>, wire-encoded
@@ -15,6 +15,11 @@ type wireRequest struct {
 	Streaming bool              `json:"streaming,omitempty"`
 	Cacheable bool              `json:"cacheable,omitempty"`
 	Settings  map[string]string `json:"settings,omitempty"`
+	// Params binds `{name:Type}` placeholders via a SET-prelude on the
+	// broker side (ADR-0133 §SD2). Optional field under the same wire
+	// version: broker and clients ship in one binary (the in-process bus),
+	// so a version bump would gate nothing real.
+	Params map[string]string `json:"params,omitempty"`
 	// InputTables rides as a CBOR map of byte strings (ADR-0094 §SD5):
 	// table name → Arrow IPC `Arrow` file-format bytes, bound as
 	// TEMPORARY tables by the broker. buscodec carries []byte as CBOR

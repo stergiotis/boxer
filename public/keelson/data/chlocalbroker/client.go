@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // ExecRequest is the caller-facing request shape for ExecOnPool. The
@@ -34,6 +34,15 @@ type ExecRequest struct {
 	// Settings is forwarded to the worker via SETTINGS k=v pairs.
 	// Reserved for future use; ignored by the M2 broker.
 	Settings map[string]string
+	// Params binds `{name:Type}` placeholders (ADR-0133 §SD2): the broker
+	// validates each name against the input-table identifier charset,
+	// prepends one `SET param_<name> = '<value>';` statement per entry to
+	// the submitted script (ahead of any InputTables prelude, after the
+	// cacheability prefix gate), and folds every sorted name=value pair
+	// into the result-cache key. Values are raw strings; typed
+	// substitution stays the engine's job, exactly as on the ClickHouse
+	// HTTP interface's `param_*` channel.
+	Params map[string]string
 	// InputTables exposes in-memory Arrow data as TEMPORARY tables to
 	// the SQL (ADR-0094 §SD5). Each value is Arrow IPC in the `Arrow`
 	// file format (with footer — i.e. ipc.FileWriter output, NOT
@@ -104,6 +113,7 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 		Streaming:   req.Streaming,
 		Cacheable:   req.Cacheable,
 		Settings:    req.Settings,
+		Params:      req.Params,
 		InputTables: req.InputTables,
 	}
 	if deadline, ok := ctx.Deadline(); ok {

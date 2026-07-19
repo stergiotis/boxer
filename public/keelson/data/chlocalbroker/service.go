@@ -22,10 +22,10 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/valyala/bytebufferpool"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // Subject taxonomy this service binds (ADR-0028 §SD1).
@@ -169,8 +169,8 @@ func (inst *Service) Stop(ctx context.Context) (err error) {
 
 // Stats reports cardinality across all pools.
 type Stats struct {
-	Pools    int
-	PerPool  map[string]chlocalpool.Stats
+	Pools   int
+	PerPool map[string]chlocalpool.Stats
 }
 
 func (inst *Service) Stats() (s Stats) {
@@ -193,19 +193,20 @@ func (inst *Service) Stats() (s Stats) {
 // ADR-0028 §SD7's audit requirement; the bus-level AuditSink covers
 // the generic subject/sender/result/sizes dimensions.
 type auditFields struct {
-	subject    string
-	sender     app.AppIdT
-	sqlBlake3  string // hex-encoded; empty if request never decoded
+	subject     string
+	sender      app.AppIdT
+	sqlBlake3   string // hex-encoded; empty if request never decoded
 	format      string
 	cacheable   bool
 	streaming   bool
 	inputTables int
+	params      int
 	cacheHit    bool
-	latencyNs  int64
-	bytesOut   int
-	exitCode   int32
-	errMsg     string // empty on success
-	stderrTail string
+	latencyNs   int64
+	bytesOut    int
+	exitCode    int32
+	errMsg      string // empty on success
+	stderrTail  string
 }
 
 // emitAudit logs one event per request. Warn level for failures so
@@ -227,6 +228,9 @@ func (inst *Service) emitAudit(f auditFields) {
 		Int("bytes_out", f.bytesOut)
 	if f.inputTables > 0 {
 		ev = ev.Int("input_tables", f.inputTables)
+	}
+	if f.params > 0 {
+		ev = ev.Int("params", f.params)
 	}
 	if f.format != "" {
 		ev = ev.Str("format", f.format)
@@ -302,10 +306,21 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		}
 	}
 
+	// Same discipline for parameter names (ADR-0133 §SD2).
+	aud.params = len(req.Params)
+	for name := range req.Params {
+		if !validParamName(name) {
+			aud.errMsg = "invalid parameter name: " + name
+			inst.sendError(msg.Reply, aud.errMsg, "", 0)
+			return
+		}
+	}
+
 	// Compute sql_blake3 once; reused as cache key when cacheable.
-	// InputTables fold into the key so a volatile input never serves a
-	// stale hit under unchanged SQL (ADR-0094 §SD5).
-	key := foldInputTables(computeCacheKey(req.SQL, req.Format, req.Settings), req.InputTables)
+	// InputTables and Params fold into the key so a volatile input or a
+	// changed binding never serves a stale hit under unchanged SQL
+	// (ADR-0094 §SD5, ADR-0133 §SD2).
+	key := foldParams(foldInputTables(computeCacheKey(req.SQL, req.Format, req.Settings), req.InputTables), req.Params)
 	aud.sqlBlake3 = hex.EncodeToString(key[:])
 
 	// Cache lookup (ADR-0028 §SD5). Eligibility = caller opted in
@@ -367,6 +382,10 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		}
 		sql = prelude + req.SQL
 	}
+	// Parameter bindings ride a SET-prelude ahead of everything else
+	// (ADR-0133 §SD2) — injected after the cacheability gate above, so a
+	// parameterized SELECT stays cacheable under its params-folded key.
+	sql = paramPrelude(req.Params) + sql
 
 	if err = w.WriteSQL(sql, req.Format); err != nil {
 		aud.errMsg = "write sql: " + err.Error()
@@ -539,4 +558,3 @@ func (inst *Service) sendError(replySubject, errMsg, stderrTail string, exitCode
 		inst.log.Warn().Err(err).Str("reply", replySubject).Msg("chlocalbroker: publish error reply")
 	}
 }
-
