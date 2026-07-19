@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -411,14 +412,81 @@ func TestDetailTimelineSyncEarlyCutoff(t *testing.T) {
 	dt := NewDetailTimeline(c.NewWidgetIdStack())
 
 	recA, schemaA := oneRowRec("when", tsCol(mem, arrow.Millisecond, true, 1_700_000_000_000))
-	dt.sync(recA, schemaA, 0, nil)
+	dt.sync(recA, schemaA, 0, nil, nil)
 	require.Len(t, dt.attrs, 1)
 	firstElem := &dt.attrs[0]
 
-	dt.sync(recA, schemaA, 0, nil)
+	dt.sync(recA, schemaA, 0, nil, nil)
 	assert.Same(t, firstElem, &dt.attrs[0], "same (rec,row): attrs slice not rebuilt")
 
 	recB, schemaB := oneRowRec("n", int64Col(mem, 7))
-	dt.sync(recB, schemaB, 0, nil)
+	dt.sync(recB, schemaB, 0, nil, nil)
 	assert.Empty(t, dt.attrs)
+}
+
+func TestJoinSectionValues(t *testing.T) {
+	assert.Equal(t, "seen=2025-12-06 · seq=42", joinSectionValues([]leewaywidgets.SectionValue{
+		{Name: "seen", Value: "2025-12-06"}, {Name: "seq", Value: "42"},
+	}))
+	assert.Equal(t, "1969-12-31", joinSectionValues([]leewaywidgets.SectionValue{{Value: "1969-12-31"}}),
+		"a nameless pair renders the bare value")
+	assert.Empty(t, joinSectionValues(nil))
+}
+
+func TestIndexDigests(t *testing.T) {
+	assert.Nil(t, indexDigests(nil))
+	m := indexDigests([]leewaywidgets.SectionDigest{
+		{SectionName: "obs", Primary: []string{"a"}},
+		{SectionName: "obs", Primary: []string{"b"}}, // duplicate section: first wins
+		{SectionName: "win"},
+	})
+	require.Len(t, m, 2)
+	assert.Equal(t, []string{"a"}, m["obs"].Primary)
+	_, ok := m["win"]
+	assert.True(t, ok)
+}
+
+// TestDetectTemporalCarriesSection: a tagged value attribute records its
+// SectionName (the digest key for the enriched legend); a backbone attribute
+// records none.
+func TestDetectTemporalCarriesSection(t *testing.T) {
+	mem := memory.NewGoAllocator()
+
+	rec, schema := oneRowRec("tv:obs:seen", uint32Col(mem, 1_700_000_000))
+	tagged := []streamreadaccess.ColumnClass{
+		{ArrowIdx: 0, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "obs", LeewayName: "seen", CanonicalType: ctabb.Z32},
+	}
+	got, _ := detectTemporalAttrs(rec, schema, 0, tagged)
+	require.Len(t, got, 1)
+	assert.Equal(t, "obs", got[0].section)
+
+	recB, schemaB := oneRowRec("ts", uint32Col(mem, 1_700_000_000))
+	backbone := []streamreadaccess.ColumnClass{
+		{ArrowIdx: 0, PlainItemType: common.PlainItemTypeEntityTimestamp, CanonicalType: ctabb.Z64},
+	}
+	gotB, _ := detectTemporalAttrs(recB, schemaB, 0, backbone)
+	require.Len(t, gotB, 1)
+	assert.Empty(t, gotB[0].section, "a backbone attr owns no tagged section")
+}
+
+// TestDetailTimelineDigestBySection: sync captures the section digests keyed by
+// name alongside the attrs, so the legend can enrich a tagged flag.
+func TestDetailTimelineDigestBySection(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	dt := NewDetailTimeline(c.NewWidgetIdStack())
+
+	rec, schema := oneRowRec("tv:obs:seen", tsCol(mem, arrow.Millisecond, true, 100))
+	classes := []streamreadaccess.ColumnClass{
+		{ArrowIdx: 0, Class: streamreadaccess.ColumnRoleClassValue, SectionName: "obs", LeewayName: "seen", CanonicalType: ctabb.Z64},
+	}
+	digests := []leewaywidgets.SectionDigest{
+		{SectionName: "obs", Primary: []string{"sensorA"}, Values: []leewaywidgets.SectionValue{{Name: "seen", Value: "1970-01-01"}}},
+	}
+	dt.sync(rec, schema, 0, classes, digests)
+
+	require.Len(t, dt.attrs, 1)
+	assert.Equal(t, "obs", dt.attrs[0].section)
+	d, ok := dt.digestBySection["obs"]
+	require.True(t, ok, "digest indexed by section name")
+	assert.Equal(t, []string{"sensorA"}, d.Primary)
 }

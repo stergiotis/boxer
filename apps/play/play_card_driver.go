@@ -149,6 +149,10 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	}
 	inst.driver = driver
 	inst.emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, leewaywidgets.ColorPaletteViridis, nil)
+	// Deferred rendering: Render walks the record in two steps (Prepare buffers,
+	// Render draws) so the Detail timeline can read the per-section digests
+	// between them.
+	inst.emitter.DeferRender = true
 	inst.usable = true
 	return true
 }
@@ -195,25 +199,45 @@ func (inst *CardDriver) SetTagClickHandler(fn func(display, detail string)) {
 	}
 }
 
-// Render walks a single-row slice of rec through the Driver, which drives
-// the Table2CardEmitter. The emitter pushes ImZero2 widgets into the current
-// ui scope — call this inside a ScrollArea or Vertical container.
-func (inst *CardDriver) Render(rec arrow.RecordBatch, row int64) error {
-	if !inst.usable || inst.driver == nil {
+// Prepare walks a single-row slice of rec through the Driver, buffering the
+// leeway card rows in the emitter without drawing them (the emitter runs with
+// DeferRender set). Call it before SectionDigests and before Render. A no-op on
+// a non-leeway or out-of-range input. Prepare drives every frame — the emitter
+// re-bases its widget-id counter at each drive, so the deferred Render stays
+// id-stable frame to frame.
+func (inst *CardDriver) Prepare(rec arrow.RecordBatch, row int64) error {
+	if !inst.usable || inst.driver == nil || inst.emitter == nil {
 		return nil
 	}
 	if rec == nil || row < 0 || row >= rec.NumRows() {
 		return nil
 	}
-	if inst.emitter == nil {
-		return nil
-	}
 	slice := rec.NewSlice(row, row+1)
 	defer slice.Release()
-	err := inst.driver.DriveRecordBatch(inst.emitter, slice)
-	if err != nil {
+	if err := inst.driver.DriveRecordBatch(inst.emitter, slice); err != nil {
 		log.Warn().Err(err).Int64("row", row).Msg("play: driver error")
 		return eh.Errorf("unable to drive record batch: %w", err)
 	}
 	return nil
+}
+
+// SectionDigests returns the per-tagged-section summaries (memberships split
+// primary / secondary + co-attribute values) buffered by the last Prepare, or
+// nil when the schema is not leeway-shaped. The Detail timeline reuses these to
+// label its temporal flags with the same content the card draws below.
+func (inst *CardDriver) SectionDigests() []leewaywidgets.SectionDigest {
+	if !inst.usable || inst.emitter == nil {
+		return nil
+	}
+	return inst.emitter.SectionDigests()
+}
+
+// Render draws the rows buffered by the last Prepare into the current ui scope.
+// Call it after Prepare (and after any SectionDigests read), inside a ScrollArea
+// or Vertical container.
+func (inst *CardDriver) Render() {
+	if !inst.usable || inst.emitter == nil {
+		return
+	}
+	inst.emitter.Render()
 }

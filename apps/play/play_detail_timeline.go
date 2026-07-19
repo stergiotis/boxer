@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 )
@@ -56,6 +57,9 @@ const (
 	// maxDetailMarks caps the flags + bars actually drawn so a pathological
 	// array can't flood the strip; the surplus is reported as an overflow note.
 	maxDetailMarks = 64
+	// legendIndentPx indents the co-attribute value line of an enriched legend
+	// entry under its section header line.
+	legendIndentPx = 18
 )
 
 type temporalKind uint8
@@ -76,6 +80,7 @@ type temporalSpan struct {
 // instants — the number painted on every one of its flags.
 type temporalAttr struct {
 	label      string
+	section    string // leeway SectionName when the attr is a tagged-value column; "" for backbone / ad-hoc
 	paletteIdx int
 	kind       temporalKind
 	points     []int64        // kindInstants
@@ -183,17 +188,19 @@ func detectTemporalAttrs(rec arrow.RecordBatch, schema *arrow.Schema, row int64,
 			consumed[b.begin] = true
 			consumed[b.end] = true
 			attrs = append(attrs, temporalAttr{
-				label: tc.section,
-				kind:  kindIntervals,
-				spans: zipSpans(lo.moments, hi.moments),
+				label:   tc.section,
+				section: tc.section,
+				kind:    kindIntervals,
+				spans:   zipSpans(lo.moments, hi.moments),
 			})
 			continue
 		}
 		consumed[i] = true
 		attrs = append(attrs, temporalAttr{
-			label:  shortColumnLabel(tc.name),
-			kind:   kindInstants,
-			points: tc.moments,
+			label:   shortColumnLabel(tc.name),
+			section: tc.section,
+			kind:    kindInstants,
+			points:  tc.moments,
 		})
 	}
 
@@ -551,6 +558,11 @@ type DetailTimeline struct {
 	seenRow int64
 	attrs   []temporalAttr
 	dropped int
+	// digestBySection carries the owning tagged section's memberships +
+	// co-attributes for a temporal flag's legend entry, keyed by SectionName. It
+	// is the card's already-decoded per-section content (CardDriver.SectionDigests),
+	// captured alongside attrs on each (result, row) change.
+	digestBySection map[string]leewaywidgets.SectionDigest
 }
 
 // NewDetailTimeline builds the driver and its widget. The widget is
@@ -583,13 +595,14 @@ func qualitativePalette() []color.Color {
 // sync re-detects the row's temporal attributes and pushes the flag/bar sets +
 // pinned range into the widget when the (result, row) identity changes. Pure
 // widget-state mutation (no ui scope), so it is exercised directly in tests.
-func (inst *DetailTimeline) sync(rec arrow.RecordBatch, schema *arrow.Schema, row int64, classes []streamreadaccess.ColumnClass) {
+func (inst *DetailTimeline) sync(rec arrow.RecordBatch, schema *arrow.Schema, row int64, classes []streamreadaccess.ColumnClass, digests []leewaywidgets.SectionDigest) {
 	if rec == inst.seenRec && row == inst.seenRow {
 		return
 	}
 	inst.seenRec = rec
 	inst.seenRow = row
 	inst.attrs, inst.dropped = detectTemporalAttrs(rec, schema, row, classes)
+	inst.digestBySection = indexDigests(digests)
 	inst.tl.SetAnnotations(buildDetailAnnotations(inst.attrs))
 	inst.tl.SetIntervals(buildDetailIntervals(inst.attrs))
 	if lo, hi, ok := fitRange(inst.attrs); ok {
@@ -603,8 +616,8 @@ func (inst *DetailTimeline) sync(rec arrow.RecordBatch, schema *arrow.Schema, ro
 // drew anything (true iff the row has ≥1 temporal attribute). A false return
 // lets the caller skip the separator it would otherwise place below the strip.
 // Must run inside the Detail body's vertical scope.
-func (inst *DetailTimeline) render(rec arrow.RecordBatch, schema *arrow.Schema, row int64, classes []streamreadaccess.ColumnClass) bool {
-	inst.sync(rec, schema, row, classes)
+func (inst *DetailTimeline) render(rec arrow.RecordBatch, schema *arrow.Schema, row int64, classes []streamreadaccess.ColumnClass, digests []leewaywidgets.SectionDigest) bool {
+	inst.sync(rec, schema, row, classes, digests)
 	if len(inst.attrs) == 0 {
 		return false
 	}
@@ -618,28 +631,19 @@ func (inst *DetailTimeline) render(rec arrow.RecordBatch, schema *arrow.Schema, 
 	return true
 }
 
-// renderLegend draws one "● N label summary" row per attribute — the swatch hue
-// matching the attribute's flags/bar — so a reader maps a numbered flag or a
-// labelled lane back to its attribute and value(s). A trailing note reports any
-// marks the density cap dropped.
+// renderLegend draws one entry per attribute — the swatch hue matching the
+// attribute's flags/bar — so a reader maps a numbered flag or a labelled lane
+// back to its attribute and value(s). A tagged-value section attribute renders
+// the enriched two-line form (its section's memberships + every co-attribute,
+// mirroring the card below); a backbone or ad-hoc attribute renders the simple
+// "● N label value" form. A trailing note reports any marks the density cap dropped.
 func (inst *DetailTimeline) renderLegend() {
 	for range c.Vertical().KeepIter() {
 		for i, a := range inst.attrs {
-			for range c.Horizontal().KeepIter() {
-				for rt := range c.RichTextLabelColored(
-					color.Hex(styletokens.QualitativeCycle(i%10).AsHex()),
-					color.Transparent, "●") {
-					rt.Small()
-				}
-				for rt := range c.RichTextLabel(strconv.Itoa(i + 1)) {
-					rt.Small().Weak()
-				}
-				for rt := range c.RichTextLabel(a.label) {
-					rt.Small()
-				}
-				for rt := range c.RichTextLabel(a.summary()) {
-					rt.Small().Weak()
-				}
+			if d, ok := inst.digestBySection[a.section]; a.section != "" && ok {
+				inst.renderLegendEnriched(i, a, d)
+			} else {
+				inst.renderLegendSimple(i, a)
 			}
 		}
 		if inst.dropped > 0 {
@@ -648,4 +652,97 @@ func (inst *DetailTimeline) renderLegend() {
 			}
 		}
 	}
+}
+
+// legendSwatch draws the shared leading "● N" of a legend entry: the flag-hued
+// dot plus the 1-based attribute number.
+func legendSwatch(i int) {
+	for rt := range c.RichTextLabelColored(
+		color.Hex(styletokens.QualitativeCycle(i%10).AsHex()),
+		color.Transparent, "●") {
+		rt.Small()
+	}
+	for rt := range c.RichTextLabel(strconv.Itoa(i + 1)) {
+		rt.Small().Weak()
+	}
+}
+
+// renderLegendSimple draws "● N label value" for a backbone or ad-hoc attribute
+// — one that owns no tagged section (and so has no memberships / co-attributes).
+func (inst *DetailTimeline) renderLegendSimple(i int, a temporalAttr) {
+	for range c.Horizontal().KeepIter() {
+		legendSwatch(i)
+		for rt := range c.RichTextLabel(a.label) {
+			rt.Small()
+		}
+		for rt := range c.RichTextLabel(a.summary()) {
+			rt.Small().Weak()
+		}
+	}
+}
+
+// renderLegendEnriched draws the two-line form for a tagged-value section
+// attribute: line 1 is "● N section  primary · secondary" (secondary weakened to
+// separate the two membership sides, as in the card's columns); line 2 indents
+// every co-attribute value pair. This reuses the card's decoded section digest,
+// so the timeline flag and the card row read the same.
+func (inst *DetailTimeline) renderLegendEnriched(i int, a temporalAttr, d leewaywidgets.SectionDigest) {
+	for range c.Horizontal().KeepIter() {
+		legendSwatch(i)
+		for rt := range c.RichTextLabel(a.section) {
+			rt.Small()
+		}
+		if s := strings.Join(d.Primary, " · "); s != "" {
+			for rt := range c.RichTextLabel(s) {
+				rt.Small()
+			}
+		}
+		if s := strings.Join(d.Secondary, " · "); s != "" {
+			for rt := range c.RichTextLabel("· " + s) {
+				rt.Small().Weak()
+			}
+		}
+	}
+	if s := joinSectionValues(d.Values); s != "" {
+		for range c.Horizontal().KeepIter() {
+			c.AddSpace(legendIndentPx)
+			for rt := range c.RichTextLabel(s) {
+				rt.Small().Weak().Monospace()
+			}
+		}
+	}
+}
+
+// indexDigests keys the card's per-section digests by SectionName for the legend
+// lookup, keeping the first digest per name (physical order). Returns nil for an
+// empty input so a missing digest reads as an absent key.
+func indexDigests(digests []leewaywidgets.SectionDigest) map[string]leewaywidgets.SectionDigest {
+	if len(digests) == 0 {
+		return nil
+	}
+	m := make(map[string]leewaywidgets.SectionDigest, len(digests))
+	for _, d := range digests {
+		if _, ok := m[d.SectionName]; !ok {
+			m[d.SectionName] = d
+		}
+	}
+	return m
+}
+
+// joinSectionValues formats a section's value pairs as "name=value · name=value"
+// (a bare value when it carries no name), the co-attribute line of an enriched
+// legend entry.
+func joinSectionValues(vals []leewaywidgets.SectionValue) string {
+	var b strings.Builder
+	for i, v := range vals {
+		if i > 0 {
+			b.WriteString(" · ")
+		}
+		if v.Name != "" {
+			b.WriteString(v.Name)
+			b.WriteByte('=')
+		}
+		b.WriteString(v.Value)
+	}
+	return b.String()
 }

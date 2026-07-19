@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 )
 
 // tagNameForIdTagValue renders an entity id's tag value as a compact hex
@@ -173,6 +174,21 @@ func (inst *PlayApp) RenderDefaultDetailContent(rec arrow.RecordBatch, schema *a
 	// same verdict.
 	leeway := inst.cards != nil && inst.cards.EnsureFor(schema)
 
+	// On the leeway path, drive the card once up front (DeferRender: it buffers
+	// the section rows but draws nothing yet), so the timeline can label its
+	// tagged-section flags from the same per-section digests — memberships +
+	// co-attributes — the card renders below. cardReady gates the deferred draw.
+	cardReady := false
+	var digests []leewaywidgets.SectionDigest
+	if leeway {
+		if err := inst.cards.Prepare(rec, row); err != nil {
+			c.Label(fmt.Sprintf("card prepare error: %s", err)).Wrap().Send()
+		} else {
+			digests = inst.cards.SectionDigests()
+			cardReady = true
+		}
+	}
+
 	// Temporal overview: when the row has datetime attributes, plot them on a
 	// compact timeline above the card. It sits outside the ad-hoc ScrollArea (a
 	// fixed-height strip) and above the self-scrolling leeway card. classes is
@@ -184,15 +200,15 @@ func (inst *PlayApp) RenderDefaultDetailContent(rec arrow.RecordBatch, schema *a
 		if leeway {
 			classes = inst.cards.ColumnClasses()
 		}
-		if inst.detailTimeline.render(rec, schema, row, classes) {
+		if inst.detailTimeline.render(rec, schema, row, classes, digests) {
 			c.Separator().Horizontal().Send()
 		}
 	}
 
 	switch {
 	case leeway:
-		if err := inst.cards.Render(rec, row); err != nil {
-			c.Label(fmt.Sprintf("card render error: %s", err)).Wrap().Send()
+		if cardReady {
+			inst.cards.Render()
 		}
 	default:
 		for range c.ScrollArea().Vscroll(true).Hscroll(true).KeepIter() {

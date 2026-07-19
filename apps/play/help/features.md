@@ -184,7 +184,10 @@ from the result's column names:
 
 Above either card, when the selected row carries one or more **datetime attributes**,
 a compact **timeline** plots them on a shared UTC axis. Each attribute is one legend
-entry — a coloured swatch, its name, and a value summary; on the axis:
+entry — a coloured swatch and its identity. A flag from a **tagged section** is
+labelled with that section's memberships (primary · secondary) and every
+co-attribute value, mirroring the card row below it; a backbone or ad-hoc flag
+shows its name and value. On the axis:
 
 - a scalar timestamp, or each item of a datetime array, is a numbered flag (all of
   one attribute's items share its number and colour; hover a flag for its value);
