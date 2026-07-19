@@ -66,15 +66,17 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 	// AutoRun only for the read class (ADR-0132 §SD3/§SD5): a mutating or
 	// egress-reaching applet always waits for an explicit Run.
 	inner.AutoRun = inst.def.Class == analysis.QuerySecurityRead
-	// A slotted buffer opens Live so panel-written signals (selection,
-	// viewport, time extents) re-run it — the cross-filtering half of the
-	// applet surface (§SD3).
-	if inst.def.HasSlots {
+	// A signal-driven buffer opens Live so panel-written signals
+	// (selection, viewport, time extents) re-run it — the cross-filtering
+	// half of the applet surface (§SD3).
+	if inst.def.HasUnboundSlots {
 		inner.SetLiveMain(true)
 	}
 	if inst.def.BandsSQL != "" {
 		inner.SetTimelineBandsSql(inst.def.BandsSQL)
 	}
+	// The applet top bar (§SD3): exploration chrome out, Copy SQL in.
+	inner.SetToolbarMinimal(true)
 	if err = attenuateTabs(inner, inst.def, ctx.Log()); err != nil {
 		return
 	}

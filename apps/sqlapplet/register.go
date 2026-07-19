@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -111,9 +112,9 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 // manifestFor builds the minted manifest. Help is the whole contributing
 // book's FS, so the applet's prose page is reachable through the Help
 // center; narrowing Help to the single document is a recorded nicety for
-// later. Caps stay empty — attenuation in manifest form: an applet declares
-// no bus reach of its own (ADR-0132 §SD8), and its buffer is committed
-// definition, so there are no persisted keys either.
+// later. The cap list is the attenuation in manifest form (ADR-0132 §SD8):
+// exactly one subject — clipboard.write for the Copy SQL escape hatch — and
+// no persisted keys, because the buffer is committed definition.
 func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 	m = app.Manifest{
 		Id:       app.AppIdT(appletIdPrefix + def.Slug),
@@ -124,6 +125,13 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 		Category: "Applets",
 		Surface:  app.SurfaceWindowed,
 		Help:     bookFsys,
+		Caps: []app.SubjectFilter{
+			{
+				Pattern:   clipboardbroker.SubjectWrite,
+				Direction: app.CapDirectionPub,
+				Reason:    "Copy SQL escape hatch (ADR-0132 §SD3): the buffer is the artifact",
+			},
+		},
 	}
 	return
 }

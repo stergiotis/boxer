@@ -67,10 +67,13 @@ type AppletDef struct {
 	// time. It gates AutoRun at mount: only QuerySecurityRead applets run on
 	// open.
 	Class analysis.QuerySecurityClassE
-	// HasSlots notes whether the buffer carries `{name:Type}` placeholders;
-	// a slotted applet opens with the Live toggle preset (panel-written
-	// signals re-run the buffer, ADR-0132 §SD3).
-	HasSlots bool
+	// HasUnboundSlots notes whether the buffer carries `{name:Type}`
+	// placeholders its SET prelude does not bind — signals, in ADR-0097
+	// terms. Such an applet opens with the Live toggle preset
+	// (panel-written signals re-run the buffer, ADR-0132 §SD3); a fully
+	// prelude-bound buffer does not (its params re-run via the strip's
+	// prelude rewrite and an explicit or auto Run).
+	HasUnboundSlots bool
 }
 
 // slugPattern is the accepted applet-slug shape. The slug becomes the minted
@@ -267,9 +270,18 @@ func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef
 		return
 	}
 	def.Class = class
-	slots, serr := play.ExtractParamSlots(sql)
-	if serr == nil {
-		def.HasSlots = len(slots) > 0
+	// Unbound slots = placeholders minus the prelude-bound names (the
+	// ADR-0097 signal definition). Extraction failures leave the flag
+	// false — the Live preset is a convenience, never a correctness gate.
+	if slots, serr := play.ExtractParamSlots(sql); serr == nil && len(slots) > 0 {
+		if _, params, perr2 := play.ExtractParams(sql); perr2 == nil {
+			for _, s := range slots {
+				if _, bound := params["param_"+s.Name]; !bound {
+					def.HasUnboundSlots = true
+					break
+				}
+			}
+		}
 	}
 	return
 }

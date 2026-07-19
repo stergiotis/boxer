@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,35 +27,41 @@ const sqlFence = "```sql\nSELECT * FROM keelson('env')\n```"
 func TestStarterBookCorpus(t *testing.T) {
 	defs, errs := ParseBook("sqlapplet", help.MustSub(bookFS, "book"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 2)
+	require.Len(t, defs, 3)
 
-	apps, env := defs[0], defs[1]
+	recent, apps, env := defs[0], defs[1], defs[2]
 	assert.Equal(t, "runtime-apps", apps.Slug)
 	assert.Equal(t, "Runtime apps", apps.Title)
 	assert.NotEmpty(t, apps.Icon)
 	assert.Equal(t, EndpointIntrospection, apps.Endpoint)
 	assert.Nil(t, apps.Tabs, "absent tabs key ⇒ auto")
 	assert.Equal(t, analysis.QuerySecurityRead, apps.Class, "keelson('…') classifies as a local read")
-	assert.False(t, apps.HasSlots)
+	assert.False(t, apps.HasUnboundSlots)
 
 	assert.Equal(t, "runtime-env", env.Slug)
 	assert.Equal(t, EndpointIntrospection, env.Endpoint)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail"}}, env.Tabs)
 	assert.Equal(t, analysis.QuerySecurityRead, env.Class)
+
+	assert.Equal(t, "recent-queries", recent.Slug)
+	assert.Equal(t, EndpointDefault, recent.Endpoint)
+	assert.Equal(t, analysis.QuerySecurityRead, recent.Class)
+	assert.False(t, recent.HasUnboundSlots, "the lim slot is prelude-bound — a param, not a signal")
 }
 
 func TestMintStarterBook(t *testing.T) {
 	reg := app.NewRegistry()
 	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{{id: "sqlapplet", fsys: help.MustSub(bookFS, "book")}})
 	require.Empty(t, errs)
-	assert.Equal(t, 2, minted)
+	assert.Equal(t, 3, minted)
 
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "runtime-apps"))
 	require.True(t, ok)
 	assert.Equal(t, "Runtime apps", m.Display)
 	assert.Equal(t, "Applets", m.Category)
 	assert.Equal(t, app.SurfaceWindowed, m.Surface)
-	assert.Empty(t, m.Caps, "attenuation in manifest form: no bus reach")
+	require.Len(t, m.Caps, 1, "attenuation in manifest form: clipboard.write only")
+	assert.Equal(t, clipboardbroker.SubjectWrite, m.Caps[0].Pattern)
 	assert.Empty(t, m.PersistedKeys, "committed definition ⇒ nothing to persist")
 
 	// Factory dispatch yields a fresh AppI per open.
@@ -114,12 +121,19 @@ func TestParseDocShapes(t *testing.T) {
 	require.NotNil(t, def)
 	assert.Equal(t, analysis.QuerySecurityMutating, def.Class)
 
-	// A slotted buffer notes HasSlots (Live preset at mount, §SD3).
+	// An unbound slot — a signal — sets HasUnboundSlots (Live preset at
+	// mount, §SD3); a prelude-bound one does not.
 	def, errs = parseOne(t, "slotted.md", docMD("title: Slotted",
 		"```sql\nSELECT * FROM t WHERE id = {selection_id:UInt64}\n```"))
 	require.Empty(t, errs)
 	require.NotNil(t, def)
-	assert.True(t, def.HasSlots)
+	assert.True(t, def.HasUnboundSlots)
+
+	def, errs = parseOne(t, "bound-slot.md", docMD("title: Bound slot",
+		"```sql\nSET param_lim = 10; SELECT * FROM t LIMIT {lim:UInt64}\n```"))
+	require.Empty(t, errs)
+	require.NotNil(t, def)
+	assert.False(t, def.HasUnboundSlots)
 
 	// Explicit tabs with a node binding.
 	def, errs = parseOne(t, "bound.md", docMD("title: Bound\ntabs: [\"table:recent\", detail]",
