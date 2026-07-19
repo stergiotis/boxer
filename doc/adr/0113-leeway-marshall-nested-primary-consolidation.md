@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-19
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-19
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0113: leeway marshall — nested becomes the primary escalation surface; the flat escalation grammar freezes, its removal deferred
 
@@ -222,7 +220,8 @@ Store-layer findings from the same review travel with their own tracks
 
 ## Status
 
-Proposed (2026-07-10; **revised 2026-07-19**). Origin: a consolidation design
+Accepted (2026-07-19; proposed 2026-07-10, revised same-day per below). Origin:
+a consolidation design
 dialogue (2026-07-10) after a complexity review of the marshall stack; also the
 retroactive record of the nested front-end shipped 2026-07-07..09. The 2026-07-19
 revision splits the original switchover into an unconditional cleanup (D1), an
