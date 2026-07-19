@@ -175,8 +175,8 @@ func newQueryServer(t *testing.T) *Server {
 	caller := bus.NewClient("test.introspect.query", []app.SubjectFilter{
 		{Pattern: chlocalbroker.SubjectExecAll, Direction: app.CapDirectionBoth, Reason: "test"},
 	})
-	runner := RunnerFunc(func(ctx context.Context, sql string) ([]byte, error) {
-		rep, e := chlocalbroker.ExecOnPool(ctx, caller, "introspect", chlocalbroker.ExecRequest{SQL: sql})
+	runner := RunnerFunc(func(ctx context.Context, sql string, params map[string]string) ([]byte, error) {
+		rep, e := chlocalbroker.ExecOnPool(ctx, caller, "introspect", chlocalbroker.ExecRequest{SQL: sql, Params: params})
 		if e != nil {
 			return nil, e
 		}
@@ -233,7 +233,7 @@ func TestServer_QueryUnknownKeelson400(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(r))
 	// URLPass rejects the unknown table before the runner is ever reached.
-	dummy := RunnerFunc(func(context.Context, string) ([]byte, error) {
+	dummy := RunnerFunc(func(context.Context, string, map[string]string) ([]byte, error) {
 		return nil, errors.New("runner must not be called")
 	})
 	s := New(Config{Registry: r, Runner: dummy}, zerolog.Nop())
@@ -248,27 +248,80 @@ func TestServer_QueryUnknownKeelson400(t *testing.T) {
 	assert.Contains(t, string(b), "unknown keelson table")
 }
 
-// TestServer_QueryRejectsParams: play ships top-level `SET param_*` on the URL
-// query string, but the in-process runner cannot bind them — the endpoint must
-// reject up front rather than mis-run (ADR-0094 §SD4). Rejected before the
-// runner is reached, so no clickhouse-local is needed.
-func TestServer_QueryRejectsParams(t *testing.T) {
+// TestServer_QueryBindsParams: `param_*` URL keys reach the runner as
+// bindings (ADR-0133 §SD3 — the former up-front rejection is lifted). A
+// capturing runner asserts the harvested map; no clickhouse-local needed.
+func TestServer_QueryBindsParams(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(r))
-	dummy := RunnerFunc(func(context.Context, string) ([]byte, error) {
-		return nil, errors.New("runner must not be called when params are present")
+	var gotParams map[string]string
+	capture := RunnerFunc(func(_ context.Context, _ string, params map[string]string) ([]byte, error) {
+		gotParams = params
+		return []byte("ok"), nil
 	})
-	s := New(Config{Registry: r, Runner: dummy}, zerolog.Nop())
+	s := New(Config{Registry: r, Runner: capture}, zerolog.Nop())
 	require.NoError(t, s.Start())
 	defer func() { _ = s.Stop(context.Background()) }()
-	resp, err := http.Post(s.BaseURL()+"/query?param_x=1", "text/plain",
+	resp, err := http.Post(s.BaseURL()+"/query?param_x=1&param_name=a%20b&log_comment=stamp", "text/plain",
 		strings.NewReader("SELECT {x:UInt64} FORMAT ArrowStream"))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, map[string]string{"x": "1", "name": "a b"}, gotParams,
+		"prefix stripped, values decoded; log_comment tolerated, not bound")
+
+	// A malformed parameter name is still an up-front client error.
+	resp, err = http.Post(s.BaseURL()+"/query?param_bad-name=1", "text/plain",
+		strings.NewReader("SELECT 1"))
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	b, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(b), "parameter binding is not supported")
-	assert.Contains(t, string(b), "param_x")
+	assert.Contains(t, string(b), "param_bad-name")
+}
+
+// TestServer_QueryParamsEndToEnd binds a placeholder through the whole
+// self-referential loop: URL param → chhttp harvest → broker SET-prelude →
+// clickhouse-local, filtering a keelson table fetched back from this same
+// server (ADR-0133 §SD5's first consumer, exercised for real).
+func TestServer_QueryParamsEndToEnd(t *testing.T) {
+	s := newQueryServer(t)
+	const sql = "SELECT count() AS c FROM keelson('env') WHERE name LIKE {pat:String} FORMAT ArrowStream"
+	resp, err := http.Post(s.BaseURL()+"/query?param_pat=%25", "text/plain", strings.NewReader(sql))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", string(b))
+
+	rdr, err := ipc.NewReader(bytes.NewReader(b), ipc.WithAllocator(memory.DefaultAllocator))
+	require.NoError(t, err)
+	defer rdr.Release()
+	require.True(t, rdr.Next())
+	rec := rdr.RecordBatch()
+	require.EqualValues(t, 1, rec.NumRows())
+	assert.Positive(t, rec.Column(0).(*array.Uint64).Value(0), "LIKE '%' keeps every env row")
+}
+
+// TestServer_QueryExceptionEnvelope: a runner failure surfaces through the
+// chhttp envelope — the Code: N the broker's stderr carries lands in the
+// X-ClickHouse-Exception-Code header and stays in the body for play's
+// probe classifier (ADR-0133 §SD1/§SD3).
+func TestServer_QueryExceptionEnvelope(t *testing.T) {
+	r := introspect.NewRegistry()
+	require.NoError(t, providers.RegisterStatic(r))
+	failing := RunnerFunc(func(context.Context, string, map[string]string) ([]byte, error) {
+		return nil, errors.New("worker: Code: 62. DB::Exception: Syntax error")
+	})
+	s := New(Config{Registry: r, Runner: failing}, zerolog.Nop())
+	require.NoError(t, s.Start())
+	defer func() { _ = s.Stop(context.Background()) }()
+	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT 1"))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, "62", resp.Header.Get("X-ClickHouse-Exception-Code"))
+	b, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(b), "Code: 62. DB::Exception: Syntax error")
 }
 
 // TestServer_QuerySummaryHeader: a successful /query carries a minimal,
@@ -301,7 +354,7 @@ func TestServer_QueryAppliesPreExecutePasses(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(r))
 	var gotSQL string
-	runner := RunnerFunc(func(_ context.Context, sql string) ([]byte, error) {
+	runner := RunnerFunc(func(_ context.Context, sql string, _ map[string]string) ([]byte, error) {
 		gotSQL = sql
 		return []byte("ok"), nil
 	})
@@ -329,7 +382,7 @@ func TestServer_QueryFailingPreExecutePassFallsBack(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(r))
 	var gotSQL string
-	runner := RunnerFunc(func(_ context.Context, sql string) ([]byte, error) {
+	runner := RunnerFunc(func(_ context.Context, sql string, _ map[string]string) ([]byte, error) {
 		gotSQL = sql
 		return []byte("ok"), nil
 	})

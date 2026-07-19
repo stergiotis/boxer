@@ -123,8 +123,10 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		queryBus := deps.Bus.NewClient(queryBusAppId, []runtimeapp.SubjectFilter{
 			{Pattern: chlocalbroker.SubjectExecAll, Direction: runtimeapp.CapDirectionPub, Reason: "introspect /query runs SQL via clickhouse-local"},
 		})
-		cfg.Runner = introspecthttp.RunnerFunc(func(ctx context.Context, sql string) (body []byte, runErr error) {
-			rep, reqErr := chlocalbroker.ExecOnPool(ctx, queryBus, queryPoolName, chlocalbroker.ExecRequest{SQL: sql})
+		cfg.Runner = introspecthttp.RunnerFunc(func(ctx context.Context, sql string, params map[string]string) (body []byte, runErr error) {
+			// Params ride the broker's SET-prelude channel (ADR-0133 §SD2),
+			// binding {name:Type} placeholders engine-side.
+			rep, reqErr := chlocalbroker.ExecOnPool(ctx, queryBus, queryPoolName, chlocalbroker.ExecRequest{SQL: sql, Params: params})
 			if reqErr != nil {
 				return nil, reqErr
 			}

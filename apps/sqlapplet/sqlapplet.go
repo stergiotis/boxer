@@ -40,8 +40,9 @@ const (
 	// launcher resolves it.
 	EndpointDefault EndpointE = iota
 	// EndpointIntrospection — the in-process ADR-0094 `/query` endpoint.
-	// Today it serves only param-less buffers (its parity gaps are the
-	// recorded `chhttp` follow-up).
+	// Parameter binding works there since ADR-0133 M3 (the chhttp dialect
+	// plus the broker's SET-prelude channel); the remaining parity gaps are
+	// read counters and progress headers, recorded in ADR-0133 §SD4.
 	EndpointIntrospection
 )
 

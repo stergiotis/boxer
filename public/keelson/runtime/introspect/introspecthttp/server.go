@@ -7,17 +7,15 @@ package introspecthttp
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"net"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chhttp"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
@@ -60,19 +58,22 @@ type Config struct {
 	Passes *passreg.Registry
 }
 
-// QueryRunner executes SQL (the FORMAT clause is already part of sql) and
-// returns the raw clickhouse-local output. Kept an interface so
-// introspecthttp need not import the bus / chlocal broker; the runtime
-// supplies a broker-backed implementation.
+// QueryRunner executes SQL (the FORMAT clause is already part of sql) with
+// `{name:Type}` placeholder bindings (ADR-0133 §SD2/§SD3; nil or empty when
+// the request carries none) and returns the raw clickhouse-local output.
+// Kept an interface so introspecthttp need not import the bus / chlocal
+// broker; the runtime supplies a broker-backed implementation.
 type QueryRunner interface {
-	RunSQL(ctx context.Context, sql string) (body []byte, err error)
+	RunSQL(ctx context.Context, sql string, params map[string]string) (body []byte, err error)
 }
 
 // RunnerFunc adapts a function to QueryRunner.
-type RunnerFunc func(ctx context.Context, sql string) ([]byte, error)
+type RunnerFunc func(ctx context.Context, sql string, params map[string]string) ([]byte, error)
 
 // RunSQL implements QueryRunner.
-func (f RunnerFunc) RunSQL(ctx context.Context, sql string) ([]byte, error) { return f(ctx, sql) }
+func (f RunnerFunc) RunSQL(ctx context.Context, sql string, params map[string]string) ([]byte, error) {
+	return f(ctx, sql, params)
+}
 
 // New returns an unstarted Server.
 func New(cfg Config, log zerolog.Logger) (s *Server) {
@@ -187,115 +188,59 @@ const maxQueryBytes = 1 << 20
 // endpoint and query keelson('env') with no external server and no url()
 // boilerplate. The SQL carries its own FORMAT clause (clients append
 // FORMAT ArrowStream); the response is clickhouse-local's raw output.
+//
+// The wire dialect — statement extraction, `param_*` binding, settings
+// tolerance, the summary header and exception envelope — is chhttp
+// (ADR-0133 §SD3); this handler owns only the endpoint policy on top:
+// pre-execute passes, the keelson macro rewrite, and the runner.
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	if s.runner == nil {
-		http.Error(w, "introspection /query is not configured (no clickhouse-local runner)", http.StatusServiceUnavailable)
+		chhttp.WriteException(w, http.StatusServiceUnavailable,
+			"introspection /query is not configured (no clickhouse-local runner)")
 		return
 	}
-	// Parameter binding is not plumbed through the in-process runner: a client
-	// (apps/play) ships top-level `SET param_*` statements on the URL query
-	// string, but the chlocal broker path has no param channel, so an unbound
-	// `{x:Type}` placeholder would otherwise fail deeper with a confusing
-	// error. Reject up front with a clear message (ADR-0094 §SD4).
-	if name, ok := firstParamName(r); ok {
-		http.Error(w, "parameter binding is not supported on the introspection /query endpoint (got "+name+"); inline the value or query an external ClickHouse", http.StatusBadRequest)
+	req, err := chhttp.ParseRequest(r, maxQueryBytes)
+	if err != nil {
+		chhttp.WriteException(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	sql := readQuerySQL(r)
-	if sql == "" {
-		http.Error(w, "empty query", http.StatusBadRequest)
+	if req.SQL == "" {
+		chhttp.WriteException(w, http.StatusBadRequest, "empty query")
 		return
+	}
+	for _, key := range req.Ignored {
+		if !chhttp.KnownIgnorableSetting(key) {
+			s.log.Debug().Str("key", key).Msg("introspecthttp: /query ignoring unknown query-string key")
+		}
 	}
 	// Registered pre-execute rewrites (ADR-0108 §SD6) — e.g. LW_ID_* macro
 	// expansion, which this path needs because chlocal has no LW_ID_* UDFs
 	// installed (identsql only emits them for real servers). Best-effort: a
 	// failing pass is skipped and the SQL from before it runs instead.
-	sql = s.passes.ApplyBestEffort(passreg.StagePreExecute, sql, s.log)
+	sql := s.passes.ApplyBestEffort(passreg.StagePreExecute, req.SQL, s.log)
 	rewritten, err := keelsonsql.RewriteToURL(s.reg, s.BaseURL(), sql)
 	if err != nil {
 		// unknown keelson table / malformed macro — a client error.
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		chhttp.WriteException(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	start := time.Now()
-	body, err := s.runner.RunSQL(r.Context(), rewritten)
+	body, err := s.runner.RunSQL(r.Context(), rewritten, req.Params)
 	if err != nil {
 		s.log.Warn().Err(err).Msg("introspecthttp: /query failed")
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		// The broker error carries clickhouse-local's stderr, whose
+		// `Code: N` the envelope surfaces for probe classification.
+		chhttp.WriteException(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Minimal ClickHouse-compatible summary so a client's stats line is not
-	// all-zero. The chlocal runner surfaces no row/byte read counters
-	// (chlocalbroker.ExecReply carries only the body + content-type), so only
-	// result_bytes and elapsed_ns are populated; read_rows/read_bytes stay 0.
-	w.Header().Set("X-ClickHouse-Summary", summaryHeader(len(body), time.Since(start)))
-	w.Header().Set("Content-Type", formatContentType(rewritten))
+	// result_bytes and elapsed_ns only; the chlocal transport surfaces no
+	// read counters and the envelope reports honest zeros (ADR-0133 §SD4).
+	chhttp.WriteSummary(w, chhttp.Summary{
+		ResultBytes: uint64(len(body)),
+		Elapsed:     time.Since(start),
+	})
+	w.Header().Set("Content-Type", chhttp.ContentTypeForStatement(rewritten))
 	_, _ = w.Write(body)
-}
-
-// firstParamName returns the first `param_*` substitution key on the request
-// URL, if any, choosing deterministically (sorted) so the rejection message
-// names the same one each time. play ships `SET param_x=...` this way.
-func firstParamName(r *http.Request) (name string, ok bool) {
-	var keys []string
-	for k := range r.URL.Query() {
-		if strings.HasPrefix(k, "param_") {
-			keys = append(keys, k)
-		}
-	}
-	if len(keys) == 0 {
-		return "", false
-	}
-	sort.Strings(keys)
-	return keys[0], true
-}
-
-// summaryHeader builds a minimal X-ClickHouse-Summary JSON object. Only the
-// result size and elapsed time are known on the in-process path; the read
-// counters are reported as 0 (the runner does not surface them).
-func summaryHeader(resultBytes int, elapsed time.Duration) string {
-	return fmt.Sprintf(`{"read_rows":"0","read_bytes":"0","result_bytes":"%d","elapsed_ns":"%d"}`,
-		resultBytes, elapsed.Nanoseconds())
-}
-
-// readQuerySQL takes the SQL from the POST body, falling back to the
-// ?query= parameter — close enough to ClickHouse's HTTP interface for
-// clients like apps/play, which POST the statement as the body.
-func readQuerySQL(r *http.Request) (sql string) {
-	b, _ := io.ReadAll(io.LimitReader(r.Body, maxQueryBytes))
-	sql = strings.TrimSpace(string(b))
-	if sql == "" {
-		sql = strings.TrimSpace(r.URL.Query().Get("query"))
-	}
-	return
-}
-
-// formatContentType maps the trailing FORMAT clause of sql to a
-// best-effort Content-Type. Informational only — a client that set the
-// format itself already knows how to read the body.
-func formatContentType(sql string) string {
-	i := strings.LastIndex(strings.ToUpper(sql), "FORMAT ")
-	if i < 0 {
-		return "application/octet-stream"
-	}
-	name := strings.TrimSpace(sql[i+len("FORMAT "):])
-	if j := strings.IndexAny(name, " \t\r\n;"); j >= 0 {
-		name = name[:j]
-	}
-	switch name {
-	case "ArrowStream", "Arrow":
-		return "application/vnd.apache.arrow.stream"
-	case "Parquet":
-		return "application/vnd.apache.parquet"
-	case "JSON", "JSONEachRow", "JSONCompact", "JSONStrings":
-		return "application/json"
-	case "CSV", "CSVWithNames":
-		return "text/csv"
-	case "TabSeparated", "TSV", "TabSeparatedWithNames":
-		return "text/tab-separated-values"
-	default:
-		return "application/octet-stream"
-	}
 }
 
 func splitCols(s string) (out []string) {
