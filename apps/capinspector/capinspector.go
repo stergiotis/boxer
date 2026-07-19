@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // capDocsFS holds the per-cap explanation files. One markdown file
@@ -154,16 +155,12 @@ func (inst *App) renderBody() {
 // another window; the schematic and prose below update on the same
 // frame.
 func (inst *App) renderPicker() {
-	for range c.Horizontal().KeepIter() {
-		for _, capId := range allCapIdsOrdered() {
-			spec := Registry[capId]
-			active := capId == inst.selectedCap
-			if c.SelectableLabel(inst.ids.PrepareStr("pick-"+string(capId)), active, spec.Display).
-				SendResp().HasPrimaryClicked() {
-				inst.selectedCap = capId
-			}
-		}
+	sel := selector.Segmented(inst.ids, "cap-picker", &inst.selectedCap).
+		Style(selector.StyleSelectable)
+	for _, capId := range allCapIdsOrdered() {
+		sel = sel.Option(capId, Registry[capId].Display)
 	}
+	sel.SendResp()
 }
 
 func (inst *App) renderDetail(spec CapSpec) {

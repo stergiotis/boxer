@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // play_layeredgraph_panel.go is the ADR-0129 Network dock tab: a result set
@@ -506,16 +507,12 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 func (inst *NetworkDriver) renderControls() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("layout").Send()
-		if c.Button(inst.ids.PrepareStr("net-tb"), c.Atoms().Text("top-down").Keep()).
-			Frame(false).Selected(inst.rankDir == layeredgraph.RankDirTopBottom).
-			SendResp().HasPrimaryClicked() {
-			inst.rankDir = layeredgraph.RankDirTopBottom
-		}
-		if c.Button(inst.ids.PrepareStr("net-lr"), c.Atoms().Text("left-right").Keep()).
-			Frame(false).Selected(inst.rankDir == layeredgraph.RankDirLeftRight).
-			SendResp().HasPrimaryClicked() {
-			inst.rankDir = layeredgraph.RankDirLeftRight
-		}
+		selector.Segmented(inst.ids, "rank-dir", &inst.rankDir).
+			Inline().
+			Frameless().
+			Option(layeredgraph.RankDirTopBottom, "top-down").
+			Option(layeredgraph.RankDirLeftRight, "left-right").
+			SendResp()
 	}
 }
 

@@ -25,6 +25,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // ViewModeE selects between the rendered Markdown view and the raw
@@ -371,14 +372,12 @@ func (inst *HelpHost) consumeScrollTarget() (section string) {
 func (inst *HelpHost) renderViewToggle() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("View:").Send()
-		if c.SelectableLabel(inst.ids.PrepareStr("view-rendered"), inst.viewMode == ViewModeRendered, "Rendered").
-			SendResp().HasPrimaryClicked() {
-			inst.viewMode = ViewModeRendered
-		}
-		if c.SelectableLabel(inst.ids.PrepareStr("view-source"), inst.viewMode == ViewModeSource, "Source").
-			SendResp().HasPrimaryClicked() {
-			inst.viewMode = ViewModeSource
-		}
+		selector.Segmented(inst.ids, "view-mode", &inst.viewMode).
+			Style(selector.StyleSelectable).
+			Inline().
+			Option(ViewModeRendered, "Rendered").
+			Option(ViewModeSource, "Source").
+			SendResp()
 	}
 }
 

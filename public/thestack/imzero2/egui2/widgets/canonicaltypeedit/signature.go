@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // Separator bytes mirroring canonicaltypes.GroupSeparator ("-") and
@@ -229,10 +230,8 @@ func (sm *SignatureModel) renderChipStrip(ids *c.WidgetIdStack) (structureChange
 			if label == "" {
 				label = "?"
 			}
-			if c.SelectableLabel(ids.PrepareSeq(chipSeqBase+uint64(i)), i == sm.sel, label).
-				SendResp().HasPrimaryClicked() {
-				sm.sel = i
-			}
+			selector.RadioValue(ids.PrepareSeq(chipSeqBase+uint64(i)), &sm.sel, i).
+				Style(selector.StyleSelectable).Text(label).Send()
 			if i < len(sm.elems)-1 {
 				if c.Button(ids.PrepareSeq(sepSeqBase+uint64(i)), c.Atoms().Text(string(e.sep)).Keep()).
 					Small().SendResp().HasPrimaryClicked() {

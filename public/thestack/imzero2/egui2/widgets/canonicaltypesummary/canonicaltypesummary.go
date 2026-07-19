@@ -45,6 +45,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // tabE selects which body the inspector window renders.
@@ -351,23 +352,13 @@ func (inst Renderer) renderLevel2Body(scope string, state *instanceState, canoni
 // AbsoluteWidgetId derived from scope so multiple .Render(...) calls on the
 // same Renderer drive independent tab state.
 func (inst Renderer) renderTabBar(scope string, state *instanceState) {
-	gap := styletokens.GapInline(styletokens.DensityFromEnv())
-	layoutID := c.MakeAbsoluteIdStr(scope + "-tab-layout")
-	membersID := c.MakeAbsoluteIdStr(scope + "-tab-members")
-	codecID := c.MakeAbsoluteIdStr(scope + "-tab-codec")
-	for range c.Horizontal().KeepIter() {
-		if c.SelectableLabel(layoutID, state.tab == tabLayout, "Layout").SendResp().HasPrimaryClicked() {
-			state.tab = tabLayout
-		}
-		c.AddSpace(gap)
-		if c.SelectableLabel(membersID, state.tab == tabMembers, "Members").SendResp().HasPrimaryClicked() {
-			state.tab = tabMembers
-		}
-		c.AddSpace(gap)
-		if c.SelectableLabel(codecID, state.tab == tabCodec, "Go codec").SendResp().HasPrimaryClicked() {
-			state.tab = tabCodec
-		}
-	}
+	selector.SegmentedAbs(scope+"-tab", &state.tab).
+		Style(selector.StyleSelectable).
+		Gap(styletokens.GapInline(styletokens.DensityFromEnv())).
+		Option(tabLayout, "Layout").
+		Option(tabMembers, "Members").
+		Option(tabCodec, "Go codec").
+		SendResp()
 }
 
 // renderLayoutTab draws the byte-footprint strip: one framed segment per

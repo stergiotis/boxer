@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	egcolor "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // renderLoading is shown while the collector runs off-thread. It requests a
@@ -118,9 +119,12 @@ func (inst *App) renderControls() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("view").Send()
 		c.AddSpace(inst.spaceInner())
-		inst.viewToggle("v-pkg", viewPackages)
-		inst.viewToggle("v-arch", viewArchitecture)
-		inst.viewToggle("v-mod", viewModules)
+		selector.Segmented(inst.ids, "view-switch", &inst.mode).
+			Inline().
+			Option(viewPackages, viewPackages.label()).
+			Option(viewArchitecture, viewArchitecture.label()).
+			Option(viewModules, viewModules.label()).
+			SendResp()
 	}
 	c.AddSpace(inst.spaceTight())
 
@@ -183,15 +187,21 @@ func (inst *App) renderNeighborhoodControls() {
 			Text("depth").
 			SendRespVal(&inst.depth)
 		c.AddSpace(inst.spaceOuter())
-		inst.dirToggle("dir-imp", "imports ▸", godep.DirImports)
-		inst.dirToggle("dir-impd", "importers ◂", godep.DirImporters)
-		inst.dirToggle("dir-both", "both", godep.DirBoth)
+		selector.Segmented(inst.ids, "dir-switch", &inst.dir).
+			Inline().
+			Option(godep.DirImports, "imports ▸").
+			Option(godep.DirImporters, "importers ◂").
+			Option(godep.DirBoth, "both").
+			SendResp()
 		c.AddSpace(inst.spaceOuter())
 		inst.boolToggle("hide-std", "hide stdlib", &inst.graphHideStd)
 		c.AddSpace(inst.spaceOuter())
 		c.Label("engine").Send()
-		inst.engineToggle("eng-live", "live", false)
-		inst.engineToggle("eng-layered", "layered", true)
+		selector.Segmented(inst.ids, "engine-switch", &inst.useLayered).
+			Inline().
+			Option(false, "live").
+			Option(true, "layered").
+			SendResp()
 	}
 }
 
@@ -223,17 +233,6 @@ func (inst *App) renderArchControls() {
 	}
 }
 
-// viewToggle is one segment of the top-level Packages / Architecture / Modules
-// switch.
-func (inst *App) viewToggle(id string, mode viewMode) {
-	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(mode.label()).Keep()).
-		Selected(inst.mode == mode).
-		Frame(true).
-		SendResp().HasPrimaryClicked() {
-		inst.mode = mode
-	}
-}
-
 // boolToggle is a framed on/off button bound to *on.
 func (inst *App) boolToggle(id string, label string, on *bool) {
 	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
@@ -244,16 +243,6 @@ func (inst *App) boolToggle(id string, label string, on *bool) {
 	}
 }
 
-// engineToggle is one segment of the live/layered graph-engine switch.
-func (inst *App) engineToggle(id string, label string, layered bool) {
-	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
-		Selected(inst.useLayered == layered).
-		Frame(true).
-		SendResp().HasPrimaryClicked() {
-		inst.useLayered = layered
-	}
-}
-
 func (inst *App) classToggle(id string, class string, on *bool) {
 	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(class).Keep()).
 		Selected(*on).
@@ -261,15 +250,6 @@ func (inst *App) classToggle(id string, class string, on *bool) {
 		SendResp().HasPrimaryClicked() {
 		*on = !*on
 		inst.viewDirty = true
-	}
-}
-
-func (inst *App) dirToggle(id string, label string, dir godep.Direction) {
-	if c.Button(inst.ids.PrepareStr(id), c.Atoms().Text(label).Keep()).
-		Selected(inst.dir == dir).
-		Frame(true).
-		SendResp().HasPrimaryClicked() {
-		inst.dir = dir
 	}
 }
 

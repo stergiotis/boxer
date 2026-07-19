@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // tabE selects which of the three panes the body renders.
@@ -196,24 +197,19 @@ func (inst *App) renderBody() {
 
 // renderTabBar draws the three selectable tab labels across the top.
 func (inst *App) renderTabBar() {
-	for range c.Horizontal().KeepIter() {
-		inst.tabButton(tabSplash, "tab-splash", icons.PhSparkle+" Splash")
-		inst.tabButton(tabAbout, "tab-about", icons.PhInfo+" About")
-		inst.tabButton(tabNotice, "tab-notice", icons.PhScroll+" NOTICE")
-	}
-}
-
-func (inst *App) tabButton(tab tabE, key string, label string) {
-	active := inst.tab == tab
-	if c.SelectableLabel(inst.ids.PrepareStr(key), active, label).SendResp().HasPrimaryClicked() {
-		if tab == tabSplash {
-			// Force one re-upload on re-entry: while another tab was shown the
-			// Image widget did not render, so the Rust-side texture may have
-			// been evicted. Forgetting the tracked version makes the next
-			// renderSplash ship full pixels again.
-			inst.imgTracker.Forget(splashImgKey)
-		}
-		inst.tab = tab
+	changed := selector.Segmented(inst.ids, "splash-tabs", &inst.tab).
+		Style(selector.StyleSelectable).
+		Option(tabSplash, icons.PhSparkle+" Splash").
+		Option(tabAbout, icons.PhInfo+" About").
+		Option(tabNotice, icons.PhScroll+" NOTICE").
+		SendResp()
+	if changed && inst.tab == tabSplash {
+		// Force one re-upload on re-entry: while another tab was shown the Image
+		// widget did not render, so the Rust-side texture may have been evicted.
+		// Forgetting the tracked version makes the next renderSplash ship full
+		// pixels again. (The change edge fires only on transition *into* Splash,
+		// which is exactly "re-entry".)
+		inst.imgTracker.Forget(splashImgKey)
 	}
 }
 

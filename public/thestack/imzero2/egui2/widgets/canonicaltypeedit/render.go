@@ -7,6 +7,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 const editorMinWidth = 460
@@ -202,14 +203,12 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 	// Base selector for the current family.
 	for range c.Horizontal().KeepIter() {
 		rowLabel("base")
+		sel := selector.Segmented(ids, "base", &m.base).Style(selector.StyleSelectable).Inline()
 		for _, b := range familyBases[fam] {
-			if c.SelectableLabel(ids.PrepareStr("base-"+b.label), m.base == b.r, b.label).
-				SendResp().HasPrimaryClicked() {
-				if m.base != b.r {
-					m.base = b.r
-					changed = true
-				}
-			}
+			sel = sel.Option(b.r, b.label)
+		}
+		if sel.SendResp() {
+			changed = true
 		}
 	}
 
@@ -251,14 +250,12 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 	if fam == familyNumeric {
 		for range c.Horizontal().KeepIter() {
 			rowLabel("byte order")
+			sel := selector.Segmented(ids, "byte-order", &m.byteOrder).Style(selector.StyleSelectable).Inline()
 			for _, bo := range byteOrderOrder {
-				if c.SelectableLabel(ids.PrepareStr("bo-"+bo.key), m.byteOrder == bo.mod, bo.label).
-					SendResp().HasPrimaryClicked() {
-					if m.byteOrder != bo.mod {
-						m.byteOrder = bo.mod
-						changed = true
-					}
-				}
+				sel = sel.Option(bo.mod, bo.label)
+			}
+			if sel.SendResp() {
+				changed = true
 			}
 		}
 	}
@@ -277,14 +274,12 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 	// Scalar shape (all families).
 	for range c.Horizontal().KeepIter() {
 		rowLabel("shape")
+		sel := selector.Segmented(ids, "shape", &m.scalarMod).Style(selector.StyleSelectable).Inline()
 		for _, sh := range scalarOrder {
-			if c.SelectableLabel(ids.PrepareStr("sh-"+sh.key), m.scalarMod == sh.mod, sh.label).
-				SendResp().HasPrimaryClicked() {
-				if m.scalarMod != sh.mod {
-					m.scalarMod = sh.mod
-					changed = true
-				}
-			}
+			sel = sel.Option(sh.mod, sh.label)
+		}
+		if sel.SendResp() {
+			changed = true
 		}
 	}
 	return

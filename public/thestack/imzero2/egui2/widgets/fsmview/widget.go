@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 	"github.com/zeebo/xxh3"
 )
 
@@ -459,23 +460,14 @@ func (inst *Widget[T]) renderPopup() {
 }
 
 func (inst *Widget[T]) renderRendererToggle() {
-	for range c.Horizontal().KeepIter() {
-		tableSel := inst.renderer == RendererTable
-		graphSel := inst.renderer == RendererGraph
-		historySel := inst.renderer == RendererHistory
-		if c.SelectableLabel(inst.ids.PrepareStr("tab-tbl"), tableSel, "Table").SendResp().HasPrimaryClicked() {
-			inst.renderer = RendererTable
-		}
-		c.AddSpace(styletokens.GapInline(inst.density))
-		if c.SelectableLabel(inst.ids.PrepareStr("tab-grp"), graphSel, "Graph").SendResp().HasPrimaryClicked() {
-			inst.renderer = RendererGraph
-		}
-		c.AddSpace(styletokens.GapInline(inst.density))
-		historyLabel := fmt.Sprintf("History (%d)", inst.machine.HistoryLen())
-		if c.SelectableLabel(inst.ids.PrepareStr("tab-hist"), historySel, historyLabel).SendResp().HasPrimaryClicked() {
-			inst.renderer = RendererHistory
-		}
-	}
+	historyLabel := fmt.Sprintf("History (%d)", inst.machine.HistoryLen())
+	selector.Segmented(inst.ids, "renderer-tabs", &inst.renderer).
+		Style(selector.StyleSelectable).
+		Gap(styletokens.GapInline(inst.density)).
+		Option(RendererTable, "Table").
+		Option(RendererGraph, "Graph").
+		Option(RendererHistory, historyLabel).
+		SendResp()
 }
 
 // renderTable emits a labelled key→value row per state, with the active

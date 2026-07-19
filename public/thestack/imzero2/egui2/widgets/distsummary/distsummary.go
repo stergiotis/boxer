@@ -68,6 +68,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdfdigest"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // tabE selects which body the inspector window renders.
@@ -731,21 +732,12 @@ func (inst Renderer) renderLevel2Body(scope string, state *instanceState, digest
 // Renderer (sccmap's size + color, imztop's cores + history) drive
 // independent tab state without an idGen thread.
 func (inst Renderer) renderTabBar(scope string, state *instanceState) {
-	density := styletokens.DensityFromEnv()
-	gap := styletokens.GapInline(density)
-	ecdfID := c.MakeAbsoluteIdStr(scope + "-tab-ecdf")
-	bpID := c.MakeAbsoluteIdStr(scope + "-tab-boxenplot")
-	for range c.Horizontal().KeepIter() {
-		if c.SelectableLabel(ecdfID, state.tab == tabECDF, "ECDF").
-			SendResp().HasPrimaryClicked() {
-			state.tab = tabECDF
-		}
-		c.AddSpace(gap)
-		if c.SelectableLabel(bpID, state.tab == tabBoxenplot, "Boxenplot").
-			SendResp().HasPrimaryClicked() {
-			state.tab = tabBoxenplot
-		}
-	}
+	selector.SegmentedAbs(scope+"-tab", &state.tab).
+		Style(selector.StyleSelectable).
+		Gap(styletokens.GapInline(styletokens.DensityFromEnv())).
+		Option(tabECDF, "ECDF").
+		Option(tabBoxenplot, "Boxenplot").
+		SendResp()
 }
 
 // renderBoxenplotBody emits the letter-value plot body — the legacy
