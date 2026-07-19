@@ -47,6 +47,16 @@ A **2026-07-19 review** added three findings that narrow the decision:
   *hand-authored* decides whether nested or a frozen flat grammar is the better
   target — a question the 2026-07-10 alternatives flagged as "real" and overrode.
 
+A **post-revision adversarial review (2026-07-19)** probed the family's stated
+invariants. In this ADR's terms: byte-identity is test-backed; the census holds
+(zero consumers for D1's sugar and the parametrized channels); the one-IR /
+shared-builder / shared-layout spine should not be merged or split. Its one
+structural finding: the two front-ends' accept sets are **not** identical today,
+so the parity premise has confirmed cracks at the codegen edge (see
+[Review fallout](#review-fallout-2026-07-19)). It endorsed D1 as the largest
+available simplification and asked for a concrete trigger on D5's parked
+carriers — both folded in below.
+
 ## Decision
 
 **D1 — cut the zero-consumer flat sugar now.** Remove `,explode` (subsumed by the
@@ -103,16 +113,62 @@ retired.
   sibling — emitting one `AddMembership<Carrier>P` per attribute; params are
   wire-emitted even when empty (ADR-0008 SD8). Unparks when a consumer's
   per-value-provenance slice commits; until then barred inside tuples and as
-  sub-columns.
+  sub-columns. Parked is not permanent by inertia: the parametrized pair costs
+  a carrier decode family in both back-ends while having no consumer anywhere,
+  so if the named statements consumer is dropped from the roadmap — or when
+  D3's contingencies resolve, whichever comes first — the parking is
+  re-justified against a then-current commitment or the pair follows D1 out of
+  the authoring grammar and the codecs (the ADR-0072 wire grid is untouched
+  either way).
 
 ## Verification
 
 - The byte-identity matrix stays load-bearing: `array.RecordEqual` + Arrow IPC
   equality + gen↔reflect cross-decode + nested-vs-flat equal-records, extended per
   nested surface as it lands.
+- **Front-end parity gains a mechanical gate:** one shared DTO corpus through
+  both `marshallgen.ParsePlan` and `marshallreflect.PlanFor`, asserting
+  identical accept / reject decisions and, where both accept, equal plans.
+  Parity was previously asserted by mirrored comments, several of which had
+  drifted from the code; both 2026-07-19 acceptance defects live in exactly the
+  gap this gate closes, and the membership-marker channel table is hand-mirrored
+  in the two classifiers. Each fallout fix lands with its negative test.
 - Every frozen flat escalation spelling keeps regenerating wire-stable.
 - If D3 ever fires it adds negative tests: each removed spelling fails at
   `PlanFor` / `Validate` naming its nested (or DML) replacement.
+
+## Review fallout (2026-07-19)
+
+Marshall-family defects and drift found by the adversarial review — ordinary
+fixes, none waiting on this ADR's acceptance:
+
+- **Codegen accepts `*S` nested-Optional and emits non-compiling code.** The
+  emitter's Optional arms assume `option.Option[S]` (`Val` / `Has` SoA), so the
+  written codec fails the next `go build` (confirmed end to end). Fix: drop the
+  `*ast.StarExpr` branch in `nestedSectionCardinalityAst`; `*S` then falls
+  through to `classifyType`'s pointer rejection, and the how-to's "codegen
+  rejects `*S`" claim becomes true instead of false.
+- **Codegen accepts unexported tagged top-level fields; reflect rejects them.**
+  The tuple / nested element walkers check `ast.IsExported`; the top-level loop
+  does not, and the reflect-side comment claims a parity that does not exist.
+  Fix: add the check; correct the comment.
+- **Doc / comment drift**, absorbed into D2's how-to merge: the nested how-to
+  advertises `lw.U8Array`, which does not exist (add the marker + registry
+  entry, or strike it); `marshallreflect.addNestedSectionField`'s comment says
+  untagged sub-columns default to the lower-cased field name (the shared
+  builder's default is `value`); the readback `Artefacts` comment claims all
+  fragments reference the helper UDFs (presence and the non-const validator /
+  filter are ClickHouse-built-ins-only — the property the single-statement
+  executor contract relies on).
+- **Smaller hardening:** `Validate` leaves scalar-section `BeginAttribute` arity
+  unchecked, so a mis-wired DML panics mid-Marshal instead of failing
+  validation; `ReadRowSupported` admits const-only kinds whose component then
+  reads back as permanently absent (reject, like plain-only kinds).
+
+Store-layer findings from the same review travel with their own tracks
+([ADR-0100](0100-recordstore-generated-leeway-clickhouse-store.md) /
+[ADR-0105](0105-keelson-adopts-generated-record-stores.md) /
+[ADR-0112](0112-dimensionstore-interned-facts-additive-memberships.md)), not here.
 
 ## Alternatives
 
@@ -162,9 +218,12 @@ dialogue (2026-07-10) after a complexity review of the marshall stack; also the
 retroactive record of the nested front-end shipped 2026-07-07..09. The 2026-07-19
 revision splits the original switchover into an unconditional cleanup (D1), an
 immediate freeze (D2), and a deferred, contingent removal (D3), on the
-read-neutrality / hand-DML-parity / generation findings above. No code
-accompanies this ADR; on acceptance the one concrete action is D1's sugar
-removal — the rest is policy.
+read-neutrality / hand-DML-parity / generation findings above. A same-day
+post-revision adversarial review verified byte-identity and the census,
+endorsed D1, and contributed the parity gate, the D5 trigger, and the fallout
+list. No decision code accompanies this ADR — the fallout items proceed as
+ordinary defect fixes; on acceptance the one concrete action is D1's sugar
+removal, the rest is policy.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
