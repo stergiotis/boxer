@@ -344,6 +344,42 @@ by [ADR-0133](./0133-chhttp-server-dialect-and-param-binding.md) M3: the
 starter book's `runtime-env` applet now carries a `pattern` parameter
 bound against the in-process endpoint.
 
+## Update (2026-07-19) — O4 realized: runtime-authored applets ("Save as applet")
+
+The O4 deferral is picked up on operator demand (its recorded trigger).
+The design keeps every §SD1 invariant by making the runtime store carry
+the *same artifact* the committed books do:
+
+- **O4-D1 — Store-as-document.** A saved applet is the identical markdown
+  document shape — frontmatter, prose, one `sql` fence — persisted through
+  the runtime persist facility (`StorageI`, `runtime.facts`-backed where
+  ClickHouse is up) under the store service's own alias: one key per
+  applet (`applet_<slug>`; persist keys are single NATS tokens, so no
+  dots) plus an `index` key, since `StorageI` has no enumeration. One
+  format, one parser, no second definition language.
+- **O4-D2 — An audited save seam.** play composes the document and
+  publishes it on `applet.store.save` (request/reply, the Powerbox
+  pattern; the cap declared in play's manifest). The `appletstore` service
+  is the moderation gate the original deferral asked for: it validates the
+  slug, parses, classifies — an unparseable buffer is *refused with the
+  classifier's error*, the §SD6 corpus gate's runtime equivalent — checks
+  collisions, persists, and mints. The contract (subject, wire shapes)
+  lives in a neutral runtime package so play need not import the host.
+- **O4-D3 — Boot order and precedence.** Committed books mint first;
+  stored documents mint second, and a stored slug that collides with a
+  committed one — or fails to parse — is skipped with a warning. Boot
+  never blocks on runtime state, and curation outranks it.
+- **O4-D4 — Overwrite, not delete.** Saving an existing stored slug
+  replaces the stored document and the live definition (the minted
+  factory resolves the definition at open time), while the manifest's
+  display metadata stays as-registered until the next boot — a recorded
+  staleness, not a hidden one. Deleting a stored applet is deferred until
+  a UI consumer for deletion exists.
+- **O4-D5 — The generated document.** Frontmatter (title, icon, the
+  documentation-standard type/status keys), a one-line provenance note,
+  and the buffer as the single fence. A buffer that itself contains a
+  fence line is refused rather than silently producing a broken document.
+
 ## References
 
 Internal:
