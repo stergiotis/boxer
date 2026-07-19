@@ -229,6 +229,25 @@ multi-statement stdin script substitutes correctly. The SET-prelude
 injection therefore proceeds as designed and the cold-spawn argv fallback
 is not needed.
 
+## Update (2026-07-19) — M2 and M3 shipped
+
+**M2**: `ExecRequest.Params` on the chlocal broker — names validated
+against the input-table charset, the SET-prelude injected after the
+cacheability prefix gate, and each sorted pair folded into the result-cache
+key. Implementation note beyond the ADR text: the params fold carries a
+domain tag so `Params{a:b}` and `InputTables{a:"b"}` cannot alias to one
+cache key. End-to-end tests bind against a live clickhouse-local and pin
+cache hit/miss across changed bindings.
+
+**M3**: `introspecthttp` adopts chhttp for the whole wire dialect and the
+`QueryRunner` seam carries the bindings to the broker; the up-front
+`param_*` rejection is gone, exceptions ride the `Code: N` envelope with
+`X-ClickHouse-Exception-Code`, and an end-to-end test binds a `LIKE`
+pattern through the full self-referential loop (URL param → broker prelude
+→ clickhouse-local → `url()` back to the same server). Ride-alongs landed
+in ADR-0094 (parity note), ADR-0132 (§SD7 lifted; `runtime-env` gains a
+`pattern` parameter), and the sqlapplet endpoint comments.
+
 ## References
 
 - [ADR-0094 — keelson introspection tables](./0094-keelson-introspection-tables.md)

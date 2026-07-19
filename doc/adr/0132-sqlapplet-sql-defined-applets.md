@@ -325,6 +325,25 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Update (2026-07-19) — implemented; the §SD7 introspection restriction is lifted
+
+All slices shipped within the acceptance day: the §SD5 classifier with its
+Diagnostics class line, the host with minted manifests and the starter
+book, the §SD3 attenuated surface (chrome tabs removed, minimal top bar
+with the Copy SQL escape hatch over `clipboard.write` — the one capability
+minted manifests now declare — and the params strip pinned into the top
+panel whenever an embedder removed the Editor tab). Two findings recorded
+elsewhere: coexisting PlayApp windows needed a per-instance widget-id salt
+(`WidgetIdStack.SetBaseSalt`; the ADR-0026 §SD9 contract met in salt form
+because one play instance spans a dozen driver-owned stacks), and
+`--launch` resolves a SQL WHERE over the manifest table, so multiple
+applets launch via `subject_alias IN (…)`.
+
+§SD7's restriction — introspection applets must be param-less — is lifted
+by [ADR-0133](./0133-chhttp-server-dialect-and-param-binding.md) M3: the
+starter book's `runtime-env` applet now carries a `pattern` parameter
+bound against the in-process endpoint.
+
 ## References
 
 Internal:

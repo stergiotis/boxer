@@ -297,6 +297,18 @@ pushdown (see Alternatives), always materialises it. This makes supply-chain
 attestation of the external tools — not just their presence, but their identity
 — a query, alongside `keelson.build`/`keelson.sbom`.
 
+## Update (2026-07-19) — `/query` parameter binding (ADR-0133)
+
+The 2026-06-27 update's parity gap — `param_*` query-string keys rejected
+with a 400 because the chlocal broker had no parameter channel — is closed
+by [ADR-0133](./0133-chhttp-server-dialect-and-param-binding.md): the
+endpoint now parses the wire dialect through the extracted `chhttp` package
+(statement, `param_*` harvest, settings tolerance, summary and exception
+envelope) and forwards bindings to the broker, which injects them as a
+`SET param_<name> = '…';` prelude ahead of the §SD5 input-table prelude.
+`{name:Type}` substitution stays engine-side. Read counters and progress
+headers remain the recorded ADR-0133 §SD4 limits.
+
 ## Update (2026-07-18) — the ADR-0126 topology tables
 
 [ADR-0126](./0126-appliance-topology-as-data.md) added five tables. Four are
