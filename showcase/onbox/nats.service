@@ -1,0 +1,69 @@
+[Unit]
+Description=NATS core bus — loopback pub/sub transport for the metric plane (ADR-0090, ADR-0026 SD4)
+# NATS is the dependency root of the topology graph (ADR-0126): nothing it needs,
+# consumers order After=nats.service. Loopback-only, so network.target (not
+# network-online.target) is the correct gate — 127.0.0.1 is up before it.
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+# nats-server is built from source, not a system package: it ships as a Go
+# `tool` dependency in the airgap bundle (ADR-0095) and the release build emits
+# it next to main_go via `go build github.com/nats-io/nats-server/v2` (ADR-0026
+# SD4 — an external binary the monolith neither imports nor supervises; systemd
+# is the supervisor). Optional, like queryrunsd.service: enable it only on boxes
+# that run the cross-process metric plane; co-located desktops use inprocbus and
+# need no server (ADR-0090 SD4 swap).
+#
+# Core bus only: pub/sub, no JetStream/KV (ADR-0090), bound to loopback. -a
+# 127.0.0.1 refuses every non-local interface at the listener; IPAddressDeny
+# below is the belt to that suspenders.
+ExecStart=/opt/imzero2/current/nats-server -a 127.0.0.1 -p 4222
+# A down bus stalls every consumer (sysmetricsd + the carrier), so recover fast;
+# a genuinely broken binary still parks on systemd's default start limiter
+# (5 starts / 10 s) rather than spinning.
+Restart=always
+RestartSec=2
+# ADR-0126 topology mark: component identity, inherited by any child. The token
+# must match the topo registry (public/keelson/runtime/topo/topo.go) verbatim.
+Environment=BOXER_COMPONENT=nats
+# Hardening mirrors queryrunsd.service (ADR-0115 SD4): NATS core is stateless
+# (no JetStream = no disk state), reads no /proc, opens no devices, has no home,
+# and talks only loopback TCP. DynamicUser gives a transient UID with no
+# writable state anywhere.
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectProc=invisible
+ProcSubset=pid
+# Port 4222 is unprivileged; the process needs no capabilities at all.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+UMask=0077
+# Plain TCP to loopback plus the resolver socket; no AF_NETLINK etc.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressAllow=localhost
+IPAddressDeny=any
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# NATS is Go with no JIT in this process; W^X can be enforced.
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

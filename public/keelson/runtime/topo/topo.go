@@ -153,8 +153,9 @@ var (
 		Needs: []string{"imzero2-demo"},
 	})
 
-	// NATS is the core pub/sub bus (metric plane transport). No unit
-	// ships in the kit yet; the component is declared ahead of it.
+	// NATS is the core pub/sub bus (metric plane transport), run on-box by
+	// showcase/onbox/nats.service (loopback NATS core, no JetStream). On an
+	// airgapped box nats-server is built from vendored source (ADR-0026 SD4).
 	NATS = Declare(Component{
 		Token: "nats",
 		Role:  "NATS core bus (metric plane transport)",

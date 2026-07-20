@@ -83,12 +83,13 @@ type Config struct {
 
 // Build-artifact locations relative to the workspace clone root.
 const (
-	rustDirRel   = "rust/imzero2"
-	mainGoRel    = "rust/imzero2/main_go"
-	clientBinRel = "rust/imzero2/target/headless/release/imzero2"
-	wsProbeRel   = "rust/imzero2/target/headless/release/imzero2_ws_probe" // Cargo bin target name (file is ws_probe.rs)
-	assetsRel    = "rust/imzero2/assets"
-	phosphorRel  = "assets/fonts/phosphor/Phosphor.ttf" // within a release dir
+	rustDirRel    = "rust/imzero2"
+	mainGoRel     = "rust/imzero2/main_go"
+	clientBinRel  = "rust/imzero2/target/headless/release/imzero2"
+	wsProbeRel    = "rust/imzero2/target/headless/release/imzero2_ws_probe" // Cargo bin target name (file is ws_probe.rs)
+	natsServerRel = "rust/imzero2/nats-server"                              // from-source NATS core bus (ADR-0026 SD4), built next to main_go
+	assetsRel     = "rust/imzero2/assets"
+	phosphorRel   = "assets/fonts/phosphor/Phosphor.ttf" // within a release dir
 )
 
 // Run is the deploy entrypoint. With cfg.Ref set it is the operator
@@ -406,7 +407,17 @@ func build(ctx context.Context, lg zerolog.Logger, cfg Config) error {
 		return err
 	}
 	// The Go launcher (carries this very `deploy` subcommand for the next run).
-	return step(ctx, lg, "build-go", extbin.Bash, extbin.Opts{Dir: rustDir}, "build_go.sh")
+	if err := step(ctx, lg, "build-go", extbin.Bash, extbin.Opts{Dir: rustDir}, "build_go.sh"); err != nil {
+		return err
+	}
+	// The NATS core bus, built from the vendored `tool` dependency into the
+	// release next to main_go and run by showcase/onbox/nats.service (ADR-0026
+	// SD4: an external binary the monolith neither imports nor supervises). CGO
+	// off to match the repo's cgo-free posture (and the airgap go-only scope,
+	// which ships no C compiler); no boxer build tags — an upstream main package.
+	return step(ctx, lg, "build-nats", extbin.Go,
+		extbin.Opts{Dir: cfg.Workspace, Env: append(os.Environ(), "CGO_ENABLED=0")},
+		"build", "-o", filepath.Join(cfg.Workspace, natsServerRel), "github.com/nats-io/nats-server/v2")
 }
 
 func stage(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) (string, error) {
@@ -422,6 +433,7 @@ func stage(ctx context.Context, lg zerolog.Logger, cfg Config, tag string) (stri
 		{filepath.Join(cfg.Workspace, mainGoRel), "main_go"},
 		{filepath.Join(cfg.Workspace, clientBinRel), "imzero2"},
 		{filepath.Join(cfg.Workspace, wsProbeRel), "ws_probe"},
+		{filepath.Join(cfg.Workspace, natsServerRel), "nats-server"},
 	}
 	for _, b := range bins {
 		if err := copyFile(b.src, filepath.Join(tmp, b.dst), 0o755); err != nil {

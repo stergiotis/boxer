@@ -20,6 +20,11 @@
 #
 # What the bundle deliberately does NOT carry (provided by the target
 # environment, per the deploy contract): systemd, clickhouse, ffmpeg, ollama.
+# The NATS core bus is the exception among infra dependencies: nats-server is a
+# Go program, so it rides the Go vendor as a `tool` dependency and the target
+# builds it from that vendored source — no separate binary, no repo bloat
+# (ADR-0026 §SD4: still an external binary the monolith neither imports nor
+# supervises; showcase/onbox/nats.service runs it).
 # And two things no language vendoring can supply, which the target still needs:
 #   - build-time (full scope only): a C compiler + pkg-config (libmimalloc-sys
 #     compiles bundled C via `cc`).
@@ -110,8 +115,14 @@ airgap_step "verify Go builds offline from vendor/ (the step people skip)"
     cd "$src"
     go build -tags "$tags"            -o /dev/null ./public/app
     go build -tags "$tags,binary_log" -o /dev/null ./public/thestack/cmd/imzero2/
+    # The NATS core bus ships as a vendored Go *tool* dependency, not a monolith
+    # import (ADR-0026 §SD4: external binary, built here from source, never
+    # linked into the carrier). The target builds it from this same vendor/
+    # tree; prove its tool-package subtree vendored completely. No repo build
+    # tags apply — it is an ordinary upstream main package.
+    go build                          -o /dev/null github.com/nats-io/nats-server/v2
 )
-echo "    Go vendor is offline-complete."
+echo "    Go vendor is offline-complete (carrier, imzero2 cmd, nats-server)."
 
 mkdir -p "$src/_airgap/toolchains"
 
