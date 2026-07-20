@@ -276,16 +276,19 @@ func NewCommand() *cli.Command {
 
 			// ADR-0134: the ad-hoc dataset capability. Owns the encrypted
 			// store, custodies keys with the broker (its KeyStore), and
-			// registers ephemeral handles as queryable providers on
-			// introspect.Default. Best-effort: a start failure leaves
-			// adhoc.* unbound. The applet query path that binds an engine
-			// over this registry lands with the sqlapplet surface (SD4).
+			// registers ephemeral handles as queryable providers into the
+			// shared introspection registry, so an applet querying
+			// keelson('<handle>') resolves it through the same /query
+			// endpoint as any keelson table (the /table endpoint streams
+			// the in-process decrypt, §SD3 revised). Best-effort: a start
+			// failure leaves adhoc.* unbound.
+			introspectReg := introspect.NewRegistry()
 			var adhocSvc *adhocdata.Service
 			if chlocalSvc != nil {
 				var adhocErr error
 				adhocSvc, adhocErr = adhocdata.NewService(adhocdata.Config{
 					Bus:      bus,
-					Registry: introspect.Default,
+					Registry: introspectReg,
 					Keys:     chlocalSvc.KeyStore(),
 					Log:      log.Logger,
 				})
@@ -439,12 +442,19 @@ func NewCommand() *cli.Command {
 			// own process — the providers read live state (windowHostRef is nil
 			// in screenshot mode, dropping only keelson.windows). Gated by
 			// KEELSON_INTROSPECT_ENABLE; best-effort, never blocks boot.
-			introspectStop, introspectErr := introspecthost.Start(introspecthost.Deps{
+			introspectDeps := introspecthost.Deps{
 				WindowHost:       windowHostRef,
 				Bus:              bus,
 				ChlocalAvailable: chlocalSvc != nil,
+				Registry:         introspectReg,
 				Log:              log.Logger,
-			})
+			}
+			// Guard against the typed-nil interface trap: only hand over the
+			// broker as the ad-hoc decryptor when it actually started.
+			if chlocalSvc != nil {
+				introspectDeps.Decryptor = chlocalSvc
+			}
+			introspectStop, introspectErr := introspecthost.Start(introspectDeps)
 			if introspectErr != nil {
 				log.Warn().Err(introspectErr).Msg("introspect: table source unavailable")
 			}

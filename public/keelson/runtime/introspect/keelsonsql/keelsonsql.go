@@ -35,7 +35,7 @@ func BareNamePass(reg *introspect.Registry) nanopass.Pass {
 	return nanopass.LiftBodyPass(
 		"KeelsonExpandBare",
 		func(sql string) (string, error) {
-			return expand(reg, sql, func(name string) string { return name })
+			return expand(reg, sql, func(name string, _ introspect.Provider) string { return name })
 		},
 		nanopass.PassProperties{Idempotent: true, Reads: nanopass.RegionBody, Writes: nanopass.RegionBody},
 	)
@@ -43,18 +43,34 @@ func BareNamePass(reg *introspect.Registry) nanopass.Pass {
 
 // URLPass rewrites keelson('x') -> url('<baseURL>/table/x','ArrowStream'),
 // injecting baseURL (the running HTTP table source's BaseURL()). Used by a
-// preprocessor in front of an external clickhouse-local/-server.
+// preprocessor in front of an external clickhouse-local/-server. An
+// ad-hoc dataset (introspect.EncryptedDatasetI) additionally carries its
+// explicit structure as the third url() argument, so clickhouse applies
+// the controlled bounded-type mapping (ADR-0134 SD1) rather than its own
+// Arrow inference, and the /table endpoint streams the decrypt
+// (ADR-0134 §SD3, revised).
 func URLPass(reg *introspect.Registry, baseURL string) nanopass.Pass {
 	base := strings.TrimRight(baseURL, "/")
 	return nanopass.LiftBodyPass(
 		"KeelsonExpandURL",
 		func(sql string) (string, error) {
-			return expand(reg, sql, func(name string) string {
-				return "url('" + base + "/table/" + name + "', 'ArrowStream')"
+			return expand(reg, sql, func(name string, p introspect.Provider) string {
+				u := "url('" + base + "/table/" + name + "', 'ArrowStream'"
+				if enc, isEnc := p.(introspect.EncryptedDatasetI); isEnc {
+					u += ", " + sqlQuoteLiteral(enc.Structure())
+				}
+				return u + ")"
 			})
 		},
 		nanopass.PassProperties{Idempotent: true, Reads: nanopass.RegionBody, Writes: nanopass.RegionBody},
 	)
+}
+
+// sqlQuoteLiteral single-quotes a ClickHouse string literal, escaping
+// backslashes and single quotes (the structure string carries 'UTC').
+func sqlQuoteLiteral(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+	return "'" + r.Replace(s) + "'"
 }
 
 // RewriteAliases rewrites keelson('<alias>') to keelson('<handle>') for
@@ -121,7 +137,7 @@ func RewriteToURL(reg *introspect.Registry, baseURL, sql string) (string, error)
 // with target(x). An unknown or malformed table name is an error: the
 // name is validated against reg (so it can never reach a url() path or a
 // table identifier unless it is a registered, identifier-clean name).
-func expand(reg *introspect.Registry, sql string, target func(name string) string) (result string, err error) {
+func expand(reg *introspect.Registry, sql string, target func(name string, p introspect.Provider) string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
 		return "", eh.Errorf("keelsonsql: parse: %w", err)
@@ -144,10 +160,11 @@ func expand(reg *introspect.Registry, sql string, target func(name string) strin
 		if argErr != nil {
 			return "", argErr
 		}
-		if _, ok := reg.Lookup(name); !ok {
+		p, ok := reg.Lookup(name)
+		if !ok {
 			return "", eh.Errorf("keelsonsql: unknown keelson table %q", name)
 		}
-		nanopass.ReplaceNode(rw, fn, target(name))
+		nanopass.ReplaceNode(rw, fn, target(name, p))
 	}
 	return nanopass.GetText(rw), nil
 }

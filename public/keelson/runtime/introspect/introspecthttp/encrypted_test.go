@@ -1,6 +1,7 @@
 package introspecthttp
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -13,6 +14,14 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
+
+// fakeDecryptor returns a fixed plaintext for any handle, standing in for
+// the broker's real streaming decrypt.
+type fakeDecryptor struct{ plaintext []byte }
+
+func (f fakeDecryptor) OpenDatasetPlaintext(handle, path string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(f.plaintext)), nil
+}
 
 // TestServer_EncryptedDatasetRefused checks that the HTTP table source
 // refuses an ad-hoc dataset with a clear 4xx rather than attempting a
@@ -31,4 +40,24 @@ func TestServer_EncryptedDatasetRefused(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
 	assert.Contains(t, string(body), "ad-hoc dataset")
+}
+
+// TestServer_EncryptedDatasetDecrypts checks that with a decryptor wired,
+// /table streams the plaintext Arrow of an ad-hoc dataset (ADR-0134 §SD3,
+// revised).
+func TestServer_EncryptedDatasetDecrypts(t *testing.T) {
+	r := introspect.NewRegistry()
+	require.NoError(t, r.Register(introspect.NewEncryptedEntry("adhoc_x", nil, "id Int64", "/p/x.bxad", 1)))
+	plaintext := []byte("PLAINTEXT-ARROW-STREAM-BYTES")
+	s := New(Config{Registry: r, Decryptor: fakeDecryptor{plaintext}}, zerolog.Nop())
+	require.NoError(t, s.Start())
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
+
+	resp, err := http.Get(s.BaseURL() + "/table/adhoc_x")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "application/vnd.apache.arrow.stream", resp.Header.Get("Content-Type"))
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, plaintext, body)
 }

@@ -7,6 +7,7 @@ package introspecthttp
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -33,13 +34,14 @@ var ListenAddr = env.NewString(env.Spec{
 
 // Server serves introspection tables as ArrowStream over HTTP.
 type Server struct {
-	reg    *introspect.Registry
-	log    zerolog.Logger
-	addr   string
-	runner QueryRunner
-	passes *passreg.Registry
-	srv    *http.Server
-	ln     net.Listener
+	reg       *introspect.Registry
+	log       zerolog.Logger
+	addr      string
+	runner    QueryRunner
+	passes    *passreg.Registry
+	decryptor DatasetDecryptor
+	srv       *http.Server
+	ln        net.Listener
 }
 
 // Config parameterises a Server.
@@ -56,6 +58,20 @@ type Config struct {
 	// Passes supplies the registered pre-execute rewrites applied to
 	// /query SQL (ADR-0108 §SD6); defaults to passreg.Default.
 	Passes *passreg.Registry
+	// Decryptor, when set, lets /table serve ad-hoc datasets by streaming
+	// their in-process decryption (ADR-0134 §SD3, revised). nil keeps the
+	// refusal — an encrypted entry answers 4xx. This is loopback-only by
+	// construction: the server refuses non-loopback binds at Start.
+	Decryptor DatasetDecryptor
+}
+
+// DatasetDecryptor streams the plaintext Arrow of an ad-hoc dataset given
+// its handle and ciphertext path (ADR-0134). The broker's Service
+// satisfies it; taking an interface keeps introspecthttp from importing
+// the broker. The key never appears here — the implementation resolves it
+// in-process.
+type DatasetDecryptor interface {
+	OpenDatasetPlaintext(handle, path string) (io.ReadCloser, error)
 }
 
 // QueryRunner executes SQL (the FORMAT clause is already part of sql) with
@@ -93,7 +109,7 @@ func New(cfg Config, log zerolog.Logger) (s *Server) {
 	if ps == nil {
 		ps = passreg.Default
 	}
-	s = &Server{reg: reg, log: log, addr: addr, runner: cfg.Runner, passes: ps}
+	s = &Server{reg: reg, log: log, addr: addr, runner: cfg.Runner, passes: ps, decryptor: cfg.Decryptor}
 	s.srv = &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second}
 	return
 }
@@ -165,12 +181,13 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown introspection table: "+name, http.StatusNotFound)
 		return
 	}
-	// Ad-hoc datasets never ride HTTP: they decrypt only through the
-	// in-process engine's broker path, so plaintext cannot leave over the
-	// wire (ADR-0134 SD3). Refuse with a clear error rather than a 500
-	// from the snapshot attempt.
-	if _, enc := p.(introspect.EncryptedDatasetI); enc {
-		http.Error(w, "ad-hoc dataset "+name+" is not served over HTTP; query it through the in-process engine (ADR-0134 SD3)", http.StatusForbidden)
+	// An ad-hoc dataset is served by streaming its in-process decryption
+	// (ADR-0134 §SD3, revised): the broker resolves the key by handle and
+	// hands back a plaintext Arrow reader — the key never rides the wire,
+	// and this endpoint is loopback-only (non-loopback binds are refused at
+	// Start). Without a decryptor wired, it is refused.
+	if enc, isEnc := p.(introspect.EncryptedDatasetI); isEnc {
+		s.serveEncrypted(w, enc)
 		return
 	}
 	proj := introspect.AllColumns()
@@ -185,6 +202,31 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
 	_, _ = w.Write(b)
+}
+
+// serveEncrypted streams an ad-hoc dataset's decryption as ArrowStream
+// (ADR-0134 §SD3, revised). A decryptor must be wired (else 4xx). A
+// mid-stream decrypt failure — truncation or authentication error — cannot
+// change the already-sent status, so it aborts the connection, which
+// clickhouse-local's url() reader surfaces as a failed fetch: the query
+// fails as a whole rather than accepting a silently-truncated result.
+func (s *Server) serveEncrypted(w http.ResponseWriter, enc introspect.EncryptedDatasetI) {
+	if s.decryptor == nil {
+		http.Error(w, "ad-hoc dataset "+enc.Name()+" is not served here (no decryptor wired)", http.StatusForbidden)
+		return
+	}
+	rc, err := s.decryptor.OpenDatasetPlaintext(enc.Name(), enc.Path())
+	if err != nil {
+		s.log.Warn().Err(err).Str("table", enc.Name()).Msg("introspecthttp: open ad-hoc dataset")
+		http.Error(w, "ad-hoc dataset unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	defer func() { _ = rc.Close() }()
+	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+	if _, err = io.Copy(w, rc); err != nil {
+		s.log.Warn().Err(err).Str("table", enc.Name()).Msg("introspecthttp: ad-hoc dataset stream aborted")
+		panic(http.ErrAbortHandler)
+	}
 }
 
 // maxQueryBytes caps the SQL a /query request may carry.

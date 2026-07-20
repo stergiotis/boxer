@@ -62,6 +62,15 @@ type Deps struct {
 	// ChlocalAvailable reports whether the chlocalbroker service is running.
 	// When false, /query is left disabled even if Bus is set.
 	ChlocalAvailable bool
+	// Registry, when set, is the introspection registry to serve instead of
+	// a fresh private one. The runtime passes a shared registry so an
+	// ad-hoc dataset capability (ADR-0134) registering handles into it
+	// becomes queryable through this endpoint. nil builds a private
+	// registry (the historical behaviour).
+	Registry *introspect.Registry
+	// Decryptor, when set, lets /table stream ad-hoc datasets' in-process
+	// decryption (ADR-0134 §SD3, revised). nil keeps the refusal.
+	Decryptor introspecthttp.DatasetDecryptor
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -83,7 +92,10 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		return
 	}
 
-	reg := introspect.NewRegistry()
+	reg := deps.Registry
+	if reg == nil {
+		reg = introspect.NewRegistry()
+	}
 	if e := introspectproviders.RegisterStatic(reg); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: static provider registration failed")
 	}
@@ -113,7 +125,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		deps.Log.Warn().Err(e).Msg("introspecthost: catalog registration failed")
 	}
 
-	cfg := introspecthttp.Config{Registry: reg}
+	cfg := introspecthttp.Config{Registry: reg, Decryptor: deps.Decryptor}
 	if deps.ChlocalAvailable && deps.Bus != nil {
 		// Back POST /query with the chlocal broker so a co-resident client
 		// (apps/play) can query `SELECT ... FROM keelson('env')` here and get

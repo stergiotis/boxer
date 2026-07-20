@@ -88,3 +88,22 @@ func TestRewriteAliases(t *testing.T) {
 	assert.Contains(t, got, "keelson('adhoc_deadbeef01234567')")
 	assert.Contains(t, got, "keelson('env')")
 }
+
+func TestRewriteToURLEncryptedDataset(t *testing.T) {
+	r := testReg(t)
+	require.NoError(t, r.Register(introspect.NewEncryptedEntry(
+		"adhoc_deadbeef01234567", nil, "id Int64, ts DateTime64(6,'UTC')", "/p/x.bxad", 1)))
+
+	// An ad-hoc dataset gets the 3-arg url() with its explicit structure;
+	// the 'UTC' quotes inside the structure are escaped.
+	got, err := RewriteToURL(r, "http://127.0.0.1:8097/", "SELECT * FROM keelson('adhoc_deadbeef01234567')")
+	require.NoError(t, err)
+	assert.Equal(t,
+		`SELECT * FROM url('http://127.0.0.1:8097/table/adhoc_deadbeef01234567', 'ArrowStream', 'id Int64, ts DateTime64(6,\'UTC\')')`,
+		got)
+
+	// A regular introspection table still gets the 2-arg (inferred) form.
+	got, err = RewriteToURL(r, "http://127.0.0.1:8097/", "SELECT * FROM keelson('env')")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM url('http://127.0.0.1:8097/table/env', 'ArrowStream')", got)
+}
