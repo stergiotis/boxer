@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-20
+reviewed-by: "@spx"
+reviewed-date: 2026-07-20
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0134: Ad-hoc datasets — capability-mediated ephemeral data for SQL applets
 
@@ -227,8 +226,14 @@ encryption-aware chlocal layer that decrypts in a stream at query time.
   not architecture: `/tmp` defaults to half of RAM and worker scratch
   shares it, so appliance profiles tune `MaxMemoryPerWorker` and
   `MaxConcurrent` down. On desktops, tmpfs `/tmp` covers the transit
-  fallback; swap is a box-level concern (encrypted swap), recorded, not
-  solved here.
+  fallback, and the two bridges from RAM to persistent media each get a
+  line: **swap** is a box-level concern (encrypted swap), recorded, not
+  solved here; **core dumps** are closed at startup — the runtime
+  disables dumpability (`RLIMIT_CORE=0` / `PR_SET_DUMPABLE=0`), since a
+  stock systemd-coredump would otherwise write crashed-process memory —
+  keys and decrypted buffers included — to disk. Plain Go panics do not
+  dump core; the exposure is FFI and `unsafe` faults. On gokrazy the
+  read-only root makes the default `core_pattern` a no-op regardless.
 
 - **SD9 — Naming (open).** Proposed: concept **ad-hoc dataset**; package
   `public/keelson/runtime/adhocdata`; capability subjects
@@ -281,6 +286,14 @@ encryption-aware chlocal layer that decrypts in a stream at query time.
   at which access can be audited. Handles make the namespace ephemeral by
   construction and give the audit trail a subject.
 
+- **Enclave key storage (memguard-style mlocked pages outside the GC
+  heap).** Rejected: it genuinely protects the key's own storage —
+  locked, dump-excluded, wipeable — but the protection ends at the
+  stdlib-crypto boundary, where `aes.NewCipher` expands the key into
+  GC-heap round-key schedules no caller can erase. Under a threat model
+  that claims only the disk, the added dependency buys nothing the SD8
+  dumpability and swap lines do not.
+
 - **File-based transit on tmpfs as the primary path.** Recorded as the
   fallback, not the default: it is zero new code (the broker's temp-dir
   default already lands on tmpfs where `/tmp` is one), but it costs a full
@@ -310,9 +323,12 @@ encryption-aware chlocal layer that decrypts in a stream at query time.
   strategy with real concurrency obligations (writer goroutines, abort
   paths), a second registry entry kind, and an Arrow→ClickHouse structure
   mapping.
-- Cryptography enters the trust base, with honest residuals: Go cannot
-  reliably zeroise key material, and a worker consumes verified plaintext
-  prefix chunks before a truncation aborts the request.
+- Cryptography enters the trust base, with honest residuals: key erasure
+  is best-effort — Go can overwrite buffers it owns, but cannot enumerate
+  or erase runtime-made copies (moved goroutine stacks, stdlib round-key
+  schedules), which threatens the disk guarantee only through the swap
+  and core-dump bridges SD8 closes — and a worker consumes verified
+  plaintext prefix chunks before a truncation aborts the request.
 - Pasteable-complete weakens to pasteable-modulo-grant for dataset
   applets; the escape-hatch paste runs only where a grant can be re-bound.
 - The bounded type set constrains publishers; widening it is a deliberate
@@ -331,7 +347,7 @@ encryption-aware chlocal layer that decrypts in a stream at query time.
 
 ## Status
 
-Proposed (2026-07-20).
+Accepted (2026-07-20).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
