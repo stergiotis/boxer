@@ -25,6 +25,12 @@ type wireRequest struct {
 	// TEMPORARY tables by the broker. buscodec carries []byte as CBOR
 	// major type 2, so no base64 expansion.
 	InputTables map[string][]byte `json:"input_tables,omitempty"`
+	// EncryptedInputs binds chunk-encrypted Arrow datasets streamed
+	// through named pipes (ADR-0134 SD3). Optional field under the same
+	// wire version — broker and clients ship in one binary (in-process
+	// bus), the ADR-0133 M2 precedent. Only the path/structure/revision
+	// travel; the key is resolved broker-side from the KeyStore.
+	EncryptedInputs map[string]EncryptedInputRef `json:"encrypted_inputs,omitempty"`
 	// DeadlineUnixNanos encodes the caller's ctx.Deadline so the
 	// broker can shorten its own execution context. 0 means "no
 	// caller-supplied deadline"; the broker falls back to its

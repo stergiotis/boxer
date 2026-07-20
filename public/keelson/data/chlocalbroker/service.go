@@ -55,6 +55,7 @@ type Service struct {
 	timeout   time.Duration
 	busClient *inprocbus.Client
 	unsub     func()
+	keys      *KeyStore
 
 	mu      sync.Mutex
 	pools   map[string]*chlocalpool.Pool
@@ -77,6 +78,7 @@ func NewService(bus *inprocbus.Inst, poolCfg chlocalpool.Config, log zerolog.Log
 		poolCfg:  poolCfg,
 		cacheCfg: CacheConfig{}.withDefaults(),
 		timeout:  DefaultRequestTimeout,
+		keys:     NewKeyStore(),
 		pools:    make(map[string]*chlocalpool.Pool),
 		caches:   make(map[string]*poolCache),
 	}
@@ -102,6 +104,12 @@ func NewService(bus *inprocbus.Inst, poolCfg chlocalpool.Config, log zerolog.Log
 	svc.unsub = unsub
 	return
 }
+
+// KeyStore returns the broker's in-process dataset key store (ADR-0134
+// K2). The ad-hoc capability service registers handle→key here at
+// publish and deregisters at retract; the broker resolves the key by
+// table name when streaming an encrypted input. Keys never ride the bus.
+func (inst *Service) KeyStore() *KeyStore { return inst.keys }
 
 // SetRequestTimeout overrides DefaultRequestTimeout; useful when the
 // pool is expected to handle long-running queries (large data
@@ -200,6 +208,7 @@ type auditFields struct {
 	cacheable   bool
 	streaming   bool
 	inputTables int
+	encInputs   int
 	params      int
 	cacheHit    bool
 	latencyNs   int64
@@ -228,6 +237,9 @@ func (inst *Service) emitAudit(f auditFields) {
 		Int("bytes_out", f.bytesOut)
 	if f.inputTables > 0 {
 		ev = ev.Int("input_tables", f.inputTables)
+	}
+	if f.encInputs > 0 {
+		ev = ev.Int("encrypted_inputs", f.encInputs)
 	}
 	if f.params > 0 {
 		ev = ev.Int("params", f.params)
@@ -306,6 +318,22 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		}
 	}
 
+	// Encrypted inputs share the identifier charset and the input-table
+	// budget (ADR-0134 SD3).
+	aud.encInputs = len(req.EncryptedInputs)
+	for name := range req.EncryptedInputs {
+		if !validInputTableName(name) {
+			aud.errMsg = "invalid encrypted input name: " + name
+			inst.sendError(msg.Reply, aud.errMsg, "", 0)
+			return
+		}
+	}
+	if len(req.InputTables)+len(req.EncryptedInputs) > maxInputTables {
+		aud.errMsg = "too many input tables"
+		inst.sendError(msg.Reply, aud.errMsg, "", 0)
+		return
+	}
+
 	// Same discipline for parameter names (ADR-0133 §SD2).
 	aud.params = len(req.Params)
 	for name := range req.Params {
@@ -320,7 +348,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// InputTables and Params fold into the key so a volatile input or a
 	// changed binding never serves a stale hit under unchanged SQL
 	// (ADR-0094 §SD5, ADR-0133 §SD2).
-	key := foldParams(foldInputTables(computeCacheKey(req.SQL, req.Format, req.Settings), req.InputTables), req.Params)
+	key := foldEncryptedInputs(foldParams(foldInputTables(computeCacheKey(req.SQL, req.Format, req.Settings), req.InputTables), req.Params), req.EncryptedInputs)
 	aud.sqlBlake3 = hex.EncodeToString(key[:])
 
 	// Cache lookup (ADR-0028 §SD5). Eligibility = caller opted in
@@ -372,6 +400,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// (ADR-0094 §SD5). The files must outlive the worker's read, so
 	// cleanup is deferred to handler return — i.e. after Wait below.
 	sql := req.SQL
+	var preludes []string
 	if len(req.InputTables) > 0 {
 		prelude, cleanup, mErr := materializeInputTables(inst.poolCfg.BaseTmpDir, req.InputTables)
 		defer cleanup()
@@ -380,7 +409,25 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 			inst.sendError(msg.Reply, aud.errMsg, "", 0)
 			return
 		}
-		sql = prelude + req.SQL
+		preludes = append(preludes, prelude)
+	}
+	// Bind any EncryptedInputs as TEMPORARY tables streamed through named
+	// pipes (ADR-0134 SD3). materialize spawns the decrypt-streaming
+	// goroutines now; encWait joins them after the worker finishes.
+	var encWait func() error
+	if len(req.EncryptedInputs) > 0 {
+		prelude, wait, cleanup, mErr := materializeEncryptedInputs(ctx, inst.poolCfg.BaseTmpDir, req.EncryptedInputs, inst.keys)
+		defer cleanup()
+		if mErr != nil {
+			aud.errMsg = mErr.Error()
+			inst.sendError(msg.Reply, aud.errMsg, "", 0)
+			return
+		}
+		encWait = wait
+		preludes = append(preludes, prelude)
+	}
+	if len(preludes) > 0 {
+		sql = strings.Join(preludes, "") + req.SQL
 	}
 	// Parameter bindings ride a SET-prelude ahead of everything else
 	// (ADR-0133 §SD2) — injected after the cacheability gate above, so a
@@ -403,10 +450,25 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.sendError(msg.Reply, aud.errMsg, aud.stderrTail, 0)
 		return
 	}
-	if err = w.Wait(); err != nil {
-		aud.errMsg = err.Error()
+	waitErr := w.Wait()
+	// Join the encrypted-input streamers regardless of the worker's exit:
+	// on worker error this releases any writer still waiting to open its
+	// pipe; on clean exit a writer error (authentication failure,
+	// truncation) still fails the request, because the worker may have
+	// consumed the verified prefix and exited 0 (ADR-0134 SD3).
+	var encErr error
+	if encWait != nil {
+		encErr = encWait()
+	}
+	if waitErr != nil {
+		aud.errMsg = waitErr.Error()
 		aud.stderrTail = string(w.StderrTail())
 		inst.sendError(msg.Reply, aud.errMsg, aud.stderrTail, 0)
+		return
+	}
+	if encErr != nil {
+		aud.errMsg = "encrypted input: " + encErr.Error()
+		inst.sendError(msg.Reply, aud.errMsg, "", 0)
 		return
 	}
 

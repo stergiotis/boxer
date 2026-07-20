@@ -54,6 +54,32 @@ type ExecRequest struct {
 	// a cached entry never outlives a changed input under unchanged
 	// SQL — callers may set Cacheable even for volatile inputs.
 	InputTables map[string][]byte
+	// EncryptedInputs binds chunk-encrypted Arrow datasets as TEMPORARY
+	// tables, decrypted in a stream through named pipes at query time
+	// (ADR-0134 SD3). The per-dataset key is resolved broker-side from
+	// the KeyStore by table name and never rides this request; the ref
+	// carries only the ciphertext path, the explicit ArrowStream
+	// structure, and the revision. Names share the InputTables
+	// identifier charset and count toward the same maxInputTables
+	// budget. Only `(name, revision)` folds into the cache key, so a
+	// same-revision requery is a legitimate hit and a republish (new
+	// revision) misses. Confined to the in-process engine route; the
+	// HTTP table source refuses these (plaintext never rides HTTP).
+	EncryptedInputs map[string]EncryptedInputRef
+}
+
+// EncryptedInputRef locates one chunk-encrypted Arrow dataset for a
+// streaming decrypt (ADR-0134 SD3). The key is not here — the broker
+// resolves it from its KeyStore by the table name this ref is keyed
+// under.
+type EncryptedInputRef struct {
+	// Path is the absolute path to the chunk-encrypted Arrow file.
+	Path string `json:"path"`
+	// Structure is the explicit ClickHouse structure string the
+	// ArrowStream read requires (schema inference over a pipe fails).
+	Structure string `json:"structure"`
+	// Revision is the dataset revision; it folds into the cache key.
+	Revision uint64 `json:"revision"`
 }
 
 // ExecReply wraps a broker response. The embedded ReadCloser exposes
@@ -108,13 +134,14 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 		return
 	}
 	wireReq := wireRequest{
-		SQL:         req.SQL,
-		Format:      req.Format,
-		Streaming:   req.Streaming,
-		Cacheable:   req.Cacheable,
-		Settings:    req.Settings,
-		Params:      req.Params,
-		InputTables: req.InputTables,
+		SQL:             req.SQL,
+		Format:          req.Format,
+		Streaming:       req.Streaming,
+		Cacheable:       req.Cacheable,
+		Settings:        req.Settings,
+		Params:          req.Params,
+		InputTables:     req.InputTables,
+		EncryptedInputs: req.EncryptedInputs,
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		wireReq.DeadlineUnixNanos = deadline.UnixNano()

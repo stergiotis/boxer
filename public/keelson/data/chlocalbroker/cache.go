@@ -1,6 +1,7 @@
 package chlocalbroker
 
 import (
+	"encoding/binary"
 	"sort"
 	"strings"
 	"sync"
@@ -169,6 +170,41 @@ func foldInputTables(base cacheKey, inputTables map[string][]byte) (key cacheKey
 		_, _ = h.Write([]byte{0})
 		_, _ = h.Write(inputTables[name])
 		_, _ = h.Write([]byte{0})
+	}
+	sum := h.Sum(nil)
+	copy(key[:], sum)
+	return
+}
+
+// foldEncryptedInputs derives a new cache key from a base key and a
+// request's EncryptedInputs, folding only each `(name, revision)` pair
+// in sorted-name order (ADR-0134 SD3) — never the key or the ciphertext
+// path. A same-revision requery therefore keys identically (a
+// legitimate cache hit), while a republish bumps the revision and
+// misses. The leading domain tag (3) keeps this fold byte-distinct from
+// foldInputTables (the base family) and foldParams (tag 2), so an
+// encrypted input named `a` at revision r never aliases an input table
+// or a param named `a`.
+func foldEncryptedInputs(base cacheKey, enc map[string]EncryptedInputRef) (key cacheKey) {
+	if len(enc) == 0 {
+		key = base
+		return
+	}
+	names := make([]string, 0, len(enc))
+	for name := range enc {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	h := blake3.New(32, nil)
+	_, _ = h.Write(base[:])
+	_, _ = h.Write([]byte{3}) // domain tag: encrypted inputs
+	var rev [8]byte
+	for _, name := range names {
+		_, _ = h.Write([]byte(name))
+		_, _ = h.Write([]byte{3})
+		binary.BigEndian.PutUint64(rev[:], enc[name].Revision)
+		_, _ = h.Write(rev[:])
+		_, _ = h.Write([]byte{3})
 	}
 	sum := h.Sum(nil)
 	copy(key[:], sum)
