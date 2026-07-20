@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -33,6 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
@@ -109,6 +111,11 @@ func NewCommand() *cli.Command {
 			}
 			var application_ *application.Application[*runtime.Unmarshaller]
 			var err error
+
+			// ADR-0134 SD8: close the core-dump bridge before any key or
+			// decrypted buffer can exist, so a crash cannot spill process
+			// memory to disk. Unconditional, best-effort.
+			adhocdata.DisableCoreDumps(log.Logger)
 
 			// Runtime identity + audit setup. Best-effort throughout —
 			// audit-trail failures never block boot. Identity is taken
@@ -264,6 +271,34 @@ func NewCommand() *cli.Command {
 					ctx, cancel := gocontext.WithTimeout(gocontext.Background(), 5*time.Second)
 					defer cancel()
 					_ = chlocalSvc.Stop(ctx)
+				}
+			}()
+
+			// ADR-0134: the ad-hoc dataset capability. Owns the encrypted
+			// store, custodies keys with the broker (its KeyStore), and
+			// registers ephemeral handles as queryable providers on
+			// introspect.Default. Best-effort: a start failure leaves
+			// adhoc.* unbound. The applet query path that binds an engine
+			// over this registry lands with the sqlapplet surface (SD4).
+			var adhocSvc *adhocdata.Service
+			if chlocalSvc != nil {
+				var adhocErr error
+				adhocSvc, adhocErr = adhocdata.NewService(adhocdata.Config{
+					Bus:      bus,
+					Registry: introspect.Default,
+					Keys:     chlocalSvc.KeyStore(),
+					Log:      log.Logger,
+				})
+				if adhocErr != nil {
+					log.Warn().Err(adhocErr).Msg("adhocdata: service start failed; adhoc.* will be unbound")
+					adhocSvc = nil
+				}
+			}
+			defer func() {
+				if adhocSvc != nil {
+					ctx, cancel := gocontext.WithTimeout(gocontext.Background(), 5*time.Second)
+					defer cancel()
+					_ = adhocSvc.Close(ctx)
 				}
 			}()
 
