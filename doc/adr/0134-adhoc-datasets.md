@@ -412,6 +412,51 @@ regenerating mid-flight would fold in unrelated in-progress specs. Binary
 placement on the appliance stays deferred to the ADR-0128 boot probe,
 unchanged.
 
+## Update 2026-07-20 — Query path (SD3 revised)
+
+The query path deferred above is now implemented, and it does **not** take
+the in-process engine route SD3 prescribed. On review, that route could
+not reach the applet — an `endpoint: introspection` applet queries over
+HTTP, not through an in-process engine — and it diverges from the recorded
+direction that `keelson(...)` may become a native ClickHouse table
+function. So SD3's *transport* is revised (the store, keys, capability,
+and bounded type set are unchanged):
+
+- **Served over the existing url() path.** The `/query` endpoint's
+  `keelson('<handle>')`→`url('.../table/<handle>','ArrowStream')` rewrite
+  now emits a **third argument, the explicit structure**, for an ad-hoc
+  dataset, so clickhouse applies the SD1 bounded-type mapping the publish
+  gate already computes rather than its own Arrow inference. The applet's
+  HTTP client is unchanged; ad-hoc becomes a first-class keelson table.
+- **Decrypted in-process at `/table`.** The `/table/<handle>` endpoint,
+  given a decryptor, resolves the key from the broker's KeyStore **by
+  handle** (the broker stays the decrypt executor, K2) and streams the
+  plaintext Arrow as the HTTP response. The **key never rides the wire** —
+  only the handle, already catalog-visible, does. A mid-stream
+  authentication or truncation failure aborts the connection, so the query
+  fails rather than accepting a truncated result.
+- **`"plaintext never rides HTTP"` becomes `"plaintext rides only loopback
+  HTTP, decrypted in-process by handle."`** The introspection endpoint is
+  loopback-bound (non-loopback binds are refused at Start), so plaintext
+  stays in-memory on the loopback socket — the same in-memory exposure as
+  the pipe's kernel buffer, defensible under the disk-only threat model
+  (SD2). The honest cost: a loopback socket is a marginally broader
+  surface than an fd-scoped pipe (a privileged local observer could sniff
+  `lo`), and there are now **two decrypt paths** — the broker pipe
+  (SD3-as-written) and this handler — where the original wanted one.
+- **The pipe/engine route is kept**, not deleted: it remains the decrypt
+  path for a direct in-process `introspectengine.Engine` consumer, and its
+  `KeyStore` and AEAD reader are reused by the handler route. If the url()
+  route proves dominant, the pipe machinery is retirable later.
+
+Rationale: this reuses the transport play already speaks (near-zero applet
+change), keeps SD1's total mapping via the explicit structure argument,
+and is a stepping stone to a native `keelson()` table function — which
+would also resolve server-side and could supersede this handler. Verified
+end to end: publish, then query `keelson('<handle>')` over `/query`
+through url() and the `/table` decrypt; a mixed ad-hoc + `env` query; and
+a republish seen on the next query.
+
 ## Status
 
 Accepted (2026-07-20).
