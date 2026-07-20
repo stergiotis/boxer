@@ -345,6 +345,73 @@ encryption-aware chlocal layer that decrypts in a stream at query time.
   per-applet attribution of embedded instances is the one open fork there
   (SD7).
 
+## Update 2026-07-20 — Implementation (M1–M7)
+
+Implemented M1–M7. The store, capability service, streaming-decrypt
+broker, registry entry kind, engine routing, and catalog are in place and
+tested end to end: publish an encrypted dataset, then query
+`keelson('<handle>')` through the in-process engine, decrypting through a
+named pipe, and the rows match; a wrong key or a truncated ciphertext
+fails the request; the `keelson('adhoc')` catalog lists and shrinks; a
+republish invalidates the revision-keyed cache. Three things diverged
+from the text above and are recorded here rather than rewritten into it.
+
+**SD3 pipe writer — `O_WRONLY`, not `O_RDWR`.** The decision has the
+writer open the fifo `O_RDWR` so the open never blocks. Verified against
+clickhouse-local 26.6.1, that races: the reader blocks until pipe EOF —
+it does *not* stop at the Arrow end-of-stream marker — so the writer must
+close the pipe to end the read, and a bare `O_RDWR`-then-close can close
+before the reader opens, discarding the payload and leaving the reader's
+own open to block forever with no writer present. The shipped writer
+instead polls `O_WRONLY|O_NONBLOCK` (which returns `ENXIO` until a reader
+is present), so the write side opens strictly after the read side and the
+ordering is guaranteed; it then streams and closes for a clean EOF. The
+poll is context-bounded so a worker that never reaches the read cannot
+strand the writer, and the fd stays under the Go poller so a write past
+the pipe buffer parks rather than failing. Everything else in SD3 holds:
+constant memory, no whole-plaintext copy, and abort-on-writer-error even
+when the worker consumed the verified prefix and exited 0.
+
+**SD5 freshness — an instance trigger, not a graph signal.** The decision
+registers the dataset revision as an ADR-0097 signal. It ships instead as
+an instance-level trigger: `NotifyDatasetRevision(alias, revision)` sets
+the ordinary auto-run request when Live main is on, so a republish
+re-runs through the same path the Run button uses. This keeps the SD4
+promise — no new reactivity machinery, an explicit Run always works —
+without threading an out-of-band revision bump through the signal store,
+whose encodable value set and per-frame snapshot semantics fit it poorly.
+The SD7 open fork is settled as it leaned: an embedded instance's queries
+attribute to a composed stamp `<embedder-app-id>#<slug>`, so per-applet
+slicing survives embedding; a standalone applet keeps its minted id.
+
+**Query path from an applet — deferred.** The applet surface ships and is
+unit-tested: the delivery ops, the `datasets:` frontmatter, the
+`NewEmbedded` embedder constructor, and the client-side
+`keelson('<alias>')`→`keelson('<handle>')` rewrite. Making an ad-hoc
+dataset actually *resolve* from an `endpoint: introspection` applet is
+left open deliberately. Such an applet queries over HTTP against the
+introspection host's private registry via the `url()` rewrite, and that
+`/table` path refuses encrypted datasets (SD3) and never sees the handles
+anyway (they register into `introspect.Default`, which the host does not
+serve). The only reader of an ad-hoc dataset is an in-process
+`introspectengine.Engine` over `introspect.Default`, which no production
+surface constructs yet. Rather than commit to a bridge — a second
+engine-backed endpoint, or unifying the host's `/query` on the in-process
+engine — the query path is deferred; the recorded direction is that
+`keelson(...)` itself may become a native ClickHouse table function
+resolving against a single live keelson instance, which would supersede
+either bridge. The rewrite is pure alias→handle indirection and plugs
+into any of them unchanged. The M8 dogfood (a publishing embedder with
+live verification) defers with the query path, since its verification is
+querying the dataset it publishes.
+
+The `RLIMIT_CORE=0` startup hardening (SD8) ships and is wired into the
+shell. `BOXER_ADHOC_DIR` is declared in the ADR-0009 env registry; its
+generated `doc/env-vars.md` row awaits a clean-tree regeneration, since
+regenerating mid-flight would fold in unrelated in-progress specs. Binary
+placement on the appliance stays deferred to the ADR-0128 boot probe,
+unchanged.
+
 ## Status
 
 Accepted (2026-07-20).
