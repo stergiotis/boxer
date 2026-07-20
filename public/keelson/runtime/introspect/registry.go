@@ -36,6 +36,22 @@ func (r *Registry) Register(p Provider) (err error) {
 	return
 }
 
+// Unregister removes the provider for name if present, reporting whether
+// one was removed. It is the counterpart to Register for ephemeral
+// entries (ADR-0134): an ad-hoc dataset is retracted by unregistering
+// its handle, so the name stops resolving and the namespace does not
+// leak. System introspection providers are registered once at startup
+// and never unregistered.
+func (r *Registry) Unregister(name string) (removed bool) {
+	r.mu.Lock()
+	if _, ok := r.byName[name]; ok {
+		delete(r.byName, name)
+		removed = true
+	}
+	r.mu.Unlock()
+	return
+}
+
 // Lookup returns the provider for table name.
 func (r *Registry) Lookup(name string) (p Provider, ok bool) {
 	r.mu.RLock()
@@ -77,6 +93,9 @@ var Default = NewRegistry()
 
 // Register adds p to the Default registry.
 func Register(p Provider) error { return Default.Register(p) }
+
+// Unregister removes name from the Default registry.
+func Unregister(name string) bool { return Default.Unregister(name) }
 
 // validTableName reports whether name is a safe ClickHouse identifier
 // for use as a TEMPORARY table name and a URL path segment:

@@ -64,6 +64,24 @@ type Provider interface {
 	Snapshot(proj Projection) (arrow.RecordBatch, error)
 }
 
+// EncryptedDatasetI marks a Provider whose rows are not snapshotted in
+// process but streamed from a chunk-encrypted file through the chlocal
+// broker at query time (ADR-0134). The in-process engine detects this
+// kind by type assertion and routes it to
+// chlocalbroker.ExecRequest.EncryptedInputs instead of snapshotting; the
+// HTTP table source refuses it, so plaintext never rides HTTP and
+// exactly one decrypt path exists. Its Snapshot always errors.
+type EncryptedDatasetI interface {
+	Provider
+	// Structure is the explicit ClickHouse structure string the
+	// ArrowStream read requires (schema inference over a pipe fails).
+	Structure() string
+	// Path is the absolute path to the chunk-encrypted Arrow file.
+	Path() string
+	// Revision is the dataset revision; a republish bumps it.
+	Revision() uint64
+}
+
 // Projection selects which columns a Snapshot materialises. The zero
 // value selects nothing; use AllColumns() for "every column". Column
 // pruning is only an optimisation: an over-broad projection is always

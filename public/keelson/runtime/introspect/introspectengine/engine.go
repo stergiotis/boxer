@@ -171,29 +171,46 @@ func (e *Engine) plan(sql string) (p queryPlan) {
 // chlocal broker.
 func (e *Engine) exec(ctx context.Context, sql, format string, tables []string, proj map[string]introspect.Projection) (body []byte, contentType string, err error) {
 	var inputs map[string][]byte
-	if len(tables) > 0 {
-		inputs = make(map[string][]byte, len(tables))
-		for _, t := range tables {
-			prov, ok := e.reg.Lookup(t)
-			if !ok {
-				continue
-			}
-			pj, ok := proj[t]
-			if !ok {
-				pj = introspect.AllColumns()
-			}
-			b, snapErr := introspect.SnapshotFile(prov, pj)
-			if snapErr != nil {
-				return nil, "", eh.Errorf("introspectengine: snapshot %q: %w", t, snapErr)
-			}
-			inputs[t] = b
+	var encInputs map[string]chlocalbroker.EncryptedInputRef
+	for _, t := range tables {
+		prov, ok := e.reg.Lookup(t)
+		if !ok {
+			continue
 		}
+		// Ad-hoc datasets are not snapshotted: they stream from an
+		// encrypted file through the broker's decrypt path (ADR-0134 SD3).
+		// Mixed queries (adhoc JOIN a snapshot provider) work because each
+		// referenced table is routed by its own kind.
+		if enc, isEnc := prov.(introspect.EncryptedDatasetI); isEnc {
+			if encInputs == nil {
+				encInputs = make(map[string]chlocalbroker.EncryptedInputRef, len(tables))
+			}
+			encInputs[t] = chlocalbroker.EncryptedInputRef{
+				Path:      enc.Path(),
+				Structure: enc.Structure(),
+				Revision:  enc.Revision(),
+			}
+			continue
+		}
+		pj, ok := proj[t]
+		if !ok {
+			pj = introspect.AllColumns()
+		}
+		b, snapErr := introspect.SnapshotFile(prov, pj)
+		if snapErr != nil {
+			return nil, "", eh.Errorf("introspectengine: snapshot %q: %w", t, snapErr)
+		}
+		if inputs == nil {
+			inputs = make(map[string][]byte, len(tables))
+		}
+		inputs[t] = b
 	}
 
 	rep, reqErr := chlocalbroker.ExecOnPool(ctx, e.bus, e.poolName, chlocalbroker.ExecRequest{
-		SQL:         sql,
-		Format:      format,
-		InputTables: inputs,
+		SQL:             sql,
+		Format:          format,
+		InputTables:     inputs,
+		EncryptedInputs: encInputs,
 	})
 	if reqErr != nil {
 		return nil, "", reqErr

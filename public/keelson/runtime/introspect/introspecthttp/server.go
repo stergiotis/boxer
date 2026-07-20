@@ -165,6 +165,14 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown introspection table: "+name, http.StatusNotFound)
 		return
 	}
+	// Ad-hoc datasets never ride HTTP: they decrypt only through the
+	// in-process engine's broker path, so plaintext cannot leave over the
+	// wire (ADR-0134 SD3). Refuse with a clear error rather than a 500
+	// from the snapshot attempt.
+	if _, enc := p.(introspect.EncryptedDatasetI); enc {
+		http.Error(w, "ad-hoc dataset "+name+" is not served over HTTP; query it through the in-process engine (ADR-0134 SD3)", http.StatusForbidden)
+		return
+	}
 	proj := introspect.AllColumns()
 	if cols := r.URL.Query().Get("cols"); cols != "" {
 		proj = introspect.Columns(splitCols(cols)...)
