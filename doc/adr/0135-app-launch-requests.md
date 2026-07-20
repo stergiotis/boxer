@@ -177,6 +177,13 @@ Adopt **O2**.
   (ADR-0024 territory); if it comes, it should compose *onto*
   `windowhost.open` rather than beside it.
 
+- **Content-based routing (a rules layer choosing the target).** The
+  Plan 9 plumber and Android implicit intents route by message content
+  under user- or system-owned rules, so the sender need not name an app.
+  Deferred, not killed: a router would be an ordinary caller layered
+  *over* `windowhost.open`. v1 composition is explicit — the caller
+  names the target.
+
 - **Reuse/focus window policy now.** Deferred (SD5) — speculative until a
   concrete app needs it, and it complicates delivery semantics (a reused
   window has already consumed its Mount).
@@ -242,8 +249,28 @@ Internal:
 
 External prior art:
 
-- **Android explicit Intents** — typed, declared extras delivered at
-  component start; the closest analog of kind-declared launch configs.
+- **Plan 9 plumbing** (Pike, *Plumbing and Other Utilities*) — the
+  sharpest ancestor: six-field messages with attributes delivered to
+  app-declared **ports** (the `LaunchKind` analog), the plumber starting
+  the target when no reader exists and holding the message for
+  delivery-at-start — SD1/SD4's shape, two decades earlier. Its
+  user-programmable content routing is the layer recorded-deferred in
+  Alternatives.
+- **Android explicit Intents** — caller-named target, delivery at
+  component start. Instructively *not* typed: `Bundle` extras are
+  schema-less, and Android's own URI permission grants cannot ride them
+  — boundary mediation fails exactly where typing stops, an independent
+  kill-reason for O3.
+- **Apple App Intents** — the closest modern analog: `@Parameter`-typed
+  intents over a registered entity vocabulary (`AppEntity`), enumerable
+  by system surfaces (Shortcuts, Spotlight); validates SD3's declared,
+  introspectable launch surface.
+- **Fuchsia component manifests (CML)** — `use`/`offer`/`expose`
+  capability routing declared in build-compiled manifests, statically
+  walkable; the whole-OS version of manifest-declared reach.
+- **Web Intents** (deprecated 2012) — the recorded failure: its
+  post-mortem names over-broad, developer-extensible intent types as a
+  root cause, supporting SD2's bounded append-only vocabulary.
 - **D-Bus service activation** — a host starting the target to deliver a
   typed request; the same bootstrapping resolution as SD1.
 - **x-callback-url / desktop URL schemes** — the schema-less contrast
