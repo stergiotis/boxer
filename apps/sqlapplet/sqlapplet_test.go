@@ -141,6 +141,19 @@ func TestParseDocShapes(t *testing.T) {
 	require.Empty(t, errs)
 	require.NotNil(t, def)
 	assert.Equal(t, []TabSel{{ID: "table", Node: "recent"}, {ID: "detail"}}, def.Tabs)
+
+	// A datasets list declares the ad-hoc aliases the buffer references
+	// (ADR-0134 §SD4); absent is nil.
+	def, errs = parseOne(t, "ds.md", docMD("title: DS\ndatasets: [items, series_a]",
+		"```sql\nSELECT * FROM keelson('items')\n```"))
+	require.Empty(t, errs)
+	require.NotNil(t, def)
+	assert.Equal(t, []string{"items", "series_a"}, def.Datasets)
+
+	def, errs = parseOne(t, "nods.md", docMD("title: NoDS", "```sql\nSELECT 1\n```"))
+	require.Empty(t, errs)
+	require.NotNil(t, def)
+	assert.Nil(t, def.Datasets)
 }
 
 func TestParseDocErrors(t *testing.T) {
@@ -163,6 +176,9 @@ func TestParseDocErrors(t *testing.T) {
 		{"tabs_empty_node", "a.md", "title: A\ntabs: [\"table:\"]", sqlFence, "empty node binding"},
 		{"tabs_duplicate", "a.md", "title: A\ntabs: [table, table]", sqlFence, "twice"},
 		{"tabs_bad_shape", "a.md", "title: A\ntabs: yes-please", sqlFence, "must be \"auto\" or a list"},
+		{"datasets_not_list", "a.md", "title: A\ndatasets: nope", sqlFence, "must be a list"},
+		{"datasets_bad_alias", "a.md", "title: A\ndatasets: [bad-alias]", sqlFence, "not a bare identifier"},
+		{"datasets_duplicate", "a.md", "title: A\ndatasets: [items, items]", sqlFence, "twice"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -184,4 +200,44 @@ func TestMintDuplicateSlugAcrossBooks(t *testing.T) {
 	assert.Equal(t, 1, minted, "first book wins deterministically (sorted by book id)")
 	require.Len(t, errs, 1)
 	assert.True(t, strings.Contains(errs[0].Error(), "already minted"))
+}
+
+func TestResolveClientConfig(t *testing.T) {
+	// An explicit endpoint override wins.
+	cfg, err := resolveClientConfig(&AppletDef{Slug: "x"}, "http://over/query")
+	require.NoError(t, err)
+	assert.Equal(t, "http://over/query", cfg.URL)
+
+	// Introspection with no live endpoint (empty in tests) errors clearly.
+	_, err = resolveClientConfig(&AppletDef{Slug: "x", Endpoint: EndpointIntrospection}, "")
+	require.Error(t, err)
+}
+
+func TestNewEmbedded(t *testing.T) {
+	def := &AppletDef{
+		Slug:     "demo",
+		Title:    "Demo",
+		SQL:      "SELECT * FROM keelson('items')",
+		Endpoint: EndpointIntrospection,
+		Class:    analysis.QuerySecurityRead,
+		Datasets: []string{"items"},
+	}
+	pa, err := NewEmbedded(def, EmbedConfig{
+		StampAppId:  "embedder#demo",
+		RunId:       "run1",
+		Log:         zerolog.Nop(),
+		EndpointURL: "http://example.invalid/query",
+		Bindings:    map[string]string{"items": "adhoc_deadbeef01234567"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, pa)
+	t.Cleanup(func() { pa.Close() })
+
+	// A malformed binding is rejected.
+	_, err = NewEmbedded(def, EmbedConfig{
+		Log:         zerolog.Nop(),
+		EndpointURL: "http://example.invalid/query",
+		Bindings:    map[string]string{"items": "bad-handle"},
+	})
+	require.Error(t, err)
 }

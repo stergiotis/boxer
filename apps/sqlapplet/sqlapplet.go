@@ -76,12 +76,22 @@ type AppletDef struct {
 	// prelude-bound buffer does not (its params re-run via the strip's
 	// prelude rewrite and an explicit or auto Run).
 	HasUnboundSlots bool
+	// Datasets are the stable ad-hoc dataset aliases the buffer references
+	// as keelson('<alias>') (ADR-0134 §SD4). An embedder binds each to an
+	// ephemeral handle before mount. The corpus gate treats them as
+	// valid-by-declaration.
+	Datasets []string
 }
 
 // slugPattern is the accepted applet-slug shape. The slug becomes the minted
 // Manifest.Id basename and therefore its NATS-safe SubjectAlias — keep it to
 // lowercase alphanumerics and dashes.
 var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// datasetAliasPattern is the accepted ad-hoc dataset alias shape: a bare
+// ClickHouse identifier, since it is interpolated as keelson('<alias>')
+// and rewritten to a handle client-side (ADR-0134 §SD4).
+var datasetAliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // resultTabIDs are play's result-panel registry slugs an explicit `tabs:`
 // list may name (the chrome tabs are never listable — attenuation removes
@@ -265,6 +275,9 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	if def.Tabs, err = parseTabs(bookID, path, fm["tabs"]); err != nil {
 		return
 	}
+	if def.Datasets, err = parseDatasets(bookID, path, fm["datasets"]); err != nil {
+		return
+	}
 	// The §SD5 class, computed once per corpus at parse time. An
 	// unclassifiable buffer is a definition error (§SD6), never a runtime
 	// surprise — the conservative direction with the corpus as the gate.
@@ -362,6 +375,40 @@ func parseTabs(bookID string, path string, v any) (tabs []TabSel, err error) {
 		}
 		seen[sel.ID] = struct{}{}
 		tabs = append(tabs, sel)
+	}
+	return
+}
+
+// parseDatasets maps the frontmatter `datasets` value: absent is nil; a
+// list of identifier-shaped aliases the buffer references as
+// keelson('<alias>'), each bound to an ephemeral handle by the embedder
+// before mount (ADR-0134 §SD4). Duplicates are a definition error.
+func parseDatasets(bookID string, path string, v any) (datasets []string, err error) {
+	if v == nil {
+		return
+	}
+	list, isList := v.([]any)
+	if !isList {
+		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `datasets` must be a list", bookID, path)
+		return
+	}
+	seen := make(map[string]struct{}, len(list))
+	for _, item := range list {
+		alias, isStr := item.(string)
+		if !isStr {
+			err = eh.Errorf("sqlapplet: %s/%s: `datasets` entries must be strings", bookID, path)
+			return
+		}
+		if len(alias) > 64 || !datasetAliasPattern.MatchString(alias) {
+			err = eh.Errorf("sqlapplet: %s/%s: `datasets` alias %q is not a bare identifier", bookID, path, alias)
+			return
+		}
+		if _, dup := seen[alias]; dup {
+			err = eh.Errorf("sqlapplet: %s/%s: `datasets` lists %q twice", bookID, path, alias)
+			return
+		}
+		seen[alias] = struct{}{}
+		datasets = append(datasets, alias)
 	}
 	return
 }

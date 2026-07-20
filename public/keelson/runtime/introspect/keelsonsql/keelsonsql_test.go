@@ -65,3 +65,26 @@ func TestRewriteScalarKeelsonUntouched(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, in, got)
 }
+
+func TestRewriteAliases(t *testing.T) {
+	b := map[string]string{"items": "adhoc_deadbeef01234567"}
+
+	// A bound alias is rewritten to its handle; the alias literal is gone.
+	got := RewriteAliases("SELECT * FROM keelson('items') ORDER BY x", b)
+	assert.Contains(t, got, "keelson('adhoc_deadbeef01234567')")
+	assert.NotContains(t, got, "'items'")
+
+	// An unbound name passes through untouched.
+	assert.Equal(t, "SELECT * FROM keelson('env')", RewriteAliases("SELECT * FROM keelson('env')", b))
+
+	// No bindings is the identity.
+	assert.Equal(t, "SELECT 1", RewriteAliases("SELECT 1", nil))
+
+	// A parse failure passes through rather than erroring.
+	assert.Equal(t, "NOT SQL ((", RewriteAliases("NOT SQL ((", b))
+
+	// Mixed: only the bound one moves.
+	got = RewriteAliases("SELECT (SELECT count() FROM keelson('items')) + (SELECT count() FROM keelson('env'))", b)
+	assert.Contains(t, got, "keelson('adhoc_deadbeef01234567')")
+	assert.Contains(t, got, "keelson('env')")
+}

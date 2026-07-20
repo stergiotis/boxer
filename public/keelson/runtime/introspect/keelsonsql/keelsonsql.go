@@ -57,6 +57,56 @@ func URLPass(reg *introspect.Registry, baseURL string) nanopass.Pass {
 	)
 }
 
+// RewriteAliases rewrites keelson('<alias>') to keelson('<handle>') for
+// each alias present in bindings, leaving every other keelson(...) call —
+// and all other SQL — untouched (ADR-0134 §SD4). It is the client-side
+// indirection that lets an applet's buffer name a stable alias while an
+// instance binds it to an ephemeral dataset handle. Unlike expand, an
+// unbound or unknown name is not an error: it passes through for the
+// downstream (server-side) keelson pass to resolve or reject. Best-effort
+// — a parse failure returns the input unchanged, since the same SQL will
+// surface a clear error when it executes. The handles come from a
+// validated binding map, so no quoting or escaping is needed.
+func RewriteAliases(sql string, bindings map[string]string) (result string) {
+	if len(bindings) == 0 {
+		return sql
+	}
+	pr, err := nanopass.Parse(sql)
+	if err != nil {
+		return sql
+	}
+	calls := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		fn, ok := ctx.(*grammar1.TableFunctionExprContext)
+		if !ok {
+			return false
+		}
+		id := fn.Identifier()
+		return id != nil && strings.EqualFold(nanopass.DecodeIdentifier(id.GetText()), FuncName)
+	})
+	if len(calls) == 0 {
+		return sql
+	}
+	rw := nanopass.NewRewriter(pr)
+	changed := false
+	for _, c := range calls {
+		fn := c.(*grammar1.TableFunctionExprContext)
+		name, argErr := tableArg(fn)
+		if argErr != nil {
+			continue // leave a malformed call for the server to reject
+		}
+		handle, ok := bindings[name]
+		if !ok {
+			continue // unbound names pass through untouched
+		}
+		nanopass.ReplaceNode(rw, fn, FuncName+"('"+handle+"')")
+		changed = true
+	}
+	if !changed {
+		return sql
+	}
+	return nanopass.GetText(rw)
+}
+
 // RewriteToBare runs BareNamePass over sql.
 func RewriteToBare(reg *introspect.Registry, sql string) (string, error) {
 	return BareNamePass(reg).Run(sql)

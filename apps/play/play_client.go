@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -70,6 +72,13 @@ type Client struct {
 	// at Mount; empty outside the runtime (standalone CLI, tests).
 	stampRunId string
 	stampAppId string
+
+	// datasetBindings maps a stable ad-hoc dataset alias to the ephemeral
+	// handle an embedder bound it to (ADR-0134 §SD4). Guarded by mu; read
+	// by buildResidual on lane goroutines, written by bindDataset on the
+	// render thread. keelson('<alias>') rewrites to keelson('<handle>')
+	// before the request leaves play; unbound names pass through.
+	datasetBindings map[string]string
 }
 
 func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
@@ -291,6 +300,12 @@ func (inst *Client) fetchColumnNames(ctx context.Context, db string, table strin
 // (step 3). Keeping the probe on this path is what makes its verdict match a
 // real Run byte-for-byte: both degrade identically on unparseable input.
 func (inst *Client) buildResidual(sql string) (residual string, params map[string]string) {
+	// Ad-hoc dataset alias→handle rewrite runs first, before the SET-param
+	// harvest and pre-execute passes, so keelson('<alias>') becomes
+	// keelson('<handle>') for every downstream consumer and the Preview
+	// "as sent" caption (ADR-0134 §SD4). Classification already ran on the
+	// authored buffer, which still names the alias.
+	sql = inst.rewriteDatasetAliases(sql)
 	residual, params, exErr := ExtractParams(sql)
 	if exErr != nil {
 		log.Debug().Err(exErr).Msg("play: ExtractParams failed, sending sql verbatim")
@@ -300,6 +315,31 @@ func (inst *Client) buildResidual(sql string) (residual string, params map[strin
 	residual = inst.passes.ApplyBestEffortBound(passreg.StagePreExecute, residual, inst.passBinding, log.Logger)
 	residual = inst.applyExposeConditions(residual)
 	return
+}
+
+// bindDataset binds an alias to a dataset handle for the client-side
+// alias→handle rewrite (ADR-0134 §SD4). Called from PlayApp.BindDataset.
+func (inst *Client) bindDataset(alias, handle string) {
+	inst.mu.Lock()
+	if inst.datasetBindings == nil {
+		inst.datasetBindings = make(map[string]string)
+	}
+	inst.datasetBindings[alias] = handle
+	inst.mu.Unlock()
+}
+
+// rewriteDatasetAliases applies the bound ad-hoc dataset alias→handle
+// rewrite; a no-op when nothing is bound.
+func (inst *Client) rewriteDatasetAliases(sql string) string {
+	inst.mu.RLock()
+	if len(inst.datasetBindings) == 0 {
+		inst.mu.RUnlock()
+		return sql
+	}
+	bindings := make(map[string]string, len(inst.datasetBindings))
+	maps.Copy(bindings, inst.datasetBindings)
+	inst.mu.RUnlock()
+	return keelsonsql.RewriteAliases(sql, bindings)
 }
 
 // applyExposeConditions runs the opt-in selection-condition rewrite (ADR-0121) when the

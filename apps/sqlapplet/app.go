@@ -3,10 +3,7 @@ package sqlapplet
 import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play"
-	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -42,47 +39,19 @@ func (inst *appletApp) Manifest() (m app.Manifest) {
 }
 
 func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
-	var cfg play.ClientConfig
-	switch inst.def.Endpoint {
-	case EndpointIntrospection:
-		cfg.URL = introspect.LocalQueryEndpoint()
-		if cfg.URL == "" {
-			err = eh.Errorf("sqlapplet %s: introspection endpoint unavailable (KEELSON_INTROSPECT_ENABLE, chlocal)", inst.def.Slug)
-			return
-		}
-	default:
-		cfg = play.ClientConfig{
-			URL:      clickhouseenv.URL.Get(),
-			User:     clickhouseenv.User.Get(),
-			Password: clickhouseenv.Password.Get(),
-		}
-	}
-	client := play.NewClient(cfg, nil)
 	// The minted per-applet id rides the log_comment stamp, so captured
 	// query runs attribute to the applet, not to a shared host (ADR-0132
-	// §SD9 over ADR-0115).
-	client.SetStampIdentity(ctx.RunId(), string(inst.m.Id))
-	inner := play.NewLivePlayApp(client, inst.def.SQL, appletMaxHistory)
-	// AutoRun only for the read class (ADR-0132 §SD3/§SD5): a mutating or
-	// egress-reaching applet always waits for an explicit Run.
-	inner.AutoRun = inst.def.Class == analysis.QuerySecurityRead
-	// A signal-driven buffer opens Live so panel-written signals
-	// (selection, viewport, time extents) re-run it — the cross-filtering
-	// half of the applet surface (§SD3).
-	if inst.def.HasUnboundSlots {
-		inner.SetLiveMain(true)
-	}
-	if inst.def.BandsSQL != "" {
-		inner.SetTimelineBandsSql(inst.def.BandsSQL)
-	}
-	// The applet top bar (§SD3): exploration chrome out, Copy SQL in.
-	inner.SetToolbarMinimal(true)
-	if err = attenuateTabs(inner, inst.def, ctx.Log()); err != nil {
+	// §SD9 over ADR-0115). A standalone applet has no ad-hoc dataset
+	// bindings; those arrive only through an embedder (ADR-0134 §SD7).
+	inner, err := NewEmbedded(inst.def, EmbedConfig{
+		StampAppId: string(inst.m.Id),
+		RunId:      ctx.RunId(),
+		Bus:        ctx.Bus(),
+		Log:        ctx.Log(),
+	})
+	if err != nil {
 		return
 	}
-	// nil storage: an applet's buffer is its committed definition — nothing
-	// to persist or restore (play's persist paths no-op on nil).
-	inner.SetCapabilities(ctx.Bus(), nil, ctx.Log())
 	inst.inner = inner
 	return
 }
