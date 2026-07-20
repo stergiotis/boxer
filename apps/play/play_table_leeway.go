@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // attrSelFrameSalt lifts a selected per-attribute cell's *background-frame* id
@@ -212,21 +213,17 @@ func (inst *PlayApp) renderTableOptionsBar() {
 			for rt := range c.RichTextLabel("Rows") {
 				rt.Weak().Small()
 			}
-			// Segmented selector for the row granularity: selectable buttons
-			// rather than RadioButton, whose *bool databinding does not model a
-			// mutually-exclusive enum cleanly (the ComboBox-option idiom).
-			if c.Button(ids.PrepareStr("table-gran-dbrow"),
-				c.Atoms().Text("per DB row").Keep()).
-				Selected(inst.tableOpts.granularity == tableRowPerDBRow).
-				SendResp().HasPrimaryClicked() {
-				inst.tableOpts.granularity = tableRowPerDBRow
-			}
-			if c.Button(ids.PrepareStr("table-gran-attr"),
-				c.Atoms().Text("per attribute").Keep()).
-				Selected(inst.tableOpts.granularity == tableRowPerAttr).
-				SendResp().HasPrimaryClicked() {
-				inst.tableOpts.granularity = tableRowPerAttr
-			}
+			// Row granularity as an exclusive segmented bar over the enum, via
+			// the selector helper (the egui radio_value analogue: it owns the
+			// compare/assign and the child-id scoping). Inline() keeps the two
+			// options in this same HorizontalTop row rather than opening a
+			// nested one, so they stay aligned with the "Rows" label and the
+			// sibling checkboxes.
+			selector.Segmented(ids, "table-gran", &inst.tableOpts.granularity).
+				Option(tableRowPerDBRow, "per DB row").
+				Option(tableRowPerAttr, "per attribute").
+				Inline().
+				SendResp()
 			// A plain horizontal gap, NOT c.Separator(): a separator inside a
 			// horizontal row is a *vertical* rule that egui sizes to the
 			// available height, and this row sits in the dock's unbounded-height
