@@ -102,7 +102,11 @@ func (inst *Service) handlePublish(msg *app.Msg) {
 		inst.reply(msg.Reply, wirePublishRep{V: wireVersion, Error: "decode: " + err.Error()})
 		return
 	}
-	res, pErr := inst.Publish(PublishInput{Alias: req.Alias, Handle: req.Handle, ArrowIPCStream: req.ArrowIPCStream})
+	// Attribute to the authenticated sender, not a client-supplied field.
+	res, pErr := inst.Publish(PublishInput{
+		Alias: req.Alias, Handle: req.Handle, ArrowIPCStream: req.ArrowIPCStream,
+		Publisher: string(msg.Sender),
+	})
 	if pErr != nil {
 		inst.reply(msg.Reply, wirePublishRep{V: wireVersion, Error: pErr.Error()})
 		return

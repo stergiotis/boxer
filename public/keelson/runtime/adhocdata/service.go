@@ -76,6 +76,7 @@ type Config struct {
 type dataset struct {
 	handle          string
 	alias           string
+	publisher       string
 	schema          *arrow.Schema
 	structure       string
 	path            string
@@ -110,6 +111,11 @@ type PublishInput struct {
 	Alias          string
 	Handle         string
 	ArrowIPCStream []byte
+	// Publisher attributes the dataset in the catalog. Over the bus it is
+	// the authenticated sender; an in-process embedder passes a composed
+	// stamp (embedder id carrying the applet slug, ADR-0134 SD7). It is
+	// recorded on first publish and kept across republishes.
+	Publisher string
 }
 
 // PublishResult reports the minted (or reused) handle and dataset stats.
@@ -157,6 +163,11 @@ func NewService(cfg Config) (inst *Service, err error) {
 	if removed := inst.sweep(); removed > 0 {
 		inst.log.Info().Int("removed", removed).Str("dir", dir).Msg("adhocdata: swept leftover dataset files on start")
 	}
+	// Register the keelson('adhoc') catalog over the live dataset table
+	// (ADR-0134 SD6).
+	if regErr := reg.Register(newCatalogProvider(inst)); regErr != nil {
+		return nil, eh.Errorf("adhocdata: register catalog %q: %w", CatalogTableName, regErr)
+	}
 	if cfg.Bus != nil {
 		if subErr := inst.subscribe(cfg.Bus); subErr != nil {
 			return nil, subErr
@@ -186,6 +197,7 @@ func (inst *Service) Close(context.Context) (err error) {
 		inst.keys.DeregisterDatasetKey(h)
 		inst.reg.Unregister(h)
 	}
+	inst.reg.Unregister(CatalogTableName)
 	removed := inst.sweep()
 	inst.log.Info().Int("removed", removed).Msg("adhocdata: deleted dataset files on close")
 	return nil
@@ -273,7 +285,8 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 			return res, eh.Errorf("adhocdata: register %q: %w", handle, regErr)
 		}
 		inst.datasets[handle] = &dataset{
-			handle: handle, alias: in.Alias, schema: schema, structure: structure,
+			handle: handle, alias: in.Alias, publisher: in.Publisher,
+			schema: schema, structure: structure,
 			path: path, revision: revision, rows: rows, bytes: nbytes,
 			createdAtUnixUs: time.Now().UnixMicro(), entry: entry,
 		}
