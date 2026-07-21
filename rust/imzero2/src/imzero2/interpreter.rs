@@ -240,9 +240,11 @@ pub struct GraphEdgeData {
     pub color: Option<egui::Color32>,
 }
 
-// Payload types stored inside the egui_graphs Graph. `color` is picked
-// up only if a style hook is wired (not in v1); for v1 it is captured
-// for later use and fed back through the drain's builder methods.
+// Payload types stored inside the egui_graphs Graph. Node color is also
+// mirrored into the egui_graphs Node's own color slot by
+// reconcile_graph_state (DefaultNodeShape reads node_props.color(), not the
+// payload — see doc/howto/imzero2-graph-node-color.md); edge color is read
+// from the payload by PayloadColorEdgeShape.
 #[derive(Clone, Debug)]
 pub struct GraphNodeUserData {
     pub key: u64,
@@ -942,13 +944,22 @@ pub fn reconcile_graph_state(
         state.edge_idx.retain(|(f, t), _| !stale_set.contains(f) && !stale_set.contains(t));
     }
 
-    // Add new nodes / update existing.
+    // Add new nodes / update existing. The Go-side color must be mirrored
+    // into the egui_graphs Node's own color slot: DefaultNodeShape renders
+    // node_props.color(), not the payload, so a payload-only color is
+    // silently dropped and every node falls back to the theme stroke color
+    // (doc/howto/imzero2-graph-node-color.md). A declaration without a color
+    // leaves the previous slot value — Go apps either always or never color
+    // a given graph's nodes.
     for n in pending_nodes {
         if let Some(&idx) = state.node_idx.get(&n.id) {
             if let Some(node) = state.graph.node_mut(idx) {
                 let p = node.payload_mut();
                 p.label = n.label.clone();
                 p.color = n.color;
+                if let Some(col) = n.color {
+                    node.set_color(col);
+                }
             }
         } else {
             let payload = GraphNodeUserData {
@@ -961,6 +972,11 @@ pub fn reconcile_graph_state(
                 n.label.clone(),
                 graph_spawn_location(n.id),
             );
+            if let Some(col) = n.color {
+                if let Some(node) = state.graph.node_mut(idx) {
+                    node.set_color(col);
+                }
+            }
             state.node_idx.insert(n.id, idx);
         }
     }
