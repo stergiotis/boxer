@@ -121,26 +121,34 @@ settled decisions:
   tab). The prompt contains schema text, a play-conventions preamble, and
   the question — never row data; the orchestrator's LLM result-verification
   stays off. The panel displays the endpoint host, keeping egress visible.
-  **OPEN:** whether a non-loopback endpoint additionally requires an
-  explicit acknowledgement variable.
-- **SD4 — Schema context.** A prompt-assembly step composes: (a) the
-  `system.columns` harvest of the active endpoint (v1's query, reused), (b)
-  bound ad-hoc dataset aliases with their schemas, (c) `keelson.*` table
-  one-liners from the provider registry, and (d) a static preamble teaching
-  play's pane conventions. **OPEN:** which of (b)/(c) are in scope for v0.
+  Setting the variable is the acknowledgement: a non-loopback endpoint
+  needs no second opt-in (a separate acknowledgement variable and a
+  loopback-only v0 were both considered and rejected in the 2026-07-21
+  dialogue — one explicit knob with a visible host, and remote endpoints
+  such as a LAN inference box stay first-class).
+- **SD4 — Schema context.** v0 grounds the prompt in exactly two parts:
+  the `system.columns` harvest of the active endpoint (v1's query, reused)
+  and the static preamble teaching play's pane conventions. Grounding for
+  bound ad-hoc dataset aliases (ADR-0134) and `keelson.*` one-liners
+  (ADR-0094) is deferred below — physical tables first, scope grows with
+  observed use.
 - **SD5 — Config.** `BOXER_PLAY_ASK_ENDPOINT`, `BOXER_PLAY_ASK_MODEL`
   (default `qwen3-coder-next`), `BOXER_PLAY_ASK_ATTEMPTS` (default 3),
   registered per ADR-0009.
 - **SD6 — UI shape.** One `bgjob`-backed flow: question field, Ask with
   progress and cancel, highlighted read-only SQL preview, then
-  Insert / Replace / Replace-and-run actions over the delivery ops.
-  **OPEN:** whether any gesture may run without a preview stop.
+  Insert / Replace / Replace-and-run actions over the delivery ops. Every
+  gesture stops at the preview: generated SQL never executes unseen, and
+  Replace-and-run is a single click made after the SQL is on screen (an
+  ask-and-run gesture was rejected in the 2026-07-21 dialogue).
 
 Deferred, recorded rather than gating (descope over gate):
 
 - Execution-error repair — completing the orchestrator's stubbed
   ClickHouse-error retry and a "fix this error" affordance from play
   diagnostics.
+- Grounding beyond physical tables — bound ad-hoc dataset aliases
+  (ADR-0134) and `keelson.*` one-liners (ADR-0094) in the prompt (SD4).
 - A golden question→SQL evaluation corpus against the demo dataset.
 - Multi-turn refinement (conversation state across asks).
 - Compile-cache persistence (`text2sql2/cache`) and sample-value grounding.
@@ -185,9 +193,9 @@ Deferred, recorded rather than gating (descope over gate):
 
 ## Status
 
-Proposed — open decisions (SD3 remote acknowledgement, SD4 v0 scope, SD6
-run gesture) are being closed in a design dialogue; this ADR is that
-dialogue's record and is edited in place until acceptance.
+Proposed — the formerly open decisions (SD3 remote acknowledgement, SD4
+v0 scope, SD6 run gesture) were closed in the 2026-07-21 design dialogue
+and are folded into the SD texts above. Awaiting review for acceptance.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
