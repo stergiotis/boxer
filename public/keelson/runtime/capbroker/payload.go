@@ -2,7 +2,7 @@
 // internal subject handler bound to runtime.cap.request that arbitrates
 // dynamic permission grants. For M2.3 the broker decides via a pluggable
 // GrantPolicyI, mutates the target Client's caps in memory, and replies
-// with a GrantReply. Grant persistence to runtime.facts arrives alongside
+// with a GrantReply. Grant persistence to boxer.facts arrives alongside
 // audit recording in M2.5; the egui dialog policy lands when the M3 dock
 // host provides an overlay layer.
 package capbroker

@@ -13,7 +13,7 @@
 // convention.
 //
 // The PackageNode / CollectionRun lw: tags are marshallgen-grammar
-// compliant today; the runtime.facts wiring (vdd memberships +
+// compliant today; the boxer.facts wiring (vdd memberships +
 // factswrapper codegen + a FactsSource adapter) is deferred per ADR-0064
 // SD7.
 package godep

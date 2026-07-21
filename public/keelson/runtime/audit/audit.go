@@ -1,13 +1,13 @@
 // Package audit defines the bus audit infrastructure per ADR-0026 §SD12 M2.5.
 // Every Client.Request call on inprocbus is captured as an AuditRecord and
 // routed to a configured AuditSinkI. The records carry the per-request
-// fields ADR-0026 §SD6 maps onto runtime.facts KindAudit rows: subject,
+// fields ADR-0026 §SD6 maps onto boxer.facts KindAudit rows: subject,
 // result classification, latency, payload sizes.
 //
 // AuditSinkI implementations:
 //   - InMemoryAuditSink (this package): test/dev recording into a slice.
 //   - factsstore.AsAuditSink (runtime/factsstore): adapter routing records
-//     into the runtime.facts view; M2.5 buffers them in memory, the future
+//     into the boxer.facts view; M2.5 buffers them in memory, the future
 //     CH-backed FactsStoreI persists them.
 package audit
 

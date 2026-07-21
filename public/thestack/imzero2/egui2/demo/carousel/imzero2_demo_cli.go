@@ -175,11 +175,11 @@ func NewCommand() *cli.Command {
 			// have a real BusI to talk to; apps with no Caps see
 			// permission errors from any Publish/Subscribe — which is
 			// the intended lockdown shape. The audit sink lands every
-			// allowed request as a runtime.facts row when CH is
+			// allowed request as a boxer.facts row when CH is
 			// reachable.
 			bus := inprocbus.NewInst(log.Logger)
 			// MultiSink fan-out: the durable facts sink lands every
-			// audit row in runtime.facts; the capinspector.Tally
+			// audit row in boxer.facts; the capinspector.Tally
 			// counter sink keeps per-cap monotonic counts the
 			// inspector window renders on cap nodes (Phase 2 of the
 			// capability legibility direction).
@@ -214,7 +214,7 @@ func NewCommand() *cli.Command {
 			}
 
 			// M2 Phase C: runtime.persist.> Powerbox (ADR-0026 §SD3,
-			// §SD6). In-memory backend for now; a runtime.facts-backed
+			// §SD6). In-memory backend for now; a boxer.facts-backed
 			// backend lands in a follow-up so state writes appear as
 			// auditable rows alongside grants + lifecycle events. The
 			// host auto-injects runtime.persist.{ownAlias}.> for any
@@ -324,7 +324,7 @@ func NewCommand() *cli.Command {
 
 			// ADR-0038 §M3: task supervisor subscribes to task.>,
 			// persists every terminal-grade verb (created / done /
-			// error / cancel / abandoned) into runtime.facts via
+			// error / cancel / abandoned) into boxer.facts via
 			// factsstore.WriteLog with structured run_id / instance_id
 			// / task_id fields, and serves task.list.inflight
 			// snapshots. Best-effort: a start failure leaves task.*

@@ -17,7 +17,7 @@
 //     log.Logger with the run_id. Per-app loggers built via
 //     app.AppLogger inherit the field automatically.
 //
-// The runtime-start event itself (a row in runtime.facts) is written by
+// The runtime-start event itself (a row in boxer.facts) is written by
 // the carousel using factsstore.WriteRuntimeStart with the *Inst as
 // input — runinfo doesn't depend on factsstore so the package stays
 // usable from contexts that haven't wired persistence yet (tests,

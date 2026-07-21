@@ -4,6 +4,6 @@
 //
 // It is the one place in the explorer that depends on the go toolchain; the
 // manifest package (godep) and the app's render path do not. The
-// FactsSource adapter that reads the same manifest back from runtime.facts
+// FactsSource adapter that reads the same manifest back from boxer.facts
 // is the deferred second adapter (ADR-0064 SD3/SD7).
 package godepcollect

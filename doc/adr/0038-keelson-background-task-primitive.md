@@ -28,7 +28,7 @@ Constraints inherited from the rest of the stack:
 - **buscodec is the wire.** All payloads route through `runtime/buscodec` (ADR-0036). No `encoding/json` direct calls.
 - **CGO-free** (ADR-0026 invariant).
 - **No mandatory IDL step.** Payload types stay as plain Go structs with `cbor:`/`json:` tags.
-- **Observer-friendly.** A status panel must watch every in-flight task without owning any of them. This is the harness for the future `runtime.facts` audit and for any UI that wants a "current activity" list.
+- **Observer-friendly.** A status panel must watch every in-flight task without owning any of them. This is the harness for the future `boxer.facts` audit and for any UI that wants a "current activity" list.
 - **Producer ergonomics.** The worker goroutine is hot-path code (a tight `for` loop over rows, files, frames). Reporting progress must not require the producer to think about bus rate-limiting, throttling, or marshalling.
 
 Dependencies already present in `go.mod` (no new modules required):
@@ -154,7 +154,7 @@ Apps that publish *and* observe the world (producer + UI panel in one binary) de
 
 - **M1.** `keelson/runtime/task/` + `task/estimator/` subpackage; producer, observer helper, `RequestCancel`, cap helpers; unit tests over `inprocbus`; REFERENCE.md + EXPLANATION.md.
 - **M2.** Demo app (`apps/taskdemo/`) wired through `c.PanelCentral()` with a cancel button.
-- **M3.** Opt-in `keelson/runtime/task/supervisor/` — subscribes `task.>`, persists Created/Done/Error/Cancel into `runtime.facts` via `factsstore`, marks tasks abandoned when no emission within N seconds, exposes `task.list.inflight` request/reply.
+- **M3.** Opt-in `keelson/runtime/task/supervisor/` — subscribes `task.>`, persists Created/Done/Error/Cancel into `boxer.facts` via `factsstore`, marks tasks abandoned when no emission within N seconds, exposes `task.list.inflight` request/reply.
 - **M4.** Reusable `leewaywidgets/taskmonitor` widget — in-flight + recent rows, per-row cancel button, `errorview` for failures.
 
 Implementation order: M1 is a precondition for any consumer; M2-M4 are independent and can land in any order driven by demand.

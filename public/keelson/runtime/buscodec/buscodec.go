@@ -74,7 +74,7 @@ func SetDefault(c CodecI) {
 //
 // Fact-row payload types can register a CodecI specialised for their
 // shape — typically a sparse-CBOR codec that piggybacks
-// on the runtime.facts dml builder with precomputed active-* hints
+// on the boxer.facts dml builder with precomputed active-* hints
 // (see ADR-0042's M10 Updates entry). Unregistered types continue to
 // hit Default() — CBOR by default — so the migration is opt-in per
 // payload type.

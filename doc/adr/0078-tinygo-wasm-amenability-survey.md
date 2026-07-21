@@ -233,7 +233,7 @@ in `both` mode rather than prune them (see open question 6).
    <prefix,…>`, which treats matching packages as Green sinks (`eh,zerolog` ⇒
    ~110 packages leave the Red wall). Note (2026-06-12): for `eh,zerolog` this
    was never hypothetical — they are genuinely Green; see the Update.
-3. **Persisting results as leeway/runtime.facts** (mirroring ADR-0064 SD7) — the
+3. **Persisting results as leeway/boxer.facts** (mirroring ADR-0064 SD7) — the
    report is markdown + JSON for now.
 4. **`godepview` verdict column** — deferred (see Alternatives).
 5. **External allow/deny list curation.** `support.go` seeds a short

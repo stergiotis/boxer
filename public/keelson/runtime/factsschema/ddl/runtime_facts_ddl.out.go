@@ -10,7 +10,7 @@ import (
 )
 
 // DatabaseName mirrors factsschema.DatabaseName at codegen time.
-const DatabaseName = "runtime"
+const DatabaseName = "boxer"
 
 // TableName mirrors factsschema.TableName at codegen time.
 const TableName = "facts"
@@ -208,7 +208,7 @@ const ColumnsSQL = `	"id:id:u64:2k:0:0:" UInt64 CODEC(Delta,ZSTD(3)),
 	"tv:bool:lmrcard:lmrcard:u64:4gw:0:0:0::data" Array(UInt64) CODEC(T64,ZSTD(3))`
 
 // ComposeCreateTableSql emits a ClickHouse-compatible CREATE TABLE
-// statement for runtime.facts. Drop-in replacement for the historical
+// statement for boxer.facts. Drop-in replacement for the historical
 // factsschema.ComposeCreateTableSql — same signature, same semantics,
 // but with the column block baked at codegen time so no leeway pipeline
 // runs at process startup.

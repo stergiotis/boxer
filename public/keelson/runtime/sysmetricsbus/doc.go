@@ -14,7 +14,7 @@
 //     fan-out — granular subscription, per-domain grants — comes later.
 //   - SD3 leeway-facts codec. P2 ships CBORCodec (fxamacker/cbor, already a
 //     dependency — no new dep). The chosen wire is "metrics are leeway
-//     facts, reuse the runtime.facts codec"; CBORCodec is the interim that
+//     facts, reuse the boxer.facts codec"; CBORCodec is the interim that
 //     the Codec interface lets us swap without touching Producer/Consumer.
 //
 // The package is transport-agnostic on purpose: it imports app (for BusI),

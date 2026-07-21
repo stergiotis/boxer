@@ -2,7 +2,7 @@
 // a stateless, idempotent, loopback-only HTTP endpoint that a
 // ClickHouse-owned refreshable materialized view pulls. GET /pull runs
 // the queryrunfacts extract against the same server, encodes the rows
-// through the generated runtime.facts DML builders, and streams the
+// through the generated boxer.facts DML builders, and streams the
 // resulting Arrow IPC back — exactly the bytes chstore would insert, so
 // no re-encoding tier exists anywhere in the plane (ADR-0115 SD3).
 //
@@ -69,7 +69,7 @@ var (
 
 // Config parameterises a Service. Zero values fall back to the env
 // registry (Listen/ChURL/Cadence/Scope) and the conventional
-// runtime.facts coordinates; tests point Database/Table at a scratch
+// boxer.facts coordinates; tests point Database/Table at a scratch
 // database.
 type Config struct {
 	Listen   string

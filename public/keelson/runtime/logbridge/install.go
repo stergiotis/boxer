@@ -11,7 +11,7 @@ import (
 // InstallGlobal redirects zerolog's package-level global log.Logger
 // through a fan-out that writes every event to both passthroughW (the
 // operator-facing destination — typically os.Stderr or a file) and
-// sink (the runtime.facts capture). Returns a closer that the caller
+// sink (the boxer.facts capture). Returns a closer that the caller
 // must invoke at process exit to drain the Sink synchronously and
 // restore the previous global.
 //

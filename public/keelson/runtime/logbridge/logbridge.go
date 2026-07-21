@@ -1,4 +1,4 @@
-// Package logbridge routes zerolog events into runtime.facts. With the
+// Package logbridge routes zerolog events into boxer.facts. With the
 // `binary_log` build tag set (already on the project tag list), zerolog
 // hands each event to its configured io.Writer as a CBOR-encoded
 // indefinite-length map; Sink decodes that map, packages it as a

@@ -12,7 +12,7 @@ import (
 )
 
 func TestComposeHistorySql(t *testing.T) {
-	sql, err := ComposeHistorySql("runtime.facts", 100)
+	sql, err := ComposeHistorySql("boxer.facts", 100)
 	require.NoError(t, err)
 	require.Contains(t, sql, fmt.Sprintf("has(%s, %d)", ColSymbolLr, vocab.MembKindQueryRun.GetId().Value()))
 	require.Contains(t, sql, "ORDER BY "+ColTs+" DESC")
@@ -22,10 +22,10 @@ func TestComposeHistorySql(t *testing.T) {
 	require.Equal(t, historyRowColumns, strings.Count(sql, " AS "),
 		"compose and parse must agree on the column count")
 
-	sql, err = ComposeHistorySql("runtime.facts", 0)
+	sql, err = ComposeHistorySql("boxer.facts", 0)
 	require.NoError(t, err)
 	require.Contains(t, sql, fmt.Sprintf("LIMIT %d", HistoryLimitCap))
-	sql, err = ComposeHistorySql("runtime.facts", 10_000)
+	sql, err = ComposeHistorySql("boxer.facts", 10_000)
 	require.NoError(t, err)
 	require.Contains(t, sql, fmt.Sprintf("LIMIT %d", HistoryLimitCap))
 
@@ -83,7 +83,7 @@ func TestParseHistoryRowsRoundTrip(t *testing.T) {
 }
 
 func TestComposeProfileEventsSql(t *testing.T) {
-	sql, err := ComposeProfileEventsSql("runtime.facts", 123)
+	sql, err := ComposeProfileEventsSql("boxer.facts", 123)
 	require.NoError(t, err)
 	require.Contains(t, sql, "ARRAY JOIN arrayZip(")
 	require.Contains(t, sql, fmt.Sprintf("m = %d", vocab.MembQueryRunProfileEvent.GetId().Value()))

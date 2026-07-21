@@ -18,7 +18,7 @@ import (
 
 // play_runs_history.go is the ADR-0115 S2 glass surface: the History tab's
 // "Recorded runs" section, reading captured KindQueryRun facts back from
-// runtime.facts through whatever endpoint the user is on. It complements
+// boxer.facts through whatever endpoint the user is on. It complements
 // the session list above it: that one is this process's editor ring
 // (restore an entry), this one is the server's durable record — every
 // terminal query, every client, surviving restarts. Selecting a run shows
@@ -36,7 +36,7 @@ const (
 	// runsHistoryFactsTable is the conventional capture destination
 	// (factsschema DatabaseName.TableName). Endpoints without it (chlocal,
 	// a foreign server) surface the server error plus a hint instead.
-	runsHistoryFactsTable = "runtime.facts"
+	runsHistoryFactsTable = "boxer.facts"
 	// runsHistoryLimit bounds one read; queryrunfacts caps it further.
 	runsHistoryLimit = 100
 	// runsHistoryTimeout bounds one fetch round-trip (diagProbeTimeout's

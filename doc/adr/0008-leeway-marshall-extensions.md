@@ -493,7 +493,7 @@ setters: a plain field's Go type *is* the setter argument type, and the
 codec inserts no conversion on either side. This makes the three codec
 packages schema-agnostic for plain columns the same way they already were
 for tagged values — previously the plain path was coupled to the
-`runtime.facts` layout.
+`boxer.facts` layout.
 
 The setter *names* are the stable leeway entity contract; only their
 argument *types* vary per table, taken verbatim from the DTO:
@@ -521,7 +521,7 @@ What this drops versus the earlier semantics (uninteresting at alpha — no
 persisted wire to preserve): the facts-specific type constraints (id must
 be `uint64`, ts must be `time.Time`/`int64`, naturalKey `[]byte`/`string`)
 and the implicit conversions they implied (int64-nanos→`time.Time`,
-`string`→`[]byte`). A DTO targeting `runtime.facts` must now declare the
+`string`→`[]byte`). A DTO targeting `boxer.facts` must now declare the
 types the facts builder actually accepts — `SetId(uint64, []byte)`,
 `SetTimestamp(time.Time)`, `SetLifecycle(time.Time)` — directly.
 

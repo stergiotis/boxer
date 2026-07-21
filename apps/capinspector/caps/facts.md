@@ -38,4 +38,4 @@ helpers above.
 - `runtime/factsstore/chstore/recentlogs.go` — log tail
 - `runtime/factsschema/factsschema.go` — leeway schema definition
 
-**ADR reference:** §SD6 (leeway-shaped runtime.facts).
+**ADR reference:** §SD6 (leeway-shaped boxer.facts).

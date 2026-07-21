@@ -96,7 +96,7 @@ var (
 	driverErr   error
 )
 
-// driver returns the lazily-built singleton Driver for runtime.facts.
+// driver returns the lazily-built singleton Driver for boxer.facts.
 // First call resolves the schema via factsschema.GetSchemaInManipulator,
 // the IR via common.NewIntermediateTableRepresentation, and the Driver
 // via streamreadaccess.NewDriver. Subsequent calls reuse the cached

@@ -3,7 +3,7 @@
 // but emits self-describing sparse CBOR instead of fixed-width
 // ClickHouse RowBinary. Wins ecosystem interop and amortises well
 // when most schema sections are empty per row (the dominant case as
-// the runtime.facts section count grows).
+// the boxer.facts section count grows).
 //
 // Encoding shape (per record produced by RecordBuilder.NewRecord):
 //
@@ -453,7 +453,7 @@ func (r *Record) Retain()               {}
 // retain past Release.
 func (r *Record) CBOR() []byte { return r.bytes }
 
-// NewSlice is the RollbackEntity-path stub; unused by the runtime.facts
+// NewSlice is the RollbackEntity-path stub; unused by the boxer.facts
 // benchmarks (panic on call so the test surface tells us if a future
 // codegen change starts depending on it).
 func (r *Record) NewSlice(_, _ int64) *Record {
@@ -481,7 +481,7 @@ func shortKeyForFieldName(physName string) string {
 	parts := strings.SplitN(physName, ":", 5)
 	if len(parts) < 2 {
 		// Unparseable physical name (no colon separator). Not expected to
-		// fire on runtime.facts; fall back to the raw name as the map key.
+		// fire on boxer.facts; fall back to the raw name as the map key.
 		return physName
 	}
 	if parts[0] == "tv" && len(parts) >= 3 {

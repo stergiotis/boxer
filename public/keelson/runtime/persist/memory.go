@@ -5,7 +5,7 @@ import (
 )
 
 // MemoryBackend is an in-memory StorageBackendI used by M2.4 until the
-// runtime.facts-backed implementation lands in M2.5. Values are defensively
+// boxer.facts-backed implementation lands in M2.5. Values are defensively
 // copied on both Get and Set so callers can't mutate the backing store.
 type MemoryBackend struct {
 	mu   sync.RWMutex

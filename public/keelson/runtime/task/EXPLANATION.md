@@ -157,7 +157,7 @@ exact same humanization logic.
 
 ## What is intentionally NOT in M1
 
-- **No supervisor.** Audit-to-`runtime.facts` lives in a separate
+- **No supervisor.** Audit-to-`boxer.facts` lives in a separate
   `task/supervisor` package at M3. M1 apps take no `factsstore`
   dependency.
 - **No retry / chaining / dependencies.** Compose at the producer.

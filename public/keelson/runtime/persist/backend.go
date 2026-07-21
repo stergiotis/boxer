@@ -2,7 +2,7 @@
 // subject family. The Service subscribes to runtime.persist.>, parses each
 // request, and dispatches to a pluggable StorageBackendI for the actual
 // read/write/delete. M2.4 ships an in-memory backend; M2.5 introduces a
-// runtime.facts-backed implementation that lands grants + audit + state
+// boxer.facts-backed implementation that lands grants + audit + state
 // writes through the same CH+leeway table.
 package persist
 

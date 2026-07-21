@@ -1,7 +1,7 @@
 // Package queryrunsd is the standalone query-run capture service
 // (ADR-0115 S1): it serves the loopback /pull endpoint that the
 // ClickHouse-owned refreshable materialized view reads every cadence,
-// turning terminal system.query_log events into runtime.facts rows of
+// turning terminal system.query_log events into boxer.facts rows of
 // kind QueryRun. The process holds no write authority — ClickHouse
 // schedules the pull and performs the insert; stopping the daemon
 // pauses capture, which catches up from the destination watermark on
@@ -26,7 +26,7 @@ import (
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "queryrunsd",
-		Usage: "capture terminal system.query_log events into runtime.facts through the url()-pulled transform endpoint (ADR-0115 queryrunsd service)",
+		Usage: "capture terminal system.query_log events into boxer.facts through the url()-pulled transform endpoint (ADR-0115 queryrunsd service)",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "listen",

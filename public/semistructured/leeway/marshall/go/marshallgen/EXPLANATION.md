@@ -35,7 +35,7 @@ Schema-specific wiring (membership-id resolution, builder pools,
 Marshal / Unmarshal / bus-codec wrappers) lives behind a
 `WrapperEmitterI` hook the caller passes in. The keelson facts target
 (`keelson/runtime/codec/factswrapper`) implements the hook for
-`runtime.facts`; anchor uses the bundled `NoOpWrapper`. The same generator
+`boxer.facts`; anchor uses the bundled `NoOpWrapper`. The same generator
 drives both.
 
 ## Background
@@ -50,7 +50,7 @@ the per-row chain that drives the DML and the matching per-row read
 from the RA.
 
 The lift into this repository was motivated by (i) two consumer
-schemas (`runtime.facts`, `anchor`) demonstrating the same emit
+schemas (`boxer.facts`, `anchor`) demonstrating the same emit
 shape works generically, and (ii) the wrapper / core split letting
 schema-coupled code live in the consumer instead of behind a
 target flag in the generator.

@@ -79,11 +79,11 @@ added four forces the Decision now reflects:
   boundary as caller-supplied data.
 - **The disjoint-sections gate rejects the facts schema's design.** The
   generator errors when two components bind one section — correct under
-  positional ids, but `runtime.facts` kinds share sections by construction
+  positional ids, but `boxer.facts` kinds share sections by construction
   (every kind's tag rides the symbol section; `reason` is one column
   joined across six DTOs).
 - **The Key role would bind a sequence, not a key.** The store keys
-  `Latest`/`GetFetch` on the leading `EntityId`; in `runtime.facts` that is
+  `Latest`/`GetFetch` on the leading `EntityId`; in `boxer.facts` that is
   `id`, a per-process counter. The access identity (the blake3
   `naturalKey`, or (appId, key) memberships) is the second `EntityId`,
   which passes through as an envelope field; explicit role election is an
@@ -93,7 +93,7 @@ added four forces the Decision now reflects:
   `expiresAt` is a DateTime, and keelson tombstones are per-kind
   memberships (`MembPersistTombstone`), not envelope lifecycle. The
   original D3 mapping — `Delete` onto the generated tombstone state view —
-  could not have been built as written against `runtime.facts`.
+  could not have been built as written against `boxer.facts`.
 
 ## Design space (QOC)
 
@@ -143,7 +143,7 @@ stays keelson-free. Concretely:
   is deferred until an in-proc consumer exists.
 - **D2 — Store-gen wrapper for the facts schema.** A generation-time package
   (working name `runtime/factsschema/storegen`) feeds `recordstore/gen` with
-  the `runtime.facts` TableDesc (`factsschema.GetSchemaInManipulator`;
+  the `boxer.facts` TableDesc (`factsschema.GetSchemaInManipulator`;
   `gen.Input.TableName` "facts" agrees with the schema) and the DTO component
   plans, resolving vdd membership ids at generation time — the store-side
   sibling of `codec/factswrapper`. Where `factswrapper` resolves ids at
@@ -168,12 +168,12 @@ stays keelson-free. Concretely:
     / `Begin`+`Commit` / `Delete`-tombstone — and the backend opts the
     entity cache into versioned write-through so a completed `Set` is
     coherent for the next `Get` without a flush round-trip. Persist state
-    thereby leaves the `runtime.facts` substrate; the `FactsStoreI` state
+    thereby leaves the `boxer.facts` substrate; the `FactsStoreI` state
     verbs (`WriteState`/`DeleteState`/`LatestState`) stay on the legacy
     `chstore` facade until its callers migrate.
   - **D3b — facts-bound store for grants and audit** (gated on the D2
     generator features). The CH-backed `FactsStoreI` ingest and `Scan` for
-    grant and audit rows binds the `runtime.facts` TableDesc; no state view
+    grant and audit rows binds the `boxer.facts` TableDesc; no state view
     is expected or possible there — both kinds are append-shaped. Grants
     reuse the existing `capabilitygrant` DTO as the plan source; audit
     needs a new DTO, authored with plain scalar/unit shapes that avoid the
@@ -208,7 +208,7 @@ review outcome.
   regression suites pin.
 - **Generalizing `chstore` in place.** Already rejected in ADR-0100; not
   re-opened here.
-- **Adding a u8 lifecycle column to `runtime.facts`** so the state view can
+- **Adding a u8 lifecycle column to `boxer.facts`** so the state view can
   emit against the facts TableDesc. Rejected: a live-table migration plus a
   retrofit of every existing facts writer and reader, for an envelope
   column only the state kind would populate — coexisting confusingly with
@@ -256,7 +256,7 @@ review outcome.
   must know `chstore` is legacy-by-policy, not legacy-by-replacement.
 - Persist state departs the single-substrate reading of ADR-0026 §SD6: once
   the durable backend ships, state rows live in `runtime.persiststate`, not
-  `runtime.facts`, and surfaces narrating the facts substrate (e.g.
+  `boxer.facts`, and surfaces narrating the facts substrate (e.g.
   capinspector's persist help) must follow.
 - `recordstore/gen` grows a membership-id override whose first — and so far
   only — consumer is keelson: generalization pressure ADR-0100 did not
@@ -298,7 +298,7 @@ entry records what changed:
   disjoint-sections gate vs the facts schema's shared sections; the Key
   role binding the per-process `id` sequence rather than an access key; no
   u8 `EntityLifecycle` in the facts schema, so no state view can emit
-  against `runtime.facts`.
+  against `boxer.facts`.
 - **D3 split by verb shape.** D3a: the persist backend binds a dedicated
   generated table (string Key, u8 lifecycle — full state view plus
   versioned write-through); persist state leaves the facts substrate. D3b:
@@ -306,7 +306,7 @@ entry records what changed:
   state view), gated on two new D2 generator features (membership-id
   override on `gen.Input`, id-level disjointness under the override).
 - **Alternatives extended** with the kill-reasons for the two rejected
-  resolutions (adding a u8 lifecycle column to `runtime.facts`; keeping
+  resolutions (adding a u8 lifecycle column to `boxer.facts`; keeping
   persist state facts-bound with membership tombstones and hand-written
   live reads).
 
@@ -314,7 +314,7 @@ entry records what changed:
 
 - [ADR-0100: recordstore — generated leeway ClickHouse store](0100-recordstore-generated-leeway-clickhouse-store.md) — the producer-side decision and its deferrals.
 - [ADR-0026: App runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD3 persist service, §SD6 facts store; the milestones slice 1 implements.
-- [ADR-0042: Generated SoA codec for keelson runtime.facts rows](0042-keelson-leeway-codec-soa-generator.md) — the wire-codec generator; unaffected, shares the emitter core.
+- [ADR-0042: Generated SoA codec for keelson boxer.facts rows](0042-keelson-leeway-codec-soa-generator.md) — the wire-codec generator; unaffected, shares the emitter core.
 - [ADR-0089: Row-DML serialization — keep the bus wire and ClickHouse ingestion separate](0089-rowdml-serialization-clickhouse-native-ingestion.md) — boundary this ADR respects.
 - [ADR-0101: leeway marshall — mixed-shape multi-sub-column sections](0101-leeway-marshall-mixed-shape-sections.md) and [ADR-0103: leeway marshall — dynamic-membership tuples](0103-leeway-marshall-dynamic-membership-tuples.md) — shape-coverage work adjacent to the deferred kinds; the tuple codec layer is on `main`, store decode still excluded.
 - [`recordstore/pushoutstore`](../../public/storage/recordstore/pushoutstore)

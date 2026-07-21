@@ -13,8 +13,8 @@ import (
 func TestComposeCreateTableSql_EmitsHeaderAndFooter(t *testing.T) {
 	sql, err := ddl.ComposeCreateTableSql("MergeTree() PARTITION BY toYYYYMM(ts) ORDER BY (id)")
 	require.NoError(t, err)
-	assert.Contains(t, sql, "CREATE DATABASE IF NOT EXISTS runtime;")
-	assert.Contains(t, sql, "CREATE TABLE IF NOT EXISTS runtime.facts")
+	assert.Contains(t, sql, "CREATE DATABASE IF NOT EXISTS boxer;")
+	assert.Contains(t, sql, "CREATE TABLE IF NOT EXISTS boxer.facts")
 	assert.Contains(t, sql, "MergeTree()")
 	assert.Contains(t, sql, "SETTINGS allow_suspicious_low_cardinality_types=1;")
 }

@@ -54,7 +54,7 @@ of every running task.
   drives the humanized-change emission gate.
 - `runtime/task/supervisor` — the opt-in audit + heartbeat layer.
   Subscribes `task.>`, persists every terminal-grade verb to
-  `runtime.facts` via `factsstore.WriteLog` with structured fields
+  `boxer.facts` via `factsstore.WriteLog` with structured fields
   (`task_id`, `task_kind`, `run_id`, `instance_id`, `duration_ms`,
   `reason`, `error_chain`). Promotes silent in-flight tasks to
   `InflightStateAbandoned` after `HeartbeatThresholdMs` (default

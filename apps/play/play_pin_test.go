@@ -51,9 +51,9 @@ func TestComposePinTableDDL(t *testing.T) {
 		{Name: "note", Type: arrow.BinaryTypes.String, Nullable: true},
 		{Name: "tags", Type: arrow.ListOf(arrow.BinaryTypes.String), Nullable: true},
 	}, nil)
-	ddl, err := composePinTableDDL("runtime.pin_00ff", schema)
+	ddl, err := composePinTableDDL("boxer.pin_00ff", schema)
 	require.NoError(t, err)
-	require.Contains(t, ddl, "CREATE TABLE IF NOT EXISTS runtime.pin_00ff")
+	require.Contains(t, ddl, "CREATE TABLE IF NOT EXISTS boxer.pin_00ff")
 	require.Contains(t, ddl, "`count()` UInt64")
 	require.Contains(t, ddl, "`id:id:u64:2k:0:0:` UInt64")
 	require.Contains(t, ddl, "`note` Nullable(String)")
@@ -68,14 +68,14 @@ func TestComposePinTableDDL(t *testing.T) {
 }
 
 func TestPinDataTableName(t *testing.T) {
-	require.Equal(t, "runtime.pin_00000000000000ff", pinDataTableName(0xff))
-	require.Equal(t, "runtime.pin_ffffffffffffffff", pinDataTableName(^uint64(0)))
+	require.Equal(t, "boxer.pin_00000000000000ff", pinDataTableName(0xff))
+	require.Equal(t, "boxer.pin_ffffffffffffffff", pinDataTableName(^uint64(0)))
 }
 
 func TestParsePinRowsRoundTrip(t *testing.T) {
 	line := strings.Join([]string{
 		"18446744073709551615",
-		"runtime.pin_ffffffffffffffff",
+		"boxer.pin_ffffffffffffffff",
 		"1752800000",
 		"play-main-1-2",
 		"run-1",
@@ -89,7 +89,7 @@ func TestParsePinRowsRoundTrip(t *testing.T) {
 	require.Len(t, rows, 1)
 	r := rows[0]
 	require.Equal(t, ^uint64(0), r.Fingerprint)
-	require.Equal(t, "runtime.pin_ffffffffffffffff", r.DataTable)
+	require.Equal(t, "boxer.pin_ffffffffffffffff", r.DataTable)
 	require.Equal(t, time.Unix(1752800000, 0).UTC(), r.PinnedAt)
 	require.EqualValues(t, 42, r.NumRows)
 	require.Equal(t, "SELECT 1\nFROM t", r.Query)
@@ -128,6 +128,6 @@ func TestPinRowLabel(t *testing.T) {
 	require.Contains(t, label, "SELECT a")
 	require.NotContains(t, label, "FROM b")
 
-	noQuery := pinRowLabel(pinRow{DataTable: "runtime.pin_ab", NumRows: 1, NumCols: 1})
-	require.Contains(t, noQuery, "runtime.pin_ab")
+	noQuery := pinRowLabel(pinRow{DataTable: "boxer.pin_ab", NumRows: 1, NumCols: 1})
+	require.Contains(t, noQuery, "boxer.pin_ab")
 }

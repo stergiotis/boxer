@@ -3,7 +3,7 @@
 // the payload's Go type (ADR-0135 §SD1: the window host refuses a
 // malformed or mistargeted launch config before the target app sees it).
 //
-// The runtime.facts sparse-CBOR wire carries no kind marker — a row's
+// The boxer.facts sparse-CBOR wire carries no kind marker — a row's
 // kind is implied by which vocabulary membership ids populate its tagged
 // sections, and only the kind's generated codec knows that set. So the
 // check cannot be a header peek; instead each codec module registers a

@@ -18,8 +18,8 @@ func TestNewDefaultsAndScopeValidation(t *testing.T) {
 	s, err := New(Config{}, zerolog.Nop())
 	require.NoError(t, err)
 	require.Equal(t, "127.0.0.1:8127", s.cfg.Listen)
-	require.Equal(t, "runtime.facts", s.FactsTable())
-	require.Equal(t, "runtime.mv_queryruns", s.MvName())
+	require.Equal(t, "boxer.facts", s.FactsTable())
+	require.Equal(t, "boxer.mv_queryruns", s.MvName())
 	require.Equal(t, queryrunfacts.ScopeAll, s.cfg.Scope)
 	require.Equal(t, 5, s.cadenceSeconds())
 

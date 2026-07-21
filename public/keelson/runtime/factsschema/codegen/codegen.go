@@ -110,7 +110,7 @@ func writeFile(path string, data []byte) (err error) {
 	return
 }
 
-// GenerateDML emits the runtime.facts DML Go source to outPath using
+// GenerateDML emits the boxer.facts DML Go source to outPath using
 // the default arrow/array builder package — preserves the historical
 // behaviour.
 func GenerateDML(outPath string) (err error) {
@@ -163,7 +163,7 @@ func GenerateDMLWithBuilderPackage(outPath, packageName string, builderPkg leewa
 	return writeFile(outPath, code)
 }
 
-// GenerateReadAccess emits the runtime.facts readaccess Go source to
+// GenerateReadAccess emits the boxer.facts readaccess Go source to
 // outPath. Mirrors spinnaker.GenerateReadAccess — uses the golang
 // (Arrow) technology backend and a "fat runtime" so callers get the
 // full membership lookup accelerators.
@@ -198,7 +198,7 @@ func GenerateReadAccess(outPath string) (err error) {
 }
 
 // ComposeCreateTableSql emits a ClickHouse-compatible CREATE TABLE
-// statement for runtime.facts. engineClause specifies the storage
+// statement for boxer.facts. engineClause specifies the storage
 // engine plus partition / order keys, e.g.
 //
 //	"MergeTree() PARTITION BY toYYYYMM(ts) ORDER BY (id)"
@@ -234,7 +234,7 @@ func ComposeCreateTableSql(engineClause string) (sql string, err error) {
 }
 
 // emitColumnsSQL runs the boxer DDL pipeline and returns just the
-// column block (no scaffolding) for the runtime.facts schema. Used by
+// column block (no scaffolding) for the boxer.facts schema. Used by
 // both ComposeCreateTableSql and GenerateDDL.
 func emitColumnsSQL() (columns string, err error) {
 	var tbl common.TableDesc
@@ -273,7 +273,7 @@ func emitColumnsSQL() (columns string, err error) {
 	return
 }
 
-// GenerateDDL emits the runtime.facts CH-DDL Go source to outPath.
+// GenerateDDL emits the boxer.facts CH-DDL Go source to outPath.
 // The generated file exposes the column block as a string constant
 // (ColumnsSQL) and a runtime ComposeCreateTableSql(engineClause)
 // function with the same signature as the codegen-internal one.
@@ -313,7 +313,7 @@ func GenerateDDL(outPath string) (err error) {
 	buf.WriteString("`\n\n")
 
 	buf.WriteString("// ComposeCreateTableSql emits a ClickHouse-compatible CREATE TABLE\n")
-	buf.WriteString("// statement for runtime.facts. Drop-in replacement for the historical\n")
+	buf.WriteString("// statement for boxer.facts. Drop-in replacement for the historical\n")
 	buf.WriteString("// factsschema.ComposeCreateTableSql — same signature, same semantics,\n")
 	buf.WriteString("// but with the column block baked at codegen time so no leeway pipeline\n")
 	buf.WriteString("// runs at process startup.\n")

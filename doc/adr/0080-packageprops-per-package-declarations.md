@@ -32,7 +32,7 @@ readable, and harvestable?
 
 **Options.**
 
-- **O1** — External store only: a JSON snapshot or a leeway/runtime.facts table
+- **O1** — External store only: a JSON snapshot or a leeway/boxer.facts table
   (ADR-0078 #3), detached from the package source.
 - **O2** — Doc-comment or struct-tag annotations parsed out of band.
 - **O3** — A co-located typed declaration `var PackageProps =
@@ -143,7 +143,7 @@ var PackageProps = packageprops.Props{
 
 ## Alternatives considered
 
-- **Leeway/runtime.facts as the sole store (O1, ADR-0078 #3).** Rejected as the
+- **Leeway/boxer.facts as the sole store (O1, ADR-0078 #3).** Rejected as the
   *home*: detached from source, not IDE-navigable. Retained as a harvest output.
 - **Doc-comment / struct-tag annotations (O2).** Rejected: untyped, not runtime-
   readable, fragile to parse.
@@ -158,7 +158,7 @@ var PackageProps = packageprops.Props{
    `generate` ever rewrites (idempotent-create only, per SD3).
 3. ~~**Rollout staging**~~ — **done for `public/` 2026-06-12** (see Updates);
    `apps/` remain unsurveyed.
-4. **Leeway-facts bridge** — wiring `props harvest` into runtime.facts /
+4. **Leeway-facts bridge** — wiring `props harvest` into boxer.facts /
    `godepview` (ADR-0078 #3/#4) once the declarations exist.
 
 ## Updates

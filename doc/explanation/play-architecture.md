@@ -215,7 +215,7 @@ and four content fingerprints: the buffer as authored, the body as sent,
 the transform chain between them, and the parameter environment it was
 applied to. That makes ClickHouse's own `system.query_log` attributable
 with no boxer process running. The `queryrunsd` capture pipeline
-(ADR-0115) then lifts each terminal log event into a `runtime.facts`
+(ADR-0115) then lifts each terminal log event into a `boxer.facts`
 `QueryRun`, which the History and run-detail panels read back as ordinary
 SQL. So History has two faces: the client-side ring of last-good lane
 results, and this durable, cross-session server-side record. The whole
@@ -231,7 +231,7 @@ verb by hand. Capture is optional and operator-enabled, and ClickHouse —
 not the daemon — owns the schedule and the insert, so the durable
 server-side face of History exists only where someone turned it on. With
 no daemon, a finished run still stamps `system.query_log` (attributable
-after the fact), but nothing lifts it into `runtime.facts`.
+after the fact), but nothing lifts it into `boxer.facts`.
 
 Those captured rows are leeway facts, not a flat table: the
 human-readable, 20-column projection is machine-generated
@@ -244,7 +244,7 @@ no pivot:
 
 ```sql
 SELECT count()
-FROM runtime.facts
+FROM boxer.facts
 WHERE has(`tv:symbol:lr:lr:u64:2q:0:0:0::data`,
           6917529027641081896)  -- KindQueryRun (vocab.MembKindQueryRun)
 ```

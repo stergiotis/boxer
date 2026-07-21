@@ -43,7 +43,7 @@ import (
 //
 // Storage backend selection:
 //   - BOXER_LOG_FACTS=1 (or any non-"0" non-empty value) → chstore,
-//     persisting every event to runtime.facts. BOXER_LOG_FACTS_URL
+//     persisting every event to boxer.facts. BOXER_LOG_FACTS_URL
 //     overrides the default localhost CH URL. If the CH endpoint is
 //     unreachable, we log a warning and fall back to in-memory.
 //   - default (BOXER_LOG_FACTS unset or "0") → InMemoryFactsStore.

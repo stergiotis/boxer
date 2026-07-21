@@ -10,7 +10,7 @@ reviewed-date: 2026-06-17
 
 ## Context
 
-[ADR-0042](./0042-keelson-leeway-codec-soa-generator.md) made **sparse, self-describing CBOR** the bus transport codec for `runtime.facts` rows (the `arrowrowcbor` shim feeding `dml_cbor`). ClickHouse ingestion of the facts store is a *separate* path: `chstore` buffers the generated `<Kind>Columns` SoA into **columnar Arrow IPC** and ships it via `chclient.InsertArrow` (`FORMAT Arrow`). The same in-memory buffer is serialized two ways, for two destinations.
+[ADR-0042](./0042-keelson-leeway-codec-soa-generator.md) made **sparse, self-describing CBOR** the bus transport codec for `boxer.facts` rows (the `arrowrowcbor` shim feeding `dml_cbor`). ClickHouse ingestion of the facts store is a *separate* path: `chstore` buffers the generated `<Kind>Columns` SoA into **columnar Arrow IPC** and ships it via `chclient.InsertArrow` (`FORMAT Arrow`). The same in-memory buffer is serialized two ways, for two destinations.
 
 A proposal asked whether to collapse that into **one** wire: adopt **protobuf** as the row-DML serialization target so the bytes are "1:1 ClickHouse-ingestible" (CH supports `FORMAT Protobuf` natively) and read them back with **hyperpb**. The appeal is unification — one wire that is both the bus codec and the CH ingest format.
 
@@ -97,7 +97,7 @@ The matrix ranks candidate *unified wires*, but it cannot express the decisive p
 
 ### Measured evidence
 
-Indicative measurements from a representative synthetic harness modelling `runtime.facts` row shapes (a lean ~16-field "Grant"-like row, a rich ~51-field "Log5"-like row) — **not** boxer-integrated benchmarks. Tooling: `clickhouse-local` 26.5; Go 1.26 native decode; TinyGo 0.39 + Go 1.25 → wasm under node WASI. Medians; order-of-magnitude.
+Indicative measurements from a representative synthetic harness modelling `boxer.facts` row shapes (a lean ~16-field "Grant"-like row, a rich ~51-field "Log5"-like row) — **not** boxer-integrated benchmarks. Tooling: `clickhouse-local` 26.5; Go 1.26 native decode; TinyGo 0.39 + Go 1.25 → wasm under node WASI. Medians; order-of-magnitude.
 
 **Wire size (raw bytes/row).** BSON is bulkiest — it encodes every array as an index-keyed sub-document (`["a","b"]` → `{"0":"a","1":"b"}`), a per-element tax that hits leeway's all-array rows hardest.
 
@@ -171,7 +171,7 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 - [ADR-0042](./0042-keelson-leeway-codec-soa-generator.md) — SoA codec generator; CBOR bus codec; `arrowrowcbor` / `dml_cbor`; the `<Kind>Columns` SoA that is the pivot here.
 - [ADR-0036](./0036-runtime-buscodec.md) — bus codec seam; prior protobuf + MsgPack rejection on non-ingestion criteria.
-- [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — `runtime.facts` and the in-proc bus.
+- [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — `boxer.facts` and the in-proc bus.
 - [ADR-0066](./0066-leeway-dql-clickhouse-readback-generator.md) — ClickHouse read-back generator.
 - [ADR-0077](./0077-keelson-browser-wasm-execution.md), [ADR-0078](./0078-tinygo-wasm-amenability-survey.md) — wasm/TinyGo read-path context (hyperpb's amd64/arm64 limit lands here).
 - `public/keelson/runtime/factsstore/chstore` — current Arrow IPC ingest path; `arrowrowcbor.shortKeyForFieldName` — the short-key derivation that the tension turns on.

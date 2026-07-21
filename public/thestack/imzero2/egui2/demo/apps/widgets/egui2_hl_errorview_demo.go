@@ -130,7 +130,7 @@ func demoErrorView(ids *c.WidgetIdStack, st *errorviewDemoState) {
 		c.AddSpace(gapSections())
 		c.Separator().Horizontal().Send()
 		c.AddSpace(gapSections())
-		c.Label("Leeway fact-table widget (same error, shredded into runtime.facts):").Send()
+		c.Label("Leeway fact-table widget (same error, shredded into boxer.facts):").Send()
 		c.AddSpace(padInner())
 		if err := leewayrender.Render(st.table2Emitter, evRealRowmarshallError); err != nil {
 			c.Label(fmt.Sprintf("leewayrender error: %v", err)).Send()

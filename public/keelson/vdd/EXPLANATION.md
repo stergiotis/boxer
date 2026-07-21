@@ -26,7 +26,7 @@ the parallel-array shredding the wire format inherits from sits in
 ## Background
 
 A leeway "membership" is a typed-value tag attached to an entity. The
-`runtime.facts` table — keelson's primitive observability and audit
+`boxer.facts` table — keelson's primitive observability and audit
 table — stores one row per entity, with columns shredded by leeway's
 canonical type vocabulary (`string`, `symbol`, `text`, `blob`,
 `u8`…`u64`, `i8`…`i64`, `f32`, `f64`, `bool`, `z64` for DateTime64(9) nanos).
@@ -371,7 +371,7 @@ Resolved during M2/M3 (recorded here for documentary continuity):
   itself is still deferred (Arbitrary covers the common case); when
   it lands it will add a runtime `len ≥ 1` assert on the slice.
 - **`HomogenousArray` sub-type vs Arbitrary multi-membership on the
-  wire.** Empirically wire-equivalent on the current `runtime.facts`
+  wire.** Empirically wire-equivalent on the current `boxer.facts`
   schema — both produce `val ‖ lr ‖ lrcard` where `lrcard[i]` is the
   number of values contributed by the kind. The vdd sub-type
   distinction is preserved in the schema for query-time semantics but
@@ -381,7 +381,7 @@ Resolved during M2/M3 (recorded here for documentary continuity):
 
 ## Further reading
 
-- [ADR-0042 — Generated SoA codec for keelson runtime.facts rows](../../../doc/adr/0042-keelson-leeway-codec-soa-generator.md)
+- [ADR-0042 — Generated SoA codec for keelson boxer.facts rows](../../../doc/adr/0042-keelson-leeway-codec-soa-generator.md)
 - [ADR-0041 — rowmarshall: boxer error fully-shredded row layout](../../../doc/adr/0041-rowmarshall-error-shredding.md)
 - [ADR-0026 — app runtime + capability subjects](../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
 - [ADR-0035 — keelson namespace introduction](../../../doc/adr/0035-keelson-namespace-introduction.md)

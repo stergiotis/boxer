@@ -59,7 +59,7 @@ They round-trip through each other. Author the DTO once; pick the driver per use
   leeway packages fail to compile with misleading "undefined" errors
   ([AGENTS.md §Build & test](../../AGENTS.md)).
 - **A leeway schema with generated DML + RA classes** — e.g. `anchor`, or
-  keelson's `runtime.facts`. The codec *drives* those builder/reader classes; it
+  keelson's `boxer.facts`. The codec *drives* those builder/reader classes; it
   does not define the schema. A DTO field names a membership and a section that
   the schema already declares; the Go compiler (codegen) or `Validate` (reflect)
   checks the binding.

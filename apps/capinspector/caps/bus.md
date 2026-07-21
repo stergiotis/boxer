@@ -29,7 +29,7 @@ boilerplate.
 **The bus is the audit boundary.** Every audited `Request` lands one
 `AuditRecord` on the bus's configured `AuditSinkI` — the carousel
 wires `MultiSink{factsstore.AsAuditSink(facts), capinspector.Tally}`
-so a single audit row populates both the durable runtime.facts table
+so a single audit row populates both the durable boxer.facts table
 and the live counters this inspector renders.
 
 **M4 swap:** inprocbus is replaced by `nats.Conn` per app; minted

@@ -11,7 +11,7 @@ reviewed-date: 2026-06-08
 ## Context
 
 The `rowmarshall` package (`public/keelson/runtime/rowmarshall/`)
-is a hand-coded ClickHouse RowBinary writer for `runtime.facts`. Until
+is a hand-coded ClickHouse RowBinary writer for `boxer.facts`. Until
 this ADR it carried one fact kind (`CapabilityGrant`); each writer
 produces one RowBinary row matching the producer-owned column subset
 resolved by `colspec.go` from boxer's leeway IR.
@@ -19,13 +19,13 @@ resolved by `colspec.go` from boxer's leeway IR.
 Operational need: persist captured boxer errors (`eh.Errorf` chains
 with PC-prefix-deduplicated stack streams, frame stubs, and optional
 attached CBOR structured data from `eb.Build().Str(...)...Errorf(...)`)
-into the same `runtime.facts` table, so error-capture observability
+into the same `boxer.facts` table, so error-capture observability
 shares the leeway-shredded storage with the existing capability /
 audit fact kinds.
 
 Constraints in play:
 
-- **Wire and storage discipline.** `runtime.facts` is one specific
+- **Wire and storage discipline.** `boxer.facts` is one specific
   leeway-shredded table with a fixed section vocabulary; any new fact
   kind must route into existing sections (`string`, `symbol`, `u32`,
   `u64`, `blob`, …) without schema duplication.
@@ -43,7 +43,7 @@ Constraints in play:
   is not required by any current consumer (logs and detail panes
   consume the presentation tree).
 - **Tree-shaped payload, row-shaped storage.** A boxer error is a
-  `Streams × Facts` tree of variable depth; `runtime.facts` is row-
+  `Streams × Facts` tree of variable depth; `boxer.facts` is row-
   oriented. We must decide how to project a tree onto rows.
 - **One-way wire.** rowmarshall's RowBinary path has no in-process
   Unmarshal counterpart by design — round-trip is via ClickHouse (or
@@ -52,7 +52,7 @@ Constraints in play:
 
 ## Design space (QOC)
 
-**Question.** How should a boxer error chain map onto `runtime.facts`
+**Question.** How should a boxer error chain map onto `boxer.facts`
 rows and rowmarshall's section vocabulary?
 
 **Options.**
@@ -61,7 +61,7 @@ rows and rowmarshall's section vocabulary?
   stream tree (matching `eh.MarshalError`'s wire shape verbatim) into a
   single `blob`-section entry; only plain identity columns are
   populated alongside. One row per error, one blob.
-- **O2 — Shredded multi-row.** One `runtime.facts` row per fact (frame
+- **O2 — Shredded multi-row.** One `boxer.facts` row per fact (frame
   or message), sharing an `error_id` plain column and linked via a
   `parent_id` foreign key. Across-row joins reconstruct the tree.
 - **O3 — One row per error, fully shredded into per-fact parallel
@@ -102,7 +102,7 @@ over the per-fact section arrays.
 We will adopt **O3 — one row per error, fully shredded into per-fact
 parallel arrays**.
 
-Each captured boxer error becomes one `runtime.facts` row with:
+Each captured boxer error becomes one `boxer.facts` row with:
 
 - Plain identity columns: `id` (caller-supplied correlation), `naturalKey`
   (opaque caller-supplied join key, optional), `ts` (capture timestamp).
@@ -170,7 +170,7 @@ egress.
 ### Positive
 
 - **Single ingestion primitive for boxer errors.** Marshal via the
-  existing `runtime.facts` row plumbing; no new table, no new
+  existing `boxer.facts` row plumbing; no new table, no new
   CH-format path.
 - **Boxer egress stays consistent.** A non-zerolog consumer
   (`eh.WalkStreams`) is now the documented seam. Future writers
@@ -250,8 +250,8 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 
 ## References
 
-- [ADR-0010 — leeway-cbor-rpc-codec](0010-leeway-cbor-rpc-codec.md) — the `runtime.facts` codec referenced above.
-- [ADR-0026 — app runtime + cap subjects](0026-app-runtime-and-capability-subjects.md) — the runtime layer that originally motivated `runtime.facts` schema.
+- [ADR-0010 — leeway-cbor-rpc-codec](0010-leeway-cbor-rpc-codec.md) — the `boxer.facts` codec referenced above.
+- [ADR-0026 — app runtime + cap subjects](0026-app-runtime-and-capability-subjects.md) — the runtime layer that originally motivated `boxer.facts` schema.
 - [`public/observability/eh/walk.go`](../../public/observability/eh/walk.go) — the upstream `WalkStreams` accessor.
 - [`public/observability/eh/zerolog.go`](../../public/observability/eh/zerolog.go) — `MarshalError` / `gatherFactsAndStacks` (lines 230–445).
 - [`public/keelson/runtime/codec/errkind/`](../../public/keelson/runtime/codec/errkind) — successor package (ADR-0042 M11 retrofit). The hand-coded `rowmarshall.Error` types and RowBinary writer this ADR introduced were replaced by codegen-emitted `ErrorColumns` + `Marshal` here; the shredded parallel-array encoding survives unchanged. The original `rowmarshall/{error,error_from_boxer,error_rowbinary,colspec}.go` files are retired.

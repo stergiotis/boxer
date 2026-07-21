@@ -10,7 +10,7 @@ date: 2026-05-15
 
 Leeway is optimised for high-throughput batched workloads: Go value → `dml/runtime` → Arrow `RecordBatch` → ClickHouse / Parquet / Arrow IPC, with per-batch overhead (section co-arrays, dictionaries, Arrow metadata) amortised across thousands of entities. **For one-entity-per-call RPC the amortisation never happens.** A one-row Arrow batch plus IPC framing costs far more than the payload warrants under a tens-of-microseconds round-trip budget.
 
-Downstream consumers (the `runtime.facts` table, the spinnaker fact lineage) define **multi-shape** leeway tables: one fixed table accepts many domain payloads via per-canonical-type sections + memberships. The same Go struct can legitimately serialise into more than one target table, so the codec must keep the Go type target-agnostic.
+Downstream consumers (the `boxer.facts` table, the spinnaker fact lineage) define **multi-shape** leeway tables: one fixed table accepts many domain payloads via per-canonical-type sections + memberships. The same Go struct can legitimately serialise into more than one target table, so the codec must keep the Go type target-agnostic.
 
 The ergonomic target is `encoding/json`: `Marshal(v)` / `Unmarshal(b, v)` for nested structs, maps, and slices, without the caller constructing Arrow batches.
 
@@ -60,7 +60,7 @@ A wire message is a CBOR map. Keys are section names (string); values are CBOR m
 
 **Membership wire keys.** Membership-related columns use the `common.ColumnRoleE` strings verbatim: `lv` / `lr` (low-card verbatim/ref), `hv` / `hr` (high-card verbatim/ref), `lmv` / `lmr` (mixed verbatim/ref), `mvhp` / `mrhp` (mixed high-card-parameter components). Cardinality-support columns append `card`: `lvcard`, `lrcard`, `lmvcard`, `valcard`, etc. The encoder picks which role columns to emit from the section's declared `MembershipSpecE`.
 
-**Plain-value keying.** Each `PlainItemTypeE` that appears gets one top-level map entry (`_id`, `_ts`, `_lifecycle`, …) whose value is a CBOR map keyed by plain-value column name. The nesting is uniform — even single-column item types use a one-entry nested map, not a bare scalar. (`runtime.facts` has two `EntityId` columns, so `_id` is `{ "id": …, "naturalKey": … }`.)
+**Plain-value keying.** Each `PlainItemTypeE` that appears gets one top-level map entry (`_id`, `_ts`, `_lifecycle`, …) whose value is a CBOR map keyed by plain-value column name. The nesting is uniform — even single-column item types use a one-entry nested map, not a bare scalar. (`boxer.facts` has two `EntityId` columns, so `_id` is `{ "id": …, "naturalKey": … }`.)
 
 Indicative shape, decoded for clarity:
 
@@ -128,7 +128,7 @@ The binding entry has a small surface:
 
 - **Slot:** `Section` (string) for tagged values, or `Plain` (`common.PlainItemTypeE`) for plain values — mutually exclusive.
 - **Column:** required for plain values (`Column: "naturalKey"`); optional override for multi-value-column tagged sections without struct recursion.
-- **Membership:** one of `Path` (verbatim membership, e.g. `"/hostname"`), `MembershipRef` (uint64 ref ID for ref-based sections like every data section in `runtime.facts`), or `Memberships []MembershipBinding` (multi-membership aliasing). The codec picks the column role from the section's declared `MembershipSpecE` and the binding's chosen field — e.g. `Section: "string"` + `MembershipRef: 101` against a `LowCardRef` section emits the `lr` role on the wire.
+- **Membership:** one of `Path` (verbatim membership, e.g. `"/hostname"`), `MembershipRef` (uint64 ref ID for ref-based sections like every data section in `boxer.facts`), or `Memberships []MembershipBinding` (multi-membership aliasing). The codec picks the column role from the section's declared `MembershipSpecE` and the binding's chosen field — e.g. `Section: "string"` + `MembershipRef: 101` against a `LowCardRef` section emits the `lr` role on the wire.
 - **High-card-param strategy:** `ParamArrayIndex` for `[]T`, `ParamMapKey` for `map[K]V`.
 
 `NewCodec[T]` reflects once at construction, resolves bindings against the target `TableDesc`, and caches a section→accessor walker; the hot path never re-reflects.
@@ -250,7 +250,7 @@ The full design space is laid out under [§ Design space (QOC)](#design-space-qo
 - Handle+binding indirection is one more concept; mitigated by short tags and the v2 auto-binder.
 - Reflection on the hot path leaves perf on the table vs. codegen; v1 measures before committing to a codegen tool.
 - "Same struct → different targets" with renamed columns requires per-target `lw:",col=..."` tag overrides on inner fields. Friction is real but bounded to the renamed sections.
-- Co-section bindings rejected; the spinnaker / runtime.facts annotation overlay pattern (ADR-0007) waits for v2.
+- Co-section bindings rejected; the spinnaker / boxer.facts annotation overlay pattern (ADR-0007) waits for v2.
 - One `Codec[T]` per goroutine; RPC handlers need a pool or per-handler instance until v2.
 
 **Neutral.**
@@ -263,7 +263,7 @@ None blocking v1. Items revisited in v2 are listed under §4 *Deferred to v2*.
 
 ## Status
 
-Deferred 2026-05-15. The design captured under §1–§5 is the target shape if and when the abstraction is built; until the trigger below is met, the hand-coded `runtime.facts` encoder is the interim path.
+Deferred 2026-05-15. The design captured under §1–§5 is the target shape if and when the abstraction is built; until the trigger below is met, the hand-coded `boxer.facts` encoder is the interim path.
 
 **Trigger to un-defer:** a second leeway target table (or a third) where hand-coding a second encoder would visibly duplicate the first. At that point the generic codec is justified by concrete duplication rather than anticipation, and this ADR moves to `proposed`/`accepted`.
 
@@ -273,10 +273,10 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ### 2026-05-15 — Deferred pending a second leeway target table
 
-Status moved from `proposed` to `deferred`. A cost-benefit comparison against plain CBOR and a hand-coded `runtime.facts`-specific encoder/decoder showed the generic codec is over-engineered for a one-table scenario:
+Status moved from `proposed` to `deferred`. A cost-benefit comparison against plain CBOR and a hand-coded `boxer.facts`-specific encoder/decoder showed the generic codec is over-engineered for a one-table scenario:
 
-- For `runtime.facts` with ~5-20 fact kinds, a hand-coded encoder + shared `FactsBuilder` helper totals ~150-350 LOC, runs sub-microsecond per call with no reflection, and introduces no new abstractions. The generic codec is ~500-1000 LOC of machinery plus per-fact binding boilerplate, with reflection on the hot path costing 5-10x more per call.
-- Wire format and storage alignment are identical between the two — both produce the shredded-non-empty CBOR layout that ingests directly into `runtime.facts`.
+- For `boxer.facts` with ~5-20 fact kinds, a hand-coded encoder + shared `FactsBuilder` helper totals ~150-350 LOC, runs sub-microsecond per call with no reflection, and introduces no new abstractions. The generic codec is ~500-1000 LOC of machinery plus per-fact binding boilerplate, with reflection on the hot path costing 5-10x more per call.
+- Wire format and storage alignment are identical between the two — both produce the shredded-non-empty CBOR layout that ingests directly into `boxer.facts`.
 - Schema-drift risk for the hand-coded path is mitigated by a test that diff-checks `factsschema.GetSchemaInManipulator()` against `FactsBuilder`'s expected wire shape.
 
 The design captured in §1–§5 above remains accurate as the target shape for a generic codec — co-array recursion, handle+binding indirection, SinkI layering, all of it. Trigger to un-defer: a second leeway target table (or a third) where hand-coding a second encoder would visibly duplicate the first. At that point the abstraction is justified by concrete duplication rather than anticipation.

@@ -24,7 +24,7 @@ service is the bus subscriber on `runtime.persist.>`; it parses
 **Backend today:** `persist.NewMemoryBackend()` — process-scoped,
 does NOT survive restart. The status line's `persist:mem` segment
 makes this explicit. A future facts-backed backend (writing to
-`runtime.facts` via `WriteState`) will make state durable when
+`boxer.facts` via `WriteState`) will make state durable when
 ClickHouse is reachable; until then `persist:mem` is the truthful
 readout.
 

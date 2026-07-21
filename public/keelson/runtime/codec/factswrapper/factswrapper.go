@@ -1,5 +1,5 @@
 // Package factswrapper implements marshallgen.WrapperEmitterI for the
-// keelson runtime.facts schema. It provides the schema-specific blocks
+// keelson boxer.facts schema. It provides the schema-specific blocks
 // — kindXxx vdd-resolved variables, ActiveSections / ActiveFields
 // hints, dml_cbor InEntityFacts pool, Marshal / Reader / Unmarshal /
 // buscodec.CodecI bridge — that wrap the schema-agnostic core produced
@@ -9,7 +9,7 @@
 // also applies a back-compat plan transformation: scalar T or
 // Option[T] fields targeting `*Array` / `*Set` / `*Range` sections
 // get FieldFlags.Unit set automatically, matching the pre-flag
-// runtime.facts emit behaviour for DTOs that haven't migrated to
+// boxer.facts emit behaviour for DTOs that haven't migrated to
 // explicit `,unit` tags.
 package factswrapper
 
@@ -27,13 +27,13 @@ import (
 	cbdml "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml_cbor"
 )
 
-// FactsWrapper wires the marshallgen core into the runtime.facts
+// FactsWrapper wires the marshallgen core into the boxer.facts
 // dml_cbor / ra / cborarrow / buscodec stack. Zero-value usable.
 type FactsWrapper struct{}
 
 var _ marshallgen.WrapperEmitterI = FactsWrapper{}
 
-// Generate parses inputPath, applies the runtime.facts back-compat
+// Generate parses inputPath, applies the boxer.facts back-compat
 // Unit-flag inference for unchanged DTOs, then emits via marshallgen
 // with this wrapper supplying the schema-coupled blocks. Returns the
 // rendered bytes; if outputPath is non-empty, also writes to disk.
@@ -64,7 +64,7 @@ func (FactsWrapper) Generate(inputPath, outputPath string) (out []byte, err erro
 // inferUnitFromSectionSuffix flips FieldFlags.Unit on scalar T or
 // Option[T] fields whose lw: tag section name ends in `Array` / `Set` /
 // `Range`. This preserves the pre-flag emit behaviour where the
-// runtime.facts generator automatically picked BeginAttributeSingle for
+// boxer.facts generator automatically picked BeginAttributeSingle for
 // scalar values landing in homogeneous-array section types. DTOs that
 // declare an explicit `,unit` are left untouched.
 func inferUnitFromSectionSuffix(plan *mappingplan.Plan) {
@@ -90,7 +90,7 @@ func isNonScalarSectionName(s string) bool {
 
 // --- marshallgen.WrapperEmitterI methods. ---
 
-// Imports lists the runtime.facts-locked imports the wrapper-emitted
+// Imports lists the boxer.facts-locked imports the wrapper-emitted
 // blocks reference: bytes (Encode/Decode buffers), io (Marshal
 // io.Writer), strings (ActiveFields prefix scan), sync (sync.Pool +
 // sync.OnceValue), arrow/arrow + ipc + memory (Allocator + IPC
@@ -211,7 +211,7 @@ func writeActiveHints(sb *strings.Builder, plan *mappingplan.Plan) (err error) {
 	sb.WriteString("}\n\n")
 
 	fmt.Fprintf(sb, "// %sActiveFields is the column-index subset this kind populates\n", plan.KindType)
-	fmt.Fprintf(sb, "// in the runtime.facts Arrow schema. Lazily computed once via\n")
+	fmt.Fprintf(sb, "// in the boxer.facts Arrow schema. Lazily computed once via\n")
 	fmt.Fprintf(sb, "// sync.OnceValue: scans cbdml.CreateSchemaFacts()'s tv:<section>:...\n")
 	fmt.Fprintf(sb, "// field names against this kind's active sections plus the three\n")
 	fmt.Fprintf(sb, "// plain prefixes (id:, ts:, lc:). Driven through RecordBuilder.\n")
@@ -397,7 +397,7 @@ func writeUnmarshalMethod(sb *strings.Builder, plan *mappingplan.Plan) (err erro
 	names := activeSectionNamesByDecl(plan)
 
 	fmt.Fprintf(sb, "// Unmarshal appends one row to c per entity in rec, projecting\n")
-	fmt.Fprintf(sb, "// the runtime.facts columns through factsschema/ra. Thin wrapper\n")
+	fmt.Fprintf(sb, "// the boxer.facts columns through factsschema/ra. Thin wrapper\n")
 	fmt.Fprintf(sb, "// around %sFillFromArrow — the per-row decode lives there.\n", t)
 	fmt.Fprintf(sb, "func (c *%sColumns) Unmarshal(rec arrow.Record) (err error) {\n", t)
 	fmt.Fprintf(sb, "\tr := new%s()\n", upperFirst(rt))
@@ -582,7 +582,7 @@ func activeSectionIndices(plan *mappingplan.Plan) (out []int, err error) {
 	for _, f := range plan.Fields {
 		idx, ok := cbdml.InEntityFactsSectionIndices[f.LWSection]
 		if !ok {
-			err = eb.Build().Str("section", f.LWSection).Errorf("factswrapper: section not in dml_cbor table (must be one of the 21 runtime.facts schema sections)")
+			err = eb.Build().Str("section", f.LWSection).Errorf("factswrapper: section not in dml_cbor table (must be one of the 21 boxer.facts schema sections)")
 			return
 		}
 		if seen[idx] {

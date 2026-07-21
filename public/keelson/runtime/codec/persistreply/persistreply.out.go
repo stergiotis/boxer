@@ -53,7 +53,7 @@ func init() {
 var PersistReplyActiveSections = []int{0, 1, 12}
 
 // PersistReplyActiveFields is the column-index subset this kind populates
-// in the runtime.facts Arrow schema. Lazily computed once via
+// in the boxer.facts Arrow schema. Lazily computed once via
 // sync.OnceValue: scans cbdml.CreateSchemaFacts()'s tv:<section>:...
 // field names against this kind's active sections plus the three
 // plain prefixes (id:, ts:, lc:). Driven through RecordBuilder.
@@ -511,7 +511,7 @@ func (r *persistReplyReader) release() {
 }
 
 // Unmarshal appends one row to c per entity in rec, projecting
-// the runtime.facts columns through factsschema/ra. Thin wrapper
+// the boxer.facts columns through factsschema/ra. Thin wrapper
 // around PersistReplyFillFromArrow — the per-row decode lives there.
 func (c *PersistReplyColumns) Unmarshal(rec arrow.Record) (err error) {
 	r := newPersistReplyReader()

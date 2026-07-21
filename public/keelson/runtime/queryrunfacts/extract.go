@@ -32,7 +32,7 @@ const (
 	RefreshTag = "queryrunsd-refresh"
 )
 
-// Physical leeway wire-column names of runtime.facts the pipeline SQL
+// Physical leeway wire-column names of boxer.facts the pipeline SQL
 // references (the chstore composeLatestStateSql convention; the DDL
 // parse test in mv_test.go asserts they exist in ddl.ColumnsSQL).
 const (
@@ -62,7 +62,7 @@ const DefaultBatchCap = 10000
 // query text (the belt for the case where a ClickHouse version does not
 // apply the MV body's SETTINGS log_comment to refresh queries).
 //
-// factsTable is the qualified destination ("runtime.facts"); pullURL is
+// factsTable is the qualified destination ("boxer.facts"); pullURL is
 // the endpoint the MV reads, e.g. "http://127.0.0.1:8127/pull";
 // batchCap <= 0 applies DefaultBatchCap.
 func ComposeExtractSql(factsTable string, pullURL string, scope ScopeE, batchCap int) (sql string, err error) {

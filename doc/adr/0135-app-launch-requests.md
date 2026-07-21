@@ -36,7 +36,7 @@ capability-declared and audited, and the target app is *not yet mounted*
 when the request arrives — so per-app request subjects have a
 bootstrapping problem; the window host is the actor. Second, a
 data-engineering constraint: the runtime already has exactly one
-sanctioned CBOR dialect — the runtime.facts DML module
+sanctioned CBOR dialect — the boxer.facts DML module
 (`factsschema/dml_cbor`) with `codec/factswrapper` generating per-DTO
 `Marshal`/`Unmarshal` and a `buscodec.CodecI` bridge — and the runtime's
 request/reply payloads are already codec modules under `runtime/codec/`
@@ -63,7 +63,7 @@ wire dialect?
 - **O2 — Host-level open subject + leeway-modelled launch configs.** One
   audited `windowhost` request; per-app launch configs are leeway-declared
   DTOs with factswrapper-generated codecs, kinds registered in the
-  runtime.facts vocabulary.
+  boxer.facts vocabulary.
 - **O3 — Host-level open subject + opaque arguments.** Same routing, but
   the payload is a schema-less CBOR bag the runtime never validates.
 - **O4 — Status quo.** Env vars at process start plus the clipboard.
@@ -109,7 +109,7 @@ Adopt **O2**.
   DTO in an app-owned package, declared in the codec grammar
   (`kind:"…"` tag, `lw:` columns) and generated via the `keelsoncodec`
   path (`factswrapper.FactsWrapper{}.Generate`), with the kind registered
-  in the runtime.facts vocabulary and the module's golden pinning byte
+  in the boxer.facts vocabulary and the module's golden pinning byte
   stability. This enforces the dialect rule **by construction**: a kind
   absent from the vocabulary has no codec, so a free-form payload is not
   representable, not merely rejected.
@@ -135,7 +135,7 @@ Adopt **O2**.
   the first app that genuinely needs it — help is the likely witness.
 
 - **SD6 — The request is the audit record.** Because the request wire
-  shape is itself a runtime.facts DTO, the host persists it as a fact
+  shape is itself a boxer.facts DTO, the host persists it as a fact
   beside the app-lifecycle "started" row it already emits, with the
   caller identity the audited-request path attributes. Launches — which
   SQL was opened in play, by which app, when — become ordinary facts
@@ -206,7 +206,7 @@ Adopt **O2**.
   `StaticMountContext`, plus test fakes) and `Manifest` a field.
 - Every argument-accepting app pays a vocabulary entry, a codec module,
   and a golden — the friction is the point, but it is real cost.
-- The runtime.facts vocabulary becomes load-bearing for UI composition;
+- The boxer.facts vocabulary becomes load-bearing for UI composition;
   kind hygiene (append-only, no renames) now guards launch compatibility
   too.
 
@@ -240,7 +240,7 @@ written:
   reply and its lifecycle row join on one column — and `Reason` on the
   shared `reason` term (empty = success), the reply-cohort convention.
 - **Envelope validation is a probe, not a header peek.** The
-  runtime.facts wire carries no kind marker — a row's kind is implied by
+  boxer.facts wire carries no kind marker — a row's kind is implied by
   which vocabulary membership ids populate it, and only the kind's
   generated codec knows that set. The boundary check is therefore a
   small registry (`runtime/codec/kindcheck`): each codec module

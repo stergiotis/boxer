@@ -17,7 +17,7 @@ view per registered capability.
 ## Picker
 
 The horizontal row at the top is the capability picker. Each chip is
-a registered capability id (`runtime.facts`, `runtime.bus`,
+a registered capability id (`boxer.facts`, `runtime.bus`,
 `runtime.fs`, `runtime.task`, …). Click a chip to switch the detail
 view; the active chip carries the accent fill.
 
@@ -26,7 +26,7 @@ view; the active chip carries the accent fill.
 For the selected capability:
 
 - **Active backend** — the implementation currently servicing the
-  capability (e.g. `chstore` for `runtime.facts`, `inprocbus` for
+  capability (e.g. `chstore` for `boxer.facts`, `inprocbus` for
   `runtime.bus`).
 - **Schematic** — a small canvas showing producers and consumers,
   drawn with the IDS palette so callers stand out.
@@ -39,7 +39,7 @@ process startup via the runtime configuration, not from here.
 ## Audit counters and sparklines
 
 The bottom strip shows recent traffic per capability, sourced from
-`runtime.facts`. A flat line is no recent activity; a busy
+`boxer.facts`. A flat line is no recent activity; a busy
 sparkline means the runtime is exercising the capability heavily.
 Useful as a sanity check that the chosen backend is actually being
 exercised.

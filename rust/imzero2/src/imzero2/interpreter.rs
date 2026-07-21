@@ -3135,7 +3135,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     /// |ui| {…})` etc. take closures with no `Result` return). Without
     /// this wrapper any inner protocol error is dropped silently and
     /// the next outer iteration reads a misaligned cursor — exactly the
-    /// failure mode the runtime.facts desync exposed. Codegen
+    /// failure mode the boxer.facts desync exposed. Codegen
     /// (`egui2_definition_d_blocks.go`) emits this wrapper at every
     /// such site so the inner error always surfaces.
     ///

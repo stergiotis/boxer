@@ -25,7 +25,7 @@ showed an in-process consumer doing its own bookkeeping. The
 supervisor is the same observer pattern hoisted to the runtime: a
 host-side service that subscribes to `task.>`, persists every
 terminal-grade verb (created, done, error, cancel, abandoned) into
-`runtime.facts`, and exposes the current in-flight set on a
+`boxer.facts`, and exposes the current in-flight set on a
 request/reply subject so any consumer — UI panel, M4 NATS bridge, the
 M2 supervisor of supervisors — can query it without rebuilding the
 same map.

@@ -10,13 +10,13 @@ reviewed-date: 2026-06-21
 
 ## Context
 
-[ADR-0026](./0026-app-runtime-and-capability-subjects.md) introduces the app runtime, the in-proc bus, and the capability-as-subject taxonomy. Its §SD3 reserves the `ch.query.{db}` / `ch.stream.{db}` / `ch.schema.{db}` family for ClickHouse access; those subjects are the eventual route to the shared CH server that hosts `runtime.facts`, `spinnaker.facts`, and business data. They are not yet bound (M2 wires `fs.*` first), but the contract is clear: those subjects talk to a long-lived multi-tenant server.
+[ADR-0026](./0026-app-runtime-and-capability-subjects.md) introduces the app runtime, the in-proc bus, and the capability-as-subject taxonomy. Its §SD3 reserves the `ch.query.{db}` / `ch.stream.{db}` / `ch.schema.{db}` family for ClickHouse access; those subjects are the eventual route to the shared CH server that hosts `boxer.facts`, `spinnaker.facts`, and business data. They are not yet bound (M2 wires `fs.*` first), but the contract is clear: those subjects talk to a long-lived multi-tenant server.
 
 In parallel, a second SQL workload has accumulated and does *not* fit the server family:
 
 - **Interactive scratch.** The regex explorer at [`public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer_chlocal.go) shells out to `clickhouse-local --query <SQL> --format ArrowStream` once per query. Cold subprocess fork costs ~50–60 ms on a warm filesystem cache; for debounced typing this is tolerable, for a panel that emits a query per keystroke or per repaint it is the dominant latency. Future apps in the same shape — play scratchpad expressions, schema-conversion utilities, ad-hoc Pretty-format peeks — would multiply the cost.
 - **Format flexibility.** The CH server's native protocol (and `chclient`'s HTTP wrapper) is primarily a `Native`/`RowBinary`/`Arrow` carrier. Apps using `clickhouse-local` for *data-conversion* — read parquet, emit JSONEachRow; read CSV, emit Pretty for a debug pane; produce Markdown from a `system.*` table — need the full CH `FORMAT` surface (Pretty, JSONEachRow, CSV, TSVWithNamesAndTypes, Markdown, Vertical, …) that the server protocols do not naturally expose.
-- **No shared state with the server.** Local scratch queries read from `file()`, `url()`, `s3()`, ad-hoc `engine=Memory` tables, and `system.*`. None of it touches `runtime.facts` or `spinnaker.facts`; mixing it onto the `ch.query.*` family would conflate two trust boundaries (server-side ACLs vs. local-only) and two latency budgets.
+- **No shared state with the server.** Local scratch queries read from `file()`, `url()`, `s3()`, ad-hoc `engine=Memory` tables, and `system.*`. None of it touches `boxer.facts` or `spinnaker.facts`; mixing it onto the `ch.query.*` family would conflate two trust boundaries (server-side ACLs vs. local-only) and two latency budgets.
 
 Stakeholder direction: **optimize for latency, not throughput.** This is interactive UI work, not a high-QPS service. We are willing to spend process resources to keep a few warm workers ready; we are not willing to manage a reuse lifecycle to extract every last query/sec from each process.
 
@@ -211,7 +211,7 @@ Streaming is the right path for: data-conversion outputs in the multi-MB-to-mult
 
 ### SD7 — Audit and capslock posture
 
-**Audit.** Every request — buffered, streaming, or cache-hit — produces one row in `runtime.facts`. The broker emits one structured `zerolog.Event` per request (`Info` for success, `Warn` for failure); the log bridge ([ADR-0026 §SD6](./0026-app-runtime-and-capability-subjects.md) logs-as-facts) routes it into `runtime.facts` under `MembKindLog`, with each zerolog field landing as a typed `runtime.log.field` mixed-membership. The columnar query surface is preserved over the broker's audit corpus without extending `FactsStoreI` for one consumer — `fsbroker` and `persist` follow the same logs-as-facts pattern. If a richer broker-audit kind emerges later as a cross-broker need, it can be promoted from the log envelope to a first-class membership without changing the field set.
+**Audit.** Every request — buffered, streaming, or cache-hit — produces one row in `boxer.facts`. The broker emits one structured `zerolog.Event` per request (`Info` for success, `Warn` for failure); the log bridge ([ADR-0026 §SD6](./0026-app-runtime-and-capability-subjects.md) logs-as-facts) routes it into `boxer.facts` under `MembKindLog`, with each zerolog field landing as a typed `runtime.log.field` mixed-membership. The columnar query surface is preserved over the broker's audit corpus without extending `FactsStoreI` for one consumer — `fsbroker` and `persist` follow the same logs-as-facts pattern. If a richer broker-audit kind emerges later as a cross-broker need, it can be promoted from the log envelope to a first-class membership without changing the field set.
 
 The event fields:
 
@@ -298,7 +298,7 @@ No CGO. No exec into anything other than the configured `BinaryPath`. No network
 - **Interactive SQL latency drops from ~60 ms to single-digit milliseconds.** The dominant cost in panels that emit a query per keystroke or per repaint becomes the SQL itself rather than the subprocess fork.
 - **Format flexibility is intrinsic.** Pretty, JSONEachRow, CSV, Arrow, Markdown — any CH `FORMAT` works without broker changes. Data-conversion workloads (parquet→JSONEachRow, system table→Markdown) become a one-cap-grant away rather than a per-app shell-out.
 - **Worker lifecycle is bounded by construction.** One-shot workers cannot pin on slow callers because the drain goroutine frees the worker as soon as stdout is consumed; cancellation propagates to SIGTERM/SIGKILL; the watchdog reaps the streaming-mode escape hatch.
-- **Cap/audit/capslock discipline carries through unchanged from ADR-0026.** Apps stay clean of `os/exec`; every call produces a `runtime.facts` audit row; the manifest cross-check pins the surface.
+- **Cap/audit/capslock discipline carries through unchanged from ADR-0026.** Apps stay clean of `os/exec`; every call produces a `boxer.facts` audit row; the manifest cross-check pins the surface.
 - **Result memoization is opt-in and per-pool.** Deterministic queries against stable local sources can serve from cache sub-microsecond without the caller giving up the option to bypass.
 
 ### Negative

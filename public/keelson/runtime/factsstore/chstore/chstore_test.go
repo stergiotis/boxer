@@ -233,7 +233,7 @@ func TestStore_RecentLogs_FilterByLevel_LiveCH(t *testing.T) {
 func TestStore_RecentLogs_FilterByTimeRange_LiveCH(t *testing.T) {
 	s, cleanup := newLiveStore(t)
 	defer cleanup()
-	// runtime.facts `ts` column is DateTime('UTC') (second precision),
+	// boxer.facts `ts` column is DateTime('UTC') (second precision),
 	// so the test spaces rows two seconds apart to make the window
 	// boundary unambiguous. logbridge enqueues sub-second events under
 	// load; ordering within a second falls back to the `id` column.

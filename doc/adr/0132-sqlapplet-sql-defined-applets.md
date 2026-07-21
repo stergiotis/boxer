@@ -352,7 +352,7 @@ the *same artifact* the committed books do:
 
 - **O4-D1 — Store-as-document.** A saved applet is the identical markdown
   document shape — frontmatter, prose, one `sql` fence — persisted through
-  the runtime persist facility (`StorageI`, `runtime.facts`-backed where
+  the runtime persist facility (`StorageI`, `boxer.facts`-backed where
   ClickHouse is up) under the store service's own alias: one key per
   applet (`applet_<slug>`; persist keys are single NATS tokens, so no
   dots) plus an `index` key, since `StorageI` has no enumeration. One

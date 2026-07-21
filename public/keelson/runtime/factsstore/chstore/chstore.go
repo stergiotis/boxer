@@ -37,7 +37,7 @@ type Config struct {
 	Table    string
 }
 
-// Defaults targets the project's localhost CH at runtime.facts per the
+// Defaults targets the project's localhost CH at boxer.facts per the
 // user-confirmed defaults (memory: reference_clickhouse_localhost_defaults).
 func Defaults() (c Config) {
 	c = Config{
@@ -84,7 +84,7 @@ func (inst *Store) Ping(ctx context.Context) (err error) {
 	return
 }
 
-// SetupTable applies the runtime.facts DDL idempotently. engineClause
+// SetupTable applies the boxer.facts DDL idempotently. engineClause
 // supplies the MergeTree partition / order / TTL settings — note the
 // columns must be referenced by their leeway-encoded physical names
 // (e.g. "id:id:u64:2k:0:0:") since the table has no logical aliases.
@@ -129,7 +129,7 @@ func (inst *Store) qualifiedTable() string {
 	return inst.cfg.Database + "." + inst.cfg.Table
 }
 
-// WriteGrant lands one runtime.facts row tagged KindGrant.
+// WriteGrant lands one boxer.facts row tagged KindGrant.
 func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	ts := defaultTs(row.Ts)
@@ -163,7 +163,7 @@ func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 	return
 }
 
-// WriteAudit lands one runtime.facts row tagged KindAudit.
+// WriteAudit lands one boxer.facts row tagged KindAudit.
 func (inst *Store) WriteAudit(row factsstore.AuditRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)
 	ts := defaultTs(row.Ts)
@@ -194,7 +194,7 @@ func (inst *Store) WriteAudit(row factsstore.AuditRow) (id uint64, err error) {
 	return
 }
 
-// WriteLog lands one runtime.facts row tagged KindLog. Envelope fields
+// WriteLog lands one boxer.facts row tagged KindLog. Envelope fields
 // (level, caller, service) go on the symbol section as low-card-refs;
 // message/error on the string section; stack on the text section. Each
 // user-supplied LogField is fanned out by its Kind into the typed section
@@ -238,7 +238,7 @@ func (inst *Store) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error)
 // encodeLogEntity encodes one KindLog row into ent (BeginEntity through the
 // last section, no CommitEntity — the caller commits). Shared by the
 // single-row WriteLog and the batched WriteLogs so the two paths cannot
-// drift in how a log row maps onto the runtime.facts sections.
+// drift in how a log row maps onto the boxer.facts sections.
 func encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factsstore.LogRow) {
 	ts := defaultTs(row.Ts)
 	nk := naturalKeyForLog(row, ts)
@@ -355,7 +355,7 @@ func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, l
 	}
 }
 
-// WriteRuntimeStart lands one runtime.facts row tagged KindRuntimeRun.
+// WriteRuntimeStart lands one boxer.facts row tagged KindRuntimeRun.
 // The run_id is the natural key (entity-id) and rides as the high-card
 // parameter of MembRuntimeRun so child app-lifecycle rows can join by
 // equality on a single symbol membership.
@@ -400,7 +400,7 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 	return
 }
 
-// WriteRuntimeHeartbeat lands one runtime.facts row tagged
+// WriteRuntimeHeartbeat lands one boxer.facts row tagged
 // KindRuntimeHeartbeat. The row carries only the kind tag and the
 // MembRuntimeRun mixed-LCR(run_id) so the heartbeat joins back to its
 // runtime-start parent by the same predicate the lifecycle queries
@@ -427,7 +427,7 @@ func (inst *Store) WriteRuntimeHeartbeat(row factsstore.HeartbeatRow) (id uint64
 	return
 }
 
-// WriteAppLifecycle lands one runtime.facts row tagged KindAppLifecycle.
+// WriteAppLifecycle lands one boxer.facts row tagged KindAppLifecycle.
 // Symbol-section attributes carry the kind tag, the app reference, the
 // run reference (so the row joins back to its runtime-start parent),
 // and the phase ("started" or "stopped"). The optional StopReason rides
@@ -464,7 +464,7 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 	return
 }
 
-// WriteLaunch lands one runtime.facts row tagged KindLaunch (ADR-0135
+// WriteLaunch lands one boxer.facts row tagged KindLaunch (ADR-0135
 // §SD6): the accepted `windowhost.open` request beside its app-lifecycle
 // "started" row. Target app / run reuse the MembRuntimeApp /
 // MembRuntimeRun identities; the caller rides MembLaunchCaller as a
@@ -509,7 +509,7 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 	return
 }
 
-// WriteState lands one runtime.facts row tagged KindState; the value bytes
+// WriteState lands one boxer.facts row tagged KindState; the value bytes
 // go in the blob section under the PersistKey membership.
 func (inst *Store) WriteState(row factsstore.StateRow) (id uint64, err error) {
 	id = inst.nextId.Add(1)

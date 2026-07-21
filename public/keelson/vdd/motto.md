@@ -9,7 +9,7 @@ reviewed-date: 2026-05-18
 VDD = VCS managed Dimensional Data.
 
 Central registry of tag values and leeway memberships used across the
-keelson runtime layer (runtime.facts producers and consumers, the
+keelson runtime layer (boxer.facts producers and consumers, the
 forthcoming Go↔leeway codec generator, and any keelson-side fact-kind
 that needs a stable membership identity).
 

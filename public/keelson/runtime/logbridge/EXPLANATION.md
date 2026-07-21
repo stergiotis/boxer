@@ -10,12 +10,12 @@ status: draft
 
 # logbridge — Explanation
 
-logbridge turns the zerolog data plane into a producer of `runtime.facts`
+logbridge turns the zerolog data plane into a producer of `boxer.facts`
 rows. Apps already log through `zerolog.Logger`; logbridge intercepts the
 configured writer, parses each event from its on-the-wire form, and
 delivers a `factsstore.LogRow` to the same FactsStoreI that grants, audit
 records, and persisted state flow through. The result: a single SQL
-surface (`SELECT … FROM runtime.facts WHERE has(symbol.lr, MembKindLog…)`)
+surface (`SELECT … FROM boxer.facts WHERE has(symbol.lr, MembKindLog…)`)
 covers every operational signal the runtime emits, ADR-0026 §SD6.
 
 ## Background

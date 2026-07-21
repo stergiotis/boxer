@@ -119,7 +119,7 @@ func (inst *OpenService) reply(subject string, windowKey uint64, reason string) 
 	}
 }
 
-// emitLaunchFact persists the accepted request as a runtime.facts row
+// emitLaunchFact persists the accepted request as a boxer.facts row
 // beside the app-lifecycle "started" row OpenWithConfig already wrote —
 // same best-effort contract: a write failure is logged at warn and
 // never bubbles. The caller identity is attributed from the bus

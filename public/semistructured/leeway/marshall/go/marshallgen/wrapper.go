@@ -28,7 +28,7 @@ import (
 // block. NoOpWrapper does that.
 //
 // Implementations live in caller packages — pebble's FactsWrapper for
-// the full runtime.facts wrapper stack, NoOpWrapper here for the
+// the full boxer.facts wrapper stack, NoOpWrapper here for the
 // schema-agnostic anchor-style emit.
 type WrapperEmitterI interface {
 	// Imports returns lines (each one a fully-quoted Go import spec)

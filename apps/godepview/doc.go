@@ -9,7 +9,7 @@
 //
 // The app depends only on the godep manifest and the godep.SourceI port.
 // The concrete data source — a godepcollect.LiveCollector today, a
-// runtime.facts-backed reader later — is injected by the registry ctor in
+// boxer.facts-backed reader later — is injected by the registry ctor in
 // app_register.go (the composition root); the render path imports neither
 // the collector nor golang.org/x/tools.
 package godepview

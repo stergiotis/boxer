@@ -19,7 +19,7 @@ const MvBaseName = "mv_queryruns"
 // by the MV, so duplicates need adversarial timing beyond a day to land.
 const AntiJoinWindow = "INTERVAL 1 DAY"
 
-// ddlColumns parses the generated runtime.facts DDL column block into
+// ddlColumns parses the generated boxer.facts DDL column block into
 // (name, ClickHouse type) pairs, codecs stripped. The parse is strict so
 // a DDL-shape change fails loudly here instead of misdeclaring the wire.
 func ddlColumns() (cols [][2]string, err error) {
@@ -75,7 +75,7 @@ func DdlColumnNames() (names []string, err error) {
 }
 
 // UrlStructure derives the url() structure clause from the generated
-// runtime.facts DDL — every leeway wire column with its ClickHouse type,
+// boxer.facts DDL — every leeway wire column with its ClickHouse type,
 // names backtick-quoted: "`id:id:u64:2k:0:0:` UInt64, …". Deriving
 // (rather than duplicating) the list keeps the pipeline DDL moving with
 // the schema.
@@ -99,8 +99,8 @@ func UrlStructure() (structure string, err error) {
 // window. The SETTINGS clause tags the refresh queries so the extract
 // can exclude them (see RefreshTag).
 //
-// mvName and factsTable are qualified ("runtime.mv_queryruns",
-// "runtime.facts") so tests can point the pipeline at a scratch
+// mvName and factsTable are qualified ("boxer.mv_queryruns",
+// "boxer.facts") so tests can point the pipeline at a scratch
 // database.
 func ComposeMvSql(mvName string, factsTable string, pullURL string, cadenceSeconds int) (sql string, err error) {
 	if mvName == "" || factsTable == "" || pullURL == "" {

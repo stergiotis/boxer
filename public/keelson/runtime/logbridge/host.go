@@ -10,7 +10,7 @@ import (
 // out to two destinations: the existing baseWriter (typically
 // os.Stdout / a file / zerolog.ConsoleWriter for operator-facing logs)
 // and the supplied Sink, which CBOR-decodes the zerolog event into
-// a LogRow that downstream lands in `runtime.facts` as a RowBinary row
+// a LogRow that downstream lands in `boxer.facts` as a RowBinary row
 // via chstore. The returned logger has no AppId tagging; per-app
 // loggers are derived via app.AppLogger(returnedLogger, appId).
 //

@@ -1,6 +1,6 @@
 // Package queryrunfacts is the pure library of the queryrunsd capture
 // pipeline (ADR-0115 S1): it turns terminal system.query_log events into
-// runtime.facts entities of kind QueryRun. It owns the extract SQL
+// boxer.facts entities of kind QueryRun. It owns the extract SQL
 // (extract.go), the refreshable-MV pipeline DDL (mv.go), and the
 // row→entity encoding below — all side-effect free; the HTTP service and
 // boot reconciliation live in runtime/queryrunsvc.

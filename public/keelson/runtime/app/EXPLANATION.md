@@ -319,7 +319,7 @@ nanoid (the `run_id`). The carousel initialises it at startup via
   `run_id` automatically** — no extra wiring needed.
 
 The carousel then writes three kinds of auditable events to
-`runtime.facts` via `factsstore.FactsStoreI`:
+`boxer.facts` via `factsstore.FactsStoreI`:
 
 | Kind | Memb tag | When |
 |------|----------|------|
@@ -329,7 +329,7 @@ The carousel then writes three kinds of auditable events to
 
 Each app-lifecycle row references its parent run via the `MembRuntimeRun`
 mixed-low-card-ref (high-card-param = run_id bytes), so a
-`runtime.facts` JOIN by run_id correlates all events from one process
+`boxer.facts` JOIN by run_id correlates all events from one process
 boot in a single column scan.
 
 The backend is chosen at startup by
@@ -395,7 +395,7 @@ factory-with-instance-state happens incrementally.
 Your app does not own a filesystem path or a sqlite handle. Anything
 you need to persist across launches goes through `MountContextI.Storage()`
 — read/write `[]byte` blobs keyed by `(yourAlias, key)`. From M2.5
-onwards the backing store is `runtime.facts` (CH+leeway); from M4
+onwards the backing store is `boxer.facts` (CH+leeway); from M4
 onwards the audit + state writes are reachable from other apps that
 hold the right `app.{id}.>` subject permission.
 

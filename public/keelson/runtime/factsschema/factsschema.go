@@ -1,4 +1,4 @@
-// Package factsschema defines the runtime.facts leeway table per ADR-0026
+// Package factsschema defines the boxer.facts leeway table per ADR-0026
 // §SD6. Modelled after spinnaker.facts
 // (public/boxerstaging/spinnaker/schema/spinnaker_schema.go):
 // plain-value identity columns + per-canonical-type tagged-value sections
@@ -33,14 +33,14 @@ import (
 const TableRowConfig = common.TableRowConfigMultiAttributesPerRow
 
 // DatabaseName / TableName are the conventional CH coordinates: the runtime
-// expects CREATE TABLE runtime.facts (...).
+// expects CREATE TABLE boxer.facts (...).
 const (
-	DatabaseName = "runtime"
+	DatabaseName = "boxer"
 	TableName    = "facts"
 )
 
 // GetSchemaInManipulator returns a freshly-constructed TableManipulator with
-// the runtime.facts schema loaded. Consumers proceed to BuildTableDesc plus
+// the boxer.facts schema loaded. Consumers proceed to BuildTableDesc plus
 // the leeway DDL/DML/RA pipelines; the generated artefacts under dml/,
 // ra/ and ddl/ are the runtime entrypoints. The codegen helpers at
 // factsschema/codegen build those artefacts on demand.
@@ -51,12 +51,12 @@ func GetSchemaInManipulator() (manip *common.TableManipulator, err error) {
 		return
 	}
 	manip.SetTableName(TableName)
-	manip.SetTableComment("ADR-0026 §SD6 runtime.facts: app state, capability grants, and audit records as leeway memberships")
+	manip.SetTableComment("ADR-0026 §SD6 boxer.facts: app state, capability grants, and audit records as leeway memberships")
 	LoadRuntimeFactsMapping(manip)
 	return
 }
 
-// LoadRuntimeFactsMapping populates manip with the runtime.facts schema.
+// LoadRuntimeFactsMapping populates manip with the boxer.facts schema.
 // Exposed separately so a composite mapping (a future host combining
 // runtime facts with private columns) can extend without forking.
 func LoadRuntimeFactsMapping(manip common.TableManipulatorFluidI) {

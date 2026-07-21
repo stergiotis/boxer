@@ -19,7 +19,7 @@ type Codec interface {
 
 // CBORCodec is the P2 interim codec (ADR-0090 SD3). It uses fxamacker/cbor
 // — already a project dependency, so it adds none. The chosen production
-// wire is the runtime.facts SoA codec; CBORCodec gets the bisection working
+// wire is the boxer.facts SoA codec; CBORCodec gets the bisection working
 // first and the Codec seam keeps the swap local.
 type CBORCodec struct{}
 

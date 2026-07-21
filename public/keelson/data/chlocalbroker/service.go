@@ -195,7 +195,7 @@ func (inst *Service) Stats() (s Stats) {
 // auditFields collects the per-request observable fields that the
 // broker emits via structured zerolog at the end of every request.
 // The log bridge (ADR-0026 §SD6 logs-as-facts) routes the event into
-// runtime.facts under MembKindLog; each field becomes a typed
+// boxer.facts under MembKindLog; each field becomes a typed
 // runtime.log.field mixed-membership preserving the columnar query
 // surface. Filling these fields is the broker's contribution to
 // ADR-0028 §SD7's audit requirement; the bus-level AuditSink covers

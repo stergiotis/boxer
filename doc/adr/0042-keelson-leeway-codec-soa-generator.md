@@ -6,11 +6,11 @@ reviewed-by: "@spx"
 reviewed-date: 2026-05-18
 ---
 
-# ADR-0042: Generated SoA codec for keelson runtime.facts rows
+# ADR-0042: Generated SoA codec for keelson boxer.facts rows
 
 ## Context
 
-`runtime.facts` is the keelson-side tagged-value table introduced by
+`boxer.facts` is the keelson-side tagged-value table introduced by
 ADR-0026 and shredded per ADR-0041. Today two fact kinds —
 `CapabilityGrant` and `Error` — are served by the hand-coded
 `public/keelson/runtime/rowmarshall/` package: per-type
@@ -62,7 +62,7 @@ Constraints in play:
 ## Design space (QOC)
 
 **Question.** How should keelson generate per-fact-kind marshal /
-unmarshal code targeting `runtime.facts` over RowBinary (write) and
+unmarshal code targeting `boxer.facts` over RowBinary (write) and
 Arrow (read)?
 
 **Options.**
@@ -175,7 +175,7 @@ The ADR does not duplicate them.
 The driver path pays ~6× per-row CPU at batch-1000 and ~24× at
 single-row vs the original byte-appender path (M3.5 numbers in the
 2026-05-19 changelog entry). In exchange the codec collapses to a
-single 35-section `runtime.facts` schema (no per-kind schemas), the
+single 35-section `boxer.facts` schema (no per-kind schemas), the
 sparse-format wire is invariant to schema width, and arbitrary
 leeway-shaped DTOs — including broker request/response DTOs — share
 one production-grade dml/ra implementation instead of N hand-emitted
@@ -300,7 +300,7 @@ Three phases shipped May 2026 (detail per phase in `## Updates`):
 Accepted (reviewed 2026-05-18 by @spx). As of 2026-05-21 every
 in-tree fact kind (m1fixture, capabilitygrant, errkind, taskprogress)
 rides the driver path + the auto-registered sparse-RB buscodec
-bridge. Convert is feature-complete for the runtime.facts schema;
+bridge. Convert is feature-complete for the boxer.facts schema;
 arrowrowbinary emits CH-canonical wire; chlocal round-trip green;
 broker-DTO migration in progress with `task.TaskProgress` as the
 shipped canary.
@@ -346,7 +346,7 @@ Four converging threads pushed the codec off the byte-appender shape:
 1. **Section count tripled** (22 → 39) once homogeneous-array and set
    sub-types landed for the bus-codec use case.
 2. **buscodec migration off CBOR/JSON** pulled toward "every bus payload
-   is a runtime.facts row", not per-message-type byte appenders.
+   is a boxer.facts row", not per-message-type byte appenders.
 3. **Sparse-format shim validation.** Three drop-in shims (sparse-RB,
    sparse-CBOR, full-RB) sed-forked from `factsschema/dml/` output
    proved boxer's column-major buffering + `NewRecord` finalisation is
@@ -427,7 +427,7 @@ Driver-path numbers:
 ### 2026-05-20 — Convert + arrowrowbinary feature completion
 
 `factsschema/rowbinaryarrow.Convert` now covers every section + role
-the runtime.facts schema declares:
+the boxer.facts schema declares:
 
 - 8 typed `readArray*` (Uint8 / Uint16 / Int8 / Int16 / Int32 / Int64
   / Float32 / Float64) plus 2 discard helpers in `reader.go`.
@@ -450,7 +450,7 @@ the runtime.facts schema declares:
 `arrowrowbinary.TimestampBuilder` switched from 8-byte UnixMilli
 (Phase-0 stop-gap) to CH-canonical 4-byte UInt32 unix-seconds.
 Symmetric reads in Convert + Unmarshal followed. Conversion is lossy
-in principle (ms → sec) but lossless for runtime.facts (canonical
+in principle (ms → sec) but lossless for boxer.facts (canonical
 type z32, second precision); a future z64 / DateTime64 column would
 trigger a per-instance unit flag on the builder.
 
@@ -481,7 +481,7 @@ Out of scope (deferred):
 
 ### 2026-05-21 — First broker-DTO migration: `task.TaskProgress`
 
-The codec was designed for *fact kinds* observed in `runtime.facts`.
+The codec was designed for *fact kinds* observed in `boxer.facts`.
 M12 plugged it into buscodec via a CodecI register seam, but every
 broker wire DTO (TaskCreated / TaskProgress / TaskDone / TaskError /
 TaskCancel / GrantRequest / …) still rode the fxamacker-cbor default.
@@ -947,16 +947,16 @@ watcher_test.go) pass unchanged through the new codec path.
 is an opaque `[]byte` payload (now well-trodden ground via the
 scalar-blob grammar extension landed with TaskDone).
 
-### 2026-05-21 — `runtime.facts` homogeneous-array-only rename + PersistReply migration
+### 2026-05-21 — `boxer.facts` homogeneous-array-only rename + PersistReply migration
 
-Two-part change. The `runtime.facts` schema migrated mid-cohort: it
+Two-part change. The `boxer.facts` schema migrated mid-cohort: it
 no longer declares the scalar-section variants
 (`string`, `text`, `blob`, `u{8,16,32,64}`, `i{8,16,32,64}`,
 `f{32,64}`, `time`) and instead declares only their homogeneous-
 array siblings (`stringArray`, `textArray`, `blobArray`, …). The
 leeway grammar itself was unchanged — both scalar and array
 sub-types still exist as protocol concepts. The change is at the
-**`runtime.facts` schema-binding layer** (which sections this
+**`boxer.facts` schema-binding layer** (which sections this
 specific table declares), not at the leeway-protocol layer.
 
 On the leeway-generator side (`dml/lw_dml_generator.go`,
@@ -1089,7 +1089,7 @@ consistency checks revert to `*Array`-only acceptance (roaring
 requires `u32Array`; scalar `[]byte` requires `blobArray`;
 `[][]byte` requires `blobArray`). `blobSliceMaybe` follows. Net
 effect: future DTOs can only spell scalar-promoted sections by
-their canonical schema name, mirroring the runtime.facts schema
+their canonical schema name, mirroring the boxer.facts schema
 exactly.
 
 #### InflightSnapshotReply — parallel-array list pattern
@@ -1197,7 +1197,7 @@ runtime has needed so far.
 
 ### 2026-05-21 — boxer ra accel multi-row mixed-membership fix
 
-The boxer-side regression flagged in the 2026-05-21 runtime.facts
+The boxer-side regression flagged in the 2026-05-21 boxer.facts
 schema-rename entry (`AccelHomogenousArray` returning row 0's
 values for every entityIdx > 0 on multi-row mixed-membership
 sections) is fixed upstream. With a downstream consumer resolving boxer via
@@ -1315,7 +1315,7 @@ Three-phase cohort lifting the codec off RowBinary entirely. Survivors:
 `arrowrowcbor/` (codec wire), `cborarrow/` (new: codec read bridge),
 `ra/` (Arrow read).
 
-#### Phase A — `runtime.facts` time columns: z32 → z64
+#### Phase A — `boxer.facts` time columns: z32 → z64
 
 One-character source change at `factsschema/factsschema.go:70`
 (`dt := ctabb.Z32` → `ctabb.Z64`) fans out into every leeway-generated
@@ -1422,7 +1422,7 @@ remain the canonical reference (re-running them would require
 restoring the deleted backends).
 
 - [`keelson/vdd/EXPLANATION.md`](../../public/keelson/vdd/EXPLANATION.md) — the schema model and codegen contract this ADR commits to generate against.
-- [ADR-0026 — app runtime + capability subjects](0026-app-runtime-and-capability-subjects.md) — introduced `runtime.facts`.
+- [ADR-0026 — app runtime + capability subjects](0026-app-runtime-and-capability-subjects.md) — introduced `boxer.facts`.
 - [ADR-0035 — keelson namespace introduction](0035-keelson-namespace-introduction.md) — situates this work under `public/keelson/`.
 - [ADR-0036 — runtime/buscodec](0036-runtime-buscodec.md) — sibling codec ADR; same `CodecI`-swap design philosophy applied to bus payloads.
 - [ADR-0041 — rowmarshall error shredding](0041-rowmarshall-error-shredding.md) — settled the no-reflection-on-hot-path rule and the parallel-array shape for tree-shaped fact kinds.

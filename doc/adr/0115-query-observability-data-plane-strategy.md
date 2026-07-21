@@ -20,12 +20,12 @@ strategy**: where transformation runs, what carries the data, and which
 technologies are the decided defaults, escalations, and deferrals.
 
 The concrete first instantiation is the capture pipeline for query runs
-(`system.query_log` → `runtime.facts`, kind QueryRun), carried in the
+(`system.query_log` → `boxer.facts`, kind QueryRun), carried in the
 implementation outline.
 
 What exists (relevant substrate): a single client chokepoint in play that
 already stamps per-lane `query_id`s (ADR-0097 SD5) and applies registered
-pre-execute rewrites (ADR-0108); `runtime.facts` with generated leeway DML
+pre-execute rewrites (ADR-0108); `boxer.facts` with generated leeway DML
 builders emitting Arrow IPC (ADR-0026 §SD6, `chstore.InsertArrow`); the
 loopback introspection HTTP plane for `url()` consumption (ADR-0094); the
 standalone-service anatomy and NATS-core bus (`natsbus`, `inprocbus`,
@@ -188,7 +188,7 @@ the technology set:
   client-side by design.
 
 First instantiation: **`queryrunsd`** — the query-run capture pipeline
-(`system.query_log` → `runtime.facts` kind QueryRun) — specified in the
+(`system.query_log` → `boxer.facts` kind QueryRun) — specified in the
 implementation outline.
 
 ## Alternatives
@@ -286,7 +286,7 @@ Within the chosen family, three drivers were weighed:
 - At-least-once delivery means rare duplicates under adversarial timing
   survive until the dedup backstop; readers must treat deterministic
   id/naturalKey as identity, not row count.
-- `runtime.facts` grows with query traffic; retention/partitioning for the
+- `boxer.facts` grows with query traffic; retention/partitioning for the
   facts table remains an open concern that this plane sharpens (interim
   control: the capture scope knob).
 
@@ -306,7 +306,7 @@ Within the chosen family, three drivers were weighed:
 
 ### queryrunsd (capture pipeline, slice S1 of the explanation page)
 
-- **Fact shape.** One `runtime.facts` row per terminal `query_log` event
+- **Fact shape.** One `boxer.facts` row per terminal `query_log` event
   (`type != 'QueryStart'`), kind QueryRun: naturalKey = `query_id`,
   timestamp = `event_time_microseconds`; scalar attributes (duration,
   read/written/result rows and bytes, peak memory, `normalized_query_hash`,
@@ -325,11 +325,11 @@ Within the chosen family, three drivers were weighed:
 - **Pipeline objects** (reconciled at boot):
 
 ```sql
-CREATE MATERIALIZED VIEW runtime.mv_queryruns
-REFRESH EVERY 5 SECOND APPEND TO runtime.facts
+CREATE MATERIALIZED VIEW boxer.mv_queryruns
+REFRESH EVERY 5 SECOND APPEND TO boxer.facts
 AS SELECT * FROM url('http://127.0.0.1:8127/pull', 'ArrowStream', '<facts columns>')
 WHERE `id:id:u64:2k:0:0:` NOT IN (
-  SELECT `id:id:u64:2k:0:0:` FROM runtime.facts
+  SELECT `id:id:u64:2k:0:0:` FROM boxer.facts
   WHERE `ts:ts:z64:2k:0:0:` > now64(9) - INTERVAL 1 DAY
     AND has(`tv:symbol:lr:lr:u64:2q:0:0:0::data`, <KindQueryRun id>)
 )
@@ -397,7 +397,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
   — the vision, entity model, planes, slices, and ADR bindings this ADR
   serves.
 - [ADR-0026](0026-app-runtime-and-capability-subjects.md) — runtime,
-  capabilities, `runtime.facts` (§SD6).
+  capabilities, `boxer.facts` (§SD6).
 - [ADR-0050](0050-clickhouse-observability-pipeline.md) — superseded;
   kill-reason record for the push/broker family.
 - [ADR-0051](0051-query-categorization-provenance.md) — dormant; theory

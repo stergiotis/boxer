@@ -20,7 +20,7 @@ const BrokerAppId app.AppIdT = "runtime.broker"
 // Broker subscribes to runtime.cap.request and arbitrates grants via a
 // GrantPolicyI. On approval it mutates the target Client's caps so the
 // next Publish/Subscribe succeeds. In-memory grant log for M2.3; M2.5
-// routes records to runtime.facts.
+// routes records to boxer.facts.
 type Broker struct {
 	inst   *inprocbus.Inst
 	log    zerolog.Logger
@@ -52,7 +52,7 @@ func (inst *Broker) currentFactsStore() (s factsstore.FactsStoreI) {
 }
 
 // GrantRecord captures one approved grant. M2.3 retains this in memory only;
-// M2.5 mirrors it into runtime.facts under KindGrant.
+// M2.5 mirrors it into boxer.facts under KindGrant.
 type GrantRecord struct {
 	Id     uint64
 	AppId  app.AppIdT

@@ -42,7 +42,7 @@ why the requirements outlived them. Restated:
 | R1 | Live progress per running query (rows/bytes/memory, cancel) | 0050 | shipped — in-band progress headers consumed live (an incremental-header transport; Go's stock client only delivers the block at completion) into the status-bar and loading badges; cancel via the Run/Cancel toggle + server-side supersession |
 | R2 | Result batches to the glass as they arrive | 0050 | inline Arrow on the response shipped; incremental rendering open |
 | R3 | Terminal run accounting (profile events, peak memory, exceptions) | 0050 | shipped — the `queryrunsd` pipeline ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md), plane B) captures every terminal `query_log` event as a KindQueryRun fact: counters and peak memory as typed attributes, ProfileEvents fanned out per counter, exceptions with code and text, identity lifted from the SD7 stamp |
-| R4 | A facts substrate absorbing operational records | 0050 | shipped — `runtime.facts` (ADR-0026 §SD6), recordstore, DimensionStore in flight |
+| R4 | A facts substrate absorbing operational records | 0050 | shipped — `boxer.facts` (ADR-0026 §SD6), recordstore, DimensionStore in flight |
 | R5 | Result archival routed by shape, with provenance to source rows | 0050+0051 | Tier 1 shipped — a pin freezes the batch as-is into a per-pin ClickHouse table with the result's own schema plus a metadata row (content fingerprint, query/run/lane anchors); opening a pin is plain SQL. Ref-tuple lineage and Tier-2 weaving stay open (S6) |
 | R6 | Auditable query categorization; governed ingestion for data products | 0051 | open — rescoped from gate to affordance (below) |
 | R7 | Machine-consumable export without re-implementing the CH protocol | 0050 | facts + `url()` cover pull; NATS-core forwarding decided as the push leg, built at consumer trigger (plane E) |
@@ -120,7 +120,7 @@ the result it produced.
 
 ### QueryRun — the anchor
 
-One execution: a `runtime.facts` row (kind `QueryRun`), captured by the
+One execution: a `boxer.facts` row (kind `QueryRun`), captured by the
 ADR-0115 pipeline, deterministic identity, stamped with
 `{run_id, app, lane, authored_fp, sent_fp, chain_fp, env_fp}` via
 `log_comment` so the server's own log is independently attributable — all
@@ -137,7 +137,7 @@ hardened, loopback-only systemd unit (`showcase/onbox/queryrunsd.service`,
 `Restart=always`) and by hand in development. It is optional and
 operator-enabled — where it is not running, a finished query still stamps
 `system.query_log` (so the record is recoverable later) but nothing lifts
-it into `runtime.facts`. ClickHouse owns the schedule and the insert;
+it into `boxer.facts`. ClickHouse owns the schedule and the insert;
 stopping the daemon only pauses capture, which resumes from the
 destination watermark (bounded by the `query_log` TTL).
 
@@ -151,7 +151,7 @@ capture is flowing needs no pivot:
 
 ```sql
 SELECT count()
-FROM runtime.facts
+FROM boxer.facts
 WHERE has(`tv:symbol:lr:lr:u64:2q:0:0:0::data`,
           6917529027641081896)  -- KindQueryRun (vocab.MembKindQueryRun)
 ```
@@ -178,7 +178,7 @@ fingerprints every lane result) and ref-tupled to their run:
 - **Tier 1 — pin** (shipped): persist the Arrow batch as-is, any query, no
   classification required. A pin is a per-pin ClickHouse table carrying the
   result's own schema (the batch bytes go in verbatim) plus one metadata row
-  in `runtime.resultsets` — so the "resultsets store" is ordinary queryable
+  in `boxer.resultsets` — so the "resultsets store" is ordinary queryable
   tables on the user's endpoint, and opening a pin is plain SQL every panel
   already renders.
 - **Tier 2 — weave**: when shape analysis proves the result data-mart-shaped
@@ -228,8 +228,8 @@ natural delivery vehicle for the interactive case.
 | plane | carries | mechanism | persistence |
 |---|---|---|---|
 | A — live | progress, cancel | in-band progress headers, read live by an incremental-header transport → lane state → status-bar and loading badges (shipped) | none (glass state) |
-| B — record | terminal run + profile + identity | ADR-0115 pipeline (`queryrunsd`) (shipped) | `runtime.facts` |
-| C — weave | results, tiered, lineage | Tier-1 pin affordance + browser (shipped: per-pin tables, `runtime.resultsets` metadata); weave = ref tuples + typed archival, at S6 | per-pin tables + metadata now; typed tables at S6 |
+| B — record | terminal run + profile + identity | ADR-0115 pipeline (`queryrunsd`) (shipped) | `boxer.facts` |
+| C — weave | results, tiered, lineage | Tier-1 pin affordance + browser (shipped: per-pin tables, `boxer.resultsets` metadata); weave = ref tuples + typed archival, at S6 | per-pin tables + metadata now; typed tables at S6 |
 | D — glass | history, run detail, per-def trends, resultset browser | play panels over plain SQL; "open as query" everywhere (shipped: History runs + detail + drill-downs, pin browser; open: per-definition trends) | reads B+C |
 | E — export | push to external consumers | NATS-core forwarding (ADR-0090 pattern) | at consumer trigger |
 

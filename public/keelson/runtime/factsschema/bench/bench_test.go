@@ -1,4 +1,4 @@
-// Package bench holds round-trip benchmarks for the runtime.facts
+// Package bench holds round-trip benchmarks for the boxer.facts
 // dml ↔ ra pipeline. Three representative chstore use cases × three
 // phases × two batch sizes = 18 benchmarks.
 //

@@ -1,5 +1,5 @@
 [Unit]
-Description=queryrunsd — capture terminal query_log events into runtime.facts (ADR-0115 S1)
+Description=queryrunsd — capture terminal query_log events into boxer.facts (ADR-0115 S1)
 # Ordering only (no Requires): ClickHouse may be packaged differently per box
 # (native service, container). If it is absent at start, the boot reconciler
 # fails fast and Restart=always retries until it appears — pull-shape capture

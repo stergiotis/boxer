@@ -28,7 +28,7 @@ func TestEnsureUTF8_emptyString(t *testing.T) {
 }
 
 func TestEnsureUTF8_invalidIsHexEncoded(t *testing.T) {
-	// The exact non-UTF-8 prefix from the runtime.facts desync.
+	// The exact non-UTF-8 prefix from the boxer.facts desync.
 	bad := []byte{0x6d, 0x0c, 0xe9, 0xd1, 0x2c, 0x79, 0x8a, 0xff,
 		0xdf, 0xf7, 0x5b, 0xd8, 0xa5, 0x38, 0x0b, 0x98}
 	out := EnsureUTF8(string(bad))

@@ -143,7 +143,7 @@ the common idiom is once-per-type init in a fact-kind's package
 #### Why not "default = sparse-RB"?
 
 The M8 / M10 work in ADR-0042 makes sparse-RB the obvious wire format
-for runtime.facts row payloads, but sparse-RB only knows how to encode
+for boxer.facts row payloads, but sparse-RB only knows how to encode
 *registered* fact-kind types (it needs the kind's active-section /
 active-field hints to drive `dml_rowbinary.InEntityFacts`). A generic
 "any Go struct → sparse-RB" path doesn't exist and isn't planned.

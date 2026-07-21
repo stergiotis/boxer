@@ -51,7 +51,7 @@ func UnmarshalDialogReply(b []byte) (r DialogReply, err error) {
 // dialog stay wire-compatible.
 //
 // Unlike the DialogReply / Watch* payloads — leeway-coded per-type codecs,
-// shaped for replay into the runtime.facts store — this ephemeral control-plane
+// shaped for replay into the boxer.facts store — this ephemeral control-plane
 // hint rides the buscodec DEFAULT (canonical CBOR) path. buscodec routes
 // unregistered types there by design (ADR-0036; the leeway migration is
 // "opt-in per payload type"), so no codec/dialogrequest package or vdd

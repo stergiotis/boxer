@@ -26,12 +26,12 @@ import (
 // the active result's Arrow batch as-is, any query, no classification.
 // A pin is two objects on the user's own endpoint:
 //
-//   - runtime.pin_<fp> — a plain ClickHouse table with the result's OWN
+//   - boxer.pin_<fp> — a plain ClickHouse table with the result's OWN
 //     schema (derived from the Arrow fields), holding the frozen rows.
 //     The batch bytes go in verbatim via INSERT … FORMAT Arrow, and
 //     "opening" a pin is ordinary SQL over that table — every play
 //     panel works on frozen data with zero new display machinery.
-//   - one metadata row in runtime.resultsets — content fingerprint
+//   - one metadata row in boxer.resultsets — content fingerprint
 //     (play's lane fingerprint — the ResultSet identity of the entity
 //     spine), provenance anchors (query_id, run/app identity, lane,
 //     query text), and size accounting.
@@ -47,10 +47,10 @@ import (
 
 const (
 	// pinMetaTable is the qualified metadata table.
-	pinMetaTable = "runtime.resultsets"
+	pinMetaTable = "boxer.resultsets"
 	// pinTablePrefix prefixes the per-pin data tables (qualified name:
-	// runtime.pin_<16-hex fingerprint>).
-	pinTablePrefix = "runtime.pin_"
+	// boxer.pin_<16-hex fingerprint>).
+	pinTablePrefix = "boxer.pin_"
 	// pinTimeout bounds one pin round (DDL + data insert + metadata).
 	pinTimeout = 60 * time.Second
 	// pinBrowserLimit bounds the browser's metadata read.

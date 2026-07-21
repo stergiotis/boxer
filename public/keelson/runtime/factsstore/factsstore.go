@@ -2,7 +2,7 @@
 // Capability grants from the broker, audit records from the bus, and state
 // writes from the persist service all flow through FactsStoreI; M2.5 ships
 // an in-memory implementation that proves the data shape end-to-end. A
-// runtime.facts-backed implementation (writing CH+leeway rows via the
+// boxer.facts-backed implementation (writing CH+leeway rows via the
 // factsschema package) lands in a later sub-phase once a live ClickHouse
 // driver is wired.
 //
@@ -25,7 +25,7 @@ import (
 // today; future kinds that also require a run anchor can reuse).
 var errEmptyRunId = errors.New("factsstore: RunId is required")
 
-// GrantRow is one approved capability grant. Maps to a runtime.facts row
+// GrantRow is one approved capability grant. Maps to a boxer.facts row
 // with the KindGrant + AppRefPrefix(appId) + GrantSubjectPattern /
 // GrantDirection / GrantReason / GrantSticky / GrantVia memberships under
 // ADR-0026 §SD6.
@@ -40,7 +40,7 @@ type GrantRow struct {
 	ExpiresAt  time.Time // zero == no TTL
 }
 
-// AuditRow is one audited bus request. Maps to a runtime.facts row with
+// AuditRow is one audited bus request. Maps to a boxer.facts row with
 // KindAudit + AppRefPrefix(appId) + AuditRequestSubject / AuditResult /
 // AuditLatencyMs / AuditRequestSize / AuditResponseSize.
 type AuditRow struct {
@@ -53,7 +53,7 @@ type AuditRow struct {
 	Ts            time.Time
 }
 
-// StateRow is one persisted state write. Maps to a runtime.facts row with
+// StateRow is one persisted state write. Maps to a boxer.facts row with
 // KindState + AppRefPrefix(appId) + PersistKey memberships; the value lives
 // on the blob section.
 type StateRow struct {
@@ -64,7 +64,7 @@ type StateRow struct {
 }
 
 // RuntimeStartRow records one process boot: a "this run started" event
-// captured at runtime entry by the carousel. Maps to a runtime.facts row
+// captured at runtime entry by the carousel. Maps to a boxer.facts row
 // with KindRuntimeRun + the run_id-bearing MembRuntimeRun mixed-low-card
 // reference (so the row joins to its child app-lifecycle rows by run_id)
 // + hostname / pid / Go version / VCS revision / modified / build-info /
@@ -85,7 +85,7 @@ type RuntimeStartRow struct {
 }
 
 // HeartbeatRow records one runtime liveness tick. Maps to a
-// runtime.facts row with KindRuntimeHeartbeat + MembRuntimeRun
+// boxer.facts row with KindRuntimeHeartbeat + MembRuntimeRun
 // mixed-LCR(run_id). Periodic; the carousel emits one every N seconds
 // while the process is alive. Readers compute liveness from the gap
 // between the latest heartbeat ts and now (or the next runtime-start
@@ -122,7 +122,7 @@ func (inst AppLifecyclePhaseE) String() (s string) {
 }
 
 // AppLifecycleRow records one open/close of a dock tile. Maps to a
-// runtime.facts row with KindAppLifecycle + AppRefPrefix(appId) +
+// boxer.facts row with KindAppLifecycle + AppRefPrefix(appId) +
 // RunRef(runId) + LifecyclePhase + optional LifecycleStopReason +
 // LifecycleTileKey. RunId is required and ties the row back to the
 // runtime-start row of the same process. TileKey lets two concurrent
@@ -143,7 +143,7 @@ type AppLifecycleRow struct {
 
 // LaunchRow records one accepted `windowhost.open` request (ADR-0135
 // §SD6): which app asked which app to open, with which typed config.
-// Maps to a runtime.facts row with KindLaunch + AppRefPrefix(target) +
+// Maps to a boxer.facts row with KindLaunch + AppRefPrefix(target) +
 // RunRef(runId) + LaunchCaller + LifecycleTileKey + LaunchConfigKind +
 // the raw config bytes on the blob section. TileKey is the opened
 // window's key — the same value the app-lifecycle "started" row written
@@ -265,7 +265,7 @@ func (inst *LogErrorContext) Summary() (s string) {
 	return
 }
 
-// LogRow is one zerolog event captured by logbridge. Maps to a runtime.facts
+// LogRow is one zerolog event captured by logbridge. Maps to a boxer.facts
 // row with KindLog + AppRefPrefix(appId) + LogLevel / LogMessage / LogCaller
 // / LogError / LogStack / LogService memberships on the structured envelope
 // plus one MembLogField mixed-membership per Fields entry. AppId is empty

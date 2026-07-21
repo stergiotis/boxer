@@ -1,4 +1,4 @@
-// Package cborarrow converts runtime.facts rows from sparse-CBOR (per
+// Package cborarrow converts boxer.facts rows from sparse-CBOR (per
 // arrowrowcbor's wire shape) into an ArrowStream IPC payload using the
 // typed Arrow builder generated under factsschema/dml.
 //

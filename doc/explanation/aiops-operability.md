@@ -60,7 +60,7 @@ judgment — so the work below is mostly seam-completion, not an ML stack.
 | Provisioning | [showcase/onbox](../../showcase/onbox/ONBOX.md) + ansible kit; OS-level substrate out of scope here | manual how-to |
 | Configuration | env registry ([ADR-0009](../adr/0009-environment-variable-registry.md)) → [doc/env-vars.md](../env-vars.md) → `keelson.env` | built |
 | Live state as SQL | `keelson.*` providers, `url()` + `/query` ([ADR-0094](../adr/0094-keelson-introspection-tables.md)) | built |
-| History, audit, logs | `runtime.facts`: grants, audit, state, logs-as-facts ([ADR-0026 §SD6](../adr/0026-app-runtime-and-capability-subjects.md), `keelson/runtime/logbridge`) | built |
+| History, audit, logs | `boxer.facts`: grants, audit, state, logs-as-facts ([ADR-0026 §SD6](../adr/0026-app-runtime-and-capability-subjects.md), `keelson/runtime/logbridge`) | built |
 | Host metrics | unidirectional pub/sub plane, metrics are leeway facts ([ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md)) | built, unpersisted |
 | Query telemetry | ELT capture pipelines as schema objects ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md)) | proposed |
 | Supply chain | license gate ([ADR-0004](../adr/0004-license-gate-cyclonedx.md)), airgapped bundle ([ADR-0095](../adr/0095-airgapped-build-bundle.md)), `keelson.extbin` digests ([ADR-0118](../adr/0118-extbin-external-process-chokepoint.md)), capslock drift gate ([ADR-0026 §SD10](../adr/0026-app-runtime-and-capability-subjects.md)) | built |
@@ -285,7 +285,7 @@ surfaces and warrant a record before code.
   Boxer sits unusually close to this blueprint because K exists as one
   queryable substrate.
 - **Wide events** (observability-2.0): one high-cardinality event store
-  beats three siloed pillars. `runtime.facts` with membership vocabulary is
+  beats three siloed pillars. `boxer.facts` with membership vocabulary is
   wide events; the standing rule is to converge new telemetry as fact kinds
   and never add a separate logs/metrics/traces stack.
 - **Golden signals / USE / RED**: adopt as per-app SQL view conventions —
@@ -342,7 +342,7 @@ facts or a keelson table, and every action is an audited subject.**
 - [query-observability](./query-observability.md) — the sibling page for the
   query plane; its entity-spine method is the model for the ops planes here.
 - [ADR-0026](../adr/0026-app-runtime-and-capability-subjects.md) — runtime,
-  capabilities, `runtime.facts`.
+  capabilities, `boxer.facts`.
 - [ADR-0085](../adr/0085-imzero2-demo-pull-build-atomic-deploy.md) — deploy,
   gates, break-glass; the derived ops-tooling practices.
 - [ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md) — the metrics

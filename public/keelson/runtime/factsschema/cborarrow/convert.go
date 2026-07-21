@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 )
 
-// Convert reads sparse-CBOR-encoded runtime.facts rows from `in` (as
+// Convert reads sparse-CBOR-encoded boxer.facts rows from `in` (as
 // produced by arrowrowcbor.RecordBuilder.NewRecord — an outer CBOR
 // array of per-row CBOR maps with short-key dispatch), drives
 // dml.InEntityFacts to build Arrow records, and writes an ArrowStream
@@ -22,7 +22,7 @@ import (
 // CBOR is self-delimiting; no row count or schema is required from
 // the caller. Sections the writer did not touch land as empty Array
 // entries in the Arrow output — the receiving side sees the canonical
-// runtime.facts schema regardless of which fact kind the row carries.
+// boxer.facts schema regardless of which fact kind the row carries.
 func Convert(in io.Reader, out io.Writer) (err error) {
 	var rows []map[string]cbor.RawMessage
 	dec := cbor.NewDecoder(in)

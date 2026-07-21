@@ -18,7 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 )
 
-// CapabilityGrant is one row of a capability grant in runtime.facts.
+// CapabilityGrant is one row of a capability grant in boxer.facts.
 // Mirrors rowmarshall.CapabilityGrant on the wire; differences:
 //   - `*int64` → `option.Option[int64]` for ExpiresAt
 //   - `*uint64` → `option.Option[uint64]` for GranterFact

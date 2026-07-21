@@ -45,10 +45,10 @@ func TestComposeCreateTableSql_AppliesToLiveClickHouse(t *testing.T) {
 	// the schema applies, so ORDER BY tuple() suffices.
 	ddl, err := factsddl.ComposeCreateTableSql(`MergeTree() ORDER BY tuple()`)
 	require.NoError(t, err)
-	require.Contains(t, ddl, "runtime.facts")
+	require.Contains(t, ddl, "boxer.facts")
 
 	// Retarget the table onto our test database.
-	ddl = strings.ReplaceAll(ddl, "runtime.facts", dbName+".facts")
+	ddl = strings.ReplaceAll(ddl, "boxer.facts", dbName+".facts")
 
 	// ClickHouse HTTP rejects multi-statement bodies. Split on top-level
 	// `;` and Exec each piece individually, dropping the bootstrap CREATE

@@ -48,25 +48,25 @@ func TestParseStamp(t *testing.T) {
 }
 
 func TestComposeExtractSql(t *testing.T) {
-	sql, err := ComposeExtractSql("runtime.facts", "http://127.0.0.1:8127/pull", ScopeAll, 0)
+	sql, err := ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeAll, 0)
 	require.NoError(t, err)
 	require.Contains(t, sql, "FROM system.query_log")
 	require.Contains(t, sql, "type != 'QueryStart'")
 	require.Contains(t, sql, "'queryrunsd-extract', 'queryrunsd-refresh'")
 	require.Contains(t, sql, "position(query, 'http://127.0.0.1:8127/pull') = 0")
-	require.Contains(t, sql, "SELECT max("+ColTs+") FROM runtime.facts")
+	require.Contains(t, sql, "SELECT max("+ColTs+") FROM boxer.facts")
 	require.Contains(t, sql, WatermarkOverlap)
 	require.Contains(t, sql, "LIMIT 10000")
 	require.Contains(t, sql, "log_comment='queryrunsd-extract'")
 	require.Contains(t, sql, "FORMAT JSONEachRow")
 	require.NotContains(t, sql, "JSONHas")
 
-	sql, err = ComposeExtractSql("runtime.facts", "http://127.0.0.1:8127/pull", ScopeStamped, 500)
+	sql, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeStamped, 500)
 	require.NoError(t, err)
 	require.Contains(t, sql, "JSONHas(log_comment, 'run_id')")
 	require.Contains(t, sql, "LIMIT 500")
 
-	_, err = ComposeExtractSql("runtime.facts", "http://127.0.0.1:8127/pull", ScopeOff, 0)
+	_, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeOff, 0)
 	require.Error(t, err, "off must not compose an extract")
 	_, err = ComposeExtractSql("", "http://127.0.0.1:8127/pull", ScopeAll, 0)
 	require.Error(t, err)
@@ -92,10 +92,10 @@ func TestUrlStructureMatchesBuilderSchema(t *testing.T) {
 }
 
 func TestComposeMvSql(t *testing.T) {
-	sql, err := ComposeMvSql("runtime.mv_queryruns", "runtime.facts", "http://127.0.0.1:8127/pull", 5)
+	sql, err := ComposeMvSql("boxer.mv_queryruns", "boxer.facts", "http://127.0.0.1:8127/pull", 5)
 	require.NoError(t, err)
-	require.Contains(t, sql, "CREATE MATERIALIZED VIEW IF NOT EXISTS runtime.mv_queryruns")
-	require.Contains(t, sql, "REFRESH EVERY 5 SECOND APPEND TO runtime.facts")
+	require.Contains(t, sql, "CREATE MATERIALIZED VIEW IF NOT EXISTS boxer.mv_queryruns")
+	require.Contains(t, sql, "REFRESH EVERY 5 SECOND APPEND TO boxer.facts")
 	require.Contains(t, sql, "url('http://127.0.0.1:8127/pull', 'ArrowStream', '")
 	require.Contains(t, sql, ColId+" NOT IN")
 	require.Contains(t, sql, AntiJoinWindow)
@@ -104,14 +104,14 @@ func TestComposeMvSql(t *testing.T) {
 	// string literal they must arrive doubled.
 	require.Contains(t, sql, "DateTime64(9,''UTC'')")
 
-	_, err = ComposeMvSql("", "runtime.facts", "u", 5)
+	_, err = ComposeMvSql("", "boxer.facts", "u", 5)
 	require.Error(t, err)
-	_, err = ComposeMvSql("runtime.mv_queryruns", "runtime.facts", "u", 0)
+	_, err = ComposeMvSql("boxer.mv_queryruns", "boxer.facts", "u", 0)
 	require.Error(t, err)
 
-	drop, err := ComposeDropMvSql("runtime.mv_queryruns")
+	drop, err := ComposeDropMvSql("boxer.mv_queryruns")
 	require.NoError(t, err)
-	require.Equal(t, "DROP TABLE IF EXISTS runtime.mv_queryruns", drop)
+	require.Equal(t, "DROP TABLE IF EXISTS boxer.mv_queryruns", drop)
 }
 
 func TestBuildEntitiesEncodesRows(t *testing.T) {

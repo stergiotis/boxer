@@ -19,7 +19,7 @@ import (
 // {run_id, app, lane, authored_fp, sent_fp, chain_fp, env_fp}, so the
 // server's own query_log is attributable with no boxer process running,
 // and the queryrunsd capture pipeline lifts the identity into
-// runtime.facts memberships (queryrunfacts.ParseStamp — the same struct
+// boxer.facts memberships (queryrunfacts.ParseStamp — the same struct
 // serialised here, single-sourcing the keys).
 //
 // The four fingerprints are the entity spine's day-one anchors

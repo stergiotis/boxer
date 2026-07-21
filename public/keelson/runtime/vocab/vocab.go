@@ -46,7 +46,7 @@ var NkRegistry = registry.MustNewNaturalKeyRegistry[*contract.VcsManagedContract
 	MembersTagValue.GetTagValue(), 32, NamingStyle, identifier.UntaggedId(0), Contract,
 )
 
-// Membership constants — vocabulary for runtime.facts rows per ADR-0026 §SD6.
+// Membership constants — vocabulary for boxer.facts rows per ADR-0026 §SD6.
 var (
 	// Kinds (low-card-ref): the attribute value carries the kind label
 	// string (e.g. "grant") for readability; the membership id identifies
