@@ -58,6 +58,22 @@ all of them:
    ([ADR-0094](./0094-keelson-introspection-tables.md)) can enumerate
    themselves into a layer tier.
 
+A further owner requirement (2026-07-22) sets the interaction model: the
+model must be able to *introspect every relevant dimension itself* —
+tables, semantic-layer entries, nanopass passes, live signals, windows —
+through tool calls, not only through whatever context was rendered up
+front. The literature backs this: static schema pre-filtering measured
+net-neutral-to-negative for frontier models (a wrongly dropped column is
+unrecoverable), and the strongest results on realistic benchmarks come
+from agentic iterative exploration. boxer's grain fits unusually well
+because dimensions here tend to *become tables*: passes are queryable via
+`keelson('sql_passes')` ([ADR-0108](./0108-keelson-sql-pass-registry.md)),
+appliance topology is data
+([ADR-0126](./0126-appliance-topology-as-data.md)), system metrics ride a
+pub/sub plane (ADR-0090), windowhost lifecycle lands as audit facts
+(ADR-0135), and provider tables self-describe (ADR-0094). SD8 records the
+contract and the engine delta.
+
 One constraint dominates the format choice: a layer describes a
 *deployment's data*, not boxer itself — it is site content. It must be
 authorable and editable without recompiling boxer, live as local files
@@ -130,11 +146,13 @@ settled decisions:
   the layer visibly — that is a feature, and doubles as a
   rename-detection tripwire. Lint home (a `gov` subcommand vs beside the
   engine CLI) is a minor open point.
-- **SD4 — Deterministic rendering.** `Render(scope, budget)` produces the
-  prompt context: layer content first, auto-derived schema tier after,
+- **SD4 — Deterministic seed rendering.** `Render(scope, budget)` produces
+  the *seed* context: layer content first, auto-derived schema tier after,
   stable ordering throughout. v0 renders whole scopes — the evidence says
-  ~4 KB already moves accuracy; retrieval/selection over large layers is
-  deferred.
+  ~4 KB already moves accuracy. The seed is deliberately compact; depth
+  comes from SD8 introspection on demand, non-destructively (nothing the
+  seed omits is unrecoverable). Retrieval/selection over large layers
+  stays deferred.
 - **SD5 — Scoping.** A layer binds to (endpoint, database, optional table
   subset). play passes its active scope; the CLI takes a flag. Ad-hoc
   datasets ([ADR-0134](./0134-adhoc-datasets.md)) may carry layer
@@ -155,6 +173,23 @@ settled decisions:
   generation may target friendly handles and keelson macros — the pass
   stack lowers them (ADR-0116) — with physical names as the universal
   fallback. **OPEN:** tied to SD6-T2's timing.
+- **SD8 — Agentic introspection** *(added 2026-07-22)*. Generation is a
+  tool-calling loop, not a single shot: while composing a query the model
+  can introspect every relevant dimension. The dimension registry is
+  extensible and starts with: tables/columns (`system.*`, `keelson.*`
+  providers; ad-hoc scopes later), semantic-layer entries, nanopass
+  passes (`keelson('sql_passes')`), signals/topology (ADR-0126 data,
+  ADR-0090 plane), and windows (windowhost lifecycle facts, ADR-0135).
+  boxer's grain holds — dimensions are, or become, queryable tables — so
+  two tool shapes cover the surface: a **read-only, row-capped query
+  tool** over the introspection tables (the DSL is its own introspection
+  language) and a **validate tool** (grammar1 parse + canonicalize) so
+  the model can self-check drafts before answering. Whether a small set
+  of bespoke per-dimension tools rides on top as a façade (friendlier to
+  small local models) is **OPEN**. Guardrails: read-only enforcement,
+  row/size caps, every tool call emitted through the observer stream.
+  Engine delta, recorded: `LLMClientI` grows tool calling — the
+  openaichat client already has it; the ollama adapter does not yet.
 
 ## Alternatives
 
@@ -180,6 +215,9 @@ settled decisions:
   that validates generation, at authoring time.
 - The artifact is dual-use by construction: prompt grounding for models,
   data documentation for humans, drift tripwire for CI.
+- The agentic loop needs registries, not new data planes: introspection
+  reuses the same tables humans query, and the observer stream doubles as
+  a complete tool-call audit trail.
 - ADR-0120's panel stays thin; grounding quality improves without
   touching play.
 
@@ -191,6 +229,9 @@ settled decisions:
 - A new artifact class to specify, lint, document, and version.
 - Whole-scope rendering caps practical layer size until
   retrieval/selection lands.
+- Agentic loops multiply LLM round-trips and latency (production
+  pipelines report up to ~19–21 calls per query); a per-question call
+  budget and cancellation are part of the contract, not afterthoughts.
 
 ### Neutral
 
@@ -204,8 +245,9 @@ settled decisions:
 ## Status
 
 Proposed — open decisions: SD1 package home, SD2 block grammar, SD6-T2 /
-SD7 timing (leeway tier in v0 or first follow-up). Being closed in the
-same design dialogue as ADR-0120.
+SD7 timing (leeway tier in v0 or first follow-up), SD8 tool surface
+(universal query tool only, or a bespoke per-dimension façade on top).
+Being closed in the same design dialogue as ADR-0120.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
@@ -230,6 +272,9 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
   runs, the future verified-query tier.
 - [ADR-0094](./0094-keelson-introspection-tables.md) — self-describing
   provider tables.
+- [ADR-0108](./0108-keelson-sql-pass-registry.md),
+  [ADR-0126](./0126-appliance-topology-as-data.md) — dimensions that are
+  already tables (passes, topology), the SD8 pattern.
 - Evidence: arXiv:2604.25149 (ClickHouse semantic layer, +17–23 pts);
   arXiv:2509.23338 (PARROT, cross-dialect <38.53%);
   dbt-labs/dbt-llm-sl-bench (vendor-reported).

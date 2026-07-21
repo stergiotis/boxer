@@ -166,7 +166,9 @@ settled decisions:
   Insert / Replace / Replace-and-run actions over the delivery ops. Every
   gesture stops at the preview: generated SQL never executes unseen, and
   Replace-and-run is a single click made after the SQL is on screen (an
-  ask-and-run gesture was rejected in the 2026-07-21 dialogue).
+  ask-and-run gesture was rejected in the 2026-07-21 dialogue). Progress
+  surfaces the engine's activity — including ADR-0139 SD8 introspection
+  tool calls — through the observer events.
 - **SD7 — The target language is a DSL, not open SQL** *(added
   2026-07-22)*. What generation must emit is the nanopass-validated
   canonical dialect — grammar1/grammar2 plus the pass-stack vocabulary
