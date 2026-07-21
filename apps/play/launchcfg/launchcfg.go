@@ -24,6 +24,18 @@ import "time"
 // launchrequest.LaunchRequest.ConfigKind.
 const Kind = "playLaunch"
 
+// Endpoint values for the PlayLaunch.Endpoint field. Empty behaves like
+// EndpointDefault.
+const (
+	// EndpointDefault keeps play's env-configured ClickHouse target.
+	EndpointDefault = "default"
+	// EndpointIntrospection binds the opened window's client to the
+	// in-process keelson `/query` endpoint (introspect.LocalQueryEndpoint,
+	// ADR-0094 §SD6) — where ad-hoc `keelson('<handle>')` datasets resolve
+	// (ADR-0134). Ignored, with a warning, when no such endpoint is up.
+	EndpointIntrospection = "introspection"
+)
+
 // PlayLaunch is the flat wire form of play's launch arguments.
 type PlayLaunch struct {
 	_ struct{} `kind:"playLaunch"`
@@ -61,4 +73,12 @@ type PlayLaunch struct {
 	// Tab selects the initially focused body tab by id when non-empty
 	// (ActivateTab); an unknown id is a warning, not a mount error.
 	Tab string `lw:"playLaunchTab,symbol"`
+
+	// Endpoint binds the opened window's client to a query target:
+	// EndpointIntrospection points it at the in-process keelson `/query`
+	// endpoint (where ad-hoc `keelson('<handle>')` datasets resolve,
+	// ADR-0134); empty or EndpointDefault keeps play's env-configured
+	// ClickHouse. An "introspection" request with no such endpoint up is a
+	// warning, not a mount error — the window opens on the default target.
+	Endpoint string `lw:"playLaunchEndpoint,symbol"`
 }

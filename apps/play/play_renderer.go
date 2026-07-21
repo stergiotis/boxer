@@ -1349,12 +1349,22 @@ func (inst *PlayApp) renderTopBar() {
 			} else if c.Button(ids.PrepareStr("openPlayground"),
 				c.Atoms().Text("Open in Playground").Keep()).
 				SendResp().HasPrimaryClicked() {
+				// Carry the endpoint so a buffer authored against the
+				// in-process introspection /query endpoint reopens there
+				// (bare keelson('…') is that endpoint's dialect); the
+				// env-default target stays default. Same probe as
+				// play_save_applet.go's ComposeAppletDoc.
+				endpoint := ""
+				if ep := introspect.LocalQueryEndpoint(); ep != "" && inst.client != nil && inst.client.URL() == ep {
+					endpoint = launchcfg.EndpointIntrospection
+				}
 				go inst.requestOpenPlayground(launchcfg.PlayLaunch{
 					At:       time.Now().UTC(),
 					Sql:      inst.sql,
 					AutoRun:  inst.AutoRun,
 					Live:     inst.liveMain,
 					BandsSql: inst.timelineBandsSql,
+					Endpoint: endpoint,
 				})
 			}
 			if openErr != "" {
@@ -1904,7 +1914,7 @@ func (inst *PlayApp) renderHistoryTab() {
 			}
 		}
 	}
-	// The durable half: captured runs from runtime.facts (ADR-0115 S2).
+	// The durable half: captured runs from boxer.facts (ADR-0115 S2).
 	inst.renderRecordedRuns()
 	// Tier-1 pins: frozen resultsets on the endpoint (ADR-0115 S4).
 	inst.renderPinnedResults()

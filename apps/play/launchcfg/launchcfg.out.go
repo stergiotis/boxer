@@ -38,6 +38,7 @@ var (
 	kindPlayLaunchLive     uint64
 	kindPlayLaunchBandsSql uint64
 	kindPlayLaunchTab      uint64
+	kindPlayLaunchEndpoint uint64
 )
 
 func init() {
@@ -46,6 +47,7 @@ func init() {
 	kindPlayLaunchLive = vdd.MembPlayLaunchLive.GetId().Value()
 	kindPlayLaunchBandsSql = vdd.MembPlayLaunchBandsSql.GetId().Value()
 	kindPlayLaunchTab = vdd.MembPlayLaunchTab.GetId().Value()
+	kindPlayLaunchEndpoint = vdd.MembPlayLaunchEndpoint.GetId().Value()
 	buscodec.Register[PlayLaunch](playLaunchBusCodec)
 }
 
@@ -57,7 +59,7 @@ func init() {
 var PlayLaunchActiveSections = []int{1, 10, 12}
 
 // PlayLaunchActiveFields is the column-index subset this kind populates
-// in the runtime.facts Arrow schema. Lazily computed once via
+// in the boxer.facts Arrow schema. Lazily computed once via
 // sync.OnceValue: scans cbdml.CreateSchemaFacts()'s tv:<section>:...
 // field names against this kind's active sections plus the three
 // plain prefixes (id:, ts:, lc:). Driven through RecordBuilder.
@@ -114,6 +116,7 @@ type PlayLaunchColumns struct {
 	Live     []bool
 	BandsSql []string
 	Tab      []string
+	Endpoint []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -134,6 +137,7 @@ func (c *PlayLaunchColumns) Append(row PlayLaunch) {
 	c.Live = append(c.Live, row.Live)
 	c.BandsSql = append(c.BandsSql, row.BandsSql)
 	c.Tab = append(c.Tab, row.Tab)
+	c.Endpoint = append(c.Endpoint, row.Endpoint)
 }
 
 // Row reconstructs entity i as an AoS PlayLaunch record. Inverse of
@@ -148,6 +152,7 @@ func (c *PlayLaunchColumns) Row(i int) (row PlayLaunch) {
 	row.Live = c.Live[i]
 	row.BandsSql = c.BandsSql[i]
 	row.Tab = c.Tab[i]
+	row.Endpoint = c.Endpoint[i]
 	return
 }
 
@@ -281,6 +286,9 @@ func PlayLaunchBuildEntities[
 		symbolSecAttr_Tab := symbolSec.BeginAttribute(c.Tab[i])
 		symbolSecAttr_Tab.AddMembershipLowCardRefP(kindPlayLaunchTab)
 		symbolSecAttr_Tab.EndAttributeP()
+		symbolSecAttr_Endpoint := symbolSec.BeginAttribute(c.Endpoint[i])
+		symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindPlayLaunchEndpoint)
+		symbolSecAttr_Endpoint.EndAttributeP()
 		symbolSec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
@@ -332,6 +340,9 @@ func PlayLaunchAddSections[
 	symbolSecAttr_Tab := symbolSec.BeginAttribute(row.Tab)
 	symbolSecAttr_Tab.AddMembershipLowCardRefP(kindPlayLaunchTab)
 	symbolSecAttr_Tab.EndAttributeP()
+	symbolSecAttr_Endpoint := symbolSec.BeginAttribute(row.Endpoint)
+	symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindPlayLaunchEndpoint)
+	symbolSecAttr_Endpoint.EndAttributeP()
 	symbolSec.EndSection()
 	return
 }
@@ -472,6 +483,8 @@ func PlayLaunchFillFromArrow[
 		// --- symbol. ---
 		var symbolTabVal string
 		var symbolTabCount int
+		var symbolEndpointVal string
+		var symbolEndpointCount int
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -480,6 +493,10 @@ func PlayLaunchFillFromArrow[
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolTabVal = val
 					symbolTabCount++
+				case kindPlayLaunchEndpoint:
+					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					symbolEndpointVal = val
+					symbolEndpointCount++
 				}
 			}
 		}
@@ -488,6 +505,11 @@ func PlayLaunchFillFromArrow[
 			return
 		}
 		c.Tab = append(c.Tab, symbolTabVal)
+		if symbolEndpointCount != 1 {
+			err = eb.Build().Int("row", i).Str("field", "Endpoint").Errorf("expected exactly one occurrence per row")
+			return
+		}
+		c.Endpoint = append(c.Endpoint, symbolEndpointVal)
 	}
 	return
 }
@@ -590,6 +612,8 @@ func PlayLaunchReadRow[
 	// --- symbol. ---
 	var symbolTabVal string
 	var symbolTabCount int
+	var symbolEndpointVal string
+	var symbolEndpointCount int
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -598,6 +622,10 @@ func PlayLaunchReadRow[
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolTabVal = val
 				symbolTabCount++
+			case kindPlayLaunchEndpoint:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolEndpointVal = val
+				symbolEndpointCount++
 			}
 		}
 	}
@@ -607,6 +635,14 @@ func PlayLaunchReadRow[
 	}
 	if symbolTabCount == 1 {
 		row.Tab = symbolTabVal
+		present = true
+	}
+	if symbolEndpointCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Endpoint").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolEndpointCount == 1 {
+		row.Endpoint = symbolEndpointVal
 		present = true
 	}
 	return
@@ -715,7 +751,7 @@ func (r *playLaunchReader) release() {
 }
 
 // Unmarshal appends one row to c per entity in rec, projecting
-// the runtime.facts columns through factsschema/ra. Thin wrapper
+// the boxer.facts columns through factsschema/ra. Thin wrapper
 // around PlayLaunchFillFromArrow — the per-row decode lives there.
 func (c *PlayLaunchColumns) Unmarshal(rec arrow.Record) (err error) {
 	r := newPlayLaunchReader()

@@ -61,4 +61,14 @@ var (
 	// Empty means the default tab.
 	MembPlayLaunchTab = KeelsonHrNkRegistry.MustBegin("playLaunchTab").
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+
+	// MembPlayLaunchEndpoint names the query target the opened window binds
+	// its client to. Empty (or "default") keeps the env-configured
+	// ClickHouse; "introspection" points at the in-process keelson
+	// `/query` endpoint (introspect.LocalQueryEndpoint, ADR-0094 §SD6) —
+	// the target where ad-hoc `keelson('<handle>')` datasets resolve
+	// (ADR-0134). Symbol section: the set of endpoints is small and closed.
+	// Appended after MembPlayLaunchTab per the id-ordering note above.
+	MembPlayLaunchEndpoint = KeelsonHrNkRegistry.MustBegin("playLaunchEndpoint").
+				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

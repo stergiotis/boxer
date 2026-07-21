@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
@@ -251,6 +252,21 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		URL:      clickhouseenv.URL.Get(),
 		User:     clickhouseenv.User.Get(),
 		Password: clickhouseenv.Password.Get(),
+	}
+	// A launch config may retarget the endpoint (ADR-0135 §SD7): an
+	// EndpointIntrospection open binds the client to the in-process keelson
+	// `/query` endpoint so ad-hoc `keelson('<handle>')` datasets resolve
+	// (ADR-0134). NewPlayApp seeds endpointDraft from cfg.URL, so the
+	// toolbar switcher reflects the retarget with no further wiring. A
+	// request with no such endpoint up degrades to the env default with a
+	// warning — a degraded open, not a failed one, like the Tab tier.
+	if launch != nil && launch.Endpoint == launchcfg.EndpointIntrospection {
+		if ep := introspect.LocalQueryEndpoint(); ep != "" {
+			cfg.URL = ep
+		} else {
+			logger := ctx.Log()
+			logger.Warn().Msg("play: launch config requested the introspection endpoint, but none is registered; opening on the default target")
+		}
 	}
 	client := NewClient(cfg, nil)
 	// SD7 identity for the log_comment stamp (ADR-0115): the runtime's

@@ -1,12 +1,8 @@
 package play
 
 import (
-	"time"
-
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
-	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -122,28 +118,11 @@ func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
 		err = eh.Errorf("play: encode launch config: %w", err)
 		return
 	}
-	reqBytes, err := buscodec.Encode(launchrequest.LaunchRequest{
-		At:          time.Now().UTC(),
-		TargetAppId: string(AppId),
-		ConfigKind:  launchcfg.Kind,
-		Config:      cfgBytes,
-	})
-	if err != nil {
-		err = eh.Errorf("play: encode launch request: %w", err)
-		return
-	}
-	replyBytes, err := inst.bus.Request(windowhost.OpenSubject, reqBytes)
-	if err != nil {
-		err = eh.Errorf("play: windowhost.open request: %w", err)
-		return
-	}
-	rep, err := buscodec.Decode[launchreply.LaunchReply](replyBytes)
-	if err != nil {
-		err = eh.Errorf("play: decode launch reply: %w", err)
-		return
-	}
-	if rep.Reason != "" {
-		err = eh.Errorf("play: open refused: %s", rep.Reason)
+	// windowhost.RequestOpen composes the LaunchRequest, runs the audited
+	// round-trip, and turns a refusal reply into an error — the shared
+	// client half of the open subject (its error already names the reason).
+	if _, err = windowhost.RequestOpen(inst.bus, AppId, launchcfg.Kind, cfgBytes); err != nil {
+		err = eh.Errorf("play: open playground: %w", err)
 		return
 	}
 	return
