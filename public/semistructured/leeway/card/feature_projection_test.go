@@ -260,3 +260,31 @@ func TestPreprocess_AllZeros(t *testing.T) {
 		}
 	}
 }
+
+// ─── UMAP init auto-selection (dense-eigendecomposition hang guard) ──────────
+
+func TestSelectUMAPInitMethod(t *testing.T) {
+	cases := []struct {
+		name      string
+		nRows     int
+		requested string
+		want      string
+	}{
+		// Auto (no explicit request): spectral up to and including the cap,
+		// random strictly above it.
+		{"auto small", 10, "", "spectral"},
+		{"auto at cap", SpectralInitMaxRows, "", "spectral"},
+		{"auto just over cap", SpectralInitMaxRows + 1, "", "random"},
+		{"auto far over cap", SpectralInitMaxRows * 4, "", "random"},
+		// Explicit request always wins, in both directions.
+		{"explicit spectral over cap", SpectralInitMaxRows + 5000, "spectral", "spectral"},
+		{"explicit random under cap", 10, "random", "random"},
+		{"explicit custom over cap", SpectralInitMaxRows + 1, "custom", "custom"},
+	}
+	for _, tc := range cases {
+		if got := selectUMAPInitMethod(tc.nRows, tc.requested); got != tc.want {
+			t.Errorf("%s: selectUMAPInitMethod(%d, %q) = %q, want %q",
+				tc.name, tc.nRows, tc.requested, got, tc.want)
+		}
+	}
+}

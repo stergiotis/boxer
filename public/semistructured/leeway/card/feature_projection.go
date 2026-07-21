@@ -23,6 +23,24 @@ const (
 	DefaultUMAPDimsOut    = 2
 )
 
+// SpectralInitMaxRows bounds the DENSE spectral-init path. umap-go's default
+// init ("spectral") builds a dense normalized Laplacian of the largest
+// connected component and runs a full gonum mat.EigenSym eigendecomposition
+// (LAPACK Dsyev — O(n³) time, O(n²) memory). Under CGO_ENABLED=0 that is
+// gonum's pure-Go LAPACK with no optimised BLAS, so it grinds for many minutes
+// once a component reaches a few thousand nodes — empirically a 7311-node
+// component ran for >10 min without finishing, presenting as a hung UI.
+// umap-go itself only claims the dense path "works well for n <= ~8000" and
+// its sparse-eigensolver path is an unimplemented TODO (see spectral.go).
+//
+// Above this row count RunUMAP auto-selects "random" init, which skips the
+// eigendecomposition entirely; UMAP's SGD layout still recovers most global
+// structure. nRows is a conservative proxy for the largest component (a
+// component is ≤ nRows), so gating on it can only over-select random, never
+// under-select. Worst case at the threshold is an O(nRows³) dense Dsyev, so
+// keep this modest; lower it if projections still feel slow.
+const SpectralInitMaxRows = 2000
+
 // LogTransformFeature flags features that are log1p-transformed before
 // z-score standardisation. Right-skewed / unbounded features span orders
 // of magnitude; bounded [0,1] features stay linear.
@@ -51,6 +69,12 @@ type UMAPOptions struct {
 	MinDist    float64 // 0 → DefaultUMAPMinDist
 	NEpochs    int32   // 0 → auto (umap-learn convention)
 	DimsOut    int32   // 0 → DefaultUMAPDimsOut
+	// InitMethod selects UMAP's initial embedding. "" auto-selects: "spectral"
+	// for nRows ≤ SpectralInitMaxRows, else "random" — the dense spectral
+	// eigendecomposition is O(nRows³) and effectively hangs on large connected
+	// components (see SpectralInitMaxRows). "spectral" | "random" | "custom"
+	// force the choice; an unrecognised value surfaces as an error from the fit.
+	InitMethod string
 	Verbose    bool
 }
 
@@ -153,6 +177,12 @@ func PreprocessFeatureMatrix(m *mat.Dense) (err error) {
 // to reflect progress in a UI must rely on phase boundaries (extraction,
 // preprocess, fit) and elapsed time, or vendor + patch the package.
 //
+// Init: the O(nRows × NNeighbors) memory claim above holds for the SGD layout,
+// but the upstream default "spectral" init is the exception — it does a DENSE
+// eigendecomposition (O(nRows³) time, O(nRows²) memory) of the largest
+// connected component and hangs on large ones. RunUMAP therefore auto-selects
+// "random" init above SpectralInitMaxRows unless opts.InitMethod overrides it.
+//
 // Below n=2 the result is all-zero coords (UMAP NNeighbors needs ≥2 points
 // and the embedding is meaningless anyway). NNeighbors is clamped to nRows−1
 // so small batches don't fail validation.
@@ -184,6 +214,11 @@ func RunUMAP(m *mat.Dense, opts UMAPOptions) (coords [][2]float64, err error) {
 	if opts.DimsOut > 0 {
 		uopts.NComponents = int(opts.DimsOut)
 	}
+	// Init selection: umap.DefaultOptions() picks "spectral", whose dense
+	// eigendecomposition hangs on large components — override to "random" above
+	// SpectralInitMaxRows unless the caller forced a method. selectUMAPInitMethod
+	// is pure; an invalid explicit value is caught by umap-go's own validate().
+	uopts.InitMethod = selectUMAPInitMethod(nRows, opts.InitMethod)
 	uopts.Verbose = opts.Verbose
 
 	model := umap.New(uopts)
@@ -208,6 +243,22 @@ func RunUMAP(m *mat.Dense, opts UMAPOptions) (coords [][2]float64, err error) {
 		coords[i] = [2]float64{row[0], row[1]}
 	}
 	return
+}
+
+// selectUMAPInitMethod picks UMAP's init strategy. An explicit request is
+// honoured verbatim (validation is left to umap-go's own options.validate()).
+// With no request it auto-selects: "spectral" while nRows ≤ SpectralInitMaxRows,
+// else "random" — the dense spectral eigendecomposition is O(nRows³) and
+// effectively hangs on large connected components (see SpectralInitMaxRows).
+// Pure; unit-tested in feature_projection_test.go.
+func selectUMAPInitMethod(nRows int, requested string) string {
+	if requested != "" {
+		return requested
+	}
+	if nRows > SpectralInitMaxRows {
+		return "random"
+	}
+	return "spectral"
 }
 
 // denseToRows reshapes a row-major mat.Dense into a slice of independent
