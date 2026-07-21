@@ -238,6 +238,15 @@ type Manifest struct {
 	// via the M2 storage layer. Forward-declared in M1.
 	PersistedKeys []string
 
+	// LaunchKind names the launch-config vocabulary kind this app accepts
+	// when opened via `windowhost.open` (ADR-0135 §SD3), e.g. "playLaunch".
+	// Kinds are runtime.facts vocabulary names whose codec the app owns
+	// (§SD2); the app decodes MountContextI.LaunchConfig() with that
+	// codec's generated Unmarshal in Mount. Empty means the app accepts no
+	// launch config — an argument-carrying open targeting it is refused at
+	// the host boundary. Plain opens are unaffected either way.
+	LaunchKind string
+
 	// Help is the optional inline-help corpus for this app. When non-nil,
 	// the keelson/runtime/help package's DefaultLibrary will lazily index
 	// every `*.md` file under the fs.FS (any depth) on first access and

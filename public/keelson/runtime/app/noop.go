@@ -53,14 +53,15 @@ func (inst *NoopStorage) Delete(key string) (err error) {
 // scenarios that don't yet have a real bus or storage. Hosts construct one
 // per app at Mount.
 type StaticMountContext struct {
-	id          AppIdT
-	logger      zerolog.Logger
-	storage     StorageI
-	bus         BusI
-	ids         *c.WidgetIdStack
-	stop        <-chan struct{}
-	instanceKey uint64
-	runId       string
+	id           AppIdT
+	logger       zerolog.Logger
+	storage      StorageI
+	bus          BusI
+	ids          *c.WidgetIdStack
+	stop         <-chan struct{}
+	instanceKey  uint64
+	runId        string
+	launchConfig []byte
 }
 
 var _ MountContextI = (*StaticMountContext)(nil)
@@ -152,6 +153,19 @@ func (inst *StaticMountContext) InstanceKey() (key uint64) {
 
 func (inst *StaticMountContext) RunId() (id string) {
 	id = inst.runId
+	return
+}
+
+// SetLaunchConfig records the validated launch-config bytes the host
+// delivers through MountContextI.LaunchConfig (ADR-0135 §SD4). Defaults
+// to nil when not set — the plain-open shape. Ownership of the slice
+// passes to the context; hosts copy caller-supplied bytes before setting.
+func (inst *StaticMountContext) SetLaunchConfig(cfg []byte) {
+	inst.launchConfig = cfg
+}
+
+func (inst *StaticMountContext) LaunchConfig() (cfg []byte) {
+	cfg = inst.launchConfig
 	return
 }
 

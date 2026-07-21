@@ -63,6 +63,16 @@ type MountContextI interface {
 	// join the runtime-start row of the same process. Empty when no
 	// runinfo was wired.
 	RunId() (id string)
+	// LaunchConfig returns the raw facts-CBOR launch-config bytes the
+	// window carrying this context was opened with (ADR-0135 §SD4);
+	// nil when the window was opened plainly. The host has already
+	// validated the size cap and that the bytes claim the manifest's
+	// LaunchKind, but has not decoded them — the app decodes with its
+	// generated Unmarshal in Mount, and a decode failure belongs in
+	// Mount's error return (it surfaces as the host's failed-mount
+	// label), never in a silent fallback. Frozen per window: post-mount
+	// parameter changes stay per-app ops.
+	LaunchConfig() (cfg []byte)
 }
 
 // FrameContextI extends MountContextI with frame-scoped resources. The host

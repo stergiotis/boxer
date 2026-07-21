@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
@@ -97,11 +98,15 @@ type instMount struct {
 // Inst is the window host: the registry plus the list of open windows.
 // The zero value is unusable; construct via NewInst.
 //
-// Goroutine safety: not goroutine-safe. The render loop is single-
-// threaded (Go side runs Frame on the main goroutine); Open/Close are
-// called from inside Frame's call stack (via the Apps menu or the
-// in-body close button) or from CLI argument parsing before the loop
-// starts. Tests stick to the single-goroutine contract.
+// Goroutine safety: split. Open / OpenWithConfig / Close / CloseAll and
+// the metadata snapshots guard every touch of host state with inst.mu
+// and may be called off the render thread — the open service (ADR-0135)
+// invokes OpenWithConfig from bus-handler goroutines, and a window
+// opened that way is picked up by the next Frame. App factory ctors run
+// on the calling goroutine and must not touch render state (the
+// lifecycle contract already reserves rendering for Frame). The render
+// surfaces themselves (Frame, RenderAppsMenu, the picker/search state)
+// remain single-threaded: render-loop only.
 type Inst struct {
 	registry *app.Registry
 	logger   zerolog.Logger
@@ -223,10 +228,72 @@ func (inst *Inst) SetAudit(runId string, facts factsstore.FactsStoreI) {
 // fails the window stays open with an error label so the user can
 // Close it.
 func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
+	key, err = inst.OpenWithConfig(appId, "", nil)
+	return
+}
+
+// maxLaunchConfigBytes caps the launch-config payload accepted at the
+// host boundary (ADR-0135 §SD6 — the request is persisted as an audit
+// fact, so the cap also bounds the row). Enforced before any decode.
+const maxLaunchConfigBytes = 64 << 10
+
+// OpenWithConfig allocates a new window for appId carrying a launch
+// config (ADR-0135): kind names the config's vocabulary kind and cfg is
+// the config DTO's facts-CBOR bytes, delivered untouched to the app via
+// MountContextI.LaunchConfig at Mount (§SD4). Empty kind + nil cfg is a
+// plain open, exactly Open's behaviour.
+//
+// Boundary validation, in order: target manifest exists → the manifest's
+// LaunchKind accepts kind (an argument-carrying open of an app with an
+// empty LaunchKind is refused, §SD3) → size cap → the bytes decode as
+// the claimed kind (kindcheck). Refusals are returned as named errors —
+// the bus-facing open service turns them into LaunchReply refusals,
+// never silent drops (§SD1).
+func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key WindowKeyT, err error) {
+	if len(cfg) == 0 {
+		// The wire cannot distinguish nil from empty; normalise so a
+		// plain open always delivers nil through LaunchConfig (§SD4).
+		cfg = nil
+	}
 	m, ok := inst.registry.LookupManifest(appId)
 	if !ok {
 		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered id=%s", string(appId))
 		return
+	}
+	if kind == "" && len(cfg) > 0 {
+		err = eb.Build().Str("id", string(appId)).Int("len", len(cfg)).
+			Errorf("windowhost: launch config bytes without a config kind")
+		return
+	}
+	if kind != "" {
+		if len(cfg) == 0 {
+			err = eb.Build().Str("id", string(appId)).Str("kind", kind).
+				Errorf("windowhost: config kind claimed but config is empty")
+			return
+		}
+		if m.LaunchKind == "" {
+			err = eb.Build().Str("id", string(appId)).Str("kind", kind).
+				Errorf("windowhost: app accepts no launch config (manifest LaunchKind is empty)")
+			return
+		}
+		if m.LaunchKind != kind {
+			err = eb.Build().Str("id", string(appId)).Str("kind", kind).Str("launchKind", m.LaunchKind).
+				Errorf("windowhost: config kind does not match the app's LaunchKind")
+			return
+		}
+		if len(cfg) > maxLaunchConfigBytes {
+			err = eb.Build().Str("id", string(appId)).Int("len", len(cfg)).Int("max", maxLaunchConfigBytes).
+				Errorf("windowhost: launch config exceeds the size cap")
+			return
+		}
+		if cErr := kindcheck.Check(kind, cfg); cErr != nil {
+			err = eb.Build().Str("id", string(appId)).Str("kind", kind).
+				Errorf("windowhost: launch config bytes refused: %w", cErr)
+			return
+		}
+		// The config crosses into host-owned state at Mount; copy so a
+		// caller recycling its buffer can't mutate the delivered bytes.
+		cfg = append([]byte(nil), cfg...)
 	}
 	a, err := inst.registry.Open(appId)
 	if err != nil {
@@ -234,6 +301,17 @@ func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 		return
 	}
 	inst.mu.Lock()
+	// Config is delivered at Mount and Mount runs once per AppI instance;
+	// a singleton-registered app that already has a window can never
+	// consume a fresh config, so refuse rather than drop it silently.
+	if kind != "" {
+		if ms := inst.mountState[a]; ms != nil && ms.refs > 0 {
+			inst.mu.Unlock()
+			err = eb.Build().Str("id", string(appId)).Str("kind", kind).
+				Errorf("windowhost: app instance is already open (singleton registration); launch config would never be delivered")
+			return
+		}
+	}
 	inst.nextKey++
 	key = WindowKeyT(inst.nextKey)
 	// Mint a per-app bus client when a provider is attached. The provider
@@ -283,6 +361,7 @@ func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 	mountCtx := app.NewStaticMountContext(m.Id, perWindowLogger, storageC, busC, nil)
 	mountCtx.SetInstanceKey(uint64(key))
 	mountCtx.SetRunId(inst.runId)
+	mountCtx.SetLaunchConfig(cfg)
 	appIds := c.NewWidgetIdStack()
 	mountCtx.SetIds(appIds)
 	frameCtx := app.NewStaticFrameContext(mountCtx, nil)
