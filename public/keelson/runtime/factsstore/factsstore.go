@@ -141,6 +141,28 @@ type AppLifecycleRow struct {
 	Ts         time.Time
 }
 
+// LaunchRow records one accepted `windowhost.open` request (ADR-0135
+// §SD6): which app asked which app to open, with which typed config.
+// Maps to a runtime.facts row with KindLaunch + AppRefPrefix(target) +
+// RunRef(runId) + LaunchCaller + LifecycleTileKey + LaunchConfigKind +
+// the raw config bytes on the blob section. TileKey is the opened
+// window's key — the same value the app-lifecycle "started" row written
+// in the same Open carries, so the two rows join on one column.
+//
+// CallerAppId is attributed by the host from the bus envelope
+// (Msg.Sender), never from the request payload — the request DTO
+// deliberately has no caller field. Refused opens write no row; they
+// surface in the caller's reply and the host log.
+type LaunchRow struct {
+	RunId       string
+	CallerAppId app.AppIdT
+	TargetAppId app.AppIdT
+	TileKey     uint64
+	ConfigKind  string // empty for a plain open
+	Config      []byte // raw facts-CBOR config bytes; nil for a plain open
+	Ts          time.Time
+}
+
 // LogFieldKindE discriminates the runtime type of a LogField's value. Drives
 // the typed-section fan-out in chstore.WriteLog — fields decoded from
 // zerolog's CBOR wire format land in i64 / u64 / f64 / string / bool / blob
@@ -287,6 +309,7 @@ type FactsStoreI interface {
 	WriteRuntimeStart(row RuntimeStartRow) (id uint64, err error)
 	WriteRuntimeHeartbeat(row HeartbeatRow) (id uint64, err error)
 	WriteAppLifecycle(row AppLifecycleRow) (id uint64, err error)
+	WriteLaunch(row LaunchRow) (id uint64, err error)
 	LatestState(appId app.AppIdT, key string) (value []byte, found bool, err error)
 	DeleteState(appId app.AppIdT, key string) (err error)
 }
@@ -305,6 +328,7 @@ type InMemoryFactsStore struct {
 	runs       []RuntimeStartRow
 	heartbeats []HeartbeatRow
 	lifecycles []AppLifecycleRow
+	launches   []LaunchRow
 	nextId     atomic.Uint64
 }
 
@@ -430,6 +454,24 @@ func (inst *InMemoryFactsStore) WriteAppLifecycle(row AppLifecycleRow) (id uint6
 	return
 }
 
+// WriteLaunch appends one accepted app-launch record. Config bytes are
+// defensively copied so the caller can recycle its buffer.
+func (inst *InMemoryFactsStore) WriteLaunch(row LaunchRow) (id uint64, err error) {
+	id = inst.nextId.Add(1)
+	if row.Ts.IsZero() {
+		row.Ts = time.Now().UTC()
+	}
+	if row.Config != nil {
+		cp := make([]byte, len(row.Config))
+		copy(cp, row.Config)
+		row.Config = cp
+	}
+	inst.mu.Lock()
+	inst.launches = append(inst.launches, row)
+	inst.mu.Unlock()
+	return
+}
+
 func (inst *InMemoryFactsStore) LatestState(appId app.AppIdT, key string) (value []byte, found bool, err error) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
@@ -510,6 +552,16 @@ func (inst *InMemoryFactsStore) Lifecycles() (rows []AppLifecycleRow) {
 	defer inst.mu.RUnlock()
 	rows = make([]AppLifecycleRow, len(inst.lifecycles))
 	copy(rows, inst.lifecycles)
+	return
+}
+
+// Launches returns a snapshot of recorded app-launch rows in insertion
+// order.
+func (inst *InMemoryFactsStore) Launches() (rows []LaunchRow) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	rows = make([]LaunchRow, len(inst.launches))
+	copy(rows, inst.launches)
 	return
 }
 

@@ -120,6 +120,14 @@ func buildWindowedRenderer(apps []app.AppI, runId string, facts factsstore.Facts
 	if runId != "" && facts != nil {
 		host.SetAudit(runId, facts)
 	}
+	if bus != nil {
+		// App-launch requests (ADR-0135): service `windowhost.open` so apps
+		// holding the cap can open other apps with typed launch configs.
+		// Process-lifetime, like the sysmetrics wiring above.
+		if _, osErr := windowhost.NewOpenService(bus, host, log.Logger); osErr != nil {
+			log.Warn().Err(osErr).Msg("carousel: windowhost open service unavailable; windowhost.open requests will time out")
+		}
+	}
 	for _, a := range apps {
 		id := a.Manifest().Id
 		_, openErr := host.Open(id)

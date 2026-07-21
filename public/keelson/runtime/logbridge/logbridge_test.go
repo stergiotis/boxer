@@ -128,12 +128,19 @@ type blockingStore struct {
 
 var _ factsstore.FactsStoreI = (*blockingStore)(nil)
 
-func (s *blockingStore) WriteGrant(_ factsstore.GrantRow) (uint64, error)               { return 0, nil }
-func (s *blockingStore) WriteAudit(_ factsstore.AuditRow) (uint64, error)               { return 0, nil }
-func (s *blockingStore) WriteState(_ factsstore.StateRow) (uint64, error)               { return 0, nil }
-func (s *blockingStore) WriteRuntimeStart(_ factsstore.RuntimeStartRow) (uint64, error)     { return 0, nil }
-func (s *blockingStore) WriteRuntimeHeartbeat(_ factsstore.HeartbeatRow) (uint64, error)    { return 0, nil }
-func (s *blockingStore) WriteAppLifecycle(_ factsstore.AppLifecycleRow) (uint64, error)     { return 0, nil }
+func (s *blockingStore) WriteGrant(_ factsstore.GrantRow) (uint64, error) { return 0, nil }
+func (s *blockingStore) WriteAudit(_ factsstore.AuditRow) (uint64, error) { return 0, nil }
+func (s *blockingStore) WriteState(_ factsstore.StateRow) (uint64, error) { return 0, nil }
+func (s *blockingStore) WriteRuntimeStart(_ factsstore.RuntimeStartRow) (uint64, error) {
+	return 0, nil
+}
+func (s *blockingStore) WriteRuntimeHeartbeat(_ factsstore.HeartbeatRow) (uint64, error) {
+	return 0, nil
+}
+func (s *blockingStore) WriteAppLifecycle(_ factsstore.AppLifecycleRow) (uint64, error) {
+	return 0, nil
+}
+func (s *blockingStore) WriteLaunch(_ factsstore.LaunchRow) (uint64, error) { return 0, nil }
 func (s *blockingStore) WriteLog(_ factsstore.LogRow) (id uint64, err error) {
 	<-s.gate
 	id = s.n.Add(1)
@@ -160,8 +167,8 @@ func (s *blockingStore) DeleteState(_ app.AppIdT, _ string) (err error) { return
 func TestSink_Close_DrainsPending(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
 	sink, err := logbridge.NewSink(store, logbridge.Config{
-		Capacity: 64,
-		FlushN:   100,                 // never reach
+		Capacity:      64,
+		FlushN:        100,            // never reach
 		FlushInterval: 24 * time.Hour, // never tick
 	})
 	require.NoError(t, err)
@@ -180,4 +187,3 @@ func TestSink_NilStore(t *testing.T) {
 	_, err := logbridge.NewSink(nil, logbridge.Config{})
 	require.Error(t, err)
 }
-

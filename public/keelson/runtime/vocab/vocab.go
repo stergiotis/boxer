@@ -178,6 +178,22 @@ var (
 	MembQueryRunChainFp         = NkRegistry.MustBegin("runtimeQueryRunChainFp").End()
 	MembQueryRunEnvFp           = NkRegistry.MustBegin("runtimeQueryRunEnvFp").End()
 	MembQueryRunProfileEvent    = NkRegistry.MustBegin("runtimeQueryRunProfileEvent").End()
+
+	// App-launch (kind + per-request fields), ADR-0135 §SD6 — one row per
+	// accepted `windowhost.open` request, written beside the app-lifecycle
+	// "started" row. Target app / run identity reuse MembRuntimeApp /
+	// MembRuntimeRun; the opened window's key reuses MembLifecycleTileKey
+	// so the launch row joins its lifecycle row on the same column.
+	// MembLaunchCaller is the requesting app, attributed from the bus
+	// envelope (Msg.Sender) — mixed-low-card-ref with the caller AppIdT
+	// bytes as the high-card parameter, the MembRuntimeApp pattern.
+	// MembLaunchConfigKind carries the config's vocabulary kind name on
+	// the symbol section; MembLaunchConfig the raw facts-CBOR config
+	// bytes on the blob section (bounded by the host's 64 KiB cap).
+	MembKindLaunch       = NkRegistry.MustBegin("runtimeKindLaunch").End()
+	MembLaunchCaller     = NkRegistry.MustBegin("runtimeLaunchCaller").End()
+	MembLaunchConfigKind = NkRegistry.MustBegin("runtimeLaunchConfigKind").End()
+	MembLaunchConfig     = NkRegistry.MustBegin("runtimeLaunchConfig").End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -200,4 +216,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembQueryRunExceptionCode, MembQueryRunExceptionText, MembQueryRunQueryText,
 	MembQueryRunAuthoredFp, MembQueryRunSentFp, MembQueryRunChainFp, MembQueryRunEnvFp,
 	MembQueryRunProfileEvent,
+	MembKindLaunch, MembLaunchCaller, MembLaunchConfigKind, MembLaunchConfig,
 }

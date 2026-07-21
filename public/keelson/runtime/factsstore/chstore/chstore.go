@@ -464,6 +464,51 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 	return
 }
 
+// WriteLaunch lands one runtime.facts row tagged KindLaunch (ADR-0135
+// §SD6): the accepted `windowhost.open` request beside its app-lifecycle
+// "started" row. Target app / run reuse the MembRuntimeApp /
+// MembRuntimeRun identities; the caller rides MembLaunchCaller as a
+// mixed-low-card-ref; the tile key reuses MembLifecycleTileKey so the
+// row joins the lifecycle row on one column; the raw config bytes land
+// on the blob section (nil for a plain open — no blob attribute).
+func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) {
+	id = inst.nextId.Add(1)
+	ts := defaultTs(row.Ts)
+	var tk [8]byte
+	for i := 0; i < 8; i++ {
+		tk[i] = byte(row.TileKey >> (8 * (7 - i)))
+	}
+	nk := naturalKeyFor("launch", row.TargetAppId, []byte(row.RunId), tk[:])
+	ent := dml.NewInEntityFacts(inst.allocator, 1)
+	ent.BeginEntity().SetId(id, nk).SetTimestamp(ts)
+
+	sym := ent.GetSectionSymbol()
+	sym.BeginAttribute("launch").AddMembershipLowCardRef(vocab.MembKindLaunch.GetId().Value()).EndAttribute()
+	sym.BeginAttribute(string(row.TargetAppId)).AddMembershipMixedLowCardRef(
+		vocab.MembRuntimeApp.GetId().Value(), []byte(row.TargetAppId)).EndAttribute()
+	sym.BeginAttribute(string(row.CallerAppId)).AddMembershipMixedLowCardRef(
+		vocab.MembLaunchCaller.GetId().Value(), []byte(row.CallerAppId)).EndAttribute()
+	sym.BeginAttribute(row.RunId).AddMembershipMixedLowCardRef(
+		vocab.MembRuntimeRun.GetId().Value(), []byte(row.RunId)).EndAttribute()
+	if row.ConfigKind != "" {
+		sym.BeginAttribute(row.ConfigKind).AddMembershipLowCardRef(vocab.MembLaunchConfigKind.GetId().Value()).EndAttribute()
+	}
+	sym.EndSection()
+
+	u64 := ent.GetSectionU64Array()
+	u64.BeginAttributeSingle(row.TileKey).AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
+	u64.EndSection()
+
+	if len(row.Config) > 0 {
+		blob := ent.GetSectionBlobArray()
+		blob.BeginAttributeSingle(row.Config).AddMembershipLowCardRef(vocab.MembLaunchConfig.GetId().Value()).EndAttribute()
+		blob.EndSection()
+	}
+
+	err = inst.commitAndShip(context.Background(), ent)
+	return
+}
+
 // WriteState lands one runtime.facts row tagged KindState; the value bytes
 // go in the blob section under the PersistKey membership.
 func (inst *Store) WriteState(row factsstore.StateRow) (id uint64, err error) {
