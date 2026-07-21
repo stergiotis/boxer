@@ -38,6 +38,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/science/geo/swisstopo"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
@@ -447,6 +448,9 @@ func (inst *App) renderMap() {
 	inst.ids.PrepareStr("ts-map")
 	mw := c.WalkersMap(inst.ids, swissCenterLat, swissCenterLon, false).
 		Width(mapStageW).Height(mapStageH)
+	// Shared basemap tile server (BOXER_MAP_TILE_URL); unset keeps the widget's
+	// built-in OpenStreetMap source.
+	mw = basemap.Apply(mw)
 	if inst.applyZoom {
 		mw = mw.SetZoom(inst.overrideZoom)
 		inst.applyZoom = false

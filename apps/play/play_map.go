@@ -11,6 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 )
 
 // MapDriver is the ADR-0096 geo-raster map panel: a walkers slippy map whose
@@ -204,6 +205,12 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		d.mapWidth, d.mapHeight = w, h
 		d.fixedSize = true
 	}
+	// A configured shared tile server (BOXER_MAP_TILE_URL) signals the operator
+	// wants basemaps, so show one by default rather than the offline default;
+	// the "no basemap" checkbox still toggles it. Unset keeps noTiles=true.
+	if basemap.Configured() {
+		d.noTiles = false
+	}
 	return d
 }
 
@@ -300,10 +307,11 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	}
 
 	// The map (drains the overlay, reports the next camera). noTiles keeps it
-	// offline; flip it off for the built-in OSM basemap (needs network).
-	// Sizing: fill the (no-scroll, bounded) tab body so the whole map is
-	// always visible; a BOXER_PLAY_MAP_SIZE override pins fixed dims
-	// instead, keeping scripted captures deterministic across hosts.
+	// offline; with the basemap on, basemap.Apply picks the tile source — a
+	// self-hosted GIS when BOXER_MAP_TILE_URL is set, else the built-in OSM
+	// (needs network). Sizing: fill the (no-scroll, bounded) tab body so the
+	// whole map is always visible; a BOXER_PLAY_MAP_SIZE override pins fixed
+	// dims instead, keeping scripted captures deterministic across hosts.
 	mw := c.WalkersMap(inst.ids.PrepareStr("map"),
 		inst.initLat, inst.initLon, inst.noTiles,
 	)
@@ -313,7 +321,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 		mw = mw.FillAvailable(true)
 	}
 	if !inst.noTiles {
-		mw = mw.TileUrl("")
+		mw = basemap.Apply(mw)
 	}
 	// SetZoom is a one-shot op: sent into a hidden tab's discarded buffer it
 	// is silently lost, so "sent" may not mean "applied". Keep sending until
