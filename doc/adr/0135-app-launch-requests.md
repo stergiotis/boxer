@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-20
+reviewed-by: "@spx"
+reviewed-date: 2026-07-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0135: App-launch requests with leeway-modelled arguments
 
@@ -223,7 +222,7 @@ Adopt **O2**.
 
 ## Status
 
-Proposed (2026-07-20).
+Accepted (2026-07-21).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
