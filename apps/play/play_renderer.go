@@ -13,6 +13,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -437,6 +438,13 @@ type PlayApp struct {
 	pickMu       sync.Mutex
 	pickInFlight bool
 	pickErr      string
+
+	// openPlayMu guards the Open in Playground request state (ADR-0135
+	// §SD7), the pickMu pattern: the button spawns a goroutine holding
+	// the bus round-trip; the toolbar reads busy + err under the lock.
+	openPlayMu   sync.Mutex
+	openPlayBusy bool
+	openPlayErr  string
 	pickedSql    *string
 }
 
@@ -1323,6 +1331,36 @@ func (inst *PlayApp) renderTopBar() {
 				go func() {
 					_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
 				}()
+			}
+
+			// Open in Playground — the recorded §SD3 escape-hatch upgrade
+			// (ADR-0135 §SD7): compose the buffer + run flags into a
+			// PlayLaunch and ask the window host for a full play window.
+			// Offered whenever a bus is wired — the honest gate: a missing
+			// cap or absent open service surfaces as the refusal label
+			// below instead of a silently hidden button. Off the frame
+			// goroutine, the Copy SQL rule.
+			inst.openPlayMu.Lock()
+			openBusy := inst.openPlayBusy
+			openErr := inst.openPlayErr
+			inst.openPlayMu.Unlock()
+			if openBusy {
+				c.Label("Opening…").Send()
+			} else if c.Button(ids.PrepareStr("openPlayground"),
+				c.Atoms().Text("Open in Playground").Keep()).
+				SendResp().HasPrimaryClicked() {
+				go inst.requestOpenPlayground(launchcfg.PlayLaunch{
+					At:       time.Now().UTC(),
+					Sql:      inst.sql,
+					AutoRun:  inst.AutoRun,
+					Live:     inst.liveMain,
+					BandsSql: inst.timelineBandsSql,
+				})
+			}
+			if openErr != "" {
+				for rt := range c.RichTextLabel("Open failed: " + openErr) {
+					rt.Small().Weak()
+				}
 			}
 		}
 

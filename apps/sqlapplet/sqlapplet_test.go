@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,8 +61,9 @@ func TestMintStarterBook(t *testing.T) {
 	assert.Equal(t, "Runtime apps", m.Display)
 	assert.Equal(t, "Applets", m.Category)
 	assert.Equal(t, app.SurfaceWindowed, m.Surface)
-	require.Len(t, m.Caps, 1, "attenuation in manifest form: clipboard.write only")
+	require.Len(t, m.Caps, 2, "attenuation in manifest form: the two escape hatches only")
 	assert.Equal(t, clipboardbroker.SubjectWrite, m.Caps[0].Pattern)
+	assert.Equal(t, windowhost.OpenSubject, m.Caps[1].Pattern, "Open in Playground cap (ADR-0135 §SD7)")
 	assert.Empty(t, m.PersistedKeys, "committed definition ⇒ nothing to persist")
 
 	// Factory dispatch yields a fresh AppI per open.

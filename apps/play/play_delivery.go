@@ -1,6 +1,15 @@
 package play
 
-import "github.com/stergiotis/boxer/public/observability/eh"
+import (
+	"time"
+
+	"github.com/stergiotis/boxer/apps/play/launchcfg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/observability/eh"
+)
 
 // play_delivery.go is the editor-delivery seam (ADR-0097 slice-6 D5 Update,
 // 2026-07-17): the exported ops a tab body uses to push SQL into the editor and
@@ -67,10 +76,77 @@ func (inst *PlayApp) SetLiveMain(on bool) {
 // SetToolbarMinimal attenuates the top bar to the applet surface (ADR-0132
 // §SD3): Load .sql, the endpoint switcher, and the prelude/conditions
 // toggles disappear; Run/Cancel, the Live toggle, and the unfilled-inputs
-// hint stay; a "Copy SQL" escape hatch appears when a bus is wired. Call it
-// between construction and mount, like the tab registry.
+// hint stay; the "Copy SQL" and "Open in Playground" escape hatches
+// (ADR-0135 §SD7) appear when a bus is wired. Call it between
+// construction and mount, like the tab registry.
 func (inst *PlayApp) SetToolbarMinimal(on bool) {
 	inst.toolbarMinimal = on
+}
+
+// requestOpenPlayground asks the window host for a full play window
+// seeded with cfg over `windowhost.open` (ADR-0135 §SD7 — the ADR-0132
+// §SD3 escape-hatch upgrade rendered as the minimal toolbar's "Open in
+// Playground" button). Blocks on the bus round-trip, so call it from a
+// goroutine off the frame loop — the Copy SQL rule. The outcome lands in
+// openPlayErr (empty on success) for the toolbar to surface; a re-click
+// while a request is in flight is dropped.
+func (inst *PlayApp) requestOpenPlayground(cfg launchcfg.PlayLaunch) {
+	inst.openPlayMu.Lock()
+	if inst.openPlayBusy {
+		inst.openPlayMu.Unlock()
+		return
+	}
+	inst.openPlayBusy = true
+	inst.openPlayErr = ""
+	inst.openPlayMu.Unlock()
+	err := inst.openPlayground(cfg)
+	inst.openPlayMu.Lock()
+	inst.openPlayBusy = false
+	if err != nil {
+		inst.openPlayErr = err.Error()
+	}
+	inst.openPlayMu.Unlock()
+}
+
+// openPlayground is the blocking body of requestOpenPlayground: encode
+// the config, wrap it in a LaunchRequest naming play, run the audited
+// request, and turn a refusal reply into an error. The caller identity
+// is attributed by the bus (Msg.Sender) — nothing to add here.
+func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
+	if inst.bus == nil {
+		err = eh.Errorf("play: open playground: no bus wired")
+		return
+	}
+	cfgBytes, err := buscodec.Encode(cfg)
+	if err != nil {
+		err = eh.Errorf("play: encode launch config: %w", err)
+		return
+	}
+	reqBytes, err := buscodec.Encode(launchrequest.LaunchRequest{
+		At:          time.Now().UTC(),
+		TargetAppId: string(AppId),
+		ConfigKind:  launchcfg.Kind,
+		Config:      cfgBytes,
+	})
+	if err != nil {
+		err = eh.Errorf("play: encode launch request: %w", err)
+		return
+	}
+	replyBytes, err := inst.bus.Request(windowhost.OpenSubject, reqBytes)
+	if err != nil {
+		err = eh.Errorf("play: windowhost.open request: %w", err)
+		return
+	}
+	rep, err := buscodec.Decode[launchreply.LaunchReply](replyBytes)
+	if err != nil {
+		err = eh.Errorf("play: decode launch reply: %w", err)
+		return
+	}
+	if rep.Reason != "" {
+		err = eh.Errorf("play: open refused: %s", rep.Reason)
+		return
+	}
+	return
 }
 
 // BindTab points a panel tab at a split node by CTE name (ADR-0097 slice 6c).

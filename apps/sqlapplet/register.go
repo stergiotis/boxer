@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -113,8 +114,9 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 // book's FS, so the applet's prose page is reachable through the Help
 // center; narrowing Help to the single document is a recorded nicety for
 // later. The cap list is the attenuation in manifest form (ADR-0132 §SD8):
-// exactly one subject — clipboard.write for the Copy SQL escape hatch — and
-// no persisted keys, because the buffer is committed definition.
+// the two escape hatches only — clipboard.write for Copy SQL and
+// windowhost.open for Open in Playground (ADR-0135 §SD7) — and no
+// persisted keys, because the buffer is committed definition.
 func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 	m = app.Manifest{
 		Id:       app.AppIdT(appletIdPrefix + def.Slug),
@@ -130,6 +132,11 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 				Pattern:   clipboardbroker.SubjectWrite,
 				Direction: app.CapDirectionPub,
 				Reason:    "Copy SQL escape hatch (ADR-0132 §SD3): the buffer is the artifact",
+			},
+			{
+				Pattern:   windowhost.OpenSubject,
+				Direction: app.CapDirectionPub,
+				Reason:    "Open in Playground (ADR-0135 §SD7): the §SD3 escape-hatch upgrade",
 			},
 		},
 	}
