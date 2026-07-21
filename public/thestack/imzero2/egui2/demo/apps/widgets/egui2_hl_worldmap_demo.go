@@ -13,8 +13,8 @@ import (
 // Synthetic per-country values (an arbitrary 0–100 index keyed by ISO code,
 // NOT real statistics) resolved through the widget's atlas and rendered as a
 // choropleth. Controls flip between graded values and presence-only mode and
-// scrub the raster width; hover shows the country readout, matching what the
-// play World tab does with a query result.
+// scrub the on-screen map width; hover shows the country readout, matching what
+// the play World tab does with a query result.
 // =============================================================================
 
 type worldmapDemoState struct {
@@ -62,17 +62,25 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 	// render pass uses.
 	if st.widget == nil {
 		st.widget = worldmap.New(ids, "worldmap-demo")
+		// Size the map explicitly by on-screen width — the "Width:" slider
+		// below drives this every frame, so scrubbing it visibly resizes the
+		// map. SetDisplayWidth also sidesteps the gallery's vertical ScrollArea
+		// (a fill-available map reads a ~0 available height there and collapses
+		// to nothing): an explicit width derives the height from the projection
+		// aspect and needs no available-size read. SetPixelWidth keeps the
+		// raster resolution in step so the map stays crisp at the chosen size.
 		st.widget.SetPixelWidth(st.width)
-		// Cap the on-screen height: the gallery hosts demos in a vertical
-		// ScrollArea, where a fill-available map reads a ~0 available height
-		// and collapses to nothing. The cap also fits inside the tour stage.
-		st.widget.SetDisplayHeight(340)
+		st.widget.SetDisplayWidth(st.width)
 	}
 
 	for range c.Horizontal().KeepIter() {
 		c.Label("Width:").Send()
 		c.AddSpace(padInner())
-		c.SliderF64(ids.PrepareStr("wm-width"), st.width, 320, 1600).
+		// On-screen width in points, capped near the tour-stage / gallery-pane
+		// width so the map stays fully visible: the host ScrollArea scrolls
+		// vertically only, so a wider map would clip on the right rather than
+		// scroll.
+		c.SliderF64(ids.PrepareStr("wm-width"), st.width, 320, 1024).
 			SendRespVal(&st.width)
 		c.AddSpace(gapSections())
 		if c.Checkbox(ids.PrepareStr("wm-presence"), st.presence, "presence only").
@@ -83,6 +91,7 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 	c.Separator().Horizontal().Send()
 
 	st.widget.SetPixelWidth(st.width)
+	st.widget.SetDisplayWidth(st.width)
 	if !st.applied {
 		st.applied = true
 		atlas := st.widget.Atlas()

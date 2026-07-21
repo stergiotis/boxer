@@ -99,6 +99,44 @@ func TestResolve(t *testing.T) {
 	}
 }
 
+func TestFitBox(t *testing.T) {
+	var w Widget // fitBox reads only the display knobs, not the atlas.
+
+	// Default: fill the available width, no height cap.
+	if fw, fh := w.fitBox(); fw != 0 || fh != 0 {
+		t.Fatalf("default fitBox = (%d, %d), want (0, 0)", fw, fh)
+	}
+
+	// A height cap fills the width but bounds the height.
+	w.SetDisplayHeight(340)
+	if fw, fh := w.fitBox(); fw != 0 || fh != 340 {
+		t.Fatalf("height-capped fitBox = (%d, %d), want (0, 340)", fw, fh)
+	}
+
+	// An explicit display width wins over the height cap (the demo's "Width:"
+	// slider must resize the map, not be shadowed by a fill-available fit): the
+	// box carries the map's own aspect, so the width is exact and the height is
+	// aspect-derived.
+	w.SetDisplayWidth(900)
+	fw, fh := w.fitBox()
+	if fw != 900 {
+		t.Fatalf("display-width fitBox width = %d, want 900 (height cap must not shadow it)", fw)
+	}
+	wantH := uint32(max(int(float64(900)/ProjectionAspect()), 1))
+	if fh != wantH {
+		t.Fatalf("display-width fitBox height = %d, want %d (aspect-derived)", fh, wantH)
+	}
+	if fw <= fh {
+		t.Fatalf("world map should be wider than tall, got %dx%d", fw, fh)
+	}
+
+	// Clearing the width falls back to the height-cap path.
+	w.SetDisplayWidth(0)
+	if fw, fh := w.fitBox(); fw != 0 || fh != 340 {
+		t.Fatalf("after clearing width, fitBox = (%d, %d), want (0, 340)", fw, fh)
+	}
+}
+
 func TestProjection(t *testing.T) {
 	// Aspect of the Natural Earth projection's world extent (Šavrič et al.):
 	// ~1.923 wide:high.

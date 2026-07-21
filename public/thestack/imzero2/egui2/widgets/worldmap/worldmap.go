@@ -75,6 +75,13 @@ type Widget struct {
 	// zero available height there and the map collapses to nothing.
 	displayH int
 
+	// displayW sets the map's on-screen width in points (0 = defer to displayH
+	// / fill-available). When > 0 it takes precedence over displayH: the map
+	// renders at exactly this width with the height derived from the projection
+	// aspect, so the on-screen size needs no available-space read. See
+	// SetDisplayWidth.
+	displayW int
+
 	hoverRc uint64
 	hovered CountryIdx
 }
@@ -140,6 +147,35 @@ func (inst *Widget) SetDisplayHeight(px float64) {
 		return
 	}
 	inst.displayH = max(int(px), 1)
+}
+
+// SetDisplayWidth sets the map's on-screen width in points; the height then
+// follows the projection aspect. Pass 0 (the default) to defer to
+// SetDisplayHeight / fill-available sizing. A finite width takes precedence
+// over SetDisplayHeight and needs no available-space read, so it is both the
+// robust choice inside a vertical ScrollArea (see SetDisplayHeight for why the
+// available height is unreliable there) and the way to make an on-screen width
+// control actually resize the map — a fill-available map ignores the width knob
+// because it always spans the pane. Display size is independent of the raster
+// resolution set by SetPixelWidth.
+func (inst *Widget) SetDisplayWidth(px float64) {
+	if px <= 0 {
+		inst.displayW = 0
+		return
+	}
+	inst.displayW = max(int(px), 1)
+}
+
+// fitBox is the (fixedW, fixedH) bounding box handed to the Image widget under
+// FitAspectMax. An explicit SetDisplayWidth wins — the box carries the map's
+// own aspect (width × width/aspect) so the render lands at exactly that width
+// regardless of available space. Otherwise the map fills the available width
+// (fixedW 0) capped by displayH (0 = fill the available height too).
+func (inst *Widget) fitBox() (w, h uint32) {
+	if inst.displayW > 0 {
+		return uint32(inst.displayW), uint32(inst.heightFor(inst.displayW))
+	}
+	return 0, uint32(inst.displayH)
 }
 
 // Atlas exposes the shared country atlas (nil when loading failed) so the
@@ -259,7 +295,8 @@ func (inst *Widget) Hovered() (idx CountryIdx, value float64, ok bool) {
 // country click (primary button over a country) — immediate-mode style, so
 // the caller reacts in the same frame. Layout: the map fills the available
 // width at the projection's aspect, capped by the available height minus the
-// legend reserve.
+// legend reserve — or renders at exactly SetDisplayWidth when the caller set
+// one.
 func (inst *Widget) Render() (clicked CountryIdx, clickedOk bool) {
 	clicked = NoCountry
 	if inst.loadErr != nil {
@@ -319,18 +356,16 @@ func (inst *Widget) renderImage() c.ResponseFlagsE {
 	// Derive() and the Image call panics ("invalid state transition").
 	imgId := inst.ids.PrepareStr(inst.scopeKey + "-img").Derive()
 	pixels := inst.tracker.PixelsToSendFor(inst.scopeKey+"-img", imgId, inst.version, inst.rgba)
-	// FitAspectMax scales the texture aspect-preserved into a bounding box.
-	// fixedW 0 means "use the available width" — the width control sets raster
-	// *resolution*, not display size. fixedH is displayH when the caller
-	// capped the on-screen height and 0 otherwise: 0 fills the available
-	// height (the splashscreen idiom, correct in a bounded leaf like the play
-	// World tab), a cap is required inside a vertical ScrollArea whose
-	// available height reads ~0 when scrolled low (see SetDisplayHeight). The
-	// hover readout stays texture-space under any fit, so hit-testing is
-	// unaffected.
+	// FitAspectMax scales the texture aspect-preserved into a (fixedW × fixedH)
+	// bounding box. SetPixelWidth sets raster *resolution*; the box (see
+	// fitBox) sets display size — the two are independent. The default box
+	// fills the available width (fixedW 0) capped by displayH; an explicit
+	// SetDisplayWidth overrides it to render at exactly that width. The hover
+	// readout stays texture-space under any fit, so hit-testing is unaffected.
+	fitW, fitH := inst.fitBox()
 	resp := c.Image(inst.ids.PrepareStr(inst.scopeKey+"-img"),
 		uint32(inst.rw), uint32(inst.rh), inst.version,
-		uint8(c.FitAspectMaxE), 0, uint32(inst.displayH),
+		uint8(c.FitAspectMaxE), fitW, fitH,
 		uint8(c.FilterLinearE), c.TintNoneRgba, pixels).
 		SendRespHoverPx(&inst.hoverRc)
 	inst.hovered = NoCountry
