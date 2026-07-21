@@ -6,9 +6,14 @@
 //! answered with the embedded single-file viewer page. Sniffing uses
 //! `TcpStream::peek`, so the stream reaches the WebSocket handshake
 //! unconsumed. Either port therefore works for both the page and the
-//! socket — the viewer connects back to its own origin (`/ws`), which
-//! also makes a single TLS-terminating reverse proxy in front (or an SSH
-//! tunnel) sufficient for the whole wire.
+//! socket — the viewer connects back to a *page-relative* `ws` (same origin,
+//! and under whatever path prefix the page itself was served on), which makes
+//! a single TLS-terminating reverse proxy in front (or an SSH tunnel), even
+//! one that mounts the viewer under a path prefix, sufficient for the whole
+//! wire. Nothing here parses the request path: the page is served for any
+//! path and the handshake is accepted on any path, so a prefix mount needs no
+//! carrier configuration — the client carries the prefix, both listeners
+//! answer regardless of it.
 //!
 //! A single binary WebSocket carries everything with a one-byte type
 //! prefix (SD6): 0x01 video chunks server→client, 0x02 protobuf input

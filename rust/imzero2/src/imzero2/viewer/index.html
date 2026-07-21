@@ -80,10 +80,21 @@ const PREFIX_VIDEO = 0x01, PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03, PREFIX_ME
 
 // The serving port accepts WebSocket upgrades too, so the data channel is
 // same-origin by default — which keeps one TLS-terminating reverse proxy
-// or SSH tunnel sufficient for the whole wire (wss follows https). A
-// `?ws=` query parameter overrides the endpoint for unusual deployments.
-const WS_URL = new URLSearchParams(location.search).get("ws")
-  || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+// or SSH tunnel sufficient for the whole wire (wss follows https). The `ws`
+// endpoint is resolved RELATIVE to this page's own URL, not the origin root,
+// so a proxy that mounts the viewer under a path prefix works with no config:
+// the page at https://host/app/ reaches the socket at https://host/app/ws,
+// carrying whatever prefix the page was served under back to the socket.
+// (A prefix mount must serve the page with a trailing slash — the web's
+// standard for a directory — so the relative `ws` resolves as its sibling;
+// this is why proxies redirect /app to /app/.) A `?ws=` query parameter still
+// overrides the endpoint outright for unusual deployments.
+function defaultWsUrl() {
+  const u = new URL("ws", location.href); // sibling of the page; drops any query
+  u.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return u.href;
+}
+const WS_URL = new URLSearchParams(location.search).get("ws") || defaultWsUrl();
 
 const statusBar = document.getElementById("status");
 const statusEl = document.getElementById("statusmsg");

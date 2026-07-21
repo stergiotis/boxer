@@ -47,8 +47,14 @@ shipped/deviation list is in ADR-0024's 2026-06-12 Updates entry.
 
 Both listeners (8089 and 8090) serve the viewer page *and* accept the
 WebSocket upgrade — requests are dispatched by sniffing the upgrade
-header, and the page connects back to its own origin. One port is
-therefore enough to forward or proxy.
+header, and the page connects its WebSocket back *relative to its own
+URL* (same origin, same path prefix). One port is therefore enough to
+forward or proxy — including a reverse proxy that mounts the viewer under
+a **path prefix** (e.g. `https://host/imzero2/`): the socket follows to
+`…/imzero2/ws`, and since the carrier serves the page and accepts the
+upgrade on any request path, no extra configuration is needed. Mount the
+prefix with a trailing slash (the web convention proxies redirect to), so
+the relative `ws` resolves as a sibling of the page.
 
 Touch clients (iPad etc.): the viewer translates gestures — one finger
 acts as the pointer (tap = click, drag = pointer drag, which scrolls in
