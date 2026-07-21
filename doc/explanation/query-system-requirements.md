@@ -118,6 +118,34 @@ finding that motivated it.
 
 Each is small, policy-free, and independently adoptable. *Exists* points
 at machinery already in the repository; *delta* names what is missing.
+Where they sit in a run's lifecycle:
+
+```
+     SQL buffer                         logical names only (R1)
+         │
+         ▼
+     E1  fact extraction                tables · kind (R5) · params
+         │
+         ▼
+     E2  dispatch seam ◀──────────────  placement data (site-owned,
+         │   emits E9 label (R6)        published as tables via E5)
+         │   reason ──▶ audit (R12)
+         │   gated by E6 probe (R3)
+         ▼
+     executor · stamps E4 run id (R7)
+         │
+         ├── sync HTTP ─────────▶  external server / cluster
+         ├── sync HTTP ─────────▶  loopback introspection plane
+         └── E8 bus reply stream ▶ chlocal one-shot worker (R10)
+         │
+         ▼
+     E3  frame stream                   data · progress · terminal
+         ▲    terminal: complete / truncated / failed
+         │    no terminal ⇒ incomplete (R9)
+         │
+         └── E7 per-server poller ◀──  system.processes
+              ticks only, never terminal (R8)
+```
 
 - **E1 — SQL fact extraction.** Pure functions over a parsed statement:
   referenced tables including table-function macros, statement kind
