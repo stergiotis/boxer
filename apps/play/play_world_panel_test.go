@@ -64,6 +64,22 @@ func TestWorldPanelAccept(t *testing.T) {
 	}
 }
 
+// TestWorldSelectionCountrySignal pins the click companion signal. The panel
+// publishes the clicked row's country cell as selection_country next to the
+// row-index selection, so a query can bind {selection_country:String}. The name
+// is a public contract (like selection / selection_node), and the value is the
+// row's country cell verbatim — formatCell, the same reader detection uses.
+func TestWorldSelectionCountrySignal(t *testing.T) {
+	if signalSelectionCountry != "selection_country" {
+		t.Fatalf("selection_country renamed to %q — public signal contract", signalSelectionCountry)
+	}
+	rec := worldRec(t, "country", []string{"Brazil", "US"}, "v", []float64{1, 2})
+	defer rec.Release()
+	if got := formatCell(rec, 0, 1); got != "US" {
+		t.Fatalf("clicked-row country cell = %q, want US (the selection_country payload)", got)
+	}
+}
+
 func TestWorldDetectCountryColumn(t *testing.T) {
 	d := testWorldDriver(t)
 	atlas := d.widget.Atlas()

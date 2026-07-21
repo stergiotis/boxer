@@ -147,12 +147,26 @@ signal for that country's (last) row, the same viewof duality the Table
 panel implements, so Detail and Table follow the click. The colormap legend
 renders beside the map with min/max labels.
 
+The click also publishes a companion `selection_country` signal carrying the
+clicked row's country cell as a string, alongside the row-index `selection`.
+It mirrors the `selection_node` / `selection_id` companions the selection
+stamper attaches to every selection — a typed, human-meaningful handle on the
+same click — and lets a query bind `{selection_country:String}` to filter to
+the clicked country. This is the read side of the per-country drill-down SD7
+defers: the signal is cheap and additive, while running a query off it stays
+the SQL author's job (the panel still executes none of its own). Consumers
+that ignore the signal are unaffected — an unread signal costs nothing and the
+row `selection` is unchanged.
+
 ### SD7 — Deferred
 
 Aggregation modes for duplicate keys, diverging palettes anchored at zero,
-continent zoom presets, fuzzy name matching, and a per-country drill-down
-query are all deferred until a concrete need shows up. None of them changes
-the asset, projection, or panel contract above.
+continent zoom presets, and fuzzy name matching are all deferred until a
+concrete need shows up. A *panel-run* per-country drill-down query stays
+deferred too — the panel now publishes `selection_country` (SD6) so an external
+query can filter to the clicked country, but executing that query remains the
+SQL author's job. None of them changes the asset, projection, or panel contract
+above.
 
 ## Alternatives
 

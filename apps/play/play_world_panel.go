@@ -32,6 +32,14 @@ const (
 	worldResolveThreshold = 0.5
 )
 
+// signalSelectionCountry is the click companion to signalSelection: when a
+// country is clicked the panel also publishes the clicked row's country cell
+// as a string, so a query can cross-filter on {selection_country:String}. It
+// mirrors the selection_node / selection_id companions the selection stamper
+// attaches to every selection (play_bindings.go) — a typed, human-meaningful
+// handle on the same click, here the country rather than the graph node or id.
+const signalSelectionCountry SignalID = "selection_country"
+
 // worldClaim is the panel's channel claim: the detected country column (-1 =
 // none resolved — the pane renders its contract hint instead of a map).
 type worldClaim struct {
@@ -171,6 +179,13 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 	if clicked, ok := inst.widget.Render(); ok {
 		if row, found := inst.rowOf[clicked]; found {
 			emit.Emit(signalSelection, row)
+			// Companion string to the selection (cf. the selection_node /
+			// selection_id stamper in play_bindings.go): publish the clicked
+			// row's country cell so a query can cross-filter on
+			// {selection_country:String} — the read side of a per-country
+			// drill-down (SD7), no panel-run query. formatCell is the same
+			// reader the country detector uses, so the value matches the data.
+			emit.Emit(signalSelectionCountry, formatCell(rec, countryCol, row))
 		}
 	}
 }
