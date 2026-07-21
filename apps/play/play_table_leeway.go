@@ -272,9 +272,17 @@ func (inst *PlayApp) renderTableOptionsBar() {
 // button.rs), which is why the band is a wrapping Frame rather than the button's
 // own fill; InnerMargin(0) keeps the text from shifting versus the unselected
 // cell, and the Frame fills the column width because its justified child does.
-func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg bool) (clicked bool) {
+//
+// leftAlign moves the text to the cell's left edge instead of centering it, for
+// free-text (string) columns so their values line up under the left-aligned
+// header. It only swaps the cross-axis alignment of the justifying wrapper
+// (Center → Min); everything else — the full-width justify that grows the hit
+// area, the button id, the height flooring, the selection band — is unchanged,
+// since VerticalCenteredJustified is exactly this same top-down cross-justified
+// layout with Center rather than Min cross-alignment.
+func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, weak bool, selected, selBg, leftAlign bool) (clicked bool) {
 	c.AddSpace(cellPadX)
-	for range c.VerticalCenteredJustified().KeepIter() {
+	emitCell := func() {
 		emitButton := func() {
 			rt := c.Atoms().BeginRichText(text).Monospace()
 			if weak {
@@ -295,6 +303,19 @@ func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, we
 			}
 		} else {
 			emitButton()
+		}
+	}
+	if leftAlign {
+		for range c.UiWithLayout().
+			MainDirTopDown().
+			CrossAlignMin().
+			CrossJustify(true).
+			KeepIter() {
+			emitCell()
+		}
+	} else {
+		for range c.VerticalCenteredJustified().KeepIter() {
+			emitCell()
 		}
 	}
 	return

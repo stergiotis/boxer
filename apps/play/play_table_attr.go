@@ -538,18 +538,19 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 				if row.firstOfEntity {
 					marker = strconv.FormatInt(row.absRow+1, 10)
 				}
-				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true) {
+				if inst.selectableCell(rowBase, cellPadX, marker, true, selected, true, false) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}
 		}
-		for pos := range visCols {
+		for pos, arrowCol := range visCols {
 			colPos := uint32(pos + 1)
 			if vis, _ := et.ColVisible(colPos); !vis {
 				continue
 			}
+			leftAlign := stringLikeArrowType(listElemType(schema.Field(arrowCol).Type))
 			for range et.Cells(local, colPos) {
-				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true) {
+				if inst.selectableCell(rowBase+uint64(pos)+1, cellPadX, row.cells[pos], false, selected, true, leftAlign) {
 					emit.Emit(signalSelection, row.absRow)
 				}
 			}

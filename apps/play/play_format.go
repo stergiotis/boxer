@@ -107,6 +107,42 @@ func formatArrayElem(arr arrow.Array, row int64) string {
 	}
 }
 
+// stringLikeArrowType reports whether values of this Arrow type render as free
+// text: plain and large UTF-8 strings, and dictionary-encoded strings
+// (ClickHouse LowCardinality(String) arrives as a dictionary). The Table pane
+// left-aligns such columns so their text lines up under the left-aligned header,
+// where numeric columns read fine centered. This is deliberately its own
+// predicate, not shared with the world panel's country detector
+// (isWorldStringType): the two ask independent questions — "does this render as
+// text?" vs. "could this hold a country name?" — that only coincide today.
+func stringLikeArrowType(dt arrow.DataType) bool {
+	switch dt.ID() {
+	case arrow.STRING, arrow.LARGE_STRING:
+		return true
+	case arrow.DICTIONARY:
+		if d, ok := dt.(*arrow.DictionaryType); ok {
+			return stringLikeArrowType(d.ValueType)
+		}
+	}
+	return false
+}
+
+// listElemType returns a list type's element type, or dt unchanged when it is
+// not a list. The per-attribute Table view explodes each list value down its
+// own rows, so a value column's element type — not the outer List — is what
+// each rendered cell actually shows; classify its alignment against that.
+func listElemType(dt arrow.DataType) arrow.DataType {
+	switch t := dt.(type) {
+	case *arrow.ListType:
+		return t.Elem()
+	case *arrow.LargeListType:
+		return t.Elem()
+	case *arrow.FixedSizeListType:
+		return t.Elem()
+	}
+	return dt
+}
+
 func formatDictValue(d *array.Dictionary, row int) string {
 	if d.IsNull(row) {
 		return ""
