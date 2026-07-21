@@ -50,7 +50,9 @@ run keelsoncodec \
     public/keelson/runtime/codec/watchreply/watchreply.go \
     public/keelson/runtime/codec/watchevent/watchevent.go \
     public/keelson/runtime/codec/persistreply/persistreply.go \
-    public/keelson/runtime/codec/inflightsnapshotreply/inflightsnapshotreply.go
+    public/keelson/runtime/codec/inflightsnapshotreply/inflightsnapshotreply.go \
+    public/keelson/runtime/codec/launchrequest/launchrequest.go \
+    public/keelson/runtime/codec/launchreply/launchreply.go
 
 # 3. Anchor codecdemo — same generator with --target=anchor. Emits the
 #    schema-agnostic surface only (no facts wrapper), proving the keelsoncodec
