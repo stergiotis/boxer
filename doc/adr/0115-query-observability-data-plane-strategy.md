@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-11
+reviewed-by: "@spx"
+reviewed-date: 2026-07-21
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0115: Query-observability data plane — ELT/ETL architecture and technology strategy
 
@@ -381,7 +381,10 @@ semantics) get their own ADR when reached.
 
 ## Status
 
-Proposed — 2026-07-11. Awaiting review by the code owner.
+Accepted — 2026-07-21. Proposed 2026-07-11; slices S1–S4 (`queryrunsd`
+capture, the History tab, live query progress, and Tier-1 result pinning)
+shipped and were committed ahead of formal review. Later slices (interning,
+the forwarding leg, the weave) remain as mapped in the explanation page.
 
 Supersedes [ADR-0050](0050-clickhouse-observability-pipeline.md) (flipped
 `superseded` 2026-07-11; never accepted or implemented — its results and
