@@ -5,11 +5,13 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -147,9 +149,13 @@ type PlayLauncher struct {
 
 var _ app.AppI = (*PlayLauncher)(nil)
 
+// AppId is play's registered manifest id — the target another app names
+// in a `windowhost.open` request (ADR-0135 §SD7).
+const AppId app.AppIdT = "github.com/stergiotis/boxer/apps/play"
+
 func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 	m = app.Manifest{
-		Id:       "github.com/stergiotis/boxer/apps/play",
+		Id:       AppId,
 		Version:  "0.1.0",
 		Display:  "SQL playground",
 		Title:    "SQL Playground",
@@ -195,24 +201,49 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// timelineBandsSql persists the Timeline panel's bands-SQL
 		// editor across sessions; empty is a valid value (no bands).
 		PersistedKeys: []string{persistKeyLastSql, persistKeyTimelineBandsSql},
+		// Launch config (ADR-0135 §SD7): windows opened over
+		// `windowhost.open` may carry a launchcfg.PlayLaunch; Mount
+		// decodes it and seeds the editor above the env/persisted chain.
+		LaunchKind: launchcfg.Kind,
 	}
 	return
 }
 
 func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// Precedence for the initial SQL buffer:
-	//   1. BOXER_PLAY_SQL env var — explicit user override
+	//   1. Launch config (ADR-0135 §SD7) — a window opened over
+	//      `windowhost.open` with a playLaunch config; per-window
+	//      intent beats process-wide defaults. Plain windows skip
+	//      this tier entirely.
+	//   2. BOXER_PLAY_SQL env var — explicit user override
 	//      (one-shot screenshots, scripted runs).
-	//   2. runtime.persist.play.lastSql — restored from the previous
+	//   3. runtime.persist.play.lastSql — restored from the previous
 	//      session via MountCtx.Storage.
-	//   3. Default literal — first run, no prior state.
+	//   4. Default literal — first run, no prior state.
 	// The persist restore happens after NewPlayApp because the
 	// PlayApp's Storage handle is set via SetCapabilities below;
 	// RestorePersistedSql replaces inst.sql in place.
+	var launch *launchcfg.PlayLaunch
+	if raw := ctx.LaunchConfig(); len(raw) > 0 {
+		lc, dErr := buscodec.Decode[launchcfg.PlayLaunch](raw)
+		if dErr != nil {
+			// The host validated the claimed kind at the boundary, so a
+			// decode failure here is a real defect (codec drift, corrupt
+			// bytes). Surface it as the failed-mount label — never fall
+			// through to a silently different buffer (§SD4).
+			err = eh.Errorf("play: decode launch config: %w", dErr)
+			return
+		}
+		launch = &lc
+	}
 	initSQL, envProvided := SQLOverride.Lookup()
 	// Per the env var's description, only a NON-EMPTY override wins over the
 	// persisted restore; set-but-empty behaves like unset.
 	envOverride := envProvided && initSQL != ""
+	if launch != nil && launch.Sql != "" {
+		initSQL = launch.Sql
+		envOverride = true // suppress the persisted restore below, same as the env tier
+	}
 	if initSQL == "" {
 		initSQL = "SELECT * FROM spinnaker.facts"
 	}
@@ -252,6 +283,26 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// scripted screenshots seed the bands editor without interactive input.
 	if bandsSQL, hasBands := TimelineBandsSQLOverride.Lookup(); hasBands && bandsSQL != "" {
 		inner.timelineBandsSql = bandsSQL
+	}
+	if launch != nil {
+		// Config tier for the non-SQL knobs (the SQL seed rode initSQL
+		// above): the flags replace their env counterparts wholesale —
+		// a config-carrying window states its complete opening intent —
+		// and the two optional fields apply only when non-empty.
+		inner.AutoRun = launch.AutoRun
+		inner.SetLiveMain(launch.Live)
+		if launch.BandsSql != "" {
+			inner.SetTimelineBandsSql(launch.BandsSql)
+		}
+		if launch.Tab != "" {
+			if tabErr := inner.ActivateTab(launch.Tab); tabErr != nil {
+				// An unknown tab id is a degraded open, not a failed one
+				// (§SD7): warn and keep the default tab.
+				logger := ctx.Log()
+				logger.Warn().Err(tabErr).Str("tab", launch.Tab).
+					Msg("play: launch config tab not activated")
+			}
+		}
 	}
 	inst.inner = inner
 	return

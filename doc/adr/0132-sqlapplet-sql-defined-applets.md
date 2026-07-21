@@ -380,6 +380,20 @@ the *same artifact* the committed books do:
   and the buffer as the single fence. A buffer that itself contains a
   fence line is refused rather than silently producing a broken document.
 
+## Update (2026-07-21) — §SD3 deferral resolved by ADR-0135
+
+§SD3 deferred bus-delivered "open this buffer in the full playground"
+until the Copy SQL escape hatch demonstrably failed someone; that
+trigger fired, and the mechanism landed as
+[ADR-0135](./0135-app-launch-requests.md) — not via the per-app
+`app.{id}.request.{name}` taxonomy this ADR sketched (the target is not
+mounted when the request arrives), but via the host-level audited
+`windowhost.open` subject with a leeway-declared launch config. play
+accepts kind `playLaunch` (`apps/play/launchcfg`): the applet toolbar
+composes the current buffer into a `PlayLaunch` and a full play window
+opens seeded with it, priority above `BOXER_PLAY_SQL` and the persisted
+session. Copy SQL stays as the transport-free fallback.
+
 ## References
 
 Internal:
