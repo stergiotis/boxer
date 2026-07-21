@@ -897,6 +897,26 @@ pub fn translate_graph_event(
     }
 }
 
+/// Deterministic spawn location for a newly declared graph node. The default
+/// add path (`add_node_with_label` → `Node::new`) places every new node at
+/// `Pos2::default()`, i.e. exactly (0,0), and FR repulsion between exactly
+/// coincident nodes is zero (`dir = delta/distance` with `delta == 0`) — so
+/// nodes with identical neighbour sets receive identical net forces every step
+/// and stay stacked forever. Scattering spawns over a disc breaks the tie;
+/// hashing the Go-side key keeps the position stable across frames and
+/// sessions instead of depending on insertion order. See
+/// doc/howto/imzero2-graph-coincident-spawn.md for the full analysis.
+fn graph_spawn_location(key: u64) -> egui::Pos2 {
+    // splitmix64 finalizer — cheap, well distributed, no rand dependency.
+    let mut z = key.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^= z >> 31;
+    let angle = ((z as u32) as f32 / u32::MAX as f32) * std::f32::consts::TAU;
+    let radius = 30.0 + (((z >> 32) as u32) as f32 / u32::MAX as f32) * 120.0;
+    egui::Pos2::new(radius * angle.cos(), radius * angle.sin())
+}
+
 pub fn reconcile_graph_state(
     state: &mut GraphState,
     pending_nodes: &[GraphNodeData],
@@ -936,7 +956,11 @@ pub fn reconcile_graph_state(
                 label: n.label.clone(),
                 color: n.color,
             };
-            let idx = state.graph.add_node_with_label(payload, n.label.clone());
+            let idx = state.graph.add_node_with_label_and_location(
+                payload,
+                n.label.clone(),
+                graph_spawn_location(n.id),
+            );
             state.node_idx.insert(n.id, idx);
         }
     }
