@@ -224,6 +224,50 @@ Adopt **O2**.
 
 Accepted (2026-07-21).
 
+## Update (2026-07-21) — implemented
+
+Landed end to end: the codec modules, the host contract, the open
+service, play's adoption, and the applet button; unit, end-to-end-bus,
+and live (driven-UI) verification pass. Notes against the decision as
+written:
+
+- **SD8 names as implemented.** Subject `windowhost.open`
+  (`windowhost.OpenSubject`), modules `runtime/codec/launchrequest` /
+  `launchreply`, manifest field `LaunchKind`, play's kind `playLaunch`
+  (`apps/play/launchcfg`, exported as `launchcfg.Kind`). The reply's
+  columns landed as `WindowKey` on the shared `tileKey` vocabulary term
+  — the same value the app-lifecycle "started" row carries, so a launch
+  reply and its lifecycle row join on one column — and `Reason` on the
+  shared `reason` term (empty = success), the reply-cohort convention.
+- **Envelope validation is a probe, not a header peek.** The
+  runtime.facts wire carries no kind marker — a row's kind is implied by
+  which vocabulary membership ids populate it, and only the kind's
+  generated codec knows that set. The boundary check is therefore a
+  small registry (`runtime/codec/kindcheck`): each codec module
+  registers a one-line probe over its own generated decoder, and the
+  host runs the claimed kind's probe after the size cap. Garbage,
+  truncation, and mismatched kinds are refused before the target app
+  sees bytes; unregistered kinds fail closed.
+- **Caller attribution (SD6).** The audited-request path does attribute:
+  the bus stamps `Msg.Sender`, the capbroker precedent. The host records
+  it on the persisted launch fact (`factsstore.LaunchRow.CallerAppId`,
+  vocabulary `runtimeLaunchCaller`) — no unattributed fallback was
+  needed. Accepted opens persist the request (target, kind, config
+  bytes, tile key) beside the lifecycle "started" row via a new
+  `FactsStoreI.WriteLaunch`; refusals surface in the reply and the host
+  log, plus the caller-side bus audit record that every Request already
+  gets.
+- **One boundary rule beyond the text.** A config-carrying open of a
+  singleton-registered app that already has a window is refused: config
+  delivery happens at Mount (SD4) and Mount runs once per app instance,
+  so the config could never be consumed — refusal beats a silent drop.
+  Factory-registered apps (play included) are unaffected.
+- **Vocabulary ordering.** Membership ids are assigned in package-init
+  order, which follows lexical file order; the launch cohort file
+  (`keelson_dimdata_windowhost.go`) deliberately sorts after every
+  existing dimdata file and documents the constraint for the next
+  cohort.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
