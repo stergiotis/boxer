@@ -64,6 +64,27 @@ Forces:
    dataset aliases (ADR-0134) — plus play's pane-driving column conventions
    (`lane`/`title`, `label@mime`, `{name: Type}` params).
 
+Evidence (2026-07 literature review; primary sources under References):
+
+- Realism collapses accuracy: the same model scores 91.2% on Spider 1.0,
+  73.0% on BIRD, and 21.3% on Spider 2.0 (enterprise workflows). SQL
+  *syntax* generation is largely solved; grounding in real schemas and
+  business semantics is not.
+- On ClickHouse specifically, frontier models are reported at 45.5–50.5%
+  from schema text alone, rising to 67.7–68.7% — +17 to +23 points — once
+  a ~4 KB hand-authored semantic layer (measure definitions,
+  disambiguation rules) is added to the prompt (arXiv:2604.25149).
+- Production deployments converge on one recipe regardless of vendor:
+  curated semantics over raw DDL, verified example queries, show-the-SQL,
+  human-in-the-loop; documentation quality outweighs model choice.
+- The failure modes differ in kind: raw generation fails *silently*
+  (plausible wrong numbers via join fan-out, NULL handling, ambiguous
+  business terms); a semantic layer fails *loudly* ("unsupported").
+
+The consequence: schema-text grounding alone — SD4 as first closed — is
+below the evidence bar. Grounding becomes the job of a semantic layer,
+designed in [ADR-0139](./0139-semantic-layer-text2dsl.md).
+
 ## Design space (QOC)
 
 **Question.** Where does the natural-language affordance live relative to
@@ -126,12 +147,17 @@ settled decisions:
   loopback-only v0 were both considered and rejected in the 2026-07-21
   dialogue — one explicit knob with a visible host, and remote endpoints
   such as a LAN inference box stay first-class).
-- **SD4 — Schema context.** v0 grounds the prompt in exactly two parts:
-  the `system.columns` harvest of the active endpoint (v1's query, reused)
-  and the static preamble teaching play's pane conventions. Grounding for
-  bound ad-hoc dataset aliases (ADR-0134) and `keelson.*` one-liners
-  (ADR-0094) is deferred below — physical tables first, scope grows with
-  observed use.
+- **SD4 — Grounding via the semantic layer** *(revised 2026-07-22,
+  superseding the 2026-07-21 "physical only" closure after the evidence
+  review above)*. Prompt grounding is owned by the semantic layer of
+  [ADR-0139](./0139-semantic-layer-text2dsl.md); the panel consumes the
+  layer's rendered context and never assembles raw schema text itself.
+  Nothing already decided is lost: the layer's automatic base tier is
+  exactly the earlier choice (the `system.columns` harvest), measures,
+  certified joins, and disambiguation rules are its authored overlay, and
+  ad-hoc-dataset (ADR-0134) plus `keelson.*` (ADR-0094) grounding are
+  deferred tiers there. The pane-conventions preamble stays play-side —
+  consumer vocabulary, not data semantics.
 - **SD5 — Config.** `BOXER_PLAY_ASK_ENDPOINT`, `BOXER_PLAY_ASK_MODEL`
   (default `qwen3-coder-next`), `BOXER_PLAY_ASK_ATTEMPTS` (default 3),
   registered per ADR-0009.
@@ -141,14 +167,22 @@ settled decisions:
   gesture stops at the preview: generated SQL never executes unseen, and
   Replace-and-run is a single click made after the SQL is on screen (an
   ask-and-run gesture was rejected in the 2026-07-21 dialogue).
+- **SD7 — The target language is a DSL, not open SQL** *(added
+  2026-07-22)*. What generation must emit is the nanopass-validated
+  canonical dialect — grammar1/grammar2 plus the pass-stack vocabulary
+  (keelson macros, leeway column handles, selection conditions) —
+  text2dsl rather than text2sql. The orchestrator's validation loop
+  already enforces the grammar half; ADR-0139 owns the vocabulary half,
+  including how much handle/macro vocabulary v0 generation targets.
 
 Deferred, recorded rather than gating (descope over gate):
 
 - Execution-error repair — completing the orchestrator's stubbed
   ClickHouse-error retry and a "fix this error" affordance from play
   diagnostics.
-- Grounding beyond physical tables — bound ad-hoc dataset aliases
-  (ADR-0134) and `keelson.*` one-liners (ADR-0094) in the prompt (SD4).
+- Grounding beyond the layer's base tier — ad-hoc dataset aliases
+  (ADR-0134), `keelson.*` one-liners (ADR-0094), handle/macro
+  vocabulary — owned as content tiers by ADR-0139 (SD4/SD7).
 - A golden question→SQL evaluation corpus against the demo dataset.
 - Multi-turn refinement (conversation state across asks).
 - Compile-cache persistence (`text2sql2/cache`) and sample-value grounding.
@@ -194,8 +228,10 @@ Deferred, recorded rather than gating (descope over gate):
 ## Status
 
 Proposed — the formerly open decisions (SD3 remote acknowledgement, SD4
-v0 scope, SD6 run gesture) were closed in the 2026-07-21 design dialogue
-and are folded into the SD texts above. Awaiting review for acceptance.
+v0 scope, SD6 run gesture) were closed in the 2026-07-21 design dialogue;
+on 2026-07-22 an evidence review revised SD4 (grounding moved to the
+ADR-0139 semantic layer) and added SD7 (DSL target). Awaiting review for
+acceptance alongside ADR-0139.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
@@ -218,7 +254,13 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
   capability question this panel must answer per app.
 - [ADR-0009](./0009-environment-variable-registry.md) — env registration.
 - [ADR-0094](./0094-keelson-introspection-tables.md),
-  [ADR-0124](./0124-play-param-editing-widgets.md) — grounding sources
-  and conventions the prompt teaches.
+  [ADR-0124](./0124-play-param-editing-widgets.md) — a deferred grounding
+  tier, and the conventions the play-side preamble teaches.
+- [ADR-0139](./0139-semantic-layer-text2dsl.md) — the semantic layer that
+  owns grounding (SD4) and the DSL vocabulary (SD7).
+- Evidence: arXiv:2604.25149 (ClickHouse semantic layer, +17–23 pts);
+  arXiv:2411.07763 (Spider 2.0) and arXiv:2305.03111 (BIRD) for the
+  realism collapse; dbt-labs/dbt-llm-sl-bench (semantic layer vs raw
+  generation — vendor-reported).
 - Engine: `public/db/clickhouse/text2sql2/{orchestrator,llmclient,cache,observers}`,
   `public/llm/openaichat`, `public/db/clickhouse/text2sql` (v1 + CLI).
