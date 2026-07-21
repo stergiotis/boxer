@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -186,6 +187,29 @@ func TestRasterTemplateRendersWellFormed(t *testing.T) {
 		for _, vp := range mapViewportSignals {
 			require.True(t, names[string(vp)], "render %q template must read %s", r.name, vp)
 		}
+	}
+}
+
+// The raster template must survive the host's pre-execute canonicalization
+// (ADR-0108 CanonicalizeFull, wired by RegisterPasses) unbroken. Regression:
+// integer division was spelled with the `DIV` operator, which grammar1 does
+// not model — it mis-parsed `expr DIV span_x` as a chained alias and the
+// identifier pass quoted DIV into `"DIV"`, a ClickHouse syntax error that
+// silently killed the Map pane. Writing it as intDiv() (canonical function
+// form) rides through. Guards every render's spliced template.
+func TestRasterTemplateSurvivesCanonicalization(t *testing.T) {
+	for _, r := range builtinRenders {
+		colorSQL := r.colorSQL
+		if r.custom {
+			colorSQL = "transparency * 255 AS red, transparency AS green, 0 AS blue"
+		}
+		sql := rasterTemplateSQL("planes_mercator", 100, colorSQL, r.where)
+		out, err := passes.CanonicalizeFull(100).Run(sql)
+		require.NoError(t, err, "render %q", r.name)
+		require.NotContains(t, out, `"DIV"`,
+			"render %q: the DIV operator must not be quoted as an identifier (grammar1 gap)", r.name)
+		require.Contains(t, out, "intDiv",
+			"render %q: integer division must stay the canonical intDiv() function", r.name)
 	}
 }
 

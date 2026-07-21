@@ -604,6 +604,13 @@ func (inst *MapDriver) statusLine() string {
 // `WITH FILL … TO` bound (the wiring check ADR-0096 called out). The header
 // assumes only mercator_x/mercator_y; what other columns are needed depends
 // on colorSQL. table/sampling stay spliced panel controls.
+//
+// Integer division is spelled intDiv(a, b), not the `a DIV b` operator: the
+// host canonicalises every executed statement (ADR-0108, CanonicalizeFull),
+// and grammar1 has no DIV/MOD operator — it mis-parses `expr DIV name` as a
+// chained alias and the identifier pass then quotes DIV into a syntax error.
+// The function form is the canonical shape and rides through untouched. Do not
+// "simplify" it back to the operator.
 func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere string) string {
 	where := "in_view"
 	if strings.TrimSpace(extraWhere) != "" {
@@ -614,8 +621,8 @@ func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere strin
     toUInt64({vp_max_y:UInt32}) - {vp_min_y:UInt32} AS span_y,
     mercator_x >= {vp_min_x:UInt32} AND mercator_x < {vp_max_x:UInt32}
         AND mercator_y >= {vp_min_y:UInt32} AND mercator_y < {vp_max_y:UInt32} AS in_view,
-    least((toUInt64(mercator_x - {vp_min_x:UInt32}) * {vp_w:UInt32}) DIV span_x, {vp_w:UInt32} - 1) AS px,
-    least((toUInt64(mercator_y - {vp_min_y:UInt32}) * {vp_h:UInt32}) DIV span_y, {vp_h:UInt32} - 1) AS py,
+    least(intDiv(toUInt64(mercator_x - {vp_min_x:UInt32}) * {vp_w:UInt32}, span_x), {vp_w:UInt32} - 1) AS px,
+    least(intDiv(toUInt64(mercator_y - {vp_min_y:UInt32}) * {vp_h:UInt32}, span_y), {vp_h:UInt32} - 1) AS py,
     py * {vp_w:UInt32} + px AS pos,
     (span_x / {vp_w:UInt32}) * (span_y / {vp_h:UInt32}) AS pixel_area,
     pow(2, 22) / sqrt(pixel_area) AS zoom_factor,
