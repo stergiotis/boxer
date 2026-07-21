@@ -946,8 +946,15 @@ func (inst *Timeline) renderBody() {
 	// both run before the input block rather than after it.
 	inst.laneAssn = layout.PackLanes(inst.intervals)
 	labelW := inst.computeLabelW()
+	// Width auto-fit is a layout concern, not an interaction one: capturing the
+	// parent's available_size is what lets effectiveContainerW track the pane
+	// next frame (WithContainerWidth is only the frame-1 fallback). It must run
+	// even when interaction is off, or a non-interactive timeline — e.g. the
+	// Detail pane's read-only strip — is stuck at the stale/fallback width and
+	// overspills a narrow pane, clipping its right edge (the newest event). Only
+	// the pan/zoom input handling below is genuinely gated on interactivity.
+	c.CaptureAvailableSize()
 	if inst.interactionEnabled {
-		c.CaptureAvailableSize()
 		inst.applyZoomInput(zoom, cp, effW)
 		inst.applyPanInput(stateMgr, labelW, effW)
 	}
