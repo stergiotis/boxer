@@ -1085,7 +1085,7 @@ func (t *Treemap) renderBody() {
 		for i := len(t.cells) - 1; i >= 0; i-- {
 			resp := sm.GetResponse(t.cells[i].handle)
 			if resp.HasHovered() && hoverInfo == "" {
-				hoverInfo = fmt.Sprintf("%s  |  size: %.0f", t.cells[i].node.Name, t.cells[i].node.TotalSize())
+				hoverInfo = fmt.Sprintf("%s  |  size: %s", t.cells[i].node.Name, formatBytes(t.cells[i].node.TotalSize()))
 			}
 			if resp.HasPrimaryClicked() && drillTarget == nil && drillUpTarget == nil {
 				switch {
@@ -1105,8 +1105,8 @@ func (t *Treemap) renderBody() {
 		if hoverInfo != "" {
 			c.Label(hoverInfo).Send()
 		} else {
-			c.Label(fmt.Sprintf("%d items  |  total size: %.0f  |  hover for info, click to drill",
-				len(cur.Children), cur.TotalSize())).Send()
+			c.Label(fmt.Sprintf("%d items  |  total size: %s  |  hover for info, click to drill",
+				len(cur.Children), formatBytes(cur.TotalSize()))).Send()
 		}
 
 		switch {
@@ -1126,14 +1126,28 @@ func (t *Treemap) renderBody() {
 			t.applyNavigation(newPath, NavTriggerDrillUpCellClick)
 		}
 	} else {
-		c.Label(fmt.Sprintf("leaf: %s  |  size: %.0f", cur.Name, cur.TotalSize())).Send()
+		c.Label(fmt.Sprintf("leaf: %s  |  size: %s", cur.Name, formatBytes(cur.TotalSize()))).Send()
 		for range c.Frame(t.ids.PrepareStr("leaf-" + t.scopeKey)).
 			Fill(t.colorLeafBg).
 			InnerMargin(styletokens.PaddingLoose(t.density)).
 			CornerRadius(styletokens.RoundingLg).
 			KeepIter() {
 			c.Label(fmt.Sprintf("File: %s", cur.Name)).Send()
-			c.Label(fmt.Sprintf("Size: %.0f bytes", cur.TotalSize())).Send()
+			c.Label(fmt.Sprintf("Size: %s", formatBytes(cur.TotalSize()))).Send()
 		}
 	}
+}
+
+func formatBytes(bytes float64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%.0f B", bytes)
+	}
+	div, exp := int64(1024), 0
+	for n := bytes / 1024; n >= 1024; n /= 1024 {
+		div *= 1024
+		exp++
+	}
+	var suffixes = []string{"KB", "MB", "GB", "TB", "PB"}
+	suffix := suffixes[exp]
+	return fmt.Sprintf("%.2f %s", bytes/float64(div), suffix)
 }
