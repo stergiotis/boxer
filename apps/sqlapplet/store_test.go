@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
@@ -134,10 +133,10 @@ func TestStoreRefusals(t *testing.T) {
 }
 
 // TestComposeRoundTrip pins the two halves of O4 against each other: the
-// document play composes is accepted and parsed back to the same buffer by
-// the store's gate (O4-D5 / §SD1's pasteable-complete invariant).
+// document the creator composes is accepted and parsed back to the same
+// buffer by the store's gate (O4-D5 / §SD1's pasteable-complete invariant).
 func TestComposeRoundTrip(t *testing.T) {
-	doc, err := play.ComposeAppletDoc("Röund \"trip\"", "🧪", "introspection", "SET param_x = 1;\nSELECT {x:UInt64}")
+	doc, err := appletstore.ComposeAppletDoc("Röund \"trip\"", "🧪", "introspection", "SET param_x = 1;\nSELECT {x:UInt64}")
 	require.NoError(t, err)
 	def, err := ParseDocSource("store", "round-trip.md", doc)
 	require.NoError(t, err)

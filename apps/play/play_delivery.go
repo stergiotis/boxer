@@ -2,6 +2,7 @@ package play
 
 import (
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
+	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -123,6 +124,52 @@ func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
 	// client half of the open subject (its error already names the reason).
 	if _, err = windowhost.RequestOpen(inst.bus, AppId, launchcfg.Kind, cfgBytes); err != nil {
 		err = eh.Errorf("play: open playground: %w", err)
+		return
+	}
+	return
+}
+
+// requestSaveApplet opens the standalone applet creator (apps/sqlappletcreator)
+// seeded with cfg over `windowhost.open` (ADR-0135 §SD7 — the ADR-0132 "O4"
+// authoring surface, now a launched window instead of an inline menu). Blocks
+// on the bus round-trip, so call it from a goroutine off the frame loop — the
+// requestOpenPlayground rule. The outcome lands in saveAppletErr (empty on
+// success) for the toolbar to surface; a re-click while a request is in flight
+// is dropped.
+func (inst *PlayApp) requestSaveApplet(cfg appletcreatecfg.AppletCreate) {
+	inst.saveAppletMu.Lock()
+	if inst.saveAppletBusy {
+		inst.saveAppletMu.Unlock()
+		return
+	}
+	inst.saveAppletBusy = true
+	inst.saveAppletErr = ""
+	inst.saveAppletMu.Unlock()
+	err := inst.openCreator(cfg)
+	inst.saveAppletMu.Lock()
+	inst.saveAppletBusy = false
+	if err != nil {
+		inst.saveAppletErr = err.Error()
+	}
+	inst.saveAppletMu.Unlock()
+}
+
+// openCreator is the blocking body of requestSaveApplet: encode the config,
+// wrap it in a LaunchRequest naming the creator, run the audited request, and
+// turn a refusal reply into an error. The caller identity is attributed by the
+// bus (Msg.Sender) — nothing to add here.
+func (inst *PlayApp) openCreator(cfg appletcreatecfg.AppletCreate) (err error) {
+	if inst.bus == nil {
+		err = eh.Errorf("play: save as applet: no bus wired")
+		return
+	}
+	cfgBytes, err := buscodec.Encode(cfg)
+	if err != nil {
+		err = eh.Errorf("play: encode applet-create config: %w", err)
+		return
+	}
+	if _, err = windowhost.RequestOpen(inst.bus, appletcreatecfg.AppId, appletcreatecfg.Kind, cfgBytes); err != nil {
+		err = eh.Errorf("play: save as applet: %w", err)
 		return
 	}
 	return

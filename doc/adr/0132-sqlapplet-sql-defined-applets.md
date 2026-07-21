@@ -394,6 +394,53 @@ composes the current buffer into a `PlayLaunch` and a full play window
 opens seeded with it, priority above `BOXER_PLAY_SQL` and the persisted
 session. Copy SQL stays as the transport-free fallback.
 
+## Update (2026-07-21) — O4 authoring surface factored into its own app
+
+With [ADR-0135](./0135-app-launch-requests.md) landed, the O4 "Save as
+applet" authoring surface — the slug/title/icon form O4-D2 inlined in the
+playground toolbar — is factored out into a standalone window,
+`apps/sqlappletcreator`, which the playground now *launches* over
+`windowhost.open` rather than hosting. What moves and what does not:
+
+- **The store seam is unchanged.** O4-D1/D3/D4 stand verbatim: the same
+  `applet.store.save` request/reply, the same `appletstore` service as the
+  single moderation gate (validate → classify → persist → mint), the same
+  document shape (O4-D5). Only *who composes and submits* moved.
+- **A launch config, not a bus taxonomy.** The playground hands the creator
+  the buffer and its authoring endpoint through a leeway-declared launch
+  config, kind `appletCreate` (`apps/sqlappletcreator/appletcreatecfg`) — a
+  dedicated kind rather than a reuse of play's `playLaunch`, so nothing
+  embeds "play" in the creator's durable launch contract. The "Save as
+  applet…" button composes the config and opens the creator; the form
+  decodes it at Mount and seeds an editable buffer (a plainly-opened creator
+  window starts empty and is still usable).
+- **The composer moved to the contract.** `ComposeAppletDoc` — the O4-D5
+  document shape — moved from play into the neutral `appletstore` package,
+  beside the wire types it produces and the store's gate parses back; the
+  store's corpus round-trip test now shares it instead of reaching into
+  play.
+- **Capability hygiene (revises O4-D2).** The save cap no longer lives in
+  play's manifest: play sheds `applet.store.save` and declares only
+  `windowhost.open` for the launch, while the creator declares
+  `applet.store.save` — the authoring capabilities now sit on the sole
+  authoring app. The playground is a query tool again, not an applet author.
+- **Two outputs — mint *and* export (the "A+B" cut).** The creator offers
+  both a Save and an Export. **Save** is the store mint above (O4-D2), which
+  remains the primitive for "publish this applet into the running system": it
+  is validated, classified, and immediately launchable, and its durability
+  follows the wired persist backend. **Export** writes the same composed
+  document to a user-chosen file through the fs Powerbox save dialog
+  (`fs.dialog.write` + a granted write handle) — a durable, user-owned,
+  legible `.md`, the file-save counterpart of play's existing "Load .sql"
+  read dialog. Export is not a mint: it produces the source artifact, not a
+  registered app. The two answer different needs (make it live now vs. keep
+  the file); a filesystem-*backed* applet library — Save itself going through
+  the Powerbox and the runtime minting from a watched directory — stays out
+  of scope as a larger change to O4-D1's keystore model.
+
+This is the second real adopter of ADR-0135 (after play's own "Open in
+Playground"), and it leaves the inline menu with no remaining consumer.
+
 ## References
 
 Internal:

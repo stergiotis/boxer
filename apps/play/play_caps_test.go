@@ -12,9 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
 
@@ -151,8 +153,10 @@ func TestPlayApp_RestorePersistedSql_EmptyValue_KeepsDefault(t *testing.T) {
 
 func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
-	// Three declared Caps: fs dialog + fs handle wildcard +
-	// chlocalbroker pool for the time-range evaluator.
+	// Four declared Caps: fs dialog + fs handle wildcard + chlocalbroker
+	// pool for the time-range evaluator + windowhost.open for the
+	// Save-as-applet launch (ADR-0135 §SD7). The applet-store save cap moved
+	// out with the O4 authoring form (now apps/sqlappletcreator).
 	require.Len(t, m.Caps, 4)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
@@ -161,6 +165,8 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	assert.Contains(t, patterns, fsbroker.SubjectDialogRead)
 	assert.Contains(t, patterns, fsbroker.HandleSubjectPrefix+">")
 	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
+	assert.Contains(t, patterns, windowhost.OpenSubject)
+	assert.NotContains(t, patterns, appletstore.SubjectSave)
 	// PersistedKeys → host-injected runtime.persist.play.> cap.
 	// lastSql + timelineBandsSql; both panel-local strings the user
 	// expects to survive session restart.

@@ -94,6 +94,7 @@ import (
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"
 	_ "github.com/stergiotis/boxer/apps/splashscreen"
+	_ "github.com/stergiotis/boxer/apps/sqlappletcreator"
 	_ "github.com/stergiotis/boxer/apps/taskdemo"
 	_ "github.com/stergiotis/boxer/apps/terrainscope"
 	_ "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/idsshowcase"

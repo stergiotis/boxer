@@ -1,9 +1,11 @@
 // Package appletstore is the wire contract of the runtime applet store
 // (ADR-0132 Update "O4"): the bus subject and request/reply shapes through
-// which an authoring app (apps/play) submits a SQL-applet document for
-// validation, persistence, and minting. Only the contract lives here — the
-// service implementation is the sqlapplet host's (apps/sqlapplet), which
-// this package must not import (the host embeds play; play imports this).
+// which an authoring app (apps/sqlappletcreator) submits a SQL-applet
+// document for validation, persistence, and minting, plus [ComposeAppletDoc]
+// — the canonical document shape both the authoring side produces and the
+// store's gate parses back. Only the contract lives here — the service
+// implementation is the sqlapplet host's (apps/sqlapplet), which this
+// package must not import (authoring apps import this).
 package appletstore
 
 import (

@@ -72,3 +72,27 @@ var (
 	MembPlayLaunchEndpoint = KeelsonHrNkRegistry.MustBegin("playLaunchEndpoint").
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
+
+// AppletCreate config columns (ADR-0132 Update "O4" / ADR-0135 §SD7) — the
+// launch config the applet creator accepts (apps/sqlappletcreator/appletcreatecfg,
+// kind appletCreate). The playground hands its buffer to a standalone
+// authoring window over `windowhost.open` instead of composing the applet
+// document inline. textArray for the SQL buffer (open-cardinality), symbol
+// for the endpoint id (small closed set). Appended after the PlayLaunch
+// columns per the id-ordering note above; a new dimdata file must sort
+// after this one.
+var (
+	// MembAppletCreateSql is the buffer the creator composes into an applet
+	// document (the SQL fence of the saved doc).
+	MembAppletCreateSql = KeelsonHrNkRegistry.MustBegin("appletCreateSql").
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+
+	// MembAppletCreateEndpoint names the query target the buffer was authored
+	// against; the creator stamps it into the applet document's frontmatter so
+	// the applet reopens there. Empty (or "default") keeps the env-configured
+	// ClickHouse; "introspection" is the in-process keelson `/query` endpoint
+	// where ad-hoc `keelson('<handle>')` datasets resolve (ADR-0094 §SD6 /
+	// ADR-0134). Symbol section: the set of endpoints is small and closed.
+	MembAppletCreateEndpoint = KeelsonHrNkRegistry.MustBegin("appletCreateEndpoint").
+				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+)

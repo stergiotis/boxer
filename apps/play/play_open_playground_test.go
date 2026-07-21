@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
+	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
@@ -104,4 +105,41 @@ func TestRequestOpenPlayground_TransportErrorSurfaces(t *testing.T) {
 	defer inst.openPlayMu.Unlock()
 	assert.Contains(t, inst.openPlayErr, "timeout")
 	assert.False(t, inst.openPlayBusy)
+}
+
+func TestRequestSaveApplet_ComposesRequestAndSucceeds(t *testing.T) {
+	bus := &fakeOpenBus{reply: launchreply.LaunchReply{WindowKey: 9}}
+	inst := newOpenTestApp(t, bus)
+
+	inst.requestSaveApplet(appletcreatecfg.AppletCreate{
+		Sql:      "SELECT 7",
+		Endpoint: appletcreatecfg.EndpointIntrospection,
+	})
+
+	inst.saveAppletMu.Lock()
+	defer inst.saveAppletMu.Unlock()
+	assert.Empty(t, inst.saveAppletErr)
+	assert.False(t, inst.saveAppletBusy)
+	assert.Equal(t, windowhost.OpenSubject, bus.gotSubject)
+
+	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
+	require.NoError(t, err)
+	assert.Equal(t, appletcreatecfg.AppId, req.TargetAppId)
+	assert.Equal(t, appletcreatecfg.Kind, req.ConfigKind)
+	sent, err := buscodec.Decode[appletcreatecfg.AppletCreate](req.Config)
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT 7", sent.Sql)
+	assert.Equal(t, appletcreatecfg.EndpointIntrospection, sent.Endpoint)
+}
+
+func TestRequestSaveApplet_RefusalSurfaces(t *testing.T) {
+	bus := &fakeOpenBus{reply: launchreply.LaunchReply{Reason: "app accepts no launch config"}}
+	inst := newOpenTestApp(t, bus)
+
+	inst.requestSaveApplet(appletcreatecfg.AppletCreate{Sql: "SELECT 1"})
+
+	inst.saveAppletMu.Lock()
+	defer inst.saveAppletMu.Unlock()
+	assert.Contains(t, inst.saveAppletErr, "refused")
+	assert.Contains(t, inst.saveAppletErr, "accepts no launch config")
 }

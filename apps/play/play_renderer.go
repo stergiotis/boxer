@@ -14,6 +14,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
+	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -381,14 +382,15 @@ type PlayApp struct {
 	// user-typed string (the multiMatch* / multiFuzzyMatch* families).
 	affordanceTestInput string
 
-	// Save-applet drafts + async reply line (play_save_applet.go, the
-	// ADR-0132 "O4" authoring seam). The status is written from the reply
-	// goroutine, hence the mutex.
-	saveAppletSlug   string
-	saveAppletTitle  string
-	saveAppletIcon   string
-	saveAppletMu     sync.Mutex
-	saveAppletStatus string
+	// saveAppletMu guards the Save-as-applet launch request state (ADR-0135
+	// §SD7): the "Save as applet…" button opens the standalone creator
+	// window (apps/sqlappletcreator) over windowhost.open, seeded with the
+	// current buffer; the goroutine holds the bus round-trip and the toolbar
+	// reads busy + err under the lock (the openPlay pattern). The authoring
+	// form itself moved out of play with the ADR-0132 "O4" seam.
+	saveAppletMu   sync.Mutex
+	saveAppletBusy bool
+	saveAppletErr  string
 
 	// toolbarMinimal attenuates the top bar to the applet surface
 	// (ADR-0132 §SD3): Load .sql, the endpoint switcher, the prelude and
@@ -1352,8 +1354,9 @@ func (inst *PlayApp) renderTopBar() {
 				// Carry the endpoint so a buffer authored against the
 				// in-process introspection /query endpoint reopens there
 				// (bare keelson('…') is that endpoint's dialect); the
-				// env-default target stays default. Same probe as
-				// play_save_applet.go's ComposeAppletDoc.
+				// env-default target stays default. Same probe the
+				// Save-as-applet button uses (appletstore.ComposeAppletDoc
+				// stamps the frontmatter from it).
 				endpoint := ""
 				if ep := introspect.LocalQueryEndpoint(); ep != "" && inst.client != nil && inst.client.URL() == ep {
 					endpoint = launchcfg.EndpointIntrospection
@@ -1403,11 +1406,42 @@ func (inst *PlayApp) renderTopBar() {
 			}
 		}
 
-		// Save applet (ADR-0132 "O4") — authoring surface only: attenuated
-		// windows are consumers, and the request needs the bus.
+		// Save as applet (ADR-0132 "O4" / ADR-0135 §SD7) — opens the
+		// standalone authoring window (apps/sqlappletcreator) over
+		// windowhost.open, seeded with the current buffer; the slug/title/icon
+		// form that used to live inline here moved out with the O4 seam.
+		// Authoring surface only: attenuated windows are consumers, and the
+		// launch needs the bus. Off the frame goroutine, the Copy SQL rule.
 		if inst.bus != nil && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
-			inst.renderSaveAppletMenu()
+			inst.saveAppletMu.Lock()
+			saveBusy := inst.saveAppletBusy
+			saveErr := inst.saveAppletErr
+			inst.saveAppletMu.Unlock()
+			if saveBusy {
+				c.Label("Opening creator…").Send()
+			} else if c.Button(ids.PrepareStr("saveApplet"),
+				c.Atoms().Text("Save as applet…").Keep()).
+				SendResp().HasPrimaryClicked() {
+				// Carry the endpoint so a buffer authored against the
+				// in-process introspection endpoint composes with the right
+				// frontmatter; the env-default target stays default. Same
+				// probe as the Open in Playground button.
+				endpoint := ""
+				if ep := introspect.LocalQueryEndpoint(); ep != "" && inst.client != nil && inst.client.URL() == ep {
+					endpoint = appletcreatecfg.EndpointIntrospection
+				}
+				go inst.requestSaveApplet(appletcreatecfg.AppletCreate{
+					At:       time.Now().UTC(),
+					Sql:      inst.sql,
+					Endpoint: endpoint,
+				})
+			}
+			if saveErr != "" {
+				for rt := range c.RichTextLabel("Save as applet failed: " + saveErr) {
+					rt.Small().Weak()
+				}
+			}
 		}
 
 		if inst.client != nil && !inst.toolbarMinimal {
