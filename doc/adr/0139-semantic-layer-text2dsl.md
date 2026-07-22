@@ -58,7 +58,7 @@ all of them:
    ([ADR-0094](./0094-keelson-introspection-tables.md)) can enumerate
    themselves into a layer tier.
 
-A further owner requirement (2026-07-22) sets the interaction model: the
+A further requirement (2026-07-22) sets the interaction model: the
 model must be able to *introspect every relevant dimension itself* —
 tables, semantic-layer entries, nanopass passes, live signals, windows —
 through tool calls, not only through whatever context was rendered up
@@ -200,8 +200,27 @@ settled decisions:
   guarded executor — with the raw query tool kept as the escape hatch,
   friendlier to small local models. Guardrails: read-only enforcement,
   row/size caps, every tool call emitted through the observer stream.
-  Engine delta, recorded: `LLMClientI` grows tool calling — the
-  openaichat client already has it; the ollama adapter does not yet.
+  SD8 defines the *surface*; the interaction protocol and the client
+  delta are SD9's.
+- **SD9 — Interactive tool calling, in-conversation** *(added
+  2026-07-22)*. The SD8 tools are called *by the model, from within the
+  generation conversation* — not pre-fetched by the engine on the
+  model's behalf. The protocol is the standard chat tool loop: on any
+  turn the model may answer with tool calls instead of SQL; the engine
+  executes each call and appends the result as a tool-result turn; the
+  conversation continues until the model emits its final SQL or the
+  per-question call budget is exhausted. This inner introspection loop
+  nests *inside* each attempt of the existing repair loop — a validation
+  failure still produces a repair turn, and the accumulated tool-call
+  history stays in the conversation, so knowledge the model gathered is
+  not lost across attempts. Mechanics: `LLMClientI` is extended so a
+  turn can carry tool definitions and return tool calls; the openaichat
+  client already models exactly this (tool definitions, `ToolCalls` on
+  the response, replayable role=tool turns), the ollama adapter needs
+  the equivalent. Interactive introspection is capability-gated per
+  client: a model or adapter without tool support degrades to SD4
+  seed-only single-shot generation — today's behavior — rather than
+  failing.
 
 ## Alternatives
 
@@ -256,13 +275,17 @@ settled decisions:
 - ClickHouse upstream is converging on similar ideas (in-client `??`
   generation, cloud-side semantic layers); this artifact is local-first
   and grammar-validated rather than a compatibility target.
+- The SD9 capability gate keeps tool-less models usable: they run
+  seed-only at reduced grounding depth instead of being excluded.
 
 ## Status
 
 Proposed — all formerly open decisions were closed in the 2026-07-22
 design dialogue (SD1 home, SD2 line-oriented block grammar, SD3 lint
 beside the engine CLI, SD6-T2a handles in v0, SD8 bespoke façade over
-one executor) and are folded into the SD texts above. Sequencing, also
+one executor) and are folded into the SD texts above. SD9 — the
+interactive in-conversation tool protocol — was added the same day after
+review feedback that SD8 left it implicit. Sequencing, also
 settled: the engine lands first and the `boxer text2sql` CLI proves it;
 the ADR-0120 panel consumes the proven engine after. Awaiting review for
 acceptance alongside ADR-0120.

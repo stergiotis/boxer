@@ -13,7 +13,7 @@ date: 2026-07-21
 > **Numbering note.** 0120 previously held the package-capability survey,
 > withdrawn 2026-07-15 (`e42e3b97`) as redundant with
 > [ADR-0026](./0026-app-runtime-and-capability-subjects.md) §SD10. The slot is
-> reused here by owner decision. References to ADR-0120 dated before
+> deliberately reused. References to ADR-0120 dated before
 > 2026-07-21 — the [2026-07 changelog](../changelog/2026-07-02--2026-07-16.md)
 > and the status note in
 > [query-system-requirements](../explanation/query-system-requirements.md) —
