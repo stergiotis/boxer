@@ -127,25 +127,28 @@ deterministically into prompts, and consumed by every generation surface
 (the `boxer text2sql` CLI today, the ADR-0120 Ask panel next). Proposed
 settled decisions:
 
-- **SD1 — Engine-side ownership.** A package beside the engine (working
-  name `public/db/clickhouse/semlayer`), with no dependency on play;
-  consumers reach it through a small render/validate API. **OPEN:** final
-  package home and name.
+- **SD1 — Engine-side ownership.** `public/db/clickhouse/semlayer`, with
+  no dependency on play; consumers reach it through a small
+  render/validate API. The SD8 tool registry lives beside the
+  orchestrator. *(Settled 2026-07-22.)*
 - **SD2 — Artifact form (O3).** One markdown file per scope. Fenced,
   machine-parsed blocks declare: *measures* (name, description, DSL
   expression), *dimensions* (name, description, column or expression,
   value notes), *certified joins* (tables, keys, cardinality note —
   fan-out warnings live here), and *routing hints* (raw table vs
   materialized view). Free prose in between carries disambiguation rules
-  and conventions. **OPEN:** the concrete block grammar (leaning: a small
-  line-oriented syntax inside fences, not YAML-in-fences).
+  and conventions. *(Settled 2026-07-22:)* the block grammar is a
+  line-oriented micro-syntax — one declaration per line, e.g.
+  `measure revenue = sumIf(amount, status = 'paid') -- paid revenue` —
+  diff-friendly, trivially parsed, the expression part feeding the SD3
+  lint directly; YAML-in-fences and markdown tables were rejected.
 - **SD3 — Loud validation.** A lint pass over a layer: every declared
   expression must grammar1-parse and canonicalize; every referenced
   table/column must resolve against the scope's schema harvest (or its
   leeway handles); failures are errors, not warnings. Schema drift breaks
   the layer visibly — that is a feature, and doubles as a
-  rename-detection tripwire. Lint home (a `gov` subcommand vs beside the
-  engine CLI) is a minor open point.
+  rename-detection tripwire. The lint lives beside the engine CLI —
+  layers are site content, not repo governance. *(Settled 2026-07-22.)*
 - **SD4 — Deterministic seed rendering.** `Render(scope, budget)` produces
   the *seed* context: layer content first, auto-derived schema tier after,
   stable ordering throughout. v0 renders whole scopes — the evidence says
@@ -164,15 +167,21 @@ settled decisions:
   - **T1 authored overlay (the v0 deliverable):** measures, dimensions,
     certified joins, disambiguation rules, routing hints — dogfooded with
     a real layer for the demo dataset.
-  - **T2 leeway-derived:** friendly handles as generation vocabulary and
-    read-back shapes as certified queries. **OPEN:** v0 or first
+  - **T2a leeway handles (v0):** friendly handles as generation
+    vocabulary where the scope is leeway-mapped — in from day one
+    (settled 2026-07-22: the strongest text2dsl cut was chosen over a
+    physical-names-first v0).
+  - **T2b leeway read-back shapes** as certified queries — first
     follow-up.
   - **T3 mined verified queries** from pinned runs, **T4 ODCS ingestion**
     — deferred.
 - **SD7 — text2dsl vocabulary.** Where a scope is leeway-mapped,
   generation may target friendly handles and keelson macros — the pass
   stack lowers them (ADR-0116) — with physical names as the universal
-  fallback. **OPEN:** tied to SD6-T2's timing.
+  fallback. *(Settled 2026-07-22 with SD6-T2a:)* handle/macro vocabulary
+  is v0. Implications: the CLI path carries the handle-resolution pass
+  binding from day one, and the SD8 validate tool resolves handles, not
+  only grammar.
 - **SD8 — Agentic introspection** *(added 2026-07-22)*. Generation is a
   tool-calling loop, not a single shot: while composing a query the model
   can introspect every relevant dimension. The dimension registry is
@@ -184,9 +193,12 @@ settled decisions:
   two tool shapes cover the surface: a **read-only, row-capped query
   tool** over the introspection tables (the DSL is its own introspection
   language) and a **validate tool** (grammar1 parse + canonicalize) so
-  the model can self-check drafts before answering. Whether a small set
-  of bespoke per-dimension tools rides on top as a façade (friendlier to
-  small local models) is **OPEN**. Guardrails: read-only enforcement,
+  the model can self-check drafts before answering. *(Settled
+  2026-07-22:)* a small bespoke façade rides on top — named
+  per-dimension tools (list/describe tables, passes, signals, windows,
+  measures) implemented as canned queries compiling into the same single
+  guarded executor — with the raw query tool kept as the escape hatch,
+  friendlier to small local models. Guardrails: read-only enforcement,
   row/size caps, every tool call emitted through the observer stream.
   Engine delta, recorded: `LLMClientI` grows tool calling — the
   openaichat client already has it; the ollama adapter does not yet.
@@ -232,6 +244,9 @@ settled decisions:
 - Agentic loops multiply LLM round-trips and latency (production
   pipelines report up to ~19–21 calls per query); a per-question call
   budget and cancellation are part of the contract, not afterthoughts.
+- Handles-in-v0 couples the engine to leeway handle resolution from the
+  first release — the CLI inherits the resolution pass binding, not only
+  play.
 
 ### Neutral
 
@@ -244,10 +259,13 @@ settled decisions:
 
 ## Status
 
-Proposed — open decisions: SD1 package home, SD2 block grammar, SD6-T2 /
-SD7 timing (leeway tier in v0 or first follow-up), SD8 tool surface
-(universal query tool only, or a bespoke per-dimension façade on top).
-Being closed in the same design dialogue as ADR-0120.
+Proposed — all formerly open decisions were closed in the 2026-07-22
+design dialogue (SD1 home, SD2 line-oriented block grammar, SD3 lint
+beside the engine CLI, SD6-T2a handles in v0, SD8 bespoke façade over
+one executor) and are folded into the SD texts above. Sequencing, also
+settled: the engine lands first and the `boxer text2sql` CLI proves it;
+the ADR-0120 panel consumes the proven engine after. Awaiting review for
+acceptance alongside ADR-0120.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
