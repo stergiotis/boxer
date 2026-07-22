@@ -208,4 +208,36 @@ func TestWorldEffectiveValueCol(t *testing.T) {
 	if d.valueCol != worldValueAuto {
 		t.Error("stale pick must reset the persisted choice to auto")
 	}
+	// Explicit presence: -1 even when numeric columns exist, and it persists.
+	d.valueCol = worldValuePresence
+	if got := d.effectiveValueCol([]int{2, 5}); got != -1 {
+		t.Errorf("presence pick: got %d, want -1 even with numerics", got)
+	}
+	if d.valueCol != worldValuePresence {
+		t.Error("presence pick must persist, not reset to auto")
+	}
+}
+
+// A value column with no spread across the matched countries (a drill-down that
+// collapsed to one country, or an all-identical id column) can't seed a
+// colormap; extract falls back to presence and flags it for the status line.
+func TestWorldExtractDegenerateValueFallsBackToPresence(t *testing.T) {
+	d := testWorldDriver(t)
+	atlas := d.widget.Atlas()
+
+	flat := worldRec(t, "country", []string{"Germany", "France"}, "v", []float64{7, 7})
+	defer flat.Release()
+	d.noteExecuted(time.Unix(300, 0))
+	d.extract(flat, flat.Schema(), 0, 1, atlas)
+	if !d.valueDegenerate {
+		t.Fatal("all-equal value column must fall back to presence (valueDegenerate)")
+	}
+
+	spread := worldRec(t, "country", []string{"Germany", "France"}, "v", []float64{1, 9})
+	defer spread.Release()
+	d.noteExecuted(time.Unix(301, 0))
+	d.extract(spread, spread.Schema(), 0, 1, atlas)
+	if d.valueDegenerate {
+		t.Fatal("a value column with spread must grade, not fall back")
+	}
 }

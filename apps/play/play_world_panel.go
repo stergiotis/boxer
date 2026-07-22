@@ -69,6 +69,10 @@ type WorldDriver struct {
 	matched   int // countries with at least one resolved row
 	unmatched int // rows whose country cell resolved to nothing
 	dupes     int // resolved rows beyond the first per country (last wins)
+	// valueDegenerate: a value column was chosen but every matched country
+	// resolved to the same value (no spread — a drill-down collapsed to one
+	// country, or an id column), so the fill fell back to presence.
+	valueDegenerate bool
 
 	// pendingExecuted is stashed by renderWorldTab before dispatch — the
 	// PanelI Render signature carries no result metadata (see noteExecuted).
@@ -84,7 +88,13 @@ type WorldDriver struct {
 	detectCol int
 }
 
-const worldValueAuto = -1
+// valueCol pseudo-values, distinct from a real column index (≥ 0):
+// worldValueAuto picks the first numeric column; worldValuePresence opts out of
+// grading (membership-only fill) even when numeric columns exist. Both persist.
+const (
+	worldValueAuto     = -1
+	worldValuePresence = -2
+)
 
 func NewWorldDriver(ids *c.WidgetIdStack) *WorldDriver {
 	d := &WorldDriver{
@@ -190,10 +200,14 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 	}
 }
 
-// effectiveValueCol maps the persisted pick onto the current schema: auto →
-// first numeric; a stale explicit pick (column gone or no longer numeric)
-// also falls back to auto rather than latching an arbitrary column.
+// effectiveValueCol maps the persisted pick onto the current schema: presence →
+// -1 (opt-out, honoured even when numerics exist); auto → first numeric; a stale
+// explicit pick (column gone or no longer numeric) falls back to auto rather
+// than latching an arbitrary column.
 func (inst *WorldDriver) effectiveValueCol(numeric []int) int {
+	if inst.valueCol == worldValuePresence {
+		return -1
+	}
 	if len(numeric) == 0 {
 		return -1
 	}
@@ -212,7 +226,12 @@ func (inst *WorldDriver) effectiveValueCol(numeric []int) int {
 // explicit stable ids per option, "auto" resets to first-numeric.
 func (inst *WorldDriver) renderValueCombo(schema *arrow.Schema, numeric []int) {
 	cur := "auto"
-	if inst.valueCol != worldValueAuto {
+	switch inst.valueCol {
+	case worldValueAuto:
+		cur = "auto"
+	case worldValuePresence:
+		cur = "none (presence)"
+	default:
 		cur = schema.Field(inst.valueCol).Name
 	}
 	for range c.ComboBox(inst.ids.PrepareStr("world-value"),
@@ -225,6 +244,16 @@ func (inst *WorldDriver) renderValueCombo(schema *arrow.Schema, numeric []int) {
 			Selected(inst.valueCol == worldValueAuto).
 			SendResp().HasPrimaryClicked() {
 			inst.valueCol = worldValueAuto
+		}
+		// Opt out of grading — membership-only fill. The right default for a
+		// SELECT *, where "auto" would otherwise shade by the first numeric
+		// column (often a uint64 id) for a meaningless map.
+		if c.Button(inst.ids.PrepareSeq(0x4fff),
+			c.Atoms().Text("none (presence)").Keep()).
+			Frame(false).
+			Selected(inst.valueCol == worldValuePresence).
+			SendResp().HasPrimaryClicked() {
+			inst.valueCol = worldValuePresence
 		}
 		for i, ci := range numeric {
 			if c.Button(inst.ids.PrepareSeq(uint64(0x5001+i)),
@@ -241,9 +270,14 @@ func (inst *WorldDriver) renderValueCombo(schema *arrow.Schema, numeric []int) {
 func (inst *WorldDriver) statusLine(numRows int64, valueCol int, schema *arrow.Schema) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d countries", inst.matched)
-	if valueCol >= 0 {
+	switch {
+	case inst.valueDegenerate:
+		fmt.Fprintf(&b, " · %s has no spread → presence", schema.Field(valueCol).Name)
+	case valueCol >= 0:
 		fmt.Fprintf(&b, " · %s", schema.Field(valueCol).Name)
-	} else {
+	case inst.valueCol == worldValuePresence:
+		b.WriteString(" · presence")
+	default:
 		b.WriteString(" · presence (no numeric column)")
 	}
 	if inst.unmatched > 0 {
@@ -333,12 +367,14 @@ func (inst *WorldDriver) extract(rec arrow.RecordBatch, schema *arrow.Schema, co
 	present := make(map[worldmap.CountryIdx]bool, 64)
 	clear(inst.rowOf)
 	inst.matched, inst.unmatched, inst.dupes = 0, 0, 0
+	inst.valueDegenerate = false
 
 	numRows := rec.NumRows()
 	valueArr := arrow.Array(nil)
 	if valueCol >= 0 {
 		valueArr = rec.Column(valueCol)
 	}
+	vmin, vmax := math.Inf(1), math.Inf(-1)
 	for row := range numRows {
 		cell := formatCell(rec, countryCol, row)
 		idx, ok := worldmap.CountryIdx(0), false
@@ -357,11 +393,23 @@ func (inst *WorldDriver) extract(rec arrow.RecordBatch, schema *arrow.Schema, co
 		if valueArr != nil {
 			if v, vok := numericCellValue(valueArr, row); vok {
 				vals[idx] = v
+				if v < vmin {
+					vmin = v
+				}
+				if v > vmax {
+					vmax = v
+				}
 			}
 		}
 	}
 	inst.matched = len(present)
-	if valueCol >= 0 {
+	// A value column with no spread across the matched countries — every value
+	// equal (a drill-down collapsed to one country, or an all-identical id
+	// column) or no numeric values at all — grades to one flat colour and can't
+	// seed a colormap. Fall back to presence so the map still reads; the status
+	// line says so.
+	inst.valueDegenerate = valueCol >= 0 && !(vmin < vmax)
+	if valueCol >= 0 && !inst.valueDegenerate {
 		inst.widget.SetValues(vals)
 	} else {
 		inst.widget.SetPresence(present)
