@@ -1510,6 +1510,43 @@ measures become a real need, the recorded direction is that pass/macro
 seam, not a source language. Separately, ClickHouse is not a Malloy
 target, so adoption was never live as an engineering option.
 
+### 2026-07-22 — Param-pane signal writing (design): typed widgets become tier-aware writers (amends slice-5 D3; mechanics in ADR-0124)
+
+A design amendment settled in dialogue (2026-07-22); the slice lands as its
+own shipped Update. Slice-5 D3 decided "widgets stay prelude-authoring in
+v1" and 5e delivered its "one coherent step" as the *raw* Signals editor
+plus the Live toggle. The typed widget layer — the PARAMETERS pane of
+ADR-0124, including the stem-folded range pickers — stayed welded to the
+constants tier, which leaves the store without a typed human writer and
+makes the pane's fill gesture a pin. The frictions that follow (pinning
+silently shadows panel co-writers; a fully pinned buffer loses the Live
+toggle — the dead end the `selection_country` fix worked around; the D3
+unfilled-input hint points away from the typed control that could fill it)
+are recorded with the mechanics in ADR-0124's same-day Update.
+
+**Decision, at this ADR's level:** D3's prelude-authoring restriction is
+superseded. The pane writes *both* tiers, and the tier is derived from the
+buffer alone — a name with a `SET` is pinned (drift edits the prelude,
+today's path), a name without one is live (drift is an ordinary
+provenance'd store write, writer `param-widget`), with an explicit
+per-claim pin/unpin gesture migrating a value between tiers. The two-tier
+truth model (D1), the wire channel, Run resolution, the staleness witness,
+and the history snapshot (D4) are all untouched: a live widget is just
+another writer, so liveness, auto-run, and reproducibility compose with no
+new store semantics. Two consequences worth naming here: a folded pair in
+live mode emits both halves inside one frame, so the frame-snapshot rule
+(5a) makes range moves atomic for every consumer; and the D3 empty-state
+gains its fill affordance — the unfilled name's own typed widget, in the
+pane, rather than a detour to the raw editor. The Signals editor remains
+the fallback surface for names the buffer does not reference (panel-only
+signals, seeding) and for conflict rows.
+
+Deferred with triggers, recorded in ADR-0124: live relative-time
+re-evaluation (a sliding `now()` is a wall-clock writer feeding the
+auto-run loop — the emit-feedback class SD9's acyclicity guard does not
+cover, so it waits on quantization plus a Live circuit-breaker witness) and
+query-backed value-domain widgets.
+
 ## References
 
 Internal:

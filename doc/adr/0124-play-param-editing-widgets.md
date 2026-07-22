@@ -476,6 +476,121 @@ Three things the decision did not anticipate:
   `play_projection.go:550`, `play_affordance.go:329`) that lean on the same
   fallback; whether they should is not this ADR's question.
 
+### 2026-07-22 — §SD4 amended (design): the pane writes both tiers; pin/unpin is the migration gesture
+
+A design amendment settled in dialogue (2026-07-22); the slice lands as its
+own shipped Update. §SD4 closed with "the pane is thus the instrument that
+turns a signal into a constant" — that one-way wiring is what this amendment
+retires. The pane keeps its detection, chain, folding, and draft mechanics
+unchanged; what changes is where drift goes.
+
+**The gap, by the frictions it manufactures.** Four costs, all one asymmetry —
+the store has no typed writer, and the typed writer has no store path:
+
+1. **Filling a picker pins.** Fill the folded `tl_min`/`tl_max` picker and the
+   Timeline's own writes are shadowed (ADR-0097 slice-5 D1) — the panel
+   co-writer is silently disconnected. §SD8 deferred an *annotation* for this;
+   an annotation explains the trap without removing it.
+2. **Pinning kills Live.** A fully SET-bound buffer has no unbound slots, so
+   the Live toggle vanishes (`hasUnboundSlots`). The `selection_country` fix
+   (fab0e1b4) documents the resulting dead end: the only affordance for "give
+   this name a value" was the one that breaks the reactive path.
+3. **The unfilled-input gate points away from its own fix.** D3 blocks Run on
+   an unfilled name while the typed widget for exactly that name sits in the
+   pane, unable to fill the store; the user detours to the Graph tab's raw
+   text field and loses the typed control (and the fold) on the way.
+4. **Two human surfaces, disjoint capabilities.** Params pane: typed, paired,
+   buffer-tier only. Signals editor: raw text, store-tier only. Same names,
+   same declared types, no shared machinery.
+
+**Decision.** The pane becomes tier-aware; the tier is *derived*, never
+stored:
+
+- **SET-presence is the mode bit.** A name with a `SET` in the buffer is
+  pinned; a name without one is live. No new persisted state — slice-5 D1
+  already defines this bit, the pane just stops forcing one direction.
+- **Drift forks by tier.** Phase 3 of the value path
+  (`syncParamDriftToPrelude`) routes a pinned name's drift to the prelude
+  rebuild exactly as today, and a live name's drift to
+  `setSignalRawFrom(name, draft, "param-widget")` — a new writer identity
+  beside `signals-editor`, so provenance distinguishes the two human
+  surfaces. Widgets are untouched: they keep mutating draft strings
+  (`paramWidgetI` is unchanged; the fork is orchestrator-only, the
+  `renderFoldLabel` precedent for orchestrator-drawn chrome beside a claim).
+- **Pin/unpin is an explicit per-claim gesture.** Pin authors a `SET` from
+  the current store value (today's author path); unpin removes the `SET` via
+  the prelude rebuild and seeds the store with the same value. It operates on
+  the *claim*, so a folded pair migrates as a unit and the pane cannot
+  produce a mixed-tier range. A tier migration moves the draft's last-synced
+  baseline with it: the frame after an unpin neither re-authors the `SET` nor
+  tears the draft.
+- **Mixed-tier pairs decline the fold.** A hand-authored half-pinned pair
+  (`SET` for one half only) is a §SD5 decline; §SD7's near-miss line grows
+  the case and names the halves and their tiers.
+- **Live drafts are reseed-guarded.** The slice-5e Signals-editor rule
+  applies to the pane: an idle draft follows external writes (a
+  Timeline-published extent shows up in the picker), typing wins while the
+  store holds still. Co-writing resolves as last-writer-wins with visible
+  provenance — the store already dedups identical re-sets, so a settled
+  co-writer is quiet.
+- **The fill default flips, deliberately.** Typing into a widget whose name
+  has no `SET` writes the live tier; it no longer authors a `SET` as a side
+  effect. This changes behaviour only for previously-unbound names — exactly
+  the cases where author-on-fill manufactures frictions 1–3 — and a buffer
+  whose prelude already binds every slot behaves identically. Pinned-tier
+  editing (a name with a `SET`) is unchanged.
+
+**What this buys inside the existing model, unpriced:** a live widget write
+flips the staleness witness and auto-runs under Live (an ordinary
+provenance'd store write); Run resolution and the history snapshot already
+carry store values, so reproducibility via D4 is untouched; a folded pair in
+live mode emits both halves in one frame, and the frame-snapshot rule makes
+the range move atomic for every consumer; and D3's Run-block hint gains its
+fill affordance — the empty, highlighted live widget in the pane *is* the
+"set parameter {x}" empty-state, typed.
+
+**Rejected:**
+
+- *A tuple-typed single slot for ranges* (`{r:Tuple(DateTime64, DateTime64)}`):
+  costs `tupleElement` noise at every SQL reference and kills per-name reuse —
+  a bands query reading only `{tl_min}` cannot reference half a tuple. Stem
+  pairing already gives the ergonomics at the widget layer; the store stays
+  flat name→raw.
+- *A defaults/domain side-syntax* (a comment DSL beside the buffer): the
+  pinned tier already is the defaults mechanism — author a `SET` to share a
+  default, the recipient unpins to go live. A second syntax would be state
+  beside the buffer that a paste half-loses.
+- *Keeping author-on-fill as the default with an opt-in live mode*: preserves
+  the trap as the default and makes the pane's write target ambiguous per
+  interaction. The SET-presence rule keeps the mode legible from the buffer
+  alone.
+
+**Deferred (with triggers):**
+
+- **Live relative time.** The range picker's evaluator already resolves
+  `now() - INTERVAL 1 HOUR` — at the pinned tier that is evaluate-once-at-
+  edit. A live-tier expression draft re-evaluated at emit time would give
+  rolling windows, but a sliding `now()` is a wall-clock writer feeding the
+  auto-run loop — the feedback class ADR-0097's acyclicity guard does not
+  cover. Wants deliberate quantization and a Live circuit-breaker witness
+  first. Trigger: the first real need for rolling windows under Live.
+- **Query-backed value domains** (the dropdown-from-a-node widget): under
+  §SD2 this is a registration ahead of the catch-all tail, not a redesign.
+  Its own decision when it comes.
+- §SD8's **signal-pin annotation** retires here — superseded: the pin state
+  becomes the control itself, not a label about a side effect.
+
+**Delivery:** one slice — the drift fork + writer identity, the pin/unpin
+gesture with baseline migration, the reseed guard, the mixed-tier decline +
+§SD7 line, and the pane's unfilled highlight. Tests: live drift lands in the
+store with `param-widget` provenance and no buffer change; pin authors the
+`SET` from the store value; unpin removes it, seeds the store, and does not
+re-author next frame; an idle live draft follows a Timeline extent write
+while a mid-edit draft does not; a folded live pair emits both halves at one
+snapshot; a half-pinned pair declines with the named reason; Live reappears
+after unpin; an empty live widget blocks Run with the pane hint; a fully
+SET-bound buffer is behaviour-identical end to end.
+
 ## References
 
 - [ADR-0016](./0016-imzero2-time-range-picker.md) — the range picker and its
