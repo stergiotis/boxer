@@ -43,11 +43,13 @@ type signalChromeRow struct {
 
 // reservedSignalTypes maps the panel-written signal names to the types their
 // writers encode for — the Map's viewport slots (ADR-0096 SD6), the
-// Timeline's extent (slice 5d), and the selection cursor (slice 5b). Used by
-// the chrome to type rows the buffer does not declare, and to cross-check
-// buffer declarations for conflicts.
+// Timeline's extent (slice 5d), and the selection cursor + the World's clicked
+// country (slice 5b). Used by the chrome to type rows the buffer does not
+// declare, to cross-check buffer declarations for conflicts, and (for the
+// String-typed names) to give a referenced-but-unwritten signal an empty
+// default rather than blocking the Run — see signalDefaultsEmpty.
 func reservedSignalTypes() (out map[string]string) {
-	out = make(map[string]string, len(mapViewportSignals)+3)
+	out = make(map[string]string, len(mapViewportSignals)+4)
 	for _, s := range mapViewportSignals {
 		out[string(s)] = "UInt32"
 	}
@@ -56,7 +58,23 @@ func reservedSignalTypes() (out map[string]string) {
 	out[string(signalSelection)] = "Int64"
 	out[string(signalSelectionNode)] = "String"
 	out[string(signalSelectionID)] = "UInt64"
+	out[string(signalSelectionCountry)] = "String"
 	return
+}
+
+// signalDefaultsEmpty reports whether a referenced reserved signal takes an
+// implicit empty value when nothing has written it yet. True for the
+// String-typed panel signals (selection_country, selection_node): their unset
+// state means "nothing selected", a valid empty filter the server accepts, so a
+// query referencing the name runs from the first frame instead of blocking as
+// an unfilled input until a panel emits — selection_country is only written on
+// a World click, so before the first click there is otherwise nothing to fill
+// it and the Run is refused. The numeric reserved signals (the Map viewport,
+// the Timeline extent) have no safe empty literal and are seeded by their own
+// panels on render, so they never default here and still gate the Run until
+// their panel writes them.
+func signalDefaultsEmpty(name string) bool {
+	return reservedSignalTypes()[name] == "String"
 }
 
 // signalTypeTable returns name → distinct declared types for the current
@@ -123,7 +141,7 @@ func (inst *PlayApp) collectSignalChrome() (rows []signalChromeRow) {
 			Writer:   h.Writer,
 			Rev:      h.Rev,
 			Pinned:   pinned,
-			Unfilled: referenced[name] && !pinned && !heldSet[name],
+			Unfilled: referenced[name] && !pinned && !heldSet[name] && !signalDefaultsEmpty(name),
 		}
 		row.Types = append(row.Types, types[name]...)
 		if rt, isReserved := reserved[name]; isReserved {
@@ -149,6 +167,9 @@ func (inst *PlayApp) unfilledInputs() (names []string) {
 			if _, heldHere := inst.frameSig.Get(s.Name); heldHere {
 				continue
 			}
+		}
+		if signalDefaultsEmpty(s.Name) {
+			continue // reserved String signal → empty default, never blocks a Run
 		}
 		names = append(names, s.Name)
 	}

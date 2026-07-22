@@ -1194,6 +1194,17 @@ func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string,
 		if _, resolved := sigParams["param_"+s.Name]; resolved {
 			continue
 		}
+		if signalDefaultsEmpty(s.Name) {
+			// Reserved String panel signal with nothing written yet: send its
+			// empty "nothing selected" value so the query runs from the first
+			// frame instead of blocking. A panel write (e.g. a World click)
+			// resolves via the store above and takes precedence over this.
+			if sigParams == nil {
+				sigParams = make(map[string]string, 1)
+			}
+			sigParams["param_"+s.Name] = ""
+			continue
+		}
 		unfilled = append(unfilled, s.Name)
 	}
 	return

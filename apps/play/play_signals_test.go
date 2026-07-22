@@ -463,6 +463,49 @@ func TestUnfilledInputsFromCaches(t *testing.T) {
 	require.False(t, app.hasUnboundSlots())
 }
 
+// A referenced reserved String signal (selection_country) with nothing written
+// defaults to "" instead of blocking the Run: the World drill-down runs from the
+// first frame rather than demanding a manual seed (which, via a SET, would
+// shadow the click). Numeric reserved signals keep gating until their panel
+// writes them, and a written value wins over the default.
+func TestReservedStringSignalDefaultsEmptyOnRun(t *testing.T) {
+	// Pure predicate: only the String-typed reserved signals default.
+	for _, name := range []string{"selection_country", "selection_node"} {
+		require.True(t, signalDefaultsEmpty(name), "%s is a reserved String signal", name)
+	}
+	for _, name := range []string{"vp_min_x", "tl_min", "selection", "selection_id", "nope"} {
+		require.False(t, signalDefaultsEmpty(name), "%s must still gate the Run", name)
+	}
+
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app.frameSig = app.graph.signals()
+
+	// Nothing written: selection_country resolves to the empty default; the
+	// non-reserved z still blocks.
+	sig, _, unfilled := app.resolveRunSignals("SELECT {selection_country:String}, {z:UInt64}")
+	v, ok := sig["param_selection_country"]
+	require.True(t, ok, "selection_country is resolved (as empty), not left unfilled")
+	require.Equal(t, "", v)
+	require.Equal(t, []string{"z"}, unfilled, "the non-reserved z still blocks")
+
+	// A World click (store write) takes precedence over the empty default.
+	app.graph.setSignalRaw("selection_country", "BRA")
+	app.frameSig = app.graph.signals()
+	sig2, _, _ := app.resolveRunSignals("SELECT {selection_country:String}")
+	require.Equal(t, "BRA", sig2["param_selection_country"], "a written value wins over the default")
+}
+
+// The auto-run / Run gate (unfilledInputs) treats an unwritten reserved String
+// signal as filled, so the World drill-down query is runnable before the first
+// click; a non-reserved unbound slot still blocks.
+func TestUnfilledInputsDefaultsReservedString(t *testing.T) {
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app.paramSlots = []paramSlot{{Name: "selection_country", Type: "String"}, {Name: "z", Type: "UInt64"}}
+	app.frameSig = app.graph.signals()
+	require.Equal(t, []string{"z"}, app.unfilledInputs(),
+		"selection_country defaults to empty; only z is unfilled")
+}
+
 // The live toggle's decision, gate by gate (D2): only a signal move on an
 // unchanged, fully-filled, non-observing, settled buffer re-runs.
 func TestShouldAutoRunGates(t *testing.T) {
