@@ -374,6 +374,34 @@ func resolveSignalNames(names []string, bound map[string]bool, sig SignalEnvI) (
 	return
 }
 
+// resolveSignalNamesWithDefaults is resolveSignalNames plus the reserved-String
+// empty default (signalDefaultsEmpty): an unbound, unwritten reserved String
+// signal — selection_country before the first World click — resolves to "".
+// The Run (resolveRunSignals) and the staleness witness (runSignalsDiverged)
+// MUST resolve identically: if only the Run applied the default, its
+// lastSentSigParams would carry `param_x → ""` while the witness omitted the
+// key, so maps.Equal reads perpetual divergence and pins the auto-run loop on
+// (and marks the result forever stale). Both paths share this helper to stay in
+// lockstep.
+func resolveSignalNamesWithDefaults(names []string, bound map[string]bool, sig SignalEnvI) (out map[string]string) {
+	out = resolveSignalNames(names, bound, sig)
+	for _, name := range names {
+		if bound[name] {
+			continue
+		}
+		if _, ok := out["param_"+name]; ok {
+			continue
+		}
+		if signalDefaultsEmpty(name) {
+			if out == nil {
+				out = make(map[string]string, 1)
+			}
+			out["param_"+name] = ""
+		}
+	}
+	return
+}
+
 // setSignal sets a param's value, bumping the revision only when the value
 // actually changes (ADR-0097 SD4: minimality starts at the input). Unchanged
 // re-sets are no-ops, so a node is not re-run for a signal that did not move.

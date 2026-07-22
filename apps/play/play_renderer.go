@@ -1186,23 +1186,18 @@ func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string,
 	for _, s := range slots {
 		names = append(names, s.Name)
 	}
-	sigParams = resolveSignalNames(names, bound, inst.frameSig)
+	// resolveSignalNamesWithDefaults applies the reserved-String empty default
+	// (e.g. selection_country before the first World click) so such a query
+	// runs from the first frame instead of blocking as unfilled; a later panel
+	// write resolves via the store and takes precedence. runSignalsDiverged
+	// resolves through the same helper so the shipped params and the staleness
+	// check agree (otherwise the default reads as perpetual divergence).
+	sigParams = resolveSignalNamesWithDefaults(names, bound, inst.frameSig)
 	for _, s := range slots {
 		if bound[s.Name] {
 			continue
 		}
 		if _, resolved := sigParams["param_"+s.Name]; resolved {
-			continue
-		}
-		if signalDefaultsEmpty(s.Name) {
-			// Reserved String panel signal with nothing written yet: send its
-			// empty "nothing selected" value so the query runs from the first
-			// frame instead of blocking. A panel write (e.g. a World click)
-			// resolves via the store above and takes precedence over this.
-			if sigParams == nil {
-				sigParams = make(map[string]string, 1)
-			}
-			sigParams["param_"+s.Name] = ""
 			continue
 		}
 		unfilled = append(unfilled, s.Name)

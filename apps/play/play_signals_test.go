@@ -506,6 +506,33 @@ func TestUnfilledInputsDefaultsReservedString(t *testing.T) {
 		"selection_country defaults to empty; only z is unfilled")
 }
 
+// Regression (auto-run loop): the reserved-String default must resolve
+// identically on the Run path (resolveRunSignals) and the staleness witness
+// (runSignalsDiverged). Otherwise the last Run ships param_selection_country=""
+// while the witness — reading only the store — omits it, so maps.Equal reports
+// perpetual divergence and shouldAutoRun re-runs every frame (the top bar
+// flickers, the app pins). With nothing written and lastSent carrying the
+// default, the witness must read "not diverged"; a later store write diverges.
+func TestReservedStringDefaultDoesNotDiverge(t *testing.T) {
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app.sql = "SELECT {selection_country:String}"
+	app.lastSentSql = "SELECT {selection_country:String}"
+	app.paramSlots = []paramSlot{{Name: "selection_country", Type: "String"}}
+	app.frameSig = app.graph.signals() // store empty
+
+	sig, _, _ := app.resolveRunSignals(app.sql)
+	require.Equal(t, map[string]string{"param_selection_country": ""}, sig)
+	app.lastSentSigParams = sig // what the Run shipped
+
+	require.False(t, app.runSignalsDiverged(),
+		"defaulted-empty selection_country must not read as diverged (would loop auto-run)")
+
+	// A World click writes the store → now it diverges (the intended re-run).
+	app.graph.setSignalRaw("selection_country", "BRA")
+	app.frameSig = app.graph.signals()
+	require.True(t, app.runSignalsDiverged(), "a written value diverges from the last Run")
+}
+
 // The live toggle's decision, gate by gate (D2): only a signal move on an
 // unchanged, fully-filled, non-observing, settled buffer re-runs.
 func TestShouldAutoRunGates(t *testing.T) {

@@ -113,7 +113,11 @@ func (inst *PlayApp) runSignalsDiverged() (diverged bool) {
 	for name := range inst.paramSyncedValues {
 		bound[name] = true
 	}
-	resolvedNow := resolveSignalNames(names, bound, inst.frameSig)
+	// Resolve through the same helper the Run uses (resolveRunSignals), so a
+	// reserved-String default (selection_country → "") that the last Run
+	// shipped also appears here — otherwise it reads as perpetual divergence
+	// and pins the auto-run loop on / marks the result forever stale.
+	resolvedNow := resolveSignalNamesWithDefaults(names, bound, inst.frameSig)
 	diverged = !maps.Equal(resolvedNow, inst.lastSentSigParams)
 	return
 }
