@@ -78,11 +78,25 @@ func GenerateTicks(min, max, step float64) []float64 {
 // It also handles the "Negative Zero" edge case.
 func GenerateTicksRobust(start, end, step float64) []float64 {
 	const eps = 1.0e-10
+	// An axis never needs more than a few dozen ticks. Cap far above that so a
+	// legitimate range is untouched, but a degenerate one cannot spin this loop
+	// effectively forever (or OOM): when step is tiny relative to the span —
+	// which the Talbot search probes at extreme magnitudes, where a near-zero-
+	// width span sits near 2^63 — (end-start)/step explodes to ~1e14+.
+	const maxTicks = 10000
 	var ticks []float64
 
 	// 1. Calculate the integer number of steps to avoid loop drift
 	// We add a tiny epsilon to handle floating point inequality strictness
 	count := math.Floor((end-start)/step + 1e-10)
+	// A non-finite step or range yields Inf/NaN count; int(Inf) is a huge value
+	// that would hang the loop. Bail (the caller falls back to a simpler axis).
+	if math.IsNaN(count) || math.IsInf(count, 0) {
+		return ticks
+	}
+	if count > maxTicks {
+		count = maxTicks
+	}
 
 	for i := 0; i <= int(count); i++ {
 		// 2. Use fma (Fused Multiply Add) if available, or standard mult

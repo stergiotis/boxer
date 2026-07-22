@@ -524,6 +524,16 @@ func (inst *ColorScale) ensureAxis(min, max, axisLen float64) finddivisions.Axis
 // failure any path falls back to a two-tick endpoint axis and logs a warning
 // (validation policy: log + safe default).
 func (inst *ColorScale) computeAxis(min, max, axisLen float64) finddivisions.AxisLayout {
+	if !axisRangeResolvable(min, max) {
+		// Degenerate / float-unresolvable range: a zero-or-reversed span, a
+		// non-finite endpoint, or a span so small relative to its magnitude that
+		// it is a single value at float64 resolution (e.g. a uint64 id/hash
+		// column near 2^63 where every row is ~equal). No ticker can place
+		// meaningful interior ticks there, and the Talbot search would probe
+		// sub-ULP steps whose offset/count loops cannot advance — a hang. An
+		// endpoints-only axis is the honest, always-terminating result.
+		return endpointsAxis(min, max)
+	}
 	switch inst.ticker {
 	case TickerHeckbert:
 		return inst.computeAxisHeckbert(min, max)
@@ -532,6 +542,25 @@ func (inst *ColorScale) computeAxis(min, max, axisLen float64) finddivisions.Axi
 	default:
 		return inst.computeAxisTalbot(min, max, axisLen)
 	}
+}
+
+// axisRangeResolvable reports whether [min,max] has a finite, positive span wide
+// enough — relative to its magnitude — for a tick search to resolve interior
+// steps. Below ~2^-40 of the magnitude the span is effectively a single value at
+// float64 resolution: candidate steps round to no-ops and the Talbot offset /
+// count loops can spin without advancing (a hang). The 2^-40 cut sits ~2^13
+// above the ~2^-53 magnitude at which the loops actually stall, so it rejects
+// only ranges that already read as a single value.
+func axisRangeResolvable(min, max float64) bool {
+	if math.IsNaN(min) || math.IsNaN(max) || math.IsInf(min, 0) || math.IsInf(max, 0) {
+		return false
+	}
+	span := max - min
+	if span <= 0 {
+		return false
+	}
+	mag := math.Max(math.Abs(min), math.Abs(max))
+	return mag == 0 || span > mag*0x1p-40
 }
 
 // computeAxisTalbot uses Talbot + TypesettingScorer for linear colormaps and
