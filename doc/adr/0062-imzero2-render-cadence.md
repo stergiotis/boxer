@@ -118,6 +118,19 @@ Accepted 2026-05-30 by @spx. Continuous default with reactive opt-in via `IMZERO
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
 
+## Updates
+
+### 2026-07-22 — Frame-pacing measurements: single-process control, governor and vsync A/B
+
+A follow-up investigation into reports of uneven ("flaky") scrolling measured the pacing directly — the [`metrics`](../../public/thestack/imzero2/metrics/metrics.go) overlay's fps distribution plus a `WAYLAND_DEBUG` `wl_surface.commit`-cadence capture. The results refine the Context's analysis without changing the decision:
+
+- **Compute and GC are not the jitter** (as the Context already found): steady-state `render + interpret` is ~1 ms and stable; GC runs every ~2 s with sub-millisecond stop-the-world pauses. The jitter lives in the `sync`/present-wait.
+- **The steady "60→30" doubling is a compositor/toolkit floor, not the Go↔Rust lock-step.** A single-process `eframe`/`wgpu` control app (continuous repaint, `AutoVsync`, same viewport) on the same COSMIC session showed the *same* doubling rate — the second process and the FFFI2 pipe add nothing measurable to it. The lock-step still makes `sync` inherit display-wait (SD3), but it is not the source of the missed-refresh beat.
+- **CPU governor / EPP moves the tail, not the beat.** `powersave` (`amd-pstate-epp`) widens the worst-case tail via wake-up latency on the mostly-idle loop; `performance` tightens it (≈−30 % pacing std in one A/B) but leaves the steady doubling untouched.
+- **`vsync` induces the beat.** With `-vsync on` a present that lands just past the refresh deadline slips a whole refresh (60→30); `-vsync off` (the compositor composites, so no tearing) markedly reduces the doubling. This is the one app-side lever, and it reinforces the SD6 argument that a hidden-throttle option is largely redundant under `vsync`.
+
+No decision change: the continuous default and the real-work slow-frame gate stand. The practical upshot — under continuous + `vsync` a compositor pacing floor remains, addressable only by `-vsync off` or the compositor — is captured as a how-to: [triage janky rendering](../howto/imzero2-render-troubleshooting.md).
+
 ## References
 
 - [ADR-0009](0009-environment-variable-registry.md) — environment-variable registry; `CategorialStringVar` and the default-on-unrecognised-value convention used here.

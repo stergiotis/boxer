@@ -26,6 +26,7 @@ the linked document wins.
 | See *why* the architecture is the way it is | [doc/adr/](./doc/adr/) |
 | Configure behaviour via env vars | [doc/env-vars.md](./doc/env-vars.md) |
 | Run a task end to end | [doc/howto/](./doc/howto/) |
+| Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
 | Report a vulnerability | [SECURITY.md](./SECURITY.md) |
 
 ## Build & test: read this first
