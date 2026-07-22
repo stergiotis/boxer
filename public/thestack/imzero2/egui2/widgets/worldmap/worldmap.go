@@ -219,9 +219,8 @@ func (inst *Widget) SetValues(vals map[CountryIdx]float64) {
 		inst.dirty = true
 		return
 	}
-	if vmin == vmax { // degenerate range — NewConfig requires min < max
-		vmin -= 0.5
-		vmax += 0.5
+	if !(vmin < vmax) { // degenerate range — NewConfig requires min < max
+		vmin, vmax = widenDegenerate(vmin)
 	}
 	if inst.cm == nil || vmin != inst.vmin || vmax != inst.vmax {
 		inst.vmin, inst.vmax = vmin, vmax
@@ -235,6 +234,16 @@ func (inst *Widget) SetValues(vals map[CountryIdx]float64) {
 		)
 	}
 	inst.dirty = true
+}
+
+// widenDegenerate brackets a single value v with a symmetric pad so
+// colormap.NewConfig (which requires min < max) accepts it and v lands on the
+// palette midpoint. The pad is scaled to v's magnitude: a fixed ±0.5 vanishes
+// below the float64 ULP for a large value (a uint64 id/hash near 2^63 has a ULP
+// of ~2048), which would leave min == max and panic NewConfig.
+func widenDegenerate(v float64) (min, max float64) {
+	pad := math.Max(0.5, math.Abs(v)*0x1p-30)
+	return v - pad, v + pad
 }
 
 // SetPresence replaces the data with membership only: the given countries

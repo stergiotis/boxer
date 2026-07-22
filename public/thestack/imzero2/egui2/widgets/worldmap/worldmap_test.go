@@ -137,6 +137,27 @@ func TestFitBox(t *testing.T) {
 	}
 }
 
+// widenDegenerate must keep min < max at every magnitude — SetValues feeds the
+// result to colormap.NewConfig, which panics on min == max. A fixed ±0.5 pad
+// vanishes below the float64 ULP near 2^63 (a uint64 id/hash column where the
+// clicked-country drill-down leaves every row equal), which crashed the value
+// fill; the pad now scales to the magnitude.
+func TestWidenDegenerate(t *testing.T) {
+	for _, v := range []float64{
+		0, 5, -5, 0.25, 1e6, -1e6, 1e15, 1e18, -1e18,
+		float64(uint64(1) << 63),  // ~9.2e18, ULP ~2048 — the panic case
+		-float64(uint64(1) << 63), // and negative
+	} {
+		mn, mx := widenDegenerate(v)
+		if !(mn < mx) {
+			t.Fatalf("widenDegenerate(%g) = [%g, %g]; NewConfig needs min < max", v, mn, mx)
+		}
+		if math.IsInf(mn, 0) || math.IsInf(mx, 0) || math.IsNaN(mn) || math.IsNaN(mx) {
+			t.Fatalf("widenDegenerate(%g) = [%g, %g]; must stay finite", v, mn, mx)
+		}
+	}
+}
+
 func TestProjection(t *testing.T) {
 	// Aspect of the Natural Earth projection's world extent (Šavrič et al.):
 	// ~1.923 wide:high.
