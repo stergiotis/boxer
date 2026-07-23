@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"iter"
+	"math"
 
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/containers/ragged"
@@ -90,6 +91,30 @@ type WalkersCameraValue struct {
 type ScrollDeltaValue struct {
 	X float32
 	Y float32
+}
+
+// CanvasWheelValue is the cached payload of the R23 canvas-wheel drain
+// (ADR-0140): the scroll/zoom a paintCanvas captured last frame while the
+// pointer was over it, via .CaptureScroll() / .CaptureZoom(). ScrollX/ScrollY
+// are in egui logical pixels (X+ = right, Y+ = up); Zoom is a multiplicative
+// factor (1.0 = no change). HoverX/HoverY are the pointer relative to the
+// canvas origin at capture time — the zoom anchor, scoped to this canvas so it
+// does not depend on the single-slot global canvas pointer. Absent (the canvas
+// did not own the wheel this frame) reads as the identity: {0, 0, 1, NaN, NaN}.
+type CanvasWheelValue struct {
+	ScrollX float32
+	ScrollY float32
+	Zoom    float32
+	HoverX  float32
+	HoverY  float32
+}
+
+// nilCanvasWheel is the value returned for a canvas that did not own the wheel
+// last frame: no scroll, identity zoom, no hover anchor.
+var nilCanvasWheel = CanvasWheelValue{
+	Zoom:   1.0,
+	HoverX: float32(math.NaN()),
+	HoverY: float32(math.NaN()),
 }
 
 // ModifiersValue is the cached payload of the R17 modifiers drain.
@@ -190,6 +215,9 @@ type StateManager struct {
 	r19ZoomDelta     ZoomDeltaValue
 	r20Pointer       PointerValue
 	r21UiRects       map[uint64]UiRectValue
+	// r23CanvasWheel holds LAST frame's per-canvas wheel captures (ADR-0140),
+	// keyed by canvas widget id. Rebuilt each Sync; read via GetCanvasWheel.
+	r23CanvasWheel map[uint64]CanvasWheelValue
 	// r22StarvedTextures holds LAST frame's starved-texture report: ids the
 	// host interpreted with no pixels and no usable cache entry (a send-once
 	// upload lost to a discarded hidden-tab buffer, or an idle-LRU eviction).
@@ -221,6 +249,7 @@ func NewStateManager() *StateManager {
 		overriddenBindingIds: containers.NewHashSet[uint64](128),
 		fetcher:              NewFetcher(),
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
+		r23CanvasWheel:       make(map[uint64]CanvasWheelValue, 8),
 		r22StarvedTextures:   make(map[uint64]struct{}, 8),
 	}
 }
@@ -244,8 +273,15 @@ func (inst *StateManager) GetWalkersCamera() WalkersCameraValue {
 }
 
 // GetScrollDelta returns last frame's R16 smoothed scroll-wheel delta.
-// Use for pan/zoom gestures in canvases. Values are in egui logical
-// pixels; X positive = scroll right, Y positive = scroll up.
+// Values are in egui logical pixels; X positive = scroll right, Y positive
+// = scroll up.
+//
+// This is the whole-Context global: it is UNSCOPED (every reader in a frame
+// sees the same value, regardless of which widget the pointer is over) and
+// NON-CONSUMING. For a canvas that should own the wheel only while hovered —
+// and fence egui-native ScrollAreas out of the same gesture — prefer
+// [StateManager.GetCanvasWheel] with a paintCanvas .CaptureScroll() (ADR-0140).
+// Reserve this for a genuine whole-viewport scroll reader.
 func (inst *StateManager) GetScrollDelta() ScrollDeltaValue {
 	return inst.r16ScrollDelta
 }
@@ -269,6 +305,11 @@ func (inst *StateManager) GetAvailableSize() AvailableSizeValue {
 // egui's combined gesture detection. 1.0 = no change. Prefer this over
 // reading scroll + modifiers for zoom because Ctrl+scroll is consumed
 // by egui before reaching smooth_scroll_delta.
+//
+// Whole-Context global (unscoped, non-consuming): any hovered canvas in the
+// frame sees the same value. For per-canvas zoom ownership — so a gesture over
+// one canvas does not also zoom a sibling — prefer [StateManager.GetCanvasWheel]
+// with a paintCanvas .CaptureZoom() (ADR-0140).
 func (inst *StateManager) GetZoomDelta() ZoomDeltaValue {
 	return inst.r19ZoomDelta
 }
@@ -309,6 +350,22 @@ func (inst *StateManager) GetF1KeyPressed() (pressed bool) {
 func (inst *StateManager) GetUiRect(seq uint64) (v UiRectValue, ok bool) {
 	v, ok = inst.r21UiRects[seq]
 	return
+}
+
+// GetCanvasWheel returns last frame's R23 wheel capture for the paintCanvas
+// identified by the given handle (ADR-0140) — the scroll/zoom that canvas owned
+// while the pointer was over it, having opted in via .CaptureScroll() /
+// .CaptureZoom(). A canvas that did not own the wheel (pointer elsewhere, or no
+// opt-in) reads as the identity {0, 0, 1, NaN, NaN}, so callers can act
+// unconditionally: Zoom==1 and ScrollX/Y==0 mean "no gesture for me". Because
+// capture is gated on egui's own contains_pointer() hit-test, exactly one
+// canvas owns a given gesture — a sibling canvas or a wrapping ScrollArea will
+// not also see it. One-frame lag, like every register here.
+func (inst *StateManager) GetCanvasWheel(h widgethandle.WidgetHandle) CanvasWheelValue {
+	if v, ok := inst.r23CanvasWheel[h.Resolve()]; ok {
+		return v
+	}
+	return nilCanvasWheel
 }
 
 // GetPointer returns last frame's R20 latest-pointer-position from egui's
@@ -680,6 +737,26 @@ func (inst *StateManager) Sync() {
 				MinY: minY[i],
 				MaxX: maxX[i],
 				MaxY: maxY,
+			}
+			i++
+		}
+	}
+	{
+		ids, scrollXs, scrollYs, zooms, hoverXs, hoverYSeq := fetcher.FetchR23CanvasWheel()
+		for k := range inst.r23CanvasWheel {
+			delete(inst.r23CanvasWheel, k)
+		}
+		i := 0
+		for hoverY := range hoverYSeq {
+			if i >= len(ids) {
+				break
+			}
+			inst.r23CanvasWheel[ids[i]] = CanvasWheelValue{
+				ScrollX: scrollXs[i],
+				ScrollY: scrollYs[i],
+				Zoom:    zooms[i],
+				HoverX:  hoverXs[i],
+				HoverY:  hoverY,
 			}
 			i++
 		}

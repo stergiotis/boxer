@@ -2353,6 +2353,17 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub r14_canvas_hover_y: f32,
     pub r14_canvas_clicked: bool,
 
+    // ADR-0140 canvas wheel capture: per-id scroll/zoom (and canvas-local
+    // hover) a paintCanvas owned this frame while the pointer was over it, via
+    // .CaptureZoom() / .CaptureScroll(). Parallel arrays keyed by the canvas
+    // widget id, drained by FetchR23CanvasWheel; cleared in prepare_next_frame.
+    r23_canvas_wheel_ids: Vec<u64>,
+    r23_canvas_wheel_scroll_x: Vec<f32>,
+    r23_canvas_wheel_scroll_y: Vec<f32>,
+    r23_canvas_wheel_zoom: Vec<f32>,
+    r23_canvas_wheel_hover_x: Vec<f32>,
+    r23_canvas_wheel_hover_y: Vec<f32>,
+
     // egui_plot click pointer state — set by the plot apply when the user
     // primary-clicks anywhere inside the plot area. Stores plot-data
     // coordinates (already transformed via PlotResponse.transform), keyed
@@ -2619,6 +2630,12 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r14_canvas_hover_x: f32::NAN,
             r14_canvas_hover_y: f32::NAN,
             r14_canvas_clicked: false,
+            r23_canvas_wheel_ids: Vec::with_capacity(16),
+            r23_canvas_wheel_scroll_x: Vec::with_capacity(16),
+            r23_canvas_wheel_scroll_y: Vec::with_capacity(16),
+            r23_canvas_wheel_zoom: Vec::with_capacity(16),
+            r23_canvas_wheel_hover_x: Vec::with_capacity(16),
+            r23_canvas_wheel_hover_y: Vec::with_capacity(16),
             r15_plot_clicked_id: 0,
             r15_plot_clicked_x: f64::NAN,
             r15_plot_clicked_y: f64::NAN,
@@ -2705,6 +2722,21 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             }
             self.r7_ids.clear();
             self.r7_responses.clear();
+        }
+
+        {
+            if !self.r23_canvas_wheel_ids.is_empty() {
+                tracing::debug!(
+                    len = self.r23_canvas_wheel_ids.len(),
+                    "r23 canvas-wheel not empty (captures not fetched), clearing"
+                );
+            }
+            self.r23_canvas_wheel_ids.clear();
+            self.r23_canvas_wheel_scroll_x.clear();
+            self.r23_canvas_wheel_scroll_y.clear();
+            self.r23_canvas_wheel_zoom.clear();
+            self.r23_canvas_wheel_hover_x.clear();
+            self.r23_canvas_wheel_hover_y.clear();
         }
 
         // Hyperlink zones — cleared so a removed link doesn't carry into
@@ -6087,6 +6119,29 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_u64h(len, self.r22_starved_texture_ids.drain(..))?;
                 self.io.flush()?;
             }
+            FuncProcId::FetchR23CanvasWheel => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR23CanvasWheel");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let len = self.r23_canvas_wheel_ids.len();
+                debug_assert_eq!(len, self.r23_canvas_wheel_scroll_x.len());
+                debug_assert_eq!(len, self.r23_canvas_wheel_scroll_y.len());
+                debug_assert_eq!(len, self.r23_canvas_wheel_zoom.len());
+                debug_assert_eq!(len, self.r23_canvas_wheel_hover_x.len());
+                debug_assert_eq!(len, self.r23_canvas_wheel_hover_y.len());
+                self.io.write_plain_u64h(len, self.r23_canvas_wheel_ids.drain(..))?;
+                self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_x.drain(..))?;
+                self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_y.drain(..))?;
+                self.io.write_plain_f32h(len, self.r23_canvas_wheel_zoom.drain(..))?;
+                self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_x.drain(..))?;
+                self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
+                self.io.flush()?;
+            }
             FuncProcId::FetchR7 => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::FetchR7");
@@ -8470,6 +8525,8 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                 let mut sense_click = false;
                 let mut sense_drag = false;
                 let mut sense_hover = false;
+                let mut capture_zoom = false;
+                let mut capture_scroll = false;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(PaintCanvasBuilderMethodId::from_repr)?;
@@ -8504,6 +8561,18 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                             sense_drag = drag;
                             sense_hover = hover;
                         }
+                        PaintCanvasBuilderMethodId::CaptureZoom => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintCanvasBuilderMethodId::CaptureZoom");
+                            capture_zoom = true;
+                        }
+                        PaintCanvasBuilderMethodId::CaptureScroll => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match PaintCanvasBuilderMethodId::CaptureScroll"
+                            );
+                            capture_scroll = true;
+                        }
                     }
                 }
                 if d == 0 {
@@ -8536,6 +8605,36 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                     } else {
                         self.r14_canvas_hover_x = f32::NAN;
                         self.r14_canvas_hover_y = f32::NAN;
+                    }
+                    // ADR-0140 hover-scoped wheel capture: own the wheel only while the pointer
+                    // is over this canvas (egui's own topmost-under-pointer hit-test). Scroll is
+                    // consumed (zeroed) so egui-native ScrollAreas and later readers this frame
+                    // do not also scroll; zoom needs no global mutation. Delivered per canvas id
+                    // with the canvas-local hover, so the Go side anchors zoom without the racy
+                    // single-slot global r14 pointer.
+                    if (capture_zoom || capture_scroll) && resp.contains_pointer() {
+                        let mut wheel_scroll_x = 0.0f32;
+                        let mut wheel_scroll_y = 0.0f32;
+                        let mut wheel_zoom = 1.0f32;
+                        if capture_zoom {
+                            wheel_zoom = ui.input(|inp| inp.zoom_delta());
+                        }
+                        if capture_scroll {
+                            let sd = ui.input(|inp| inp.smooth_scroll_delta);
+                            wheel_scroll_x = sd.x;
+                            wheel_scroll_y = sd.y;
+                            ui.input_mut(|inp| inp.smooth_scroll_delta = egui::Vec2::ZERO);
+                        }
+                        let hx = self.r14_canvas_hover_x;
+                        let hy = self.r14_canvas_hover_y;
+                        self.r23_canvas_wheel_push(
+                            i.value(),
+                            wheel_scroll_x,
+                            wheel_scroll_y,
+                            wheel_zoom,
+                            hx,
+                            hy,
+                        );
                     }
                     if let Some(op) = opacity {
                         painter.set_opacity(op);
@@ -13661,6 +13760,16 @@ egui::Window::new(label).id(i);
     pub fn r7_push(&mut self, i: u64, r: ResponseFlags) {
         self.r7_ids.push(i);
         self.r7_responses.push(r);
+    }
+    // ADR-0140 canvas wheel capture push — one row per canvas that owned the
+    // wheel this frame (see paintCanvas apply). Drained by FetchR23CanvasWheel.
+    pub fn r23_canvas_wheel_push(&mut self, i: u64, sx: f32, sy: f32, zoom: f32, hx: f32, hy: f32) {
+        self.r23_canvas_wheel_ids.push(i);
+        self.r23_canvas_wheel_scroll_x.push(sx);
+        self.r23_canvas_wheel_scroll_y.push(sy);
+        self.r23_canvas_wheel_zoom.push(zoom);
+        self.r23_canvas_wheel_hover_x.push(hx);
+        self.r23_canvas_wheel_hover_y.push(hy);
     }
     pub fn r9_u64_push(&mut self, i: u64, r: u64) {
         self.r9_u64_ids.push(i);

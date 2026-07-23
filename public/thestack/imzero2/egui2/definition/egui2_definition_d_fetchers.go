@@ -384,5 +384,37 @@ self.io.write_plain_b(pressed)?;
 		AddReturnValue("pressed", ctabb.B).
 		Build())
 
+	// ADR-0140: drains the per-frame canvas wheel captures stamped by a
+	// paintCanvas with .CaptureZoom()/.CaptureScroll() while the pointer was
+	// over it. Six homogeneous arrays keyed by the canvas widget id — a canvas
+	// that did not own the wheel contributes no row (Go defaults it to
+	// {0,0,1,NaN,NaN}). Scroll is egui logical px (x+ = right, y+ = up); zoom is
+	// multiplicative (1.0 = none); hoverX/Y are the pointer relative to the
+	// canvas origin at capture time (the zoom anchor, avoiding the racy global
+	// r14 pointer register).
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchR23CanvasWheel").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.r23_canvas_wheel_ids.len();
+debug_assert_eq!(len, self.r23_canvas_wheel_scroll_x.len());
+debug_assert_eq!(len, self.r23_canvas_wheel_scroll_y.len());
+debug_assert_eq!(len, self.r23_canvas_wheel_zoom.len());
+debug_assert_eq!(len, self.r23_canvas_wheel_hover_x.len());
+debug_assert_eq!(len, self.r23_canvas_wheel_hover_y.len());
+self.io.write_plain_u64h(len, self.r23_canvas_wheel_ids.drain(..))?;
+self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_x.drain(..))?;
+self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_y.drain(..))?;
+self.io.write_plain_f32h(len, self.r23_canvas_wheel_zoom.drain(..))?;
+self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_x.drain(..))?;
+self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
+{{SendMessage}}
+`)).
+		AddReturnValue("ids", ctabb.U64h).
+		AddReturnValue("scrollXs", ctabb.F32h).
+		AddReturnValue("scrollYs", ctabb.F32h).
+		AddReturnValue("zooms", ctabb.F32h).
+		AddReturnValue("hoverXs", ctabb.F32h).
+		AddReturnValue("hoverYs", ctabb.F32h).
+		Build())
+
 	return
 }

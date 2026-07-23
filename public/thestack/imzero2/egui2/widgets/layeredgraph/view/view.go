@@ -130,18 +130,19 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		// response (drag) and the zoom-gesture register, both scoped to the canvas.
 		zoom, panX, panY := 1.0, 0.0, 0.0
 		if vs := opts.State; vs != nil {
-			resp := sm.GetResponse(widgethandle.Make(wis.PrepareStr("canvas").Derive()))
-			// Zoom only while the pointer is over this canvas (don't hijack a scroll
-			// meant for something else). GetZoomDelta is egui's combined gesture
-			// (Ctrl+scroll / pinch / +-).
-			if resp.HasContainsPointer() {
-				if zd := sm.GetZoomDelta().Zoom; zd > 0 && zd != 1 {
-					z := vs.Zoom
-					if z <= 0 {
-						z = 1
-					}
-					vs.Zoom = min(max(z*float64(zd), 0.2), 5.0)
+			canvasH := widgethandle.Make(wis.PrepareStr("canvas").Derive())
+			resp := sm.GetResponse(canvasH)
+			// ADR-0140: the wheel is scoped to this canvas by the .CaptureZoom() on
+			// the PaintCanvas below — GetCanvasWheel is non-identity only when the
+			// pointer was over us last frame, so there is no separate
+			// contains-pointer gate and no read of the global zoom register that a
+			// sibling canvas would also see.
+			if zd := sm.GetCanvasWheel(canvasH).Zoom; zd > 0 && zd != 1 {
+				z := vs.Zoom
+				if z <= 0 {
+					z = 1
 				}
+				vs.Zoom = min(max(z*float64(zd), 0.2), 5.0)
 			}
 			// Pan while the primary button is held after a press that began on this
 			// canvas. HasIsPointerButtonDown stays true even once the cursor leaves
@@ -231,7 +232,10 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		// enabled, so Render can read drag + zoom over the canvas.
 		cv := c.PaintCanvas(wis.PrepareStr("canvas"), canvasW, canvasH).Background(st.Background)
 		if opts.State != nil {
-			cv = cv.Sense(true, true, true)
+			// CaptureZoom (ADR-0140) scopes the zoom gesture to this canvas; Render
+			// reads it back via GetCanvasWheel. Scroll is left uncaptured — pan is
+			// drag-based, so plain wheel stays free for an enclosing pane.
+			cv = cv.Sense(true, true, true).CaptureZoom()
 		}
 		cv.Send()
 	}

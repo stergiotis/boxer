@@ -35,7 +35,7 @@ status: draft
 | CopyTextToClipboard | Procedural | No | 1 | 0 | - | - |
 | DatePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
 | DateTimePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
-| DockAreaRaw | BuilderFactory | Yes | 4 | 0 | 0 | Immediate |
+| DockAreaRaw | BuilderFactory | Yes | 5 | 0 | 0 | Immediate |
 | DragValueF64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
 | DragValueI64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
 | DragValueU64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
@@ -63,6 +63,8 @@ status: draft
 | FetchR19ZoomDelta | Fetcher | No | 0 | 0 | - | - |
 | FetchR20Pointer | Fetcher | No | 0 | 0 | - | - |
 | FetchR21UiRects | Fetcher | No | 0 | 0 | - | - |
+| FetchR22StarvedTextures | Fetcher | No | 0 | 0 | - | - |
+| FetchR23CanvasWheel | Fetcher | No | 0 | 0 | - | - |
 | FetchR7 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9EtPrefetch | Fetcher | No | 0 | 0 | - | - |
 | FetchR9F64 | Fetcher | No | 0 | 0 | - | - |
@@ -112,7 +114,7 @@ status: draft
 | NodeLeaf | BuilderFactory | Yes | 0 | 1 | 0 | Immediate, Retained |
 | PaintAbsoluteOverlay | Procedural | No | 0 | 0 | - | - |
 | PaintArrow | BuilderFactory | No | 6 | 0 | 0 | Immediate |
-| PaintCanvas | BuilderFactory | Yes | 2 | 0 | 3 | Immediate, Retained |
+| PaintCanvas | BuilderFactory | Yes | 2 | 0 | 5 | Immediate, Retained |
 | PaintCircleFilled | BuilderFactory | No | 4 | 0 | 0 | Immediate |
 | PaintCircleStroke | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | PaintCubicBezier | BuilderFactory | No | 10 | 0 | 0 | Immediate |
@@ -180,7 +182,7 @@ status: draft
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TextEdit | BuilderFactory | Yes | 2 | 0 | 12 | Immediate |
+| TextEdit | BuilderFactory | Yes | 2 | 0 | 13 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | Tree | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
@@ -530,6 +532,7 @@ DateTimePickerButton
 | tabTitles | plain | sh |
 | initialLayout | plain | u8h |
 | noScrollTabIds | plain | u64h |
+| activateTabId | plain | u64 |
 
 #### Deferred Block Maps
 
@@ -1478,6 +1481,8 @@ PaintCmd
 - **Background**(col: u32)
 - **Opacity**(op: f32)
 - **Sense**(click: b, drag: b, hover: b)
+- **CaptureZoom**()
+- **CaptureScroll**()
 
 #### Return Type
 
@@ -2771,6 +2776,7 @@ TableHeaderText
 - **ClipText**(val: b)
 - **CharLimit**(chars: u32)
 - **InsertAtCursor**(snippet: s)
+- **HighlightJob**()
 
 #### Return Type
 
@@ -3684,6 +3690,35 @@ Block
 | minY | f32h |
 | maxX | f32h |
 | maxY | f32h |
+
+---
+
+### FetchR22StarvedTextures
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+
+---
+
+### FetchR23CanvasWheel
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+| scrollXs | f32h |
+| scrollYs | f32h |
+| zooms | f32h |
+| hoverXs | f32h |
+| hoverYs | f32h |
 
 ---
 

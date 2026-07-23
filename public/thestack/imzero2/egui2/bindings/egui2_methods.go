@@ -298,6 +298,12 @@ func (inst *DockAreaFluid) ActivateTab(tabId uint64) {
 // zoom flicker). Content overflowing a no-scroll tab is clipped, not
 // scrollable — size the body to the leaf.
 //
+// A paintCanvas that adopts .CaptureScroll() (ADR-0140) consumes the wheel
+// itself while hovered, so it no longer needs this to avoid the double-scroll
+// and can live under a plain Tab's ScrollArea. TabNoScroll remains for the
+// walkers map (below), for widgets that read the wheel globally without
+// consuming, and for bodies that must clip rather than scroll.
+//
 // The walkers read-without-consume half is reported upstream as
 // https://github.com/podusowski/walkers/issues/544; when a consuming
 // walkers lands, map-hosting tabs can return to plain Tab.

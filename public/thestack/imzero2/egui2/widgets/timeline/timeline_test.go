@@ -80,6 +80,70 @@ func TestCursorInsideCanvas(t *testing.T) {
 	}
 }
 
+// TestApplyZoomInput exercises the ADR-0140-migrated zoom handler: it consumes
+// a per-canvas CanvasWheelValue (factor + canvas-local anchor) instead of the
+// global zoom register, and is a pure viewport transform, so it needs no FFI.
+func TestApplyZoomInput(t *testing.T) {
+	const effW float32 = 100
+	// A timeline pinned to a known [0,1000]ms view. explicitRange short-circuits
+	// pinToCurrentView so the handler operates on exactly these bounds.
+	newTL := func() *Timeline {
+		return &Timeline{explicitRange: true, viewMinMS: 0, viewMaxMS: 1000}
+	}
+
+	t.Run("identity_zoom_is_noop", func(t *testing.T) {
+		tl := newTL()
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 1.0, HoverX: 50}, effW)
+		if tl.viewMinMS != 0 || tl.viewMaxMS != 1000 {
+			t.Errorf("zoom==1 mutated view: [%d,%d]", tl.viewMinMS, tl.viewMaxMS)
+		}
+	})
+
+	// NaN anchor is how "this canvas did not own the wheel" arrives (the R23
+	// default) — even a real zoom factor must be ignored.
+	t.Run("nan_anchor_is_noop", func(t *testing.T) {
+		tl := newTL()
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: float32(math.NaN())}, effW)
+		if tl.viewMinMS != 0 || tl.viewMaxMS != 1000 {
+			t.Errorf("NaN anchor mutated view: [%d,%d]", tl.viewMinMS, tl.viewMaxMS)
+		}
+	})
+
+	// Zoom in x2 anchored at the left edge: span halves, the anchored instant
+	// (t=0) stays put.
+	t.Run("zoom_in_left_anchor", func(t *testing.T) {
+		tl := newTL()
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: 0}, effW)
+		if got := tl.viewMaxMS - tl.viewMinMS; got != 500 {
+			t.Errorf("span: got %d want 500", got)
+		}
+		if tl.viewMinMS != 0 {
+			t.Errorf("left anchor moved: viewMinMS=%d want 0", tl.viewMinMS)
+		}
+	})
+
+	// Zoom in x2 anchored at the centre: span halves around t=500.
+	t.Run("zoom_in_centre_anchor", func(t *testing.T) {
+		tl := newTL()
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: effW / 2}, effW)
+		if tl.viewMinMS != 250 || tl.viewMaxMS != 750 {
+			t.Errorf("centre anchor: got [%d,%d] want [250,750]", tl.viewMinMS, tl.viewMaxMS)
+		}
+	})
+
+	// Zoom out (factor < 1) widens the span; centre anchor keeps t=500 centred.
+	t.Run("zoom_out_centre_anchor", func(t *testing.T) {
+		tl := newTL()
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 0.5, HoverX: effW / 2}, effW)
+		if got := tl.viewMaxMS - tl.viewMinMS; got != 2000 {
+			t.Errorf("span: got %d want 2000", got)
+		}
+		if tl.viewMinMS != -500 || tl.viewMaxMS != 1500 {
+			t.Errorf("centre anchor: got [%d,%d] want [-500,1500]", tl.viewMinMS, tl.viewMaxMS)
+		}
+	})
+}
+
 func TestSplitLines(t *testing.T) {
 	cases := []struct {
 		in   string

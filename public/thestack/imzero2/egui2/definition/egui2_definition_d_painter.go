@@ -315,6 +315,17 @@ func definitionsPainterBlock() []*ir.BuilderFactoryNode {
 			CodeClientRust(rustClientCode("opacity = Some(op);\n")).EndMethod().
 			BeginMethod("sense").Arg("click", ctabb.B).Arg("drag", ctabb.B).Arg("hover", ctabb.B).
 			CodeClientRust(rustClientCode("sense_click = click; sense_drag = drag; sense_hover = hover;\n")).EndMethod().
+			// ADR-0140: opt in to owning the wheel while the pointer is over this
+			// canvas. captureZoom is pure per-id read (no global mutation, since
+			// only canvas widgets read zoom_delta); captureScroll additionally
+			// zeroes the global smooth_scroll_delta so egui-native ScrollAreas /
+			// later readers this frame do not also scroll. Read back per canvas id
+			// via StateManager.GetCanvasWheel; needs a sense that yields a response
+			// (Sense.hover() is enough for contains_pointer()).
+			BeginMethod("captureZoom").
+			CodeClientRust(rustClientCode("capture_zoom = true;\n")).EndMethod().
+			BeginMethod("captureScroll").
+			CodeClientRust(rustClientCode("capture_scroll = true;\n")).EndMethod().
 			Build()...).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
@@ -324,6 +335,8 @@ let mut opacity: Option<f32> = None;
 let mut sense_click = false;
 let mut sense_drag = false;
 let mut sense_hover = false;
+let mut capture_zoom = false;
+let mut capture_scroll = false;
 `)).
 		WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
@@ -344,6 +357,29 @@ if {{EguiUiOptionalOuter}}.is_some() {
     } else {
         self.r14_canvas_hover_x = f32::NAN;
         self.r14_canvas_hover_y = f32::NAN;
+    }
+    // ADR-0140 hover-scoped wheel capture: own the wheel only while the pointer
+    // is over this canvas (egui's own topmost-under-pointer hit-test). Scroll is
+    // consumed (zeroed) so egui-native ScrollAreas and later readers this frame
+    // do not also scroll; zoom needs no global mutation. Delivered per canvas id
+    // with the canvas-local hover, so the Go side anchors zoom without the racy
+    // single-slot global r14 pointer.
+    if (capture_zoom || capture_scroll) && resp.contains_pointer() {
+        let mut wheel_scroll_x = 0.0f32;
+        let mut wheel_scroll_y = 0.0f32;
+        let mut wheel_zoom = 1.0f32;
+        if capture_zoom {
+            wheel_zoom = ui.input(|inp| inp.zoom_delta());
+        }
+        if capture_scroll {
+            let sd = ui.input(|inp| inp.smooth_scroll_delta);
+            wheel_scroll_x = sd.x;
+            wheel_scroll_y = sd.y;
+            ui.input_mut(|inp| inp.smooth_scroll_delta = egui::Vec2::ZERO);
+        }
+        let hx = self.r14_canvas_hover_x;
+        let hy = self.r14_canvas_hover_y;
+        self.r23_canvas_wheel_push({{Id}}.value(), wheel_scroll_x, wheel_scroll_y, wheel_zoom, hx, hy);
     }
     if let Some(op) = opacity {
         painter.set_opacity(op);

@@ -937,7 +937,10 @@ func (inst *Timeline) Render() {
 func (inst *Timeline) renderBody() {
 	stateMgr := c.CurrentApplicationState.StateManager
 	cp := stateMgr.GetCanvasPointer()
-	zoom := stateMgr.GetZoomDelta()
+	// ADR-0140: read the wheel scoped to THIS canvas (only non-identity when the
+	// pointer was over us last frame), not the global zoom register that any
+	// hovered canvas would also see.
+	wheel := stateMgr.GetCanvasWheel(widgethandle.Make(inst.ids.PrepareStr(canvasIdKey).Derive()))
 	avail := stateMgr.GetAvailableSize()
 
 	effW := inst.effectiveContainerW(avail)
@@ -955,7 +958,7 @@ func (inst *Timeline) renderBody() {
 	// the pan/zoom input handling below is genuinely gated on interactivity.
 	c.CaptureAvailableSize()
 	if inst.interactionEnabled {
-		inst.applyZoomInput(zoom, cp, effW)
+		inst.applyZoomInput(wheel, effW)
 		inst.applyPanInput(stateMgr, labelW, effW)
 	}
 
@@ -997,7 +1000,12 @@ func (inst *Timeline) renderBody() {
 		// arbitrate click vs drag for us: a gesture that travels past the
 		// drag threshold stops reporting clicked(), so a pan never lands a
 		// selection on the bar it started over.
-		canvas = canvas.Sense(true, true, true)
+		//
+		// CaptureZoom (ADR-0140) scopes the zoom gesture to this canvas — the
+		// wheel is read back per canvas id via GetCanvasWheel. Plain scroll is
+		// deliberately NOT captured, so it stays free to scroll an enclosing
+		// pane while the pointer is over the strip.
+		canvas = canvas.Sense(true, true, true).CaptureZoom()
 	}
 	canvas.Send()
 
@@ -1152,11 +1160,17 @@ func (inst *Timeline) effectiveContainerW(avail c.AvailableSizeValue) (w float32
 // at the cursor X so the time under the cursor stays fixed across the
 // gesture. zoom.Zoom is a multiplicative factor: 1.0 = no change,
 // >1.0 = zoom in (smaller span), <1.0 = zoom out (larger span).
-func (inst *Timeline) applyZoomInput(zoom c.ZoomDeltaValue, cp c.CanvasPointerValue, effW float32) {
-	if zoom.Zoom == 1.0 || zoom.Zoom <= 0 {
+// applyZoomInput zooms the viewport about the cursor from THIS canvas's wheel
+// capture (ADR-0140). Both the zoom factor and the anchor (wheel.HoverX, the
+// pointer relative to the canvas) come from the per-canvas R23 register, so the
+// gesture is owned by whichever canvas the pointer was actually over — a scroll
+// over a neighbouring etable or a sibling canvas no longer zooms this strip, and
+// the anchor no longer depends on the single-slot global canvas pointer.
+func (inst *Timeline) applyZoomInput(wheel c.CanvasWheelValue, effW float32) {
+	if wheel.Zoom == 1.0 || wheel.Zoom <= 0 {
 		return
 	}
-	if math.IsNaN(float64(cp.HoverX)) || effW <= 0 {
+	if math.IsNaN(float64(wheel.HoverX)) || effW <= 0 {
 		return
 	}
 	if !inst.pinToCurrentView() {
@@ -1166,10 +1180,10 @@ func (inst *Timeline) applyZoomInput(zoom c.ZoomDeltaValue, cp c.CanvasPointerVa
 	if spanMS <= 0 {
 		return
 	}
-	anchorFrac := clamp01(cp.HoverX / effW)
+	anchorFrac := clamp01(wheel.HoverX / effW)
 	anchorMS := inst.viewMinMS + int64(float64(anchorFrac)*float64(spanMS))
 	// zoom > 1 → smaller span; zoom < 1 → larger span. Invert + clamp.
-	mul := clamp01ToRange(1.0/zoom.Zoom, minZoomMul, maxZoomMul)
+	mul := clamp01ToRange(1.0/wheel.Zoom, minZoomMul, maxZoomMul)
 	newSpan := max(int64(float64(spanMS)*float64(mul)), 1)
 	inst.viewMinMS = anchorMS - int64(float64(anchorFrac)*float64(newSpan))
 	inst.viewMaxMS = inst.viewMinMS + newSpan

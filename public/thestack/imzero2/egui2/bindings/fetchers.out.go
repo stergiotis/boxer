@@ -133,6 +133,16 @@ func (inst *Fetcher) FetchR22StarvedTextures() (ids iter.Seq[uint64]) {
 	ids = inst.iterateU64h()
 	return
 }
+func (inst *Fetcher) FetchR23CanvasWheel() (ids []uint64, scrollXs []float32, scrollYs []float32, zooms []float32, hoverXs []float32, hoverYs iter.Seq[float32]) {
+	inst.invoke(FuncProcIdFetchR23CanvasWheel)
+	ids = inst.readU64h()
+	scrollXs = inst.readF32h()
+	scrollYs = inst.readF32h()
+	zooms = inst.readF32h()
+	hoverXs = inst.readF32h()
+	hoverYs = inst.iterateF32h()
+	return
+}
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchR7)
 	ids = inst.readU64h()

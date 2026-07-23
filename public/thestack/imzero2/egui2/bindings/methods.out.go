@@ -2526,6 +2526,20 @@ func (inst PaintCanvasFluid) Sense(click bool, drag bool, hover bool) PaintCanva
 	return inst
 }
 
+func (inst PaintCanvasFluid) CaptureZoom() PaintCanvasFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintCanvasMethodIdCaptureZoom))
+
+	return inst
+}
+
+func (inst PaintCanvasFluid) CaptureScroll() PaintCanvasFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintCanvasMethodIdCaptureScroll))
+
+	return inst
+}
+
 func (inst PaintCanvasFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(PaintCanvasMethodIdBuild))
