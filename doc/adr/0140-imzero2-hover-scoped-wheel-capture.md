@@ -215,11 +215,10 @@ to generated code):
   `paintCanvas` + a new per-id register (six parallel arrays — id, scrollX/Y,
   zoom, hoverX/Y — R23) written in the canvas apply from the existing `resp`, the
   `fetchR23CanvasWheel` drain, and `StateManager.GetCanvasWheel(handle)`.
-- **M2 — migrate timeline + layeredgraph** (SD1, SD2 — code landed and
-  unit-tested) then verify one gesture no longer crosses widgets on the
-  **interactive host, not the tour** (the tour starts on one widget and never
-  exercises the cross-widget edge). The interactive verification is the
-  remaining gate.
+- **M2 — migrate timeline + layeredgraph** ✓ — SD1, SD2 code landed and
+  unit-tested; the cross-widget behaviour was then verified on the **interactive
+  host, not the tour** (the tour starts on one widget and never exercises the
+  cross-widget edge).
 - **M3 — documentation** ✓ — annotate `GetScrollDelta` / `GetZoomDelta` as
   unscoped (SD3) and relax the `TabNoScroll` guidance (SD4).
 
@@ -298,7 +297,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
-### 2026-07-23 — implemented (M1, M3, SD1–SD4); M2 interactive verify pending
+### 2026-07-23 — implemented and live-verified (M1–M3, SD1–SD4)
 
 Shipped the same day as acceptance:
 
@@ -330,11 +329,10 @@ Shipped the same day as acceptance:
   doc notes a `.CaptureScroll()` canvas no longer needs it.
 - **Verification.** `cargo check` (desktop + headless — the interpreter is
   shared), `go build` / `go vet` on the affected trees, and the timeline test
-  suite all pass. **M2's interactive cross-widget check** (scrolling an etable
-  beside a timeline no longer zooms the timeline; a graph in another pane does
-  not steal a timeline's wheel) is the remaining gate — it needs the live host,
-  since the screenshot tour starts on a single widget and never exercises the
-  cross-widget edge.
+  suite all pass. **M2 live-verified by the maintainer (2026-07-23):** the
+  original cross-widget bug — an etable and a timeline reacting to one wheel
+  gesture — is resolved on the interactive host (the screenshot tour could not
+  exercise this edge, as it starts on a single widget).
 
 ## References
 
