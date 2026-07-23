@@ -55,7 +55,10 @@ var AllowedSpecialIds = map[string]bool{
 	"runtime.chlocal":          true,
 	"runtime.clipboard":        true,
 	"runtime.sysmetrics":       true,
+	"runtime.adhoc":            true,
+	"runtime.windowhost":       true,
 	"runtime.introspect.query": true,
+	"runtime.introspect.topo":  true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.
