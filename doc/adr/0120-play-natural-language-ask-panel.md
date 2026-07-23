@@ -74,9 +74,20 @@ Evidence (2026-07 literature review; primary sources under References):
   from schema text alone, rising to 67.7–68.7% — +17 to +23 points — once
   a ~4 KB hand-authored semantic layer (measure definitions,
   disambiguation rules) is added to the prompt (arXiv:2604.25149).
+- The enterprise floor is lower still, and public benchmarks flatter it.
+  On private warehouses no model saw in training (BEAVER — 812 tables
+  across 19 domains, arXiv:2409.02038) the best agentic systems score in
+  the low teens — ~11% against ~63% for the same method on a public suite
+  — and even hand-supplied join hints lift a real 1,400-table warehouse
+  only to ~30%. Because public schemas sit in the training data, their
+  numbers (the ClickHouse figures above included) read as upper bounds;
+  evaluation on a deployment's own unseen data is the only measure to
+  trust. This is why the golden question→SQL corpus below is deferred
+  work, not a nicety (Stonebraker & Chen, CACM, 2026-07).
 - Production deployments converge on one recipe regardless of vendor:
   curated semantics over raw DDL, verified example queries, show-the-SQL,
-  human-in-the-loop; documentation quality outweighs model choice.
+  human-in-the-loop (a user cannot vouch for a query they cannot read);
+  documentation quality outweighs model choice.
 - The failure modes differ in kind: raw generation fails *silently*
   (plausible wrong numbers via join fan-out, NULL handling, ambiguous
   business terms); a semantic layer fails *loudly* ("unsupported").
@@ -262,7 +273,10 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
   owns grounding (SD4) and the DSL vocabulary (SD7).
 - Evidence: arXiv:2604.25149 (ClickHouse semantic layer, +17–23 pts);
   arXiv:2411.07763 (Spider 2.0) and arXiv:2305.03111 (BIRD) for the
-  realism collapse; dbt-labs/dbt-llm-sl-bench (semantic layer vs raw
-  generation — vendor-reported).
+  realism collapse; arXiv:2409.02038 (BEAVER — the enterprise-warehouse
+  floor and the benchmark-vs-production gap), framed by Stonebraker &
+  Chen, "If You Think You Can Do Real-World Text-to-SQL" (CACM, 2026-07);
+  dbt-labs/dbt-llm-sl-bench (semantic layer vs raw generation —
+  vendor-reported).
 - Engine: `public/db/clickhouse/text2sql2/{orchestrator,llmclient,cache,observers}`,
   `public/llm/openaichat`, `public/db/clickhouse/text2sql` (v1 + CLI).

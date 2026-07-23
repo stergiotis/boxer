@@ -29,6 +29,18 @@ grounding is not enough; the numbers that matter here:
   fan-out, NULL handling, ambiguous business terms); semantic layers fail
   *loudly* ("unsupported"). Production post-mortems consistently rank
   documentation quality above model choice.
+- On real private warehouses the floor is lower than any public number
+  suggests — messy overlapping schemas, materialized views with
+  duplicated semantics, opaque machine-generated identifiers, and local
+  vocabulary a generic model cannot infer. The best agentic systems reach
+  only the low teens on such data (BEAVER, arXiv:2409.02038: ~11% against
+  ~63% for the same method on a public suite), and public accuracy is
+  itself inflated by schema contamination in the training set, so the
+  numbers above are upper bounds. This is precisely the obstacle the
+  authored overlay exists to counter: T1 is where a human records the
+  site knowledge a schema harvest cannot carry — what a measure actually
+  means, which join is safe at what cardinality, what an opaque code
+  column encodes (Stonebraker & Chen, CACM, 2026-07).
 
 The task is therefore not "text to ClickHouse SQL" but **text2dsl**: the
 generation target is the nanopass-validated canonical dialect —
@@ -236,6 +248,15 @@ settled decisions:
   silent-failure source; prose survives *inside* O3 where it belongs.
 - **Play-internal grounding assembler.** Rejected: multiple consumers
   exist today (CLI) and next (panel); this is an engine concern.
+- **LLM for parsing, optimizer for joins** (the SQL-first line, e.g.
+  RUBICON, arXiv:2604.21413): use the model only to read intent and let a
+  query optimizer choose joins, sidestepping join fan-out at the source.
+  Not adopted as the architecture — the generation target here is a
+  nanopass-validated DSL, and certified joins with cardinality notes
+  (SD2) fold the same fan-out knowledge into a form the grammar checks —
+  but the diagnosis it rests on, that real-world accuracy is bounded by
+  data and join semantics rather than syntax, is the one this ADR is
+  built on.
 
 ## Consequences
 
@@ -256,7 +277,10 @@ settled decisions:
 
 - T1 overlays are human work that cannot be fully automated; a stale or
   wrong overlay is worse than none. The lint catches drift and syntax,
-  not wrong business semantics.
+  not wrong business semantics. The enterprise evidence puts most of the
+  real-world accuracy gap in exactly this human data-modeling work: a
+  layer grounds generation but cannot repair a schema whose own structure
+  is the problem — it papers over the rot rather than removing it.
 - A new artifact class to specify, lint, document, and version.
 - Whole-scope rendering caps practical layer size until
   retrieval/selection lands.
@@ -318,6 +342,10 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
   already tables (passes, topology), the SD8 pattern.
 - Evidence: arXiv:2604.25149 (ClickHouse semantic layer, +17–23 pts);
   arXiv:2509.23338 (PARROT, cross-dialect <38.53%);
+  arXiv:2409.02038 (BEAVER, the enterprise-warehouse floor);
+  arXiv:2604.21413 (RUBICON, the SQL-first alternative);
+  Stonebraker & Chen, "If You Think You Can Do Real-World Text-to-SQL"
+  (CACM, 2026-07), for the benchmark-vs-production gap;
   dbt-labs/dbt-llm-sl-bench (vendor-reported).
 - Engine: `public/db/clickhouse/text2sql2/`, `public/db/clickhouse/text2sql`
   (v1 harvest query).
