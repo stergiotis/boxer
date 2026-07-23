@@ -39,6 +39,10 @@ go.work
 /out.json
 /results.json
 
+# Local planning / scratch notes at repo root (e.g. PLAN-*.md working docs).
+# Anchored so identically-named files in subdirs are unaffected.
+/PLAN-*.md
+
 # Rust build artifacts — cargo target directories under rust/<crate>/target.
 rust/*/target/
 
