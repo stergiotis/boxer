@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/http"
 	"github.com/stergiotis/boxer/public/app/commands/iconsgen"
 	"github.com/stergiotis/boxer/public/app/commands/keelsoncodec"
+	"github.com/stergiotis/boxer/public/app/commands/keelsonddl"
 	"github.com/stergiotis/boxer/public/app/commands/key"
 	"github.com/stergiotis/boxer/public/app/commands/queryrunsd"
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
@@ -104,6 +105,7 @@ func mainC() (exitCode int) {
 			key.NewCliCommand(),
 			queryrunsd.NewCliCommand(),
 			runtimecodegen.NewCliCommand(),
+			keelsonddl.NewCliCommand(),
 			sample.NewCliCommand(),
 			swisstopo.NewCliCommand(),
 			sysmetricsd.NewCliCommand(),
