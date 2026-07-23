@@ -75,15 +75,21 @@ Evidence (2026-07 literature review; primary sources under References):
   a ~4 KB hand-authored semantic layer (measure definitions,
   disambiguation rules) is added to the prompt (arXiv:2604.25149).
 - The enterprise floor is lower still, and public benchmarks flatter it.
-  On private warehouses no model saw in training (BEAVER — 812 tables
-  across 19 domains, arXiv:2409.02038) the best agentic systems score in
-  the low teens — ~11% against ~63% for the same method on a public suite
-  — and even hand-supplied join hints lift a real 1,400-table warehouse
-  only to ~30%. Because public schemas sit in the training data, their
-  numbers (the ClickHouse figures above included) read as upper bounds;
-  evaluation on a deployment's own unseen data is the only measure to
-  trust. This is why the golden question→SQL corpus below is deferred
-  work, not a nicety (Stonebraker & Chen, CACM, 2026-07).
+  BEAVER (arXiv:2409.02038) draws on four real enterprise warehouses —
+  starting from a 1,400+-table Oracle warehouse — and keeps the traits
+  public suites lack: schemas no model saw in training, "schema rot"
+  (repeated migrations leaving non-mnemonic, overlapping, undocumented
+  column names), idiosyncratic local vocabulary, and multi-join queries.
+  On it a pure LLM scores ~0%; RAG, prompt engineering, and an agentic
+  loop reach ~10%; handing the model the gold query's from- and
+  join-clauses lifts it only to ~30% — some 50 points below the 80–90%+
+  public leaderboards. Spider 2.0 closed only the query-complexity gap,
+  so agentic methods have climbed it; BEAVER's other three traits keep
+  real accuracy on the floor. The public numbers above — the ClickHouse
+  figures included — are therefore upper bounds, and evaluation on a
+  deployment's own unseen data is the only measure to trust; this is why
+  the golden question→SQL corpus below is deferred work, not a nicety
+  (Stonebraker & Chen, CACM, 2026-07).
 - Production deployments converge on one recipe regardless of vendor:
   curated semantics over raw DDL, verified example queries, show-the-SQL,
   human-in-the-loop (a user cannot vouch for a query they cannot read);
