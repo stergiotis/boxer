@@ -290,7 +290,7 @@ func (p *Program) override() (path string, ok bool) {
 	if p.OverrideEnv == "" {
 		return
 	}
-	v := strings.TrimSpace(os.Getenv(p.OverrideEnv))
+	v := strings.TrimSpace(os.Getenv(p.OverrideEnv)) //boxer:lint disable=CS011 reason="OverrideEnv names the variable at runtime; the static env registry keys on compile-time handles and cannot express this name-indirected lookup"
 	if v == "" {
 		return
 	}
