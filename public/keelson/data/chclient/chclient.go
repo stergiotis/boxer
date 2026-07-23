@@ -102,7 +102,7 @@ func (inst *Client) Ping(ctx context.Context) (err error) {
 // DDL and any SQL that does not return rows.
 func (inst *Client) Exec(ctx context.Context, sql string) (err error) {
 	var body io.ReadCloser
-	body, err = inst.postSQL(ctx, sql)
+	body, err = inst.postSQL(ctx, sql, nil)
 	if err != nil {
 		return
 	}
@@ -114,7 +114,24 @@ func (inst *Client) Exec(ctx context.Context, sql string) (err error) {
 // Query POSTs sql and returns the response body for caller consumption.
 // Caller MUST close. Format is whatever the SQL FORMAT clause specifies.
 func (inst *Client) Query(ctx context.Context, sql string) (body io.ReadCloser, err error) {
-	body, err = inst.postSQL(ctx, sql)
+	body, err = inst.postSQL(ctx, sql, nil)
+	return
+}
+
+// QueryParams is Query with server-side parameter binding: each params entry
+// rides the ClickHouse HTTP `param_<name>` URL channel, where the server
+// substitutes it into the matching `{<name>:Type}` placeholder in sql. The SQL
+// text itself stays constant, so values — including user-supplied ones — are
+// never concatenated into the statement.
+//
+// Keys are the bare placeholder names: params["q"] binds `{q:String}`. Values
+// are the raw ClickHouse text form for the placeholder's declared type
+// (`[1,2,3]` for an Array(UInt64), an unquoted string for a String). A nil or
+// empty map behaves exactly like Query.
+//
+// Caller MUST close the returned body.
+func (inst *Client) QueryParams(ctx context.Context, sql string, params map[string]string) (body io.ReadCloser, err error) {
+	body, err = inst.postSQL(ctx, sql, params)
 	return
 }
 
@@ -181,9 +198,30 @@ func (inst *Client) queryURL(queryParam string) (u string) {
 	return
 }
 
-func (inst *Client) postSQL(ctx context.Context, sql string) (body io.ReadCloser, err error) {
+// paramsURL appends the `param_<name>` query fields the ClickHouse HTTP
+// interface reads server-side bindings from. An empty params map leaves the
+// configured URL untouched, so the no-parameter path allocates nothing.
+func (inst *Client) paramsURL(params map[string]string) (u string) {
+	u = inst.cfg.URL
+	if len(params) == 0 {
+		return
+	}
+	vals := make(url.Values, len(params))
+	for k, v := range params {
+		vals.Set("param_"+k, v)
+	}
+	sep := "?"
+	if strings.Contains(u, "?") {
+		sep = "&"
+	}
+	u += sep + vals.Encode()
+	return
+}
+
+func (inst *Client) postSQL(ctx context.Context, sql string, params map[string]string) (body io.ReadCloser, err error) {
+	reqURL := inst.paramsURL(params)
 	var req *http.Request
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, inst.cfg.URL, strings.NewReader(sql))
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(sql))
 	if err != nil {
 		err = eh.Errorf("chclient post: build: %w", err)
 		return
@@ -193,16 +231,38 @@ func (inst *Client) postSQL(ctx context.Context, sql string) (body io.ReadCloser
 	var resp *http.Response
 	resp, err = inst.http.Do(req)
 	if err != nil {
+		// cfg.URL, not reqURL: the latter carries the bound parameter values,
+		// which are caller data (search terms, ids) and must not land in logs.
 		err = eb.Build().Str("url", inst.cfg.URL).Errorf("chclient post: do: %w", err)
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+		// The body carries ClickHouse's own diagnostic ("Code: 47. Unknown
+		// expression identifier …"), which names the offending column or
+		// placeholder. It goes into the message, not only the structured
+		// field, because consumers that surface errors to a human — a GUI
+		// panel, a CLI — render Error() and would otherwise show a bare
+		// "non-200" with the one useful sentence stripped out. Truncated in
+		// the message; the field keeps it whole for the log sink.
 		err = eb.Build().Int("status", resp.StatusCode).Str("response", string(bodyBytes)).
-			Errorf("chclient post: non-200")
+			Errorf("chclient post: non-200: %s", truncateForMessage(bodyBytes))
 		return
 	}
 	body = resp.Body
+	return
+}
+
+// maxMessageBody bounds how much of a ClickHouse error body is inlined into an
+// error message. Long enough for the "Code: N. Name: detail" prefix that
+// carries the diagnosis, short enough not to flood a log line or a GUI label.
+const maxMessageBody = 400
+
+func truncateForMessage(body []byte) (s string) {
+	s = strings.TrimSpace(string(body))
+	if len(s) > maxMessageBody {
+		s = s[:maxMessageBody] + "…"
+	}
 	return
 }
