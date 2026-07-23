@@ -249,7 +249,14 @@ mod tests {
         let res = resolve_sections(live, &rec);
         assert_covering(live, &res);
         // keyword section stretched over the typed char: 0..7 with tag 1
-        assert_eq!(res[0], Resolved { start: 0, stop: 7, color: Some(egui::Color32::from_gray(1)) });
+        assert_eq!(
+            res[0],
+            Resolved {
+                start: 0,
+                stop: 7,
+                color: Some(egui::Color32::from_gray(1))
+            }
+        );
         // trailing identifier shifted to 8..9
         assert_eq!(res.last().unwrap().start, 8);
         assert_eq!(res.last().unwrap().color, Some(egui::Color32::from_gray(3)));
@@ -325,8 +332,8 @@ mod tests {
         let res = resolve_sections(live, &rec);
         assert_covering(live, &res);
         // "FROM" keeps its color, shifted by +3
-        assert!(res
-            .iter()
-            .any(|r| r.start == 12 && r.stop == 16 && r.color == Some(egui::Color32::from_gray(4))));
+        assert!(res.iter().any(|r| r.start == 12
+            && r.stop == 16
+            && r.color == Some(egui::Color32::from_gray(4))));
     }
 }
