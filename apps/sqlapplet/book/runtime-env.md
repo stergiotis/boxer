@@ -8,6 +8,8 @@ endpoint: introspection
 tabs: [table, detail]
 ---
 
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # Runtime environment
 
 The boxer environment-variable registry (ADR-0009) with live values, read

@@ -7,6 +7,8 @@ icon: "🕘"
 tabs: [table, detail]
 ---
 
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # Recent queries
 
 The last completed statements of the env-configured ClickHouse, straight

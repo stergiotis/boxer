@@ -4,6 +4,8 @@ status: proposed
 date: 2026-07-18
 ---
 
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
 # ADR-0128: imzero2 remote access — a mesh draw-stream codec lane beside video
 
 ## Context

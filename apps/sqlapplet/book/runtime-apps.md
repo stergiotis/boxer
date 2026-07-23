@@ -7,6 +7,8 @@ icon: "🧩"
 endpoint: introspection
 ---
 
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
 # Runtime apps
 
 Every app registered in this boxer process, read live from the

@@ -42,7 +42,7 @@ zero-capacity stashes panicked at first use or over-admitted; absent
 upstream keys were re-fetched forever (already recorded as an ADR-0100
 deferral).
 
-## Decisions
+## Decision
 
 **Question.** How does item state survive tiering, where does failure
 bookkeeping live, and how far does the API cut go?
@@ -97,6 +97,22 @@ bookkeeping live, and how far does the API cut go?
   cache) is a no-op with the keys deferred to the next flush; constructors
   validate capacities and the fetcher.
 
+## Alternatives
+
+Per-decision alternatives are recorded inline above — each `D*` lists the
+options it rejected and why. Two package-level alternatives were weighed
+before choosing to harden in place:
+
+- **Rewrite `public/caching` from scratch.** Rejected: the fifteen defects
+  are localised to tiering, breaker bookkeeping, and iterator protocol; the
+  cache's structure (L1 + stash + work-item batching) survived the review.
+  A rewrite would discard working code and its test corpus to fix bounded,
+  understood faults.
+- **Document the defects and defer.** Rejected: several are silent
+  correctness faults — a `(nil, true)` hit that panics `GetLive`, SWR lost
+  during an outage — that violate the cache's stated contract, so they
+  cannot sit behind a "known issues" note.
+
 ## Consequences
 
 - The generated recordstore caches (`ADR-0100` SD5) get the documented
@@ -130,3 +146,13 @@ Four layers, replacing confirmatory-only coverage:
   pre-flush snapshot serve).
 - **Fuzz target** (`FuzzCacheOps`): the same driver fed by raw bytes,
   configuration included; the seed corpus runs as unit tests.
+
+## Status
+
+Proposed (2026-07-04) — pre-human-review, as the banner above states. The
+decision is under consideration and not yet accepted; treat this ADR as a
+living snapshot until it is.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
+for the edit-policy tiers.
