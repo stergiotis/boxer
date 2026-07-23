@@ -84,32 +84,61 @@ func (inst *Store) Ping(ctx context.Context) (err error) {
 	return
 }
 
-// SetupTable applies the boxer.facts DDL idempotently. engineClause
-// supplies the MergeTree partition / order / TTL settings — note the
-// columns must be referenced by their leeway-encoded physical names
-// (e.g. "id:id:u64:2k:0:0:") since the table has no logical aliases.
-func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
-	if engineClause == "" {
-		// Time-ordered by default: every audit read (RecentLogs,
-		// LifecyclesByRun, LatestState) is ORDER BY ts, so a sorted primary
-		// key turns those into a sparse-index range read instead of the full
-		// scan that ORDER BY tuple() forced. Retention — TTL / partitioning to
-		// bound a forever-growing heartbeat table — is intentionally left to
-		// the operator's own engine clause rather than imposed here, since it
-		// deletes data.
-		engineClause = "MergeTree() ORDER BY `ts:ts:z64:2k:0:0:`"
-	}
-	var ddl string
-	ddl, err = factsddl.ComposeCreateTableSql(engineClause)
-	if err != nil {
-		err = eh.Errorf("chstore: setup: compose ddl: %w", err)
+// defaultEngineClause is the MergeTree clause ComposeSetupSQL applies when
+// the caller passes an empty engineClause — the shape every first-run
+// initialisation (SetupTable(ctx, "")) uses.
+//
+// Time-ordered by default: every audit read (RecentLogs, LifecyclesByRun,
+// LatestState) is ORDER BY ts, so a sorted primary key turns those into a
+// sparse-index range read instead of the full scan that ORDER BY tuple()
+// forced. Retention — TTL / partitioning to bound a forever-growing
+// heartbeat table — is intentionally left to the operator's own engine
+// clause rather than imposed here, since it deletes data.
+const defaultEngineClause = "MergeTree() ORDER BY `ts:ts:z64:2k:0:0:`"
+
+// ComposeSetupSQL returns the exact DDL script SetupTable applies for cfg:
+// the CREATE DATABASE + CREATE TABLE statements (separated by ';'), composed
+// with no database connection and no side effects. An empty engineClause
+// selects defaultEngineClause — the first-run default. SetupTable is defined
+// in terms of this function, so a caller that only wants the SQL (the
+// `keelsonddl` CLI) emits byte-for-byte what first-run initialisation
+// executes, with no risk of drift.
+//
+// The columns are referenced by their leeway-encoded physical names (e.g.
+// "id:id:u64:2k:0:0:") since the table has no logical aliases.
+func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
+	if cfg.Database == "" || cfg.Table == "" {
+		err = eh.Errorf("chstore: compose setup sql: cfg requires Database + Table")
 		return
 	}
-	ddl = strings.ReplaceAll(ddl, factsschema.DatabaseName+"."+factsschema.TableName, inst.qualifiedTable())
-	if inst.cfg.Database != factsschema.DatabaseName {
-		ddl = strings.ReplaceAll(ddl,
+	if engineClause == "" {
+		engineClause = defaultEngineClause
+	}
+	sql, err = factsddl.ComposeCreateTableSql(engineClause)
+	if err != nil {
+		err = eh.Errorf("chstore: compose setup sql: %w", err)
+		return
+	}
+	sql = strings.ReplaceAll(sql,
+		factsschema.DatabaseName+"."+factsschema.TableName,
+		cfg.Database+"."+cfg.Table)
+	if cfg.Database != factsschema.DatabaseName {
+		sql = strings.ReplaceAll(sql,
 			"CREATE DATABASE IF NOT EXISTS "+factsschema.DatabaseName+";",
-			"CREATE DATABASE IF NOT EXISTS "+inst.cfg.Database+";")
+			"CREATE DATABASE IF NOT EXISTS "+cfg.Database+";")
+	}
+	return
+}
+
+// SetupTable applies the boxer.facts DDL idempotently against the live CH
+// connection. engineClause supplies the MergeTree partition / order / TTL
+// settings (empty selects defaultEngineClause). The SQL is composed by
+// ComposeSetupSQL, so this path and the `keelsonddl` CLI cannot drift.
+func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
+	var ddl string
+	ddl, err = ComposeSetupSQL(inst.cfg, engineClause)
+	if err != nil {
+		return
 	}
 	for _, stmt := range splitOnSemicolon(ddl) {
 		stmt = strings.TrimSpace(stmt)
