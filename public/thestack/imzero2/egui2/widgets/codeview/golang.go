@@ -94,7 +94,7 @@ func BuildGo(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 // prepared again returns the same retained holder without re-highlighting
 // (ADR-0125).
 func PrepareGo(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	return memo.prepare(memoKey{lang: langGo, src: src}, func() job {
+	return memo.prepare(memoKey{lang: langGo, src: src}, func() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 		return build(goSpec, src)
 	})
 }
@@ -119,5 +119,7 @@ func BuildGoLines(src string, firstLine int32, lastLine int32) typed.RetainedFff
 func PrepareGoLines(src string, firstLine int32, lastLine int32) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	return memo.prepare(
 		memoKey{lang: langGoLines, firstLine: firstLine, lastLine: lastLine, src: src},
-		func() job { return buildLines(goSpec, src, firstLine, lastLine) })
+		func() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+			return buildLines(goSpec, src, firstLine, lastLine)
+		})
 }

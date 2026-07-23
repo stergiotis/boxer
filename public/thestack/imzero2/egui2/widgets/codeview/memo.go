@@ -19,9 +19,6 @@ import (
 // A probe costs 30 ns for a query and ~7 µs for a 312 KB document: Go hashes the
 // whole string key at ~45 GB/s, three to four orders below the build it skips.
 
-// job is the retained CodeViewJob every builder returns.
-type job = typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-
 // memoBudgetBytes is the memo's byte budget, charged against source length
 // (see chargeOf). Bytes rather than entries because entries span a 31-byte
 // query to a 300 KB document — four orders of magnitude — so a count says
@@ -78,7 +75,7 @@ func chargeOf(k memoKey) int { return 2 * len(k.src) }
 // gets there.
 type memoT struct {
 	mu    sync.Mutex
-	lru   *simplelru.LRU[memoKey, job]
+	lru   *simplelru.LRU[memoKey, typed.RetainedFffiHolderTyped[c.CodeViewJobS]]
 	bytes int
 
 	// Observability for the tests; ADR-0125 defers real telemetry.
@@ -90,7 +87,7 @@ var memo = newMemo()
 
 func newMemo() *memoT {
 	inst := &memoT{}
-	lru, err := simplelru.NewLRU(memoMaxEntries, func(k memoKey, _ job) {
+	lru, err := simplelru.NewLRU(memoMaxEntries, func(k memoKey, _ typed.RetainedFffiHolderTyped[c.CodeViewJobS]) {
 		// Called by simplelru with inst.mu already held by this goroutine —
 		// never take the lock here.
 		inst.bytes -= chargeOf(k)
@@ -110,7 +107,7 @@ func newMemo() *memoT {
 // both build it and the second Add replaces the first. That is wasted work, not
 // a wrong result: the two holders serialize to identical bytes and intern to the
 // same buffer.
-func (inst *memoT) prepare(k memoKey, build func() job) job {
+func (inst *memoT) prepare(k memoKey, build func() typed.RetainedFffiHolderTyped[c.CodeViewJobS]) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 	inst.mu.Lock()
 	if v, ok := inst.lru.Get(k); ok {
 		inst.hits++

@@ -91,7 +91,7 @@ func BuildMarkdown(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 // (ADR-0125). The canonicalisation described on [BuildMarkdown] still applies —
 // the memo caches its result, it does not change it.
 func PrepareMarkdown(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	return memo.prepare(memoKey{lang: langMarkdown, src: src}, func() job {
+	return memo.prepare(memoKey{lang: langMarkdown, src: src}, func() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 		return BuildMarkdown(src)
 	})
 }

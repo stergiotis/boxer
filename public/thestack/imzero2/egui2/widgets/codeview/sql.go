@@ -95,7 +95,7 @@ func BuildSql(sql string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 // prepared again returns the same retained holder without re-parsing
 // (ADR-0125). Prefer this anywhere the same SQL is shown across frames.
 func PrepareSql(sql string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	return memo.prepare(memoKey{lang: langSQL, src: sql}, func() job {
+	return memo.prepare(memoKey{lang: langSQL, src: sql}, func() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 		return build(sqlSpec, sql)
 	})
 }

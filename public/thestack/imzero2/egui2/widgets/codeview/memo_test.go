@@ -8,6 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
 // ADR-0125 §Validation. The memo is package-global, so every test resets it
@@ -296,4 +299,4 @@ func distinctJSON(i int, size int) string {
 }
 
 // contentOf returns a holder's serialized bytes.
-func contentOf(j job) []byte { return j.Untype().Content() }
+func contentOf(j typed.RetainedFffiHolderTyped[c.CodeViewJobS]) []byte { return j.Untype().Content() }

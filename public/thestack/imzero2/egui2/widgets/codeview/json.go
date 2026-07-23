@@ -62,7 +62,7 @@ func BuildJson(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 // prepared again returns the same retained holder without re-tokenising
 // (ADR-0125).
 func PrepareJson(src string) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	return memo.prepare(memoKey{lang: langJSON, src: src}, func() job {
+	return memo.prepare(memoKey{lang: langJSON, src: src}, func() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
 		return build(jsonSpec, src)
 	})
 }
