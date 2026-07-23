@@ -1023,6 +1023,24 @@ func (inst *Inst) renderEmptyStateEntry(ids *c.WidgetIdStack, m app.Manifest, wi
 // windowhostDebugRender mirrors DebugRender.Get() != "" at init time.
 var windowhostDebugRender = DebugRender.Get() != ""
 
+// windowhostInstanceSalt derives the per-window widget-id salt that
+// renderWindowBody pushes around each app's Frame. The salt MUST live
+// outside the sequence-id space that PrepareSeq(index) draws from
+// (makeHighEntropy of small integers): the widget-id stack combines a
+// pushed salt and a child's PrepareSeq(index) by XOR, so a salt of
+// makeHighEntropy(w.key) — what an earlier appIds.PrepareSeq(w.key)
+// produced — aliased option ids across windows whenever a window key
+// equalled a child index. Two open windows then shared the tab whose
+// index matched the other window's key (e.g. window 1 tab 2 == window 2
+// tab 1), colliding in the global seenIds registry and sharing egui
+// widget state. Multiplying the key by the golden-ratio odd constant and
+// XOR-ing a domain tag moves the salt clear of that space, mirroring the
+// play app's playInstanceSalt.
+func windowhostInstanceSalt(key WindowKeyT) uint64 {
+	const saltTag = 0x57696e486f737421 // "WinHost!"
+	return (uint64(key) * 0x9e3779b97f4a7c15) ^ saltTag
+}
+
 // renderWindowBody draws one window's body: the app's Frame call,
 // gated by lazy Mount + sticky mountErr handling. The close
 // affordance is the egui::Window title-bar X (wired via openBound +
@@ -1030,11 +1048,10 @@ var windowhostDebugRender = DebugRender.Get() != ""
 // in-body close button.
 //
 // The Frame call is wrapped in c.IdScope on the per-window appIds
-// stack with `w.key` as the salt. The window key is monotonic and
-// unique across the lifetime of the host, so two open apps that
-// happen to share a label string ("btm", "cheat", …) on their
-// outermost panel cannot collide on the wire id — each derives its
-// id under a different salt. The IdScope wrapper pops the salt on
+// stack with a per-window salt from windowhostInstanceSalt(w.key), so
+// two open apps that happen to share a label string ("btm", "cheat", …)
+// on their outermost panel cannot collide on the wire id — each derives
+// its id under a different salt. The IdScope wrapper pops the salt on
 // return so the stack is empty between frames.
 func renderWindowBody(w *window, logger zerolog.Logger) {
 	if windowhostDebugRender {
@@ -1064,7 +1081,7 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 		c.Label("windowhost: mount failed: " + w.mount.mountErr.Error()).Send()
 		return
 	}
-	for range c.IdScope(w.appIds.PrepareSeq(uint64(w.key))) {
+	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
 		fErr := w.appInst.Frame(w.frameCtx)
 		if fErr != nil {
 			c.Label("windowhost: frame error: " + fErr.Error()).Send()
