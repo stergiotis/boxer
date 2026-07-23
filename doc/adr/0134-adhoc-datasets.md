@@ -457,6 +457,60 @@ end to end: publish, then query `keelson('<handle>')` over `/query`
 through url() and the `/table` decrypt; a mixed ad-hoc + `env` query; and
 a republish seen on the next query.
 
+## Update 2026-07-23 — Nested / leeway-encoded columnar schemas
+
+SD1 bounds the publish gate to a **flat scalar** type set and bare
+identifier column names, so the Arrow→ClickHouse structure mapping the fifo
+read (SD3) and the url() rewrite (SD3 revised) require is total. That
+excludes a whole legitimate class of publisher: a **leeway-encoded /
+nested columnar** table, whose physical column names carry colons and whose
+repeated sections are `Array`-typed (with `Struct`/`Map`/`Nullable` in the
+mix). The Consequences already name this as the sanctioned lever —
+*"widening it is a deliberate act (mapping plus publish-gate change), not a
+drift"* — and this is that act. The store, keys, capability, quotas, and the
+two decrypt paths are unchanged.
+
+- **The structure generator is now name-quoting and recursive.** Every
+  column name — top-level and nested `Tuple` field — is backtick-quoted
+  (embedded backticks doubled), so a colon-laden name is carried verbatim.
+  The type mapping recurses: `List`/`LargeList`/`FixedSizeList → Array(T)`,
+  `Struct → Tuple(`f` T, …)` (a *named* tuple, so Arrow struct fields match
+  by name), `Map → Map(K,V)`, and a nullable **scalar leaf** wraps in
+  `Nullable(T)`. The scalar set also grew to cover the remaining backbone
+  and payload leaf types a real columnar table carries: a **timezone-naive**
+  `Timestamp` (empty zone) → a bare `DateTime64(N)` (fabricating a UTC zone
+  the schema does not carry would misrepresent it — the epoch value is
+  identical, only the display zone differs), and `FixedSizeBinary(N)` (a
+  fixed-width hash/correlator) → `FixedString(N)` — both also inside an
+  `Array`, via the same recursion.
+
+- **Nullability lives on scalar leaves only.** ClickHouse forbids
+  `Nullable(Array)`/`Nullable(Tuple)`/`Nullable(Map)`, and its ArrowStream
+  reader coerces a null container to an empty/default one (verified against
+  clickhouse-local 26.6), so container-level nullability is dropped rather
+  than rejected — a null list reads as `[]`. The publish-time discipline is
+  kept: a still-unsupported type (dictionary, union, large/view string, or a
+  timestamp with a non-UTC/non-empty zone or a coarser-than-µs unit) is
+  refused at publish, naming the column, never discovered at query time —
+  now also when nested inside a supported container.
+
+- **Blast radius is one function.** The fifo read
+  (`file('<fifo>','ArrowStream',<structure>)`) and the url() rewrite
+  (`url(...,'ArrowStream',<structure>)`) already interpolate the structure
+  string as an **opaque single-quoted SQL literal**, and a query never
+  interpolates a column name as a bare identifier (an ad-hoc dataset streams
+  whole; projection pruning is bypassed for it). So the colon names and
+  nested types live entirely inside the structure literal and survive the
+  round trip without touching either transport. The bare-identifier rule
+  still guards the dataset **alias** and **handle**, which must name a
+  TEMPORARY table and a frontmatter binding unquoted.
+
+Verified end to end: the structure generator over a nested schema; a live
+fifo `SELECT *` round-trip; and — through the capability service — both the
+in-process engine and the url()/`/table` decrypt returning the colon-named
+`Array`/`Tuple`/`Nullable` columns intact, addressable by quoted identifier
+through the `keelson('…')` macro rewrite.
+
 ## Status
 
 Accepted (2026-07-20).

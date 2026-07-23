@@ -64,6 +64,23 @@ func int64Stream(t *testing.T, nullable bool, vals ...int64) []byte {
 	return buf.Bytes()
 }
 
+// unsupportedStream builds a one-column Arrow stream whose type (LargeString)
+// stays outside the publish gate's supported set, so Publish must reject it.
+func unsupportedStream(t *testing.T) []byte {
+	t.Helper()
+	schema := arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.BinaryTypes.LargeString}}, nil)
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer rb.Release()
+	rb.Field(0).(*array.LargeStringBuilder).Append("x")
+	rec := rb.NewRecordBatch()
+	defer rec.Release()
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	require.NoError(t, w.Write(rec))
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
+
 func newTestService(t *testing.T) *Service {
 	t.Helper()
 	svc, err := NewService(Config{
@@ -101,7 +118,7 @@ func TestServiceLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "items", g.Alias)
 	assert.Equal(t, uint64(1), g.Revision)
-	assert.Equal(t, "v Int64", g.Structure)
+	assert.Equal(t, "`v` Int64", g.Structure)
 
 	// Republish: same handle, bumped revision, entry updated in place.
 	res2, err := svc.Publish(PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 4, 5)})
@@ -130,8 +147,8 @@ func TestServiceRejections(t *testing.T) {
 	_, err := svc.Publish(PublishInput{Alias: "bad-alias", ArrowIPCStream: int64Stream(t, false, 1)})
 	require.Error(t, err, "invalid alias")
 
-	_, err = svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, true, 1, 2)})
-	require.Error(t, err, "nullable field is outside the supported type set")
+	_, err = svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: unsupportedStream(t)})
+	require.Error(t, err, "a type outside the supported set is rejected")
 
 	_, err = svc.Publish(PublishInput{Alias: "items", Handle: "adhoc_nope", ArrowIPCStream: int64Stream(t, false, 1)})
 	require.Error(t, err, "republish of an unknown handle")

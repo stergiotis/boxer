@@ -96,10 +96,71 @@ func TestServer_AdhocQueryEndpoint(t *testing.T) {
 	assert.Equal(t, "3\t1",
 		post("SELECT (SELECT count() FROM keelson('"+res.Handle+"')) AS a, (SELECT count()>0 FROM keelson('env')) AS b FORMAT TabSeparated"))
 
+	// A leeway-shaped dataset — colon-laden names, an Array-typed section, a
+	// nested Struct, a Nullable scalar — resolves over the same url() path:
+	// its explicit structure rides the third url() argument, so clickhouse
+	// applies the bounded mapping rather than its own inference (ADR-0134
+	// §SD3 revised). SELECT * and quoted-identifier access both survive.
+	lw, err := adhoc.Publish(adhocdata.PublishInput{Alias: "records", ArrowIPCStream: adhocLeewayStream(t)})
+	require.NoError(t, err)
+	assert.Equal(t, "7\t[]\t(-3,'bye')\t\\N\n42\t['a','b']\t(10,'hi')\tok",
+		post("SELECT * FROM keelson('"+lw.Handle+"') ORDER BY `id:kid:u64` FORMAT TabSeparated"))
+	assert.Equal(t, "7\t0\tbye\t\\N\n42\t2\thi\tok",
+		post("SELECT `id:kid:u64`, length(`sec:tags`), `s:pair`.`y:sub`, `note` "+
+			"FROM keelson('"+lw.Handle+"') ORDER BY `id:kid:u64` FORMAT TabSeparated"))
+
 	// A republish is seen immediately (no /query result caching, single-use workers).
 	_, err = adhoc.Publish(adhocdata.PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: adhocInt64Stream(t, 100)})
 	require.NoError(t, err)
 	assert.Equal(t, "100", post("SELECT sum(v) FROM keelson('"+res.Handle+"') FORMAT TabSeparated"))
+}
+
+// adhocLeewayStream builds a 2-row Arrow stream with a leeway-shaped schema
+// (colon-laden names, an Array(String) section, a nested Struct, a Nullable
+// scalar) for the url()-path round-trip.
+func adhocLeewayStream(t *testing.T) []byte {
+	t.Helper()
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "id:kid:u64", Type: arrow.PrimitiveTypes.Uint64},
+		{Name: "sec:tags", Type: arrow.ListOfNonNullable(arrow.BinaryTypes.String)},
+		{Name: "s:pair", Type: arrow.StructOf(
+			arrow.Field{Name: "x", Type: arrow.PrimitiveTypes.Int64},
+			arrow.Field{Name: "y:sub", Type: arrow.BinaryTypes.String},
+		)},
+		{Name: "note", Type: arrow.BinaryTypes.String, Nullable: true},
+	}, nil)
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer rb.Release()
+
+	rb.Field(0).(*array.Uint64Builder).AppendValues([]uint64{42, 7}, nil)
+
+	tags := rb.Field(1).(*array.ListBuilder)
+	tagsV := tags.ValueBuilder().(*array.StringBuilder)
+	tags.Append(true)
+	tagsV.AppendValues([]string{"a", "b"}, nil)
+	tags.Append(true) // empty list
+
+	pair := rb.Field(2).(*array.StructBuilder)
+	px := pair.FieldBuilder(0).(*array.Int64Builder)
+	py := pair.FieldBuilder(1).(*array.StringBuilder)
+	pair.Append(true)
+	px.Append(10)
+	py.Append("hi")
+	pair.Append(true)
+	px.Append(-3)
+	py.Append("bye")
+
+	note := rb.Field(3).(*array.StringBuilder)
+	note.Append("ok")
+	note.AppendNull()
+
+	rec := rb.NewRecordBatch()
+	defer rec.Release()
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	require.NoError(t, w.Write(rec))
+	require.NoError(t, w.Close())
+	return buf.Bytes()
 }
 
 func adhocInt64Stream(t *testing.T, vals ...int64) []byte {

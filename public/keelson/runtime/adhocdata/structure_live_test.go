@@ -147,6 +147,106 @@ func TestStructureLiveFIFO(t *testing.T) {
 	}
 }
 
+// TestStructureLiveLeewayShape proves a leeway-shaped schema — colon-laden
+// physical names, Array-typed repeated sections, a nested Struct, and a
+// Nullable scalar — round-trips through the production path-A read: the
+// StructureFor structure binds a fifo-fed TEMPORARY table, and SELECT *
+// returns every column intact (ADR-0134 SD1/SD3).
+func TestStructureLiveLeewayShape(t *testing.T) {
+	requireCH(t)
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "id:kid:u64", Type: arrow.PrimitiveTypes.Uint64},
+		{Name: "sec:tags", Type: arrow.ListOfNonNullable(arrow.BinaryTypes.String)},
+		{Name: "sec:ids", Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		{Name: "s:pair", Type: arrow.StructOf(
+			arrow.Field{Name: "x", Type: arrow.PrimitiveTypes.Int64},
+			arrow.Field{Name: "y:sub", Type: arrow.BinaryTypes.String},
+		)},
+		{Name: "note", Type: arrow.BinaryTypes.String, Nullable: true},
+		{Name: "h", Type: &arrow.FixedSizeBinaryType{ByteWidth: 16}},
+		{Name: "sec:h", Type: arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 16})},
+	}, nil)
+
+	structure, err := StructureFor(schema)
+	if err != nil {
+		t.Fatalf("StructureFor: %v", err)
+	}
+	want := "`id:kid:u64` UInt64, `sec:tags` Array(String), `sec:ids` Array(UInt64), " +
+		"`s:pair` Tuple(`x` Int64, `y:sub` String), `note` Nullable(String), " +
+		"`h` FixedString(16), `sec:h` Array(FixedString(16))"
+	if structure != want {
+		t.Fatalf("structure = %q, want %q", structure, want)
+	}
+
+	stream := buildMultiStream(t, schema, func(rb *array.RecordBuilder) {
+		rb.Field(0).(*array.Uint64Builder).AppendValues([]uint64{42, 7}, nil)
+
+		tags := rb.Field(1).(*array.ListBuilder)
+		tagsV := tags.ValueBuilder().(*array.StringBuilder)
+		tags.Append(true)
+		tagsV.AppendValues([]string{"a", "b"}, nil)
+		tags.Append(true) // empty list
+
+		ids := rb.Field(2).(*array.ListBuilder)
+		idsV := ids.ValueBuilder().(*array.Uint64Builder)
+		ids.Append(true)
+		idsV.AppendValues([]uint64{1, 2, 3}, nil)
+		ids.Append(true)
+		idsV.AppendValues([]uint64{9}, nil)
+
+		pair := rb.Field(3).(*array.StructBuilder)
+		px := pair.FieldBuilder(0).(*array.Int64Builder)
+		py := pair.FieldBuilder(1).(*array.StringBuilder)
+		pair.Append(true)
+		px.Append(10)
+		py.Append("hi")
+		pair.Append(true)
+		px.Append(-3)
+		py.Append("bye")
+
+		note := rb.Field(4).(*array.StringBuilder)
+		note.Append("ok")
+		note.AppendNull()
+
+		h := rb.Field(5).(*array.FixedSizeBinaryBuilder)
+		h.Append([]byte("0123456789abcdef"))
+		h.Append([]byte("fedcba9876543210"))
+
+		hs := rb.Field(6).(*array.ListBuilder)
+		hsV := hs.ValueBuilder().(*array.FixedSizeBinaryBuilder)
+		hs.Append(true)
+		hsV.Append([]byte("0123456789abcdef"))
+		hs.Append(true) // empty list
+	})
+
+	got := runCHOverFIFO(t, structure, stream)
+	wantRows := "42\t['a','b']\t[1,2,3]\t(10,'hi')\tok\t0123456789abcdef\t['0123456789abcdef']\n" +
+		"7\t[]\t[9]\t(-3,'bye')\t\\N\tfedcba9876543210\t[]\n"
+	if got != wantRows {
+		t.Fatalf("SELECT * =\n%q\nwant\n%q", got, wantRows)
+	}
+}
+
+// buildMultiStream renders a multi-column 2-row record for schema (via
+// build, which receives the whole RecordBuilder) as Arrow IPC stream bytes.
+func buildMultiStream(t *testing.T, schema *arrow.Schema, build func(*array.RecordBuilder)) []byte {
+	t.Helper()
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer rb.Release()
+	build(rb)
+	rec := rb.NewRecordBatch()
+	defer rec.Release()
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	if err := w.Write(rec); err != nil {
+		t.Fatalf("ipc write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("ipc close: %v", err)
+	}
+	return buf.Bytes()
+}
+
 // buildArrowStream renders a single 2-row record for schema (via build)
 // as Arrow IPC *stream* bytes (not the seekable file format).
 func buildArrowStream(t *testing.T, schema *arrow.Schema, build func(array.Builder)) []byte {

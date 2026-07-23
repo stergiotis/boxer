@@ -112,6 +112,122 @@ func TestCatalogE2E(t *testing.T) {
 	assert.Equal(t, "1", strings.TrimSpace(string(body)), "retract removes the catalog row")
 }
 
+// TestServiceE2E_LeewayShapedDataset publishes a leeway-shaped dataset —
+// colon-laden physical names, Array-typed repeated sections, a nested
+// Struct, and a Nullable scalar — through the capability service, then
+// queries keelson('<handle>') through the in-process engine (publish → fifo
+// read → served back → client SELECT). SELECT * returns every column
+// intact, and the colon-named columns are addressable by quoted identifier
+// through the keelson macro rewrite (ADR-0134 SD1/SD3).
+func TestServiceE2E_LeewayShapedDataset(t *testing.T) {
+	svc, eng := setupE2E(t)
+
+	res, err := svc.Publish(adhocdata.PublishInput{Alias: "records", ArrowIPCStream: leewayStream(t)})
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), res.Rows)
+
+	// SELECT * carries the colon-named Array/Struct/Nullable columns back.
+	body, _, err := eng.Query(context.Background(),
+		"SELECT * FROM keelson('"+res.Handle+"') ORDER BY `id:kid:u64`", "TabSeparated")
+	require.NoError(t, err)
+	assert.Equal(t,
+		"7\t[]\t(-3,'bye')\t\\N\n42\t['a','b']\t(10,'hi')\tok",
+		strings.TrimSpace(string(body)))
+
+	// The colon-named columns are queryable by quoted identifier through the
+	// macro rewrite: nested Tuple access and a Nullable projection included.
+	body, _, err = eng.Query(context.Background(),
+		"SELECT `id:kid:u64`, length(`sec:tags`), `s:pair`.`y:sub`, `note` "+
+			"FROM keelson('"+res.Handle+"') ORDER BY `id:kid:u64`", "TabSeparated")
+	require.NoError(t, err)
+	assert.Equal(t, "7\t0\tbye\t\\N\n42\t2\thi\tok", strings.TrimSpace(string(body)))
+}
+
+// TestServiceE2E_NaiveTimestamp publishes a timezone-naive Timestamp(ns)
+// backbone column and reads it back through the engine. The stored epoch
+// value must survive publish → fifo read → SELECT (a naive zone affects only
+// display, not the value), checked tz-independently via toUnixTimestamp64Nano.
+func TestServiceE2E_NaiveTimestamp(t *testing.T) {
+	svc, eng := setupE2E(t)
+
+	res, err := svc.Publish(adhocdata.PublishInput{Alias: "events", ArrowIPCStream: naiveTsStream(t)})
+	require.NoError(t, err)
+
+	body, _, err := eng.Query(context.Background(),
+		"SELECT `id`, toUnixTimestamp64Nano(`evt:ns`) FROM keelson('"+res.Handle+"') ORDER BY `id`", "TabSeparated")
+	require.NoError(t, err)
+	assert.Equal(t, "1\t1000000000000000000\n2\t0", strings.TrimSpace(string(body)))
+}
+
+// naiveTsStream builds a 2-row Arrow stream whose event-time column is a
+// timezone-naive Timestamp(ns) (empty zone), the leeway backbone shape.
+func naiveTsStream(t *testing.T) []byte {
+	t.Helper()
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "id", Type: arrow.PrimitiveTypes.Uint64},
+		{Name: "evt:ns", Type: &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: ""}},
+	}, nil)
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer rb.Release()
+	rb.Field(0).(*array.Uint64Builder).AppendValues([]uint64{1, 2}, nil)
+	rb.Field(1).(*array.TimestampBuilder).AppendValues([]arrow.Timestamp{1_000_000_000_000_000_000, 0}, nil)
+	rec := rb.NewRecordBatch()
+	defer rec.Release()
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	require.NoError(t, w.Write(rec))
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
+
+// leewayStream builds a 2-row Arrow stream with a leeway-shaped schema:
+// colon-laden names, an Array(String) repeated section, a nested Struct, and
+// a Nullable scalar.
+func leewayStream(t *testing.T) []byte {
+	t.Helper()
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "id:kid:u64", Type: arrow.PrimitiveTypes.Uint64},
+		{Name: "sec:tags", Type: arrow.ListOfNonNullable(arrow.BinaryTypes.String)},
+		{Name: "s:pair", Type: arrow.StructOf(
+			arrow.Field{Name: "x", Type: arrow.PrimitiveTypes.Int64},
+			arrow.Field{Name: "y:sub", Type: arrow.BinaryTypes.String},
+		)},
+		{Name: "note", Type: arrow.BinaryTypes.String, Nullable: true},
+	}, nil)
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer rb.Release()
+
+	rb.Field(0).(*array.Uint64Builder).AppendValues([]uint64{42, 7}, nil)
+
+	tags := rb.Field(1).(*array.ListBuilder)
+	tagsV := tags.ValueBuilder().(*array.StringBuilder)
+	tags.Append(true)
+	tagsV.AppendValues([]string{"a", "b"}, nil)
+	tags.Append(true) // empty list
+
+	pair := rb.Field(2).(*array.StructBuilder)
+	px := pair.FieldBuilder(0).(*array.Int64Builder)
+	py := pair.FieldBuilder(1).(*array.StringBuilder)
+	pair.Append(true)
+	px.Append(10)
+	py.Append("hi")
+	pair.Append(true)
+	px.Append(-3)
+	py.Append("bye")
+
+	note := rb.Field(3).(*array.StringBuilder)
+	note.Append("ok")
+	note.AppendNull()
+
+	rec := rb.NewRecordBatch()
+	defer rec.Release()
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	require.NoError(t, w.Write(rec))
+	require.NoError(t, w.Close())
+	return buf.Bytes()
+}
+
 func int64Stream(t *testing.T, vals ...int64) []byte {
 	t.Helper()
 	schema := arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.PrimitiveTypes.Int64}}, nil)
