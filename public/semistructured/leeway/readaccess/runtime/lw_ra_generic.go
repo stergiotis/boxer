@@ -5,7 +5,6 @@ package runtime
 import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type RecordI[C ColumnI[D], D ArrayDataI] interface {
@@ -30,15 +29,16 @@ type ArrayDataI interface {
 	//DataType() arrow.DataType
 	//Len() int
 }
+
 func LoadAccelFieldFromRecord[F, B IndexConstraintI, C ColumnI[D], D ArrayDataI](idx uint32, rec RecordI[C, D], dest *RandomAccessTwoLevelLookupAccel[F, B, int, int64]) (err error) {
 	c := rec.Column(int(idx))
 	if c.DataType().ID() != arrow.LIST {
-		err = eb.Build().Uint32("columnIndex", idx).Stringer("effective", c.DataType()).Stringer("expected", arrow.LIST).Errorf("unexpected data type: %w", ErrUnexpectedArrowDataType)
+		err = unexpectedDataTypeE(rec.Schema(), idx, c.DataType(), arrow.LIST)
 		return
 	}
 	d := array.NewListData(c.Data())
 	if d.ListValues().DataType().ID() != arrow.UINT64 {
-		err = eb.Build().Uint32("columnIndex", idx).Stringer("effective", c.DataType()).Stringer("expected", arrow.UINT64).Errorf("unexpected data type: %w", ErrUnexpectedArrowDataType)
+		err = unexpectedDataTypeE(rec.Schema(), idx, d.ListValues().DataType(), arrow.UINT64)
 		return
 	}
 	e := array.NewUint64Data(d.ListValues().Data())
@@ -52,7 +52,7 @@ func LoadScalarValueFieldFromRecord[S any, C ColumnI[D], D ArrayDataI](idx uint3
 	if c.DataType().ID() != expectedDatatype {
 		if expectedDatatype == arrow.BINARY && c.DataType().ID() == arrow.STRING {
 		} else {
-			err = eb.Build().Uint32("columnIndex", idx).Stringer("effective", c.DataType()).Stringer("expected", expectedDatatype).Errorf("unexpected data type: %w", ErrUnexpectedArrowDataType)
+			err = unexpectedDataTypeE(rec.Schema(), idx, c.DataType(), expectedDatatype)
 			return
 		}
 	}
@@ -62,14 +62,14 @@ func LoadScalarValueFieldFromRecord[S any, C ColumnI[D], D ArrayDataI](idx uint3
 func LoadNonScalarValueFieldFromRecord[S any, C ColumnI[D], D ArrayDataI](idx uint32, expectedDatatype arrow.Type, rec RecordI[C, D], dest **array.List, destElementAccess **S, ctorElementAccess func(data arrow.ArrayData) *S) (err error) {
 	c := rec.Column(int(idx))
 	if c.DataType().ID() != arrow.LIST {
-		err = eb.Build().Uint32("columnIndex", idx).Stringer("effective", c.DataType()).Stringer("expected", arrow.LIST).Errorf("unexpected data type: %w", ErrUnexpectedArrowDataType)
+		err = unexpectedDataTypeE(rec.Schema(), idx, c.DataType(), arrow.LIST)
 		return
 	}
 	d := array.NewListData(c.Data())
 	if d.ListValues().DataType().ID() != expectedDatatype {
 		if expectedDatatype == arrow.BINARY && d.ListValues().DataType().ID() == arrow.STRING {
 		} else {
-			err = eb.Build().Uint32("columnIndex", idx).Stringer("effective", c.DataType()).Stringer("expected", expectedDatatype).Errorf("unexpected data type: %w", ErrUnexpectedArrowDataType)
+			err = unexpectedDataTypeE(rec.Schema(), idx, d.ListValues().DataType(), expectedDatatype)
 			return
 		}
 	}
