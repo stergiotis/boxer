@@ -26,14 +26,20 @@ type Input struct {
 	EtaMs int64
 	// Note is optional trailing status text (e.g. an error reason).
 	Note string
-	// CancelId, when non-zero, renders a compact "Cancel" button on the
+	// CancelId, when non-nil, renders a compact "Cancel" button on the
 	// status row; Render then returns true on the frame it is clicked. The
-	// id must be stable across frames and unique among sibling widgets — an
-	// AbsoluteWidgetId derived from the owning surface's scope is the usual
-	// source. The widget stays a pure display: it only reports the click,
-	// leaving the caller to decide what cancelling means (abort the
-	// producer, suppress its re-schedule, …). Zero hides the button.
-	CancelId c.AbsoluteWidgetId
+	// id must be stable across frames and unique among sibling widgets.
+	// Prefer a relative id off the owning surface's per-instance id stack
+	// (e.g. ids.PrepareStr("cancel")): it inherits the host's per-instance
+	// salt, so two concurrently-open instances of the same surface cannot
+	// collide on this button's id. An AbsoluteWidgetId also satisfies the
+	// interface — for widget-in-a-box callers addressed purely by an
+	// absolute scope string — but such an id must be made instance-unique
+	// by the caller (the host salt does not reach absolute ids). The widget
+	// stays a pure display: it only reports the click, leaving the caller to
+	// decide what cancelling means (abort the producer, suppress its
+	// re-schedule, …). Nil hides the button.
+	CancelId c.WidgetIdCreatorI
 }
 
 // cancelGap is the inline space (points) between the status text and the
@@ -61,7 +67,7 @@ func Render(in Input) (cancelClicked bool) {
 		c.ProgressBar(clampUnit(in.Fraction)).Send()
 	}
 	status := statusLine(in)
-	if in.CancelId == 0 {
+	if in.CancelId == nil {
 		if status != "" {
 			c.Label(status).Send()
 		}
@@ -69,8 +75,10 @@ func Render(in Input) (cancelClicked bool) {
 	}
 	// Cancel affordance present: lay the status text and a compact Cancel
 	// button on one row so the control reads as part of the progress
-	// readout. The button carries the caller's AbsoluteWidgetId (a no-op on
-	// the WidgetIdStack), so it does not disturb a surrounding id scope.
+	// readout. The button draws exactly one widget id from the caller's id
+	// creator: a relative id resolves against the surrounding scope, an
+	// absolute id ignores it — neither pushes a scope, so the surrounding
+	// id stack is left balanced either way.
 	for range c.Horizontal().KeepIter() {
 		if status != "" {
 			c.Label(status).Send()

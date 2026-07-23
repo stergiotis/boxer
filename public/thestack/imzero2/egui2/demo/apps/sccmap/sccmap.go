@@ -291,13 +291,13 @@ type App struct {
 
 	// repoPath is the scan target, bound to the header path box. job runs the
 	// scc scan off the render thread; data is the last completed scan, owned by
-	// the render thread and read by every render helper. tasks and instanceKey
-	// wire the host background-task UI and the Cancel button's stable id.
-	repoPath    string
-	job         bgjob.Runner[sccData]
-	data        *sccData
-	tasks       task.TaskApiI
-	instanceKey uint64
+	// the render thread and read by every render helper. tasks wires the host
+	// background-task UI; the Cancel button's id is a salted relative id off
+	// ids, so it needs no per-instance qualifier.
+	repoPath string
+	job      bgjob.Runner[sccData]
+	data     *sccData
+	tasks    task.TaskApiI
 
 	tm *treemap.Treemap
 	// cs is the gradient legend bound to the same *treemap.Colormap that
@@ -521,7 +521,6 @@ func (inst *App) rebuildTreemap() {
 func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.tasks = task.ForApp(ctx)
-	inst.instanceKey = ctx.InstanceKey()
 	if inst.repoPath == "" {
 		inst.repoPath = repoEnv.Get()
 	}
@@ -685,7 +684,7 @@ func (inst *App) renderScanOrProgress() {
 				Fraction: snap.Fraction,
 				EtaMs:    snap.EtaMs,
 				Note:     snap.Note,
-				CancelId: c.MakeAbsoluteIdStr(fmt.Sprintf("sccmap-scan-cancel-%d", inst.instanceKey)),
+				CancelId: inst.ids.PrepareStr("scan-cancel"),
 			}) {
 				inst.job.Cancel()
 			}
