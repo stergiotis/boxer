@@ -233,7 +233,7 @@ func entityHeader(rec arrow.RecordBatch, row int64) (typeLabel string, natKey st
 		name := tagNameForIdTagValue(tv)
 		typeLabel = fmt.Sprintf("[%s]", name)
 	} else {
-		typeLabel = "[?]"
+		typeLabel = "<not-a-tagged-id>"
 	}
 	schema := rec.Schema()
 	for i := 0; i < schema.NumFields(); i++ {
