@@ -34,6 +34,42 @@ func TestIsValidRejectsUnparseableNodes(t *testing.T) {
 	}
 }
 
+// Regression for the 2026-07-24 extension of B-4: GroupAstNode.IsValid
+// lacked the emptiness check its sibling SignatureAstNode carries, so a
+// member-less group reported valid while String() rendered the placeholder
+// "<invalid:empty>". MarshalCBOR serialises String(), so that literal
+// reached the wire and could never be read back.
+func TestEmptyGroupIsInvalid(t *testing.T) {
+	empty := NewGroupAstNode(nil)
+	require.False(t, empty.IsValid(), "a member-less group has no rendering and must be invalid")
+	require.False(t, NewGroupAstNode([]PrimitiveAstNodeI{}).IsValid(),
+		"an empty non-nil member slice must behave the same as nil")
+
+	// Same contract as the container that already had the check.
+	require.False(t, NewSignatureAstNode(nil).IsValid())
+
+	// The placeholder String() emits must not reparse — that is precisely
+	// why validity has to reject it up front.
+	p := NewParser()
+	_, err := p.ParsePrimitiveTypeOrGroupAst(empty.String())
+	require.Error(t, err, "the empty-group placeholder %q must not reparse", empty.String())
+
+	// A group carrying an invalid member stays invalid, and a well-formed
+	// one stays valid — the emptiness check must not swallow either.
+	require.False(t, NewGroupAstNode([]PrimitiveAstNodeI{
+		MachineNumericTypeAstNode{BaseType: BaseTypeMachineNumericUnsigned, Width: 0},
+	}).IsValid())
+
+	good := NewGroupAstNode([]PrimitiveAstNodeI{
+		MachineNumericTypeAstNode{BaseType: BaseTypeMachineNumericUnsigned, Width: 8},
+		MachineNumericTypeAstNode{BaseType: BaseTypeMachineNumericSigned, Width: 16},
+	})
+	require.True(t, good.IsValid())
+	reparsed, err := p.ParsePrimitiveTypeOrGroupAst(good.String())
+	require.NoErrorf(t, err, "IsValid group %q must reparse", good.String())
+	require.Equal(t, good.String(), reparsed.String())
+}
+
 // Regression for review B-3: the group-conversion loop neither checked nor
 // accumulated the member parse error, so a member overflow was overwritten and
 // a nil node appended — the caller got err==nil and a GroupAstNode that

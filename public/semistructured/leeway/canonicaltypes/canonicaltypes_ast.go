@@ -273,11 +273,20 @@ func (inst GroupAstNode) IterateMembers() iter.Seq[PrimitiveAstNodeI] {
 	}
 }
 func (inst GroupAstNode) IsValid() bool {
-	valid := true
-	for _, m := range inst.members {
-		valid = valid && m.IsValid()
+	// Previously omitted the emptiness check that SignatureAstNode.IsValid
+	// carries, so a member-less group passed validity yet String() emitted
+	// "<invalid:empty>" and MarshalCBOR put that literal on the wire, where
+	// it can never be reparsed (review B-4, extended 2026-07-24). Validity
+	// means "String() reparses", and an empty group has no rendering.
+	if len(inst.members) == 0 {
+		return false
 	}
-	return valid
+	for _, m := range inst.members {
+		if !m.IsValid() {
+			return false
+		}
+	}
+	return true
 }
 
 func (inst GroupAstNode) String() string {
