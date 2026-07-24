@@ -23,7 +23,12 @@ import (
 // After Marshal returns, the caller drains via dml's own
 // TransferRecords (or schema-specific equivalent) — wire bytes live
 // outside this package.
+//
+// A dml missing a method the plan drives is returned as an error, not raised as
+// a panic; call Validate[T](dml) first to get every mismatch at once instead of
+// the first one reached.
 func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
+	defer recoverContract(&err)
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
@@ -521,13 +526,46 @@ func reslicedIfFixedByte(v reflect.Value, f mappingplan.TaggedField) reflect.Val
 	return v
 }
 
-// mustCall is the reflect.Value.MethodByName(name).Call(args...)
-// shortcut. Panics if the method doesn't exist — DTOs whose target
-// DML doesn't satisfy the codec contract should fail fast and noisy.
+// contractPanic carries a write-contract violation raised deep inside the
+// reflected call chain up to the nearest exported entry point, which converts
+// it to an error (recoverContract). It exists so a caller mistake — a DML that
+// does not satisfy the method set this codec drives — reaches the caller the
+// way every other failure in this package does, as a returned error, without
+// also swallowing genuine panics: any other panic value is re-raised untouched.
+type contractPanic struct{ err error }
+
+// recoverContract converts a contractPanic raised below into *err. Deferred by
+// every exported entry point that drives a DML by reflection. A panic that is
+// not a contract violation is re-raised, so a bug in this package or in the
+// DML still fails loudly.
+func recoverContract(err *error) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	cp, ok := r.(contractPanic)
+	if !ok {
+		panic(r)
+	}
+	*err = cp.err
+}
+
+// mustCall is the reflect.Value.MethodByName(name).Call(args...) shortcut.
+//
+// A missing method is a write-contract violation: it raises a contractPanic,
+// which the exported entry point returns as an error. Validate[T](dml)
+// preflights the whole method set and reports every mismatch at once, which is
+// the better diagnostic — this is the backstop for callers that skip it.
+//
+// A method that exists with the wrong ARGUMENT types is not covered: reflect
+// panics inside Call, and that panic is re-raised rather than converted, since
+// it is indistinguishable from a panic raised by the DML method itself.
+// Validate does not check argument types either (see its doc); the strict-1:1
+// setters make them a compile-time concern for generated DMLs.
 func mustCall(recv reflect.Value, name string, args ...reflect.Value) (rets []reflect.Value) {
 	m := recv.MethodByName(name)
 	if !m.IsValid() {
-		panic(eb.Build().Str("method", name).Str("recv", recv.Type().String()).Errorf("target DML does not have method %s", name))
+		panic(contractPanic{eb.Build().Str("method", name).Str("recv", recv.Type().String()).Errorf("target DML does not have method %s — call Validate[T](dml) to preflight the whole write contract", name)})
 	}
 	rets = m.Call(args)
 	return

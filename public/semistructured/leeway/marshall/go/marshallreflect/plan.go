@@ -117,7 +117,7 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 		if isTupleSliceType(f.Type) {
 			elem := f.Type.Elem()
 			switch goplan.ClassifySliceSection(lwTag, elemHasLwMembershipMarker(elem), elemHasAtMembership(elem)) {
-			case goplan.SliceSectionNested:
+			case goplan.SliceSectionKindNested:
 				err = addNestedSectionField(b, rt, f.Name, lwTag, elem, mappingplan.AttrCardinalityMany)
 			default:
 				err = addReflectTupleField(b, rt, f.Name, lwTag, elem)

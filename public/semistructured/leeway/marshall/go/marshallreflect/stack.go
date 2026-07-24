@@ -57,6 +57,7 @@ func NewRowComposer(dml any, lookup LookupI) *RowComposer {
 // composer-state related; plan / DML errors propagate from the
 // underlying emit.
 func (c *RowComposer) BeginRow(plainOwner any) (err error) {
+	defer recoverContract(&err)
 	if c.inRow {
 		err = eb.Build().Errorf("BeginRow called while already inside a row — call CommitRow first")
 		return
@@ -122,6 +123,7 @@ func (c *RowComposer) AddMultiValueAttributes(row any) (err error) {
 }
 
 func (c *RowComposer) addSectionsFiltered(row any, filter cardFilter, callerName string) (err error) {
+	defer recoverContract(&err)
 	if !c.inRow {
 		err = eb.Build().Str("call", callerName).Errorf("%s called outside of a row — call BeginRow first", callerName)
 		return
@@ -139,6 +141,7 @@ func (c *RowComposer) addSectionsFiltered(row any, filter cardFilter, callerName
 // surfaced. After CommitRow the composer is ready for the next
 // BeginRow.
 func (c *RowComposer) CommitRow() (err error) {
+	defer recoverContract(&err)
 	if !c.inRow {
 		err = eb.Build().Errorf("CommitRow called outside of a row — call BeginRow first")
 		return

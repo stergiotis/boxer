@@ -71,9 +71,12 @@
 // # The DML write contract
 //
 // Marshal / RowComposer drive `dml` (passed as any) by reflected method
-// dispatch; the method set below IS the contract. A missing or mis-typed method
-// otherwise panics mid-marshal (mustCall); Validate[T](dml) preflights the whole
-// set and reports every mismatch in one error before the first row.
+// dispatch; the method set below IS the contract. Validate[T](dml) preflights
+// the whole set and reports every mismatch in one error before the first row —
+// the better diagnostic, and the recommended call. A caller that skips it and
+// drives a DML missing a method gets that reported as an error from the entry
+// point rather than a panic; a method present with the wrong ARGUMENT types
+// still panics inside reflect, which neither Validate nor the recovery covers.
 //
 // Entity frame, on dml:
 //   - BeginEntity() — open an entity.

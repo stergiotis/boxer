@@ -160,7 +160,7 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 			usedTupleStructs[elemName] = true
 			var elems []goplan.TupleElem
 			switch goplan.ClassifySliceSection(lwTag, elemHasLwMembershipMarkerAst(elemStruct), elemHasAtMembershipAst(elemStruct)) {
-			case goplan.SliceSectionNested:
+			case goplan.SliceSectionKindNested:
 				elems, err = buildAstNestedElems(elemStruct)
 				if err != nil {
 					err = eb.Build().Str("field", goFieldName).Str("elemStruct", elemName).Errorf("%w", err)

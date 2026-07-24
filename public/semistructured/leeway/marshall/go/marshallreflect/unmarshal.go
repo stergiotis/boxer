@@ -75,6 +75,7 @@ func (r *SectionReaders) Section(name string, attrs, membs any) *SectionReaders 
 // Unmarshal first checks that readers covers every plain column and section T's
 // Plan declares, reporting all gaps in one error before reading any row.
 func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI) (err error) {
+	defer recoverContract(&err)
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
