@@ -53,3 +53,47 @@ func TestValidateNameComponentDetectsSeparators(t *testing.T) {
 	require.Error(t, err, "a component carrying the join separator must be rejected, preserving JoinComponents injectivity")
 	require.Equal(t, "foo-bar", joined.String())
 }
+
+// ConvertNameStyle is not idempotent for every (name, style) pair, and cannot
+// be under this component model: component boundaries are recovered from the
+// spelling, and upper-casing manufactures one at a digit. "foo2bar" is ONE
+// component while lower-cased — nothing separates "2" from "b" — but its
+// upper-cased spelling reads as TWO, because "2" then "B" IS a boundary.
+//
+// The consequence is what matters: the once-converted name is then spelled in
+// NO supported style, so TableValidator rejects it. This pins the shape of the
+// limitation so a change to the underlying splitter is noticed here rather
+// than as an intermittent failure in a randomized schema test.
+func TestConvertNameStyle_NotIdempotentAcrossDigitBoundary(t *testing.T) {
+	const name = "foo2bar"
+	for _, style := range []NamingStyleE{UpperSnakeCase, UpperSpinalCase} {
+		once := ConvertNameStyle(name, style)
+		require.Equal(t, "FOO2BAR", string(once), "%s", style)
+		require.NotEqual(t, once, ConvertNameStyle(once, style),
+			"%s: upper-casing invents a component boundary at the digit", style)
+
+		matched := false
+		for _, s2 := range AllNamingStyles {
+			if ConvertNameStyle(once, s2) == once {
+				matched = true
+			}
+		}
+		require.False(t, matched, "%s: the converted name matches no style — the state validation rejects", style)
+	}
+}
+
+// IsStyleStable is the guard callers use to avoid landing there.
+func TestIsStyleStable(t *testing.T) {
+	// Lossy exactly where the upper styles meet the digit boundary.
+	require.False(t, IsStyleStable("foo2bar", UpperSnakeCase))
+	require.False(t, IsStyleStable("foo2bar", UpperSpinalCase))
+	// The lower styles keep the single component intact.
+	require.True(t, IsStyleStable("foo2bar", LowerSnakeCase))
+	require.True(t, IsStyleStable("foo2bar", LowerSpinalCase))
+	require.True(t, IsStyleStable("foo2bar", LowerCamelCase))
+	// A name that spells its boundary with a capital — every name in the tree
+	// looks like this — is stable in every style.
+	for _, style := range AllNamingStyles {
+		require.Truef(t, IsStyleStable("u64Array", style), "u64Array must survive %s", style)
+	}
+}

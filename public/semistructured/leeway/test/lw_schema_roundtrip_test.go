@@ -3,7 +3,9 @@ package test
 import (
 	"bytes"
 	"math/rand/v2"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,10 +25,28 @@ import (
 // newSeededRand builds a PRNG from explicit seeds and logs them so a failing
 // randomized run is reproducible (review G-15: the seeds were previously
 // unlogged, making failures irreproducible).
+//
+// Logging alone was not enough: the seeds were drawn from the global source
+// with no way to put them back, so a CI failure could not be replayed without
+// editing this file. Set LEEWAY_TEST_SEED=<s1>,<s2> — the pair from the failing
+// run's log — to rerun that exact case.
 func newSeededRand(t *testing.T) *rand.Rand {
 	t.Helper()
 	seed1, seed2 := rand.Uint64(), rand.Uint64()
-	t.Logf("randomized test seed: %d %d (rand.NewPCG)", seed1, seed2)
+	if env := os.Getenv("LEEWAY_TEST_SEED"); env != "" {
+		s1, s2, ok := strings.Cut(env, ",")
+		var e1, e2 error
+		if ok {
+			seed1, e1 = strconv.ParseUint(strings.TrimSpace(s1), 10, 64)
+			seed2, e2 = strconv.ParseUint(strings.TrimSpace(s2), 10, 64)
+		}
+		if !ok || e1 != nil || e2 != nil {
+			t.Fatalf("LEEWAY_TEST_SEED=%q is not a <uint64>,<uint64> pair", env)
+		}
+		t.Logf("randomized test seed: %d %d (rand.NewPCG, from LEEWAY_TEST_SEED)", seed1, seed2)
+		return rand.New(rand.NewPCG(seed1, seed2))
+	}
+	t.Logf("randomized test seed: %d %d (rand.NewPCG) — replay with LEEWAY_TEST_SEED=%d,%d", seed1, seed2, seed1, seed2)
 	return rand.New(rand.NewPCG(seed1, seed2))
 }
 

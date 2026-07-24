@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
+	easp "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stretchr/testify/require"
 )
@@ -65,5 +67,58 @@ func TestNormalizer(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, tblDesc2, tblDesc1)
 		}
+	}
+}
+
+// loadDigitBoundaryTable authors a table whose names carry the shape that made
+// TestTableOpsRoundtrip flake: a component with an INTERNAL digit-then-letter
+// run ("foo2bar"), which is one component while lower-cased but two once
+// upper-cased. Names that spell the boundary with a capital ("u64Array") do
+// not have the problem — the difference is the point.
+func loadDigitBoundaryTable(manip TableManipulatorFluidI) {
+	manip.PlainValueColumn(PlainItemTypeEntityId, "id", ctabb.U64).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+
+	sec := manip.TaggedValueSection("foo2bar").
+		AddSectionMembership(MembershipSpecLowCardRef)
+	sec.TaggedValueColumn("x1y", ctabb.U64).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+}
+
+// Scramble must never produce a table Normalize refuses. It re-spells every
+// name into one drawn style, and not every style is available for every name:
+// upper-casing a component with an internal digit boundary yields a name
+// spelled in NO supported style, which TableValidator rejects — so Normalize
+// errors out before it can re-style, and the round-trip below never runs.
+//
+// That is what made TestTableOpsRoundtrip fail on roughly one run in seven:
+// the generator produced such a name and the draw landed on an upper style.
+// The draw is now restricted to the styles the table survives.
+func TestScrambleSkipsStylesTheTableCannotSurvive(t *testing.T) {
+	ops, err := NewTableOperations()
+	require.NoError(t, err)
+	normalizer := NewTableNormalizer(naming.DefaultNamingStyle)
+	validator := NewTableValidator()
+
+	canonical := buildTable(t, "digitTable", loadDigitBoundaryTable)
+	_, _, _, err = normalizer.Normalize(&canonical)
+	require.NoError(t, err)
+
+	// Every seed, not a lucky one: an unrestricted draw would hit an upper
+	// style within a handful of iterations.
+	for seed := range uint64(40) {
+		rnd := rand.New(rand.NewPCG(seed, seed+1))
+		var tbl TableDesc
+		tbl, err = ops.DeepCopy(&canonical)
+		require.NoError(t, err)
+
+		normalizer.Scramble(&tbl, rnd)
+		validator.Reset()
+		require.NoErrorf(t, validator.ValidateTable(&tbl),
+			"seed %d: Scramble produced a table Normalize would refuse", seed)
+
+		_, _, _, err = normalizer.Normalize(&tbl)
+		require.NoErrorf(t, err, "seed %d", seed)
+		require.EqualValuesf(t, canonical, tbl, "seed %d: Normalize must undo Scramble", seed)
 	}
 }

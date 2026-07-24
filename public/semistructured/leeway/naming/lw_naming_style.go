@@ -23,6 +23,22 @@ const (
 	DefaultNamingStyle      = BestReadableNamingStyle
 )
 
+// ConvertNameStyle re-spells name in targetStyle.
+//
+// It is NOT idempotent for every (name, style) pair, and cannot be made so
+// under this component model. Component boundaries are recovered from the
+// spelling, and the upper-case styles erase the evidence for one of them: a
+// component with an internal digit-then-letter run, such as "foo2bar", is ONE
+// component while lower-cased (there is no boundary between "2" and "b"), but
+// its upper-cased spelling "FOO2BAR" reads as TWO ("2" then "B" is a
+// boundary). So Convert("foo2bar", UpperSnakeCase) is "FOO2BAR" while
+// Convert("FOO2BAR", UpperSnakeCase) is "FOO2_BAR", and "FOO2BAR" is spelled
+// in no supported style at all — TableValidator rejects it.
+//
+// Names whose components carry no internal digit-then-letter run — every name
+// in the tree, since "u64Array" spells the boundary with a capital — are
+// unaffected. Use IsStyleStable to test a specific pair before converting into
+// a style that must survive validation.
 func ConvertNameStyle[S ~string](name S, targetStyle NamingStyleE) (naming S) {
 	switch targetStyle {
 	case LowerCamelCase:
@@ -42,6 +58,18 @@ func ConvertNameStyle[S ~string](name S, targetStyle NamingStyleE) (naming S) {
 	}
 	return
 }
+// IsStyleStable reports whether converting name into style lands on a name
+// that is itself spelled in that style — i.e. whether the conversion is a fixed
+// point there. It is false exactly for the lossy pairs ConvertNameStyle
+// documents, whose output matches no supported style and so fails validation.
+//
+// Callers that re-spell a name which must stay valid — a schema normalizer, a
+// physical-name mapper — should consult this before committing to a style.
+func IsStyleStable[S ~string](name S, style NamingStyleE) bool {
+	once := ConvertNameStyle(name, style)
+	return ConvertNameStyle(once, style) == once
+}
+
 func MustBeValidKey[S ~string](key S) (r Key) {
 	err := ValidateKey(key)
 	if err != nil {

@@ -45,8 +45,23 @@ func (inst *TableNormalizer) Scramble(table *TableDesc, rnd *rand.Rand) {
 // therefore yields a table that fails validation ("found names in multiple
 // naming styles") and so is rejected by Normalize before it can be re-styled,
 // except by luck when every drawn name happens to agree.
+//
+// The draw is restricted to the styles every name in the table survives
+// (naming.IsStyleStable). Not every style is available for every name: an
+// upper-case style applied to a component with an internal digit-then-letter
+// run — "foo2bar" — yields "FOO2BAR", which is spelled in no supported style
+// and which TableValidator therefore rejects (see ConvertNameStyle). Drawing
+// such a style scrambles the table into one Normalize refuses, which is not
+// the re-styling path this exists to exercise.
 func (inst *TableNormalizer) ScrambleNames(table *TableDesc, rnd *rand.Rand) {
-	style := naming.AllNamingStyles[rnd.IntN(len(naming.AllNamingStyles))]
+	styles := stableStylesFor(table)
+	if len(styles) == 0 {
+		// No style re-spells this table's names into a valid table. Leave it
+		// alone rather than produce one Normalize must reject; the caller's
+		// round-trip still holds, it just has nothing to re-style.
+		return
+	}
+	style := styles[rnd.IntN(len(styles))]
 	for i, name := range table.PlainValuesNames {
 		table.PlainValuesNames[i] = naming.ConvertNameStyle(name, style)
 	}
@@ -57,6 +72,38 @@ func (inst *TableNormalizer) ScrambleNames(table *TableDesc, rnd *rand.Rand) {
 			sec.ValueColumnNames[j] = naming.ConvertNameStyle(name, style)
 		}
 	}
+}
+
+// stableStylesFor returns the naming styles every name in the table can be
+// re-spelled into and still be spelled in SOME supported style — the
+// precondition TableValidator enforces per name. Order follows
+// naming.AllNamingStyles so a seeded draw over the result is reproducible.
+func stableStylesFor(table *TableDesc) (out []naming.NamingStyleE) {
+	stable := func(style naming.NamingStyleE) bool {
+		for _, name := range table.PlainValuesNames {
+			if !naming.IsStyleStable(name, style) {
+				return false
+			}
+		}
+		for i := range table.TaggedValuesSections {
+			sec := &table.TaggedValuesSections[i]
+			if !naming.IsStyleStable(sec.Name, style) {
+				return false
+			}
+			for _, name := range sec.ValueColumnNames {
+				if !naming.IsStyleStable(name, style) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	for _, style := range naming.AllNamingStyles {
+		if stable(style) {
+			out = append(out, style)
+		}
+	}
+	return
 }
 
 // ScrambleOrder is the inverse of normalizeOrder: it randomly permutes the
