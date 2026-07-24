@@ -197,7 +197,10 @@ func TestNodeLaneForgetDiscardsInFlightCompletion(t *testing.T) {
 	require.Never(t, func() bool {
 		lane.mu.Lock()
 		defer lane.mu.Unlock()
-		return lane.servedKey == "SELECT 1" // a landed completion would restore this
+		// A landed completion would restore this. Compare against key(),
+		// not the bare SQL: the memo key is a length-prefixed encoding of
+		// the (SQL, params) pair, not the SQL text.
+		return lane.servedKey == compiledNode{SQL: "SELECT 1"}.key()
 	}, 150*time.Millisecond, 5*time.Millisecond,
 		"the in-flight completion must be discarded after forget")
 
@@ -288,7 +291,7 @@ func TestNodeLaneFlipBackServesMemoWithoutReExecuting(t *testing.T) {
 	require.Never(t, func() bool {
 		lane.mu.Lock()
 		defer lane.mu.Unlock()
-		return lane.servedKey != "A"
+		return lane.servedKey != compiledNode{SQL: "A"}.key()
 	}, 150*time.Millisecond, 5*time.Millisecond, "B's cancelled completion must not land")
 }
 

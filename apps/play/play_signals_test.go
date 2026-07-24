@@ -26,13 +26,37 @@ func TestCompiledNodeKeyDistinguishesParams(t *testing.T) {
 	a := compiledNode{SQL: "SELECT {x:UInt64}"}
 	b := compiledNode{SQL: "SELECT {x:UInt64}", Params: map[string]string{"param_x": "1"}}
 	c2 := compiledNode{SQL: "SELECT {x:UInt64}", Params: map[string]string{"param_x": "2"}}
-	require.Equal(t, a.SQL, a.key(), "no params ⇒ the key is the SQL")
+	require.Equal(t, a.key(), compiledNode{SQL: a.SQL}.key(), "the key is a function of the pair")
 	require.NotEqual(t, a.key(), b.key())
 	require.NotEqual(t, b.key(), c2.key(), "same SQL under a different signal value is a different execution")
 
 	d := compiledNode{SQL: "s", Params: map[string]string{"param_a": "1", "param_b": "2"}}
 	e := compiledNode{SQL: "s", Params: map[string]string{"param_b": "2", "param_a": "1"}}
 	require.Equal(t, d.key(), e.key(), "the key is param-order-insensitive")
+}
+
+// A raw signal value is arbitrary text — result-cell text reaches the store
+// via formatCell (selection_country and friends). If the key joined its
+// components with delimiter bytes, a value carrying those bytes would forge an
+// entry boundary, two distinct param sets would share one memo key, and a lane
+// would serve the wrong cached result for one of them.
+func TestCompiledNodeKeyResistsForgedSeparators(t *testing.T) {
+	forged := compiledNode{SQL: "s", Params: map[string]string{"param_a": "1\x00param_b\x011"}}
+	honest := compiledNode{SQL: "s", Params: map[string]string{"param_a": "1", "param_b": "1"}}
+	require.NotEqual(t, forged.key(), honest.key(),
+		"a value spelling out a separator must not alias a second param")
+
+	// The same aliasing one level up: a bare SQL string spelling out the
+	// encoded form of a node that does carry params.
+	spelled := compiledNode{SQL: "1:s7:param_a1:1"}
+	withParam := compiledNode{SQL: "s", Params: map[string]string{"param_a": "1"}}
+	require.NotEqual(t, spelled.key(), withParam.key(),
+		"SQL text must not be able to spell out a param-bearing key")
+
+	// Two names whose concatenation is shared but split differently.
+	ab := compiledNode{SQL: "s", Params: map[string]string{"param_ab": "c"}}
+	aBc := compiledNode{SQL: "s", Params: map[string]string{"param_a": "bc"}}
+	require.NotEqual(t, ab.key(), aBc.key())
 }
 
 // The lane memo keys on the compiled pair: the same SQL re-executes when a

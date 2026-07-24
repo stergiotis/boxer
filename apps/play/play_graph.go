@@ -122,10 +122,19 @@ type compiledNode struct {
 // key is the memo identity of a compiled node: the SQL plus the sorted
 // params. The same SQL under different signal values is a different
 // execution — both the runtime memo and the lanes key on this pair.
+//
+// Every component is length-prefixed (`<len>:<bytes>`) rather than joined
+// with delimiter bytes. Signal values are arbitrary text — a raw carrying a
+// separator byte would otherwise forge an entry boundary and let two distinct
+// param sets share one key, which is a lane serving the wrong cached result.
+// A decimal length before each component makes the encoding unambiguous
+// regardless of what the bytes are. Keys are in-memory only, so the encoding
+// carries no compatibility obligation.
+//
+// The SQL is prefixed too, and the no-params case takes no shortcut: a bare
+// SQL string would otherwise be able to spell out a length-prefixed key with
+// params, which is the same aliasing one level up.
 func (inst compiledNode) key() (out string) {
-	if len(inst.Params) == 0 {
-		return inst.SQL
-	}
 	names := make([]string, 0, len(inst.Params))
 	for k := range inst.Params {
 		names = append(names, k)
@@ -133,12 +142,15 @@ func (inst compiledNode) key() (out string) {
 	sort.Strings(names)
 	var b strings.Builder
 	b.Grow(len(inst.SQL) + 32*len(names))
-	b.WriteString(inst.SQL)
+	writeLenPrefixed := func(s string) {
+		b.WriteString(strconv.Itoa(len(s)))
+		b.WriteByte(':')
+		b.WriteString(s)
+	}
+	writeLenPrefixed(inst.SQL)
 	for _, k := range names {
-		b.WriteByte(0x00)
-		b.WriteString(k)
-		b.WriteByte(0x01)
-		b.WriteString(inst.Params[k])
+		writeLenPrefixed(k)
+		writeLenPrefixed(inst.Params[k])
 	}
 	out = b.String()
 	return
