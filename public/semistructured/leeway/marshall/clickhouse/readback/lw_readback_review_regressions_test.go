@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
 
@@ -105,6 +106,73 @@ func TestRegressionOptionalNullableScalar(t *testing.T) {
 		if len(f) != 4 || f[1] != w.isNull || f[2] != w.val {
 			t.Errorf("row %d = %q, want IS NULL=%s val=%q", i+1, f, w.isNull, w.val)
 		}
+	}
+}
+
+// rbTaggedText is a dynamic-membership tuple element (ADR-0103): its
+// membership is per-element data, so the TaggedFields it produces carry an
+// EMPTY LWMembership.
+type rbTaggedText struct {
+	Label string `lw:"@membership,verbatim"`
+	Text  string `lw:"symbol:value"`
+}
+
+type rbTupleDoc struct {
+	_ struct{} `kind:"rbTupleDoc"`
+
+	ID       uint64         `lw:",id"`
+	Tracking []byte         `lw:",naturalKey"`
+	Texts    []rbTaggedText `lw:"symbol"`
+}
+
+// rbNestedNote is a nested attribute struct with a STATIC membership on the
+// section field and Many cardinality — N attributes per row through one field.
+type rbNestedNote struct {
+	Text string
+}
+
+type rbNestedDoc struct {
+	_ struct{} `kind:"rbNestedDoc"`
+
+	ID       uint64         `lw:",id"`
+	Tracking []byte         `lw:",naturalKey"`
+	Notes    []rbNestedNote `lw:"droneStatus,symbol"`
+}
+
+// Tuple / nested attribute sections are rejected at generation AND validation
+// time. Every artefact assumes one attribute per membership per row, so
+// emitting for these shapes is silently wrong, not merely incomplete: a
+// dynamic tuple carries no LWMembership (a verbatim channel resolved to the
+// empty literal and matched nothing), and a static nested `[]S` pinned
+// `countEqual(...) = 1` on an N-attribute section. In-tree the hole was masked
+// by recordstore/gen's ReadRowSupported gate — a guard in the caller, not here.
+func TestRegressionTupleAndNestedRejected(t *testing.T) {
+	ir := buildAnchorIR(t)
+	res := NewLookupResolver(marshallreflect.MapLookup{"droneStatus": 1})
+
+	for _, tc := range []struct {
+		name string
+		plan func() (*mappingplan.Plan, error)
+	}{
+		{"dynamic-membership tuple", func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[rbTupleDoc]() }},
+		{"static nested Many", func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[rbNestedDoc]() }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan, err := tc.plan()
+			if err != nil {
+				t.Fatalf("PlanFor: %v", err)
+			}
+			_, err = NewGenerator(ir, res).Generate(plan)
+			if err == nil {
+				t.Fatal("Generate must reject a tuple / nested section")
+			}
+			if !strings.Contains(err.Error(), "not supported by the read-back generator") {
+				t.Errorf("unexpected Generate error: %v", err)
+			}
+			if err = ValidatePlanAgainstIR(plan, ir); err == nil {
+				t.Fatal("ValidatePlanAgainstIR must reject a tuple / nested section")
+			}
+		})
 	}
 }
 

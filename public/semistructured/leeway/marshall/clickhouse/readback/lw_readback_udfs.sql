@@ -1,6 +1,6 @@
 -- Leeway DQL helper UDFs — jagged-array (SoA) read-back primitives.
--- Consolidated from pebble2impl spinnaker (udfs_tag.sql) + boxer anchor
--- (ANCHOR_UNFLATTEN_LEEWAY_ARRAY), fixed (BEGIN_INCL no longer references an
+-- Consolidated from a downstream consumer's tag UDFs plus boxer anchor's
+-- ANCHOR_UNFLATTEN_LEEWAY_ARRAY, fixed (BEGIN_INCL no longer references an
 -- undefined _END) and extended with level-2 (value array/set) extraction.
 --
 -- A tagged section stores, per entity row, parallel arrays: a value array

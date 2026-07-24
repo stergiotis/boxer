@@ -47,8 +47,8 @@ func TestHelperUDFs_TruthTable(t *testing.T) {
 }
 
 // TestHelperUDFs_SQLShape is a server-free guard on the embedded DDL: the
-// expected functions are present, and the spinnaker bug (BEGIN_INCL
-// referencing an undefined LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END) stays fixed.
+// expected functions are present, and the inherited BEGIN_INCL bug
+// (referencing an undefined LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END) stays fixed.
 func TestHelperUDFs_SQLShape(t *testing.T) {
 	sql := HelperUDFsSQL()
 	for _, fn := range []string{
@@ -69,6 +69,6 @@ func TestHelperUDFs_SQLShape(t *testing.T) {
 	// The undefined-_END regression: BEGIN_INCL must derive from arrayCumSum,
 	// never call a LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END that no statement defines.
 	if strings.Contains(sql, "VAL_IDX_TO_MEMB_IDX_END(") {
-		t.Errorf("HelperUDFsSQL references undefined LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END (the spinnaker bug)")
+		t.Errorf("HelperUDFsSQL references undefined LEEWAY_LU_VAL_IDX_TO_MEMB_IDX_END (the inherited bug)")
 	}
 }

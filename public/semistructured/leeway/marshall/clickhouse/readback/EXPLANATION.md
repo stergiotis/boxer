@@ -140,11 +140,11 @@ Option fields the generator emits an `<= 1` validator term and projects the natu
 ## Reference ClickHouse implementation
 
 The helper UDFs ship in [`lw_readback_udfs.sql`](./lw_readback_udfs.sql) (accessor `HelperUDFsSQL()`),
-consolidated from pebble2impl's spinnaker `udfs_tag.sql` plus the anchor unflatten UDF — with
-spinnaker's `BEGIN_INCL` bug fixed (it called an undefined `…_END`) and level-2 (value
+consolidated from a downstream consumer's tag UDFs plus the anchor unflatten UDF — with that
+implementation's `BEGIN_INCL` bug fixed (it called an undefined `…_END`) and level-2 (value
 array/set) extraction added. They are kind-independent (create once per database) and are
 verified by a truth-table run through `clickhouse-local` (`lw_readback_udfs_test.go`). Naming follows
-spinnaker's `LEEWAY_LU_*` ("Leeway LookUp") convention: "val idx" = attribute index, "memb idx"
+the inherited `LEEWAY_LU_*` ("Leeway LookUp") convention: "val idx" = attribute index, "memb idx"
 = flattened membership position.
 
 The locate primitive is the **materialized** position→attribute map (`MEMB_IDX_TO_VAL_IDX`),

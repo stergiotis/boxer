@@ -106,6 +106,10 @@ func NewGenerator(ir *InformationRetrieval, resolver MembershipResolver) *Genera
 // scan and one skip-index condition; validator terms are deduplicated so
 // multi-sub-column sections (one membership, several value columns) count the
 // membership once.
+//
+// Every artefact assumes the flat one-attribute-per-membership-per-row shape,
+// so a Plan carrying a tuple / nested attribute section is rejected rather than
+// mis-generated (see locate).
 func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 	a.Kind = plan.KindName
 	if err = g.validate(plan); err != nil {
@@ -164,9 +168,17 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 	return
 }
 
+// newValidator returns a Generator usable for validate only — it carries no
+// MembershipResolver, so calling Generate on it would fail at the first field.
+// Kept private so the resolver-less form cannot escape the package.
+func newValidator(ir *InformationRetrieval) *Generator {
+	return NewGenerator(ir, nil)
+}
+
 // validate reports the first plain column or tagged-field column the Plan
-// references that the schema lacks — the conformance subset of Generate, with
-// no SQL emission and no membership resolution.
+// references that the schema lacks, or the first field whose shape the
+// generator cannot express — the conformance subset of Generate, with no SQL
+// emission and no membership resolution.
 func (g *Generator) validate(plan *mappingplan.Plan) (err error) {
 	for _, pc := range plan.PlainCols {
 		if _, ok := g.plain[pc.Column]; !ok {
@@ -186,12 +198,13 @@ func (g *Generator) validate(plan *mappingplan.Plan) (err error) {
 
 // ValidatePlanAgainstIR reports whether every plain column, section, value
 // sub-column, and per-channel membership support column the Plan references
-// exists in the schema loaded into ir — the conformance check the readback
+// exists in the schema loaded into ir, and whether every field is a shape the
+// generator can express (see locate) — the conformance check the readback
 // generator runs before emitting SQL, exposed so a consumer can verify a DTO
 // Plan against a schema at plan-build time without generating ClickHouse
 // artefacts. It resolves no membership ids (needs no MembershipResolver).
 func ValidatePlanAgainstIR(plan *mappingplan.Plan, ir *InformationRetrieval) error {
-	return NewGenerator(ir, nil).validate(plan)
+	return newValidator(ir).validate(plan)
 }
 
 // chType renders a canonical type as its ClickHouse type via the ddl/clickhouse
@@ -233,9 +246,25 @@ type fieldLocators struct {
 }
 
 // locate resolves a tagged field to its physical columns, erroring on the first
-// one the schema lacks. Shared by field (Generate) and validate
-// (ValidatePlanAgainstIR) so the conformance rules cannot drift between them.
+// one the schema lacks — and on the field shapes the generator cannot express
+// at all. Shared by field (Generate) and validate (ValidatePlanAgainstIR) so
+// the conformance rules cannot drift between them.
 func (g *Generator) locate(f *mappingplan.TaggedField) (loc fieldLocators, err error) {
+	if f.TupleField != "" {
+		// A tuple-family section (a dynamic-membership tuple, ADR-0103/0109, or
+		// a nested attribute section, ADR-0113) maps MANY attributes per row
+		// through one Go field. Every artefact below assumes the flat
+		// one-attribute-per-membership shape: the validator pins
+		// `countEqual(...) = 1` and the projection extracts a single value slot.
+		// Emitting them for a tuple is silently wrong rather than merely
+		// incomplete — a dynamic tuple's per-element memberships are not on the
+		// TaggedField at all (LWMembership is ""), so a verbatim channel would
+		// resolve to the empty literal and match nothing, and a static nested
+		// `[]S` would assert exactly one attribute for an N-attribute section.
+		// Reject here so both Generate and ValidatePlanAgainstIR say so.
+		err = eb.Build().Str("tupleField", f.TupleField).Str("section", f.LWSection).Errorf("tuple / nested attribute sections are not supported by the read-back generator — it maps one attribute per membership per row")
+		return
+	}
 	sec := f.LWSection
 	subCol := f.LWColumn
 	if subCol == "" {
