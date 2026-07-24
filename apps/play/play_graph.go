@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"hash/fnv"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -250,6 +251,9 @@ type queryGraph struct {
 	results  map[NodeID]*nodeResult
 	demanded map[NodeID]bool
 	sig      *signalEnv
+	// drops carries the standing emit-drop notices (one per signal name)
+	// the Diagnostics tab reads; nil until the first drop.
+	drops map[SignalID]emitDrop
 
 	// mainLane is the `main` node's async execution lane (ADR-0097): the
 	// Run-triggered node whose SQL is the editor buffer. nil for the bare
@@ -357,9 +361,72 @@ func (inst graphEmitter) Emit(id SignalID, value any) {
 	if !encodable {
 		log.Warn().Str("signal", string(id)).Type("valueType", value).
 			Msg("play: dropping signal emit with unsupported value type")
+		inst.graph.noteEmitDrop(id, value, inst.writer)
 		return
 	}
+	inst.graph.clearEmitDrop(id)
 	inst.graph.setSignalRawFrom(id, raw, inst.writer)
+}
+
+// emitDrop is one panel emit encodeSignalValue declined (slice 5b): the value's
+// Go type has no raw form, so nothing was written. A drop is the failure mode
+// that looks like nothing at all — the panel believes it published, the reader
+// sees a stale value, and the only trace is a log line nobody is tailing — so
+// the notice is carried to the Diagnostics tab. Revision is the store revision
+// current at the drop, the same clock the Signals chrome prints as `r%d`.
+type emitDrop struct {
+	Name      string
+	ValueType string
+	Writer    string
+	Revision  uint64
+}
+
+// noteEmitDrop records the last drop for a name, replacing any earlier one:
+// one notice per signal, not a log. A repeating drop (a panel re-emitting the
+// same unencodable value every frame) therefore costs one entry, not a leak.
+func (inst *queryGraph) noteEmitDrop(id SignalID, value any, writer string) {
+	if writer == "" {
+		writer = signalWriterApp
+	}
+	name := "<nil>"
+	if value != nil {
+		name = reflect.TypeOf(value).String()
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.drops == nil {
+		inst.drops = make(map[SignalID]emitDrop, 1)
+	}
+	inst.drops[id] = emitDrop{Name: string(id), ValueType: name, Writer: writer, Revision: inst.sig.revision}
+}
+
+// clearEmitDrop retires a name's drop notice — self-retiring on the next
+// emit of that name that DOES encode, which is the moment the reader's value
+// stops being wrong. A store write from another surface (the Signals editor,
+// a pin) deliberately does not retire it: the emitting panel is still broken.
+func (inst *queryGraph) clearEmitDrop(id SignalID) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if _, ok := inst.drops[id]; !ok {
+		return
+	}
+	delete(inst.drops, id)
+}
+
+// emitDrops lists the standing drop notices, name-sorted (the Diagnostics
+// tab's read surface). Empty when every emit this session encoded.
+func (inst *queryGraph) emitDrops() (out []emitDrop) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if len(inst.drops) == 0 {
+		return
+	}
+	out = make([]emitDrop, 0, len(inst.drops))
+	for _, d := range inst.drops {
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return
 }
 
 // resolveSignalNames resolves the given slot names against a signal snapshot,

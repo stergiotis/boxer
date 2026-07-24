@@ -343,7 +343,34 @@ func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, 
 	c.Separator().Send()
 	inst.renderDiagSplit()
 	c.Separator().Send()
+	inst.renderDiagSignalEmits()
+	c.Separator().Send()
 	inst.renderDiagLastRun(numRows, elapsed, summary, executed, err)
+}
+
+// renderDiagSignalEmits names the panel emits the store declined to record
+// (ADR-0097 slice 5b: encodeSignalValue has no raw form for the value's Go
+// type). A dropped emit is invisible where it happens — the panel behaves as
+// though it published and a reader keeps showing the previous value — so the
+// notice stands here until that name emits something encodable.
+func (inst *PlayApp) renderDiagSignalEmits() {
+	diagHeading("Signal emits")
+	if inst.graph == nil {
+		return
+	}
+	drops := inst.graph.emitDrops()
+	if len(drops) == 0 {
+		diagWeak("Every panel emit this session was recorded.")
+		return
+	}
+	for _, d := range drops {
+		for rt := range c.RichTextLabel(d.Name + " — dropped: " + d.Writer +
+			" emitted a " + d.ValueType + ", which has no raw form (at r" +
+			strconv.FormatUint(d.Revision, 10) + ")") {
+			rt.Monospace()
+		}
+	}
+	diagWeak("The named signal keeps its previous value. The notice retires when that name emits an encodable value.")
 }
 
 // renderDiagColumnResolution lists the leeway column handles the resolver could

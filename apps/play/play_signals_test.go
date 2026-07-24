@@ -274,6 +274,45 @@ func TestEncodeSignalValue(t *testing.T) {
 	}
 }
 
+// A dropped emit leaves a standing notice (the Diagnostics tab reads it), and
+// that notice retires when the same name emits something encodable — the point
+// at which the reader's value stops being wrong. Nothing here renders: the
+// notice model is what carries the behaviour.
+func TestEmitDropNoticeSetsAndRetires(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	em := graphEmitter{graph: g, writer: "table"}
+
+	require.Empty(t, g.emitDrops(), "a fresh graph has dropped nothing")
+
+	em.Emit("x", struct{}{})
+	drops := g.emitDrops()
+	require.Len(t, drops, 1)
+	require.Equal(t, "x", drops[0].Name)
+	require.Equal(t, "table", drops[0].Writer)
+	require.Contains(t, drops[0].ValueType, "struct")
+	_, held := g.signals().Get("x")
+	require.False(t, held, "a dropped emit writes nothing")
+
+	// A repeat of the same broken emit is one notice, not a growing log.
+	em.Emit("x", struct{}{})
+	require.Len(t, g.emitDrops(), 1)
+
+	// A drop on a second name is its own notice; name-sorted.
+	em.Emit("a", []string{"multi"})
+	require.Equal(t, []string{"a", "x"}, []string{g.emitDrops()[0].Name, g.emitDrops()[1].Name})
+
+	// A store write from another surface does NOT retire it — the emitting
+	// panel is still broken, and the notice is about the panel.
+	g.setSignalRawFrom("x", "7", signalWriterEditor)
+	require.Len(t, g.emitDrops(), 2)
+
+	// An encodable emit for that name does retire it, and only it.
+	em.Emit("x", int64(9))
+	drops = g.emitDrops()
+	require.Len(t, drops, 1)
+	require.Equal(t, "a", drops[0].Name)
+}
+
 // syncSelectionClamp (slice 5b, replacing the selectedRow field clamp) resets
 // an absent or out-of-range selection to row 0 and leaves an in-range one
 // untouched — no store-revision churn on the steady state.
