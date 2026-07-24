@@ -52,6 +52,24 @@ const provenanceArrowOutputSettings = " SETTINGS output_format_arrow_string_as_s
 // provenanceKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func provenanceKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
+// ProvenanceMembershipIds is the membership-id assignment this store was
+// generated under: component kind -> membership name -> the uint64 id
+// carried in the membership columns. Verbatim-channel memberships embed
+// their literal name instead and are absent here.
+//
+// The ids are declaration-order (1..N per component) and are baked into
+// both the component codecs and this store's Scan filters. Nothing on the
+// wire records which assignment wrote a row, so rows written under a
+// different one decode as ABSENT rather than failing — VerifySchema
+// cannot see it. Compare this map against the writer's before pointing a
+// regenerated store at existing rows.
+var ProvenanceMembershipIds = map[string]map[string]uint64{
+	"Provenance": {
+		"provHost":  1,
+		"provStack": 2,
+	},
+}
+
 // ProvenanceEntity is the entity bag (ADR-0100 SD5): the envelope plus one option
 // per bound component. Arrow-free — safe to hold in the cache.
 // Entities returned by cached reads are shared with the cache (and
@@ -193,6 +211,15 @@ func (inst *ProvenanceStore) EnsureTable(ctx context.Context) (err error) {
 // and the decode is positional, so drift fails late or, for same-typed
 // column swaps, silently: run VerifySchema at startup after
 // EnsureTable.
+//
+// It checks the COLUMN contract only. The membership-id contract is not
+// checked and cannot be from the schema alone: the ids live in the
+// membership columns as ordinary values, and a FAT table legitimately
+// carries other kinds' ids beside this store's. Rows written under a
+// different id assignment therefore pass VerifySchema and then match
+// nothing — every component decodes absent, with no error. Compare
+// ProvenanceMembershipIds against the writer's assignment when pointing this
+// store at rows it did not write.
 func (inst *ProvenanceStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
 	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE TABLE "+ProvenanceTableName+provenanceArrowOutputSettings) {
@@ -343,13 +370,16 @@ func (inst *ProvenanceStore) Buffered() int { return inst.buffered }
 // Flush ships them — Flush is retryable; DiscardPending drops them
 // instead. An open (uncommitted) entity frame makes Flush error.
 func (inst *ProvenanceStore) Flush(ctx context.Context) (n int, err error) {
-	if inst.buffered == 0 && len(inst.pending) == 0 {
-		return
-	}
 	// Ordered flush (ADR-0112 SD5): make the dimension facts this batch
 	// references durable before the payload insert, so a referencing row is
 	// never durable ahead of its descriptor. On failure nothing is
 	// transferred yet — the buffered rows stay and the next Flush retries.
+	//
+	// This runs BEFORE the nothing-to-do return: a Begin that stamped and
+	// then rolled back, or a caller flushing a store whose own rows all
+	// went elsewhere, still leaves dimension rows buffered in the stampers,
+	// and skipping them here would strand descriptors no later Flush of
+	// this store is obliged to ship. Flushing an empty stamper is free.
 	if !inst.cfg.BestEffortStampFlush {
 		for _, s := range inst.stampers {
 			if _, ferr := s.Flush(ctx); ferr != nil {
@@ -357,6 +387,9 @@ func (inst *ProvenanceStore) Flush(ctx context.Context) (n int, err error) {
 				return
 			}
 		}
+	}
+	if inst.buffered == 0 && len(inst.pending) == 0 {
+		return
 	}
 	records, err := lowlevel.InEntityProvenanceTableTransferRecords(inst.dml, nil)
 	if err != nil {
@@ -510,14 +543,28 @@ func (inst *ProvenanceCache[W]) Get(key uint64) (ent *ProvenanceEntity, found bo
 // GetFetch is the single-lookup read: the cached entity when present,
 // otherwise one immediate batched point fetch — fetch errors surface
 // instead of reading as misses, so found=false with err=nil is the
-// authoritative absent. The fetched row is cached unless the key is
-// in the dirty write window. Prefer Get plus the work-item protocol
-// when batching lookups across a frame; the initial miss here also
-// queues the key, so a later batch fetch may include it redundantly
-// (harmless).
+// authoritative absent. A key in the dirty write window that the cache
+// could not answer is an error rather than a stale row (see below).
+// Prefer Get plus the work-item protocol when batching lookups across a
+// frame; the initial miss here also queues the key, so a later batch
+// fetch may include it redundantly (harmless).
 func (inst *ProvenanceCache[W]) GetFetch(ctx context.Context, key uint64) (ent *ProvenanceEntity, found bool, err error) {
 	ent, found = inst.cache.Get(key)
 	if found {
+		return
+	}
+	if _, d := inst.st.dirty[key]; d {
+		// The key was written locally and is not yet flushed, so ClickHouse
+		// still serves the PRE-write row — and the cache miss above means
+		// there is no local answer either (a Raw() commit, or a discarded
+		// write, invalidates the entry rather than materializing it; an
+		// ordinary commit is pinned and would have hit). Returning the
+		// pre-write row would be stale, and found=false would assert the
+		// authoritative absent this method promises and cannot stand behind
+		// here — so say so instead. Flush first, or read through Get plus the
+		// work-item protocol, whose fetcher drops dirty keys as a MISS, which
+		// queues a refetch rather than claiming absence.
+		err = eh.Errorf("get-fetch: key is in the dirty write window — written locally and not yet flushed, and the write was not materializable into the cache; Flush before reading it back")
 		return
 	}
 	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]uint64{key}))
@@ -531,9 +578,7 @@ func (inst *ProvenanceCache[W]) GetFetch(ctx context.Context, key uint64) (ent *
 		}
 		ent = e
 		found = true
-		if _, d := inst.st.dirty[key]; !d {
-			inst.cache.AddItem(key, e)
-		}
+		inst.cache.AddItem(key, e)
 	}
 	return
 }
@@ -651,7 +696,11 @@ const (
 )
 
 // ScanProvenance iterates the entities whose rows carry a conforming Provenance
-// component, ordered by (Order, Key) — deterministic across ties.
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse

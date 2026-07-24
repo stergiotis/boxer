@@ -60,3 +60,63 @@ func TestStampDiscardPendingClearsAmbient(t *testing.T) {
 	require.Equal(t, []uint64{42}, got,
 		"the abandoned Begin's stamp leaked past DiscardPending onto a later entity")
 }
+
+// countingStamper records how many times Flush reached it.
+type countingStamper struct {
+	id      uint64
+	flushes int
+}
+
+func (s *countingStamper) Current(_ context.Context) iter.Seq2[identifier.TaggedId, error] {
+	return func(yield func(identifier.TaggedId, error) bool) {
+		yield(identifier.TaggedId(s.id), nil)
+	}
+}
+func (s *countingStamper) Flush(_ context.Context) (int, error) {
+	s.flushes++
+	return 0, nil
+}
+
+// The ordered flush (ADR-0112 SD5) must not be skipped by the store's
+// nothing-to-do return. A Begin that stamped and then rolled back leaves the
+// dimension rows those stamps reference buffered in the stamper while the
+// store itself has nothing to ship — and the store's Flush is the only thing
+// obliged to ship them in order. Flushing an empty stamper is free, so the
+// ordered flush runs unconditionally.
+func TestStampFlushRunsWithNothingBuffered(t *testing.T) {
+	ctx := context.Background()
+	stamper := &countingStamper{id: 42}
+	dev := NewDeviceStore(nil, nil, DeviceStoreConfig{
+		Stampers: []recordstore.ReferenceStamper{stamper},
+	})
+	defer dev.Close()
+
+	// Nothing buffered at all.
+	n, err := dev.Flush(ctx)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	require.Equal(t, 1, stamper.flushes, "the ordered stamp flush must run even with no rows to insert")
+
+	// A stamped frame that never becomes a row: same obligation.
+	require.NoError(t, dev.Begin(1, recordstore.SeqTs(1)).Rollback())
+	n, err = dev.Flush(ctx)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	require.Equal(t, 2, stamper.flushes)
+}
+
+// BestEffortStampFlush opts out of the ordering, so the stampers are not
+// flushed by the store at all — the caller owns their durability.
+func TestStampFlushBestEffortSkipsOrdering(t *testing.T) {
+	ctx := context.Background()
+	stamper := &countingStamper{id: 42}
+	dev := NewDeviceStore(nil, nil, DeviceStoreConfig{
+		Stampers:             []recordstore.ReferenceStamper{stamper},
+		BestEffortStampFlush: true,
+	})
+	defer dev.Close()
+
+	_, err := dev.Flush(ctx)
+	require.NoError(t, err)
+	require.Zero(t, stamper.flushes)
+}

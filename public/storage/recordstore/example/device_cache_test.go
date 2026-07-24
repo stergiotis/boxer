@@ -307,8 +307,8 @@ func TestDeviceCacheLatestAndStaleness(t *testing.T) {
 
 // TestDeviceCacheGetFetch pins the single-lookup read: a miss fetches
 // immediately and caches, an absent key is found=false with err=nil
-// (authoritative), and a dirty-window fetch serves the flushed row
-// without re-caching it.
+// (authoritative), and an unflushed local write is what reads serve
+// (write-through) until it is discarded.
 func TestDeviceCacheGetFetch(t *testing.T) {
 	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
@@ -357,6 +357,58 @@ func TestDeviceCacheGetFetch(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, uint64(7), ent.Battery.Val.Charge, "after the discard the flushed row is the truth again")
+}
+
+// A Raw() commit is the one write the cache cannot materialize: the key is
+// marked dirty and the cache entry is INVALIDATED rather than populated. A
+// GetFetch for it then misses the cache and, before this was fixed, answered
+// from ClickHouse — which still serves the PRE-write row — and returned it as
+// found=true. That is stale data presented as authoritative, and the dirty
+// guard only stopped it from being cached, not from being returned.
+//
+// found=false would be no better: GetFetch documents found=false + err=nil as
+// the authoritative absent, and the entity is not absent. So it errors.
+func TestDeviceCacheGetFetchDirtyRawWindow(t *testing.T) {
+	local, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse-local unavailable: %v", err)
+	}
+	ctx := context.Background()
+	st := NewDeviceStore(local, nil, DeviceStoreConfig{})
+	defer st.Close()
+	c := NewDeviceCache[struct{}](st, DeviceCacheConfig{Capacity: 8})
+	require.NoError(t, st.EnsureTable(ctx))
+
+	t0 := time.Unix(1_600_000_000, 0).UTC()
+	require.NoError(t, st.Begin(1, t0).AddBattery(Battery{ID: 1, Charge: 7}).Commit())
+	_, err = st.Flush(ctx)
+	require.NoError(t, err)
+
+	// Warm the cache so the pre-write row is genuinely available to be served.
+	ent, found, err := c.GetFetch(ctx, 1)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, uint64(7), ent.Battery.Val.Charge)
+
+	// A Raw() commit: dirty, and the cache entry invalidated (not replaced).
+	// Taking the raw handle is the whole signal — it marks the commit
+	// unmaterializable whether or not anything is written through it.
+	b := st.Begin(1, t0.Add(time.Hour))
+	_ = b.Raw()
+	require.NoError(t, b.Commit())
+	_, hit := c.Get(1)
+	require.False(t, hit, "a Raw() commit invalidates the key rather than caching it")
+
+	_, _, err = c.GetFetch(ctx, 1)
+	require.Error(t, err, "the pre-write row must not be served as the current one")
+	require.Contains(t, err.Error(), "dirty write window")
+
+	// Flushing makes ClickHouse authoritative again and the read resumes.
+	_, err = st.Flush(ctx)
+	require.NoError(t, err)
+	_, found, err = c.GetFetch(ctx, 1)
+	require.NoError(t, err)
+	require.True(t, found)
 }
 
 // TestDeviceCacheGetFetchError: fetch failures surface as errors instead

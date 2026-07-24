@@ -3,6 +3,7 @@ package gen
 import (
 	"fmt"
 	"go/format"
+	"sort"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -136,11 +137,12 @@ type envelopeCol struct {
 //
 // Role gates (ADR-0100 SD2): Key = EntityId (u64 or string), Order =
 // EntityTimestamp (z64); the state view emits only when an
-// EntityLifecycle (u8) column exists; any other plain column is a
-// generation error — pass-through envelope fields are deferred (ADR-0100
-// Update 2026-07-04). Component decode coverage is gated by
-// marshallgen.ReadRowSupported (carrier channels and exploded fields
-// remain uncovered).
+// EntityLifecycle (u8) column exists. Any other plain column becomes a
+// pass-through envelope field, promoted onto the entity through the
+// embedded <Store>Envelope (shipped 2026-07-09; the ADR-0100 Update of
+// 2026-07-04 that deferred them is superseded). Component decode coverage
+// is gated by marshallgen.ReadRowSupported (carrier channels and
+// tuple / nested sections remain uncovered).
 func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, plans []*mappingplan.Plan) (code []byte, err error) {
 	info := readback.NewInformationRetrieval(conv)
 	err = info.LoadTable(ir, inst.RowConfig)
@@ -242,6 +244,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		stampLane: stampLane, stampLaneAsData: stampLaneAsData}
 	var sb strings.Builder
 	em.emitStoreHeader(&sb, key, order, lifecycle, stateView)
+	em.emitMembershipIds(&sb, comps)
 	em.emitEnvelopeStruct(&sb)
 	em.emitEntityBag(&sb, comps, stateView)
 	em.emitStoreType(&sb)
@@ -494,6 +497,53 @@ func (inst emitter) emitBeginFrame(p func(string, ...any), recv, lifecycleExpr, 
 // emitEnvelopeStruct renders the pass-through envelope carrier — one field
 // per non-role plain column, in canonical order. Nothing is emitted for a
 // role-only schema (the pre-pass-through shape).
+// emitMembershipIds emits the membership-id assignment this store was
+// generated under: per component, the 1..N declaration-order ids
+// marshallgen's NoOpWrapper bakes into that component's codec and this
+// generator bakes into its Scan filter literals.
+//
+// It is emitted as readable data because nothing on the wire records it. The
+// ids are values in the membership columns, indistinguishable from any other
+// kind's ids in a FAT table, so a store pointed at rows written under a
+// different assignment matches nothing and decodes every component as absent
+// — without an error (see VerifySchema, which checks columns only). A
+// migration or a startup check therefore needs the assignment in a form it can
+// compare; this is that form.
+func (inst emitter) emitMembershipIds(sb *strings.Builder, comps []storeComponent) {
+	if len(comps) == 0 {
+		return
+	}
+	p := func(format string, args ...any) { fmt.Fprintf(sb, format+"\n", args...) }
+	p("// %sMembershipIds is the membership-id assignment this store was", inst.StoreName)
+	p("// generated under: component kind -> membership name -> the uint64 id")
+	p("// carried in the membership columns. Verbatim-channel memberships embed")
+	p("// their literal name instead and are absent here.")
+	p("//")
+	p("// The ids are declaration-order (1..N per component) and are baked into")
+	p("// both the component codecs and this store's Scan filters. Nothing on the")
+	p("// wire records which assignment wrote a row, so rows written under a")
+	p("// different one decode as ABSENT rather than failing — VerifySchema")
+	p("// cannot see it. Compare this map against the writer's before pointing a")
+	p("// regenerated store at existing rows.")
+	p("var %sMembershipIds = map[string]map[string]uint64{", inst.StoreName)
+	for _, c := range comps {
+		ids := marshallgen.MembershipIds(c.plan)
+		names := make([]string, 0, len(ids))
+		for n := range ids {
+			names = append(names, n)
+		}
+		// Deterministic emission: by assigned id, which is declaration order.
+		sort.Slice(names, func(i, j int) bool { return ids[names[i]] < ids[names[j]] })
+		p("\t%q: {", c.Kind)
+		for _, n := range names {
+			p("\t\t%q: %d,", n, ids[n])
+		}
+		p("\t},")
+	}
+	p("}")
+	p("")
+}
+
 func (inst emitter) emitEnvelopeStruct(sb *strings.Builder) {
 	if len(inst.model.passthrough) == 0 {
 		return
@@ -828,6 +878,15 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("// and the decode is positional, so drift fails late or, for same-typed")
 	p("// column swaps, silently: run VerifySchema at startup after")
 	p("// EnsureTable.")
+	p("//")
+	p("// It checks the COLUMN contract only. The membership-id contract is not")
+	p("// checked and cannot be from the schema alone: the ids live in the")
+	p("// membership columns as ordinary values, and a FAT table legitimately")
+	p("// carries other kinds' ids beside this store's. Rows written under a")
+	p("// different id assignment therefore pass VerifySchema and then match")
+	p("// nothing — every component decodes absent, with no error. Compare")
+	p("// %sMembershipIds against the writer's assignment when pointing this", inst.StoreName)
+	p("// store at rows it did not write.")
 	p("func (inst *%s) VerifySchema(ctx context.Context) (err error) {", inst.storeType())
 	p("\tlive := make([]string, 0, 64)")
 	p("\tfor rec, rerr := range inst.exec.QueryArrow(ctx, \"DESCRIBE TABLE \"+%sTableName+%sArrowOutputSettings) {", inst.StoreName, inst.TableName)
@@ -1041,13 +1100,16 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("// Flush ships them — Flush is retryable; DiscardPending drops them")
 	p("// instead. An open (uncommitted) entity frame makes Flush error.")
 	p("func (inst *%s) Flush(ctx context.Context) (n int, err error) {", inst.storeType())
-	p("\tif inst.buffered == 0 && len(inst.pending) == 0 {")
-	p("\t\treturn")
-	p("\t}")
 	p("\t// Ordered flush (ADR-0112 SD5): make the dimension facts this batch")
 	p("\t// references durable before the payload insert, so a referencing row is")
 	p("\t// never durable ahead of its descriptor. On failure nothing is")
 	p("\t// transferred yet — the buffered rows stay and the next Flush retries.")
+	p("\t//")
+	p("\t// This runs BEFORE the nothing-to-do return: a Begin that stamped and")
+	p("\t// then rolled back, or a caller flushing a store whose own rows all")
+	p("\t// went elsewhere, still leaves dimension rows buffered in the stampers,")
+	p("\t// and skipping them here would strand descriptors no later Flush of")
+	p("\t// this store is obliged to ship. Flushing an empty stamper is free.")
 	p("\tif !inst.cfg.BestEffortStampFlush {")
 	p("\t\tfor _, s := range inst.stampers {")
 	p("\t\t\tif _, ferr := s.Flush(ctx); ferr != nil {")
@@ -1055,6 +1117,9 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\t\t\t\treturn")
 	p("\t\t\t}")
 	p("\t\t}")
+	p("\t}")
+	p("\tif inst.buffered == 0 && len(inst.pending) == 0 {")
+	p("\t\treturn")
 	p("\t}")
 	p("\trecords, err := %s", inst.ctrlCall("inst.dml", "TransferRecords", "nil"))
 	p("\tif err != nil {")
@@ -1216,14 +1281,28 @@ func (inst emitter) emitCacheView(sb *strings.Builder, stateView bool) {
 	p("// GetFetch is the single-lookup read: the cached entity when present,")
 	p("// otherwise one immediate batched point fetch — fetch errors surface")
 	p("// instead of reading as misses, so found=false with err=nil is the")
-	p("// authoritative absent. The fetched row is cached unless the key is")
-	p("// in the dirty write window. Prefer Get plus the work-item protocol")
-	p("// when batching lookups across a frame; the initial miss here also")
-	p("// queues the key, so a later batch fetch may include it redundantly")
-	p("// (harmless).")
+	p("// authoritative absent. A key in the dirty write window that the cache")
+	p("// could not answer is an error rather than a stale row (see below).")
+	p("// Prefer Get plus the work-item protocol when batching lookups across a")
+	p("// frame; the initial miss here also queues the key, so a later batch")
+	p("// fetch may include it redundantly (harmless).")
 	p("func (inst *%s[W]) GetFetch(ctx context.Context, key %s) (ent *%s, found bool, err error) {", inst.cacheType(), inst.keyGoType, inst.entityType())
 	p("\tent, found = inst.cache.Get(key)")
 	p("\tif found {")
+	p("\t\treturn")
+	p("\t}")
+	p("\tif _, d := inst.st.dirty[key]; d {")
+	p("\t\t// The key was written locally and is not yet flushed, so ClickHouse")
+	p("\t\t// still serves the PRE-write row — and the cache miss above means")
+	p("\t\t// there is no local answer either (a Raw() commit, or a discarded")
+	p("\t\t// write, invalidates the entry rather than materializing it; an")
+	p("\t\t// ordinary commit is pinned and would have hit). Returning the")
+	p("\t\t// pre-write row would be stale, and found=false would assert the")
+	p("\t\t// authoritative absent this method promises and cannot stand behind")
+	p("\t\t// here — so say so instead. Flush first, or read through Get plus the")
+	p("\t\t// work-item protocol, whose fetcher drops dirty keys as a MISS, which")
+	p("\t\t// queues a refetch rather than claiming absence.")
+	p("\t\terr = eh.Errorf(\"get-fetch: key is in the dirty write window — written locally and not yet flushed, and the write was not materializable into the cache; Flush before reading it back\")")
 	p("\t\treturn")
 	p("\t}")
 	p("\tents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]%s{key}))", inst.keyGoType)
@@ -1237,9 +1316,7 @@ func (inst emitter) emitCacheView(sb *strings.Builder, stateView bool) {
 	p("\t\t}")
 	p("\t\tent = e")
 	p("\t\tfound = true")
-	p("\t\tif _, d := inst.st.dirty[key]; !d {")
-	p("\t\t\tinst.cache.AddItem(key, e)")
-	p("\t\t}")
+	p("\t\tinst.cache.AddItem(key, e)")
 	p("\t}")
 	p("\treturn")
 	p("}")
@@ -1398,7 +1475,11 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("")
 	for _, c := range comps {
 		p("// Scan%s iterates the entities whose rows carry a conforming %s", c.Kind, c.Kind)
-		p("// component, ordered by (Order, Key) — deterministic across ties.")
+		p("// component, ordered by (Order, Key) — so entities sharing an Order")
+		p("// still come out in a fixed sequence. Rows that tie on BOTH (the same")
+		p("// key written twice at the same Order) are not ordered against each")
+		p("// other by this clause; the table keeps newest-per-key, so which of")
+		p("// them survives is the engine's choice, not the scan's.")
 		p("// opts.ExtraPredicate (trusted raw SQL over the physical columns —")
 		p("// never untrusted input) further restricts the scan; opts.Limit")
 		p("// caps the row count. The Filter artefact uses ClickHouse")

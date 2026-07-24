@@ -2,6 +2,7 @@ package example
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -77,5 +78,28 @@ func TestDeviceStoreScan(t *testing.T) {
 	for ent, rerr := range st.ScanLocated(ctx, recordstore.ScanOpts{}) {
 		require.NoError(t, rerr)
 		t.Fatalf("unexpected Located row for entity %d — scan must be empty", ent.ID)
+	}
+}
+
+// The exposed membership-id assignment must be the one actually baked into
+// the Scan filters. It exists so a caller can compare it against the writer's
+// before pointing a regenerated store at existing rows — the only defence
+// against the silent-absent decode VerifySchema cannot see — and a map that
+// drifted from the literals would make that comparison worthless.
+func TestDeviceMembershipIdsMatchBakedFilters(t *testing.T) {
+	filters := map[string]string{
+		"Identity": deviceScanIdentityFilter,
+		"Battery":  deviceScanBatteryFilter,
+		"Tagged":   deviceScanTaggedFilter,
+		"Located":  deviceScanLocatedFilter,
+	}
+	require.Len(t, DeviceMembershipIds, len(filters), "every component must expose its assignment")
+	for kind, filter := range filters {
+		ids := DeviceMembershipIds[kind]
+		require.NotEmptyf(t, ids, "component %s exposes no membership ids", kind)
+		for name, id := range ids {
+			require.Containsf(t, filter, fmt.Sprintf(", %d)", id),
+				"%s.%s is exposed as id %d, but that id is not baked into its Scan filter", kind, name, id)
+		}
 	}
 }

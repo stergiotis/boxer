@@ -144,6 +144,14 @@ func (inst *Storage) PutEnvelope(ctx context.Context, h types.PatchHash, framed 
 	key := envKey(h)
 	// First write wins: envelopes are immutable, re-putting different
 	// bytes for an existing hash is ignored per the contract.
+	//
+	// The rule is enforced as check-then-insert under inst.mu, which is
+	// process-local: two processes writing the same hash concurrently both
+	// see not-found and both insert. The table keeps newest-per-key, so the
+	// later row wins and "first write" is decided by arrival, not by the
+	// check. Harmless while the bytes agree — which they do for an honest
+	// producer, since the hash addresses them — but it means this method is
+	// single-writer for the dishonest case, not serializable.
 	_, found, err := inst.st.Latest(ctx, key)
 	if err != nil {
 		err = eh.Errorf("put envelope existence check: %w", err)
@@ -244,8 +252,18 @@ func (inst *Storage) ReplaceApplied(ctx context.Context, hs []types.PatchHash) (
 		return
 	}
 	// The tombstone resets the log; the new entries follow in the same
-	// buffered batch, so one Flush makes the whole replacement visible
-	// atomically (a single Arrow insert).
+	// buffered batch, so one Flush ships the whole replacement in one
+	// insert.
+	//
+	// Atomicity is bounded by that insert becoming ONE part. ClickHouse
+	// splits an insert whose block exceeds max_insert_block_size (~1M rows
+	// by default) into several parts, and parts become visible
+	// independently — so for an `hs` long enough to cross that threshold a
+	// concurrent reader can observe the tombstone part without the entries
+	// that follow it, and LoadApplied then reads EMPTY rather than either
+	// the old or the new log. Applied-log replacements are far below that
+	// size in practice; a caller that could approach it needs the
+	// replacement staged elsewhere and swapped, not this method.
 	err = inst.st.Delete(logKey, ts)
 	if err != nil {
 		err = eh.Errorf("replace applied tombstone: %w", err)
