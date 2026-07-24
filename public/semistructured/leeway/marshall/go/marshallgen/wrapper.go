@@ -27,9 +27,9 @@ import (
 // registry vs declaration-order const) and is free to elide either
 // block. NoOpWrapper does that.
 //
-// Implementations live in caller packages — pebble's FactsWrapper for
-// the full boxer.facts wrapper stack, NoOpWrapper here for the
-// schema-agnostic anchor-style emit.
+// Implementations live in caller packages — keelson's FactsWrapper
+// (runtime/codec/factswrapper) for the full boxer.facts wrapper stack,
+// NoOpWrapper here for the schema-agnostic anchor-style emit.
 type WrapperEmitterI interface {
 	// Imports returns lines (each one a fully-quoted Go import spec)
 	// that should be folded into the generated file's import block in
@@ -111,12 +111,6 @@ func (NoOpWrapper) BeforeCore(_ *strings.Builder, _ *mappingplan.Plan) error { r
 // helpers the core emits.
 func (NoOpWrapper) AfterCore(_ *strings.Builder, _ *mappingplan.Plan) error { return nil }
 
-// uniqueMemberships returns plan.Fields filtered so each LWMembership
-// appears at most once (first-seen wins), skipping channels that do
-// not consult a registry (the literal []byte name is embedded at the
-// call site, or the params-blob channels carry the wire payload
-// directly). Multi-sub-column sections share one membership across
-// two fields; KindVars decl per membership, not per field.
 // MembershipIds reports the package-local membership-id assignment the
 // NoOpWrapper KindVars block emits: one id per unique ref-channel
 // membership, 1-based, in declaration order. Exposed so downstream
@@ -131,6 +125,12 @@ func MembershipIds(plan *mappingplan.Plan) map[string]uint64 {
 	return out
 }
 
+// uniqueMemberships returns plan.Fields filtered so each LWMembership
+// appears at most once (first-seen wins), skipping channels that do
+// not consult a registry (the literal []byte name is embedded at the
+// call site, or the params-blob channels carry the wire payload
+// directly). Multi-sub-column sections share one membership across
+// two fields; KindVars declares per membership, not per field.
 func uniqueMemberships(plan *mappingplan.Plan) (out []mappingplan.TaggedField) {
 	seen := map[string]bool{}
 	for _, f := range plan.Fields {

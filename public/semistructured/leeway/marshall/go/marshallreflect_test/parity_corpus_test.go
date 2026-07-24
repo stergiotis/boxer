@@ -86,8 +86,8 @@ var parityCases = []parityCase{
 		name:      "asym-entity-level-lane-marker",
 		file:      "parity_dto_asym_lane_test.go",
 		plan:      func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[parityAsymLane]() },
-		genErr:    "not yet supported by the codegen front-end",
-		asymmetry: "value-marker bridge is reflect-only (deferred surface, ADR-0113 D3): reflect relabels the canonical from the lw lane type; codegen names the gap explicitly",
+		genErr:    "is not supported by the codegen front-end",
+		asymmetry: "value-marker bridge is reflect-only (ADR-0113 P1, not planned): reflect relabels the canonical from the lw lane type; codegen names the gap and points at the `,ct=` spelling",
 	},
 }
 

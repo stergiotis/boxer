@@ -16,10 +16,11 @@ import (
 )
 
 // ParsePlan parses the DTO source file at inputPath and returns the
-// resolved mappingplan.Plan. The DTO must contain exactly one top-level struct
-// type declaration; that struct declares an `_` field carrying entity
-// metadata (`kind:"<name>" plain:"<col=Field,…>"`) plus zero or more
-// fields tagged with `lw:"<membership>[,<section>[:<column>]][,<flag>…]"`.
+// resolved mappingplan.Plan. The file declares exactly one DTO struct — the
+// one carrying an `_` field with `kind:"<name>"` — plus, optionally, the
+// tuple / nested element structs its fields reference. Beside the `_` field
+// the DTO carries plain columns (`lw:",<col>"`) and tagged-value fields
+// (`lw:"<membership>[,<section>[:<column>]][,<flag>…]"`).
 //
 // ParsePlan does NOT consult any membership registry or schema
 // descriptor. Membership-name typos, missing memberships, and
@@ -33,7 +34,7 @@ import (
 //
 //   - lw: tag grammar (comma layout, optional section, optional sub-
 //     column, optional trailing flag tokens).
-//   - Recognised flag tokens (`unit`, `explode`, channel flags, `const=`,
+//   - Recognised flag tokens (`unit`, channel flags, `const=`,
 //     `ct=<canonical>`).
 //   - Flag-vs-Go-shape consistency (see mappingplan.FieldFlags doc).
 //   - mappingplan.Plan completeness (kind name present, at least one plain column).
@@ -385,15 +386,6 @@ func buildAstNestedElems(st *ast.StructType) (elems []goplan.TupleElem, err erro
 	return
 }
 
-// membershipMarkerChannel maps an lw.* membership marker type name to its
-// channel — the AST mirror of marshallreflect.membershipMarkerChannel.
-var membershipMarkerChannel = map[string]mappingplan.MembershipChannel{
-	"Ref":          mappingplan.MembershipChannelLowCardRef,
-	"HighRef":      mappingplan.MembershipChannelHighCardRef,
-	"Verbatim":     mappingplan.MembershipChannelLowCardVerbatim,
-	"HighVerbatim": mappingplan.MembershipChannelHighCardVerbatim,
-}
-
 // lwMarkerName reports whether expr names an lw.* marker type — a selector into
 // the `lw` package (lw.Ref, lw.IPv4, …), an lw.Single[T] index expression, or a
 // `[]` of one. It returns the marker's type name (e.g. "Ref", "Single") and
@@ -421,25 +413,18 @@ func lwMarkerName(expr ast.Expr) (name string, isSlice, ok bool) {
 
 // classifyLwMembershipMarker classifies an lw.* membership marker (lw.Ref /
 // lw.HighRef / lw.Verbatim / lw.HighVerbatim, or a `[]` of them) into a
-// FieldShape — mirroring marshallreflect.classifyLwMarker's membership branch.
-// The value's Go type is uint64 (ref) or string (verbatim), a slice promotes the
-// canonical to HomogenousArray, and MarkerGoType carries the newtype for the
-// codegen bridge. lw.Single / lane value markers are deferred to step 2b.
+// FieldShape via the shared goplan table, so the two front-ends recognise the
+// same marker set. A slice promotes the canonical to HomogenousArray (a
+// repeated membership). The value-shape markers (lw.Single, the lanes) are
+// reflect-only — a codegen'd DTO spells them `,unit` / `,ct=` — so they are
+// rejected here with that pointer (ADR-0113 P1).
 func classifyLwMembershipMarker(name string, isSlice bool) (shape goplan.FieldShape, err error) {
-	ch, ok := membershipMarkerChannel[name]
-	if !ok {
-		err = eb.Build().Str("marker", "lw."+name).Errorf("lw.%s is not yet supported by the codegen front-end (Slice C step 2b — only the membership markers lw.Ref / lw.HighRef / lw.Verbatim / lw.HighVerbatim are wired)", name)
+	shape, ok, err := goplan.MembershipMarkerShape(name)
+	if err != nil {
 		return
 	}
-	shape.IsMembership = true
-	shape.MembershipChannel = ch
-	shape.MarkerGoType = "lw." + name
-	goType := "uint64"
-	if ch.EmbedsLiteralName() {
-		goType = "string"
-	}
-	shape.Canonical, err = goplan.ScalarCanonicalForGoType(goType)
-	if err != nil {
+	if !ok {
+		err = eb.Build().Str("marker", "lw."+name).Errorf("lw.%s is not supported by the codegen front-end — only the membership markers (lw.Ref / lw.HighRef / lw.Verbatim / lw.HighVerbatim) are wired; spell a value-shape marker as `,unit` / `,ct=` on a plain field (ADR-0113 P1)", name)
 		return
 	}
 	if isSlice {
