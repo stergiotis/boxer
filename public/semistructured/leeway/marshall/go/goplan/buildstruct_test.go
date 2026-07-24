@@ -21,52 +21,52 @@ func TestClassifySliceSection(t *testing.T) {
 	}{
 		{
 			name: "marker beats everything", tag: "text", marker: true, atMemb: true,
-			want:    goplan.SliceSectionNested,
+			want:    goplan.SliceSectionKindNested,
 			because: "the lw.* markers are the typed spelling of @membership; a struct carrying both is still nested",
 		},
 		{
 			name: "marker with a static tag stays nested", tag: "memb,text", marker: true,
-			want:    goplan.SliceSectionNested,
+			want:    goplan.SliceSectionKindNested,
 			because: "per-attribute markers make it dynamic; the tag's membership is redundant, not decisive",
 		},
 		{
 			name: "@membership is the flat tuple", tag: "text", atMemb: true,
-			want:    goplan.SliceSectionFlatTuple,
+			want:    goplan.SliceSectionKindFlatTuple,
 			because: "the original ADR-0103 grammar",
 		},
 		{
 			name: "@membership beats a static tag", tag: "memb,text", atMemb: true,
-			want:    goplan.SliceSectionFlatTuple,
+			want:    goplan.SliceSectionKindFlatTuple,
 			because: "per-element memberships win; AddTupleSliceField rejects the tag's flags",
 		},
 		{
 			name: "static membership on the tag", tag: "memb,text",
-			want:    goplan.SliceSectionNested,
+			want:    goplan.SliceSectionKindNested,
 			because: "static-Many: N attributes per row under one membership",
 		},
 		{
 			name: "bare section, no membership anywhere", tag: "text",
-			want:    goplan.SliceSectionFlatTuple,
+			want:    goplan.SliceSectionKindFlatTuple,
 			because: "a flat tuple missing its @membership field — routed so the error names that",
 		},
 		{
 			name: "sub-column tag does not name a membership", tag: "text:value",
-			want:    goplan.SliceSectionFlatTuple,
+			want:    goplan.SliceSectionKindFlatTuple,
 			because: "SplitLW reads `text:value` as membership `text` with no section slot filled",
 		},
 		{
 			name: "trailing comma is not a membership", tag: "text,",
-			want:    goplan.SliceSectionFlatTuple,
+			want:    goplan.SliceSectionKindFlatTuple,
 			because: "the section slot is empty — the crude strings.Contains(\",\") test this replaced got it wrong",
 		},
 		{
 			name: "unparseable tag routes on the element signals", tag: "memb,text,bogusFlag", atMemb: true,
-			want:    goplan.SliceSectionFlatTuple,
+			want:    goplan.SliceSectionKindFlatTuple,
 			because: "the chosen builder re-parses the tag and reports the bad flag",
 		},
 		{
 			name: "unparseable tag with no element signal", tag: "memb,text,bogusFlag",
-			want:    goplan.SliceSectionFlatTuple,
+			want:    goplan.SliceSectionKindFlatTuple,
 			because: "a tag that does not parse cannot name a membership; the builder reports the flag",
 		},
 	} {

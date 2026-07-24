@@ -21,14 +21,14 @@ import (
 type SliceSectionKindE uint8
 
 const (
-	// SliceSectionFlatTuple is the ADR-0103 grammar: AddTupleSliceField, with
+	// SliceSectionKindFlatTuple is the ADR-0103 grammar: AddTupleSliceField, with
 	// `@membership`-tagged element fields and `<section>:<column>` values.
-	SliceSectionFlatTuple SliceSectionKindE = iota
-	// SliceSectionNested is the ADR-0113 nested attribute model:
+	SliceSectionKindFlatTuple SliceSectionKindE = iota
+	// SliceSectionKindNested is the ADR-0113 nested attribute model:
 	// AddNestedSliceField, whose element fields are bare sub-columns and whose
 	// membership is either a lw.* marker field (dynamic) or the outer tag
 	// (static-Many).
-	SliceSectionNested
+	SliceSectionKindNested
 )
 
 // ClassifySliceSection decides which builder a `[]S` section field feeds, from
@@ -54,13 +54,13 @@ const (
 func ClassifySliceSection(lwTag string, elemHasMarkerMembership, elemHasAtMembership bool) SliceSectionKindE {
 	switch {
 	case elemHasMarkerMembership:
-		return SliceSectionNested
+		return SliceSectionKindNested
 	case elemHasAtMembership:
-		return SliceSectionFlatTuple
+		return SliceSectionKindFlatTuple
 	case tagNamesStaticMembership(lwTag):
-		return SliceSectionNested
+		return SliceSectionKindNested
 	default:
-		return SliceSectionFlatTuple
+		return SliceSectionKindFlatTuple
 	}
 }
 
@@ -74,6 +74,92 @@ func tagNamesStaticMembership(lwTag string) bool {
 		return false
 	}
 	return pt.Membership != "" && pt.Section != ""
+}
+
+// attrValueField is one accepted value sub-column of a struct-shaped section.
+type attrValueField struct {
+	goField   string
+	column    string
+	canonical canonicaltypes.PrimitiveAstNodeI
+	ct        string
+}
+
+// attrSubColumns accumulates the validated value sub-columns of a struct-shaped
+// section. Once a field is known to be a value (not a membership) and its tag
+// has been read, the remaining rules are the same for both spellings — the flat
+// `@membership` tuple element and the nested attribute struct — so they live
+// here rather than twice over: the "value" column default, in-struct column
+// uniqueness, the `,ct=` override, the roaring rejection, and the slice-element
+// allowlist.
+//
+// The two spellings name the enclosing shape differently in their errors, which
+// is the only thing they differ on: noun fills "two <noun> fields", place fills
+// "not supported <place>". Both spellings' wordings are load-bearing — the
+// parity corpus and consumer tests match on them — so they are carried verbatim
+// rather than unified.
+type attrSubColumns struct {
+	goField  string // outer DTO field, for error context
+	noun     string // "tuple element" / "nested"
+	place    string // "inside a tuple element" / "as a nested sub-column"
+	usedCols map[string]string
+	values   []attrValueField
+}
+
+func newAttrSubColumns(goField, noun, place string, capHint int) *attrSubColumns {
+	return &attrSubColumns{
+		goField:  goField,
+		noun:     noun,
+		place:    place,
+		usedCols: make(map[string]string, capHint),
+		values:   make([]attrValueField, 0, capHint),
+	}
+}
+
+// add validates one value sub-column and records it. column is the tag's
+// column slot ("" ⇒ the flat single-sub-column default "value"); ctOverride is
+// the tag's `,ct=` canonical ("" for none); shape is the front-end's
+// classification of the field's Go type.
+func (s *attrSubColumns) add(elemField, column, ctOverride string, shape FieldShape) (err error) {
+	ctx := eb.Build().Str("field", s.goField).Str("elemField", elemField)
+	if column == "" {
+		// A multi-sub-column struct must give each field a distinct column —
+		// two defaulted fields would both claim "value" and collide below.
+		column = "value"
+	}
+	if prev, dup := s.usedCols[column]; dup {
+		err = ctx.Str("column", column).Str("first", prev).Errorf("sub-column appears on two %s fields", s.noun)
+		return
+	}
+	s.usedCols[column] = elemField
+
+	goType, isSlice, isRoaring, err := mappingplan.DeriveGoShape(shape.Canonical)
+	if err != nil {
+		err = ctx.Errorf("derive Go type from canonical: %w", err)
+		return
+	}
+	canonical := shape.Canonical
+	if ctOverride != "" {
+		canonical, err = resolveCanonicalOverride(elemField, ctOverride, goType, isSlice, isRoaring)
+		if err != nil {
+			return
+		}
+		goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(canonical)
+		if err != nil {
+			err = ctx.Errorf("derive Go type from `,ct=` canonical: %w", err)
+			return
+		}
+	}
+	if isRoaring {
+		err = ctx.Errorf("*roaring.Bitmap not supported %s — no stable element index to zip with the co-containers; use []T", s.place)
+		return
+	}
+	if isSlice {
+		if err = checkSliceElemType(elemField, goType); err != nil {
+			return
+		}
+	}
+	s.values = append(s.values, attrValueField{goField: elemField, column: column, canonical: canonical, ct: ctOverride})
+	return
 }
 
 // TupleElem is one field of a tuple element struct as seen by a
@@ -118,15 +204,8 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 		return
 	}
 
-	type valueField struct {
-		goField   string
-		column    string
-		canonical canonicaltypes.PrimitiveAstNodeI
-		flags     mappingplan.FieldFlags
-	}
 	memberships := make([]mappingplan.TupleMembership, 0, len(elems))
-	values := make([]valueField, 0, len(elems))
-	usedCols := map[string]string{}
+	subs := newAttrSubColumns(goFieldName, "tuple element", "inside a tuple element", len(elems))
 
 	for _, e := range elems {
 		ctx := eb.Build().Str("field", goFieldName).Str("elemField", e.GoFieldName)
@@ -199,20 +278,13 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			continue
 		}
 
-		// Value field — one sub-column of the tuple's section.
+		// Value field — one sub-column of the tuple's section. The tag rules
+		// below are the tuple spelling's own; the sub-column rules they gate are
+		// shared with the nested spelling (attrSubColumns.add).
 		if pt.Section != section {
 			err = ctx.Str("tupleSection", section).Str("elemSection", pt.Section).Errorf("tuple element targets a different section than its tuple field")
 			return
 		}
-		col := pt.Column
-		if col == "" {
-			col = "value"
-		}
-		if prev, dup := usedCols[col]; dup {
-			err = ctx.Str("column", col).Str("first", prev).Errorf("sub-column appears on two tuple element fields")
-			return
-		}
-		usedCols[col] = e.GoFieldName
 		if pt.Flags.Unit || pt.Flags.HasConst {
 			err = ctx.Errorf("`unit` / `const` not supported inside a tuple element — each element is one tuple attribute plus zipped co-containers")
 			return
@@ -221,35 +293,16 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			err = ctx.Str("flag", pt.Flags.Channel.String()).Errorf("channel flag belongs on the `%s` field, not on a tuple value field", TupleMembershipMarker)
 			return
 		}
-		fieldCanonical := e.Shape.Canonical
-		if pt.Flags.CanonicalType != "" {
-			fieldCanonical, err = resolveCanonicalOverride(e.GoFieldName, pt.Flags.CanonicalType, goType, isSlice, isRoaring)
-			if err != nil {
-				return
-			}
-			goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(fieldCanonical)
-			if err != nil {
-				err = ctx.Errorf("derive Go type from `,ct=` canonical: %w", err)
-				return
-			}
-		}
-		if isRoaring {
-			err = ctx.Errorf("*roaring.Bitmap not supported inside a tuple element — no stable element index to zip with the co-containers; use []T")
+		if err = subs.add(e.GoFieldName, pt.Column, pt.Flags.CanonicalType, e.Shape); err != nil {
 			return
 		}
-		if isSlice {
-			if err = checkSliceElemType(e.GoFieldName, goType); err != nil {
-				return
-			}
-		}
-		values = append(values, valueField{goField: e.GoFieldName, column: col, canonical: fieldCanonical, flags: pt.Flags})
 	}
 
 	if len(memberships) == 0 {
 		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs at least one `%s` field carrying a per-attribute membership", TupleMembershipMarker)
 		return
 	}
-	if len(values) == 0 {
+	if len(subs.values) == 0 {
 		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs at least one value field (`<section>:<column>`)")
 		return
 	}
@@ -258,7 +311,7 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 		return
 	}
 
-	for _, v := range values {
+	for _, v := range subs.values {
 		b.plan.Fields = append(b.plan.Fields, mappingplan.TaggedField{
 			GoFieldName:  v.goField,
 			Canonical:    v.canonical,
@@ -269,7 +322,7 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			// g.Channel() and the per-section channel-uniformity check stay
 			// well-defined; every tuple channel site dispatches on
 			// TupleMemberships instead (the memberships may be heterogeneous).
-			Flags:            mappingplan.FieldFlags{Channel: memberships[0].Channel, CanonicalType: v.flags.CanonicalType},
+			Flags:            mappingplan.FieldFlags{Channel: memberships[0].Channel, CanonicalType: v.ct},
 			TupleField:       goFieldName,
 			TupleStructType:  structTypeName,
 			TupleMemberships: memberships,
@@ -327,15 +380,8 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 	// — the DYNAMIC case, per-attribute memberships) versus value sub-columns. A
 	// struct with ≥1 membership marker is dynamic; without one it is STATIC (its
 	// single membership is on the outer tag).
-	type valueField struct {
-		goField   string
-		column    string
-		canonical canonicaltypes.PrimitiveAstNodeI
-		ct        string
-	}
 	memberships := make([]mappingplan.TupleMembership, 0, len(elems))
-	values := make([]valueField, 0, len(elems))
-	usedCols := map[string]string{}
+	subs := newAttrSubColumns(goFieldName, "nested", "as a nested sub-column", len(elems))
 
 	for _, e := range elems {
 		ctx := eb.Build().Str("field", goFieldName).Str("elemField", e.GoFieldName)
@@ -384,54 +430,16 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 			err = ctx.Errorf("parse nested sub-column tag: %w", err)
 			return
 		}
-		if column == "" {
-			// The flat single-sub-column default. A multi-sub-column nested
-			// section must give each field a distinct `lw:"<column>"` tag — two
-			// untagged fields would both claim "value" and collide below.
-			column = "value"
-		}
 		if flags.Unit || flags.HasConst || flags.Channel != mappingplan.MembershipChannelLowCardRef {
 			err = ctx.Errorf("nested sub-column tag takes only `ct=` (no unit / const / channel — the channel is on the membership)")
 			return
 		}
-		if prev, dup := usedCols[column]; dup {
-			err = ctx.Str("column", column).Str("first", prev).Errorf("sub-column appears on two nested fields")
+		if err = subs.add(e.GoFieldName, column, flags.CanonicalType, e.Shape); err != nil {
 			return
 		}
-		usedCols[column] = e.GoFieldName
-
-		var goType string
-		var isSlice, isRoaring bool
-		goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(e.Shape.Canonical)
-		if err != nil {
-			err = ctx.Errorf("derive Go type from canonical: %w", err)
-			return
-		}
-		fieldCanonical := e.Shape.Canonical
-		if flags.CanonicalType != "" {
-			fieldCanonical, err = resolveCanonicalOverride(e.GoFieldName, flags.CanonicalType, goType, isSlice, isRoaring)
-			if err != nil {
-				return
-			}
-			goType, isSlice, isRoaring, err = mappingplan.DeriveGoShape(fieldCanonical)
-			if err != nil {
-				err = ctx.Errorf("derive Go type from `,ct=` canonical: %w", err)
-				return
-			}
-		}
-		if isRoaring {
-			err = ctx.Errorf("*roaring.Bitmap not supported as a nested sub-column — no stable element index to zip; use []T")
-			return
-		}
-		if isSlice {
-			if err = checkSliceElemType(e.GoFieldName, goType); err != nil {
-				return
-			}
-		}
-		values = append(values, valueField{goField: e.GoFieldName, column: column, canonical: fieldCanonical, ct: flags.CanonicalType})
 	}
 
-	if len(values) == 0 {
+	if len(subs.values) == 0 {
 		err = eb.Build().Str("field", goFieldName).Errorf("nested section struct needs at least one sub-column field")
 		return
 	}
@@ -485,7 +493,7 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 		membership, section, channel = pt.Membership, pt.Section, pt.Flags.Channel
 	}
 
-	for _, v := range values {
+	for _, v := range subs.values {
 		tf := mappingplan.TaggedField{
 			GoFieldName:      v.goField,
 			Canonical:        v.canonical,

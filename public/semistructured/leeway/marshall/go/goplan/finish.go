@@ -13,9 +13,47 @@ import (
 // channel uniformity, kindXxx symbol collisions, carrier pairing, and the
 // multi-sub-column structural rules.
 
-// Finish runs the whole-DTO completeness + per-section channel
-// uniformity checks and returns the assembled plan.
+// finishCtx carries the derived views a whole-DTO check builds and a later one
+// reads, so each check stays a plain method and the sharing is explicit rather
+// than a local variable threaded through one long function.
+type finishCtx struct {
+	// membsBySection is section -> set of membership names. Built by
+	// checkSectionChannelUniformity, read by resolveCarriers (one membership
+	// per carrier section) and checkMultiSubColumnShapes (one membership per
+	// multi-sub-column section).
+	membsBySection map[string]map[string]bool
+}
+
+// Finish runs the whole-DTO checks and returns the assembled plan.
+//
+// The checks run in the order listed; two orderings are load-bearing.
+// checkTupleSectionExclusivity runs before checkSectionChannelUniformity so a
+// section shared between a tuple field and something else is reported as the
+// sharing itself rather than as a downstream channel mix. resolveCarriers and
+// checkMultiSubColumnShapes run after checkSectionChannelUniformity because
+// they read the membership index it builds.
 func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
+	fc := &finishCtx{}
+	for _, check := range []func(*finishCtx) error{
+		b.checkCompleteness,
+		b.checkRefMembershipsAreIdentifiers,
+		b.checkTupleSectionExclusivity,
+		b.checkSectionChannelUniformity,
+		b.checkConstRefKindVarCollisions,
+		b.resolveCarriers,
+		b.checkMultiSubColumnShapes,
+	} {
+		if err = check(fc); err != nil {
+			return
+		}
+	}
+	plan = b.plan
+	return
+}
+
+// checkCompleteness requires the entity-level identity every downstream
+// emitter assumes: a kind name, and the `id` plain column that drives SetId.
+func (b *PlanBuilder) checkCompleteness(fc *finishCtx) (err error) {
 	if b.plan.KindName == "" {
 		err = eb.Build().Str("input", b.plan.InputPath).Errorf("DTO struct is missing the `_` entity-level field with `kind:\"…\"`")
 		return
@@ -28,7 +66,10 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 		err = eb.Build().Str("input", b.plan.InputPath).Errorf("DTO missing required plain column `id` (`lw:\",id\"`)")
 		return
 	}
+	return
+}
 
+func (b *PlanBuilder) checkRefMembershipsAreIdentifiers(fc *finishCtx) (err error) {
 	// A ref-channel field's membership becomes a Go identifier
 	// kind<UpperFirst(memb)> in the marshallgen core emit (for every target;
 	// membership-keyed so kind vars stay unique when several kinds are
@@ -57,7 +98,10 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 			return
 		}
 	}
+	return
+}
 
+func (b *PlanBuilder) checkTupleSectionExclusivity(fc *finishCtx) (err error) {
 	// Tuple-section exclusivity (ADR-0103). A section mapped by a
 	// dynamic-membership tuple field belongs to it entirely: its attribute
 	// count and memberships are per-element data, so a static field, const
@@ -90,7 +134,10 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 			return
 		}
 	}
+	return
+}
 
+func (b *PlanBuilder) checkSectionChannelUniformity(fc *finishCtx) (err error) {
 	// Per-section membership-channel uniformity check: all fields
 	// targeting the same section must agree on Channel (the read-side
 	// dispatch iterates a per-section channel; mixed channels would
@@ -98,12 +145,12 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 	// from the original "all Verbatim or all Ref" bool.
 	bySection := map[string]mappingplan.MembershipChannel{}
 	bySectionFirst := map[string]string{}
-	membsBySection := map[string]map[string]bool{}
+	fc.membsBySection = map[string]map[string]bool{}
 	for _, f := range b.plan.Fields {
-		if membsBySection[f.LWSection] == nil {
-			membsBySection[f.LWSection] = map[string]bool{}
+		if fc.membsBySection[f.LWSection] == nil {
+			fc.membsBySection[f.LWSection] = map[string]bool{}
 		}
-		membsBySection[f.LWSection][f.LWMembership] = true
+		fc.membsBySection[f.LWSection][f.LWMembership] = true
 
 		seen, ok := bySection[f.LWSection]
 		if !ok {
@@ -116,7 +163,10 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 			return
 		}
 	}
+	return
+}
 
+func (b *PlanBuilder) checkConstRefKindVarCollisions(fc *finishCtx) (err error) {
 	// KindVar keying guard. A const field keys its kindXxx on the membership
 	// name (so several consts on one membership share a symbol); a value field
 	// keys it on its Go field name. If a ref-channel membership is claimed by
@@ -138,7 +188,10 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 			return
 		}
 	}
+	return
+}
 
+func (b *PlanBuilder) resolveCarriers(fc *finishCtx) (err error) {
 	// Cut-2: resolve each carrier-channel value field with its sibling
 	// carrier and enforce one membership per carrier (mixed/parametrized)
 	// section. Such a section's attributes carry per-row membership data
@@ -148,7 +201,7 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 		if !f.Flags.Channel.UsesCarrier() {
 			continue
 		}
-		if len(membsBySection[f.LWSection]) > 1 {
+		if len(fc.membsBySection[f.LWSection]) > 1 {
 			err = eb.Build().Str("section", f.LWSection).Str("channel", f.Flags.Channel.String()).Errorf("a carrier (mixed/parametrized) section may carry only one membership — its per-row attributes cannot be disambiguated on read")
 			return
 		}
@@ -180,7 +233,10 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 		err = eb.Build().Str("field", c.goField).Str("membership", memb).Str("section", sect).Errorf("carrier field has no value sibling on the same membership+section")
 		return
 	}
+	return
+}
 
+func (b *PlanBuilder) checkMultiSubColumnShapes(fc *finishCtx) (err error) {
 	// Multi-sub-column structural rules (ADR-0101 D3). A section whose
 	// fields target more than one sub-column emits one tuple attribute per
 	// row: BeginAttribute(<scalars…>) plus zipped co-containers via
@@ -217,7 +273,7 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 			err = eb.Build().Str("section", f.LWSection).Str("column", col).Errorf("multi-field sub-column in multi-sub-column section not supported")
 			return
 		}
-		if len(membsBySection[f.LWSection]) > 1 {
+		if len(fc.membsBySection[f.LWSection]) > 1 {
 			err = eb.Build().Str("section", f.LWSection).Errorf("multi-sub-column section with multiple memberships not supported")
 			return
 		}
@@ -238,7 +294,5 @@ func (b *PlanBuilder) Finish() (plan *mappingplan.Plan, err error) {
 			return
 		}
 	}
-
-	plan = b.plan
 	return
 }
