@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -39,58 +38,96 @@ type procViewState struct {
 	Tree   bool
 }
 
-var (
-	procViewMu sync.RWMutex
-	procView   = procViewState{SortBy: ProcSortByCPU, Desc: true}
-)
-
-func loadProcView() (out procViewState) {
-	procViewMu.RLock()
-	out = procView
-	procViewMu.RUnlock()
-	return
+// procViewMemo is one window's cached filter+sort of a published
+// snapshot. src is compared by pointer: Sampler.Latest swaps the pointer
+// on every publish, so pointer identity is exactly "same sample".
+type procViewMemo struct {
+	src      *PublishedSnapshot
+	view     procViewState
+	infos    []sysmsnap.ProcInfo
+	smoothed []float32
 }
 
-func setProcSort(by ProcSortByE) {
-	procViewMu.Lock()
-	if procView.SortBy == by {
-		procView.Desc = !procView.Desc
-	} else {
-		procView.SortBy = by
-		procView.Desc = by != ProcSortByPID && by != ProcSortByUser && by != ProcSortByName
+// defaultProcView is the sort/filter every window starts with.
+func defaultProcView() (out procViewState) {
+	return procViewState{SortBy: ProcSortByCPU, Desc: true}
+}
+
+// The sort key, filter and tree toggle are per-window state on *App, like
+// the rest of this app's UI state (imztop.go). They used to be package
+// globals behind a RWMutex, because the singleton Sampler applied them
+// before publishing and so needed one view for the whole process — which
+// also meant two imztop windows silently shared a sort order and a filter,
+// and the tour's filter leaked into a live window. The view is applied at
+// render time now, so the mutex is gone with it: these are only ever
+// touched from the render thread of the window that owns them.
+
+func (inst *App) setProcSort(by ProcSortByE) {
+	if inst.procView.SortBy == by {
+		inst.procView.Desc = !inst.procView.Desc
+		return
 	}
-	procViewMu.Unlock()
+	inst.procView.SortBy = by
+	inst.procView.Desc = by != ProcSortByPID && by != ProcSortByUser && by != ProcSortByName
 }
 
-func setProcFilter(filter string) {
-	procViewMu.Lock()
-	procView.Filter = filter
-	procViewMu.Unlock()
+func (inst *App) setProcFilter(filter string) {
+	inst.procView.Filter = filter
 }
 
-func toggleProcTree() {
-	procViewMu.Lock()
-	procView.Tree = !procView.Tree
-	procViewMu.Unlock()
+func (inst *App) toggleProcTree() {
+	inst.procView.Tree = !inst.procView.Tree
+}
+
+// viewProcs returns snap's process list filtered and sorted by this
+// window's view, with the smoothed-CPU slice kept index-aligned to it.
+//
+// Applying the view moved off the Sampler when it stopped being
+// process-wide, so this runs per frame rather than per sample. The result
+// is memoised against the snapshot pointer and the view, so the actual
+// work still happens once per published sample — and every panel in a
+// frame shares the one result, which is what keeps the process table and
+// the Proc Map showing the same set.
+func (inst *App) viewProcs(snap *PublishedSnapshot) (infos []sysmsnap.ProcInfo, smoothed []float32) {
+	if snap == nil {
+		return
+	}
+	if inst.procViewMemo.src == snap && inst.procViewMemo.view == inst.procView {
+		return inst.procViewMemo.infos, inst.procViewMemo.smoothed
+	}
+	infos, smoothed = applyProcView(snap.Procs, snap.ProcCPUSmoothed, inst.procView)
+	inst.procViewMemo = procViewMemo{
+		src:      snap,
+		view:     inst.procView,
+		infos:    infos,
+		smoothed: smoothed,
+	}
+	return
 }
 
 // applyProcView filters and sorts the (infos, smoothed) pair per the
 // supplied view and returns both — kept aligned by index so the
 // renderer can read a row's raw fields from infos[i] and its smoothed
-// CPU% from smoothed[i] without a PID lookup. Called by the Sampler
-// before publishing; the renderer never mutates the returned slices.
-// Sort by ProcSortByCPU keys off the smoothed slice so the row order
-// is stable across brief spikes (see procCPUEWMAAlpha); every other
-// sort key reads from infos.
+// CPU% from smoothed[i] without a PID lookup. Sort by ProcSortByCPU keys
+// off the smoothed slice so the row order is stable across brief spikes
+// (see procCPUEWMAAlpha); every other sort key reads from infos.
+//
+// The inputs are never written to. They belong to a published snapshot
+// that every window reads concurrently, so the filter allocates rather
+// than compacting in place as it did while the Sampler owned the slices
+// outright. With no filter and nothing to reorder the inputs are returned
+// as they are, which is safe because nobody mutates them.
 func applyProcView(infos []sysmsnap.ProcInfo, smoothed []float32, v procViewState) (outInfos []sysmsnap.ProcInfo, outSmoothed []float32) {
 	if v.Filter != "" {
 		needle := strings.ToLower(v.Filter)
-		wi := infos[:0]
-		ws := smoothed[:0]
+		wi := make([]sysmsnap.ProcInfo, 0, len(infos))
+		ws := make([]float32, 0, len(smoothed))
 		for i, p := range infos {
 			if strings.Contains(strings.ToLower(p.Name), needle) || strings.Contains(strings.ToLower(p.Cmd), needle) {
 				wi = append(wi, p)
-				ws = append(ws, smoothed[i])
+				if i < len(smoothed) {
+					ws = append(ws, smoothed[i])
+				}
 			}
 		}
 		infos = wi
@@ -145,9 +182,12 @@ func procIndexCmp(infos []sysmsnap.ProcInfo, smoothed []float32, by ProcSortByE,
 
 func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 	inst.sectionHeader("Processes")
-	view := loadProcView()
+	view := inst.procView
+	// One filter+sort for the whole frame, shared with the Proc Map so the
+	// two panels never disagree about which processes are in view.
+	procs, smoothed := inst.viewProcs(snap)
 
-	// Tour mode sets procView.Filter directly via the scene setup
+	// Tour mode sets this window's filter directly via the scene setup
 	// callback (imztop_tour.go) and never types into the TextEdit, so
 	// without this sync the captured PNG would show an empty filter
 	// box while the proc list is filtered. Interactive mode keeps
@@ -157,7 +197,7 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 	}
 
 	for range c.Horizontal().KeepIter() {
-		c.Label(fmt.Sprintf("%d procs", len(snap.Procs))).Send()
+		c.Label(fmt.Sprintf("%d procs", len(procs))).Send()
 		c.AddSpace(inst.spaceOuter())
 		c.Label("Filter").Send()
 		c.AddSpace(inst.spaceInner())
@@ -171,7 +211,7 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 			HintText("name or cmd substring").
 			SendRespVal(&inst.procFilterDraft)
 		if resp.HasChanged() {
-			setProcFilter(inst.procFilterDraft)
+			inst.setProcFilter(inst.procFilterDraft)
 		}
 		c.AddSpace(inst.spaceOuter())
 		treeLabel := "tree ▸"
@@ -182,7 +222,7 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 			Selected(view.Tree).
 			Frame(true).
 			SendResp().HasPrimaryClicked() {
-			toggleProcTree()
+			inst.toggleProcTree()
 		}
 	}
 	c.AddSpace(inst.spaceInner())
@@ -198,7 +238,7 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 	c.EtColumn(400.0).Resizable(true).Send() // Cmd
 
 	et := c.EndETable(inst.ids.PrepareStr("proc-tbl"),
-		uint64(len(snap.Procs)),
+		uint64(len(procs)),
 		procRowHeight,
 		1, // numStickyHeaders: keep the sortable header row pinned during scroll
 		0, // numStickyCols: no frozen leading columns
@@ -207,20 +247,20 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 	inst.renderProcHeader(et, view)
 
 	// Tree mode reorders the (already filtered + sorted) rows into a PPID
-	// forest, depth-first; flat mode renders snap.Procs as-is (depth 0). The
+	// forest, depth-first; flat mode renders the rows as-is (depth 0). The
 	// reordering is render-only — srcIdx maps an output row back to its index
-	// in snap.Procs / ProcCPUSmoothed, so per-row data and the smoothed-tint
-	// lookup stay correct in both modes.
+	// in the view-applied procs / smoothed pair, so per-row data and the
+	// smoothed-tint lookup stay correct in both modes.
 	var treeOrder, treeDepth []int
 	if view.Tree {
-		treeOrder, treeDepth = buildProcOrder(snap.Procs)
+		treeOrder, treeDepth = buildProcOrder(procs)
 	}
-	for row := range snap.Procs {
+	for row := range procs {
 		srcIdx, d := row, 0
 		if view.Tree {
 			srcIdx, d = treeOrder[row], treeDepth[row]
 		}
-		p := snap.Procs[srcIdx]
+		p := procs[srcIdx]
 		r := uint64(row)
 		for range et.Cells(r, 0) {
 			procCellLabel(fmt.Sprintf("%d", p.PID))
@@ -229,8 +269,8 @@ func (inst *App) renderProcPanel(snap *PublishedSnapshot) {
 			procCellLabel(p.User)
 		}
 		smoothedPct := p.CPUPercent
-		if srcIdx < len(snap.ProcCPUSmoothed) {
-			smoothedPct = snap.ProcCPUSmoothed[srcIdx]
+		if srcIdx < len(smoothed) {
+			smoothedPct = smoothed[srcIdx]
 		}
 		for range et.Cells(r, 2) {
 			// CPU%~ — smoothed. Tinted with the heatmap palette only
@@ -368,7 +408,7 @@ func (inst *App) renderProcHeader(et c.EndETableFluid, view procViewState) {
 					Frame(false).
 					SendResp().HasPrimaryClicked() {
 					if hc.key != procSortNoneSentinel {
-						setProcSort(hc.key)
+						inst.setProcSort(hc.key)
 					}
 				}
 				c.AddSpace(procCellPadX)

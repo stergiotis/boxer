@@ -47,8 +47,9 @@ func setSamplerBus(bus app.BusI) {
 
 // App is the per-window imztop instance. The registry's factory ctor
 // allocates a fresh App per Open() so two windows have independent UI
-// state (currently just the selected network interface; more fields
-// land here as user-visible per-window state grows).
+// state: the selected network interface, the process-panel sort key,
+// filter and tree toggle, the Proc Map's area metric, and the panel
+// widgets' own persistent state.
 type App struct {
 	// ids is the per-instance WidgetIdStack the host pre-prepares
 	// with a window-unique salt every frame (windowhost wraps Frame
@@ -88,9 +89,20 @@ type App struct {
 	// frames, and the next frame's render reads it back as the
 	// TextEdit's displayed value. A local var would be reset to
 	// view.Filter each frame and the typed text would never appear.
-	// Pushed into the package-global procView (the sampler's source
-	// of truth) on every HasChanged response.
+	// Committed into procView below on every HasChanged response.
 	procFilterDraft string
+
+	// procView is this window's process-panel sort key, direction,
+	// filter and tree toggle. Per-window like the rest of the UI state
+	// here: it was a package global while the singleton Sampler applied
+	// it before publishing, which made two windows share one sort order.
+	// Render-thread-only, so it needs no lock.
+	procView procViewState
+
+	// procViewMemo caches the last filter+sort of a published snapshot
+	// so the work stays once-per-sample now that it happens at render
+	// time. Keyed on the snapshot pointer and the view together.
+	procViewMemo procViewMemo
 
 	// cpuHeatmap holds the per-core CPU% scrolling heatmap state
 	// (HeatmapScroll widget + colormap config + last-published
@@ -163,13 +175,15 @@ type App struct {
 	//   procNodes        pooled process node by EWMA key (stable pointer identity).
 	//   procNodeObj      layout node → source process + smoothed CPU% (tint + hover).
 	//   procMetric       the area encoding the user picked (RSS default / CPU%).
-	//   procBuiltMetric / procLastSampleMs gate the rebuild to sample/metric changes.
+	//   procBuiltMetric / procLastSampleMs / procBuiltView gate the rebuild to
+	//   sample, metric and view changes.
 	procTreemap      *treemap.Treemap
 	procRoot         *layout.Node
 	procNodes        map[procEWMAKey]*layout.Node
 	procNodeObj      map[*layout.Node]*procCell
 	procMetric       procMetricE
 	procBuiltMetric  procMetricE
+	procBuiltView    procViewState
 	procLastSampleMs int64
 	// procCores is the logical-core count, for the CPU-load tint normalisation
 	// (per-process CPU% ranges [0, cores*100]). Refreshed from the snapshot.
@@ -192,6 +206,7 @@ func newApp() (inst *App) {
 		diskDistsumDigest: tdigest.NewTDigest(),
 		gpuDistsumDigest:  tdigest.NewTDigest(),
 		lazyPanes:         map[uint64]*lazypane.Pane{},
+		procView:          defaultProcView(),
 	}
 	return
 }

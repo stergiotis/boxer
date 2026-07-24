@@ -309,11 +309,12 @@ func (inst *Sampler) onBundle(bundleSnap *sysmsnap.BundleSnapshot) {
 		inst.gpuBusy.push(nil)
 	}
 
+	// Published unfiltered and unsorted. The sort key and filter are
+	// per-window state now (App.procView), so there is no one view this
+	// singleton could apply on every window's behalf; each applies its own
+	// at render time via App.viewProcs.
 	procs := bundleSnap.Procs
 	smoothed := inst.updateProcCPUEWMA(procs)
-	if len(procs) > 0 {
-		procs, smoothed = applyProcView(procs, smoothed, loadProcView())
-	}
 
 	pub := &PublishedSnapshot{
 		SampledAtUnixMs:       bundleSnap.SampledAtUnixMs,

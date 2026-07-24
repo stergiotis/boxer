@@ -135,11 +135,11 @@ func tourRenderStateful(ids *c.WidgetIdStack, state any) {
 	if !ok || st == nil {
 		return
 	}
-	// The process-table filter is a package global; set it per-frame for
-	// this Demo (Init runs for every Demo at setup, so the last writer would
-	// win there). renderApp draws a "waiting for first sample" placeholder
-	// when the snapshot is still nil.
-	setProcFilter(st.filter)
+	// Set this Demo's filter per-frame on its own App: Init runs for every
+	// Demo at setup, so a shared setter would leave the last writer's filter
+	// in place. renderApp draws a "waiting for first sample" placeholder when
+	// the snapshot is still nil.
+	st.app.setProcFilter(st.filter)
 	st.app.ids = ids
 	s, err := ensureSampler()
 	if err != nil {

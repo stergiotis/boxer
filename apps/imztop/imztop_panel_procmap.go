@@ -98,11 +98,19 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 		inst.initProcMap()
 	}
 
-	if snap != nil && len(snap.Procs) > 0 &&
-		(snap.SampledAtUnixMs != inst.procLastSampleMs || inst.procMetric != inst.procBuiltMetric) {
+	// Same view-applied procs the process table renders, so the two panels
+	// agree on what is in scope. The rebuild is keyed on the view as well
+	// as the sample: while the Sampler applied the filter, changing it
+	// produced a new sample id and that alone triggered the rebuild.
+	procs, smoothed := inst.viewProcs(snap)
+	if snap != nil && len(procs) > 0 &&
+		(snap.SampledAtUnixMs != inst.procLastSampleMs ||
+			inst.procMetric != inst.procBuiltMetric ||
+			inst.procView != inst.procBuiltView) {
 		inst.procLastSampleMs = snap.SampledAtUnixMs
 		inst.procBuiltMetric = inst.procMetric
-		inst.reconcileProcTree(snap.Procs, snap.ProcCPUSmoothed, inst.procMetric)
+		inst.procBuiltView = inst.procView
+		inst.reconcileProcTree(procs, smoothed, inst.procMetric)
 	}
 
 	// Logical-core count for the CPU-load tint normalisation (loadFn). Machine-
