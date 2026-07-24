@@ -591,6 +591,76 @@ snapshot; a half-pinned pair declines with the named reason; Live reappears
 after unpin; an empty live widget blocks Run with the pane hint; a fully
 SET-bound buffer is behaviour-identical end to end.
 
+### 2026-07-24 — the tier-aware pane shipped
+
+The 2026-07-22 amendment is built. The pane derives each name's tier from the
+prelude mirror the debounced parse already maintains (`paramPinned`), and
+phase 3 of §SD4's value path forks on it: a pinned draft rebuilds the prelude
+through the unchanged `SyncParamPrelude` path, a live draft becomes
+`setSignalRawFrom(name, draft, "param-widget")`. `paramWidgetI` is untouched —
+no widget learned what a tier is.
+
+Live-verified per §Validation: typing into `{q:String}` writes the store with
+`via param-widget` provenance and leaves the buffer byte-identical; **pin**
+authors `SET param_q = 'hello';` and flips the control to **unpin**; unpin
+removes the line, keeps the value, and does not re-author it on the next
+frame; the folded `tl_min`/`tl_max` picker resolves a quick range into both
+halves live, after which the Run ships all four values on the URL and
+ClickHouse returns them.
+
+Four things the decision did not settle, decided here:
+
+- **The live tier needs a second baseline, not a re-read of the store.**
+  Comparing a draft against the store's *current* value makes an external
+  co-writer's move read as pane drift and get written straight back — the
+  pane clobbering the Timeline rather than following it. `paramLiveSeeded`
+  (per live name, the value the pane last agreed with the store on) is
+  therefore both the drift baseline and the reseed guard, mirroring 5e's
+  `sigValSeeded`.
+- **Typing outranks a same-frame external write.** The 2026-07-22 text says
+  an idle draft follows external writes and "typing wins while the store
+  holds still", which leaves the both-moved frame open. The reseed skips any
+  draft that has moved since the last agreed value, so the pane's write lands
+  as the later writer with its provenance on it. This is stricter than the 5e
+  Signals editor, which reseeds unconditionally.
+- **A live draft is born from the store.** A fresh draft for a name a panel
+  already publishes starts at that value rather than empty, or the empty
+  field would read as drift on its first frame and overwrite the publisher.
+- **The mixed-tier decline is a withholding, not a veto.** The matcher cannot
+  be told about tiers without widening §SD2's interface, so the orchestrator
+  withholds a half-pinned pair's slots from the group widgets and lets the
+  tail claim them. Withholding rather than rejecting a returned match keeps
+  any *other* pair in the same buffer foldable.
+
+Two deviations from the plan of record, both narrowing:
+
+- **The unfilled affordance is a mark, not a highlight.** "Highlight the empty
+  live widget" would mean styling a control the orchestrator does not own
+  (§SD4 keeps widgets ignorant of everything but their drafts). The claim
+  chrome carries a warning-toned `needs a value` instead, derived per frame
+  from the same `unfilledInputs` the Run gate reads, so the two cannot
+  disagree and neither needs retiring.
+- **The tier control is drawn beside the claim inside a wrapping
+  `Horizontal`.** Each claim's row becomes `[pin] <widget>`; widgets are
+  unchanged but now render inside an orchestrator-opened horizontal scope.
+  Vertical space above the editor is the scarce resource, which is why this
+  was preferred to a second chrome line per claim.
+
+Tests (`apps/play/play_param_tier_test.go`): live drift → store with
+`param-widget` provenance and an unchanged buffer; pinned drift → prelude
+only; a fully SET-bound buffer end-to-end behaviour-identical; mixed-tier
+buffer forking both ways; a live draft born from the store; an untouched empty
+draft neither seeding nor unblocking a Run; the staleness witness flipping on
+a pane write and clearing on revert; a hand-deleted `SET` flipping the tier;
+pin authoring + tier flip + no write-back next frame; unpin seeding the store,
+not re-authoring, and surviving the debounced reparse; the Live toggle
+returning after unpin; a folded pair migrating as a bundle; the reseed
+following an idle draft, sparing a mid-edit one, and staying quiet for a
+settled co-writer; a pinned draft untouched by the reseed; the half-pinned
+decline with its named reason, uniform pairs still folding, and one decline
+not costing another pair its picker; the unfilled mark appearing and retiring
+via both fill routes.
+
 ## References
 
 - [ADR-0016](./0016-imzero2-time-range-picker.md) — the range picker and its

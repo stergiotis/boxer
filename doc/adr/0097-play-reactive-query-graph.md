@@ -1547,6 +1547,75 @@ auto-run loop — the emit-feedback class SD9's acyclicity guard does not
 cover, so it waits on quantization plus a Live circuit-breaker witness) and
 query-backed value-domain widgets.
 
+### 2026-07-24 — Param-pane signal writing shipped; review remediations (memo key, emit drops, the Live breaker)
+
+The same-day design Update is built; the pane's mechanics and its own test
+inventory are recorded in ADR-0124's 2026-07-24 Update. At this ADR's level
+what changed is that the store gained a second human writer — `param-widget`,
+distinct from `signals-editor` — and nothing else: D1's tiers, the wire
+channel, Run resolution, the staleness witness and D4's snapshot are all
+untouched, and a live widget write is an ordinary provenance'd write that
+flips the witness and auto-runs like any other. Live-verified end to end.
+
+Three findings from the 2026-07-22 review land with it:
+
+- **The memo key was delimiter-aliasable.** `compiledNode.key()` joined its
+  components with `0x00`/`0x01` bytes. Signal values are arbitrary text —
+  result-cell text reaches the store through `formatCell` — so a value
+  spelling out those bytes forged an entry boundary, two distinct param sets
+  could share one key, and a lane would serve the wrong cached result for one
+  of them. Every component is now length-prefixed (`<len>:<bytes>`), which
+  makes the encoding injective whatever the bytes are. Keys are in-memory
+  only, so nothing had to be migrated. The no-params shortcut (`key() == SQL`)
+  went with it: a bare SQL string could otherwise spell out a param-bearing
+  key, which is the same aliasing one level up. Two tests that compared a
+  lane's `servedKey` against bare SQL text now compare against `key()`.
+- **A dropped emit was log-only.** `encodeSignalValue` declining a value's Go
+  type left nothing on screen: the panel behaves as though it published and a
+  reader keeps showing the previous value. The graph now carries one standing
+  notice per name (name, Go type, writer, store revision), rendered in the
+  Diagnostics tab and self-retiring when that name emits something encodable.
+  A store write from another surface deliberately does not retire it — the
+  emitting panel is still broken.
+- **Live had no loop witness.** SD9's acyclicity guard constrains data edges
+  (node reads node) and says nothing about emit feedback: a panel publishing
+  a signal derived from a query that reads it. Write-dedup and frame
+  quantization damp the settling case, but a query whose result moves its own
+  input a little every run ratchets instead — each run legitimate on its own,
+  which is why no per-frame gate can catch it. `shouldAutoRun` is unchanged;
+  the frame that fires an auto-run now records it, and a streak of
+  consecutive auto-runs on an unchanged buffer whose diverging names were all
+  last written by a machine trips a breaker at 8: Live unchecks itself and the
+  status bar names the cycling signals. Human writers (`param-widget`,
+  `signals-editor`, `history`) never count, so a person driving a value fast
+  is never mistaken for a loop; a human Run or re-checking Live resumes. The
+  breaker is also the prerequisite ADR-0124 named for live relative time,
+  which stays deferred.
+
+A standing limitation, now written down rather than implied: emit feedback is
+outside SD9's reach by construction, and the breaker bounds its cost rather
+than preventing it. A query that feeds its own input still runs up to the
+limit before Live gives up.
+
+The itemised witness the breaker needs (`divergedSignalNames`) shares
+`resolveSignalsNow` with `runSignalsDiverged`, so the breaker judges exactly
+the values the staleness witness compares — the lockstep the reserved-String
+default already required of the Run path.
+
+Also shipped, from the same review: the Signals chrome marks `selection_id`
+when its revision trails `selection`'s. It tracks the last *leeway* selection
+by design (a click on an id-less result leaves it behind), which is invisible
+without saying so — a cue in §SD7's register, not a warning.
+
+Tests: the forged-separator and spelled-key cases on the memo key; the
+emit-drop notice model (set, dedup per name, retire on the next encodable
+emit of that name, and NOT on another surface's write); the breaker's witness
+gate by gate (each machine writer, each human writer, one human among several
+diverging names, an unheld name, nothing diverging), the streak tripping at
+the limit, and resets on a human write, a buffer edit and a human Run; a
+ratcheting self-feeding query against the capture server tripping it after
+exactly the limit; and the `selection_id` cue appearing and clearing.
+
 ## References
 
 Internal:

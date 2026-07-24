@@ -135,13 +135,20 @@ constant that shadows the store — the two-tier truth model (slice-5 D1) that
 keeps the buffer a self-contained artifact while panels write at interaction
 rate.
 
+The `SET` is also the pane's mode bit. The typed parameter widgets read the
+tier off the buffer and write accordingly: a pinned name's edit rebuilds the
+prelude, a live name's edit is an ordinary store write with `param-widget`
+provenance, and a per-claim pin/unpin control migrates a value between the
+two. So the same control serves both tiers, and filling a picker no longer
+disconnects the panel that co-writes the name.
+
 ```
         panels write as you interact         humans write
         ────────────────────────────         ────────────
-        row click  → selection               the Signals editor (Graph tab)
-                     (+ node, + id)          a SET prelude pins a name
-        map settle → vp_min_x … vp_h         history restore re-seeds (D4)
-        events     → tl_min, tl_max
+        row click  → selection               the parameter pane (typed)
+                     (+ node, + id)          the Signals editor (raw)
+        map settle → vp_min_x … vp_h         a SET prelude pins a name
+        events     → tl_min, tl_max          history restore re-seeds (D4)
                      │                                  │
                      ▼                                  ▼
              ┌─────────────────── signal store ───────────────────┐
@@ -166,9 +173,21 @@ server-side, so there is no client-side literal-encoding surface. Liveness
 is a per-node policy (D2): demand-driven lanes re-drive automatically, while
 `main` stays Run-gated with an opt-in **Live** toggle and a staleness
 witness that covers both buffer edits and moved signals. A referenced name
-nothing fills blocks Run with a hint rather than a doomed request (D3).
-History entries snapshot the signal values a run shipped, and restoring one
-re-seeds the store (D4) — signals otherwise do not persist.
+nothing fills blocks Run with a hint rather than a doomed request, and the
+hint points at that name's own widget in the pane (D3). History entries
+snapshot the signal values a run shipped, and restoring one re-seeds the
+store (D4) — signals otherwise do not persist.
+
+Emit feedback is the loop the acyclicity guard (SD9) does not cover: it
+constrains *data* edges — node reads node — and says nothing about a panel
+publishing a signal derived from a query that reads it. Write-dedup and
+frame quantization damp the settling case, but a query whose result moves
+its own input a little every run ratchets instead. Live therefore carries a
+circuit breaker: consecutive auto-runs on an unchanged buffer whose diverging
+signals were all last written by a machine suspend the toggle and name what
+was cycling. Human writers (the pane, the Signals editor, a history restore)
+never count towards it, which is what separates a feedback loop from someone
+dragging a control.
 
 Selection is three signals, not one. A row click writes the ordinal cursor
 (`selection`), the node it indexes (`selection_node`), and — when the
@@ -177,7 +196,10 @@ clicked result carries a leeway `id:id:…` column — the row's id *value*
 are node-scoped (a panel sees the cursor only when it indexes that panel's
 node), the Detail tab follows `selection_node` by default, and
 `{selection_id:UInt64}` cross-filters correctly regardless of node or
-ordering because it is a key, not a position.
+ordering because it is a key, not a position. Because it tracks the last
+*leeway* selection, a click on an id-less result leaves it behind the cursor;
+the Signals section marks the row when that has happened rather than leaving
+a value that looks stale unexplained.
 
 The Graph tab renders this whole picture live — a layered drawing
 (constants and signals → query nodes → panel tabs, with the provenance

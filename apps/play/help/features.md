@@ -50,12 +50,29 @@ canonical form.
 
 Write a `{name:Type}` placeholder in the query (e.g. `{event:String}`,
 `{from:DateTime}`) and the playground surfaces an editing widget above the
-editor. Filling the widget authors a `SET param_<name> = <value>` line at the
-top of the buffer — the name is now a **constant**: buffer-owned, part of the
-query text, reproducible by copy-paste. A placeholder you leave without a
-`SET` is a live **signal** instead (see **Signals** below). On Run, the
-`SET param_*` prelude is stripped from the body and shipped to ClickHouse on
-the request URL, so the placeholder is substituted server-side either way.
+editor. On Run, the values are shipped to ClickHouse on the request URL and
+the placeholder is substituted server-side.
+
+Each parameter sits in one of two tiers, and the buffer alone says which:
+
+- **Live** — no `SET` line for the name. Typing in its widget writes the
+  shared signal value (see **Signals** below), so panels that publish the
+  same name keep working and the value is live for every query that reads
+  it. This is the default for a new placeholder.
+- **Pinned** — the buffer carries `SET param_<name> = <value>` at the top.
+  The name is a **constant**: buffer-owned, part of the query text,
+  reproducible by copy-paste, and it shadows any signal of the same name.
+
+The **pin** button beside each widget moves a value between the tiers: *pin*
+writes the current value into the buffer as a `SET`, *unpin* removes that line
+and keeps the value as a live signal. Deleting the `SET` by hand does the same
+thing as unpinning. A folded range migrates as a unit, so a picker never ends
+up writing one bound to the buffer and the other to the store.
+
+Pin when you want the query to carry its own values — sharing a snippet,
+keeping a reproducible artifact. Leave it live when a panel should be able to
+drive the value, or when the **Live** checkbox should re-run the query as the
+value moves.
 
 The widget chosen for a slot depends on its shape:
 
@@ -78,11 +95,15 @@ distance don't matter: the bounds can sit anywhere in the query, in either order
 with anything between them. Both halves must be DateTime or DateTime64.
 
 When two DateTime parameters *don't* fold, the pane says why in one line beneath
-the widgets — usually that they share no stem, or that one half isn't DateTime.
-A fold that did happen is labelled with the two names it claimed, so you can
-always see what the editor inferred. Add a **`-- play: ungroup`** comment line
-anywhere in the query to refuse every fold and get one plain text field per
-parameter.
+the widgets — usually that they share no stem, that one half isn't DateTime, or
+that a hand-written `SET` pinned one half and left the other live (one picker
+cannot write two tiers; pin or unpin the other half and it folds). A fold that
+did happen is labelled with the two names it claimed, so you can always see what
+the editor inferred. Add a **`-- play: ungroup`** comment line anywhere in the
+query to refuse every fold and get one plain text field per parameter.
+
+A widget whose name nothing fills yet is marked **needs a value**. That is the
+same condition that blocks Run, so filling the widget clears both.
 
 The **Hide prelude** checkbox (top bar, shown only when the query has parameters)
 collapses the `SET param_*` lines: the prelude renders as a read-only label above
@@ -97,16 +118,29 @@ clicking a row (Table), a point (Projection), an event (Timeline), or a
 country (World) writes `selection`; the Map's settled viewport writes the
 `vp_*` set; the Timeline publishes the events extent as `tl_min`/`tl_max` —
 and any query referencing the name picks the value up on its next run. The
-**signals** section at the top of the Graph tab lists them — value, declared
-type(s), and who last wrote it (a name read as different types by different
-queries gets a conflict warning) — and is also where you set, add, or discard
-one by hand. Adding a `SET` for the same name pins it into a constant that
-shadows the signal until the `SET` is removed.
+parameter widgets above the editor write the same values, so a signal has a
+typed control as well as a raw one.
+
+The **signals** section at the top of the Graph tab lists them — value,
+declared type(s), and who last wrote it (`param-widget` for the parameter
+pane, `signals-editor` for this section itself, a panel's name for a panel) —
+and is also where you set, add, or discard a name by hand, including names no
+placeholder in the buffer mentions. A name read as different types by
+different queries gets a conflict warning. `selection_id` is marked when it
+lags the cursor: it follows the last row that carried a leeway id, so clicking
+a row without one leaves it pointing at the previous match.
 
 A referenced name that nothing fills blocks Run with a hint (instead of the
-server's "substitution not set" error). The **Live** checkbox (top bar, shown
-when the query has a signal input) re-runs the query automatically when a
+server's "substitution not set" error); the widget for that name carries the
+matching **needs a value** mark. The **Live** checkbox (top bar, shown when
+the query has a signal input) re-runs the query automatically when a
 referenced signal moves — edits to the SQL itself still wait for Run.
+
+If a query keeps re-running because it feeds its own input — its result moves
+a signal it reads, which triggers another run, which moves it again — Live
+switches itself off after a few rounds and the status bar names the signal
+that was cycling. Re-check Live to resume. Values you type never count towards
+that: a person driving a value fast is not a loop.
 
 ## Inline affordances
 
