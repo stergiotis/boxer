@@ -229,6 +229,9 @@ func (inst *PlayApp) renderSignalRow(r signalChromeRow) {
 		if r.Unfilled {
 			notes = append(notes, "unfilled input")
 		}
+		if r.Lags {
+			notes = append(notes, "lags cursor (last row with a leeway id)")
+		}
 		if r.Held {
 			notes = append(notes, fmt.Sprintf("via %s · r%d", r.Writer, r.Rev))
 		}

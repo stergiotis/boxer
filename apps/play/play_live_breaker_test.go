@@ -190,3 +190,33 @@ func TestBreakerTripsOnRatchetingSelfFeedingQuery(t *testing.T) {
 	require.Equal(t, autoRunLoopLimit, runs, "it suspends at the limit, not before or long after")
 	require.Len(t, got(), 1+autoRunLoopLimit, "and the server sees exactly those runs")
 }
+
+// selection_id tracks the last LEEWAY selection, so clicking a row of an
+// id-less result leaves it pointing at the previous one. The chrome says so
+// rather than leaving a stale-looking value unexplained.
+func TestSelectionIDLagsCursorCue(t *testing.T) {
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app.graph.setSignalRawFrom(signalSelection, "3", "table")
+	app.graph.setSignalRawFrom(signalSelectionID, "77", "table")
+	app.frameSig = app.graph.signals()
+
+	rowByName := func() map[string]signalChromeRow {
+		out := make(map[string]signalChromeRow)
+		for _, r := range app.collectSignalChrome() {
+			out[r.Name] = r
+		}
+		return out
+	}
+	require.False(t, rowByName()[signalSelectionID].Lags, "written together ⇒ in step")
+
+	// A click on a result with no leeway id moves the cursor only.
+	app.graph.setSignalRawFrom(signalSelection, "4", "projection")
+	app.frameSig = app.graph.signals()
+	require.True(t, rowByName()[signalSelectionID].Lags, "the id did not follow the cursor")
+	require.False(t, rowByName()[signalSelection].Lags, "the cue is on the id row, not the cursor")
+
+	// A click that does carry one puts them back in step.
+	app.graph.setSignalRawFrom(signalSelectionID, "78", "table")
+	app.frameSig = app.graph.signals()
+	require.False(t, rowByName()[signalSelectionID].Lags)
+}

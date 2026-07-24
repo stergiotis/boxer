@@ -39,6 +39,11 @@ type signalChromeRow struct {
 	// store fills it — a Run would fail server-side, so it is blocked with
 	// a hint instead (D3's empty-state).
 	Unfilled bool
+	// Lags: this is selection_id and it was last written BEFORE the cursor
+	// it accompanies. selection_id tracks the last LEEWAY selection, so
+	// clicking a row of an id-less result leaves it pointing at the
+	// previous one — by design, and invisible without saying so.
+	Lags bool
 }
 
 // reservedSignalTypes maps the panel-written signal names to the types their
@@ -150,7 +155,27 @@ func (inst *PlayApp) collectSignalChrome() (rows []signalChromeRow) {
 		row.Conflict = len(row.Types) > 1
 		rows = append(rows, row)
 	}
+	markLaggingSelectionID(rows, byName)
 	return
+}
+
+// markLaggingSelectionID flags the selection_id row when the cursor has moved
+// on without it — the row the id points at is not the row that is selected.
+// It is a cue, not a warning: leaving the last leeway id in place is the
+// documented behaviour of an id-less click, and a query cross-filtering on
+// {selection_id} is still answering about a real row.
+func markLaggingSelectionID(rows []signalChromeRow, byName map[string]signalRow) {
+	cursor, hasCursor := byName[signalSelection]
+	id, hasID := byName[signalSelectionID]
+	if !hasCursor || !hasID || id.Rev >= cursor.Rev {
+		return
+	}
+	for i := range rows {
+		if rows[i].Name == signalSelectionID {
+			rows[i].Lags = true
+			return
+		}
+	}
 }
 
 // unfilledInputs lists the buffer's referenced slot names that neither a SET
