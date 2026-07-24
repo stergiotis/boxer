@@ -107,28 +107,19 @@ func buildPlan(rt reflect.Type) (plan *mappingplan.Plan, err error) {
 			return
 		}
 
-		// Dynamic-membership tuple field (ADR-0103): a slice of a named
-		// plain struct — not one of the special struct types the classifier
-		// owns (marshalltypes carrier, option.Option, time.Time). The
-		// element struct's fields are classified individually and validated
-		// by the shared builder.
+		// A `[]S` section field: a slice of a named plain struct — not one of
+		// the special struct types the classifier owns (marshalltypes carrier,
+		// option.Option, time.Time). Which builder it feeds is the shared
+		// grammar decision in goplan.ClassifySliceSection, so this front-end
+		// only supplies the two signals it can see off the reflect.Type. The
+		// element struct's fields are classified individually and validated by
+		// the shared builder either way.
 		if isTupleSliceType(f.Type) {
 			elem := f.Type.Elem()
-			switch {
-			case elemHasLwMembershipMarker(elem):
-				// Nested dynamic tuple: lw.* marker memberships + nested value
-				// fields (column-only tags). Routed to the nested builder.
-				err = addNestedSectionField(b, rt, f.Name, lwTag, elem, mappingplan.AttrCardinalityMany)
-			case elemHasAtMembership(elem):
-				// Flat dynamic tuple: `@membership` tags + `section:column` value
-				// fields — the original ADR-0103 grammar.
-				err = addReflectTupleField(b, rt, f.Name, lwTag, elem)
-			case strings.Contains(lwTag, ","):
-				// Static-Many nested section (its single membership on the tag).
+			switch goplan.ClassifySliceSection(lwTag, elemHasLwMembershipMarker(elem), elemHasAtMembership(elem)) {
+			case goplan.SliceSectionNested:
 				err = addNestedSectionField(b, rt, f.Name, lwTag, elem, mappingplan.AttrCardinalityMany)
 			default:
-				// A bare-section `[]S` with no membership at all → the flat tuple
-				// path reports the missing-`@membership` error.
 				err = addReflectTupleField(b, rt, f.Name, lwTag, elem)
 			}
 			if err != nil {

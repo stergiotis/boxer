@@ -69,6 +69,16 @@ var parityCases = []parityCase{
 		reflectErr: "missing `lw:` tag",
 	},
 	{
+		// Pins goplan.ClassifySliceSection: both front-ends must route a
+		// membership-less bare-section `[]S` to the same builder, so the
+		// rejection names the missing `@membership` field in both.
+		name:       "reject-bare-slice-section",
+		file:       "parity_dto_reject_bareslice_test.go",
+		plan:       func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[parityRejectBareSlice]() },
+		genErr:     "needs at least one `@membership` field",
+		reflectErr: "needs at least one `@membership` field",
+	},
+	{
 		name:       "reject-scalar-pointer",
 		file:       "parity_dto_reject_scalarptr_test.go",
 		plan:       func() (*mappingplan.Plan, error) { return marshallreflect.PlanFor[parityRejectScalarPtr]() },

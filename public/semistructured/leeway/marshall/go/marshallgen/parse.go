@@ -149,31 +149,33 @@ func ParsePlan(inputPath string) (plan *mappingplan.Plan, err error) {
 			return
 		}
 
-		// `[]X` where X is a struct declared in this file: either a flat
+		// `[]X` where X is a struct declared in this file: a flat
 		// dynamic-membership tuple (ADR-0103 — the element carries `@membership`
-		// fields) or a static-membership NESTED section (the outer tag names the
-		// membership; the element struct is the attribute's sub-columns). Both
-		// classify the element's fields individually; validation lives in the
-		// shared builder.
+		// fields) or a NESTED section, whose membership is either a lw.* marker
+		// field (dynamic) or the outer tag (static-Many). Which one is the shared
+		// grammar decision in goplan.ClassifySliceSection; this front-end supplies
+		// the two signals it can see off the AST. Both classify the element's
+		// fields individually; validation lives in the shared builder.
 		if elemName, elemStruct, isSlice := tupleElemStruct(field.Type, structDecls, kindType); isSlice {
 			usedTupleStructs[elemName] = true
 			var elems []goplan.TupleElem
-			if elemHasAtMembershipAst(elemStruct) {
-				elems, err = buildAstTupleElems(elemStruct)
-				if err != nil {
-					err = eb.Build().Str("field", goFieldName).Str("elemStruct", elemName).Errorf("%w", err)
-					return
-				}
-				if err = b.AddTupleSliceField(goFieldName, lwTag, elemName, elems); err != nil {
-					return
-				}
-			} else {
+			switch goplan.ClassifySliceSection(lwTag, elemHasLwMembershipMarkerAst(elemStruct), elemHasAtMembershipAst(elemStruct)) {
+			case goplan.SliceSectionNested:
 				elems, err = buildAstNestedElems(elemStruct)
 				if err != nil {
 					err = eb.Build().Str("field", goFieldName).Str("elemStruct", elemName).Errorf("%w", err)
 					return
 				}
 				if err = b.AddNestedSliceField(goFieldName, lwTag, elemName, elems, mappingplan.AttrCardinalityMany); err != nil {
+					return
+				}
+			default:
+				elems, err = buildAstTupleElems(elemStruct)
+				if err != nil {
+					err = eb.Build().Str("field", goFieldName).Str("elemStruct", elemName).Errorf("%w", err)
+					return
+				}
+				if err = b.AddTupleSliceField(goFieldName, lwTag, elemName, elems); err != nil {
 					return
 				}
 			}
@@ -300,11 +302,24 @@ func buildAstTupleElems(st *ast.StructType) (elems []goplan.TupleElem, err error
 	return
 }
 
+// elemHasLwMembershipMarkerAst reports whether a `[]S` element struct carries
+// an lw.* membership marker FIELD (lw.Ref / lw.Verbatim / …) — the nested
+// model's tag-free spelling of a per-attribute membership. One of the two
+// signals goplan.ClassifySliceSection routes on; mirrors
+// marshallreflect.elemHasLwMembershipMarker.
+func elemHasLwMembershipMarkerAst(st *ast.StructType) bool {
+	for _, field := range st.Fields.List {
+		if name, _, ok := lwMarkerName(field.Type); ok && goplan.IsMembershipMarker(name) {
+			return true
+		}
+	}
+	return false
+}
+
 // elemHasAtMembershipAst reports whether a `[]S` element struct carries a
 // per-attribute `@membership`-tagged field — the flat dynamic-membership tuple
-// marker (ADR-0103). Such a `[]S` routes to the flat tuple builder; without one
-// it is a static-membership nested section (Many). Mirrors
-// marshallreflect.elemHasAtMembership.
+// marker (ADR-0103). The other signal goplan.ClassifySliceSection routes on;
+// mirrors marshallreflect.elemHasAtMembership.
 func elemHasAtMembershipAst(st *ast.StructType) bool {
 	for _, field := range st.Fields.List {
 		if field.Tag == nil {

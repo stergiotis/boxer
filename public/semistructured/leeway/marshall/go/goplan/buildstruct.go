@@ -15,6 +15,67 @@ import (
 // `@membership` tuple (ADR-0103/0109) and the nested attribute model
 // (ADR-0113) — and the rules they share live here.
 
+// SliceSectionKindE names which entry point a `[]S` DTO field routes to.
+// Both spellings map MANY attributes of one section, but they carry the
+// membership differently, so the element struct is walked by different rules.
+type SliceSectionKindE uint8
+
+const (
+	// SliceSectionFlatTuple is the ADR-0103 grammar: AddTupleSliceField, with
+	// `@membership`-tagged element fields and `<section>:<column>` values.
+	SliceSectionFlatTuple SliceSectionKindE = iota
+	// SliceSectionNested is the ADR-0113 nested attribute model:
+	// AddNestedSliceField, whose element fields are bare sub-columns and whose
+	// membership is either a lw.* marker field (dynamic) or the outer tag
+	// (static-Many).
+	SliceSectionNested
+)
+
+// ClassifySliceSection decides which builder a `[]S` section field feeds, from
+// the three signals a front-end can observe about it. It lives here so the
+// go/ast and reflect paths cannot route the same DTO differently — the rule is
+// grammar, not a per-front-end detail, and a divergence here is an accept-set
+// divergence the parity corpus would only catch after the fact.
+//
+// In precedence order:
+//
+//   - a lw.* membership marker FIELD makes it a dynamic nested section, whatever
+//     the tag says (the markers are the typed spelling of `@membership`);
+//   - otherwise an `@membership`-tagged field makes it the flat tuple;
+//   - otherwise a tag naming a static membership (`lw:"<membership>,<section>"`)
+//     makes it a static-Many nested section;
+//   - otherwise the tag is a bare section with no membership anywhere, which is
+//     the flat tuple missing its `@membership` field — routed there so the error
+//     names what is missing rather than complaining about the element's
+//     `<section>:<column>` tags.
+//
+// A tag that does not parse routes by the element signals alone; the chosen
+// builder re-parses it and reports the tag problem.
+func ClassifySliceSection(lwTag string, elemHasMarkerMembership, elemHasAtMembership bool) SliceSectionKindE {
+	switch {
+	case elemHasMarkerMembership:
+		return SliceSectionNested
+	case elemHasAtMembership:
+		return SliceSectionFlatTuple
+	case tagNamesStaticMembership(lwTag):
+		return SliceSectionNested
+	default:
+		return SliceSectionFlatTuple
+	}
+}
+
+// tagNamesStaticMembership reports whether a section field's tag fills the
+// membership slot — `lw:"<membership>,<section>"` — as opposed to the bare
+// section name a dynamic tuple carries (`lw:"<section>"`, which SplitLW reads
+// as a membership with no section).
+func tagNamesStaticMembership(lwTag string) bool {
+	pt, err := SplitLW(lwTag)
+	if err != nil {
+		return false
+	}
+	return pt.Membership != "" && pt.Section != ""
+}
+
 // TupleElem is one field of a tuple element struct as seen by a
 // front-end: the Go field name, its raw lw: tag, and the classified
 // FieldShape. The front-ends walk the element struct (go/ast or
