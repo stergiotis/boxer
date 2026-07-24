@@ -411,9 +411,16 @@ type PlayApp struct {
 	// to paramSqlEdit (the residual after slicing the prelude) and a
 	// secondary read-only label renders the prelude above the residual
 	// editor.
+	// paramLiveSeeded is the LIVE tier's counterpart to paramSyncedValues
+	// (ADR-0124's 2026-07-22 §SD4 amendment): per live name, the value the
+	// pane last wrote to the store or last took from it. It is both the
+	// drift baseline (write only when the draft moved away from it) and the
+	// reseed guard (follow the store only when the store moved away from
+	// it), so a co-writing panel and the pane do not chase each other.
 	paramSlots             []paramSlot
 	paramDrafts            map[string]*string
 	paramSyncedValues      map[string]string
+	paramLiveSeeded        map[string]string
 	paramWidgets           []paramWidgetI
 	paramEvaluator         *evaluator.Evaluator
 	paramHidePrelude       bool
@@ -698,6 +705,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		},
 		paramDrafts:       map[string]*string{},
 		paramSyncedValues: map[string]string{},
+		paramLiveSeeded:   map[string]string{},
 		lazyPanes:         map[uint64]*lazypane.Pane{},
 		sigValDrafts:      map[string]*string{},
 		sigValSeeded:      map[string]string{},

@@ -221,6 +221,12 @@ const (
 	signalWriterHistory = "history"         // history-restore seeding (D4)
 	signalWriterClamp   = "selection-clamp" // syncSelectionClamp's reset write
 	signalWriterMap     = "map"             // the Map driver's vp_* emits
+	// signalWriterParamWidget is the PARAMETERS pane writing its live tier
+	// (ADR-0124's 2026-07-22 §SD4 amendment): a typed widget over a name the
+	// buffer does not SET-bind. Distinct from signalWriterEditor so
+	// provenance tells the two human surfaces apart — the typed pane and the
+	// raw Signals editor write the same names.
+	signalWriterParamWidget = "param-widget"
 )
 
 // signalEnv is an immutable signal snapshot. setSignal copy-on-writes a new one

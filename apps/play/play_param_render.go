@@ -29,8 +29,21 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 			ptr = &v
 		}
 		if v, hit := preludeValues["param_"+s.Name]; hit {
+			// The parser wins — but only at the PINNED tier, which is what a
+			// prelude value means (ADR-0124's 2026-07-22 §SD4 amendment). A
+			// live name has no prelude entry, so it never reaches here; its
+			// draft follows the store instead.
 			*ptr = v
 			newSynced[s.Name] = v
+		} else if !kept {
+			// A live draft is born from the store, so a name a panel already
+			// publishes (a Timeline extent, a viewport bound) shows its
+			// current value the first frame its widget appears rather than an
+			// empty field that would then read as drift and clobber it.
+			if raw, held := inst.signalRawFor(s.Name); held {
+				*ptr = raw
+				inst.noteLiveSeeded(s.Name, raw)
+			}
 		}
 		newDrafts[s.Name] = ptr
 	}
@@ -41,9 +54,40 @@ func (inst *PlayApp) refreshParamSlotsFromParse(slots []paramSlot, preludeValues
 	for _, s := range slots {
 		present[s.Name] = struct{}{}
 	}
+	for name := range inst.paramLiveSeeded {
+		if _, keep := present[name]; !keep {
+			delete(inst.paramLiveSeeded, name)
+		}
+	}
 	for _, w := range inst.paramWidgets {
 		w.ClearStateForAbsent(present)
 	}
+}
+
+// paramPinned reports a name's tier (ADR-0124's 2026-07-22 §SD4 amendment):
+// a name the buffer SET-binds is PINNED — its drift edits the prelude and the
+// buffer stays a self-contained artifact; a name without a SET is LIVE — its
+// drift is a provenance'd store write. The bit is derived from the prelude
+// mirror the debounced parse maintains, never stored, so deleting a SET line
+// by hand and clicking unpin are the same gesture.
+func (inst *PlayApp) paramPinned(name string) bool {
+	_, pinned := inst.paramSyncedValues[name]
+	return pinned
+}
+
+// signalRawFor reads a name's stored raw through this frame's snapshot,
+// falling back to the store itself outside a frame (the debounced parse can
+// run before Render has taken one).
+func (inst *PlayApp) signalRawFor(name string) (raw string, held bool) {
+	sig := inst.frameSig
+	if sig == nil {
+		if inst.graph == nil {
+			return
+		}
+		sig = inst.graph.signals()
+	}
+	p, ok := sig.Get(name)
+	return p.Raw, ok
 }
 
 // renderParamSlots draws the per-slot widgets above the SQL editor,
@@ -178,38 +222,81 @@ func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungro
 	}
 }
 
-// syncParamDriftToPrelude compares each draft to its last-synced
-// value and, on any drift, rebuilds the editor's leading SET prelude.
-// Idempotent — no-ops when drafts match the cache.
+// syncParamDriftToPrelude compares each draft to its last-synced value and
+// routes the drift BY TIER (ADR-0124's 2026-07-22 §SD4 amendment): a pinned
+// name's drift rebuilds the editor's leading SET prelude exactly as before, a
+// live name's drift is a store write stamped `param-widget`. Idempotent — it
+// no-ops when no draft moved.
+//
+// The prelude rebuild is handed the pinned names only. That is the flipped
+// fill default: typing into a widget whose name has no SET no longer authors
+// one as a side effect, so filling a picker stops silently disconnecting the
+// panel that co-writes the same name. A buffer whose prelude already binds
+// every slot has no live names and behaves identically to before.
 func (inst *PlayApp) syncParamDriftToPrelude() {
 	if len(inst.paramSlots) == 0 {
 		return
 	}
-	values := make(map[string]string, len(inst.paramSlots))
-	drift := false
+	pinnedValues := make(map[string]string, len(inst.paramSlots))
+	pinnedDrift := false
 	for _, s := range inst.paramSlots {
 		ptr, ok := inst.paramDrafts[s.Name]
 		if !ok {
 			continue
 		}
-		values[s.Name] = *ptr
+		if !inst.paramPinned(s.Name) {
+			inst.syncLiveParamDrift(s.Name, *ptr)
+			continue
+		}
+		pinnedValues[s.Name] = *ptr
 		if inst.paramSyncedValues[s.Name] != *ptr {
-			drift = true
+			pinnedDrift = true
 		}
 	}
-	if !drift {
+	if !pinnedDrift {
 		return
 	}
-	out, changed := SyncParamPrelude(inst.sql, inst.paramSlots, values)
+	out, changed := SyncParamPrelude(inst.sql, inst.paramSlots, pinnedValues)
 	if !changed {
 		// Parse failure inside SyncParamPrelude — leave inst.sql alone
 		// and refresh the cache so we stop re-trying every frame for
 		// the same transient broken state.
-		maps.Copy(inst.paramSyncedValues, values)
+		maps.Copy(inst.paramSyncedValues, pinnedValues)
 		return
 	}
 	inst.sql = out
-	maps.Copy(inst.paramSyncedValues, values)
+	maps.Copy(inst.paramSyncedValues, pinnedValues)
+}
+
+// syncLiveParamDrift writes a live name's moved draft into the signal store —
+// an ordinary provenance'd write, so liveness, the staleness witness, the
+// auto-run gate and the history snapshot all compose with no new store
+// semantics (ADR-0097's 2026-07-22 Update).
+//
+// The baseline is paramLiveSeeded — the value the pane last wrote or last
+// took from the store — NOT the store's current value. Comparing against the
+// store would make an external co-writer's move read as pane drift and get
+// written straight back, which is the pane clobbering the Timeline rather
+// than following it.
+func (inst *PlayApp) syncLiveParamDrift(name string, draft string) {
+	if inst.graph == nil {
+		return
+	}
+	if inst.paramLiveSeeded[name] == draft {
+		return
+	}
+	inst.graph.setSignalRawFrom(name, draft, signalWriterParamWidget)
+	inst.noteLiveSeeded(name, draft)
+}
+
+// noteLiveSeeded records a live name's baseline. It tolerates the
+// bare-constructed &PlayApp{} some unit tests use for unrelated work, where
+// the constructor's maps are absent.
+func (inst *PlayApp) noteLiveSeeded(name string, value string) {
+	if inst.paramLiveSeeded == nil {
+		inst.paramLiveSeeded = make(map[string]string, 4)
+	}
+	inst.paramLiveSeeded[name] = value
 }
 
 func unconsumedSlots(slots []paramSlot, consumed []bool) (out []paramSlot) {
