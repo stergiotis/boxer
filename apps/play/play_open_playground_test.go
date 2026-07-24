@@ -81,6 +81,52 @@ func TestRequestOpenPlayground_ComposesRequestAndSucceeds(t *testing.T) {
 	assert.Equal(t, cfg.BandsSql, sent.BandsSql)
 }
 
+// TestRequestOpenPlayground_ResolvesDatasetAliases pins the ad-hoc case:
+// an embedder binds keelson('<alias>') to an ephemeral handle on this
+// instance's client (ADR-0134 §SD4), and the opened window inherits no
+// binding — so the launched buffer must carry the handle form or its
+// query resolves nowhere.
+func TestRequestOpenPlayground_ResolvesDatasetAliases(t *testing.T) {
+	bus := &fakeOpenBus{reply: launchreply.LaunchReply{WindowKey: 3}}
+	client := NewClient(ClientConfig{URL: "http://example.invalid"}, nil)
+	inst := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "")
+	inst.SetCapabilities(bus, nil, zerolog.Nop())
+	require.NoError(t, inst.BindDataset("items", "adhoc_deadbeef01234567"))
+
+	inst.requestOpenPlayground(launchcfg.PlayLaunch{
+		Sql:      "SELECT * FROM keelson('items') ORDER BY x",
+		BandsSql: "SELECT * FROM keelson('items')",
+	})
+
+	inst.openPlayMu.Lock()
+	require.Empty(t, inst.openPlayErr)
+	inst.openPlayMu.Unlock()
+
+	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
+	require.NoError(t, err)
+	sent, err := buscodec.Decode[launchcfg.PlayLaunch](req.Config)
+	require.NoError(t, err)
+	assert.Contains(t, sent.Sql, "keelson('adhoc_deadbeef01234567')")
+	assert.NotContains(t, sent.Sql, "'items'")
+	assert.Contains(t, sent.BandsSql, "keelson('adhoc_deadbeef01234567')")
+}
+
+// An instance with no bindings sends the buffer through untouched — the
+// ordinary non-embedded path.
+func TestRequestOpenPlayground_UnboundBufferUnchanged(t *testing.T) {
+	bus := &fakeOpenBus{reply: launchreply.LaunchReply{WindowKey: 4}}
+	inst := newOpenTestApp(t, bus)
+
+	const sql = "SELECT * FROM keelson('items')"
+	inst.requestOpenPlayground(launchcfg.PlayLaunch{Sql: sql})
+
+	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
+	require.NoError(t, err)
+	sent, err := buscodec.Decode[launchcfg.PlayLaunch](req.Config)
+	require.NoError(t, err)
+	assert.Equal(t, sql, sent.Sql)
+}
+
 func TestRequestOpenPlayground_RefusalSurfaces(t *testing.T) {
 	bus := &fakeOpenBus{reply: launchreply.LaunchReply{Reason: "app accepts no launch config"}}
 	inst := newOpenTestApp(t, bus)

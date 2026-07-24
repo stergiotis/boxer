@@ -114,6 +114,20 @@ func (inst *PlayApp) openPlayground(cfg launchcfg.PlayLaunch) (err error) {
 		err = eh.Errorf("play: open playground: no bus wired")
 		return
 	}
+	// Resolve ad-hoc dataset aliases into the launched buffer (ADR-0134
+	// §SD4). The alias→handle binding is this instance's client state and
+	// the authored buffer keeps naming the alias — the rewrite normally
+	// happens per query in buildResidual. The opened window inherits no
+	// binding, so it must carry the handle form, which is what the
+	// endpoint actually knows. Unbound instances rewrite nothing.
+	if inst.client != nil {
+		if cfg.Sql != "" {
+			cfg.Sql = inst.client.rewriteDatasetAliases(cfg.Sql)
+		}
+		if cfg.BandsSql != "" {
+			cfg.BandsSql = inst.client.rewriteDatasetAliases(cfg.BandsSql)
+		}
+	}
 	cfgBytes, err := buscodec.Encode(cfg)
 	if err != nil {
 		err = eh.Errorf("play: encode launch config: %w", err)
