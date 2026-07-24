@@ -111,6 +111,10 @@ func (inst *PlayApp) renderParamSlots() {
 		rt.Small().Weak()
 	}
 
+	// Phase 1b: idle live drafts follow the store before any widget reads
+	// them, so a panel's publication is what the pane draws this frame.
+	inst.syncLiveParamDrafts()
+
 	consumed := make([]bool, len(slots))
 	// grouped tracks the slots a group widget folded, which is what §SD7's
 	// near-miss pass reports on. It cannot read `consumed` instead: the tail
@@ -266,6 +270,50 @@ func (inst *PlayApp) syncParamDriftToPrelude() {
 	}
 	inst.sql = out
 	maps.Copy(inst.paramSyncedValues, pinnedValues)
+}
+
+// syncLiveParamDrafts makes idle live drafts follow the store, so a value a
+// panel publishes — a Timeline extent, a viewport bound — shows up in the
+// pane's own typed widget (ADR-0124's 2026-07-22 §SD4 amendment; the idiom is
+// slice 5e's Signals editor).
+//
+// Two guards, both against paramLiveSeeded — the value the pane last agreed
+// with the store on:
+//
+//   - the store must have MOVED since then, or there is nothing to follow and
+//     a settled co-writer's identical re-emit costs no draft churn;
+//   - the draft must NOT have moved since then, or the user has typed
+//     something phase 3 has not committed yet. Typing wins: the pane's write
+//     lands this frame and is the later writer, with its provenance on it.
+//
+// A name the store dropped (the Signals editor's discard) reads as an empty
+// value here, so an idle draft empties with it rather than showing a value no
+// longer bound to anything.
+//
+// Runs before dispatch, so the widgets render this frame's value; the
+// databinding override tells the frontend to drop its cached buffer for a
+// draft written behind an interactive widget's back (the setEndpoint idiom).
+func (inst *PlayApp) syncLiveParamDrafts() {
+	if inst.frameSig == nil && inst.graph == nil {
+		return
+	}
+	for _, s := range inst.paramSlots {
+		if inst.paramPinned(s.Name) {
+			continue // the parser owns a pinned draft (phase 1)
+		}
+		ptr, ok := inst.paramDrafts[s.Name]
+		if !ok {
+			continue
+		}
+		raw, _ := inst.signalRawFor(s.Name)
+		seeded := inst.paramLiveSeeded[s.Name]
+		if raw == seeded || *ptr != seeded {
+			continue
+		}
+		*ptr = raw
+		inst.noteLiveSeeded(s.Name, raw)
+		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(ptr)
+	}
 }
 
 // syncLiveParamDrift writes a live name's moved draft into the signal store —

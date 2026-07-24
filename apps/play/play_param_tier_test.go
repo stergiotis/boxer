@@ -187,3 +187,79 @@ func TestHandDeletedSetFlipsTierToLive(t *testing.T) {
 	require.Equal(t, "SELECT {q:String}", app.sql, "the deleted SET is not re-authored")
 	require.Equal(t, "z", heldSignal(t, app, "q").Raw)
 }
+
+// An idle live draft follows the store: the Timeline publishes an extent and
+// the pane's picker shows it on the next frame, without the pane writing
+// anything back.
+func TestIdleLiveDraftFollowsStore(t *testing.T) {
+	app := paneApp(t, "SELECT {tl_min:DateTime64(3, 'UTC')}")
+	*app.paramDrafts["tl_min"] = "" // never touched
+
+	app.graph.setSignalRawFrom("tl_min", "2026-03-01 00:00:00", "timeline")
+	app.frameSig = app.graph.signals()
+	app.syncLiveParamDrafts()
+
+	require.Equal(t, "2026-03-01 00:00:00", *app.paramDrafts["tl_min"],
+		"an idle draft follows an external write")
+
+	rev := app.graph.signals().Revision()
+	app.syncParamDriftToPrelude()
+	require.Equal(t, rev, app.graph.signals().Revision(), "following is not drift")
+	require.Equal(t, "timeline", heldSignal(t, app, "tl_min").Writer,
+		"the publisher keeps its provenance — the pane did not rewrite the value")
+}
+
+// A draft the user has moved since the last agreed value survives a
+// simultaneous external write, and the pane's write is the one that lands —
+// last-writer-wins, with `param-widget` provenance saying so.
+func TestMidEditLiveDraftSurvivesExternalWrite(t *testing.T) {
+	app := paneApp(t, "SELECT {tl_min:DateTime64(3, 'UTC')}")
+	app.graph.setSignalRawFrom("tl_min", "2026-01-01 00:00:00", "timeline")
+	app.frameSig = app.graph.signals()
+	app.syncLiveParamDrafts() // draft and store agree
+
+	// The same frame: the user types, and the Timeline republishes.
+	*app.paramDrafts["tl_min"] = "2026-06-06 06:06:06"
+	app.graph.setSignalRawFrom("tl_min", "2026-02-02 00:00:00", "timeline")
+	app.frameSig = app.graph.signals()
+
+	app.syncLiveParamDrafts()
+	require.Equal(t, "2026-06-06 06:06:06", *app.paramDrafts["tl_min"],
+		"typing wins — the uncommitted edit is not torn out from under the user")
+
+	app.syncParamDriftToPrelude()
+	row := heldSignal(t, app, "tl_min")
+	require.Equal(t, "2026-06-06 06:06:06", row.Raw)
+	require.Equal(t, signalWriterParamWidget, row.Writer)
+}
+
+// A settled co-writer — a panel re-emitting the value it already published —
+// causes no draft churn, because the store dedups identical re-sets and the
+// reseed guard keys on the value, not on the write.
+func TestSettledCoWriterCausesNoDraftChurn(t *testing.T) {
+	app := paneApp(t, "SELECT {tl_min:DateTime64(3, 'UTC')}")
+	app.graph.setSignalRawFrom("tl_min", "2026-01-01 00:00:00", "timeline")
+	app.frameSig = app.graph.signals()
+	app.syncLiveParamDrafts()
+
+	rev := app.graph.signals().Revision()
+	for range 3 {
+		app.graph.setSignalRawFrom("tl_min", "2026-01-01 00:00:00", "timeline")
+		app.frameSig = app.graph.signals()
+		app.syncLiveParamDrafts()
+		app.syncParamDriftToPrelude()
+	}
+	require.Equal(t, rev, app.graph.signals().Revision(), "a settled pair is quiet")
+	require.Equal(t, "2026-01-01 00:00:00", *app.paramDrafts["tl_min"])
+}
+
+// A pinned draft is the parser's; the reseed pass must not touch it, or a
+// same-named signal would fight the prelude the user authored.
+func TestReseedLeavesPinnedDraftsAlone(t *testing.T) {
+	app := paneApp(t, "SET param_q = 'buffer';\nSELECT {q:String}")
+	app.graph.setSignalRawFrom("q", "store", signalWriterEditor)
+	app.frameSig = app.graph.signals()
+
+	app.syncLiveParamDrafts()
+	require.Equal(t, "buffer", *app.paramDrafts["q"], "a SET-bound draft follows the buffer, not the store")
+}
