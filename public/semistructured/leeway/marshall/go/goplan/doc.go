@@ -15,6 +15,9 @@
 //
 //   - SplitLW / ParsedLWTag and the tuple-grammar parsers (SplitTupleOuterLW,
 //     SplitTupleElemLW): the lw: tag grammar, one shared flag vocabulary.
+//   - MembershipMarkerShape / IsMembershipMarker: the nested model's
+//     TYPE-based spelling of the same membership channels (the lw.* marker
+//     types), so a new marker reaches both front-ends at once.
 //   - PlanBuilder (NewPlanBuilder; AddField / AddUnderscoreField /
 //     AddTupleSliceField / AddNestedSliceField; Finish): the per-field
 //     validation + whole-DTO assembly shared by both front-ends, so the

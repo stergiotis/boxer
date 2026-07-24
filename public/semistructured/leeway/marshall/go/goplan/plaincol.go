@@ -1,5 +1,7 @@
 package goplan
 
+import "github.com/stergiotis/boxer/public/observability/eh/eb"
+
 // Plain (entity-header) columns map 1:1 onto the leeway entity-builder
 // setters: `id`(+`naturalKey`) → SetId, `ts` → SetTimestamp, `expiresAt`
 // → SetLifecycle. The setter *names* are the stable leeway entity
@@ -59,4 +61,24 @@ func PlainArrowArrayType(goType string) (arrowType string, ok bool) {
 func IsSupportedPlainType(goType string) bool {
 	_, ok := PlainArrowArrayType(goType)
 	return ok
+}
+
+// ValidatePlainColumnShape checks that a plain column names a recognized
+// entity-header role (id / naturalKey / ts / expiresAt) and carries a Go
+// type the codec supports. Under the strict 1:1 mapping the Go type is
+// the entity setter's argument type verbatim — the codec inserts no
+// conversions — so the only constraint here is that the type round-trips
+// through Arrow (see PlainArrowArrayType). Exported for the sibling
+// marshallreflect package.
+func ValidatePlainColumnShape(column, goType string) (err error) {
+	switch column {
+	case "id", "naturalKey", "ts", "expiresAt":
+		// Recognized role; the Go type is the setter's arg type verbatim.
+		if !IsSupportedPlainType(goType) {
+			err = eb.Build().Str("column", column).Str("goType", goType).Errorf("unsupported plain column Go type (see goplan.PlainArrowArrayType for the supported set)")
+		}
+	default:
+		err = eb.Build().Str("column", column).Errorf("unknown plain column (allowed: id, naturalKey, ts, expiresAt)")
+	}
+	return
 }

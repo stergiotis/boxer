@@ -171,6 +171,55 @@ func parseFlagTokens(tokens []string, flags *mappingplan.FieldFlags) (err error)
 // for a literal verbatim label (ADR-0103).
 const TupleMembershipMarker = "@membership"
 
+// membershipMarkerChannel is the nested model's TYPE-based spelling of the
+// `@membership,<channel flag>` tag (ADR-0113): an lw.* marker type's bare name
+// to the channel it denotes. It lives here, beside the tag vocabulary, because
+// both front-ends need it — marshallreflect reads the name off a live
+// reflect.Type, marshallgen off the selector in the AST — and a marker that
+// reached only one of them would be an accept-set divergence.
+var membershipMarkerChannel = map[string]mappingplan.MembershipChannel{
+	"Ref":          mappingplan.MembershipChannelLowCardRef,
+	"HighRef":      mappingplan.MembershipChannelHighCardRef,
+	"Verbatim":     mappingplan.MembershipChannelLowCardVerbatim,
+	"HighVerbatim": mappingplan.MembershipChannelHighCardVerbatim,
+}
+
+// MembershipMarkerShape classifies an lw.* membership marker by its bare type
+// name (lw.Ref → "Ref") into the FieldShape a front-end hands to
+// AddTupleSliceField / AddNestedSliceField: the channel comes from the type,
+// the canonical from the channel's wire value (a uint64 ref id, or the string
+// name a verbatim channel embeds), and MarkerGoType carries the as-written
+// newtype the codegen bridge emits its conversions from.
+//
+// ok is false when markerName is not a membership marker; each front-end words
+// its own error there, because they recognise different marker families — the
+// reflect codec also accepts the value-shape markers (lw.Single, the lanes)
+// that marshallgen rejects (ADR-0113 P1). Callers promote the canonical with
+// ScalarModifierHomogenousArray for a repeated (`[]lw.Ref`) membership.
+func MembershipMarkerShape(markerName string) (shape FieldShape, ok bool, err error) {
+	ch, ok := membershipMarkerChannel[markerName]
+	if !ok {
+		return
+	}
+	goType := "uint64"
+	if ch.EmbedsLiteralName() {
+		goType = "string"
+	}
+	shape.IsMembership = true
+	shape.MembershipChannel = ch
+	shape.MarkerGoType = "lw." + markerName
+	shape.Canonical, err = ScalarCanonicalForGoType(goType)
+	return
+}
+
+// IsMembershipMarker reports whether markerName names an lw.* membership
+// marker type. Used by the front-ends' `[]S` detectors to route a slice whose
+// element carries marker-typed memberships to the dynamic-membership builder.
+func IsMembershipMarker(markerName string) bool {
+	_, ok := membershipMarkerChannel[markerName]
+	return ok
+}
+
 // SplitTupleOuterLW parses the tag of a tuple field — a slice-of-struct
 // DTO field mapping one section, e.g. `Texts []LabeledText` with
 // `lw:"string"`. The tag is the bare section name: a tuple field has no
