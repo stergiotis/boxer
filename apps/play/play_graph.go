@@ -229,6 +229,18 @@ const (
 	signalWriterParamWidget = "param-widget"
 )
 
+// humanSignalWriters are the writer identities that mean "a person did this",
+// as opposed to a panel republishing derived state. The Live circuit breaker
+// reads it to tell a genuine input change from a self-feeding emit loop
+// (ADR-0097, the 2026-07-22 review remediation).
+func isHumanSignalWriter(writer string) bool {
+	switch writer {
+	case signalWriterEditor, signalWriterParamWidget, signalWriterHistory:
+		return true
+	}
+	return false
+}
+
 // signalEnv is an immutable signal snapshot. setSignal copy-on-writes a new one
 // and bumps the revision, so a holder of an older snapshot keeps a consistent
 // view (glitch-free reads, ADR-0097 SD4). meta travels with params under the
@@ -544,6 +556,18 @@ func (inst *queryGraph) deleteSignal(id SignalID) {
 		}
 	}
 	inst.sig = &signalEnv{params: next, meta: nextMeta, revision: inst.sig.revision + 1}
+}
+
+// signalWriterFor reports which writer last CHANGED a signal's value.
+// ok=false when the store does not hold the name (nothing to attribute).
+func (inst *queryGraph) signalWriterFor(name SignalID) (writer string, ok bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if _, held := inst.sig.params[name]; !held {
+		return
+	}
+	m, ok := inst.sig.meta[name]
+	return m.writer, ok
 }
 
 // signalRow is one held signal for the Signals chrome (slice 5e): the value

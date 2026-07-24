@@ -167,6 +167,14 @@ type PlayApp struct {
 	liveMain         bool
 	runIsAuto        bool
 	runBlockedReason string
+	// The Live circuit breaker (the 2026-07-22 review remediation):
+	// autoRunStreak counts consecutive machine-driven auto-runs against
+	// autoRunStreakSql (the buffer they ran), and liveSuspendReason carries
+	// the status-bar line naming what was cycling once the breaker unchecks
+	// Live. A human Run clears both.
+	autoRunStreak     int
+	autoRunStreakSql  string
+	liveSuspendReason string
 	// exposeConditions is the top-bar toggle for the opt-in selection-condition
 	// rewrite (ADR-0121), default off. The Client owns the authoritative
 	// (atomic) flag the query path reads; this is the render thread's copy,
@@ -933,9 +941,18 @@ func (inst *PlayApp) Render() error {
 
 	// The `main` live toggle (slice 5e, D2): a referenced-signal move
 	// re-runs the unchanged buffer through the ordinary Run path below.
+	// Re-checking Live retires the breaker's notice: the checkbox on screen
+	// is the state of the system, so turning it back on IS the resume
+	// gesture (the breaker unchecked it when it tripped).
+	if inst.liveMain && inst.liveSuspendReason != "" {
+		inst.resumeLiveAfterHumanAction()
+	}
 	if inst.shouldAutoRun() {
 		inst.requestRun = true
 		inst.runIsAuto = true
+		// Count it against the loop witness before it fires: an emit-driven
+		// cycle is only visible in the sequence of auto-runs.
+		inst.noteAutoRunFired()
 	}
 
 	// Run the canonical-form pipeline once per frame regardless of which
@@ -1141,6 +1158,9 @@ func (inst *PlayApp) executeRun(auto bool) {
 		// for sessions that never Run; doing both keeps the
 		// persistence point user-intent-anchored.
 		inst.PersistSql()
+		// A human Run is the reset for the Live circuit breaker: whatever
+		// the streak was measuring, a person has just said what to run.
+		inst.resumeLiveAfterHumanAction()
 	}
 }
 

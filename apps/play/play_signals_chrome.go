@@ -215,6 +215,80 @@ func (inst *PlayApp) shouldAutoRun() bool {
 	return inst.runSignalsDiverged()
 }
 
+// autoRunLoopLimit is how many consecutive machine-driven auto-runs Live
+// tolerates before it suspends itself. SD9's acyclicity guard covers data
+// edges — node reads node — and says nothing about a panel that publishes a
+// signal derived from the result of a query that reads it: that loop is
+// damped by write-dedup and frame quantization, but a query whose output
+// moves its own input a little every run ratchets instead of settling. The
+// limit is deliberately generous: a genuine burst of panel activity (a drag
+// across the Map, a Timeline brush) produces short streaks well under it,
+// while a ratchet passes it in a second or two.
+const autoRunLoopLimit = 8
+
+// noteAutoRunFired records that Live fired an auto-run and trips the circuit
+// breaker on a self-feeding one (ADR-0097, the 2026-07-22 review
+// remediation). A streak counts only while BOTH hold:
+//
+//   - the buffer has not changed — an edit is a human saying what to run;
+//   - every diverging name was last written by a machine. A human write
+//     (signals-editor, param-widget, history) means a person is driving the
+//     value, however fast, and is never a loop to break.
+//
+// Tripping unchecks Live rather than muting it, so the state on screen is the
+// state of the system: the user sees an unchecked box and a reason, and
+// re-checking it is the resume gesture.
+func (inst *PlayApp) noteAutoRunFired() {
+	sql := strings.TrimSpace(inst.sql)
+	cycling := inst.machineDrivenDivergence()
+	if sql != inst.autoRunStreakSql {
+		inst.autoRunStreak = 0
+		inst.autoRunStreakSql = sql
+	}
+	if len(cycling) == 0 {
+		inst.autoRunStreak = 0 // a person moved it — not a loop
+		return
+	}
+	inst.autoRunStreak++
+	if inst.autoRunStreak < autoRunLoopLimit {
+		return
+	}
+	inst.liveMain = false
+	inst.autoRunStreak = 0
+	inst.liveSuspendReason = "Live suspended: " + strings.Join(cycling, ", ") +
+		" kept moving with no edit (a query feeding its own input) — re-check Live to resume"
+}
+
+// resumeLiveAfterHumanAction clears the breaker's state on a human Run: the
+// person has said what to run, so whatever the streak was measuring is over.
+func (inst *PlayApp) resumeLiveAfterHumanAction() {
+	inst.autoRunStreak = 0
+	inst.liveSuspendReason = ""
+}
+
+// machineDrivenDivergence returns the names whose value diverges from the
+// last Run's inputs, but ONLY when every one of them was last written by a
+// machine; a single human writer among them returns nil, because the whole
+// point of the witness is to tell a person driving a value from a query
+// driving its own input.
+//
+// A diverging name the store does not hold at all (a value that was
+// discarded) has no writer to judge, so it reads as human — the conservative
+// side, where the breaker does not fire.
+func (inst *PlayApp) machineDrivenDivergence() (names []string) {
+	diverged := inst.divergedSignalNames()
+	if len(diverged) == 0 {
+		return
+	}
+	for _, name := range diverged {
+		writer, known := inst.graph.signalWriterFor(name)
+		if !known || isHumanSignalWriter(writer) {
+			return nil
+		}
+	}
+	return diverged
+}
+
 func appendDistinct(ss []string, s string) []string {
 	for _, have := range ss {
 		if have == s {

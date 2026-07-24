@@ -3,6 +3,7 @@ package play
 import (
 	"fmt"
 	"maps"
+	"sort"
 	"strings"
 	"time"
 
@@ -105,6 +106,16 @@ func (inst *PlayApp) runSignalsDiverged() (diverged bool) {
 	if len(inst.paramSlots) == 0 && len(inst.lastSentSigParams) == 0 {
 		return
 	}
+	diverged = !maps.Equal(inst.resolveSignalsNow(), inst.lastSentSigParams)
+	return
+}
+
+// resolveSignalsNow is the buffer's CURRENT signal resolution, URL-keyed —
+// the left-hand side of the staleness comparison. Shared with the Live
+// circuit breaker so the breaker judges exactly the values the witness
+// compares (resolveSignalNamesWithDefaults is the same helper the Run uses,
+// so all three stay in lockstep on the reserved-String default).
+func (inst *PlayApp) resolveSignalsNow() map[string]string {
 	names := make([]string, 0, len(inst.paramSlots))
 	for _, s := range inst.paramSlots {
 		names = append(names, s.Name)
@@ -113,12 +124,33 @@ func (inst *PlayApp) runSignalsDiverged() (diverged bool) {
 	for name := range inst.paramSyncedValues {
 		bound[name] = true
 	}
-	// Resolve through the same helper the Run uses (resolveRunSignals), so a
-	// reserved-String default (selection_country → "") that the last Run
-	// shipped also appears here — otherwise it reads as perpetual divergence
-	// and pins the auto-run loop on / marks the result forever stale.
-	resolvedNow := resolveSignalNamesWithDefaults(names, bound, inst.frameSig)
-	diverged = !maps.Equal(resolvedNow, inst.lastSentSigParams)
+	return resolveSignalNamesWithDefaults(names, bound, inst.frameSig)
+}
+
+// divergedSignalNames names the referenced signals whose current value
+// differs from what the last Run shipped — runSignalsDiverged's witness,
+// itemised for the Live circuit breaker, which has to say WHICH signal is
+// cycling. Names are bare (no `param_` prefix) and sorted, so a status line
+// built from them is stable frame to frame.
+func (inst *PlayApp) divergedSignalNames() (names []string) {
+	now := inst.resolveSignalsNow()
+	seen := make(map[string]struct{}, len(now)+len(inst.lastSentSigParams))
+	for key, v := range now {
+		if sent, ok := inst.lastSentSigParams[key]; ok && sent == v {
+			continue
+		}
+		seen[strings.TrimPrefix(key, "param_")] = struct{}{}
+	}
+	for key := range inst.lastSentSigParams {
+		if _, ok := now[key]; !ok {
+			seen[strings.TrimPrefix(key, "param_")] = struct{}{}
+		}
+	}
+	names = make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	return
 }
 
@@ -249,6 +281,12 @@ func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, su
 	// edited away, no Run needed.
 	if inst.runBlockedReason != "" && len(inst.unfilledInputs()) > 0 {
 		s = "Run blocked: " + inst.runBlockedReason
+	}
+	// The Live circuit breaker's verdict outranks the summary: Live went off
+	// on its own, which the user has to be told, and the line names what was
+	// cycling. Cleared by the next human Run.
+	if inst.liveSuspendReason != "" {
+		s = inst.liveSuspendReason
 	}
 	if s == "" {
 		return
