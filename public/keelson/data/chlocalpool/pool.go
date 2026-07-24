@@ -89,7 +89,10 @@ func (inst *Pool) Acquire(ctx context.Context) (w *Worker, err error) {
 	// Fast path: pop an idle worker.
 	select {
 	case w = <-inst.idle:
-		inst.afterAcquire(w)
+		err = inst.claim(w)
+		if err != nil {
+			w = nil
+		}
 		return
 	default:
 	}
@@ -112,14 +115,22 @@ func (inst *Pool) Acquire(ctx context.Context) (w *Worker, err error) {
 		if err != nil {
 			return
 		}
-		inst.afterAcquire(w)
+		err = inst.claim(w)
+		if err != nil {
+			w = nil
+		}
 		return
 	}
 
-	// Pool maxed; block.
+	// Pool maxed; block. A stopping pool can present both a buffered
+	// worker and a closed stopCh, and select picks between ready cases at
+	// random — claim is what makes the outcome deterministic.
 	select {
 	case w = <-inst.idle:
-		inst.afterAcquire(w)
+		err = inst.claim(w)
+		if err != nil {
+			w = nil
+		}
 		return
 	case <-ctx.Done():
 		err = eh.Errorf("chlocalpool: acquire cancelled: %w", ctx.Err())
@@ -147,6 +158,22 @@ func (inst *Pool) Stop(ctx context.Context) (err error) {
 		workers = append(workers, w)
 	}
 	inst.mu.Unlock()
+
+	// Empty the idle buffer. Everything in it is also in tracked and so is
+	// closed below, but leaving the entries buffered keeps reaped workers
+	// reachable by a racing Acquire and leaves Stats reporting idle workers
+	// against a live count of zero. Nothing sends to idle after this point:
+	// refillSpawnOnce only reaches its send once spawnAndCount has returned
+	// successfully, and spawnAndCount refuses to register under a stopped
+	// pool.
+drain:
+	for {
+		select {
+		case <-inst.idle:
+		default:
+			break drain
+		}
+	}
 
 	closeDone := make(chan struct{})
 	go func() {
@@ -192,13 +219,29 @@ func (inst *Pool) Stats() (s Stats) {
 	return
 }
 
-// afterAcquire records the moment the worker was handed to a caller,
-// for the watchdog to age out forgotten Closes.
-func (inst *Pool) afterAcquire(w *Worker) {
+// claim hands a worker to the caller: it records the moment of handover
+// for the watchdog to age out forgotten Closes, and nudges the refill
+// goroutine.
+//
+// It refuses, and closes, a worker drawn after the pool stopped. Taking
+// inst.mu is what settles the race with Stop, which sets stopped and
+// snapshots tracked under that same lock: either this claim registers
+// before the snapshot — and Stop reaps the worker under its caller, the
+// documented aggressive behaviour — or it observes stopped and refuses.
+// Without the refusal, Acquire hands back a worker whose subprocess Stop
+// has already reaped, with a nil error.
+func (inst *Pool) claim(w *Worker) (err error) {
 	inst.mu.Lock()
+	if inst.stopped {
+		inst.mu.Unlock()
+		_ = w.Close()
+		err = eh.Errorf("chlocalpool: pool stopped")
+		return
+	}
 	inst.acquired[w] = time.Now()
 	inst.mu.Unlock()
 	inst.signalRefill()
+	return
 }
 
 // workerClosed is the Worker→Pool callback invoked from Worker.Close
