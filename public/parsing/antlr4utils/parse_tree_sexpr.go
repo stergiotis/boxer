@@ -48,41 +48,50 @@ func (inst *ParseTreeSerializer) AddValueTerminal(symbolicName string) (err erro
 }
 
 func (inst *ParseTreeSerializer) formatSourceInterval2(out io.StringWriter, rctxt *antlr.BaseParserRuleContext) (err error) {
-	if inst.emitSourceInfo {
-		start := rctxt.GetStart()
-		stop := rctxt.GetStop()
-		s := fmt.Sprintf(" ((%d . %d) . ", start.GetStart(), stop.GetStop())
-		_, err = out.WriteString(s)
-		if err != nil {
-			return
-		}
-		t := inst.sql[start.GetStart() : stop.GetStop()+1]
-
-		if false {
-			_, err = out.WriteString("#|")
-			if err != nil {
-				return
-			}
-			_, err = out.WriteString(t)
-			if err != nil {
-				return
-			}
-			_, err = out.WriteString("|#")
-			if err != nil {
-				return
-			}
-		} else {
-			err = escapeJsonString(out, t)
-			if err != nil {
-				return
-			}
-		}
-		_, err = out.WriteString(")")
-		if err != nil {
-			return
-		}
+	if !inst.emitSourceInfo {
+		return
 	}
+	// Every offset here is untrusted. A rule that failed to match carries a
+	// nil stop token, error recovery leaves synthetic tokens reporting -1,
+	// and a recovered stop can precede its own start — and this serializer
+	// is the debug dump one reaches for precisely when the parse went
+	// wrong. Slicing inst.sql on those offsets panicked.
+	start := rctxt.GetStart()
+	stop := rctxt.GetStop()
+	lo, hi := -1, -1
+	if start != nil {
+		lo = start.GetStart()
+	}
+	if stop != nil {
+		hi = stop.GetStop()
+	}
+	_, err = out.WriteString(fmt.Sprintf(" ((%d . %d) . ", lo, hi))
+	if err != nil {
+		return
+	}
+	err = escapeJsonString(out, sliceSource(inst.sql, lo, hi))
+	if err != nil {
+		return
+	}
+	_, err = out.WriteString(")")
 	return
+}
+
+// sliceSource returns the inclusive src[lo:hi] span when that is a usable
+// range and the empty string otherwise, clamping a stop that runs past the
+// end. It never panics, whatever the token offsets say.
+func sliceSource(src string, lo int, hi int) (out string) {
+	if lo < 0 || lo > len(src) {
+		return
+	}
+	end := hi + 1
+	if end > len(src) {
+		end = len(src)
+	}
+	if end < lo {
+		return
+	}
+	return src[lo:end]
 }
 func (inst *ParseTreeSerializer) formatSourceInterval(out io.StringWriter, interval antlr.Interval) (err error) {
 	if inst.emitSourceInfo {
@@ -91,16 +100,26 @@ func (inst *ParseTreeSerializer) formatSourceInterval(out io.StringWriter, inter
 		if err != nil {
 			return
 		}
+		// serializeNode reaches this or formatSourceInterval2 from the same
+		// switch, so the offsets are no more trustworthy here: Get() on a
+		// negative or past-the-end token index panics. The stream is also
+		// optional — NewParseTreeSerializer accepts a nil one.
 		ts := inst.tokenStream
-		for i := interval.Start; i < interval.Stop; i++ {
-			t := ts.Get(i).GetText()
-			_, err = out.WriteString(t)
-			if err != nil {
-				return
+		if ts != nil && interval.Start >= 0 {
+			stop := interval.Stop
+			if n := ts.Size(); stop > n {
+				stop = n
 			}
-			_, err = out.WriteString(" ")
-			if err != nil {
-				return
+			for i := interval.Start; i < stop; i++ {
+				t := ts.Get(i).GetText()
+				_, err = out.WriteString(t)
+				if err != nil {
+					return
+				}
+				_, err = out.WriteString(" ")
+				if err != nil {
+					return
+				}
 			}
 		}
 		_, err = out.WriteString("|#")

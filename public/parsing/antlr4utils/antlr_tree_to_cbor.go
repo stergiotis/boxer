@@ -86,12 +86,12 @@ func (inst *AntlrTreeToCbor[E]) convert(parser antlr.Recognizer, tree antlr.Tree
 			if err != nil {
 				return
 			}
-			prefix := inst.contextPrefix
-			if prefix != "" {
-				_, err = enc.EncodeString(contextTypeName)
-			} else {
-				_, err = enc.EncodeString(prefix + contextTypeName)
-			}
+			// The two branches used to be the wrong way round: a set
+			// prefix took the path that dropped it, an empty one the path
+			// that concatenated nothing, so contextPrefix never reached
+			// the output. Concatenating an empty prefix is a no-op, so one
+			// expression covers both cases.
+			_, err = enc.EncodeString(inst.contextPrefix + contextTypeName)
 			if err != nil {
 				return
 			}
