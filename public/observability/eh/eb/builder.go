@@ -41,6 +41,10 @@ func Build() *ErrorBuilder {
 func (inst *ErrorBuilder) Reset() {
 	inst.structuredData.Reset()
 	inst.encoder.Reset()
+	// Re-open the indefinite map that Build() emits. Without this the
+	// reused builder produces a headerless key/value run terminated by a
+	// stray break, which no CBOR decoder accepts.
+	_, _ = inst.encoder.EncodeMapIndefinite()
 	inst.open = true
 	inst.withoutStack = false
 }
@@ -57,7 +61,7 @@ func (inst *ErrorBuilder) Type(key string, val any) *ErrorBuilder {
 	if t == nil {
 		return inst.Str(key, "<unknown>")
 	} else {
-		return inst.Str(key, reflect.TypeOf(val).String())
+		return inst.Str(key, t.String())
 	}
 }
 func (inst *ErrorBuilder) Str(key string, val string) *ErrorBuilder {
@@ -339,12 +343,19 @@ func (inst *ErrorBuilder) Bytes(key string, val []byte) *ErrorBuilder {
 	return inst
 }
 
+// Stringer encodes val.String() under key. A nil Stringer encodes as CBOR
+// null rather than panicking — this builder runs on error paths, where a
+// panic would replace the report with a crash.
 func (inst *ErrorBuilder) Stringer(key string, val fmt.Stringer) *ErrorBuilder {
 	if !inst.open {
 		return inst
 	}
 	_, _ = inst.encoder.EncodeString(key)
-	_, _ = inst.encoder.EncodeString(val.String())
+	if val == nil {
+		_, _ = inst.encoder.EncodeNil()
+	} else {
+		_, _ = inst.encoder.EncodeString(val.String())
+	}
 	return inst
 }
 
@@ -355,16 +366,27 @@ func (inst *ErrorBuilder) Stringers(key string, val []fmt.Stringer) *ErrorBuilde
 	_, _ = inst.encoder.EncodeString(key)
 	_, _ = inst.encoder.EncodeArrayDefinite(uint64(len(val)))
 	for _, v := range val {
-		_, _ = inst.encoder.EncodeString(v.String())
+		if v == nil {
+			_, _ = inst.encoder.EncodeNil()
+		} else {
+			_, _ = inst.encoder.EncodeString(v.String())
+		}
 	}
 	return inst
 }
 
+// Hex encodes val as a byte string tagged for hex rendering. A nil slice
+// encodes as CBOR null; emitting the tag alone would leave a dangling tag
+// with no content item and make the whole payload undecodable.
 func (inst *ErrorBuilder) Hex(key string, val []byte) *ErrorBuilder {
 	if !inst.open {
 		return inst
 	}
 	_, _ = inst.encoder.EncodeString(key)
+	if val == nil {
+		_, _ = inst.encoder.EncodeNil()
+		return inst
+	}
 	_, _ = inst.encoder.EncodeTagSmall(cbor.TagExpectConversionToHex)
 	_, _ = inst.encoder.EncodeByteSlice(val)
 	return inst
@@ -375,6 +397,10 @@ func (inst *ErrorBuilder) RawJSON(key string, b []byte) *ErrorBuilder {
 		return inst
 	}
 	_, _ = inst.encoder.EncodeString(key)
+	if b == nil {
+		_, _ = inst.encoder.EncodeNil()
+		return inst
+	}
 	_, _ = inst.encoder.EncodeJsonPayload(b)
 	return inst
 }
@@ -384,6 +410,10 @@ func (inst *ErrorBuilder) RawCBOR(key string, b []byte) *ErrorBuilder {
 		return inst
 	}
 	_, _ = inst.encoder.EncodeString(key)
+	if b == nil {
+		_, _ = inst.encoder.EncodeNil()
+		return inst
+	}
 	_, _ = inst.encoder.EncodeTag8(cbor.TagEncodedCBORSequence)
 	_, _ = inst.encoder.EncodeByteSlice(b)
 	return inst
@@ -410,17 +440,23 @@ func (inst *ErrorBuilder) Times(key string, val []time.Time) *ErrorBuilder {
 	return inst
 }
 
+// IPAddr encodes ip as a tagged CBOR address: 4 bytes when it has an IPv4
+// form, 16 otherwise. A nil or malformed net.IP (any length other than 4
+// or 16) encodes as CBOR null.
 func (inst *ErrorBuilder) IPAddr(key string, ip net.IP) *ErrorBuilder {
 	if !inst.open {
 		return inst
 	}
 	_, _ = inst.encoder.EncodeString(key)
-	b := ip.To4()
-	if b != nil {
+	if b := ip.To4(); b != nil {
 		_, _ = inst.encoder.EncodeIpAddr(netip.AddrFrom4([4]byte(b)))
-	} else {
-		_, _ = inst.encoder.EncodeIpAddr(netip.AddrFrom16([16]byte(b.To16())))
+		return inst
 	}
+	if b := ip.To16(); b != nil {
+		_, _ = inst.encoder.EncodeIpAddr(netip.AddrFrom16([16]byte(b)))
+		return inst
+	}
+	_, _ = inst.encoder.EncodeNil()
 	return inst
 }
 
@@ -428,9 +464,14 @@ func (inst *ErrorBuilder) IsOpen() bool {
 	return inst.open
 }
 
+// Errorf closes the payload and returns the error carrying it. Calling it
+// more than once returns further errors over the same already-closed
+// payload; only the first call emits the map's break.
 func (inst *ErrorBuilder) Errorf(format string, a ...any) error {
-	inst.open = false
-	_, _ = inst.encoder.EncodeBreak()
+	if inst.open {
+		inst.open = false
+		_, _ = inst.encoder.EncodeBreak()
+	}
 	buf := make([]byte, inst.structuredData.Len())
 	copy(buf, inst.structuredData.Bytes())
 	if inst.withoutStack {
