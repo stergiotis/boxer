@@ -186,18 +186,66 @@ func (inst *Encoder) EncodeJsonPayload(val []byte) (n int, err error) {
 	n += u
 	return
 }
+
+// EncodeTimeUTC encodes val as a tagged epoch time.
+//
+// Whole-second values use tag 1 (RFC 8949 §3.4.2) carrying an integer count
+// of seconds.
+//
+// Sub-second values cannot use tag 1. Its content is defined as *seconds*,
+// and no tag-1-admissible number carries a present-day nanosecond timestamp
+// losslessly: float64's step at ~1.75e18 is 256 ns, so distinct timestamps
+// collide. Those use tag 1001 (RFC 9581 §3.2) instead — a map pairing the
+// integer second base under key 1 with the nanosecond fraction to add under
+// key -9. Go's Unix()/Nanosecond() split matches that "add the fraction to
+// the base" rule exactly: Nanosecond() is always in [0,1e9) and Unix() is
+// the floored second, so the pair stays exact before the epoch too.
+//
+// Splitting on the fraction keeps whole-second output byte-identical to
+// what this function has always produced, so only sub-second values — the
+// ones that were being encoded wrongly — change representation.
 func (inst *Encoder) EncodeTimeUTC(val time.Time) (n int, err error) {
 	val = val.UTC()
-	n, err = inst.EncodeTagSmall(TagEpochDateTimeNumber)
+	ns := val.Nanosecond()
+	if ns == 0 {
+		n, err = inst.EncodeTagSmall(TagEpochDateTimeNumber)
+		if err != nil {
+			return
+		}
+		var u int
+		u, err = inst.EncodeInt(val.Unix())
+		n += u
+		return
+	}
+
+	n, err = inst.EncodeTag16(TagExtendedTime)
 	if err != nil {
 		return
 	}
 	var u int
-	if val.Nanosecond() > 0 {
-		u, err = inst.EncodeFloat64(float64(val.Unix())*1.0e9 + float64(val.Nanosecond()))
-	} else {
-		u, err = inst.EncodeInt(val.Unix())
+	// Keys 1 and -9 encode as 0x01 and 0x28, so this order is also the
+	// deterministic-encoding order of RFC 8949 §4.2.1.
+	u, err = inst.EncodeMapDefinite(2)
+	n += u
+	if err != nil {
+		return
 	}
+	u, err = inst.EncodeUint(1)
+	n += u
+	if err != nil {
+		return
+	}
+	u, err = inst.EncodeInt(val.Unix())
+	n += u
+	if err != nil {
+		return
+	}
+	u, err = inst.EncodeInt(-9)
+	n += u
+	if err != nil {
+		return
+	}
+	u, err = inst.EncodeUint(uint64(ns))
 	n += u
 	return
 }

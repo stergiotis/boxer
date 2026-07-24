@@ -100,6 +100,7 @@ const (
 	TagEmbeddedJSON             TagUint16 = 262
 	TagHexString                TagUint16 = 263
 	TagMapStringKeysOnly        TagUint16 = 275
+	TagExtendedTime             TagUint16 = 1001
 	TagMultiDimArrayColumnMajor TagUint16 = 1040
 	TagCborTagValue             TagUint16 = 21607
 	TagExternalReference        TagUint16 = 32769
