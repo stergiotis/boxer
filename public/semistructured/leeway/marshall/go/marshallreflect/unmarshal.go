@@ -775,8 +775,8 @@ func sliceFromSeq(seq reflect.Value, f *mappingplan.TaggedField) reflect.Value {
 // that field and no id matching is needed. The value field's shape selects the
 // decode (mirroring the codegen emitter): scalar / Option pair one value with
 // a scalar carrier; a container []T pairs N values (one attribute) with a
-// scalar carrier; an exploded []T pairs N attributes (one value each) with a
-// slice carrier. The carrier's per-row membership data (id/name + params)
+// scalar carrier. Carriers are scalar-only — one marshalltypes.X per attribute
+// (ADR-0113 D1). The carrier's per-row membership data (id/name + params)
 // comes from the combined Seq2 (mixed) or Seq (parametrized) accessor.
 func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, membs reflect.Value, i int) (err error) {
 	var f *mappingplan.TaggedField

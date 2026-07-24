@@ -92,8 +92,8 @@ func (c *RowComposer) AddSections(row any) (err error) {
 //
 //   - scalar fields (T, Option[T] with Has=true, consts): always size 1
 //   - container / roaring fields whose runtime length is exactly 1
-//   - explode-shaped fields (each element produces a size-1 attribute)
 //   - multi-sub-column scalar sections (one tuple per row)
+//   - tuple / nested elements whose shared container length is ≤ 1
 //
 // Container / roaring fields with runtime length > 1 are skipped;
 // they belong to AddMultiValueAttributes. Sections whose fields all
@@ -110,9 +110,10 @@ func (c *RowComposer) AddSingleValueAttributes(row any) (err error) {
 // AddMultiValueAttributes contributes `row`'s sections to the
 // currently open entity, emitting only attributes whose value-
 // cardinality exceeds 1 at runtime. Only container / roaring fields
-// without `,explode` and with runtime length > 1 reach the wire;
-// scalar / Option / explode / const / multi-sub-column emits are
-// skipped (they belong to AddSingleValueAttributes).
+// with runtime length > 1 reach the wire; scalar / Option / const
+// emits are skipped (they belong to AddSingleValueAttributes), as are
+// multi-sub-column and tuple / nested attributes whose shared
+// container length is ≤ 1.
 //
 // Sections that produce no matching attribute open no BeginSection
 // frame.

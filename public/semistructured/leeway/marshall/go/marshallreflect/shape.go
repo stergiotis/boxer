@@ -8,7 +8,6 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
 )
 
@@ -41,15 +40,6 @@ var laneCanonical = map[string]string{
 	"IPv6Prefix": "wc",
 }
 
-// membershipMarkerChannel maps an lw membership marker type's name to its
-// leeway channel — the type-safe form of the tuple `@membership,<channel>` tag.
-var membershipMarkerChannel = map[string]mappingplan.MembershipChannel{
-	"Ref":          mappingplan.MembershipChannelLowCardRef,
-	"HighRef":      mappingplan.MembershipChannelHighCardRef,
-	"Verbatim":     mappingplan.MembershipChannelLowCardVerbatim,
-	"HighVerbatim": mappingplan.MembershipChannelHighCardVerbatim,
-}
-
 // classifyLwMarker classifies a field whose type is from the lw marker package.
 // lw.Single[T] is the unit shape — a container sub-column carrying one element
 // supplied as the scalar T (routed to BeginAttributeSingle via the Unit flag);
@@ -78,17 +68,14 @@ func classifyLwMarker(rt reflect.Type) (s goplan.FieldShape, err error) {
 		}
 		return
 	}
-	if ch, ok := membershipMarkerChannel[name]; ok {
+	if ms, ok, merr := goplan.MembershipMarkerShape(name); ok {
 		// A membership marker: the value type is uint64 (ref id) or string
 		// (verbatim name); AddTupleSliceField reads MembershipChannel + the
-		// Canonical to build the TupleMembership.
-		s.IsMembership = true
-		s.MembershipChannel = ch
-		goType := "uint64"
-		if ch.EmbedsLiteralName() {
-			goType = "string"
-		}
-		s.Canonical, err = goplan.ScalarCanonicalForGoType(goType)
+		// Canonical to build the TupleMembership. The marker Go type stays the
+		// as-written one taken off the live reflect.Type above.
+		markerGoType := s.MarkerGoType
+		s, err = ms, merr
+		s.MarkerGoType = markerGoType
 		return
 	}
 	err = eb.Build().Str("type", rt.String()).Errorf("unknown lw marker type (recognised: Single[T], IPv4, IPv6, IPv4Prefix, IPv6Prefix, Ref, HighRef, Verbatim, HighVerbatim)")
@@ -111,8 +98,7 @@ func isLwMembershipType(t reflect.Type) bool {
 	if t.PkgPath() != lwPkgPath {
 		return false
 	}
-	_, ok := membershipMarkerChannel[t.Name()]
-	return ok
+	return goplan.IsMembershipMarker(t.Name())
 }
 
 // unwrapLwSingle returns v.Val when v is an lw.Single[T] wrapper (so the codec

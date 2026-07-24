@@ -4,10 +4,16 @@
 // those types. They are pure data — no methods, no imports beyond the standard
 // library — so a DTO can embed them anywhere.
 //
-// Slice-A Step 4 defines the value-shape markers: Single (the ,unit /
-// BeginAttributeSingle shape) and the canonical lane types (the ,ct= relabels).
-// The membership channel markers (Ref / Verbatim / carriers) arrive with the
-// dynamic-membership step.
+// Two families are declared here: the value-shape markers — Single (the ,unit
+// / BeginAttributeSingle shape) and the canonical lane types (the ,ct=
+// relabels) — and the membership channel markers (Ref / HighRef / Verbatim /
+// HighVerbatim), which make a nested attribute struct's field a per-attribute
+// membership. The carrier channels have no marker: they stay in
+// marshalltypes and are rejected inside a nested section (ADR-0113 D6).
+//
+// The value-shape markers ship in the marshallreflect front-end only;
+// marshallgen rejects them with a clear error and a codegen'd DTO spells them
+// `,unit` / `,ct=` (ADR-0113 P1). The membership markers work in both.
 package lw
 
 // Single is a value-shape marker for a container (array / set) sub-column that

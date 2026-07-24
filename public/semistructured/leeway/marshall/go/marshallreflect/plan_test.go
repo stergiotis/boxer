@@ -10,9 +10,8 @@ import (
 
 // reflectDrone is the synthetic DTO used by the parse-side tests in
 // this package. End-to-end round-trip tests against a real DML / RA
-// live in consumer repos (e.g. pebble2impl's
-// boxerstaging/leeway/marshallreflect_test/) so boxer's tests stay
-// schema-free.
+// live against the in-tree anchor schema (marshallreflect_test/) and in
+// consumer repos, so the tests here stay schema-free.
 type reflectDrone struct {
 	_ struct{} `kind:"droneMission"`
 

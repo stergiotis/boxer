@@ -9,7 +9,7 @@ import (
 // `,verbatim` — the reflect codec needs to call
 // AddMembershipLowCardRefP(id) and the id must come from somewhere.
 //
-// Pebble's facts target satisfies this by wrapping
+// The keelson facts target satisfies this by wrapping
 // keelson/vdd.KeelsonHrNkRegistry; schema-agnostic targets that use
 // `,verbatim` on every membership can pass NoLookup{}.
 type LookupI interface {
