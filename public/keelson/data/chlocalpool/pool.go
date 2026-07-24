@@ -41,6 +41,12 @@ type Pool struct {
 	stopCh        chan struct{}
 	bg            sync.WaitGroup
 
+	// stopOnce guards the single teardown; stopDone closes once it has
+	// finished, so every Stop caller — including one retrying after its own
+	// deadline expired — waits on the same completion signal.
+	stopOnce sync.Once
+	stopDone chan struct{}
+
 	mu            sync.Mutex
 	stopped       bool
 	live          int
@@ -67,6 +73,7 @@ func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 		spawnSem:      make(chan struct{}, cfg.SpawnConcurrency),
 		refillTrigger: make(chan struct{}, 1),
 		stopCh:        make(chan struct{}),
+		stopDone:      make(chan struct{}),
 		tracked:       make(map[*Worker]struct{}),
 		acquired:      make(map[*Worker]time.Time),
 	}
@@ -144,13 +151,27 @@ func (inst *Pool) Acquire(ctx context.Context) (w *Worker, err error) {
 // Stop drains the pool: closes every tracked worker, joins the
 // refill / watchdog / in-flight spawn goroutines. Aggressive — any
 // worker the caller still holds will be terminated under it.
-// Idempotent; honours ctx for an upper-bound deadline.
+//
+// The teardown runs once, but every call waits for it to finish and
+// reports honestly under its own ctx. A caller whose deadline expires gets
+// an error and can call again to keep waiting; the second call does not
+// report success while workers are still being reaped.
 func (inst *Pool) Stop(ctx context.Context) (err error) {
-	inst.mu.Lock()
-	if inst.stopped {
-		inst.mu.Unlock()
+	inst.stopOnce.Do(inst.beginStop)
+	select {
+	case <-inst.stopDone:
+		return
+	case <-ctx.Done():
+		err = eh.Errorf("chlocalpool: stop timed out: %w", ctx.Err())
 		return
 	}
+}
+
+// beginStop closes the pool to new work and launches the teardown that
+// closes stopDone when the last worker and background goroutine is gone.
+// Runs exactly once, under stopOnce.
+func (inst *Pool) beginStop() {
+	inst.mu.Lock()
 	inst.stopped = true
 	close(inst.stopCh)
 	workers := make([]*Worker, 0, len(inst.tracked))
@@ -175,9 +196,8 @@ drain:
 		}
 	}
 
-	closeDone := make(chan struct{})
 	go func() {
-		defer close(closeDone)
+		defer close(inst.stopDone)
 		var wg sync.WaitGroup
 		for _, w := range workers {
 			wg.Add(1)
@@ -189,13 +209,6 @@ drain:
 		wg.Wait()
 		inst.bg.Wait()
 	}()
-
-	select {
-	case <-closeDone:
-	case <-ctx.Done():
-		err = eh.Errorf("chlocalpool: stop timed out: %w", ctx.Err())
-	}
-	return
 }
 
 // Stats snapshots the pool's current cardinality. Useful for tests
@@ -405,20 +418,34 @@ func (inst *Pool) watchdogLoop() {
 	}
 }
 
+// reapCandidate carries the acquisition time alongside the worker so the
+// sweep can report the age it actually judged.
+type reapCandidate struct {
+	w          *Worker
+	acquiredAt time.Time
+}
+
 func (inst *Pool) watchdogSweep() {
 	deadline := inst.cfg.WatchdogMaxLifetime
 	now := time.Now()
-	var candidates []*Worker
+	var candidates []reapCandidate
 	inst.mu.Lock()
 	for w, acquiredAt := range inst.acquired {
 		if now.Sub(acquiredAt) > deadline {
-			candidates = append(candidates, w)
+			candidates = append(candidates, reapCandidate{w: w, acquiredAt: acquiredAt})
 		}
 	}
 	inst.mu.Unlock()
-	for _, w := range candidates {
-		inst.logger.Warn().Dur("acquired_age", time.Since(w.bornAt)).
+	for _, c := range candidates {
+		// acquired_age used to be logged as time since bornAt — the spawn
+		// time, not the handover — so it read high by however long the
+		// worker sat idle first, and did not match the deadline the sweep
+		// had just applied. Both ages are reported now, under their own
+		// names.
+		inst.logger.Warn().
+			Dur("acquired_age", now.Sub(c.acquiredAt)).
+			Dur("worker_age", now.Sub(c.w.bornAt)).
 			Msg("chlocalpool: watchdog reaping forgotten worker")
-		_ = w.Close()
+		_ = c.w.Close()
 	}
 }

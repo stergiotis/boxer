@@ -120,6 +120,85 @@ func TestPool_AcquireRacingStopReturnsWorkerXorError(t *testing.T) {
 	assert.Equal(t, 0, s.Idle, "idle buffer must not retain workers after Stop")
 }
 
+// Regression, 2026-07-24 review: Stop returned its timeout error but was
+// idempotent by early return, so a caller that retried after a deadline
+// expiry got nil — success — while the teardown was still reaping workers.
+// The failed Stop could never be completed, only re-reported as fine.
+func TestPool_StopTimeoutIsRetryableAndHonest(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.MinIdle = 3
+	cfg.MaxConcurrent = 4
+	pool := newTestPool(t, cfg)
+	waitFor(t, 10*time.Second, func() bool { return pool.Stats().Idle >= 3 }, "MinIdle filled")
+
+	// A context that is already done: Stop cannot possibly have finished.
+	expired, cancelExpired := context.WithCancel(context.Background())
+	cancelExpired()
+	err := pool.Stop(expired)
+	require.Error(t, err, "a Stop that could not finish must say so")
+	assert.Contains(t, err.Error(), "timed out")
+
+	// Retrying must wait for the teardown that is still running, not
+	// report success on the strength of stopped already being set.
+	retryCtx, cancelRetry := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelRetry()
+	require.NoError(t, pool.Stop(retryCtx), "the retry must be able to complete the stop")
+
+	s := pool.Stats()
+	assert.Equal(t, 0, s.Live, "a successful Stop means teardown actually finished")
+	assert.Equal(t, 0, s.Idle)
+	assert.True(t, s.Stopped)
+}
+
+// Once teardown has finished, further Stops are immediate and still report
+// success — the retry path must not turn into a permanent wait.
+func TestPool_StopAfterCompletionReturnsPromptly(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.MinIdle = 1
+	pool := newTestPool(t, cfg)
+	waitFor(t, 5*time.Second, func() bool { return pool.Stats().Idle >= 1 }, "MinIdle filled")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	require.NoError(t, pool.Stop(ctx))
+	for i := range 3 {
+		short, cancelShort := context.WithTimeout(context.Background(), time.Second)
+		require.NoErrorf(t, pool.Stop(short), "Stop %d after completion must return promptly", i)
+		cancelShort()
+	}
+}
+
+// Concurrent Stops share the one teardown and must all agree on the
+// outcome rather than one of them observing a half-torn-down pool.
+func TestPool_ConcurrentStopsAllSucceed(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.MinIdle = 2
+	cfg.MaxConcurrent = 4
+	pool := newTestPool(t, cfg)
+	waitFor(t, 10*time.Second, func() bool { return pool.Stats().Idle >= 2 }, "MinIdle filled")
+
+	const stoppers = 6
+	errs := make([]error, stoppers)
+	var wg sync.WaitGroup
+	for i := range stoppers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			errs[i] = pool.Stop(ctx)
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		assert.NoErrorf(t, err, "concurrent Stop %d", i)
+	}
+	s := pool.Stats()
+	assert.Equal(t, 0, s.Live)
+	assert.Equal(t, 0, s.Idle)
+}
+
 // A stopped pool refuses repeatedly; the refusal is not a one-shot that
 // leaves later callers to fall through to the buffered fast path.
 func TestPool_AcquireAfterStopFailsRepeatedly(t *testing.T) {
