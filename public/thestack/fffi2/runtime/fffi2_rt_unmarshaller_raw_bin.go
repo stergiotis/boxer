@@ -17,6 +17,12 @@ type Unmarshaller struct {
 	allocateBuffer func(l uint32) []byte
 	buf            []byte
 	read           int
+	// err is the first read failure since the last SetInput or ClearErr.
+	// The Read* methods cannot report failure through their results — they
+	// return a zero value, which no caller can tell apart from a zero the
+	// peer actually sent — so this is the only signal that decoded values
+	// are not real. It is sticky, and it gates every subsequent read.
+	err error
 }
 
 var _ UnmarshallReaderI = (*Unmarshaller)(nil)
@@ -49,8 +55,39 @@ func (inst *Unmarshaller) ResetReadBytes() {
 func (inst *Unmarshaller) GetReadBytes() int {
 	return inst.read
 }
+
+// Err returns the first read failure since the last SetInput or ClearErr,
+// or nil while the stream is intact. Every Read* method returns a zero
+// value on failure, so a caller that must trust what it decoded has to
+// check this — typically once per frame rather than per field.
+func (inst *Unmarshaller) Err() (err error) {
+	return inst.err
+}
+
+// ClearErr drops the sticky failure and re-arms reading. Only sound once
+// the stream is known to be resynchronised, since a failed read leaves the
+// position somewhere inside a frame. SetInput does this implicitly.
+func (inst *Unmarshaller) ClearErr() {
+	inst.err = nil
+}
+
+// fail records the first failure and reports it to the error handler. Later
+// failures in the same epoch are not reported again: once the position is
+// unknown every subsequent read fails the same way, which is what used to
+// turn one broken pipe into a per-read flood on stderr.
+func (inst *Unmarshaller) fail(err error) {
+	if inst.err != nil {
+		return
+	}
+	inst.err = err
+	inst.handleError(err)
+}
+
+// SetInput attaches a new reader and re-arms reading: any previous failure
+// described the stream being replaced.
 func (inst *Unmarshaller) SetInput(r io.Reader) {
 	inst.r = r
+	inst.err = nil
 }
 func (inst *Unmarshaller) SetEndianness(endi binary.ByteOrder) {
 	inst.endianness = endi
@@ -152,10 +189,19 @@ func (inst *Unmarshaller) handleError(err error) {
 }
 
 func (inst *Unmarshaller) readBuf(n int) (success bool) {
+	if inst.err != nil {
+		// A short read leaves the stream position inside a frame, so
+		// reading on would decode whatever bytes follow as if they were
+		// the next field. Stay stopped until the caller resynchronises.
+		return
+	}
 	u, err := io.ReadFull(inst.r, inst.buf[:n])
 	inst.read += u
-	inst.handleError(err)
-	success = err == nil
+	if err != nil {
+		inst.fail(err)
+		return
+	}
+	success = true
 	return
 }
 
@@ -182,21 +228,30 @@ func (inst *Unmarshaller) ReadStringMostLikelyEmpty() (v string) {
 }
 
 func (inst *Unmarshaller) readBytesNonEmpty(l uint32) (v []byte) {
+	if inst.err != nil {
+		return
+	}
 	v = inst.allocateBuffer(l)
 	if len(v) != int(l) {
-		inst.handleError(StringAllocationError)
-		return
+		inst.fail(StringAllocationError)
+		return nil
 	}
 	u, err := io.ReadFull(inst.r, v)
 	inst.read += u
 	if err != nil {
-		inst.handleError(err)
-		return
+		inst.fail(err)
+		// Handing back the buffer would return allocated-but-unwritten
+		// bytes; through ReadString those become a run of NULs that reads
+		// like a value the peer sent.
+		return nil
 	}
 	return
 }
 func (inst *Unmarshaller) ReadBytes() (v []byte) {
 	l := inst.ReadUInt32()
+	if inst.err != nil {
+		return nil
+	}
 	if l == math.MaxUint32 {
 		// nil sentinel — WriteBytes(nil) encodes as MaxUint32
 		return nil
@@ -213,6 +268,11 @@ func (inst *Unmarshaller) ReadBool() (v bool) {
 	v = inst.ReadUInt8() != 0
 	return
 }
+
+// ReadSliceLength returns the element count, or isNil for the nil-slice
+// sentinel. A failed read yields (0, false) — an empty, non-nil slice —
+// which is a perfectly ordinary answer, so callers that must distinguish
+// "the peer sent nothing" from "the stream died" have to consult Err.
 func (inst *Unmarshaller) ReadSliceLength() (l int, isNil bool) {
 	v := inst.ReadUInt32()
 	if v == math.MaxUint32 {

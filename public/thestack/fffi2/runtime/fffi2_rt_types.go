@@ -60,6 +60,13 @@ type UnmarshallReaderI interface {
 	SetErrorHandler(f func(err error))
 	SetAllocateBufferFunc(f func(l uint32) []byte)
 
+	// Err reports the first read failure since the reader was last given a
+	// stream, or nil while it is intact. None of the Read methods below can
+	// signal failure themselves — each returns a zero value, which is
+	// indistinguishable from a zero the peer sent — so this is what
+	// separates decoded data from the wreckage of a broken stream.
+	Err() (err error)
+
 	ReadUInt8() (v uint8)
 	ReadUInt16() (v uint16)
 	ReadUInt32MostLikelyZero() (v uint32)
