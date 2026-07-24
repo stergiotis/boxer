@@ -176,6 +176,62 @@ func TestRegressionTupleAndNestedRejected(t *testing.T) {
 	}
 }
 
+type rbUnit struct {
+	_ struct{} `kind:"rbUnitDrone"`
+
+	ID       uint64                `lw:",id"`
+	Tracking []byte                `lw:",naturalKey"`
+	Battery  uint64                `lw:"battery,u64Array,unit"`
+	Spare    option.Option[uint64] `lw:"spare,u64Array,unit"`
+}
+
+// A `,unit` field is a scalar T on a container value column — the
+// BeginAttributeSingle shape. Its projected slot must be that scalar, not the
+// column's Array(T): the slot is named after the Go field, so an Array(T) slot
+// does not round-trip the field it names. The Option sibling additionally gets
+// the Nullable treatment a scalar slot allows.
+func TestRegressionUnitProjectsScalar(t *testing.T) {
+	rows := []rbUnit{
+		{ID: 1, Tracking: []byte("A"), Battery: 88, Spare: option.Option[uint64]{Val: 7, Has: true}},
+		{ID: 2, Tracking: []byte("B"), Battery: 0},    // Battery present-but-zero, Spare absent
+		{ID: 3, Tracking: []byte("C"), Battery: 4095}, // Spare absent
+	}
+	lookup := marshallreflect.MapLookup{"battery": 11, "spare": 12}
+	plan, err := marshallreflect.PlanFor[rbUnit]()
+	if err != nil {
+		t.Fatalf("PlanFor: %v", err)
+	}
+	a, err := NewGenerator(buildAnchorIR(t), NewLookupResolver(lookup)).Generate(plan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if !strings.Contains(a.Projection, "Battery UInt64") {
+		t.Errorf("`,unit` must project the scalar element type, not the column's array:\n%s", a.Projection)
+	}
+	if !strings.Contains(a.Projection, "Spare Nullable(UInt64)") {
+		t.Errorf("a `,unit` Option projects a scalar slot, so it takes Nullable:\n%s", a.Projection)
+	}
+
+	// The validator names raw physical columns, so it is evaluated in the inner
+	// SELECT where they are in scope — the projection tuple is all the outer
+	// query sees.
+	arrowPath := rbMarshalArrow(t, rows, lookup)
+	script := HelperUDFsSQL() + "\nSELECT p.ID, p.Battery, p.Spare IS NULL, ifNull(p.Spare, 0), val FROM (SELECT " +
+		a.Projection + " AS p, " + a.Validator + " AS val FROM file('" +
+		arrowPath + "', 'Arrow')) ORDER BY p.ID"
+	out := strings.TrimSpace(runClickHouseLocal(t, script))
+	want := []string{"1\t88\t0\t7\t1", "2\t0\t1\t0\t1", "3\t4095\t1\t0\t1"}
+	got := strings.Split(out, "\n")
+	if len(got) != len(want) {
+		t.Fatalf("want %d rows, got:\n%s\nscript:\n%s", len(want), out, script)
+	}
+	for i := range want {
+		if strings.TrimSpace(got[i]) != want[i] {
+			t.Errorf("row %d = %q, want %q", i+1, got[i], want[i])
+		}
+	}
+}
+
 // Const on a non-scalar value section is rejected at generation time rather
 // than emitting `array = 'const'` SQL that errors at query time.
 func TestRegressionConstOnArrayRejected(t *testing.T) {

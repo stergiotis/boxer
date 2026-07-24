@@ -343,6 +343,24 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 		valExpr = "LEEWAY_LIST_BY_TAG_EQUAL(" + vinfo.col + ", " + loc.subtypeCol + ", " + idCol + ", " + lit + ", " + m2v + ")"
 	}
 
+	// A `,unit` field is a container column carrying exactly ONE element per
+	// attribute, authored and read back as the scalar element type (the
+	// BeginAttributeSingle shape). The physical column stays an array, so the
+	// located list is indexed to its single element and the slot's canonical is
+	// demoted to the element's. Without this the projection emits Array(T) for
+	// a T DTO field — a slot that does not round-trip the field it is named
+	// after. On a scalar value column `,unit` is already the projected shape,
+	// so it is a no-op there.
+	unit := f.Flags.Unit && vinfo.subType != common.IntermediateColumnsSubTypeScalar
+	if unit {
+		valExpr += "[1]"
+		res.canonicalType = canonicaltypes.DemoteToScalarPrim(vinfo.canonicalType)
+	}
+	// Whether the slot this field projects is a scalar — true for a scalar
+	// value column and for the indexed `,unit` shape above. Drives the Option
+	// treatment below: only a scalar slot can carry Nullable(T).
+	projectsScalar := vinfo.subType == common.IntermediateColumnsSubTypeScalar || unit
+
 	countExpr := "countEqual(" + idCol + ", " + lit + ")"
 
 	switch {
@@ -379,7 +397,9 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 		// default (ADR-0066 decision 4). Array/set Options cannot: ClickHouse
 		// forbids Nullable(Array(...)), so they keep the empty-array sentinel
 		// — absent and present-empty are indistinguishable there (v1 concern).
-		if vinfo.subType == common.IntermediateColumnsSubTypeScalar {
+		// A `,unit` Option projects a scalar slot, so it gets the Nullable
+		// treatment even though its value column is an array.
+		if projectsScalar {
 			res.valExpr = "if(has(" + idCol + ", " + lit + "), " + valExpr + ", NULL)"
 			res.nullableSlot = true
 		} else {

@@ -133,8 +133,11 @@ func TestRoundTripClickHouse(t *testing.T) {
 		r := rows[i]
 		require.Equalf(t, fmt.Sprintf("%d", w.ID), r[0], "row %d id", i)
 		require.Equalf(t, w.Status, r[1], "row %d status", i)
-		// Battery is a u64Array attribute, so it projects as a 1-element array.
-		require.Equalf(t, fmt.Sprintf("[%d]", w.Battery), r[2], "row %d battery", i)
+		// Battery is a `,unit` field: a scalar uint64 on the u64Array section,
+		// carrying exactly one element per attribute. The projection slot is
+		// named after the DTO field, so it projects as that scalar — the
+		// read-back generator indexes the located list to its single element.
+		require.Equalf(t, fmt.Sprintf("%d", w.Battery), r[2], "row %d battery", i)
 		lat, _ := strconv.ParseFloat(r[3], 64)
 		require.InDeltaf(t, float64(w.Lat), lat, 1e-6, "row %d lat", i)
 		lng, _ := strconv.ParseFloat(r[4], 64)
