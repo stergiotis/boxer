@@ -263,3 +263,215 @@ func TestReseedLeavesPinnedDraftsAlone(t *testing.T) {
 	app.syncLiveParamDrafts()
 	require.Equal(t, "buffer", *app.paramDrafts["q"], "a SET-bound draft follows the buffer, not the store")
 }
+
+// Pin authors the SET from the store value and flips the tier immediately —
+// the frame after it must not write the value straight back into the store it
+// just left.
+func TestPinClaimAuthorsSetAndFlipsTier(t *testing.T) {
+	app := paneApp(t, "SELECT {q:String}")
+	*app.paramDrafts["q"] = "abc"
+	app.syncParamDriftToPrelude() // the live value reaches the store
+	app.frameSig = app.graph.signals()
+
+	app.pinParamClaim(app.paramSlots)
+
+	require.Equal(t, "SET param_q = 'abc';\nSELECT {q:String}", app.sql)
+	require.True(t, app.paramPinned("q"), "the tier flips now, not at the next parse")
+	require.NotContains(t, app.paramLiveSeeded, "q", "the live baseline goes with the tier")
+	require.Equal(t, "abc", heldSignal(t, app, "q").Raw,
+		"the store keeps its value — a SET shadows it, it does not replace it")
+
+	// The frame after: neither a re-author nor a store write.
+	before := app.sql
+	rev := app.graph.signals().Revision()
+	app.syncLiveParamDrafts()
+	app.syncParamDriftToPrelude()
+	require.Equal(t, before, app.sql)
+	require.Equal(t, rev, app.graph.signals().Revision())
+}
+
+// Unpin removes the SET, seeds the store with the same value, and moves the
+// baseline — so the frame after neither re-authors nor tears the draft.
+func TestUnpinClaimSeedsStoreAndDoesNotReAuthor(t *testing.T) {
+	app := paneApp(t, "SET param_q = 'abc';\nSELECT {q:String}")
+	require.True(t, app.paramPinned("q"))
+
+	app.unpinParamClaim(app.paramSlots)
+
+	require.Equal(t, "SELECT {q:String}", app.sql, "the SET line is gone")
+	require.False(t, app.paramPinned("q"))
+	require.Equal(t, "abc", heldSignal(t, app, "q").Raw, "the value survives the migration")
+	require.Equal(t, signalWriterParamWidget, heldSignal(t, app, "q").Writer)
+	require.Equal(t, "abc", *app.paramDrafts["q"], "the draft is not torn")
+
+	before := app.sql
+	rev := app.graph.signals().Revision()
+	app.frameSig = app.graph.signals()
+	app.syncLiveParamDrafts()
+	app.syncParamDriftToPrelude()
+	require.Equal(t, before, app.sql, "the removed SET is not re-authored")
+	require.Equal(t, rev, app.graph.signals().Revision(), "and the store is not rewritten")
+	require.Equal(t, "abc", *app.paramDrafts["q"])
+
+	// …and it survives the debounced parse catching up with the new buffer.
+	reparse(t, app)
+	require.False(t, app.paramPinned("q"))
+	require.Equal(t, "abc", *app.paramDrafts["q"])
+}
+
+// Unpinning restores the Live toggle: a fully SET-bound buffer has no unbound
+// slots, which is the dead end the selection_country fix documented — the only
+// affordance for "give this name a value" was the one that broke the reactive
+// path.
+func TestUnpinRestoresLiveToggle(t *testing.T) {
+	app := paneApp(t, "SET param_q = 'abc';\nSELECT {q:String}")
+	require.False(t, app.hasUnboundSlots(), "fully bound ⇒ no Live toggle")
+
+	app.unpinParamClaim(app.paramSlots)
+	require.True(t, app.hasUnboundSlots(), "unpinning gives the buffer a signal input again")
+}
+
+// A folded pair migrates as a unit: one buffer rewrite carries both SETs, and
+// both live values are seeded in the same frame, so every consumer sees the
+// range move at one snapshot.
+func TestPinUnpinFoldedPairIsBundleAtomic(t *testing.T) {
+	app := paneApp(t, "SELECT {tl_min:DateTime64(3, 'UTC')}, {tl_max:DateTime64(3, 'UTC')}")
+	*app.paramDrafts["tl_min"] = "2026-01-01 00:00:00"
+	*app.paramDrafts["tl_max"] = "2026-02-01 00:00:00"
+	app.syncParamDriftToPrelude()
+	app.frameSig = app.graph.signals()
+
+	pair, ok := matchRangePair(app.paramSlots)
+	require.True(t, ok, "the stem rule folds tl_min/tl_max (§SD5)")
+	claim := []paramSlot{app.paramSlots[pair[0]], app.paramSlots[pair[1]]}
+
+	app.pinParamClaim(claim)
+	require.Equal(t, "SET param_tl_min = '2026-01-01 00:00:00';\n"+
+		"SET param_tl_max = '2026-02-01 00:00:00';\n"+
+		"SELECT {tl_min:DateTime64(3, 'UTC')}, {tl_max:DateTime64(3, 'UTC')}", app.sql,
+		"both halves pin in one rewrite — the pane cannot produce a half-pinned range")
+	require.True(t, app.paramPinned("tl_min"))
+	require.True(t, app.paramPinned("tl_max"))
+
+	revBefore := app.graph.signals().Revision()
+	app.unpinParamClaim(claim)
+	require.False(t, app.paramPinned("tl_min"))
+	require.False(t, app.paramPinned("tl_max"))
+	require.Equal(t, "SELECT {tl_min:DateTime64(3, 'UTC')}, {tl_max:DateTime64(3, 'UTC')}", app.sql)
+	// Both seeds land before the next frame's snapshot is taken, so no
+	// consumer can observe one half moved and the other not.
+	require.GreaterOrEqual(t, app.graph.signals().Revision(), revBefore)
+	require.Equal(t, "2026-01-01 00:00:00", heldSignal(t, app, "tl_min").Raw)
+	require.Equal(t, "2026-02-01 00:00:00", heldSignal(t, app, "tl_max").Raw)
+}
+
+// Pinning a name the store never held takes the draft — the pane's own empty
+// field is a legitimate thing to write into the buffer.
+func TestPinUnheldNameUsesDraft(t *testing.T) {
+	app := paneApp(t, "SELECT {q:String}")
+	*app.paramDrafts["q"] = "typed"
+	app.pinParamClaim(app.paramSlots)
+	require.Equal(t, "SET param_q = 'typed';\nSELECT {q:String}", app.sql)
+}
+
+// A hand-authored half-pinned pair declines the fold: one picker cannot write
+// two tiers. Both halves are withheld from the group widgets, so the tail
+// claims them as two scalar fields, and §SD7's line names the halves and
+// their tiers.
+func TestHalfPinnedPairDeclinesFold(t *testing.T) {
+	app := paneApp(t, "SET param_tl_min = '2026-01-01 00:00:00';\n"+
+		"SELECT {tl_min:DateTime64(3, 'UTC')}, {tl_max:DateTime64(3, 'UTC')}")
+	require.True(t, app.paramPinned("tl_min"))
+	require.False(t, app.paramPinned("tl_max"))
+
+	withheld, pairs := app.mixedTierRangeHalves(app.paramSlots)
+	require.Len(t, pairs, 1)
+	require.Equal(t, mixedTierPair{Pinned: "tl_min", Live: "tl_max"}, pairs[0])
+	require.Equal(t, []bool{true, true}, withheld, "both halves are withheld from the group widgets")
+
+	// What the group widgets are actually offered no longer folds…
+	offered := unconsumedSlots(app.paramSlots, maskUnion(make([]bool, len(app.paramSlots)), withheld))
+	_, folds := matchRangePair(offered)
+	require.False(t, folds, "the pair is not offered, so no picker claims it")
+	// …while the tail still sees both slots.
+	require.Len(t, unconsumedSlots(app.paramSlots, make([]bool, len(app.paramSlots))), 2)
+
+	note := mixedTierNote(pairs)
+	require.Contains(t, note, "{tl_min}")
+	require.Contains(t, note, "{tl_max}")
+	require.Contains(t, note, "pinned")
+	require.Contains(t, note, "live")
+}
+
+// A pair in one tier folds as before — the decline is about disagreement, not
+// about the tiers themselves.
+func TestUniformTierPairsStillFold(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT {tl_min:DateTime64(3, 'UTC')}, {tl_max:DateTime64(3, 'UTC')}",
+		"SET param_tl_min = '2026-01-01 00:00:00';\nSET param_tl_max = '2026-02-01 00:00:00';\n" +
+			"SELECT {tl_min:DateTime64(3, 'UTC')}, {tl_max:DateTime64(3, 'UTC')}",
+	} {
+		app := paneApp(t, sql)
+		withheld, pairs := app.mixedTierRangeHalves(app.paramSlots)
+		require.Empty(t, pairs, "a same-tier pair is not a decline")
+		require.Nil(t, withheld)
+		_, folds := matchRangePair(app.paramSlots)
+		require.True(t, folds)
+	}
+}
+
+// Withholding is per pair: a half-pinned pair declining must not cost an
+// unrelated, uniform pair its picker.
+func TestDeclineDoesNotBlockAnotherPair(t *testing.T) {
+	app := paneApp(t, "SET param_a_min = '2026-01-01 00:00:00';\n"+
+		"SELECT {a_min:DateTime64(3, 'UTC')}, {a_max:DateTime64(3, 'UTC')}, "+
+		"{b_min:DateTime64(3, 'UTC')}, {b_max:DateTime64(3, 'UTC')}")
+
+	withheld, pairs := app.mixedTierRangeHalves(app.paramSlots)
+	require.Len(t, pairs, 1, "only the half-pinned stem declines")
+	require.Equal(t, "a_min", pairs[0].Pinned)
+
+	offered := unconsumedSlots(app.paramSlots, maskUnion(make([]bool, len(app.paramSlots)), withheld))
+	idx, folds := matchRangePair(offered)
+	require.True(t, folds, "the uniform b_min/b_max pair still folds")
+	require.Equal(t, []string{"b_min", "b_max"}, []string{offered[idx[0]].Name, offered[idx[1]].Name})
+}
+
+// The §SD7 line prefers the tier decline over the generic vocabulary note:
+// telling the user their two DateTime slots "do not pair" would be false, and
+// the rename it advises is not the fix.
+func TestMixedTierNoteWinsOverGenericNearMiss(t *testing.T) {
+	slots := []paramSlot{
+		{Name: "tl_min", Type: "DateTime64(3, 'UTC')"},
+		{Name: "tl_max", Type: "DateTime64(3, 'UTC')"},
+	}
+	generic := nearMissNote(slots, false)
+	require.Contains(t, generic, "do not pair", "the generic note would misdescribe this")
+	require.NotEqual(t, generic, mixedTierNote([]mixedTierPair{{Pinned: "tl_min", Live: "tl_max"}}))
+}
+
+// The pane's unfilled mark is derived per frame, so it appears for a
+// referenced name nothing fills and retires as soon as one does — the same
+// set the Run gate reads, so the hint and the mark cannot disagree.
+func TestUnfilledMarkAppearsAndRetires(t *testing.T) {
+	app := paneApp(t, "SELECT {q:String}, {selection_country:String}")
+	require.Equal(t, map[string]bool{"q": true}, app.unfilledSet(),
+		"a reserved String signal defaults to empty and never reads as unfilled")
+
+	*app.paramDrafts["q"] = "abc"
+	app.syncParamDriftToPrelude()
+	app.frameSig = app.graph.signals()
+	require.Empty(t, app.unfilledSet(), "filling it in the pane retires the mark")
+	require.Empty(t, app.unfilledInputs(), "…and unblocks the Run")
+}
+
+// Pinning is also a way to fill: the SET binds the name, so the mark retires
+// without the store holding anything.
+func TestPinRetiresUnfilledMark(t *testing.T) {
+	app := paneApp(t, "SELECT {q:String}")
+	require.Equal(t, map[string]bool{"q": true}, app.unfilledSet())
+
+	*app.paramDrafts["q"] = "abc"
+	app.pinParamClaim(app.paramSlots)
+	require.Empty(t, app.unfilledSet(), "a SET fills the input (D1)")
+}

@@ -3,7 +3,9 @@ package play
 import (
 	"maps"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // refreshParamSlotsFromParse is called from updatePreview after a
@@ -122,13 +124,28 @@ func (inst *PlayApp) renderParamSlots() {
 	// nothing is unconsumed and the interesting set would be empty.
 	grouped := make([]bool, len(slots))
 	ungroup := scanUngroupHint(inst.sql)
+	// A half-pinned pair declines the fold (ADR-0124's 2026-07-22 amendment):
+	// its halves are withheld from the group widgets so the tail claims them
+	// as two scalars, and the near-miss line says why. Withholding rather
+	// than vetoing after the fact keeps paramWidgetI untouched — the matcher
+	// never learns what a tier is — and leaves any OTHER pair in the same
+	// buffer free to fold.
+	halfPinned, mixed := inst.mixedTierRangeHalves(slots)
+	unfilled := inst.unfilledSet()
 	for _, w := range inst.paramWidgets {
 		if ungroup && w.IsGroup() {
 			continue
 		}
-		remaining := unconsumedSlots(slots, consumed)
+		// Group widgets see the withheld halves as already taken; the tail
+		// sees the true consumed set, so nothing is lost.
+		withheld := halfPinned
+		if !w.IsGroup() {
+			withheld = nil
+		}
+		mask := maskUnion(consumed, withheld)
+		remaining := unconsumedSlots(slots, mask)
 		if len(remaining) == 0 {
-			break
+			continue
 		}
 		// Repeated dispatch lets one widget claim multiple disjoint
 		// matches in a single frame (e.g. two from/to pairs in one
@@ -143,7 +160,7 @@ func (inst *PlayApp) renderParamSlots() {
 			subset := make([]paramSlot, 0, len(idxInRemaining))
 			absoluteIdx := make([]int, 0, len(idxInRemaining))
 			for _, ri := range idxInRemaining {
-				abs := absoluteIndex(slots, consumed, ri)
+				abs := absoluteIndex(slots, mask, ri)
 				if abs < 0 || consumed[abs] {
 					break
 				}
@@ -160,19 +177,28 @@ func (inst *PlayApp) renderParamSlots() {
 			if w.IsGroup() {
 				inst.renderFoldLabel(subset)
 			}
-			w.Render(&paramCtx{
-				Ids:    inst.ids,
-				Slots:  subset,
-				Drafts: inst.paramDrafts,
-			})
-			remaining = unconsumedSlots(slots, consumed)
+			// The tier control sits beside the claim it migrates, drawn by
+			// the orchestrator for the renderFoldLabel reason: a widget
+			// deciding its own tier would have to know about the buffer's
+			// prelude, which is exactly what §SD4 keeps away from it.
+			for range c.Horizontal().KeepIter() {
+				inst.renderClaimTierControl(subset)
+				inst.renderClaimUnfilledMark(subset, unfilled)
+				w.Render(&paramCtx{
+					Ids:    inst.ids,
+					Slots:  subset,
+					Drafts: inst.paramDrafts,
+				})
+			}
+			mask = maskUnion(consumed, withheld)
+			remaining = unconsumedSlots(slots, mask)
 			if len(remaining) == 0 {
 				break
 			}
 		}
 	}
 
-	inst.renderNearMissNote(slots, grouped, ungroup)
+	inst.renderNearMissNote(slots, grouped, ungroup, mixed)
 
 	// Divider between the parameter block and the SQL editor below it.
 	c.Separator().Horizontal().Send()
@@ -207,23 +233,262 @@ func (inst *PlayApp) renderFoldLabel(subset []paramSlot) {
 	}
 }
 
+// renderClaimTierControl draws the pin/unpin gesture for one claim (ADR-0124's
+// 2026-07-22 §SD4 amendment). It operates on the CLAIM, not the slot, so a
+// folded pair migrates as a unit and the pane cannot produce a mixed-tier
+// range: both halves author their SET in one buffer rewrite, and both live
+// values are seeded in one frame, which the frame-snapshot rule (ADR-0097 5a)
+// then makes atomic for every consumer.
+func (inst *PlayApp) renderClaimTierControl(subset []paramSlot) {
+	if len(subset) == 0 {
+		return
+	}
+	pinned := inst.paramPinned(subset[0].Name)
+	label := "pin"
+	if pinned {
+		label = "unpin"
+	}
+	if c.Button(inst.ids.PrepareStr("paramTier-"+subset[0].Name),
+		c.Atoms().Text(label).Keep()).
+		Small().Selected(pinned).
+		SendResp().HasPrimaryClicked() {
+		if pinned {
+			inst.unpinParamClaim(subset)
+		} else {
+			inst.pinParamClaim(subset)
+		}
+	}
+}
+
+// pinParamClaim moves a claim's names to the pinned tier: it authors
+// `SET param_<name> = <value>` for each of them through the same prelude path
+// a pinned drift takes, so the encoding rules (encodeParamLiteral) are the
+// same ones the buffer already lives by. The value is the store's, which is
+// what the widget is showing; a name the store never held pins whatever its
+// draft holds.
+//
+// The store keeps its value — a SET shadows it at execution (slice-5 D1)
+// rather than replacing it, so pinning `tl_min` does not wipe the extent the
+// Timeline publishes, and unpinning finds it still there.
+func (inst *PlayApp) pinParamClaim(subset []paramSlot) {
+	values := make(map[string]string, len(inst.paramSyncedValues)+len(subset))
+	maps.Copy(values, inst.paramSyncedValues)
+	for _, s := range subset {
+		v, held := inst.signalRawFor(s.Name)
+		if !held {
+			if ptr, has := inst.paramDrafts[s.Name]; has {
+				v = *ptr
+			}
+		}
+		values[s.Name] = v
+	}
+	out, changed := SyncParamPrelude(inst.sql, inst.paramSlots, values)
+	if !changed {
+		// A transiently unparseable buffer: leave both tiers alone rather
+		// than record a migration the buffer does not show.
+		return
+	}
+	inst.sql = out
+	for _, s := range subset {
+		// The tier bit flips now, not when the debounced parse catches up:
+		// the frame in between must not read as live drift and write the
+		// value straight back into the store it just left.
+		inst.paramSyncedValues[s.Name] = values[s.Name]
+		delete(inst.paramLiveSeeded, s.Name)
+		if ptr, has := inst.paramDrafts[s.Name]; has {
+			*ptr = values[s.Name]
+		}
+	}
+}
+
+// unpinParamClaim moves a claim's names to the live tier: it removes their
+// SET lines and seeds the store with the values those lines carried, so the
+// value the user was looking at survives the migration and the name is
+// immediately live rather than unfilled.
+//
+// The drift baseline moves with the tier, which is the invariant the frame
+// after an unpin depends on: the pane must neither re-author the SET it just
+// removed (the name is no longer pinned) nor tear the draft (the store now
+// agrees with it).
+func (inst *PlayApp) unpinParamClaim(subset []paramSlot) {
+	values := make(map[string]string, len(inst.paramSyncedValues))
+	maps.Copy(values, inst.paramSyncedValues)
+	freed := make(map[string]string, len(subset))
+	for _, s := range subset {
+		v, bound := inst.paramSyncedValues[s.Name]
+		if !bound {
+			continue
+		}
+		freed[s.Name] = v
+		delete(values, s.Name)
+	}
+	if len(freed) == 0 {
+		return
+	}
+	out, changed := SyncParamPrelude(inst.sql, inst.paramSlots, values)
+	if !changed {
+		return
+	}
+	inst.sql = out
+	for _, s := range subset {
+		v, ok := freed[s.Name]
+		if !ok {
+			continue
+		}
+		delete(inst.paramSyncedValues, s.Name)
+		inst.noteLiveSeeded(s.Name, v)
+		if inst.graph != nil {
+			inst.graph.setSignalRawFrom(s.Name, v, signalWriterParamWidget)
+		}
+		if ptr, has := inst.paramDrafts[s.Name]; has {
+			*ptr = v
+		}
+	}
+}
+
+// renderClaimUnfilledMark marks a claim whose name the buffer references and
+// nothing fills — D3's empty-state, now typed and in the pane. The pane is the
+// fill affordance the Run-block hint points at, so the mark and the hint
+// retire together: both are derived per frame from unfilledInputs, so typing a
+// value clears them with no state to reset.
+func (inst *PlayApp) renderClaimUnfilledMark(subset []paramSlot, unfilled map[string]bool) {
+	if len(unfilled) == 0 {
+		return
+	}
+	for _, s := range subset {
+		if !unfilled[s.Name] {
+			continue
+		}
+		warn := color.Hex(styletokens.WarningDefault.AsHex())
+		atoms := c.Atoms().BeginRichTextColored(warn, color.Transparent, "needs a value").Small().End().Keep()
+		c.LabelAtoms(atoms).Send()
+		return // one mark per claim: a folded pair is one control
+	}
+}
+
+// unfilledSet is unfilledInputs as a lookup, computed once per frame — the
+// per-claim mark would otherwise re-derive it per claim.
+func (inst *PlayApp) unfilledSet() (out map[string]bool) {
+	names := inst.unfilledInputs()
+	if len(names) == 0 {
+		return
+	}
+	out = make(map[string]bool, len(names))
+	for _, n := range names {
+		out[n] = true
+	}
+	return
+}
+
+// mixedTierPair is a range pair §SD5 would fold but whose halves sit in
+// different tiers, with the pinned half named first.
+type mixedTierPair struct {
+	Pinned string
+	Live   string
+}
+
+// mixedTierRangeHalves finds the range pairs whose halves disagree on tier —
+// a hand-authored buffer that SET-binds only one half of a range. Such a pair
+// declines the fold: one picker writing two tiers would send half a range to
+// the buffer and half to the store, and the control has no way to say so.
+//
+// Returns a mask of the slots to withhold from the group widgets, and the
+// pairs themselves for §SD7's near-miss line. Only pairs that would otherwise
+// fold are reported: halves that disagree on TYPE are already the near-miss
+// line's own case, and saying both would be two answers to one question.
+func (inst *PlayApp) mixedTierRangeHalves(slots []paramSlot) (withheld []bool, pairs []mixedTierPair) {
+	for i, lo := range slots {
+		stem, suffix, decomposed := splitRangeSuffix(lo.Name)
+		if !decomposed {
+			continue
+		}
+		hiSuffix, isLo := rangeHiFor(suffix)
+		if !isLo {
+			continue
+		}
+		j := findRangeHalf(slots, stem, hiSuffix)
+		if j < 0 {
+			continue
+		}
+		hi := slots[j]
+		if !isDateTimeType(lo.Type) || !isDateTimeType(hi.Type) {
+			continue // not foldable anyway — the type-mismatch case owns it
+		}
+		loPinned, hiPinned := inst.paramPinned(lo.Name), inst.paramPinned(hi.Name)
+		if loPinned == hiPinned {
+			continue
+		}
+		if withheld == nil {
+			withheld = make([]bool, len(slots))
+		}
+		withheld[i] = true
+		withheld[j] = true
+		pair := mixedTierPair{Pinned: lo.Name, Live: hi.Name}
+		if hiPinned {
+			pair = mixedTierPair{Pinned: hi.Name, Live: lo.Name}
+		}
+		pairs = append(pairs, pair)
+	}
+	return
+}
+
+// mixedTierNote is §SD7's line for a half-pinned pair: it names both halves,
+// their tiers, and the one gesture that resolves it. Pure over the pairs, so
+// it is testable without a frame.
+func mixedTierNote(pairs []mixedTierPair) string {
+	if len(pairs) == 0 {
+		return ""
+	}
+	p := pairs[0]
+	return "{" + p.Pinned + "} is pinned by a SET and {" + p.Live +
+		"} is live — a range picker needs both halves in one tier; pin or unpin the other half"
+}
+
 // renderNearMissNote draws §SD7's single advisory line about folds that did not
 // happen. Advisory only: it never gates execution, and a query that ignores it
 // behaves exactly as it did.
-func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool) {
+//
+// One line, so the cases are ordered by how much they explain: the ungroup
+// opt-out accounts for every missing fold at once; a half-pinned pair is next,
+// being a specific decline with a one-click fix; then the type mismatch and
+// the generic vocabulary note, both inside nearMissNote.
+func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair) {
 	unfolded := make([]paramSlot, 0, len(slots))
 	for i, s := range slots {
 		if !grouped[i] {
 			unfolded = append(unfolded, s)
 		}
 	}
-	note := nearMissNote(unfolded, ungroup)
+	note := ""
+	if !ungroup {
+		note = mixedTierNote(mixed)
+	}
+	if note == "" {
+		note = nearMissNote(unfolded, ungroup)
+	}
 	if note == "" {
 		return
 	}
 	for rt := range c.RichTextLabel(note) {
 		rt.Small().Weak()
 	}
+}
+
+// maskUnion returns a fresh mask that is true where either input is. A nil
+// second mask returns a copy of the first, so the tail widgets pay nothing for
+// the group phase's withholding.
+func maskUnion(a []bool, b []bool) (out []bool) {
+	out = make([]bool, len(a))
+	copy(out, a)
+	if b == nil {
+		return
+	}
+	for i := range out {
+		if i < len(b) && b[i] {
+			out[i] = true
+		}
+	}
+	return
 }
 
 // syncParamDriftToPrelude compares each draft to its last-synced value and

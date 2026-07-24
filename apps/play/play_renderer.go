@@ -1083,8 +1083,12 @@ func (inst *PlayApp) executeRun(auto bool) {
 	// Run gate). The raw-fallback path (parse failure) resolves nothing
 	// and reports nothing unfilled, so it still defers to the server.
 	if len(unfilled) > 0 {
+		// The hint points AT the fix: since the pane writes the live tier
+		// (ADR-0124's 2026-07-22 amendment) every unfilled name has its own
+		// typed widget in PARAMETERS, marked "needs a value". The Signals
+		// editor stays the fallback for names the buffer does not reference.
 		inst.runBlockedReason = "unfilled parameter {" + strings.Join(unfilled, "}, {") +
-			"} — write it in the Graph tab's signals section, or bind it with SET param_<name> = …"
+			"} — fill it in the PARAMETERS pane, or bind it with SET param_<name> = …"
 		return
 	}
 	inst.runBlockedReason = ""
@@ -1506,7 +1510,7 @@ func (inst *PlayApp) renderTopBar() {
 		if unfilled := inst.unfilledInputs(); len(unfilled) > 0 {
 			c.Separator().Vertical().Send()
 			for rt := range c.RichTextLabel("unfilled: {" + strings.Join(unfilled, "}, {") +
-				"} — see Graph ▸ signals, or SET param_<name> = …") {
+				"} — fill it in PARAMETERS, or SET param_<name> = …") {
 				rt.Small().Weak()
 			}
 		}
