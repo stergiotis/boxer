@@ -271,6 +271,89 @@ Two findings from the bring-up, both outside the seam:
   migration debt in svgexport, not a seam regression; left failing rather
   than papered over.
 
+### 2026-07-25 — L3 (editor affordances) design settled; implementation pending
+
+L3's scope is the survey §8 list — error-token underlines,
+statement-under-cursor execution for multi-statement buffers, and the
+line-number gutter — plus the `sectionStyled` channel this ADR's
+§Alternatives deferred, and ADR-0124 §SD8's "`Src` consumers" bullet, which
+lands here. Settled in a design pass on 2026-07-25; nothing below is built
+yet.
+
+- **`sectionStyled` is a parallel channel, not a `Section` change.** A new
+  evaluated arg (its own struct and register) plus a parallel textEdit
+  method, so the color-only `Section` shared with the existing codeview
+  producers does not move — the reason recorded in §Alternatives stands.
+  The style vocabulary is exactly what egui's `TextFormat` expresses
+  natively: underline, background, strikethrough, italics — flag bits plus
+  one style color per section. Styled sections ride the same reconcile
+  shift as color sections; their normalization clamps, drops inverted
+  ranges, and sorts, but does **not** gap-fill — they are sparse overlays
+  over the color tier, and an uncovered byte simply has no styling. A wavy
+  "squiggle" is not `TextFormat`-expressible and is deferred as a paint-over
+  pass on galley rows; trigger: the straight underline proving insufficient
+  in use.
+- **Caret report is an opt-in `reportCursor` method.** The apply block
+  already loads `TextEditState` for `insertAtCursor`; the method reuses
+  that read after apply and pushes the sorted cursor char range packed into
+  one u64 (low half start, high half end) — the datePickerButton packed-u64
+  value path is the precedent. The push is unconditional on every frame the
+  method is present: change detection around end-of-frame value application
+  is the known trap, and one u64 per frame is noise. Go converts char to
+  byte offsets against its own frame copy of the buffer, clamped; consumers
+  gate on the quiescent buffer (text equal to the last parsed text). This
+  is deliberately the same seam a later tethered-affordance phase needs, so
+  it is designed once here.
+- **Statements split at the lex tier, not the CST.** The splitter walks
+  `highlight.HighlightLex` tokens for top-level `;` — in spirit a port of
+  play.html's `getQueryUnderCursor`. Rationale: it must keep working when a
+  *sibling* statement is broken — precisely the situation in which running
+  one statement of a multi-statement buffer is most useful — and the lexer
+  survives what the parser does not (the same independence argument L1
+  made).
+- **Run-under-cursor ships conservative semantics.** When the
+  prelude-stripped body holds more than one statement, Run ships the
+  statement under the caret, with the whole `SET` prelude riding along
+  unchanged. Everything else deliberately stays buffer-wide in the first
+  cut: param slots and signals keep their existing scope, history snapshots
+  the full buffer, and a caret move does not flip the staleness witness —
+  what would run is legible from the tint and the wire preview instead.
+  Finer per-statement scoping is deferred; trigger: the first real
+  multi-statement friction with params or signals.
+- **The active statement is tinted, multi-statement only.** A background
+  styled section over the caret's statement, rendered only when the body
+  holds more than one statement — the common single-statement buffer stays
+  visually unchanged.
+- **The error underline producer** maps the debounced parse's syntax-error
+  line/column to the lex token at that position and underlines its span in
+  the error tone; the L1 lexical colors stay up underneath (play.html's
+  `q-err`, with a real token extent).
+- **The gutter is wanted, and lives Go-side.** A container row — gutter
+  column beside the TextEdit — under a shared scroll scope, with a marks
+  lane (error line, active statement) beside the numbers. Its alignment
+  contract is no-wrap: galley rows must equal logical lines, so the
+  layouter this seam owns gains a no-wrap switch and the editor gains
+  horizontal scrolling. Monospace plus no-wrap makes uniform row height
+  hold by construction.
+- **ADR-0124 §SD8's `Src` consumers land as styled sections.** The pane's
+  `unfilledInputs` set — the same set the Run gate reads, so the two cannot
+  disagree — drives a warning-toned underline on each unfilled
+  placeholder's span. §SD8's bullet retires via a dated Update on ADR-0124
+  when this ships.
+
+Two hygiene preconditions surfaced by the same design pass, to land first:
+the editor's observation pipeline currently parses the whitespace-trimmed
+buffer while its consumers slice the untrimmed one, so recorded byte ranges
+are skewed by any leading whitespace — the pipeline moves to the untrimmed
+buffer before new span consumers land. And per-call-site editor state, when
+it appears, must not key on raw byte ranges (they shift with every edit
+above the site); name plus same-name ordinal is the stable identity.
+
+Explicitly out of scope, unchanged by this entry: tethered per-literal
+editor windows (a later phase that builds on the first two items), the
+svgexport 0.35 content-only test debt, and ADR-0125's steady-state parse
+cost.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
