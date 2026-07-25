@@ -12,17 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPing_LiveServer exercises Ping against the project's localhost CH
-// (per reference_clickhouse_localhost_defaults). Skips when the server is
-// unreachable so the suite stays green offline.
-func TestPing_LiveServer(t *testing.T) {
-	c := New(Defaults(), nil)
-	err := c.Ping(context.Background())
-	if err != nil {
-		t.Skipf("ClickHouse not reachable at %s: %v", Defaults().URL, err)
-	}
-}
-
 func TestPing_HttpTestServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ping" {

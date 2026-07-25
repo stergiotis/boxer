@@ -46,6 +46,12 @@ export `GOFLAGS=-tags=<contents of ./tags>` so gopls resolves symbols. Details:
 **Check module drift with `go mod tidy --diff`**, not `tidy` followed by
 `git diff` — the `--diff` form reports drift without mutating `go.mod` / `go.sum`.
 
+**Tests needing a live server or a heavy dependency go in the integration
+lane** — `//go:build integration`, run by
+[scripts/ci/gotest-integration.sh](./scripts/ci/gotest-integration.sh), never by
+the default `go test ./...`. Details:
+[ENGINEERING_PRACTICES §4 — Tests](./doc/ENGINEERING_PRACTICES.md#4-tests).
+
 ## Version control
 
 Development is **trunk-based**: commit directly to `main`, keep every commit

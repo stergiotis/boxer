@@ -1,3 +1,5 @@
+//go:build integration
+
 package passes_test
 
 import (

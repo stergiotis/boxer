@@ -104,19 +104,45 @@ go test -race -json -short -cover -tags "$tags" ./... \
 - Coverage HTML is produced locally via
   [scripts/dev/coveragehtml.sh](../scripts/dev/coveragehtml.sh), which reads
   `$GOCOVERDIR` and pipes `go tool covdata textfmt` into `go tool cover -html`.
-- Integration tests are explicitly tagged
-  (`//go:build integration`) and use
-  [testcontainers-go](https://pkg.go.dev/github.com/testcontainers/testcontainers-go);
-  see [the Kafka integration test](../public/streaming/persisted/kafka/integration_test.go),
-  which boots a Redpanda container. The tag doubles as a dependency-isolation
-  gate: under the default tag set, the testcontainers + Moby + OCI +
-  containerd + gopsutil chain (29 transitive modules, ≈41 MB in `$GOMODCACHE`,
-  59 entries in [go.sum](../go.sum)) is absent from `go list -deps ./...`, so
-  default `go build` and `go test -short` do not compile or download it. CI
-  opts into the chain only when running integration jobs. The same pattern
-  applies to any future test that would introduce a comparably heavy
-  dependency — gate it with a build tag rather than letting it leak into
-  every developer's build.
+- Integration tests are explicitly tagged (`//go:build integration`) and run by
+  their own runner, [scripts/ci/gotest-integration.sh](../scripts/ci/gotest-integration.sh):
+
+  ```sh
+  go test -json -count=1 -p 1 -tags "$tags,integration" ./... \
+    | go tool tparse -progress -trimpath -slow 20
+  ```
+
+  The default `go test ./...` neither compiles nor runs them. A test belongs in
+  the lane for either of two reasons:
+
+  - **Heavy dependency.** [The Kafka integration test](../public/streaming/persisted/kafka/integration_test.go)
+    boots a Redpanda container via
+    [testcontainers-go](https://pkg.go.dev/github.com/testcontainers/testcontainers-go).
+    The tag doubles as a dependency-isolation gate: under the default tag set,
+    the testcontainers + Moby + OCI + containerd + gopsutil chain (29
+    transitive modules, ≈41 MB in `$GOMODCACHE`, 59 entries in
+    [go.sum](../go.sum)) is absent from `go list -deps ./...`, so default
+    `go build` and `go test -short` do not compile or download it. Gate any
+    future test that would introduce a comparably heavy dependency the same
+    way, rather than letting it leak into every developer's build.
+  - **Shared live server.** The ClickHouse tests reach one server at
+    localhost:8123 and share `system.query_log` with each other. They create
+    and drop scratch databases and read back rows they just wrote, bounded by
+    wall-clock polls — so run beside the rest of the suite they fail on
+    contention rather than on behaviour. This is why the runner passes `-p 1`;
+    it is a correctness requirement of the lane, not a preference.
+
+  The lane runner also omits `-race`, the one place it departs from the default
+  runner. The same wall-clock budgets make race instrumentation a source of
+  false failures rather than of findings: the queryrunsvc pipeline test polls
+  20s for a fact it normally gets in 17–21s, and under `-race` it reliably
+  blows that budget. Race detection stays where the tests are hermetic and
+  fast.
+
+  Skipping when the server is unreachable is a *capability* gate, not lane
+  membership: on a developer machine that happens to be running ClickHouse, a
+  probe-and-skip test executes for real. Both gates belong on such a test — the
+  tag decides which lane it is in, the probe decides whether it can run there.
 - `example_test.go` files are reserved for the *How-To* quadrant of Diátaxis
   per [§1 of DOCUMENTATION_STANDARD.md](./DOCUMENTATION_STANDARD.md#how-to-guides-problem-oriented);
   current count is low, representing an under-served convention rather than an

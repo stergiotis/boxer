@@ -3,6 +3,7 @@ package readaccess
 import (
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
@@ -195,7 +196,9 @@ func TestReadAccessNetworkDmlGolden(t *testing.T) {
 	require.NoError(t, err)
 
 	p := "./example/readaccess_nettable_dml.out.go"
-	_ = os.Remove(p)
+	// No unlink: WriteAligned replaces the file atomically, and this writes
+	// into the example/ package next door — removing it first leaves a window
+	// in which a concurrent package load of example/ sees it missing.
 	err = golang.WriteAligned(p, sourceCode)
 	require.NoError(t, err)
 }
@@ -235,7 +238,13 @@ func TestGoClassBuilderSample(t *testing.T) {
 		var _ = sourceCode
 		unittest.NoError(t, err)
 		if !wellFormed && testing.Verbose() {
-			_ = os.WriteFile("tmp.out.go", sourceCode, os.ModePerm)
+			// Into the test's temp dir, never the package dir: a `.go` file
+			// dropped beside the sources makes the package uncompilable for
+			// everyone until someone notices and deletes it.
+			dump := filepath.Join(t.TempDir(), "malformed.out.go.txt")
+			if werr := os.WriteFile(dump, sourceCode, 0o644); werr == nil {
+				t.Logf("malformed generated source written to %s", dump)
+			}
 		}
 		require.True(t, wellFormed)
 	}
@@ -257,7 +266,9 @@ func TestDmlSample(t *testing.T) {
 	require.NoError(t, err)
 
 	p := "./example/readaccess_testtable_dml.out.go"
-	_ = os.Remove(p)
+	// No unlink: WriteAligned replaces the file atomically, and this writes
+	// into the example/ package next door — removing it first leaves a window
+	// in which a concurrent package load of example/ sees it missing.
 	err = golang.WriteAligned(p, sourceCode)
 	require.NoError(t, err)
 }

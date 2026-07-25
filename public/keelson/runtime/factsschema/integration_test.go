@@ -1,3 +1,5 @@
+//go:build integration
+
 package factsschema_test
 
 import (
