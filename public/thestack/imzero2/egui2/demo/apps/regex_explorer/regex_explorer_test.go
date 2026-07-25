@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // newTestApp returns a fresh [App]: no regex flags set, empty compile
@@ -249,6 +251,247 @@ func TestCountMatches(t *testing.T) {
 	}
 }
 
+// TestApplyMultiHits covers the index remap, which is the one place in the
+// app where a silent wrong answer can hide: ClickHouse's indices are
+// 1-based and count only the patterns actually sent, so every invalid line
+// shifts the mapping.
+func TestApplyMultiHits(t *testing.T) {
+	t.Parallel()
+
+	valid := func(texts ...string) (lines []multiLine) {
+		for _, s := range texts {
+			lines = append(lines, multiLine{Text: s})
+		}
+		return
+	}
+
+	cases := []struct {
+		name         string
+		lines        []multiLine
+		validOrigIdx []int
+		hits         []uint64
+		wantHit      []bool
+	}{
+		{
+			name:         "all-valid-first-hits",
+			lines:        valid("a", "b", "c"),
+			validOrigIdx: []int{0, 1, 2},
+			hits:         []uint64{1},
+			wantHit:      []bool{true, false, false},
+		},
+		{
+			name:         "unsorted-indices",
+			lines:        valid("a", "b", "c"),
+			validOrigIdx: []int{0, 1, 2},
+			hits:         []uint64{3, 1},
+			wantHit:      []bool{true, false, true},
+		},
+		{
+			// The case the remap exists for: line 1 is invalid and never
+			// sent, so CH index 1 means line 0 and index 2 means line 2.
+			name:         "invalid-line-shifts-indices",
+			lines:        []multiLine{{Text: "a"}, {Text: "(bad", Invalid: true}, {Text: "c"}},
+			validOrigIdx: []int{0, 2},
+			hits:         []uint64{2},
+			wantHit:      []bool{false, false, true},
+		},
+		{
+			name:         "leading-invalid",
+			lines:        []multiLine{{Text: "(bad", Invalid: true}, {Text: "b"}},
+			validOrigIdx: []int{1},
+			hits:         []uint64{1},
+			wantHit:      []bool{false, true},
+		},
+		{
+			name:         "no-hits",
+			lines:        valid("a", "b"),
+			validOrigIdx: []int{0, 1},
+			hits:         nil,
+			wantHit:      []bool{false, false},
+		},
+		{
+			// A reply about patterns we did not send is ignored rather
+			// than panicking or marking an arbitrary line.
+			name:         "out-of-range-indices-ignored",
+			lines:        valid("a", "b"),
+			validOrigIdx: []int{0, 1},
+			hits:         []uint64{0, 3, 99},
+			wantHit:      []bool{false, false},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := applyMultiHits(tc.lines, tc.validOrigIdx, tc.hits)
+			if len(got) != len(tc.wantHit) {
+				t.Fatalf("line count = %d; want %d", len(got), len(tc.wantHit))
+			}
+			for i, want := range tc.wantHit {
+				if got[i].Hit != want {
+					t.Errorf("line %d (%q) hit = %v; want %v", i, got[i].Text, got[i].Hit, want)
+				}
+			}
+			// The input must not be mutated: the render thread reuses its
+			// own parse of the same lines in the frame that dispatched.
+			for i := range tc.lines {
+				if tc.lines[i].Hit {
+					t.Errorf("input line %d was mutated", i)
+				}
+			}
+		})
+	}
+}
+
+func TestMakeQueryKey(t *testing.T) {
+	t.Parallel()
+
+	// Quoting each part is what stops different input tuples from
+	// colliding. Without it, ("a\x1fb", "") and ("a", "b") would produce
+	// the same key under a raw separator join, and one lane would serve
+	// the other's result.
+	cases := []struct {
+		name string
+		a    []string
+		b    []string
+		same bool
+	}{
+		{"identical", []string{"foo", "bar"}, []string{"foo", "bar"}, true},
+		{"different-value", []string{"foo", "bar"}, []string{"foo", "baz"}, false},
+		{"boundary-shift", []string{"foobar", ""}, []string{"foo", "bar"}, false},
+		{"separator-injection", []string{"a\x1fb", ""}, []string{"a", "b"}, false},
+		{"quote-injection", []string{`a"b`, ""}, []string{"a", "b"}, false},
+		{"empty-vs-absent", []string{"a", ""}, []string{"a"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ka, kb := makeQueryKey(tc.a...), makeQueryKey(tc.b...)
+			if (ka == kb) != tc.same {
+				t.Errorf("makeQueryKey(%q)=%q vs makeQueryKey(%q)=%q; same=%v want %v",
+					tc.a, ka, tc.b, kb, ka == kb, tc.same)
+			}
+		})
+	}
+}
+
+// TestQueryLane_Convergence is the regression test for the stale-result
+// bug: an input that changes while a query is in flight must still be
+// queried, and the lane must never report a result for older inputs as
+// describing the current ones.
+func TestQueryLane_Convergence(t *testing.T) {
+	t.Parallel()
+
+	var lane queryLane[string]
+	release := make(chan struct{})
+	var ran atomic.Int32
+
+	start := func(key queryKey, value string) {
+		lane.demand(key, "test", func(ctx context.Context) (out string, err error) {
+			ran.Add(1)
+			<-release
+			out = value
+			return
+		})
+	}
+
+	keyA, keyB := makeQueryKey("A"), makeQueryKey("B")
+
+	// Frame 1: ask for A. Nothing served yet.
+	start(keyA, "resultA")
+	if v := lane.view(keyA); v.Has || !v.Running {
+		t.Fatalf("after first demand: Has=%v Running=%v; want false/true", v.Has, v.Running)
+	}
+	waitFor(t, func() bool { return ran.Load() == 1 }, "A's run to reach the worker")
+
+	// Frames 2..N: the input moves to B while A is still running. The
+	// old edge-triggered code dropped this edit permanently.
+	for range 5 {
+		start(keyB, "resultB")
+	}
+	if got := ran.Load(); got != 1 {
+		t.Fatalf("runs started while busy = %d; want 1 (the lane must coalesce)", got)
+	}
+
+	// A lands. It is a real result, but it describes inputs that are no
+	// longer on screen, so it must not read as fresh for B.
+	close(release)
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.servedFor(keyA)
+	}, "lane to take A's result")
+
+	if v := lane.view(keyB); v.Fresh {
+		t.Errorf("A's result reported as fresh for input B")
+	}
+
+	// The next frame re-observes the mismatch and queries for B.
+	release = make(chan struct{})
+	close(release)
+	start(keyB, "resultB")
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.servedFor(keyB)
+	}, "lane to converge on B")
+
+	v := lane.view(keyB)
+	if !v.Fresh || v.Value != "resultB" {
+		t.Errorf("converged view = %+v; want fresh resultB", v)
+	}
+}
+
+// TestQueryLane_FailureIsNotRetriedForSameInput pins the other half of the
+// contract: a lane that failed must not spin re-issuing the same doomed
+// query every frame, but must try again as soon as the input changes.
+func TestQueryLane_FailureIsNotRetriedForSameInput(t *testing.T) {
+	t.Parallel()
+
+	var lane queryLane[string]
+	var ran atomic.Int32
+	fail := func(key queryKey) {
+		lane.demand(key, "test", func(ctx context.Context) (out string, err error) {
+			ran.Add(1)
+			err = eh.Errorf("nope")
+			return
+		})
+	}
+
+	keyA := makeQueryKey("A")
+	fail(keyA)
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.failedFor(keyA)
+	}, "lane to record the failure")
+
+	for range 10 {
+		fail(keyA)
+	}
+	if got := ran.Load(); got != 1 {
+		t.Errorf("runs for an already-failed input = %d; want 1", got)
+	}
+	if v := lane.view(keyA); v.Err == nil {
+		t.Errorf("view for the failed input carries no error")
+	}
+
+	keyB := makeQueryKey("B")
+	fail(keyB)
+	waitFor(t, func() bool { return ran.Load() == 2 }, "a changed input to retry")
+}
+
+// waitFor polls cond until it holds or the test times out. The lane is
+// render-thread state driven by a worker goroutine, so tests advance it
+// the way the render loop does — by calling drain and re-checking.
+func waitFor(t *testing.T, cond func() bool, what string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
 // ---------------------------------------------------------------------------
 // SQL builders — pure string composition, exact-match tests
 // ---------------------------------------------------------------------------
@@ -267,6 +510,75 @@ func TestBuildExtractAllSQL(t *testing.T) {
 	if got != want {
 		t.Errorf("got %q; want %q", got, want)
 	}
+}
+
+func TestBuildExtractAllGroupsSQL(t *testing.T) {
+	got := buildExtractAllGroupsSQL("a@b.c", `(\w+)@([\w.]+)`)
+	want := `SELECT extractAllGroups('a@b.c', '(\\w+)@([\\w.]+)')`
+	if got != want {
+		t.Errorf("got %q; want %q", got, want)
+	}
+}
+
+// TestRunListOutcomeBlocking_CaptureGroups pins the two behaviours that
+// make the List tab honest about capture groups:
+//
+//   - extractAll returns capture group 1, not the full match, whenever the
+//     pattern captures — so YieldsGroups must be set and the tab must say
+//     so, or it silently contradicts the Preview tab's full-match
+//     highlighting;
+//   - extractAllGroups is only asked for when the pattern actually
+//     captures, because ClickHouse rejects it outright otherwise, and
+//     interactive typing produces group-less patterns constantly.
+func TestRunListOutcomeBlocking_CaptureGroups(t *testing.T) {
+	bus := setupTestBus(t)
+	inst := newTestApp(t)
+	inst.setBus(bus)
+	ctx := context.Background()
+
+	t.Run("with-groups", func(t *testing.T) {
+		out, err := runListOutcomeBlocking(ctx, inst, "alice@example.com bob@test.org", `(\w+)@([\w.]+)`, 2)
+		if err != nil {
+			t.Fatalf("runListOutcomeBlocking: %v", err)
+		}
+		if !out.YieldsGroups {
+			t.Errorf("YieldsGroups = false; extractAll returns group 1 for a capturing pattern")
+		}
+		// This is the divergence the tab has to explain: extractAll gives
+		// the local parts, while Go highlights the whole addresses.
+		if want := []string{"alice", "bob"}; !reflect.DeepEqual(out.Matches, want) {
+			t.Errorf("Matches = %q; want %q", out.Matches, want)
+		}
+		want := [][]string{{"alice", "example.com"}, {"bob", "test.org"}}
+		if !reflect.DeepEqual(out.Groups, want) {
+			t.Errorf("Groups = %q; want %q", out.Groups, want)
+		}
+	})
+
+	t.Run("without-groups", func(t *testing.T) {
+		out, err := runListOutcomeBlocking(ctx, inst, "a1 b22", `\d+`, 0)
+		if err != nil {
+			t.Fatalf("runListOutcomeBlocking: %v", err)
+		}
+		if out.YieldsGroups || out.Groups != nil {
+			t.Errorf("group-less pattern reported groups: YieldsGroups=%v Groups=%v", out.YieldsGroups, out.Groups)
+		}
+		if want := []string{"1", "22"}; !reflect.DeepEqual(out.Matches, want) {
+			t.Errorf("Matches = %q; want %q", out.Matches, want)
+		}
+	})
+
+	t.Run("extractAllGroups-rejects-group-less-pattern", func(t *testing.T) {
+		// The reason numGroups gates the call rather than the app just
+		// always asking. If this ever starts succeeding, the gate can go.
+		_, err := runExtractAllGroupsBlocking(ctx, inst, "abc", `a`)
+		if err == nil {
+			t.Fatalf("expected ClickHouse to reject extractAllGroups on a group-less pattern")
+		}
+		if !strings.Contains(err.Error(), "no groups in regexp") {
+			t.Errorf("err = %v; expected the BAD_ARGUMENTS 'no groups in regexp' text", err)
+		}
+	})
 }
 
 func TestBuildReplaceAllSQL(t *testing.T) {
@@ -305,6 +617,46 @@ func TestBuildMultiMatchSQL(t *testing.T) {
 // and exercise the production path (executeArrowStreamViaBus). They
 // skip automatically if the binary is not on PATH.
 // ---------------------------------------------------------------------------
+
+// TestRunTripwireBlocking_Ledger is SD1 run for real against
+// clickhouse-local. It asserts the ledger in both directions:
+//
+//   - no corpus case diverges unless it says it will — an unexpected
+//     entry in drifts means Go and ClickHouse have actually parted
+//     company somewhere we assumed they agreed;
+//   - every case that says it will diverge still does — a KnownDrift
+//     note whose difference has since been fixed upstream is stale, and
+//     stale ledger entries silently shrink the tripwire's coverage.
+func TestRunTripwireBlocking_Ledger(t *testing.T) {
+	bus := setupTestBus(t)
+	inst := newTestApp(t)
+	inst.setBus(bus)
+
+	drifts, known, err := inst.runTripwireBlocking(context.Background())
+	if err != nil {
+		t.Fatalf("runTripwireBlocking: %v", err)
+	}
+
+	for _, i := range drifts {
+		tc := tripwireCorpus[i]
+		t.Errorf("unexpected Go/ClickHouse divergence: case %q, pattern %q, haystack %q",
+			tc.Name, tc.effective(), tc.Haystack)
+	}
+
+	inKnown := make(map[int]bool, len(known))
+	for _, i := range known {
+		inKnown[i] = true
+	}
+	for i, tc := range tripwireCorpus {
+		if tc.KnownDrift == "" {
+			continue
+		}
+		if !inKnown[i] {
+			t.Errorf("stale ledger entry: case %q declares KnownDrift (%s) but the engines now agree — drop the note",
+				tc.Name, tc.KnownDrift)
+		}
+	}
+}
 
 func TestExecuteArrowStreamViaBus_Match(t *testing.T) {
 	bus := setupTestBus(t)
