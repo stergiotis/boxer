@@ -202,3 +202,33 @@ func TestRoundTripDeterministicOrder(t *testing.T) {
 	outb, _ := eb.Integrate(bodyb)
 	assert.Equal(t, outa, outb)
 }
+
+// BodyOffset must agree with Extract on every input shape: Extract's body is
+// a byte-identical suffix of the input, and BodyOffset names where it starts.
+// Callers rebase pass-recorded byte ranges onto the original SQL with it, so
+// a disagreement silently mis-slices their source text.
+func TestBodyOffsetLocatesExtractBody(t *testing.T) {
+	inputs := []string{
+		"SELECT 1",
+		"   SELECT 1",
+		"\n\n\tSELECT 1",
+		"SET param_a = 1;\nSELECT {a: UInt64}",
+		"SET param_a = 1;\nSET max_threads = 8;\n\n  SELECT 1",
+		"\nSET param_a = 1;\n\nSELECT 1",
+		"SET param_a = 1;\r\nSELECT 1",
+		"SET param_a = 1;", // prelude only — body is empty
+		"",
+		"   ",
+		"-- a comment\nSELECT 1", // no prelude; comment stays in the body
+		"NOTASET foo\nSELECT 1",  // unparseable prelude line stays in the body
+	}
+	for _, in := range inputs {
+		_, body, err := env.Extract(in)
+		require.NoError(t, err, "input %q", in)
+		off := env.BodyOffset(in)
+		require.GreaterOrEqual(t, off, 0, "input %q", in)
+		require.LessOrEqual(t, off, len(in), "input %q", in)
+		assert.Equal(t, body, in[off:],
+			"BodyOffset must name where Extract's body starts (input %q)", in)
+	}
+}

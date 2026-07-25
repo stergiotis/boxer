@@ -61,6 +61,22 @@ func Extract(sql string) (e *Environment, body string, err error) {
 	return
 }
 
+// BodyOffset returns the byte offset at which [Extract]'s body begins within
+// sql, so that `sql[BodyOffset(sql):] == body`.
+//
+// Extract's body is always a byte-identical suffix of its input: the SET
+// prelude is consumed whole lines at a time and the remainder is only
+// left-trimmed. A byte range recorded against the body — everything a
+// nanopass pass sees, since [Pass.Run] hands passes the extracted body —
+// therefore maps back into the original SQL by adding this offset. Callers
+// that slice the user's buffer with pass-recorded ranges need it.
+//
+// Costs the prelude scan only, not the CST walk Extract additionally runs.
+func BodyOffset(sql string) int {
+	_, body := harvestSetPrelude(sql)
+	return len(sql) - len(strings.TrimLeft(body, " \t\r\n"))
+}
+
 type preludeEntry struct {
 	name string
 	raw  string
