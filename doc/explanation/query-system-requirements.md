@@ -152,10 +152,22 @@ Where they sit in a run's lifecycle:
   (read / mutating / unknown), parameter references. Total and
   best-effort: never errors on strange SQL, returns *unknown* instead.
   Boxer states facts about SQL; it attaches no routing meaning to them.
-  *Exists:* `analysis.ExtractTables`/`ExtractColumns`, the
-  [ADR-0117](../adr/0117-passthrough-table-classifier.md) classifier, the
-  `keelson()` reference predicate (unexported). *Delta:* export the
-  macro-reference helper; add statement-kind classification.
+  *Exists:* all of it. `analysis.ExtractTables`/`ExtractColumns`, the
+  [ADR-0117](../adr/0117-passthrough-table-classifier.md) classifier,
+  `keelsonsql.References` (the macro-reference helper, exported off the
+  predicate its two rewrites already shared), and
+  `analysis.ClassifyStatementKind`. *Delta:* none.
+
+  Two notes on the kind classifier, both consequences of Grammar1 covering
+  the SELECT surface and nothing else. It takes the SQL text rather than a
+  parse result — every statement Grammar1 accepts is already a read and
+  every mutation fails to parse, so classifying a parse result could only
+  ever answer *read-only*. And its proof runs in two tiers: a successful
+  parse is the read proof; anything else is classified by its leading
+  keyword, which recovers the reads Grammar1 cannot parse (EXPLAIN, SHOW,
+  DESCRIBE, EXISTS) and names the common mutations. Whatever neither tier
+  establishes is *unknown*, which consumers are obliged to treat as
+  mutating — the R5 default-deny, carried by the zero value.
 - **E2 — Dispatch seam.** The query issuer consults a resolver once per
   run with the finalized outgoing SQL and an affinity token; the
   returned decision (executor + human-readable reason) rides that
