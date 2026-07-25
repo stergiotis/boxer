@@ -27,6 +27,48 @@ import (
 // FuncName is the table-function name the macro uses.
 const FuncName = "keelson"
 
+// References reports the table names sql addresses through the
+// keelson('<name>') table-function macro, in first-appearance order and
+// deduplicated. It states a fact about the SQL and attaches no meaning to
+// it: a non-empty result says the statement reaches into the
+// introspection plane's namespace, not that it should execute anywhere in
+// particular. Callers that route on it own that policy.
+//
+// Total and best-effort, so there is no error a caller would have to act
+// on: unparseable SQL and macro-free SQL both return nil, and a malformed
+// call (wrong arity, an argument that is neither a quoted literal nor a
+// bare identifier) is skipped rather than reported — the same statement
+// surfaces a precise error when it executes. Only the table-function
+// position counts, so a scalar keelson('env') in a SELECT list and a
+// qualified keelson.env table reference are both absent from the result.
+func References(sql string) (names []string) {
+	pr, err := nanopass.Parse(sql)
+	if err != nil {
+		return nil
+	}
+	calls := findCalls(pr)
+	if len(calls) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(calls))
+	names = make([]string, 0, len(calls))
+	for _, fn := range calls {
+		name, argErr := tableArg(fn)
+		if argErr != nil {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return
+}
+
 // BareNamePass rewrites keelson('x') -> x. Used by the in-process engine,
 // where x arrives as a TEMPORARY table; the macro is sugar there, but it
 // is also required for correctness because a TEMPORARY table cannot carry
@@ -91,21 +133,13 @@ func RewriteAliases(sql string, bindings map[string]string) (result string) {
 	if err != nil {
 		return sql
 	}
-	calls := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		fn, ok := ctx.(*grammar1.TableFunctionExprContext)
-		if !ok {
-			return false
-		}
-		id := fn.Identifier()
-		return id != nil && strings.EqualFold(nanopass.DecodeIdentifier(id.GetText()), FuncName)
-	})
+	calls := findCalls(pr)
 	if len(calls) == 0 {
 		return sql
 	}
 	rw := nanopass.NewRewriter(pr)
 	changed := false
-	for _, c := range calls {
-		fn := c.(*grammar1.TableFunctionExprContext)
+	for _, fn := range calls {
 		name, argErr := tableArg(fn)
 		if argErr != nil {
 			continue // leave a malformed call for the server to reject
@@ -142,20 +176,12 @@ func expand(reg *introspect.Registry, sql string, target func(name string, p int
 	if err != nil {
 		return "", eh.Errorf("keelsonsql: parse: %w", err)
 	}
-	calls := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		fn, ok := ctx.(*grammar1.TableFunctionExprContext)
-		if !ok {
-			return false
-		}
-		id := fn.Identifier()
-		return id != nil && strings.EqualFold(nanopass.DecodeIdentifier(id.GetText()), FuncName)
-	})
+	calls := findCalls(pr)
 	if len(calls) == 0 {
 		return sql, nil
 	}
 	rw := nanopass.NewRewriter(pr)
-	for _, c := range calls {
-		fn := c.(*grammar1.TableFunctionExprContext)
+	for _, fn := range calls {
 		name, argErr := tableArg(fn)
 		if argErr != nil {
 			return "", argErr
@@ -167,6 +193,28 @@ func expand(reg *introspect.Registry, sql string, target func(name string, p int
 		nanopass.ReplaceNode(rw, fn, target(name, p))
 	}
 	return nanopass.GetText(rw), nil
+}
+
+// findCalls returns every keelson(...) table-function call in pr, in
+// document order. The match predicate lives here alone so the fact
+// extraction (References) and the rewrites (RewriteAliases, expand) can
+// never drift apart about what counts as a macro call — a scalar
+// keelson('env') in a SELECT list is not a TableFunctionExpr and so is
+// invisible to all three.
+func findCalls(pr *nanopass.ParseResult) (calls []*grammar1.TableFunctionExprContext) {
+	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		fn, ok := ctx.(*grammar1.TableFunctionExprContext)
+		if !ok {
+			return false
+		}
+		id := fn.Identifier()
+		return id != nil && strings.EqualFold(nanopass.DecodeIdentifier(id.GetText()), FuncName)
+	})
+	calls = make([]*grammar1.TableFunctionExprContext, 0, len(nodes))
+	for _, n := range nodes {
+		calls = append(calls, n.(*grammar1.TableFunctionExprContext))
+	}
+	return
 }
 
 // tableArg extracts the single table-name argument from keelson(...). It

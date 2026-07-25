@@ -24,7 +24,7 @@ func TestRewriteToBare(t *testing.T) {
 		{"SELECT name FROM keelson('env') AS e", "SELECT name FROM env AS e"}, // alias preserved
 		{"SELECT * FROM keelson('env') JOIN keelson('apps') ON 1", "SELECT * FROM env JOIN apps ON 1"},
 		{"SELECT * FROM keelson(env)", "SELECT * FROM env"}, // bare-identifier arg form
-		{"SELECT 1", "SELECT 1"},                            // no macro — unchanged
+		{"SELECT 1", "SELECT 1"}, // no macro — unchanged
 	}
 	for _, tc := range cases {
 		got, err := RewriteToBare(r, tc.in)
@@ -87,6 +87,40 @@ func TestRewriteAliases(t *testing.T) {
 	got = RewriteAliases("SELECT (SELECT count() FROM keelson('items')) + (SELECT count() FROM keelson('env'))", b)
 	assert.Contains(t, got, "keelson('adhoc_deadbeef01234567')")
 	assert.Contains(t, got, "keelson('env')")
+}
+
+func TestReferences(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"quoted arg", "SELECT * FROM keelson('env')", []string{"env"}},
+		{"bare identifier arg", "SELECT * FROM keelson(env)", []string{"env"}},
+		{"case-insensitive macro name", "SELECT * FROM KEELSON('env')", []string{"env"}},
+		{"join", "SELECT * FROM keelson('env') JOIN keelson('apps') ON 1", []string{"env", "apps"}},
+		{"subquery", "SELECT * FROM (SELECT name FROM keelson('env'))", []string{"env"}},
+		{"union", "SELECT name FROM keelson('env') UNION ALL SELECT name FROM keelson('apps')", []string{"env", "apps"}},
+		{"cte", "WITH e AS (SELECT * FROM keelson('env')) SELECT * FROM e", []string{"env"}},
+		{"deduplicated, first-appearance order", "SELECT * FROM keelson('apps') JOIN keelson('env') ON 1 JOIN keelson('apps') AS a2 ON 1", []string{"apps", "env"}},
+		{"no macro", "SELECT * FROM system.tables", nil},
+		{"qualified table is not a macro call", "SELECT * FROM keelson.env", nil},
+		{"scalar position is not a macro call", "SELECT keelson('env')", nil},
+		{"parse failure", "NOT SQL ((", nil},
+		{"malformed calls skipped", "SELECT * FROM keelson('env','x') JOIN keelson() ON 1", nil},
+		{"malformed call skipped, well-formed sibling kept", "SELECT * FROM keelson('env') JOIN keelson('a','b') ON 1", []string{"env"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, References(tc.in))
+		})
+	}
+}
+
+func TestReferencesIsRegistryIndependent(t *testing.T) {
+	// References states a fact about the SQL, so an unregistered name is
+	// reported exactly like a registered one — validation belongs to expand.
+	assert.Equal(t, []string{"bogus"}, References("SELECT * FROM keelson('bogus')"))
 }
 
 func TestRewriteToURLEncryptedDataset(t *testing.T) {
