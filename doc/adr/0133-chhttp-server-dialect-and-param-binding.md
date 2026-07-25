@@ -248,6 +248,26 @@ pattern through the full self-referential loop (URL param → broker prelude
 in ADR-0094 (parity note), ADR-0132 (§SD7 lifted; `runtime-env` gains a
 `pattern` parameter), and the sqlapplet endpoint comments.
 
+## Update (2026-07-25) — `query_id` is parsed, not ignored
+
+`query_id` was on the tolerance list: accepted and dropped, like
+`log_comment`. That was the right default when nothing here could use it,
+but it is the join key a client uses to say anything about a run later —
+progress, terminal facts, pins, cancellation — and a request whose identity
+is silently discarded gives the client no way to tell.
+
+It now leaves `Request.Ignored` for `Request.QueryID`, and `WriteQueryID`
+echoes it on the response as `X-ClickHouse-Query-Id`, as a server does. The
+echo is deliberately the whole of the change: this dialect's endpoints are
+backed by one-shot workers whose system tables die with them, so there is
+no `system.processes` to register an id in and nothing to kill by it. What
+the client gains is evidence that the id arrived, plus a log line it can
+join against. `KnownIgnorableSetting("query_id")` is now false — an
+interpreted key is not an ignored one.
+
+Context: `E4` of
+[query-system-requirements](../explanation/query-system-requirements.md).
+
 ## References
 
 - [ADR-0094 — keelson introspection tables](./0094-keelson-introspection-tables.md)

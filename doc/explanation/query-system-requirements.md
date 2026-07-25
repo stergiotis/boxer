@@ -199,9 +199,22 @@ Where they sit in a run's lifecycle:
   library, the sync adapter.
 - **E4 — Run identity discipline.** Client-minted `query_id` with a
   documented uniqueness scope, stamped on execution and carried by
-  frames, facts, and pins. *Exists:* play's per-lane minting and the
-  `queryrunfacts` join. *Delta:* promote from convention to documented
-  contract consumed by E3/E7.
+  frames, facts, and pins. *Exists:* play's per-lane minting, now with the
+  contract written down where the id is minted, and the `queryrunfacts`
+  join. The scope is per host: `play-<label>-<pid>-<seq>` distinguishes
+  lanes and processes but not machines, so a system federating `query_log`
+  across hosts must join on (host, query_id). *Delta:* none.
+
+  The two endpoints do different things with the same id, and the
+  difference is R10 rather than an omission. A real server registers it in
+  `system.processes` and `query_log`, where it is observable and killable —
+  verified end to end: a client-minted id comes back on both the
+  `QueryStart` and `QueryFinish` rows. The in-process `/query` endpoint
+  parses it and echoes `X-ClickHouse-Query-Id`
+  ([ADR-0133](../adr/0133-chhttp-server-dialect-and-param-binding.md),
+  2026-07-25 update), which is as far as it can go: its workers are
+  one-shot and their system tables die with them, so there is nothing to
+  register the id in and nothing to kill by it.
 - **E5 — Introspection provider seam.** Systems publish their placement
   maps, cluster rosters, and routing decisions as ordinary introspection
   tables via the existing `TableProvider` registry; boxer provides the
