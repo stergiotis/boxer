@@ -175,9 +175,15 @@ Where they sit in a run's lifecycle:
   diagnostic probes — must consume the same decision, or probe and run
   diverge. Boxer ships the seam and a default resolver covering its own
   two endpoints (external base, loopback introspection); systems replace
-  the resolver. *Exists:* the single `buildResidual` choke point;
-  the manual endpoint switcher. *Delta:* the interface, the threading,
-  the default resolver.
+  the resolver. *Exists:* the seam, as
+  [ADR-0141](../adr/0141-play-endpoint-dispatch-seam.md) — resolver
+  interface, decision type, the threading, and a default resolver that
+  answers with the pinned endpoint. Two properties are carried by the
+  types rather than by convention: the decision is a required parameter,
+  so the compiler enumerates the issuers, and the zero decision names no
+  endpoint, so a path that forgot to resolve fails loudly instead of
+  reaching for an ambient default. *Delta:* a resolver that decides
+  anything — the shipped one reproduces the manual endpoint.
 - **E3 — Result frame contract.** A run's result is a sequence of typed,
   sequenced frames: data, progress, and exactly one terminal frame —
   complete, truncated (with reason), or failed (with error). Consumers

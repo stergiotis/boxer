@@ -1,0 +1,138 @@
+---
+type: adr
+status: proposed
+date: 2026-07-25
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+---
+
+> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+
+# ADR-0141: The endpoint dispatch seam — one resolved decision per run
+
+## Context
+
+play talks to more than one engine. An external ClickHouse server over
+HTTP, the loopback introspection plane
+([ADR-0094](./0094-keelson-introspection-tables.md)), and — through the
+`keelson()` macro — ad-hoc datasets whose decryption never leaves loopback
+([ADR-0134](./0134-adhoc-datasets.md)). Which one runs a given statement was
+decided by whatever the endpoint switcher last pointed at, and the user
+held that decision in their head.
+
+Mechanically, three issuers each read `Client.URL()` at request-build time
+and independently arrived at an answer: the run path
+(`ExecuteArrowStream`), the diagnostics EXPLAIN probe (`ProbeStatement`),
+and the incremental-header progress client that rides the same URL
+([ADR-0115](./0115-query-observability-data-plane-strategy.md) plane A). Nothing tied their answers
+together, and nothing recorded why any of them was right.
+
+The probe is the sharp edge. Its verdict is only worth reading because it
+matches a real Run byte for byte — it deliberately shares `buildResidual`
+with the run path for exactly that reason. But it ships
+`EXPLAIN AST <residual>`, and that wrapper is outside Grammar1's SELECT
+surface and names none of the residual's tables. Any placement rule that
+looks at the statement would therefore answer differently for the probe
+than for the run it claims to describe, and the probe would quietly start
+attesting about a server the run never reaches.
+
+[doc/explanation/query-system-requirements.md](../explanation/query-system-requirements.md)
+sets out the requirements behind this (R2 hard locality walls, R6 the
+two-axis dispatch label, R12 decisions as auditable data) and names this
+extension point E2. Boxer's job is the seam; placement maps, cluster
+rosters, and balancing strategy are site policy and stay out of the
+repository.
+
+## Decision
+
+We will resolve the endpoint **once per run**, through a resolver
+consulted with the finalized outgoing SQL, and pass the resulting
+`dispatchDecision` — endpoint, class, and a human-readable reason — to
+every issuer as a **required parameter**.
+
+Two properties are carried by the types, not by convention:
+
+- **The compiler enumerates the issuers.** A request path that reads an
+  endpoint without being handed a decision does not compile. This is what
+  makes the seam hold as the code grows.
+- **The zero decision is invalid.** `dispatchDecision{}` names no endpoint,
+  and every issuer routes through one accessor that rejects it. Forgetting
+  to resolve fails the run loudly rather than falling back to an ambient
+  default — the failure mode a nilable option would have re-introduced.
+
+A decision may also *refuse*, carrying the reason instead of an endpoint.
+The run does not happen and the user is told why.
+
+The resolver sees the **residual** — the SQL after the client-side
+rewrites, which is what the server will actually receive — so no rule ever
+judges a form the server will not see. The diagnostics probe resolves from
+the statement it wraps rather than from its own `EXPLAIN AST` text; a test
+fails loudly if that regresses.
+
+boxer ships `staticResolver`, which answers with the pinned endpoint and
+nothing else. It is what play already did, written down.
+
+## Alternatives
+
+- **A nilable `*dispatchDecision`, or a field on `ExecOptions`.** Both make
+  "no decision" representable and silently fall back to the ambient
+  endpoint — precisely the implicit placement this ADR exists to remove.
+- **Resolve inside `ExecuteArrowStream` from its own SQL argument.** Each
+  issuer would resolve independently again, and the probe would resolve
+  from its `EXPLAIN AST` wrapper. That is the divergence in Context, made
+  permanent.
+- **Resolve from the authored buffer rather than the residual.** Cheaper —
+  it avoids one extra rewrite per run — but it lets a rule fire on a form
+  the pre-execute passes are about to rewrite away.
+- **Put the decision on `compiledNode`.** That struct is a memo key
+  (`key()` is its identity); a decision in it would fragment the cache and
+  make placement part of node identity, which it is not.
+
+## Consequences
+
+### Positive
+
+- Where a query runs is a named value with a reason attached, so it can be
+  shown in the UI and recorded on the run's durable record (R12).
+- A system that needs real placement policy replaces one small interface,
+  and publishes its placement data as ordinary introspection tables (E5)
+  rather than as boxer schema.
+- Probe and run cannot diverge, and the guard is a test rather than a
+  comment.
+
+### Negative
+
+- One extra client-side rewrite per run, since resolution runs
+  `buildResidual` to see the residual. The schema probes behind it are
+  cached, so the cost is parsing, and it is paid per run rather than per
+  frame.
+- Every future request path must obtain a decision. That is the intended
+  friction, but it is friction.
+
+### Neutral
+
+- `Client.URL()` survives as the *manual base*: what the switcher shows and
+  what a resolver falls back to. Infrastructure requests that are not the
+  user's query — the `system.columns` schema probe, the pin INSERT, the
+  run-history readback — deliberately stay on it rather than taking a
+  decision, since none of them is the statement being placed.
+- The affinity token of R4 is carried through the resolver signature and
+  judged by nobody: boxer's own endpoints have no members to choose
+  between. It exists so a site resolver has somewhere to put it.
+- The dispatch class is play-internal for now. Promoting it to the shared
+  E9 vocabulary waits for a second consumer.
+
+## Status
+
+Proposed — awaiting review.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## References
+
+- [doc/explanation/query-system-requirements.md](../explanation/query-system-requirements.md) — the requirements and the E-point catalog.
+- [ADR-0094](./0094-keelson-introspection-tables.md) — the loopback introspection plane and its `/query` endpoint.
+- [ADR-0134](./0134-adhoc-datasets.md) — ad-hoc datasets; §SD4 is the alias→handle rewrite inside the residual.
+- [ADR-0115](./0115-query-observability-data-plane-strategy.md) — observability planes; the progress client that rides the dispatched URL.
+- [ADR-0097](./0097-play-reactive-query-graph.md) — the reactive query graph whose lanes are the other issuers.
