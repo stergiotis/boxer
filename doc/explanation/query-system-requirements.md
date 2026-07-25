@@ -213,11 +213,28 @@ Where they sit in a run's lifecycle:
   for.
 - **E4 — Run identity discipline.** Client-minted `query_id` with a
   documented uniqueness scope, stamped on execution and carried by
-  frames, facts, and pins. *Exists:* play's per-lane minting, now with the
-  contract written down where the id is minted, and the `queryrunfacts`
-  join. The scope is per host: `play-<label>-<pid>-<seq>` distinguishes
-  lanes and processes but not machines, so a system federating `query_log`
-  across hosts must join on (host, query_id). *Delta:* none.
+  frames, facts, and pins. *Exists:* the contract and its minting, as
+  `public/keelson/runtime/runid`, plus the `queryrunfacts` join.
+  `<app>-<label>-<host>-<pid>-<seq>` distinguishes lanes within a process,
+  processes on a box, and boxes on a shared channel. *Delta:* none.
+
+  The host component was added ahead of the engine that needs it. While
+  every result came back down the connection that asked for it, a
+  host-scoped id was sufficient and the gap was a documented caveat. Once
+  results are federated — an async engine streaming onto a topic several
+  boxes publish to — two processes on different hosts minting the same id
+  would collide on the one key everything correlates by, silently. Widening
+  the id keeps that a *single* identity, which is R7's actual requirement;
+  a second, channel-scoped correlation id would have been cheaper to land
+  and would have left every join asking which id it was holding. It is
+  wire-visible (it lands in `query_log`, the `log_comment` stamp and pins),
+  which is the other reason to do it before the engine exists rather than
+  after.
+
+  Nothing parses the id — the lane label rides `ExecOptions` separately for
+  exactly that reason — which is what made widening it safe. Labels are
+  sanitised on the way in, since a lane bound to a graph node carries that
+  node's id, and consumers reject unsafe ids rather than escaping them.
 
   The two endpoints do different things with the same id, and the
   difference is R10 rather than an omission. A real server registers it in

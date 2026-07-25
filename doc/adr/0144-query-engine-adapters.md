@@ -194,9 +194,16 @@ stamp, and in pins — so it belongs *before* engine 3 exists, not after.
 
 ## Status
 
-Proposed — awaiting review. Sequencing, if accepted: the identity widening
-first (cheap now, expensive later), then the delivery role over the two
-shipped engines, then observation and control.
+Proposed — awaiting review, **except the identity widening, which has
+landed**: `public/keelson/runtime/runid` owns the contract and play mints
+through it, verified against a real server (a widened id comes back on both
+the `QueryStart` and `QueryFinish` rows of `query_log`). It was taken
+first, ahead of acceptance, because it is the one piece that is cheap now
+and a migration later — it is wire-visible, so the longer engine 3 waits
+the more history carries the narrow shape.
+
+Remaining sequencing, if accepted: the delivery role over the two shipped
+engines, then observation and control.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
