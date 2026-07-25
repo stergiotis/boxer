@@ -16,6 +16,7 @@ import (
 	"context"
 	"os/exec"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -369,6 +370,11 @@ func TestExecuteArrowStreamViaBus_MultiMatch_TwoTrivial(t *testing.T) {
 	for i := int(offsets[0]); i < int(offsets[1]); i++ {
 		hits = append(hits, inner.Value(i))
 	}
+	// multiMatchAllIndices does not promise sorted output — VectorScan
+	// reports hits in match order, so ['^foo$','f.o'] over "foo" comes
+	// back as [2,1]. The UI keys hits by index rather than position, so
+	// sort before comparing instead of asserting an accidental order.
+	slices.Sort(hits)
 	wantHits := []uint64{1, 2}
 	if !reflect.DeepEqual(hits, wantHits) {
 		t.Errorf("multiMatchAllIndices hits = %v; want %v", hits, wantHits)
