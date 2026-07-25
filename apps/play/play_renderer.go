@@ -2120,7 +2120,7 @@ func (inst *PlayApp) updatePreview() {
 	// ADR-0130 L3 span producers) slices inst.sql. Runs on the error path too:
 	// the analytical pass is first in the sequence, so it has already observed
 	// by the time a later canonicaliser fails.
-	shiftObservationsToBuffer(inst.observations, env.BodyOffset(raw))
+	shiftObservationsToBuffer(inst.observations, raw, env.BodyOffset(raw))
 	if err != nil {
 		inst.formatted = ""
 		inst.formattedErr = err

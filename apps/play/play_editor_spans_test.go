@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stretchr/testify/require"
 )
 
@@ -101,4 +102,56 @@ func TestCanonicalPreviewUnaffectedByLeadingWhitespace(t *testing.T) {
 	require.NoError(t, flush.formattedErr)
 	require.NoError(t, indented.formattedErr)
 	require.Equal(t, flush.formatted, indented.formatted)
+}
+
+// The rebase checks its own arithmetic rather than trusting the invariant it
+// depends on. That invariant — Extract's body is the suffix of the buffer
+// starting at env.BodyOffset — lives in another package, and the way it fails
+// here is silent: a range still inside the buffer but pointing at the wrong
+// bytes slices plausible text and nothing errors. A range that LEAVES the
+// buffer is the observable half, so it is dropped rather than passed on.
+func TestShiftObservationsToBufferBoundsCheck(t *testing.T) {
+	const buf = "SET param_a = 1;\nSELECT 1"
+	const off = 17 // len("SET param_a = 1;\n")
+	require.Equal(t, "SELECT 1", buf[off:])
+
+	t.Run("a range that stays inside the buffer shifts", func(t *testing.T) {
+		obs := []nanopass.Observation{{Name: "f", Src: nanopass.SourceRange{Start: 0, End: 8}}}
+		shiftObservationsToBuffer(obs, buf, off)
+		require.Equal(t, nanopass.SourceRange{Start: 17, End: 25}, obs[0].Src)
+		require.Equal(t, "SELECT 1", buf[obs[0].Src.Start:obs[0].Src.End])
+	})
+
+	t.Run("a range that leaves the buffer is emptied, not shifted", func(t *testing.T) {
+		obs := []nanopass.Observation{
+			{Name: "ok", Src: nanopass.SourceRange{Start: 0, End: 6}},
+			{Name: "past", Src: nanopass.SourceRange{Start: 0, End: 99}},
+		}
+		shiftObservationsToBuffer(obs, buf, off)
+		require.Equal(t, nanopass.SourceRange{Start: 17, End: 23}, obs[0].Src,
+			"a sibling in range is unaffected")
+		require.True(t, obs[1].Src.Empty(), "the out-of-range one is dropped")
+		// Which is exactly what the one real consumer already treats as
+		// "no source text".
+		require.Nil(t, extractCallArgs(buf, obs[1].Src))
+	})
+
+	t.Run("an offset past the buffer drops everything", func(t *testing.T) {
+		obs := []nanopass.Observation{{Name: "f", Src: nanopass.SourceRange{Start: 0, End: 8}}}
+		shiftObservationsToBuffer(obs, buf, len(buf)+50)
+		require.True(t, obs[0].Src.Empty())
+	})
+
+	t.Run("a zero offset and empty ranges are untouched", func(t *testing.T) {
+		obs := []nanopass.Observation{
+			{Name: "f", Src: nanopass.SourceRange{Start: 3, End: 9}},
+			{Name: "g"},
+		}
+		shiftObservationsToBuffer(obs, buf, 0)
+		require.Equal(t, nanopass.SourceRange{Start: 3, End: 9}, obs[0].Src)
+		require.True(t, obs[1].Src.Empty())
+
+		shiftObservationsToBuffer(obs, buf, off)
+		require.True(t, obs[1].Src.Empty(), "an already-empty Src stays empty")
+	})
 }

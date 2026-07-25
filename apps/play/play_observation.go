@@ -60,7 +60,16 @@ func newAffordanceEvaluator(sink *[]nanopass.Observation) *passes.FunctionEvalua
 // by its own length, and the affordance below the editor reads its arguments
 // from the wrong bytes. A zero offset (flush single statement, no prelude)
 // leaves the slice untouched.
-func shiftObservationsToBuffer(obs []nanopass.Observation, bodyOffset int) {
+//
+// Every shifted range is checked against buf rather than trusted. The
+// invariant that makes the shift correct — that Extract's body is the suffix
+// of buf starting at env.BodyOffset — lives in another package, and the way it
+// fails here is silent: a range still inside the buffer but pointing at the
+// wrong bytes slices plausible-looking text and nothing errors. A range that
+// leaves the buffer is the observable half of that failure, so it is dropped
+// (emptied) and logged rather than passed on. Consumers already treat an empty
+// Src as "no source text"; extractCallArgs returns nil for it.
+func shiftObservationsToBuffer(obs []nanopass.Observation, buf string, bodyOffset int) {
 	if bodyOffset <= 0 {
 		return
 	}
@@ -68,7 +77,18 @@ func shiftObservationsToBuffer(obs []nanopass.Observation, bodyOffset int) {
 		if obs[i].Src.Empty() {
 			continue
 		}
-		obs[i].Src.Start += bodyOffset
-		obs[i].Src.End += bodyOffset
+		start, end := obs[i].Src.Start+bodyOffset, obs[i].Src.End+bodyOffset
+		if start < 0 || end > len(buf) {
+			log.Warn().
+				Str("name", obs[i].Name).
+				Int("src.start", obs[i].Src.Start).
+				Int("src.end", obs[i].Src.End).
+				Int("bodyOffset", bodyOffset).
+				Int("bufLen", len(buf)).
+				Msg("play: observation range left the buffer after rebasing; dropped")
+			obs[i].Src = nanopass.SourceRange{}
+			continue
+		}
+		obs[i].Src.Start, obs[i].Src.End = start, end
 	}
 }
