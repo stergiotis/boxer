@@ -72,11 +72,17 @@ type gutterModel struct {
 	present bool
 }
 
-// buildGutterModel derives the per-line marks from the styled overlays already
-// computed for this frame, so the gutter and the text decoration can never
-// disagree: an error underline puts an error mark on its line, and the active
-// statement's tint marks every line it spans.
-func (inst *PlayApp) buildGutterModel(buf string, viewOffset int) (m gutterModel) {
+// buildGutterModel derives the per-line marks from the styled overlays the
+// caller is handing to the editor this frame, so the gutter and the text
+// decoration can never disagree: an error underline puts an error mark on its
+// line, and the active statement's tint marks every line it spans.
+//
+// `styled` must be in `buf`'s own coordinates — the same list the editor gets,
+// already rebased if the editor is bound to a sliced view of the buffer. Taking
+// it as an argument rather than re-deriving it is what keeps the two in step:
+// re-deriving would mean a second coordinate transform here, and two transforms
+// of one list is one too many places to get the elided prefix wrong.
+func (inst *PlayApp) buildGutterModel(buf string, styled []codeview.StyledSection) (m gutterModel) {
 	if buf == "" {
 		return
 	}
@@ -87,7 +93,7 @@ func (inst *PlayApp) buildGutterModel(buf string, viewOffset int) (m gutterModel
 	m.charPx = styletokens.ScaledPt(styletokens.BodyPt, inst.density) * monoAdvanceRatio
 	m.present = true
 
-	for _, s := range inst.editorStyledSections() {
+	for _, s := range styled {
 		mark := gutterMarkNone
 		switch {
 		case s.Flags&codeview.StyleUnderline != 0 && s.Color == styleErrorTone:
@@ -97,10 +103,10 @@ func (inst *PlayApp) buildGutterModel(buf string, viewOffset int) (m gutterModel
 		default:
 			continue
 		}
-		first := lineIndexOf(starts, int(s.Start)-viewOffset)
-		last := lineIndexOf(starts, int(s.Stop)-1-viewOffset)
+		first := lineIndexOf(starts, int(s.Start))
+		last := lineIndexOf(starts, int(s.Stop)-1)
 		for i := first; i <= last && i < m.lines; i++ {
-			if i >= 0 && mark > m.marks[i] {
+			if mark > m.marks[i] {
 				m.marks[i] = mark
 			}
 		}

@@ -1794,7 +1794,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	// ADR-0130 L3 overlays, in inst.sql coordinates.
 	styled := inst.editorStyledSections()
 	if !inst.paramHidePrelude {
-		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled, 0)
+		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled)
 		return
 	}
 
@@ -1803,7 +1803,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 		// Parse broken — fall back to the unsliced editor so the
 		// user can fix the syntax. Don't try to slice a buffer we
 		// don't understand.
-		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled, 0)
+		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled)
 		return
 	}
 	inst.sql = pre.Canonical
@@ -1824,7 +1824,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	// by the elided prelude's length rather than being dropped in this mode.
 	inst.gutteredEditor("sqlEditorResidual", &inst.paramSqlEdit,
 		"-- type SQL (prelude hidden)", rows, pending,
-		shiftStyledSections(styled, len(pre.Prelude), len(pre.Mirror)), len(pre.Prelude))
+		shiftStyledSections(styled, len(pre.Prelude), len(pre.Mirror)))
 }
 
 // gutteredEditor lays the line-number gutter beside the editor (ADR-0130 L3).
@@ -1840,16 +1840,17 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 // on line 1 rather than on the frame; the offsets are named constants in
 // play_editor_gutter.go.
 //
-// viewOffset is where valuePtr's buffer starts inside inst.sql, so the
-// overlay-derived marks land on the right lines behind the hide-prelude
-// toggle.
-func (inst *PlayApp) gutteredEditor(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string, styled []codeview.StyledSection, viewOffset int) {
+// `styled` is in valuePtr's own coordinates, and both the gutter and the
+// editor are given that one list — behind the hide-prelude toggle the caller
+// rebases it once, rather than each consumer subtracting the elided prefix
+// for itself.
+func (inst *PlayApp) gutteredEditor(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string, styled []codeview.StyledSection) {
 	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
 	paneW := avail.W
 	if math.IsNaN(float64(paneW)) || paneW <= 0 {
 		paneW = editorFallbackWidthPx
 	}
-	m := inst.buildGutterModel(*valuePtr, viewOffset)
+	m := inst.buildGutterModel(*valuePtr, styled)
 	editorW := editorWidthPx(*valuePtr, m.charPx, paneW-m.widthPx())
 	for range c.Horizontal().KeepIter() {
 		for range c.Vertical().KeepIter() {

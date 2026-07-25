@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,7 +91,7 @@ func TestGutterModelMarksFollowTheOverlays(t *testing.T) {
 	app.updatePreview()
 	app.caretByte = 3 // in the healthy first statement
 
-	m := app.buildGutterModel(sql, 0)
+	m := app.buildGutterModel(sql, app.editorStyledSections())
 	require.True(t, m.present)
 	require.Equal(t, 3, m.lines)
 	require.Equal(t, 1, m.digits)
@@ -99,7 +100,7 @@ func TestGutterModelMarksFollowTheOverlays(t *testing.T) {
 	// Caret into the broken statement: its line takes the error mark, which
 	// outranks the active mark on the same line.
 	app.caretByte = 12
-	m = app.buildGutterModel(sql, 0)
+	m = app.buildGutterModel(sql, app.editorStyledSections())
 	require.Equal(t, []gutterMarkE{gutterMarkNone, gutterMarkError, gutterMarkNone}, m.marks)
 }
 
@@ -109,7 +110,7 @@ func TestGutterModelMarksSpanMultipleLines(t *testing.T) {
 	app := debouncedApp(t, sql)
 	app.updatePreview()
 	app.caretByte = len(sql)
-	m := app.buildGutterModel(sql, 0)
+	m := app.buildGutterModel(sql, app.editorStyledSections())
 	require.Equal(t, []gutterMarkE{
 		gutterMarkNone, gutterMarkActive, gutterMarkActive, gutterMarkActive,
 	}, m.marks)
@@ -117,7 +118,7 @@ func TestGutterModelMarksSpanMultipleLines(t *testing.T) {
 
 func TestGutterModelEmptyBuffer(t *testing.T) {
 	app := debouncedApp(t, "")
-	require.False(t, app.buildGutterModel("", 0).present)
+	require.False(t, app.buildGutterModel("", nil).present)
 }
 
 // The digit width grows with the line count, so a 100-line buffer reserves
@@ -129,7 +130,7 @@ func TestGutterDigitsGrowWithLineCount(t *testing.T) {
 		app.sql = buf
 		app.formattedFor = buf
 		app.lastEditAt = time.Now().Add(-2 * previewDebounce)
-		m := app.buildGutterModel(buf, 0)
+		m := app.buildGutterModel(buf, nil)
 		require.Equal(t, tc.lines, m.lines)
 		require.Equal(t, tc.digits, m.digits, "%d lines", tc.lines)
 	}
@@ -148,4 +149,34 @@ func TestEditorWidthPx(t *testing.T) {
 	require.InDelta(t,
 		editorWidthPx(strings.Repeat("x", 5), charPx, 0),
 		editorWidthPx(strings.Repeat("€", 5), charPx, 0), 0.01)
+}
+
+// The gutter and the editor are handed ONE overlay list in one coordinate
+// system. Behind the hide-prelude toggle the caller rebases it once; the
+// gutter must not subtract the elided prefix a second time, and a span the
+// rebase dropped must not reappear as a mark.
+func TestGutterModelTakesTheEditorsOwnSections(t *testing.T) {
+	const prelude = "SET param_a = 1;\n"
+	const mirror = "SELECT 1;\nSELECT 2"
+	app := debouncedApp(t, prelude+mirror)
+	app.updatePreview()
+	app.caretByte = len(prelude) + 12 // in the second statement
+
+	whole := app.editorStyledSections()
+	require.NotEmpty(t, whole)
+	rebased := shiftStyledSections(whole, len(prelude), len(mirror))
+
+	m := app.buildGutterModel(mirror, rebased)
+	require.Equal(t, 2, m.lines)
+	require.Equal(t, []gutterMarkE{gutterMarkNone, gutterMarkActive}, m.marks,
+		"the mark lands on the mirror's own line 2, not shifted twice")
+
+	// A span lying entirely inside the elided prelude is dropped by the
+	// rebase, so it can never mark a mirror line.
+	inPrelude := []codeview.StyledSection{{
+		Start: 4, Stop: 9, Flags: codeview.StyleUnderline, Color: styleErrorTone,
+	}}
+	require.Empty(t, shiftStyledSections(inPrelude, len(prelude), len(mirror)))
+	m = app.buildGutterModel(mirror, shiftStyledSections(inPrelude, len(prelude), len(mirror)))
+	require.Equal(t, []gutterMarkE{gutterMarkNone, gutterMarkNone}, m.marks)
 }
