@@ -17,7 +17,7 @@ const SubjectRoot = "queryrun.progress"
 const SubjectWildcard = SubjectRoot + ".>"
 
 // Subject returns the subject a run's ticks are published on. queryID must
-// already have passed [ValidQueryID] — the poller only ever watches ids that
+// already have passed runid.Valid — the poller only ever watches ids that
 // have.
 func Subject(queryID string) (subject string) {
 	subject = SubjectRoot + "." + queryID
@@ -84,26 +84,5 @@ func DecodeTick(payload []byte) (t Tick, err error) {
 	return
 }
 
-// ValidQueryID reports whether id is safe to use as a bus subject token and
-// as a SQL string literal. The charset is `[A-Za-z0-9_.:-]`, which covers
-// the client-minted ids in use (`play-<lane>-<pid>-<seq>`) and excludes the
-// quote and wildcard characters that would let an id reach into either the
-// statement the poller builds or the subject namespace.
-//
-// Rejecting is the whole defence: the poller never escapes or rewrites an
-// id, so an id that gets in unchecked would be a hole in both.
-func ValidQueryID(id string) (ok bool) {
-	if id == "" || len(id) > 128 {
-		return
-	}
-	for i := 0; i < len(id); i++ {
-		c := id[i]
-		valid := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-			(c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == ':'
-		if !valid {
-			return
-		}
-	}
-	ok = true
-	return
-}
+// The id charset lives in runid, which owns the identity contract, rather
+// than here — this package consumes ids, it does not define them.

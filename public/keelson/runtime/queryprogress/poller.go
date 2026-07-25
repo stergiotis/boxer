@@ -42,6 +42,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -140,7 +141,7 @@ func New(opts Options) (inst *Poller, err error) {
 // self-exclusion: the poller's own statements are never registered, so they
 // can never be reported.
 func (inst *Poller) Watch(queryID string) (err error) {
-	if !ValidQueryID(queryID) {
+	if !runid.Valid(queryID) {
 		err = eb.Build().Str("queryId", queryID).Errorf("queryprogress: query id is not safe as a subject token or SQL literal")
 		return
 	}
@@ -248,7 +249,7 @@ type processRow struct {
 
 // pollSQL builds the tick's statement. Ids are interpolated as literals,
 // which is safe only because Watch rejected everything outside
-// [ValidQueryID]'s charset — quotes cannot appear.
+// runid.Valid's charset — quotes cannot appear.
 func pollSQL(ids []string) (sql string) {
 	var b strings.Builder
 	b.WriteString("SELECT query_id, read_rows, read_bytes, total_rows_approx, " +

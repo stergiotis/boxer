@@ -304,15 +304,6 @@ func TestPollerRejectsUnsafeQueryIDs(t *testing.T) {
 	}
 }
 
-func TestValidQueryIDRejectsSubjectWildcards(t *testing.T) {
-	// The two characters that would let an id reach into the subject
-	// namespace, and the one that would reach into the statement.
-	assert.False(t, ValidQueryID("a*b"))
-	assert.False(t, ValidQueryID("a>b"))
-	assert.False(t, ValidQueryID("a'b"))
-	assert.True(t, ValidQueryID("play-main-1-1"))
-}
-
 func TestPollSQLQuotesEveryId(t *testing.T) {
 	sql := pollSQL([]string{"a", "b"})
 	assert.Contains(t, sql, "query_id IN ('a','b')")

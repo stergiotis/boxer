@@ -11,6 +11,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,6 +56,23 @@ func okServer(t *testing.T, body []byte) (srv *httptest.Server, hits *int) {
 	}))
 	t.Cleanup(srv.Close)
 	return srv, &n
+}
+
+// TestNewExecOptionsMintsAValidRunId ties play's lane minting to the
+// identity contract: the id it produces must be one every consumer accepts,
+// including the poller, which rejects rather than escapes.
+func TestNewExecOptionsMintsAValidRunId(t *testing.T) {
+	opts := newExecOptions("main")
+	require.NotEmpty(t, opts.QueryID)
+	assert.True(t, runid.Valid(opts.QueryID), "id=%q", opts.QueryID)
+	assert.Contains(t, opts.QueryID, runid.HostToken(), "the host component is what makes it safe on a shared channel")
+	assert.Equal(t, "main", opts.Label, "the label rides separately; nothing parses it back out")
+
+	// A lane label that is not a literal — a bound graph node carries the
+	// node's id — must not be able to smuggle anything through.
+	rough := newExecOptions("bound-node'; DROP--")
+	assert.True(t, runid.Valid(rough.QueryID), "id=%q", rough.QueryID)
+	assert.NotContains(t, rough.QueryID, "'")
 }
 
 func TestDispatchClassNames(t *testing.T) {

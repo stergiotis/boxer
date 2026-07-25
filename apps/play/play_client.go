@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -131,10 +131,6 @@ type ExecOptions struct {
 	OnProgress func(Summary)
 }
 
-// execQueryIDSeq disambiguates lanes within one process; the pid disambiguates
-// processes sharing a server.
-var execQueryIDSeq atomic.Uint64
-
 // newExecOptions mints a lane's stable ExecOptions.
 //
 // # The run-identity contract (E4)
@@ -148,20 +144,16 @@ var execQueryIDSeq atomic.Uint64
 // exists, and a second observer can watch a run it did not issue (R7/R8 of
 // doc/explanation/query-system-requirements.md).
 //
-// Uniqueness scope. `play-<label>-<pid>-<seq>` is unique across every
-// server this or any other boxer process talks to, for as long as query_log
-// retains it: seq disambiguates lanes within a process, the pid
-// disambiguates processes on a host. It is NOT unique across hosts — two
-// machines can mint the same id — so a system federating query_log across
-// hosts must join on (host, query_id), not query_id alone.
-//
-// Stability is the point, not novelty: a lane reuses its id across runs, so
-// a superseding run REPLACES its still-running predecessor server-side
-// (ReplaceRunningQuery). One lane therefore has at most one live run.
+// The id's shape and its uniqueness scope belong to runid, which owns the
+// contract; `<app>-<label>-<host>-<pid>-<seq>` distinguishes lanes,
+// processes and boxes. What matters here is the consequence: it is stable,
+// not novel. A lane reuses its id across runs, so a superseding run
+// REPLACES its still-running predecessor server-side (ReplaceRunningQuery),
+// and one lane therefore has at most one live run.
 //
 // The label names the lane in server-side observability, and rides the
 // log_comment stamp separately so a consumer need not parse it back out of
-// the id.
+// the id — nothing does, which is what made widening the id safe.
 //
 // Both endpoints receive the id, but they can do different things with it.
 // A real server registers it in system.processes and query_log, where it is
@@ -170,7 +162,7 @@ var execQueryIDSeq atomic.Uint64
 // one-shot and their system tables die with them (R10).
 func newExecOptions(label string) *ExecOptions {
 	return &ExecOptions{
-		QueryID:             fmt.Sprintf("play-%s-%d-%d", label, os.Getpid(), execQueryIDSeq.Add(1)),
+		QueryID:             runid.Mint("play", label),
 		ReplaceRunningQuery: true,
 		Label:               label,
 	}
