@@ -34,6 +34,10 @@ func newAffordanceEvaluator(sink *[]nanopass.Observation) *passes.FunctionEvalua
 		eval.Register(spec.display, discard, true)
 	}
 
+	// Observations arrive in BODY space; updatePreview lifts them into
+	// buffer space with shiftObservationsToBuffer once the run is done.
+	// The log line below is deliberately the pre-shift range — it is the
+	// pass's own view, and shifting has not happened yet.
 	eval.OnObservation(func(obs nanopass.Observation) {
 		log.Debug().
 			Str("name", obs.Name).
@@ -45,4 +49,26 @@ func newAffordanceEvaluator(sink *[]nanopass.Observation) *passes.FunctionEvalua
 		*sink = append(*sink, obs)
 	})
 	return eval
+}
+
+// shiftObservationsToBuffer rebases each observation's Src from the body the
+// nanopass runner extracted onto the editor buffer it came from, by adding
+// the body's offset within that buffer (env.BodyOffset).
+//
+// Without it a `SET param_x = 1;` prelude — the very thing the parameter
+// widgets author — or any leading whitespace slides every recorded range left
+// by its own length, and the affordance below the editor reads its arguments
+// from the wrong bytes. A zero offset (flush single statement, no prelude)
+// leaves the slice untouched.
+func shiftObservationsToBuffer(obs []nanopass.Observation, bodyOffset int) {
+	if bodyOffset <= 0 {
+		return
+	}
+	for i := range obs {
+		if obs[i].Src.Empty() {
+			continue
+		}
+		obs[i].Src.Start += bodyOffset
+		obs[i].Src.End += bodyOffset
+	}
 }

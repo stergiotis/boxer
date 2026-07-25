@@ -733,8 +733,11 @@ func newLiveQueryGraph(client *Client, alloc memory.Allocator, maxHistory int) (
 // lane. signals carries the URL-keyed signal values resolved for this run
 // (slice 5a — the store's values for the buffer's unbound param slots); they
 // ride the request URL and are snapshotted into the run's history entry (D4).
-func (inst *queryGraph) RunMain(sql string, signals map[string]string) {
-	inst.mainLane.Execute(sql, signals)
+// sourceBuffer is the editor buffer sql came from — they differ when a
+// multi-statement buffer ships only the statement under the caret (ADR-0130
+// L3). Pass "" when the two are the same.
+func (inst *queryGraph) RunMain(sql string, signals map[string]string, sourceBuffer string) {
+	inst.mainLane.Execute(sql, signals, sourceBuffer)
 }
 
 // CancelMain aborts an in-flight `main` execution.

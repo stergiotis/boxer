@@ -222,7 +222,11 @@ var multiMatchRegexFamily = map[string]multiMatchSpec{
 // tested against the shared affordanceTestInput field on PlayApp.
 type multiMatchAffordance struct {
 	// Currently no per-affordance state beyond what's on PlayApp.
-	// Future: per-call test inputs would key on (Src.Start, Src.End).
+	// Future: per-call test inputs must NOT key on (Src.Start, Src.End) —
+	// a byte range shifts with every edit above the site, so the state
+	// would follow the wrong call after one keystroke. The stable identity
+	// is the function name plus the site's ordinal among same-name calls
+	// (ADR-0130 §Updates 2026-07-25).
 }
 
 func (a *multiMatchAffordance) Matches(obs nanopass.Observation) bool {

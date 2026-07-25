@@ -22,6 +22,11 @@ type HistoryEntry struct {
 	// signal store from this map. nil when the run read no signals.
 	SigParams map[string]string
 	ErrorText string
+	// Buffer is the editor buffer the run came from, when that is not the SQL
+	// that executed — a multi-statement buffer ships only the statement under
+	// the caret (ADR-0130 L3). Restoring the entry restores this, so the
+	// siblings come back with it. Empty means SQL is the whole buffer.
+	Buffer string
 }
 
 type QueryStore struct {
@@ -47,8 +52,15 @@ type QueryStore struct {
 	// executedSQL is the SQL text of the run that produced the current record —
 	// set by finish alongside it, so SQL() and Snapshot() name the same run.
 	executedSQL string
-	history     []HistoryEntry
-	maxHist     int
+	// sourceBuffer is the editor buffer the in-flight run came from, stashed
+	// by Execute for finish to record on the history entry (ADR-0130 L3). It
+	// differs from the executed SQL when a multi-statement buffer shipped only
+	// the statement under the caret; empty means "the executed SQL is it".
+	// Written before the run's goroutine starts and read only in finish, both
+	// under mu, and one run at a time per store.
+	sourceBuffer string
+	history      []HistoryEntry
+	maxHist      int
 
 	// closed (under mu) marks a torn-down store: a late finish() from an
 	// already-running goroutine is dropped instead of resurrecting state.
@@ -135,11 +147,17 @@ func (inst *QueryStore) History() []HistoryEntry {
 // values resolved for this run (ADR-0097 slice 5a; nil = none) — they ride
 // the request URL and are snapshotted into the history entry (D4). Subsequent
 // calls while a query is running are ignored; call Cancel first.
-func (inst *QueryStore) Execute(sql string, signals map[string]string) {
+//
+// sourceBuffer is the editor buffer sql was derived from, recorded on the
+// history entry so a restore brings back the whole buffer rather than the
+// fragment that ran (ADR-0130 L3 run-under-cursor). Pass "" when sql IS the
+// buffer — every lane but `main` does.
+func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuffer string) {
 	if inst.isLoading.Swap(true) {
 		return
 	}
 	inst.mu.Lock()
+	inst.sourceBuffer = sourceBuffer
 	inst.loading = true
 	inst.progress = Summary{}
 	inst.progressFresh = false
@@ -284,6 +302,7 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 		Elapsed:   inst.elapsed,
 		NumRows:   rows,
 		SigParams: sigs,
+		Buffer:    inst.sourceBuffer,
 	}
 	if err != nil {
 		entry.ErrorText = err.Error()

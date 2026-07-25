@@ -245,7 +245,7 @@ func TestQueryStoreProgressEndToEnd(t *testing.T) {
 	})
 	store := NewQueryStore(NewClient(ClientConfig{URL: baseURL}, nil), nil, 10, "progress-test")
 	defer store.Close()
-	store.Execute("SELECT 1", nil)
+	store.Execute("SELECT 1", nil, "")
 
 	require.Eventually(t, func() bool {
 		_, fresh := store.Progress()

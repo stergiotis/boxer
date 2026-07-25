@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -328,6 +329,20 @@ type PlayApp struct {
 	formattedFor string
 	formattedErr error
 
+	// Caret report (ADR-0130 L3). caretPacked is the raw r9_u64 databinding
+	// target for the main SQL editor: the sorted cursor CHAR range packed
+	// low=start / high=end, refreshed every frame the editor renders and
+	// carrying the usual one-frame lag. caretByte is its start converted to a
+	// byte offset into inst.sql — computed once per frame at the top of the
+	// editor render, so every consumer sees the same value.
+	caretPacked uint64
+	caretByte   int
+	// One-entry memo for the per-statement syntax check the error underline
+	// runs on multi-statement buffers (see statementSyntaxError).
+	stmtErrFor string
+	stmtErrPos syntaxErrorPos
+	stmtErrOk  bool
+
 	// "As sent" preview toggle (ADR-0108): when on, the Preview tab shows
 	// the statement Client.BuildStatement would ship — params harvested,
 	// pre-execute passes applied, FORMAT rewritten — instead of the
@@ -341,6 +356,12 @@ type PlayApp struct {
 	// changes what ships without touching the buffer, and a view whose whole
 	// job is to show what ships must not go stale behind it.
 	wireConditions bool
+	// wireStmtNumber / wireStmtTotal are the caret's statement and the body's
+	// statement count for the cached wire body (ADR-0130 L3). They key the
+	// cache on caret travel — which changes what ships without an edit — and
+	// caption the view with "statement N of M".
+	wireStmtNumber int
+	wireStmtTotal  int
 
 	// Results pagination. pagerSeenExecuted tracks the QueryStore's
 	// "executed" timestamp — when it advances, the pager snaps back to
@@ -1109,14 +1130,20 @@ func (inst *PlayApp) executeRun(auto bool) {
 		return
 	}
 	inst.runBlockedReason = ""
+	// Run-under-cursor (ADR-0130 L3): a multi-statement body ships the SET
+	// prelude plus the statement under the caret. A single-statement buffer
+	// returns itself, so everything below this line is byte-identical to what
+	// it was. Deliberately AFTER the signal resolution and the unfilled gate,
+	// both of which stay buffer-wide in this first cut.
+	runSQL, _, _ := inst.runBuffer()
 	// ADR-0097 3c: split the buffer into the node graph and fuse to the
 	// sink for execution. For a single statement the fused SQL is the
 	// original (the client re-lifts the SET prelude either way), so this
 	// is behaviour-identical. On a split/parse failure, fall back to the
 	// raw buffer so ClickHouse reports the error exactly as before.
-	executable, split, fErr := fuseToSink(sql)
+	executable, split, fErr := fuseToSink(runSQL)
 	if fErr != nil {
-		executable = sql
+		executable = runSQL
 		split = splitResult{}
 	}
 	inst.currentSplit = split
@@ -1151,7 +1178,13 @@ func (inst *PlayApp) executeRun(auto bool) {
 	inst.lastSentSql = sql
 	inst.lastSentSigParams = sigParams
 	inst.lastRunBound = boundNames
-	inst.graph.RunMain(executable, sigParams)
+	// The history entry records the whole buffer, not just what ran: restoring
+	// a run of a multi-statement buffer must bring its siblings back too.
+	sourceBuffer := ""
+	if runSQL != sql {
+		sourceBuffer = sql
+	}
+	inst.graph.RunMain(executable, sigParams, sourceBuffer)
 	if !auto {
 		// Persist on Run: the user's intent is "this is the SQL I
 		// want to keep around". Save-on-Unmount is the fallback
@@ -1242,7 +1275,13 @@ func (inst *PlayApp) resolveRunSignals(sql string) (sigParams map[string]string,
 // reproduces the same inputs. A SET-bound name still shadows a seeded signal
 // at execution (D1).
 func (inst *PlayApp) restoreHistoryEntry(entry HistoryEntry) {
+	// Buffer is set only when the run shipped less than the buffer — a
+	// multi-statement buffer under run-under-cursor (ADR-0130 L3). Restoring
+	// it puts the siblings back rather than silently discarding them.
 	inst.sql = entry.SQL
+	if entry.Buffer != "" {
+		inst.sql = entry.Buffer
+	}
 	for urlKey, raw := range entry.SigParams {
 		inst.graph.setSignalRawFrom(strings.TrimPrefix(urlKey, "param_"), raw, signalWriterHistory)
 	}
@@ -1655,11 +1694,22 @@ func (inst *PlayApp) renderEditorTab() {
 // mirror in hide mode). idSlot keeps each instance's stable widget
 // id distinct; valuePtr is the bound buffer (both displayed value
 // and SendRespVal target); hint is the empty-buffer placeholder.
-func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string) {
+//
+// reportCaret opts this instance into the ADR-0130 L3 caret channel. Exactly
+// one editor renders per frame, so the single caretPacked slot is unambiguous;
+// it is set for the editor bound to the buffer inst.caretByte is expressed in.
+//
+// widthPx is the editor's desired width. No-wrap layout (the gutter's
+// alignment contract) makes the galley as wide as the longest line, and egui
+// caps a TextEdit's allocation at its desired width — so this has to be the
+// content width, not +Inf, or the tail of a long line is clipped and the
+// enclosing scroll area never learns it is there.
+func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string, styled []codeview.StyledSection, reportCaret bool, widthPx float32) {
 	b := c.TextEdit(inst.ids.PrepareStr(idSlot), *valuePtr, true).
 		CodeEditor().
+		NoWrapLayout().
 		DesiredRows(rows).
-		DesiredWidth(float32(math.Inf(1))).
+		DesiredWidth(widthPx).
 		HintText(hint)
 	// Snippet-library Insert: hand the pending snippet to the editor so the
 	// Rust side splices it at the caret next frame (TextEditFluid.InsertAtCursor,
@@ -1672,6 +1722,16 @@ func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint stri
 	// this frame's binding; the Rust layouter applies them advisorily.
 	if job, ok := inst.sqlEditorHighlightJob(*valuePtr); ok {
 		b = b.HighlightJob(job)
+		// L3 overlays ride the same layouter, so they only reach the buffer
+		// when a highlight job installed one — which is also the only case
+		// where their spans have been reconciled against a live edit.
+		if job, ok := codeview.BuildStyledSections(styled); ok {
+			b = b.SectionStyled(job)
+		}
+	}
+	if reportCaret {
+		b.ReportCursor().SendRespValCursor(valuePtr, &inst.caretPacked)
+		return
 	}
 	b.SendRespVal(valuePtr)
 }
@@ -1727,8 +1787,14 @@ func (inst *PlayApp) consumePendingSnippet() (insert string) {
 func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	const mainHint = "-- type SQL, press Run"
 	pending := inst.consumePendingSnippet()
+	// Resolve last frame's caret into this frame's buffer BEFORE the
+	// producers below read it: the overlays and the run-under-cursor gate
+	// must all see one value per frame.
+	inst.refreshCaret(inst.sql, 0)
+	// ADR-0130 L3 overlays, in inst.sql coordinates.
+	styled := inst.editorStyledSections()
 	if !inst.paramHidePrelude {
-		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows, pending)
+		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled, 0)
 		return
 	}
 
@@ -1737,20 +1803,66 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 		// Parse broken — fall back to the unsliced editor so the
 		// user can fix the syntax. Don't try to slice a buffer we
 		// don't understand.
-		inst.sqlTextEditField("sqlEditor", &inst.sql, mainHint, rows, pending)
+		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled, 0)
 		return
 	}
 	inst.sql = pre.Canonical
 	inst.paramSqlEdit = pre.Mirror
 	inst.paramSqlEditSyncedFrom = pre.SyncedFrom
+	// The mirror is what the user's caret actually moves in; re-resolve
+	// against it, offset by the elided prelude so caretByte stays in
+	// inst.sql coordinates like every other span here.
+	inst.refreshCaret(pre.Mirror, len(pre.Prelude))
 
 	if pre.Prelude != "" {
 		for rt := range c.RichTextLabel(strings.TrimRight(pre.Prelude, "\n")) {
 			rt.Small().Weak().Monospace()
 		}
 	}
-	inst.sqlTextEditField("sqlEditorResidual", &inst.paramSqlEdit,
-		"-- type SQL (prelude hidden)", rows, pending)
+	// The residual mirror is a suffix view of inst.sql (recomposeMirror
+	// guarantees Canonical == Prelude+Mirror), so the overlays rebase onto it
+	// by the elided prelude's length rather than being dropped in this mode.
+	inst.gutteredEditor("sqlEditorResidual", &inst.paramSqlEdit,
+		"-- type SQL (prelude hidden)", rows, pending,
+		shiftStyledSections(styled, len(pre.Prelude), len(pre.Mirror)), len(pre.Prelude))
+}
+
+// gutteredEditor lays the line-number gutter beside the editor (ADR-0130 L3).
+//
+// One horizontal row. The two columns share the dock tab's VERTICAL scroll
+// scope — they are siblings in it, so a line's number stays on its line — but
+// the editor owns the HORIZONTAL one: no-wrap makes the galley as wide as the
+// longest line, and a gutter that slid out of view on the first long line
+// would not be a gutter. The editor's own scroll area is therefore inside the
+// row, with the gutter pinned outside it.
+//
+// The gutter is nudged down by the TextEdit's inner top margin so row 1 sits
+// on line 1 rather than on the frame; the offsets are named constants in
+// play_editor_gutter.go.
+//
+// viewOffset is where valuePtr's buffer starts inside inst.sql, so the
+// overlay-derived marks land on the right lines behind the hide-prelude
+// toggle.
+func (inst *PlayApp) gutteredEditor(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string, styled []codeview.StyledSection, viewOffset int) {
+	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	paneW := avail.W
+	if math.IsNaN(float64(paneW)) || paneW <= 0 {
+		paneW = editorFallbackWidthPx
+	}
+	m := inst.buildGutterModel(*valuePtr, viewOffset)
+	editorW := editorWidthPx(*valuePtr, m.charPx, paneW-m.widthPx())
+	for range c.Horizontal().KeepIter() {
+		for range c.Vertical().KeepIter() {
+			c.AddSpace(textEditTopMarginPx)
+			inst.renderEditorGutter(idSlot+"Gutter", m)
+		}
+		// AutoShrink(false, false): the row must keep its full width and
+		// height rather than collapsing onto the content, which is the
+		// standing quirk of scroll areas in this toolkit.
+		for range c.ScrollArea().Hscroll(true).Vscroll(false).AutoShrink(false, false).KeepIter() {
+			inst.sqlTextEditField(idSlot, valuePtr, hint, rows, pendingInsert, styled, true, editorW)
+		}
+	}
 }
 
 // renderPreviewTab is the Preview dock tab body: the canonical-form
@@ -1807,6 +1919,15 @@ func (inst *PlayApp) renderWirePreview() {
 			rt.Small().Weak()
 		}
 	default:
+		// Multi-statement buffers ship one statement (ADR-0130 L3); say which,
+		// so the body below is never mistaken for the whole buffer.
+		if inst.wireStmtTotal > 1 {
+			for rt := range c.RichTextLabel(fmt.Sprintf(
+				"statement %d of %d — the caret's statement ships, with the SET prelude",
+				inst.wireStmtNumber, inst.wireStmtTotal)) {
+				rt.Small().Weak()
+			}
+		}
 		if len(inst.wireParams) > 0 {
 			names := make([]string, 0, len(inst.wireParams))
 			for k := range inst.wireParams {
@@ -1858,12 +1979,20 @@ func (inst *PlayApp) updatePreview() {
 	// OnObservation callback during the pipeline run below. Whatever was
 	// there is for the previous SQL.
 	inst.observations = inst.observations[:0]
-	raw := strings.TrimSpace(inst.sql)
-	if raw == "" {
+	// Parse the UNTRIMMED buffer. Every byte range this pipeline records —
+	// observation Src (renderAffordances / extractCallArgs) and param-slot
+	// Src (ADR-0124 §SD1, and the ADR-0130 L3 span consumers) — is sliced
+	// against inst.sql by its consumers, so trimming here would skew them
+	// by exactly the leading whitespace. The lexer skips leading whitespace,
+	// so parsing the untrimmed buffer is otherwise a no-op, and
+	// CanonicalizeWhitespace trims the canonical output itself. Emptiness is
+	// still judged on a trimmed copy.
+	raw := inst.sql
+	if strings.TrimSpace(raw) == "" {
 		inst.formatted = ""
 		inst.formattedErr = nil
 		inst.refreshParamSlotsFromParse(nil, nil)
-		inst.diag.noteParse(raw, nil)
+		inst.diag.noteParse("", nil)
 		return
 	}
 	// Param-slot extraction runs unconditionally on the raw buffer:
@@ -1895,6 +2024,14 @@ func (inst *PlayApp) updatePreview() {
 		passes.CanonicalizeWhitespace,
 		passes.RemoveRedundantParens,
 	).Run(raw)
+	// Lift the observations from body space into buffer space. Pass.Run hands
+	// each pass the body env.Extract split off — SET prelude removed, leading
+	// whitespace trimmed — so a recorded range is relative to that suffix,
+	// while every consumer (renderAffordances, extractCallArgs, and the
+	// ADR-0130 L3 span producers) slices inst.sql. Runs on the error path too:
+	// the analytical pass is first in the sequence, so it has already observed
+	// by the time a later canonicaliser fails.
+	shiftObservationsToBuffer(inst.observations, env.BodyOffset(raw))
 	if err != nil {
 		inst.formatted = ""
 		inst.formattedErr = err
@@ -1917,6 +2054,11 @@ func (inst *PlayApp) updatePreview() {
 // (ADR-0121) — all three key the cache, or the view silently shows the
 // previous query while a different one ships. Only a *buffer* change is
 // debounced: a toggle is a deliberate act with nothing to settle.
+//
+// Run-under-cursor (ADR-0130 L3) adds the caret's statement number to the key:
+// on a multi-statement buffer, moving the caret changes what Run ships without
+// touching a single byte of the buffer, and a view whose whole job is to show
+// what ships must not go stale behind that either.
 func (inst *PlayApp) updateWirePreview() {
 	if !inst.previewAsSent || inst.client == nil {
 		return
@@ -1926,7 +2068,9 @@ func (inst *PlayApp) updateWirePreview() {
 		sigRev = inst.frameSig.Revision()
 	}
 	conds := inst.client.ExposeConditions()
-	if inst.sql == inst.wireFor && sigRev == inst.wireSigRev && conds == inst.wireConditions {
+	runSQL, number, total := inst.runBuffer()
+	if inst.sql == inst.wireFor && sigRev == inst.wireSigRev && conds == inst.wireConditions &&
+		number == inst.wireStmtNumber && total == inst.wireStmtTotal {
 		return
 	}
 	if inst.sql != inst.wireFor && time.Since(inst.lastEditAt) < previewDebounce {
@@ -1935,15 +2079,17 @@ func (inst *PlayApp) updateWirePreview() {
 	inst.wireFor = inst.sql
 	inst.wireSigRev = sigRev
 	inst.wireConditions = conds
-	raw := strings.TrimSpace(inst.sql)
-	if raw == "" {
+	inst.wireStmtNumber, inst.wireStmtTotal = number, total
+	if runSQL == "" {
 		inst.wireBody = ""
 		inst.wireParams = nil
 		inst.wireSignals = nil
 		return
 	}
-	inst.wireBody, inst.wireParams = inst.client.BuildStatement(raw)
-	inst.wireSignals, _, _ = inst.resolveRunSignals(raw)
+	inst.wireBody, inst.wireParams = inst.client.BuildStatement(runSQL)
+	// Signals stay buffer-wide: what the store would supply is a property of
+	// the buffer's slots, not of which statement happens to run.
+	inst.wireSignals, _, _ = inst.resolveRunSignals(strings.TrimSpace(inst.sql))
 }
 
 // renderStatus is the bottom-bar status line. Per-frame snapshot values

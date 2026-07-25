@@ -136,7 +136,7 @@ func TestQueryStoreSnapshotsSignalsIntoHistory(t *testing.T) {
 	store := NewQueryStore(NewClient(ClientConfig{URL: srv.URL}, srv.Client()), memory.NewGoAllocator(), 10, "sigtest")
 	defer store.Close()
 
-	store.Execute("SELECT {x:UInt64}", map[string]string{"param_x": "7"})
+	store.Execute("SELECT {x:UInt64}", map[string]string{"param_x": "7"}, "")
 	require.Eventually(t, func() bool { return !store.IsLoading() }, 2*time.Second, time.Millisecond)
 
 	h := store.History()
