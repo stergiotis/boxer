@@ -182,8 +182,12 @@ Where they sit in a run's lifecycle:
   types rather than by convention: the decision is a required parameter,
   so the compiler enumerates the issuers, and the zero decision names no
   endpoint, so a path that forgot to resolve fails loudly instead of
-  reaching for an ambient default. *Delta:* a resolver that decides
-  anything — the shipped one reproduces the manual endpoint.
+  reaching for an ambient default. The default resolver routes on the one
+  fact boxer owns — a read naming only `keelson()` tables has exactly one
+  engine that can serve it — and refuses a read that names both planes;
+  only a provable read is ever moved. *Delta:* none for boxer's own
+  endpoints. A system with more than two engines supplies its own resolver
+  and publishes its placement data through E5.
 - **E3 — Result frame contract.** A run's result is a sequence of typed,
   sequenced frames: data, progress, and exactly one terminal frame —
   complete, truncated (with reason), or failed (with error). Consumers

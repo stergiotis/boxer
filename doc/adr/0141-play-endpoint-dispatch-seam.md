@@ -69,8 +69,21 @@ judges a form the server will not see. The diagnostics probe resolves from
 the statement it wraps rather than from its own `EXPLAIN AST` text; a test
 fails loudly if that regresses.
 
-boxer ships `staticResolver`, which answers with the pinned endpoint and
-nothing else. It is what play already did, written down.
+boxer ships two resolvers. `staticResolver` answers with the pinned
+endpoint and nothing else — what play already did, written down.
+`keelsonResolver`, behind the toolbar's Auto preset (default on), routes on
+the one fact boxer owns: a read naming only `keelson()` tables goes to the
+in-process introspection plane, a read naming plain tables stays on the
+pinned endpoint, and a read naming both is refused, since no endpoint
+serves both. Only a provable read moves — a mutation, or a statement whose
+kind cannot be established, stays where the user pointed (R5). `system.*`
+carries no placement meaning (it answers on either engine), and the
+`keelson` *database* is an ordinary qualified table that merely shares a
+word with the macro.
+
+That is the whole of boxer's routing policy, and it is deliberately about
+locality rather than preference: the introspection plane is the only place
+its data exists.
 
 ## Alternatives
 
