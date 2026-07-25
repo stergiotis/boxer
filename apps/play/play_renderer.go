@@ -120,6 +120,10 @@ type PlayApp struct {
 	// that names only keelson tables goes to the in-process introspection
 	// plane instead of wherever the switcher points. Off leaves the static
 	// resolver, and any manual pick turns it off — a pin always wins.
+	//
+	// Default on (NewPlayApp). Nothing moves unless a buffer names a keelson
+	// table, and a buffer that does had exactly one endpoint that could
+	// serve it anyway.
 	autoEndpoint bool
 
 	// density resolves IDS spacing tokens at the active preset
@@ -1621,7 +1625,8 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 	label := fmt.Sprintf("%s  as %s", truncateRunes(inst.client.URL(), 40), inst.client.cfg.User)
 	if inst.autoEndpoint {
 		if dec, ok := inst.client.LastDecision(); ok {
-			label = "auto → " + truncateRunes(dec.describe(), 72)
+			// No arrow glyph: the host font has no →, and it renders as tofu.
+			label = "auto: " + truncateRunes(dec.describe(), 72)
 		} else {
 			label = "auto — no query run yet"
 		}
