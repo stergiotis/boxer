@@ -1,6 +1,7 @@
 package play
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -158,6 +159,66 @@ func (inst *Client) dispatchResidual(residual string, affinity string) (dec disp
 		r = staticResolver{}
 	}
 	dec = r.resolve(residual, base, affinity)
+	inst.lastDecision.Store(&dec)
+	return
+}
+
+// LastDecision returns the most recently resolved decision, and whether
+// anything has been resolved yet. It is what the toolbar reports: where the
+// last query actually went and why — a fact about a run that happened, not
+// a prediction about the buffer currently being typed. Predicting would
+// mean running the client-side rewrites on the render thread every frame,
+// and those can reach the network.
+func (inst *Client) LastDecision() (dec dispatchDecision, ok bool) {
+	p := inst.lastDecision.Load()
+	if p == nil {
+		return
+	}
+	dec = *p
+	ok = true
+	return
+}
+
+// describe renders a decision for the toolbar: where it went, and why.
+func (inst dispatchDecision) describe() (text string) {
+	where := inst.targetURL
+	if inst.class == dispatchClassRefused {
+		where = "refused"
+	}
+	text = where + "  · " + inst.reason
+	return
+}
+
+// autoResolver is the resolver the Auto preset installs. Built once: the
+// toolbar re-installs it every frame (SendRespVal lands a frame late, so
+// change detection around it never fires), and boxing a fresh value into
+// the interface each time would allocate for nothing.
+var autoResolver endpointResolverI = keelsonResolver{}
+
+// runsOnIntrospection reports whether sql would execute on the in-process
+// introspection plane, and is what stamps the `endpoint:` frontmatter of a
+// saved applet or a reopened playground buffer.
+//
+// It asks the resolver rather than comparing the client's URL against the
+// local endpoint, because under Auto those disagree by design: the pinned
+// base is no longer where queries go, so a buffer that in fact runs on the
+// introspection plane would be stamped for the default target and come back
+// somewhere its bare keelson('…') dialect does not work. Asking the resolver
+// gives the same answer as the pinned comparison whenever Auto is off.
+//
+// MUST NOT be called from the render thread: resolving runs the client-side
+// rewrites, whose schema probes can reach the network on a cold cache. Both
+// call sites classify inside the goroutine that carries the request.
+func (inst *PlayApp) runsOnIntrospection(sql string) (yes bool) {
+	if inst.client == nil {
+		return
+	}
+	ep := introspect.LocalQueryEndpoint()
+	if ep == "" {
+		return
+	}
+	dec := inst.client.Dispatch(sql, "")
+	yes = dec.class == dispatchClassIntrospection || dec.targetURL == ep
 	return
 }
 

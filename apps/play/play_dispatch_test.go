@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -124,6 +125,73 @@ func TestDispatchRefusalStopsTheRun(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "names both planes", "the refusal reason must reach the user")
 	assert.Zero(t, *hits, "a refused run must not reach a server")
+}
+
+// TestDispatchLastDecisionFeedsTheToolbar covers what the Auto label reads:
+// nothing before the first resolution, then the decision that actually
+// carried the last run.
+func TestDispatchLastDecisionFeedsTheToolbar(t *testing.T) {
+	c := NewClient(ClientConfig{URL: "http://base.invalid"}, nil)
+	_, ok := c.LastDecision()
+	assert.False(t, ok, "no decision before anything ran")
+
+	want := c.Dispatch("SELECT 1", "")
+	got, ok := c.LastDecision()
+	require.True(t, ok)
+	assert.Equal(t, want, got)
+	assert.Contains(t, got.describe(), "http://base.invalid")
+	assert.Contains(t, got.describe(), got.reason)
+}
+
+func TestDispatchDescribeNamesRefusal(t *testing.T) {
+	dec := dispatchDecision{class: dispatchClassRefused, reason: "names both planes"}
+	assert.Contains(t, dec.describe(), "refused")
+	assert.Contains(t, dec.describe(), "names both planes")
+}
+
+// TestRunsOnIntrospectionFollowsTheResolver is the applet-stamping rule. The
+// old probe compared the client's URL against the local endpoint, which under
+// Auto answers about the pinned base rather than about where the buffer runs
+// — so a keelson-only buffer would be stamped for the default target and come
+// back somewhere its bare keelson('…') dialect does not work.
+func TestRunsOnIntrospectionFollowsTheResolver(t *testing.T) {
+	const local = "http://127.0.0.1:9998/query"
+	prev := introspect.LocalQueryEndpoint()
+	introspect.SetLocalQueryEndpoint(local)
+	t.Cleanup(func() { introspect.SetLocalQueryEndpoint(prev) })
+
+	cl := NewClient(ClientConfig{URL: "http://base.invalid"}, nil)
+	app := &PlayApp{client: cl}
+
+	// Auto off: the pinned base is the target, so nothing is stamped even for
+	// a keelson-only buffer.
+	assert.False(t, app.runsOnIntrospection("SELECT * FROM keelson('env')"))
+
+	// Auto on: the same buffer now really does run on the introspection
+	// plane, and the stamp must follow.
+	cl.SetResolver(autoResolver)
+	assert.True(t, app.runsOnIntrospection("SELECT * FROM keelson('env')"))
+	assert.False(t, app.runsOnIntrospection("SELECT * FROM db.events"),
+		"a plain buffer still runs on the pinned base")
+
+	// Pinned directly at the introspection endpoint, Auto off: the old probe's
+	// case, which must keep answering the same way.
+	cl.SetResolver(nil)
+	cl.SetURL(local)
+	assert.True(t, app.runsOnIntrospection("SELECT * FROM db.events"))
+}
+
+func TestRunsOnIntrospectionWithoutAPublishedEndpoint(t *testing.T) {
+	prev := introspect.LocalQueryEndpoint()
+	introspect.SetLocalQueryEndpoint("")
+	t.Cleanup(func() { introspect.SetLocalQueryEndpoint(prev) })
+
+	cl := NewClient(ClientConfig{URL: "http://base.invalid"}, nil)
+	cl.SetResolver(autoResolver)
+	app := &PlayApp{client: cl}
+	assert.False(t, app.runsOnIntrospection("SELECT * FROM keelson('env')"))
+
+	assert.False(t, (&PlayApp{}).runsOnIntrospection("SELECT 1"), "nil client is not a crash")
 }
 
 // TestDispatchProbeAndRunShareOneDecision is the divergence guard. The

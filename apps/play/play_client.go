@@ -75,6 +75,11 @@ type Client struct {
 	// resolver is the E2 seam. nil means staticResolver — every run goes to
 	// the manual base, which is what play did before the seam existed.
 	resolver endpointResolverI
+
+	// lastDecision is the most recent resolution, for the toolbar to report.
+	// Written on lane goroutines, read on the render thread, so it lives
+	// outside mu rather than widening that lock's reach for a display value.
+	lastDecision atomic.Pointer[dispatchDecision]
 	// stampRunId / stampAppId are the SD7 identity halves of the
 	// log_comment stamp (play_stamp.go), set once via SetStampIdentity
 	// at Mount; empty outside the runtime (standalone CLI, tests).

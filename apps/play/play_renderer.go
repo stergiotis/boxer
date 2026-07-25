@@ -116,6 +116,11 @@ type PlayApp struct {
 	// renderEndpointSwitcher and Client.SetURL (ADR-0094 §SD6).
 	endpointDraft string
 	launchURL     string
+	// autoEndpoint installs the keelson-aware resolver (ADR-0141): a read
+	// that names only keelson tables goes to the in-process introspection
+	// plane instead of wherever the switcher points. Off leaves the static
+	// resolver, and any manual pick turns it off — a pin always wins.
+	autoEndpoint bool
 
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at NewPlayApp.
@@ -1433,19 +1438,23 @@ func (inst *PlayApp) renderTopBar() {
 				// (bare keelson('…') is that endpoint's dialect); the
 				// env-default target stays default. Same probe the
 				// Save-as-applet button uses (appletstore.ComposeAppletDoc
-				// stamps the frontmatter from it).
-				endpoint := ""
-				if ep := introspect.LocalQueryEndpoint(); ep != "" && inst.client != nil && inst.client.URL() == ep {
-					endpoint = launchcfg.EndpointIntrospection
-				}
-				go inst.requestOpenPlayground(launchcfg.PlayLaunch{
-					At:       time.Now().UTC(),
-					Sql:      inst.sql,
-					AutoRun:  inst.AutoRun,
-					Live:     inst.liveMain,
-					BandsSql: inst.timelineBandsSql,
-					Endpoint: endpoint,
-				})
+				// stamps the frontmatter from it). Classified off the frame
+				// goroutine — see runsOnIntrospection.
+				sql, autoRun, live, bands := inst.sql, inst.AutoRun, inst.liveMain, inst.timelineBandsSql
+				go func() {
+					endpoint := ""
+					if inst.runsOnIntrospection(sql) {
+						endpoint = launchcfg.EndpointIntrospection
+					}
+					inst.requestOpenPlayground(launchcfg.PlayLaunch{
+						At:       time.Now().UTC(),
+						Sql:      sql,
+						AutoRun:  autoRun,
+						Live:     live,
+						BandsSql: bands,
+						Endpoint: endpoint,
+					})
+				}()
 			}
 			if openErr != "" {
 				for rt := range c.RichTextLabel("Open failed: " + openErr) {
@@ -1503,16 +1512,20 @@ func (inst *PlayApp) renderTopBar() {
 				// Carry the endpoint so a buffer authored against the
 				// in-process introspection endpoint composes with the right
 				// frontmatter; the env-default target stays default. Same
-				// probe as the Open in Playground button.
-				endpoint := ""
-				if ep := introspect.LocalQueryEndpoint(); ep != "" && inst.client != nil && inst.client.URL() == ep {
-					endpoint = appletcreatecfg.EndpointIntrospection
-				}
-				go inst.requestSaveApplet(appletcreatecfg.AppletCreate{
-					At:       time.Now().UTC(),
-					Sql:      inst.sql,
-					Endpoint: endpoint,
-				})
+				// probe as the Open in Playground button; classified off the
+				// frame goroutine — see runsOnIntrospection.
+				sql := inst.sql
+				go func() {
+					endpoint := ""
+					if inst.runsOnIntrospection(sql) {
+						endpoint = appletcreatecfg.EndpointIntrospection
+					}
+					inst.requestSaveApplet(appletcreatecfg.AppletCreate{
+						At:       time.Now().UTC(),
+						Sql:      sql,
+						Endpoint: endpoint,
+					})
+				}()
 			}
 			if saveErr != "" {
 				for rt := range c.RichTextLabel("Save as applet failed: " + saveErr) {
@@ -1577,23 +1590,55 @@ func (inst *PlayApp) renderTopBar() {
 }
 
 // renderEndpointSwitcher is the toolbar control for the query target. It shows
-// the current endpoint read-only beside a fixed-label "Endpoint" menu (a
+// where queries go, read-only, beside a fixed-label "Endpoint" menu (a
 // dynamic MenuButton label would shift its derived id and drop menu state). The
-// menu offers a manual URL plus two presets: the in-process keelson
-// introspection /query endpoint (shown only when a co-resident host published
-// one via introspecthost.Start → introspect.LocalQueryEndpoint, ADR-0094 §SD6)
-// and the launch URL ("External"). Every widget uses an explicit stable id, so
-// conditionally showing the keelson preset never drifts the others' ids.
+// menu offers the Auto preset, a manual URL, and two fixed presets: the
+// in-process keelson introspection /query endpoint (shown only when a
+// co-resident host published one via introspecthost.Start →
+// introspect.LocalQueryEndpoint, ADR-0094 §SD6) and the launch URL
+// ("External"). Every widget uses an explicit stable id, so conditionally
+// showing the keelson preset never drifts the others' ids.
+//
+// Auto installs the keelson-aware resolver (ADR-0141) — a read naming only
+// keelson tables goes to the introspection plane on its own. While it is on,
+// the label reports the last run's resolved target and the reason for it,
+// rather than the pinned base, since the base is no longer where queries
+// necessarily went. It reports the *last* decision rather than resolving the
+// current buffer because resolving runs the client-side rewrites, which can
+// reach the network — not something to do per frame on the render thread.
 func (inst *PlayApp) renderEndpointSwitcher() {
 	ids := inst.ids
-	c.Label(fmt.Sprintf("%s  as %s", truncateRunes(inst.client.URL(), 40), inst.client.cfg.User)).
-		Truncate().Send()
+	// Installed unconditionally rather than on an observed change, for the
+	// reason the Conditions toggle records: SendRespVal writes the bound
+	// field a frame late, so comparing it against a value read moments
+	// earlier never sees the flip.
+	if inst.autoEndpoint {
+		inst.client.SetResolver(autoResolver)
+	} else {
+		inst.client.SetResolver(nil)
+	}
+
+	label := fmt.Sprintf("%s  as %s", truncateRunes(inst.client.URL(), 40), inst.client.cfg.User)
+	if inst.autoEndpoint {
+		if dec, ok := inst.client.LastDecision(); ok {
+			label = "auto → " + truncateRunes(dec.describe(), 72)
+		} else {
+			label = "auto — no query run yet"
+		}
+	}
+	c.Label(label).Truncate().Send()
+
 	for range c.MenuButton(c.Atoms().Text("Endpoint").Keep()).KeepIter() {
+		c.Checkbox(ids.PrepareStr("endpointAuto"), inst.autoEndpoint,
+			"Auto — send keelson-only reads to introspection").
+			SendRespVal(&inst.autoEndpoint)
+		c.Separator().Send()
 		c.TextEdit(ids.PrepareStr("endpointDraft"), inst.endpointDraft, false).
 			SendRespVal(&inst.endpointDraft)
 		if c.Button(ids.PrepareStr("endpointApply"), c.Atoms().Text("Apply").Keep()).
 			SendResp().HasPrimaryClicked() {
 			inst.client.SetURL(strings.TrimSpace(inst.endpointDraft))
+			inst.clearAutoEndpoint()
 		}
 		c.Separator().Send()
 		if ep := introspect.LocalQueryEndpoint(); ep != "" {
@@ -1613,11 +1658,23 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 
 // setEndpoint repoints the client and syncs the draft TextEdit, telling the
 // frontend to drop its cached buffer so the new URL shows (the "Stubborn Text"
-// override — a programmatic write to an interactive-widget binding).
+// override — a programmatic write to an interactive-widget binding). Pinning
+// an endpoint by hand is an instruction, so it also turns Auto off.
 func (inst *PlayApp) setEndpoint(u string) {
 	inst.client.SetURL(u)
 	inst.endpointDraft = u
 	c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.endpointDraft)
+	inst.clearAutoEndpoint()
+}
+
+// clearAutoEndpoint turns Auto off from Go, overriding the checkbox's cached
+// frontend state so the box actually clears.
+func (inst *PlayApp) clearAutoEndpoint() {
+	if !inst.autoEndpoint {
+		return
+	}
+	inst.autoEndpoint = false
+	c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&inst.autoEndpoint)
 }
 
 // renderEditorTab is the Editor dock tab body: multi-line SQL editor
