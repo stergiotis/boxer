@@ -240,8 +240,17 @@ Where they sit in a run's lifecycle:
   Semantics: a successful check proves the probed engine could reach
   this process's loopback plane at that moment — nothing more. Proof
   caching, re-probe cadence, and what to do with the proof are the
-  caller's policy. *Exists:* nothing. *Delta:* the endpoint and check
-  API (small).
+  caller's policy. *Exists:* `GET /probe/<nonce>` on introspecthttp, with
+  `MintProbe` / `CheckProbe`. Single-use in both directions — a nonce is
+  fetchable once and checkable once — so no proof can be replayed into a
+  second answer, and the lookup is a constant-time scan of every
+  outstanding entry, since the nonce is the whole secret. *Delta:* none.
+
+  One asymmetry to hold on to: a false check means *not proven*, never
+  *proven unreachable*. A check arriving after the TTL cannot tell an
+  expired nonce from one that was never fetched, so it reports the weaker
+  thing. Nothing in boxer consumes the primitive — the collapse policy that
+  would is system-side.
 - **E7 — Progress observation component.** A poller bound to one server
   polls `system.processes` once per tick for all registered run ids and
   publishes progress frames on per-run bus subjects. Guarantees: ticks
