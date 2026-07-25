@@ -79,9 +79,31 @@ Boxer would ship the mechanism only. Retention *policy*, replay windows,
 and what a system does with a partially consumed stream stay with the
 system, as with every other extension point in the catalog.
 
+**A second consumer, and what it implies for the shape.** This ADR was
+first written for one motivating case — a `clickhouse-local` worker whose
+stdout must be drained whole before the broker can reply. A second is now
+committed roadmap: an async ClickHouse cluster streaming results over Kafka
+or NATS ([ADR-0144](./0144-query-engine-adapters.md), engine 3). It needs
+the same four properties over a different transport.
+
+Two independent consumers is a materially better case than one, and it
+changes what "narrow" should mean here. The framing must be **transport-
+agnostic** — carried equally by the in-process broker, NATS, and Kafka —
+rather than shaped around the broker's reply path, which was the obvious
+economy while there was one consumer. Concretely, that argues against
+leaning on any bus-specific reply correlation, and for a framing whose
+sequence, terminator and retention are properties of the payload rather
+than of the transport carrying it.
+
+It also raises a prerequisite this ADR does not own: on a **shared**
+channel the run identity must be globally unique, and today's minted id is
+unique per host only. ADR-0144 carries that fix; a streaming channel built
+before it would correlate two hosts' streams onto one key.
+
 **Out of scope for this ADR**, to keep it narrow: integrating the channel
-into the introspection `/query` endpoint or into play. Those are adopters,
-and the wire should be decided before anything is built on it.
+into the introspection `/query` endpoint, into play, or into the cluster
+adapter. Those are adopters, and the wire should be decided before anything
+is built on it.
 
 ## Alternatives
 
