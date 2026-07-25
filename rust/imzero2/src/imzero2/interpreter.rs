@@ -12323,58 +12323,47 @@ self.apply_widget(w,u,f,Some(i));
 
                 if u.is_some() {
                     let ui = u.as_mut().unwrap();
-                    let col_count = self.table_columns.len();
-                    let num_rows = w.num_rows;
-                    let row_height = w.row_height;
+                    // The node's widget id becomes an egui Ui id scope for the duration of
+                    // the table. egui_extras derives its per-table state — column widths,
+                    // resize drags, scroll offset — from ui.id() plus a CONSTANT salt
+                    // ("__table_state"), so two tables drawn under one Ui land on one
+                    // state id: check_for_id_clash fires every frame, and because
+                    // TableState::load discards state whose column count does not match,
+                    // two tables of differing widths wipe each other's widths on every
+                    // frame and no resize can ever stick. TableBuilder::id_salt would
+                    // separate the state but not the double-click-to-autosize probe,
+                    // which reads an unsalted ui.id().with("resize_column") — push_id
+                    // moves ui.id() itself and so covers both.
+                    ui.push_id(i, |ui| {
+                        let col_count = self.table_columns.len();
+                        let num_rows = w.num_rows;
+                        let row_height = w.row_height;
 
-                    let mut builder = egui_extras::TableBuilder::new(ui);
-                    for col in self.table_columns.drain(..) {
-                        builder = builder.column(col);
-                    }
-                    if w.striped {
-                        builder = builder.striped(true);
-                    }
-                    if w.vscroll {
-                        builder = builder.vscroll(true);
-                    }
-                    if let Some(row) = w.scroll_to_row {
-                        builder = builder.scroll_to_row(row, None);
-                    }
-                    if w.min_scrolled_height > 0.0 {
-                        builder = builder.min_scrolled_height(w.min_scrolled_height);
-                    }
-                    if w.max_scroll_height > 0.0 {
-                        builder = builder.max_scroll_height(w.max_scroll_height);
-                    }
+                        let mut builder = egui_extras::TableBuilder::new(ui);
+                        for col in self.table_columns.drain(..) {
+                            builder = builder.column(col);
+                        }
+                        if w.striped {
+                            builder = builder.striped(true);
+                        }
+                        if w.vscroll {
+                            builder = builder.vscroll(true);
+                        }
+                        if let Some(row) = w.scroll_to_row {
+                            builder = builder.scroll_to_row(row, None);
+                        }
+                        if w.min_scrolled_height > 0.0 {
+                            builder = builder.min_scrolled_height(w.min_scrolled_height);
+                        }
+                        if w.max_scroll_height > 0.0 {
+                            builder = builder.max_scroll_height(w.max_scroll_height);
+                        }
 
-                    let cells: Vec<TableCell> = self.table_cells.drain(..).collect();
-                    let header_texts: Vec<String> = self.table_header_texts.drain(..).collect();
+                        let cells: Vec<TableCell> = self.table_cells.drain(..).collect();
+                        let header_texts: Vec<String> = self.table_header_texts.drain(..).collect();
 
-                    if header_texts.is_empty() {
-                        builder.body(|body| {
-                            body.rows(row_height, num_rows, |mut row| {
-                                let row_idx = row.index();
-                                let cell_offset = row_idx * col_count;
-                                for col_idx in 0..col_count {
-                                    let cell_idx = cell_offset + col_idx;
-                                    row.col(|ui| {
-                                        if cell_idx < cells.len() {
-                                            cells[cell_idx].render(ui);
-                                        }
-                                    });
-                                }
-                            });
-                        });
-                    } else {
-                        builder
-                            .header(row_height, |mut header| {
-                                for ht in header_texts.iter() {
-                                    header.col(|ui| {
-                                        ui.heading(ht.as_str());
-                                    });
-                                }
-                            })
-                            .body(|body| {
+                        if header_texts.is_empty() {
+                            builder.body(|body| {
                                 body.rows(row_height, num_rows, |mut row| {
                                     let row_idx = row.index();
                                     let cell_offset = row_idx * col_count;
@@ -12388,7 +12377,31 @@ self.apply_widget(w,u,f,Some(i));
                                     }
                                 });
                             });
-                    }
+                        } else {
+                            builder
+                                .header(row_height, |mut header| {
+                                    for ht in header_texts.iter() {
+                                        header.col(|ui| {
+                                            ui.heading(ht.as_str());
+                                        });
+                                    }
+                                })
+                                .body(|body| {
+                                    body.rows(row_height, num_rows, |mut row| {
+                                        let row_idx = row.index();
+                                        let cell_offset = row_idx * col_count;
+                                        for col_idx in 0..col_count {
+                                            let cell_idx = cell_offset + col_idx;
+                                            row.col(|ui| {
+                                                if cell_idx < cells.len() {
+                                                    cells[cell_idx].render(ui);
+                                                }
+                                            });
+                                        }
+                                    });
+                                });
+                        }
+                    });
                 } else {
                     self.table_columns.clear();
                     self.table_header_texts.clear();

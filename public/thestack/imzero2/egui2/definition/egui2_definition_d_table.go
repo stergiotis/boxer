@@ -32,6 +32,11 @@ package definition
 //
 //   c.Table(ids.PrepareStr("my-table"), 20.0, uint64(len(employees))).Striped(true).Send()
 //
+// The id is load-bearing, not decoration: it opens an egui Ui id scope
+// around the table, which is what keeps two tables under one parent Ui
+// from sharing egui_extras' per-table state (column widths, resize drags,
+// scroll offset). Give every table its own id.
+//
 // =============================================================================
 
 import (
@@ -143,6 +148,18 @@ func definitionsTableBlock() []*ir.BuilderFactoryNode {
 		WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
 	let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+	// The node's widget id becomes an egui Ui id scope for the duration of
+	// the table. egui_extras derives its per-table state — column widths,
+	// resize drags, scroll offset — from ui.id() plus a CONSTANT salt
+	// ("__table_state"), so two tables drawn under one Ui land on one
+	// state id: check_for_id_clash fires every frame, and because
+	// TableState::load discards state whose column count does not match,
+	// two tables of differing widths wipe each other's widths on every
+	// frame and no resize can ever stick. TableBuilder::id_salt would
+	// separate the state but not the double-click-to-autosize probe,
+	// which reads an unsalted ui.id().with("resize_column") — push_id
+	// moves ui.id() itself and so covers both.
+	ui.push_id({{Id}}, |ui| {
 	let col_count = self.table_columns.len();
 	let num_rows = {{Instance}}.num_rows;
 	let row_height = {{Instance}}.row_height;
@@ -207,6 +224,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 			});
 		});
 	}
+	});
 } else {
 	self.table_columns.clear();
 	self.table_header_texts.clear();

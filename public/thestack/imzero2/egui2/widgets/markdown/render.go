@@ -197,6 +197,12 @@ func tableColumnWidth(runes uint32, colCap float32) (w float32) {
 // wrap and anything taller than one line is clipped. Cells are plain
 // strings — a hyperlink inside a cell renders as its label text, not as
 // a clickable link.
+//
+// The seq slot per table is load-bearing, not just an id the op happens
+// to require: the table node opens an egui Ui id scope around itself, so
+// that id is what keeps two tables in one document from sharing
+// egui_extras' column widths and scroll offset. Do not hoist it to a
+// constant.
 func renderTable(s *segment, rc *renderCtx) {
 	cols := int(s.tableCols)
 	if cols <= 0 {
