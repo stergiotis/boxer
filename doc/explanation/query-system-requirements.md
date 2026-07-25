@@ -289,8 +289,13 @@ Where they sit in a run's lifecycle:
   whole catalog. *Exists:* one-shot replies
   ([ADR-0028](../adr/0028-chlocal-low-latency-sql-cap.md));
   [ADR-0089](../adr/0089-rowdml-serialization-clickhouse-native-ingestion.md)'s
-  rule that result wire format stays separate from ingestion wire format.
-  *Delta:* the streaming reply primitive.
+  rule that result wire format stays separate from ingestion wire format,
+  and ADR-0028's reserved `Streaming` request flag, which the service still
+  refuses because the wire it needs does not exist. *Delta:* the streaming
+  reply primitive, proposed as
+  [ADR-0143](../adr/0143-bus-streaming-reply-channel.md) and **not
+  implemented** — it is the catalog's only wire-level novelty and is gated
+  on sign-off of that ADR rather than on the work below it.
 - **E9 — Dispatch label vocabulary.** The two-axis label of R6
   (sensitivity; execution mode) as shared types, so classifiers,
   resolvers, and transports compose without re-encoding each other's
