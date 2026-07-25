@@ -125,7 +125,15 @@ type probeExecutor struct {
 var _ nodeExecutorI = probeExecutor{}
 
 func (inst probeExecutor) execute(ctx context.Context, cn compiledNode, alloc memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
-	err = inst.client.ProbeStatement(ctx, cn.SQL, cn.Params, inst.opts)
+	// Resolve from the statement the probe wraps, never from the wrapper.
+	// `EXPLAIN AST <residual>` parses differently from <residual> and names
+	// none of its tables, so a decision taken on the wrapper could send the
+	// probe to a server the run it describes never reaches — and the probe's
+	// whole value is that its verdict matches a real Run. cn.SQL is the
+	// residual behind diagProbePrefix (noteParse), so stripping the prefix
+	// recovers exactly what Client.Dispatch would resolve from.
+	dec := inst.client.dispatchResidual(strings.TrimPrefix(cn.SQL, diagProbePrefix), "")
+	err = inst.client.ProbeStatement(ctx, cn.SQL, cn.Params, inst.opts, dec)
 	return
 }
 

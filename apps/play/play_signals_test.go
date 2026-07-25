@@ -118,7 +118,7 @@ func TestExecuteArrowStreamShipsSignalsAndSetShadows(t *testing.T) {
 
 	sql := "SET param_y = 'bound'; SELECT {x:UInt64}, {y:String}"
 	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil,
-		map[string]string{"param_x": "42", "param_y": "signal"})
+		map[string]string{"param_x": "42", "param_y": "signal"}, c.Dispatch(sql, ""))
 	require.NoError(t, err)
 	rdr.Release()
 	_ = closer.Close()

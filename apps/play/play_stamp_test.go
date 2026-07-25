@@ -94,7 +94,8 @@ func TestExecuteArrowStreamCarriesStamp(t *testing.T) {
 	c := NewClient(ClientConfig{URL: srv.URL}, nil)
 	c.SetStampIdentity("run-wire", "app-wire")
 	opts := newExecOptions("map")
-	_, _, _, _ = c.ExecuteArrowStream(context.Background(), "SELECT 1", memory.NewGoAllocator(), opts, nil)
+	_, _, _, _ = c.ExecuteArrowStream(context.Background(), "SELECT 1", memory.NewGoAllocator(), opts, nil,
+		c.Dispatch("SELECT 1", ""))
 
 	require.Equal(t, opts.QueryID, gotQueryID)
 	st, ok := queryrunfacts.ParseStamp(gotLogComment)

@@ -50,7 +50,10 @@ func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNo
 		o.OnProgress = onProgress
 		opts = &o
 	}
-	rdr, body, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params)
+	// One resolution per run (play_dispatch.go), taken here rather than on
+	// the lane so a decision never outlives the request it was made for.
+	dec := inst.client.Dispatch(c.SQL, "")
+	rdr, body, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params, dec)
 	if xErr != nil {
 		err = eh.Errorf("clientExecutor.execute: %w", xErr)
 		return

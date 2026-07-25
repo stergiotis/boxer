@@ -65,8 +65,16 @@ type Client struct {
 	// switched at runtime via SetURL — e.g. play's endpoint switcher points at
 	// the in-process keelson introspection /query endpoint (ADR-0094 §SD6).
 	// cfg.User/cfg.Password are not switchable in v1.
+	//
+	// targetURL is the *manual base* now, not the target: what a request is
+	// actually sent to comes from a dispatchDecision (play_dispatch.go), and
+	// the resolver is what turns the base into one. Requests never read this
+	// field; only the resolver and the UI do.
 	mu        sync.RWMutex
 	targetURL string
+	// resolver is the E2 seam. nil means staticResolver — every run goes to
+	// the manual base, which is what play did before the seam existed.
+	resolver endpointResolverI
 	// stampRunId / stampAppId are the SD7 identity halves of the
 	// log_comment stamp (play_stamp.go), set once via SetStampIdentity
 	// at Mount; empty outside the runtime (standalone CLI, tests).
@@ -172,8 +180,15 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 // probe must stay off the Arrow pipeline. Non-200 responses fold the server's
 // diagnostic into the error exactly like ExecuteArrowStream ("clickhouse http
 // <code>: <body>"), which classifyProbeError keys on.
-func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[string]string, opts *ExecOptions) (err error) {
-	reqURL := inst.URL()
+//
+// dec is required (play_dispatch.go). A probe that resolved its own endpoint
+// from its own `EXPLAIN AST …` text would answer about a server the run it
+// describes never talks to, so the caller passes the decision the run uses.
+func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[string]string, opts *ExecOptions, dec dispatchDecision) (err error) {
+	reqURL, err := dec.target()
+	if err != nil {
+		return
+	}
 	qs := url.Values{}
 	for k, v := range params {
 		qs.Set(k, v)
@@ -439,12 +454,20 @@ func (inst *Client) SetURL(u string) {
 // the body's prelude, and a SET-bound name SHADOWS a same-named signal
 // (slice-5 D1: a SET pins a signal into a constant) — the harvested params
 // are applied second.
-func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions, signals map[string]string) (rdr *ipc.Reader, body io.Closer, summary Summary, err error) {
-	q, params := inst.BuildStatement(sql)
+//
+// dec is required and names the endpoint (play_dispatch.go): obtain it from
+// Client.Dispatch. It is a parameter rather than something read here so that
+// every issuer of a request is enumerated by the compiler, and so a run and
+// the diagnostic probe describing it provably share one decision.
+func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions, signals map[string]string, dec dispatchDecision) (rdr *ipc.Reader, body io.Closer, summary Summary, err error) {
 	// ClickHouse reads the body verbatim as SQL — params must ride the URL
-	// query string. See the function doc for size limits. The target is read
-	// once here so a concurrent SetURL never tears a request mid-build.
-	reqURL := inst.URL()
+	// query string. See the function doc for size limits. The decision was
+	// resolved before the request, so a concurrent SetURL cannot tear it.
+	reqURL, err := dec.target()
+	if err != nil {
+		return
+	}
+	q, params := inst.BuildStatement(sql)
 	qs := url.Values{}
 	for k, v := range signals {
 		qs.Set(k, v)

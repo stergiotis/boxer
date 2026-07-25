@@ -28,12 +28,14 @@ func liveClickHouseURL(t *testing.T) string {
 // `{a:UInt64}`, not `{param_a:UInt64}`.
 func TestLiveExecuteArrowStreamMultiStatementParams(t *testing.T) {
 	c := NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
+	const sql = `SET param_a = 42; SET param_b = 'hello world'; SELECT {a : UInt64} AS a, {b : String} AS b`
 	rdr, body, _, err := c.ExecuteArrowStream(
 		context.Background(),
-		`SET param_a = 42; SET param_b = 'hello world'; SELECT {a : UInt64} AS a, {b : String} AS b`,
+		sql,
 		memory.NewGoAllocator(),
 		nil,
 		nil,
+		c.Dispatch(sql, ""),
 	)
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
@@ -70,7 +72,7 @@ func TestLiveExecuteArrowStreamLargeStringParam(t *testing.T) {
 	}
 	sql := "SET param_blob = '" + string(blob) + "'; SELECT length({blob : String}) AS n"
 
-	rdr, body, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil)
+	rdr, body, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil, c.Dispatch(sql, ""))
 	if err != nil {
 		t.Fatalf("ExecuteArrowStream: %v", err)
 	}

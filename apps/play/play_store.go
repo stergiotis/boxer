@@ -200,8 +200,12 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 			inst.mu.Unlock()
 		}
 
+		// One resolution per run (play_dispatch.go). Taken on this goroutine,
+		// not on the render thread, because it runs the client-side rewrites.
+		dec := inst.client.Dispatch(sql, "")
+
 		start := time.Now()
-		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs)
+		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs, dec)
 		if err != nil {
 			inst.finish(sql, sigs, start, nil, nil, 0, summary, err)
 			return
