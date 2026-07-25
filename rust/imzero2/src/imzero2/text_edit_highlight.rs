@@ -110,12 +110,23 @@ fn layout_reconciled(
 /// would be more precise at the edges; overlap-merge keeps the invariant that
 /// the color tier alone decides section boundaries — which is what makes the
 /// two channels independent.
+///
+/// **Precondition: `styled` is sorted by `byte_start`.** The early `break`
+/// below reads it, and on an unsorted list it exits over sections that should
+/// have applied — silently, and only for some color sections, so the symptom
+/// is a decoration that appears on part of a span. [`resolve_styled`] sorts,
+/// and is the only production source; the assertion is here so a second caller
+/// that forgets fails loudly in debug rather than rendering half a squiggle.
 fn apply_styles(
     format: &mut egui::TextFormat,
     start: usize,
     stop: usize,
     styled: &[StyledSection],
 ) {
+    debug_assert!(
+        styled.windows(2).all(|w| w[0].byte_start <= w[1].byte_start),
+        "apply_styles requires sections sorted by byte_start; got {styled:?}"
+    );
     for s in styled {
         let (ss, se) = (s.byte_start as usize, s.byte_stop as usize);
         if se <= start {
@@ -615,6 +626,21 @@ mod tests {
         let mut miss = egui::TextFormat::default();
         apply_styles(&mut miss, 7, 8, &res);
         assert_eq!(miss.underline, egui::Stroke::NONE);
+    }
+
+    #[test]
+    #[should_panic(expected = "sorted by byte_start")]
+    fn apply_styles_rejects_an_unsorted_list_in_debug() {
+        // The early break silently skips a section that should have applied:
+        // [6..8) then [0..8) against color section [0..2) exits on the first,
+        // never seeing the tint that covers the whole buffer. resolve_styled
+        // sorts, so production cannot reach this — the assertion is what keeps
+        // a future second caller from reaching it either.
+        let unsorted = [
+            styled(6, 8, STYLE_UNDERLINE),
+            styled(0, 8, STYLE_BACKGROUND),
+        ];
+        apply_styles(&mut egui::TextFormat::default(), 0, 2, &unsorted);
     }
 
     #[test]
