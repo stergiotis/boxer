@@ -33,6 +33,16 @@ var (
 	styleErrorTone   = color.Hex(styletokens.ErrorDefault.AsHex())
 	styleWarningTone = color.Hex(styletokens.WarningDefault.AsHex())
 	styleStmtTint    = color.Hex(styletokens.NeutralBgFaint.AsHex())
+	// styleCaretRowMark outlines the PARAMETERS row holding the placeholder the
+	// caret is in — the pane's counterpart to the editor's statement tint.
+	//
+	// An outline, not a fill, and this is empirical: the pane's own background
+	// is a surface tone, so a fill has to thread between invisible and
+	// illegible. AccentSubtle and NeutralBgSurface both vanished against it,
+	// and AccentDefault as a fill washed out the row's own text. A one-pixel
+	// accent outline reads unambiguously whatever the backdrop, and cannot
+	// touch the contrast of what it surrounds.
+	styleCaretRowMark = color.Hex(styletokens.AccentDefault.AsHex())
 )
 
 // byteOffsetOfChar converts a char (rune) offset into a byte offset into s,

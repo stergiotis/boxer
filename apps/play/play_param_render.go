@@ -181,14 +181,27 @@ func (inst *PlayApp) renderParamSlots() {
 			// the orchestrator for the renderFoldLabel reason: a widget
 			// deciding its own tier would have to know about the buffer's
 			// prelude, which is exactly what §SD4 keeps away from it.
-			for range c.Horizontal().KeepIter() {
-				inst.renderClaimTierControl(subset)
-				inst.renderClaimUnfilledMark(subset, unfilled)
-				w.Render(&paramCtx{
-					Ids:    inst.ids,
-					Slots:  subset,
-					Drafts: inst.paramDrafts,
-				})
+			//
+			// The row is always framed, outlined only when the caret is in one
+			// of its placeholders (ADR-0130 L3's caret report). Always framed,
+			// so the widget tree keeps one shape — a frame that came and went
+			// would move every inner widget's id with it, and with it the
+			// editor state egui holds per id.
+			row := c.Frame(inst.ids.PrepareStr("paramClaim:" + subset[0].Name)).
+				Fill(color.Transparent).InnerMargin(2)
+			if inst.caretOnClaim(subset) {
+				row = row.Stroke(1.0, styleCaretRowMark)
+			}
+			for range row.KeepIter() {
+				for range c.Horizontal().KeepIter() {
+					inst.renderClaimTierControl(subset)
+					inst.renderClaimUnfilledMark(subset, unfilled)
+					w.Render(&paramCtx{
+						Ids:    inst.ids,
+						Slots:  subset,
+						Drafts: inst.paramDrafts,
+					})
+				}
 			}
 			mask = maskUnion(consumed, withheld)
 			remaining = unconsumedSlots(slots, mask)
@@ -364,6 +377,37 @@ func (inst *PlayApp) renderClaimUnfilledMark(subset []paramSlot, unfilled map[st
 		c.LabelAtoms(atoms).Send()
 		return // one mark per claim: a folded pair is one control
 	}
+}
+
+// caretOnClaim reports whether the editor caret sits in one of this claim's
+// placeholders, so the pane can mark the row the user is standing in.
+//
+// Gated on quiescence: the slots' `Src` describe the buffer the debounced
+// parse saw, so mid-edit they are stale and a mark would point at the wrong
+// row. The caret value itself is one frame behind here — renderParamSlots
+// draws above the editor and so runs before renderSqlEditor resolves it —
+// which is invisible for a highlight and keeps the mode-aware resolution
+// (plain buffer vs. residual mirror) in the one place that knows the mode.
+//
+// The end bound is inclusive: a caret resting just past the closing `}` is
+// still "on" the placeholder, which is where it lands after typing one.
+//
+// Known limit: collectParamSlots dedups by name and keeps the FIRST
+// occurrence's Src, so a name written twice only marks from its first
+// occurrence. It degrades to no mark, never to marking the wrong row.
+func (inst *PlayApp) caretOnClaim(subset []paramSlot) bool {
+	if inst.sql == "" || inst.sql != inst.formattedFor {
+		return false
+	}
+	for _, s := range subset {
+		if s.Src.Empty() || s.Src.End > len(inst.sql) {
+			continue
+		}
+		if inst.caretByte >= s.Src.Start && inst.caretByte <= s.Src.End {
+			return true
+		}
+	}
+	return false
 }
 
 // unfilledSet is unfilledInputs as a lookup, computed once per frame — the

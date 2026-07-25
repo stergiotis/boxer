@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stretchr/testify/require"
@@ -324,4 +325,72 @@ func TestNoUnfilledPlaceholdersNoUnderline(t *testing.T) {
 	app.frameSig = app.graph.signals()
 	require.Empty(t, app.unfilledInputs())
 	require.Empty(t, app.editorStyledSections())
+}
+
+// --- caret-marked parameter row ---
+
+// The pane marks the row holding the placeholder the caret is in, from the
+// same slot Src the underline uses.
+func TestCaretOnClaim(t *testing.T) {
+	//                       0         1         2         3         4
+	//                       0123456789012345678901234567890123456789012
+	const sql = "SELECT * FROM t WHERE a = {a:UInt64} AND b = {b:String}"
+	app := debouncedApp(t, sql)
+	app.updatePreview()
+	require.Len(t, app.paramSlots, 2)
+	a, b := app.paramSlots[0], app.paramSlots[1]
+	require.Equal(t, "{a:UInt64}", sql[a.Src.Start:a.Src.End])
+	require.Equal(t, "{b:String}", sql[b.Src.Start:b.Src.End])
+
+	cases := []struct {
+		name  string
+		caret int
+		onA   bool
+		onB   bool
+	}{
+		{"before any slot", 5, false, false},
+		{"on the opening brace of a", a.Src.Start, true, false},
+		{"inside a", a.Src.Start + 3, true, false},
+		{"just past a's closing brace", a.Src.End, true, false},
+		{"in the gap between them", a.Src.End + 3, false, false},
+		{"inside b", b.Src.Start + 2, false, true},
+		{"at the end of the buffer", len(sql), false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app.caretByte = tc.caret
+			require.Equal(t, tc.onA, app.caretOnClaim([]paramSlot{a}))
+			require.Equal(t, tc.onB, app.caretOnClaim([]paramSlot{b}))
+			// A folded pair claims both slots, so it marks for either.
+			require.Equal(t, tc.onA || tc.onB, app.caretOnClaim([]paramSlot{a, b}))
+		})
+	}
+}
+
+// Mid-edit the slot ranges describe the previous buffer, so no row is marked
+// rather than the wrong one — the same quiescence gate the overlays use.
+func TestCaretOnClaimGatedOnQuiescence(t *testing.T) {
+	const sql = "SELECT * FROM t WHERE a = {a:UInt64}"
+	app := debouncedApp(t, sql)
+	app.updatePreview()
+	slot := app.paramSlots[0]
+	app.caretByte = slot.Src.Start + 2
+	require.True(t, app.caretOnClaim([]paramSlot{slot}))
+
+	app.sql = "SELECT 1 " + sql // typed since; the debounce has not caught up
+	require.False(t, app.caretOnClaim([]paramSlot{slot}))
+}
+
+// Degenerate inputs mark nothing rather than panicking — a bare app, an empty
+// range, and a range past the end of the buffer it is sliced against.
+func TestCaretOnClaimDegenerate(t *testing.T) {
+	require.False(t, (&PlayApp{}).caretOnClaim([]paramSlot{{Name: "a"}}))
+
+	app := debouncedApp(t, "SELECT {a:UInt64}")
+	app.updatePreview()
+	require.False(t, app.caretOnClaim(nil))
+	require.False(t, app.caretOnClaim([]paramSlot{{Name: "x"}}), "empty Src")
+	require.False(t, app.caretOnClaim([]paramSlot{{
+		Name: "x", Src: nanopass.SourceRange{Start: 0, End: len(app.sql) + 99},
+	}}), "a range past the buffer end")
 }
