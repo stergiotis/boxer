@@ -194,9 +194,23 @@ Where they sit in a run's lifecycle:
   render a stream without a terminal frame as incomplete. The
   synchronous HTTP binding is the degenerate stream (data then
   terminal). One subscriber library owns these invariants; panels do not
-  re-implement them. *Exists:* nothing formal; the `/table` decrypt path
-  already practices abort-on-truncation. *Delta:* the types, the
-  library, the sync adapter.
+  re-implement them. *Exists:* the contract, as
+  [ADR-0142](../adr/0142-runstream-result-frame-contract.md) — the
+  `runstream` types, the collector that owns the invariants, and the
+  synchronous adapter both of play's result paths drain through. The
+  collector rejects rather than tolerates (a frame out of sequence, a
+  second terminal, anything after a terminal, a frame whose kind or
+  terminal state was never set), and its zero values are *unknown* rather
+  than *data* and *complete*. *Delta:* a bus binding, once E8 exists.
+
+  What boxer can honestly say about truncation is narrower than the
+  requirement's ambition, and the gap is worth stating. Only a cap the
+  request declared on *itself* is visible client-side; a cap from a server
+  default or a quota comes back short with nothing on the wire to
+  distinguish it, and is not claimed. Even the visible case is ambiguous —
+  a result complete at exactly the cap looks identical to one cut there —
+  so it is reported as *may be a prefix*, which is the direction R9 asks
+  for.
 - **E4 — Run identity discipline.** Client-minted `query_id` with a
   documented uniqueness scope, stamped on execution and carried by
   frames, facts, and pins. *Exists:* play's per-lane minting, now with the
