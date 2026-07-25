@@ -37,8 +37,8 @@ const ParamPrefix = "param_"
 func Extract(sql string) (e *Environment, body string, err error) {
 	e = NewEnvironment()
 
-	preludeEntries, body := harvestSetPrelude(sql)
-	body = strings.TrimLeft(body, " \t\r\n")
+	preludeEntries, off := bodyStart(sql)
+	body = sql[off:]
 
 	if body != "" {
 		scanBody(body, e)
@@ -64,17 +64,30 @@ func Extract(sql string) (e *Environment, body string, err error) {
 // BodyOffset returns the byte offset at which [Extract]'s body begins within
 // sql, so that `sql[BodyOffset(sql):] == body`.
 //
-// Extract's body is always a byte-identical suffix of its input: the SET
-// prelude is consumed whole lines at a time and the remainder is only
-// left-trimmed. A byte range recorded against the body — everything a
-// nanopass pass sees, since [Pass.Run] hands passes the extracted body —
-// therefore maps back into the original SQL by adding this offset. Callers
-// that slice the user's buffer with pass-recorded ranges need it.
+// A byte range recorded against the body — everything a nanopass pass sees,
+// since [Pass.Run] hands passes the extracted body — maps back into the
+// original SQL by adding this offset. Callers that slice the user's buffer
+// with pass-recorded ranges need it.
 //
 // Costs the prelude scan only, not the CST walk Extract additionally runs.
 func BodyOffset(sql string) int {
-	_, body := harvestSetPrelude(sql)
-	return len(sql) - len(strings.TrimLeft(body, " \t\r\n"))
+	_, off := bodyStart(sql)
+	return off
+}
+
+// bodyStart is the single definition of where the body begins: the SET
+// prelude is consumed whole lines at a time, so what remains is a
+// byte-identical suffix of sql, and the leading whitespace skip only moves
+// the start further right.
+//
+// Extract slices at this offset rather than trimming its own copy, which is
+// what makes "the body is the suffix starting at BodyOffset" a definition
+// instead of a promise two functions have to keep independently. The two used
+// to spell the cutset separately; widening one of them to unicode whitespace
+// would have skewed every pass-recorded range by the difference, silently.
+func bodyStart(sql string) (entries []preludeEntry, off int) {
+	entries, body := harvestSetPrelude(sql)
+	return entries, len(sql) - len(strings.TrimLeft(body, " \t\r\n"))
 }
 
 type preludeEntry struct {

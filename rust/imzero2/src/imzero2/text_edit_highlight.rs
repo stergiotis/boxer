@@ -110,7 +110,12 @@ fn layout_reconciled(
 /// would be more precise at the edges; overlap-merge keeps the invariant that
 /// the color tier alone decides section boundaries — which is what makes the
 /// two channels independent.
-fn apply_styles(format: &mut egui::TextFormat, start: usize, stop: usize, styled: &[StyledSection]) {
+fn apply_styles(
+    format: &mut egui::TextFormat,
+    start: usize,
+    stop: usize,
+    styled: &[StyledSection],
+) {
     for s in styled {
         let (ss, se) = (s.byte_start as usize, s.byte_stop as usize);
         if se <= start {
@@ -162,7 +167,11 @@ fn reconcile_sections(
     let (p, job_edit_end, live_edit_end) = edit_region(job_text, live);
     let delta = live_edit_end as i64 - job_edit_end as i64;
 
-    let shift = |x: u32| -> u32 { (x as i64 + delta).max(0) as u32 };
+    // Clamp BOTH ends: .max(0) alone leaves `as u32` free to truncate a far
+    // out-of-range offset back INTO the buffer, where it would paint a
+    // section nothing asked for. Garbage in must stay garbage, not become
+    // plausible.
+    let shift = |x: u32| -> u32 { (x as i64 + delta).clamp(0, u32::MAX as i64) as u32 };
 
     let mut out = Vec::with_capacity(sections.len());
     for sec in sections {
@@ -213,7 +222,11 @@ fn reconcile_styled(job_text: &str, live: &str, styled: &[StyledSection]) -> Vec
     }
     let (p, job_edit_end, live_edit_end) = edit_region(job_text, live);
     let delta = live_edit_end as i64 - job_edit_end as i64;
-    let shift = |x: u32| -> u32 { (x as i64 + delta).max(0) as u32 };
+    // Clamp BOTH ends: .max(0) alone leaves `as u32` free to truncate a far
+    // out-of-range offset back INTO the buffer, where it would paint a
+    // section nothing asked for. Garbage in must stay garbage, not become
+    // plausible.
+    let shift = |x: u32| -> u32 { (x as i64 + delta).clamp(0, u32::MAX as i64) as u32 };
 
     let mut out = Vec::with_capacity(styled.len());
     for s in styled {
@@ -577,7 +590,10 @@ mod tests {
         let live = "SELECT 1";
         let res = resolve_styled(
             live,
-            &[styled(3, 5, STYLE_UNDERLINE), styled(0, 8, STYLE_BACKGROUND)],
+            &[
+                styled(3, 5, STYLE_UNDERLINE),
+                styled(0, 8, STYLE_BACKGROUND),
+            ],
         );
         assert_eq!(res.len(), 2);
         assert_eq!(res[0].byte_start, 0);
@@ -599,6 +615,35 @@ mod tests {
         let mut miss = egui::TextFormat::default();
         apply_styles(&mut miss, 7, 8, &res);
         assert_eq!(miss.underline, egui::Stroke::NONE);
+    }
+
+    #[test]
+    fn far_out_of_range_offsets_do_not_wrap_into_the_buffer() {
+        // A shift that only clamped the low end would let `as u32` truncate a
+        // near-u32::MAX offset back into the live buffer, turning garbage into
+        // a plausible in-range section — a colour or an underline on text
+        // nothing asked to decorate. Coverage would still hold, so the
+        // covering assertions above cannot catch this on their own.
+        let (job, live) = ("ab", "XYZab"); // delta = +3
+        let res = resolve_sections(
+            live,
+            &reconcile_sections(job, live, &[sec(u32::MAX - 1, u32::MAX, 9)]),
+        );
+        assert_covering(live, &res);
+        assert!(
+            res.iter().all(|r| r.color.is_none()),
+            "an out-of-range section must colour nothing, got {res:?}"
+        );
+
+        let rec = reconcile_styled(
+            job,
+            live,
+            &[styled(u32::MAX - 1, u32::MAX, STYLE_UNDERLINE)],
+        );
+        assert!(
+            resolve_styled(live, &rec).is_empty(),
+            "an out-of-range overlay must decorate nothing"
+        );
     }
 
     #[test]

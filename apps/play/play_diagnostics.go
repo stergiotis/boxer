@@ -474,9 +474,11 @@ func (inst *PlayApp) renderDiagSecurityContext() {
 	if inst.diag == nil {
 		return
 	}
-	// Keyed off the same debounced buffer as the classification (armSecurityContext
-	// runs in noteParse on the trimmed raw): until the editor settles onto a
-	// parseable buffer, there is nothing meaningful to show.
+	// Keyed off the same debounced buffer as the classification
+	// (armSecurityContext runs in noteParse on the buffer as typed, untrimmed
+	// since ADR-0130 L3's span hygiene): until the editor settles onto a
+	// parseable buffer, there is nothing meaningful to show. The trim here is
+	// only an emptiness test, not a key.
 	raw := strings.TrimSpace(inst.sql)
 	switch {
 	case raw == "":

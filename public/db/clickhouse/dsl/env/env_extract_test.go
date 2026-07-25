@@ -221,6 +221,12 @@ func TestBodyOffsetLocatesExtractBody(t *testing.T) {
 		"   ",
 		"-- a comment\nSELECT 1", // no prelude; comment stays in the body
 		"NOTASET foo\nSELECT 1",  // unparseable prelude line stays in the body
+		// Whitespace OUTSIDE the ASCII cutset the body skip uses. These
+		// discriminate that cutset from unicode.IsSpace, which the rest of
+		// the table cannot — every other input here uses only space, tab,
+		// CR or LF, which both sets contain.
+		"SET a = 1;\n\v\fSELECT 1",
+		"SET a = 1;\n\u00a0SELECT 1",
 	}
 	for _, in := range inputs {
 		_, body, err := env.Extract(in)
