@@ -249,3 +249,58 @@ func TestRunUnderCursorLeavesBufferWideSemanticsAlone(t *testing.T) {
 		require.Equal(t, "SELECT 1", restored.sql)
 	})
 }
+
+// --- the statement-split memo ---
+
+// The split depends on the buffer alone; the caret only picks among the
+// ranges. So caret travel must not re-derive it — the two consumers both run
+// per frame, and the split costs a full lex of the body.
+func TestStatementRangesMemo(t *testing.T) {
+	app := debouncedApp(t, "SELECT 1; SELECT 2")
+	first, off := app.statementRanges()
+	require.Len(t, first, 2)
+	require.Equal(t, 0, off)
+
+	// Same buffer, moved caret: the identical backing array comes back, which
+	// is what says no lex ran.
+	app.caretByte = 15
+	again, _ := app.statementRanges()
+	require.Same(t, &first[0], &again[0], "a caret move must not re-split")
+
+	// An edit invalidates it — the same key the colour job uses.
+	app.sql = "SELECT 1; SELECT 2; SELECT 3"
+	third, _ := app.statementRanges()
+	require.Len(t, third, 3)
+	require.NotSame(t, &first[0], &third[0], "an edit must re-split")
+}
+
+// The memoised path and the pure path must agree, or the per-frame consumers
+// would drift from what the tests pin.
+func TestMemoisedPathMatchesThePureOne(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT 1",
+		"SELECT 1; SELECT 2",
+		"SET param_a = 1;\nSELECT 1; SELECT {a:UInt64}",
+		"SELCT 1; SELECT 2",
+		"",
+		"   ",
+	} {
+		app := debouncedApp(t, sql)
+		for _, caret := range []int{0, 5, len(sql), len(sql) + 40} {
+			app.caretByte = caret
+
+			wantStmt, wantIdx, wantTotal, wantOk := activeStatement(sql, caret)
+			gotStmt, gotIdx, gotTotal, gotOk := app.caretStatement()
+			require.Equal(t, wantOk, gotOk, "sql=%q caret=%d", sql, caret)
+			require.Equal(t, wantIdx, gotIdx, "sql=%q caret=%d", sql, caret)
+			require.Equal(t, wantTotal, gotTotal, "sql=%q caret=%d", sql, caret)
+			require.Equal(t, wantStmt, gotStmt, "sql=%q caret=%d", sql, caret)
+
+			wantRun, wantNum, wantTot := runBufferFor(sql, caret)
+			gotRun, gotNum, gotTot := app.runBuffer()
+			require.Equal(t, wantRun, gotRun, "sql=%q caret=%d", sql, caret)
+			require.Equal(t, wantNum, gotNum, "sql=%q caret=%d", sql, caret)
+			require.Equal(t, wantTot, gotTot, "sql=%q caret=%d", sql, caret)
+		}
+	}
+}

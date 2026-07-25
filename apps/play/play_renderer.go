@@ -351,6 +351,13 @@ type PlayApp struct {
 	stmtErrFor string
 	stmtErrPos syntaxErrorPos
 	stmtErrOk  bool
+	// Memo for the lex-tier statement split, keyed on the buffer it describes
+	// (see statementRanges). Its consumers run per frame while the split
+	// itself changes only with the buffer.
+	stmtRangesFor    string
+	stmtRanges       []statementRange
+	stmtRangesOffset int
+	stmtRangesOk     bool
 
 	// "As sent" preview toggle (ADR-0108): when on, the Preview tab shows
 	// the statement Client.BuildStatement would ship — params harvested,

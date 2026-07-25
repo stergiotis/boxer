@@ -173,7 +173,7 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 	if inst.sql == "" || inst.sql != inst.formattedFor {
 		return nil
 	}
-	stmt, _, total, haveStmt := activeStatement(inst.sql, inst.caretByte)
+	stmt, _, total, haveStmt := inst.caretStatement()
 	// Active-statement tint, multi-statement buffers only — the common
 	// single-statement buffer stays visually unchanged. Emitted first so the
 	// error underline, which is narrower, composes on top of it.

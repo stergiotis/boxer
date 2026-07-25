@@ -100,18 +100,51 @@ func activeStatementIndex(ranges []statementRange, caret int) int {
 	return len(ranges) - 1
 }
 
-// activeStatement resolves the caret to a statement of sql, reporting how many
-// statements the body holds. total > 1 is the multi-statement condition every
-// L3 consumer gates on: the tint renders, and Run ships one statement instead
-// of the buffer.
-func activeStatement(sql string, caret int) (stmt statementRange, index, total int, ok bool) {
-	ranges, _ := bodyStatementRanges(sql)
+// selectStatement resolves the caret against an already-split buffer. Split
+// out from activeStatement so the per-frame callers can run it against the
+// memo instead of re-splitting: the ranges depend on the buffer alone, the
+// caret only picks among them.
+func selectStatement(ranges []statementRange, caret int) (stmt statementRange, index, total int, ok bool) {
 	total = len(ranges)
 	index = activeStatementIndex(ranges, caret)
 	if index < 0 {
 		return stmt, -1, total, false
 	}
 	return ranges[index], index, total, true
+}
+
+// activeStatement resolves the caret to a statement of sql, reporting how many
+// statements the body holds. total > 1 is the multi-statement condition every
+// L3 consumer gates on: the tint renders, and Run ships one statement instead
+// of the buffer.
+func activeStatement(sql string, caret int) (stmt statementRange, index, total int, ok bool) {
+	ranges, _ := bodyStatementRanges(sql)
+	return selectStatement(ranges, caret)
+}
+
+// statementRanges is bodyStatementRanges memoised on the buffer it describes.
+//
+// The split costs a full lex of the body — ~26 µs at 180 B and ~280 µs at
+// 2.5 KB, roughly linear (ADR-0130's measurements) — and its two callers both
+// run per frame: the styled overlays on every quiescent frame, and the wire
+// preview's cache key whenever "as sent" is on. Without the memo a 25 KB
+// buffer would spend milliseconds per frame re-deriving a value that only
+// changes when the buffer does. The caret moving does not invalidate it; only
+// an edit does, which is the same key the colour job uses.
+func (inst *PlayApp) statementRanges() (ranges []statementRange, bodyOffset int) {
+	if inst.stmtRangesOk && inst.stmtRangesFor == inst.sql {
+		return inst.stmtRanges, inst.stmtRangesOffset
+	}
+	inst.stmtRanges, inst.stmtRangesOffset = bodyStatementRanges(inst.sql)
+	inst.stmtRangesFor = inst.sql
+	inst.stmtRangesOk = true
+	return inst.stmtRanges, inst.stmtRangesOffset
+}
+
+// caretStatement is activeStatement against the memo and the app's caret.
+func (inst *PlayApp) caretStatement() (stmt statementRange, index, total int, ok bool) {
+	ranges, _ := inst.statementRanges()
+	return selectStatement(ranges, inst.caretByte)
 }
 
 // runBufferFor returns what a Run ships for buffer sql with the caret at
@@ -124,8 +157,14 @@ func activeStatement(sql string, caret int) (stmt statementRange, index, total i
 // are what make any of the statements executable, and scoping those per
 // statement is deferred (ADR-0130 §Updates 2026-07-25).
 func runBufferFor(sql string, caret int) (run string, number, total int) {
-	trimmed := strings.TrimSpace(sql)
 	ranges, bodyOffset := bodyStatementRanges(sql)
+	return composeRunBuffer(sql, ranges, bodyOffset, caret)
+}
+
+// composeRunBuffer is runBufferFor against an already-split buffer, so the
+// per-frame caller can compose from the memo rather than re-splitting.
+func composeRunBuffer(sql string, ranges []statementRange, bodyOffset, caret int) (run string, number, total int) {
+	trimmed := strings.TrimSpace(sql)
 	total = len(ranges)
 	if total <= 1 {
 		return trimmed, total, total
@@ -145,5 +184,6 @@ func runBufferFor(sql string, caret int) (run string, number, total int) {
 
 // runBuffer is runBufferFor against the app's current buffer and caret.
 func (inst *PlayApp) runBuffer() (run string, number, total int) {
-	return runBufferFor(inst.sql, inst.caretByte)
+	ranges, bodyOffset := inst.statementRanges()
+	return composeRunBuffer(inst.sql, ranges, bodyOffset, inst.caretByte)
 }
