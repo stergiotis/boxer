@@ -432,6 +432,57 @@ marks to exactly its lines; the wire preview reads "statement 2 of 4" and shows
 that statement's body; Run executes it and returns its rows, with a broken
 sibling above it and a healthy one below.
 
+### 2026-07-25 — the tethered per-literal editor phase is deferred, not started
+
+Assessed immediately after L3 shipped, and declined in that form. Two
+findings, the second the deciding one.
+
+**The 2026-07-25 entry's claim that L3's first two items are this phase's
+foundations is half right.** `sectionStyled` and `reportCursor` give
+*identity* — which literal the caret is in, and a way to mark it. They do not
+give *position*. Tethering a window to a literal needs the screen rect of a
+byte range inside the editor's galley, and nothing exposes one:
+`inspector.AnchorTether` — the mechanism `fsmview.Tethered()` uses — anchors
+to a **Ui rect** captured via `c.CaptureUiRect`, i.e. to a widget, and no
+byte-range-to-rect channel exists in the IDL. Nor can it be derived Go-side:
+the galley lives in Rust, and this host resolves `TextStyle::Monospace` to
+the proportional main font when `mono_font_ttf` is unset, so column
+arithmetic does not survive contact with the glyphs. The phase therefore
+needs a third seam of its own, not a composition of the two that shipped.
+
+**The UX case is weaker than the design entry assumed.** A bare literal is
+already editable — it is text in a text editor — so a widget earns its place
+only where it beats typing, which is a narrow set (dates, colors, regexes).
+More decisively, this repository already has a home for typed value editing:
+the parameter slot. `{d:DateTime}` gets a widget from
+[ADR-0124](./0124-play-param-editing-widgets.md)'s ladder *and* signal
+binding, URL shipping, history snapshotting, and the unfilled-Run gate. A
+tethered editor over a bare literal would be a second editing surface with
+none of those, and a second widget ladder to keep in step with the pane's.
+Tethering to text is also fragile where tethering to a widget is not: the
+anchor moves on every keystroke, scroll and wrap change, and both the caret
+report and any future position report carry this seam's inherent one-frame
+lag, so the window visibly trails its anchor while the user types — over the
+code being edited.
+
+Two cheaper shapes were identified and are recorded here as available rather
+than chosen, since neither has a demonstrated need behind it yet:
+
+- **Promote-to-parameter.** An action that rewrites the literal under the
+  caret into `{name:Type}` and authors the matching `SET`, handing the
+  editing to the pane that already exists. It composes the shipped pieces —
+  the lex-tier token walk, the styled channel to mark promotable literals,
+  the existing prelude author — and needs no new FFI seam. It also makes the
+  value reusable and signal-bindable, which the tethered form does not.
+- **Caret-scoped affordances.** Rendering the affordance for the call site
+  under the caret instead of listing every one. Uses only what L3 shipped.
+
+**Trigger to revisit:** a value whose editing genuinely cannot be served by
+promoting it to a parameter — the case would have to show why the pane is
+the wrong place, not merely that a floating window would be closer to the
+text. Until then the out-of-scope line in the entry above stands, with this
+reasoning attached so it is not re-derived.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
