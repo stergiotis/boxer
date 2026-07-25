@@ -353,7 +353,7 @@ func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, 
 	c.Separator().Send()
 	inst.renderDiagSignalEmits()
 	c.Separator().Send()
-	inst.renderDiagLastRun(numRows, elapsed, summary, executed, err)
+	inst.renderDiagLastRun(numRows, elapsed, summary, executed, err, inst.activeTruncation())
 }
 
 // renderDiagSignalEmits names the panel emits the store declined to record
@@ -582,7 +582,7 @@ func (inst *PlayApp) renderDiagSplit() {
 // renderDiagLastRun is the active result's outcome: the full execution error
 // (whose only other surface is the status bar's truncated first line), or the
 // same summary line the status bar shows.
-func (inst *PlayApp) renderDiagLastRun(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+func (inst *PlayApp) renderDiagLastRun(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) {
 	diagHeading("Last run")
 	if err != nil {
 		c.Label("The query failed:").Send()
@@ -591,7 +591,7 @@ func (inst *PlayApp) renderDiagLastRun(numRows int64, elapsed time.Duration, sum
 		c.Label(err.Error()).Wrap().Selectable(true).Send()
 		return
 	}
-	if s := inst.querySummaryLine(numRows, elapsed, summary, executed, err); s != "" {
+	if s := inst.querySummaryLine(numRows, elapsed, summary, executed, err, truncation); s != "" {
 		diagWeak(s)
 	}
 }

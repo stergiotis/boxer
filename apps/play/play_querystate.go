@@ -273,8 +273,8 @@ func queryStateTone(s queryStateE) badge.ToneE {
 // just right of the colored state badge. The full error text lives in the
 // Diagnostics tab; the state graph / history live in the pop-out inspector
 // window.
-func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
-	s := inst.querySummaryLine(numRows, elapsed, summary, executed, err)
+func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) {
+	s := inst.querySummaryLine(numRows, elapsed, summary, executed, err, truncation)
 	// A Run refused on unfilled inputs (5e, D3) reports where its result
 	// summary would have landed — the FSM chip beside it keeps showing the
 	// last settled state. Retires as soon as the inputs are filled or
@@ -298,7 +298,7 @@ func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, su
 
 // querySummaryLine is the FSM-keyed one-line result summary, shared by the
 // status bar and the Diagnostics tab's "Last run" section.
-func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) string {
+func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) string {
 	var s string
 	switch inst.queryFSM.Current() {
 	case queryStateIdle:
@@ -313,6 +313,12 @@ func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summ
 	case queryStateRows:
 		s = fmt.Sprintf("%d rows · %s · %s read · %s",
 			numRows, elapsed.Round(time.Millisecond), humanBytes(summary.ReadBytes), humanizeAgo(executed))
+		// A capped result is indistinguishable from a whole one unless the
+		// line says so (R9), and the row count alone reads as the answer.
+		if truncation != "" {
+			s = fmt.Sprintf("%d rows, capped · %s · %s",
+				numRows, truncateRunes(truncation, 80), humanizeAgo(executed))
+		}
 	case queryStateEmpty:
 		s = "0 rows · ran " + humanizeAgo(executed)
 	case queryStateFailed:

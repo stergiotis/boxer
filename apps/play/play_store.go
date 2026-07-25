@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 )
 
 type HistoryEntry struct {
@@ -73,6 +74,11 @@ type QueryStore struct {
 	progress      Summary
 	progressFresh bool
 
+	// terminal is how the last run ended (E3, play_runstream.go). It says
+	// what err cannot: that a result which arrived intact is nonetheless a
+	// prefix, because the run hit a row limit it declared on itself.
+	terminal runstream.Terminal
+
 	// opts is the store's stable query_id + replace_running_query (SD5): a
 	// Run after a Cancel replaces the maybe-still-running predecessor
 	// server-side (ClickHouse does not kill read-only HTTP queries on
@@ -122,6 +128,19 @@ func (inst *QueryStore) SQL() string {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	return inst.executedSQL
+}
+
+// Truncation reports the reason the last result is a prefix, or "" when it
+// is whole (or when the run failed, which err already says). Read it beside
+// Snapshot: a capped result looks exactly like a complete one otherwise,
+// which is the confusion R9 exists to prevent.
+func (inst *QueryStore) Truncation() (reason string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if inst.terminal.State == runstream.TerminalTruncated {
+		reason = inst.terminal.Reason
+	}
+	return
 }
 
 // Progress returns the in-flight run's latest in-band progress tick;
@@ -207,7 +226,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		start := time.Now()
 		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs, dec)
 		if err != nil {
-			inst.finish(sql, sigs, start, nil, nil, 0, summary, err)
+			inst.finish(sql, sigs, start, nil, nil, 0, summary, err, runstream.Failed(err))
 			return
 		}
 		defer func() {
@@ -216,18 +235,14 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		}()
 
 		// Consume all batches and concatenate into a single record batch so
-		// the renderer sees one continuous column per field.
-		var batches []arrow.RecordBatch
-		for rdr.Next() {
-			b := rdr.Record()
-			b.Retain()
-			batches = append(batches, b)
-		}
-		if e := rdr.Err(); e != nil {
-			for _, b := range batches {
-				b.Release()
-			}
-			inst.finish(sql, sigs, start, nil, nil, 0, summary, e)
+		// the renderer sees one continuous column per field. The drain runs
+		// through the runstream collector (play_runstream.go), so a stream
+		// that dies part-way is a failed terminal rather than a short
+		// result nobody flagged, and a run capped against its own declared
+		// row limit comes back marked.
+		batches, term, e := drainRun(rdr, summary, readResultRowCap(sql))
+		if e != nil {
+			inst.finish(sql, sigs, start, nil, nil, 0, summary, e, runstream.Failed(e))
 			return
 		}
 
@@ -236,7 +251,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 			b.Release()
 		}
 		if cErr != nil {
-			inst.finish(sql, sigs, start, nil, nil, 0, summary, cErr)
+			inst.finish(sql, sigs, start, nil, nil, 0, summary, cErr, runstream.Failed(cErr))
 			return
 		}
 		if schema == nil {
@@ -248,7 +263,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		if rec != nil {
 			rows = rec.NumRows()
 		}
-		inst.finish(sql, sigs, start, rec, schema, rows, summary, nil)
+		inst.finish(sql, sigs, start, rec, schema, rows, summary, nil, term)
 	}()
 }
 
@@ -277,7 +292,7 @@ func (inst *QueryStore) Close() {
 	inst.schema = nil
 }
 
-func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Time, rec arrow.RecordBatch, schema *arrow.Schema, rows int64, summary Summary, err error) {
+func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Time, rec arrow.RecordBatch, schema *arrow.Schema, rows int64, summary Summary, err error, term runstream.Terminal) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.closed {
@@ -296,6 +311,7 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 	inst.summary = summary
 	inst.elapsed = time.Since(start)
 	inst.err = err
+	inst.terminal = term
 	inst.executed = time.Now()
 	inst.executedSQL = sql
 	inst.loading = false

@@ -901,6 +901,24 @@ func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Sche
 	return inst.graph.MainSnapshot()
 }
 
+// activeTruncation reports why the result activeSnapshot returned is a
+// prefix, or "" when it is whole (E3, R9). Only the main lane carries it: an
+// intermediate is a fused sub-query, and whatever bounds it is visible in
+// the SQL the user is already looking at.
+func (inst *PlayApp) activeTruncation() (reason string) {
+	split := inst.currentSplit
+	if inst.observedNode != "" && inst.observedNode != split.Sink && len(split.Nodes) > 0 {
+		if _, ok := findSplitNode(split, inst.observedNode); ok {
+			return
+		}
+	}
+	if inst.graph == nil {
+		return
+	}
+	reason = inst.graph.MainTruncation()
+	return
+}
+
 // MainSnapshot returns a retained view of the `main` node's current result —
 // the sink result the Table tab shows by default — with its metadata. It is the
 // thread-safe embedder seam for reading the live resultset OFF the render loop
@@ -1018,7 +1036,7 @@ func (inst *PlayApp) Render() error {
 		}
 	}
 	for range c.PanelBottomInside(ids.PrepareStr("status")).Resizable(false).KeepIter() {
-		inst.renderStatus(numRows, elapsed, summary, executed, err)
+		inst.renderStatus(numRows, elapsed, summary, executed, err, inst.activeTruncation())
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
@@ -2165,14 +2183,14 @@ func (inst *PlayApp) updateWirePreview() {
 // toggle that pops out the bezier-tethered inspector window (state graph /
 // history / provenance). The FSM is mirrored each frame in Render so the badge
 // and summary agree.
-func (inst *PlayApp) renderStatus(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+func (inst *PlayApp) renderStatus(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) {
 	inst.queryFSMWidget.
 		Provenance(inspector.Provenance{
 			Subject:   "app.play.query.result-state",
 			SourceApp: "github.com/stergiotis/boxer/apps/play",
 			SampledAt: executed,
 		}).
-		Summary(func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err) }).
+		Summary(func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err, truncation) }).
 		Render()
 }
 

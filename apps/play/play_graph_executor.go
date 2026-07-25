@@ -62,17 +62,10 @@ func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNo
 		rdr.Release()
 		_ = body.Close()
 	}()
-	batches := make([]arrow.RecordBatch, 0, 4)
-	for rdr.Next() {
-		b := rdr.Record()
-		b.Retain()
-		batches = append(batches, b)
-	}
-	rErr := rdr.Err()
+	// Same frame drain as the main lane (play_runstream.go): a stream that
+	// dies part-way is a failed terminal, never a short result.
+	batches, _, rErr := drainRun(rdr, summary, readResultRowCap(c.SQL))
 	if rErr != nil {
-		for _, b := range batches {
-			b.Release()
-		}
 		err = eh.Errorf("clientExecutor.execute: read stream: %w", rErr)
 		return
 	}

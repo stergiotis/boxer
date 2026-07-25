@@ -762,3 +762,8 @@ func (inst *queryGraph) MainSQL() string { return inst.mainLane.SQL() }
 // MainProgress returns the `main` lane's live progress tick, fresh only
 // while a run is in flight (ADR-0115 plane A — transient glass state).
 func (inst *queryGraph) MainProgress() (p Summary, fresh bool) { return inst.mainLane.Progress() }
+
+// MainTruncation reports why the `main` lane's result is a prefix, or "" when
+// it is whole (E3, R9). Read beside MainSnapshot — a capped result looks
+// exactly like a complete one in the row count alone.
+func (inst *queryGraph) MainTruncation() (reason string) { return inst.mainLane.Truncation() }
