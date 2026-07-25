@@ -4,13 +4,19 @@
 // extractAllGroups, replaceRegexpAll) and VectorScan-backed multi-pattern
 // (multiMatchAllIndices).
 //
-// Registered as demo-carousel entry a006 via [RenderLoopHandlerDemo]. Queries
-// execute through `clickhouse local` subprocesses (invoked via os/exec with
-// --format ArrowStream) rather than a running ClickHouse server, so the demo
-// is self-contained — no server, no auth, no network. User-supplied strings
-// reach the subprocess as ClickHouse SQL literals produced by boxer's
-// marshalling.EscapeString. Match offsets for inline highlighting are
-// computed locally via Go's regexp package (RE2-compatible with ClickHouse's
-// single-pattern RE2 functions). See doc/adr/0005-regex-explorer-offset-authority.md
-// for the rationale and the SD1 engine-fidelity tripwire.
+// Registered with the app runtime as a windowed app, and with the demo
+// registry as two gallery scenes (regex_explorer_tour.go). Queries execute
+// against a pooled `clickhouse-local` worker reached over the chlocalbroker
+// capability subject `ch.local.exec.regex_explorer` — no server, no auth, no
+// network, and no subprocess management in this package. User-supplied strings
+// reach ClickHouse as SQL literals produced by boxer's marshalling.EscapeString.
+//
+// Match offsets for inline highlighting and capture-group breakdown are
+// computed locally via Go's regexp package, which targets the same RE2
+// specification as ClickHouse's single-pattern functions. See
+// doc/adr/0054-regex-explorer-offset-authority.md for the rationale, the
+// SD1 engine-fidelity tripwire, and the ledger of known differences between
+// the two engines — of which the load-bearing one is that ClickHouse's
+// extractAll returns capture group 1, not the full match, whenever the
+// pattern captures.
 package regex_explorer

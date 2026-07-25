@@ -9,12 +9,12 @@ package regex_explorer
 // fallback-chain path codified in ADR-0054 SD2: the originally-proposed
 // SETTINGS-clause binding does not work (ClickHouse's SETTINGS is for
 // query-level server settings, not parameter substitution), and
-// multi-statement SET requires multi_statements=1 which
-// [play.Client.ExecuteArrowStream] does not currently plumb.
+// multi-statement SET buys nothing given this app's one-SELECT-per-dispatch
+// shape.
 //
-// play.Client.ExecuteArrowStream handles the FORMAT ArrowStream rewrite via
-// its nanopass pipeline; callers of these builders must not append FORMAT
-// themselves.
+// The output format is requested out of band — the broker is asked for
+// ArrowStream when the query is published (see regex_explorer_chlocal.go),
+// so callers of these builders must not append a FORMAT clause themselves.
 
 import (
 	"strings"
