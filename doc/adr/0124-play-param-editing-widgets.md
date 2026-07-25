@@ -346,7 +346,8 @@ terms of the stem rule.
   (`play_signals_chrome.go` distinguishes `pinned by SET` from `unfilled input`);
   plumbing it across panes is scope this decision does not need.
 - **`Src` consumers.** §SD1 carries a source range no one reads; a placeholder
-  highlighter is the obvious claimant.
+  highlighter is the obvious claimant. *(Retired 2026-07-25 — see the Update
+  below.)*
 
 ## Alternatives
 
@@ -660,6 +661,32 @@ settled co-writer; a pinned draft untouched by the reseed; the half-pinned
 decline with its named reason, uniform pairs still folding, and one decline
 not costing another pair its picker; the unfilled mark appearing and retiring
 via both fill routes.
+
+### 2026-07-25 — §SD8's "`Src` consumers" retired: the editor underlines unfilled slots
+
+The deferred bullet has a consumer. Each unfilled placeholder now carries a
+warning-toned underline over its `Src` span in the SQL editor, rendered through
+the styled-section channel [ADR-0130](./0130-imzero2-textedit-highlight-seam.md)
+L3 added (`apps/play/play_editor_styled.go`, `editorStyledSections`). The set it
+draws from is `unfilledSet()` — the same one the Run gate and the pane's
+"needs a value" mark read — so the three cannot disagree about what is blocking
+a Run, and filling a name retires all three together with no state to reset.
+
+One correctness precondition landed with it. §SD1's `Src` is produced by
+`collectParamSlots` against the whole buffer, but the editor's debounced
+observation pipeline used to parse the whitespace-trimmed buffer while its
+consumers sliced the untrimmed one; separately, the nanopass runner hands each
+pass the body `env.Extract` split off, so observation ranges were short by the
+`SET` prelude's length. Both are fixed (untrimmed parse plus
+`env.BodyOffset`-based rebasing), so every recorded range now indexes
+`inst.sql` directly. Slot `Src` was always buffer-relative — it comes from a
+direct `nanopass.Parse` — and is unchanged.
+
+Two limits, deliberate. The underline marks the first occurrence of each name,
+because `collectParamSlots` dedups by name; and a multi-statement buffer yields
+no slots at all, because grammar1's `QueryStmt` is single-statement — the same
+scope §SD8's other deferrals live in, and the trigger for revisiting is the
+same first real friction.
 
 ## References
 

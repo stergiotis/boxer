@@ -354,6 +354,84 @@ editor windows (a later phase that builds on the first two items), the
 svgexport 0.35 content-only test debt, and ADR-0125's steady-state parse
 cost.
 
+### 2026-07-25 — L3 implemented and live-verified
+
+Everything the design entry above settled is built, in that order. What landed
+and where it deviates:
+
+- **`sectionStyled`** shipped as designed: its own evaluated-arg node
+  (`styledSections`), its own register (`r24_styled_sections`), and a parallel
+  textEdit method, so `Section` did not move. Style flags are underline,
+  background, strikethrough, italics; `text_edit_highlight.rs` runs the styled
+  list through the same edit-region shift as the colour sections and normalizes
+  it by clamping, dropping inverted/empty/flagless ranges and sorting — no
+  gap-fill, and no overlap merge either, because overlapping overlays are a
+  legitimate composition (an error underline inside a tinted statement). Nine
+  new Rust unit tests beside the existing nine. `codeview.BuildStyledSections`
+  is the shared Go-side builder.
+- **The error underline** producer differs from the design in one respect that
+  the design pass did not anticipate: grammar1's `QueryStmt` is
+  *single-statement*, so a multi-statement buffer never parses whole and its
+  reported error position is the second statement's first token — a position
+  that says nothing about either statement. So the producer takes the
+  whole-buffer verdict only for single-statement buffers, and for
+  multi-statement ones parses the caret's statement alone (memoised on that
+  statement's text, so caret travel inside one statement costs no parse). A
+  broken sibling then stays the sibling's problem, which is also what makes
+  running the healthy statement beside it legible.
+- **`reportCursor`** shipped as designed — unconditional packed-u64 push per
+  frame. The Go side needed no generator change: `r9_s` and `r9_u64`
+  databindings live in separate id-keyed maps, so one widget carries text and
+  caret independently; `TextEditFluid.SendRespValCursor` registers both after a
+  single `Send`, beside the hand-written `SendRespVal` it mirrors.
+- **The statement splitter** walks `HighlightLex` for top-level `;` as
+  designed, over the *prelude-stripped* body — counting the `SET param_*` lines
+  the parameter widgets author would make every parameterised buffer look
+  multi-statement. The caret's statement resolves by play.html's own rule, read
+  as served from ClickHouse 26.6.1 and mirrored rather than approximated: the
+  winner is the first statement whose terminating `;` ends at or after the
+  caret, with a fallback to the last statement when only trivia follows. That
+  is slightly different from "the caret between statements resolves to the
+  previous one" — a caret exactly one byte past a `;` belongs to the statement
+  it closes, but anywhere further into the gap already belongs to the next.
+- **Run-under-cursor** ships prelude + active statement, and everything else
+  stayed buffer-wide as recorded. The history entry gained a `Buffer` field so
+  restoring a run of a multi-statement buffer brings its siblings back instead
+  of the fragment that ran; it is empty whenever the run WAS the buffer, so
+  single-statement behaviour is byte-identical end to end.
+- **The gutter** is one monospace `CodeView`, not a column of labels: N labels
+  accumulate item spacing and drift out of step with the editor's rows within a
+  screenful. It carries the mark lane and the right-aligned numbers in one
+  text, with per-line colour sections — and every byte has to be claimed by
+  one, because a `CodeViewJob` does not gap-fill and egui drops the glyphs of
+  unclaimed bytes (the numbers were invisible until this was fixed).
+- **Horizontal scrolling** deviates from "under a shared scroll scope": the two
+  columns share the tab's *vertical* scope, but the editor owns the
+  *horizontal* one, because a gutter that slides out of view on the first long
+  line is not a gutter. Live-verified pinned while scrolled to the end of a
+  150-character line. The editor's desired width must be finite and content-
+  sized: egui caps a TextEdit's allocation at its desired width, so `+Inf`
+  under no-wrap clips the tail of a long line out of reach.
+
+Two findings worth recording:
+
+- The host may leave `mono_font_ttf` unset, in which case
+  `TextStyle::Monospace` resolves to the proportional main font — per-glyph
+  advances then range ~2.4–8.3 px at BodyPt. Row alignment is unaffected (row
+  height is uniform per font size, which is all the gutter's contract needs);
+  only the editor's width estimate is approximate, and it is deliberately an
+  over-estimate.
+- The statement tint reaches the galley as one background rect per glyph rather
+  than one per run, which the SVG export makes visible as faint seams under
+  magnification. Cosmetic, below this seam, and not pursued.
+
+Live-verified under the inspection tooling on a four-statement buffer: the
+error underline appears on the offending token with the lexical colours intact
+and clears on the fix; clicking into a statement moves the tint and the gutter
+marks to exactly its lines; the wire preview reads "statement 2 of 4" and shows
+that statement's body; Run executes it and returns its rows, with a broken
+sibling above it and a healthy one below.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —

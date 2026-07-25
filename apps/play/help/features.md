@@ -46,6 +46,30 @@ editor supports the usual text-editing keys (select-all, copy, paste). Use the
 **Snippets** tab to drop in fragments, and the **Preview** tab to see the parsed
 canonical form.
 
+A line-number gutter runs down the left edge, with a marks lane beside the
+numbers: `!` on a line whose statement has a syntax error, `>` on the lines of
+the statement the caret is in. Lines are not wrapped — long lines scroll
+sideways, and the gutter stays put while they do.
+
+The editor annotates as you pause typing:
+
+- **Syntax errors** get an error-toned underline on the token the parser tripped
+  on; the syntax colours stay up underneath, and the underline clears when the
+  buffer parses.
+- **Unfilled placeholders** get a warning-toned underline. These are exactly the
+  names that block a Run, so the underline agrees with the Run button and with
+  the "needs a value" mark in the parameters pane.
+- **Multi-statement buffers** — statements separated by `;` — tint the statement
+  the caret is in, and Run ships just that statement, with any leading `SET`
+  prelude riding along. The **Preview** tab's "As sent to server" view names it
+  ("statement 2 of 4") and shows exactly what would be sent. A syntax error in
+  one statement does not stop another from running. Parameters, signals, and
+  the saved history stay whole-buffer: history restores everything you had, not
+  just the statement that ran.
+
+A single-statement buffer — the common case — is unchanged by all of this: no
+tint, and Run sends the whole buffer as before.
+
 ## Query parameters
 
 Write a `{name:Type}` placeholder in the query (e.g. `{event:String}`,
