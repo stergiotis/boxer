@@ -1,9 +1,12 @@
 package golang_test
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
@@ -62,4 +65,83 @@ func findRepoRoot(t *testing.T) string {
 		}
 		d = parent
 	}
+}
+
+// WriteAligned regenerates sources that live in PACKAGE directories — several
+// callers write into a sibling package — so it runs while the rest of the
+// suite may be compiling that package. The replacement must therefore be
+// atomic: a concurrent reader sees the old file or the new one, never a
+// missing or half-written one.
+//
+// It was neither. The write truncated in place, and one caller unlinked the
+// target first, leaving it absent for the whole align-and-format pass; a
+// concurrent `go build` of the affected package failed 6 times in 12 attempts,
+// surfacing as an unrelated-looking capslock failure under `go test ./...`.
+func TestWriteAlignedReplacesAtomically(t *testing.T) {
+	dir := t.TempDir()
+	// FindModuleBuildTags walks up for a go.mod; without one WriteAligned
+	// cannot resolve build tags. No `tags` file means the empty tag set.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module scratch\n\ngo 1.24\n"), 0o644))
+	path := filepath.Join(dir, "gen.go")
+	src := []byte("package scratch\n\nconst Sentinel = 1\n")
+	require.NoError(t, golang.WriteAligned(path, src))
+
+	stop := make(chan struct{})
+	var missing, partial atomic.Int64
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			b, rerr := os.ReadFile(path)
+			switch {
+			case rerr != nil:
+				missing.Add(1)
+			case !bytes.Contains(b, []byte("Sentinel")):
+				partial.Add(1)
+			}
+		}
+	}()
+	for range 60 {
+		require.NoError(t, golang.WriteAligned(path, src))
+	}
+	close(stop)
+	wg.Wait()
+
+	require.Zero(t, missing.Load(), "the target was observed absent mid-replacement")
+	require.Zero(t, partial.Load(), "the target was observed half-written")
+
+	// And nothing is left behind beside it.
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		require.NotContains(t, e.Name(), ".tmp", "a temp file survived the replacement")
+	}
+}
+
+// The mode of an existing target survives replacement: os.WriteFile applied its
+// perm only when creating, so regeneration never changed it, and some
+// checked-in generated sources are 0755. A fresh temp file would silently
+// normalise them and show up as repo-wide drift.
+func TestWriteAlignedPreservesMode(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module scratch\n\ngo 1.24\n"), 0o644))
+	path := filepath.Join(dir, "gen.go")
+	src := []byte("package scratch\n\nconst Sentinel = 1\n")
+
+	require.NoError(t, golang.WriteAligned(path, src))
+	fi, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o644), fi.Mode().Perm(), "a new file gets the default mode")
+
+	require.NoError(t, os.Chmod(path, 0o755))
+	require.NoError(t, golang.WriteAligned(path, src))
+	fi, err = os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o755), fi.Mode().Perm(), "an existing file keeps its mode")
 }

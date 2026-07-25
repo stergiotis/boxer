@@ -1,7 +1,6 @@
 package test
 
 import (
-	"os"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -33,8 +32,15 @@ func getSystemTableColumnsDesc() (tableDesc common.TableDesc, err error) {
 	return
 }
 
+// writeFileSystemTableColumns regenerates a source file belonging to ANOTHER
+// package (../common). Under `go test ./...` that package may be compiling
+// while this runs, so the file must never be observably absent: the unlink
+// that used to precede the write left it missing for the whole align-and-
+// format pass, and a concurrent package load — capslock's, which loads every
+// package in the repo — failed with "no such file or directory" and an
+// undefined symbol from ../common. golang.WriteAligned replaces the file
+// atomically, which needs no unlink.
 func writeFileSystemTableColumns(path string, code string, t *testing.T) {
-	_ = os.Remove(path)
 	err := golang.WriteAligned(path, unsafeperf.UnsafeStringToBytes(code))
 	require.NoError(t, err)
 }

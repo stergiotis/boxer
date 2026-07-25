@@ -155,6 +155,16 @@ func AlignAndFormat(src []byte, targetPath, buildTags string) (out []byte, err e
 // WriteAligned aligns src and writes it to targetPath. Build tags are
 // discovered from the boxer module's `tags` file by walking up the
 // directory tree from targetPath's parent.
+//
+// The replacement is ATOMIC: the aligned source lands in a temporary file
+// beside the target and is renamed over it. Every caller regenerates a `.go`
+// file that lives in a package directory — several into a SIBLING package —
+// while the rest of the suite may be compiling that package, and a plain
+// truncate-then-write exposes a window in which the file is empty or partial.
+// A concurrent `go build` / package load then fails with "no such file or
+// directory" or an undefined symbol from the half-written file, in a package
+// the failing test never mentions. Rename gives a reader the old file or the
+// new one and nothing in between.
 func WriteAligned(targetPath string, src []byte) (err error) {
 	var abs string
 	abs, err = filepath.Abs(targetPath)
@@ -162,8 +172,9 @@ func WriteAligned(targetPath string, src []byte) (err error) {
 		err = eh.Errorf("resolve %q: %w", targetPath, err)
 		return
 	}
+	dir := filepath.Dir(abs)
 	var tags string
-	tags, err = FindModuleBuildTags(filepath.Dir(abs))
+	tags, err = FindModuleBuildTags(dir)
 	if err != nil {
 		err = eh.Errorf("find build tags for %q: %w", abs, err)
 		return
@@ -174,8 +185,47 @@ func WriteAligned(targetPath string, src []byte) (err error) {
 		err = eh.Errorf("align %q: %w", abs, err)
 		return
 	}
-	if err = os.WriteFile(abs, aligned, 0o644); err != nil {
-		err = eh.Errorf("write %q: %w", abs, err)
+	// Keep whatever mode the target already carries. os.WriteFile applied its
+	// perm argument only when CREATING a file, so replacing one never changed
+	// its mode; a fresh temp file would, and some checked-in generated sources
+	// are 0755. Preserving it keeps this a pure atomicity change instead of a
+	// silent mode normalisation that shows up as repo-wide drift.
+	mode := os.FileMode(0o644)
+	if fi, serr := os.Stat(abs); serr == nil {
+		mode = fi.Mode().Perm()
+	}
+	// Same directory, so the rename stays on one filesystem. The name is
+	// dot-prefixed and does not end in .go, so the toolchain ignores it even
+	// if a crash leaves one behind.
+	var tmp *os.File
+	tmp, err = os.CreateTemp(dir, "."+filepath.Base(abs)+".tmp*")
+	if err != nil {
+		err = eh.Errorf("create temp beside %q: %w", abs, err)
+		return
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if _, err = tmp.Write(aligned); err != nil {
+		_ = tmp.Close()
+		err = eh.Errorf("write %q: %w", tmpName, err)
+		return
+	}
+	// CreateTemp makes the file 0600.
+	if err = tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		err = eh.Errorf("chmod %q: %w", tmpName, err)
+		return
+	}
+	if err = tmp.Close(); err != nil {
+		err = eh.Errorf("close %q: %w", tmpName, err)
+		return
+	}
+	if err = os.Rename(tmpName, abs); err != nil {
+		err = eh.Errorf("replace %q: %w", abs, err)
 		return
 	}
 	return
