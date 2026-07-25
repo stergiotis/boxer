@@ -48,12 +48,74 @@ func (inst *App) getCompiledRegexp(pattern string) (re *regexp.Regexp, err error
 	return
 }
 
+// flagPrefix returns the RE2 inline-flag group for the current toggle
+// state — "(?i)", "(?ims)", … — or the empty string when no flag is set.
+// Also serves as the flag component of a query key, so a lane re-runs when
+// a toggle changes even though the raw input text did not.
+func (inst *App) flagPrefix() (prefix string) {
+	var flags strings.Builder
+	if inst.caseInsensitive {
+		flags.WriteByte('i')
+	}
+	if inst.multiline {
+		flags.WriteByte('m')
+	}
+	if inst.dotAll {
+		flags.WriteByte('s')
+	}
+	if flags.Len() == 0 {
+		return
+	}
+	prefix = "(?" + flags.String() + ")"
+	return
+}
+
+// effectivePattern prepends the inline-flag group to a user-entered
+// pattern. Empty patterns are returned unchanged. The flag group is
+// understood by both Go regexp and ClickHouse RE2, so the Go-side preview
+// and the ClickHouse queries see equivalent patterns.
+func (inst *App) effectivePattern(base string) (out string) {
+	out = base
+	if base == "" {
+		return
+	}
+	out = inst.flagPrefix() + base
+	return
+}
+
+// nonEmptyMatches returns re's non-overlapping matches in haystack as
+// (start, end) byte-offset pairs, with zero-width matches dropped.
+//
+// The filter is what makes the preview predictive. Go and ClickHouse
+// enumerate repeated empty matches differently: for pattern `a*` over
+// "xyz", Go's FindAllStringIndex yields one zero-width match at every
+// position (4 of them) while ClickHouse's extractAll yields none. RE2
+// specifies what matches, not how a caller enumerates repeated empty
+// matches, so neither engine is wrong — but this app exists to predict
+// ClickHouse, so the preview follows ClickHouse. Without the filter the
+// status bar claims "Go: 4 match(es)" while the List tab shows 0, and
+// the highlighter emits four invisible zero-width spans.
+//
+// The SD1 tripwire deliberately does NOT go through here — see
+// [App.tripwireGoMatches].
+func nonEmptyMatches(re *regexp.Regexp, haystack string) (matches [][]int) {
+	all := re.FindAllStringIndex(haystack, -1)
+	matches = make([][]int, 0, len(all))
+	for _, m := range all {
+		if m[0] == m[1] {
+			continue
+		}
+		matches = append(matches, m)
+	}
+	return
+}
+
 // renderHighlightedHaystack paints haystack as a LabelAtoms with match
 // ranges highlighted. Plain segments between matches use AtomsFluid.Text;
-// match segments use StyledTextColored with a yellow background. An invalid
-// pattern yields the unstyled haystack — the compile error is surfaced
-// next to the pattern input (see [renderPatternCompileError]).
-func renderHighlightedHaystack(pattern string, haystack string) {
+// match segments use StyledTextColored with the IDS accent fill. An
+// invalid pattern yields the unstyled haystack — the compile error is
+// surfaced next to the pattern input (see [renderPatternCompileError]).
+func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
 	if haystack == "" {
 		c.Label("(empty haystack)").Send()
 		return
@@ -63,13 +125,13 @@ func renderHighlightedHaystack(pattern string, haystack string) {
 		return
 	}
 
-	re, compileErr := app.getCompiledRegexp(effectivePattern(pattern))
+	re, compileErr := inst.getCompiledRegexp(inst.effectivePattern(pattern))
 	if compileErr != nil {
 		c.Label(haystack).Send()
 		return
 	}
 
-	matches := re.FindAllStringIndex(haystack, -1)
+	matches := nonEmptyMatches(re, haystack)
 	if len(matches) == 0 {
 		c.Label(haystack).Send()
 		return
@@ -101,66 +163,111 @@ func renderHighlightedHaystack(pattern string, haystack string) {
 }
 
 // countMatches returns the number of matches of pattern in haystack via
-// Go's regexp. Compile failures are reported as 0 matches with the error;
-// the UI uses this for the status-bar match count (-1 sentinel on error).
-func countMatches(pattern string, haystack string) (n int, err error) {
+// Go's regexp, counted the way ClickHouse's extractAll counts them (see
+// [nonEmptyMatches]). A compile failure is returned as the error with a
+// zero count; the caller keys on err, not on the count.
+func (inst *App) countMatches(pattern string, haystack string) (n int, err error) {
 	if pattern == "" || haystack == "" {
 		return
 	}
-	re, compileErr := app.getCompiledRegexp(effectivePattern(pattern))
+	re, compileErr := inst.getCompiledRegexp(inst.effectivePattern(pattern))
 	if compileErr != nil {
 		err = compileErr
-		n = -1
 		return
 	}
-	n = len(re.FindAllStringIndex(haystack, -1))
+	n = len(nonEmptyMatches(re, haystack))
 	return
 }
 
-// isPatternValid reports whether the single-pattern input compiles under
-// Go's regexp with the current flag set. Empty pattern counts as invalid
-// (there is nothing to dispatch). Uses the compile cache so the check is
-// O(1) per call after the first frame that touched the pattern.
-func isPatternValid() bool {
-	if app.pattern == "" {
-		return false
+// patternStateE is the single-pattern input's readiness, as the result
+// surfaces need it. "Nothing typed yet" and "typed something that does
+// not compile" are different situations for the user and get different
+// messages: the invalid case has a compile error rendered next to the
+// input to point at, the empty case has nothing to point at.
+type patternStateE uint8
+
+const (
+	// patternEmpty — no pattern entered; nothing to dispatch, nothing to explain.
+	patternEmpty patternStateE = iota
+	// patternInvalid — entered but rejected by Go's regexp under the current flags.
+	patternInvalid
+	// patternValid — compiles; queries may dispatch.
+	patternValid
+)
+
+// patternState classifies the single-pattern input under the current flag
+// set. Uses the compile cache, so the check is O(1) per call after the
+// first frame that touched the pattern.
+func (inst *App) patternState() (state patternStateE) {
+	if inst.pattern == "" {
+		state = patternEmpty
+		return
 	}
-	_, err := app.getCompiledRegexp(effectivePattern(app.pattern))
-	return err == nil
+	if _, err := inst.getCompiledRegexp(inst.effectivePattern(inst.pattern)); err != nil {
+		state = patternInvalid
+		return
+	}
+	state = patternValid
+	return
+}
+
+// renderPatternNotReady draws the placeholder a CH-backed result surface
+// shows when there is no valid pattern to have queried, and reports
+// whether it drew anything. Keeps the empty/invalid wording in one place
+// so the tabs cannot drift apart.
+func (inst *App) renderPatternNotReady() (drew bool) {
+	switch inst.patternState() {
+	case patternEmpty:
+		c.Label("(enter a pattern above)").Send()
+		drew = true
+	case patternInvalid:
+		c.Label("(pattern invalid — see the error under the Pattern input)").Send()
+		drew = true
+	}
+	return
+}
+
+// isPatternValid reports whether the single-pattern input is ready to
+// dispatch — non-empty and compiling under the current flag set.
+func (inst *App) isPatternValid() bool {
+	return inst.patternState() == patternValid
 }
 
 // multiLine is one non-empty line of the multi-pattern input together
-// with its per-line state: whether it compiles under Go regexp, and
-// whether the most recent ClickHouse multiMatchAllIndices dispatch
-// reported a hit for it. Invalid lines always have Hit==false;
-// dispatchers skip them when building the call to ClickHouse.
+// with its per-line state.
+//
+// Invalid means Go's regexp rejected the line, which is a *proxy* for what
+// the Multi tab actually runs on. That tab is VectorScan-backed
+// (multiMatchAllIndices), and VectorScan is a different engine accepting a
+// different language from RE2 — so Go-validity is a useful pre-filter, not
+// an authority. Two consequences the UI has to live with:
+//
+//   - a line Go accepts but VectorScan rejects fails the whole query, and
+//     every line loses its hit state behind one error, because
+//     multiMatchAllIndices is a single call over the whole set;
+//   - a line Go rejects is skipped, even if VectorScan would have taken it.
+//
+// The SD1 tripwire covers the RE2 path only, so nothing currently proves
+// the two languages agree on any given line. Err carries the ClickHouse
+// error when a dispatch failed, so the per-line marker can distinguish
+// "Go could not compile this" from "ClickHouse refused the set".
 type multiLine struct {
 	Text    string
 	Invalid bool
 	Hit     bool
 }
 
-// multiSnapshot is the result of the most recent RunMultiMatch dispatch.
-// patternListText is the exact textarea content that produced `lines`,
-// so render code can detect "the user edited since this snapshot" by
-// string comparison and fall back to pending-state markers rather than
-// misrepresenting stale hits as current.
-type multiSnapshot struct {
-	patternListText string
-	lines           []multiLine
-}
-
 // parseAndValidatePatternList splits the patternList textarea into
 // non-empty lines, and tags each line with Invalid=true when Go regexp
 // rejects it under the current flag set. Hit is always false; the
 // dispatcher fills it in after ClickHouse's response.
-func parseAndValidatePatternList(raw string) (lines []multiLine) {
+func (inst *App) parseAndValidatePatternList(raw string) (lines []multiLine) {
 	for _, s := range strings.Split(raw, "\n") {
 		if strings.TrimSpace(s) == "" {
 			continue
 		}
 		line := multiLine{Text: s}
-		if _, err := app.getCompiledRegexp(effectivePattern(s)); err != nil {
+		if _, err := inst.getCompiledRegexp(inst.effectivePattern(s)); err != nil {
 			line.Invalid = true
 		}
 		lines = append(lines, line)
@@ -183,11 +290,11 @@ func countValidMultiLines(lines []multiLine) (n int) {
 // single-pattern input if the pattern fails to compile. Empty patterns
 // are silent (the hint-text already communicates "enter something").
 // Uses the compile cache so no re-compile happens per frame.
-func renderPatternCompileError(pattern string) {
+func (inst *App) renderPatternCompileError(pattern string) {
 	if pattern == "" {
 		return
 	}
-	if _, err := app.getCompiledRegexp(effectivePattern(pattern)); err != nil {
+	if _, err := inst.getCompiledRegexp(inst.effectivePattern(pattern)); err != nil {
 		renderCompileErrorLabel("regex compile error: " + err.Error())
 	}
 }
@@ -195,31 +302,31 @@ func renderPatternCompileError(pattern string) {
 // renderPatternListCompileErrors draws a red error label below the
 // multi-pattern input summarising any invalid lines. Reports the first
 // bad line's message plus the count of bad lines overall, so the user
-// has one concrete message to read and the scope of the damage. Empty
-// lines are skipped. Per-line ⚠ markers in [renderMultiInline] are the
-// visual counterpart; this label carries the full Go regexp error text.
-func renderPatternListCompileErrors(patternList string) {
-	if patternList == "" {
-		return
-	}
+// has one concrete message to read and the scope of the damage. Per-line
+// ⚠ markers in [App.renderMultiInline] are the visual counterpart; this
+// label carries the full Go regexp error text.
+//
+// Walks the lines [App.parseAndValidatePatternList] already produced
+// rather than re-splitting the textarea. The two used to disagree about
+// nothing in particular, but they each carried their own definition of
+// "which lines count", and only one of them had a test.
+func (inst *App) renderPatternListCompileErrors(lines []multiLine) {
 	var firstBadLine int
 	var firstErr error
 	badCount := 0
-	lineNum := 0
-	for _, s := range strings.Split(patternList, "\n") {
-		if strings.TrimSpace(s) == "" {
+	for i, line := range lines {
+		if !line.Invalid {
 			continue
 		}
-		lineNum++
-		if _, err := app.getCompiledRegexp(effectivePattern(s)); err != nil {
-			badCount++
-			if firstErr == nil {
-				firstBadLine = lineNum
-				firstErr = err
-			}
+		badCount++
+		if firstErr == nil {
+			firstBadLine = i + 1
+			// Re-fetch from the cache purely for the message text; the
+			// Invalid flag above is the authority on whether it failed.
+			_, firstErr = inst.getCompiledRegexp(inst.effectivePattern(line.Text))
 		}
 	}
-	if badCount == 0 {
+	if badCount == 0 || firstErr == nil {
 		return
 	}
 	var msg string

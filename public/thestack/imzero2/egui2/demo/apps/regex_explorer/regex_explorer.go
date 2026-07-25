@@ -3,10 +3,8 @@ package regex_explorer
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -31,63 +29,46 @@ import (
 // configview, which uses a finite DesiredWidth(280) for the same reason.
 const editorWidth = float32(800)
 
-// app is the *active* App state pointer the renderer reads from on
-// every frame. The factory ctor allocates a fresh App per Open() and
-// the AppInstance.Frame method swaps this pointer to its per-window
-// state for the duration of the frame, then restores it. The swap is
-// safe because the Go render loop is single-threaded.
-//
-// The initial value gives tests (which exercise the renderer outside
-// the AppInstance wrapper) a non-nil pointer. Production always swaps
-// in fresh per-window state before any access. Every widget id the
-// renderer derives goes through `app.ids` so cross-app collisions are
-// avoided by the per-instance stack the windowhost pre-pushes a
-// window-unique salt onto via c.IdScope (see windowhost.renderWindowBody).
-var app = newApp()
-
-// resultState carries the result of the most recent [App.RunMatch] query.
-// Valid is false before the first successful query.
-type resultState struct {
-	Valid bool
-	Value bool
-}
-
-// App holds per-session state for the regex explorer: current pattern and
-// haystack bound to the UI text-edit widgets, last result of each kind of
-// ClickHouse query, the path to the `clickhouse local` binary used to run
-// queries, and the compiled-regexp cache used by the Go-side offset-highlight
-// painter.
+// App holds per-window state for the regex explorer: the current pattern
+// and haystack bound to the UI text-edit widgets, the last result of each
+// kind of ClickHouse query, and the compiled-regexp cache the Go-side
+// highlight painter uses.
 //
 // Each query kind (match, extractAll, replaceRegexpAll, multiMatchAllIndices)
-// has its own atomic-bool coalescer so all four can be in flight concurrently
-// as independent `clickhouse local` subprocesses; results are stored under mu.
+// has its own atomic-bool coalescer so all four can be in flight
+// concurrently as independent broker requests.
+//
+// Concurrency, precisely — the fields fall into three groups:
+//
+//   - Input and view state (pattern, haystack, replacement, patternList,
+//     the flag toggles, lastFocusedInput, ids) is confined to the render
+//     thread. The egui bindings write several of these through pointers
+//     handed to SendRespVal, which no lock could cover anyway, so the
+//     confinement is the invariant, not the lock.
+//   - Query results, errors, stats, the tripwire outcome, and bus are
+//     written by worker goroutines and read by the render thread; mu
+//     covers those. Input state is also read under mu when a dispatcher
+//     snapshots it for a worker, which is harmless and keeps the snapshot
+//     in one place.
+//   - compileCache has its own mutex (compileCacheMu) because the
+//     tripwire goroutine shares it with the render thread and must not
+//     contend on mu with the query workers.
 type App struct {
 	mu       sync.RWMutex
 	pattern  string
 	haystack string
 
-	lastMatchResult resultState
-	lastMatchStats  clStats
-	lastMatchErr    error
-	matchRunning    atomic.Bool
+	replacement string
+	patternList string
 
-	listMatches []string
-	listStats   clStats
-	listErr     error
-	listRunning atomic.Bool
-
-	replacement    string
-	replaceResult  string
-	replaceValid   bool
-	replaceStats   clStats
-	replaceErr     error
-	replaceRunning atomic.Bool
-
-	patternList   string
-	multiSnapshot multiSnapshot
-	multiStats    clStats
-	multiErr      error
-	multiRunning  atomic.Bool
+	// One lane per ClickHouse call. Each owns its own in-flight state,
+	// last-good result, input fingerprint, and error — so "is this
+	// showing the current input?" is one comparison rather than a
+	// convention every result surface has to remember to follow.
+	matchLane   queryLane[bool]
+	listLane    queryLane[[]string]
+	replaceLane queryLane[string]
+	multiLane   queryLane[[]multiLine]
 
 	caseInsensitive bool
 	multiline       bool
@@ -107,27 +88,35 @@ type App struct {
 	// bus is the per-instance BusI captured at Mount. All SQL goes
 	// through ch.local.exec.regex_explorer via the broker; the
 	// subprocess-shell-out path has been retired.
+	//
+	// Guarded by mu: a host may re-attach a bus between frames
+	// (regexsummary pushes one on every open frame) while query
+	// goroutines are still in flight, so writes go through [App.setBus]
+	// and reads through [App.busSnapshot]. Reading the field directly
+	// from a query goroutine races with the render thread.
 	bus runtimeapp.BusI
 
 	// ids is the per-instance WidgetIdStack the host pre-prepares
 	// with a window-unique salt every frame. Captured from
-	// MountCtx.Ids() at Mount time; AppInstance.Frame swaps the
-	// package-level [app] pointer to this *App, so every renderer
-	// reaches the stack through app.ids and inherits the host's
-	// salt. Cross-app id collisions cannot happen even when two
-	// apps use the same label string. Tour mode and tests fall
-	// back to the default stack populated by newApp().
+	// MountCtx.Ids() at Mount time; every renderer reaches the stack
+	// through its receiver's ids and so inherits the host's salt.
+	// Cross-app id collisions cannot happen even when two apps use
+	// the same label string. Demo scenes rebind it per frame from the
+	// gallery's stack; tests keep the default stack from newApp().
+	//
+	// Render-thread-confined, like [App.pattern] and friends — see the
+	// mu comment above.
 	ids *c.WidgetIdStack
 
 	compileCacheMu sync.Mutex
 	compileCache   map[string]compileResult
 }
 
-// newApp builds the package-level [App]. clickhouse-local is reached
-// via the chlocalbroker subject `ch.local.exec.regex_explorer`; no
-// binary path or env var is consulted here. The fresh WidgetIdStack
-// the App carries is the fallback used by tour mode and tests;
-// AppInstance.Mount overrides it with the host-supplied per-instance
+// newApp builds one [App] — the unit of per-window state. clickhouse-local
+// is reached via the chlocalbroker subject `ch.local.exec.regex_explorer`;
+// no binary path or env var is consulted here. The fresh WidgetIdStack the
+// App carries is the fallback used by tests; AppInstance.Mount (and the
+// demo scenes' BusInit) override it with the host-supplied per-instance
 // stack so interactive multi-window renders don't collide.
 func newApp() (inst *App) {
 	inst = &App{
@@ -137,17 +126,36 @@ func newApp() (inst *App) {
 	return
 }
 
-// AppInstance is the per-window regex_explorer AppI value. Each
-// dock-host Open() yields a fresh AppInstance with its own *App
-// state (pattern, haystack, replacement, query results, mode flags,
-// …). Frame() swaps the package-level [app] pointer to inst.state
-// for the duration of the render call so the existing renderer code
-// (which still reads `app.X`) sees per-window state.
+// setBus attaches bus as the transport for subsequent queries. Safe to
+// call from the render thread while queries are in flight; an in-flight
+// query keeps whatever [App.busSnapshot] handed it when it started.
+func (inst *App) setBus(bus runtimeapp.BusI) {
+	inst.mu.Lock()
+	inst.bus = bus
+	inst.mu.Unlock()
+}
+
+// busSnapshot returns the currently attached transport. Query goroutines
+// must reach the bus through here rather than touching the field, so a
+// host re-attaching a bus mid-flight does not race them.
+func (inst *App) busSnapshot() (bus runtimeapp.BusI) {
+	inst.mu.RLock()
+	bus = inst.bus
+	inst.mu.RUnlock()
+	return
+}
+
+// AppInstance is the per-window regex_explorer AppI value. Each host
+// Open() yields a fresh AppInstance with its own *App state (pattern,
+// haystack, replacement, query results, mode flags, …), and Frame()
+// renders that state directly.
 //
-// We use this swap rather than threading *App through every renderer
-// to keep the refactor diff small (regex_explorer has 70+ `app.X`
-// references). The swap is single-render-goroutine-safe: defer
-// restores the previous pointer when Frame returns.
+// Every renderer is a method on *App, so per-window state reaches them
+// through the receiver. This is deliberate: the app previously kept a
+// package-level *App that Frame swapped in and out for the duration of
+// each render call, which worked only as long as nothing outside the
+// render thread read it — and the SD1 tripwire goroutine did, racing
+// the swap and landing in whichever window happened to be drawing.
 type AppInstance struct {
 	state *App
 }
@@ -172,38 +180,41 @@ func (inst *AppInstance) Manifest() (m runtimeapp.Manifest) { m = manifest; retu
 // label string (e.g. "btm" for their bottom panel).
 func (inst *AppInstance) Mount(ctx runtimeapp.MountContextI) (err error) {
 	if inst.state != nil {
-		inst.state.bus = ctx.Bus()
+		inst.state.setBus(ctx.Bus())
 		inst.state.ids = ctx.Ids()
 	}
 	return
 }
 
-func (inst *AppInstance) Unmount(ctx runtimeapp.MountContextI) (err error) { return }
+// Unmount abandons anything still in flight. Without this a closed window
+// leaves up to four queries running against pooled clickhouse-local
+// workers with nothing left to consume their results.
+func (inst *AppInstance) Unmount(ctx runtimeapp.MountContextI) (err error) {
+	if inst.state != nil {
+		inst.state.cancelQueries()
+	}
+	return
+}
 
-// Frame swaps the package-level `app` pointer to this instance's
-// state for the duration of the render call, then restores it on
-// return. The host has already pre-pushed a window-unique salt onto
-// inst.state.ids via c.IdScope (windowhost.renderWindowBody), so
-// every widget id the renderer derives from `app.ids` is scoped under
-// that salt and cannot collide with another open app's ids.
+// Frame renders this instance's state. The host has already pre-pushed a
+// window-unique salt onto inst.state.ids via c.IdScope
+// (windowhost.renderWindowBody), so every widget id the renderer derives
+// from inst.ids is scoped under that salt and cannot collide with another
+// open app's ids.
 //
 // Kicks off the SD1 engine-fidelity tripwire on the first call
 // (coalesced by [App.tripwireRan] on the per-instance state).
 func (inst *AppInstance) Frame(ctx runtimeapp.FrameContextI) (err error) {
-	prev := app
-	app = inst.state
-	defer func() { app = prev }()
-
 	inst.state.RunTripwire(context.Background())
-	RenderWindow()
+	inst.state.RenderWindow()
 	return
 }
 
 // Screenshot capture is enrolled via registry.Register in
-// regex_explorer_tour.go (ADR-0057). Tour/gallery rendering is
-// single-instance per scene, so each Demo reads/writes the package-level
-// `app` directly (pinning its pattern/haystack) and draws through
-// RenderWindow below; the central widgets TestDriver captures the result.
+// regex_explorer_tour.go (ADR-0057), which allocates one [App] per demo
+// scene through the registry's stateful BusInit/RenderStateful contract
+// and draws it through RenderWindow below; the central widgets TestDriver
+// captures the result.
 
 // RenderWindow draws the regex-explorer body into the caller's UI scope:
 // left cheatsheet panel, central body with pattern / haystack inputs and
@@ -213,160 +224,128 @@ func (inst *AppInstance) Frame(ctx runtimeapp.FrameContextI) (err error) {
 // PanelCentralInside is retained so the body has an owned layout scope —
 // without it, the inputs flicker and steal width unpredictably from the
 // left panel.
-func RenderWindow() {
-	for range c.PanelBottomInside(app.ids.PrepareStr("btm")).DefaultSize(24).Resizable(false).KeepIter() {
-		renderStatusBar()
+func (inst *App) RenderWindow() {
+	for range c.PanelBottomInside(inst.ids.PrepareStr("btm")).DefaultSize(24).Resizable(false).KeepIter() {
+		inst.renderStatusBar()
 	}
 
-	for range c.PanelLeftInside(app.ids.PrepareStr("cheat")).DefaultSize(280).Resizable(true).KeepIter() {
-		renderCheatsheet()
+	for range c.PanelLeftInside(inst.ids.PrepareStr("cheat")).DefaultSize(280).Resizable(true).KeepIter() {
+		inst.renderCheatsheet()
 	}
 
 	for range c.PanelCentralInside().KeepIter() {
-		renderBody()
+		inst.renderBody()
 	}
 }
 
 // renderBody draws the pattern input, haystack input, and the tabbed
-// results area. Input changes auto-dispatch per-tab ClickHouse queries
-// (each coalesced via its own atomic.Bool); the Go-side highlight preview
-// in the Test tab repaints immediately every frame.
-func renderBody() {
-	changed := false
-
+// results area. The Go-side highlight preview repaints every frame; the
+// ClickHouse-backed tabs read whatever their lane currently holds and the
+// lanes converge on the inputs at the end of the frame.
+func (inst *App) renderBody() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("Flags:").Send()
-		if c.Checkbox(app.ids.PrepareStr("ci"), app.caseInsensitive, "case-insensitive (?i)").SendRespVal(&app.caseInsensitive).HasChanged() {
-			changed = true
-		}
-		if c.Checkbox(app.ids.PrepareStr("ml"), app.multiline, "multiline (?m)").SendRespVal(&app.multiline).HasChanged() {
-			changed = true
-		}
-		if c.Checkbox(app.ids.PrepareStr("dot"), app.dotAll, "dot-all (?s)").SendRespVal(&app.dotAll).HasChanged() {
-			changed = true
-		}
+		c.Checkbox(inst.ids.PrepareStr("ci"), inst.caseInsensitive, "case-insensitive (?i)").SendRespVal(&inst.caseInsensitive)
+		c.Checkbox(inst.ids.PrepareStr("ml"), inst.multiline, "multiline (?m)").SendRespVal(&inst.multiline)
+		c.Checkbox(inst.ids.PrepareStr("dot"), inst.dotAll, "dot-all (?s)").SendRespVal(&inst.dotAll)
 	}
 
-	for range c.CollapsingHeader(app.ids.PrepareStr("hdr-pattern"), c.WidgetText().Text("Pattern (single regex — RE2 tabs)").Keep()).DefaultOpen(true).KeepIter() {
-		resp := c.TextEdit(app.ids.PrepareStr("pattern"), app.pattern, false).
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-pattern"), c.WidgetText().Text("Pattern (single regex — RE2 tabs)").Keep()).DefaultOpen(true).KeepIter() {
+		resp := c.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false).
 			DesiredWidth(editorWidth).
 			HintText("regular expression").
-			SendRespVal(&app.pattern)
-		if resp.HasChanged() {
-			changed = true
-		}
+			SendRespVal(&inst.pattern)
 		if resp.HasGainedFocus() || resp.HasFocus() {
-			app.lastFocusedInput = 0
+			inst.lastFocusedInput = 0
 		}
-		renderPatternCompileError(app.pattern)
+		inst.renderPatternCompileError(inst.pattern)
 	}
 
-	for range c.CollapsingHeader(app.ids.PrepareStr("hdr-patternlist"), c.WidgetText().Text("Multi patterns (one regex per line — VectorScan multiMatchAllIndices)").Keep()).DefaultOpen(true).KeepIter() {
-		listResp := c.TextEdit(app.ids.PrepareStr("patternList"), app.patternList, true).
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-patternlist"), c.WidgetText().Text("Multi patterns (one regex per line — VectorScan multiMatchAllIndices)").Keep()).DefaultOpen(true).KeepIter() {
+		listResp := c.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true).
 			CodeEditor().
 			DesiredWidth(editorWidth).
 			DesiredRows(4).
 			HintText("pattern 1\npattern 2\n...").
-			SendRespVal(&app.patternList)
-		if listResp.HasChanged() {
-			changed = true
-		}
+			SendRespVal(&inst.patternList)
 		if listResp.HasGainedFocus() || listResp.HasFocus() {
-			app.lastFocusedInput = 2
+			inst.lastFocusedInput = 2
 		}
-		renderPatternListCompileErrors(app.patternList)
-		renderMultiInline()
+		// One parse feeds both the error summary and the per-line rows.
+		lines := inst.parseAndValidatePatternList(inst.patternList)
+		inst.renderPatternListCompileErrors(lines)
+		inst.renderMultiInline(lines)
 	}
 
 	c.Separator().Horizontal().Send()
 
 	c.Label("Haystack (trial text):").Send()
-	haystackResp := c.TextEdit(app.ids.PrepareStr("haystack"), app.haystack, true).
+	haystackResp := c.TextEdit(inst.ids.PrepareStr("haystack"), inst.haystack, true).
 		CodeEditor().
 		DesiredWidth(editorWidth).
 		DesiredRows(6).
 		HintText("test string").
-		SendRespVal(&app.haystack)
-	if haystackResp.HasChanged() {
-		changed = true
-	}
+		SendRespVal(&inst.haystack)
 	if haystackResp.HasGainedFocus() || haystackResp.HasFocus() {
-		app.lastFocusedInput = 1
+		inst.lastFocusedInput = 1
 	}
 
 	c.Separator().Horizontal().Send()
 
 	c.UiSetMinHeight(260)
-	for dock := range c.DockArea(app.ids.PrepareStr("tabs")) {
-		for range dock.Tab(1, "Test") {
-			renderTestTab()
+	for dock := range c.DockArea(inst.ids.PrepareStr("tabs")) {
+		for range dock.Tab(1, "Preview (Go)") {
+			inst.renderPreviewTab()
 		}
 		for range dock.Tab(2, "List") {
-			renderListTab()
+			inst.renderListTab()
 		}
 		for range dock.Tab(3, "Replace") {
-			if renderReplaceTab() {
-				changed = true
-			}
+			inst.renderReplaceTab()
 		}
 	}
 
-	if changed && app.haystack != "" && isPatternValid() {
-		ctx := context.Background()
-		if !app.matchRunning.Load() {
-			app.RunMatch(ctx)
-		}
-		if !app.listRunning.Load() {
-			app.RunExtractAll(ctx)
-		}
-		if !app.replaceRunning.Load() {
-			app.RunReplaceAll(ctx)
-		}
-	}
-	if changed && app.haystack != "" && app.patternList != "" && !app.multiRunning.Load() {
-		app.RunMultiMatch(context.Background(), app.patternList)
-	}
+	// Converge the lanes on whatever is in the editors now. Runs every
+	// frame rather than on a change edge: an edit that lands while a
+	// query is in flight is not lost, it is simply picked up by the next
+	// frame that finds a lane free (see [queryLane]).
+	inst.reconcileQueries()
 }
 
-// effectivePattern prepends an RE2 inline-flag group (e.g. "(?ims)") to the
-// user-entered pattern based on the current flag-toggle state. Empty
-// patterns are returned unchanged. The flag group is understood by both Go
-// regexp and ClickHouse RE2, so the Go-side preview and the ClickHouse
-// queries see equivalent patterns.
-func effectivePattern(base string) (out string) {
-	if base == "" {
-		out = base
-		return
-	}
-	var flags strings.Builder
-	if app.caseInsensitive {
-		flags.WriteByte('i')
-	}
-	if app.multiline {
-		flags.WriteByte('m')
-	}
-	if app.dotAll {
-		flags.WriteByte('s')
-	}
-	if flags.Len() == 0 {
-		out = base
-		return
-	}
-	out = "(?" + flags.String() + ")" + base
+// singleKey is the query fingerprint for the two lanes driven purely by
+// the single pattern and the haystack. Render-side mirror of the key
+// [App.reconcileSingle] builds, so a result surface can ask its lane
+// whether what it holds describes what is on screen.
+func (inst *App) singleKey() (key queryKey) {
+	key = makeQueryKey(inst.effectivePattern(inst.pattern), inst.haystack)
 	return
 }
 
-// renderTestTab draws the Go-side highlight preview. No ClickHouse
-// interaction; offsets are recomputed per frame from the cached compiled
-// pattern, so the preview is always in sync with the current input.
-func renderTestTab() {
-	c.Label("Preview (Go RE2, byte offsets computed locally):").Send()
-	renderHighlightedHaystack(app.pattern, app.haystack)
+// replaceKey extends [App.singleKey] with the replacement text.
+func (inst *App) replaceKey() (key queryKey) {
+	key = makeQueryKey(inst.effectivePattern(inst.pattern), inst.haystack, inst.replacement)
+	return
 }
 
-// renderMultiInline draws the per-line result rows for the Multi
-// patterns input, right below the patternList TextEdit and its
-// compile-error label. Each non-empty line of the current input gets:
+// multiKey is the query fingerprint for the VectorScan lane.
+func (inst *App) multiKey() (key queryKey) {
+	key = makeQueryKey(inst.patternList, inst.haystack, inst.flagPrefix())
+	return
+}
+
+// renderPreviewTab draws the Go-side highlight preview. No ClickHouse
+// interaction: offsets are recomputed per frame from the cached compiled
+// pattern, so the preview is always in sync with the current input — which
+// is exactly why it is the tab that can afford to repaint on every
+// keystroke.
+func (inst *App) renderPreviewTab() {
+	c.Label("Preview (Go RE2, byte offsets computed locally):").Send()
+	inst.renderHighlightedHaystack(inst.pattern, inst.haystack)
+}
+
+// renderMultiInline draws the per-line result rows for the Multi patterns
+// input, right below the patternList TextEdit and its compile-error label.
+// Each non-empty line of the current input gets:
 //
 //	<line-number> <marker>  |  <pattern text>
 //
@@ -375,40 +354,31 @@ func renderTestTab() {
 //	✓  pattern hit the haystack (ClickHouse multiMatchAllIndices result)
 //	·  pattern did not hit
 //	⚠  pattern does not compile under Go regexp (skipped on CH dispatch)
-//	…  pending — user just edited; waiting on ClickHouse
+//	…  pending — waiting on ClickHouse for the current input
 //
-// Parses the current patternList live to show ⚠ markers as soon as the
-// user types an invalid line; overlays Hit state from the last
-// [multiSnapshot] only when its captured text matches the current
-// input (otherwise the hits are stale and we fall back to "pending").
-func renderMultiInline() {
-	lines := parseAndValidatePatternList(app.patternList)
+// lines is the caller's live parse, so ⚠ markers appear as soon as the
+// user types an invalid line. Hit state comes from the lane, and only when
+// the lane's result describes the current input — otherwise the row shows
+// … rather than presenting an older answer as this one.
+func (inst *App) renderMultiInline(lines []multiLine) {
 	if len(lines) == 0 {
 		return
 	}
 
-	app.mu.RLock()
-	snapshot := app.multiSnapshot
-	multiErr := app.multiErr
-	running := app.multiRunning.Load()
-	multiStats := app.multiStats
-	app.mu.RUnlock()
-
-	overlay := snapshot.patternListText == app.patternList
-	if overlay {
-		lines = snapshot.lines
+	view := inst.multiLane.view(inst.multiKey())
+	if view.Fresh {
+		lines = view.Value
 	}
-
 	validCount := countValidMultiLines(lines)
 
 	for range c.Horizontal().KeepIter() {
 		switch {
-		case running:
+		case view.Running:
 			c.Spinner().Size(14).Send()
 			c.Label(fmt.Sprintf("multiMatchAllIndices over %d valid line(s)…", validCount)).Send()
-		case multiErr != nil && overlay:
-			c.Label(fmt.Sprintf("CH error: %v", multiErr)).Send()
-		case !overlay:
+		case view.Err != nil:
+			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
+		case !view.Fresh:
 			c.Label(fmt.Sprintf("pending… %d valid / %d total line(s)", validCount, len(lines))).Send()
 		case validCount == 0:
 			c.Label(fmt.Sprintf("%d line(s), all invalid (see errors above)", len(lines))).Send()
@@ -420,18 +390,18 @@ func renderMultiInline() {
 				}
 			}
 			c.Label(fmt.Sprintf("hits: %d / %d valid (%d total)  elapsed: %s",
-				hits, validCount, len(lines), time.Duration(multiStats.ElapsedNs))).Send()
+				hits, validCount, len(lines), view.Elapsed)).Send()
 		}
 	}
 
 	for i, line := range lines {
-		for range c.IdScope(app.ids.PrepareSeq(uint64(i))) {
+		for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 			for range c.Horizontal().KeepIter() {
 				mark := "·"
 				switch {
 				case line.Invalid:
 					mark = "⚠"
-				case !overlay:
+				case !view.Fresh:
 					mark = "…"
 				case line.Hit:
 					mark = "✓"
@@ -448,145 +418,108 @@ func renderMultiInline() {
 // cursor-position insertion is not exposed through the current FFFI2
 // binding; appending is the closest accurate approximation for the
 // cheatsheet's intended left-to-right pattern construction flow.
-func insertToken(tok string) {
-	app.mu.Lock()
-	switch app.lastFocusedInput {
+//
+// No dispatch here: the lanes pick the edit up when renderBody
+// reconciles at the end of this frame.
+func (inst *App) insertToken(tok string) {
+	switch inst.lastFocusedInput {
 	case 1:
-		app.haystack += tok
+		inst.haystack += tok
 	case 2:
-		app.patternList += tok
+		inst.patternList += tok
 	case 3:
-		app.replacement += tok
+		inst.replacement += tok
 	default:
-		app.pattern += tok
+		inst.pattern += tok
 	}
-	app.mu.Unlock()
-	dispatchQueriesFromShowcase()
 }
 
 // applyShowcase sets both the pattern and haystack inputs to showcase
-// content, overriding whatever is currently in those fields, and triggers
-// the per-tab query cascade. Used by the left-panel showcase buttons.
-func applyShowcase(pattern string, haystack string) {
-	app.mu.Lock()
-	app.pattern = pattern
-	app.haystack = haystack
-	app.mu.Unlock()
-	dispatchQueriesFromShowcase()
-}
-
-// dispatchQueriesFromShowcase mirrors the auto-dispatch block in
-// renderBody for the case where App.pattern / App.haystack were mutated
-// outside a TextEdit HasChanged event (cheatsheet click, showcase click).
-// Like renderBody, skips ClickHouse dispatch when the pattern does not
-// compile under Go regexp — the compile error is already shown next to
-// the input, and spawning `clickhouse local` just to duplicate the
-// error message is wasteful.
-func dispatchQueriesFromShowcase() {
-	ctx := context.Background()
-	if app.haystack != "" && isPatternValid() {
-		if !app.matchRunning.Load() {
-			app.RunMatch(ctx)
-		}
-		if !app.listRunning.Load() {
-			app.RunExtractAll(ctx)
-		}
-		if !app.replaceRunning.Load() {
-			app.RunReplaceAll(ctx)
-		}
-	}
-	if app.haystack != "" && app.patternList != "" && !app.multiRunning.Load() {
-		app.RunMultiMatch(ctx, app.patternList)
-	}
+// content, overriding whatever is currently in those fields. Used by the
+// left-panel showcase buttons; like [App.insertToken], it only writes
+// state — reconciliation does the rest.
+func (inst *App) applyShowcase(pattern string, haystack string) {
+	inst.pattern = pattern
+	inst.haystack = haystack
 }
 
 // renderReplaceTab draws the replacement TextEdit and the
-// replaceRegexpAll result. Returns true when the replacement input
-// changed, so the caller can include the change in the auto-dispatch
-// trigger.
-func renderReplaceTab() (changed bool) {
+// replaceRegexpAll result.
+func (inst *App) renderReplaceTab() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("Replacement:").Send()
-		resp := c.TextEdit(app.ids.PrepareStr("replacement"), app.replacement, false).
+		resp := c.TextEdit(inst.ids.PrepareStr("replacement"), inst.replacement, false).
 			DesiredWidth(editorWidth).
 			HintText("replacement pattern (use \\1, \\2, ... for capture groups)").
-			SendRespVal(&app.replacement)
-		if resp.HasChanged() {
-			changed = true
-		}
+			SendRespVal(&inst.replacement)
 		if resp.HasGainedFocus() || resp.HasFocus() {
-			app.lastFocusedInput = 3
+			inst.lastFocusedInput = 3
 		}
 	}
 
-	if !isPatternValid() {
-		c.Label("(pattern invalid — see Pattern input)").Send()
+	if inst.renderPatternNotReady() {
 		return
 	}
 
-	app.mu.RLock()
-	result := app.replaceResult
-	valid := app.replaceValid
-	replaceErr := app.replaceErr
-	running := app.replaceRunning.Load()
-	app.mu.RUnlock()
+	view := inst.replaceLane.view(inst.replaceKey())
 
 	for range c.Horizontal().KeepIter() {
 		switch {
-		case running:
+		case view.Running:
 			c.Spinner().Size(14).Send()
 			c.Label("Querying ClickHouse replaceRegexpAll...").Send()
-		case replaceErr != nil:
-			c.Label(fmt.Sprintf("CH error: %v", replaceErr)).Send()
-		case !valid:
-			c.Label("Result: (enter replacement and haystack)").Send()
+		case view.Err != nil:
+			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
+		case !view.Has:
+			c.Label("Result: (enter a haystack)").Send()
+		case !view.Fresh:
+			c.Label("Result (stale — refreshing):").Send()
 		default:
-			c.Label("Result:").Send()
+			c.Label(fmt.Sprintf("Result:  elapsed: %s", view.Elapsed)).Send()
 		}
 	}
 
-	if valid && replaceErr == nil {
+	if view.Has && view.Err == nil {
 		for range c.ScrollArea().Vscroll(true).KeepIter() {
-			c.Label(result).Send()
+			c.Label(view.Value).Send()
 		}
 	}
-	return
 }
 
-// renderListTab draws the ClickHouse extractAll result — one row per match
-// text. Rendered as a ScrollArea with sequential labels; match counts
-// expected to stay small during interactive use. If the pattern is
-// invalid Go-side, the list is suppressed and the header explains why —
-// the red error next to the input is already the authoritative signal.
-func renderListTab() {
-	if !isPatternValid() {
-		c.Label("(pattern invalid — see Pattern input)").Send()
+// renderListTab draws the ClickHouse extractAll result — one row per
+// match text. Rendered as a ScrollArea with sequential labels; match
+// counts are expected to stay small during interactive use.
+func (inst *App) renderListTab() {
+	if inst.renderPatternNotReady() {
 		return
 	}
 
-	app.mu.RLock()
-	matches := app.listMatches
-	listErr := app.listErr
-	running := app.listRunning.Load()
-	app.mu.RUnlock()
+	view := inst.listLane.view(inst.singleKey())
+	matches := view.Value
 
 	for range c.Horizontal().KeepIter() {
-		if running {
+		switch {
+		case view.Running:
 			c.Spinner().Size(14).Send()
 			c.Label("Querying ClickHouse extractAll...").Send()
-		} else if listErr != nil {
-			c.Label(fmt.Sprintf("CH error: %v", listErr)).Send()
-		} else {
-			c.Label(fmt.Sprintf("ClickHouse extractAll: %d match(es)", len(matches))).Send()
+		case view.Err != nil:
+			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
+		case !view.Has:
+			c.Label("ClickHouse extractAll: (enter a haystack)").Send()
+		case !view.Fresh:
+			c.Label("ClickHouse extractAll: (stale — refreshing)").Send()
+		default:
+			c.Label(fmt.Sprintf("ClickHouse extractAll: %d match(es)  elapsed: %s", len(matches), view.Elapsed)).Send()
 		}
 	}
 
-	if len(matches) == 0 {
+	if !view.Has || view.Err != nil {
 		return
 	}
+
 	for range c.ScrollArea().Vscroll(true).KeepIter() {
 		for i, m := range matches {
-			for range c.IdScope(app.ids.PrepareSeq(uint64(i))) {
+			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 				for range c.Horizontal().KeepIter() {
 					c.Label(fmt.Sprintf("%d:", i)).Send()
 					c.Label(m).Send()
@@ -597,29 +530,20 @@ func renderListTab() {
 }
 
 // renderStatusBar draws the bottom status bar: Go-side match count, SD1
-// tripwire state, CH match boolean, wall-clock elapsed for the last
-// `clickhouse local` subprocess, and — if the last query failed — the
-// error.
-func renderStatusBar() {
-	app.mu.RLock()
-	result := app.lastMatchResult
-	stats := app.lastMatchStats
-	matchErr := app.lastMatchErr
-	app.mu.RUnlock()
-
+// tripwire state, the ClickHouse match boolean, and the wall-clock elapsed
+// for the query that produced it.
+func (inst *App) renderStatusBar() {
 	for range c.Horizontal().KeepIter() {
-		localCount, localErr := countMatches(app.pattern, app.haystack)
+		localCount, localErr := inst.countMatches(inst.pattern, inst.haystack)
 		switch {
 		case localErr != nil:
 			c.Label(fmt.Sprintf("Go: compile error — %v", localErr)).Send()
-		case localCount < 0:
-			c.Label("Go: —").Send()
 		default:
 			c.Label(fmt.Sprintf("Go: %d match(es)", localCount)).Send()
 		}
 		c.Separator().Vertical().Send()
 
-		tw := app.tripwireSnapshot()
+		tw := inst.tripwireSnapshot()
 		switch {
 		case !tw.Done:
 			c.Label("SD1: running...").Send()
@@ -632,21 +556,30 @@ func renderStatusBar() {
 		}
 		c.Separator().Vertical().Send()
 
+		view := inst.matchLane.view(inst.singleKey())
 		switch {
-		case !isPatternValid():
+		case inst.patternState() == patternEmpty:
+			c.Label("CH: (no pattern)").Send()
+		case inst.patternState() == patternInvalid:
 			c.Label("CH: (pattern invalid)").Send()
-		case matchErr != nil:
-			c.Label(fmt.Sprintf("CH: error — %v", matchErr)).Send()
-		case !result.Valid:
+		case view.Err != nil:
+			c.Label(fmt.Sprintf("CH: error — %v", view.Err)).Send()
+		case !view.Has:
 			c.Label("CH: —").Send()
 		default:
 			label := "CH: match=false"
-			if result.Value {
+			if view.Value {
 				label = "CH: match=true"
+			}
+			if !view.Fresh {
+				// The lane is holding an older answer while a newer query
+				// runs. Saying so beats presenting it as current, which is
+				// the failure this whole lane arrangement exists to stop.
+				label += " (stale)"
 			}
 			c.Label(label).Send()
 			c.Separator().Vertical().Send()
-			c.Label(fmt.Sprintf("elapsed: %s", time.Duration(stats.ElapsedNs))).Send()
+			c.Label(fmt.Sprintf("elapsed: %s", view.Elapsed)).Send()
 		}
 	}
 }

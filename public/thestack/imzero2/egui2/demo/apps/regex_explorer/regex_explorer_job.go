@@ -1,133 +1,35 @@
 package regex_explorer
 
+// ClickHouse query execution.
+//
+// Every query follows the same three steps: build SQL (regex_explorer_sql.go),
+// execute it through the chlocalbroker and pull the single result cell out of
+// the Arrow record (here), and hand the decoded value to a [queryLane]
+// (regex_explorer_lane.go) which owns the async state around it.
+//
+// The functions here are the middle step only. They are synchronous, take
+// everything they need by value, and touch no render-thread state — which is
+// what makes them safe to call from a lane's worker goroutine.
+
 import (
 	"context"
-	"time"
+	"slices"
+	"strings"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// RunMatch dispatches an asynchronous ClickHouse query that evaluates
-// match(haystack, pattern) through a `clickhouse local` subprocess.
-// Coalesces concurrent calls via an atomic flag — if a query is already
-// in flight the new call is dropped silently. Errors are stored on the
-// app and surfaced through the status bar on the next frame.
-func (inst *App) RunMatch(ctx context.Context) {
-	if inst.matchRunning.Swap(true) {
-		return
-	}
-
-	inst.mu.RLock()
-	pattern := effectivePattern(inst.pattern)
-	haystack := inst.haystack
-	inst.mu.RUnlock()
-
-	inst.mu.Lock()
-	inst.lastMatchErr = nil
-	inst.mu.Unlock()
-
-	go func() {
-		defer inst.matchRunning.Store(false)
-		val, stats, err := inst.runMatchBlocking(ctx, haystack, pattern)
-		inst.mu.Lock()
-		defer inst.mu.Unlock()
-		if err != nil {
-			inst.lastMatchErr = err
-			log.Warn().Err(err).Msg("regex_explorer: match query failed")
-			return
-		}
-		inst.lastMatchResult = resultState{Valid: true, Value: val}
-		inst.lastMatchStats = stats
-	}()
-}
-
-// runMatchBlocking executes the SELECT match(...) query synchronously and
-// extracts the single UInt8 cell. Intended to run on a goroutine.
-func (inst *App) runMatchBlocking(ctx context.Context, haystack string, pattern string) (val bool, stats clStats, err error) {
-	sql := buildMatchSQL(haystack, pattern)
-
-	start := time.Now()
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.bus, sql, inst.alloc)
-	if execErr != nil {
-		err = eh.Errorf("execute match query: %w", execErr)
-		return
-	}
-	defer func() {
-		cErr := closer.Close()
-		if cErr != nil && err == nil {
-			err = eh.Errorf("close match query: %w", cErr)
-		}
-	}()
-	defer rdr.Release()
-
-	if !rdr.Next() {
-		readerErr := rdr.Err()
-		if readerErr != nil {
-			err = eh.Errorf("read match result: %w", readerErr)
-			return
-		}
-		err = eh.Errorf("match query returned no records")
-		return
-	}
-	rec := rdr.Record()
-	if rec.NumRows() == 0 || rec.NumCols() == 0 {
-		err = eh.Errorf("match query returned empty record (rows=%d cols=%d)", rec.NumRows(), rec.NumCols())
-		return
-	}
-
-	col := rec.Column(0)
-	u8, ok := col.(*array.Uint8)
-	if !ok {
-		err = eh.Errorf("match query returned unexpected column type %T (expected *array.Uint8)", col)
-		return
-	}
-	val = u8.Value(0) != 0
-	stats.ElapsedNs = uint64(time.Since(start).Nanoseconds())
-	return
-}
-
-// RunExtractAll dispatches an asynchronous ClickHouse query that evaluates
-// extractAll(haystack, pattern), returning an Array(String) of matches.
-// Coalesced and error-surfaced the same way as [App.RunMatch].
-func (inst *App) RunExtractAll(ctx context.Context) {
-	if inst.listRunning.Swap(true) {
-		return
-	}
-
-	inst.mu.RLock()
-	pattern := effectivePattern(inst.pattern)
-	haystack := inst.haystack
-	inst.mu.RUnlock()
-
-	inst.mu.Lock()
-	inst.listErr = nil
-	inst.mu.Unlock()
-
-	go func() {
-		defer inst.listRunning.Store(false)
-		matches, stats, err := inst.runExtractAllBlocking(ctx, haystack, pattern)
-		inst.mu.Lock()
-		defer inst.mu.Unlock()
-		if err != nil {
-			inst.listErr = err
-			log.Warn().Err(err).Msg("regex_explorer: extractAll query failed")
-			return
-		}
-		inst.listMatches = matches
-		inst.listStats = stats
-	}()
-}
-
-// runListQueryBlocking executes sql via the bus, expects a single record whose
-// first column is an Arrow List, and decodes that list's single row via decode.
-// label names the query in error messages. Shared by runExtractAllBlocking and
-// runMultiMatchBlocking, which differ only in the list's inner element type.
-// (Free function, not a method: Go methods cannot take type parameters.)
-func runListQueryBlocking[T any](ctx context.Context, inst *App, label string, sql string, decode func(list *array.List) (out []T, err error)) (out []T, stats clStats, err error) {
-	start := time.Now()
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.bus, sql, inst.alloc)
+// runQueryBlocking executes sql via the bus and hands the first column of
+// the first result record to decode. label names the query in error
+// messages.
+//
+// A free function rather than a method because Go methods cannot take type
+// parameters; inst is used only for the transport and the allocator, both
+// of which are goroutine-safe.
+func runQueryBlocking[T any](ctx context.Context, inst *App, label string, sql string, decode func(col arrow.Array) (out T, err error)) (out T, err error) {
+	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, inst.alloc)
 	if execErr != nil {
 		err = eh.Errorf("execute %s query: %w", label, execErr)
 		return
@@ -154,139 +56,186 @@ func runListQueryBlocking[T any](ctx context.Context, inst *App, label string, s
 		err = eh.Errorf("%s query returned empty record (rows=%d cols=%d)", label, rec.NumRows(), rec.NumCols())
 		return
 	}
-
-	col := rec.Column(0)
-	list, ok := col.(*array.List)
-	if !ok {
-		err = eh.Errorf("%s query returned unexpected column type %T (expected *array.List)", label, col)
-		return
-	}
-	out, err = decode(list)
-	if err != nil {
-		return
-	}
-	stats.ElapsedNs = uint64(time.Since(start).Nanoseconds())
+	out, err = decode(rec.Column(0))
 	return
 }
 
-// runExtractAllBlocking executes SELECT extractAll(...) and decodes the
-// Array(String) column into a Go []string. The record has a single row
-// whose first column is an Arrow List<String>; we iterate the inner string
-// array over the list's offsets.
-func (inst *App) runExtractAllBlocking(ctx context.Context, haystack string, pattern string) (matches []string, stats clStats, err error) {
-	return runListQueryBlocking(ctx, inst, "extractAll", buildExtractAllSQL(haystack, pattern), func(list *array.List) (out []string, err error) {
+// listRowRange returns the [start, end) index range covering the first row
+// of an Arrow list column.
+//
+// arrow-go's List.Offsets returns the raw offsets buffer without adjusting
+// for the array's own offset, so this is only correct for an unsliced
+// array — which is what the reader hands back for these single-row,
+// single-column results. The length check makes the assumption fail loudly
+// instead of panicking if that ever stops holding.
+func listRowRange(label string, list *array.List) (start int, end int, err error) {
+	offsets := list.Offsets()
+	if len(offsets) < 2 {
+		err = eh.Errorf("%s: list column carries %d offset(s); one row needs 2", label, len(offsets))
+		return
+	}
+	start = int(offsets[0])
+	end = int(offsets[1])
+	return
+}
+
+// asList casts col to an Arrow list column, or reports what it got instead.
+func asList(label string, col arrow.Array) (list *array.List, err error) {
+	list, ok := col.(*array.List)
+	if !ok {
+		err = eh.Errorf("%s query returned unexpected column type %T (expected *array.List)", label, col)
+	}
+	return
+}
+
+// runMatchBlocking evaluates match(haystack, pattern) — UInt8, 0 or 1.
+func runMatchBlocking(ctx context.Context, inst *App, haystack string, pattern string) (val bool, err error) {
+	return runQueryBlocking(ctx, inst, "match", buildMatchSQL(haystack, pattern), func(col arrow.Array) (out bool, err error) {
+		u8, ok := col.(*array.Uint8)
+		if !ok {
+			err = eh.Errorf("match query returned unexpected column type %T (expected *array.Uint8)", col)
+			return
+		}
+		out = u8.Value(0) != 0
+		return
+	})
+}
+
+// runReplaceAllBlocking evaluates replaceRegexpAll(haystack, pattern,
+// replacement) — the haystack with every match replaced.
+func runReplaceAllBlocking(ctx context.Context, inst *App, haystack string, pattern string, replacement string) (result string, err error) {
+	return runQueryBlocking(ctx, inst, "replaceRegexpAll", buildReplaceAllSQL(haystack, pattern, replacement), func(col arrow.Array) (out string, err error) {
+		strCol, ok := col.(*array.String)
+		if !ok {
+			err = eh.Errorf("replaceRegexpAll returned unexpected column type %T (expected *array.String)", col)
+			return
+		}
+		out = strCol.Value(0)
+		return
+	})
+}
+
+// runExtractAllBlocking evaluates extractAll(haystack, pattern) —
+// Array(String).
+func runExtractAllBlocking(ctx context.Context, inst *App, haystack string, pattern string) (matches []string, err error) {
+	return runQueryBlocking(ctx, inst, "extractAll", buildExtractAllSQL(haystack, pattern), func(col arrow.Array) (out []string, err error) {
+		list, err := asList("extractAll", col)
+		if err != nil {
+			return
+		}
 		inner, ok := list.ListValues().(*array.String)
 		if !ok {
 			err = eh.Errorf("extractAll inner column type %T (expected *array.String)", list.ListValues())
 			return
 		}
-		offsets := list.Offsets()
-		startIdx := int(offsets[0])
-		end := int(offsets[1])
-		out = make([]string, 0, end-startIdx)
-		for i := startIdx; i < end; i++ {
+		start, end, err := listRowRange("extractAll", list)
+		if err != nil {
+			return
+		}
+		out = make([]string, 0, end-start)
+		for i := start; i < end; i++ {
 			out = append(out, inner.Value(i))
 		}
 		return
 	})
 }
 
-// RunReplaceAll dispatches an asynchronous ClickHouse query that evaluates
-// replaceRegexpAll(haystack, pattern, replacement). Coalesced and
-// error-surfaced the same way as [App.RunMatch].
-func (inst *App) RunReplaceAll(ctx context.Context) {
-	if inst.replaceRunning.Swap(true) {
-		return
-	}
-
-	inst.mu.RLock()
-	pattern := effectivePattern(inst.pattern)
-	haystack := inst.haystack
-	replacement := inst.replacement
-	inst.mu.RUnlock()
-
-	inst.mu.Lock()
-	inst.replaceErr = nil
-	inst.mu.Unlock()
-
-	go func() {
-		defer inst.replaceRunning.Store(false)
-		result, stats, err := inst.runReplaceAllBlocking(ctx, haystack, pattern, replacement)
-		inst.mu.Lock()
-		defer inst.mu.Unlock()
+// runMultiMatchBlocking evaluates multiMatchAllIndices(haystack, [p...]) —
+// Array(UInt64) of 1-based indices into the pattern array. The result is
+// not sorted; callers key by index rather than position.
+func runMultiMatchBlocking(ctx context.Context, inst *App, haystack string, patterns []string) (hits []uint64, err error) {
+	return runQueryBlocking(ctx, inst, "multiMatchAllIndices", buildMultiMatchSQL(haystack, patterns), func(col arrow.Array) (out []uint64, err error) {
+		list, err := asList("multiMatchAllIndices", col)
 		if err != nil {
-			inst.replaceErr = err
-			log.Warn().Err(err).Msg("regex_explorer: replaceRegexpAll query failed")
 			return
 		}
-		inst.replaceResult = result
-		inst.replaceValid = true
-		inst.replaceStats = stats
-	}()
-}
-
-// runReplaceAllBlocking executes SELECT replaceRegexpAll(...) and returns
-// the single String result. Intended to run on a goroutine.
-func (inst *App) runReplaceAllBlocking(ctx context.Context, haystack string, pattern string, replacement string) (result string, stats clStats, err error) {
-	sql := buildReplaceAllSQL(haystack, pattern, replacement)
-
-	start := time.Now()
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.bus, sql, inst.alloc)
-	if execErr != nil {
-		err = eh.Errorf("execute replaceRegexpAll query: %w", execErr)
-		return
-	}
-	defer func() {
-		cErr := closer.Close()
-		if cErr != nil && err == nil {
-			err = eh.Errorf("close replaceRegexpAll query: %w", cErr)
-		}
-	}()
-	defer rdr.Release()
-
-	if !rdr.Next() {
-		readerErr := rdr.Err()
-		if readerErr != nil {
-			err = eh.Errorf("read replaceRegexpAll result: %w", readerErr)
+		inner, ok := list.ListValues().(*array.Uint64)
+		if !ok {
+			err = eh.Errorf("multiMatchAllIndices inner column type %T (expected *array.Uint64)", list.ListValues())
 			return
 		}
-		err = eh.Errorf("replaceRegexpAll query returned no records")
+		start, end, err := listRowRange("multiMatchAllIndices", list)
+		if err != nil {
+			return
+		}
+		out = make([]uint64, 0, end-start)
+		for i := start; i < end; i++ {
+			out = append(out, inner.Value(i))
+		}
 		return
-	}
-	rec := rdr.Record()
-	if rec.NumRows() == 0 || rec.NumCols() == 0 {
-		err = eh.Errorf("replaceRegexpAll query returned empty record (rows=%d cols=%d)", rec.NumRows(), rec.NumCols())
-		return
-	}
-
-	col := rec.Column(0)
-	strCol, ok := col.(*array.String)
-	if !ok {
-		err = eh.Errorf("replaceRegexpAll returned unexpected column type %T (expected *array.String)", col)
-		return
-	}
-	result = strCol.Value(0)
-	stats.ElapsedNs = uint64(time.Since(start).Nanoseconds())
-	return
+	})
 }
 
-// RunMultiMatch dispatches an asynchronous ClickHouse query that evaluates
-// multiMatchAllIndices(haystack, [<valid patterns>]) and stores the
-// outcome as a [multiSnapshot] — one entry per non-empty line of
-// patternListText, tagged with Invalid and (if CH accepted it) Hit.
-// Invalid lines are skipped when building the CH call; CH's 1-based hit
-// indices are mapped back onto the original line positions so the
-// render code can key by visible line number.
+// ---------------------------------------------------------------------------
+// Lane reconciliation — the render thread's once-per-frame convergence step
+// ---------------------------------------------------------------------------
+
+// reconcileQueries points every lane at the inputs currently in the
+// editors. Call once per frame from renderBody after the widgets have
+// written this frame's values.
 //
-// Coalesced via inst.multiRunning. If all lines are invalid (or the
-// patternListText has no non-empty lines) the snapshot is updated
-// synchronously without spawning clickhouse local.
-func (inst *App) RunMultiMatch(ctx context.Context, patternListText string) {
-	if inst.multiRunning.Swap(true) {
+// There is no "did anything change" flag: the lanes compare keys
+// themselves, so a frame where nothing changed costs four key builds and
+// four string comparisons, and a frame where something changed cannot lose
+// the change (see [queryLane]).
+func (inst *App) reconcileQueries() {
+	inst.reconcileSingle()
+	inst.reconcileMulti()
+}
+
+// reconcileSingle drives the three RE2-backed lanes off the single-pattern
+// input. All three go idle when there is nothing dispatchable — a cleared
+// or broken pattern must drop the previous answer, not keep showing it.
+func (inst *App) reconcileSingle() {
+	if inst.haystack == "" || !inst.isPatternValid() {
+		inst.matchLane.reset()
+		inst.listLane.reset()
+		inst.replaceLane.reset()
 		return
 	}
 
-	lines := parseAndValidatePatternList(patternListText)
+	pattern := inst.effectivePattern(inst.pattern)
+	haystack := inst.haystack
+	singleKey := makeQueryKey(pattern, haystack)
+
+	inst.matchLane.demand(singleKey, "regex_explorer.match", func(ctx context.Context) (out bool, err error) {
+		return runMatchBlocking(ctx, inst, haystack, pattern)
+	})
+
+	inst.listLane.demand(singleKey, "regex_explorer.extractAll", func(ctx context.Context) (out []string, err error) {
+		return runExtractAllBlocking(ctx, inst, haystack, pattern)
+	})
+
+	// The replacement text feeds only this lane, so an edit to it must
+	// not re-run match and extractAll — hence its own key rather than a
+	// shared "something changed" trigger.
+	replacement := inst.replacement
+	replaceKey := makeQueryKey(pattern, haystack, replacement)
+	inst.replaceLane.demand(replaceKey, "regex_explorer.replaceRegexpAll", func(ctx context.Context) (out string, err error) {
+		return runReplaceAllBlocking(ctx, inst, haystack, pattern, replacement)
+	})
+}
+
+// reconcileMulti drives the VectorScan lane off the multi-pattern input.
+//
+// The pattern list is parsed on the render thread because
+// parseAndValidatePatternList reads the flag toggles; the worker gets the
+// parsed lines by value.
+func (inst *App) reconcileMulti() {
+	if inst.haystack == "" || strings.TrimSpace(inst.patternList) == "" {
+		inst.multiLane.reset()
+		return
+	}
+	lines := inst.parseAndValidatePatternList(inst.patternList)
+	if len(lines) == 0 {
+		inst.multiLane.reset()
+		return
+	}
+
+	// The haystack and the flags are part of the key, not just the
+	// pattern-list text: editing either changes which patterns hit, and
+	// keying on the text alone would present the old hits as current.
+	key := makeQueryKey(inst.patternList, inst.haystack, inst.flagPrefix())
 
 	var validPatterns []string
 	var validOrigIdx []int
@@ -294,63 +243,56 @@ func (inst *App) RunMultiMatch(ctx context.Context, patternListText string) {
 		if l.Invalid {
 			continue
 		}
-		validPatterns = append(validPatterns, effectivePattern(l.Text))
+		validPatterns = append(validPatterns, inst.effectivePattern(l.Text))
 		validOrigIdx = append(validOrigIdx, i)
 	}
-
-	inst.mu.RLock()
-	haystack := inst.haystack
-	inst.mu.RUnlock()
-
 	if len(validPatterns) == 0 {
-		inst.mu.Lock()
-		inst.multiSnapshot = multiSnapshot{patternListText: patternListText, lines: lines}
-		inst.multiErr = nil
-		inst.mu.Unlock()
-		inst.multiRunning.Store(false)
+		// multiMatchAllIndices rejects an empty pattern array with
+		// ILLEGAL_TYPE_OF_ARGUMENT, and there is nothing to ask anyway:
+		// no line can hit. Serve the parsed lines so the markers render
+		// as answered rather than pending.
+		inst.multiLane.serve(key, lines)
 		return
 	}
 
-	go func() {
-		defer inst.multiRunning.Store(false)
-		hits, stats, err := inst.runMultiMatchBlocking(ctx, haystack, validPatterns)
-		inst.mu.Lock()
-		defer inst.mu.Unlock()
-		if err != nil {
-			inst.multiErr = err
-			inst.multiSnapshot = multiSnapshot{patternListText: patternListText, lines: lines}
-			log.Warn().Err(err).Msg("regex_explorer: multiMatchAllIndices query failed")
+	haystack := inst.haystack
+	inst.multiLane.demand(key, "regex_explorer.multiMatchAllIndices", func(ctx context.Context) (out []multiLine, err error) {
+		hits, hitErr := runMultiMatchBlocking(ctx, inst, haystack, validPatterns)
+		if hitErr != nil {
+			err = hitErr
 			return
 		}
-		for _, chIdx := range hits {
-			validIdx := int(chIdx) - 1
-			if validIdx >= 0 && validIdx < len(validOrigIdx) {
-				lines[validOrigIdx[validIdx]].Hit = true
-			}
-		}
-		inst.multiSnapshot = multiSnapshot{patternListText: patternListText, lines: lines}
-		inst.multiStats = stats
-		inst.multiErr = nil
-	}()
-}
-
-// runMultiMatchBlocking executes SELECT multiMatchAllIndices(...) and
-// decodes the Array(UInt64) column into a Go []uint64. Intended to run on
-// a goroutine.
-func (inst *App) runMultiMatchBlocking(ctx context.Context, haystack string, patterns []string) (hits []uint64, stats clStats, err error) {
-	return runListQueryBlocking(ctx, inst, "multiMatchAllIndices", buildMultiMatchSQL(haystack, patterns), func(list *array.List) (out []uint64, err error) {
-		inner, ok := list.ListValues().(*array.Uint64)
-		if !ok {
-			err = eh.Errorf("multiMatchAllIndices inner column type %T (expected *array.Uint64)", list.ListValues())
-			return
-		}
-		offsets := list.Offsets()
-		startIdx := int(offsets[0])
-		end := int(offsets[1])
-		out = make([]uint64, 0, end-startIdx)
-		for i := startIdx; i < end; i++ {
-			out = append(out, inner.Value(i))
-		}
+		out = applyMultiHits(lines, validOrigIdx, hits)
 		return
 	})
+}
+
+// cancelQueries abandons every lane's in-flight run and drops what the
+// lanes hold. Called from Unmount; safe to call more than once.
+func (inst *App) cancelQueries() {
+	inst.matchLane.reset()
+	inst.listLane.reset()
+	inst.replaceLane.reset()
+	inst.multiLane.reset()
+}
+
+// applyMultiHits maps ClickHouse's hit indices back onto line positions.
+//
+// The indices are 1-based and count only the patterns actually sent, so
+// invalid lines — which are skipped when building the call — shift every
+// subsequent index. validOrigIdx records where each sent pattern came
+// from; this walks that mapping backwards.
+//
+// Out-of-range indices are ignored rather than trusted: they would mean
+// ClickHouse answered about a pattern array we did not send.
+func applyMultiHits(lines []multiLine, validOrigIdx []int, hits []uint64) (out []multiLine) {
+	out = slices.Clone(lines)
+	for _, chIdx := range hits {
+		validIdx := int(chIdx) - 1
+		if validIdx < 0 || validIdx >= len(validOrigIdx) {
+			continue
+		}
+		out[validOrigIdx[validIdx]].Hit = true
+	}
+	return
 }

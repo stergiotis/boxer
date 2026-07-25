@@ -4,15 +4,14 @@ package regex_explorer
 //
 // Go's regexp and ClickHouse's libre2 both implement RE2 — same specification,
 // independent implementations. The tripwire runs a small fixed corpus of
-// (haystack, pattern, expected_matches) tuples through both engines on
-// startup; divergences are logged via eh structured fields and surfaced in
-// the status bar. See ADR-0054 section "Subsidiary design decisions" for
-// the rationale.
+// (haystack, pattern, flags) cases through both engines on startup;
+// divergences are logged and surfaced in the status bar. See ADR-0054
+// section "Subsidiary design decisions" for the rationale.
 //
 // The tripwire is not gating: a drift does not block the app. Users can
-// still type and run queries; the expectation is that divergence is rare
-// and informational, and anyone who cares about an exact-match verification
-// is looking for the status-bar indicator.
+// still type and run queries; the expectation is that unexpected divergence
+// is rare and informational, and anyone who cares about an exact-match
+// verification is looking for the status-bar indicator.
 
 import (
 	"context"
@@ -96,12 +95,12 @@ func (inst *App) RunTripwire(ctx context.Context) {
 func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, err error) {
 	alloc := memory.NewGoAllocator()
 	for i, tc := range tripwireCorpus {
-		goMatches, goErr := tripwireGoMatches(tc.Pattern, tc.Haystack)
+		goMatches, goErr := inst.tripwireGoMatches(tc.Pattern, tc.Haystack)
 		if goErr != nil {
 			err = eh.Errorf("tripwire[%d=%s]: Go compile: %w", i, tc.Name, goErr)
 			return
 		}
-		chMatches, chErr := tripwireCHMatches(ctx, inst, alloc, tc.Pattern, tc.Haystack)
+		chMatches, chErr := inst.tripwireCHMatches(ctx, alloc, tc.Pattern, tc.Haystack)
 		if chErr != nil {
 			err = eh.Errorf("tripwire[%d=%s]: ClickHouse: %w", i, tc.Name, chErr)
 			return
@@ -114,12 +113,21 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, err err
 	return
 }
 
-// tripwireGoMatches is the Go-side reference for a tripwire case. Mirrors
-// ClickHouse's extractAll semantics: all non-overlapping matches, full-match
-// strings (not capture groups). Shares the [App] compile cache so patterns
-// reused by the tripwire and the main loop are compiled only once.
-func tripwireGoMatches(pattern string, haystack string) (matches []string, err error) {
-	re, err := app.getCompiledRegexp(pattern)
+// tripwireGoMatches is the Go-side reference for a tripwire case: all
+// non-overlapping matches as full-match strings (not capture groups).
+//
+// Deliberately raw — this is the one place that must NOT go through
+// nonEmptyMatches. The preview mirrors ClickHouse's empty-match policy so
+// the UI tells one story; the tripwire compares the engines as they
+// actually behave. Filtering here would make the tripwire agree with
+// itself by construction.
+//
+// Shares the receiver's compile cache so patterns reused by the tripwire
+// and the main loop are compiled only once. Reaching the cache through
+// the receiver rather than a package-level pointer is what keeps this
+// goroutine off the render thread's toes.
+func (inst *App) tripwireGoMatches(pattern string, haystack string) (matches []string, err error) {
+	re, err := inst.getCompiledRegexp(pattern)
 	if err != nil {
 		return
 	}
@@ -134,9 +142,9 @@ func tripwireGoMatches(pattern string, haystack string) (matches []string, err e
 // local` subprocess and returns the string matches, mirroring the shape
 // of tripwireGoMatches. Allocates a fresh [memory.Allocator] so the
 // tripwire does not share memory bookkeeping with live UI queries.
-func tripwireCHMatches(ctx context.Context, inst *App, alloc memory.Allocator, pattern string, haystack string) (matches []string, err error) {
+func (inst *App) tripwireCHMatches(ctx context.Context, alloc memory.Allocator, pattern string, haystack string) (matches []string, err error) {
 	sql := buildExtractAllSQL(haystack, pattern)
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.bus, sql, alloc)
+	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, alloc)
 	if execErr != nil {
 		err = eh.Errorf("execute tripwire query: %w", execErr)
 		return
@@ -183,7 +191,7 @@ func tripwireCHMatches(ctx context.Context, inst *App, alloc memory.Allocator, p
 	return
 }
 
-// tripwireState exposes a thread-safe snapshot of the SD1 outcome.
+// tripwireSnapshot exposes a thread-safe snapshot of the SD1 outcome.
 func (inst *App) tripwireSnapshot() (state TripwireState) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()

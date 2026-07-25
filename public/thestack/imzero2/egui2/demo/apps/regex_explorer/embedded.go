@@ -2,13 +2,13 @@ package regex_explorer
 
 // Embedded entry point — hosts the regex explorer inside another widget's
 // UI scope (typically an inspector window) without going through the
-// runtimeapp registry. Mirrors [AppInstance.Frame]'s setup exactly:
-// per-render package-`app`-pointer swap, instance-unique
-// [c.WidgetIdStack] salt pushed via [c.IdScope], and the same
-// idempotent [App.RunTripwire] kick. ADR-0026 amendment 2026-05-12
-// already designed [RenderWindow]'s body so it works inside any
-// caller-owned [c.Window] using only `*Inside` panel variants, so no
-// panel-layout refactor is needed.
+// runtimeapp registry. Mirrors [AppInstance.Frame]'s setup, plus an
+// instance-unique [c.WidgetIdStack] salt pushed via [c.IdScope] so
+// several embedded explorers can share a screen, and the same idempotent
+// [App.RunTripwire] kick. ADR-0026 amendment 2026-05-12 already designed
+// [App.RenderWindow]'s body so it works inside any caller-owned
+// [c.Window] using only `*Inside` panel variants, so no panel-layout
+// refactor is needed.
 //
 // One [EmbeddedApp] per host widget instance; reuse across frames so
 // pattern / haystack / replacement state persists. The embedded app
@@ -62,7 +62,7 @@ func NewEmbedded(seed uint64) (inst *EmbeddedApp) {
 		state: newApp(),
 		seed:  seed,
 	}
-	inst.state.bus = &runtimeapp.NoopBus{}
+	inst.state.setBus(&runtimeapp.NoopBus{})
 	return
 }
 
@@ -72,16 +72,18 @@ func NewEmbedded(seed uint64) (inst *EmbeddedApp) {
 // reverts to [runtimeapp.NoopBus] (CH-backed queries fail with a clear
 // error; Go-side preview still works).
 //
-// Safe to call between frames; in-flight goroutines spawned before the
-// swap retain their captured *App pointer and continue using the
-// previous bus value, so the swap takes effect from the next
-// [App.RunMatch] / [App.RunExtractAll] / etc. dispatch.
+// Safe to call from the render thread at any time, including while
+// queries are in flight: the swap goes through [App.setBus] under the
+// state lock, and a query that has already started keeps the transport
+// [App.busSnapshot] handed it. Hosts that re-push a bus every frame
+// (regexsummary does) therefore cost one uncontended lock per frame and
+// nothing else.
 func (inst *EmbeddedApp) SetBus(bus runtimeapp.BusI) {
 	if bus == nil {
-		inst.state.bus = &runtimeapp.NoopBus{}
+		inst.state.setBus(&runtimeapp.NoopBus{})
 		return
 	}
-	inst.state.bus = bus
+	inst.state.setBus(bus)
 }
 
 // SetPattern seeds the embedded explorer's pattern field. The caller
@@ -96,43 +98,25 @@ func (inst *EmbeddedApp) SetPattern(p string) {
 	inst.state.mu.Unlock()
 }
 
-// Pattern returns the embedded explorer's current pattern. Useful for
-// hosts that want to surface "user has changed the pattern in the
-// inspector" feedback (e.g. a small dirty marker) in their level-1
-// summary row.
-func (inst *EmbeddedApp) Pattern() (p string) {
-	inst.state.mu.RLock()
-	p = inst.state.pattern
-	inst.state.mu.RUnlock()
-	return
-}
-
 // Render renders the regex explorer body into the current UI scope.
 // The caller must wrap this in a parent scope that owns layout (e.g.
 // a `c.Window` body or a `c.Vertical` block) — per ADR-0026 the body
 // uses only `*Inside` panel variants and does not own its own window
 // chrome.
 //
-// Internally performs the same package-level `app` pointer swap that
-// [AppInstance.Frame] does, then pushes the per-instance salt onto
-// the per-state [c.WidgetIdStack] via [c.IdScope] before calling
-// [RenderWindow]. The swap is safe under the single-threaded Go render
-// loop; defer restores the previous pointer on return so nested hosts
-// (one EmbeddedApp inside another's inspector window) still see the
-// correct state when control returns to them.
+// Pushes the per-instance salt onto the state's [c.WidgetIdStack] via
+// [c.IdScope] before calling [App.RenderWindow], so nested hosts (one
+// EmbeddedApp inside another's inspector window) each draw under their
+// own id namespace.
 //
 // Kicks off the SD1 engine-fidelity tripwire on the first call
 // (coalesced by [App.tripwireRan] on the per-instance state) so the
 // status bar's "SD1: ✓" / "SD1: DRIFT" indicator reflects the
 // embedded explorer just like the standalone window does.
 func (inst *EmbeddedApp) Render() {
-	prev := app
-	app = inst.state
-	defer func() { app = prev }()
-
 	inst.state.RunTripwire(context.Background())
 	inst.state.ids.Reset()
 	for range c.IdScope(inst.state.ids.PrepareSeq(inst.seed)) {
-		RenderWindow()
+		inst.state.RenderWindow()
 	}
 }

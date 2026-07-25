@@ -2,11 +2,9 @@ package regex_explorer
 
 // Unit + integration tests for the regex explorer's testable surface.
 //
-// The package currently uses a package-global [App] (var app). Tests that
-// depend on flag state or cached compiles reset the relevant fields on
-// setup — a richer future refactor would take the App as a parameter so
-// tests could run t.Parallel, but for the current scope (single-user
-// interactive demo) the global is fine and the setup hooks are small.
+// State is per-[App]: every test allocates its own via newTestApp, so flag
+// state and the compile cache cannot leak between cases and nothing has to
+// be reset on setup.
 //
 // Integration tests that shell out to `clickhouse local` skip when the
 // binary is not on PATH, so the suite stays usable on machines without
@@ -31,14 +29,13 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 )
 
-// resetAppFlags restores the package-global [app] to the flag state
-// shared across tests — no regex flags, empty compile cache entry for
-// patterns we're about to exercise.
-func resetAppFlags(t *testing.T) {
+// newTestApp returns a fresh [App]: no regex flags set, empty compile
+// cache, no bus. Cheap enough to call per subtest, which is what keeps
+// cases independent.
+func newTestApp(t *testing.T) (inst *App) {
 	t.Helper()
-	app.caseInsensitive = false
-	app.multiline = false
-	app.dotAll = false
+	inst = newApp()
+	return
 }
 
 // skipIfNoClickHouseLocal short-circuits integration tests when the
@@ -90,30 +87,29 @@ func setupTestBus(t *testing.T) (caller runtimeapp.BusI) {
 // ---------------------------------------------------------------------------
 
 func TestEffectivePattern(t *testing.T) {
-	resetAppFlags(t)
-
 	cases := []struct {
 		name  string
-		setup func()
+		setup func(inst *App)
 		base  string
 		want  string
 	}{
-		{name: "empty-base-no-flags", setup: func() {}, base: "", want: ""},
-		{name: "no-flags", setup: func() {}, base: "foo", want: "foo"},
-		{name: "case-insensitive", setup: func() { app.caseInsensitive = true }, base: "foo", want: "(?i)foo"},
-		{name: "multiline", setup: func() { app.multiline = true }, base: "^x$", want: "(?m)^x$"},
-		{name: "dotall", setup: func() { app.dotAll = true }, base: ".", want: "(?s)."},
-		{name: "all-three", setup: func() {
-			app.caseInsensitive = true
-			app.multiline = true
-			app.dotAll = true
+		{name: "empty-base-no-flags", setup: func(*App) {}, base: "", want: ""},
+		{name: "no-flags", setup: func(*App) {}, base: "foo", want: "foo"},
+		{name: "case-insensitive", setup: func(inst *App) { inst.caseInsensitive = true }, base: "foo", want: "(?i)foo"},
+		{name: "multiline", setup: func(inst *App) { inst.multiline = true }, base: "^x$", want: "(?m)^x$"},
+		{name: "dotall", setup: func(inst *App) { inst.dotAll = true }, base: ".", want: "(?s)."},
+		{name: "all-three", setup: func(inst *App) {
+			inst.caseInsensitive = true
+			inst.multiline = true
+			inst.dotAll = true
 		}, base: "foo", want: "(?ims)foo"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetAppFlags(t)
-			tc.setup()
-			got := effectivePattern(tc.base)
+			t.Parallel()
+			inst := newTestApp(t)
+			tc.setup(inst)
+			got := inst.effectivePattern(tc.base)
 			if got != tc.want {
 				t.Errorf("effectivePattern(%q) = %q; want %q", tc.base, got, tc.want)
 			}
@@ -122,8 +118,6 @@ func TestEffectivePattern(t *testing.T) {
 }
 
 func TestParseAndValidatePatternList(t *testing.T) {
-	resetAppFlags(t)
-
 	cases := []struct {
 		name        string
 		input       string
@@ -174,8 +168,8 @@ func TestParseAndValidatePatternList(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetAppFlags(t)
-			got := parseAndValidatePatternList(tc.input)
+			t.Parallel()
+			got := newTestApp(t).parseAndValidatePatternList(tc.input)
 			if len(got) != len(tc.wantTexts) {
 				t.Fatalf("line count = %d; want %d (got=%v)", len(got), len(tc.wantTexts), got)
 			}
@@ -216,8 +210,6 @@ func TestCountValidMultiLines(t *testing.T) {
 }
 
 func TestCountMatches(t *testing.T) {
-	resetAppFlags(t)
-
 	cases := []struct {
 		name     string
 		pattern  string
@@ -230,12 +222,23 @@ func TestCountMatches(t *testing.T) {
 		{"empty-haystack", `\d+`, "", 0, false},
 		{"digits", `\d+`, "a1 b22 c333", 3, false},
 		{"no-match", `\d+`, "no digits", 0, false},
-		{"invalid-pattern", `\d(+`, "text", -1, true},
+		// A compile failure is reported through err with a zero count.
+		// There is no negative sentinel: the caller distinguishes
+		// "couldn't compile" from "compiled, matched nothing" by err.
+		{"invalid-pattern", `\d(+`, "text", 0, true},
+		// Zero-width matches are not counted — ClickHouse's extractAll
+		// reports none for these, and the preview follows ClickHouse so
+		// the status bar and the List tab tell one story (ADR-0054 SD1
+		// known-difference ledger, case empty-matchable-star).
+		{"empty-matchable-star", `a*`, "xyz", 0, false},
+		{"empty-matchable-opt", `q?`, "xyz", 0, false},
+		{"mixed-empty-and-real", `a*`, "xayz", 1, false},
+		{"boundary-is-zero-width", `\b`, "hi there", 0, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetAppFlags(t)
-			n, err := countMatches(tc.pattern, tc.haystack)
+			t.Parallel()
+			n, err := newTestApp(t).countMatches(tc.pattern, tc.haystack)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("countMatches err=%v; wantErr=%v", err, tc.wantErr)
 			}

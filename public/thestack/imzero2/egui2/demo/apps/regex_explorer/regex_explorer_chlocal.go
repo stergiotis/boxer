@@ -28,14 +28,6 @@ const chLocalPoolName = "regex_explorer"
 // its Manifest.Caps — see app_register.go.
 const chLocalCapPattern = chlocalbroker.SubjectExecPrefix + chLocalPoolName
 
-// clStats is the minimal query summary surfaced to the UI — wall-clock
-// elapsed only. The broker's reply does carry an ElapsedNs that could
-// populate this, but the existing job code measures end-to-end so we
-// keep that for now.
-type clStats struct {
-	ElapsedNs uint64
-}
-
 // executeArrowStreamViaBus publishes the query on
 // ch.local.exec.regex_explorer via the supplied BusI, ingests the
 // reply bytes as an Arrow IPC stream, and returns the reader + a

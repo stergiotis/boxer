@@ -9,12 +9,12 @@ package regex_explorer
 // fallback-chain path codified in ADR-0054 SD2: the originally-proposed
 // SETTINGS-clause binding does not work (ClickHouse's SETTINGS is for
 // query-level server settings, not parameter substitution), and
-// multi-statement SET requires multi_statements=1 which
-// [play.Client.ExecuteArrowStream] does not currently plumb.
+// multi-statement SET buys nothing given this app's one-SELECT-per-dispatch
+// shape.
 //
-// play.Client.ExecuteArrowStream handles the FORMAT ArrowStream rewrite via
-// its nanopass pipeline; callers of these builders must not append FORMAT
-// themselves.
+// The output format is requested out of band — the broker is asked for
+// ArrowStream when the query is published (see regex_explorer_chlocal.go),
+// so callers of these builders must not append a FORMAT clause themselves.
 
 import (
 	"strings"
@@ -52,7 +52,12 @@ func buildReplaceAllSQL(haystack string, pattern string, replacement string) (sq
 // buildMultiMatchSQL returns a SELECT querying ClickHouse's
 // multiMatchAllIndices(haystack, [p1, p2, ...]) with each pattern escaped
 // as an individual SQL literal. Returns Array(UInt64) — 1-based indices
-// of matching patterns. Uses the VectorScan / hyperscan backend.
+// of matching patterns, unsorted. Uses the VectorScan / hyperscan backend.
+//
+// patterns must be non-empty: `multiMatchAllIndices(h, [])` types the
+// array as Array(Nothing) and ClickHouse rejects it with
+// ILLEGAL_TYPE_OF_ARGUMENT. Callers filter the empty case out before
+// getting here (see [App.reconcileMulti]).
 func buildMultiMatchSQL(haystack string, patterns []string) (sql string) {
 	var b strings.Builder
 	b.WriteString("SELECT multiMatchAllIndices(")

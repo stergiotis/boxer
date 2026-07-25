@@ -80,89 +80,89 @@ var showcaseCases = []showcaseCase{
 // on top followed by RE2 syntax and ClickHouse function references.
 // Clicking any row either inserts a token into the last-focused input
 // (syntax/function rows) or replaces pattern+haystack (showcase rows).
-func renderCheatsheet() {
+func (inst *App) renderCheatsheet() {
 	for range c.ScrollArea().Vscroll(true).KeepIter() {
-		for range c.CollapsingHeader(app.ids.PrepareStr("cs-showcases"), c.WidgetText().Text("Showcases").Keep()).DefaultOpen(true).KeepIter() {
-			for range c.IdScope(app.ids.PrepareStr("showcase-scope")) {
+		for range c.CollapsingHeader(inst.ids.PrepareStr("cs-showcases"), c.WidgetText().Text("Showcases").Keep()).DefaultOpen(true).KeepIter() {
+			for range c.IdScope(inst.ids.PrepareStr("showcase-scope")) {
 				for i, sc := range showcaseCases {
-					for range c.IdScope(app.ids.PrepareSeq(uint64(i))) {
+					for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 						btnAtoms := c.Atoms().Text(sc.Title).Keep()
-						if c.Button(app.ids.PrepareStr("btn"), btnAtoms).Small().SendResp().HasPrimaryClicked() {
-							applyShowcase(sc.Pattern, sc.Haystack)
+						if c.Button(inst.ids.PrepareStr("btn"), btnAtoms).Small().SendResp().HasPrimaryClicked() {
+							inst.applyShowcase(sc.Pattern, sc.Haystack)
 						}
 					}
 				}
 			}
 		}
 
-		for range c.CollapsingHeader(app.ids.PrepareStr("cs-classes"), c.WidgetText().Text("Character classes").Keep()).KeepIter() {
-			for range c.IdScope(app.ids.PrepareStr("cs-classes-scope")) {
-				cheatRow(0, `\d`, "digit [0-9]")
-				cheatRow(1, `\D`, "non-digit")
-				cheatRow(2, `\w`, "word [A-Za-z0-9_]")
-				cheatRow(3, `\W`, "non-word")
-				cheatRow(4, `\s`, "whitespace")
-				cheatRow(5, `\S`, "non-whitespace")
-				cheatRow(6, `.`, "any char")
-				cheatRow(7, `[abc]`, "any of a, b, c")
-				cheatRow(8, `[^abc]`, "none of a, b, c")
-				cheatRow(9, `[a-z]`, "range")
-				cheatRow(10, `\p{Greek}`, "Unicode property")
+		for range c.CollapsingHeader(inst.ids.PrepareStr("cs-classes"), c.WidgetText().Text("Character classes").Keep()).KeepIter() {
+			for range c.IdScope(inst.ids.PrepareStr("cs-classes-scope")) {
+				inst.cheatRow(0, `\d`, "digit [0-9]")
+				inst.cheatRow(1, `\D`, "non-digit")
+				inst.cheatRow(2, `\w`, "word [A-Za-z0-9_]")
+				inst.cheatRow(3, `\W`, "non-word")
+				inst.cheatRow(4, `\s`, "whitespace")
+				inst.cheatRow(5, `\S`, "non-whitespace")
+				inst.cheatRow(6, `.`, "any char")
+				inst.cheatRow(7, `[abc]`, "any of a, b, c")
+				inst.cheatRow(8, `[^abc]`, "none of a, b, c")
+				inst.cheatRow(9, `[a-z]`, "range")
+				inst.cheatRow(10, `\p{Greek}`, "Unicode property")
 			}
 		}
 
-		for range c.CollapsingHeader(app.ids.PrepareStr("cs-anchors"), c.WidgetText().Text("Anchors").Keep()).KeepIter() {
-			for range c.IdScope(app.ids.PrepareStr("cs-anchors-scope")) {
-				cheatRow(0, `^`, "start of line / text")
-				cheatRow(1, `$`, "end of line / text")
-				cheatRow(2, `\b`, "word boundary")
-				cheatRow(3, `\B`, "non-boundary")
-				cheatRow(4, `\A`, "start of text")
-				cheatRow(5, `\z`, "end of text")
+		for range c.CollapsingHeader(inst.ids.PrepareStr("cs-anchors"), c.WidgetText().Text("Anchors").Keep()).KeepIter() {
+			for range c.IdScope(inst.ids.PrepareStr("cs-anchors-scope")) {
+				inst.cheatRow(0, `^`, "start of line / text")
+				inst.cheatRow(1, `$`, "end of line / text")
+				inst.cheatRow(2, `\b`, "word boundary")
+				inst.cheatRow(3, `\B`, "non-boundary")
+				inst.cheatRow(4, `\A`, "start of text")
+				inst.cheatRow(5, `\z`, "end of text")
 			}
 		}
 
-		for range c.CollapsingHeader(app.ids.PrepareStr("cs-quantifiers"), c.WidgetText().Text("Quantifiers").Keep()).KeepIter() {
-			for range c.IdScope(app.ids.PrepareStr("cs-quantifiers-scope")) {
-				cheatRow(0, `*`, "zero or more")
-				cheatRow(1, `+`, "one or more")
-				cheatRow(2, `?`, "zero or one")
-				cheatRow(3, `{n}`, "exactly n")
-				cheatRow(4, `{n,}`, "n or more")
-				cheatRow(5, `{n,m}`, "between n and m")
-				cheatRow(6, `*?`, "lazy (smallest match)")
+		for range c.CollapsingHeader(inst.ids.PrepareStr("cs-quantifiers"), c.WidgetText().Text("Quantifiers").Keep()).KeepIter() {
+			for range c.IdScope(inst.ids.PrepareStr("cs-quantifiers-scope")) {
+				inst.cheatRow(0, `*`, "zero or more")
+				inst.cheatRow(1, `+`, "one or more")
+				inst.cheatRow(2, `?`, "zero or one")
+				inst.cheatRow(3, `{n}`, "exactly n")
+				inst.cheatRow(4, `{n,}`, "n or more")
+				inst.cheatRow(5, `{n,m}`, "between n and m")
+				inst.cheatRow(6, `*?`, "lazy (smallest match)")
 			}
 		}
 
-		for range c.CollapsingHeader(app.ids.PrepareStr("cs-groups"), c.WidgetText().Text("Groups & flags").Keep()).KeepIter() {
-			for range c.IdScope(app.ids.PrepareStr("cs-groups-scope")) {
-				cheatRow(0, `(...)`, "capturing group")
-				cheatRow(1, `(?:...)`, "non-capturing")
-				cheatRow(2, `(?P<n>...)`, "named capture")
-				cheatRow(3, `(?i)`, "case-insensitive")
-				cheatRow(4, `(?m)`, "multiline")
-				cheatRow(5, `(?s)`, "dot-all")
-				cheatRow(6, `a|b`, "alternation")
+		for range c.CollapsingHeader(inst.ids.PrepareStr("cs-groups"), c.WidgetText().Text("Groups & flags").Keep()).KeepIter() {
+			for range c.IdScope(inst.ids.PrepareStr("cs-groups-scope")) {
+				inst.cheatRow(0, `(...)`, "capturing group")
+				inst.cheatRow(1, `(?:...)`, "non-capturing")
+				inst.cheatRow(2, `(?P<n>...)`, "named capture")
+				inst.cheatRow(3, `(?i)`, "case-insensitive")
+				inst.cheatRow(4, `(?m)`, "multiline")
+				inst.cheatRow(5, `(?s)`, "dot-all")
+				inst.cheatRow(6, `a|b`, "alternation")
 			}
 		}
 
-		for range c.CollapsingHeader(app.ids.PrepareStr("cs-ch-single"), c.WidgetText().Text("ClickHouse RE2 fns").Keep()).KeepIter() {
-			for range c.IdScope(app.ids.PrepareStr("cs-ch-single-scope")) {
-				cheatRow(0, `match(h, p)`, "UInt8: 1 if match, else 0")
-				cheatRow(1, `extractAll(h, p)`, "Array(String): full matches")
-				cheatRow(2, `extractAllGroups(h, p)`, "Array(Array(String)): groups per match")
-				cheatRow(3, `replaceRegexpAll(h, p, r)`, "replace every match")
-				cheatRow(4, `replaceRegexpOne(h, p, r)`, "replace first match")
-				cheatRow(5, `countMatches(h, p)`, "number of matches")
+		for range c.CollapsingHeader(inst.ids.PrepareStr("cs-ch-single"), c.WidgetText().Text("ClickHouse RE2 fns").Keep()).KeepIter() {
+			for range c.IdScope(inst.ids.PrepareStr("cs-ch-single-scope")) {
+				inst.cheatRow(0, `match(h, p)`, "UInt8: 1 if match, else 0")
+				inst.cheatRow(1, `extractAll(h, p)`, "Array(String): full matches")
+				inst.cheatRow(2, `extractAllGroups(h, p)`, "Array(Array(String)): groups per match")
+				inst.cheatRow(3, `replaceRegexpAll(h, p, r)`, "replace every match")
+				inst.cheatRow(4, `replaceRegexpOne(h, p, r)`, "replace first match")
+				inst.cheatRow(5, `countMatches(h, p)`, "number of matches")
 			}
 		}
 
-		for range c.CollapsingHeader(app.ids.PrepareStr("cs-ch-multi"), c.WidgetText().Text("ClickHouse VectorScan fns").Keep()).KeepIter() {
-			for range c.IdScope(app.ids.PrepareStr("cs-ch-multi-scope")) {
-				cheatRow(0, `multiMatchAny(h, [p..])`, "UInt8: any pattern hit")
-				cheatRow(1, `multiMatchAnyIndex(h, [p..])`, "UInt64: index of first hit")
-				cheatRow(2, `multiMatchAllIndices(h, [p..])`, "Array(UInt64): all hit indices")
-				cheatRow(3, `multiFuzzyMatchAny(h, d, [p..])`, "fuzzy match with edit distance")
+		for range c.CollapsingHeader(inst.ids.PrepareStr("cs-ch-multi"), c.WidgetText().Text("ClickHouse VectorScan fns").Keep()).KeepIter() {
+			for range c.IdScope(inst.ids.PrepareStr("cs-ch-multi-scope")) {
+				inst.cheatRow(0, `multiMatchAny(h, [p..])`, "UInt8: any pattern hit")
+				inst.cheatRow(1, `multiMatchAnyIndex(h, [p..])`, "UInt64: index of first hit")
+				inst.cheatRow(2, `multiMatchAllIndices(h, [p..])`, "Array(UInt64): all hit indices")
+				inst.cheatRow(3, `multiFuzzyMatchAny(h, d, [p..])`, "fuzzy match with edit distance")
 			}
 		}
 	}
@@ -171,12 +171,12 @@ func renderCheatsheet() {
 // cheatRow draws one clickable token row: a small button labelled with
 // the token text, followed by a plain description. Clicking the button
 // appends the token into the last-focused text input via [insertToken].
-func cheatRow(seq uint64, token string, desc string) {
-	for range c.IdScope(app.ids.PrepareSeq(seq)) {
+func (inst *App) cheatRow(seq uint64, token string, desc string) {
+	for range c.IdScope(inst.ids.PrepareSeq(seq)) {
 		for range c.Horizontal().KeepIter() {
 			btnAtoms := c.Atoms().Text(token).Keep()
-			if c.Button(app.ids.PrepareStr("tok"), btnAtoms).Small().SendResp().HasPrimaryClicked() {
-				insertToken(token)
+			if c.Button(inst.ids.PrepareStr("tok"), btnAtoms).Small().SendResp().HasPrimaryClicked() {
+				inst.insertToken(token)
 			}
 			c.Label(desc).Send()
 		}
