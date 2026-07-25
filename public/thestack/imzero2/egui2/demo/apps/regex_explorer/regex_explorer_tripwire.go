@@ -143,14 +143,14 @@ func tripwireCHMatches(ctx context.Context, inst *App, alloc memory.Allocator, p
 	}
 	defer func() {
 		cErr := closer.Close()
-		if cErr != nil && err == nil{
+		if cErr != nil && err == nil {
 			err = eh.Errorf("close tripwire query: %w", cErr)
 		}
 	}()
 	defer rdr.Release()
 	if !rdr.Next() {
 		rErr := rdr.Err()
-		if rErr != nil{
+		if rErr != nil {
 			err = eh.Errorf("read tripwire result: %w", rErr)
 			return
 		}

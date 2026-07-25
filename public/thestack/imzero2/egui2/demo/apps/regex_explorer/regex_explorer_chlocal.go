@@ -14,9 +14,9 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // chLocalPoolName is the pool the regex explorer asks the broker for.

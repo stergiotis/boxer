@@ -56,7 +56,7 @@ func (inst *App) runMatchBlocking(ctx context.Context, haystack string, pattern 
 	}
 	defer func() {
 		cErr := closer.Close()
-		if cErr != nil && err == nil{
+		if cErr != nil && err == nil {
 			err = eh.Errorf("close match query: %w", cErr)
 		}
 	}()
@@ -64,7 +64,7 @@ func (inst *App) runMatchBlocking(ctx context.Context, haystack string, pattern 
 
 	if !rdr.Next() {
 		readerErr := rdr.Err()
-		if readerErr != nil{
+		if readerErr != nil {
 			err = eh.Errorf("read match result: %w", readerErr)
 			return
 		}
@@ -238,7 +238,7 @@ func (inst *App) runReplaceAllBlocking(ctx context.Context, haystack string, pat
 	}
 	defer func() {
 		cErr := closer.Close()
-		if cErr != nil && err == nil{
+		if cErr != nil && err == nil {
 			err = eh.Errorf("close replaceRegexpAll query: %w", cErr)
 		}
 	}()
@@ -246,7 +246,7 @@ func (inst *App) runReplaceAllBlocking(ctx context.Context, haystack string, pat
 
 	if !rdr.Next() {
 		readerErr := rdr.Err()
-		if readerErr != nil{
+		if readerErr != nil {
 			err = eh.Errorf("read replaceRegexpAll result: %w", readerErr)
 			return
 		}

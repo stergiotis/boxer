@@ -24,9 +24,9 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 )
 
@@ -207,7 +207,7 @@ func TestCountValidMultiLines(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := countValidMultiLines(tc.in)
-			if got != tc.want{
+			if got != tc.want {
 				t.Errorf("countValidMultiLines(%v) = %d; want %d", tc.in, got, tc.want)
 			}
 		})
@@ -313,7 +313,7 @@ func TestExecuteArrowStreamViaBus_Match(t *testing.T) {
 	}
 	defer func() {
 		cErr := closer.Close()
-		if cErr != nil{
+		if cErr != nil {
 			t.Errorf("closer.Close: %v", cErr)
 		}
 	}()
@@ -346,7 +346,7 @@ func TestExecuteArrowStreamViaBus_MultiMatch_TwoTrivial(t *testing.T) {
 	}
 	defer func() {
 		cErr := closer.Close()
-		if cErr != nil{
+		if cErr != nil {
 			t.Errorf("closer.Close: %v\nsql: %s", cErr, sql)
 		}
 	}()
@@ -408,7 +408,7 @@ func TestExecuteArrowStreamViaBus_EmptyHaystack(t *testing.T) {
 	}
 	defer func() {
 		cErr := closer.Close()
-		if cErr != nil{
+		if cErr != nil {
 			t.Errorf("closer.Close: %v", cErr)
 		}
 	}()

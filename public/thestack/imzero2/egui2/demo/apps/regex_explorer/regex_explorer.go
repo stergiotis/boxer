@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
 // editorWidth is the desired width (egui points) for the pattern,
