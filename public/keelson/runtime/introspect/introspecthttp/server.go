@@ -42,6 +42,9 @@ type Server struct {
 	decryptor DatasetDecryptor
 	srv       *http.Server
 	ln        net.Listener
+	// probes holds the outstanding E6 reachability nonces (probe.go). The
+	// zero value is ready to use.
+	probes probeStore
 }
 
 // Config parameterises a Server.
@@ -158,6 +161,10 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /table/{name}", s.handleTable)
 	mux.HandleFunc("POST /query", s.handleQuery)
 	mux.HandleFunc("GET /query", s.handleQuery)
+	// The E6 reachability probe (probe.go). No data, no policy: it answers
+	// whether a minted nonce was fetched, which is what makes locality
+	// provable rather than inferred from an address.
+	mux.HandleFunc("GET /probe/{nonce}", s.handleProbe)
 	return mux
 }
 
