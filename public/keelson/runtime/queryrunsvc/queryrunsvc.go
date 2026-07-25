@@ -55,6 +55,12 @@ var (
 		Description: "refresh cadence of the capture materialized view (whole seconds, minimum 1s); ClickHouse owns the schedule (ADR-0115 SD2)",
 		Category:    env.CategoryObservability,
 	})
+	Backfill = env.NewString(env.Spec{
+		Name:        "IMZERO2_QUERYRUNS_BACKFILL",
+		Default:     BackfillAll,
+		Description: "how far a FIRST-BOOT backfill reaches: `all` (the source's whole retention), `none` (start at service start), or a duration such as `24h`; ignored once the destination holds facts, so downtime catch-up is unaffected (ADR-0115)",
+		Category:    env.CategoryObservability,
+	})
 	Scope = env.NewCategorialString(env.Spec{
 		Name:        "IMZERO2_QUERYRUNS_SCOPE",
 		Default:     string(queryrunfacts.ScopeAll),
@@ -66,6 +72,39 @@ var (
 		string(queryrunfacts.ScopeOff),
 	})
 )
+
+// Backfill modes for ParseBackfill / the IMZERO2_QUERYRUNS_BACKFILL knob.
+const (
+	// BackfillAll reaches the source's whole retention on first boot — the
+	// original behaviour, and the default.
+	BackfillAll = "all"
+	// BackfillNone starts at service start: no history, only what happens
+	// from now on.
+	BackfillNone = "none"
+)
+
+// ParseBackfill resolves the IMZERO2_QUERYRUNS_BACKFILL spelling to the
+// Config.BackfillFrom instant, relative to now: "all" (or empty) yields the
+// zero time — unbounded, as before — "none" yields now, and any Go duration
+// yields that far back. now is a parameter so the resolution is testable.
+func ParseBackfill(spec string, now time.Time) (from time.Time, err error) {
+	switch spec {
+	case "", BackfillAll:
+		return
+	case BackfillNone:
+		return now, nil
+	}
+	d, derr := time.ParseDuration(spec)
+	if derr != nil {
+		err = eh.Errorf("queryrunsvc: backfill %q is not %q, %q, or a duration: %w", spec, BackfillAll, BackfillNone, derr)
+		return
+	}
+	if d < 0 {
+		err = eh.Errorf("queryrunsvc: backfill duration %q must not be negative", spec)
+		return
+	}
+	return now.Add(-d), nil
+}
 
 // Config parameterises a Service. Zero values fall back to the env
 // registry (Listen/ChURL/Cadence/Scope) and the conventional
@@ -81,6 +120,12 @@ type Config struct {
 	Database string
 	Table    string
 	BatchCap int
+	// BackfillFrom bounds a first-boot backfill: with an empty destination
+	// the extract has no watermark to be newer than and otherwise reaches
+	// the source's whole retention. Zero keeps that behaviour; a non-zero
+	// value starts there instead. Ignored once the destination holds facts,
+	// so a restart after downtime still catches up over the gap.
+	BackfillFrom time.Time
 }
 
 // Service is the running capture endpoint. Construct with New, then
@@ -266,7 +311,7 @@ func (s *Service) extract(ctx context.Context) (rows []queryrunfacts.Row, err er
 	if s.cfg.Scope == queryrunfacts.ScopeOff {
 		return
 	}
-	sql, err := queryrunfacts.ComposeExtractSql(s.FactsTable(), s.PullURL(), s.cfg.Scope, s.cfg.BatchCap)
+	sql, err := queryrunfacts.ComposeExtractSql(s.FactsTable(), s.PullURL(), s.cfg.Scope, s.cfg.BatchCap, s.cfg.BackfillFrom)
 	if err != nil {
 		return
 	}

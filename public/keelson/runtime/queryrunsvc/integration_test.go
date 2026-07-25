@@ -44,6 +44,16 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 		Cadence:  time.Second,
 		Scope:    queryrunfacts.ScopeAll,
 		Database: scratchDb,
+		// Start at now instead of backfilling the host's whole query_log
+		// retention. Without this the test's duration is proportional to
+		// however much history the machine happens to hold — the extract
+		// drains oldest-first at BatchCap per refresh, and the probe is the
+		// NEWEST row, so it lands only after the entire backlog does. That is
+		// what made this test flaky: 119k rows of retention here, ~10k rows/s
+		// normally but ~550/s under -race, i.e. minutes rather than seconds.
+		// The catch-up half below is unaffected — the floor applies only while
+		// the destination is empty, and by then it is not.
+		BackfillFrom: time.Now(),
 	}, zerolog.Nop())
 	require.NoError(t, err)
 	require.NoError(t, svc.Start(ctx))

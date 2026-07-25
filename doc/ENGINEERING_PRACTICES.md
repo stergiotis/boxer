@@ -108,7 +108,7 @@ go test -race -json -short -cover -tags "$tags" ./... \
   their own runner, [scripts/ci/gotest-integration.sh](../scripts/ci/gotest-integration.sh):
 
   ```sh
-  go test -json -count=1 -p 1 -tags "$tags,integration" ./... \
+  go test -race -json -count=1 -p 1 -tags "$tags,integration" ./... \
     | go tool tparse -progress -trimpath -slow 20
   ```
 
@@ -132,14 +132,15 @@ go test -race -json -short -cover -tags "$tags" ./... \
     contention rather than on behaviour. This is why the runner passes `-p 1`;
     it is a correctness requirement of the lane, not a preference.
 
-  The lane runner also omits `-race`, the one place it departs from the default
-  runner — and this one is a **known gap, not a considered exclusion**. The
-  queryrunsvc pipeline test fails under `-race` for a reason that is not
-  understood: it is not slowness (it fails with a 60s budget, three times its
-  passing wall clock), the service logs no error, ClickHouse reports its
-  refreshes succeeding with no exception, and the detector finds no data race —
-  the fact simply never arrives. These are concurrent services and would
-  benefit from race coverage; restoring it needs that root-caused first.
+  A member must not inherit an unbounded workload from the host. The
+  queryrunsvc pipeline test used to: a fresh destination makes the capture
+  extract backfill the machine's whole `system.query_log` retention,
+  oldest-first at a batch cap per refresh, and the probe it waits for is the
+  newest row — so its duration was proportional to however much history the
+  machine happened to hold (119k rows here), and it failed under load and under
+  `-race`, which slowed the drain ~20x. It now starts its capture at `now`
+  (`queryrunsvc.Config.BackfillFrom`), which is O(1) in host history. Prefer
+  that shape: a live-server test should bound what it asks the server to do.
 
   Skipping when the server is unreachable is a *capability* gate, not lane
   membership: on a developer machine that happens to be running ClickHouse, a

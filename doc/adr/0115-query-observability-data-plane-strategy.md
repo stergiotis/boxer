@@ -394,6 +394,32 @@ dormant-proposed; its successor is expected at the weave slice.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 
+## Update — 2026-07-25: bounding the first-boot backfill
+
+The Implementation outline records that the extract reads ascending event time
+with a batch cap "so a first-boot backfill of the whole source TTL advances
+watermark-by-watermark". That remains the default, and it is the right one for
+a server whose history is worth keeping. It is not always the right one: an
+empty destination has no watermark, so the reach is the source's entire
+retention, drained oldest-first at the batch cap per refresh. Enabling capture
+on a busy server therefore means a long catch-up before recent queries appear —
+bounded only by cap × cadence, and silent while it runs. Measured on a
+development machine: 119k retained rows draining at ~10k rows/s, so ~12s before
+the newest query surfaces; the same drain under race instrumentation ran ~20x
+slower.
+
+`queryrunsvc.Config.BackfillFrom` now bounds it. Zero keeps the original
+unbounded reach. A non-zero instant starts there instead, expressed to the
+operator as `IMZERO2_QUERYRUNS_BACKFILL` / `--backfill`: `all` (the default),
+`none` (start at service start), or a duration such as `24h`.
+
+It applies **only while the destination is empty**. Once it holds facts the
+destination-derived watermark governs, so a restart after downtime still
+catches up over the gap — the gap-on-down + anti-join property C3 and the
+Decision rest on. A floor that applied unconditionally would skip exactly that
+window, which is why the predicate tests the watermark for emptiness rather
+than taking the later of the two.
+
 ## References
 
 - [doc/explanation/query-observability.md](../explanation/query-observability.md)

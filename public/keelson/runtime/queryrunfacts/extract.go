@@ -3,6 +3,7 @@ package queryrunfacts
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -65,7 +66,19 @@ const DefaultBatchCap = 10000
 // factsTable is the qualified destination ("boxer.facts"); pullURL is
 // the endpoint the MV reads, e.g. "http://127.0.0.1:8127/pull";
 // batchCap <= 0 applies DefaultBatchCap.
-func ComposeExtractSql(factsTable string, pullURL string, scope ScopeE, batchCap int) (sql string, err error) {
+//
+// backfillFrom bounds a FIRST-BOOT backfill: with an empty destination
+// there is no watermark to be newer than, so the extract otherwise reaches
+// the source's whole retention — on a busy server that is a long silent
+// catch-up before recent queries appear, bounded only by batchCap per
+// refresh. A non-zero backfillFrom starts there instead. The zero value
+// keeps the original unbounded behaviour.
+//
+// It applies ONLY while the destination is empty. Once it holds facts the
+// watermark governs, so a restart after downtime still catches up over the
+// gap — a floor that applied unconditionally would skip exactly that window,
+// which is the property the pipeline exists to guarantee.
+func ComposeExtractSql(factsTable string, pullURL string, scope ScopeE, batchCap int, backfillFrom time.Time) (sql string, err error) {
 	if factsTable == "" || pullURL == "" {
 		err = eh.Errorf("queryrunfacts: extract needs factsTable + pullURL")
 		return
@@ -83,7 +96,16 @@ func ComposeExtractSql(factsTable string, pullURL string, scope ScopeE, batchCap
 		err = eh.Errorf("queryrunfacts: extract not composable for scope %q", scope)
 		return
 	}
-	sql = fmt.Sprintf(`SELECT
+	// The watermark is read once into a scalar so the emptiness test and the
+	// overlap subtraction cannot disagree, and so the destination is scanned
+	// once rather than twice. An empty destination yields the DateTime64 zero,
+	// which is what selects the floor below.
+	floor := "toDateTime64(0, 9, 'UTC')"
+	if !backfillFrom.IsZero() {
+		floor = fmt.Sprintf("toDateTime64(%d, 9, 'UTC')", backfillFrom.UTC().Unix())
+	}
+	sql = fmt.Sprintf(`WITH (SELECT max(%s) FROM %s WHERE has(%s, %d)) AS watermark
+SELECT
   type,
   toUnixTimestamp64Micro(event_time_microseconds) AS event_us,
   query_id,
@@ -101,17 +123,20 @@ FROM system.query_log
 WHERE type != 'QueryStart'
   AND log_comment NOT IN (%s, %s)
   AND position(query, %s) = 0%s
-  AND event_time_microseconds >= (
-    SELECT max(%s) FROM %s WHERE has(%s, %d)
-  ) - %s
+  AND event_time_microseconds >= if(
+    watermark = toDateTime64(0, 9, 'UTC'),
+    %s,
+    watermark - %s
+  )
 ORDER BY event_time_microseconds
 LIMIT %d
 SETTINGS output_format_json_quote_64bit_integers=0, log_comment=%s
 FORMAT JSONEachRow`,
+		ColTs, factsTable, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value(),
 		QueryTextCap,
 		quoteSqlString(ExtractTag), quoteSqlString(RefreshTag),
 		quoteSqlString(pullURL), scopePredicate,
-		ColTs, factsTable, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value(),
+		floor,
 		WatermarkOverlap,
 		batchCap,
 		quoteSqlString(ExtractTag))

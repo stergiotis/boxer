@@ -44,17 +44,30 @@ func NewCliCommand() *cli.Command {
 				Name:  "scope",
 				Usage: "capture scope: all | stamped | off (default: $IMZERO2_QUERYRUNS_SCOPE, else all)",
 			},
+			&cli.StringFlag{
+				Name:  "backfill",
+				Usage: "how far a first-boot backfill reaches: all | none | a duration such as 24h (default: $IMZERO2_QUERYRUNS_BACKFILL, else all). Ignored once the destination holds facts, so downtime catch-up is unaffected",
+			},
 		},
 		Action: run,
 	}
 }
 
 func run(c *cli.Context) (err error) {
+	backfillSpec := c.String("backfill")
+	if backfillSpec == "" {
+		backfillSpec = queryrunsvc.Backfill.Get()
+	}
+	backfillFrom, err := queryrunsvc.ParseBackfill(backfillSpec, time.Now())
+	if err != nil {
+		return eh.Errorf("queryrunsd: %w", err)
+	}
 	svc, err := queryrunsvc.New(queryrunsvc.Config{
-		Listen:  c.String("listen"),
-		ChURL:   c.String("ch-url"),
-		Cadence: c.Duration("cadence"),
-		Scope:   queryrunfacts.ScopeE(c.String("scope")),
+		Listen:       c.String("listen"),
+		ChURL:        c.String("ch-url"),
+		Cadence:      c.Duration("cadence"),
+		Scope:        queryrunfacts.ScopeE(c.String("scope")),
+		BackfillFrom: backfillFrom,
 	}, log.Logger)
 	if err != nil {
 		return eh.Errorf("queryrunsd: %w", err)

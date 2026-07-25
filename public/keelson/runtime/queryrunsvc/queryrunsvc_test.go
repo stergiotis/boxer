@@ -86,3 +86,29 @@ func TestIsLoopbackHost(t *testing.T) {
 	require.False(t, isLoopbackHost("192.168.1.10"))
 	require.False(t, isLoopbackHost("example.com"))
 }
+
+// ParseBackfill resolves the operator-facing spelling. "all" must stay the
+// zero time: that is what keeps the original unbounded first-boot reach for
+// every existing deployment.
+func TestParseBackfill(t *testing.T) {
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+
+	for _, spec := range []string{"", BackfillAll} {
+		from, err := ParseBackfill(spec, now)
+		require.NoError(t, err)
+		require.True(t, from.IsZero(), "%q must leave the reach unbounded", spec)
+	}
+
+	from, err := ParseBackfill(BackfillNone, now)
+	require.NoError(t, err)
+	require.Equal(t, now, from, "none starts at service start")
+
+	from, err = ParseBackfill("24h", now)
+	require.NoError(t, err)
+	require.Equal(t, now.Add(-24*time.Hour), from)
+
+	_, err = ParseBackfill("yesterday", now)
+	require.Error(t, err, "an unparseable spelling must fail loudly, not silently backfill everything")
+	_, err = ParseBackfill("-1h", now)
+	require.Error(t, err, "a negative duration would start in the future")
+}

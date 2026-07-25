@@ -1,8 +1,10 @@
 package queryrunfacts
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -48,7 +50,7 @@ func TestParseStamp(t *testing.T) {
 }
 
 func TestComposeExtractSql(t *testing.T) {
-	sql, err := ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeAll, 0)
+	sql, err := ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeAll, 0, time.Time{})
 	require.NoError(t, err)
 	require.Contains(t, sql, "FROM system.query_log")
 	require.Contains(t, sql, "type != 'QueryStart'")
@@ -61,14 +63,14 @@ func TestComposeExtractSql(t *testing.T) {
 	require.Contains(t, sql, "FORMAT JSONEachRow")
 	require.NotContains(t, sql, "JSONHas")
 
-	sql, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeStamped, 500)
+	sql, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeStamped, 500, time.Time{})
 	require.NoError(t, err)
 	require.Contains(t, sql, "JSONHas(log_comment, 'run_id')")
 	require.Contains(t, sql, "LIMIT 500")
 
-	_, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeOff, 0)
+	_, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeOff, 0, time.Time{})
 	require.Error(t, err, "off must not compose an extract")
-	_, err = ComposeExtractSql("", "http://127.0.0.1:8127/pull", ScopeAll, 0)
+	_, err = ComposeExtractSql("", "http://127.0.0.1:8127/pull", ScopeAll, 0, time.Time{})
 	require.Error(t, err)
 }
 
@@ -197,4 +199,27 @@ func binaryValue(t *testing.T, col arrow.Array, row int) (out []byte) {
 		t.Fatalf("unexpected naturalKey column type %T", col)
 	}
 	return
+}
+
+// The first-boot floor. An empty destination has no watermark to be newer
+// than, so without one the extract reaches the source's whole retention — on a
+// busy server a long silent catch-up before recent queries appear.
+func TestComposeExtractSql_BackfillFrom(t *testing.T) {
+	from := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	sql, err := ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeAll, 0, from)
+	require.NoError(t, err)
+	require.Contains(t, sql, fmt.Sprintf("toDateTime64(%d, 9, 'UTC')", from.Unix()),
+		"the floor must be embedded as the first-boot start")
+
+	// It is a FLOOR ON EMPTINESS, not a filter: the watermark still governs
+	// once the destination holds facts, or a restart after downtime would skip
+	// exactly the gap the pipeline exists to close.
+	require.Contains(t, sql, "watermark - "+WatermarkOverlap)
+	require.Contains(t, sql, "watermark = toDateTime64(0, 9, 'UTC')")
+
+	// The zero value keeps the original unbounded reach.
+	sql, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeAll, 0, time.Time{})
+	require.NoError(t, err)
+	require.NotContains(t, sql, fmt.Sprintf("toDateTime64(%d", from.Unix()))
+	require.Contains(t, sql, "watermark - "+WatermarkOverlap)
 }
