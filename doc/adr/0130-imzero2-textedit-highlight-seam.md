@@ -483,6 +483,32 @@ the wrong place, not merely that a floating window would be closer to the
 text. Until then the out-of-scope line in the entry above stands, with this
 reasoning attached so it is not re-derived.
 
+### 2026-07-25 — correction: the svgexport test debt was discharged, and its recorded cause was wrong
+
+The 2026-07-18 entry above reports
+`render_svg_window_content_only_shrinks_viewbox_and_strips_bg` as "left
+failing rather than papered over", and both later entries carry that forward
+in their out-of-scope lists. It has passed since `15bd9116`, landed the same
+day, so the claim went stale within hours of being written and was then
+repeated twice. Noticed 2026-07-25 while running the suite for L3.
+
+The diagnosis recorded with it was also wrong, which is the part worth
+correcting rather than merely dating. This ADR blamed egui 0.35's `run_ui`
+wrapping the pass in an implicit full-screen `Ui` whose background the
+content-only exporter fails to strip — i.e. a defect in the exporter. The
+actual cause was in the test: its `baseline_rect_present` heuristic treated
+any bare `<rect x=… fill=…>` without rx / fill-opacity / stroke as a
+`finish()` baseline background, and egui 0.35 paints transparent rects behind
+text that `emit_rect` writes as `fill="none"`. A real baseline always carries
+an opaque colour fill, so excluding `fill="none"` was the fix. The exporter
+was not stripping the wrong thing; the assertion was recognising the wrong
+thing.
+
+Nothing in this ADR's decision depends on either version of that story — the
+test debt was always collateral from the egui bump, noted here only because
+fixing the crate's test target to run the seam's own tests is what surfaced
+it. The out-of-scope lists' remaining items stand.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
