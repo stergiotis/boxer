@@ -551,6 +551,11 @@ func (inst *App) renderStatusBar() {
 			c.Label(fmt.Sprintf("SD1: blocked (%v)", tw.Err)).Send()
 		case len(tw.Drifts) > 0:
 			c.Label(fmt.Sprintf("SD1: DRIFT (%d case(s))", len(tw.Drifts))).Send()
+		case len(tw.Known) > 0:
+			// Green, with the ledger count alongside: the engines agree
+			// everywhere we expect them to, and differ only where we
+			// already know they do.
+			c.Label(fmt.Sprintf("SD1: ✓ (%d known)", len(tw.Known))).Send()
 		default:
 			c.Label("SD1: ✓").Send()
 		}
