@@ -135,8 +135,39 @@ type ExecOptions struct {
 // processes sharing a server.
 var execQueryIDSeq atomic.Uint64
 
-// newExecOptions mints a lane's stable ExecOptions. The label names the lane
-// in server-side observability (system.processes / query_log).
+// newExecOptions mints a lane's stable ExecOptions.
+//
+// # The run-identity contract (E4)
+//
+// The minted QueryID is the join key for everything said about a run, and
+// the parties that need to agree on it never meet: the server's
+// system.processes row while it runs, its query_log row once it finishes,
+// the queryrunfacts pin, a KILL QUERY addressed at it, and the progress
+// frames a poller publishes for it. Because it is minted by the client
+// rather than assigned by the server, all of them can name a run before it
+// exists, and a second observer can watch a run it did not issue (R7/R8 of
+// doc/explanation/query-system-requirements.md).
+//
+// Uniqueness scope. `play-<label>-<pid>-<seq>` is unique across every
+// server this or any other boxer process talks to, for as long as query_log
+// retains it: seq disambiguates lanes within a process, the pid
+// disambiguates processes on a host. It is NOT unique across hosts — two
+// machines can mint the same id — so a system federating query_log across
+// hosts must join on (host, query_id), not query_id alone.
+//
+// Stability is the point, not novelty: a lane reuses its id across runs, so
+// a superseding run REPLACES its still-running predecessor server-side
+// (ReplaceRunningQuery). One lane therefore has at most one live run.
+//
+// The label names the lane in server-side observability, and rides the
+// log_comment stamp separately so a consumer need not parse it back out of
+// the id.
+//
+// Both endpoints receive the id, but they can do different things with it.
+// A real server registers it in system.processes and query_log, where it is
+// observable and killable. The in-process introspection endpoint echoes it
+// on the response and logs it, and can offer no more: its workers are
+// one-shot and their system tables die with them (R10).
 func newExecOptions(label string) *ExecOptions {
 	return &ExecOptions{
 		QueryID:             fmt.Sprintf("play-%s-%d-%d", label, os.Getpid(), execQueryIDSeq.Add(1)),

@@ -40,6 +40,11 @@ const (
 	// HeaderExceptionCode carries the numeric ClickHouse error code beside
 	// the exception body.
 	HeaderExceptionCode = "X-ClickHouse-Exception-Code"
+	// HeaderQueryID echoes the run identity the request carried, as the
+	// server does. It is the client's evidence that the id it minted was
+	// received rather than dropped, which matters because an id nobody
+	// records cannot be joined against later.
+	HeaderQueryID = "X-ClickHouse-Query-Id"
 )
 
 // Request is the parsed dialect-level content of one /query-style request.
@@ -52,6 +57,12 @@ type Request struct {
 	// raw string values; typed substitution stays the engine's job. nil
 	// when the request carries none.
 	Params map[string]string
+	// QueryID is the client-minted run identity from `?query_id=` — the
+	// join key a client uses across progress, terminal facts, pins, and
+	// cancellation. Empty when the client minted none. The dialect only
+	// carries it: an endpoint decides what it is good for, and echoes it
+	// with WriteQueryID so a client can see it was received.
+	QueryID string
 	// Ignored lists the non-param, non-query query-string keys, sorted —
 	// settings and endpoint-specific hints the dialect tolerates without
 	// interpreting. Consumers may pick their own keys out (the introspection
@@ -83,6 +94,8 @@ func ParseRequest(r *http.Request, maxSQLBytes int64) (req Request, err error) {
 		switch {
 		case key == "query":
 			// consumed above
+		case key == "query_id":
+			req.QueryID = values[len(values)-1]
 		case strings.HasPrefix(key, ParamPrefix):
 			name := key[len(ParamPrefix):]
 			if !validParamName(name) {
@@ -134,7 +147,6 @@ func validParamName(name string) (ok bool) {
 func KnownIgnorableSetting(key string) (ok bool) {
 	switch key {
 	case "log_comment", // the ADR-0115 identity stamp
-		"query_id",                      // client-chosen statement identity
 		"readonly",                      // the ADR-0132 §SD5 enforcement knob
 		"send_progress_in_http_headers", // no mid-flight exists on a buffered reply
 		"wait_end_of_query",             // buffered replies always wait
@@ -165,6 +177,17 @@ func (inst Summary) JSON() string {
 // WriteSummary sets HeaderSummary on w. Call before the status is written.
 func WriteSummary(w http.ResponseWriter, s Summary) {
 	w.Header().Set(HeaderSummary, s.JSON())
+}
+
+// WriteQueryID echoes a request's run identity on the response. A no-op for
+// an empty id — a client that minted none gets no header, as from a server.
+// Call before the status is written, on the error path too: a failed run is
+// still a run somebody may want to join to.
+func WriteQueryID(w http.ResponseWriter, queryID string) {
+	if queryID == "" {
+		return
+	}
+	w.Header().Set(HeaderQueryID, queryID)
 }
 
 // ContentTypeForStatement maps the trailing FORMAT clause of sql to a

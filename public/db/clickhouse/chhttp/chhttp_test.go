@@ -74,12 +74,38 @@ func TestParseRequestParams(t *testing.T) {
 }
 
 func TestKnownIgnorableSetting(t *testing.T) {
-	for _, key := range []string{"log_comment", "query_id", "readonly",
+	for _, key := range []string{"log_comment", "readonly",
 		"send_progress_in_http_headers", "wait_end_of_query", "default_format", "database"} {
 		assert.True(t, KnownIgnorableSetting(key), key)
 	}
 	assert.False(t, KnownIgnorableSetting("cols"), "endpoint-specific hints are the consumer's")
 	assert.False(t, KnownIgnorableSetting("frobnicate"))
+	assert.False(t, KnownIgnorableSetting("query_id"), "query_id is parsed now, not ignored")
+}
+
+func TestParseRequestQueryID(t *testing.T) {
+	req, err := ParseRequest(
+		httptest.NewRequest("POST", "/query?query_id=play-main-7-3&log_comment=x", strings.NewReader("SELECT 1")),
+		testMaxSQL)
+	require.NoError(t, err)
+	assert.Equal(t, "play-main-7-3", req.QueryID)
+	assert.Equal(t, []string{"log_comment"}, req.Ignored, "an interpreted key is not also ignored")
+
+	// No id is the empty string, not an error: minting one is the client's
+	// choice.
+	req, err = ParseRequest(httptest.NewRequest("POST", "/query", strings.NewReader("SELECT 1")), testMaxSQL)
+	require.NoError(t, err)
+	assert.Empty(t, req.QueryID)
+}
+
+func TestWriteQueryIDEchoesOnlyWhatWasMinted(t *testing.T) {
+	rec := httptest.NewRecorder()
+	WriteQueryID(rec, "play-main-7-3")
+	assert.Equal(t, "play-main-7-3", rec.Header().Get(HeaderQueryID))
+
+	rec = httptest.NewRecorder()
+	WriteQueryID(rec, "")
+	assert.Empty(t, rec.Header().Values(HeaderQueryID), "no id minted, no header")
 }
 
 // TestSummaryJSON pins the wire shape: string-encoded numbers, fixed field

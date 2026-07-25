@@ -263,6 +263,12 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 			s.log.Debug().Str("key", key).Msg("introspecthttp: /query ignoring unknown query-string key")
 		}
 	}
+	// Echo the client's run identity, as a server does. This endpoint has no
+	// system.processes to register it in — its workers are one-shot and their
+	// system tables die with them — so the echo plus the log line below is
+	// the whole of what "the id reached here" can mean on this path. Set
+	// before anything can fail, so a rejected run is joinable too.
+	chhttp.WriteQueryID(w, req.QueryID)
 	// Registered pre-execute rewrites (ADR-0108 §SD6) — e.g. LW_ID_* macro
 	// expansion, which this path needs because chlocal has no LW_ID_* UDFs
 	// installed (identsql only emits them for real servers). Best-effort: a
@@ -277,7 +283,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	body, err := s.runner.RunSQL(r.Context(), rewritten, req.Params)
 	if err != nil {
-		s.log.Warn().Err(err).Msg("introspecthttp: /query failed")
+		s.log.Warn().Err(err).Str("queryId", req.QueryID).Msg("introspecthttp: /query failed")
 		// The broker error carries clickhouse-local's stderr, whose
 		// `Code: N` the envelope surfaces for probe classification.
 		chhttp.WriteException(w, http.StatusBadRequest, err.Error())

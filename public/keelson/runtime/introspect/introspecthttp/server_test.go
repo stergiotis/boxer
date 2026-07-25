@@ -345,6 +345,36 @@ func TestServer_QuerySummaryHeader(t *testing.T) {
 	assert.Contains(t, kv, "elapsed_ns")
 }
 
+// TestServer_QueryEchoesQueryID: the client-minted run identity comes back
+// on the response, as from a server. The echo is the client's only evidence
+// that the id reached this endpoint rather than being dropped — this path
+// has no system.processes to register it in, because its workers are
+// one-shot and their system tables die with them.
+func TestServer_QueryEchoesQueryID(t *testing.T) {
+	s := newQueryServer(t)
+	const sql = "SELECT count() AS c FROM keelson('env') FORMAT ArrowStream"
+
+	resp, err := http.Post(s.BaseURL()+"/query?query_id=play-main-7-3", "text/plain", strings.NewReader(sql))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "play-main-7-3", resp.Header.Get("X-ClickHouse-Query-Id"))
+
+	// A run that fails is still a run somebody may want to join to.
+	bad, err := http.Post(s.BaseURL()+"/query?query_id=play-main-7-4", "text/plain",
+		strings.NewReader("SELECT * FROM keelson('nope')"))
+	require.NoError(t, err)
+	defer func() { _ = bad.Body.Close() }()
+	require.Equal(t, http.StatusBadRequest, bad.StatusCode)
+	assert.Equal(t, "play-main-7-4", bad.Header.Get("X-ClickHouse-Query-Id"))
+
+	// No id minted, no header — as from a server.
+	none, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader(sql))
+	require.NoError(t, err)
+	defer func() { _ = none.Body.Close() }()
+	assert.Empty(t, none.Header.Values("X-ClickHouse-Query-Id"))
+}
+
 // TestServer_QueryAppliesPreExecutePasses: SQL posted to /query goes
 // through the registered pre-execute rewrites before the keelson-url
 // rewrite and the runner (ADR-0108 §SD6). A stub runner captures the SQL,
