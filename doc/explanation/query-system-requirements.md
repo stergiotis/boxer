@@ -258,8 +258,30 @@ Where they sit in a run's lifecycle:
   staleness bounded by the tick. *Exists:* the pattern
   ([ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md)'s single
   scraper; `sysmetricsbus.LatestHolder` on the consumer side) and the
-  in-band capture that remains the one-shot workers' only witness.
-  *Delta:* the poller itself.
+  in-band capture that remains the one-shot workers' only witness, and now
+  the poller itself (`public/keelson/runtime/queryprogress`). Two of its
+  three guarantees are refusals: it never synthesises a terminal, since a
+  run leaving `system.processes` cannot be told apart from one that was
+  killed or failed; and it never deregisters a run on its own, because that
+  would be the same guess by another name. Deregistration belongs to
+  whoever holds the result path, at the moment it delivers the terminal.
+  Self-exclusion is structural rather than a filter — only registered ids
+  are reported, and the poller never registers its own. *Delta:* an
+  adopter.
+
+  No adopter is wired yet, deliberately. The obvious candidate, play, is
+  the connection holder for its own runs, and for that party the in-band
+  headers are strictly better than tick-bounded polling: they stream, and
+  they are not floored by a tick. Routing play's own display through the
+  poller would trade latency for nothing it does not already have. The
+  poller's value is precisely for a party that is *not* the connection
+  holder — a second window, ops tooling — and no such consumer exists in
+  this repository yet. Wiring one before it has a consumer would be
+  guessing at its shape; the poller waits, tested, for the first real one.
+  There is a lifecycle question waiting with it: a poller is bound to one
+  server, while play's endpoint now moves per run under the Auto resolver,
+  so an adopter must decide which runs it can observe before it can decide
+  what to watch.
 - **E8 — Streaming reply channel.** The bus broker's request/reply
   gains an ordered, chunked, backpressured reply stream with an explicit
   end-of-stream or error marker; retention for late joiners is bounded
