@@ -4388,6 +4388,22 @@ func (inst SpinnerFluid) Send() {
 	r.WriteOpCode(uint32(SpinnerMethodIdBuild))
 	r.SendIntermediate()
 }
+func (inst StyledSectionsFluid) Section(byteStart uint32, byteStop uint32, flags uint32, col color.Color) StyledSectionsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(StyledSectionsMethodIdSection))
+	r.WriteUint32(byteStart)
+	r.WriteUint32(byteStop)
+	r.WriteUint32(flags)
+	PutColorAsRetainedColor32(r, col)
+
+	return inst
+}
+
+func (inst StyledSectionsFluid) Keep() typed.RetainedFffiHolderTyped[StyledSectionsS] {
+	r := inst.r
+	r.WriteOpCode(uint32(StyledSectionsMethodIdBuild))
+	return typed.NewRetainedFffiHolderTyped[StyledSectionsS](r.BuildRetained())
+}
 func (inst TableFluid) Striped(val bool) TableFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(TableMethodIdStriped))
@@ -4639,6 +4655,28 @@ func (inst TextEditFluid) HighlightJob(job typed.RetainedFffiHolderTyped[CodeVie
 	r := inst.r
 	r.WriteOpCode(uint32(TextEditMethodIdHighlightJob))
 	r.SpliceRetained(job.Untype())
+
+	return inst
+}
+
+func (inst TextEditFluid) SectionStyled(styled typed.RetainedFffiHolderTyped[StyledSectionsS]) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdSectionStyled))
+	r.SpliceRetained(styled.Untype())
+
+	return inst
+}
+
+func (inst TextEditFluid) NoWrapLayout() TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdNoWrapLayout))
+
+	return inst
+}
+
+func (inst TextEditFluid) ReportCursor() TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdReportCursor))
 
 	return inst
 }

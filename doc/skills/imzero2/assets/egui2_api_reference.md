@@ -177,12 +177,13 @@ status: draft
 | SnarlNode | BuilderFactory | No | 5 | 0 | 2 | Immediate |
 | SnarlPin | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | Spinner | BuilderFactory | No | 0 | 0 | 1 | Immediate |
+| StyledSections | BuilderFactory | No | 0 | 0 | 1 | Retained |
 | Table | BuilderFactory | Yes | 2 | 0 | 5 | Immediate, Retained |
 | TableCellRichText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TextEdit | BuilderFactory | Yes | 2 | 0 | 13 | Immediate |
+| TextEdit | BuilderFactory | Yes | 2 | 0 | 16 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | Tree | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
@@ -2645,6 +2646,22 @@ Spinner
 
 ---
 
+### StyledSections
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Retained
+
+#### Builder Methods
+
+- **Section**(byteStart: u32, byteStop: u32, flags: u32)
+
+#### Return Type
+
+StyledSections
+
+---
+
 ### Table
 
 - **Type:** BuilderFactory
@@ -2777,6 +2794,9 @@ TableHeaderText
 - **CharLimit**(chars: u32)
 - **InsertAtCursor**(snippet: s)
 - **HighlightJob**()
+- **SectionStyled**()
+- **NoWrapLayout**()
+- **ReportCursor**()
 
 #### Return Type
 

@@ -62,6 +62,9 @@ var BuilderFactoryCodeGenExprs = ir.BuilderFactoryCodeGenExprs{
 	Color32Register0Transfer:      "self.r11_color32\n",
 	CodeViewJobRegister0Reference: "self.r12_code_view_job",
 	CodeViewJobRegister0Transfer:  "std::mem::take(&mut self.r12_code_view_job)\n",
+
+	StyledSectionsRegister0Reference: "self.r24_styled_sections",
+	StyledSectionsRegister0Transfer:  "std::mem::take(&mut self.r24_styled_sections)\n",
 }
 
 func resolveTypeToTransferRegister(t ir.TypeI) (consumeCode string, err error) {
@@ -74,6 +77,8 @@ func resolveTypeToTransferRegister(t ir.TypeI) (consumeCode string, err error) {
 		consumeCode = BuilderFactoryCodeGenExprs.Color32Register0Transfer
 	case "code_view_job":
 		consumeCode = BuilderFactoryCodeGenExprs.CodeViewJobRegister0Transfer
+	case "styled_sections":
+		consumeCode = BuilderFactoryCodeGenExprs.StyledSectionsRegister0Transfer
 	default:
 		err = eb.Build().Stringer("type", t.GetName()).Bool("isAbstract", t.IsAbstract()).Errorf("unabhe to resolve transfer register for given type")
 	}

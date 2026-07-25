@@ -184,6 +184,12 @@ type BuilderFactoryCodeGenExprs struct {
 	Color32Register0Transfer      string
 	CodeViewJobRegister0Reference string
 	CodeViewJobRegister0Transfer  string
+	// StyledSections is the ADR-0130 L3 overlay channel: a parallel
+	// evaluated arg whose register accumulates sparse style spans, kept
+	// apart from CodeViewJob so the color-only Section wire struct the
+	// read-only codeview producers share stays put.
+	StyledSectionsRegister0Reference string
+	StyledSectionsRegister0Transfer  string
 }
 
 // A DeferredBlockMap is a first-class argument type in the IDL.

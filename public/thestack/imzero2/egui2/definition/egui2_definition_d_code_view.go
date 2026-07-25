@@ -32,6 +32,37 @@ func definitionsCodeView() (nodes []*ir.BuilderFactoryNode) {
 		WithReturnType(structCodeViewJob()).
 		Build())
 
+	// StyledSections is the ADR-0130 L3 overlay channel: an evaluated
+	// argument builder accumulating sparse style spans (underline,
+	// background, strikethrough, italics) over a buffer somebody else owns.
+	// Deliberately parallel to CodeViewJob rather than an extension of its
+	// Section: the color-only struct is shared with four read-only codeview
+	// producers, and this channel carries no text of its own — it decorates
+	// whatever buffer the consuming widget holds.
+	//
+	// Usage: StyledSections().Section(12, 19, underline|background, red).Keep()
+	//
+	// flags are the STYLE_* bits from text_edit_highlight.rs; a section with
+	// no bits set expresses nothing and is dropped Rust-side.
+	nodes = append(nodes, idl.NewBuilderFactoryNode("styledSections").
+		AddMethods(idl.NewMethodBuilder().
+			BeginMethod("section").
+			Arg("byteStart", ctabb.U32).
+			Arg("byteStop", ctabb.U32).
+			Arg("flags", ctabb.U32).
+			EvaluatedArg("col", structColor32()).AsColor().
+			CodeClientRust(rustClientCode("{{StyledSectionsRegister0Reference}}.push(text_edit_highlight::StyledSection{byte_start, byte_stop, flags, color: col});\n")).
+			EndMethod().
+			Build()...).
+		WithConstructionCodeClientRust(rustClientCode(`{
+	{{StyledSectionsRegister0Reference}}.clear();
+	()
+};
+`)).
+		WithSettingRetained(true).
+		WithReturnType(structStyledSections()).
+		Build())
+
 	// CodeView renders syntax-highlighted text via a cached LayoutJob.
 	// It consumes a CodeViewJob evaluated arg and renders it as a selectable Label.
 	nodes = append(nodes, idl.NewBuilderFactoryNode("codeView").

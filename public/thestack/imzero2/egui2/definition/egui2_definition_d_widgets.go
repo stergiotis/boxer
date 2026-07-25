@@ -473,6 +473,31 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				EvaluatedArg("job", structCodeViewJob()).
 				CodeClientRust(rustClientCode("self.text_edit_pending_highlight = Some(job);\n")).
 				EndMethod().
+				// sectionStyled (ADR-0130 L3): the parallel overlay channel —
+				// sparse underline / background / strikethrough / italics spans
+				// riding the same reconcile as the color sections. Sparse by
+				// contract: uncovered bytes simply have no styling, so unlike
+				// the color tier there is no gap-fill.
+				BeginMethod("sectionStyled").
+				EvaluatedArg("styled", structStyledSections()).
+				CodeClientRust(rustClientCode("self.text_edit_pending_styled = Some(styled);\n")).
+				EndMethod().
+				// noWrapLayout (ADR-0130 L3): lay the buffer out unwrapped, so
+				// galley rows equal logical lines — the alignment contract a
+				// line-number gutter beside the editor depends on. The caller
+				// owns the horizontal scrolling that the wider galley needs.
+				BeginMethod("noWrapLayout").
+				CodeClientRust(rustClientCode("self.text_edit_pending_no_wrap = true;\n")).
+				EndMethod().
+				// reportCursor (ADR-0130 L3): opt in to the caret channel. The
+				// apply block below pushes the sorted cursor char range packed
+				// into one r9_u64 (low half start, high half end), on EVERY
+				// frame the method is present — change detection around
+				// end-of-frame value application never fires, and one u64 per
+				// frame is noise next to the buffer itself.
+				BeginMethod("reportCursor").
+				CodeClientRust(rustClientCode("self.text_edit_pending_report_cursor = true;\n")).
+				EndMethod().
 				Build()...).
 			WithConstructionCodeClientRust(rustClientCode("if multiline { egui::TextEdit::multiline(&mut text).id({{Id}}) } else { egui::TextEdit::singleline(&mut text).id({{Id}}) };\n")).
 			WithSettingImmediate(true).
@@ -482,14 +507,21 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 			// gated on a single `changed` (user-edited OR snippet-inserted) —
 			// pushing twice would move text twice. See ADR-0063.
 			WithApplyCodeClientRust(ir.MergeVerbatimCode(
-				rustClientCode(`// ADR-0130: a builder method stashed an evaluated CodeViewJob on
-// self.text_edit_pending_highlight. Build the layouter closure as a stack
+				rustClientCode(`// ADR-0130: builder methods stashed an evaluated CodeViewJob on
+// self.text_edit_pending_highlight, the L3 overlay list on
+// self.text_edit_pending_styled, and the no-wrap switch on
+// self.text_edit_pending_no_wrap. Build the layouter closure as a stack
 // local — closure and widget are same-scope locals, and the widget is
 // consumed by apply below, so the &mut FnMut borrow stays sound.
-let mut hl_layouter = self
-    .text_edit_pending_highlight
-    .take()
-    .map(crate::imzero2::text_edit_highlight::make_layouter);
+//
+// The styled list and the no-wrap switch are taken unconditionally so
+// neither leaks into the next TextEdit; they only reach a layouter when a
+// highlight job is present, which is the only thing that installs one.
+let styled_sections = self.text_edit_pending_styled.take().unwrap_or_default();
+let no_wrap_layout = std::mem::take(&mut self.text_edit_pending_no_wrap);
+let mut hl_layouter = self.text_edit_pending_highlight.take().map(|job| {
+    crate::imzero2::text_edit_highlight::make_layouter(job, styled_sections, no_wrap_layout)
+});
 if let Some(cl) = hl_layouter.as_mut() {
     {{Instance}} = {{Instance}}.layouter(cl);
 }
@@ -520,6 +552,25 @@ if let Some(ins) = self.text_edit_pending_insert.take() {
 		}
 	}
 	changed = true;
+}
+// ADR-0130 L3 caret report: push the persisted cursor's sorted CHAR range
+// packed low=start / high=end. Runs BEFORE the text push below, which moves
+// the buffer out. Unconditional while the method is present — a caret move
+// with no text change must still be reported, and change detection around
+// end-of-frame value application never fires. No stored state (the editor
+// was never focused) reports (end, end), matching the insert path's
+// convention above; Go clamps against its own copy of the buffer.
+if std::mem::take(&mut self.text_edit_pending_report_cursor) {
+	const CARET_HALF_MAX: u64 = 0xffff_ffff;
+	let end = text.chars().count() as u64;
+	let (cs, ce) = {{EguiUiOptionalOuter}}
+		.as_deref()
+		.map(|ui| ui.ctx().clone())
+		.and_then(|ctx| egui::text_edit::TextEditState::load(&ctx, {{Id}}))
+		.and_then(|st| st.cursor.char_range())
+		.map(|cr| { let r = cr.as_sorted_char_range(); (r.start.0 as u64, r.end.0 as u64) })
+		.unwrap_or((end, end));
+	self.r9_u64_push({{Id}}.value(), cs.min(CARET_HALF_MAX) | (ce.min(CARET_HALF_MAX) << 32));
 }
 if changed {
 	self.r9_s_push({{Id}}.value(), text);

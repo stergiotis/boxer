@@ -167,33 +167,34 @@ const (
 	FuncProcIdSnarlNode                           FuncProcIdE = FuncProcIdOffset + 159
 	FuncProcIdSnarlPin                            FuncProcIdE = FuncProcIdOffset + 160
 	FuncProcIdSpinner                             FuncProcIdE = FuncProcIdOffset + 161
-	FuncProcIdTable                               FuncProcIdE = FuncProcIdOffset + 162
-	FuncProcIdTableCellRichText                   FuncProcIdE = FuncProcIdOffset + 163
-	FuncProcIdTableCellText                       FuncProcIdE = FuncProcIdOffset + 164
-	FuncProcIdTableColumn                         FuncProcIdE = FuncProcIdOffset + 165
-	FuncProcIdTableHeaderText                     FuncProcIdE = FuncProcIdOffset + 166
-	FuncProcIdTextEdit                            FuncProcIdE = FuncProcIdOffset + 167
-	FuncProcIdTimeRangePicker                     FuncProcIdE = FuncProcIdOffset + 168
-	FuncProcIdTintedScope                         FuncProcIdE = FuncProcIdOffset + 169
-	FuncProcIdTree                                FuncProcIdE = FuncProcIdOffset + 170
-	FuncProcIdUiClipToMaxRect                     FuncProcIdE = FuncProcIdOffset + 171
-	FuncProcIdUiDisable                           FuncProcIdE = FuncProcIdOffset + 172
-	FuncProcIdUiSetHeight                         FuncProcIdE = FuncProcIdOffset + 173
-	FuncProcIdUiSetMaxHeight                      FuncProcIdE = FuncProcIdOffset + 174
-	FuncProcIdUiSetMaxWidth                       FuncProcIdE = FuncProcIdOffset + 175
-	FuncProcIdUiSetMinHeight                      FuncProcIdE = FuncProcIdOffset + 176
-	FuncProcIdUiSetMinWidth                       FuncProcIdE = FuncProcIdOffset + 177
-	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 178
-	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 179
-	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 180
-	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 181
-	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 182
-	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 183
-	FuncProcIdWalkersMap                          FuncProcIdE = FuncProcIdOffset + 184
-	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 185
-	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 186
-	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 187
-	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 188
+	FuncProcIdStyledSections                      FuncProcIdE = FuncProcIdOffset + 162
+	FuncProcIdTable                               FuncProcIdE = FuncProcIdOffset + 163
+	FuncProcIdTableCellRichText                   FuncProcIdE = FuncProcIdOffset + 164
+	FuncProcIdTableCellText                       FuncProcIdE = FuncProcIdOffset + 165
+	FuncProcIdTableColumn                         FuncProcIdE = FuncProcIdOffset + 166
+	FuncProcIdTableHeaderText                     FuncProcIdE = FuncProcIdOffset + 167
+	FuncProcIdTextEdit                            FuncProcIdE = FuncProcIdOffset + 168
+	FuncProcIdTimeRangePicker                     FuncProcIdE = FuncProcIdOffset + 169
+	FuncProcIdTintedScope                         FuncProcIdE = FuncProcIdOffset + 170
+	FuncProcIdTree                                FuncProcIdE = FuncProcIdOffset + 171
+	FuncProcIdUiClipToMaxRect                     FuncProcIdE = FuncProcIdOffset + 172
+	FuncProcIdUiDisable                           FuncProcIdE = FuncProcIdOffset + 173
+	FuncProcIdUiSetHeight                         FuncProcIdE = FuncProcIdOffset + 174
+	FuncProcIdUiSetMaxHeight                      FuncProcIdE = FuncProcIdOffset + 175
+	FuncProcIdUiSetMaxWidth                       FuncProcIdE = FuncProcIdOffset + 176
+	FuncProcIdUiSetMinHeight                      FuncProcIdE = FuncProcIdOffset + 177
+	FuncProcIdUiSetMinWidth                       FuncProcIdE = FuncProcIdOffset + 178
+	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 179
+	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 180
+	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 181
+	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 182
+	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 183
+	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 184
+	FuncProcIdWalkersMap                          FuncProcIdE = FuncProcIdOffset + 185
+	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 186
+	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 187
+	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 188
+	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 189
 )
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
@@ -894,6 +895,12 @@ const (
 )
 
 const (
+	StyledSectionsMethodIdBuild StyledSectionsMethodIdE = 0
+
+	StyledSectionsMethodIdSection StyledSectionsMethodIdE = 1
+)
+
+const (
 	TableMethodIdBuild TableMethodIdE = 0
 
 	TableMethodIdStriped           TableMethodIdE = 1
@@ -932,6 +939,9 @@ const (
 	TextEditMethodIdCharLimit      TextEditMethodIdE = 11
 	TextEditMethodIdInsertAtCursor TextEditMethodIdE = 12
 	TextEditMethodIdHighlightJob   TextEditMethodIdE = 13
+	TextEditMethodIdSectionStyled  TextEditMethodIdE = 14
+	TextEditMethodIdNoWrapLayout   TextEditMethodIdE = 15
+	TextEditMethodIdReportCursor   TextEditMethodIdE = 16
 )
 
 const (

@@ -72,6 +72,34 @@ func (inst TextEditFluid) SendRespVal(val *string) ResponseFlagsE {
 	s.AddR9SDatabinding(id, val)
 	return s.GetResponseByIdRaw(id)
 }
+
+// SendRespValCursor is [TextEditFluid.SendRespVal] plus the ADR-0130 L3 caret
+// channel: the editor's cursor range, packed low=start / high=end as CHAR
+// offsets, lands in *cursor. Requires the widget to have opted in via
+// .ReportCursor() — without it Rust pushes nothing and *cursor keeps its
+// previous value.
+//
+// Two typed channels on one widget id is not a special case: the r9_s and
+// r9_u64 databindings live in separate maps keyed by id, so text and caret
+// travel independently. Both carry the usual one-frame lag, and both must be
+// re-registered every frame — FFFI databindings reset each Sync.
+//
+// Use [UnpackCursorRange] to split the value; convert the char offsets to
+// bytes against your own copy of the buffer, not against the live one.
+func (inst TextEditFluid) SendRespValCursor(val *string, cursor *uint64) ResponseFlagsE {
+	inst.Send()
+	s := CurrentApplicationState.StateManager
+	id := inst.id
+	s.AddR9SDatabinding(id, val)
+	s.AddR9U64Databinding(id, cursor)
+	return s.GetResponseByIdRaw(id)
+}
+
+// UnpackCursorRange splits the packed caret value into its sorted char
+// offsets. A collapsed caret reports start == end.
+func UnpackCursorRange(packed uint64) (start, end int) {
+	return int(packed & 0xffff_ffff), int(packed >> 32)
+}
 func (inst DragValueF64Fluid) SendRespVal(val *float64) ResponseFlagsE {
 	inst.Send()
 	s := CurrentApplicationState.StateManager

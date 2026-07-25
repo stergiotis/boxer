@@ -166,33 +166,34 @@ pub enum FuncProcId {
     SnarlNode = fenums::FUNC_PROC_ID_OFFSET + 159,
     SnarlPin = fenums::FUNC_PROC_ID_OFFSET + 160,
     Spinner = fenums::FUNC_PROC_ID_OFFSET + 161,
-    Table = fenums::FUNC_PROC_ID_OFFSET + 162,
-    TableCellRichText = fenums::FUNC_PROC_ID_OFFSET + 163,
-    TableCellText = fenums::FUNC_PROC_ID_OFFSET + 164,
-    TableColumn = fenums::FUNC_PROC_ID_OFFSET + 165,
-    TableHeaderText = fenums::FUNC_PROC_ID_OFFSET + 166,
-    TextEdit = fenums::FUNC_PROC_ID_OFFSET + 167,
-    TimeRangePicker = fenums::FUNC_PROC_ID_OFFSET + 168,
-    TintedScope = fenums::FUNC_PROC_ID_OFFSET + 169,
-    Tree = fenums::FUNC_PROC_ID_OFFSET + 170,
-    UiClipToMaxRect = fenums::FUNC_PROC_ID_OFFSET + 171,
-    UiDisable = fenums::FUNC_PROC_ID_OFFSET + 172,
-    UiSetHeight = fenums::FUNC_PROC_ID_OFFSET + 173,
-    UiSetMaxHeight = fenums::FUNC_PROC_ID_OFFSET + 174,
-    UiSetMaxWidth = fenums::FUNC_PROC_ID_OFFSET + 175,
-    UiSetMinHeight = fenums::FUNC_PROC_ID_OFFSET + 176,
-    UiSetMinWidth = fenums::FUNC_PROC_ID_OFFSET + 177,
-    UiSetWidth = fenums::FUNC_PROC_ID_OFFSET + 178,
-    UiWithLayout = fenums::FUNC_PROC_ID_OFFSET + 179,
-    VectorSize = fenums::FUNC_PROC_ID_OFFSET + 180,
-    Vertical = fenums::FUNC_PROC_ID_OFFSET + 181,
-    VerticalCentered = fenums::FUNC_PROC_ID_OFFSET + 182,
-    VerticalCenteredJustified = fenums::FUNC_PROC_ID_OFFSET + 183,
-    WalkersMap = fenums::FUNC_PROC_ID_OFFSET + 184,
-    WarnIfDebugBuild = fenums::FUNC_PROC_ID_OFFSET + 185,
-    WidgetText = fenums::FUNC_PROC_ID_OFFSET + 186,
-    WidgetsGlobalThemePreferenceButtons = fenums::FUNC_PROC_ID_OFFSET + 187,
-    Window = fenums::FUNC_PROC_ID_OFFSET + 188,
+    StyledSections = fenums::FUNC_PROC_ID_OFFSET + 162,
+    Table = fenums::FUNC_PROC_ID_OFFSET + 163,
+    TableCellRichText = fenums::FUNC_PROC_ID_OFFSET + 164,
+    TableCellText = fenums::FUNC_PROC_ID_OFFSET + 165,
+    TableColumn = fenums::FUNC_PROC_ID_OFFSET + 166,
+    TableHeaderText = fenums::FUNC_PROC_ID_OFFSET + 167,
+    TextEdit = fenums::FUNC_PROC_ID_OFFSET + 168,
+    TimeRangePicker = fenums::FUNC_PROC_ID_OFFSET + 169,
+    TintedScope = fenums::FUNC_PROC_ID_OFFSET + 170,
+    Tree = fenums::FUNC_PROC_ID_OFFSET + 171,
+    UiClipToMaxRect = fenums::FUNC_PROC_ID_OFFSET + 172,
+    UiDisable = fenums::FUNC_PROC_ID_OFFSET + 173,
+    UiSetHeight = fenums::FUNC_PROC_ID_OFFSET + 174,
+    UiSetMaxHeight = fenums::FUNC_PROC_ID_OFFSET + 175,
+    UiSetMaxWidth = fenums::FUNC_PROC_ID_OFFSET + 176,
+    UiSetMinHeight = fenums::FUNC_PROC_ID_OFFSET + 177,
+    UiSetMinWidth = fenums::FUNC_PROC_ID_OFFSET + 178,
+    UiSetWidth = fenums::FUNC_PROC_ID_OFFSET + 179,
+    UiWithLayout = fenums::FUNC_PROC_ID_OFFSET + 180,
+    VectorSize = fenums::FUNC_PROC_ID_OFFSET + 181,
+    Vertical = fenums::FUNC_PROC_ID_OFFSET + 182,
+    VerticalCentered = fenums::FUNC_PROC_ID_OFFSET + 183,
+    VerticalCenteredJustified = fenums::FUNC_PROC_ID_OFFSET + 184,
+    WalkersMap = fenums::FUNC_PROC_ID_OFFSET + 185,
+    WarnIfDebugBuild = fenums::FUNC_PROC_ID_OFFSET + 186,
+    WidgetText = fenums::FUNC_PROC_ID_OFFSET + 187,
+    WidgetsGlobalThemePreferenceButtons = fenums::FUNC_PROC_ID_OFFSET + 188,
+    Window = fenums::FUNC_PROC_ID_OFFSET + 189,
 }
 #[allow(dead_code)]
 #[derive(strum::FromRepr, Debug, PartialEq)]
@@ -1330,6 +1331,14 @@ pub enum SpinnerBuilderMethodId {
 #[allow(dead_code)]
 #[derive(strum::FromRepr, Debug, PartialEq)]
 #[repr(u32)]
+pub enum StyledSectionsBuilderMethodId {
+    Build = 0,
+    Section = 1,
+}
+
+#[allow(dead_code)]
+#[derive(strum::FromRepr, Debug, PartialEq)]
+#[repr(u32)]
 pub enum TableBuilderMethodId {
     Build = 0,
     Striped = 1,
@@ -1393,6 +1402,9 @@ pub enum TextEditBuilderMethodId {
     CharLimit = 11,
     InsertAtCursor = 12,
     HighlightJob = 13,
+    SectionStyled = 14,
+    NoWrapLayout = 15,
+    ReportCursor = 16,
 }
 
 #[allow(dead_code)]

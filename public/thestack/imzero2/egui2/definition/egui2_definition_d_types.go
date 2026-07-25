@@ -91,6 +91,9 @@ func structNewTableDummy() ir.ConcreteType {
 func structCodeViewJob() ir.ConcreteType {
 	return ir.NewConcreteType("codeViewJob")
 }
+func structStyledSections() ir.ConcreteType {
+	return ir.NewConcreteType("styledSections")
+}
 func structCodeView() ir.ConcreteType {
 	return ir.NewConcreteType("codeView", traitWidget())
 }

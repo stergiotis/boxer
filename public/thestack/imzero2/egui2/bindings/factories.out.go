@@ -1867,6 +1867,17 @@ func Spinner() (inst SpinnerFluid) {
 	return
 }
 
+func StyledSections() (inst StyledSectionsFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdStyledSections))
+
+	inst = StyledSectionsFluid{
+		r: r,
+	}
+
+	return
+}
+
 func Table(i WidgetIdCreatorI, rowHeight float32, numRows uint64) (inst TableFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdTable))

@@ -35,6 +35,7 @@ use crate::imzero2::scrolling_texture::ScrollingTextureCache;
 use crate::imzero2::svgexport::{
     ExportState, ExportStateHandle, LinkZonesHandle, TexturePixelCache, TexturePixelCacheHandle,
 };
+use crate::imzero2::text_edit_highlight;
 use egui_ltreeview::{NodeBuilder, NodeConfig, TreeView};
 use std::collections::HashMap;
 use std::io::{BufReader, Cursor, Read};
@@ -2248,6 +2249,17 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // the live buffer and gap-fills, so a stale or malformed job degrades
     // to plain text, never to dropped glyphs.
     text_edit_pending_highlight: Option<code_view::CodeViewJobData>,
+    // Scratch slots for TextEditFluid.SectionStyled / .NoWrapLayout
+    // (ADR-0130 L3), consumed by the same TextEdit apply as the highlight
+    // job above. Styled sections are the sparse overlay channel (underline,
+    // background, strikethrough, italics); no-wrap is the gutter's alignment
+    // contract — galley rows equal logical lines.
+    text_edit_pending_styled: Option<Vec<text_edit_highlight::StyledSection>>,
+    text_edit_pending_no_wrap: bool,
+    // Scratch slot for TextEditFluid.ReportCursor (ADR-0130 L3): the apply
+    // block reads the persisted TextEditState it already loads for
+    // insertAtCursor and pushes the sorted cursor char range as a packed u64.
+    text_edit_pending_report_cursor: bool,
     // ADR-0088 runtime codec pipeline: `setVideoPipeline` stashes the
     // requested codec here (0=H.264, 1=VP9, 2=AV1); the headless host drains
     // it after dispatch and re-points the encoder. `video_cap_*` are pushed
@@ -2344,6 +2356,12 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // CodeView register + cache
     pub r12_code_view_job: code_view::CodeViewJobData,
     pub code_view_cache: code_view::CodeViewCache,
+
+    // Styled-section register (ADR-0130 L3): the parallel overlay channel a
+    // `styledSections` evaluated arg accumulates into and a consuming node
+    // takes. Separate from r12 so the color-only Section the read-only
+    // codeview producers share does not move.
+    pub r24_styled_sections: Vec<text_edit_highlight::StyledSection>,
 
     // PaintCanvas state (set by PaintCanvas, read by Go via fetcher)
     pub r14_canvas_origin_x: f32,
@@ -2587,6 +2605,9 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r22_starved_texture_ids: Vec::with_capacity(8),
             text_edit_pending_insert: None,
             text_edit_pending_highlight: None,
+            text_edit_pending_styled: None,
+            text_edit_pending_no_wrap: false,
+            text_edit_pending_report_cursor: false,
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
             r10_true_ids: Vec::with_capacity(1024),
@@ -2625,6 +2646,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             paint_cmds: Vec::with_capacity(32),
             r12_code_view_job: code_view::CodeViewJobData::default(),
             code_view_cache: code_view::CodeViewCache::new(),
+            r24_styled_sections: Vec::with_capacity(8),
             r14_canvas_origin_x: 0.0,
             r14_canvas_origin_y: 0.0,
             r14_canvas_hover_x: f32::NAN,
@@ -2769,6 +2791,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.r21_ui_rect_max_y.clear();
         self.r12_code_view_job.text.clear();
         self.r12_code_view_job.sections.clear();
+        self.r24_styled_sections.clear();
         self.graph_pending_nodes.clear();
         self.graph_pending_edges.clear();
         // graph_states NOT cleared — persists layout positions across frames
@@ -12253,6 +12276,61 @@ self.apply_widget(w,u,f,Some(i));
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                 self.apply_widget(w, u, f, None);
             }
+            FuncProcId::StyledSections => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::StyledSections");
+                // arguments
+                // construct
+
+                #[allow(unused_mut)]
+let mut w = // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+{
+	self.r24_styled_sections.clear();
+	()
+};
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(StyledSectionsBuilderMethodId::from_repr)?;
+                    match m {
+                        StyledSectionsBuilderMethodId::Build => {
+                            break;
+                        }
+                        StyledSectionsBuilderMethodId::Section => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match StyledSectionsBuilderMethodId::Section");
+                            #[allow(unused_mut)]
+                            let mut byte_start = self.io.read_plain_u32()?;
+                            #[allow(unused_mut)]
+                            let mut byte_stop = self.io.read_plain_u32()?;
+                            #[allow(unused_mut)]
+                            let mut flags = self.io.read_plain_u32()?;
+
+                            let col = {
+                                let (f2, _) = self.read_from_repr(FuncProcId::from_repr)?;
+                                let u2: &mut Option<&mut egui::Ui> = &mut None;
+                                if u2.is_some() {
+                                    self.interpret_inner(c, u2, &f2, d + 1)?;
+                                } else {
+                                    self.interpret_inner(c, u, &f2, d + 1)?;
+                                }
+
+                                self.r11_color32
+                            };
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            self.r24_styled_sections.push(text_edit_highlight::StyledSection {
+                                byte_start,
+                                byte_stop,
+                                flags,
+                                color: col,
+                            });
+                        }
+                    }
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+            }
             FuncProcId::Table => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::Table");
@@ -12668,6 +12746,33 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             };
                             self.text_edit_pending_highlight = Some(job);
                         }
+                        TextEditBuilderMethodId::SectionStyled => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TextEditBuilderMethodId::SectionStyled");
+
+                            let styled = {
+                                let (f2, _) = self.read_from_repr(FuncProcId::from_repr)?;
+                                let u2: &mut Option<&mut egui::Ui> = &mut None;
+                                if u2.is_some() {
+                                    self.interpret_inner(c, u2, &f2, d + 1)?;
+                                } else {
+                                    self.interpret_inner(c, u, &f2, d + 1)?;
+                                }
+
+                                std::mem::take(&mut self.r24_styled_sections)
+                            };
+                            self.text_edit_pending_styled = Some(styled);
+                        }
+                        TextEditBuilderMethodId::NoWrapLayout => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TextEditBuilderMethodId::NoWrapLayout");
+                            self.text_edit_pending_no_wrap = true;
+                        }
+                        TextEditBuilderMethodId::ReportCursor => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TextEditBuilderMethodId::ReportCursor");
+                            self.text_edit_pending_report_cursor = true;
+                        }
                     }
                 }
                 if d == 0 {
@@ -12675,14 +12780,25 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                 }
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                // ADR-0130: a builder method stashed an evaluated CodeViewJob on
-                // self.text_edit_pending_highlight. Build the layouter closure as a stack
+                // ADR-0130: builder methods stashed an evaluated CodeViewJob on
+                // self.text_edit_pending_highlight, the L3 overlay list on
+                // self.text_edit_pending_styled, and the no-wrap switch on
+                // self.text_edit_pending_no_wrap. Build the layouter closure as a stack
                 // local — closure and widget are same-scope locals, and the widget is
                 // consumed by apply below, so the &mut FnMut borrow stays sound.
-                let mut hl_layouter = self
-                    .text_edit_pending_highlight
-                    .take()
-                    .map(crate::imzero2::text_edit_highlight::make_layouter);
+                //
+                // The styled list and the no-wrap switch are taken unconditionally so
+                // neither leaks into the next TextEdit; they only reach a layouter when a
+                // highlight job is present, which is the only thing that installs one.
+                let styled_sections = self.text_edit_pending_styled.take().unwrap_or_default();
+                let no_wrap_layout = std::mem::take(&mut self.text_edit_pending_no_wrap);
+                let mut hl_layouter = self.text_edit_pending_highlight.take().map(|job| {
+                    crate::imzero2::text_edit_highlight::make_layouter(
+                        job,
+                        styled_sections,
+                        no_wrap_layout,
+                    )
+                });
                 if let Some(cl) = hl_layouter.as_mut() {
                     w = w.layouter(cl);
                 }
@@ -12720,6 +12836,31 @@ self.apply_widget(w,u,f,Some(i));
                         }
                     }
                     changed = true;
+                }
+                // ADR-0130 L3 caret report: push the persisted cursor's sorted CHAR range
+                // packed low=start / high=end. Runs BEFORE the text push below, which moves
+                // the buffer out. Unconditional while the method is present — a caret move
+                // with no text change must still be reported, and change detection around
+                // end-of-frame value application never fires. No stored state (the editor
+                // was never focused) reports (end, end), matching the insert path's
+                // convention above; Go clamps against its own copy of the buffer.
+                if std::mem::take(&mut self.text_edit_pending_report_cursor) {
+                    const CARET_HALF_MAX: u64 = 0xffff_ffff;
+                    let end = text.chars().count() as u64;
+                    let (cs, ce) = u
+                        .as_deref()
+                        .map(|ui| ui.ctx().clone())
+                        .and_then(|ctx| egui::text_edit::TextEditState::load(&ctx, i))
+                        .and_then(|st| st.cursor.char_range())
+                        .map(|cr| {
+                            let r = cr.as_sorted_char_range();
+                            (r.start.0 as u64, r.end.0 as u64)
+                        })
+                        .unwrap_or((end, end));
+                    self.r9_u64_push(
+                        i.value(),
+                        cs.min(CARET_HALF_MAX) | (ce.min(CARET_HALF_MAX) << 32),
+                    );
                 }
                 if changed {
                     self.r9_s_push(i.value(), text);

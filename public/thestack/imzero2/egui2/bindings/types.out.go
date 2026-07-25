@@ -621,6 +621,11 @@ type SpinnerFluid struct {
 }
 type SpinnerMethodIdE uint32
 
+type StyledSectionsFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type StyledSectionsMethodIdE uint32
+
 type TableFluid struct {
 	r     *typed.RetainedFffiBuilder
 	id    uint64
@@ -857,6 +862,8 @@ type SpinnerS struct{}
 func (inst SpinnerS) DummyInterfaceImplementationMethodWidgetI() {}
 
 var _ WidgetI = SpinnerS{}
+
+type StyledSectionsS struct{}
 
 type TableCellS struct{}
 
