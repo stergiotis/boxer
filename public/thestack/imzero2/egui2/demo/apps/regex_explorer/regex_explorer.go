@@ -3,6 +3,7 @@ package regex_explorer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -66,7 +67,7 @@ type App struct {
 	// showing the current input?" is one comparison rather than a
 	// convention every result surface has to remember to follow.
 	matchLane   queryLane[bool]
-	listLane    queryLane[[]string]
+	listLane    queryLane[listOutcome]
 	replaceLane queryLane[string]
 	multiLane   queryLane[[]multiLine]
 
@@ -333,7 +334,8 @@ func (inst *App) multiKey() (key queryKey) {
 	return
 }
 
-// renderPreviewTab draws the Go-side highlight preview. No ClickHouse
+// renderPreviewTab draws the Go-side highlight preview and, when the
+// pattern captures, the per-match group breakdown. No ClickHouse
 // interaction: offsets are recomputed per frame from the cached compiled
 // pattern, so the preview is always in sync with the current input — which
 // is exactly why it is the tab that can afford to repaint on every
@@ -341,6 +343,7 @@ func (inst *App) multiKey() (key queryKey) {
 func (inst *App) renderPreviewTab() {
 	c.Label("Preview (Go RE2, byte offsets computed locally):").Send()
 	inst.renderHighlightedHaystack(inst.pattern, inst.haystack)
+	inst.renderCaptureGroups(inst.pattern, inst.haystack)
 }
 
 // renderMultiInline draws the per-line result rows for the Multi patterns
@@ -487,15 +490,21 @@ func (inst *App) renderReplaceTab() {
 }
 
 // renderListTab draws the ClickHouse extractAll result — one row per
-// match text. Rendered as a ScrollArea with sequential labels; match
-// counts are expected to stay small during interactive use.
+// element. Rendered as a ScrollArea with sequential labels; match counts
+// are expected to stay small during interactive use.
+//
+// When the pattern captures, extractAll returns capture group 1 rather
+// than the full match, and the tab says so and shows the full
+// extractAllGroups breakdown alongside. Silently listing group values
+// under a "matches" heading would contradict the Preview tab, which
+// highlights full matches.
 func (inst *App) renderListTab() {
 	if inst.renderPatternNotReady() {
 		return
 	}
 
 	view := inst.listLane.view(inst.singleKey())
-	matches := view.Value
+	out := view.Value
 
 	for range c.Horizontal().KeepIter() {
 		switch {
@@ -509,7 +518,7 @@ func (inst *App) renderListTab() {
 		case !view.Fresh:
 			c.Label("ClickHouse extractAll: (stale — refreshing)").Send()
 		default:
-			c.Label(fmt.Sprintf("ClickHouse extractAll: %d match(es)  elapsed: %s", len(matches), view.Elapsed)).Send()
+			c.Label(fmt.Sprintf("ClickHouse extractAll: %d element(s)  elapsed: %s", len(out.Matches), view.Elapsed)).Send()
 		}
 	}
 
@@ -517,12 +526,20 @@ func (inst *App) renderListTab() {
 		return
 	}
 
+	if out.YieldsGroups {
+		c.Label("note: the pattern captures, so extractAll returns capture group 1 — not the full match. Full matches are highlighted in the Preview tab.").Send()
+	}
+
 	for range c.ScrollArea().Vscroll(true).KeepIter() {
-		for i, m := range matches {
+		for i, m := range out.Matches {
 			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 				for range c.Horizontal().KeepIter() {
 					c.Label(fmt.Sprintf("%d:", i)).Send()
 					c.Label(m).Send()
+					if i < len(out.Groups) {
+						c.Separator().Vertical().Send()
+						c.Label("groups: " + strings.Join(out.Groups[i], " | ")).Send()
+					}
 				}
 			}
 		}

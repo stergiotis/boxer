@@ -9,12 +9,12 @@ package regex_explorer
 // fallback-chain path codified in ADR-0054 SD2: the originally-proposed
 // SETTINGS-clause binding does not work (ClickHouse's SETTINGS is for
 // query-level server settings, not parameter substitution), and
-// multi-statement SET buys nothing given this app's one-SELECT-per-dispatch
-// shape.
+// multi-statement SET requires multi_statements=1 which
+// [play.Client.ExecuteArrowStream] does not currently plumb.
 //
-// The output format is requested out of band — the broker is asked for
-// ArrowStream when the query is published (see regex_explorer_chlocal.go),
-// so callers of these builders must not append a FORMAT clause themselves.
+// play.Client.ExecuteArrowStream handles the FORMAT ArrowStream rewrite via
+// its nanopass pipeline; callers of these builders must not append FORMAT
+// themselves.
 
 import (
 	"strings"
@@ -34,6 +34,18 @@ func buildMatchSQL(haystack string, pattern string) (sql string) {
 // literals. Returns Array(String) — one match text per element.
 func buildExtractAllSQL(haystack string, pattern string) (sql string) {
 	sql = "SELECT extractAll(" + marshalling.EscapeString(haystack) + ", " + marshalling.EscapeString(pattern) + ")"
+	return
+}
+
+// buildExtractAllGroupsSQL returns a SELECT querying ClickHouse's
+// extractAllGroups(haystack, pattern). Returns Array(Array(String)) — one
+// inner array of capture-group values per match, without the full match.
+//
+// ClickHouse rejects a pattern with no capture group ("There are no groups
+// in regexp", BAD_ARGUMENTS), so callers must confirm the pattern has at
+// least one before building this.
+func buildExtractAllGroupsSQL(haystack string, pattern string) (sql string) {
+	sql = "SELECT extractAllGroups(" + marshalling.EscapeString(haystack) + ", " + marshalling.EscapeString(pattern) + ")"
 	return
 }
 

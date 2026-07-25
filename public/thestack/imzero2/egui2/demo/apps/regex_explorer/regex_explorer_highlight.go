@@ -14,6 +14,7 @@ package regex_explorer
 // cost is paid once per unique input.
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -162,6 +163,79 @@ func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
 	c.LabelAtoms(atoms.Keep()).Send()
 }
 
+// renderCaptureGroups draws the per-match capture-group breakdown under
+// the highlighted haystack: one row per match, one tinted cell per group,
+// with the group's byte range.
+//
+// This is the half of ADR-0054's premise that had never been built. The
+// ADR chose Go as the offset authority precisely because
+// FindAllStringSubmatchIndex returns offsets "for the full match and each
+// capture group, in one call" — but the painter only ever used
+// FindAllStringIndex, so group offsets were computed nowhere and SD5's
+// capture-group-numbering parity assumption had nothing to compare.
+//
+// Silent when the pattern has no capture group: there is nothing to say,
+// and an empty table below every plain pattern is noise.
+func (inst *App) renderCaptureGroups(pattern string, haystack string) {
+	if pattern == "" || haystack == "" {
+		return
+	}
+	re, err := inst.getCompiledRegexp(inst.effectivePattern(pattern))
+	if err != nil || re == nil || re.NumSubexp() == 0 {
+		return
+	}
+	matches := re.FindAllStringSubmatchIndex(haystack, -1)
+	if len(matches) == 0 {
+		return
+	}
+
+	names := re.SubexpNames()
+	c.Separator().Horizontal().Send()
+	c.Label(fmt.Sprintf("Capture groups (%d per match, %d match(es)):", re.NumSubexp(), len(matches))).Send()
+
+	for mi, m := range matches {
+		for range c.IdScope(inst.ids.PrepareSeq(uint64(mi))) {
+			for range c.Horizontal().KeepIter() {
+				c.Label(fmt.Sprintf("%d:", mi)).Send()
+				// m[0],m[1] is the full match; group k lives at
+				// m[2k],m[2k+1]. A group that did not participate in this
+				// match has -1 for both.
+				for k := 1; k*2+1 < len(m); k++ {
+					start, end := m[2*k], m[2*k+1]
+					label := groupLabel(names, k)
+					if start < 0 || end < 0 {
+						c.Label(label + "=(unset)").Send()
+						continue
+					}
+					// Group k always takes cycle slot k-1, so one group
+					// keeps one colour down the whole haystack and
+					// adjacent groups stay distinguishable. QualitativeCycle
+					// is the IDS categorical palette (ADR-0031), which
+					// wraps on its own past the last entry.
+					fg := color.Hex(styletokens.NeutralBgExtreme.AsHex()).Keep()
+					bg := color.Hex(styletokens.QualitativeCycle(k - 1).AsHex()).Keep()
+					atoms := c.Atoms().Text(label + "=")
+					for range atoms.StyledTextColored(fg, bg, haystack[start:end]) {
+					}
+					atoms.Text(fmt.Sprintf(" [%d:%d]", start, end))
+					c.LabelAtoms(atoms.Keep()).Send()
+				}
+			}
+		}
+	}
+}
+
+// groupLabel names capture group k: its (?P<name>…) name when it has one,
+// otherwise its number.
+func groupLabel(names []string, k int) (label string) {
+	if k < len(names) && names[k] != "" {
+		label = names[k]
+		return
+	}
+	label = strconv.Itoa(k)
+	return
+}
+
 // countMatches returns the number of matches of pattern in haystack via
 // Go's regexp, counted the way ClickHouse's extractAll counts them (see
 // [nonEmptyMatches]). A compile failure is returned as the error with a
@@ -231,6 +305,18 @@ func (inst *App) renderPatternNotReady() (drew bool) {
 // dispatch — non-empty and compiling under the current flag set.
 func (inst *App) isPatternValid() bool {
 	return inst.patternState() == patternValid
+}
+
+// patternNumSubexp returns the single-pattern input's capture-group count,
+// or 0 if it does not compile. Decides whether extractAllGroups may be
+// asked at all: ClickHouse rejects it for a group-less pattern.
+func (inst *App) patternNumSubexp() (n int) {
+	re, err := inst.getCompiledRegexp(inst.effectivePattern(inst.pattern))
+	if err != nil || re == nil {
+		return
+	}
+	n = re.NumSubexp()
+	return
 }
 
 // multiLine is one non-empty line of the multi-pattern input together

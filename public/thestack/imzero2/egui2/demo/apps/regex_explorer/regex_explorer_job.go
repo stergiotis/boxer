@@ -117,6 +117,10 @@ func runReplaceAllBlocking(ctx context.Context, inst *App, haystack string, patt
 
 // runExtractAllBlocking evaluates extractAll(haystack, pattern) —
 // Array(String).
+//
+// Note that ClickHouse returns capture group 1 rather than the full match
+// when the pattern has a capture group; see [listOutcome.YieldsGroups] for
+// how the UI accounts for that.
 func runExtractAllBlocking(ctx context.Context, inst *App, haystack string, pattern string) (matches []string, err error) {
 	return runQueryBlocking(ctx, inst, "extractAll", buildExtractAllSQL(haystack, pattern), func(col arrow.Array) (out []string, err error) {
 		list, err := asList("extractAll", col)
@@ -138,6 +142,86 @@ func runExtractAllBlocking(ctx context.Context, inst *App, haystack string, patt
 		}
 		return
 	})
+}
+
+// runExtractAllGroupsBlocking evaluates extractAllGroups(haystack, pattern)
+// — Array(Array(String)), one inner array of capture-group values per
+// match. The full match is not included; extractAllGroups reports groups
+// only.
+//
+// ClickHouse rejects a pattern with no capture group outright (BAD_ARGUMENTS
+// "There are no groups in regexp"), so callers must check that the pattern
+// has at least one before asking.
+func runExtractAllGroupsBlocking(ctx context.Context, inst *App, haystack string, pattern string) (groups [][]string, err error) {
+	return runQueryBlocking(ctx, inst, "extractAllGroups", buildExtractAllGroupsSQL(haystack, pattern), func(col arrow.Array) (out [][]string, err error) {
+		outer, err := asList("extractAllGroups", col)
+		if err != nil {
+			return
+		}
+		inner, ok := outer.ListValues().(*array.List)
+		if !ok {
+			err = eh.Errorf("extractAllGroups inner column type %T (expected *array.List)", outer.ListValues())
+			return
+		}
+		leaf, ok := inner.ListValues().(*array.String)
+		if !ok {
+			err = eh.Errorf("extractAllGroups leaf column type %T (expected *array.String)", inner.ListValues())
+			return
+		}
+		matchStart, matchEnd, err := listRowRange("extractAllGroups", outer)
+		if err != nil {
+			return
+		}
+		innerOffsets := inner.Offsets()
+		if len(innerOffsets) < matchEnd+1 {
+			err = eh.Errorf("extractAllGroups: %d inner offset(s) for %d match(es)", len(innerOffsets), matchEnd-matchStart)
+			return
+		}
+		out = make([][]string, 0, matchEnd-matchStart)
+		for m := matchStart; m < matchEnd; m++ {
+			start := int(innerOffsets[m])
+			end := int(innerOffsets[m+1])
+			row := make([]string, 0, end-start)
+			for i := start; i < end; i++ {
+				row = append(row, leaf.Value(i))
+			}
+			out = append(out, row)
+		}
+		return
+	})
+}
+
+// listOutcome is everything the List tab draws for one input.
+type listOutcome struct {
+	// Matches is extractAll's output, verbatim.
+	Matches []string
+	// Groups is extractAllGroups' output — one row of capture-group
+	// values per match — or nil when the pattern has no capture group.
+	Groups [][]string
+	// YieldsGroups records that Matches holds capture-group-1 values
+	// rather than full matches, which is what extractAll returns whenever
+	// the pattern has a capture group. The tab says so rather than
+	// letting the reader assume otherwise: the Test tab highlights full
+	// matches, so without the caveat the two tabs look like they
+	// disagree.
+	YieldsGroups bool
+}
+
+// runListOutcomeBlocking gathers the List tab's results. numGroups is the
+// pattern's capture-group count, determined by the caller on the render
+// thread — it decides whether the extractAllGroups call is legal at all
+// (ClickHouse rejects it outright for a group-less pattern).
+func runListOutcomeBlocking(ctx context.Context, inst *App, haystack string, pattern string, numGroups int) (out listOutcome, err error) {
+	out.Matches, err = runExtractAllBlocking(ctx, inst, haystack, pattern)
+	if err != nil {
+		return
+	}
+	if numGroups == 0 {
+		return
+	}
+	out.YieldsGroups = true
+	out.Groups, err = runExtractAllGroupsBlocking(ctx, inst, haystack, pattern)
+	return
 }
 
 // runMultiMatchBlocking evaluates multiMatchAllIndices(haystack, [p...]) —
@@ -202,8 +286,12 @@ func (inst *App) reconcileSingle() {
 		return runMatchBlocking(ctx, inst, haystack, pattern)
 	})
 
-	inst.listLane.demand(singleKey, "regex_explorer.extractAll", func(ctx context.Context) (out []string, err error) {
-		return runExtractAllBlocking(ctx, inst, haystack, pattern)
+	// The capture-group count is read here, on the render thread, because
+	// it needs the compiled pattern — and because it decides whether the
+	// extractAllGroups call is legal at all.
+	numGroups := inst.patternNumSubexp()
+	inst.listLane.demand(singleKey, "regex_explorer.extractAll", func(ctx context.Context) (out listOutcome, err error) {
+		return runListOutcomeBlocking(ctx, inst, haystack, pattern, numGroups)
 	})
 
 	// The replacement text feeds only this lane, so an edit to it must
