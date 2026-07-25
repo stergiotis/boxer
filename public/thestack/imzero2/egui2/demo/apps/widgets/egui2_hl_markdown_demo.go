@@ -111,7 +111,7 @@ func init() {
 		Stage:       [2]float32{1024, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "Obsidian-flavored markdown renderer: headings, inline, lists, blockquote, code, rule, frontmatter, highlight, wikilinks, embeds (Obsidian + CommonMark images), callouts, comments — plus an interactive Load section.",
+		Description: "Obsidian-flavored markdown renderer: headings, inline, lists, tables, blockquote, code, rule, frontmatter, highlight, wikilinks, embeds (Obsidian + CommonMark images), callouts, comments — plus an interactive Load section.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = &markdownDemoState{}
 			return
@@ -218,6 +218,39 @@ And a paragraph after.`))
 ---
 
 Below the rule.`))
+
+	// mdTables exercises the GFM table path. The first table is an
+	// ordinary doc table; the second is deliberately awkward, so the
+	// renderer's limits are visible rather than described: a cell
+	// whose text outruns its column, an empty cell, a row with too few
+	// cells and one with too many. Both alignment styles appear in the
+	// delimiter rows — they are parsed and not applied, which the prose
+	// says out loud rather than leaving the reader to wonder.
+	mdTables = markdown.Parse([]byte(`A table as you would write one in a doc:
+
+| Stage | Reads | Writes | Runs |
+|-------|-------|--------|------|
+| describe | Go types | IR | once per type |
+| map | IR | mapping plan | once per schema |
+| marshal | mapping plan | column bytes | per batch |
+
+Prose after the table flows normally.
+
+Cells hold plain text. Inline styling, links and wikilinks inside a cell
+flatten to their visible text, and the ` + "`:---:`" + ` markers in the delimiter
+row below are parsed but not applied — every column reads left-aligned.
+Rows are one fixed-height line, so a cell that outruns its column
+truncates; every column but the last can be dragged wider.
+
+| Cell | What it shows |
+|:-----|--------------:|
+| **bold** and ` + "`code`" + ` | styling flattens to plain text |
+| [a link](https://example.com) | the label survives, the link does not |
+| [[SomePage]] | a wikilink shows its display text |
+|  | an empty cell keeps its column slot |
+| a cell whose text runs a good deal past the width its column was given | it truncates rather than wrapping |
+| a short row |
+| an over-long row | squared off | against the header |`))
 
 	mdFrontmatter = markdown.Parse([]byte(`---
 title: Sample Note
@@ -376,6 +409,12 @@ func demoMarkdownRule(ids *c.WidgetIdStack) {
 	}
 }
 
+func demoMarkdownTables(ids *c.WidgetIdStack) {
+	for range c.IdScope(ids.PrepareStr("md-tables")) {
+		mdTables.Render(ids)
+	}
+}
+
 func demoMarkdownFrontmatter(ids *c.WidgetIdStack) {
 	for range c.IdScope(ids.PrepareStr("md-frontmatter")) {
 		mdFrontmatter.Render(ids)
@@ -492,6 +531,9 @@ func demoMarkdown(ids *c.WidgetIdStack, st *markdownDemoState) {
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("md-embeds-h"), c.WidgetText().Text("embeds (![[file]] — image embeds render via resolver.LoadImage)").Keep()).DefaultOpen(true).KeepIter() {
 		demoMarkdownEmbeds(ids)
+	}
+	for range c.CollapsingHeader(ids.PrepareStr("md-tables-h"), c.WidgetText().Text("tables (GFM — fixed-height rows, plain-text cells)").Keep()).DefaultOpen(true).KeepIter() {
+		demoMarkdownTables(ids)
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("md-code-h"), c.WidgetText().Text("code blocks (fenced go/sql/json highlighted; indented + untagged plain)").Keep()).KeepIter() {
 		demoMarkdownCode(ids)
