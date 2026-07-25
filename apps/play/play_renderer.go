@@ -719,6 +719,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 		intermediateLane: newNodeLane(clientExecutor{client: client, opts: newExecOptions("intermediate")}, memory.NewGoAllocator(), 0),
 		endpointDraft:    launchURL,
 		launchURL:        launchURL,
+		autoEndpoint:     true,
 		density:          styletokens.DensityFromEnv(),
 		sql:              initialSQL,
 		sigEmit:          graphEmitter{graph: graph},
