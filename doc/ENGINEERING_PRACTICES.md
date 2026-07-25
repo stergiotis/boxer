@@ -133,11 +133,13 @@ go test -race -json -short -cover -tags "$tags" ./... \
     it is a correctness requirement of the lane, not a preference.
 
   The lane runner also omits `-race`, the one place it departs from the default
-  runner. The same wall-clock budgets make race instrumentation a source of
-  false failures rather than of findings: the queryrunsvc pipeline test polls
-  20s for a fact it normally gets in 17–21s, and under `-race` it reliably
-  blows that budget. Race detection stays where the tests are hermetic and
-  fast.
+  runner — and this one is a **known gap, not a considered exclusion**. The
+  queryrunsvc pipeline test fails under `-race` for a reason that is not
+  understood: it is not slowness (it fails with a 60s budget, three times its
+  passing wall clock), the service logs no error, ClickHouse reports its
+  refreshes succeeding with no exception, and the detector finds no data race —
+  the fact simply never arrives. These are concurrent services and would
+  benefit from race coverage; restoring it needs that root-caused first.
 
   Skipping when the server is unreachable is a *capability* gate, not lane
   membership: on a developer machine that happens to be running ClickHouse, a

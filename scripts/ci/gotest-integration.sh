@@ -20,12 +20,17 @@
 # without ClickHouse reports skips rather than failures.
 #
 # No `-race`, deliberately — the one place this lane departs from
-# scripts/ci/gotest.sh. These tests bound their end-to-end waits by wall clock
-# (the queryrunsvc pipeline polls for a fact for 20s, and takes 17-21s to get
-# it), and race instrumentation inflates exactly those timings: under -race the
-# same test blows its own budget and reports a behaviour failure for a
-# scheduling cost. Race detection belongs in the default lane, whose tests are
-# hermetic and fast; here it would only manufacture noise.
+# scripts/ci/gotest.sh. The queryrunsvc pipeline test fails under `-race` for a
+# reason that is NOT understood: it is not slowness (it still fails with a 60s
+# budget, three times the passing run's wall clock), the service logs no error,
+# and ClickHouse reports its refreshes succeeding with no exception — the fact
+# simply never arrives. The race detector reports no data race either. Until
+# that is root-caused, running the lane under -race reports a failure that says
+# nothing about the code under test.
+#
+# This is a KNOWN GAP, not a considered exclusion: these tests are concurrent
+# services and would benefit from race coverage. See the note in
+# ENGINEERING_PRACTICES §4.
 set -e
 set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")

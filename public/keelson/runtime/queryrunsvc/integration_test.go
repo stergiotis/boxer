@@ -63,7 +63,7 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 	runTaggedQuery(t, probe1, fmt.Sprintf(
 		`{"run_id":"%s","app":"it.app","lane":"l1","authored_fp":"af1","sent_fp":"sf1","chain_fp":"cf1","env_fp":"ef1"}`, runId))
 	require.NoError(t, cli.Exec(ctx, "SYSTEM FLUSH LOGS"))
-	waitForFactCount(t, cli, probe1, 1, 20*time.Second)
+	waitForFactCount(t, cli, probe1, 1)
 
 	// The lifted stamp: the run_id must be queryable via the
 	// MembRuntimeRun mixed membership's high-card parameter.
@@ -75,7 +75,14 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 	require.Equal(t, "1", queryScalar(t, cli, sql), "the stamp's run_id must be lifted into the mixed membership")
 
 	// --- S2 readback: the history pivots reconstruct the captured run ---
-	histSql, err := queryrunfacts.ComposeHistorySql(scratchDb+".facts", 50)
+	// Read the full cap, not a small window. The scratch database is this
+	// test's own, but the SOURCE is the shared system.query_log and the scope
+	// is ScopeAll, so the facts table accumulates a row for every query the
+	// server ran while the test was up — not just the two probes. The history
+	// SELECT is newest-first, so a window of 50 asks that fewer than 50 queries
+	// reached this server since the probe, which nothing guarantees: under a
+	// parallel suite it did not hold, and the probe was simply pushed out.
+	histSql, err := queryrunfacts.ComposeHistorySql(scratchDb+".facts", queryrunfacts.HistoryLimitCap)
 	require.NoError(t, err)
 	histRows, err := queryrunfacts.ParseHistoryRows([]byte(queryRaw(t, cli, histSql)))
 	require.NoError(t, err)
@@ -86,7 +93,13 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 			break
 		}
 	}
-	require.NotNil(t, probeRow, "the stamped probe must appear in the history readback")
+	// Name the two ways this fails apart: the pivots dropped the row, or the
+	// window overflowed. The fact itself is already known to exist — the
+	// waitForFactCount above counted it.
+	require.NotNilf(t, probeRow,
+		"the stamped probe must appear in the history readback; %d of at most %d rows returned%s",
+		len(histRows), queryrunfacts.HistoryLimitCap,
+		map[bool]string{true: " — the window is full, so the probe may have been displaced rather than lost"}[len(histRows) >= queryrunfacts.HistoryLimitCap])
 	require.Equal(t, "QueryFinish", probeRow.Event)
 	require.Equal(t, "Select", probeRow.Kind)
 	require.Equal(t, "it.app", probeRow.App)
@@ -133,7 +146,7 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, svc2.Start(ctx))
 	defer func() { _ = svc2.Stop(context.Background()) }()
-	waitForFactCount(t, cli, probe2, 1, 20*time.Second)
+	waitForFactCount(t, cli, probe2, 1)
 
 	// The down-window row must exist exactly once too (no double-capture
 	// from the catch-up).
@@ -183,15 +196,29 @@ func runTaggedQuery(t *testing.T, queryId string, logComment string) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, "probe query failed: %s", string(body))
 }
 
+// factWaitBudget bounds the wait for a probe to traverse the pipeline:
+// query_log flush, the MV, the extract watermark, and the 1s service cadence.
+// The typical crossing is a few seconds, but the stages are wall-clock driven
+// and the server is shared with whatever else the machine is doing, so the
+// budget is a CEILING on the pathological case, not an estimate of the normal
+// one. It is generous on purpose and costs nothing when things are healthy —
+// require.Eventually polls every 500ms and returns on the first success, so a
+// passing run is no slower for it. Only a genuine failure waits this long.
+//
+// 20s was too tight: it failed twice under a parallel suite, once here and
+// once at the history read below. (It also fails under `-race`, but not for
+// this reason — that failure survives this budget and is unexplained; the lane
+// runner excludes -race and says so.)
+const factWaitBudget = 60 * time.Second
+
 // waitForFactCount polls until the naturalKey shows up n times in the
-// scratch facts table (the MV refresh cadence is 1s; flush + refresh
-// need a few of those).
-func waitForFactCount(t *testing.T, cli *chclient.Client, naturalKey string, n int, timeout time.Duration) {
+// scratch facts table.
+func waitForFactCount(t *testing.T, cli *chclient.Client, naturalKey string, n int) {
 	t.Helper()
 	sql := fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:g:0:0:` = '%s'", scratchDb, naturalKey)
 	require.Eventually(t, func() bool {
 		return queryScalar(t, cli, sql) == fmt.Sprint(n)
-	}, timeout, 500*time.Millisecond, "fact for %s did not reach count %d", naturalKey, n)
+	}, factWaitBudget, 500*time.Millisecond, "fact for %s did not reach count %d", naturalKey, n)
 }
 
 // queryScalar runs sql (single value) and returns the trimmed result.
