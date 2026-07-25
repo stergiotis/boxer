@@ -289,11 +289,10 @@ func defaultConfig() (cfg config) {
 }
 
 // WithFeatures overrides the default obsidian feature set. The default
-// covers everything the renderer can lower in phase 2: frontmatter,
-// GFM (tables / strikethrough / footnotes / task lists), wikilinks,
-// embeds, callouts, ==highlight== and %%comment%% stripping. Tables,
-// images and math remain deferred — the parser recognises them but the
-// renderer drops them.
+// covers everything the renderer can lower: frontmatter, GFM (tables /
+// strikethrough / footnotes / task lists), wikilinks, embeds, callouts,
+// ==highlight== and %%comment%% stripping. Math remains deferred — the
+// parser recognises it but the renderer drops it.
 func WithFeatures(features obsidian.FeatureE) (opt Option) {
 	opt = func(cfg *config) {
 		cfg.features = features
@@ -367,6 +366,7 @@ const (
 	segKindBlockquote
 	segKindHorizontalRule
 	segKindCallout
+	segKindTable
 )
 
 // runKindE tags a run inside a paragraph or heading segment.
@@ -418,6 +418,17 @@ type paragraphRun struct {
 //   - segKindCallout:                    children is the inner blocks; the
 //     callout* fields drive theme,
 //     title and the foldable variant.
+//   - segKindTable:                      tableCols is the column count,
+//     tableHeader the header row's cell
+//     texts (empty ⇒ headerless) and
+//     tableCells the body cells in
+//     row-major order. Row count is
+//     len(tableCells)/tableCols — it is
+//     derived, never stored, so the two
+//     cannot disagree. tableColRunes is
+//     the widest cell per column, in
+//     runes, and drives the initial
+//     column widths.
 type segment struct {
 	kind               segKindE
 	runs               []paragraphRun
@@ -431,4 +442,8 @@ type segment struct {
 	calloutTitle       string
 	calloutFoldable    bool
 	calloutDefaultOpen bool
+	tableCols          uint32
+	tableColRunes      []uint32
+	tableHeader        []string
+	tableCells         []string
 }

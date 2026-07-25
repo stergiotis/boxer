@@ -80,7 +80,161 @@ func (inst *segment) render(rc *renderCtx) {
 		c.Separator().Send()
 	case segKindCallout:
 		renderCallout(inst, rc)
+	case segKindTable:
+		renderTable(inst, rc)
 	}
+}
+
+// Initial column width bounds, in points. A column starts at roughly
+// the width of its widest cell, clamped into this range: below the
+// minimum a short column collapses to an unreadable sliver, and above
+// the maximum a single long cell would push the rest of the table past
+// the pane's right edge. A clamped column truncates with an ellipsis and
+// stays resizable, so the reader can widen it.
+const (
+	tableColumnMinWidth float32 = 48.0
+	tableColumnMaxWidth float32 = 260.0
+)
+
+// tableColumnBudget is roughly the total width, in points, that a
+// table's fixed-width columns may claim between them. Only the last
+// column is a remainder, and egui_extras gives it whatever the fixed
+// ones leave over — so on a wide table with long cells, per-column
+// caps that are individually reasonable add up to more than the pane
+// and starve the last column to nothing. Splitting one budget across
+// the fixed columns keeps a share for the remainder no matter how many
+// columns there are. It is a guess at a doc pane's usable width, not a
+// measurement (the render path cannot ask), and it only sets the
+// starting widths — the reader can drag any of them.
+const tableColumnBudget float32 = 560.0
+
+// tableGlyphAdvance is the fraction of the font's point size that one
+// character of prose occupies on average. Used to turn a cell's rune
+// count into an initial column width without measuring text — see
+// [tableRowHeightFactor] for why measurement is not available here. It
+// is an average over mixed-case prose in a proportional font, so a
+// column of capitals comes out narrow and one of thin glyphs wide; the
+// column is only *initially* this size and the reader can drag it.
+const tableGlyphAdvance float32 = 0.55
+
+// tableCellPadding pads the estimated text width so a column that fits
+// its content exactly does not sit flush against the next column's
+// separator.
+const tableCellPadding float32 = 12.0
+
+// tableRowHeightFactor turns a text-style point size into the fixed row
+// height the table op takes. egui's real text metrics are not reachable
+// from the render path — the Fetcher opcodes that could report them may
+// only run from StateManager.Sync() at frame end — so the row height is
+// a heuristic multiple of the IDS type scale rather than a measurement.
+// It errs generous: the op clips anything taller than rowHeight, and a
+// clipped row loses its descenders where a roomy one only wastes a few
+// pixels.
+const tableRowHeightFactor float32 = 1.6
+
+// tableRowHeight derives the per-row height from the IDS type scale at
+// the active density. The op applies one height to the header row and
+// every body row alike, and the interpreter draws header cells with
+// `ui.heading()` (TextStyle::Heading, the larger step), so a table with
+// a header sizes off HeadingPt and a headerless one off BodyPt.
+func tableRowHeight(hasHeader bool) (h float32) {
+	d := styletokens.DensityFromEnv()
+	pt := styletokens.ScaledPt(styletokens.BodyPt, d)
+	if hasHeader {
+		if hp := styletokens.ScaledPt(styletokens.HeadingPt, d); hp > pt {
+			pt = hp
+		}
+	}
+	h = pt * tableRowHeightFactor
+	return
+}
+
+// tableColumnCap is the per-column ceiling for a table with cols
+// columns: [tableColumnBudget] shared out among the fixed-width ones
+// (every column but the trailing remainder), bounded by the absolute
+// min/max. More columns therefore means a tighter ceiling on each.
+func tableColumnCap(cols int) (w float32) {
+	fixed := max(cols-1, 1)
+	w = tableColumnBudget / float32(fixed)
+	if w > tableColumnMaxWidth {
+		w = tableColumnMaxWidth
+	} else if w < tableColumnMinWidth {
+		w = tableColumnMinWidth
+	}
+	return
+}
+
+// tableColumnWidth estimates the initial width of a column whose widest
+// cell is runes long, clamped into [tableColumnMinWidth, colCap].
+//
+// An estimate rather than a measurement, and an explicit one rather than
+// `Column::auto()`: auto sizing derives the width from what the previous
+// frame's cells actually used, which for a clipping column is the
+// *truncated* width — the column then never learns it should be wider
+// and stays pinned near egui_extras' 100pt fallback suggestion. Feeding
+// an absolute initial width side-steps that feedback loop.
+func tableColumnWidth(runes uint32, colCap float32) (w float32) {
+	pt := styletokens.ScaledPt(styletokens.BodyPt, styletokens.DensityFromEnv())
+	w = float32(runes)*pt*tableGlyphAdvance + tableCellPadding
+	if w < tableColumnMinWidth {
+		w = tableColumnMinWidth
+	} else if w > colCap {
+		w = colCap
+	}
+	return
+}
+
+// renderTable emits one GFM table through the table op's register-drain
+// protocol: columns first, then the header texts, then the body cells
+// row-major, then the table node that drains all three and renders. The
+// pushes carry no id and paint nothing on their own — only the closing
+// [bindings.Table] does — so the four steps must stay adjacent, with no
+// other table's pushes interleaved. Nothing between them here emits, and
+// a nested table is impossible in GFM, so adjacency holds by
+// construction.
+//
+// Rows are a fixed height (see [tableRowHeight]): cell text does not
+// wrap and anything taller than one line is clipped. Cells are plain
+// strings — a hyperlink inside a cell renders as its label text, not as
+// a clickable link.
+func renderTable(s *segment, rc *renderCtx) {
+	cols := int(s.tableCols)
+	if cols <= 0 {
+		return
+	}
+	rows := len(s.tableCells) / cols
+
+	// Every column but the last starts at roughly its content width and
+	// can be dragged; the last takes whatever width is left so the table
+	// fills the pane instead of ending in a ragged edge. All of them
+	// clip, which egui renders as an ellipsis where it can.
+	colCap := tableColumnCap(cols)
+	for i := 0; i < cols-1; i++ {
+		var runes uint32
+		if i < len(s.tableColRunes) {
+			runes = s.tableColRunes[i]
+		}
+		c.TableColumn().Initial(tableColumnWidth(runes, colCap)).
+			AtLeast(tableColumnMinWidth).
+			Resizable(true).ClipContents(true).Send()
+	}
+	c.TableColumn().Remainder().ClipContents(true).Send()
+
+	// Zero header pushes render a headerless body — that is the op's
+	// documented behaviour, and what a table whose header row lowered to
+	// nothing should look like.
+	for _, h := range s.tableHeader {
+		c.TableHeaderText(h).Send()
+	}
+	for _, cell := range s.tableCells {
+		c.TableCellText(cell).Send()
+	}
+
+	seq := rc.idSeq
+	rc.idSeq++
+	c.Table(rc.ids.PrepareSeq(seq), tableRowHeight(len(s.tableHeader) > 0), uint64(rows)).
+		Striped(true).
+		Send()
 }
 
 // renderCodeActionButtons emits a horizontal row of small IDS buttons above

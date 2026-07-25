@@ -34,10 +34,16 @@
 // horizontal rules, callouts, Obsidian wikilinks and embeds, inline
 // images (CommonMark `![alt](url)` and Obsidian `![[file.png]]` —
 // rendered via [bindings.Image] when [resolver.ResolverI.LoadImage]
-// returns ok; glyph-prefixed hyperlink fallback otherwise), and
-// frontmatter exposure (via [Doc.Frontmatter]).
+// returns ok; glyph-prefixed hyperlink fallback otherwise), GFM tables,
+// and frontmatter exposure (via [Doc.Frontmatter]).
 //
-// Tables and math are still deferred.
+// Tables render through the native table op, which fixes every row to
+// one height: cell text does not wrap, taller content is clipped, a
+// hyperlink in a cell shows as its label rather than as a link, and
+// GFM's per-column alignment (`:---:`) is parsed but not applied. See
+// EXPLANATION.md for why.
+//
+// Math is still deferred.
 //
 // # See also
 //

@@ -72,6 +72,14 @@ block children once. Each block produces a `segment` value:
   the body. Foldable callouts swap the Frame for a `CollapsingHeader`
   that wraps the same Frame internally so the body still gets the
   themed chrome.
+- `table`                   — a GFM table flattened to a rectangular grid
+  of plain-text cells. The column count comes from the delimiter row
+  (`|---|:--:|`), which goldmark records as `Table.Alignments` and
+  against which it has already padded short rows and truncated long
+  ones; the segment stores the header texts, the body cells row-major,
+  and the column count, deriving the row count as
+  `len(cells)/cols`. Cell inline content is flattened by
+  `flattenInlineText` — see the trade-offs below for what that costs.
 
 Inline nodes that cannot become atoms (links, wikilinks, embeds) are
 extracted as separate runs at paragraph build time. Strong, Em, Code,
@@ -145,7 +153,18 @@ should iterate `Frontmatter().IteratePairs()` directly.
   emit the same seq sequence, so retained ids are stable across frames.
   Adding a new id-needing segment kind shifts existing ids — bump the
   scopeKey when changing the lowering rules in a way that affects
-  layout state stored against ids.
+  layout state stored against ids. Tables are such a kind: adding them
+  moved every id after the first table in a doc, so `helphost`'s scope
+  key went from `doc-render` to `doc-render-2`.
+- **Table register/drain adjacency.** The table op is a register-drain
+  protocol, not a block iterator: `tableColumn`, `tableHeaderText` and
+  `tableCellText` push into interpreter-side registers that paint
+  nothing, and the closing `table` node drains *all* of them and
+  renders. The four steps must therefore stay adjacent in the op
+  stream, in that order, with no second table's pushes interleaved.
+  `renderTable` emits nothing else between them, and GFM has no nested
+  tables, so this holds by construction today — a future caller that
+  wanted to interleave would silently merge two tables into one.
 - **Inline run boundaries.** A paragraph either contains zero
   hyperlinks (one atoms run, rendered as a single `LabelAtoms`) or one
   or more (rendered as a `HorizontalWrapped` over a run sequence).
@@ -234,6 +253,65 @@ should iterate `Frontmatter().IteratePairs()` directly.
   buffers before they reach the segment tree. Cap covers up to 8K
   source textures while staying inside what egui can plausibly
   upload.
+- **Table rows are a fixed height, so cells do not wrap.** The table op
+  takes a single `rowHeight` and applies it to the header row and every
+  body row; the interpreter draws each cell as a `ui.label` inside
+  `row.col`, and content taller than `rowHeight` is clipped. There is no
+  wrapping or multi-line cell to be had without a different op. `v1`
+  therefore accepts single-line cells and sizes the row from the IDS
+  type scale (`tableRowHeight`), taking the larger heading step when a
+  header is present because the interpreter draws header cells with
+  `ui.heading()`. The factor is a heuristic, not a measurement: egui's
+  real text metrics are only reachable through Fetcher opcodes, which
+  may only run from `StateManager.Sync()` at frame end, never from a
+  widget's render path. It errs generous — a too-tall row wastes a few
+  pixels, a too-short one eats the descenders.
+- **Column widths are estimated from rune counts, not measured or
+  auto-sized.** Long cells are handled on the width axis: each column
+  but the last starts at roughly its widest cell's width and is
+  resizable, the last is `remainder()`, and all of them clip (which egui
+  draws as an ellipsis where it can). The estimate is
+  `runes × BodyPt × tableGlyphAdvance`, capped, with the per-column
+  rune maximum cached on the segment at lowering time. Two rejected
+  alternatives explain the shape. `Column::auto()` looks like the right
+  answer and is not: auto sizing takes its width from what the previous
+  frame's cells *used*, which for a clipping column is the truncated
+  width, so the column never learns it should be wider and stays pinned
+  near egui_extras' 100pt fallback — and dropping the clip to break that
+  loop trades the ellipsis for a cell that wraps into the row's fixed
+  height and gets cut mid-line. A single per-column cap is also not
+  enough: only the last column is a remainder, so on a five-column table
+  individually-reasonable caps summed to more than the pane and starved
+  it to nothing. `tableColumnBudget` is therefore shared across the
+  fixed columns — more columns, tighter cap. Both the budget and the
+  glyph-advance factor are guesses (the render path can measure
+  neither), so they only set *starting* widths; the reader drags from
+  there.
+- **Table cells are plain text, so inline content is flattened.** The
+  cell ops take a string (`tableCellText`) or a `WidgetText`
+  (`tableCellRichText`); neither takes the Atoms blob that paragraph
+  runs are built from, and neither renders a hyperlink. `v1` takes the
+  string path and flattens each cell with `flattenInlineText`: bold,
+  italic, code spans and strikethrough lose their styling, and a link,
+  wikilink or embed inside a cell shows as its label text with no way to
+  follow it. That last one is a real gap, not a simplification — a table
+  of links reads as a table of words. The `tableCellRichText` path would
+  restore the styling (at the cost of one retained holder per cell, kept
+  on the segment for the `Doc`'s lifetime per the retained-holder
+  invariant) but still not the links, so it buys the smaller half of the
+  loss; it is the obvious next step if styled cells start to matter.
+  `flattenInlineText` gained cases for autolinks, wikilinks and embeds
+  along the way — those carry their visible text in node fields rather
+  than in child `Text` nodes, so a cell holding only one of them used to
+  flatten to the empty string.
+- **GFM column alignment is parsed and not applied.** `:---`, `:--:` and
+  `---:` reach the lowering as `Table.Alignments`, and the lowering uses
+  them only for their column count. Neither `tableColumn` nor the cell
+  ops carry an alignment knob, and the interpreter's cell renderer is a
+  bare `ui.label`, so applying alignment means changing the IDL and the
+  Rust interpreter — out of scope here. Every column renders
+  left-aligned; a right-aligned numeric column in a source document will
+  not look like the author intended.
 - **Callouts collapse a 20+ type vocabulary into 5 families.** Obsidian
   recognises `note`, `info`, `tip`, `hint`, `important`, `success`,
   `check`, `done`, `question`, `help`, `faq`, `warning`, `caution`,

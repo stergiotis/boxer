@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/containers"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
@@ -89,7 +90,12 @@ func headingPlainText(h *ast.Heading, src []byte) (out string) {
 }
 
 // lowerBlock converts one block AST node into a segment. Unsupported
-// block kinds (tables; phase-deferred constructs) are silently dropped.
+// block kinds (raw HTML blocks, GFM footnote definitions, math and
+// other phase-deferred constructs) are silently dropped — a visible
+// "unsupported block" marker would be the honest rendering, but it is
+// a behaviour change for every doc that already relies on HTML blocks
+// and footnote definitions disappearing, so it is left for its own
+// change.
 func lowerBlock(ctx *lowerCtx, n ast.Node) (seg segment, ok bool) {
 	switch v := n.(type) {
 	case *ast.Heading:
@@ -125,6 +131,92 @@ func lowerBlock(ctx *lowerCtx, n ast.Node) (seg segment, ok bool) {
 	case *callout.Node:
 		seg = lowerCallout(ctx, v)
 		ok = true
+	case *east.Table:
+		seg, ok = lowerTable(ctx, v)
+	}
+	return
+}
+
+// lowerTable flattens a GFM table into a rectangular grid of plain-text
+// cells. The column count comes from the delimiter row (`|---|:--:|`),
+// which goldmark records as Table.Alignments and against which it has
+// already padded short rows and truncated long ones; the fallbacks below
+// only matter if that ever stops holding.
+//
+// Cell content is flattened to a single plain-text line by
+// [flattenInlineText]: the table op's cells take a string (or a
+// WidgetText), so inline styling, hyperlinks and images inside a cell
+// are reduced to their visible text. A degenerate table with no columns
+// is dropped rather than emitted as an empty widget.
+//
+// GFM's per-column alignment (`:---`, `:--:`, `---:`) is parsed but NOT
+// applied: neither `tableColumn` nor `tableCellText` carries an
+// alignment knob, and every cell is drawn by the interpreter as a plain
+// `ui.label`, so honouring it would need an IDL and interpreter change.
+// Every column renders left-aligned.
+func lowerTable(ctx *lowerCtx, t *east.Table) (seg segment, ok bool) {
+	seg.kind = segKindTable
+	cols := len(t.Alignments)
+	if cols == 0 {
+		for row := t.FirstChild(); row != nil; row = row.NextSibling() {
+			if n := row.ChildCount(); n > cols {
+				cols = n
+			}
+		}
+	}
+	if cols == 0 {
+		return
+	}
+	seg.tableCols = uint32(cols)
+	for row := t.FirstChild(); row != nil; row = row.NextSibling() {
+		switch r := row.(type) {
+		case *east.TableHeader:
+			seg.tableHeader = lowerTableRow(ctx, r, cols)
+		case *east.TableRow:
+			seg.tableCells = append(seg.tableCells, lowerTableRow(ctx, r, cols)...)
+		}
+	}
+	seg.tableColRunes = measureTableColumns(cols, seg.tableHeader, seg.tableCells)
+	ok = true
+	return
+}
+
+// measureTableColumns returns the widest cell per column in runes, over
+// the header and the whole body. The renderer turns these into initial
+// column widths.
+//
+// This is cached on the segment rather than recomputed per frame because
+// it is a scan of every cell and the cells never change after Parse. It
+// is a rune count, not a width: the point size it multiplies depends on
+// the density, which is read at render time.
+func measureTableColumns(cols int, header []string, cells []string) (runes []uint32) {
+	runes = make([]uint32, cols)
+	widen := func(col int, s string) {
+		if n := uint32(utf8.RuneCountInString(s)); n > runes[col] {
+			runes[col] = n
+		}
+	}
+	for i, h := range header {
+		widen(i, h)
+	}
+	for i, cell := range cells {
+		widen(i%cols, cell)
+	}
+	return
+}
+
+// lowerTableRow flattens one header or body row into exactly cols
+// plain-text cells: short rows are padded with empty strings, overflow
+// cells are dropped. Keeping every row the same width is what lets the
+// renderer address the body as cells[row*cols+col], which is the
+// indexing the table op's Rust side performs.
+func lowerTableRow(ctx *lowerCtx, row ast.Node, cols int) (out []string) {
+	out = make([]string, 0, cols)
+	for cell := row.FirstChild(); cell != nil && len(out) < cols; cell = cell.NextSibling() {
+		out = append(out, strings.TrimSpace(flattenInlineText(cell, ctx.src)))
+	}
+	for len(out) < cols {
+		out = append(out, "")
 	}
 	return
 }
@@ -352,8 +444,15 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 }
 
 // flattenInlineText collects the plain-text content of an inline subtree
-// (used for code spans and link labels where embedded styling is not
-// preserved).
+// (used for code spans, link labels and table cells, where embedded
+// styling is not preserved).
+//
+// Autolinks, wikilinks and embeds carry their visible text in node
+// fields rather than in child [ast.Text] nodes, so a plain Text/String
+// walk returns the empty string for them. They are enumerated here so a
+// subtree that consists only of such a node still flattens to something
+// the reader can see — without the extra cases, a table cell holding
+// `[[Page]]` would render blank.
 func flattenInlineText(parent ast.Node, src []byte) (out string) {
 	var buf bytes.Buffer
 	ast.Walk(parent, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -365,6 +464,16 @@ func flattenInlineText(parent ast.Node, src []byte) (out string) {
 			buf.Write(v.Segment.Value(src))
 		case *ast.String:
 			buf.Write(v.Value)
+		case *ast.AutoLink:
+			buf.Write(v.URL(src))
+		case *wikilink.Node:
+			buf.WriteString(v.DisplayText())
+		case *embed.Node:
+			buf.Write(v.Target)
+			if len(v.Heading) > 0 {
+				buf.WriteString(" > ")
+				buf.Write(v.Heading)
+			}
 		}
 		return ast.WalkContinue, nil
 	})

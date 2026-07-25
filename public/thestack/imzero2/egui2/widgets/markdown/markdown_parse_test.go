@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/containers"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 )
@@ -327,6 +328,307 @@ func TestParse_Callout_FoldableMarker(t *testing.T) {
 	}
 	if !seg.calloutFoldable {
 		t.Error("calloutFoldable: got false want true (for `-` marker)")
+	}
+}
+
+// ---------------- GFM tables ----------------------------------------------
+
+// tableSeg finds the single segKindTable segment in a doc, failing the
+// test when there is not exactly one. Every table assertion below starts
+// here, so a lowering that drops the table (the pre-table-support
+// behaviour) fails loudly rather than silently passing an empty grid.
+func tableSeg(t *testing.T, doc *Doc) (seg *segment) {
+	t.Helper()
+	for i := range doc.segments {
+		if doc.segments[i].kind != segKindTable {
+			continue
+		}
+		if seg != nil {
+			t.Fatalf("expected exactly one table segment; got kinds=%v", kindsOf(doc.segments))
+		}
+		seg = &doc.segments[i]
+	}
+	if seg == nil {
+		t.Fatalf("no segKindTable segment; got kinds=%v", kindsOf(doc.segments))
+	}
+	return
+}
+
+func TestParse_GFMTable_LowersToTableSegment(t *testing.T) {
+	src := strings.Join([]string{
+		"| Stage | Reads | Writes |",
+		"|-------|-------|--------|",
+		"| describe | Go types | IR |",
+		"| map | IR | mapping plan |",
+	}, "\n") + "\n"
+	doc := Parse([]byte(src))
+	if len(doc.segments) != 1 {
+		t.Fatalf("segments: got %d want 1 (kinds=%v)", len(doc.segments), kindsOf(doc.segments))
+	}
+	seg := tableSeg(t, doc)
+
+	if seg.tableCols != 3 {
+		t.Errorf("tableCols: got %d want 3", seg.tableCols)
+	}
+	wantHeader := []string{"Stage", "Reads", "Writes"}
+	if !reflect.DeepEqual(seg.tableHeader, wantHeader) {
+		t.Errorf("tableHeader: got %#v want %#v", seg.tableHeader, wantHeader)
+	}
+	wantCells := []string{
+		"describe", "Go types", "IR",
+		"map", "IR", "mapping plan",
+	}
+	if !reflect.DeepEqual(seg.tableCells, wantCells) {
+		t.Errorf("tableCells: got %#v want %#v", seg.tableCells, wantCells)
+	}
+	// Row count is derived, never stored — the renderer computes it the
+	// same way to size the table op.
+	if rows := len(seg.tableCells) / int(seg.tableCols); rows != 2 {
+		t.Errorf("derived rows: got %d want 2", rows)
+	}
+}
+
+func TestParse_GFMTable_HeaderOnly_NoBodyRows(t *testing.T) {
+	// A delimiter row with no data rows is legal GFM. The header must
+	// still lower, with an empty body — the table op then renders a
+	// header and zero rows.
+	src := "| a | b |\n|---|---|\n"
+	doc := Parse([]byte(src))
+	seg := tableSeg(t, doc)
+	if !reflect.DeepEqual(seg.tableHeader, []string{"a", "b"}) {
+		t.Errorf("tableHeader: got %#v want [a b]", seg.tableHeader)
+	}
+	if len(seg.tableCells) != 0 {
+		t.Errorf("tableCells: got %#v want empty", seg.tableCells)
+	}
+}
+
+func TestParse_GFMTable_EmptyCells_StayInGrid(t *testing.T) {
+	// An empty cell must occupy its slot, not collapse — otherwise every
+	// following cell shifts one column left in the row-major body.
+	src := strings.Join([]string{
+		"| a | b | c |",
+		"|---|---|---|",
+		"| 1 |  | 3 |",
+		"|  |  |  |",
+	}, "\n") + "\n"
+	doc := Parse([]byte(src))
+	seg := tableSeg(t, doc)
+	wantCells := []string{
+		"1", "", "3",
+		"", "", "",
+	}
+	if !reflect.DeepEqual(seg.tableCells, wantCells) {
+		t.Errorf("tableCells: got %#v want %#v", seg.tableCells, wantCells)
+	}
+}
+
+func TestParse_GFMTable_RaggedRows_PadAndTruncate(t *testing.T) {
+	// The delimiter row fixes the column count at 3. A short row is
+	// padded with empty cells and an over-long one is truncated, so the
+	// body stays exactly rows×cols and cells[row*cols+col] addresses
+	// what the reader sees.
+	src := strings.Join([]string{
+		"| a | b | c |",
+		"|---|---|---|",
+		"| short | row |",
+		"| too | many | cells | here |",
+		"| just | right | ok |",
+	}, "\n") + "\n"
+	doc := Parse([]byte(src))
+	seg := tableSeg(t, doc)
+	if seg.tableCols != 3 {
+		t.Fatalf("tableCols: got %d want 3", seg.tableCols)
+	}
+	wantCells := []string{
+		"short", "row", "",
+		"too", "many", "cells",
+		"just", "right", "ok",
+	}
+	if !reflect.DeepEqual(seg.tableCells, wantCells) {
+		t.Errorf("tableCells: got %#v want %#v", seg.tableCells, wantCells)
+	}
+	if len(seg.tableCells)%int(seg.tableCols) != 0 {
+		t.Errorf("body is not rectangular: %d cells over %d columns",
+			len(seg.tableCells), seg.tableCols)
+	}
+}
+
+func TestParse_GFMTable_InlineContentFlattensToText(t *testing.T) {
+	// Cells take a plain string, so styling, code spans, links,
+	// wikilinks and autolinks all reduce to their visible text. The
+	// wikilink and autolink cases are the ones that would render blank
+	// under a Text-nodes-only flattener.
+	src := strings.Join([]string{
+		"| kind | cell |",
+		"|------|------|",
+		"| styled | **bold** and *italic* |",
+		"| code | `reflect` walk |",
+		"| link | see [the docs](https://example.com/docs) |",
+		"| wikilink | [[SomePage]] |",
+		"| autolink | <https://example.com> |",
+	}, "\n") + "\n"
+	doc := Parse([]byte(src))
+	seg := tableSeg(t, doc)
+	wantCells := []string{
+		"styled", "bold and italic",
+		"code", "reflect walk",
+		"link", "see the docs",
+		"wikilink", "SomePage",
+		"autolink", "https://example.com",
+	}
+	if !reflect.DeepEqual(seg.tableCells, wantCells) {
+		t.Errorf("tableCells: got %#v want %#v", seg.tableCells, wantCells)
+	}
+}
+
+func TestParse_GFMTable_AlignmentRow_DoesNotLeakIntoCells(t *testing.T) {
+	// Alignment is parsed by goldmark and deliberately not applied by
+	// the renderer (no alignment knob on tableColumn / tableCellText).
+	// What must hold regardless: the `:---:` delimiter row is consumed
+	// as structure and never surfaces as a body row.
+	src := strings.Join([]string{
+		"| left | centre | right |",
+		"|:-----|:------:|------:|",
+		"| 1 | 2 | 3 |",
+	}, "\n") + "\n"
+	doc := Parse([]byte(src))
+	seg := tableSeg(t, doc)
+	if !reflect.DeepEqual(seg.tableHeader, []string{"left", "centre", "right"}) {
+		t.Errorf("tableHeader: got %#v", seg.tableHeader)
+	}
+	if !reflect.DeepEqual(seg.tableCells, []string{"1", "2", "3"}) {
+		t.Errorf("tableCells: got %#v want [1 2 3]", seg.tableCells)
+	}
+}
+
+func TestParse_GFMTable_WithoutGFMFeature_StaysProse(t *testing.T) {
+	// The table nodes only exist because FeatureGFM is in the default
+	// set. Dropping it must leave prose, not a half-lowered table.
+	src := "| a | b |\n|---|---|\n| 1 | 2 |\n"
+	doc := Parse([]byte(src), WithFeatures(obsidian.FeatureFrontmatter))
+	for _, seg := range doc.segments {
+		if seg.kind == segKindTable {
+			t.Fatal("table segment lowered even though FeatureGFM is off")
+		}
+	}
+}
+
+func TestParse_GFMTable_InListItem(t *testing.T) {
+	// lowerBlock is shared by the nested-block walkers, so a table
+	// indented under a list item lowers the same way.
+	src := strings.Join([]string{
+		"- item",
+		"",
+		"  | a | b |",
+		"  |---|---|",
+		"  | 1 | 2 |",
+	}, "\n") + "\n"
+	doc := Parse([]byte(src))
+	if len(doc.segments) != 1 || doc.segments[0].kind != segKindList {
+		t.Fatalf("expected one list segment; got kinds=%v", kindsOf(doc.segments))
+	}
+	found := false
+	for _, item := range doc.segments[0].children {
+		for _, ch := range item.children {
+			if ch.kind == segKindTable {
+				found = true
+				if ch.tableCols != 2 {
+					t.Errorf("nested tableCols: got %d want 2", ch.tableCols)
+				}
+				if !reflect.DeepEqual(ch.tableCells, []string{"1", "2"}) {
+					t.Errorf("nested tableCells: got %#v want [1 2]", ch.tableCells)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Error("no table segment under the list item")
+	}
+}
+
+func TestParse_GFMTable_ColumnRunes_WidestCellWins(t *testing.T) {
+	// The per-column rune maximum drives the initial column widths. It
+	// must span the header and the whole body, not just one of them —
+	// column 0's widest cell is its header, column 1's is a body cell.
+	src := strings.Join([]string{
+		"| a longish header | b |",
+		"|------------------|---|",
+		"| x | a much longer body cell |",
+		"| y | short |",
+	}, "\n") + "\n"
+	doc := Parse([]byte(src))
+	seg := tableSeg(t, doc)
+	want := []uint32{
+		uint32(len("a longish header")),
+		uint32(len("a much longer body cell")),
+	}
+	if !reflect.DeepEqual(seg.tableColRunes, want) {
+		t.Errorf("tableColRunes: got %#v want %#v", seg.tableColRunes, want)
+	}
+}
+
+func TestTableColumnWidth_ClampsToBounds(t *testing.T) {
+	colCap := tableColumnCap(2)
+	if got := tableColumnWidth(0, colCap); got != tableColumnMinWidth {
+		t.Errorf("tableColumnWidth(0): got %v want the minimum %v", got, tableColumnMinWidth)
+	}
+	if got := tableColumnWidth(10_000, colCap); got != colCap {
+		t.Errorf("tableColumnWidth(10000): got %v want the cap %v", got, colCap)
+	}
+	// A mid-range column lands strictly inside the bounds and grows with
+	// its content.
+	narrow, wide := tableColumnWidth(10, colCap), tableColumnWidth(20, colCap)
+	if narrow <= tableColumnMinWidth || wide >= colCap {
+		t.Fatalf("test inputs no longer straddle the clamp: %v, %v (cap %v)", narrow, wide, colCap)
+	}
+	if wide <= narrow {
+		t.Errorf("width should grow with rune count: 10 runes → %v, 20 runes → %v", narrow, wide)
+	}
+}
+
+func TestTableColumnCap_TightensAsColumnsMultiply(t *testing.T) {
+	// The last column is the remainder and gets whatever the fixed ones
+	// leave over, so the fixed columns must share one budget: a wide
+	// table has to accept narrower columns or the remainder starves.
+	narrow2, narrow5 := tableColumnCap(2), tableColumnCap(5)
+	if narrow5 >= narrow2 {
+		t.Errorf("cap should tighten with more columns: 2 cols → %v, 5 cols → %v", narrow2, narrow5)
+	}
+	// Fixed columns claim at most the budget, whatever the column count.
+	for _, cols := range []int{1, 2, 3, 5, 9, 40} {
+		fixed := cols - 1
+		if fixed < 1 {
+			continue
+		}
+		if claimed := tableColumnCap(cols) * float32(fixed); claimed > tableColumnBudget {
+			// The floor is allowed to exceed the budget — below
+			// tableColumnMinWidth a column is unreadable — but nothing else is.
+			if tableColumnCap(cols) != tableColumnMinWidth {
+				t.Errorf("cols=%d: fixed columns claim %v > budget %v", cols, claimed, tableColumnBudget)
+			}
+		}
+	}
+	if got := tableColumnCap(1); got < tableColumnMinWidth || got > tableColumnMaxWidth {
+		t.Errorf("tableColumnCap(1): got %v, want it inside the absolute bounds", got)
+	}
+}
+
+func TestTableRowHeight_TracksTypeScale(t *testing.T) {
+	// A table with a header sizes off the larger heading step, because
+	// the interpreter draws header cells with ui.heading() and one row
+	// height covers header and body alike.
+	d := styletokens.DensityFromEnv()
+	wantHeader := styletokens.ScaledPt(styletokens.HeadingPt, d) * tableRowHeightFactor
+	wantBody := styletokens.ScaledPt(styletokens.BodyPt, d) * tableRowHeightFactor
+	if got := tableRowHeight(true); got != wantHeader {
+		t.Errorf("tableRowHeight(true): got %v want %v", got, wantHeader)
+	}
+	if got := tableRowHeight(false); got != wantBody {
+		t.Errorf("tableRowHeight(false): got %v want %v", got, wantBody)
+	}
+	if wantHeader <= wantBody {
+		t.Errorf("header row height %v should exceed body row height %v", wantHeader, wantBody)
 	}
 }
 
@@ -754,6 +1056,10 @@ func TestParse_DocumentWithMixedBlocks(t *testing.T) {
 		"",
 		"> a quote",
 		"",
+		"| col | col |",
+		"|-----|-----|",
+		"| 1 | 2 |",
+		"",
 		"---",
 		"",
 		"```",
@@ -766,6 +1072,7 @@ func TestParse_DocumentWithMixedBlocks(t *testing.T) {
 		segKindParagraph,
 		segKindList,
 		segKindBlockquote,
+		segKindTable,
 		segKindHorizontalRule,
 		segKindCodeBlock,
 	}

@@ -394,13 +394,23 @@ func (inst *HelpHost) renderViewToggle() {
 // the block's verbatim source to the clipboard over clipboard.write. On
 // an M1 host (nil bus) the plain [markdown.Doc.Render] path is used and
 // no button is shown.
+//
+// The scope key carries a generation suffix. markdown's ids come from a
+// per-Render sequence counter, so teaching the renderer a new
+// id-consuming segment kind shifts every id after the first occurrence
+// of it in a doc; egui state stored against the old ids (a callout's
+// open/closed flag, a table's dragged column widths) would then be
+// re-applied to whichever widget inherited the id. Bumping the suffix
+// abandons that state wholesale instead — see the "ID derivation order"
+// invariant in the markdown package's EXPLANATION.md. Generation 2 is
+// the addition of table rendering.
 func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, bus app.BusI) {
 	opts := make([]markdown.RenderOpt, 0, 1)
 	if scrollToSection != "" {
 		opts = append(opts, markdown.WithScrollToSection(scrollToSection))
 	}
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-		for range c.IdScope(ids.PrepareStr("doc-render")) {
+		for range c.IdScope(ids.PrepareStr("doc-render-2")) {
 			if bus == nil {
 				doc.Render(ids, opts...)
 				continue
