@@ -11,6 +11,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -245,4 +246,55 @@ func TestDispatchProbeAndRunShareOneDecision(t *testing.T) {
 		"probe and run must resolve from the same SQL, not from the EXPLAIN wrapper")
 	assert.NotContains(t, residuals[1], "EXPLAIN", "the probe must not resolve from its own wrapper")
 	assert.Equal(t, runDec, decisions[1], "probe and run must consume the same decision")
+}
+
+// TestDispatchRecordsTheResolvedMember covers what R11 needs and boxer's own
+// endpoints never exercise: a resolver with members to choose between says
+// WHICH one it picked, and a cancellation is addressed there rather than at
+// the placement.
+func TestDispatchRecordsTheResolvedMember(t *testing.T) {
+	// The roster is the site's, not boxer's — a test is the only place one
+	// appears in this repository.
+	placement := []string{"http://a.invalid:8123", "http://b.invalid:8123", "http://c.invalid:8123"}
+	c := NewClient(ClientConfig{URL: "http://cluster.invalid"}, nil)
+	c.SetResolver(&recordingResolver{answer: func(_ string, base string) dispatchDecision {
+		member, _ := queryengine.SelectMember(placement, "generation-3")
+		return dispatchDecision{
+			targetURL: base,
+			class:     dispatchClassManual,
+			reason:    "cluster placement, generation-pinned member",
+			member:    member,
+		}
+	}})
+
+	dec := c.Dispatch("SELECT 1", "generation-3")
+	require.NotEmpty(t, dec.member)
+	assert.Contains(t, placement, dec.member)
+
+	target, err := dec.killTarget()
+	require.NoError(t, err)
+	assert.Equal(t, dec.member, target,
+		"a kill reaches only the member that ran the query, never the placement")
+	assert.Contains(t, dec.describe(), dec.member, "an audit of the run wants the member too (R12)")
+}
+
+// TestDispatchWithoutMembersKillsAtTheTarget is boxer's own case: no
+// placement, so the target IS the member and nothing extra is displayed.
+func TestDispatchWithoutMembersKillsAtTheTarget(t *testing.T) {
+	c := NewClient(ClientConfig{URL: "http://only.invalid"}, nil)
+	dec := c.Dispatch("SELECT 1", "")
+	assert.Empty(t, dec.member, "boxer's endpoints have no members to choose between")
+
+	target, err := dec.killTarget()
+	require.NoError(t, err)
+	assert.Equal(t, "http://only.invalid", target)
+	assert.NotContains(t, dec.describe(), "()", "nothing to name means nothing shown")
+}
+
+// TestDispatchRefusedHasNoKillTarget: a run that never happened cannot be
+// cancelled, and asking says so rather than answering with the base.
+func TestDispatchRefusedHasNoKillTarget(t *testing.T) {
+	dec := dispatchDecision{class: dispatchClassRefused, reason: "names both planes"}
+	_, err := dec.killTarget()
+	assert.Error(t, err)
 }

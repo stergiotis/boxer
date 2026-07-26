@@ -77,6 +77,39 @@ type dispatchDecision struct {
 	targetURL string
 	class     dispatchClassE
 	reason    string
+	// member is the concrete member of the placement the run went to, when
+	// the placement has members to choose between. Empty for boxer's own
+	// endpoints, which have none: there the target IS the member.
+	//
+	// It is recorded because cancellation needs it. `KILL QUERY` reaches
+	// only the member that ran the query (R11), and a decision that
+	// remembered a cluster address instead would address the kill to
+	// whichever member happened to answer — which is to say, usually not
+	// the right one. An audit of the run wants the same fact (R12).
+	//
+	// A site resolver fills it, typically from
+	// [queryengine.SelectMember](placement, affinity), which is the
+	// deterministic (placement, generation) choice R4 asks for.
+	member string
+}
+
+// killTarget names what a cancellation for this run must be addressed to:
+// the resolved member where the placement had one, and the target endpoint
+// otherwise.
+//
+// It exists so the "which host do I kill on" question has one answer rather
+// than a convention every caller re-derives, and it is deliberately usable
+// before anything in boxer calls it — the engine's ControlI is built and
+// tested (queryengine/chserver), and the connection holder here still
+// supersedes by run id instead, which is cheaper and needs no second
+// request.
+func (inst dispatchDecision) killTarget() (endpoint string, err error) {
+	if inst.member != "" {
+		endpoint = inst.member
+		return
+	}
+	endpoint, err = inst.target()
+	return
 }
 
 // target returns the endpoint the request goes to, or an error explaining
@@ -104,8 +137,14 @@ func (inst dispatchDecision) target() (targetURL string, err error) {
 // which every resolver must be able to fall back to. affinity is the
 // caller's read-consistency token (R4): runs sharing a token belong to one
 // evaluation generation and must not be spread across members with
-// different replication lag. Boxer carries the token; its own endpoints
-// have no members to choose between, so nothing here judges it.
+// different replication lag.
+//
+// Boxer carries the token and does not judge it, because its own endpoints
+// have no members to choose between. A resolver that does have members
+// judges it with [queryengine.SelectMember], the deterministic (placement,
+// generation) function R4 asks for, and records the answer in the
+// decision's member field — where cancellation and the audit can find it.
+// The roster it selects from is site data and stays out of this repository.
 //
 // Implementations must be deterministic in their arguments and safe to call
 // from any goroutine: the run path and the diagnostics probe resolve
@@ -179,11 +218,16 @@ func (inst *Client) LastDecision() (dec dispatchDecision, ok bool) {
 	return
 }
 
-// describe renders a decision for the toolbar: where it went, and why.
+// describe renders a decision for the toolbar: where it went, and why. The
+// member is named only when there was a choice to make — on boxer's own
+// endpoints it would repeat the target.
 func (inst dispatchDecision) describe() (text string) {
 	where := inst.targetURL
 	if inst.class == dispatchClassRefused {
 		where = "refused"
+	}
+	if inst.member != "" {
+		where += " (" + inst.member + ")"
 	}
 	text = where + "  · " + inst.reason
 	return
