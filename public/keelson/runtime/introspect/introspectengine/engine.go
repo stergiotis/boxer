@@ -23,7 +23,6 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
-	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
@@ -31,6 +30,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chlocal"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DefaultPoolName is the chlocal pool the engine targets.
@@ -181,26 +181,20 @@ func (e *Engine) plan(sql string) (p queryPlan) {
 // chlocal broker.
 func (e *Engine) exec(ctx context.Context, sql, format string, tables []string, proj map[string]introspect.Projection) (body []byte, contentType string, err error) {
 	var inputs map[string][]byte
-	var encInputs map[string]chlocalbroker.EncryptedInputRef
 	for _, t := range tables {
 		prov, ok := e.reg.Lookup(t)
 		if !ok {
 			continue
 		}
-		// Ad-hoc datasets are not snapshotted: they stream from an
-		// encrypted file through the broker's decrypt path (ADR-0134 SD3).
-		// Mixed queries (adhoc JOIN a snapshot provider) work because each
-		// referenced table is routed by its own kind.
-		if enc, isEnc := prov.(introspect.EncryptedDatasetI); isEnc {
-			if encInputs == nil {
-				encInputs = make(map[string]chlocalbroker.EncryptedInputRef, len(tables))
-			}
-			encInputs[t] = chlocalbroker.EncryptedInputRef{
-				Path:      enc.Path(),
-				Structure: enc.Structure(),
-				Revision:  enc.Revision(),
-			}
-			continue
+		// A sealed dataset is not snapshotted and is not bound here: it is
+		// served by handle over the loopback plane, decrypted in-process at
+		// /table (ADR-0145 §SD2 retired the second, pipe-based decrypt
+		// path). A query that reaches this engine still naming one has not
+		// been through the url() rewrite that resolves it, so refusing is
+		// the honest answer — snapshotting it would hand back ciphertext.
+		if _, isEnc := prov.(introspect.EncryptedDatasetI); isEnc {
+			return nil, "", eb.Build().Str("table", t).
+				Errorf("introspectengine: %q is a sealed dataset; query it through the introspection /query endpoint, which resolves it by handle", t)
 		}
 		pj, ok := proj[t]
 		if !ok {
@@ -220,7 +214,6 @@ func (e *Engine) exec(ctx context.Context, sql, format string, tables []string, 
 		SQL:    sql,
 		Format: format,
 		Inputs: inputs,
-		Extra:  chlocal.Extra{EncryptedInputs: encInputs},
 	})
 	if reqErr != nil {
 		return nil, "", reqErr

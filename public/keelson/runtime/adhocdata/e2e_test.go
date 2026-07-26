@@ -3,6 +3,8 @@ package adhocdata_test
 import (
 	"bytes"
 	"context"
+	"io"
+	"net/http"
 	"os/exec"
 	"strings"
 	"testing"
@@ -22,12 +24,19 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspectengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
 )
 
-// setupE2E wires a broker, capability service, and in-process engine over
-// one shared registry, exactly as the runtime does.
-func setupE2E(t *testing.T) (*adhocdata.Service, *introspectengine.Engine) {
+// setupE2E wires a broker, the capability service, and the loopback
+// introspection endpoint over one shared registry, exactly as the runtime
+// does — and queries go the way production queries go: POST /query rewrites
+// keelson('<handle>') to url('…/table/<handle>','ArrowStream','<structure>')
+// and /table streams the in-process decryption (ADR-0134 §SD3 revised).
+//
+// These tests used to drive the in-process engine, whose named-pipe decrypt
+// path ADR-0145 §SD2 retired as unreachable. What they assert is unchanged;
+// only the path underneath is now the one that ships.
+func setupE2E(t *testing.T) (svc *adhocdata.Service, query func(sql string) string) {
 	t.Helper()
 	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
 		t.Skipf("clickhouse-local not installed: %v", err)
@@ -47,7 +56,7 @@ func setupE2E(t *testing.T) (*adhocdata.Service, *introspectengine.Engine) {
 	})
 
 	reg := introspect.NewRegistry()
-	svc, err := adhocdata.NewService(adhocdata.Config{
+	svc, err = adhocdata.NewService(adhocdata.Config{
 		Registry: reg, Keys: broker.KeyStore(), Dir: t.TempDir(), Log: logger,
 	})
 	require.NoError(t, err)
@@ -56,16 +65,39 @@ func setupE2E(t *testing.T) (*adhocdata.Service, *introspectengine.Engine) {
 	caller := bus.NewClient("test.adhoc.e2e", []app.SubjectFilter{
 		{Pattern: chlocalbroker.SubjectExecAll, Direction: app.CapDirectionBoth, Reason: "test"},
 	})
-	eng, err := introspectengine.New(introspectengine.Config{Registry: reg, Bus: caller}, logger)
-	require.NoError(t, err)
-	return svc, eng
+	runner := introspecthttp.RunnerFunc(func(ctx context.Context, sql string, params map[string]string) (body []byte, err error) {
+		rep, e := chlocalbroker.ExecOnPool(ctx, caller, "introspect", chlocalbroker.ExecRequest{SQL: sql, Params: params})
+		if e != nil {
+			return nil, e
+		}
+		defer func() { _ = rep.Close() }()
+		if re := rep.Err(); re != nil {
+			return nil, re
+		}
+		return io.ReadAll(rep)
+	})
+	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner, Decryptor: broker}, logger)
+	require.NoError(t, srv.Start())
+	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
+
+	query = func(sql string) (out string) {
+		t.Helper()
+		resp, perr := http.Post(srv.BaseURL()+"/query", "text/plain", strings.NewReader(sql+" FORMAT TabSeparated"))
+		require.NoError(t, perr)
+		defer func() { _ = resp.Body.Close() }()
+		raw, _ := io.ReadAll(resp.Body)
+		require.Equalf(t, http.StatusOK, resp.StatusCode, "body: %s", raw)
+		out = strings.TrimSpace(string(raw))
+		return
+	}
+	return
 }
 
-// TestServiceE2E_QueryViaEngine is the milestone e2e: publish a dataset
-// through the capability service, then query it by handle through the
-// in-process engine over the same registry and broker (ADR-0134).
-func TestServiceE2E_QueryViaEngine(t *testing.T) {
-	svc, eng := setupE2E(t)
+// TestServiceE2E_QueryByHandle is the milestone e2e: publish a dataset
+// through the capability service, then query it by handle over the
+// introspection endpoint that resolves it (ADR-0134, ADR-0145 §SD2).
+func TestServiceE2E_QueryByHandle(t *testing.T) {
+	svc, query := setupE2E(t)
 
 	res, err := svc.Publish(adhocdata.PublishInput{
 		Alias: "items", ArrowIPCStream: int64Stream(t, 10, 20, 30),
@@ -73,90 +105,78 @@ func TestServiceE2E_QueryViaEngine(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), res.Rows)
 
-	body, _, err := eng.Query(context.Background(), "SELECT sum(v) FROM keelson('"+res.Handle+"') ORDER BY 1", "TabSeparated")
-	require.NoError(t, err)
-	assert.Equal(t, "60", strings.TrimSpace(string(body)))
+	body := query("SELECT sum(v) FROM keelson('" + res.Handle + "') ORDER BY 1")
+	assert.Equal(t, "60", body)
 
 	// Republish new data; a fresh query sees it (revision bump invalidates
 	// the broker's revision-keyed cache).
 	_, err = svc.Publish(adhocdata.PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, 100)})
 	require.NoError(t, err)
-	body, _, err = eng.Query(context.Background(), "SELECT sum(v) FROM keelson('"+res.Handle+"')", "TabSeparated")
-	require.NoError(t, err)
-	assert.Equal(t, "100", strings.TrimSpace(string(body)))
+	body = query("SELECT sum(v) FROM keelson('" + res.Handle + "')")
+	assert.Equal(t, "100", body)
 }
 
 // TestCatalogE2E queries keelson('adhoc'): the catalog lists live
 // datasets and shrinks on retract (ADR-0134 SD6).
 func TestCatalogE2E(t *testing.T) {
-	svc, eng := setupE2E(t)
+	svc, query := setupE2E(t)
 
 	a, err := svc.Publish(adhocdata.PublishInput{Alias: "alpha", Publisher: "app.one", ArrowIPCStream: int64Stream(t, 1, 2)})
 	require.NoError(t, err)
 	_, err = svc.Publish(adhocdata.PublishInput{Alias: "beta", Publisher: "app.two", ArrowIPCStream: int64Stream(t, 3)})
 	require.NoError(t, err)
 
-	body, _, err := eng.Query(context.Background(), "SELECT count(*) FROM keelson('adhoc')", "TabSeparated")
-	require.NoError(t, err)
-	assert.Equal(t, "2", strings.TrimSpace(string(body)), "two datasets in the catalog")
+	body := query("SELECT count(*) FROM keelson('adhoc')")
+	assert.Equal(t, "2", body, "two datasets in the catalog")
 
 	// Columns are readable and attributed.
-	body, _, err = eng.Query(context.Background(),
-		"SELECT alias, publisher, rows FROM keelson('adhoc') ORDER BY alias", "TabSeparated")
-	require.NoError(t, err)
-	assert.Equal(t, "alpha\tapp.one\t2\nbeta\tapp.two\t1", strings.TrimSpace(string(body)))
+	body = query("SELECT alias, publisher, rows FROM keelson('adhoc') ORDER BY alias")
+	assert.Equal(t, "alpha\tapp.one\t2\nbeta\tapp.two\t1", body)
 
 	require.NoError(t, svc.Retract(a.Handle))
-	body, _, err = eng.Query(context.Background(), "SELECT count(*) FROM keelson('adhoc')", "TabSeparated")
-	require.NoError(t, err)
-	assert.Equal(t, "1", strings.TrimSpace(string(body)), "retract removes the catalog row")
+	body = query("SELECT count(*) FROM keelson('adhoc')")
+	assert.Equal(t, "1", body, "retract removes the catalog row")
 }
 
 // TestServiceE2E_LeewayShapedDataset publishes a leeway-shaped dataset —
 // colon-laden physical names, Array-typed repeated sections, a nested
 // Struct, and a Nullable scalar — through the capability service, then
-// queries keelson('<handle>') through the in-process engine (publish → fifo
-// read → served back → client SELECT). SELECT * returns every column
+// queries keelson('<handle>') over the introspection endpoint (publish →
+// url() rewrite → in-process decrypt → client SELECT). SELECT * returns every column
 // intact, and the colon-named columns are addressable by quoted identifier
 // through the keelson macro rewrite (ADR-0134 SD1/SD3).
 func TestServiceE2E_LeewayShapedDataset(t *testing.T) {
-	svc, eng := setupE2E(t)
+	svc, query := setupE2E(t)
 
 	res, err := svc.Publish(adhocdata.PublishInput{Alias: "records", ArrowIPCStream: leewayStream(t)})
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), res.Rows)
 
 	// SELECT * carries the colon-named Array/Struct/Nullable columns back.
-	body, _, err := eng.Query(context.Background(),
-		"SELECT * FROM keelson('"+res.Handle+"') ORDER BY `id:kid:u64`", "TabSeparated")
-	require.NoError(t, err)
+	body := query("SELECT * FROM keelson('" + res.Handle + "') ORDER BY `id:kid:u64`")
 	assert.Equal(t,
 		"7\t[]\t(-3,'bye')\t\\N\n42\t['a','b']\t(10,'hi')\tok",
-		strings.TrimSpace(string(body)))
+		body)
 
 	// The colon-named columns are queryable by quoted identifier through the
 	// macro rewrite: nested Tuple access and a Nullable projection included.
-	body, _, err = eng.Query(context.Background(),
-		"SELECT `id:kid:u64`, length(`sec:tags`), `s:pair`.`y:sub`, `note` "+
-			"FROM keelson('"+res.Handle+"') ORDER BY `id:kid:u64`", "TabSeparated")
-	require.NoError(t, err)
-	assert.Equal(t, "7\t0\tbye\t\\N\n42\t2\thi\tok", strings.TrimSpace(string(body)))
+	body = query("SELECT `id:kid:u64`, length(`sec:tags`), `s:pair`.`y:sub`, `note` " +
+		"FROM keelson('" + res.Handle + "') ORDER BY `id:kid:u64`")
+	assert.Equal(t, "7\t0\tbye\t\\N\n42\t2\thi\tok", body)
 }
 
 // TestServiceE2E_NaiveTimestamp publishes a timezone-naive Timestamp(ns)
-// backbone column and reads it back through the engine. The stored epoch
-// value must survive publish → fifo read → SELECT (a naive zone affects only
+// backbone column and reads it back. The stored epoch
+// value must survive publish → in-process decrypt → SELECT (a naive zone affects only
 // display, not the value), checked tz-independently via toUnixTimestamp64Nano.
 func TestServiceE2E_NaiveTimestamp(t *testing.T) {
-	svc, eng := setupE2E(t)
+	svc, query := setupE2E(t)
 
 	res, err := svc.Publish(adhocdata.PublishInput{Alias: "events", ArrowIPCStream: naiveTsStream(t)})
 	require.NoError(t, err)
 
-	body, _, err := eng.Query(context.Background(),
-		"SELECT `id`, toUnixTimestamp64Nano(`evt:ns`) FROM keelson('"+res.Handle+"') ORDER BY `id`", "TabSeparated")
-	require.NoError(t, err)
-	assert.Equal(t, "1\t1000000000000000000\n2\t0", strings.TrimSpace(string(body)))
+	body := query("SELECT `id`, toUnixTimestamp64Nano(`evt:ns`) FROM keelson('" + res.Handle + "') ORDER BY `id`")
+	assert.Equal(t, "1\t1000000000000000000\n2\t0", body)
 }
 
 // naiveTsStream builds a 2-row Arrow stream whose event-time column is a

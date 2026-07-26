@@ -200,18 +200,6 @@ func TestDeliverBadStatementIsAFailedTerminal(t *testing.T) {
 	require.Error(t, term.Err)
 }
 
-func TestDeliverRefusesAnUnknownExtension(t *testing.T) {
-	t.Parallel()
-	eng := &Engine{}
-	_, _, err := eng.Deliver(context.Background(), queryengine.Request{
-		SQL:   "SELECT 1",
-		Extra: struct{ Foreign string }{"x"},
-	})
-	// An extension silently dropped becomes a query failing later against a
-	// table the engine never received, with nothing on the wire saying why.
-	assert.Error(t, err)
-}
-
 func TestDeliverValidatesTheRunId(t *testing.T) {
 	t.Parallel()
 	eng := &Engine{}

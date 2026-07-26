@@ -24,7 +24,6 @@ package chlocal
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
@@ -32,34 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
-
-// Extra is the engine-specific half of a request, carried in
-// [queryengine.Request.Extra]. Nothing here generalises: encrypted datasets
-// are decrypted in a stream through named pipes on the broker's side
-// ([ADR-0134] SD3), against a key this process never sends, and that shape
-// belongs to this engine alone.
-//
-// [ADR-0134]: https://github.com/stergiotis/boxer/blob/main/doc/adr/0134-adhoc-datasets.md
-type Extra struct {
-	// EncryptedInputs binds chunk-encrypted Arrow datasets as temporary
-	// tables. The per-dataset key is resolved broker-side from its
-	// KeyStore by table name and never rides the request.
-	EncryptedInputs map[string]chlocalbroker.EncryptedInputRef
-	// Cacheable opts into the broker's per-pool result cache (ADR-0028
-	// §SD5). It is the CALLER asserting the statement is deterministic —
-	// now(), rand(), a network function and a mutable dictionary each make
-	// that false — and the broker additionally gates on a SQL-prefix check,
-	// so setting it is a request rather than an instruction.
-	//
-	// It lives here rather than on the shared request because a result
-	// cache is not a property engines share: the shape of the key, what
-	// invalidates it, and whether asking is even meaningful differ per
-	// engine. [queryengine.Result.CacheHit] reports the outcome for any
-	// engine that has one.
-	Cacheable bool
-}
 
 // Config parameterises an [Engine]. Bus is required.
 type Config struct {
@@ -114,25 +86,13 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 	if err != nil {
 		return
 	}
-	var extra Extra
-	if req.Extra != nil {
-		e, ok := req.Extra.(Extra)
-		if !ok {
-			err = eb.Build().Str("extraType", fmt.Sprintf("%T", req.Extra)).
-				Errorf("chlocal: request carries an extension this engine does not recognise")
-			return
-		}
-		extra = e
-	}
-
 	rep, reqErr := chlocalbroker.ExecOnPool(ctx, inst.bus, inst.poolName, chlocalbroker.ExecRequest{
-		SQL:             req.SQL,
-		Format:          req.Format,
-		Cacheable:       extra.Cacheable,
-		Settings:        req.Settings,
-		Params:          req.Params,
-		InputTables:     req.Inputs,
-		EncryptedInputs: extra.EncryptedInputs,
+		SQL:         req.SQL,
+		Format:      req.Format,
+		Cacheable:   req.Cacheable,
+		Settings:    req.Settings,
+		Params:      req.Params,
+		InputTables: req.Inputs,
 	})
 	if reqErr != nil {
 		// The bus never answered: no worker, no capability, or a timeout.

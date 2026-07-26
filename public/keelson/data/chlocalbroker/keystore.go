@@ -54,9 +54,3 @@ func (inst *KeyStore) LookupDatasetKey(name string) (key []byte, ok bool) {
 	}
 	return
 }
-
-// KeyStoreI is the broker-side key lookup the encrypted-input
-// materialiser needs. *KeyStore satisfies it; tests inject fakes.
-type KeyStoreI interface {
-	LookupDatasetKey(name string) (key []byte, ok bool)
-}

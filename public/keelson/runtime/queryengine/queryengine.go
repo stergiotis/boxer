@@ -97,17 +97,14 @@ type Request struct {
 	// declares none. A cap the engine applies by its own default, or that
 	// a quota imposes, is not visible from here and is not claimed.
 	Cap RowCap
-	// Extra carries an engine-specific extension these roles deliberately
-	// do not model, and an engine that does not recognise it REFUSES the
-	// request rather than ignoring it. That refusal is the point: an
-	// extension silently dropped becomes a query failing later against a
-	// table the engine never received, with nothing on the wire saying
-	// why.
-	//
-	// It is the seam for what only one engine has — the broker's
-	// stream-decrypted datasets, a cluster's submission options — and not a
-	// place to route around the fields above.
-	Extra any
+	// Cacheable is the caller asserting that the statement is
+	// deterministic, so an engine holding a result cache may answer from it
+	// instead of executing. The assertion is the caller's to get right —
+	// now(), rand(), a network function and a mutable dictionary each make
+	// it false — and it is advisory in the same way [OnProgress] is: an
+	// engine without a cache ignores it, and [Result.CacheHit] reports what
+	// actually happened rather than what was asked for.
+	Cacheable bool
 	// OnProgress, when set, receives inflight observations for engines that
 	// can deliver them on the request's own channel. Advisory in the
 	// strongest sense: it may never fire, it is not a substitute for the

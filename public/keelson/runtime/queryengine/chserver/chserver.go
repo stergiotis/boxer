@@ -135,10 +135,6 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 			Errorf("chserver: this engine cannot bind in-memory input tables; stage them server-side first")
 		return
 	}
-	if req.Extra != nil {
-		err = eh.Errorf("chserver: request carries an extension this engine does not recognise")
-		return
-	}
 	qs, err := inst.queryString(req)
 	if err != nil {
 		return

@@ -129,17 +129,6 @@ func TestDeliverRefusesInputTables(t *testing.T) {
 	assert.Contains(t, err.Error(), "in-memory input tables")
 }
 
-func TestDeliverRefusesAnUnknownExtension(t *testing.T) {
-	t.Parallel()
-	endpoint, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {})
-	eng := newEngine(t, endpoint)
-	_, _, err := eng.Deliver(context.Background(), queryengine.Request{
-		SQL:   "SELECT 1",
-		Extra: struct{ Whatever string }{"x"},
-	})
-	assert.Error(t, err)
-}
-
 func TestDeliverServerErrorIsAFailedTerminalNotAnError(t *testing.T) {
 	t.Parallel()
 	endpoint, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
