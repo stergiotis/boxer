@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-26
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-07-26
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0145: Sealed app data — one vocabulary, and a wall that is checked
 
@@ -277,7 +275,7 @@ places that refuse, and the removal of the unreachable path.
 
 ## Status
 
-Proposed 2026-07-26. **Not implemented.**
+Accepted 2026-07-26. **Implementation in progress.**
 
 Sequenced so the subtraction lands before the addition, and so the probe —
 the only part with a new runtime cost — is separable:
