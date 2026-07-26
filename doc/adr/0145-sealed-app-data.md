@@ -339,7 +339,44 @@ transport-independent, so retiring the pipe cost only pipe mechanics. The
 publish → query → catalog → leeway shapes → naive timestamps now assert
 over the path that ships.
 
-Milestones 2 (the label and its refusals) and 3 (the probe) are unstarted.
+### 2026-07-26 — Milestone 2 landed; the plane publishes a predicate
+
+§SD3's label and §SD4's two refusals are in, and behave as the Status
+predicted: a buffer naming an ad-hoc dataset while the endpoint is pinned
+elsewhere is refused with a reason naming the datasets and the endpoint,
+rather than failing at the server with `Unknown function keelson`.
+
+**How the derivation reaches a registry, which the design left open.** The
+runtime serves a *fresh* registry rather than `introspect.Default`, so a
+co-resident dispatcher cannot look one up. Rather than hand play the
+registry, the plane publishes a **predicate** beside the endpoint it already
+publishes (`SetLocalSealedPredicate` / `IsLocalSealed`, mirroring
+`SetLocalQueryEndpoint`). One question leaves the host, not the ability to
+enumerate or read what is registered. `Registry.IsSealed` is the ground
+truth behind it.
+
+**The wall's placement was sharpened.** §SD4 said the resolver declines;
+the implementation puts the check *above* every resolver, in
+`dispatchResidual`. Inside `keelsonResolver` it would have been bypassed by
+`staticResolver`, by any site resolver, and by whatever replaces them — and
+R2 asks for a router that *cannot* override the wall, not one that chooses
+not to. This is a strengthening of §SD4 rather than a deviation from it, and
+worth recording because "the resolver refuses" reads as the weaker thing.
+
+**The two gates are independent by construction.** The engine's permission
+is derived from the target address (identity with the published plane
+endpoint), never from the decision's own label, so a bug in one cannot
+excuse the other. A test drives the case that matters: a decision a site
+resolver could have produced — confined, placed off the plane — is refused
+by the engine, with nothing reaching the server, and the diagnostics probe
+sharing that decision is refused identically.
+
+Not built, and still §SD5: the probe. Until it lands, the only endpoint that
+may serve a confined run is this process's own plane, so a confined run
+cannot reach *any* external engine — which is more restrictive than the
+Decision's end state and is the safe direction to be wrong in.
+
+Milestone 3 (the probe) is unstarted.
 
 ## References
 

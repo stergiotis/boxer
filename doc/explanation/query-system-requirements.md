@@ -346,7 +346,27 @@ Where they sit in a run's lifecycle:
   meanings. Boxer enforces only the walls it owns (R2); everything else
   is carried, not judged. *Exists:* the walls, in
   [ADR-0094](../adr/0094-keelson-introspection-tables.md)/[ADR-0134](../adr/0134-adhoc-datasets.md)
-  enforcement. *Delta:* the label types.
+  enforcement, and now the **sensitivity axis** as
+  `queryengine.SensitivityE` ([ADR-0145](../adr/0145-sealed-app-data.md)).
+  *Delta:* the execution-mode axis, which still waits for a second
+  consumer.
+
+  Two things about the sensitivity axis are worth carrying forward to
+  whoever builds the other one. Its zero value is *ordinary*, not
+  unknown-and-therefore-denied — deliberately breaking symmetry with the
+  R5 default-deny of the statement-kind classifier, because the questions
+  differ: whether a statement mutates is undecidable from unparseable SQL
+  and must fail closed, whereas whether a run touches sealed data is
+  decided by a binding this process performed. And the label is *derived
+  from a registry lookup*, never guessed from SQL text, which is what
+  makes it something a wall can rest on.
+
+  The wall itself sits **above** the resolver rather than inside one. A
+  check inside a resolver is bypassed by the next resolver, and R2 asks for
+  a router that *cannot* override a locality wall; there is a second,
+  independent refusal at the engine, whose permission is derived from the
+  target address rather than from the decision, so the two gates cannot
+  agree by construction.
 
 ## Deliberately out of scope for boxer
 
