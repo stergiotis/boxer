@@ -8,30 +8,35 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// OpenDatasetPlaintext streams the decryption of an ad-hoc dataset file
-// (ADR-0134 §SD3, revised): the broker is the decrypt executor (K2), so it
-// resolves the dataset's key from its own KeyStore by handle, opens the
-// ciphertext at path, and returns a reader over the plaintext Arrow
-// stream. The key never leaves the process. This is how the introspection
-// /table endpoint serves an ad-hoc dataset over loopback HTTP — the same
-// AEAD reader the pipe path uses, without the named pipe. The caller must
-// Close the returned reader.
-func (inst *Service) OpenDatasetPlaintext(handle, path string) (rc io.ReadCloser, err error) {
-	key, ok := inst.keys.LookupDatasetKey(handle)
+// OpenDatasetPlaintext streams the decryption of a sealed dataset
+// (ADR-0134 §SD3 revised, ADR-0145 §SD1): the broker is the decrypt
+// executor, so it resolves the key from its own KeyStore by handle, opens
+// the ciphertext, and returns a reader over the plaintext Arrow stream. The
+// key never leaves the process.
+//
+// This is how the introspection /table endpoint serves a sealed dataset
+// over loopback HTTP, and since ADR-0145 §SD2 it is the ONLY decrypt path.
+// The caller must Close the returned reader.
+func (inst *Service) OpenDatasetPlaintext(ref adhocdata.Ref) (rc io.ReadCloser, err error) {
+	key, ok := inst.keys.LookupDatasetKey(ref.Handle)
 	if !ok {
-		return nil, eh.Errorf("chlocalbroker: no key registered for dataset %q", handle)
+		return nil, eh.Errorf("chlocalbroker: no key registered for dataset %q", ref.Handle)
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(ref.Path)
 	if err != nil {
-		return nil, eh.Errorf("chlocalbroker: open dataset %q: %w", handle, err)
+		return nil, eh.Errorf("chlocalbroker: open dataset %q: %w", ref.Handle, err)
 	}
 	ar, err := adhocdata.NewReader(f, key)
 	if err != nil {
 		_ = f.Close()
-		return nil, eh.Errorf("chlocalbroker: decrypt reader %q: %w", handle, err)
+		return nil, eh.Errorf("chlocalbroker: decrypt reader %q: %w", ref.Handle, err)
 	}
 	return &datasetReadCloser{r: ar, c: f}, nil
 }
+
+// The broker is ADR-0134 §SD2's decrypt executor, and this is the seam that
+// says so.
+var _ adhocdata.DecryptorI = (*Service)(nil)
 
 // datasetReadCloser reads decrypted plaintext from the AEAD reader and
 // closes the underlying ciphertext file.

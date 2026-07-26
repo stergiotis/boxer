@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chhttp"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -39,7 +40,7 @@ type Server struct {
 	addr      string
 	runner    QueryRunner
 	passes    *passreg.Registry
-	decryptor DatasetDecryptor
+	decryptor adhocdata.DecryptorI
 	srv       *http.Server
 	ln        net.Listener
 	// probes holds the outstanding E6 reachability nonces (probe.go). The
@@ -65,16 +66,7 @@ type Config struct {
 	// their in-process decryption (ADR-0134 §SD3, revised). nil keeps the
 	// refusal — an encrypted entry answers 4xx. This is loopback-only by
 	// construction: the server refuses non-loopback binds at Start.
-	Decryptor DatasetDecryptor
-}
-
-// DatasetDecryptor streams the plaintext Arrow of an ad-hoc dataset given
-// its handle and ciphertext path (ADR-0134). The broker's Service
-// satisfies it; taking an interface keeps introspecthttp from importing
-// the broker. The key never appears here — the implementation resolves it
-// in-process.
-type DatasetDecryptor interface {
-	OpenDatasetPlaintext(handle, path string) (io.ReadCloser, error)
+	Decryptor adhocdata.DecryptorI
 }
 
 // QueryRunner executes SQL (the FORMAT clause is already part of sql) with
@@ -222,7 +214,15 @@ func (s *Server) serveEncrypted(w http.ResponseWriter, enc introspect.EncryptedD
 		http.Error(w, "ad-hoc dataset "+enc.Name()+" is not served here (no decryptor wired)", http.StatusForbidden)
 		return
 	}
-	rc, err := s.decryptor.OpenDatasetPlaintext(enc.Name(), enc.Path())
+	// The registry says "this provider is sealed" in accessors; the
+	// decryptor wants a Ref. This handler imports both, so it converts —
+	// introspect cannot depend on adhocdata, which registers into it.
+	rc, err := s.decryptor.OpenDatasetPlaintext(adhocdata.Ref{
+		Handle:    enc.Name(),
+		Path:      enc.Path(),
+		Structure: enc.Structure(),
+		Revision:  enc.Revision(),
+	})
 	if err != nil {
 		s.log.Warn().Err(err).Str("table", enc.Name()).Msg("introspecthttp: open ad-hoc dataset")
 		http.Error(w, "ad-hoc dataset unavailable", http.StatusServiceUnavailable)

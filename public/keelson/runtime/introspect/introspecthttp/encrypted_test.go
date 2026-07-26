@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
@@ -19,7 +20,7 @@ import (
 // the broker's real streaming decrypt.
 type fakeDecryptor struct{ plaintext []byte }
 
-func (f fakeDecryptor) OpenDatasetPlaintext(handle, path string) (io.ReadCloser, error) {
+func (f fakeDecryptor) OpenDatasetPlaintext(ref adhocdata.Ref) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(f.plaintext)), nil
 }
 

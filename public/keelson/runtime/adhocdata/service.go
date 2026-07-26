@@ -47,11 +47,17 @@ var StoreDir = env.NewString(env.Spec{
 	Category:    env.CategorySystem,
 })
 
-// KeyRegistrar is the broker-side key custody the service drives (ADR-0134
-// K2). *chlocalbroker.KeyStore satisfies it; taking an interface keeps
-// this package from importing the broker (the broker imports the AEAD
-// stream from here).
-type KeyRegistrar interface {
+// KeyRegistrarI is the broker-side key custody the capability service
+// drives (ADR-0134 K2). *chlocalbroker.KeyStore satisfies it; taking an
+// interface keeps this package from importing the broker (the broker
+// imports the AEAD stream from here).
+//
+// It is deliberately register-and-forget, with no lookup. ADR-0134 §SD2
+// splits key roles — this service is the POLICY OWNER, the broker is the
+// DECRYPT EXECUTOR — and a custody interface spanning both halves would
+// hand the policy owner exactly the ability that split exists to deny it.
+// See [DecryptorI] for the executor's half.
+type KeyRegistrarI interface {
 	RegisterDatasetKey(name string, key []byte)
 	DeregisterDatasetKey(name string)
 }
@@ -65,7 +71,7 @@ type Config struct {
 	// providers; defaults to introspect.Default.
 	Registry *introspect.Registry
 	// Keys is the broker key store; required.
-	Keys KeyRegistrar
+	Keys KeyRegistrarI
 	// Dir overrides the store directory; empty resolves from StoreDir.
 	Dir string
 	// Log is the service logger.
@@ -93,7 +99,7 @@ type dataset struct {
 // request (ADR-0134 SD2). It is safe for concurrent use.
 type Service struct {
 	reg  *introspect.Registry
-	keys KeyRegistrar
+	keys KeyRegistrarI
 	dir  string
 	log  zerolog.Logger
 

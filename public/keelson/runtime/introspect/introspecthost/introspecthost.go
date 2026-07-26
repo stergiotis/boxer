@@ -18,6 +18,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -70,7 +71,7 @@ type Deps struct {
 	Registry *introspect.Registry
 	// Decryptor, when set, lets /table stream ad-hoc datasets' in-process
 	// decryption (ADR-0134 §SD3, revised). nil keeps the refusal.
-	Decryptor introspecthttp.DatasetDecryptor
+	Decryptor adhocdata.DecryptorI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
