@@ -97,6 +97,16 @@ type Request struct {
 	// declares none. A cap the engine applies by its own default, or that
 	// a quota imposes, is not visible from here and is not claimed.
 	Cap RowCap
+	// Sensitivity is what the run TOUCHES, and is the R6 sensitivity axis
+	// of the E9 dispatch label. A run naming sealed data is
+	// [SensitivityConfined] and may only be executed where its plaintext is
+	// allowed to go; everything else is ordinary. An engine that may not
+	// serve confined runs refuses one rather than executing it.
+	//
+	// The label is derived by whoever knows what the statement names — a
+	// registry lookup, not a guess over SQL text — and rides here so the
+	// engine can refuse independently of whatever placed the run.
+	Sensitivity SensitivityE
 	// Cacheable is the caller asserting that the statement is
 	// deterministic, so an engine holding a result cache may answer from it
 	// instead of executing. The assertion is the caller's to get right —
@@ -133,6 +143,42 @@ func (inst Request) Validate() (err error) {
 		err = eb.Build().Str("runId", inst.RunID).
 			Errorf("queryengine: run id is not safe as a subject token or SQL literal")
 		return
+	}
+	return
+}
+
+// SensitivityE says what a run touches, and therefore where it may execute
+// — the R6 axis that is independent of execution mode, so "async" never
+// implies "less protected".
+//
+// The zero value is [SensitivityOrdinary], NOT an unknown that denies. That
+// is a deliberate asymmetry with the statement-kind classifier, which
+// treats unknown as mutating (R5 default-deny), and the two answer
+// different questions: whether a statement mutates is undecidable from
+// unparseable SQL and must fail closed, whereas whether a run touches
+// sealed data is decided by a binding this process performed. A run that
+// names nothing sealed is ordinary because nothing sealed was bound into
+// it, not because nobody looked.
+type SensitivityE uint8
+
+const (
+	// SensitivityOrdinary is a run that touches no sealed data. It may
+	// execute wherever it was placed.
+	SensitivityOrdinary SensitivityE = iota
+	// SensitivityConfined is a run whose inputs must not leave this box.
+	// Only an engine allowed to see that plaintext may execute it, and the
+	// engine refuses rather than trusting whoever routed it there.
+	SensitivityConfined
+)
+
+var AllSensitivities = []SensitivityE{SensitivityOrdinary, SensitivityConfined}
+
+func (inst SensitivityE) String() (name string) {
+	switch inst {
+	case SensitivityConfined:
+		name = "confined"
+	default:
+		name = "ordinary"
 	}
 	return
 }

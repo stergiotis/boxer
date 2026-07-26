@@ -29,3 +29,37 @@ func LocalQueryEndpoint() (url string) {
 	}
 	return
 }
+
+// localSealed answers whether a table name in this process's introspection
+// registry is a sealed dataset (ADR-0145 §SD3), or nil when no plane runs.
+//
+// It is published beside the endpoint, and for the same reason: a
+// co-resident app has to be able to ask a question about the local plane
+// that only the plane can answer. The narrower shape is deliberate — the
+// registry itself stays private to the host, and what leaves is one
+// predicate rather than the ability to enumerate or read anything.
+var localSealed atomic.Pointer[func(name string) bool]
+
+// SetLocalSealedPredicate records how to ask whether a local introspection
+// table is a sealed dataset. The host start hook sets it alongside
+// [SetLocalQueryEndpoint]; nil clears it (server stopped).
+func SetLocalSealedPredicate(fn func(name string) (yes bool)) {
+	if fn == nil {
+		localSealed.Store(nil)
+		return
+	}
+	localSealed.Store(&fn)
+}
+
+// IsLocalSealed reports whether name is a sealed dataset on this process's
+// introspection plane.
+//
+// False when no plane runs, which is the safe reading here rather than a
+// dangerous one: with no local plane there is no sealed data to confine,
+// and a statement naming such a table cannot be served by anything anyway.
+func IsLocalSealed(name string) (yes bool) {
+	if p := localSealed.Load(); p != nil {
+		yes = (*p)(name)
+	}
+	return
+}

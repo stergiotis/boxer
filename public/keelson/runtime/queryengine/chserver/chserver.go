@@ -73,15 +73,27 @@ type Config struct {
 	// one. A request asking for live progress swaps in its own transport
 	// (see progress.go) and this client is not consulted for it.
 	HTTPClient *http.Client
+	// ServesConfined declares that this server may see the plaintext of
+	// sealed data (ADR-0145 §SD4). Default false: an engine refuses a
+	// confined run unless the party that built it said otherwise.
+	//
+	// This is a discipline gate, not a security boundary — the caller
+	// asserts it, so it is only as good as the caller. Its value is that
+	// forgetting is loud and local: a new issuer that never considered
+	// sealed data gets a refusal naming the reason, rather than a query
+	// that works until the endpoint moves. The wall a router cannot
+	// override lives above, at the dispatch seam.
+	ServesConfined bool
 }
 
 // Engine delivers results from one ClickHouse server, and cancels runs on
 // it.
 type Engine struct {
-	endpoint string
-	user     string
-	password string
-	http     *http.Client
+	endpoint       string
+	user           string
+	password       string
+	http           *http.Client
+	servesConfined bool
 }
 
 var (
@@ -100,10 +112,11 @@ func New(cfg Config) (inst *Engine, err error) {
 		httpClient = &http.Client{}
 	}
 	inst = &Engine{
-		endpoint: cfg.Endpoint,
-		user:     cfg.User,
-		password: cfg.Password,
-		http:     httpClient,
+		endpoint:       cfg.Endpoint,
+		user:           cfg.User,
+		password:       cfg.Password,
+		http:           httpClient,
+		servesConfined: cfg.ServesConfined,
 	}
 	return
 }
@@ -124,6 +137,14 @@ func (inst *Engine) Endpoint() (endpoint string) {
 func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st queryengine.StreamI, res queryengine.Result, err error) {
 	err = req.Validate()
 	if err != nil {
+		return
+	}
+	if req.Sensitivity == queryengine.SensitivityConfined && !inst.servesConfined {
+		// The backstop of ADR-0145 §SD4. Whatever placed this run, this
+		// engine was not told it may see sealed plaintext, so it does not
+		// execute — and says which of the two facts is missing.
+		err = eb.Build().Str("endpoint", inst.endpoint).
+			Errorf("chserver: refusing a confined run: %s is not declared as allowed to see sealed data", inst.endpoint)
 		return
 	}
 	if len(req.Inputs) > 0 {

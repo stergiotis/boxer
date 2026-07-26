@@ -166,6 +166,9 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// tables via url('<BaseURL>/table/<name>') regardless.
 	if cfg.Runner != nil {
 		introspect.SetLocalQueryEndpoint(endpoint)
+		// Published together: a co-resident dispatcher needs both the plane
+		// and the one question about it that decides confinement (ADR-0145).
+		introspect.SetLocalSealedPredicate(reg.IsSealed)
 	}
 	deps.Log.Info().
 		Str("addr", srv.Addr()).
@@ -176,6 +179,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 
 	stop = func(ctx context.Context) error {
 		introspect.SetLocalQueryEndpoint("")
+		introspect.SetLocalSealedPredicate(nil)
 		if topoHolder != nil {
 			_ = topoHolder.Close()
 		}

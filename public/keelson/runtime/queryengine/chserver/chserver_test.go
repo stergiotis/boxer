@@ -279,3 +279,58 @@ func TestParseSummaryTolerance(t *testing.T) {
 	assert.Equal(t, uint64(9), got.MemoryUsage)
 	assert.Zero(t, got.ResultRows, "a field the server did not report stays zero, meaning unreported")
 }
+
+// TestDeliverRefusesAConfinedRunByDefault is the ADR-0145 §SD4 backstop.
+// Default-off matters: an engine nobody told about sealed data refuses one,
+// so an issuer that never considered confinement fails loudly instead of
+// sending plaintext somewhere it was never cleared for.
+func TestDeliverRefusesAConfinedRunByDefault(t *testing.T) {
+	t.Parallel()
+	endpoint, cap := newServer(t, func(w http.ResponseWriter, r *http.Request) {})
+	eng := newEngine(t, endpoint)
+
+	_, _, err := eng.Deliver(context.Background(), queryengine.Request{
+		SQL:         "SELECT * FROM keelson('adhoc_secret')",
+		Sensitivity: queryengine.SensitivityConfined,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "confined")
+	_, body, _, _ := cap.get()
+	assert.Empty(t, body, "nothing may reach a server that was not cleared for it")
+}
+
+// TestDeliverServesAConfinedRunWhenDeclared: the caller's assertion is what
+// opens the gate, which is why this is a discipline gate and not a security
+// boundary — the ADR says so, and this test is what that sentence means.
+func TestDeliverServesAConfinedRunWhenDeclared(t *testing.T) {
+	t.Parallel()
+	endpoint, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("rows"))
+	})
+	eng, err := New(Config{Endpoint: endpoint, ServesConfined: true})
+	require.NoError(t, err)
+
+	st, _, err := eng.Deliver(context.Background(), queryengine.Request{
+		SQL:         "SELECT * FROM keelson('adhoc_secret')",
+		Sensitivity: queryengine.SensitivityConfined,
+	})
+	require.NoError(t, err)
+	defer func() { _ = st.Close() }()
+	body, term, cErr := queryengine.Collect(st)
+	require.NoError(t, cErr)
+	assert.Equal(t, "rows", string(body))
+	assert.Equal(t, runstream.TerminalComplete, term.State)
+}
+
+// TestDeliverOrdinaryRunNeedsNoDeclaration: the gate only bites on confined
+// runs, so every existing issuer is unaffected.
+func TestDeliverOrdinaryRunNeedsNoDeclaration(t *testing.T) {
+	t.Parallel()
+	endpoint, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("rows"))
+	})
+	eng := newEngine(t, endpoint)
+	st, _, err := eng.Deliver(context.Background(), queryengine.Request{SQL: "SELECT 1"})
+	require.NoError(t, err)
+	assert.NoError(t, st.Close())
+}

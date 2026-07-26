@@ -82,3 +82,20 @@ func (e *EncryptedEntry) Update(schema *arrow.Schema, structure, path string, re
 	e.revision = revision
 	e.mu.Unlock()
 }
+
+// IsSealed reports whether the registered provider under name is a sealed
+// dataset — one whose bytes are encrypted at rest and readable only by
+// decrypting in this process (ADR-0134, ADR-0145).
+//
+// It is what a dispatcher consults to decide whether a statement naming
+// this table is confined, so it answers about the registry rather than
+// about SQL text: a name either resolves to a sealed provider here or it
+// does not.
+func (inst *Registry) IsSealed(name string) (yes bool) {
+	p, ok := inst.Lookup(name)
+	if !ok {
+		return
+	}
+	_, yes = p.(EncryptedDatasetI)
+	return
+}

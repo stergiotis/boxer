@@ -43,3 +43,36 @@ func TestEncryptedEntry(t *testing.T) {
 	assert.Equal(t, uint64(2), e.Revision())
 	assert.Equal(t, schema2, e.Schema())
 }
+
+// TestRegistryIsSealed is the derivation's ground truth: a name either
+// resolves to a sealed provider in this registry or it does not. Everything
+// upstream — the dispatch label, the refusals — rests on this answer, so it
+// must not be a guess about the name's shape.
+func TestRegistryIsSealed(t *testing.T) {
+	reg := NewRegistry()
+	require.NoError(t, reg.Register(NewEncryptedEntry("adhoc_secret",
+		arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.PrimitiveTypes.Int64}}, nil),
+		"v Int64", "/nonexistent/ciphertext", 1)))
+
+	assert.True(t, reg.IsSealed("adhoc_secret"))
+	assert.False(t, reg.IsSealed("nothing_registered"),
+		"an unknown name is not sealed — it is simply not here")
+	assert.False(t, reg.IsSealed(""), "and neither is nothing")
+}
+
+// TestLocalSealedPredicate covers the discovery hook a co-resident
+// dispatcher reads, including the case where no plane runs.
+func TestLocalSealedPredicate(t *testing.T) {
+	t.Cleanup(func() { SetLocalSealedPredicate(nil) })
+
+	SetLocalSealedPredicate(nil)
+	assert.False(t, IsLocalSealed("adhoc_secret"),
+		"with no plane there is no sealed data to confine")
+
+	SetLocalSealedPredicate(func(name string) (yes bool) { return name == "adhoc_secret" })
+	assert.True(t, IsLocalSealed("adhoc_secret"))
+	assert.False(t, IsLocalSealed("env"))
+
+	SetLocalSealedPredicate(nil)
+	assert.False(t, IsLocalSealed("adhoc_secret"), "clearing it is how a stopped plane says so")
+}
