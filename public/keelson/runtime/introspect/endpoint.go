@@ -63,3 +63,41 @@ func IsLocalSealed(name string) (yes bool) {
 	}
 	return
 }
+
+// LocalProbeI is the reachability-probe primitive of this process's plane
+// (the E6 extension point): mint a single-use nonce URL, and afterwards ask
+// whether it was fetched.
+//
+// A successful check proves that whatever fetched it could reach this
+// process's loopback plane at that moment — nothing more. It is not a claim
+// about the future, about other engines, or about any other address that
+// engine might use. *introspecthttp.Server satisfies it.
+type LocalProbeI interface {
+	MintProbe() (nonce string, url string, err error)
+	CheckProbe(nonce string) (fetched bool)
+}
+
+// localProbe holds this process's probe primitive, or nil when no plane
+// runs. Published beside the endpoint for the same reason: proving that an
+// engine can reach this plane is a question only this plane can pose.
+var localProbe atomic.Pointer[LocalProbeI]
+
+// SetLocalProbe records this process's probe primitive. The host start hook
+// sets it alongside [SetLocalQueryEndpoint]; nil clears it.
+func SetLocalProbe(p LocalProbeI) {
+	if p == nil {
+		localProbe.Store(nil)
+		return
+	}
+	localProbe.Store(&p)
+}
+
+// LocalProbe returns this process's probe primitive. ok is false when no
+// plane runs, and a caller that needs a proof must then treat the engine as
+// unproven — there is nothing to prove reachability TO.
+func LocalProbe() (p LocalProbeI, ok bool) {
+	if ptr := localProbe.Load(); ptr != nil {
+		p, ok = *ptr, true
+	}
+	return
+}

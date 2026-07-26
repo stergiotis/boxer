@@ -89,6 +89,11 @@ type Client struct {
 	stampRunId string
 	stampAppId string
 
+	// reach remembers which endpoints have demonstrated they can fetch from
+	// this process's loopback plane (ADR-0145 §SD5). Consulted by the
+	// confinement wall; never written on a dispatch path.
+	reach *reachProver
+
 	// datasetBindings maps a stable ad-hoc dataset alias to the ephemeral
 	// handle an embedder bound it to (ADR-0134 §SD4). Guarded by mu; read
 	// by buildResidual on lane goroutines, written by bindDataset on the
@@ -101,7 +106,7 @@ func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{}
 	}
-	return &Client{cfg: cfg, http: httpClient, passes: passreg.Default, targetURL: cfg.URL}
+	return &Client{cfg: cfg, http: httpClient, passes: passreg.Default, targetURL: cfg.URL, reach: newReachProver()}
 }
 
 // PassRegistry exposes the registry Execute applies at StagePreExecute — the
@@ -314,13 +319,14 @@ func (inst *Client) engineFor(dec dispatchDecision) (eng *chserver.Engine, err e
 		User:       inst.cfg.User,
 		Password:   inst.cfg.Password,
 		HTTPClient: inst.http,
-		// Only this process's own plane may see sealed plaintext, and the
-		// exemption is by IDENTITY rather than by address: this endpoint
-		// string was minted by a server this process started, which is not
-		// the same act as recognising a loopback address in a configured URL
-		// (ADR-0145 §SD5). Derived from the target, never from the decision's
-		// own label, so the two gates cannot agree by construction.
-		ServesConfined: target == introspect.LocalQueryEndpoint(),
+		// Two ways an endpoint may see sealed plaintext (ADR-0145 §SD5):
+		// it IS this process's plane — exempt by identity, since the string
+		// was minted by a server this process started, which is not the same
+		// act as recognising a loopback address in a configured URL — or it
+		// has DEMONSTRATED it can fetch from that plane. Derived from the
+		// target, never from the decision's own label, so the two gates
+		// cannot agree by construction.
+		ServesConfined: target == introspect.LocalQueryEndpoint() || inst.reach.isProven(target),
 	})
 	return
 }

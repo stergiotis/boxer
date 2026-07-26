@@ -383,8 +383,9 @@ func TestConfineWithNoLocalPlane(t *testing.T) {
 // another reason keeps that reason rather than having it overwritten.
 func TestConfinePreservesAnExistingRefusal(t *testing.T) {
 	withSealedPlane(t, "http://127.0.0.1:9/query", "adhoc_secret")
+	c := NewClient(ClientConfig{URL: "http://elsewhere.invalid"}, nil)
 	in := dispatchDecision{class: dispatchClassRefused, reason: "names both planes"}
-	out := confine("SELECT * FROM keelson('adhoc_secret')", in)
+	out := c.confine("SELECT * FROM keelson('adhoc_secret')", in)
 	assert.Equal(t, "names both planes", out.reason)
 }
 

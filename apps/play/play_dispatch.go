@@ -203,7 +203,7 @@ func (inst *Client) dispatchResidual(residual string, affinity string) (dec disp
 	if r == nil {
 		r = staticResolver{}
 	}
-	dec = confine(residual, r.resolve(residual, base, affinity))
+	dec = inst.confine(residual, r.resolve(residual, base, affinity))
 	inst.lastDecision.Store(&dec)
 	return
 }
@@ -223,7 +223,7 @@ func (inst *Client) dispatchResidual(residual string, affinity string) (dec disp
 // started, which is not the same act as recognising a loopback address in a
 // configured URL. Widening that to an engine which has PROVEN it can reach
 // this plane is ADR-0145 §SD5, and is not built yet.
-func confine(residual string, in dispatchDecision) (out dispatchDecision) {
+func (inst *Client) confine(residual string, in dispatchDecision) (out dispatchDecision) {
 	out = in
 	if in.class == dispatchClassRefused {
 		return
@@ -233,15 +233,28 @@ func confine(residual string, in dispatchDecision) (out dispatchDecision) {
 		return
 	}
 	out.sensitivity = queryengine.SensitivityConfined
+
+	// Exempt by identity: this endpoint string was minted by a server this
+	// process started.
 	local := introspect.LocalQueryEndpoint()
 	if local != "" && in.targetURL == local {
 		return
 	}
+	// Or exempt by demonstration (§SD5): the endpoint has fetched a nonce
+	// from this plane inside the proof window. Only the cache is read here —
+	// dispatch performs no I/O, since applet stamping resolves a decision
+	// purely to classify a buffer.
+	if inst.reach.isProven(in.targetURL) {
+		return
+	}
+	// Refused, and a demonstration is started for the NEXT attempt. The run
+	// is not happening either way, so nothing waits on the probe.
+	inst.proveReachInBackground(in.targetURL)
 	out = dispatchDecision{
 		class:       dispatchClassRefused,
 		sensitivity: queryengine.SensitivityConfined,
 		reason: "names sealed data (" + nameList(sealed) + ") that must not leave this box, and " +
-			describeTarget(in.targetURL) + " is not this process's introspection plane",
+			describeTarget(in.targetURL) + " has not demonstrated it can reach this process's introspection plane",
 	}
 	return
 }

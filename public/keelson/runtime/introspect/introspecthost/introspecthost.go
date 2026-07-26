@@ -169,6 +169,9 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		// Published together: a co-resident dispatcher needs both the plane
 		// and the one question about it that decides confinement (ADR-0145).
 		introspect.SetLocalSealedPredicate(reg.IsSealed)
+		// And the probe primitive, so a dispatcher can establish that an
+		// engine reaches THIS plane rather than infer it (R3, ADR-0145 §SD5).
+		introspect.SetLocalProbe(srv)
 	}
 	deps.Log.Info().
 		Str("addr", srv.Addr()).
@@ -180,6 +183,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	stop = func(ctx context.Context) error {
 		introspect.SetLocalQueryEndpoint("")
 		introspect.SetLocalSealedPredicate(nil)
+		introspect.SetLocalProbe(nil)
 		if topoHolder != nil {
 			_ = topoHolder.Close()
 		}
