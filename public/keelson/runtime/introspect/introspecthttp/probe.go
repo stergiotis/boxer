@@ -95,6 +95,18 @@ func (s *Server) CheckProbe(nonce string) (fetched bool) {
 // says nothing about why, so a caller cannot use the response to tell an
 // expired nonce from one that never existed.
 func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodHead {
+		// A HEAD is not a fetch: ClickHouse's url() engine sizes a resource
+		// before reading it, and consuming the nonce there would 404 the GET
+		// that follows and fail the probing statement. Answering without
+		// marking keeps "fetchable once" about the content.
+		if !s.probes.isOutstanding(r.PathValue("nonce"), time.Now()) {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		return
+	}
 	if !s.probes.markFetched(r.PathValue("nonce"), time.Now()) {
 		http.NotFound(w, r)
 		return
@@ -108,6 +120,18 @@ func (inst *probeStore) add(e probeEntry) {
 	inst.pruneLocked(time.Now())
 	inst.entries = append(inst.entries, e)
 	inst.mu.Unlock()
+}
+
+// isOutstanding reports whether nonce is known, unexpired and not yet
+// fetched, WITHOUT consuming it. It exists for HEAD, and deliberately
+// answers the same question markFetched would without changing anything.
+func (inst *probeStore) isOutstanding(nonce string, now time.Time) (ok bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.pruneLocked(now)
+	i := inst.indexOfLocked(nonce)
+	ok = i >= 0 && !inst.entries[i].fetched
+	return
 }
 
 // markFetched records that nonce's URL was fetched. Returns false when the

@@ -53,6 +53,33 @@ func TestProbeIsSingleUse(t *testing.T) {
 	assert.False(t, s.CheckProbe(nonce), "a nonce is checkable once")
 }
 
+// TestProbeHeadDoesNotConsume covers a property found by giving the probe
+// its first real consumer: ClickHouse's url() engine sizes a resource with a
+// HEAD before reading it, and if that consumed the nonce the GET which
+// follows would 404 and fail the probing statement. A HEAD therefore answers
+// without marking — "fetchable once" is about the content.
+func TestProbeHeadDoesNotConsume(t *testing.T) {
+	s := newQueryServer(t)
+
+	nonce, url, err := s.MintProbe()
+	require.NoError(t, err)
+
+	resp, err := http.Head(url)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Still unfetched: the sizing request proved nothing.
+	assert.Equal(t, http.StatusOK, fetch(t, url), "the GET must still find it")
+	assert.True(t, s.CheckProbe(nonce), "and the GET is what proves reachability")
+
+	// A HEAD for a nonce that does not exist says so, like a GET.
+	head, err := http.Head(s.BaseURL() + "/probe/deadbeef")
+	require.NoError(t, err)
+	require.NoError(t, head.Body.Close())
+	assert.Equal(t, http.StatusNotFound, head.StatusCode)
+}
+
 func TestProbeUnknownNonce(t *testing.T) {
 	s := newQueryServer(t)
 

@@ -177,3 +177,63 @@ func adhocInt64Stream(t *testing.T, vals ...int64) []byte {
 	require.NoError(t, w.Close())
 	return buf.Bytes()
 }
+
+// TestProbeIsFetchedByARealEngine is the E6 primitive doing its actual job,
+// which no unit test can establish: clickhouse-local evaluates a statement
+// naming a minted nonce URL, reaches back into this process over loopback,
+// and the check then answers true.
+//
+// It is the demonstration ADR-0145 §SD5 rests on. The negative half matters
+// as much: a nonce nobody fetched must check false, or the wall would open
+// on a statement that merely ran.
+func TestProbeIsFetchedByARealEngine(t *testing.T) {
+	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+		t.Skipf("clickhouse-local not installed: %v", err)
+	}
+	logger := zerolog.New(zerolog.NewTestWriter(t))
+	bus := inprocbus.NewInst(logger)
+	bus.SetRequestTimeout(15 * time.Second)
+
+	broker, err := chlocalbroker.NewService(bus, chlocalpool.Config{
+		BaseTmpDir: t.TempDir(), MinIdle: 1, MaxConcurrent: 2, SpawnConcurrency: 1,
+	}, logger)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = broker.Stop(ctx)
+	})
+
+	caller := bus.NewClient("test.introspect.probe", []app.SubjectFilter{
+		{Pattern: chlocalbroker.SubjectExecAll, Direction: app.CapDirectionBoth, Reason: "test"},
+	})
+	s := New(Config{Registry: introspect.NewRegistry()}, logger)
+	require.NoError(t, s.Start())
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
+
+	run := func(sql string) {
+		t.Helper()
+		rep, e := chlocalbroker.ExecOnPool(context.Background(), caller, "probe",
+			chlocalbroker.ExecRequest{SQL: sql, Format: "TabSeparated"})
+		require.NoError(t, e)
+		defer func() { _ = rep.Close() }()
+		body, _ := io.ReadAll(rep)
+		require.NoError(t, rep.Err(), "body: %s", body)
+	}
+
+	// A nonce nobody fetches proves nothing.
+	unfetched, _, err := s.MintProbe()
+	require.NoError(t, err)
+	assert.False(t, s.CheckProbe(unfetched))
+
+	// A nonce the engine fetches does. This is the whole primitive: the
+	// engine had to reach THIS process to make the check answer true.
+	nonce, nonceURL, err := s.MintProbe()
+	require.NoError(t, err)
+	run("SELECT count() FROM url('" + nonceURL + "','LineAsString')")
+	assert.True(t, s.CheckProbe(nonce),
+		"the engine demonstrated it can reach this process's loopback plane")
+
+	// Single-use in both directions: the proof cannot be replayed.
+	assert.False(t, s.CheckProbe(nonce))
+}
