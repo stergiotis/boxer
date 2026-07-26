@@ -5,14 +5,13 @@ import (
 	"context"
 	"io"
 	"net"
-	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,107 +45,12 @@ func progressTestServer(t *testing.T, script func(conn net.Conn)) string {
 	return "http://" + ln.Addr().String() + "/"
 }
 
-// TestProgressTransportStreamsMidBlock pins the entire point of the
-// hand-rolled transport: progress ticks reach the sink WHILE the header
-// block is still open. The server refuses to finish the response until
-// the client has observed both ticks — a causal proof, no timing flakes.
-func TestProgressTransportStreamsMidBlock(t *testing.T) {
-	ticks := make(chan Summary, 8)
-	proceed := make(chan struct{})
-	baseURL := progressTestServer(t, func(conn net.Conn) {
-		_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\n")
-		_, _ = io.WriteString(conn, "X-ClickHouse-Progress: {\"read_rows\":\"10\",\"read_bytes\":\"80\",\"total_rows_to_read\":\"100\",\"memory_usage\":\"1024\"}\r\n")
-		_, _ = io.WriteString(conn, "X-ClickHouse-Progress: {\"read_rows\":\"50\",\"read_bytes\":\"400\",\"total_rows_to_read\":\"100\",\"memory_usage\":\"2048\"}\r\n")
-		<-proceed // only complete the block once the client saw both ticks
-		_, _ = io.WriteString(conn, "X-ClickHouse-Summary: {\"read_rows\":\"100\",\"read_bytes\":\"800\"}\r\n")
-		_, _ = io.WriteString(conn, "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello")
-	})
-
-	client := &http.Client{Transport: &progressTransport{onProgress: func(p Summary) { ticks <- p }}}
-	req, err := http.NewRequest("POST", baseURL, strings.NewReader("SELECT 1"))
-	require.NoError(t, err)
-
-	type doResult struct {
-		resp *http.Response
-		err  error
-	}
-	doCh := make(chan doResult, 1)
-	go func() {
-		resp, dErr := client.Do(req)
-		doCh <- doResult{resp, dErr}
-	}()
-
-	first := <-ticks
-	require.EqualValues(t, 10, first.ReadRows)
-	require.EqualValues(t, 1024, first.MemoryUsage)
-	second := <-ticks
-	require.EqualValues(t, 50, second.ReadRows)
-	select {
-	case r := <-doCh:
-		t.Fatalf("Do returned before the header block completed: %+v", r)
-	default: // good — the response is still open
-	}
-	close(proceed)
-
-	r := <-doCh
-	require.NoError(t, r.err)
-	defer func() { _ = r.resp.Body.Close() }()
-	require.Equal(t, http.StatusOK, r.resp.StatusCode)
-	require.Contains(t, r.resp.Header.Get("X-ClickHouse-Summary"), "\"read_rows\":\"100\"")
-	require.Empty(t, r.resp.Header.Get(progressHeaderKey), "ticks are consumed, not accumulated")
-	body, err := io.ReadAll(r.resp.Body)
-	require.NoError(t, err)
-	require.Equal(t, "hello", string(body))
-}
-
-func TestProgressTransportChunkedBody(t *testing.T) {
-	baseURL := progressTestServer(t, func(conn net.Conn) {
-		_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\n")
-		_, _ = io.WriteString(conn, "X-ClickHouse-Progress: {\"read_rows\":\"1\"}\r\n")
-		_, _ = io.WriteString(conn, "Transfer-Encoding: chunked\r\n\r\n")
-		_, _ = io.WriteString(conn, "5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n")
-	})
-	client := &http.Client{Transport: &progressTransport{onProgress: func(Summary) {}}}
-	resp, err := client.Post(baseURL, "text/plain", strings.NewReader("q"))
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.Equal(t, "hello world", string(body))
-	require.Empty(t, resp.Header.Get("Transfer-Encoding"), "framing is decoded by the transport")
-}
-
-func TestProgressTransportCancelMidHeaders(t *testing.T) {
-	stall := make(chan struct{})
-	t.Cleanup(func() { close(stall) })
-	baseURL := progressTestServer(t, func(conn net.Conn) {
-		_, _ = io.WriteString(conn, "HTTP/1.1 200 OK\r\n")
-		_, _ = io.WriteString(conn, "X-ClickHouse-Progress: {\"read_rows\":\"1\"}\r\n")
-		<-stall // never completes the block
-	})
-	ctx, cancel := context.WithCancel(context.Background())
-	client := &http.Client{Transport: &progressTransport{onProgress: func(Summary) { cancel() }}}
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL, strings.NewReader("q"))
-	require.NoError(t, err)
-	start := time.Now()
-	_, err = client.Do(req) //nolint:bodyclose // the request fails; there is no body
-	require.Error(t, err)
-	require.ErrorIs(t, err, context.Canceled)
-	require.Less(t, time.Since(start), 3*time.Second, "cancellation must not wait out the stall")
-}
-
-func TestNewProgressClientSchemeGate(t *testing.T) {
-	require.NotNil(t, newProgressClient("http://127.0.0.1:8123/", func(Summary) {}))
-	require.Nil(t, newProgressClient("https://ch.example/", func(Summary) {}), "TLS endpoints keep the stock client")
-	require.Nil(t, newProgressClient("::not-a-url::", func(Summary) {}))
-}
-
 // fakeProgressExec implements both executor interfaces: each
 // executeWithProgress call parks until release closes, exposing its sink
 // so the test can fire ticks at controlled moments.
 type fakeProgressExec struct {
 	mu      sync.Mutex
-	sinks   []func(Summary)
+	sinks   []func(p runstream.Progress)
 	release chan struct{}
 }
 
@@ -154,7 +58,7 @@ func (inst *fakeProgressExec) execute(ctx context.Context, c compiledNode, alloc
 	return inst.executeWithProgress(ctx, c, alloc, nil)
 }
 
-func (inst *fakeProgressExec) executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(Summary)) (arrow.RecordBatch, *arrow.Schema, Summary, error) {
+func (inst *fakeProgressExec) executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (arrow.RecordBatch, *arrow.Schema, Summary, error) {
 	inst.mu.Lock()
 	inst.sinks = append(inst.sinks, onProgress)
 	inst.mu.Unlock()
@@ -166,7 +70,7 @@ func (inst *fakeProgressExec) executeWithProgress(ctx context.Context, c compile
 	}
 }
 
-func (inst *fakeProgressExec) sink(t *testing.T, i int) func(Summary) {
+func (inst *fakeProgressExec) sink(t *testing.T, i int) func(p runstream.Progress) {
 	t.Helper()
 	require.Eventually(t, func() bool {
 		inst.mu.Lock()
@@ -187,7 +91,7 @@ func TestLaneProgressTickAndGate(t *testing.T) {
 	require.True(t, v.loading)
 	require.False(t, v.progressFresh, "no tick yet")
 
-	exec.sink(t, 0)(Summary{ReadRows: 10, TotalRowsToRead: 100})
+	exec.sink(t, 0)(runstream.Progress{ReadRows: 10, TotalRowsToRead: 100})
 	p, fresh := lane.progressView()
 	require.True(t, fresh)
 	require.EqualValues(t, 10, p.ReadRows)
@@ -220,11 +124,11 @@ func TestLaneProgressSupersededTickDiscarded(t *testing.T) {
 	lane.demand(compiledNode{SQL: "SELECT B"}) // supersedes A
 	newSink := exec.sink(t, 1)
 
-	oldSink(Summary{ReadRows: 999}) // late tick from the superseded run
+	oldSink(runstream.Progress{ReadRows: 999}) // late tick from the superseded run
 	_, fresh := lane.progressView()
 	require.False(t, fresh, "a superseded run's tick must not paint the new run's badge")
 
-	newSink(Summary{ReadRows: 5})
+	newSink(runstream.Progress{ReadRows: 5})
 	p, fresh := lane.progressView()
 	require.True(t, fresh)
 	require.EqualValues(t, 5, p.ReadRows)
@@ -261,12 +165,12 @@ func TestQueryStoreProgressEndToEnd(t *testing.T) {
 }
 
 func TestFormatProgressLine(t *testing.T) {
-	s := formatProgressLine(Summary{ReadRows: 1_946_964_294, ReadBytes: 15_575_714_352,
+	s := formatProgressLine(runstream.Progress{ReadRows: 1_946_964_294, ReadBytes: 15_575_714_352,
 		TotalRowsToRead: 2_500_000_000, ElapsedNs: 300_006_531, MemoryUsage: 1_145_567})
 	require.Contains(t, s, "1.9B / 2.5B rows (77%)")
 	require.Contains(t, s, "14.5 GB read")
 	require.Contains(t, s, "mem 1.1 MB")
 	require.Contains(t, s, "300ms")
 
-	require.Equal(t, "12 rows · 0 B read", formatProgressLine(Summary{ReadRows: 12}))
+	require.Equal(t, "12 rows · 0 B read", formatProgressLine(runstream.Progress{ReadRows: 12}))
 }

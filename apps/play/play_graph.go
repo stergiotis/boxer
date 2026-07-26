@@ -15,6 +15,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -172,7 +173,7 @@ type nodeExecutorI interface {
 // untouched; a lane whose executor lacks it simply shows no mid-run
 // numbers.
 type progressAwareExecutorI interface {
-	executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(Summary)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
+	executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
 }
 
 // Node is a query node. Compile produces the pushed-down SQL plus the signal
@@ -761,7 +762,9 @@ func (inst *queryGraph) MainSQL() string { return inst.mainLane.SQL() }
 
 // MainProgress returns the `main` lane's live progress tick, fresh only
 // while a run is in flight (ADR-0115 plane A — transient glass state).
-func (inst *queryGraph) MainProgress() (p Summary, fresh bool) { return inst.mainLane.Progress() }
+func (inst *queryGraph) MainProgress() (p runstream.Progress, fresh bool) {
+	return inst.mainLane.Progress()
+}
 
 // MainTruncation reports why the `main` lane's result is a prefix, or "" when
 // it is whole (E3, R9). Read beside MainSnapshot — a capped result looks

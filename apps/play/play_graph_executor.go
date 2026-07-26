@@ -5,6 +5,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -43,7 +44,7 @@ func (inst clientExecutor) execute(ctx context.Context, c compiledNode, alloc me
 // stable ExecOptions, opting the request into the in-band progress
 // headers. The lane's identity options (query_id, label, supersession)
 // are untouched — OnProgress is the only per-run field.
-func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(Summary)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
 	opts := inst.opts
 	if onProgress != nil && opts != nil {
 		o := *opts
@@ -53,18 +54,18 @@ func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNo
 	// One resolution per run (play_dispatch.go), taken here rather than on
 	// the lane so a decision never outlives the request it was made for.
 	dec := inst.client.Dispatch(c.SQL, "")
-	rdr, body, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params, dec)
+	rdr, rs, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params, dec)
 	if xErr != nil {
 		err = eh.Errorf("clientExecutor.execute: %w", xErr)
 		return
 	}
 	defer func() {
 		rdr.Release()
-		_ = body.Close()
+		_ = rs.Close()
 	}()
 	// Same frame drain as the main lane (play_runstream.go): a stream that
 	// dies part-way is a failed terminal, never a short result.
-	batches, _, rErr := drainRun(rdr, summary, readResultRowCap(c.SQL))
+	batches, _, rErr := drainRun(rdr, rs)
 	if rErr != nil {
 		err = eh.Errorf("clientExecutor.execute: read stream: %w", rErr)
 		return

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,37 +54,16 @@ func TestReadResultRowCap(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := readResultRowCap(tc.sql)
-			assert.Equal(t, tc.wantRows, got.maxResultRows)
-			assert.Equal(t, tc.wantBreaks, got.breaks)
+			assert.Equal(t, tc.wantRows, got.MaxResultRows)
+			assert.Equal(t, tc.wantBreaks, got.Breaks)
 		})
 	}
 }
 
-func TestResultRowCapTerminalFor(t *testing.T) {
-	capped := resultRowCap{maxResultRows: 100, breaks: true}
-
-	// Under the cap: whole.
-	assert.Equal(t, runstream.TerminalComplete, capped.terminalFor(Summary{ResultRows: 99}).State)
-
-	// At or over it: reported as possibly a prefix. ClickHouse stops at a
-	// block boundary, so `over` is normal, and a result that is complete at
-	// exactly the cap is indistinguishable from one cut there — R9 says take
-	// the loud reading.
-	for _, rows := range []uint64{100, 128} {
-		term := capped.terminalFor(Summary{ResultRows: rows})
-		assert.Equal(t, runstream.TerminalTruncated, term.State, "rows=%d", rows)
-		assert.Contains(t, term.Reason, "max_result_rows=100")
-	}
-
-	// throw mode raises server-side instead of truncating, so nothing here
-	// should claim a cap.
-	throws := resultRowCap{maxResultRows: 100, breaks: false}
-	assert.Equal(t, runstream.TerminalComplete, throws.terminalFor(Summary{ResultRows: 500}).State)
-
-	// No declared cap: nothing to report, however many rows came back.
-	var none resultRowCap
-	assert.Equal(t, runstream.TerminalComplete, none.terminalFor(Summary{ResultRows: 1 << 20}).State)
-}
+// The cap play reads off the buffer is JUDGED by the engine adapter, which
+// is the only party that sees the response counters — queryengine.RowCap
+// owns that verdict and tests it. What is play's to get right is the
+// reading, above, and the end-to-end wiring, below.
 
 // TestQueryStoreTruncationSurfaces drives the whole path: a run whose own
 // prelude declares a break-mode cap, against a server that reports hitting

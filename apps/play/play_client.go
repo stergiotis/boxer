@@ -2,13 +2,11 @@ package play
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,11 +14,15 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chhttp"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -123,12 +125,17 @@ type ExecOptions struct {
 	// OnProgress, when set, opts the request into ClickHouse's in-band
 	// progress headers (ADR-0115 plane A): the server streams
 	// X-ClickHouse-Progress lines inside the open response-header block,
-	// and the streaming transport fires this callback for each one while
-	// the query still runs. Called from the transport goroutine — keep it
-	// cheap and thread-safe. Live delivery needs a plain-http endpoint
-	// (see progressTransport); elsewhere the run degrades to the final
-	// summary with no mid-run ticks. nil = off (no wire change).
-	OnProgress func(Summary)
+	// and the engine's streaming transport fires this callback for each one
+	// while the query still runs. Called from the transport goroutine —
+	// keep it cheap and thread-safe. Live delivery needs a plain-http
+	// endpoint; elsewhere the run degrades to the final summary with no
+	// mid-run ticks. nil = off (no wire change).
+	//
+	// The ticks are a callback rather than progress frames because they
+	// arrive inside the response-header block — before the result stream
+	// exists. Frames are how a party that is NOT the connection holder sees
+	// progress, and this lane is the connection holder.
+	OnProgress func(p runstream.Progress)
 }
 
 // newExecOptions mints a lane's stable ExecOptions.
@@ -213,64 +220,99 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 // from its own `EXPLAIN AST …` text would answer about a server the run it
 // describes never talks to, so the caller passes the decision the run uses.
 func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[string]string, opts *ExecOptions, dec dispatchDecision) (err error) {
-	reqURL, err := dec.target()
+	eng, err := inst.engineFor(dec)
 	if err != nil {
 		return
 	}
-	qs := url.Values{}
-	for k, v := range params {
-		qs.Set(k, v)
-	}
-	if opts != nil && opts.QueryID != "" {
-		qs.Set("query_id", opts.QueryID)
-		if opts.ReplaceRunningQuery {
-			qs.Set("replace_running_query", "1")
-		}
-	}
+	settings := map[string]string{}
 	// Attribution-only SD7 stamp — a probe is not an executed definition,
 	// so it carries identity without fingerprints (play_stamp.go).
 	if lc := inst.composeProbeLogComment(opts); lc != "" {
-		qs.Set("log_comment", lc)
+		settings["log_comment"] = lc
 	}
-	if len(qs) > 0 {
-		sep := "?"
-		if strings.Contains(reqURL, "?") {
-			sep = "&"
+	req := queryengine.Request{
+		SQL:      sql,
+		Params:   bareParams(nil, params),
+		Settings: settings,
+	}
+	if opts != nil && opts.QueryID != "" {
+		req.RunID = opts.QueryID
+		if opts.ReplaceRunningQuery {
+			// Only ever alongside an id: supersession is by query_id, so
+			// the flag on its own would say nothing.
+			settings["replace_running_query"] = "1"
 		}
-		reqURL = reqURL + sep + qs.Encode()
 	}
-	var req *http.Request
-	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(sql))
+	st, _, err := eng.Deliver(ctx, req)
 	if err != nil {
-		err = eh.Errorf("unable to build clickhouse request: %w", err)
 		return
 	}
-	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-	if inst.cfg.User != "" {
-		req.Header.Set("X-ClickHouse-User", inst.cfg.User)
-	}
-	if inst.cfg.Password != "" {
-		req.Header.Set("X-ClickHouse-Key", inst.cfg.Password)
-	}
-	var resp *http.Response
-	resp, err = inst.http.Do(req)
-	if err != nil {
-		err = eh.Errorf("clickhouse request failed: %w", err)
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		detail := strings.TrimSpace(string(raw))
-		bld := eb.Build().Int("statusCode", resp.StatusCode).Str("body", detail)
-		if detail == "" {
-			detail = "(empty response body)"
+	defer func() { _ = st.Close() }()
+	// The verdict is the terminal, not the rows: a statement the server
+	// rejected comes back as a failed terminal carrying its diagnostic.
+	// Frames are dropped as they arrive rather than collected — draining is
+	// what lets the connection be reused, and a probe has no use for a body
+	// however large it turns out to be.
+	var term runstream.Terminal
+	var answered bool
+	for {
+		f, ok := st.Next()
+		if !ok {
+			break
 		}
-		err = bld.Errorf("clickhouse http %d: %s", resp.StatusCode, detail)
+		if f.Kind == runstream.KindTerminal {
+			term, answered = f.Terminal, true
+		}
+	}
+	if !answered {
+		err = runstream.ErrIncomplete
 		return
 	}
-	// Drain (bounded) so the connection can be reused; the content is unused.
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	if term.State == runstream.TerminalFailed {
+		err = term.Err
+	}
+	return
+}
+
+// bareParams merges the caller's signal and SET-harvested bindings into the
+// bare `{name:Type}` names the engine expects, dropping the `param_` prefix
+// play carries them under.
+//
+// A SET-bound name SHADOWS a same-named signal (ADR-0097 slice-5 D1: a SET
+// pins a signal into a constant), which is why params are applied second.
+func bareParams(signals map[string]string, params map[string]string) (out map[string]string) {
+	if len(signals) == 0 && len(params) == 0 {
+		return
+	}
+	out = make(map[string]string, len(signals)+len(params))
+	add := func(src map[string]string) {
+		for k, v := range src {
+			out[strings.TrimPrefix(k, chhttp.ParamPrefix)] = v
+		}
+	}
+	add(signals)
+	add(params)
+	return
+}
+
+// engineFor builds the delivery engine a decision names (ADR-0144).
+//
+// One engine per run rather than one per client: placement is resolved per
+// run, and an engine is bound to ONE server precisely because the roles
+// beyond delivery — observing a run in `system.processes`, killing it — only
+// mean anything against the member that ran it. Construction is a struct
+// literal over the client's shared HTTP client, so per-run is not per-cost.
+func (inst *Client) engineFor(dec dispatchDecision) (eng *chserver.Engine, err error) {
+	target, err := dec.target()
+	if err != nil {
+		return
+	}
+	eng, err = chserver.New(chserver.Config{
+		Endpoint:   target,
+		User:       inst.cfg.User,
+		Password:   inst.cfg.Password,
+		HTTPClient: inst.http,
+	})
 	return
 }
 
@@ -487,108 +529,94 @@ func (inst *Client) SetURL(u string) {
 // Client.Dispatch. It is a parameter rather than something read here so that
 // every issuer of a request is enumerated by the compiler, and so a run and
 // the diagnostic probe describing it provably share one decision.
-func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions, signals map[string]string, dec dispatchDecision) (rdr *ipc.Reader, body io.Closer, summary Summary, err error) {
-	// ClickHouse reads the body verbatim as SQL — params must ride the URL
-	// query string. See the function doc for size limits. The decision was
-	// resolved before the request, so a concurrent SetURL cannot tear it.
-	reqURL, err := dec.target()
+func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc memory.Allocator, opts *ExecOptions, signals map[string]string, dec dispatchDecision) (rdr *ipc.Reader, rs *resultStream, summary Summary, err error) {
+	// The decision was resolved before the request, so a concurrent SetURL
+	// cannot tear it.
+	eng, err := inst.engineFor(dec)
 	if err != nil {
 		return
 	}
 	q, params := inst.BuildStatement(sql)
-	qs := url.Values{}
-	for k, v := range signals {
-		qs.Set(k, v)
+	req := queryengine.Request{
+		SQL: q,
+		// Params ride the URL rather than the body: ClickHouse reads the
+		// body verbatim as SQL, and the typed substitution from
+		// `{name:Type}` placeholders is what it expects on that channel.
+		// See the function doc for the size limits that bounds.
+		Params:   bareParams(signals, params),
+		Settings: map[string]string{},
+		// What the statement declared about its own result size, for the
+		// engine to judge the delivery against (R9). play parses it; the
+		// engine, which is the only party that sees the response counters,
+		// decides.
+		Cap: readResultRowCap(sql),
 	}
-	for k, v := range params { // SET-bound constants shadow same-named signals
-		qs.Set(k, v)
-	}
-	if opts != nil && opts.QueryID != "" {
-		qs.Set("query_id", opts.QueryID)
-		if opts.ReplaceRunningQuery {
-			qs.Set("replace_running_query", "1")
+	if opts != nil {
+		if opts.QueryID != "" {
+			req.RunID = opts.QueryID
+			if opts.ReplaceRunningQuery {
+				// Only ever alongside an id: supersession is by query_id,
+				// so the flag on its own would say nothing.
+				req.Settings["replace_running_query"] = "1"
+			}
 		}
+		req.OnProgress = opts.OnProgress
 	}
 	// SD7 identity stamp (ADR-0115): {run_id, app, lane, four
 	// fingerprints} as compact JSON, so the server's query_log row is
 	// attributable and the capture pipeline lifts the identity. Endpoints
 	// that don't know the setting ignore the parameter, like query_id.
 	if lc := inst.composeLogComment(sql, q, params, signals, opts); lc != "" {
-		qs.Set("log_comment", lc)
-	}
-	// Live progress (ADR-0115 plane A): ask the server to stream
-	// X-ClickHouse-Progress inside the response-header block, and swap in
-	// the incremental-header transport that can actually surface those
-	// lines mid-run — Go's stock client delivers headers only once the
-	// block completes. Non-http endpoints keep the stock client: the
-	// params are ignored or the ticks simply arrive at completion.
-	httpClient := inst.http
-	if opts != nil && opts.OnProgress != nil {
-		qs.Set("send_progress_in_http_headers", "1")
-		qs.Set("http_headers_progress_interval_ms", strconv.Itoa(progressIntervalMs))
-		if sc := newProgressClient(reqURL, opts.OnProgress); sc != nil {
-			httpClient = sc
-		}
-	}
-	if len(qs) > 0 {
-		sep := "?"
-		if strings.Contains(reqURL, "?") {
-			sep = "&"
-		}
-		reqURL = reqURL + sep + qs.Encode()
-	}
-	var req *http.Request
-	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(q))
-	if err != nil {
-		err = eh.Errorf("unable to build clickhouse request: %w", err)
-		return
-	}
-	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-	if inst.cfg.User != "" {
-		req.Header.Set("X-ClickHouse-User", inst.cfg.User)
-	}
-	if inst.cfg.Password != "" {
-		req.Header.Set("X-ClickHouse-Key", inst.cfg.Password)
+		req.Settings["log_comment"] = lc
 	}
 
-	var resp *http.Response
-	resp, err = httpClient.Do(req)
+	st, res, err := eng.Deliver(ctx, req)
 	if err != nil {
-		err = eh.Errorf("clickhouse request failed: %w", err)
 		return
 	}
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		_ = resp.Body.Close()
-		// ClickHouse reports the real problem — the SQL error text and its help
-		// hint — in the response body. Fold it into the error *message* (not
-		// only the structured field) so the play UI, which renders err.Error()
-		// in the Table tab and the status bar, shows the user what actually
-		// failed instead of a bare "clickhouse http error".
-		detail := strings.TrimSpace(string(raw))
-		bld := eb.Build().Int("statusCode", resp.StatusCode).Str("body", detail)
-		if detail == "" {
-			detail = "(empty response body)"
-		}
-		err = bld.Errorf("clickhouse http %d: %s", resp.StatusCode, detail)
-		return
-	}
-	summary = parseSummaryHeader(resp.Header.Get("X-ClickHouse-Summary"))
+	summary = summaryFrom(res.Summary)
 
-	rdr, err = ipc.NewReader(resp.Body, ipc.WithAllocator(alloc))
+	// A run the server rejected ends before any bytes arrive, and opening
+	// the stream is what surfaces its diagnostic — handing an empty body to
+	// the Arrow decoder would replace "clickhouse http 400: <the actual
+	// problem>" with a complaint about a missing IPC header.
+	rs, err = openResultStream(st)
 	if err != nil {
-		_ = resp.Body.Close()
+		return
+	}
+	rdr, err = ipc.NewReader(rs, ipc.WithAllocator(alloc))
+	if err != nil {
+		_ = rs.Close()
+		rs = nil
 		err = eh.Errorf("unable to create arrow ipc reader: %w", err)
 		return
 	}
-	body = resp.Body
+	return
+}
+
+// summaryFrom lifts the engine's counters into play's display shape. The two
+// structs carry the same fields; the conversion is here rather than a shared
+// type because play's Summary is what a dozen panels already render.
+func summaryFrom(s queryengine.Summary) (out Summary) {
+	out = Summary{
+		ReadRows:        s.ReadRows,
+		ReadBytes:       s.ReadBytes,
+		WrittenRows:     s.WrittenRows,
+		WrittenBytes:    s.WrittenBytes,
+		TotalRowsToRead: s.TotalRowsToRead,
+		ResultRows:      s.ResultRows,
+		ResultBytes:     s.ResultBytes,
+		ElapsedNs:       s.ElapsedNs,
+		MemoryUsage:     s.MemoryUsage,
+	}
 	return
 }
 
 // Summary mirrors ClickHouse's X-ClickHouse-Summary JSON-ish header values.
-// The in-band X-ClickHouse-Progress headers carry the same shape (a prefix
-// of these fields plus memory_usage), so live progress ticks reuse this
-// struct and parseSummaryHeader (ADR-0115 plane A).
+//
+// Parsing the header is the engine adapter's job (chserver.ParseSummary);
+// this is play's display shape, and [summaryFrom] is the one place the two
+// meet.
 type Summary struct {
 	ReadRows        uint64
 	ReadBytes       uint64
@@ -599,33 +627,6 @@ type Summary struct {
 	ResultBytes     uint64
 	ElapsedNs       uint64
 	MemoryUsage     uint64
-}
-
-func parseSummaryHeader(s string) (out Summary) {
-	if s == "" {
-		return
-	}
-	// ClickHouse emits a flat JSON object of string-typed counters, e.g.
-	// `{"read_rows":"123","read_bytes":"456",...}`.
-	kv := map[string]string{}
-	if err := json.Unmarshal([]byte(s), &kv); err != nil {
-		log.Debug().Err(err).Str("header", s).Msg("play: malformed X-ClickHouse-Summary header")
-		return
-	}
-	parseU64 := func(k string) uint64 {
-		n, _ := strconv.ParseUint(kv[k], 10, 64)
-		return n
-	}
-	out.ReadRows = parseU64("read_rows")
-	out.ReadBytes = parseU64("read_bytes")
-	out.WrittenRows = parseU64("written_rows")
-	out.WrittenBytes = parseU64("written_bytes")
-	out.TotalRowsToRead = parseU64("total_rows_to_read")
-	out.ResultRows = parseU64("result_rows")
-	out.ResultBytes = parseU64("result_bytes")
-	out.ElapsedNs = parseU64("elapsed_ns")
-	out.MemoryUsage = parseU64("memory_usage")
-	return
 }
 
 func (inst Summary) String() string {

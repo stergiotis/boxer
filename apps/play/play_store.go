@@ -71,7 +71,7 @@ type QueryStore struct {
 	// plane A), written by the transport goroutine while loading and
 	// meaningful only then — finish() leaves it gated behind the loading
 	// flag rather than racing to clear it.
-	progress      Summary
+	progress      runstream.Progress
 	progressFresh bool
 
 	// terminal is how the last run ended (E3, play_runstream.go). It says
@@ -145,7 +145,7 @@ func (inst *QueryStore) Truncation() (reason string) {
 
 // Progress returns the in-flight run's latest in-band progress tick;
 // fresh is false when no run is loading or no tick has arrived yet.
-func (inst *QueryStore) Progress() (p Summary, fresh bool) {
+func (inst *QueryStore) Progress() (p runstream.Progress, fresh bool) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	if inst.loading && inst.progressFresh {
@@ -178,7 +178,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 	inst.mu.Lock()
 	inst.sourceBuffer = sourceBuffer
 	inst.loading = true
-	inst.progress = Summary{}
+	inst.progress = runstream.Progress{}
 	inst.progressFresh = false
 	inst.mu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -210,7 +210,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		// isLoading gate above means no second run can be in flight, so
 		// no generation counter is needed here.
 		opts := *inst.opts
-		opts.OnProgress = func(p Summary) {
+		opts.OnProgress = func(p runstream.Progress) {
 			inst.mu.Lock()
 			if inst.loading && !inst.closed {
 				inst.progress = p
@@ -224,14 +224,14 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		dec := inst.client.Dispatch(sql, "")
 
 		start := time.Now()
-		rdr, body, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs, dec)
+		rdr, rs, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs, dec)
 		if err != nil {
 			inst.finish(sql, sigs, start, nil, nil, 0, summary, err, runstream.Failed(err))
 			return
 		}
 		defer func() {
 			rdr.Release()
-			_ = body.Close()
+			_ = rs.Close()
 		}()
 
 		// Consume all batches and concatenate into a single record batch so
@@ -240,7 +240,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		// that dies part-way is a failed terminal rather than a short
 		// result nobody flagged, and a run capped against its own declared
 		// row limit comes back marked.
-		batches, term, e := drainRun(rdr, summary, readResultRowCap(sql))
+		batches, term, e := drainRun(rdr, rs)
 		if e != nil {
 			inst.finish(sql, sigs, start, nil, nil, 0, summary, e, runstream.Failed(e))
 			return

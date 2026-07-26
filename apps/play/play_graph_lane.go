@@ -7,6 +7,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 )
 
 // play_graph_lane.go is ADR-0097 slice 3b: the suspending async execution lane
@@ -38,7 +39,7 @@ type nodeLane struct {
 	// plane A) — written by the transport goroutine through a
 	// generation-guarded sink, cleared when the run lands or is
 	// superseded. Meaningful only while loading (transient glass state).
-	progress      Summary
+	progress      runstream.Progress
 	progressFresh bool
 	// closed marks a torn-down lane: a straggler frame's demand after close
 	// (the Unmount window) is dropped instead of starting a query nothing will
@@ -78,7 +79,7 @@ type laneView struct {
 	// progress is the in-flight run's latest in-band tick, set only while
 	// loading (ADR-0115 plane A); progressFresh distinguishes "no tick
 	// yet" from a zero-valued tick.
-	progress      Summary
+	progress      runstream.Progress
 	progressFresh bool
 }
 
@@ -142,7 +143,7 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 
 // progressView returns the in-flight run's latest progress tick without
 // demanding anything — the render-thread read for badges.
-func (inst *nodeLane) progressView() (p Summary, fresh bool) {
+func (inst *nodeLane) progressView() (p runstream.Progress, fresh bool) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.loading && inst.progressFresh {
@@ -190,7 +191,7 @@ func (inst *nodeLane) startLocked(c compiledNode, demandKey string) {
 	}
 	inst.cancel = cancel
 	inst.loading = true
-	inst.progress = Summary{}
+	inst.progress = runstream.Progress{}
 	inst.progressFresh = false
 	go inst.run(ctx, cancel, gen, c, demandKey)
 }
@@ -208,7 +209,7 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	if pe, ok := inst.exec.(progressAwareExecutorI); ok {
 		// The sink is generation-guarded: a superseded run's late ticks
 		// must not paint the new run's badge.
-		sink := func(p Summary) {
+		sink := func(p runstream.Progress) {
 			inst.mu.Lock()
 			if gen == inst.gen && inst.loading {
 				inst.progress = p
