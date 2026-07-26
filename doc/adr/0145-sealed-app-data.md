@@ -376,7 +376,49 @@ may serve a confined run is this process's own plane, so a confined run
 cannot reach *any* external engine — which is more restrictive than the
 Decision's end state and is the safe direction to be wrong in.
 
-Milestone 3 (the probe) is unstarted.
+### 2026-07-26 — Milestone 3 landed; the probe needed fixing to work at all
+
+§SD5 is in. `introspect.LocalProbeI` publishes the primitive beside the
+endpoint and the sealed predicate; play owns the policy — a proof cache with
+a bounded window, a demonstration started from a refusal, and both gates
+reading the proof rather than each other.
+
+**The probe did not work against a real engine, and only a real engine could
+have shown it.** ClickHouse's `url()` sizes a resource with a HEAD before
+reading it. The nonce is fetchable once, so the HEAD consumed it and the GET
+that followed 404'd — the probing statement failed, and a primitive whose
+whole job is to be fetched by an engine could not be fetched by the engine
+boxer runs. A HEAD now answers without marking. The guarantee is unchanged
+where it matters: a proof still requires a real GET and still cannot be
+replayed. E6 shipped tested and unconsumed, and this is what its first
+consumer found.
+
+**Dispatch performs no I/O, which §SD5 did not say and should have.**
+`confine` reads the proof cache only; a refusal starts a demonstration for
+the next attempt, deduped per endpoint on a background goroutine. Proving
+inside dispatch would put a round trip inside a function that applet
+stamping calls purely to classify a buffer, and would make a resolver's
+answer depend on the network. The cost is that the first confined run
+against a newly proven endpoint is refused and must be re-run — which costs
+nothing today, for the reason below.
+
+**What §SD5 unlocks today: nothing, deliberately.** A confined statement
+names `keelson('<handle>')`, and that macro is resolved by THIS process's
+`/query` endpoint. An external server does not know the function, so a
+confined run fails there whether proven or not. The mechanism is here for
+C1 — the wall surviving `keelson()` becoming a native, server-resolved table
+function — and until that lands the wall's real work is the identity
+exemption from milestone 2. This is recorded because a reader could
+otherwise conclude the proof widens something it does not.
+
+**A failed demonstration is an answer, not an error.** An engine that cannot
+run the statement and one that cannot reach the URL both come back "not
+proven"; only this process failing to *mint* is reported, since that is ours
+rather than the engine's.
+
+All three milestones are now landed. The requirements catalog's E6 and E9
+both have consumers; R2, R3 and R6's sensitivity axis are implemented rather
+than merely observed.
 
 ## References
 

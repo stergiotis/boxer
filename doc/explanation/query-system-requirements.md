@@ -287,8 +287,24 @@ Where they sit in a run's lifecycle:
   One asymmetry to hold on to: a false check means *not proven*, never
   *proven unreachable*. A check arriving after the TTL cannot tell an
   expired nonce from one that was never fetched, so it reports the weaker
-  thing. Nothing in boxer consumes the primitive — the collapse policy that
-  would is system-side.
+  thing.
+
+  It now has a consumer, which it did not when this was written: the
+  confinement wall of [ADR-0145](../adr/0145-sealed-app-data.md) §SD5, where
+  an engine that is not this process's own plane must demonstrate it can
+  fetch from that plane before a run touching sealed data may be placed on
+  it. Boxer owns that particular policy because the wall is boxer's own; a
+  collapse policy over *site* placements is still system-side.
+
+  Two things the first consumer established. A **HEAD is not a fetch**:
+  ClickHouse's `url()` sizes a resource before reading it, and consuming the
+  nonce there 404'd the GET that followed, so the primitive could not be
+  fetched by the engine boxer actually runs until it stopped marking on
+  HEAD. And a proof **fails safe against accident, not against intent** — a
+  pinned remote endpoint cannot reach this loopback, but a deliberately
+  constructed reverse tunnel would pass. It is a misconfiguration wall, and
+  reading it as a security boundary would be a mistake the threat model does
+  not support.
 - **E7 — Progress observation component.** A poller bound to one server
   polls `system.processes` once per tick for all registered run ids and
   publishes progress frames on per-run bus subjects. Guarantees: ticks
