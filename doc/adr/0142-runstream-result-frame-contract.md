@@ -113,6 +113,42 @@ paths drain through.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-07-26 — Engines produce the frames now, and one claim was tested
+
+[ADR-0144](./0144-query-engine-adapters.md)'s delivery role made this
+contract the shape an engine speaks rather than a shape play built around
+its own HTTP call. The types are unchanged; what moved is who produces
+them. Both shipped engines now yield `[data…, terminal]` — a buffered
+broker reply as a single data frame, an HTTP body as chunks — and play's
+result paths consume a stream instead of a response.
+
+The claim that a synchronous response is the degenerate case, not an
+exception, was the load-bearing one, and it held: nothing in the frame types
+had to change to fit either engine. What did have to change was the row-cap
+verdict's *home*. It sat in play, which had the SQL but only a copy of the
+response counters; it now sits with the engine, which has both. play declares
+the cap it read off the buffer; the engine decides whether the delivery hit
+it. Engine 1 says something new as a result — it reports no result row count,
+so it reports a declared cap as *may be a prefix* instead of claiming
+complete.
+
+One thing the sync binding was hiding, found by moving it: a consumer that
+stops reading before the body ends never reaches the terminal. Arrow's IPC
+decoder stops at its end-of-stream marker rather than at end of body, so
+play's drain looked exactly like a producer that had died — `ErrIncomplete`
+on every successful run. The contract was right and the consumer was wrong:
+the fix is that play drains the remainder before asking how the run ended.
+Worth recording because any future consumer of a framed result that stops
+early has the same bug available to it, and the failure is loud rather than
+silent only because this contract made absence mean incomplete.
+
+The Negative note above stands unchanged: the collector still holds the whole
+result, and a genuinely streaming consumer would want to render from the
+stream rather than from a collector. `StreamI` is pull-based partly so that
+consumer has somewhere to stand.
+
 ## References
 
 - [doc/explanation/query-system-requirements.md](../explanation/query-system-requirements.md) — R8, R9, and the E3 extension point.

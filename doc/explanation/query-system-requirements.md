@@ -188,6 +188,17 @@ Where they sit in a run's lifecycle:
   only a provable read is ever moved. *Delta:* none for boxer's own
   endpoints. A system with more than two engines supplies its own resolver
   and publishes its placement data through E5.
+
+  Two fields that boxer's own endpoints never exercise are nevertheless
+  present, because the parties that need them are not the resolver. The
+  decision records the **resolved member** where a placement has members:
+  cancellation is addressed to the member that ran the query (R11), and a
+  decision remembering a cluster address instead would send the kill
+  wherever the balancer next pointed. And the **affinity token has a judge**
+  — `queryengine.SelectMember(placement, affinity)`, the deterministic
+  (placement, generation) choice R4 asks for, which sorts the roster first
+  so the guarantee cannot depend on map-iteration order. Neither is a
+  policy: boxer ships no roster, no weights, and no health probing.
 - **E3 — Result frame contract.** A run's result is a sequence of typed,
   sequenced frames: data, progress, and exactly one terminal frame —
   complete, truncated (with reason), or failed (with error). Consumers
@@ -197,11 +208,21 @@ Where they sit in a run's lifecycle:
   re-implement them. *Exists:* the contract, as
   [ADR-0142](../adr/0142-runstream-result-frame-contract.md) — the
   `runstream` types, the collector that owns the invariants, and the
-  synchronous adapter both of play's result paths drain through. The
-  collector rejects rather than tolerates (a frame out of sequence, a
-  second terminal, anything after a terminal, a frame whose kind or
-  terminal state was never set), and its zero values are *unknown* rather
-  than *data* and *complete*. *Delta:* a bus binding, once E8 exists.
+  engine adapters that produce the frames
+  ([ADR-0144](../adr/0144-query-engine-adapters.md)). The collector rejects
+  rather than tolerates (a frame out of sequence, a second terminal,
+  anything after a terminal, a frame whose kind or terminal state was never
+  set), and its zero values are *unknown* rather than *data* and
+  *complete*. *Delta:* a bus binding, once E8 exists.
+
+  Producing the frames is an engine's job rather than a consumer's, which is
+  what the delivery role settled: a buffered broker reply is one data frame
+  and a terminal, an HTTP body is chunks and a terminal, and a consumer
+  reads outcomes in one place either way. One trap came with it, worth
+  knowing before writing the next consumer: a reader that stops before the
+  body ends never reaches the terminal, and correctly reads as *incomplete*.
+  Arrow's IPC decoder does exactly that — it stops at its end-of-stream
+  marker — so play drains the remainder before consulting the terminal.
 
   What boxer can honestly say about truncation is narrower than the
   requirement's ambition, and the gap is worth stating. Only a cap the
@@ -283,10 +304,20 @@ Where they sit in a run's lifecycle:
   would be the same guess by another name. Deregistration belongs to
   whoever holds the result path, at the moment it delivers the terminal.
   Self-exclusion is structural rather than a filter — only registered ids
-  are reported, and the poller never registers its own. *Delta:* an
-  adopter.
+  are reported, and the poller never registers its own. It is also the
+  observation role of [ADR-0144](../adr/0144-query-engine-adapters.md): the
+  `Poller` satisfies that interface verbatim, because the interface was
+  drawn to what the poller already did. *Delta:* an adopter.
 
-  No adopter is wired yet, deliberately. The obvious candidate, play, is
+  The lifecycle question this note used to leave open is closed. A poller is
+  bound to one server while play's endpoint moves per run, and the answer is
+  that the binding belongs to the engine: `chserver.NewObserving` builds the
+  poller against the endpoint and credentials the engine already holds, so
+  watching a run on a server that did not run it is no longer expressible.
+  Observation is optional by *type* — a plain engine has no `Watch` method,
+  so an engine built without a bus cannot be asked to observe.
+
+  No adopter is wired, still deliberately. The obvious candidate, play, is
   the connection holder for its own runs, and for that party the in-band
   headers are strictly better than tick-bounded polling: they stream, and
   they are not floored by a tick. Routing play's own display through the
@@ -295,10 +326,6 @@ Where they sit in a run's lifecycle:
   holder — a second window, ops tooling — and no such consumer exists in
   this repository yet. Wiring one before it has a consumer would be
   guessing at its shape; the poller waits, tested, for the first real one.
-  There is a lifecycle question waiting with it: a poller is bound to one
-  server, while play's endpoint now moves per run under the Auto resolver,
-  so an adopter must decide which runs it can observe before it can decide
-  what to watch.
 - **E8 — Streaming reply channel.** The bus broker's request/reply
   gains an ordered, chunked, backpressured reply stream with an explicit
   end-of-stream or error marker; retention for late joiners is bounded

@@ -209,6 +209,98 @@ engine 3's is not one of them yet.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-07-26 — The three roles are built, over both shipped engines
+
+`public/keelson/runtime/queryengine` carries the roles; an adapter package
+sits beside it per engine (`chlocal`, `chserver`). Both engines' delivery is
+in use rather than merely available: `introspectengine` consumes engine 1
+through it, and play's result path consumes engine 2 through it.
+
+**Delivery is a pull iterator, and the frames carry bytes.** `Deliver`
+returns a `StreamI` the consumer advances (`Next`/`Err`/`Close`), which suits
+all three lifecycles — a bus reply already in hand, an HTTP body being read,
+and a subscription arriving over time — without any of them needing a
+goroutine to invert control. The payload is `[]byte` because what an engine
+delivers is a result body in a requested FORMAT; decoding belongs to the
+consumer, and both shipped engines produce bytes natively. play decodes Arrow
+above the seam, exactly as it did below it.
+
+Two invariants turned out to be load-bearing, and both are stated in the
+interface rather than left to convention:
+
+- **An error means the request was rejected, never that the run failed.** A
+  statement the server refused, a worker that died, a transport that never
+  connected — all are terminal frames. That is what lets a consumer stop
+  branching on which engine ran the query, and it is why `Deliver`'s error
+  return is narrow enough to be uninteresting.
+- **A data frame's bytes belong to the consumer.** The alternative
+  (valid-until-next-call, which a pull iterator makes tempting) silently
+  corrupts anything that collects, and collecting is the common case.
+
+Judgement of a declared row cap moved *onto* the engine side, where the
+response counters are: the caller declares `RowCap`, the engine decides. The
+consequence is engine 1 finally saying something honest — it reports no
+result row count at all, so a request that declared `max_result_rows` with
+`result_overflow_mode = break` comes back marked *may be a prefix* rather
+than as complete. Loud and ambiguous beats quiet and wrong.
+
+**Observation is the E7 poller, unchanged.** `queryprogress.Poller` satisfies
+`ObservationI` verbatim — the interface was drawn to what the poller already
+did, which is the version of "fitting an existing component into a role" that
+does not involve editing the component. What the engine adds is the *binding*:
+`chserver.NewObserving` builds the poller against its own endpoint and
+credentials, so a poller pointed at a different server than the one that ran
+the query is no longer expressible. Optionality is carried by the type — a
+plain `Engine` has no `Watch` method, so it does not satisfy `ObservationI`,
+and an engine built without a bus cannot be asked to observe.
+
+**Control is `KILL QUERY` addressed by run id**, on the engine bound to the
+member that ran it. A nil error is explicitly not evidence that anything
+stopped, for the same reason the poller never synthesises a terminal: a run
+that already finished, one that never existed, and one this call ended are
+indistinguishable from outside.
+
+One thing did *not* move, and the reason is worth recording. ClickHouse's
+in-band progress ticks arrive inside the still-open response-header block —
+which is to say **before the stream they would have to be frames of exists**.
+They stay a callback on the request. Making them frames would mean replaying
+them once the headers completed, by which time the only property they had,
+liveness, is gone. Frames are how a party that is *not* the connection holder
+sees progress, and that party is what the observation role serves.
+
+### 2026-07-26 — The two loose ends
+
+Both are closed as the Decision described, and both remain unexercised by
+boxer's own endpoints, which is the honest state rather than an omission.
+
+- **The affinity token has a judge.** `queryengine.SelectMember(members,
+  affinity)` is the deterministic (placement, generation) choice R4 asks for.
+  It sorts the roster before selecting, which matters more than it looks: a
+  placement assembled from a map has no order, and a choice that depended on
+  iteration luck would break exactly the guarantee the function exists to
+  provide. It is not a balancer and swapping it for one would be a mistake —
+  spreading across generations is a consequence of tokens differing, not the
+  goal. The roster stays site data.
+- **The decision records the resolved member.** `dispatchDecision.member`,
+  plus `killTarget()`, which answers "which host does a cancellation go to"
+  once instead of leaving each caller to re-derive it. Empty for boxer's own
+  endpoints, where the target *is* the member.
+
+Not done, deliberately: play does not yet issue `KILL QUERY` on cancel. It
+supersedes by run id (`replace_running_query`), which costs no second request
+and covers the case that actually occurs — a superseded lane. Making cancel
+kill is a behaviour change with its own trade-off (an extra round trip
+against a server that may already have finished) and belongs to whoever wants
+it, not to the ADR that made it possible.
+
+Also unwired, and previously recorded as such: no consumer subscribes to the
+poller. play is the connection holder for its own runs, and for that party
+the in-band ticks are strictly better — they stream, and they are not floored
+by a tick. The observation role's value is for a party that is not the
+connection holder, and this repository still has none.
+
 ## References
 
 - [doc/explanation/query-system-requirements.md](../explanation/query-system-requirements.md) — R4, R7, R10, R11 and the extension-point catalog.

@@ -142,6 +142,37 @@ stamping derived from it.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-07-26 — The decision records its member, and the affinity token has a judge
+
+Both were recorded above as carried-but-unjudged, and
+[ADR-0144](./0144-query-engine-adapters.md) closed them while building the
+engine roles.
+
+The decision gains a `member` field: the concrete member of a placement the
+run went to, empty where there is none to choose. It is what a cancellation
+must be addressed to — `KILL QUERY` reaches only the member that ran the
+query (R11), so a decision remembering a cluster address instead would send
+the kill to whichever member happened to answer. `killTarget()` gives that
+one answer rather than a convention each caller re-derives, and the toolbar
+names the member only when there was a choice.
+
+The affinity token's judge is `queryengine.SelectMember(placement,
+affinity)` — the deterministic (placement, generation) function R4 asks for,
+and no more than that. Boxer still supplies no roster and no balancing: the
+Neutral note above holds, with the one word "nobody" now reading "no resolver
+boxer ships", since a site resolver has somewhere concrete to put its answer.
+
+The dispatch class is still play-internal. A second consumer has not
+appeared, and the E9 vocabulary waits for one.
+
+One consequence for the issuers this ADR enumerates: they now obtain an
+engine from the decision rather than a URL, one per run
+(`Client.engineFor`). That is not a new seam — it is the same decision,
+consumed by something that also knows how to observe and cancel on the
+endpoint it names.
+
 ## References
 
 - [doc/explanation/query-system-requirements.md](../explanation/query-system-requirements.md) — the requirements and the E-point catalog.
