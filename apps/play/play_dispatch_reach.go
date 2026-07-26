@@ -82,7 +82,10 @@ func newReachProver() (inst *reachProver) {
 // dispatch is consulted by things that must not perform I/O (applet
 // stamping resolves a decision purely to classify a buffer).
 func (inst *reachProver) isProven(endpoint string) (yes bool) {
-	if endpoint == "" {
+	// A nil prover proves nothing, which is the safe answer rather than a
+	// panic: a Client built as a literal (tests do) then simply has no
+	// demonstrations, and every confined run stays refused.
+	if inst == nil || endpoint == "" {
 		return
 	}
 	inst.mu.Lock()
@@ -101,6 +104,9 @@ func (inst *reachProver) isProven(endpoint string) (yes bool) {
 
 // record marks endpoint as proven from now until the TTL.
 func (inst *reachProver) record(endpoint string) {
+	if inst == nil {
+		return
+	}
 	inst.mu.Lock()
 	inst.proven[endpoint] = inst.now().Add(reachProofTTL)
 	inst.mu.Unlock()
@@ -110,6 +116,9 @@ func (inst *reachProver) record(endpoint string) {
 // same refusal produce one demonstration rather than one each. done releases
 // the claim; ok is false when a probe is already under way.
 func (inst *reachProver) begin(endpoint string) (done func(), ok bool) {
+	if inst == nil {
+		return
+	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if _, busy := inst.inFlight[endpoint]; busy {
@@ -137,6 +146,10 @@ type runnerFunc func(ctx context.Context, endpoint string, sql string) (err erro
 // proven", which is what the wall then acts on. Only the mint failing is
 // reported, since that is this process's own fault rather than the engine's.
 func (inst *reachProver) prove(ctx context.Context, endpoint string, run runnerFunc) (proven bool, err error) {
+	if inst == nil {
+		err = eh.Errorf("play: no reachability prover")
+		return
+	}
 	probe, ok := introspect.LocalProbe()
 	if !ok {
 		err = eh.Errorf("play: no local introspection plane to prove reachability to")

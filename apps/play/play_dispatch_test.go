@@ -417,3 +417,52 @@ func TestConfinedRunIsRefusedByTheEngineEvenWhenPlaced(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "confined")
 }
+
+// TestSealedNamesSeesBothSpellings closes a syntactic hole the wall must not
+// have. keelson('x') and x are interchangeable in the introspection dialect
+// (ADR-0094 §SD4), so labelling only the macro form would have exempted a
+// run from confinement purely because of how it was written.
+func TestSealedNamesSeesBothSpellings(t *testing.T) {
+	withSealedPlane(t, "http://127.0.0.1:9/query", "adhoc_secret")
+
+	assert.Equal(t, []string{"adhoc_secret"}, sealedNames("SELECT * FROM keelson('adhoc_secret')"))
+	assert.Equal(t, []string{"adhoc_secret"}, sealedNames("SELECT * FROM adhoc_secret"),
+		"the bare spelling names the same sealed data")
+	assert.Equal(t, []string{"adhoc_secret"},
+		sealedNames("SELECT * FROM adhoc_secret JOIN keelson('adhoc_secret') USING (v)"),
+		"named twice is still one dataset")
+	assert.Empty(t, sealedNames("SELECT * FROM ordinary_table"))
+	assert.Empty(t, sealedNames("NOT SQL (("), "unparseable names nothing")
+}
+
+// TestConfineRefusesABareSealedReference is the same hole seen through the
+// wall rather than the derivation.
+func TestConfineRefusesABareSealedReference(t *testing.T) {
+	withSealedPlane(t, "http://127.0.0.1:9/query", "adhoc_secret")
+	c := NewClient(ClientConfig{URL: "http://elsewhere.invalid"}, nil)
+
+	dec := c.Dispatch("SELECT * FROM adhoc_secret", "")
+	assert.Equal(t, dispatchClassRefused, dec.class)
+	assert.Equal(t, queryengine.SensitivityConfined, dec.sensitivity)
+}
+
+// TestZeroClientIsConservativeNotFatal: a Client built as a literal has no
+// prover, and several tests in this package build one. Nothing may panic,
+// and nothing may count as proven.
+func TestZeroClientIsConservativeNotFatal(t *testing.T) {
+	withSealedPlane(t, "http://127.0.0.1:9/query", "adhoc_secret")
+	c := &Client{}
+
+	dec := c.confine("SELECT * FROM keelson('adhoc_secret')",
+		dispatchDecision{targetURL: "http://x.invalid", class: dispatchClassManual})
+	assert.Equal(t, dispatchClassRefused, dec.class, "no prover means nothing is proven")
+
+	assert.False(t, c.reach.isProven("http://x.invalid"))
+	c.reach.record("http://x.invalid")
+	assert.False(t, c.reach.isProven("http://x.invalid"), "recording into nothing records nothing")
+	_, ok := c.reach.begin("http://x.invalid")
+	assert.False(t, ok)
+	_, err := c.reach.prove(context.Background(), "http://x.invalid",
+		func(ctx context.Context, endpoint string, sql string) (e error) { return })
+	assert.Error(t, err)
+}

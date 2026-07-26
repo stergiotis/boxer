@@ -171,19 +171,39 @@ func nameList(names []string) (out string) {
 }
 
 // sealedNames returns the sealed datasets a statement names, by asking the
-// local introspection plane about each keelson() reference (ADR-0145 §SD3).
+// local introspection plane about every table it references (ADR-0145 §SD3).
 //
 // A registry lookup, not a heuristic over SQL text: a name either resolves
 // to a sealed provider on this process's plane or it does not. The residual
 // is the right input because the ad-hoc alias→handle rewrite has already
 // run by then (ADR-0134 §SD4), so what is asked about is the handle the
 // server would receive.
+//
+// BOTH spellings are asked about, and the bare one is not an afterthought:
+// keelson('x') and x are interchangeable in the introspection dialect
+// (ADR-0094 §SD4), so consulting only the macro form would label a run that
+// names sealed data "ordinary" purely because of how it was written — a
+// syntactic exemption inside a wall that exists to not have any. The names
+// arrive from two extractors because the two forms are extracted
+// differently, not because they mean different things.
+//
+// Duplicates are possible in principle (a query naming both forms) and are
+// collapsed, since the list is read by a human in a refusal.
 func sealedNames(residual string) (names []string) {
-	for _, ref := range keelsonsql.References(residual) {
-		if introspect.IsLocalSealed(ref) {
-			names = append(names, ref)
+	seen := make(map[string]struct{}, 2)
+	add := func(candidates []string) {
+		for _, name := range candidates {
+			if _, dup := seen[name]; dup {
+				continue
+			}
+			if introspect.IsLocalSealed(name) {
+				seen[name] = struct{}{}
+				names = append(names, name)
+			}
 		}
 	}
+	add(keelsonsql.References(residual))
+	add(plainTables(residual))
 	sort.Strings(names)
 	return
 }
