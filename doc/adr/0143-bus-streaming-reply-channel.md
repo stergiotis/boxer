@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-25
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-07-26
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0143: A streaming reply channel for bus request/reply
 
@@ -50,10 +48,10 @@ than landing as part of the extension-point sweep.
 
 ## Decision
 
-> **This ADR is a proposal awaiting sign-off. Nothing here is implemented,
-> and no code should be written against it until it is accepted.**
+> **Accepted, not yet implemented.** The decision below is settled; no code
+> exists against it. See Status for what implementing it depends on.
 
-We would give bus request/reply an **ordered, chunked, backpressured reply
+We will give bus request/reply an **ordered, chunked, backpressured reply
 stream** with an explicit end-of-stream or error marker, and bounded,
 caller-configured retention. Sketched:
 
@@ -75,7 +73,7 @@ caller-configured retention. Sketched:
   Unbounded replay would reintroduce, on the bus, exactly the "hold the
   whole result" property being removed from the broker.
 
-Boxer would ship the mechanism only. Retention *policy*, replay windows,
+Boxer will ship the mechanism only. Retention *policy*, replay windows,
 and what a system does with a partially consumed stream stay with the
 system, as with every other extension point in the catalog.
 
@@ -152,9 +150,15 @@ is built on it.
 
 ## Status
 
-**Proposed — awaiting sign-off before any implementation.** The
-implementation plan this ADR belongs to gates the work on that sign-off
-explicitly; the milestone is deliberately unstarted.
+Accepted 2026-07-26. **Not implemented** — this is the one decision in the
+arc with no code behind it.
+
+Its prerequisite is met: the run identity now carries a host component
+([ADR-0144](./0144-query-engine-adapters.md)), so streams from two boxes
+cannot correlate onto one key. The open question implementation must answer
+first is backpressure across an abstraction serving both the in-process bus
+and NATS, which the two do not offer alike; that is the part most likely to
+force a dated update here.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

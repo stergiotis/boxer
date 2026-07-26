@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-25
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "@spx"
+reviewed-date: 2026-07-26
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0144: Query-engine adapters — three roles, not one plugin
 
@@ -194,16 +192,19 @@ stamp, and in pins — so it belongs *before* engine 3 exists, not after.
 
 ## Status
 
-Proposed — awaiting review, **except the identity widening, which has
-landed**: `public/keelson/runtime/runid` owns the contract and play mints
-through it, verified against a real server (a widened id comes back on both
-the `QueryStart` and `QueryFinish` rows of `query_log`). It was taken
-first, ahead of acceptance, because it is the one piece that is cheap now
-and a migration later — it is wire-visible, so the longer engine 3 waits
-the more history carries the narrow shape.
+Accepted 2026-07-26. **Partly implemented.**
 
-Remaining sequencing, if accepted: the delivery role over the two shipped
-engines, then observation and control.
+The identity widening has landed: `public/keelson/runtime/runid` owns the
+contract and play mints through it, verified against a real server (a
+widened id comes back on both the `QueryStart` and `QueryFinish` rows of
+`query_log`). It was taken first, ahead of acceptance, because it is the
+one piece that is cheap now and a migration later — it is wire-visible, so
+the longer engine 3 waits the more history carries the narrow shape.
+
+Remaining: the delivery role over the two shipped engines, then observation
+and control. The role interfaces are deliberately unbuilt until then — two
+real implementations is the bar this ADR sets for drawing them at all, and
+engine 3's is not one of them yet.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
