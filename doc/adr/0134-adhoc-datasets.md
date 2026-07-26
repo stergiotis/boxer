@@ -511,6 +511,54 @@ in-process engine and the url()/`/table` decrypt returning the colon-named
 `Array`/`Tuple`/`Nullable` columns intact, addressable by quoted identifier
 through the `keelson('…')` macro rewrite.
 
+## Update 2026-07-26 — The pipe decrypt path is retired (ADR-0145 §SD2)
+
+§SD3 as written specified a named-pipe decrypt route: `mkfifo` in the
+per-request directory, a writer goroutine streaming chunked-AEAD decryption
+into the pipe, and a `CREATE TEMPORARY TABLE … file('<fifo>',…)` prelude. The
+2026-07-20 query-path revision added a second route — decrypt in-process at
+`/table`, served over loopback through `url()` — kept the pipe route "not
+deleted", and said the pipe machinery would be "retirable later" if the
+url() route proved dominant.
+
+It is retired. Not because the url() route merely won, but because the pipe
+route turned out to be **unreachable in this repository**: the production
+`/query` runner submits `{SQL, Params}` and nothing else — the endpoint has
+already rewritten `keelson('h')` into `url('…/table/h')` — and the only code
+that ever populated `ExecRequest.EncryptedInputs` was `introspectengine`,
+which nothing outside tests imports.
+
+Gone with it: `EncryptedInputs` and its wire field, `EncryptedInputRef`, the
+`mkfifo` materialiser and its writer goroutines, the encrypted-input
+cache-key fold, and `KeyStoreI`. One decrypt implementation remains — resolve
+the key by handle, stream the AEAD reader out of `/table` — which is what
+§SD3's original "exactly one decrypt path exists" asked for, reached by the
+other route.
+
+Consequences worth reading here rather than only in ADR-0145:
+
+- **`introspectengine` no longer serves sealed datasets.** It refuses one by
+  name with an error saying where to go, because snapshotting it would hand
+  back ciphertext. It is a public library seam with no consumer in this
+  repository, so the loss is potential rather than actual.
+- **The revision's "two decrypt paths" cost is discharged**, and so is the
+  worry that went with it. What remains of the honest limits is unchanged:
+  plaintext transits a loopback socket, which a privileged local observer can
+  sniff, and the threat model is still the disk.
+- **§SD3's cache-key discipline survives in a narrower form.** `(handle,
+  revision)` no longer folds into the broker's key because encrypted inputs
+  no longer reach the broker; freshness now rides the `url()` fetch and the
+  §SD5 revision signal, which is where a republish was already visible.
+- **The crypto properties are not lost with the code.** Wrong key,
+  truncation, bit flip, trailing bytes and missing-close are asserted at the
+  layer that owns them (the AEAD stream), independent of transport. What went
+  with the implementation is pipe mechanics.
+
+Where the placement half of the guarantee is enforced is now
+[ADR-0145](./0145-sealed-app-data.md): a sensitivity label derived from a
+registry lookup, refused both above the resolver and at the engine, with
+locality proven by the E6 probe rather than inferred from an address.
+
 ## Status
 
 Accepted (2026-07-20).
