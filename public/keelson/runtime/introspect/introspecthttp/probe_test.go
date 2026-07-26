@@ -63,8 +63,10 @@ func TestProbeUnknownNonce(t *testing.T) {
 	// A near-miss of a live nonce is still a miss.
 	nonce, _, err := s.MintProbe()
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusNotFound, fetch(t, s.BaseURL()+"/probe/"+nonce[:len(nonce)-1]+"0"))
-	assert.False(t, s.CheckProbe(nonce[:len(nonce)-1]+"0"))
+	nearMiss := flipLastHexDigit(nonce)
+	require.NotEqual(t, nonce, nearMiss, "the near-miss must actually miss")
+	assert.Equal(t, http.StatusNotFound, fetch(t, s.BaseURL()+"/probe/"+nearMiss))
+	assert.False(t, s.CheckProbe(nearMiss))
 	assert.False(t, s.CheckProbe(nonce), "the near-miss must not have marked it fetched")
 }
 
@@ -132,4 +134,21 @@ func TestProbeLookupIsConstantTime(t *testing.T) {
 	assert.Equal(t, -1, store.indexOfLocked("zzz"))
 	assert.Equal(t, -1, store.indexOfLocked("aa"), "a prefix is not a match")
 	assert.Equal(t, -1, store.indexOfLocked("aaaa"), "an extension is not a match")
+}
+
+// flipLastHexDigit builds a nonce that differs from s in exactly one
+// character. Substituting a FIXED digit would not: one nonce in sixteen
+// already ends in it, and the "near-miss" would then be the live nonce —
+// fetching it, proving nothing, and failing the test that asked whether a
+// miss stays a miss.
+func flipLastHexDigit(s string) (out string) {
+	if s == "" {
+		return "0"
+	}
+	replacement := "0"
+	if s[len(s)-1] == '0' {
+		replacement = "1"
+	}
+	out = s[:len(s)-1] + replacement
+	return
 }
