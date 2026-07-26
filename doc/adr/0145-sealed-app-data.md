@@ -275,22 +275,29 @@ places that refuse, and the removal of the unreachable path.
 
 ## Status
 
-Accepted 2026-07-26. **Implementation in progress.**
+Accepted 2026-07-26, and **implemented** — all three milestones, in the order
+the Decision sequenced them:
 
-Sequenced so the subtraction lands before the addition, and so the probe —
-the only part with a new runtime cost — is separable:
+1. §SD1 vocabulary and §SD2 retirement. Net negative lines and no behaviour
+   change, since the retired path had no consumer.
+2. §SD3 label and §SD4 refusals. A confined run pinned at a non-local
+   endpoint is refused with a reason instead of failing at the server.
+3. §SD5 proof. The mechanism exists and is tested end to end; it widens
+   nothing today, for the reason its Update records.
 
-1. SD1 vocabulary, SD2 retirement. Net negative lines; no behaviour change,
-   since the retired path has no consumer.
-2. SD3 label and SD4 refusals. Behaviour changes: a confined run pinned at
-   a non-local endpoint is refused with a reason instead of failing at the
-   server.
-3. SD5 proof. Behaviour changes again: a confined run may reach a non-local
-   engine that has demonstrated it can reach this plane.
+[ADR-0134](./0134-adhoc-datasets.md) carries the dated Update this ADR's
+retirement warranted.
 
-Landing (1) warrants a dated Update on
-[ADR-0134](./0134-adhoc-datasets.md), whose §SD3 revision recorded the pipe
-route as retirable; this ADR is the retirement.
+What is deliberately NOT done, so a reader does not go looking:
+
+- play does not consume the observation or control roles of
+  [ADR-0144](./0144-query-engine-adapters.md), and this ADR does not change
+  that.
+- The `ServesConfined` declaration stays caller-asserted — a discipline gate,
+  not a security boundary (§SD4).
+- Nothing here has been seen in the GUI. The wall's refusal path is covered
+  by tests and by the live integration lane, but no one has watched a
+  refusal render in play's toolbar.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
