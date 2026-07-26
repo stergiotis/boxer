@@ -15,7 +15,6 @@ package introspectengine
 
 import (
 	"context"
-	"io"
 	"sort"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -28,6 +27,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chlocal"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -36,8 +38,12 @@ const DefaultPoolName = "introspect"
 
 // Engine analyses and runs introspection queries.
 type Engine struct {
-	reg      *introspect.Registry
-	bus      app.BusI
+	reg *introspect.Registry
+	// delivery is the chlocal broker in its ADR-0144 delivery role: this
+	// engine consumes a result as a frame stream rather than as a byte
+	// slice, so a reply that never arrived is distinguishable from one that
+	// arrived empty (R9) without this file having to check for it.
+	delivery *chlocal.Engine
 	poolName string
 	log      zerolog.Logger
 }
@@ -66,7 +72,11 @@ func New(cfg Config, log zerolog.Logger) (e *Engine, err error) {
 	if pool == "" {
 		pool = DefaultPoolName
 	}
-	return &Engine{reg: reg, bus: cfg.Bus, poolName: pool, log: log}, nil
+	delivery, err := chlocal.New(chlocal.Config{Bus: cfg.Bus, PoolName: pool})
+	if err != nil {
+		return nil, err
+	}
+	return &Engine{reg: reg, delivery: delivery, poolName: pool, log: log}, nil
 }
 
 // Query runs sql and returns the result body in the given ClickHouse
@@ -206,25 +216,29 @@ func (e *Engine) exec(ctx context.Context, sql, format string, tables []string, 
 		inputs[t] = b
 	}
 
-	rep, reqErr := chlocalbroker.ExecOnPool(ctx, e.bus, e.poolName, chlocalbroker.ExecRequest{
-		SQL:             sql,
-		Format:          format,
-		InputTables:     inputs,
-		EncryptedInputs: encInputs,
+	st, res, reqErr := e.delivery.Deliver(ctx, queryengine.Request{
+		SQL:    sql,
+		Format: format,
+		Inputs: inputs,
+		Extra:  chlocal.Extra{EncryptedInputs: encInputs},
 	})
 	if reqErr != nil {
 		return nil, "", reqErr
 	}
-	defer func() { _ = rep.Close() }()
-	if repErr := rep.Err(); repErr != nil {
-		return nil, "", repErr
-	}
-	body, err = io.ReadAll(rep)
+	defer func() { _ = st.Close() }()
+
+	// Collect reports ErrIncomplete when the stream ended without saying how
+	// the run finished — the case a byte slice cannot express, and the one a
+	// caller would otherwise render as a short answer.
+	body, term, err := queryengine.Collect(st)
 	if err != nil {
-		return nil, "", eh.Errorf("introspectengine: read reply: %w", err)
+		return nil, "", err
 	}
-	contentType = rep.ContentType
-	return
+	if term.State == runstream.TerminalFailed {
+		return nil, "", term.Err
+	}
+	contentType = res.ContentType
+	return body, contentType, nil
 }
 
 // hasStar reports whether the query contains any `*` — a projection star
