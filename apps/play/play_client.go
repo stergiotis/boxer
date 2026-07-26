@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
@@ -231,9 +232,10 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 		settings["log_comment"] = lc
 	}
 	req := queryengine.Request{
-		SQL:      sql,
-		Params:   bareParams(nil, params),
-		Settings: settings,
+		SQL:         sql,
+		Params:      bareParams(nil, params),
+		Settings:    settings,
+		Sensitivity: dec.sensitivity,
 	}
 	if opts != nil && opts.QueryID != "" {
 		req.RunID = opts.QueryID
@@ -312,6 +314,13 @@ func (inst *Client) engineFor(dec dispatchDecision) (eng *chserver.Engine, err e
 		User:       inst.cfg.User,
 		Password:   inst.cfg.Password,
 		HTTPClient: inst.http,
+		// Only this process's own plane may see sealed plaintext, and the
+		// exemption is by IDENTITY rather than by address: this endpoint
+		// string was minted by a server this process started, which is not
+		// the same act as recognising a loopback address in a configured URL
+		// (ADR-0145 §SD5). Derived from the target, never from the decision's
+		// own label, so the two gates cannot agree by construction.
+		ServesConfined: target == introspect.LocalQueryEndpoint(),
 	})
 	return
 }
@@ -550,6 +559,10 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		// engine, which is the only party that sees the response counters,
 		// decides.
 		Cap: readResultRowCap(sql),
+		// What the run touches, decided at the dispatch seam. It rides here
+		// so the engine refuses a confined run on its own account rather
+		// than trusting whatever placed it (ADR-0145 §SD4).
+		Sensitivity: dec.sensitivity,
 	}
 	if opts != nil {
 		if opts.QueryID != "" {

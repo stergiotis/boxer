@@ -2,6 +2,7 @@ package play
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -91,6 +92,11 @@ type dispatchDecision struct {
 	// [queryengine.SelectMember](placement, affinity), which is the
 	// deterministic (placement, generation) choice R4 asks for.
 	member string
+	// sensitivity is what the run touches (ADR-0145 §SD3), carried so the
+	// engine can refuse independently of whatever placed the run, and so an
+	// audit of the run records it (R12). Derived above the resolver, not by
+	// it — see confine.
+	sensitivity queryengine.SensitivityE
 }
 
 // killTarget names what a cancellation for this run must be addressed to:
@@ -197,8 +203,56 @@ func (inst *Client) dispatchResidual(residual string, affinity string) (dec disp
 	if r == nil {
 		r = staticResolver{}
 	}
-	dec = r.resolve(residual, base, affinity)
+	dec = confine(residual, r.resolve(residual, base, affinity))
 	inst.lastDecision.Store(&dec)
+	return
+}
+
+// confine applies the ADR-0145 §SD4 locality wall, and does it ABOVE the
+// resolver rather than inside one.
+//
+// That placement is the whole point. R2 says a router must be UNABLE to
+// override a hard locality wall, so a check living inside the resolver
+// would be bypassed by the static resolver, by a site resolver, and by
+// whatever replaces them next. Here, every resolver's answer passes through
+// it.
+//
+// The rule is narrow: a run naming sealed data may only be placed on this
+// process's own introspection plane, which is exempt by IDENTITY rather
+// than by address — the endpoint string was minted by a server this process
+// started, which is not the same act as recognising a loopback address in a
+// configured URL. Widening that to an engine which has PROVEN it can reach
+// this plane is ADR-0145 §SD5, and is not built yet.
+func confine(residual string, in dispatchDecision) (out dispatchDecision) {
+	out = in
+	if in.class == dispatchClassRefused {
+		return
+	}
+	sealed := sealedNames(residual)
+	if len(sealed) == 0 {
+		return
+	}
+	out.sensitivity = queryengine.SensitivityConfined
+	local := introspect.LocalQueryEndpoint()
+	if local != "" && in.targetURL == local {
+		return
+	}
+	out = dispatchDecision{
+		class:       dispatchClassRefused,
+		sensitivity: queryengine.SensitivityConfined,
+		reason: "names sealed data (" + nameList(sealed) + ") that must not leave this box, and " +
+			describeTarget(in.targetURL) + " is not this process's introspection plane",
+	}
+	return
+}
+
+// describeTarget names an endpoint for a refusal reason, or says there was
+// none.
+func describeTarget(targetURL string) (text string) {
+	text = targetURL
+	if text == "" {
+		text = "an unresolved endpoint"
+	}
 	return
 }
 
@@ -230,6 +284,9 @@ func (inst dispatchDecision) describe() (text string) {
 		where += " (" + inst.member + ")"
 	}
 	text = where + "  · " + inst.reason
+	if inst.sensitivity == queryengine.SensitivityConfined {
+		text = "confined · " + text
+	}
 	return
 }
 

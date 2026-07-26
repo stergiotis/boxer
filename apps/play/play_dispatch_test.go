@@ -298,3 +298,121 @@ func TestDispatchRefusedHasNoKillTarget(t *testing.T) {
 	_, err := dec.killTarget()
 	assert.Error(t, err)
 }
+
+// withSealedPlane publishes a fake local introspection plane whose named
+// datasets are sealed, and restores the process globals afterwards.
+func withSealedPlane(t *testing.T, endpoint string, sealed ...string) {
+	t.Helper()
+	prevEndpoint := introspect.LocalQueryEndpoint()
+	introspect.SetLocalQueryEndpoint(endpoint)
+	introspect.SetLocalSealedPredicate(func(name string) (yes bool) {
+		for _, s := range sealed {
+			if s == name {
+				return true
+			}
+		}
+		return
+	})
+	t.Cleanup(func() {
+		introspect.SetLocalQueryEndpoint(prevEndpoint)
+		introspect.SetLocalSealedPredicate(nil)
+	})
+}
+
+// TestConfineRefusesSealedDataOffThePlane is ADR-0145 §SD4's resolver-side
+// wall. The static resolver answers with the pinned endpoint and knows
+// nothing about sealed data — which is the point: the wall sits ABOVE every
+// resolver, so a router cannot route around it (R2).
+func TestConfineRefusesSealedDataOffThePlane(t *testing.T) {
+	withSealedPlane(t, "http://127.0.0.1:9/query", "adhoc_secret")
+	c := NewClient(ClientConfig{URL: "http://elsewhere.invalid"}, nil)
+
+	dec := c.Dispatch("SELECT * FROM keelson('adhoc_secret')", "")
+	assert.Equal(t, dispatchClassRefused, dec.class)
+	assert.Equal(t, queryengine.SensitivityConfined, dec.sensitivity)
+	assert.Contains(t, dec.reason, "adhoc_secret", "the reason names the evidence")
+	assert.Contains(t, dec.reason, "must not leave this box")
+	assert.Contains(t, dec.reason, "elsewhere.invalid", "and names where it would have gone")
+
+	_, err := dec.target()
+	require.Error(t, err, "a refused decision cannot be dispatched")
+}
+
+// TestConfineAllowsSealedDataOnThePlane: the one endpoint exempt is this
+// process's own plane, and the exemption is by identity — the same string
+// the plane published.
+func TestConfineAllowsSealedDataOnThePlane(t *testing.T) {
+	const plane = "http://127.0.0.1:9/query"
+	withSealedPlane(t, plane, "adhoc_secret")
+	c := NewClient(ClientConfig{URL: plane}, nil)
+
+	dec := c.Dispatch("SELECT * FROM keelson('adhoc_secret')", "")
+	require.NotEqual(t, dispatchClassRefused, dec.class, "reason=%q", dec.reason)
+	assert.Equal(t, queryengine.SensitivityConfined, dec.sensitivity,
+		"still confined — allowed is not the same as ordinary")
+	assert.Contains(t, dec.describe(), "confined", "an audit of the run records it (R12)")
+}
+
+// TestConfineLeavesOrdinaryRunsAlone: a query naming an unsealed keelson
+// table is not confined, and the wall does not touch it.
+func TestConfineLeavesOrdinaryRunsAlone(t *testing.T) {
+	withSealedPlane(t, "http://127.0.0.1:9/query", "adhoc_secret")
+	c := NewClient(ClientConfig{URL: "http://elsewhere.invalid"}, nil)
+
+	dec := c.Dispatch("SELECT * FROM keelson('env')", "")
+	assert.NotEqual(t, dispatchClassRefused, dec.class)
+	assert.Equal(t, queryengine.SensitivityOrdinary, dec.sensitivity)
+	assert.NotContains(t, dec.describe(), "confined")
+}
+
+// TestConfineWithNoLocalPlane: with no plane running there is no sealed data
+// to confine, so nothing is refused for confinement.
+func TestConfineWithNoLocalPlane(t *testing.T) {
+	prev := introspect.LocalQueryEndpoint()
+	introspect.SetLocalQueryEndpoint("")
+	introspect.SetLocalSealedPredicate(nil)
+	t.Cleanup(func() { introspect.SetLocalQueryEndpoint(prev) })
+
+	c := NewClient(ClientConfig{URL: "http://elsewhere.invalid"}, nil)
+	dec := c.Dispatch("SELECT * FROM keelson('adhoc_secret')", "")
+	assert.Equal(t, queryengine.SensitivityOrdinary, dec.sensitivity)
+	assert.NotEqual(t, dispatchClassRefused, dec.class)
+}
+
+// TestConfinePreservesAnExistingRefusal: a decision already refused for
+// another reason keeps that reason rather than having it overwritten.
+func TestConfinePreservesAnExistingRefusal(t *testing.T) {
+	withSealedPlane(t, "http://127.0.0.1:9/query", "adhoc_secret")
+	in := dispatchDecision{class: dispatchClassRefused, reason: "names both planes"}
+	out := confine("SELECT * FROM keelson('adhoc_secret')", in)
+	assert.Equal(t, "names both planes", out.reason)
+}
+
+// TestConfinedRunIsRefusedByTheEngineEvenWhenPlaced is why ADR-0145 §SD4
+// has two refusals rather than one. This decision is what a site resolver
+// could hand back — confined, yet placed somewhere that is not this
+// process's plane — with the wall above the resolver bypassed. The engine
+// refuses on its own account, and nothing reaches the server.
+func TestConfinedRunIsRefusedByTheEngineEvenWhenPlaced(t *testing.T) {
+	withSealedPlane(t, "http://127.0.0.1:9/query", "adhoc_secret")
+	srv, hits := okServer(t, emptyArrowStream(t))
+	c := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+
+	dec := dispatchDecision{
+		targetURL:   srv.URL,
+		class:       dispatchClassManual,
+		reason:      "a site resolver placed it here",
+		sensitivity: queryengine.SensitivityConfined,
+	}
+	_, _, _, err := c.ExecuteArrowStream(context.Background(), "SELECT * FROM keelson('adhoc_secret')",
+		memory.NewGoAllocator(), nil, nil, dec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "confined")
+	assert.Zero(t, *hits, "the run must not reach a server that was never cleared for it")
+
+	// The probe issuer shares the decision, so it is refused for the same
+	// reason rather than quietly attesting about a server the run never met.
+	err = c.ProbeStatement(context.Background(), "SELECT 1", nil, nil, dec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "confined")
+}

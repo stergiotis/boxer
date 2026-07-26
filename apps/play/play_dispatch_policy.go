@@ -1,6 +1,7 @@
 package play
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
@@ -166,5 +167,23 @@ func nameList(names []string) (out string) {
 		return
 	}
 	out = strings.Join(names, ", ")
+	return
+}
+
+// sealedNames returns the sealed datasets a statement names, by asking the
+// local introspection plane about each keelson() reference (ADR-0145 §SD3).
+//
+// A registry lookup, not a heuristic over SQL text: a name either resolves
+// to a sealed provider on this process's plane or it does not. The residual
+// is the right input because the ad-hoc alias→handle rewrite has already
+// run by then (ADR-0134 §SD4), so what is asked about is the handle the
+// server would receive.
+func sealedNames(residual string) (names []string) {
+	for _, ref := range keelsonsql.References(residual) {
+		if introspect.IsLocalSealed(ref) {
+			names = append(names, ref)
+		}
+	}
+	sort.Strings(names)
 	return
 }
