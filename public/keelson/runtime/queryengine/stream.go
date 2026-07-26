@@ -1,6 +1,7 @@
 package queryengine
 
 import (
+	"errors"
 	"io"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
@@ -119,10 +120,7 @@ func (inst *readerStream) Next() (f runstream.Frame[[]byte], ok bool) {
 	}
 	if inst.r != nil {
 		buf := make([]byte, inst.chunkSize)
-		// ReadFull rather than Read: a body arriving in dribs would
-		// otherwise become one frame per drib, and the framing would say
-		// something about the network that it does not mean.
-		n, rerr := io.ReadFull(inst.r, buf)
+		n, rerr := inst.fill(buf)
 		if n > 0 {
 			inst.seq++
 			f = runstream.DataFrame(inst.seq, buf[:n])
@@ -145,11 +143,36 @@ func (inst *readerStream) Next() (f runstream.Frame[[]byte], ok bool) {
 	return
 }
 
+// fill reads until buf is full or the reader stops, and reports the
+// reader's OWN error rather than a normalised one. It fills whole chunks
+// rather than emitting one frame per arriving drib, so the framing says
+// nothing about the network that it does not mean.
+//
+// [io.ReadFull] cannot be used here, and the reason is this package's whole
+// subject. ReadFull reports two different outcomes as the same
+// [io.ErrUnexpectedEOF]: a final short chunk of a body that ended cleanly,
+// and a transfer that broke mid-chunk — which is exactly what Go's chunked
+// reader returns when a connection dies mid-response. The first ends a
+// result and the second destroys one, and R9 says a consumer must not be
+// able to mistake them. Reading directly keeps io.EOF meaning "the body
+// ended" and everything else meaning "it did not".
+func (inst *readerStream) fill(buf []byte) (n int, err error) {
+	for n < len(buf) {
+		read, rerr := inst.r.Read(buf[n:])
+		n += read
+		if rerr != nil {
+			err = rerr
+			return
+		}
+	}
+	return
+}
+
 // recordReadErr folds a read outcome into the terminal. EOF is how a body
 // ends, not a failure; anything else replaces the caller's terminal, since
 // a result whose transfer broke is not the result the caller was promised.
 func (inst *readerStream) recordReadErr(rerr error) {
-	if rerr == nil || rerr == io.EOF || rerr == io.ErrUnexpectedEOF {
+	if rerr == nil || errors.Is(rerr, io.EOF) {
 		return
 	}
 	inst.err = eh.Errorf("queryengine: read result body: %w", rerr)

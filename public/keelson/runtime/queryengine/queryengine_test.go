@@ -263,3 +263,48 @@ func (inst *failingReader) Read(p []byte) (n int, err error) {
 	inst.pos += n
 	return
 }
+
+// truncatedBody mimics Go's chunked reader on a connection that died
+// mid-response: some bytes, then io.ErrUnexpectedEOF. It is a DIFFERENT
+// outcome from a body whose last chunk was simply short, and the two arrive
+// at this package looking alike.
+type truncatedBody struct{ sent bool }
+
+func (inst *truncatedBody) Read(p []byte) (n int, err error) {
+	if !inst.sent {
+		inst.sent = true
+		n = copy(p, "half a result")
+		return
+	}
+	err = io.ErrUnexpectedEOF
+	return
+}
+
+// TestTransferThatBrokeIsNotComplete is the regression this package exists
+// to prevent, and it once failed here: io.ReadFull reports a final short
+// chunk and a transfer that died mid-chunk as the same io.ErrUnexpectedEOF,
+// so a truncated response read as a complete short answer — R9's exact
+// confusion, inside the code that implements R9.
+func TestTransferThatBrokeIsNotComplete(t *testing.T) {
+	t.Parallel()
+	st := NewReaderStream(&truncatedBody{}, runstream.Complete(), nil, 64)
+	body, term, err := Collect(st)
+	require.NoError(t, err, "the adapter was alive to report an outcome, so there is a terminal")
+	assert.Equal(t, runstream.TerminalFailed, term.State,
+		"a body that died mid-transfer must not read as the whole answer")
+	assert.ErrorIs(t, st.Err(), io.ErrUnexpectedEOF)
+	assert.Equal(t, "half a result", string(body), "the prefix is still returned, as a prefix")
+}
+
+// TestShortFinalChunkIsComplete is the other half of the same distinction:
+// a body that ends cleanly part-way through a chunk is complete, and must
+// not be reported as a broken transfer.
+func TestShortFinalChunkIsComplete(t *testing.T) {
+	t.Parallel()
+	st := NewReaderStream(newStringReader("nine char"), runstream.Complete(), nil, 64)
+	body, term, err := Collect(st)
+	require.NoError(t, err)
+	assert.Equal(t, runstream.TerminalComplete, term.State)
+	assert.Equal(t, "nine char", string(body))
+	assert.NoError(t, st.Err())
+}
