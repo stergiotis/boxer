@@ -84,6 +84,12 @@ var localProbe atomic.Pointer[LocalProbeI]
 
 // SetLocalProbe records this process's probe primitive. The host start hook
 // sets it alongside [SetLocalQueryEndpoint]; nil clears it.
+//
+// Pass an untyped nil to clear, never a typed one. A `(*Server)(nil)` is not
+// == nil once it is inside an interface, so it would be STORED and then
+// panic at the first MintProbe — the typed-nil trap the runtime's wiring
+// already guards against for the dataset decryptor. Hand over a value only
+// when the server actually started.
 func SetLocalProbe(p LocalProbeI) {
 	if p == nil {
 		localProbe.Store(nil)
