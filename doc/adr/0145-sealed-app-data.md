@@ -295,6 +295,52 @@ route as retirable; this ADR is the retirement.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-07-26 — Milestone 1 landed; §SD1 came out smaller and differently shaped
+
+The retirement (§SD2) and the vocabulary (§SD1) are in. No behaviour
+changed, which was the prediction: the deleted path had no consumer.
+
+**The subtraction did most of §SD1's work.** `KeyStoreI` and
+`EncryptedInputRef` left with the path that used them, so the "four
+spellings plus custody in a fifth place" had already collapsed to two by
+the time the vocabulary commit started. What it added is `Ref` and
+`DecryptorI`, not the larger consolidation the Decision imagined.
+
+**`introspect.EncryptedDatasetI` does not report a `Ref`, and cannot.**
+`adhocdata` imports `introspect` to register its datasets, so `introspect`
+importing back is a cycle. This was not visible from the design. The
+resolution is better than the original anyway: the two are different
+statements — the registry says "this provider is sealed", a `Ref` asks to
+decrypt one — and the party that holds both vocabularies, the `/table`
+handler, converts. Anything that wanted them fused would be asking the base
+registry package to know what encryption is.
+
+**`CustodyI{Register, Lookup, Forget}` was not built, deliberately.**
+Fusing the halves would have handed the capability service a key *lookup*,
+and ADR-0134 §SD2 splits those roles on purpose: the capability is the
+policy owner, the broker is the decrypt executor. The design sketched a
+merge that the threat model forbids. Custody therefore stays two narrow
+seams — `KeyRegistrarI` (register at publish, forget at retract) and
+`DecryptorI` (the executor's half) — which is one interface per role rather
+than one per concept.
+
+**`introspectengine` refuses a sealed dataset rather than losing the
+ability quietly.** §SD2 recorded that it loses encrypted support; in code
+that is an error naming where to go, because snapshotting one would hand
+back ciphertext.
+
+**Test debt paid rather than deleted.** The crypto properties the retired
+suite proved — wrong key, truncation, bit flip, trailing bytes, missing
+close — live at the layer that owns them (`aeadstream_test.go`) and are
+transport-independent, so retiring the pipe cost only pipe mechanics. The
+`adhocdata` e2e suite was repointed onto `/query` rather than removed, so
+publish → query → catalog → leeway shapes → naive timestamps now assert
+over the path that ships.
+
+Milestones 2 (the label and its refusals) and 3 (the probe) are unstarted.
+
 ## References
 
 - [ADR-0134](./0134-adhoc-datasets.md) — ad-hoc datasets; §SD1–SD3 and the 2026-07-20 query-path revision this ADR completes.
