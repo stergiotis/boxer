@@ -476,3 +476,53 @@ on the strength of a deferral that was really a wrong guess.
   the whole loop: the snippet's **Replace** into the editor, Run, and a card
   click moving Detail to that row (row 3 of 8, `ADR-0114`) — the viewof duality
   in both directions.
+
+## Updates
+
+### 2026-07-27 — §SD4 gains a fourth table: `adrcontent`
+
+`keelson('adrcontent')` joins the three tables §SD4 describes, carrying each
+decision's markdown source (`num`, `path`, `content@text/markdown`) beside the
+metadata the others expose. Everything §SD4 decides holds for it unchanged: the
+same name and schema `boxer adr` binds over its Arrow dump, Live freshness, the
+shared read window, empty rather than erroring off-repo, and the same schema-
+and cell-parity tests. The decision to hold it apart from `adr` rather than add
+a column — it is ~60× the size, and the engine widens to all columns for any
+star, aggregate or join — is recorded in
+[ADR-0092](./0092-adr-overview-tool.md)'s 2026-07-27 update, with the
+measurements.
+
+The board query in the snippet library then took the table up: it `LEFT JOIN`s
+`adrcontent` and carries the column through, so clicking a card shows that
+decision's text in **Detail**. The join is `LEFT` because an ADR whose file
+cannot be read has no `adrcontent` row, and an inner join would take its card
+off the board rather than showing it textless.
+
+Measured on this corpus through the in-process endpoint, that costs the board
+~63 ms → ~122 ms and an 11 KB result → ~1.9 MB. The board reads all 141
+decisions to show the one that was clicked, because a projection prunes columns
+and not rows.
+
+Worth being precise about what the split bought, since the shipped board now
+pays: not that this board is cheap, but that the cost is a **choice a query
+makes** rather than a tax on every query over `adr`. The dotless boards, the
+sub-item worklist and the decision graph name `adr`/`subtask`/`coderef` and are
+untouched; had the source been a column, all of them would carry it, because the
+engine widens to all columns for any star, aggregate or join. Removing two lines
+from the board query gets the 11 KB version back.
+
+One consequence lands outside §SD2's contract and is recorded here because
+nothing else would catch it: the Table tab renders whole cells, so on this
+result it pushes ADR bodies — up to ~116 KB each — across the FFI boundary per
+visible row per frame. The Kanban and Detail tabs do not (one renders short
+strings, the other one selected row). That is a property of any result carrying
+large cells rather than of this board, but this board is the first shipped
+snippet where it is reachable by accident.
+
+One thing this is the first instance of: the column declares its media type in
+its *source table's* name, not in a result alias. ADR-0123 §SD2 introduced
+`label@mime` for what a query aliases on its way out; here a table already
+carries it, and `SELECT *` propagates it to the Detail pane with no alias
+written at all. The convention needed no change to work in that position — it
+is a column name that requires backticks either way, and clickhouse-local
+rejects it unquoted rather than reading `@` as anything plausible.

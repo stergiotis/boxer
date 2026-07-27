@@ -29,6 +29,7 @@ func TestAdrTableSchemasMatchTheArrowDump(t *testing.T) {
 		{"adr", adrProvider{}.Schema(), adr.AdrArrowSchema()},
 		{"subtask", subtaskProvider{}.Schema(), adr.SubtaskArrowSchema()},
 		{"coderef", coderefProvider{}.Schema(), adr.CoderefArrowSchema()},
+		{"adrcontent", adrcontentProvider{}.Schema(), adr.AdrContentArrowSchema()},
 	} {
 		require.Equal(t, len(tc.want.Fields()), len(tc.got.Fields()),
 			"table %q: field count", tc.name)
@@ -68,6 +69,10 @@ func TestAdrTableCellsMatchTheArrowDump(t *testing.T) {
 		Num: 42, Path: "public/x/y.go", Line: 99, Lang: "go",
 		Pkg: "y", Qualifier: "SD3", Snippet: "// ADR-0042 §SD3",
 	}}
+	contents := []adrcorpus.AdrContent{{
+		Num: 42, Path: "doc/adr/0042-the-slug.md",
+		Content: "---\nstatus: accepted\n---\n\n# ADR-0042: The Title\n",
+	}}
 
 	dir := t.TempDir()
 	for _, tc := range []struct {
@@ -81,6 +86,8 @@ func TestAdrTableCellsMatchTheArrowDump(t *testing.T) {
 			subtaskTable(subs).Build(introspect.AllColumns(), len(subs))},
 		{"coderef", func(p string) error { return adr.WriteCoderefArrow(p, refs) },
 			coderefTable(refs).Build(introspect.AllColumns(), len(refs))},
+		{"adrcontent", func(p string) error { return adr.WriteAdrContentArrow(p, contents) },
+			adrcontentTable(contents).Build(introspect.AllColumns(), len(contents))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			defer tc.got.Release()
@@ -115,12 +122,12 @@ func readOneArrowRecord(t *testing.T, path string) arrow.RecordBatch {
 	return rec
 }
 
-// The three tables are Live: the corpus is files on disk that change under a
+// The four tables are Live: the corpus is files on disk that change under a
 // running process, so a Static table would go stale the first time an ADR is
 // edited — silently, which is the failure mode a governance table can least
 // afford.
 func TestAdrTablesAreLive(t *testing.T) {
-	for _, p := range []introspect.Provider{adrProvider{}, subtaskProvider{}, coderefProvider{}} {
+	for _, p := range []introspect.Provider{adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}} {
 		assert.Equal(t, introspect.FreshnessLive, p.Freshness(), "table %q", p.Name())
 	}
 }
@@ -130,7 +137,7 @@ func TestAdrTablesAreLive(t *testing.T) {
 // rather than a failure. The schema stays available so a query still parses.
 func TestAdrTablesAreEmptyWithNoCorpus(t *testing.T) {
 	t.Setenv(adrcorpus.EnvAdrDirName, t.TempDir()) // a real dir, no ADRs in it
-	for _, p := range []introspect.Provider{adrProvider{}, subtaskProvider{}, coderefProvider{}} {
+	for _, p := range []introspect.Provider{adrProvider{}, subtaskProvider{}, coderefProvider{}, adrcontentProvider{}} {
 		rec, err := p.Snapshot(introspect.AllColumns())
 		require.NoError(t, err, "table %q must not error off-repo", p.Name())
 		require.NotNil(t, rec, "table %q keeps its schema", p.Name())
@@ -154,12 +161,12 @@ func TestAdrTablesEmptyOnUnresolvableDir(t *testing.T) {
 	rec.Release()
 }
 
-// The registry carries all three under the names `boxer adr` binds.
+// The registry carries all four under the names `boxer adr` binds.
 func TestAdrTablesRegister(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, RegisterStatic(r))
 	names := r.Names()
-	for _, want := range []string{"adr", "subtask", "coderef"} {
+	for _, want := range []string{"adr", "subtask", "coderef", "adrcontent"} {
 		assert.Contains(t, names, want, "keelson(%q) must be registered", want)
 	}
 }

@@ -3,10 +3,12 @@
 // queryable Arrow tables, so the state of every ADR can be inspected with SQL
 // via clickhouse-local.
 //
-// Three tables are emitted and bound by name: `adr` (one row per decision,
+// Four tables are emitted and bound by name: `adr` (one row per decision,
 // carrying both the lifecycle status and the code-evidence columns), `coderef`
-// (one row per citation, for drill-down) and `subtask` (one row per sub-item an
-// ADR declares for itself, with its declared done-ness).
+// (one row per citation, for drill-down), `subtask` (one row per sub-item an
+// ADR declares for itself, with its declared done-ness) and `adrcontent` (one
+// row per decision carrying the markdown source, kept apart from `adr` because
+// it is ~60× the size — see adrcorpus.AdrContent).
 //
 // The axes and the ADR-reference convention the evidence axis depends on are
 // recorded in ADR-0092. Everything here is the *query surface*; the corpus
@@ -28,18 +30,11 @@ import (
 )
 
 const (
-	adrArrowName     = "adr.arrow"
-	coderefArrowName = "coderef.arrow"
-	subtaskArrowName = "subtask.arrow"
+	adrArrowName        = "adr.arrow"
+	coderefArrowName    = "coderef.arrow"
+	subtaskArrowName    = "subtask.arrow"
+	adrcontentArrowName = "adrcontent.arrow"
 )
-
-// artifacts are the emitted Arrow files, bound as the query tables of the same
-// name.
-type artifacts struct {
-	adrArrow     string
-	coderefArrow string
-	subtaskArrow string
-}
 
 func rootFlags() []cli.Flag {
 	return []cli.Flag{
@@ -56,7 +51,7 @@ func NewCliCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			{
 				Name:   "build",
-				Usage:  "parse ADRs, scan code references, and emit adr.arrow + coderef.arrow + subtask.arrow",
+				Usage:  "parse ADRs, scan code references, and emit adr.arrow + coderef.arrow + subtask.arrow + adrcontent.arrow",
 				Flags:  append(rootFlags(), &cli.StringFlag{Name: "out", Value: ".adrcache", Usage: "output directory for the Arrow files (relative to --root unless absolute)"}),
 				Action: actionBuild,
 			},
@@ -68,7 +63,7 @@ func NewCliCommand() *cli.Command {
 			},
 			{
 				Name:      "query",
-				Usage:     "run an arbitrary SQL query against the `adr`, `coderef` and `subtask` tables",
+				Usage:     "run an arbitrary SQL query against the `adr`, `coderef`, `subtask` and `adrcontent` tables",
 				ArgsUsage: "<SQL>",
 				Flags:     append(rootFlags(), &cli.StringFlag{Name: "format", Value: "PrettyCompact", Usage: "clickhouse-local --output-format"}),
 				Action:    actionQuery,
@@ -89,34 +84,45 @@ func resolvePaths(c *cli.Context) (root, adrDir string) {
 // buildArtifacts parses the corpus, scans code references, folds the evidence
 // into the rows, and emits the Arrow files into outDir. outDir is excluded
 // from the code scan so emitted files never count as references.
-func buildArtifacts(c *cli.Context, outDir string) (adrs []adrcorpus.Adr, refs []adrcorpus.CodeRef, subs []adrcorpus.Subtask, arts artifacts, err error) {
+//
+// withContent additionally emits adrcontent.arrow, which carries every ADR's
+// source and so is the one artifact whose size tracks the corpus rather than
+// its shape. Callers that run only canned queries pass false and skip both the
+// re-read and the write.
+func buildArtifacts(c *cli.Context, outDir string, withContent bool) (adrs []adrcorpus.Adr, refs []adrcorpus.CodeRef, subs []adrcorpus.Subtask, tables ArrowTables, err error) {
 	root, adrDir := resolvePaths(c)
 	if adrs, err = adrcorpus.ParseDir(adrDir); err != nil {
-		return nil, nil, nil, arts, err
+		return nil, nil, nil, tables, err
 	}
 	if refs, err = adrcorpus.ScanCodeRefs(root, adrDir, outDir); err != nil {
-		return nil, nil, nil, arts, err
+		return nil, nil, nil, tables, err
 	}
 	adrs = adrcorpus.Aggregate(adrs, refs)
 	subs = adrcorpus.AllSubtasks(adrs)
 	if err = os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, nil, nil, arts, eh.Errorf("unable to create out dir %q: %w", outDir, err)
+		return nil, nil, nil, tables, eh.Errorf("unable to create out dir %q: %w", outDir, err)
 	}
-	arts = artifacts{
-		adrArrow:     filepath.Join(outDir, adrArrowName),
-		coderefArrow: filepath.Join(outDir, coderefArrowName),
-		subtaskArrow: filepath.Join(outDir, subtaskArrowName),
+	tables = ArrowTables{
+		Adr:     filepath.Join(outDir, adrArrowName),
+		Coderef: filepath.Join(outDir, coderefArrowName),
+		Subtask: filepath.Join(outDir, subtaskArrowName),
 	}
-	if err = WriteAdrArrow(arts.adrArrow, adrs); err != nil {
-		return nil, nil, nil, arts, err
+	if err = WriteAdrArrow(tables.Adr, adrs); err != nil {
+		return nil, nil, nil, tables, err
 	}
-	if err = WriteCoderefArrow(arts.coderefArrow, refs); err != nil {
-		return nil, nil, nil, arts, err
+	if err = WriteCoderefArrow(tables.Coderef, refs); err != nil {
+		return nil, nil, nil, tables, err
 	}
-	if err = WriteSubtaskArrow(arts.subtaskArrow, subs); err != nil {
-		return nil, nil, nil, arts, err
+	if err = WriteSubtaskArrow(tables.Subtask, subs); err != nil {
+		return nil, nil, nil, tables, err
 	}
-	return adrs, refs, subs, arts, nil
+	if withContent {
+		tables.AdrContent = filepath.Join(outDir, adrcontentArrowName)
+		if err = WriteAdrContentArrow(tables.AdrContent, adrcorpus.ReadContents(adrs)); err != nil {
+			return nil, nil, nil, tables, err
+		}
+	}
+	return adrs, refs, subs, tables, nil
 }
 
 func actionBuild(c *cli.Context) error {
@@ -125,13 +131,13 @@ func actionBuild(c *cli.Context) error {
 	if !filepath.IsAbs(outDir) {
 		outDir = filepath.Join(root, outDir)
 	}
-	adrs, refs, subs, arts, err := buildArtifacts(c, outDir)
+	adrs, refs, subs, tables, err := buildArtifacts(c, outDir, true)
 	if err != nil {
 		return err
 	}
 	log.Info().Int("adrs", len(adrs)).Int("coderefs", len(refs)).Int("subtasks", len(subs)).
-		Str("adrArrow", arts.adrArrow).Str("coderefArrow", arts.coderefArrow).
-		Str("subtaskArrow", arts.subtaskArrow).
+		Str("adrArrow", tables.Adr).Str("coderefArrow", tables.Coderef).
+		Str("subtaskArrow", tables.Subtask).Str("adrcontentArrow", tables.AdrContent).
 		Msg("emitted ADR Arrow tables")
 	return nil
 }
@@ -142,11 +148,13 @@ func actionOverview(c *cli.Context) error {
 		return eh.Errorf("unable to create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	adrs, _, _, arts, err := buildArtifacts(c, tmp)
+	// The canned queries read only the metadata tables, so the source text is
+	// not emitted for them.
+	adrs, _, _, tables, err := buildArtifacts(c, tmp, false)
 	if err != nil {
 		return err
 	}
-	ok, err := RunOverview(arts.adrArrow, arts.coderefArrow, arts.subtaskArrow, os.Stdout)
+	ok, err := RunOverview(tables, os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -171,11 +179,11 @@ func actionQuery(c *cli.Context) error {
 		return eh.Errorf("unable to create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	_, _, _, arts, err := buildArtifacts(c, tmp)
+	_, _, _, tables, err := buildArtifacts(c, tmp, true)
 	if err != nil {
 		return err
 	}
-	ok, err := RunQuery(arts.adrArrow, arts.coderefArrow, arts.subtaskArrow, sql, c.String("format"), os.Stdout)
+	ok, err := RunQuery(tables, sql, c.String("format"), os.Stdout)
 	if err != nil {
 		return err
 	}

@@ -12,7 +12,7 @@ status: draft
 
 You have a corpus of ADRs under [doc/adr](../adr) and have lost the thread of
 which are merely *decided* versus actually *built*. `boxer adr` loads the whole
-corpus into two Apache Arrow tables and lets you query them with
+corpus into Apache Arrow tables and lets you query them with
 `clickhouse-local`, crossing two independent axes:
 
 - **Decision lifecycle** — the front-matter `status` (`proposed`, `accepted`,
@@ -64,6 +64,9 @@ boxer adr query "SELECT path, line, qualifier FROM coderef WHERE num = 66 ORDER 
 
 # Accepted ADRs with no code evidence at all — un-built, or built without a marker.
 boxer adr query "SELECT num, last_date, title FROM adr WHERE status='accepted' AND code_refs = 0 ORDER BY num"
+
+# Grep the corpus prose itself. The content column's name must be backticked.
+boxer adr query "SELECT num, path FROM adrcontent WHERE \`content@text/markdown\` ILIKE '%airgap%' ORDER BY num"
 ```
 
 `--format` selects any `clickhouse-local` output format (`PrettyCompact` is the
@@ -72,13 +75,15 @@ default; `JSONEachRow`, `CSV`, `Markdown`, … all work).
 ### 3. Persist the Arrow files
 
 ```bash
-boxer adr build --out .adrcache      # writes .adrcache/adr.arrow + coderef.arrow
+boxer adr build --out .adrcache      # adr + coderef + subtask + adrcontent .arrow
 ```
 
 Point any ClickHouse client at the files, or re-query them without re-scanning.
-`.adrcache/` is git-ignored.
+`.adrcache/` is git-ignored. `adrcontent.arrow` is far the largest of the four —
+it carries every ADR's source text — and `overview` skips emitting it, since its
+canned reports never read it.
 
-## The two tables
+## The tables
 
 `adr` — one row per ADR:
 
@@ -94,6 +99,16 @@ Point any ClickHouse client at the files, or re-query them without re-scanning.
 
 `coderef` — one row per citation site: `num, path, line, lang, pkg, qualifier, snippet`.
 
+`subtask` — one row per sub-item an ADR declares for itself:
+`num, marker, kind, ordinal, title, done, shape, line, code_refs`. `done` is the
+author's `✓`; `code_refs > 0` is evidence that code cites the sub-item by its
+`§marker`. They are different claims and they overlap, so bucket them with a
+first-match rule rather than by subtracting one from the other.
+
+`adrcontent` — one row per ADR carrying the file whole:
+`num, path, content@text/markdown`. `length()` of the content equals `adr.body_bytes`
+exactly — same bytes, frontmatter included.
+
 ## Gotchas
 
 - **`impl_evidence` is a heuristic, not a verdict.** `none` = zero markers (which
@@ -106,3 +121,9 @@ Point any ClickHouse client at the files, or re-query them without re-scanning.
   scanned, so ADR-to-ADR cross-links never inflate the count.
 - **ADR-0080 dominates the ref counts** because every package's
   `package_props.go` cites it — that is breadth of adoption, not depth.
+- **`adrcontent` costs the whole corpus whenever you name it**, and a `WHERE`
+  does not make it cheap — the rows are read before ClickHouse filters them.
+  That is why the source lives in its own table rather than as a column of
+  `adr`, so the queries above stay small. Its content column can only be
+  written backtick-quoted; unquoted, `@` is a syntax error rather than a
+  plausible column, which is the point of the naming (ADR-0123 §SD2).

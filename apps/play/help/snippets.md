@@ -335,16 +335,34 @@ ORDER BY indexOf(lifecycle, lane) = 0, indexOf(lifecycle, lane), title
 
 ## ADR board (this repository's decisions)
 
-This repository's own decision corpus, as a board. It needs no setup and no
-ClickHouse: `keelson('adr')` and `keelson('subtask')` read `doc/adr` in-process,
-so point the **Endpoint** menu at *Keelson introspection* and Run. The rows are
-the same ones `boxer adr` emits, under the same names — a query written here
-runs verbatim against its Arrow dump, and a test pins the two schema sets equal
+This repository's own decision corpus, as a board — and, click a card, the
+decision itself. It needs no setup and no ClickHouse: `keelson('adr')`,
+`keelson('subtask')` and `keelson('adrcontent')` read `doc/adr` in-process, so
+point the **Endpoint** menu at *Keelson introspection* and Run. The rows are the
+same ones `boxer adr` emits, under the same names — a query written here runs
+verbatim against its Arrow dump, and a test pins the two schema sets equal
 (ADR-0122 §SD4).
 
 The tables read the corpus per query, so an edited ADR shows up on the next Run;
 that costs about half a second, most of it parsing rather than the citation
 scan.
+
+The last joined column is what makes the board readable rather than only
+countable. `keelson('adrcontent')` carries each decision's markdown source, and
+its column declares its media type in its *name*, so the **Detail** tab renders
+the selected card's ADR as prose with no alias written here (ADR-0123 §SD2).
+The join is `LEFT` on purpose: a decision whose file cannot be read drops out of
+`adrcontent` rather than arriving blank, and an inner join would silently take
+its card off the board with it.
+
+That column is not free, and the price is worth knowing before you copy this.
+Measured on this corpus through the in-process endpoint, the board without it
+runs in ~63 ms for an 11 KB result; with it, ~122 ms for ~1.9 MB. Naming
+`adrcontent` reads every ADR — a projection prunes columns, never rows — so the
+board carries all 141 decisions to show you the one you clicked. Drop the last
+join line and the `c.` column to get the cheap board back; nothing else changes.
+The **Table** tab is where the size shows, since it renders whole cells rather
+than one selection. Stay on **Kanban** and **Detail** and you will not notice.
 
 The `lanes` CTE is the board's lane vocabulary: its rows are the lanes, in
 order, whether or not a card sits in one — which is how the board says "nothing
@@ -381,9 +399,11 @@ SELECT
   if(a.superseded_by != '', concat('→ ', a.superseded_by), a.last_date) AS subtitle,
   t.n_done  AS `dot_done@success`,
   t.n_cited AS `dot_cited@warning`,
-  t.n_todo  AS `dot_todo@disabled`
+  t.n_todo  AS `dot_todo@disabled`,
+  c.`content@text/markdown`
 FROM keelson('adr') AS a
 LEFT JOIN tally AS t ON t.num = a.num
+LEFT JOIN keelson('adrcontent') AS c ON c.num = a.num
 ORDER BY a.num
 ```
 
@@ -396,6 +416,48 @@ FROM keelson('subtask') AS s
 WHERE s.code_refs > 0 AND NOT s.done
 ORDER BY s.code_refs DESC, s.num
 LIMIT 25
+```
+
+## Read an ADR where you found it
+
+The same join as the board above, without the board — a plain table narrowed to
+what you want to read, and then the pattern for searching the prose instead.
+`keelson('adrcontent')` carries one row per decision with the source text whole,
+and the column declares its media type in its *name*, so **Detail** renders it as
+markdown with no alias written here at all (ADR-0092, ADR-0123 §SD2). Same
+no-setup path: point **Endpoint** at *Keelson introspection*, Run, then click a
+row in **Table**.
+
+The backticks around the content column are not optional. Unquoted, `@` is a
+syntax error rather than a plausible column, which is what makes a forgotten
+backtick fail at once instead of quietly producing a plain cell.
+
+Naming this table reads the whole corpus — a few megabytes of markdown — which
+is why the source lives apart from `keelson('adr')` rather than as a column of
+it, and why the `WHERE` here does not make it cheap: the rows are read before
+ClickHouse filters them. Keep the row count small for reading, not for speed.
+
+```sql
+SELECT
+  concat('ADR-', leftPad(toString(a.num), 4, '0')) AS id,
+  a.status                                         AS status,
+  a.title                                          AS title,
+  c.`content@text/markdown`
+FROM keelson('adr') AS a
+JOIN keelson('adrcontent') AS c ON c.num = a.num
+WHERE a.status = 'proposed'
+ORDER BY a.num
+```
+
+To search the prose instead of reading it, filter on the same column and select
+only the metadata — the corpus is still read, but nothing large comes back:
+
+```sql
+SELECT c.num, a.title
+FROM keelson('adrcontent') AS c
+JOIN keelson('adr') AS a ON a.num = c.num
+WHERE c.`content@text/markdown` ILIKE '%airgap%'
+ORDER BY c.num
 ```
 
 ## Decision graph (ADRs and the code that cites them)

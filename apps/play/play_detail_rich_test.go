@@ -32,6 +32,11 @@ func TestParseRichColumnGates(t *testing.T) {
 	}{
 		// Declarations.
 		{"notes@text/markdown", true, "notes", mimeMarkdown, richKindMarkdown},
+		// keelson('adrcontent')'s source column (ADR-0092). It is the first
+		// name that arrives declared from a *table* rather than from a query's
+		// alias, so a bare `SELECT *` over that table reaches this parser —
+		// which is the only reason the corpus renders as markdown at all.
+		{"content@text/markdown", true, "content", mimeMarkdown, richKindMarkdown},
 		{"shot@image/png", true, "shot", mimePNG, richKindImage},
 		{"req@application/json", true, "req", mimeJSON, richKindJSON},
 		{"q@application/sql", true, "q", mimeSQL, richKindSQL},

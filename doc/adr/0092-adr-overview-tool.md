@@ -274,6 +274,44 @@ board is ~25 lines of SQL rather than another app. And deleting the app removed
 the only oracle the SQL board had: the cross-check was a migration gate, not a
 standing test, and it cannot be one once the reference is gone.
 
+### 2026-07-27 — A fourth table: `adrcontent`, the source text, held apart from `adr`
+
+The corpus now also reaches SQL as its own markdown: one row per decision
+carrying `num`, `path` and the file whole, emitted as `adrcontent.arrow` and
+exposed as `keelson('adrcontent')`. What it buys is reading an ADR where you
+found it — a `play` Detail pane renders the cell as markdown rather than as a
+truncated one-line label, because the column declares its media type in its
+name (`content@text/markdown`, ADR-0123 §SD2).
+
+**It is a table rather than a column of `adr`, and the reason is size.** Both
+carry one row per decision, so a column is the obvious shape; the measurements
+say otherwise. On this corpus (141 files, 3.17 MiB of markdown) the `adr`
+snapshot is 53 KB uncompressed, and the source is 3.17 MiB — a factor of ~60 on
+a table that is read per query, and the snapshot path does not compress. As a
+column there would be no way to decline it: the introspection engine widens to
+all columns for any `*`, any aggregate naming no column, and any join, which is
+most of what gets written against these tables — including this ADR's own board
+query. Split out, `SELECT * FROM adr` stays what it was and nothing pays until
+a query says `adrcontent`.
+
+The cost that remains is worth stating rather than hiding: naming the table
+reads every ADR. A projection prunes columns, not rows, so a `WHERE num = 42`
+is applied after the snapshot is built. There is no cheap single-ADR read here.
+
+Two smaller consequences. `boxer adr overview` does not emit the file — its
+canned queries never read it — so that path is unchanged; `build` and `query`
+do. And `length(content)` equals `body_bytes` exactly, by construction: both
+measure the same bytes of the same whole file, frontmatter included.
+
+A latent bug surfaced on the way and was fixed rather than worked around.
+`analysis.ExtractColumns` returned column names *un-decoded* while decoding
+table names, so a name that can only be written quoted came back wearing its
+backticks and matched nothing. The introspection engine compares those names
+against a schema to prune columns, so it would have pruned away the very column
+the query asked for, failed, and been rescued by its all-columns retry — correct,
+but at two executions and two snapshots of the one table that cannot afford
+them. No existing keelson column needs quoting, which is why nothing had hit it.
+
 ## References
 
 - [How to survey ADR status and implementation degree](../howto/adr-overview.md)

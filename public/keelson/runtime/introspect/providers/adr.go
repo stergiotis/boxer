@@ -7,9 +7,10 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
-// The ADR corpus as three keelson tables — `adr` (one row per decision),
-// `subtask` (one row per sub-item a decision declares for itself) and `coderef`
-// (one row per §-pinned citation) — so the state of the repository's decisions
+// The ADR corpus as four keelson tables — `adr` (one row per decision),
+// `subtask` (one row per sub-item a decision declares for itself), `coderef`
+// (one row per §-pinned citation) and `adrcontent` (one row per decision
+// carrying its markdown source) — so the state of the repository's decisions
 // is queryable from any host pointed at this process (ADR-0122 §SD4).
 //
 // The table names and schemas are the ones `boxer adr` already binds over its
@@ -42,6 +43,11 @@ import (
 // query joining two of these tables pays it twice. Caching it behind an mtime
 // check is deferred (§SD5) — it buys latency at the cost of the one property
 // that makes a filesystem-backed table defensible.
+//
+// `adrcontent` is the expensive one — ~60× the others on boxer's own corpus —
+// and the only one whose cost tracks the corpus rather than its shape. That makes
+// it a separate table: the other three stay what they were, and a query that
+// does not name this one does not pay for it.
 
 // adrProvider exposes each decision as keelson.adr: its frontmatter lifecycle
 // (status, dates, supersession) alongside the code-evidence columns folded in
@@ -79,6 +85,33 @@ func (subtaskProvider) Schema() *arrow.Schema                { return subtaskTab
 func (subtaskProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	_, rows, _ := adrcorpus.Load()
 	return subtaskTable(rows).Build(proj, len(rows)), nil
+}
+
+// adrcontentProvider exposes each decision's markdown source as
+// keelson.adrcontent, keyed by the number that joins it to `adr`.
+//
+// It is a table rather than a column of `adr` because of what it costs:
+// adrcorpus.AdrContent carries that reasoning, and it is worth reading before
+// querying this. The short version is that the source is ~60× the metadata,
+// and only a separate table lets a reader decline it.
+//
+// The content column declares its media type in its name (ADR-0123 §SD2), so
+// a pane that knows the convention renders a cell as markdown. That also means
+// the column can only be written quoted:
+//
+//	SELECT num, `content@text/markdown` FROM keelson('adrcontent') WHERE num = 42
+//
+// The WHERE does not make it cheap. A projection prunes columns, never rows,
+// so naming this table reads the corpus whole and ClickHouse filters after.
+type adrcontentProvider struct{}
+
+func (adrcontentProvider) Name() string                         { return "adrcontent" }
+func (adrcontentProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (adrcontentProvider) Schema() *arrow.Schema                { return adrcontentTable(nil).Schema() }
+
+func (adrcontentProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows := adrcorpus.LoadContents()
+	return adrcontentTable(rows).Build(proj, len(rows)), nil
 }
 
 // coderefProvider exposes each citation as keelson.coderef — the drill-down
@@ -138,6 +171,18 @@ func subtaskTable(rows []adrcorpus.Subtask) *introspect.Table {
 		String("shape", func(i int) string { return rows[i].Shape }).
 		Int32("line", func(i int) int32 { return int32(rows[i].Line) }).
 		Int32("code_refs", func(i int) int32 { return int32(rows[i].CodeRefs) })
+}
+
+// adrcontentTable mirrors WriteAdrContentArrow's schema. The content column's
+// name is spelled out here as it is there — this package does not link the
+// command, so the two copies are held together by adrSchemaParity like every
+// other column, and a typo in the media type fails that test rather than
+// quietly producing a cell that renders as a truncated label.
+func adrcontentTable(rows []adrcorpus.AdrContent) *introspect.Table {
+	return introspect.NewTable().
+		Int32("num", func(i int) int32 { return int32(rows[i].Num) }).
+		String("path", func(i int) string { return rows[i].Path }).
+		String("content@text/markdown", func(i int) string { return rows[i].Content })
 }
 
 // coderefTable mirrors WriteCoderefArrow's schema.

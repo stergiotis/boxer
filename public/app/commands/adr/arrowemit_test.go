@@ -40,7 +40,7 @@ date: 2026-05-01
 	return root, adrDir
 }
 
-// TestEmitArrow checks all three Arrow files are written non-empty from a
+// TestEmitArrow checks all four Arrow files are written non-empty from a
 // parsed corpus.
 func TestEmitArrow(t *testing.T) {
 	root, adrDir := fixture(t)
@@ -67,6 +67,9 @@ func TestEmitArrow(t *testing.T) {
 		{adrArrowName, filepath.Join(out, adrArrowName), func(p string) error { return WriteAdrArrow(p, adrs) }},
 		{coderefArrowName, filepath.Join(out, coderefArrowName), func(p string) error { return WriteCoderefArrow(p, refs) }},
 		{subtaskArrowName, filepath.Join(out, subtaskArrowName), func(p string) error { return WriteSubtaskArrow(p, subs) }},
+		{adrcontentArrowName, filepath.Join(out, adrcontentArrowName), func(p string) error {
+			return WriteAdrContentArrow(p, adrcorpus.ReadContents(adrs))
+		}},
 	} {
 		if err := tc.write(tc.path); err != nil {
 			t.Fatalf("write %s: %v", tc.name, err)

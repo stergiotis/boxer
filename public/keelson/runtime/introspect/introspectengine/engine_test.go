@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/gov/adrcorpus"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -57,6 +58,43 @@ func TestPlan_StarForcesAllColumns(t *testing.T) {
 	require.Equal(t, []string{"env"}, p.tables)
 	assert.False(t, p.pruned)
 	assert.True(t, p.proj["env"].IsAll())
+}
+
+// A column that can only be written quoted must survive analysis unquoted,
+// or the projection drops it: the snapshot arrives without the column, the
+// query fails on an unknown identifier, and only the all-columns retry
+// rescues it — correct, but at two executions and two snapshots of a table
+// that exists because it is expensive. keelson.adrcontent's content column
+// is the first in the corpus that needs the quoting (ADR-0123 `label@mime`).
+func TestPlan_QuotedColumnSurvivesPruning(t *testing.T) {
+	e := &Engine{reg: testRegistry(t)}
+	p := e.plan("SELECT num, `content@text/markdown` FROM adrcontent WHERE num = 42")
+	require.Equal(t, []string{"adrcontent"}, p.tables)
+	require.True(t, p.pruned)
+
+	prov, _ := e.reg.Lookup("adrcontent")
+	rec, err := prov.Snapshot(p.proj["adrcontent"])
+	require.NoError(t, err)
+	defer rec.Release()
+	assert.ElementsMatch(t, []string{"num", "content@text/markdown"}, fieldNames(rec),
+		"the quoted column must be projected, not pruned away")
+}
+
+// The counterpart: a query that does not name the source text does not carry
+// it. The files are still read — adrcorpus.LoadContents is eager, so that a
+// vanished ADR drops its row rather than arriving empty — but the column never
+// reaches the snapshot, so it is not encoded, hashed into the cache key, or
+// shipped to the broker, which is where the megabytes would go.
+func TestPlan_AdrContentPrunesToMetadata(t *testing.T) {
+	e := &Engine{reg: testRegistry(t)}
+	p := e.plan("SELECT num, path FROM adrcontent")
+	require.True(t, p.pruned)
+
+	prov, _ := e.reg.Lookup("adrcontent")
+	rec, err := prov.Snapshot(p.proj["adrcontent"])
+	require.NoError(t, err)
+	defer rec.Release()
+	assert.ElementsMatch(t, []string{"num", "path"}, fieldNames(rec))
 }
 
 func TestPlan_NoKnownTable(t *testing.T) {
@@ -142,6 +180,25 @@ func TestQuery_KeelsonMacro(t *testing.T) {
 	n, err := strconv.Atoi(strings.TrimSpace(string(body)))
 	require.NoError(t, err, "body: %q", string(body))
 	assert.Positive(t, n)
+}
+
+// The whole path for a quoted column name, end to end: macro rewrite,
+// analysis, projected snapshot, broker, result. It runs against this
+// repository's own corpus when the tests are run inside a checkout, so it is
+// skipped rather than asserted-on off-repo, where the table is empty by
+// design.
+func TestQuery_AdrContentQuotedColumn(t *testing.T) {
+	e := newEngineWithBroker(t)
+	if _, _, err := adrcorpus.ResolveCorpus(); err != nil {
+		t.Skipf("no ADR corpus around this checkout: %v", err)
+	}
+	body, _, err := e.Query(context.Background(),
+		"SELECT length(`content@text/markdown`) FROM keelson('adrcontent') ORDER BY num LIMIT 1",
+		"TabSeparated")
+	require.NoError(t, err)
+	n, err := strconv.Atoi(strings.TrimSpace(string(body)))
+	require.NoError(t, err, "body: %q", string(body))
+	assert.Positive(t, n, "the source of an ADR is not zero bytes")
 }
 
 func TestQuery_KeelsonMacroUnknownFailsFast(t *testing.T) {

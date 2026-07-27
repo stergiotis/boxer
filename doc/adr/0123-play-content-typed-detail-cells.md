@@ -138,6 +138,16 @@ convention whose typo mode is a wrong-but-plausible render is not worth having.
 is scoped to declarations — a token with a slash in it — so it cannot fire on a
 column that never meant to declare anything.
 
+**A declaration need not come from an alias.** The examples above all show a
+query naming its own column on the way out, which is the case that motivated
+the convention. Nothing in the rule requires that: a *table* whose column is
+already named `content@text/markdown` reaches the pane declared through a bare
+`SELECT *`, with no alias written anywhere. `keelson('adrcontent')`
+(ADR-0092, 2026-07-27) is the first such table. This costs the contract nothing
+— the gate reads a column name and does not care who spelled it — and it is
+worth recording because it makes the declaration a property a dataset can
+carry rather than one each query must restate.
+
 Past the gate, `mime.ParseMediaType` earns its keep: it case-folds
 (`TEXT/Markdown` → `text/markdown`) and splits parameters, so
 `` `notes@text/markdown; charset=utf-8` `` works without a hand-rolled parser.

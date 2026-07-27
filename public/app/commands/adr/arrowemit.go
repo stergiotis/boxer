@@ -53,6 +53,19 @@ var coderefSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "snippet", Type: arrow.BinaryTypes.String},
 }, nil)
 
+// adrcontentSchema is one row per decision carrying the file whole. The
+// content column declares its media type in its name (`<label>@<mime>`,
+// ADR-0123 §SD2) so a pane that knows the convention renders it as markdown
+// rather than as a truncated one-line label. The declaration costs nothing to
+// a reader that does not know it — it is just a column whose name needs
+// backticks, which ClickHouse enforces loudly: unquoted, `@` is a syntax
+// error rather than a plausible column.
+var adrcontentSchema = arrow.NewSchema([]arrow.Field{
+	{Name: "num", Type: arrow.PrimitiveTypes.Int32},
+	{Name: "path", Type: arrow.BinaryTypes.String},
+	{Name: "content@text/markdown", Type: arrow.BinaryTypes.String},
+}, nil)
+
 var subtaskSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "num", Type: arrow.PrimitiveTypes.Int32},
 	{Name: "marker", Type: arrow.BinaryTypes.String},
@@ -69,9 +82,10 @@ var subtaskSchema = arrow.NewSchema([]arrow.Field{
 // schemas so the keelson tables of the same names can be pinned equal to them
 // (ADR-0122 §SD4). The symmetry — one query, either source — is a claim, and
 // these let a test hold it.
-func AdrArrowSchema() *arrow.Schema     { return adrSchema }
-func SubtaskArrowSchema() *arrow.Schema { return subtaskSchema }
-func CoderefArrowSchema() *arrow.Schema { return coderefSchema }
+func AdrArrowSchema() *arrow.Schema        { return adrSchema }
+func SubtaskArrowSchema() *arrow.Schema    { return subtaskSchema }
+func CoderefArrowSchema() *arrow.Schema    { return coderefSchema }
+func AdrContentArrowSchema() *arrow.Schema { return adrcontentSchema }
 
 // WriteAdrArrow writes the adr registry + code-evidence rows as an Arrow IPC file.
 func WriteAdrArrow(path string, adrs []adrcorpus.Adr) (err error) {
@@ -105,6 +119,20 @@ func WriteAdrArrow(path string, adrs []adrcorpus.Adr) (err error) {
 		rb.Field(24).(*array.StringBuilder).Append(a.Path)
 	}
 	return writeRecord(path, adrSchema, rb)
+}
+
+// WriteAdrContentArrow writes the per-decision source rows as an Arrow IPC
+// file. It is the one emitted table whose size tracks the corpus rather than
+// its shape, which is why adrcorpus.AdrContent explains itself at length.
+func WriteAdrContentArrow(path string, rows []adrcorpus.AdrContent) (err error) {
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, adrcontentSchema)
+	defer rb.Release()
+	for _, r := range rows {
+		rb.Field(0).(*array.Int32Builder).Append(int32(r.Num))
+		rb.Field(1).(*array.StringBuilder).Append(r.Path)
+		rb.Field(2).(*array.StringBuilder).Append(r.Content)
+	}
+	return writeRecord(path, adrcontentSchema, rb)
 }
 
 // WriteSubtaskArrow writes the per-sub-item rows as an Arrow IPC file.

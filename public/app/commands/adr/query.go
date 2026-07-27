@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/gov/adrcorpus"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -76,22 +77,49 @@ func resolveChBinary() (path string, ok bool) {
 	return "", false
 }
 
-// chTablePrelude binds the three Arrow files to the table names `adr`,
-// `coderef` and `subtask`. The files are referenced by basename and
-// clickhouse-local is run with its working directory set to where they live
-// (see RunQuery), so no absolute-path file()-access policy is involved.
-func chTablePrelude(adrArrowBase, coderefArrowBase, subtaskArrowBase string) string {
-	return fmt.Sprintf(
-		"CREATE TEMPORARY TABLE adr AS SELECT * FROM file(%s, 'Arrow');\n"+
-			"CREATE TEMPORARY TABLE coderef AS SELECT * FROM file(%s, 'Arrow');\n"+
-			"CREATE TEMPORARY TABLE subtask AS SELECT * FROM file(%s, 'Arrow');\n",
-		sqlQuote(adrArrowBase), sqlQuote(coderefArrowBase), sqlQuote(subtaskArrowBase))
+// ArrowTables names the emitted Arrow files to bind as query tables. They are
+// carried as one value rather than as positional arguments because they are
+// all paths of the same type and a transposition between them would bind
+// plausible-looking tables to the wrong data with nothing to catch it.
+//
+// Adr is required and anchors the working directory. Any other field may be
+// empty, which omits that binding: `overview` runs canned queries that never
+// read the source text, so it does not pay to emit AdrContent for them.
+type ArrowTables struct {
+	Adr        string
+	Coderef    string
+	Subtask    string
+	AdrContent string
 }
 
-// RunQuery executes one SQL statement against the adr/coderef/subtask tables
-// via clickhouse-local. ok=false means the binary is unreachable; callers decide
+// chTablePrelude binds each named Arrow file to the table of the same name.
+// The files are referenced by basename and clickhouse-local is run with its
+// working directory set to where they live (see RunQuery), so no
+// absolute-path file()-access policy is involved.
+func chTablePrelude(t ArrowTables) string {
+	var b strings.Builder
+	for _, bind := range []struct{ table, path string }{
+		{"adr", t.Adr},
+		{"coderef", t.Coderef},
+		{"subtask", t.Subtask},
+		{"adrcontent", t.AdrContent},
+	} {
+		if bind.path == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "CREATE TEMPORARY TABLE %s AS SELECT * FROM file(%s, 'Arrow');\n",
+			bind.table, sqlQuote(filepath.Base(bind.path)))
+	}
+	return b.String()
+}
+
+// RunQuery executes one SQL statement against the bound tables via
+// clickhouse-local. ok=false means the binary is unreachable; callers decide
 // whether to error or fall back.
-func RunQuery(adrArrow, coderefArrow, subtaskArrow, query, format string, stdout io.Writer) (ok bool, err error) {
+func RunQuery(tables ArrowTables, query, format string, stdout io.Writer) (ok bool, err error) {
+	if tables.Adr == "" {
+		return false, eh.Errorf("adr: ArrowTables.Adr is required (it anchors the working directory)")
+	}
 	bin, found := resolveChBinary()
 	if !found {
 		return false, nil
@@ -99,9 +127,9 @@ func RunQuery(adrArrow, coderefArrow, subtaskArrow, query, format string, stdout
 	if format == "" {
 		format = "PrettyCompact"
 	}
-	script := chTablePrelude(filepath.Base(adrArrow), filepath.Base(coderefArrow), filepath.Base(subtaskArrow)) + query
+	script := chTablePrelude(tables) + query
 	cmd, err := extbin.ClickHouseLocal.Command(context.Background(),
-		extbin.Opts{Path: bin, Dir: filepath.Dir(adrArrow)},
+		extbin.Opts{Path: bin, Dir: filepath.Dir(tables.Adr)},
 		"--multiquery", "--output-format", format)
 	if err != nil {
 		return true, eb.Build().Str("query", query).Errorf("resolve clickhouse-local: %w", err)
@@ -119,7 +147,7 @@ func RunQuery(adrArrow, coderefArrow, subtaskArrow, query, format string, stdout
 
 // RunOverview runs the canned overview queries, each under a heading. ok=false
 // means clickhouse-local is unreachable (callers fall back to RenderBoardASCII).
-func RunOverview(adrArrow, coderefArrow, subtaskArrow string, stdout io.Writer) (ok bool, err error) {
+func RunOverview(tables ArrowTables, stdout io.Writer) (ok bool, err error) {
 	if _, found := resolveChBinary(); !found {
 		return false, nil
 	}
@@ -127,7 +155,7 @@ func RunOverview(adrArrow, coderefArrow, subtaskArrow string, stdout io.Writer) 
 		if _, err = fmt.Fprintf(stdout, "\n── %s ──\n", q.title); err != nil {
 			return true, err
 		}
-		if _, err = RunQuery(adrArrow, coderefArrow, subtaskArrow, q.sql, "PrettyCompact", stdout); err != nil {
+		if _, err = RunQuery(tables, q.sql, "PrettyCompact", stdout); err != nil {
 			return true, err
 		}
 	}
