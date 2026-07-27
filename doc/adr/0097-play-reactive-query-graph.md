@@ -1636,11 +1636,11 @@ vocabulary: at most one mark per tab, in one slot, after the existing
 - **`-` — shape reject.** A shape-gated pane whose required channels reject
   the result it would be handed. It outranks the signal marks: a pane that
   cannot draw this result is not a control over it either.
-- **`!` — blocked on you.** The pane writes a name the split reads that
-  nothing has filled (`unfilledInputs`), and it can render. Interacting here
-  is what unblocks the Run the gate currently refuses.
-- **`*` — drives this query.** The pane writes a name some split node reads,
-  so interacting re-filters rather than merely re-selects.
+- **`!` — blocked on you.** The pane writes a name the buffer reads that
+  nothing has filled, and it can render. Interacting here is what unblocks
+  the Run the gate currently refuses.
+- **`*` — drives this query.** The pane writes a name the buffer reads, so
+  interacting re-filters rather than merely re-selects.
 - **a notice.** Reserved for chrome with something to report — Diagnostics: a
   failed run, a truncation, a standing emit drop. Chrome is not shape-gated,
   so it does not contend with the marks above, and it shares the `!` glyph
@@ -1725,8 +1725,18 @@ two groups:
   shows the same reason string the pane body would, and still activates, so
   the contract help stays one click away instead of being hidden behind a
   pane the menu just advised against.
-- *Drives this query*: the panes whose declared writes meet the split's
-  `Reads`, naming the signals, with the unfilled ones marked.
+- *Drives this query*: the panes whose declared writes meet the names the
+  buffer reads, naming the signals, with the unfilled ones marked.
+
+The drive relation reads the BUFFER's `{name:Type}` slots, not the last
+split's `Reads`. That was specified the other way round and building it
+showed why it cannot be: a Run refused for an unfilled input never produces
+a split, so the pane that writes the missing name — the Map, for a `{vp_*}`
+buffer — would have gone unmarked in precisely the state where pointing at
+it is the whole point. The buffer's slots are also what the Run gate judges
+(`unfilledInputs`), so the mark and the refusal cannot disagree. The split
+keeps the structural verdict for channels filled by a named node, which is a
+question about CTEs rather than about signals.
 
 Activation goes through the existing `pendingDockActivate` seam. The menu
 hides nothing, moves nothing, and reuses the verdicts the titles computed
@@ -1779,11 +1789,16 @@ split reading `{selection_country:String}`: `Timeline -`, `Kanban -` and
 reads), with Table, Projection, Schema, Map and the chrome tabs unmarked —
 the facts this entry set out to surface, and nothing more.
 
+The menu is built too, over the same verdicts, and two of its rows read
+better for having been looked at: a pane in both groups printed its signal
+line twice until each group was made to print only its own payload, and the
+drive relation moved from the split to the buffer for the reason above.
+
 One live question is still open, deliberately: strip churn. The
 referenced-name set refreshes post-debounce, so typing a `{name:Type}` slot
 flips a mark mid-edit — correct as feedback, possibly jittery as layout.
 Whether the mark needs a fixed-width slot is a question for use, not for
-this entry. The menu is unbuilt.
+this entry.
 
 ## References
 

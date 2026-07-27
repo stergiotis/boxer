@@ -1036,7 +1036,7 @@ func (inst *PlayApp) Render() error {
 	// InitRoot/Split block; once the user drags, the persistent
 	// dock_state on the Rust side wins.
 	for range c.PanelTopInside(ids.PrepareStr("topbar")).Resizable(false).KeepIter() {
-		inst.renderTopBar()
+		inst.renderTopBar(schema)
 		// The params strip (ADR-0132 §SD3): with the Editor tab removed, the
 		// param widgets — normally drawn above the SQL editor — re-home here,
 		// pinned. Exactly one site renders per frame (the editor path when
@@ -1423,7 +1423,7 @@ func (inst *PlayApp) autoShotTick() {
 // runtime wired a bus client), and the ClickHouse connection label.
 // History/Detail/Projection visibility lives in the DockArea tab bar,
 // so the legacy toggle buttons are gone.
-func (inst *PlayApp) renderTopBar() {
+func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 	ids := inst.ids
 	for range c.Horizontal().KeepIter() {
 		if inst.graph.MainLoading() {
@@ -1574,6 +1574,15 @@ func (inst *PlayApp) renderTopBar() {
 		if inst.client != nil && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			inst.renderEndpointSwitcher()
+		}
+
+		// The Panes menu (the 2026-07-27 Update): the strip's marks with room
+		// to explain themselves. Not offered under toolbarMinimal, where an
+		// applet's pane set is the author's decision rather than the reader's
+		// to navigate.
+		if !inst.toolbarMinimal {
+			c.Separator().Vertical().Send()
+			inst.renderPanesMenu(schema)
 		}
 
 		// Hide-prelude toggle (visible only when there's at least one
