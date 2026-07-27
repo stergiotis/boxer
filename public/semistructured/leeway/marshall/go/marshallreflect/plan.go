@@ -22,14 +22,16 @@ func PlanFor[T any]() (plan *mappingplan.Plan, err error) {
 
 var planCache sync.Map // map[reflect.Type]*planEntry
 
-// resolvedPlan bundles a built Plan with its section grouping. Both are
-// pure functions of the DTO type, so they are computed once per type and
-// cached together: Marshal, Unmarshal, and RowComposer all read the
-// shared groups instead of recomputing goplan.ComputeGroups per row
-// / per call.
+// resolvedPlan bundles a built Plan with its section grouping and its read
+// contract. All three are pure functions of the DTO type, so they are computed
+// once per type and cached together: Marshal, Unmarshal, and RowComposer read
+// the shared groups instead of recomputing goplan.ComputeGroups per row / per
+// call, and Unmarshal / Detect read the shared contract rather than deriving it
+// per row (ADR-0146 D1).
 type resolvedPlan struct {
-	plan   *mappingplan.Plan
-	groups []goplan.SectionGroup
+	plan     *mappingplan.Plan
+	groups   []goplan.SectionGroup
+	contract mappingplan.ReadContract
 }
 
 // planEntry wraps the (resolvedPlan, err) result in a sync.OnceValues so
@@ -49,7 +51,11 @@ func resolveForType(rt reflect.Type) (*resolvedPlan, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &resolvedPlan{plan: plan, groups: goplan.ComputeGroups(plan)}, nil
+			contract, err := mappingplan.DeriveReadContract(plan)
+			if err != nil {
+				return nil, err
+			}
+			return &resolvedPlan{plan: plan, groups: goplan.ComputeGroups(plan), contract: contract}, nil
 		}),
 	}
 	actual, _ := planCache.LoadOrStore(rt, entry)

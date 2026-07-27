@@ -2,6 +2,8 @@ package marshallreflect
 
 import (
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,7 +107,11 @@ func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI) (err er
 		// well-defined; their memberships are per-element ids read directly off
 		// the wire (distributeTupleMemberships), never resolved via lookup —
 		// their LWMembership is "" and would fail the lookup (ADR-0109).
-		if !f.Flags.Channel.NeedsKindVar() || f.IsConst || f.TupleField != "" {
+		//
+		// Const fields ARE resolved: the write path looks their membership up
+		// like any other (addMembership), and the slot-arity gate counts their
+		// attributes, so the read side needs the same id to recognise them.
+		if !f.Flags.Channel.NeedsKindVar() || f.TupleField != "" {
 			continue
 		}
 		var id uint64
@@ -126,7 +132,7 @@ func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI) (err er
 			return
 		}
 		for _, g := range groups {
-			err = unmarshalSection(rowVal, g, readers, i, membIDs)
+			err = unmarshalSection(rowVal, g, readers, i, membIDs, r.contract)
 			if err != nil {
 				err = eb.Build().Int("row", i).Str("section", g.Section).Errorf("%w", err)
 				return
@@ -247,7 +253,7 @@ func readPlainArrow(fld reflect.Value, goType string, col any, i int) (err error
 	return
 }
 
-func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *SectionReaders, i int, membIDs map[string]uint64) (err error) {
+func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *SectionReaders, i int, membIDs map[string]uint64, c mappingplan.ReadContract) (err error) {
 	sr := readers.sections[g.Section]
 	attrs := reflect.ValueOf(sr.attrs)
 	membs := reflect.ValueOf(sr.membs)
@@ -261,11 +267,11 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 	}
 
 	if len(g.SubColumns) > 1 {
-		return unmarshalMultiSubColumn(row, g, attrs, membs, i, membIDs)
+		return unmarshalMultiSubColumn(row, g, attrs, membs, i, membIDs, c)
 	}
 
 	if g.Channel().UsesCarrier() {
-		return unmarshalCarrierSection(row, g, attrs, membs, i)
+		return unmarshalCarrierSection(row, g, attrs, membs, i, c)
 	}
 
 	fields := g.SubColumns[0].Fields
@@ -292,18 +298,30 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 	// Section channel is uniform across its fields (enforced by the
 	// plan's channel-uniformity check); resolve it once for all attributes.
 	ch := g.Channel()
+	// tally counts the attributes each membership claims on this row, so the
+	// slot arity can be checked before anything is projected (ADR-0146 D4).
+	// It is keyed by membership rather than by field so a const — which has no
+	// accumulator — is still counted.
+	tally := make(map[string]int, len(fields))
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	for attrJ := int64(0); attrJ < n; attrJ++ {
 		// Every membership on the attribute dispatches to its field, mirroring
 		// the codegen switch — a multi-membership attribute feeds each matching
 		// field. dispatchMemberships filters consts, which have no accumulator.
-		for _, matchedField := range dispatchMemberships(membs, i, attrJ, fields, membIDs, ch) {
+		for _, matchedField := range dispatchMemberships(membs, i, attrJ, fields, membIDs, ch, tally) {
 			a := accs[matchedField.GoFieldName]
 			err = consumeValue(attrs, i, attrJ, matchedField, a)
 			if err != nil {
 				return
 			}
 		}
+	}
+
+	// Arity gate. A surplus attribute on a claimed slot means two producers
+	// wrote into it; decoding anyway would silently concatenate a container or
+	// drop an Option, which is the failure mode this check exists to stop.
+	if err = checkSectionArity(c, g.Section, tally); err != nil {
+		return
 	}
 
 	// Project accumulators into the row.
@@ -314,6 +332,46 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 		}
 	}
 	return
+}
+
+// checkSectionArity verifies every slot the contract declares for a section
+// against the attributes the row actually carried for it.
+func checkSectionArity(c mappingplan.ReadContract, section string, tally map[string]int) (err error) {
+	for _, s := range c.Slots {
+		if s.Section != section || s.OwnsSection {
+			continue
+		}
+		if got := tally[s.Membership]; !s.Admits(got) {
+			return arityError(s, got)
+		}
+	}
+	return
+}
+
+// arityError reports a slot whose attribute count falls outside what the write
+// path can produce. The message names the slot and both bounds: the common
+// cause is two components claiming one (section, membership), and the reader
+// cannot tell whose attribute is whose.
+func arityError(s mappingplan.Slot, got int) error {
+	upper := "unbounded"
+	if s.MaxAttrs != mappingplan.ArityUnbounded {
+		upper = strconv.Itoa(s.MaxAttrs)
+	}
+	fields := strings.Join(s.GoFields, ", ")
+	b := eb.Build().
+		Str("section", s.Section).
+		Str("membership", s.Membership).
+		Int("got", got).
+		Int("min", s.MinAttrs).
+		Str("max", upper)
+	if fields != "" {
+		b = b.Str("fields", fields)
+		fields = " (fields " + fields + ")"
+	}
+	if got > s.MaxAttrs && s.MaxAttrs != mappingplan.ArityUnbounded {
+		return b.Errorf("slot %s@%s%s carries %d attributes but the DTO admits at most %s — several producers claim this slot, so the reader cannot tell which attribute is this kind's", s.Section, s.Membership, fields, got, upper)
+	}
+	return b.Errorf("slot %s@%s%s carries %d attributes but the DTO requires at least %d", s.Section, s.Membership, fields, got, s.MinAttrs)
 }
 
 // dispatchMemberships iterates the per-attribute membership channel (uint64 or
@@ -337,24 +395,45 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 // codec round-trips the result is identical to a first-match dispatch; the two
 // paths now also agree for a third-party producer that attaches multiple
 // memberships to one attribute.
-func dispatchMemberships(membs reflect.Value, i int, attrJ int64, fields []mappingplan.TaggedField, membIDs map[string]uint64, ch mappingplan.MembershipChannel) (matched []mappingplan.TaggedField) {
+// tally, when non-nil, receives one increment per (attribute, claimed
+// membership) pair — including memberships claimed only by a const field,
+// which has no accumulator to dispatch to. It is the input to the slot-arity
+// gate (ADR-0146 D4); a membership no field claims is not counted, since no
+// slot bounds it.
+func dispatchMemberships(membs reflect.Value, i int, attrJ int64, fields []mappingplan.TaggedField, membIDs map[string]uint64, ch mappingplan.MembershipChannel, tally map[string]int) (matched []mappingplan.TaggedField) {
 	// ch is the section's (uniform) membership channel, resolved once by
 	// the caller — all fields in a section agree on it per the plan's
 	// channel-uniformity check.
 	method := "GetMembValue" + ch.AddMethodSuffix()
 	seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 
+	// The tally counts ATTRIBUTES per slot, so each membership this attribute
+	// claims is counted once however many fields match it and however many
+	// times it appears in the attribute's membership sequence.
+	var claimed []string
+	claim := func(memb string) {
+		if tally == nil || slices.Contains(claimed, memb) {
+			return
+		}
+		claimed = append(claimed, memb)
+	}
+
 	if ch.EmbedsLiteralName() {
 		for _, v := range collectIterSeq(seq) {
 			name := string(v.Bytes())
 			for _, f := range fields {
-				if f.IsConst || !f.Flags.Channel.EmbedsLiteralName() {
+				if !f.Flags.Channel.EmbedsLiteralName() || f.LWMembership != name {
 					continue
 				}
-				if f.LWMembership == name {
-					matched = append(matched, f)
+				claim(name)
+				if f.IsConst {
+					continue // counted, but there is nothing to project
 				}
+				matched = append(matched, f)
 			}
+		}
+		for _, memb := range claimed {
+			tally[memb]++
 		}
 		return
 	}
@@ -362,13 +441,21 @@ func dispatchMemberships(membs reflect.Value, i int, attrJ int64, fields []mappi
 	for _, v := range collectIterSeq(seq) {
 		id := v.Uint()
 		for _, f := range fields {
-			if f.IsConst || f.Flags.Channel.EmbedsLiteralName() {
+			// A membership with no resolved id would compare equal to a wire id
+			// of 0; require the resolution to have happened.
+			resolved, ok := membIDs[f.LWMembership]
+			if f.Flags.Channel.EmbedsLiteralName() || !ok || resolved != id {
 				continue
 			}
-			if membIDs[f.LWMembership] == id {
-				matched = append(matched, f)
+			claim(f.LWMembership)
+			if f.IsConst {
+				continue
 			}
+			matched = append(matched, f)
 		}
+	}
+	for _, memb := range claimed {
+		tally[memb]++
 	}
 	return
 }
@@ -457,7 +544,7 @@ func projectAccumulator(row reflect.Value, a *accumulator) (err error) {
 	return
 }
 
-func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, membs reflect.Value, i int, membIDs map[string]uint64) (err error) {
+func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, membs reflect.Value, i int, membIDs map[string]uint64, c mappingplan.ReadContract) (err error) {
 	if len(g.Memberships) != 1 {
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
@@ -521,12 +608,17 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 			count++
 		}
 	}
-	// A tuple with scalar sub-columns must occur exactly once per row. An
-	// all-container tuple (S = 0) additionally admits zero occurrences: the
-	// write side splices the attribute when every container is empty, and
-	// the row decodes to nil slices (ADR-0101 D2/D5).
-	wantExactlyOne := len(g.ScalarSubColumns()) > 0
-	if count > 1 || (wantExactlyOne && count != 1) {
+	// The slot's arity says it: exactly one attribute for a tuple with scalar
+	// sub-columns, zero-or-one for an all-container tuple, whose attribute the
+	// write side splices when every container is empty (ADR-0101 D2/D5).
+	if slot, ok := c.Slot(g.Section, memb.LWMembership); ok {
+		if !slot.Admits(count) {
+			err = arityError(slot, count)
+			return
+		}
+	} else if count != 1 {
+		// No slot: a hand-built Plan the contract could not describe. Fall back
+		// to the original rule rather than skipping the check entirely.
 		err = eb.Build().Str("membership", memb.LWMembership).Int("count", count).Errorf("expected exactly one occurrence per row")
 		return
 	}
@@ -779,7 +871,7 @@ func sliceFromSeq(seq reflect.Value, f *mappingplan.TaggedField) reflect.Value {
 // scalar carrier. Carriers are scalar-only — one marshalltypes.X per attribute
 // (ADR-0113 D1). The carrier's per-row membership data (id/name + params)
 // comes from the combined Seq2 (mixed) or Seq (parametrized) accessor.
-func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, membs reflect.Value, i int) (err error) {
+func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, membs reflect.Value, i int, c mappingplan.ReadContract) (err error) {
 	var f *mappingplan.TaggedField
 	for j := range g.SubColumns[0].Fields {
 		if g.SubColumns[0].Fields[j].Flags.Channel.UsesCarrier() {
@@ -798,6 +890,16 @@ func unmarshalCarrierSection(row reflect.Value, g goplan.SectionGroup, attrs, me
 	// the same accessor (shared via goplan.SingleValueReadAccessor).
 	valMethod := goplan.SingleValueReadAccessor(*f)
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
+
+	// A carrier section carries exactly one membership (resolveCarriers), so
+	// every attribute in it belongs to this slot and the count is the section's
+	// attribute count. Without this gate a second attribute silently
+	// concatenated into the container arm and silently overwrote the scalar
+	// arm's carrier (ADR-0146 D4).
+	if slot, ok := c.Slot(g.Section, f.LWMembership); ok && !slot.Admits(int(n)) {
+		err = arityError(slot, int(n))
+		return
+	}
 
 	switch {
 	case f.IsSlice():
