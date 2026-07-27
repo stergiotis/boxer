@@ -30,7 +30,10 @@ appends one.
 Run one statement at a time. The editor takes a single statement, and a buffer
 holding two parses as neither — the pre-execute rewrites are then skipped and
 the SQL ships as written, so the handles above never reach their physical names
-and the server rejects them. Each block below is one statement for that reason.
+and the server rejects them. When that happens the **Diagnostics** tab's
+*Pre-execute rewrites* section names each rewrite that was skipped and the parse
+error that skipped it, and the **Passes** tab marks them in the sequence. Each
+block below is one statement for that reason.
 
 In a real boxer deployment the equivalent table is `spinnaker.facts`; the
 queries transfer by swapping the table name.
