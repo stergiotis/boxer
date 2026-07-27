@@ -350,6 +350,43 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Updates
+
+### 2026-07-27 — the lookup-vs-wire deferral resolves to a diagnosis, not a check
+
+§Scope deferred "verifying resolved `lookup` ids against the wire". Attempting
+it showed why it had been easy to defer: **it cannot be a check.**
+
+A ref-channel membership rides the wire as a bare `uint64`; the name lives in
+the registry the `LookupI` wraps. A reader whose lookup maps a name to a
+different id than the writer used therefore asks for an id that is not present,
+and observes exactly what an absent component observes. For a mandatory scalar
+D4's arity gate already catches it. For an `Option` or a container, zero
+attributes is a legal state — so the field reads empty and the contract has
+nothing to object to. Under D5's fusion model a component genuinely may be
+absent from every row, so the two cases are not merely hard to separate, they
+are identical observations. Verifying against the registry instead would compare
+the thing already assumed correct.
+
+What ships is the honest form:
+
+- **`InspectLookup[T]`** reports, per slot, the id the lookup resolved and how
+  many attributes it matched, alongside the distinct memberships each claimed
+  section actually carries — including ones the kind does not claim. A slot
+  resolving to 92 while its section carries only 2 is then visible in one call.
+  `LookupReport.Suspect()` narrows to slots that resolved, matched nothing, and
+  sit in a populated section, and is documented as a heuristic with a test
+  pinning the false positive it admits: honest absence in a section other
+  components populate looks the same.
+- **The arity gate's under-population error now names what the section held**,
+  so the most common symptom explains itself without a second run. Collected on
+  the error path only.
+
+This closes the deferral by resolving it rather than by building it: the
+remaining silence for `Option` and container slots is a property of the wire
+format, not a gap in the contract, and is now documented as such at
+`lookupinspect.go`.
+
 ## References
 
 - [ADR-0066](0066-leeway-dql-clickhouse-readback-generator.md) — Presence /

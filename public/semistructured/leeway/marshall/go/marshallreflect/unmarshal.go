@@ -334,7 +334,9 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 	// Arity gate. A surplus attribute on a claimed slot means two producers
 	// wrote into it; decoding anyway would silently concatenate a container or
 	// drop an Option, which is the failure mode this check exists to stop.
-	if err = checkSectionArity(c, g.Section, tally); err != nil {
+	if err = checkSectionArity(c, g.Section, tally, func() []string {
+		return observedMemberships(membs, attrs, i, ch)
+	}); err != nil {
 		return
 	}
 
@@ -350,13 +352,49 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 
 // checkSectionArity verifies every slot the contract declares for a section
 // against the attributes the row actually carried for it.
-func checkSectionArity(c mappingplan.ReadContract, section string, tally map[string]int) (err error) {
+//
+// observed is called only on an UNDER-populated slot, to say what the section
+// actually held. A slot that should be there and is not is the usual symptom of
+// a membership lookup disagreeing with the writer's registry, and the ids alone
+// make that diagnosable without a second run.
+func checkSectionArity(c mappingplan.ReadContract, section string, tally map[string]int, observed func() []string) (err error) {
 	for _, s := range c.Slots {
 		if s.Section != section || s.OwnsSection {
 			continue
 		}
-		if got := tally[s.Membership]; !s.Admits(got) {
-			return arityError(s, got)
+		got := tally[s.Membership]
+		if s.Admits(got) {
+			continue
+		}
+		if got < s.MinAttrs && observed != nil {
+			return arityError(s, got, observed()...)
+		}
+		return arityError(s, got)
+	}
+	return
+}
+
+// observedMemberships lists the distinct memberships a section carries on one
+// row — ref ids or verbatim names per its channel. Error path only.
+func observedMemberships(membs, attrs reflect.Value, i int, ch mappingplan.MembershipChannel) (out []string) {
+	if ch.UsesCarrier() {
+		return
+	}
+	method := "GetMembValue" + ch.AddMethodSuffix()
+	embedsName := ch.EmbedsLiteralName()
+	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
+	for attrJ := int64(0); attrJ < n; attrJ++ {
+		seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
+		for _, v := range collectIterSeq(seq) {
+			var s string
+			if embedsName {
+				s = string(v.Bytes())
+			} else {
+				s = strconv.FormatUint(v.Uint(), 10)
+			}
+			if !slices.Contains(out, s) {
+				out = append(out, s)
+			}
 		}
 	}
 	return
@@ -366,7 +404,7 @@ func checkSectionArity(c mappingplan.ReadContract, section string, tally map[str
 // path can produce. The message names the slot and both bounds: the common
 // cause is two components claiming one (section, membership), and the reader
 // cannot tell whose attribute is whose.
-func arityError(s mappingplan.Slot, got int) error {
+func arityError(s mappingplan.Slot, got int, observed ...string) error {
 	upper := "unbounded"
 	if s.MaxAttrs != mappingplan.ArityUnbounded {
 		upper = strconv.Itoa(s.MaxAttrs)
@@ -384,6 +422,10 @@ func arityError(s mappingplan.Slot, got int) error {
 	}
 	if got > s.MaxAttrs && s.MaxAttrs != mappingplan.ArityUnbounded {
 		return b.Errorf("slot %s@%s%s carries %d attributes but the DTO admits at most %s — several producers claim this slot, so the reader cannot tell which attribute is this kind's", s.Section, s.Membership, fields, got, upper)
+	}
+	if len(observed) > 0 {
+		b = b.Str("sectionCarries", strings.Join(observed, ","))
+		return b.Errorf("slot %s@%s%s carries %d attributes but the DTO requires at least %d — the section carries [%s], so check the membership lookup resolves %s to one of them", s.Section, s.Membership, fields, got, s.MinAttrs, strings.Join(observed, ", "), s.Membership)
 	}
 	return b.Errorf("slot %s@%s%s carries %d attributes but the DTO requires at least %d", s.Section, s.Membership, fields, got, s.MinAttrs)
 }

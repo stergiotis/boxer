@@ -198,5 +198,3 @@ func resolvePlan(row any) (rowVal reflect.Value, plan *mappingplan.Plan, groups 
 	groups = r.groups
 	return
 }
-
-
