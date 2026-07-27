@@ -35,12 +35,14 @@ const (
 
 // glyph is the mark's character on the strip, or "" for no mark.
 //
-// ASCII, on live evidence rather than taste. The first cut used the glyphs
-// this app paints elsewhere (`●`, `⚠`, `×`) and a capture of the running strip
-// killed two of them: `●` renders as tofu in the tab label font — the endpoint
-// switcher already records the same for `→` — and `×` sits one space from the
-// dock's own per-tab close glyph, where a second ✕-shape reads as a second
-// close button. What the strip is known to paint is what it gets.
+// ASCII, for two reasons found by looking at the running app. `×` sits one
+// space from the dock's own per-tab close glyph, where a second ✕-shape reads
+// as a second close button. And the app's SVG export — its own toolbar button,
+// and the scripted-screenshot path — does not carry non-ASCII glyphs through
+// reliably: `●` and `✓` render live but come out as tofu in an exported
+// capture, so a non-ASCII mark would be missing from exactly the artifacts
+// that get shared. (The font itself is fine: `●` paints correctly in the Graph
+// view. `→` is the one the endpoint switcher records as genuinely absent.)
 //
 // Blocked and notice deliberately share `!`: both mean "attention here", the
 // strip has room for one attention class, and no tab can hold both (a notice

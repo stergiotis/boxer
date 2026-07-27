@@ -1658,11 +1658,22 @@ vocabulary: at most one mark per tab, in one slot, after the existing
 
 The glyph set is ASCII, settled by the running app rather than on paper. It
 was first specified as glyphs this app paints elsewhere (`●`, `⚠`, `×` in the
-Graph view); the first capture of the live strip killed two of them. `●`
-renders as tofu in the tab label font — the endpoint switcher already records
-the same for `→`, and the Graph view's own `●` is suspect by the same
-evidence — and `×` lands one space from the dock's per-tab close glyph, where
-a second ✕-shape reads as a second close button.
+Graph view), and two rounds of looking moved it:
+
+- `×` lands one space from the dock's per-tab close glyph, where a second
+  ✕-shape reads as a second close button.
+- The app's SVG export does not carry non-ASCII glyphs through reliably. `●`
+  and `✓` paint correctly in the live framebuffer and come out as tofu in an
+  exported capture — so a non-ASCII mark would be absent from precisely the
+  artifacts that get shared, including the scripted screenshots. `→` remains
+  the one glyph the endpoint switcher records as genuinely missing from the
+  font.
+
+Recorded because the first version of this entry got it wrong: an SVG capture
+was read as evidence that `●` renders as tofu *live*, and an inspection-port
+screenshot of the real framebuffer showed it painting correctly. The
+conclusion (ASCII) survived; its reason did not. A capture path is not the
+app.
 
 **Mark only where the bit varies.** Table, Projection, Detail and Schema
 accept any schema; a mark that is always on informs nobody and widens every
@@ -1761,10 +1772,12 @@ declaration enables and which wait on the declaration existing.
 What lands first: the verdict as one pure function over (spec, frame
 schema, split, signals, bindings), unit-tested the way `boundTabTitle` is,
 then the marks, then the menu over the same verdicts. The verdict and the
-marks are built and live-verified — a buffer reading
-`{selection_country:String}` over a text column shows `Timeline -` beside
-`World *`, the two facts this entry set out to surface — and the glyph set
-above is what that verification settled.
+marks are built and verified against the live framebuffer over a two-node
+split reading `{selection_country:String}`: `Timeline -`, `Kanban -` and
+`Network -` (no `_tl_time`, no `lane`+`title`, no `edges` CTE) beside
+`World *` (a text column it can draw, and it writes the name the query
+reads), with Table, Projection, Schema, Map and the chrome tabs unmarked —
+the facts this entry set out to surface, and nothing more.
 
 One live question is still open, deliberately: strip churn. The
 referenced-name set refreshes post-debounce, so typing a `{name:Type}` slot
