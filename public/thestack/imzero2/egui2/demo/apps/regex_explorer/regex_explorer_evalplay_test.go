@@ -8,10 +8,12 @@ package regex_explorer
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -488,6 +490,131 @@ func TestRetractEvalDatasetsIsSafeWhenNothingPublished(t *testing.T) {
 	inst.setBus(&runtimeapp.NoopBus{})
 	inst.retractEvalDatasets()
 	inst.retractEvalDatasets()
+}
+
+// ---------------------------------------------------------------------------
+// Failure and staleness — found by adversarial review, pinned here
+// ---------------------------------------------------------------------------
+
+// TestPartialPublishRetainsTheHandleItMinted — the two publishes fail
+// independently, and the ClickHouse one can hit the very quota the Go one
+// just made tighter. A handle minted but not recorded is one nothing can
+// retract: Unmount cannot see it, and every retry mints another.
+//
+// Driven by the MaxDatasets quota: fill the service to one slot short, so
+// the Go publish takes the last slot and the ClickHouse publish is refused.
+func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
+	rig := setupEvalRig(t)
+	inst := rig.app
+	inst.pattern = `(a)`
+	inst.haystack = "ab"
+
+	filler, err := encodeChExtract([]chExtractRow{{MatchIdx: 0, GroupIdx: 0, Text: "x"}})
+	require.NoError(t, err)
+	bus := inst.busSnapshot()
+	for i := range adhocdata.MaxDatasets - 1 {
+		_, pErr := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
+			Alias:          fmt.Sprintf("filler_%d", i),
+			ArrowIPCStream: filler,
+		})
+		require.NoErrorf(t, pErr, "filler %d", i)
+	}
+	require.Equal(t, adhocdata.MaxDatasets-1, rig.keys.live())
+
+	snap, err := inst.snapshotEval()
+	require.NoError(t, err)
+	snap.hasCH = true
+	snap.chRows = chExtractRows(listOutcome{Matches: []string{"a"}})
+
+	inst.requestEvalInPlay(snap)
+
+	inst.mu.RLock()
+	evalErr, goHandle := inst.evalErr, inst.evalGoHandle
+	inst.mu.RUnlock()
+	require.NotEmpty(t, evalErr, "the ClickHouse publish must have been refused")
+	assert.NotEmptyf(t, goHandle,
+		"the Go dataset was published (live=%d) but its handle was not retained — nothing could retract it",
+		rig.keys.live())
+
+	// Retrying republishes under the recorded handle rather than minting
+	// a fresh one each time.
+	before := rig.keys.live()
+	for range 3 {
+		inst.requestEvalInPlay(snap)
+	}
+	assert.Equalf(t, before, rig.keys.live(),
+		"repeated failing hand-offs minted more datasets: %d -> %d live", before, rig.keys.live())
+
+	// And what it holds, it gives back.
+	inst.retractEvalDatasets()
+	assert.Equal(t, adhocdata.MaxDatasets-1, rig.keys.live(),
+		"the app's own dataset was not retracted")
+}
+
+// TestStatusIsRetiredWhenTheInputsChange — every other result surface in
+// this window refuses to present an answer as describing inputs it does
+// not (see queryLane); the hand-off's outcome is held to the same rule.
+func TestStatusIsRetiredWhenTheInputsChange(t *testing.T) {
+	rig := setupEvalRig(t)
+	inst := rig.app
+	inst.pattern = `(a)`
+	inst.haystack = "ab a"
+
+	snap, err := inst.snapshotEval()
+	require.NoError(t, err)
+	inst.requestEvalInPlay(snap)
+
+	_, shown, _ := inst.evalStatusView(inst.singleKey())
+	require.NotEmpty(t, shown, "the outcome describes what is on screen and must be visible")
+
+	inst.pattern = `(zzz)`
+	inst.haystack = "nothing here"
+
+	_, stale, staleErr := inst.evalStatusView(inst.singleKey())
+	assert.Emptyf(t, stale, "status %q still shown after the inputs changed", stale)
+	assert.Empty(t, staleErr)
+}
+
+// TestDegradedStatusSaysClickHouseWasNotAsked — "0 ClickHouse row(s)"
+// reads as an answer, and this surface exists to make the two engines'
+// answers comparable.
+func TestDegradedStatusSaysClickHouseWasNotAsked(t *testing.T) {
+	rig := setupEvalRig(t)
+	inst := rig.app
+	inst.pattern = `(a)`
+	inst.haystack = "ab"
+
+	snap, err := inst.snapshotEval()
+	require.NoError(t, err)
+	require.False(t, snap.hasCH)
+	inst.requestEvalInPlay(snap)
+
+	_, status, _ := inst.evalStatusView(inst.singleKey())
+	assert.NotContains(t, status, "0 ClickHouse row(s)")
+	assert.Contains(t, status, "no result for this input")
+}
+
+// TestSqlCommentTruncatesOnRuneBoundaries — the header is cut to a length
+// cap, and a regex explorer is exactly where someone pastes a Unicode
+// pattern. A byte-offset cut splits a rune and the invalid UTF-8 rides
+// into play's editor buffer.
+func TestSqlCommentTruncatesOnRuneBoundaries(t *testing.T) {
+	for _, s := range []string{
+		strings.Repeat("α", 200),
+		strings.Repeat("日", 200),
+		strings.Repeat("x", 200),
+		"\xff\xfe" + strings.Repeat("é", 200),
+	} {
+		out := sqlComment(s)
+		assert.Truef(t, utf8.ValidString(out), "sqlComment produced invalid UTF-8: %q", out)
+		assert.NotContains(t, out, "\n", "the header must stay one line")
+	}
+}
+
+func TestSeededSqlIsValidUtf8(t *testing.T) {
+	snap := evalSnapshot{pattern: strings.Repeat("α", 200), haystack: strings.Repeat("日", 200), hasCH: true}
+	sql := buildEvalSQL(snap, evalHandles{goHandle: "h_go", chHandle: "h_ch"})
+	assert.True(t, utf8.ValidString(sql), "seeded SQL carries invalid UTF-8")
 }
 
 func TestEvalHandoffReportsMissingBus(t *testing.T) {

@@ -32,10 +32,9 @@ func assertCoverage(t *testing.T, src string, spans []regexhighlight.Span) {
 		if got := src[s.Start:s.Stop]; got != s.Text {
 			t.Fatalf("span %d: Text=%q, want %q", i, s.Text, got)
 		}
-		if !utf8.ValidString(src) {
-			// A pattern with invalid UTF-8 still has to be covered; the
-			// rune-boundary claim below only applies to valid input.
-		} else if !utf8.ValidString(s.Text) {
+		// A pattern with invalid UTF-8 still has to be covered; the
+		// rune-boundary claim only applies to valid input.
+		if utf8.ValidString(src) && !utf8.ValidString(s.Text) {
 			t.Fatalf("span %d: %q splits a UTF-8 sequence in %q", i, s.Text, src)
 		}
 		if s.Depth < 0 {
@@ -300,6 +299,113 @@ func TestCoverageInvariantOverArbitraryBytes(t *testing.T) {
 		src := string(rapid.SliceOfN(rapid.Byte(), 0, 32).Draw(rt, "bytes"))
 		assertCoverage(t, src, regexhighlight.Highlight(src))
 		assertCoverage(t, src, regexhighlight.HighlightLines(src))
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Oracles — the lexer's structural claims, checked against Go's regexp
+// rather than against itself.
+// ---------------------------------------------------------------------------
+
+// oracleAtoms builds random patterns out of whole constructs, so a
+// meaningful share of the draws actually compile and the oracle has
+// something to say about them.
+var oracleAtoms = []string{
+	"a", "é", ".", "|", "x",
+	"(", ")", "(?:", "(?i)", "(?i:", "(?s:", "(?P<n>", "(?<m>",
+	"[a-z]", "[^a]", "[]]", `\d`, `\w`, `\p{Greek}`, `\x{41}`, `\.`, `\Q`, `\E`,
+	"*", "+", "?", "{2}", "{2,3}", "{,3}", "^", "$", `\b`, "}", "]",
+}
+
+func drawPattern(rt *rapid.T, maxAtoms int) (src string) {
+	n := rapid.IntRange(0, maxAtoms).Draw(rt, "n")
+	var b strings.Builder
+	for range n {
+		b.WriteString(rapid.SampledFrom(oracleAtoms).Draw(rt, "atom"))
+	}
+	src = b.String()
+	return
+}
+
+// countCapturingOpeners counts the group openers the lexer classified as
+// *capturing*: a bare `(`, `(?P<`, or `(?<`. A non-capturing `(?:` or a
+// flag group `(?i:` opens a group but captures nothing, and a flag
+// setting `(?i)` opens nothing at all.
+func countCapturingOpeners(spans []regexhighlight.Span) (n int) {
+	for _, s := range spans {
+		if s.Category != regexhighlight.CategoryGroup {
+			continue
+		}
+		switch s.Text {
+		case "(", "(?P<", "(?<":
+			n++
+		}
+	}
+	return
+}
+
+// TestCaptureCountMatchesRegexp is the strongest independent check on the
+// group classification: for any pattern that compiles, the number of
+// capturing openers the lexer saw must equal re.NumSubexp(). Nothing in
+// the lexer computes that number, so this cannot pass by construction —
+// it catches `(?i)` counted as a group, `(?:` counted as a capture, and
+// a named group missed.
+func TestCaptureCountMatchesRegexp(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		src := drawPattern(rt, 14)
+		re, err := regexp.Compile(src)
+		if err != nil {
+			return // only compiling patterns have a defined answer
+		}
+		if got, want := countCapturingOpeners(regexhighlight.Highlight(src)), re.NumSubexp(); got != want {
+			rt.Fatalf("pattern %q: lexer saw %d capturing group(s), regexp says %d", src, got, want)
+		}
+	})
+}
+
+// TestDepthIsBalancedForCompilingPatterns — a pattern that compiles is
+// balanced, so depth never goes negative, never steps by more than one
+// between adjacent spans, and returns to 0 at the end.
+func TestDepthIsBalancedForCompilingPatterns(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		src := drawPattern(rt, 14)
+		if _, err := regexp.Compile(src); err != nil {
+			return
+		}
+		spans := regexhighlight.Highlight(src)
+		if len(spans) == 0 {
+			return
+		}
+		prev := int32(0)
+		for i, s := range spans {
+			if s.Depth < 0 {
+				rt.Fatalf("pattern %q span %d (%q): negative depth %d", src, i, s.Text, s.Depth)
+			}
+			if d := s.Depth - prev; d > 1 || d < -1 {
+				rt.Fatalf("pattern %q span %d (%q): depth stepped %d -> %d", src, i, s.Text, prev, s.Depth)
+			}
+			prev = s.Depth
+		}
+		if last := spans[len(spans)-1]; last.Depth != 0 {
+			rt.Fatalf("pattern %q compiles but ends at depth %d", src, last.Depth)
+		}
+	})
+}
+
+// TestCompilingPatternsNeverPaintAnErrorProperty is the property-test
+// counterpart of the fixed corpus below: CategoryError claims only two
+// byte-level certainties, and neither can occur in a pattern Go accepts.
+func TestCompilingPatternsNeverPaintAnErrorProperty(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		src := drawPattern(rt, 12)
+		if _, err := regexp.Compile(src); err != nil {
+			return
+		}
+		for _, s := range regexhighlight.Highlight(src) {
+			if s.Category == regexhighlight.CategoryError {
+				rt.Fatalf("pattern %q compiles but span %q was painted as an error", src, s.Text)
+			}
+		}
 	})
 }
 

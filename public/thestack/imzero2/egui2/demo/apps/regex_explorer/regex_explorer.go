@@ -89,9 +89,13 @@ type App struct {
 	// so it belongs to the mu group above. evalGoHandle / evalChHandle
 	// are retained across republishes so one window holds at most two
 	// datasets against the ADR-0134 MaxDatasets cap.
-	evalBusy     bool
-	evalErr      string
-	evalStatus   string
+	evalBusy   bool
+	evalErr    string
+	evalStatus string
+	// evalKey fingerprints the inputs evalStatus / evalErr describe, so
+	// an outcome is retired when the editors move on rather than
+	// presented as current — the [queryLane] freshness rule.
+	evalKey      queryKey
 	evalGoHandle string
 	evalChHandle string
 
@@ -365,9 +369,10 @@ func (inst *App) renderBody() {
 // plain data and never touches c.* or a lane. A re-click while a
 // hand-off is in flight is dropped.
 func (inst *App) renderEvalHandoff() {
-	inst.mu.RLock()
-	busy, evalErr, status := inst.evalBusy, inst.evalErr, inst.evalStatus
-	inst.mu.RUnlock()
+	// Keyed on the inputs on screen: an outcome describing a pattern the
+	// user has since edited is dropped, not shown. The lanes beside it
+	// say "(stale)" for the same reason.
+	busy, status, evalErr := inst.evalStatusView(inst.singleKey())
 
 	for range c.Horizontal().KeepIter() {
 		label := "Query this extraction in the playground"
@@ -396,7 +401,12 @@ func (inst *App) renderEvalHandoff() {
 func (inst *App) startEvalHandoff() {
 	snap, err := inst.snapshotEval()
 	if err != nil {
+		// snapshotEval failed before it could build a key, so stamp the
+		// current one — the message describes what is on screen now.
+		// Built outside the lock: it reads render-thread input state.
+		key := inst.singleKey()
 		inst.mu.Lock()
+		inst.evalKey = key
 		inst.evalErr = err.Error()
 		inst.evalStatus = ""
 		inst.mu.Unlock()

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -68,6 +69,11 @@ type chExtractRow struct {
 // evalSnapshot is everything the worker needs, taken on the render
 // thread. Plain data only — no lane, no compiled regexp, no c.* handle.
 type evalSnapshot struct {
+	// key fingerprints the inputs this snapshot describes, so the status
+	// it produces can be retired when the editors move on — the same
+	// freshness rule [queryLane] applies to every other result surface in
+	// this window.
+	key      queryKey
 	pattern  string
 	haystack string
 	goRows   []goMatchRow
@@ -104,6 +110,7 @@ func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
 		return
 	}
 
+	snap.key = inst.singleKey()
 	snap.pattern = inst.effectivePattern(inst.pattern)
 	snap.haystack = inst.haystack
 
@@ -189,15 +196,46 @@ func (inst *App) requestEvalInPlay(snap evalSnapshot) {
 
 	inst.mu.Lock()
 	inst.evalBusy = false
+	inst.evalKey = snap.key
 	if err != nil {
 		inst.evalErr = err.Error()
 		inst.evalStatus = ""
 	} else {
 		inst.evalErr = ""
-		inst.evalStatus = fmt.Sprintf("opened a playground over %d Go row(s) / %d ClickHouse row(s)",
-			len(snap.goRows), len(snap.chRows))
+		inst.evalStatus = evalStatusLine(snap)
 	}
 	inst.mu.Unlock()
+}
+
+// evalStatusLine describes what was published. The degraded path says
+// ClickHouse was never asked rather than reporting zero rows for it —
+// "0 ClickHouse row(s)" reads as an answer, and this surface exists to
+// make the two engines' answers comparable.
+func evalStatusLine(snap evalSnapshot) (line string) {
+	if !snap.hasCH {
+		line = fmt.Sprintf("opened a playground over %d Go row(s); ClickHouse had no result for this input, so only the Go side was published",
+			len(snap.goRows))
+		return
+	}
+	line = fmt.Sprintf("opened a playground over %d Go row(s) / %d ClickHouse row(s)",
+		len(snap.goRows), len(snap.chRows))
+	return
+}
+
+// evalStatusView is the render-side snapshot of the hand-off's outcome
+// against the inputs currently on screen — the [laneView.Fresh] rule,
+// applied to the one result surface in this window that is not a lane. An
+// outcome describing inputs the user has edited past is dropped rather
+// than presented as current.
+func (inst *App) evalStatusView(want queryKey) (busy bool, status string, errText string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	busy = inst.evalBusy
+	if inst.evalKey != want {
+		return
+	}
+	status, errText = inst.evalStatus, inst.evalErr
+	return
 }
 
 // evalHandles are the two published dataset handles. chHandle is empty on
@@ -234,6 +272,14 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 		return
 	}
 	handles.goHandle = res.Handle
+	// Record it before attempting the second publish, not after both
+	// succeed. The two publishes fail independently — the ClickHouse one
+	// can hit the MaxDatasets or byte quota that the first one just made
+	// tighter — and a handle minted but not recorded is one nothing can
+	// retract: Unmount cannot see it, and the next attempt mints another.
+	inst.mu.Lock()
+	inst.evalGoHandle = handles.goHandle
+	inst.mu.Unlock()
 
 	if snap.hasCH {
 		var chStream []byte
@@ -251,14 +297,10 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 			return
 		}
 		handles.chHandle = chRes.Handle
-	}
-
-	inst.mu.Lock()
-	inst.evalGoHandle = handles.goHandle
-	if handles.chHandle != "" {
+		inst.mu.Lock()
 		inst.evalChHandle = handles.chHandle
+		inst.mu.Unlock()
 	}
-	inst.mu.Unlock()
 	return
 }
 
@@ -339,13 +381,30 @@ func buildEvalSQL(snap evalSnapshot, handles evalHandles) (sql string) {
 
 // sqlComment renders s safely inside a single-line `--` comment: newlines
 // would end the comment and turn the rest of the pattern into SQL, and a
-// long haystack would bury the query. Escaped and truncated, so the
-// header stays one line whatever the user typed.
+// long haystack would bury the query. %q escapes both, so the header
+// stays one line whatever the user typed.
+//
+// Truncation counts runes, not bytes. Cutting the %q output at a byte
+// offset splits a multi-byte rune — which a regex explorer hits the
+// moment someone pastes a Unicode-class pattern — and the invalid UTF-8
+// then rides into play's editor buffer.
 func sqlComment(s string) (out string) {
-	const maxLen = 120
+	const maxRunes = 100
+	truncated := false
+	if utf8.RuneCountInString(s) > maxRunes {
+		i, n := 0, 0
+		for i < len(s) && n < maxRunes {
+			_, size := utf8.DecodeRuneInString(s[i:])
+			i += size
+			n++
+		}
+		s = s[:i]
+		truncated = true
+	}
 	out = fmt.Sprintf("%q", s)
-	if len(out) > maxLen {
-		out = out[:maxLen] + "…\""
+	if truncated {
+		// %q always closes with a quote; reopen past the ellipsis.
+		out = out[:len(out)-1] + `…"`
 	}
 	return
 }

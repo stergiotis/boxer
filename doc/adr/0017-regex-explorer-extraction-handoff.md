@@ -137,6 +137,18 @@ external `play.AppId` call site keeps compiling untouched.
   call `c.*`); status folds back under the existing `mu`, which already covers the
   "written by workers, read by the render thread" field group. A re-click while in flight is
   dropped.
+- **Each handle is recorded the moment it is minted, not once both publishes succeed.** The
+  two publishes fail independently — the ClickHouse one can hit the very `MaxDatasets` or
+  byte quota the Go one just made tighter — and a handle minted but not recorded is one
+  nothing can retract: `Unmount` cannot see it, and every retry mints another. Recording
+  first also makes a retry a *republish*, so repeated failures consume no additional slots.
+- **The outcome carries the inputs it describes.** `evalStatus` / `evalErr` are stamped with
+  the snapshot's `queryKey` and rendered only while that key matches what is on screen. Every
+  other result surface in this window already refuses to present an answer as describing
+  inputs it does not (`queryLane`, and the "(stale)" labels beside it); a status line that
+  kept describing a pattern the user had edited past would reintroduce exactly the disease
+  the lanes exist to cure. On the degraded path the line says ClickHouse was never asked —
+  "0 ClickHouse row(s)" reads as an answer.
 - The manifest gains three `Pub` caps: `adhocdata.SubjectPublish`,
   `adhocdata.SubjectRetract`, `windowhost.OpenSubject`.
 - `AppInstance.Unmount` retracts both handles alongside the existing `cancelQueries()`.
