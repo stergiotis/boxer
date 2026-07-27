@@ -197,11 +197,27 @@ which is the failure above. The API has no consumers outside its own tests.
 - **M4 — role filtering**, inert by default.
 - **M5 — the single-section-visit rule**, the ordering fold, and the two-pass
   removal.
-- **Deferred** — re-deriving the ClickHouse artefacts from `ReadContract`
-  (that back-end already behaves correctly, so this is consolidation, not
-  correctness); verifying resolved `lookup` ids against the wire; archetype
-  APIs beyond `ArchetypePresence`; a generated Presence prefilter, which
-  ADR-0075 already deferred to ADR-0066's codegen.
+- **Deferred** — re-deriving the ClickHouse artefacts from `ReadContract`;
+  verifying resolved `lookup` ids against the wire; archetype APIs beyond
+  `ArchetypePresence`; a generated Presence prefilter, which ADR-0075 already
+  deferred to ADR-0066's codegen.
+
+M1 corrected one premise of that first deferral. It was written believing the
+ClickHouse back-end already enforced the contract correctly, so moving it would
+be consolidation rather than a fix. Measuring the write path showed otherwise
+for **non-Option container fields**: a `[]T` or `*roaring.Bitmap` field emits
+**zero** attributes when empty — `marshalContainer` splices it — so its arity is
+`[0..1]`, but the generator treats every non-Option field as mandatory and emits
+a presence literal plus `countEqual(…) = 1`, i.e. `[1..1]`. A row whose
+container field is legitimately empty therefore fails the Presence and Validator
+its own kind generates. The Go read paths accept it, so the two back-ends
+disagree about the same row.
+
+The fix is one branch in `Generator.field` — a container field takes the Option
+treatment for arity while keeping its mandatory *value* semantics — but it
+changes generated SQL, so it stays deferred rather than riding along with M1.
+`TestGenerator_ContainerArityDivergesFromReadContract` pins the current
+behaviour so the divergence is not rediscovered.
 
 ## Alternatives
 
