@@ -25,12 +25,31 @@ func markSig(names ...string) SignalEnvI {
 	return &signalEnv{params: params, revision: 1}
 }
 
-// markSplit is a one-node split whose sink reads the given names.
-func markSplit(reads ...SignalID) splitResult {
+// markSplit is a bare one-node split — the structural half, for the channels
+// filled by a named node.
+func markSplit() splitResult {
 	return splitResult{
-		Nodes: []splitNode{{ID: mainNodeID, Kind: splitNodeStatement, Reads: reads}},
+		Nodes: []splitNode{{ID: mainNodeID, Kind: splitNodeStatement}},
 		Sink:  mainNodeID,
 	}
+}
+
+// markSlots is the parsed-slot form of markReads, for the app-level paths that
+// build the read set off the buffer cache.
+func markSlots(names ...SignalID) (out []paramSlot) {
+	for _, n := range names {
+		out = append(out, paramSlot{Name: string(n), Type: "String"})
+	}
+	return
+}
+
+// markReads is the buffer's referenced slot names — the drive relation's half.
+func markReads(names ...SignalID) map[string]bool {
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		out[string(n)] = true
+	}
+	return out
 }
 
 var (
@@ -97,17 +116,17 @@ func TestTabMarkSkipsUniversalPanes(t *testing.T) {
 func TestTabMarkSignalRelation(t *testing.T) {
 	mapTab := markSpec("map", false, nil, mapViewportSignals[:]...)
 
-	assert.Equal(t, tabMarkNone, tabMark(mapTab, tabVerdict{split: markSplit("unrelated")}),
+	assert.Equal(t, tabMarkNone, tabMark(mapTab, tabVerdict{reads: markReads("unrelated")}),
 		"the query does not read the viewport")
 
-	blocked := tabVerdict{split: markSplit("vp_min_x"), sig: markSig()}
+	blocked := tabVerdict{reads: markReads("vp_min_x"), sig: markSig()}
 	assert.Equal(t, tabMarkBlocked, tabMark(mapTab, blocked),
 		"the query reads vp_min_x and nothing has written it")
 
-	drives := tabVerdict{split: markSplit("vp_min_x"), sig: markSig("vp_min_x")}
+	drives := tabVerdict{reads: markReads("vp_min_x"), sig: markSig("vp_min_x")}
 	assert.Equal(t, tabMarkDrives, tabMark(mapTab, drives))
 
-	pinned := tabVerdict{split: markSplit("vp_min_x"), sig: markSig(), bound: map[string]string{"vp_min_x": "0"}}
+	pinned := tabVerdict{reads: markReads("vp_min_x"), sig: markSig(), bound: map[string]string{"vp_min_x": "0"}}
 	assert.Equal(t, tabMarkNone, tabMark(mapTab, pinned),
 		"a SET pins the value — the pane's write is shadowed (D1)")
 }
@@ -116,14 +135,14 @@ func TestTabMarkSignalRelation(t *testing.T) {
 // its writer drives without ever being the blocker.
 func TestTabMarkReservedStringNeverBlocks(t *testing.T) {
 	world := markSpec("world", true, worldPanel{}, signalSelection, signalSelectionCountry)
-	v := tabVerdict{schema: markWorldOK, split: markSplit(signalSelectionCountry), sig: markSig()}
+	v := tabVerdict{schema: markWorldOK, reads: markReads(signalSelectionCountry), sig: markSig()}
 	assert.Equal(t, tabMarkDrives, tabMark(world, v))
 }
 
 // Declaring `selection` implies the companions the dispatcher stamps.
 func TestTabMarkSelectionCompanions(t *testing.T) {
 	table := markSpec("table", false, tablePanel{}, signalSelection)
-	v := tabVerdict{schema: markWorldOK, split: markSplit(signalSelectionID), sig: markSig(string(signalSelectionID))}
+	v := tabVerdict{schema: markWorldOK, reads: markReads(signalSelectionID), sig: markSig(string(signalSelectionID))}
 	assert.Equal(t, tabMarkDrives, tabMark(table, v),
 		"selection_id rides every selecting pane's click")
 }
@@ -131,14 +150,14 @@ func TestTabMarkSelectionCompanions(t *testing.T) {
 // Precedence: a pane that cannot draw this result is not a control over it.
 func TestTabMarkPrecedence(t *testing.T) {
 	world := markSpec("world", true, worldPanel{}, signalSelection, signalSelectionCountry)
-	v := tabVerdict{schema: markWorldNo, split: markSplit(signalSelectionCountry), sig: markSig()}
+	v := tabVerdict{schema: markWorldNo, reads: markReads(signalSelectionCountry), sig: markSig()}
 	assert.Equal(t, tabMarkShapeReject, tabMark(world, v))
 
 	// A notice loses to both signal marks, and stands on its own.
 	chrome := markSpec("diagnostics", false, nil)
 	assert.Equal(t, tabMarkNotice, tabMark(chrome, tabVerdict{notice: true}))
 	driving := markSpec("map", false, nil, mapViewportSignals[:]...)
-	v = tabVerdict{split: markSplit("vp_min_x"), sig: markSig("vp_min_x"), notice: true}
+	v = tabVerdict{reads: markReads("vp_min_x"), sig: markSig("vp_min_x"), notice: true}
 	assert.Equal(t, tabMarkDrives, tabMark(driving, v))
 }
 
@@ -191,7 +210,8 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 // The title composes: 6c's binding decoration, then the mark.
 func TestTabTitleComposesBindingAndMark(t *testing.T) {
 	app := tabsTestApp()
-	app.currentSplit = markSplit(signalSelectionCountry)
+	app.currentSplit = markSplit()
+	app.paramSlots = markSlots(signalSelectionCountry)
 	app.frameSig = app.graph.signals()
 
 	var world TabSpec

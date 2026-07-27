@@ -67,9 +67,17 @@ type tabVerdict struct {
 	// shape verdict is then unknown rather than negative — before the first
 	// Run every panel rejects, and a strip of rejects says nothing.
 	schema *arrow.Schema
-	// split is the last Run's recovered node graph — the source of both the
-	// structural channel verdict and the names the query reads.
+	// split is the last Run's recovered node graph — the source of the
+	// structural verdict for channels filled by a named node.
 	split splitResult
+	// reads are the names the BUFFER references — its `{name:Type}` slots,
+	// not the last split's. The two agree for a buffer that ran, and only the
+	// buffer's slots exist for one that did not: a Run refused for an unfilled
+	// input never produces a split, which is exactly the state where the pane
+	// that writes the missing name most wants pointing at. It is also the set
+	// the Run gate itself judges (unfilledInputs), so the mark and the refusal
+	// cannot disagree.
+	reads map[string]bool
 	sig   SignalEnvI
 	// bound are the names the buffer's SET prelude pins. A pinned name
 	// shadows the signal at execution (slice-5 D1), so a pane writing it does
@@ -84,14 +92,16 @@ type tabVerdict struct {
 // the signal marks; an unfilled name outranks a filled one because it names
 // the gesture that unblocks a refused Run.
 func tabMark(spec *TabSpec, in tabVerdict) (mark tabMarkE) {
-	if spec.ShapeContract && spec.Panel != nil && shapeRejects(spec.Panel, in) {
-		return tabMarkShapeReject
+	if spec.ShapeContract && spec.Panel != nil {
+		if reason, verdict := paneReject(spec.Panel, in); verdict && reason != "" {
+			return tabMarkShapeReject
+		}
 	}
-	drives, blocked := signalRelation(spec, in)
+	drives, unfilled := signalRelation(spec, in)
 	switch {
-	case blocked:
+	case len(unfilled) > 0:
 		mark = tabMarkBlocked
-	case drives:
+	case len(drives) > 0:
 		mark = tabMarkDrives
 	case in.notice:
 		mark = tabMarkNotice
@@ -99,34 +109,79 @@ func tabMark(spec *TabSpec, in tabVerdict) (mark tabMarkE) {
 	return
 }
 
-// shapeRejects reports that a panel's required channels cannot be filled from
-// what this frame would offer them. Only a POSITIVE rejection is reported: an
-// unknown offer (no result yet, no split, a channel this mapping does not
-// model, or a split node whose columns are unknown without executing) yields
-// false, so the strip stays silent rather than guessing. "Does not reject" is
-// therefore not a promise that the pane will render.
-func shapeRejects(p PanelI, in tabVerdict) (rejects bool) {
+// paneReject asks a panel whether its required channels can be filled from
+// what this frame would offer them, and returns the panel's own reason text
+// when they cannot — the same string its body would show, so the strip and
+// the menu never invent prose the pane would not.
+//
+// verdict distinguishes a judgement about a real offer from a description of
+// an absent one. The strip marks only on a verdict, so a pane is never marked
+// unusable merely because nothing has run; the menu shows the reason either
+// way, because "Run a query to see results." is exactly what a reader wants
+// there. When neither holds — a named node that exists but has not executed —
+// there is no honest text at all, and both surfaces stay quiet.
+func paneReject(p PanelI, in tabVerdict) (reason string, verdict bool) {
 	for _, ch := range p.Channels() {
 		if !ch.Required {
 			continue // an optional channel that cannot be filled is simply absent
 		}
-		if node, fromSplit := splitFedChannel(ch.ID); fromSplit {
-			if len(in.split.Nodes) == 0 {
-				continue // nothing has been split yet — unknown, not absent
+		state, schema := requiredOffer(ch.ID, in)
+		switch state {
+		case offerSchema:
+			if _, r := p.AcceptForChannel(ch.ID, schema, in.sig); r != "" {
+				return r, true
 			}
-			if _, ok := findSplitNode(in.split, node); !ok {
-				return true // the CTE this channel needs is not in the buffer
+		case offerAbsent:
+			// The node this channel is filled from is not in the buffer. The
+			// panel's own no-input text names what it wants ("Run a query with
+			// an `edges` CTE …"), which is the message for exactly this case.
+			_, r := p.AcceptForChannel(ch.ID, nil, in.sig)
+			return r, true
+		case offerNoResult:
+			if reason == "" {
+				_, reason = p.AcceptForChannel(ch.ID, nil, in.sig)
 			}
-			continue // present, but its shape needs an execution to know (SD2)
-		}
-		if !frameFedChannel(ch.ID) || in.schema == nil {
-			continue
-		}
-		if _, reason := p.AcceptForChannel(ch.ID, in.schema, in.sig); reason != "" {
-			return true
+		case offerPending:
+			// The node is there but has not executed; its columns are unknown
+			// without running it (SD2), and the no-input text would misdescribe
+			// a node that exists.
 		}
 	}
 	return
+}
+
+// offerE is what a required channel would be handed this frame.
+type offerE uint8
+
+const (
+	offerNoResult offerE = iota // frame-fed, nothing has landed
+	offerSchema                 // a real schema to judge
+	offerAbsent                 // the named node this channel needs is not in the split
+	offerPending                // the named node is there, unexecuted
+)
+
+func requiredOffer(ch ChannelID, in tabVerdict) (state offerE, schema *arrow.Schema) {
+	if node, fromSplit := splitFedChannel(ch); fromSplit {
+		switch {
+		case len(in.split.Nodes) == 0:
+			return offerNoResult, nil
+		case !splitHasNode(in.split, node):
+			return offerAbsent, nil
+		}
+		return offerPending, nil
+	}
+	if !frameFedChannel(ch) {
+		return offerPending, nil // a channel this mapping does not model
+	}
+	if in.schema == nil {
+		return offerNoResult, nil
+	}
+	return offerSchema, in.schema
+}
+
+func splitHasNode(split splitResult, node NodeID) bool {
+	_, ok := findSplitNode(split, node)
+	return ok
 }
 
 // splitFedChannel maps a channel to the split node that fills it BY NAME — the
@@ -152,29 +207,26 @@ func splitFedChannel(ch ChannelID) (node NodeID, ok bool) {
 // the active result, or a bound node's (6c).
 func frameFedChannel(ch ChannelID) bool { return ch == chMain || ch == chEvents }
 
-// signalRelation reports whether the tab writes a name some split node reads
-// (drives) and, of those, whether one is unfilled (blocked) — the same
-// condition the Run gate refuses on, attributed to the pane that can fix it.
+// signalRelation returns the names this tab writes that some split node reads
+// (drives) and the subset nothing has filled (unfilled) — the same condition
+// the Run gate refuses on, attributed to the pane that can fix it. Names come
+// back in declaration order, so a menu row reads the same way twice.
 //
-// A SET-bound name counts for neither: the constant shadows the signal at
-// execution (D1), so writing it moves nothing until the SET goes.
-func signalRelation(spec *TabSpec, in tabVerdict) (drives, blocked bool) {
-	if len(spec.Writes) == 0 {
-		return
-	}
-	reads := splitReads(in.split)
-	if len(reads) == 0 {
+// A SET-bound name is in neither: the constant shadows the signal at execution
+// (D1), so writing it moves nothing until the SET goes.
+func signalRelation(spec *TabSpec, in tabVerdict) (drives, unfilled []string) {
+	if len(spec.Writes) == 0 || len(in.reads) == 0 {
 		return
 	}
 	for _, w := range declaredWrites(spec) {
 		name := string(w)
-		if !reads[name] {
+		if !in.reads[name] {
 			continue
 		}
 		if _, pinned := in.bound[name]; pinned {
 			continue
 		}
-		drives = true
+		drives = append(drives, name)
 		if signalDefaultsEmpty(name) {
 			continue // a reserved String signal never blocks a Run
 		}
@@ -183,22 +235,22 @@ func signalRelation(spec *TabSpec, in tabVerdict) (drives, blocked bool) {
 				continue
 			}
 		}
-		blocked = true
+		unfilled = append(unfilled, name)
 	}
 	return
 }
 
-// splitReads is the union of the names the split's nodes read — the signal
-// edges of the recovered graph, SET-bound names included (the caller filters
-// those, as the system-graph drawing does).
-func splitReads(split splitResult) (out map[string]bool) {
-	for i := range split.Nodes {
-		for _, r := range split.Nodes[i].Reads {
-			if out == nil {
-				out = make(map[string]bool, 4)
-			}
-			out[string(r)] = true
-		}
+// bufferReads is the set of names the buffer references — its parsed
+// `{name:Type}` slots, SET-bound ones included (signalRelation filters those,
+// as the system-graph drawing does). Read off the debounced slot cache, so it
+// costs a map build per frame and no parse.
+func bufferReads(slots []paramSlot) (out map[string]bool) {
+	if len(slots) == 0 {
+		return
+	}
+	out = make(map[string]bool, len(slots))
+	for _, s := range slots {
+		out[s.Name] = true
 	}
 	return
 }
@@ -236,6 +288,7 @@ func (inst *PlayApp) tabTitle(spec *TabSpec, f *TabFrame) (title string) {
 func (inst *PlayApp) tabVerdictFor(spec *TabSpec, f *TabFrame) (v tabVerdict) {
 	v = tabVerdict{
 		split:  inst.currentSplit,
+		reads:  bufferReads(inst.paramSlots),
 		sig:    inst.frameSig,
 		bound:  inst.paramSyncedValues,
 		notice: inst.tabNotice(spec, f),
