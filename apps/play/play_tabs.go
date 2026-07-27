@@ -67,6 +67,23 @@ type TabSpec struct {
 	Lazy     bool
 	Panel    PanelI
 	Render   func(f *TabFrame)
+
+	// ShapeContract marks a panel whose acceptance turns on the RESULT'S
+	// COLUMN SHAPE — the Timeline's `_tl_*` contract, the World's country
+	// column, the Kanban's `lane`+`title`, the Network's `edges` CTE. Their
+	// rejection is worth advertising on the dock strip (the `×` mark of the
+	// 2026-07-27 Update); the universal panes accept any schema and reject
+	// only on interaction state ("select a row"), where a mark would be
+	// permanent and carry no information.
+	ShapeContract bool
+	// Writes are the signal names this tab may publish — the write-back half
+	// of the reactive surface, declared so the strip can mark a pane that
+	// drives the current query BEFORE the first interaction (provenance knows
+	// a writer only afterwards). It lives here rather than on PanelI because
+	// the Map writes `vp_*` without being a PanelI at all. The companions the
+	// dispatcher stamps (`selection_node`, `selection_id`) are implied by
+	// declaring `selection` — see declaredWrites.
+	Writes []SignalID
 }
 
 // TabRegistry is a PlayApp instance's tab set (D4): mutate between
@@ -200,6 +217,10 @@ type builtinTabDef struct {
 	zone     TabZoneE
 	noScroll bool
 	lazy     bool
+	// shapeContract / writes are the strip-mark declarations (TabSpec's
+	// fields of the same name).
+	shapeContract bool
+	writes        []SignalID
 }
 
 // Lazy marks (see TabSpec.Lazy): heavy bodies whose per-frame cost is wasted
@@ -216,24 +237,32 @@ var builtinTabDefs = []builtinTabDef{
 	{id: "editor", dockID: dockTabEditor, title: "Editor", zone: TabZoneEditor},
 	{id: "history", dockID: dockTabHistory, title: "History", zone: TabZoneEditor, lazy: true},
 	{id: "preview", dockID: dockTabPreview, title: "Preview", zone: TabZonePreview},
-	{id: "table", dockID: dockTabTable, title: "Table"},
-	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true},
-	{id: "timeline", dockID: dockTabTimeline, title: "Timeline", lazy: true},
+	{id: "table", dockID: dockTabTable, title: "Table", writes: []SignalID{signalSelection}},
+	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true,
+		writes: []SignalID{signalSelection}},
+	{id: "timeline", dockID: dockTabTimeline, title: "Timeline", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection, signalTimelineMin, signalTimelineMax}},
 	{id: "snippets", dockID: dockTabSnippets, title: "Snippets"},
 	// NoScroll: the walkers map reads wheel/zoom input globally (no
 	// consumption), so the dock's default body ScrollArea would scroll the
 	// panel in the same gesture that pans/zooms the map.
-	{id: "map", dockID: dockTabMap, title: "Map", noScroll: true, lazy: true},
+	// The Map is chrome (no PanelI) that nonetheless publishes its viewport —
+	// the case that puts Writes on the spec rather than on the panel.
+	{id: "map", dockID: dockTabMap, title: "Map", noScroll: true, lazy: true,
+		writes: mapViewportSignals[:]},
 	// NoScroll: the world choropleth sizes its map image from
 	// ui.available_size() (zero-box FitAspectMax); inside the dock's
 	// auto-shrinking ScrollArea, zero is a stable fixed point after a
 	// tab-activation layout pass. A no-scroll leaf is bounded, so the
 	// available size is the real remainder; overflow clips, as on Map.
-	{id: "world", dockID: dockTabWorld, title: "World", noScroll: true, lazy: true},
-	{id: "kanban", dockID: dockTabKanban, title: "Kanban", lazy: true},
+	{id: "world", dockID: dockTabWorld, title: "World", noScroll: true, lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection, signalSelectionCountry}},
+	{id: "kanban", dockID: dockTabKanban, title: "Kanban", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
 	// The Network tab draws the result as a node-link graph (ADR-0129). Its
 	// title is deliberately not "Graph" — that is the dataflow chrome below.
-	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true},
+	// It writes nothing: selection is local to the driver in v1.
+	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true, shapeContract: true},
 	{id: "graph", dockID: dockTabGraph, title: "Graph", lazy: true},
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
 	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
@@ -326,7 +355,9 @@ func scrollTab(body func()) {
 func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 	reg = &TabRegistry{specs: make([]TabSpec, 0, len(builtinTabDefs))}
 	for _, def := range builtinTabDefs {
-		spec := TabSpec{ID: def.id, DockID: def.dockID, Title: def.title, Zone: def.zone, NoScroll: def.noScroll, Lazy: def.lazy}
+		spec := TabSpec{ID: def.id, DockID: def.dockID, Title: def.title, Zone: def.zone,
+			NoScroll: def.noScroll, Lazy: def.lazy,
+			ShapeContract: def.shapeContract, Writes: def.writes}
 		switch def.id {
 		case "editor":
 			spec.Render = func(f *TabFrame) { inst.renderEditorTab() }

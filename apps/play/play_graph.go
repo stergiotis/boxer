@@ -104,6 +104,12 @@ type PanelI interface {
 	// — the dispatcher keys on the reason, and the claim may be any value the
 	// panel wants back in Render (including nil). Pure: no side effects, no
 	// rendering.
+	//
+	// It must also stay CHEAP — a schema scan, not a data pass. Since the dock
+	// strip carries the verdict (the 2026-07-27 Update) it runs once per
+	// registered tab per frame, hidden tabs included, not only for the panes a
+	// frame draws. Data-dependent work belongs in Render, where the record is
+	// at hand and the pane is known to be visible.
 	AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string)
 	// Render draws the panel from its filled channels — called when every Required
 	// channel is filled (and the panel is visible). May publish signal mutations
@@ -430,6 +436,16 @@ func (inst *queryGraph) clearEmitDrop(id SignalID) {
 		return
 	}
 	delete(inst.drops, id)
+}
+
+// hasEmitDrops reports whether any drop notice stands — the allocation-free
+// question the tab strip's notice mark asks every frame, beside emitDrops'
+// sorted read surface.
+func (inst *queryGraph) hasEmitDrops() (any bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	any = len(inst.drops) > 0
+	return
 }
 
 // emitDrops lists the standing drop notices, name-sorted (the Diagnostics

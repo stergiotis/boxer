@@ -1087,9 +1087,11 @@ func (inst *PlayApp) Render() error {
 			for _, spec := range inst.tabs.all() {
 				// Per-tab frame view (slice 6c): a bound tab renders its
 				// node's lane view instead of the active result, and its
-				// dock title names the node.
+				// dock title names the node — plus, since the 2026-07-27
+				// Update, one mark for what the graph knows about the pane
+				// (can it draw this shape, does it drive this query).
 				tabFrame := inst.frameFor(spec.ID, &frame)
-				title := inst.boundTabTitle(&spec)
+				title := inst.tabTitle(&spec, &tabFrame)
 				if spec.NoScroll {
 					for range dock.TabNoScroll(spec.DockID, title) {
 						inst.renderTabBody(&spec, title, &tabFrame)

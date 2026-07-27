@@ -1633,22 +1633,36 @@ grow.
 vocabulary: at most one mark per tab, in one slot, after the existing
 `· node` suffix. In precedence order:
 
-- **`×` — shape reject.** A shape-gated pane whose required channels reject
+- **`-` — shape reject.** A shape-gated pane whose required channels reject
   the result it would be handed. It outranks the signal marks: a pane that
   cannot draw this result is not a control over it either.
 - **`!` — blocked on you.** The pane writes a name the split reads that
   nothing has filled (`unfilledInputs`), and it can render. Interacting here
   is what unblocks the Run the gate currently refuses.
-- **`●` — drives this query.** The pane writes a name some split node reads,
+- **`*` — drives this query.** The pane writes a name some split node reads,
   so interacting re-filters rather than merely re-selects.
-- **`⚠` — a notice.** Reserved for chrome with something to report
-  (Diagnostics: a failed run, a truncation, a skipped pre-execute pass).
-  Chrome is not shape-gated, so it does not contend with the marks above.
+- **a notice.** Reserved for chrome with something to report — Diagnostics: a
+  failed run, a truncation, a standing emit drop. Chrome is not shape-gated,
+  so it does not contend with the marks above, and it shares the `!` glyph
+  with blocked: both mean "attention here", the strip has room for one
+  attention class, and no tab can hold both (a notice is chrome's, and chrome
+  declares no writes).
 
-The glyph set is constrained by the host font rather than by taste: the
-endpoint switcher records that `→` renders as tofu, so the vocabulary is
-drawn from glyphs this app already paints (`●`, `⚠`, `×` in the Graph view)
-plus ASCII.
+  A skipped pre-execute pass is deliberately *not* among them. Its trace is
+  demand-driven by design — `rewriteTraceFor` memoises a full client-side
+  rewrite so that a session with neither the Passes nor the Diagnostics tab
+  open never pays for it — and reading it from the title path would put that
+  cost on every session. It is the same hazard as demanding a lane, in a
+  different resource, and it joins the notice if the trace ever becomes a
+  per-frame product.
+
+The glyph set is ASCII, settled by the running app rather than on paper. It
+was first specified as glyphs this app paints elsewhere (`●`, `⚠`, `×` in the
+Graph view); the first capture of the live strip killed two of them. `●`
+renders as tofu in the tab label font — the endpoint switcher already records
+the same for `→`, and the Graph view's own `●` is suspect by the same
+evidence — and `×` lands one space from the dock's per-tab close glyph, where
+a second ✕-shape reads as a second close button.
 
 **Mark only where the bit varies.** Table, Projection, Detail and Schema
 accept any schema; a mark that is always on informs nobody and widens every
@@ -1746,12 +1760,17 @@ declaration enables and which wait on the declaration existing.
 
 What lands first: the verdict as one pure function over (spec, frame
 schema, split, signals, bindings), unit-tested the way `boundTabTitle` is,
-then the marks, then the menu over the same verdicts. The live check the
-design cannot settle on paper is strip churn — the referenced-name set
-refreshes post-debounce, so typing a `{name:Type}` slot flips a mark
-mid-edit, correct as feedback and possibly jittery as layout. Whether the
-mark slot needs a fixed width is a question for the running app, not for
-this entry.
+then the marks, then the menu over the same verdicts. The verdict and the
+marks are built and live-verified — a buffer reading
+`{selection_country:String}` over a text column shows `Timeline -` beside
+`World *`, the two facts this entry set out to surface — and the glyph set
+above is what that verification settled.
+
+One live question is still open, deliberately: strip churn. The
+referenced-name set refreshes post-debounce, so typing a `{name:Type}` slot
+flips a mark mid-edit — correct as feedback, possibly jittery as layout.
+Whether the mark needs a fixed-width slot is a question for use, not for
+this entry. The menu is unbuilt.
 
 ## References
 
