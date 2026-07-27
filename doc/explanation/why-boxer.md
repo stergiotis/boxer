@@ -2,7 +2,7 @@
 type: explanation
 audience: prospective consumers and integrators evaluating adoption
 status: stable
-reviewed-by: "@stergiotis"
+reviewed-by: "p@stergiotis"
 reviewed-date: 2026-07-05
 ---
 

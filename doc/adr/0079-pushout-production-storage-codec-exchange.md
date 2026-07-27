@@ -2,7 +2,7 @@
 type: adr
 status: accepted
 date: 2026-06-12
-reviewed-by: "@stergiotis"
+reviewed-by: "p@stergiotis"
 reviewed-date: 2026-06-12
 ---
 

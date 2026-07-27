@@ -2,7 +2,7 @@
 type: explanation
 audience: keelson/vdd stakeholder reading the framing
 status: stable
-reviewed-by: "@spx"
+reviewed-by: "p@stergiotis"
 reviewed-date: 2026-05-18
 ---
 
