@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-27
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0017: Regex explorer extraction hand-off — both engines, published as two joinable datasets
 
@@ -217,10 +215,45 @@ window and the button cannot be clicked at all.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted (2026-07-27).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
+
+## Updates
+
+### 2026-07-27 — implemented
+
+Landed as `regex_explorer_evalplay.go` plus the manifest caps, the `Unmount`
+retract, and `EmbeddedApp.Close()`; `AppId` moved to `apps/play/launchcfg` per
+SD4. Accepted and implemented the same day.
+
+**One rule the design did not state, discovered while building it.** The Go
+dataset drops zero-width whole matches, exactly as the explorer's existing
+`nonEmptyMatches` does for the preview and the status bar. Go enumerates a
+zero-width match at every position for `a*` where ClickHouse's `extractAll`
+yields none, so publishing `FindAllStringSubmatchIndex` verbatim would shift
+every `match_idx` and make the join compare unrelated rows. A capture group that
+participated but matched the empty string still gets a row.
+
+**What an adversarial pass found**, each reproduced by a test written before its
+fix (commit `2620edd7`). Three are now stated as decisions in SD5 rather than
+recounted here; the fourth is a plain bug:
+
+- A partial publish orphaned the handle it had just minted, because handles were
+  recorded only once both publishes succeeded. Reached through the real
+  `MaxDatasets` quota, not hypothetically.
+- The status line survived any edit, in a window whose every other result
+  surface refuses to present an answer as describing inputs it does not.
+- The degraded path reported "0 ClickHouse row(s)" for an engine that was never
+  asked.
+- `sqlComment` truncated by bytes, so a multi-byte pattern was cut mid-rune and
+  the invalid UTF-8 rode into play's editor buffer via the launch config.
+
+**Still open.** `EmbeddedApp.Close()` has no in-tree caller (SD5); the gap is
+recorded in its doc comment rather than papered over. The affordance row's
+placement above the `DockArea` (SD6) was corrected after a demo capture showed
+the first cut landing off the bottom of the window.
 
 ## References
 

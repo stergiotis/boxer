@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-27
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0015: Regex pattern syntax highlighting — a hand-rolled lexer with `regexp` as validator
 
@@ -277,10 +275,40 @@ syntax, and colouring them with the pattern palette would be a lie.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted (2026-07-27).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
+
+## Updates
+
+### 2026-07-27 — implemented
+
+Landed as `widgets/regexhighlight` (lexer), `codeview/regex.go` (palette and
+builders), and `regex_explorer_syntax.go` (wiring), accepted and implemented the
+same day.
+
+Two names in the body were settled during implementation rather than before it,
+and are recorded above rather than here: the `codeview` face is
+`BuildRegexList` / `PrepareRegexList` (SD3, Consequences), and the depth cycle is
+a hand-picked four-colour set rather than `styletokens.QualitativeCycle` (SD2).
+
+Three RE2 behaviours the lexer depends on were checked against Go's
+`regexp/syntax` rather than assumed, because a plausible implementation gets each
+one backwards: a `]` immediately after `[` or `[^` is a **literal** member and
+not the class close (`[]]` parses as `\]`); `a{,3}` is literal text, not a
+repeat; and `(?i)` eats its own `)` while `(?i:` does not.
+
+Verified live through the demo-registry `TestDriver` (ADR-0057) — a new
+`regex-explorer-highlighting` scene, seeded with a three-level nested pattern and
+a pattern list whose second line is deliberately unclosed, so the depth cycle and
+the per-line reset are both observable in a capture rather than only in a test.
+
+An adversarial pass afterwards found nothing in the lexer, but only after it was
+given a real oracle: three property tests now check it against Go's `regexp`
+instead of against itself. The strongest is capture counting — for any pattern
+that compiles, the openers the lexer classified as capturing must number
+`re.NumSubexp()`, a quantity nothing in the lexer computes.
 
 ## References
 
