@@ -120,3 +120,31 @@ func (inst *EmbeddedApp) Render() {
 		inst.state.RenderWindow()
 	}
 }
+
+// Close abandons in-flight queries and retracts anything the embedded
+// explorer published through the ADR-0017 extraction hand-off. Hosts that
+// know when their embedded explorer dies should call it.
+//
+// The gap, stated plainly (ADR-0017 §SD5): there is no teardown hook on
+// the embedded path, and nothing in-tree calls this today —
+// [regexsummary] keeps its embedded explorers alive for the widget's
+// lifetime, which in practice is the process's. So an embedded explorer
+// that published holds its handles until exit. The exposure is bounded:
+// at most two handles per instance (they are reused on republish) and the
+// store is ephemeral.
+//
+// In practice the embedded case degrades earlier and more visibly than
+// that gap suggests. The host's bus client carries the *host app's*
+// manifest caps, which will not include adhoc.publish, so the publish is
+// refused with a reason in the status line rather than silently doing
+// nothing.
+//
+// Safe to call more than once, and safe on an explorer that never
+// published.
+func (inst *EmbeddedApp) Close() {
+	if inst.state == nil {
+		return
+	}
+	inst.state.cancelQueries()
+	inst.state.retractEvalDatasets()
+}

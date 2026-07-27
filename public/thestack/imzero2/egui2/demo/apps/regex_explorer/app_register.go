@@ -3,7 +3,9 @@ package regex_explorer
 import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
 // manifest is the static AppI descriptor every instance returns. Kept
@@ -27,6 +29,25 @@ var manifest = runtimeapp.Manifest{
 			Direction: runtimeapp.CapDirectionPub,
 			Reason:    "interactive regex evaluation via clickhouse-local",
 			Sticky:    true,
+		},
+		// The ADR-0017 extraction hand-off. Without these three the
+		// button is still drawn, and each publish is refused with a
+		// reason in the status line — which is the honest degradation,
+		// but only these caps make it work.
+		{
+			Pattern:   adhocdata.SubjectPublish,
+			Direction: runtimeapp.CapDirectionPub,
+			Reason:    "regex_explorer: publish the Go and ClickHouse extraction as ad-hoc datasets (ADR-0134)",
+		},
+		{
+			Pattern:   adhocdata.SubjectRetract,
+			Direction: runtimeapp.CapDirectionPub,
+			Reason:    "regex_explorer: retract those datasets when the window closes",
+		},
+		{
+			Pattern:   windowhost.OpenSubject,
+			Direction: runtimeapp.CapDirectionPub,
+			Reason:    "regex_explorer: open a play window joined over both engines' extraction (ADR-0135 §SD7)",
 		},
 	},
 }

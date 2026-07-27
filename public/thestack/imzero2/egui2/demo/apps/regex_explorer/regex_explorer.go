@@ -84,6 +84,17 @@ type App struct {
 	tripwireRan atomic.Bool
 	tripwire    tripwireResult
 
+	// Extraction hand-off state (ADR-0017). Written by the worker
+	// goroutine that publishes and opens, read by the render thread —
+	// so it belongs to the mu group above. evalGoHandle / evalChHandle
+	// are retained across republishes so one window holds at most two
+	// datasets against the ADR-0134 MaxDatasets cap.
+	evalBusy     bool
+	evalErr      string
+	evalStatus   string
+	evalGoHandle string
+	evalChHandle string
+
 	alloc memory.Allocator
 
 	// bus is the per-instance BusI captured at Mount. All SQL goes
@@ -111,6 +122,13 @@ type App struct {
 
 	compileCacheMu sync.Mutex
 	compileCache   map[string]compileResult
+
+	// Retained syntax-highlight jobs for the two pattern editors
+	// (ADR-0015), rebuilt only when their buffer changes. Render-thread-
+	// confined, like the input state they mirror — see the mu comment
+	// above.
+	patternHl     highlightCache
+	patternListHl highlightCache
 }
 
 // newApp builds one [App] — the unit of per-window state. clickhouse-local
@@ -187,12 +205,15 @@ func (inst *AppInstance) Mount(ctx runtimeapp.MountContextI) (err error) {
 	return
 }
 
-// Unmount abandons anything still in flight. Without this a closed window
-// leaves up to four queries running against pooled clickhouse-local
-// workers with nothing left to consume their results.
+// Unmount abandons anything still in flight and retracts anything this
+// window published. Without the first a closed window leaves up to four
+// queries running against pooled clickhouse-local workers with nothing
+// left to consume their results; without the second its ad-hoc datasets
+// (ADR-0017) would sit in the ephemeral store until process exit.
 func (inst *AppInstance) Unmount(ctx runtimeapp.MountContextI) (err error) {
 	if inst.state != nil {
 		inst.state.cancelQueries()
+		inst.state.retractEvalDatasets()
 	}
 	return
 }
@@ -252,10 +273,18 @@ func (inst *App) renderBody() {
 	}
 
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-pattern"), c.WidgetText().Text("Pattern (single regex — RE2 tabs)").Keep()).DefaultOpen(true).KeepIter() {
-		resp := c.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false).
+		// CodeEditor() is not cosmetic here: the Rust highlight layouter
+		// resolves TextStyle::Monospace unconditionally, so without it
+		// the field's font would change the moment a character is typed
+		// and a job appears (ADR-0015 §SD6).
+		patternEdit := c.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false).
+			CodeEditor().
 			DesiredWidth(editorWidth).
-			HintText("regular expression").
-			SendRespVal(&inst.pattern)
+			HintText("regular expression")
+		if job, ok := inst.patternHighlightJob(inst.pattern); ok {
+			patternEdit = patternEdit.HighlightJob(job)
+		}
+		resp := patternEdit.SendRespVal(&inst.pattern)
 		if resp.HasGainedFocus() || resp.HasFocus() {
 			inst.lastFocusedInput = 0
 		}
@@ -263,12 +292,15 @@ func (inst *App) renderBody() {
 	}
 
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-patternlist"), c.WidgetText().Text("Multi patterns (one regex per line — VectorScan multiMatchAllIndices)").Keep()).DefaultOpen(true).KeepIter() {
-		listResp := c.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true).
+		listEdit := c.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true).
 			CodeEditor().
 			DesiredWidth(editorWidth).
 			DesiredRows(4).
-			HintText("pattern 1\npattern 2\n...").
-			SendRespVal(&inst.patternList)
+			HintText("pattern 1\npattern 2\n...")
+		if job, ok := inst.patternListHighlightJob(inst.patternList); ok {
+			listEdit = listEdit.HighlightJob(job)
+		}
+		listResp := listEdit.SendRespVal(&inst.patternList)
 		if listResp.HasGainedFocus() || listResp.HasFocus() {
 			inst.lastFocusedInput = 2
 		}
@@ -293,6 +325,8 @@ func (inst *App) renderBody() {
 
 	c.Separator().Horizontal().Send()
 
+	inst.renderEvalHandoff()
+
 	c.UiSetMinHeight(260)
 	for dock := range c.DockArea(inst.ids.PrepareStr("tabs")) {
 		for range dock.Tab(1, "Preview (Go)") {
@@ -311,6 +345,73 @@ func (inst *App) renderBody() {
 	// query is in flight is not lost, it is simply picked up by the next
 	// frame that finds a lane free (see [queryLane]).
 	inst.reconcileQueries()
+}
+
+// renderEvalHandoff draws the extraction hand-off row (ADR-0017 §SD6):
+// one button that publishes both engines' extraction as ad-hoc datasets
+// and opens a play window joined over them.
+//
+// It sits outside the tab DockArea rather than inside either tab —
+// deliberate neutral ground, since the Go half comes from Preview and the
+// ClickHouse half from List, and placing it in one would imply that tab
+// owns the hand-off.
+//
+// Above the DockArea, not below it: the DockArea takes the rest of the
+// body's height, so a row emitted after it is pushed off the bottom of
+// the window and the button cannot be clicked (seen in the
+// regex-explorer-highlighting demo capture).
+//
+// The snapshot is taken here, on the render thread; the goroutine gets
+// plain data and never touches c.* or a lane. A re-click while a
+// hand-off is in flight is dropped.
+func (inst *App) renderEvalHandoff() {
+	inst.mu.RLock()
+	busy, evalErr, status := inst.evalBusy, inst.evalErr, inst.evalStatus
+	inst.mu.RUnlock()
+
+	for range c.Horizontal().KeepIter() {
+		label := "Query this extraction in the playground"
+		if busy {
+			label = "Publishing…"
+		}
+		if c.Button(inst.ids.PrepareStr("evalplay"), c.Atoms().Text(label).Keep()).
+			SendResp().HasPrimaryClicked() && !busy {
+			inst.startEvalHandoff()
+		}
+		switch {
+		case busy:
+			c.Spinner().Size(14).Send()
+		case evalErr != "":
+			c.Label("hand-off failed: " + evalErr).Send()
+		case status != "":
+			c.Label(status).Send()
+		}
+	}
+}
+
+// startEvalHandoff snapshots both result sets and dispatches the worker.
+// Render-thread only. A snapshot failure (no pattern, no haystack, a
+// pattern that does not compile) is reported in place rather than
+// dispatched — there is nothing to publish.
+func (inst *App) startEvalHandoff() {
+	snap, err := inst.snapshotEval()
+	if err != nil {
+		inst.mu.Lock()
+		inst.evalErr = err.Error()
+		inst.evalStatus = ""
+		inst.mu.Unlock()
+		return
+	}
+	inst.mu.Lock()
+	if inst.evalBusy {
+		inst.mu.Unlock()
+		return
+	}
+	inst.evalBusy = true
+	inst.evalErr = ""
+	inst.evalStatus = ""
+	inst.mu.Unlock()
+	go inst.requestEvalInPlay(snap)
 }
 
 // singleKey is the query fingerprint for the two lanes driven purely by
