@@ -304,6 +304,16 @@ binding ignores every attribute no bound kind claims, so a row that later
 stages have fused and enriched reads exactly like one they have not
 ([ADR-0146](0146-leeway-marshall-component-read-contract.md) D5).
 
+Live-verified in the widget tour: both drones render the panels the detection
+produces, drone 3 showing the dimmed absent line for `tasked` where the
+hard-coded path had a `len(Tags) > 0` special case. The check that mattered was
+the panel text rather than the record label — the labels are static strings in
+the demo, while the status symbols and tag chips are the ones decoded off the
+wire, and a `string` field is not defensively copied out of the Arrow buffer
+(`goplan.CopyStrategy` returns `CopyNone` for it). They render intact across
+repeated paging, so retaining the record while releasing the RA readers is
+sound here.
+
 ## References
 
 - ECS background and the json stage-1 detect/unmarshal: `anchor/ecsdemo/EXPLANATION.md`,
