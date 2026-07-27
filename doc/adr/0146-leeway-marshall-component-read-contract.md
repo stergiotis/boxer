@@ -297,8 +297,8 @@ Beyond the QOC matrix:
 - One definition of the read contract, consumed by every back-end, instead of
   four independently drifting ones.
 - The three silent-corruption modes measured above become errors.
-- The archetype becomes inspectable: a registry of Plans, a disjointness law,
-  and a `Detect` per kind.
+- The archetype becomes inspectable per entity: a catalogue of contracts and a
+  `Detect` per kind, answerable by a stage that knows only its own components.
 - The over-broad per-DTO uniqueness key stops rejecting valid DTOs.
 
 ### Negative
@@ -309,7 +309,9 @@ Beyond the QOC matrix:
   legitimately emits several attributes under one membership must move to a
   tuple section.
 - Removing the two-pass `RowComposer` methods is an exported-API removal, even
-  though nothing outside tests calls them.
+  though nothing outside tests calls them. `RowComposer` also buffers its
+  sections now, so an emit error surfaces from `CommitRow` rather than from the
+  `AddSections` call that supplied it.
 - Role filtering adds a second optional policy object alongside `LookupI`, and
   ADR-0073's own consequence applies: two consumers with different classifiers
   key differently.
