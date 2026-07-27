@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/componentview"
 )
 
 // cvDroneRow is the flat leeway drone DTO shared by the componentview demos.
@@ -116,5 +117,113 @@ func newCvCardDriver(d *cvDroneData) (driver *streamreadaccess.Driver, err error
 	driver, err = streamreadaccess.NewDriverFromSchema(
 		&d.tblDesc, ir, streamreadaccess.DefaultFormatters(),
 		d.rec.Schema(), conv, d.tableRowConfig)
+	return
+}
+
+// --- Per-component DTOs (ADR-0075 / ADR-0146 D2). ---
+//
+// cvDroneRow above is a WRITER: one fat DTO carrying every component, which is
+// how the demo dataset is produced. It is deliberately not what the components
+// are read through. A fat DTO can only answer "is all of this here?"; a
+// component DTO declares just the slots its own component owns, so Detect can
+// answer per component — which is what makes the archetype legible per entity
+// rather than assumed.
+
+// cvIdentity reads the identity component: the drone's status symbol.
+type cvIdentity struct {
+	_        struct{} `kind:"cvIdentity"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Status   string   `lw:"droneStatus,symbol"`
+}
+
+// cvBattery reads the battery component.
+type cvBattery struct {
+	_        struct{} `kind:"cvBattery"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Charge   uint64   `lw:"battery,u64Array,unit"`
+}
+
+// cvTasked reads the tasked component. Its tags are a container, so the slot is
+// [0..1]: a drone with no tags writes no attribute and reads back as absent —
+// which is exactly what the report should show.
+type cvTasked struct {
+	_        struct{} `kind:"cvTasked"`
+	ID       uint64   `lw:",id"`
+	Tracking []byte   `lw:",naturalKey"`
+	Tags     []string `lw:"droneTags,symbolArray"`
+}
+
+// cvComponentBinder binds the three recognised components to the DTOs that read
+// them. The `window` (timeRange) section is deliberately unbound: no renderer
+// claims it, so it surfaces only through the generic card — the typed/generic
+// complement ADR-0075 is about — and Detect ignores it, exactly as it ignores
+// components this process has never heard of.
+func cvComponentBinder() (*componentview.Binder, error) {
+	b := componentview.NewBinder()
+	b.Lookup = cvDroneLookup()
+
+	identity, err := componentview.Bind(componentview.KindIdentity, func(r cvIdentity) any {
+		return componentview.IdentityVal{Status: r.Status}
+	})
+	if err != nil {
+		return nil, err
+	}
+	battery, err := componentview.Bind(componentview.KindBattery, func(r cvBattery) any {
+		return componentview.BatteryVal{Charge: r.Charge}
+	})
+	if err != nil {
+		return nil, err
+	}
+	tasked, err := componentview.Bind(componentview.KindTasked, func(r cvTasked) any {
+		return componentview.TaskedVal{Tags: r.Tags}
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, bind := range []componentview.Binding{identity, battery, tasked} {
+		if err = b.Add(bind); err != nil {
+			return nil, err
+		}
+	}
+	return b, nil
+}
+
+// cvSectionReaders binds the record's per-section RA readers for the sections
+// the bound components claim. Released by the caller.
+func cvSectionReaders(rec arrow.RecordBatch) (readers *marshallreflect.SectionReaders, release func(), err error) {
+	idR := anchor.NewReadAccessTestTablePlainEntityIdAttributes()
+	idR.SetColumnIndices(idR.GetColumnIndices())
+	if err = idR.LoadFromRecord(rec); err != nil {
+		return
+	}
+	symR := anchor.NewReadAccessTestTableTaggedSymbol()
+	symR.SetColumnIndices(symR.GetColumnIndices())
+	if err = symR.LoadFromRecord(rec); err != nil {
+		return
+	}
+	symArrR := anchor.NewReadAccessTestTableTaggedSymbolArray()
+	symArrR.SetColumnIndices(symArrR.GetColumnIndices())
+	if err = symArrR.LoadFromRecord(rec); err != nil {
+		return
+	}
+	u64R := anchor.NewReadAccessTestTableTaggedU64Array()
+	u64R.SetColumnIndices(u64R.GetColumnIndices())
+	if err = u64R.LoadFromRecord(rec); err != nil {
+		return
+	}
+	readers = marshallreflect.NewSectionReaders(idR.Len()).
+		PlainColumn("id", idR.ValueId).
+		PlainColumn("naturalKey", idR.ValueNaturalKey).
+		Section("symbol", symR.GetAttributes(), symR.GetMemberships()).
+		Section("symbolArray", symArrR.GetAttributes(), symArrR.GetMemberships()).
+		Section("u64Array", u64R.GetAttributes(), u64R.GetMemberships())
+	release = func() {
+		idR.Release()
+		symR.Release()
+		symArrR.Release()
+		u64R.Release()
+	}
 	return
 }

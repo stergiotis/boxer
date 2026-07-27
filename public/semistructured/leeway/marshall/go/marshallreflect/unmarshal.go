@@ -98,48 +98,60 @@ func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI, opts ..
 		return
 	}
 
-	// Pre-resolve ref-channel membership ids — cached so the inner
-	// dispatch loop doesn't pay one lookup per attribute per row. Only
-	// channels whose wire form takes a uint64 id need this; verbatim
-	// and parametrized-only channels are matched by literal bytes.
-	membIDs := map[string]uint64{}
+	// Pre-resolve ref-channel membership ids — cached so the inner dispatch
+	// loop doesn't pay one lookup per attribute per row. Tuple value fields
+	// carry a ref channel only to keep g.Channel() well-defined; their
+	// memberships are per-element ids read off the wire (ADR-0109), so they are
+	// skipped. Const fields ARE resolved: the write path looks their membership
+	// up like any other, and the slot-arity gate counts their attributes.
+	membIDs, err := resolveMembershipIDs(plan, lookup)
+	if err != nil {
+		return
+	}
+
+	for i := 0; i < readers.numRows; i++ {
+		var rowVal reflect.Value
+		rowVal, err = unmarshalRow(rowType, plan, groups, readers, i, membIDs, r.contract, ro)
+		if err != nil {
+			return
+		}
+		*out = append(*out, rowVal.Interface().(T))
+	}
+	return
+}
+
+// unmarshalRow decodes one row into a fresh value of rowType — the body Unmarshal
+// loops and ReadComponent calls once.
+func unmarshalRow(rowType reflect.Type, plan *mappingplan.Plan, groups []goplan.SectionGroup, readers *SectionReaders, i int, membIDs map[string]uint64, contract mappingplan.ReadContract, ro readOptions) (rowVal reflect.Value, err error) {
+	rowPtr := reflect.New(rowType)
+	rowVal = rowPtr.Elem()
+	if err = unmarshalPlain(rowVal, plan, readers, i); err != nil {
+		err = eb.Build().Int("row", i).Errorf("plain decode: %w", err)
+		return
+	}
+	for _, g := range groups {
+		if err = unmarshalSection(rowVal, g, readers, i, membIDs, contract, ro); err != nil {
+			err = eb.Build().Int("row", i).Str("section", g.Section).Errorf("%w", err)
+			return
+		}
+	}
+	return
+}
+
+// resolveMembershipIDs pre-resolves the ref-channel membership ids a plan's
+// dispatch needs, so the per-attribute loop pays no lookup.
+func resolveMembershipIDs(plan *mappingplan.Plan, lookup LookupI) (membIDs map[string]uint64, err error) {
+	membIDs = map[string]uint64{}
 	for _, f := range plan.Fields {
-		// Tuple value fields carry a ref channel only to keep g.Channel()
-		// well-defined; their memberships are per-element ids read directly off
-		// the wire (distributeTupleMemberships), never resolved via lookup —
-		// their LWMembership is "" and would fail the lookup (ADR-0109).
-		//
-		// Const fields ARE resolved: the write path looks their membership up
-		// like any other (addMembership), and the slot-arity gate counts their
-		// attributes, so the read side needs the same id to recognise them.
 		if !f.Flags.Channel.NeedsKindVar() || f.TupleField != "" {
 			continue
 		}
 		var id uint64
-		id, err = lookup.LookupMembership(f.LWMembership)
-		if err != nil {
+		if id, err = lookup.LookupMembership(f.LWMembership); err != nil {
 			err = eb.Build().Str("membership", f.LWMembership).Errorf("%w", err)
 			return
 		}
 		membIDs[f.LWMembership] = id
-	}
-
-	for i := 0; i < readers.numRows; i++ {
-		rowPtr := reflect.New(rowType)
-		rowVal := rowPtr.Elem()
-		err = unmarshalPlain(rowVal, plan, readers, i)
-		if err != nil {
-			err = eb.Build().Int("row", i).Errorf("plain decode: %w", err)
-			return
-		}
-		for _, g := range groups {
-			err = unmarshalSection(rowVal, g, readers, i, membIDs, r.contract, ro)
-			if err != nil {
-				err = eb.Build().Int("row", i).Str("section", g.Section).Errorf("%w", err)
-				return
-			}
-		}
-		*out = append(*out, rowPtr.Elem().Interface().(T))
 	}
 	return
 }

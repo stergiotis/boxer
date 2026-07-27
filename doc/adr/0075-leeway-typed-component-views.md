@@ -273,6 +273,37 @@ a successful unmarshal makes detection cost a decode and hides decode failures
 inside a presence verdict. The `Absent | Approximate | Exact` vocabulary and
 the one-sided guarantee are kept as decided here.
 
+### 2026-07-27 — detection is wired into componentview; the demo reads the archetype off the wire
+
+`componentview` now carries the detect-then-render half. `Bind[T]` ties a
+component kind to the leeway DTO that reads it; `Binder.Detect` reports each
+bound kind's `PresenceE` for a row without touching a value column, and
+`Binder.Components` decodes the ones that answer. The renderer side is
+unchanged — `Dispatcher.RenderReport` still takes decoded `Component` values —
+so a consumer with its own decode path is unaffected.
+
+Two consequences worth recording.
+
+**The seed demo used a fat DTO, and that was the actual obstacle.** A DTO
+spanning several components can only answer "is all of this here?", so the demo
+reconstructed its `Component` values unconditionally from decoded fields. The
+demo now declares one DTO per component — each claiming only its own slots —
+and detects per row: the drone with no tags reads as genuinely *absent* for
+`tasked` rather than being special-cased. The `window` (timeRange) section
+stays deliberately unbound, so it surfaces only through the generic
+`Table2CardEmitter`, which is the typed/generic complement this ADR is about.
+
+**The package is no longer free of leeway-codec dependencies**, and its doc
+said it was. That claim was a consequence of detection never having been built.
+The renderer↔component mapping is what this package owns, so the binding lives
+here; the alternative — a third package between the codec and the widgets —
+buys separation nothing else needs.
+
+Detection is deliberately one-sided about components it does not know: a
+binding ignores every attribute no bound kind claims, so a row that later
+stages have fused and enriched reads exactly like one they have not
+([ADR-0146](0146-leeway-marshall-component-read-contract.md) D5).
+
 ## References
 
 - ECS background and the json stage-1 detect/unmarshal: `anchor/ecsdemo/EXPLANATION.md`,

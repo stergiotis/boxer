@@ -7,9 +7,17 @@
 // component, the archetype made visible — and routes anything unrecognised to a
 // generic fallback.
 //
-// Detection and typed decode happen upstream (leeway RA population counts +
-// marshallreflect.Unmarshal); this package consumes the already-decoded
-// Component values, so it stays free of leeway-codec dependencies.
+// Detection and typed decode live in this package too, as Binder (see
+// componentview_detect.go): Bind ties a component kind to the leeway DTO that
+// reads it, and Binder.Components decodes a row into the components it carries
+// by asking each bound kind in turn. That is ADR-0075's detect-then-render,
+// finally built on ADR-0146's read contract.
+//
+// Rendering does not depend on it — Dispatcher.RenderReport takes decoded
+// Component values from anywhere, so a caller with its own decode path is
+// unaffected. Earlier revisions of this doc claimed the package was free of
+// leeway-codec dependencies; it no longer is, because the detection half had to
+// live somewhere and the renderer↔component mapping is what this package owns.
 package componentview
 
 import (

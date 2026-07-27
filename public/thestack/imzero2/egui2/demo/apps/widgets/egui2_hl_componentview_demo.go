@@ -49,19 +49,35 @@ func newComponentViewState(ids *c.WidgetIdStack) (st *componentViewDemoState) {
 		st.errMsg = d.err
 		return
 	}
-	for _, r := range d.rows {
-		comps := []componentview.Component{
-			{Kind: componentview.KindIdentity, Value: componentview.IdentityVal{Status: r.Status}},
-			{Kind: componentview.KindBattery, Value: componentview.BatteryVal{Charge: r.Battery}},
-		}
-		if len(r.Tags) > 0 {
-			comps = append(comps, componentview.Component{Kind: componentview.KindTasked, Value: componentview.TaskedVal{Tags: r.Tags}})
+	// Detect each row's components off the WIRE rather than reconstructing them
+	// from the writer DTO (ADR-0075's detect+decode, built by ADR-0146 D2). The
+	// binder asks each bound component "are you here?" per row and ignores every
+	// attribute no binding claims — including the `window` section, which no
+	// renderer recognises and which therefore surfaces only in the generic card
+	// below. Drone 3 carries no tags, so its tasked component reads as genuinely
+	// absent instead of being special-cased here.
+	binder, err := cvComponentBinder()
+	if err != nil {
+		st.errMsg = "bind components: " + err.Error()
+		return
+	}
+	readers, releaseReaders, err := cvSectionReaders(d.rec)
+	if err != nil {
+		st.errMsg = "section readers: " + err.Error()
+		return
+	}
+	defer releaseReaders()
+	for i := range d.rows {
+		comps, cerr := binder.Components(readers, i)
+		if cerr != nil {
+			st.errMsg = "detect components: " + cerr.Error()
+			return
 		}
 		st.comps = append(st.comps, comps)
 	}
-	driver, err := newCvCardDriver(d)
-	if err != nil {
-		st.errMsg = "driver: " + err.Error()
+	driver, derr := newCvCardDriver(d)
+	if derr != nil {
+		st.errMsg = "driver: " + derr.Error()
 		return
 	}
 	st.cvDriver = driver

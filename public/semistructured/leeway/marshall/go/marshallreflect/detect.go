@@ -94,11 +94,42 @@ func slotCounts[T any](readers *SectionReaders, i int, lookup LookupI, ro readOp
 	if err = readers.checkCoverage(r.plan, r.groups); err != nil {
 		return
 	}
-	c, err = mappingplan.DeriveReadContract(r.plan)
+	c = r.contract
+	counts, err = countSlots(readers, i, lookup, c, ro)
+	return
+}
+
+// DetectContract is Detect driven by a CONTRACT rather than a Go type, for a
+// caller holding registered contracts instead of the types they came from — a
+// component registry iterating its kinds.
+//
+// It is otherwise identical: attribute counts only, no value column read.
+func DetectContract(readers *SectionReaders, i int, lookup LookupI, c mappingplan.ReadContract, opts ...ReadOption) (p mappingplan.PresenceE, err error) {
+	defer recoverContract(&err)
+	if readers == nil {
+		err = eb.Build().Errorf("SectionReaders is nil")
+		return
+	}
+	if lookup == nil {
+		lookup = NoLookup{}
+	}
+	for _, section := range c.Sections() {
+		if sr, ok := readers.sections[section]; !ok || sr.attrs == nil || sr.membs == nil {
+			err = eb.Build().Str("kind", c.Kind).Str("section", section).Errorf("SectionReaders has no reader for section %s, which kind %s claims", section, c.Kind)
+			return
+		}
+	}
+	counts, err := countSlots(readers, i, lookup, c, buildReadOptions(opts))
 	if err != nil {
 		return
 	}
+	return c.Verdict(counts), nil
+}
 
+// countSlots tallies how many attributes each of the contract's slots carries
+// on row i. Shared by the type-driven and contract-driven detect paths so they
+// cannot count differently.
+func countSlots(readers *SectionReaders, i int, lookup LookupI, c mappingplan.ReadContract, ro readOptions) (counts map[int]int, err error) {
 	// Resolve ref-channel membership ids once. A slot on a verbatim channel
 	// matches by literal bytes and needs none; a tuple-owned slot matches
 	// nothing (every attribute in its section is its own).
@@ -159,4 +190,52 @@ func slotCounts[T any](readers *SectionReaders, i int, lookup LookupI, ro readOp
 		counts[si] = total
 	}
 	return
+}
+
+// ReadComponent decodes row i as T, reporting absence rather than failing
+// (ADR-0146 D2). It is Detect followed by the projection:
+//
+//   - PresenceAbsent  → ok=false, no error. The row does not carry T; a caller
+//     iterating components over a heterogeneous table expects this constantly.
+//   - PresenceExact   → ok=true, the decoded row.
+//   - PresenceApproximate → an error. The row recognisably carries T but does
+//     not conform — a slot holds more attributes than T's shape admits — so no
+//     sound decode exists and silently returning absent would hide it.
+//
+// This is the read a component registry drives per entity: ask each registered
+// kind, render the ones that answer. It tolerates every attribute no kind
+// claims, which is what lets a stage that knows only its own components read a
+// row other stages have fused and enriched.
+func ReadComponent[T any](readers *SectionReaders, i int, lookup LookupI, opts ...ReadOption) (row T, ok bool, err error) {
+	defer recoverContract(&err)
+	ro := buildReadOptions(opts)
+	if lookup == nil {
+		lookup = NoLookup{}
+	}
+	counts, c, err := slotCounts[T](readers, i, lookup, ro)
+	if err != nil {
+		return
+	}
+	switch c.Verdict(counts) {
+	case mappingplan.PresenceAbsent:
+		return
+	case mappingplan.PresenceApproximate:
+		err = eb.Build().Str("kind", c.Kind).Int("row", i).Errorf("row carries kind %s but does not conform to it — a slot holds more attributes than the DTO admits; decode it with Unmarshal to see which", c.Kind)
+		return
+	}
+
+	rowType := reflect.TypeFor[T]()
+	r, err := resolveForType(rowType)
+	if err != nil {
+		return
+	}
+	membIDs, err := resolveMembershipIDs(r.plan, lookup)
+	if err != nil {
+		return
+	}
+	rowVal, err := unmarshalRow(rowType, r.plan, r.groups, readers, i, membIDs, r.contract, ro)
+	if err != nil {
+		return
+	}
+	return rowVal.Interface().(T), true, nil
 }
