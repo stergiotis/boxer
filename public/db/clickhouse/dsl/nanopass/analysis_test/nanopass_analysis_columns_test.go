@@ -53,6 +53,44 @@ func TestExtractColumns(t *testing.T) {
 				{Column: "b"},
 			},
 		},
+		{
+			// A name that can only be written quoted must come back
+			// unquoted, or a caller matching it against a schema misses
+			// it silently. keelson.adrcontent's content column is exactly
+			// this shape (ADR-0123 `label@mime`).
+			name: "quoted_column",
+			sql:  "SELECT num, `content@text/markdown` FROM adrcontent",
+			expected: []analysis.ColumnRef{
+				{Column: "num"},
+				{Column: "content@text/markdown"},
+			},
+		},
+		{
+			name: "quoted_table_and_column",
+			sql:  "SELECT `my tbl`.`odd col` FROM `my tbl`",
+			expected: []analysis.ColumnRef{
+				{Table: "my tbl", Column: "odd col"},
+			},
+		},
+		{
+			// Each segment decodes on its own; decoding the whole text
+			// would read the outer backticks as one pair.
+			name: "quoted_nested_path",
+			sql:  "SELECT `a b`.`c d` FROM t",
+			expected: []analysis.ColumnRef{
+				{Table: "a b", Column: "c d"},
+			},
+		},
+		{
+			// Three parts read as database.table.column: the grammar's
+			// tableIdentifier absorbs the first two, so Table carries the
+			// qualified name and Column is the bare leaf.
+			name: "qualified_three_part",
+			sql:  "SELECT `my db`.t.`odd col` FROM `my db`.t",
+			expected: []analysis.ColumnRef{
+				{Table: "my db.t", Column: "odd col"},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
