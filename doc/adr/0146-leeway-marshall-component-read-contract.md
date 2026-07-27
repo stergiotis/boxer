@@ -190,9 +190,11 @@ which is the failure above. The API has no consumers outside its own tests.
 
 ### Scope and phasing
 
-- **M1 — `ReadContract` derivation + `PresenceE` / `Detect`.**
+- **M1 — `ReadContract` derivation + `PresenceE` / `Detect`.** ✓
 - **M2 — arity enforcement** in `marshallreflect.Unmarshal` and marshallgen's
-  `FillFromArrow` / `ReadRow`.
+  `FillFromArrow` / `ReadRow`. ✓ Landed in two parts, because the codegen half
+  regenerates 44 artefacts and its diff had to stay separable from the runtime
+  half: **M2a** the reflect decode, **M2b** the two emitters.
 - **M3 — the registry + the section-scoped uniqueness key.**
 - **M4 — role filtering**, inert by default.
 - **M5 — the single-section-visit rule**, the ordering fold, and the two-pass
@@ -218,6 +220,16 @@ treatment for arity while keeping its mandatory *value* semantics — but it
 changes generated SQL, so it stays deferred rather than riding along with M1.
 `TestGenerator_ContainerArityDivergesFromReadContract` pins the current
 behaviour so the divergence is not rediscovered.
+
+M2 turned up a second thing worth recording, about the artefacts rather than
+the design. The committed `.out.go` codecs had fallen behind marshallgen:
+regenerating with an unchanged emitter produced a 24-file diff (`KindVar`
+naming, an ADR-0100 SD6 doc comment, the `AddSections` surface). Proving the
+generators reproduce their own output *before* changing them is what kept M2b's
+diff readable, and is worth doing again for M5. `scripts/dev/generate.sh` drives
+only the keelson codecs — the `--target=anchor` codecdemo set and the
+test-driven recordstore / ecsdemo regenerations live outside it, which is how
+the drift went unnoticed.
 
 ## Alternatives
 
