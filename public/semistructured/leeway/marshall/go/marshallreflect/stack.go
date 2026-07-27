@@ -30,6 +30,9 @@ type RowComposer struct {
 	dml    reflect.Value
 	lookup LookupI
 	inRow  bool
+	// sections records which sections the open row has already emitted, and
+	// which DTO kind emitted each — see claimSections.
+	sections map[string]string
 }
 
 // NewRowComposer wraps `dml` and `lookup` for repeated per-row
@@ -42,8 +45,9 @@ func NewRowComposer(dml any, lookup LookupI) *RowComposer {
 		lookup = NoLookup{}
 	}
 	return &RowComposer{
-		dml:    reflect.ValueOf(dml),
-		lookup: lookup,
+		dml:      reflect.ValueOf(dml),
+		lookup:   lookup,
+		sections: map[string]string{},
 	}
 }
 
@@ -68,11 +72,15 @@ func (c *RowComposer) BeginRow(plainOwner any) (err error) {
 	}
 	mustCall(c.dml, "BeginEntity")
 	c.inRow = true
+	clear(c.sections)
 
 	if err = marshalPlain(c.dml, rowVal, plan); err != nil {
 		return
 	}
-	err = marshalRowSectionsFiltered(c.dml, rowVal, groups, c.lookup, cardFilterAll)
+	if err = c.claimSections(groups, plan.KindName); err != nil {
+		return
+	}
+	err = marshalRowSections(c.dml, rowVal, groups, c.lookup)
 	return
 }
 
@@ -84,55 +92,36 @@ func (c *RowComposer) BeginRow(plainOwner any) (err error) {
 // CommitRow already called for this entity), or if plan resolution
 // fails.
 func (c *RowComposer) AddSections(row any) (err error) {
-	return c.addSectionsFiltered(row, cardFilterAll, "AddSections")
-}
-
-// AddSingleValueAttributes contributes `row`'s sections to the
-// currently open entity, emitting only attributes whose value-
-// cardinality is exactly 1 at runtime. Concretely:
-//
-//   - scalar fields (T, Option[T] with Has=true, consts): always size 1
-//   - container / roaring fields whose runtime length is exactly 1
-//   - multi-sub-column scalar sections (one tuple per row)
-//   - tuple / nested elements whose shared container length is ≤ 1
-//
-// Container / roaring fields with runtime length > 1 are skipped;
-// they belong to AddMultiValueAttributes. Sections whose fields all
-// fail to match this filter open no BeginSection frame.
-//
-// Pair this with AddMultiValueAttributes on the same row to drive
-// the per-section `1,1,…,>1,>1,…` attribute ordering described in
-// ADR-0008 D2 (the field-class partition is static; this method
-// extends it to per-attribute runtime cardinality).
-func (c *RowComposer) AddSingleValueAttributes(row any) (err error) {
-	return c.addSectionsFiltered(row, cardFilterSingleValue, "AddSingleValueAttributes")
-}
-
-// AddMultiValueAttributes contributes `row`'s sections to the
-// currently open entity, emitting only attributes whose value-
-// cardinality exceeds 1 at runtime. Only container / roaring fields
-// with runtime length > 1 reach the wire; scalar / Option / const
-// emits are skipped (they belong to AddSingleValueAttributes), as are
-// multi-sub-column and tuple / nested attributes whose shared
-// container length is ≤ 1.
-//
-// Sections that produce no matching attribute open no BeginSection
-// frame.
-func (c *RowComposer) AddMultiValueAttributes(row any) (err error) {
-	return c.addSectionsFiltered(row, cardFilterMultiValue, "AddMultiValueAttributes")
-}
-
-func (c *RowComposer) addSectionsFiltered(row any, filter cardFilter, callerName string) (err error) {
 	defer recoverContract(&err)
 	if !c.inRow {
-		err = eb.Build().Str("call", callerName).Errorf("%s called outside of a row — call BeginRow first", callerName)
+		err = eb.Build().Str("call", "AddSections").Errorf("AddSections called outside of a row — call BeginRow first")
 		return
 	}
-	rowVal, _, groups, err := resolvePlan(row)
+	rowVal, plan, groups, err := resolvePlan(row)
 	if err != nil {
 		return
 	}
-	err = marshalRowSectionsFiltered(c.dml, rowVal, groups, c.lookup, filter)
+	if err = c.claimSections(groups, plan.KindName); err != nil {
+		return
+	}
+	err = marshalRowSections(c.dml, rowVal, groups, c.lookup)
+	return
+}
+
+// claimSections enforces one section visit per entity (ADR-0146 D6). A section
+// is opened once per BeginEntity and closed once; the generated DML does not
+// reopen it, so a second DTO touching a section another already emitted fails
+// deep inside the DML as a bare "invalid state transition" that names neither
+// the section nor the DTO. Catching it here says what actually happened.
+func (c *RowComposer) claimSections(groups []goplan.SectionGroup, kind string) (err error) {
+	for _, g := range groups {
+		if owner, taken := c.sections[g.Section]; taken {
+			return eb.Build().Str("section", g.Section).Str("first", owner).Errorf("section %s was already emitted in this row by %s — a section is opened once per entity, so stacked DTOs must not overlap on one (ADR-0070 D3 retracted by ADR-0146 D6)", g.Section, owner)
+		}
+	}
+	for _, g := range groups {
+		c.sections[g.Section] = kind
+	}
 	return
 }
 
@@ -147,6 +136,7 @@ func (c *RowComposer) CommitRow() (err error) {
 		return
 	}
 	c.inRow = false
+	clear(c.sections)
 	rets := mustCall(c.dml, "CommitEntity")
 	if len(rets) == 1 && !rets[0].IsNil() {
 		err = rets[0].Interface().(error)
@@ -176,9 +166,9 @@ func resolvePlan(row any) (rowVal reflect.Value, plan *mappingplan.Plan, groups 
 	return
 }
 
-func marshalRowSectionsFiltered(dml, rowVal reflect.Value, groups []goplan.SectionGroup, lookup LookupI, filter cardFilter) (err error) {
+func marshalRowSections(dml, rowVal reflect.Value, groups []goplan.SectionGroup, lookup LookupI) (err error) {
 	for _, g := range groups {
-		err = marshalSection(dml, rowVal, g, lookup, filter)
+		err = marshalSection(dml, rowVal, g, lookup)
 		if err != nil {
 			err = eb.Build().Str("section", g.Section).Errorf("section %s: %w", g.Section, err)
 			return
@@ -187,112 +177,3 @@ func marshalRowSectionsFiltered(dml, rowVal reflect.Value, groups []goplan.Secti
 	return
 }
 
-// cardFilter partitions per-attribute emit by runtime value
-// cardinality. Used by RowComposer.AddSingleValueAttributes /
-// AddMultiValueAttributes to drive the `1,1,…,>1,>1,…` per-section
-// attribute ordering from ADR-0008 D2 at the per-attribute grain.
-type cardFilter uint8
-
-const (
-	cardFilterAll cardFilter = iota
-	cardFilterSingleValue
-	cardFilterMultiValue
-)
-
-// sectionHasMatchingField reports whether any field in the section
-// would emit at least one attribute matching `filter`, given the
-// current row's values. Used to decide whether to open a
-// BeginSection frame for a filtered emit.
-func sectionHasMatchingField(row reflect.Value, g goplan.SectionGroup, filter cardFilter) bool {
-	if filter == cardFilterAll {
-		return true
-	}
-	if ts, ok := g.TupleSpec(); ok {
-		// One attribute per element; each element classifies by its own
-		// shared container length (marshalTupleSection re-evaluates the same
-		// predicate per element). Element enumeration follows the section
-		// cardinality (Many slice / One struct value) via the shared helper so
-		// the frame predicate and the emitter cannot disagree.
-		containers := g.ContainerSubColumns()
-		noScalars := len(g.ScalarSubColumns()) == 0
-		for _, elem := range tupleRowElements(row, ts) {
-			n := 0
-			if len(containers) > 0 {
-				n = elem.FieldByName(containers[0].Fields[0].GoFieldName).Len()
-			}
-			// Mirror the emitter's S=0 splice (H2): a One/Optional all-container
-			// empty element emits nothing, so it opens no frame.
-			if ts.Cardinality != mappingplan.AttrCardinalityMany && noScalars && n == 0 {
-				continue
-			}
-			if tupleElemCardMatches(n, filter) {
-				return true
-			}
-		}
-		return false
-	}
-	if len(g.SubColumns) > 1 {
-		// One tuple per row; the shared container length classifies the
-		// attribute's cardinality pass (ADR-0101 D7).
-		return multiSubColumnEmitsForFilter(row, g, filter)
-	}
-	for _, f := range g.SubColumns[0].Fields {
-		if fieldEmitsForFilter(row, f, filter) {
-			return true
-		}
-	}
-	return false
-}
-
-// fieldEmitsForFilter reports whether the field will emit at least
-// one attribute matching the cardinality filter, given the row's
-// current values. Returns true for cardFilterAll so callers can use
-// the same predicate uniformly.
-func fieldEmitsForFilter(row reflect.Value, f mappingplan.TaggedField, filter cardFilter) bool {
-	if filter == cardFilterAll {
-		return true
-	}
-	if f.IsConst {
-		return filter == cardFilterSingleValue
-	}
-	if f.IsOption {
-		if filter != cardFilterSingleValue {
-			return false
-		}
-		return row.FieldByName(f.GoFieldName).FieldByName("Has").Bool()
-	}
-	isMulti := f.IsSlice() || f.IsRoaring()
-	if !isMulti {
-		return filter == cardFilterSingleValue
-	}
-	size, hasData := containerSize(row, f)
-	if !hasData {
-		return false
-	}
-	if size == 1 {
-		return filter == cardFilterSingleValue
-	}
-	return filter == cardFilterMultiValue
-}
-
-// containerSize returns the element count of a slice / roaring
-// field and a bool indicating whether the field has any data at
-// all. Used to decide cardFilter matching for multi-shape fields.
-func containerSize(row reflect.Value, f mappingplan.TaggedField) (n int, hasData bool) {
-	fld := row.FieldByName(f.GoFieldName)
-	if f.IsRoaring() {
-		if fld.IsNil() {
-			return 0, false
-		}
-		if mustCall(fld, "IsEmpty")[0].Bool() {
-			return 0, false
-		}
-		card := mustCall(fld, "GetCardinality")[0].Uint()
-		return int(card), card > 0
-	}
-	if f.IsSlice() {
-		n = fld.Len()
-		return n, n > 0
-	}
-	return 0, false
-}

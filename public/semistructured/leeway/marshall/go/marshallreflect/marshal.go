@@ -55,7 +55,7 @@ func marshalRow(dml, row reflect.Value, plan *mappingplan.Plan, groups []goplan.
 		return
 	}
 	for _, g := range groups {
-		err = marshalSection(dml, row, g, lookup, cardFilterAll)
+		err = marshalSection(dml, row, g, lookup)
 		if err != nil {
 			return
 		}
@@ -90,10 +90,7 @@ func marshalPlain(dml, row reflect.Value, plan *mappingplan.Plan) (err error) {
 	return
 }
 
-func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup LookupI, filter cardFilter) (err error) {
-	if !sectionHasMatchingField(row, g, filter) {
-		return
-	}
+func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup LookupI) (err error) {
 	method := mappingplan.UpperFirst(g.Section)
 	sec := mustCall(dml, "GetSection"+method)[0]
 
@@ -101,7 +98,7 @@ func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup Lookup
 		// Dynamic-membership tuple: one attribute per element of the outer
 		// slice, each with its own membership (ADR-0103). Dispatched before
 		// the sub-column-count split — a tuple may have any S + C ≥ 1.
-		err = marshalTupleSection(sec, row, g, ts, lookup, filter)
+		err = marshalTupleSection(sec, row, g, ts, lookup)
 		if err != nil {
 			return
 		}
@@ -114,7 +111,7 @@ func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup Lookup
 		// the cardinality pass (N ≤ 1 single-value, N > 1 multi-value) and
 		// the S = 0 splice — ADR-0101 D7/D2. All-scalar tuples remain
 		// single-value.
-		if multiSubColumnEmitsForFilter(row, g, filter) {
+		if multiSubColumnEmits(row, g) {
 			err = marshalMultiSubColumn(sec, row, g, lookup)
 			if err != nil {
 				return
@@ -124,9 +121,6 @@ func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup Lookup
 		return
 	}
 	for _, f := range g.SubColumns[0].Fields {
-		if !fieldEmitsForFilter(row, f, filter) {
-			continue
-		}
 		err = marshalField(sec, row, f, lookup)
 		if err != nil {
 			return
@@ -194,9 +188,7 @@ func marshalMultiSubColumn(sec, row reflect.Value, g goplan.SectionGroup, lookup
 // tupleRowElements returns the element reflect.Values a row contributes to a
 // tuple-family section, by cardinality: Many → each element of the outer slice;
 // One → the struct value once; Optional → zero-or-one (Slice-A Step 3, currently
-// none). Shared by the write emitter (marshalTupleSection) and the frame
-// predicate (sectionHasMatchingField) so the two cannot disagree on which
-// elements a row emits.
+// none).
 func tupleRowElements(row reflect.Value, ts goplan.TupleSpec) []reflect.Value {
 	fld := row.FieldByName(ts.GoField)
 	switch ts.Cardinality {
@@ -243,7 +235,7 @@ func tupleRowElements(row reflect.Value, ts goplan.TupleSpec) []reflect.Value {
 //     directly. A STATIC nested section (ts.Memberships empty) resolves its one
 //     membership through addMembership — the ref lookup / verbatim literal —
 //     exactly like a flat section, NOT the raw per-element path.
-func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, lookup LookupI, filter cardFilter) (err error) {
+func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts goplan.TupleSpec, lookup LookupI) (err error) {
 	scalars := g.ScalarSubColumns()
 	containers := g.ContainerSubColumns()
 	addMethod := ""
@@ -277,9 +269,6 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 		// multi-sub-column / single-container S=0 rule. A Many (dynamic-tuple)
 		// element always emits: its slice presence is the signal.
 		if ts.Cardinality != mappingplan.AttrCardinalityMany && len(scalars) == 0 && n == 0 {
-			continue
-		}
-		if !tupleElemCardMatches(n, filter) {
 			continue
 		}
 		args = args[:0]
@@ -339,54 +328,21 @@ func tupleMembArg(v reflect.Value, m mappingplan.TupleMembership) reflect.Value 
 	return v.Convert(uint64Type)
 }
 
-// tupleElemCardMatches classifies one tuple element by its shared
-// container length n for the RowComposer cardinality passes: n ≤ 1
-// single-value, n > 1 multi-value — the runtime-cardinality rule the
-// static mixed-shape tuple already follows (ADR-0101 D7), applied at
-// element grain. All-scalar tuple elements have n = 0, always
-// single-value.
-func tupleElemCardMatches(n int, filter cardFilter) bool {
-	switch filter {
-	case cardFilterSingleValue:
-		return n <= 1
-	case cardFilterMultiValue:
-		return n > 1
-	default:
+// multiSubColumnEmits reports whether the section's tuple attribute emits for
+// the row: an all-container tuple whose containers are all empty is spliced
+// entirely (the S = 0 rule, ADR-0101 D2). Anything else emits exactly one
+// attribute.
+func multiSubColumnEmits(row reflect.Value, g goplan.SectionGroup) bool {
+	if len(g.ScalarSubColumns()) > 0 {
 		return true
 	}
-}
-
-// multiSubColumnEmitsForFilter reports whether the section's tuple
-// attribute emits for the row under the cardinality filter. The shared
-// container length N classifies the attribute (N ≤ 1 single-value,
-// N > 1 multi-value; all-scalar tuples are N = 0); an all-container
-// tuple with every container empty is spliced entirely (ADR-0101 D2/D7).
-// sectionHasMatchingField and marshalSection both consult this one
-// predicate so the frame decision and the emit cannot drift.
-func multiSubColumnEmitsForFilter(row reflect.Value, g goplan.SectionGroup, filter cardFilter) bool {
-	containers := g.ContainerSubColumns()
-	n := 0
-	anyElems := false
-	for j, sc := range containers {
-		l := row.FieldByName(sc.Fields[0].GoFieldName).Len()
-		if j == 0 {
-			n = l
-		}
-		if l > 0 {
-			anyElems = true
+	for _, sc := range g.ContainerSubColumns() {
+		if row.FieldByName(sc.Fields[0].GoFieldName).Len() > 0 {
+			return true
 		}
 	}
-	if len(containers) > 0 && len(g.ScalarSubColumns()) == 0 && !anyElems {
-		return false // S = 0 splice — no attribute at all
-	}
-	switch filter {
-	case cardFilterSingleValue:
-		return n <= 1
-	case cardFilterMultiValue:
-		return n > 1
-	default:
-		return true
-	}
+	// No scalar sub-column and every container empty — nothing to emit.
+	return len(g.ContainerSubColumns()) == 0
 }
 
 func marshalField(sec, row reflect.Value, f mappingplan.TaggedField, lookup LookupI) (err error) {

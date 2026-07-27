@@ -476,6 +476,36 @@ unchanged: separate fields with differing memberships on one
 multi-sub-column section stay rejected (the field↔attribute grouping is
 ambiguous); the tuple form is the supported spelling.
 
+### 2026-07-27 — D7's cardinality passes are removed; D1–D6 unaffected
+
+D7 routed a mixed-shape attribute into `AddSingleValueAttributes` (shared
+container length N ≤ 1) or `AddMultiValueAttributes` (N > 1). Both `RowComposer`
+methods are gone, so D7 no longer describes anything.
+
+The mechanism could not work. A section is opened once per `BeginEntity` and
+closed once; no generated DML reopens it, so a pass that revisits a section
+another pass already emitted fails at the next `BeginAttribute`. D7's own case
+survived only because a multi-sub-column section emits ONE attribute per row and
+therefore matches exactly one pass — a flat section holding fields of differing
+runtime cardinality emits in both, and fails. The tests that covered this drove
+a recording mock with no state machine, so the defect stayed invisible; see
+[ADR-0070](0070-leeway-entity-assembly.md)'s 2026-07-27 update and
+[ADR-0146](0146-leeway-marshall-component-read-contract.md) D6.
+
+Nothing accepted required the ordering the passes produced.
+[ADR-0071](0071-leeway-value-and-emission.md) C1 asks for a STATIC
+scalar-before-container partition within a section, which
+`partitionScalarsFirst` implements and this change leaves untouched; the
+runtime-cardinality refinement on top of it was introduced by the API itself.
+Reinstating it would mean sorting attributes at runtime in BOTH front-ends —
+changing the wire for existing data to satisfy no consumer — so it is dropped
+rather than relocated. The classification D7 describes is still how a
+mixed-shape attribute behaves; it simply no longer selects a pass.
+
+D1–D6 and the subsidiary decisions are unaffected: the zip rule, the S = 0
+splice, and the one-attribute-per-row shape all stand, and the round-trip tests
+that covered them now drive a single `AddSections` call per row.
+
 ## References
 
 - [ADR-0008](0008-leeway-marshall-extensions.md) — marshall extensions (D2 ordering, SD8 presence-signal precedent, Cut-2 carrier length-agreement precedent); superseded by ADR-0070–0073 but decisions stand.

@@ -104,10 +104,10 @@ func TestCarrierOption_WritePresentAbsent(t *testing.T) {
 	require.Contains(t, joined, `AddMembershipMixedLowCardVerbatimP("n", "p")`)
 }
 
-// --- RowComposer: a multi-value container carrier via AddMultiValueAttributes.
-// The plain owner declares no sections, so the container carrier reaches the
-// wire exactly once, through the multi-value-filtered path (the third marshal
-// entry point besides Marshal and the emitter). ---
+// --- RowComposer: a container carrier stacked onto a section-less owner. The
+// plain owner declares no sections, so the container carrier reaches the wire
+// exactly once, through RowComposer (the third marshal entry point besides
+// Marshal and the emitter). ---
 
 type plainOnlyDrone struct {
 	_          struct{} `kind:"pod"`
@@ -115,16 +115,16 @@ type plainOnlyDrone struct {
 	NaturalKey []byte   `lw:",naturalKey"`
 }
 
-func TestCarrierContainer_RowComposerMultiValue(t *testing.T) {
+func TestCarrierContainer_RowComposerStacked(t *testing.T) {
 	dml := &recordingDML{}
 	comp := marshallreflect.NewRowComposer(dml, marshallreflect.NoLookup{})
 	row := containerCarrierDrone{
 		Id: 1, NaturalKey: []byte("k"),
-		Tags:  []string{"a", "b"}, // runtime length > 1 → multi-value pass
+		Tags:  []string{"a", "b"},
 		TagsC: marshalltypes.MixedLowCardVerbatim{Name: []byte("n"), Params: []byte("p")},
 	}
 	require.NoError(t, comp.BeginRow(plainOnlyDrone{Id: 1, NaturalKey: []byte("k")}))
-	require.NoError(t, comp.AddMultiValueAttributes(row))
+	require.NoError(t, comp.AddSections(row))
 	require.NoError(t, comp.CommitRow())
 
 	joined := strings.Join(dml.log, "\n")

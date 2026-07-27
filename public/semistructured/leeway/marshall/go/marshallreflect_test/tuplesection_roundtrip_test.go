@@ -260,7 +260,7 @@ func TestReflect_TupleSingleSubColumnSection(t *testing.T) {
 // once per entity (the DML protocol), so a row's tuple elements must all
 // classify into the same pass — mirroring the existing mixed-shape pass
 // test, each row here emits in exactly one pass, never zero, never both.
-func TestRowComposer_TupleCardinalityPasses(t *testing.T) {
+func TestRowComposer_TupleCardinalityRoundTrip(t *testing.T) {
 	multi := labeledDoc{ID: 1, Tracking: []byte("A"), Texts: []labeledText{
 		{Label: "m1", Text: "two words", WordLength: []uint32{3, 5}, WordBag: []string{"two", "words"}},
 		{Label: "m2", Text: "more words", WordLength: []uint32{4, 5}, WordBag: []string{"more", "words"}},
@@ -273,17 +273,16 @@ func TestRowComposer_TupleCardinalityPasses(t *testing.T) {
 	table := anchor.NewInEntityTestTable(memory.NewGoAllocator(), 2)
 	m := marshallreflect.NewRowComposer(table, marshallreflect.NoLookup{})
 
-	// Row 0: both elements N > 1 → the section emits only in the
-	// multi-value pass.
+	// Row 0: both elements N > 1. Row 1: both N ≤ 1. Each row emits in one
+	// AddSections call — the cardinality passes ADR-0101 D7 routed these
+	// through are gone (ADR-0146 D6), so what is checked below is that both
+	// element shapes round-trip through a single section visit.
 	require.NoError(t, m.BeginRow(plainOnlyOwner{ID: multi.ID, Tracking: multi.Tracking}))
-	require.NoError(t, m.AddSingleValueAttributes(multi))
-	require.NoError(t, m.AddMultiValueAttributes(multi))
+	require.NoError(t, m.AddSections(multi))
 	require.NoError(t, m.CommitRow())
 
-	// Row 1: both elements N ≤ 1 → only the single-value pass.
 	require.NoError(t, m.BeginRow(plainOnlyOwner{ID: single.ID, Tracking: single.Tracking}))
-	require.NoError(t, m.AddSingleValueAttributes(single))
-	require.NoError(t, m.AddMultiValueAttributes(single))
+	require.NoError(t, m.AddSections(single))
 	require.NoError(t, m.CommitRow())
 
 	recs, err := table.TransferRecords(nil)

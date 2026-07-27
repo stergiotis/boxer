@@ -202,8 +202,15 @@ which is the failure above. The API has no consumers outside its own tests.
   change across every generated codec. With the default the two front-ends
   agree exactly, so the asymmetry only exists for a caller that opts in; taking
   it to codegen waits for a consumer.
-- **M5 — the single-section-visit rule**, the ordering fold, and the two-pass
-  removal.
+- **M5 — the single-section-visit rule** and the two-pass removal. ✓ One
+  correction to D6 as written: the runtime-cardinality ordering is **dropped**,
+  not folded into the section frame. Folding it would reorder attributes at
+  runtime in the reflect front-end only, breaking the byte-parity invariant with
+  marshallgen's `BuildEntities`; matching it in codegen would change the wire for
+  existing data to satisfy no consumer. ADR-0071 C1's static
+  scalar-before-container partition — the ordering that IS decided — is
+  untouched. [ADR-0101](0101-leeway-marshall-mixed-shape-sections.md) D7, which
+  named the two passes, is superseded there.
 - **M2c — the ClickHouse artefacts take their arity from `ReadContract`.** ✓
   Pulled forward out of Deferred once M1 showed the divergence was a defect,
   not just an inconsistency.

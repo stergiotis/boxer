@@ -199,10 +199,14 @@ type plainOnlyOwner struct {
 	Tracking []byte `lw:",naturalKey"`
 }
 
-// TestRowComposer_MixedCardinalityPasses pins ADR-0101 D7: the shared
-// container length N routes the tuple attribute into the single-value
-// pass (N ≤ 1) or the multi-value pass (N > 1).
-func TestRowComposer_MixedCardinalityPasses(t *testing.T) {
+// TestRowComposer_MixedCardinalityRoundTrip covers a mixed-shape tuple section
+// stacked through RowComposer at two runtime container lengths (N = 3 and
+// N = 1), which used to be routed through the two cardinality passes ADR-0101
+// D7 defined. Those passes are gone (ADR-0146 D6 — a section is opened once
+// per entity, so a pass that revisits it cannot work against a real DML), so
+// each row emits in a single AddSections call and the assertions below check
+// what still matters: both lengths round-trip through one section visit.
+func TestRowComposer_MixedCardinalityRoundTrip(t *testing.T) {
 	lookup := marshallreflect.MapLookup{"prose": 1}
 	multi := reflectTextDoc{ID: 1, Tracking: []byte("A"), Text: "hello brave world", WordLength: []uint32{5, 5, 5}, WordBag: []string{"hello", "brave", "world"}}
 	single := reflectTextDoc{ID: 2, Tracking: []byte("B"), Text: "one", WordLength: []uint32{3}, WordBag: []string{"one"}}
@@ -210,16 +214,14 @@ func TestRowComposer_MixedCardinalityPasses(t *testing.T) {
 	table := anchor.NewInEntityTestTable(memory.NewGoAllocator(), 2)
 	m := marshallreflect.NewRowComposer(table, lookup)
 
-	// Row 0: N = 3 → emits only in the multi-value pass.
+	// Row 0: N = 3.
 	require.NoError(t, m.BeginRow(plainOnlyOwner{ID: multi.ID, Tracking: multi.Tracking}))
-	require.NoError(t, m.AddSingleValueAttributes(multi))
-	require.NoError(t, m.AddMultiValueAttributes(multi))
+	require.NoError(t, m.AddSections(multi))
 	require.NoError(t, m.CommitRow())
 
-	// Row 1: N = 1 → emits only in the single-value pass.
+	// Row 1: N = 1.
 	require.NoError(t, m.BeginRow(plainOnlyOwner{ID: single.ID, Tracking: single.Tracking}))
-	require.NoError(t, m.AddSingleValueAttributes(single))
-	require.NoError(t, m.AddMultiValueAttributes(single))
+	require.NoError(t, m.AddSections(single))
 	require.NoError(t, m.CommitRow())
 
 	recs, err := table.TransferRecords(nil)

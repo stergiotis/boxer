@@ -151,16 +151,20 @@ func TestRowComposer_SingleRow_PlainPlusSections(t *testing.T) {
 	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
 }
 
-// TestRowComposer_Stacked_TwoDTOsOneRow confirms multiple DTOs can
-// contribute to one entity: BeginRow with DTO-A's row owns plains and
-// emits A's sections, AddSections with DTO-B's row adds B's sections,
-// then CommitRow closes. Order of section emit follows call order.
+// TestRowComposer_Stacked_TwoDTOsOneRow confirms multiple DTOs can contribute
+// to one entity (ADR-0070 D1): BeginRow with DTO-A's row owns plains and emits
+// A's sections, AddSections with DTO-B's row adds B's sections, then CommitRow
+// closes. Order of section emit follows call order.
+//
+// The two DTOs must target DISJOINT sections. ADR-0070 D3 claimed they could
+// share one; no generated DML supports that, and ADR-0146 D6 retracted it —
+// see TestRowComposer_RejectsSectionOverlap.
 func TestRowComposer_Stacked_TwoDTOsOneRow(t *testing.T) {
 	dml := &recordingDML{}
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
 
 	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
-	require.NoError(t, m.AddSections(stackedB{Id: 99, Label: "alpha"}))
+	require.NoError(t, m.AddSections(stackedFoo{Id: 99, Note: "alpha"}))
 	require.NoError(t, m.CommitRow())
 
 	joined := strings.Join(dml.log, "\n")
@@ -169,13 +173,13 @@ func TestRowComposer_Stacked_TwoDTOsOneRow(t *testing.T) {
 	require.Equal(t, 1, strings.Count(joined, "CommitEntity"))
 	// Both DTOs' section values appear.
 	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
-	require.Contains(t, joined, `Symbol.BeginAttribute("alpha")`)
+	require.Contains(t, joined, `Foo.BeginAttribute("alpha")`)
 	// Plains owned by A (Id=1), not B (Id=99).
 	require.Contains(t, joined, `SetId(1, "")`)
 	require.NotContains(t, joined, `SetId(99, "")`)
 	// A's section emit precedes B's.
 	redIdx := strings.Index(joined, `Symbol.BeginAttribute("red")`)
-	alphaIdx := strings.Index(joined, `Symbol.BeginAttribute("alpha")`)
+	alphaIdx := strings.Index(joined, `Foo.BeginAttribute("alpha")`)
 	require.Less(t, redIdx, alphaIdx, "BeginRow's DTO emits before AddSections's DTO")
 	// BeginEntity precedes both; CommitEntity follows.
 	beginIdx := strings.Index(joined, "BeginEntity")
@@ -192,7 +196,7 @@ func TestRowComposer_MultipleRows_VaryingDTOMix(t *testing.T) {
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
 
 	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
-	require.NoError(t, m.AddSections(stackedB{Id: 99, Label: "alpha"}))
+	require.NoError(t, m.AddSections(stackedFoo{Id: 99, Note: "alpha"}))
 	require.NoError(t, m.CommitRow())
 
 	require.NoError(t, m.BeginRow(stackedA{Id: 2, Color: "blue"}))
@@ -202,7 +206,7 @@ func TestRowComposer_MultipleRows_VaryingDTOMix(t *testing.T) {
 	require.Equal(t, 2, strings.Count(joined, "BeginEntity"))
 	require.Equal(t, 2, strings.Count(joined, "CommitEntity"))
 	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
-	require.Contains(t, joined, `Symbol.BeginAttribute("alpha")`)
+	require.Contains(t, joined, `Foo.BeginAttribute("alpha")`)
 	require.Contains(t, joined, `Symbol.BeginAttribute("blue")`)
 }
 
@@ -268,139 +272,113 @@ func TestRowComposer_RejectsNonStructRow(t *testing.T) {
 	require.Contains(t, err.Error(), "row must be a struct")
 }
 
-// TestRowComposer_AddSingleValueAttributes_PureScalarRow confirms a
-// DTO with only scalar fields emits its single section with one
-// size-1 attribute when AddSingleValueAttributes is called.
-func TestRowComposer_AddSingleValueAttributes_PureScalarRow(t *testing.T) {
+// --- ADR-0146 D6: one section visit per entity ---
+//
+// ADR-0070 D3 claimed two DTOs could both emit into section Foo, producing two
+// BeginSectionFoo…EndSection cycles. No generated DML supports that: BeginEntity
+// opens each section once, EndSection returns it to Initial, and nothing
+// reopens it, so the second visit fails at the next BeginAttribute with a bare
+// "invalid state transition" naming neither the section nor the DTO. The
+// recordingDML used here has no state machine, which is why the two-pass
+// RowComposer API (AddSingleValueAttributes / AddMultiValueAttributes) appeared
+// to work in these tests while failing against a real DML. That API is gone;
+// RowComposer now refuses the overlap up front, with a message that says what
+// happened.
+
+// stackedFoo targets the mock's `foo` section, so stacking it beside a DTO on
+// `symbol` exercises the disjoint case.
+type stackedFoo struct {
+	_    struct{} `kind:"foo"`
+	Id   uint64   `lw:",id"`
+	Note string   `lw:"note,foo"`
+}
+
+// TestRowComposer_RejectsSectionOverlap confirms a second DTO touching a
+// section the row already emitted is refused, naming the section and both DTO
+// kinds.
+func TestRowComposer_RejectsSectionOverlap(t *testing.T) {
 	dml := &recordingDML{}
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
 
 	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
-	require.NoError(t, m.AddSingleValueAttributes(stackedB{Id: 1, Label: "alpha"}))
-	require.NoError(t, m.CommitRow())
-
-	joined := strings.Join(dml.log, "\n")
-	require.Contains(t, joined, `Symbol.BeginAttribute("alpha")`)
-	// No AddToContainerP calls — there are no containers.
-	require.NotContains(t, joined, "AddToContainerP")
+	err := m.AddSections(stackedB{Id: 99, Label: "alpha"})
+	require.Error(t, err, "stackedA and stackedB both emit into `symbol`")
+	require.Contains(t, err.Error(), "symbol")
+	require.Contains(t, err.Error(), "already emitted")
 }
 
-// TestRowComposer_AddMultiValueAttributes_SkipsScalars confirms
-// AddMultiValueAttributes never emits attributes for purely scalar
-// DTOs — pure scalar rows produce no Begin/EndSection frame at all
-// (sectionHasMatchingField returns false).
-func TestRowComposer_AddMultiValueAttributes_SkipsScalars(t *testing.T) {
+// TestRowComposer_AllowsDisjointSections confirms the rule bites only on
+// overlap: stacking DTOs that touch different sections is the ADR-0070 D1 case
+// and still works.
+func TestRowComposer_AllowsDisjointSections(t *testing.T) {
 	dml := &recordingDML{}
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
 
 	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
-	logBefore := append([]string(nil), dml.log...)
-	require.NoError(t, m.AddMultiValueAttributes(stackedB{Id: 1, Label: "alpha"}))
-	require.NoError(t, m.CommitRow())
-
-	// Between BeginRow's emit and CommitRow's CommitEntity, the only
-	// new entries should be from CommitEntity — AddMultiValueAttributes
-	// on a pure-scalar DTO is a no-op.
-	tail := dml.log[len(logBefore):]
-	for _, line := range tail {
-		require.NotContains(t, line, "Symbol", "AddMultiValueAttributes should not open Symbol section for pure-scalar DTO")
-	}
-	require.Contains(t, dml.log, "CommitEntity")
-}
-
-// TestRowComposer_CardinalitySplit_OneOneMany confirms the
-// 1,1,…,>1,>1,… per-section attribute ordering when chaining the two
-// new methods across multiple DTOs in the same row.
-//
-// Both DTOs share section "symbol". DTO A's Brand is len=1 (so its
-// container attribute is size-1); DTO B's Brand is len=3 (size-3).
-// Chaining AddSingleValueAttributes(A) → AddSingleValueAttributes(B)
-// → AddMultiValueAttributes(A) → AddMultiValueAttributes(B) should
-// produce — within section symbol — attributes in this order:
-//
-//	A.Color ("red")           [size 1, scalar]
-//	A.Brand[0]                 [size 1, container len=1]
-//	B.Label ("alpha")          [size 1, scalar]
-//	B.Brand{x,y,z}             [size 3, container len=3]
-//
-// (A's multi-value pass produces nothing because its Brand is len=1
-// which is single-value; B's single-value pass produces only its
-// scalar Label because Brand is len=3.)
-func TestRowComposer_CardinalitySplit_OneOneMany(t *testing.T) {
-	dml := &recordingDML{}
-	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
-
-	rowA := stackedMixed{Id: 1, Color: "red", Brand: []string{"acme"}}
-	rowB := stackedMixed{Id: 2, Color: "blue", Brand: []string{"x", "y", "z"}}
-
-	// BeginRow emits plain + plainOwner's full sections. To exercise
-	// only the filtered methods, plainOwner is a scalar-only DTO and
-	// we drive the cardinality split via Add* calls on the mixed DTOs.
-	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "owner"}))
-	require.NoError(t, m.AddSingleValueAttributes(rowA))
-	require.NoError(t, m.AddSingleValueAttributes(rowB))
-	require.NoError(t, m.AddMultiValueAttributes(rowA))
-	require.NoError(t, m.AddMultiValueAttributes(rowB))
+	require.NoError(t, m.AddSections(stackedFoo{Id: 1, Note: "n"}))
 	require.NoError(t, m.CommitRow())
 
 	joined := strings.Join(dml.log, "\n")
-
-	// Order assertion: rowA's scalar + len=1 container, then rowB's
-	// scalar, then rowB's len=3 container. rowA's MultiValue pass
-	// produces no Symbol cycle (len=1 is single-value).
-	redIdx := strings.Index(joined, `Symbol.BeginAttribute("red")`)
-	acmeIdx := strings.Index(joined, `AddToContainerP("acme")`)
-	blueIdx := strings.Index(joined, `Symbol.BeginAttribute("blue")`)
-	xIdx := strings.Index(joined, `AddToContainerP("x")`)
-
-	require.NotEqual(t, -1, redIdx)
-	require.NotEqual(t, -1, acmeIdx)
-	require.NotEqual(t, -1, blueIdx)
-	require.NotEqual(t, -1, xIdx)
-	require.Less(t, redIdx, acmeIdx, "size-1 scalar precedes size-1 container within rowA's single-value pass")
-	require.Less(t, acmeIdx, blueIdx, "rowA's single-value emit precedes rowB's single-value emit")
-	require.Less(t, blueIdx, xIdx, "size-1 emits precede size-3 container")
-
-	// rowA's container is len=1 so its MultiValue pass emits nothing.
-	require.Equal(t, 1, strings.Count(joined, `AddToContainerP("acme")`),
-		"rowA's len=1 container should appear exactly once (single-value pass only)")
-	// rowB's container has three elements added.
-	require.Equal(t, 1, strings.Count(joined, `AddToContainerP("x")`))
-	require.Equal(t, 1, strings.Count(joined, `AddToContainerP("y")`))
-	require.Equal(t, 1, strings.Count(joined, `AddToContainerP("z")`))
-}
-
-// TestRowComposer_AddSingleValueAttributes_EmptyContainerSkipped
-// confirms an empty container produces no attribute at all from
-// either method (splice semantics preserved).
-func TestRowComposer_AddSingleValueAttributes_EmptyContainerSkipped(t *testing.T) {
-	dml := &recordingDML{}
-	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
-
-	row := stackedMixed{Id: 1, Color: "red", Brand: nil}
-	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "owner"}))
-	require.NoError(t, m.AddSingleValueAttributes(row))
-	require.NoError(t, m.AddMultiValueAttributes(row))
-	require.NoError(t, m.CommitRow())
-
-	joined := strings.Join(dml.log, "\n")
-	require.NotContains(t, joined, "AddToContainerP",
-		"empty Brand should produce no container attribute under either filter")
-	// The scalar Color still emits under the single-value pass.
 	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
+	require.Contains(t, joined, "GetSectionFoo")
 }
 
-// TestRowComposer_FilteredMethodsRequireBeginRow confirms the
-// state-machine guard applies to the new methods as well.
-func TestRowComposer_FilteredMethodsRequireBeginRow(t *testing.T) {
+// TestRowComposer_SectionClaimsResetPerRow confirms the claim set is per
+// entity: the same DTO pair that collides within one row is fine across rows.
+func TestRowComposer_SectionClaimsResetPerRow(t *testing.T) {
 	dml := &recordingDML{}
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
 
-	err := m.AddSingleValueAttributes(stackedA{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "outside of a row")
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	require.NoError(t, m.CommitRow())
+	require.NoError(t, m.BeginRow(stackedA{Id: 2, Color: "blue"}))
+	require.NoError(t, m.CommitRow())
 
-	err = m.AddMultiValueAttributes(stackedA{})
+	joined := strings.Join(dml.log, "\n")
+	require.Equal(t, 2, strings.Count(joined, "BeginEntity"))
+	require.Contains(t, joined, `Symbol.BeginAttribute("blue")`)
+}
+
+// TestRowComposer_AddSectionsRequiresBeginRow keeps the state-machine guard
+// that the removed filtered methods also carried.
+func TestRowComposer_AddSectionsRequiresBeginRow(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	err := m.AddSections(stackedA{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "outside of a row")
+}
+
+// TestRowComposer_ScalarFirstOrderingSurvives pins the ordering that IS
+// decided — ADR-0071 C1's static scalar-before-container partition within a
+// section. The runtime-cardinality refinement the two-pass API added on top was
+// never an accepted decision, and removing it leaves C1 untouched.
+func TestRowComposer_ScalarFirstOrderingSurvives(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedMixed{Id: 1, Color: "red", Brand: []string{"x", "y", "z"}}))
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+	redIdx := strings.Index(joined, `Symbol.BeginAttribute("red")`)
+	xIdx := strings.Index(joined, `AddToContainerP("x")`)
+	require.NotEqual(t, -1, redIdx)
+	require.NotEqual(t, -1, xIdx)
+	require.Less(t, redIdx, xIdx, "the scalar field emits before the container field")
+}
+
+// TestRowComposer_EmptyContainerIsSpliced confirms splice semantics survive the
+// removal: an empty container emits no attribute, the scalar still does.
+func TestRowComposer_EmptyContainerIsSpliced(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedMixed{Id: 1, Color: "red", Brand: nil}))
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+	require.NotContains(t, joined, "AddToContainerP", "an empty container emits nothing")
+	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
 }
