@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-27
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0146: leeway marshall — the component read contract
 
@@ -325,7 +323,26 @@ Beyond the QOC matrix:
 
 ## Status
 
-Proposed on 2026-07-27.
+Accepted on 2026-07-27.
+
+Implementation status (2026-07-27): **M1–M5 built**, and the first consumer is
+wired — `componentview` detects a row's components off the wire through `Bind` /
+`Binder`, live-verified in the widget tour
+([ADR-0075](0075-leeway-typed-component-views.md)'s dated update). Two decisions
+were re-cut during implementation and their earlier form is recorded where it
+was wrong rather than removed: **D5** dropped a slot-disjointness registration
+law once it was clear no process holds the global component vocabulary — facts
+are fused and enriched by stages unaware of every component, so detecting
+overwriting components is a non-goal — and **D6** turned from refusing
+overlapping section writes into supporting them through a shared, buffered
+section frame.
+
+Deliberately not done, and not gating acceptance: role filtering (D3) reaches
+the reflect front-end only, since generated codecs resolve memberships to
+package-level `kindXxx` vars at init and take no per-read policy; the
+ClickHouse artefacts are re-derived from the contract (M2c) but the remaining
+deferred items in §Scope stand, notably verifying resolved `lookup` ids against
+the wire.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
