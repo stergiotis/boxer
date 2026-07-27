@@ -28,6 +28,11 @@ import (
 //     degraded-features list is spelled out); ClickHouse rejecting it means
 //     the SQL itself is broken, and the server's message — usually better
 //     positioned than the grammar's — is shown.
+//   - Pre-execute rewrites — what the client-side rewrite did to the statement
+//     that would run: the passes that failed and were skipped, with the errors
+//     that skipped them. Every step of that rewrite degrades rather than fails
+//     (ADR-0108 §SD3), so a skipped pass changes what ships without changing
+//     anything the user can see; this section is where it becomes visible.
 //   - Column resolution — the leeway column handles the client-side resolver
 //     could not map, when a resolver is wired (SetColumnResolver).
 //   - Security context — the passthrough ("1:1 as stored") base tables the
@@ -343,6 +348,8 @@ func adjustProbeLineNumbers(s string) string {
 func (inst *PlayApp) renderDiagnosticsTab(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error) {
 	inst.renderDiagStatement()
 	c.Separator().Send()
+	inst.renderDiagRewrites()
+	c.Separator().Send()
 	if inst.diag != nil && inst.diag.resolveDiag != nil {
 		inst.renderDiagColumnResolution()
 		c.Separator().Send()
@@ -379,6 +386,43 @@ func (inst *PlayApp) renderDiagSignalEmits() {
 		}
 	}
 	diagWeak("The named signal keeps its previous value. The notice retires when that name emits an encodable value.")
+}
+
+// renderDiagRewrites reports the client-side rewrite's outcome on the statement
+// Run would ship: the pre-execute passes that failed and were skipped, each
+// with the full error that skipped it, plus factories that declined this
+// client's binding. This is the one place a skipped rewrite is legible — the
+// registry keeps going past a failing pass and ships the SQL from before it
+// (ADR-0108 §SD3), so the query still runs and nothing else in the UI differs.
+//
+// The Passes tab draws the same trace over the pipeline schematic; the split
+// follows the tab's standing division of labour — that pane shows where in the
+// sequence a unit sits, this one owns the prose.
+func (inst *PlayApp) renderDiagRewrites() {
+	diagHeading("Pre-execute rewrites")
+	trace, ok := inst.rewriteTraceFor()
+	if !ok {
+		diagWeak("Type SQL in the Editor tab.")
+		return
+	}
+	skipped := skippedRewrites(trace)
+	if len(skipped) == 0 {
+		diagWeak("Every rewrite applied: " + rewriteOutcomeSummary(trace) + ".")
+		return
+	}
+	c.Label("The statement ships without these rewrites — each failed and was skipped, " +
+		"which does not block the run (ADR-0108 §SD3):").Wrap().Send()
+	for _, o := range skipped {
+		for rt := range c.RichTextLabel(o.Name + " — " + rewriteOutcomeText(o)) {
+			rt.Monospace()
+		}
+		if o.Err != nil {
+			// Selectable: the pass error is the only record of why the shipped
+			// SQL differs from what the user expected.
+			c.Label(o.Err.Error()).Wrap().Selectable(true).Send()
+		}
+	}
+	diagWeak(rewriteOutcomeSummary(trace) + " · the Passes tab shows where each sits in the sequence.")
 }
 
 // renderDiagColumnResolution lists the leeway column handles the resolver could

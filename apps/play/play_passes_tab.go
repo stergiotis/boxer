@@ -23,10 +23,14 @@ import (
 // (ADR-0116 §SD6), so on the unbound path they are catalog-only. Clicking a
 // stage selects it and the section below shows its catalog row.
 //
-// The drawing is the registry's catalog, not a per-run trace: it is what the
-// client WOULD apply. Per-run outcomes (pass failed-and-skipped, factory
-// declined) are a deferred slice — they need an observed apply seam in
-// passreg.
+// The schematic is the registry's catalog — what the client WOULD apply.
+// Layered over it are the per-buffer outcomes of actually applying it
+// (ADR-0108's 2026-07-27 update): a pass that failed and was skipped is tinted
+// error-toned and listed with its message below, a factory that declined the
+// client's binding stays recessed and is named as declined. Without that layer
+// a skipped rewrite is invisible — §SD3 makes every unit degrade rather than
+// fail, so the statement still ships and only a warn line in the process log
+// records that it shipped un-rewritten.
 
 // passesVizIDSalt namespaces the Passes canvas ids; composed with the
 // per-instance vizSeed so two PlayApp instances do not collide, and distinct
@@ -50,6 +54,101 @@ type passesTabState struct {
 }
 
 func passStageID(name string) string { return passesStagePrefix + name }
+
+// rewriteTraceState memoises Client.RewriteTrace by what the trace depends on:
+// the statement that would run (the caret's, on a multi-statement buffer) and
+// the selection-condition toggle, which rewrites without an edit. Recomputing
+// costs a full rewrite — every pass re-parses — so it happens on a key change,
+// not per frame.
+type rewriteTraceState struct {
+	forSQL     string
+	conditions bool
+	valid      bool
+	obs        []passreg.ApplyObservation
+}
+
+// rewriteTrace returns the client-side rewrite's per-unit outcomes for the
+// statement Run would ship, recomputing only when the buffer, the caret's
+// statement or the conditions toggle moved. ok=false means there is nothing to
+// describe — no client, or an empty buffer.
+//
+// Deliberately demand-driven rather than computed in updatePreview: the Passes
+// and Diagnostics tabs are the only readers and both are lazy dock tabs, so a
+// session with neither open never pays for it. The first reader in a frame
+// computes; the second gets the memo.
+func (inst *PlayApp) rewriteTraceFor() (obs []passreg.ApplyObservation, ok bool) {
+	if inst.client == nil {
+		return
+	}
+	runSQL, _, _ := inst.runBuffer()
+	if strings.TrimSpace(runSQL) == "" {
+		return
+	}
+	conds := inst.client.ExposeConditions()
+	st := &inst.rewriteTrace
+	if !st.valid || st.forSQL != runSQL || st.conditions != conds {
+		st.forSQL, st.conditions, st.valid = runSQL, conds, true
+		st.obs = inst.client.RewriteTrace(runSQL)
+	}
+	return st.obs, true
+}
+
+// skippedRewrites filters a trace to the units that did not run: a pass whose
+// Run errored (its rewrite was dropped and the prior SQL shipped) and a factory
+// whose Build declined the client's binding. These are what a user is looking
+// for when the shipped statement does not match what they expected.
+func skippedRewrites(obs []passreg.ApplyObservation) (out []passreg.ApplyObservation) {
+	for _, o := range obs {
+		if o.Outcome == passreg.ApplyOutcomeSkipped || o.Outcome == passreg.ApplyOutcomeDeclined {
+			out = append(out, o)
+		}
+	}
+	return
+}
+
+// rewriteOutcomeText names one unit's outcome for a detail line.
+func rewriteOutcomeText(o passreg.ApplyObservation) string {
+	switch o.Outcome {
+	case passreg.ApplyOutcomeApplied:
+		if o.Changed {
+			return "applied — rewrote the statement"
+		}
+		return "applied — left the statement unchanged"
+	case passreg.ApplyOutcomeSkipped:
+		return "SKIPPED — it failed, and the statement shipped without its rewrite"
+	case passreg.ApplyOutcomeDeclined:
+		return "declined — this client's binding is not one it can build against"
+	}
+	return o.Outcome.String()
+}
+
+// rewriteOutcomeSummary is the one-line accounting of a trace: how many units
+// ran, how many of those changed the SQL, and how many were skipped or
+// declined.
+func rewriteOutcomeSummary(obs []passreg.ApplyObservation) string {
+	var applied, changed, skipped, declined int
+	for _, o := range obs {
+		switch o.Outcome {
+		case passreg.ApplyOutcomeApplied:
+			applied++
+			if o.Changed {
+				changed++
+			}
+		case passreg.ApplyOutcomeSkipped:
+			skipped++
+		case passreg.ApplyOutcomeDeclined:
+			declined++
+		}
+	}
+	parts := []string{fmt.Sprintf("%d applied (%d rewrote)", applied, changed)}
+	if skipped > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", skipped))
+	}
+	if declined > 0 {
+		parts = append(parts, fmt.Sprintf("%d declined", declined))
+	}
+	return strings.Join(parts, " · ")
+}
 
 // passesCatalogKey fingerprints what the drawing depends on: pass identity,
 // order, late-boundness, the fixed-point flag (the label set and edge set),
@@ -184,6 +283,34 @@ func passChildrenLines(p nanopass.Pass) (lines []string) {
 	return
 }
 
+// renderPassesOutcomes is the outcome band under the schematic: the trace's
+// accounting line, then one line per unit that did not run. It covers the whole
+// client-side rewrite, not only the registry stage — play's own steps
+// (extract-params, expose-conditions, set-format) degrade the same way and are
+// no more visible in the result — so a named step with no stage on the spine
+// above is one of those. Full error prose stays in the Diagnostics tab; these
+// lines are truncated pointers.
+func (inst *PlayApp) renderPassesOutcomes(trace []passreg.ApplyObservation, traced bool) {
+	if !traced {
+		for rt := range c.RichTextLabel("Type SQL in the Editor tab to see what these passes do to it.") {
+			rt.Small().Weak()
+		}
+		return
+	}
+	for rt := range c.RichTextLabel("on the statement that would run: " + rewriteOutcomeSummary(trace)) {
+		rt.Small().Weak()
+	}
+	for _, o := range skippedRewrites(trace) {
+		line := o.Name + " — " + rewriteOutcomeText(o)
+		if o.Err != nil {
+			line += ": " + truncateRunes(firstLine(o.Err.Error()), 120)
+		}
+		for rt := range c.RichTextLabel(line) {
+			rt.Small().Monospace()
+		}
+	}
+}
+
 // renderPassesTab draws the Passes tab body (inside the dock's scroll host).
 func (inst *PlayApp) renderPassesTab() {
 	ids := inst.ids
@@ -254,6 +381,14 @@ func (inst *PlayApp) renderPassesTab() {
 	for _, r := range st.rows {
 		lateBound[passStageID(r.Name)] = r.LateBound
 	}
+	// Per-buffer outcomes, keyed by stage id so the fill callbacks can reach
+	// them. Absent (no client, empty buffer) leaves the drawing exactly as it
+	// was before the trace existed.
+	trace, traced := inst.rewriteTraceFor()
+	outcome := make(map[string]passreg.ApplyObservation, len(trace))
+	for _, o := range trace {
+		outcome[passStageID(o.Name)] = o
+	}
 	selectedID := ""
 	if st.selected != "" {
 		selectedID = passStageID(st.selected)
@@ -262,8 +397,19 @@ func (inst *PlayApp) renderPassesTab() {
 		CanvasW: w,
 		CanvasH: h,
 		NodeFill: func(id string) (col color.Color, ok bool) {
+			// Selection wins over outcome: the user asked for this one.
 			if id == selectedID {
 				return color.Hex(styletokens.AccentDefault.AsHex()), true
+			}
+			if o, has := outcome[id]; has {
+				switch {
+				case o.Outcome == passreg.ApplyOutcomeSkipped:
+					return color.Hex(styletokens.ErrorDefault.AsHex()), true
+				case o.Outcome == passreg.ApplyOutcomeApplied && o.Changed:
+					// The units that actually touched this buffer, set apart
+					// from the ones that ran and found nothing to do.
+					return color.Hex(styletokens.SuccessSubtle.AsHex()), true
+				}
 			}
 			if lateBound[id] {
 				return color.Hex(styletokens.NeutralBgFaint.AsHex()), true
@@ -272,6 +418,11 @@ func (inst *PlayApp) renderPassesTab() {
 		},
 		NodeText: func(id string) (col color.Color, ok bool) {
 			if id == selectedID {
+				return color.Hex(styletokens.NeutralBgExtreme.AsHex()), true
+			}
+			if o, has := outcome[id]; has && o.Outcome == passreg.ApplyOutcomeSkipped {
+				// ErrorDefault is a light tint, so its label needs dark text
+				// for the same reason the accent selection fill does.
 				return color.Hex(styletokens.NeutralBgExtreme.AsHex()), true
 			}
 			return
@@ -298,6 +449,7 @@ func (inst *PlayApp) renderPassesTab() {
 	for rt := range c.RichTextLabel(status + " · click a pass for details") {
 		rt.Small().Weak()
 	}
+	inst.renderPassesOutcomes(trace, traced)
 
 	if st.selected == "" {
 		return
@@ -334,6 +486,14 @@ func (inst *PlayApp) renderPassesTab() {
 		if row.Provenance != "" {
 			for rt := range c.RichTextLabel(row.Provenance) {
 				rt.Small().Monospace()
+			}
+		}
+		if o, has := outcome[passStageID(row.Name)]; has {
+			for rt := range c.RichTextLabel("on this buffer: " + rewriteOutcomeText(o)) {
+				rt.Small().Weak()
+			}
+			if o.Err != nil {
+				c.Label(o.Err.Error()).Wrap().Selectable(true).Send()
 			}
 		}
 		if p, ok := entryPassForRow(reg, *row); ok {

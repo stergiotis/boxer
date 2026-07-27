@@ -293,3 +293,57 @@ the `nanopass/passes` abstraction. Play no longer builds a per-client registry:
 `installLeewayNameResolution` sets `Client.passBinding` to the resolver and lets
 `Client.passes` default to `Default`. The `QualifyTables(db)`-style factory SD7
 also mentioned remains a future registrant; the mechanism now exists for it.
+
+## Update — 2026-07-27: an observed apply, so a skipped pass is visible
+
+The Consequences above name the cost of §SD3 plainly — "best-effort
+application can silently skip a broken pass for a given input; the skip is
+logged at warn level and the catalog says what should have applied." In play
+that left a gap: the catalog says what *would* apply, the Preview tab's "as
+sent" view says what shipped, and nothing said which registered rewrite
+declined to run or why. A user whose statement shipped un-expanded saw a
+correct-looking query and no explanation, unless they were reading the
+process log at warn level — which a GUI user is not.
+
+**The seam.** `Registry.ApplyBestEffortBoundObserved(stage, sql, binding,
+logger, observe)` is `ApplyBestEffortBound` with a per-unit callback;
+`ApplyBestEffortBound` is now that with a nil observer, so there is one apply
+loop rather than two that could diverge. `observe` fires once per unit in
+apply order with an `ApplyObservation` — name, order, late-boundness, and an
+`ApplyOutcomeE` of applied (with a `Changed` flag distinguishing a pass that
+rewrote the statement from one that ran and found nothing to do), skipped
+(carrying the error), or declined. Warn-level logging is unchanged: an
+observer is an additional surface, not a replacement for the operational
+record.
+
+Reporting declined factories required `boundUnits` to keep a factory whose
+`Build` rejected the binding, marked, instead of dropping it — otherwise a
+consumer could not tell "this rewrite does not apply here" from "this rewrite
+does not exist". `ApplyBestEffort` (the unbound `/query` path, no factories,
+no GUI) is untouched.
+
+**The consumer.** Play's client-side rewrite is traced end to end, not just
+the registry stage: `ExtractParams`, the stage, the ADR-0121 condition
+rewrite and `SetFormat` all degrade the same way and are equally invisible in
+the result, so `Client.buildStatementObserved` reports them as observations
+too, and `BuildStatement` is it with a nil observer. `Client.RewriteTrace`
+runs it for the outcomes and discards the statement. The trace therefore
+describes the code path that executes rather than a re-derivation of it —
+the same property the "as sent" view rests on, and the diagnostics EXPLAIN
+probe after it.
+
+**Where it shows.** The Passes tab (ADR-0119 M3) layers the trace over its
+schematic — a skipped pass tinted error-toned, one that rewrote this buffer
+tinted success-subtle, a declined factory left recessed — with an accounting
+line and the non-applying units named below it. The Diagnostics tab gains a
+"Pre-execute rewrites" section carrying the full error prose, following that
+tab's standing division of labour (the schematic shows *where* in the
+sequence, Diagnostics owns *why*). Both read one memo on `PlayApp`, keyed by
+the statement that would run and the conditions toggle, computed on first
+demand: both tabs are lazy dock tabs, so a session with neither open pays
+nothing, and the rewrite is not re-run per frame.
+
+This retires the deferral recorded in `play_passes_tab.go` ("per-run outcomes
+… need an observed apply seam in passreg"). It does not change §SD3: a
+failing pass is still skipped and the statement still ships. It changes only
+whether the user can find out.

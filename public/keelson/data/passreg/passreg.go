@@ -345,31 +345,118 @@ func (inst *Registry) ApplyBestEffort(stage StageE, sql string, logger zerolog.L
 // needs simply does not apply it. The plain ApplyBestEffort applies no factories
 // at all: use it where there is no binding (the introspection /query path) and
 // this where there is (play binds its leeway schema resolver, ADR-0116 §SD6).
+//
+// A consumer that wants to show its user what the stage actually did — which
+// units ran, which were skipped and why — uses ApplyBestEffortBoundObserved.
 func (inst *Registry) ApplyBestEffortBound(stage StageE, sql string, binding any, logger zerolog.Logger) (out string) {
+	return inst.ApplyBestEffortBoundObserved(stage, sql, binding, logger, nil)
+}
+
+// ApplyOutcomeE is what a best-effort apply did with one unit of a stage.
+type ApplyOutcomeE uint8
+
+const (
+	// ApplyOutcomeInvalid is the zero value; an observation never carries it.
+	ApplyOutcomeInvalid ApplyOutcomeE = iota
+	// ApplyOutcomeApplied means Pass.Run returned without error and its output
+	// was kept. Whether it rewrote anything is ApplyObservation.Changed.
+	ApplyOutcomeApplied
+	// ApplyOutcomeSkipped means Pass.Run returned an error: the unit's output
+	// was discarded, the SQL from before it kept, and later units still ran.
+	ApplyOutcomeSkipped
+	// ApplyOutcomeDeclined means a Factory's Build rejected the consumer's
+	// binding, so the unit was catalog-only on this apply — it never ran.
+	ApplyOutcomeDeclined
+)
+
+func (inst ApplyOutcomeE) String() (s string) {
+	switch inst {
+	case ApplyOutcomeApplied:
+		s = "applied"
+	case ApplyOutcomeSkipped:
+		s = "skipped"
+	case ApplyOutcomeDeclined:
+		s = "declined"
+	default:
+		s = "invalid"
+	}
+	return
+}
+
+// ApplyObservation is one unit's outcome on one best-effort apply — the
+// per-run counterpart to a CatalogRow, which says only what the registry
+// *would* apply. Because every unit degrades rather than fails (§SD3), the
+// difference between "ran" and "was silently skipped" is otherwise visible
+// only in the consumer's log; an observer turns it into something a UI can
+// show against the statement that shipped.
+type ApplyObservation struct {
+	// Name is the unit's registered name — the CatalogRow.Name it belongs to.
+	Name string
+	// Order is the unit's sort key within the stage. Observations arrive in
+	// apply order, so consumers rendering a trace need not re-sort.
+	Order int
+	// LateBound marks a unit realised from a Factory rather than a concrete
+	// Entry, matching CatalogRow.LateBound.
+	LateBound bool
+	Outcome   ApplyOutcomeE
+	// Changed reports whether an applied unit's output differs from its input.
+	// False for every other outcome.
+	Changed bool
+	// Err is the error a skipped unit's Run returned; nil otherwise.
+	Err error
+}
+
+// ApplyBestEffortBoundObserved is ApplyBestEffortBound with a per-unit
+// observer. observe fires once for every unit of the stage in apply order —
+// including factories that declined the binding, which never run but are part
+// of what a consumer's user may be looking for. It is called synchronously,
+// before the next unit runs, so an observer must not block; a nil observe makes
+// this exactly ApplyBestEffortBound. Warn-level logging of a skip happens
+// either way: an observer is an additional surface, not a replacement for the
+// operational record.
+func (inst *Registry) ApplyBestEffortBoundObserved(stage StageE, sql string, binding any, logger zerolog.Logger, observe func(ApplyObservation)) (out string) {
 	out = sql
 	for _, u := range inst.boundUnits(stage, binding) {
+		if u.declined {
+			if observe != nil {
+				observe(ApplyObservation{Name: u.name, Order: u.order, LateBound: true, Outcome: ApplyOutcomeDeclined})
+			}
+			continue
+		}
 		next, runErr := u.pass.Run(out)
 		if runErr != nil {
 			logger.Warn().Err(runErr).Str("pass", u.name).Str("stage", stage.String()).Msg("passreg: pass failed; skipped")
+			if observe != nil {
+				observe(ApplyObservation{Name: u.name, Order: u.order, LateBound: u.lateBound, Outcome: ApplyOutcomeSkipped, Err: runErr})
+			}
 			continue
+		}
+		if observe != nil {
+			observe(ApplyObservation{
+				Name: u.name, Order: u.order, LateBound: u.lateBound,
+				Outcome: ApplyOutcomeApplied, Changed: next != out,
+			})
 		}
 		out = next
 	}
 	return
 }
 
-// boundUnit is one appliable pass — from a concrete entry or a realised
-// factory — with the keys that order it within a stage.
+// boundUnit is one unit of a bound apply — from a concrete entry or a
+// factory — with the keys that order it within a stage. A factory whose Build
+// declined the binding is kept as a declined unit rather than dropped, so an
+// observer sees it in its apply position; the apply loop skips it.
 type boundUnit struct {
-	order int
-	name  string
-	pass  nanopass.Pass
+	order     int
+	name      string
+	pass      nanopass.Pass
+	lateBound bool
+	declined  bool
 }
 
-// boundUnits merges the stage's concrete entries with the factories that
-// accept binding into one (Order, Name)-sorted apply list. Factories are built
-// after the read lock is released: Build may be non-trivial and must not run
-// under inst.mu.
+// boundUnits merges the stage's concrete entries with its factories into one
+// (Order, Name)-sorted apply list. Factories are built after the read lock is
+// released: Build may be non-trivial and must not run under inst.mu.
 func (inst *Registry) boundUnits(stage StageE, binding any) (us []boundUnit) {
 	inst.mu.RLock()
 	for k, e := range inst.entries {
@@ -386,10 +473,7 @@ func (inst *Registry) boundUnits(stage StageE, binding any) (us []boundUnit) {
 	inst.mu.RUnlock()
 	for _, f := range facs {
 		pass, ok := f.Build(binding)
-		if !ok {
-			continue
-		}
-		us = append(us, boundUnit{order: f.Order, name: f.Name, pass: pass})
+		us = append(us, boundUnit{order: f.Order, name: f.Name, pass: pass, lateBound: true, declined: !ok})
 	}
 	sort.Slice(us, func(i, j int) bool {
 		if us[i].order != us[j].order {

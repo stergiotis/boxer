@@ -240,6 +240,11 @@ type PlayApp struct {
 	// Passes-tab drawing state (play_passes_tab.go, ADR-0119 M3): the
 	// pipelineview layout cached on the pass-catalog fingerprint.
 	passesTab passesTabState
+	// Per-buffer outcomes of the client-side rewrite (play_passes_tab.go),
+	// shared by the Passes and Diagnostics tabs and computed on first demand
+	// per frame — both tabs are lazy, so a session with neither open pays
+	// nothing.
+	rewriteTrace rewriteTraceState
 	// pendingDockActivate focuses a dock tab on the next dock send (0 =
 	// none): set by affordances that deliver content into a tab body (the
 	// snippet library targeting the editor), consumed once per frame in the

@@ -166,6 +166,88 @@ func TestApplyBestEffortBoundMergesEntriesAndFactories(t *testing.T) {
 	require.NotContains(t, out, "/*late*/", "ApplyBestEffort must not apply factories")
 }
 
+// noopPass parses and re-emits the body unchanged — an applied unit that
+// rewrites nothing, which the observer must distinguish from one that did.
+func noopPass(name string) nanopass.Pass {
+	return nanopass.LiftBodyPass(name, func(sql string) (string, error) {
+		return sql, nil
+	}, nanopass.PassProperties{Reads: nanopass.RegionBody})
+}
+
+func TestApplyBestEffortBoundObservedReportsEveryUnit(t *testing.T) {
+	r := NewRegistry()
+	require.NoError(t, r.Register(Entry{Pass: markerPass("First", "first"), Stage: StagePreExecute, Order: 100}))
+	require.NoError(t, r.Register(Entry{Pass: failingPass("Broken"), Stage: StagePreExecute, Order: 200}))
+	require.NoError(t, r.Register(Entry{Pass: noopPass("Quiet"), Stage: StagePreExecute, Order: 300}))
+	require.NoError(t, r.RegisterFactory(markerFactory("Late", "late", 400)))
+
+	var obs []ApplyObservation
+	out := r.ApplyBestEffortBoundObserved(StagePreExecute, "SELECT 1", true, zerolog.Nop(),
+		func(o ApplyObservation) { obs = append(obs, o) })
+
+	// The skipped unit's rewrite is dropped; everything else still applies.
+	require.Contains(t, out, "/*first*/")
+	require.Contains(t, out, "/*late*/")
+
+	require.Len(t, obs, 4, "every unit of the stage is observed, including the one that failed")
+	require.Equal(t, []string{"First", "Broken", "Quiet", "Late"}, []string{obs[0].Name, obs[1].Name, obs[2].Name, obs[3].Name},
+		"observations arrive in apply order, so a consumer need not re-sort")
+
+	require.Equal(t, ApplyOutcomeApplied, obs[0].Outcome)
+	require.True(t, obs[0].Changed, "a pass that rewrote the body reports Changed")
+	require.Equal(t, 100, obs[0].Order)
+
+	require.Equal(t, ApplyOutcomeSkipped, obs[1].Outcome)
+	require.Error(t, obs[1].Err, "a skipped unit carries the error that skipped it")
+	require.False(t, obs[1].Changed)
+
+	require.Equal(t, ApplyOutcomeApplied, obs[2].Outcome)
+	require.False(t, obs[2].Changed, "a pass that left the body alone must not report Changed")
+
+	require.Equal(t, ApplyOutcomeApplied, obs[3].Outcome)
+	require.True(t, obs[3].LateBound, "a realised factory reports itself late-bound")
+}
+
+func TestApplyBestEffortBoundObservedReportsDeclinedFactory(t *testing.T) {
+	r := NewRegistry()
+	require.NoError(t, r.Register(Entry{Pass: markerPass("Concrete", "concrete"), Stage: StagePreExecute, Order: 100}))
+	require.NoError(t, r.RegisterFactory(markerFactory("Late", "late", 200)))
+
+	var obs []ApplyObservation
+	// false declines the factory's Build — the consumer lacks the binding.
+	out := r.ApplyBestEffortBoundObserved(StagePreExecute, "SELECT 1", false, zerolog.Nop(),
+		func(o ApplyObservation) { obs = append(obs, o) })
+
+	require.NotContains(t, out, "/*late*/", "a declined factory must not apply")
+	require.Len(t, obs, 2, "a declined factory is observed in its apply position, not dropped")
+	require.Equal(t, "Late", obs[1].Name)
+	require.Equal(t, ApplyOutcomeDeclined, obs[1].Outcome)
+	require.True(t, obs[1].LateBound)
+	require.NoError(t, obs[1].Err, "declining is not a failure")
+}
+
+func TestApplyBestEffortBoundNilObserverMatchesObserved(t *testing.T) {
+	r := NewRegistry()
+	require.NoError(t, r.Register(Entry{Pass: markerPass("First", "first"), Stage: StagePreExecute, Order: 100}))
+	require.NoError(t, r.Register(Entry{Pass: failingPass("Broken"), Stage: StagePreExecute, Order: 200}))
+	require.NoError(t, r.RegisterFactory(markerFactory("Late", "late", 300)))
+
+	// Observing must not change what the stage produces — the trace describes
+	// the shipped statement, so the two paths cannot diverge.
+	for _, binding := range []any{true, false} {
+		plain := r.ApplyBestEffortBound(StagePreExecute, "SELECT 1", binding, zerolog.Nop())
+		observed := r.ApplyBestEffortBoundObserved(StagePreExecute, "SELECT 1", binding, zerolog.Nop(), func(ApplyObservation) {})
+		require.Equal(t, plain, observed)
+	}
+}
+
+func TestApplyOutcomeString(t *testing.T) {
+	require.Equal(t, "applied", ApplyOutcomeApplied.String())
+	require.Equal(t, "skipped", ApplyOutcomeSkipped.String())
+	require.Equal(t, "declined", ApplyOutcomeDeclined.String())
+	require.Equal(t, "invalid", ApplyOutcomeInvalid.String())
+}
+
 func TestCatalogIncludesFactoriesWithLateBound(t *testing.T) {
 	r := NewRegistry()
 	require.NoError(t, r.Register(Entry{Pass: markerPass("Concrete", "c"), Stage: StagePreExecute, Order: 100, Description: "c", Provenance: "p"}))

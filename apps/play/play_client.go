@@ -201,7 +201,18 @@ func newExecOptions(label string) *ExecOptions {
 // tab's "as sent" view calls this too, so what it shows can never drift
 // from what executes.
 func (inst *Client) BuildStatement(sql string) (body string, params map[string]string) {
-	residual, params := inst.buildResidual(sql)
+	return inst.buildStatementObserved(sql, nil)
+}
+
+// buildStatementObserved is BuildStatement with an observer over its degrade
+// points. Every step of the client-side rewrite reports what it did — applied,
+// applied-and-changed, or skipped with the error that caused it — so a UI can
+// account for the difference between the buffer the user wrote and the body
+// that shipped. BuildStatement is this with a nil observer, which is what makes
+// the trace load-bearing: it describes the same code path that executes, never
+// a re-derivation of it.
+func (inst *Client) buildStatementObserved(sql string, observe func(passreg.ApplyObservation)) (body string, params map[string]string) {
+	residual, params := inst.buildResidualObserved(sql, observe)
 	body, setErr := passes.SetFormat("ArrowStream").Run(residual)
 	if setErr != nil {
 		log.Debug().Err(setErr).Msg("play: SetFormat failed, falling back to textual append")
@@ -209,7 +220,56 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 		if !strings.Contains(strings.ToUpper(body), "FORMAT ") {
 			body += " FORMAT ArrowStream"
 		}
+		observeStep(observe, rewriteStepSetFormat, orderSetFormat, setErr, "", "")
+		return
 	}
+	observeStep(observe, rewriteStepSetFormat, orderSetFormat, nil, residual, body)
+	return
+}
+
+// The client-side rewrite's own steps sit outside the pass registry but degrade
+// the same way, so the trace carries them as observations too. Their orders
+// place them around the registry stage (whose registered orders start at 100)
+// in execution order; nothing sorts on them, they exist so a reader can tell a
+// play step from a registered pass at a glance.
+const (
+	orderExtractParams    = -100
+	orderExposeConditions = 1_000_000
+	orderSetFormat        = 1_000_100
+
+	rewriteStepExtractParams    = "extract-params"
+	rewriteStepExposeConditions = "expose-conditions"
+	rewriteStepSetFormat        = "set-format"
+)
+
+// observeStep reports one non-registry step of the client-side rewrite. A
+// non-nil err is a skip (the step's output was discarded); otherwise the step
+// applied, and before/after decide whether it changed anything. A nil observe
+// makes this a no-op, so the un-observed path pays only a nil check.
+func observeStep(observe func(passreg.ApplyObservation), name string, order int, err error, before, after string) {
+	if observe == nil {
+		return
+	}
+	obs := passreg.ApplyObservation{Name: name, Order: order, Outcome: passreg.ApplyOutcomeApplied, Changed: before != after}
+	if err != nil {
+		obs.Outcome, obs.Changed, obs.Err = passreg.ApplyOutcomeSkipped, false, err
+	}
+	observe(obs)
+}
+
+// RewriteTrace runs the client-side rewrite of sql for its per-step outcomes
+// and discards the statement. Callers get what the registry stage and play's
+// own steps did to this buffer — including passes that failed and were skipped,
+// which otherwise appear only as a warn line in the process log (ADR-0108 §SD3
+// makes every unit degrade rather than fail, so a skipped rewrite is invisible
+// in the result).
+//
+// It costs a full rewrite — the passes re-parse — so callers memoise it by
+// buffer rather than recomputing per frame. Safe from any goroutine: the state
+// the rewrite reads is either immutable after wiring or guarded (Client.mu, the
+// exposeConditions atomic).
+func (inst *Client) RewriteTrace(sql string) (obs []passreg.ApplyObservation) {
+	_, _ = inst.buildStatementObserved(sql, func(o passreg.ApplyObservation) { obs = append(obs, o) })
 	return
 }
 
@@ -400,11 +460,19 @@ func (inst *Client) fetchColumnNames(ctx context.Context, db string, table strin
 // (step 3). Keeping the probe on this path is what makes its verdict match a
 // real Run byte-for-byte: both degrade identically on unparseable input.
 func (inst *Client) buildResidual(sql string) (residual string, params map[string]string) {
+	return inst.buildResidualObserved(sql, nil)
+}
+
+// buildResidualObserved is buildResidual with the observer buildStatementObserved
+// documents. A nil observe is the plain path.
+func (inst *Client) buildResidualObserved(sql string, observe func(passreg.ApplyObservation)) (residual string, params map[string]string) {
 	// Ad-hoc dataset alias→handle rewrite runs first, before the SET-param
 	// harvest and pre-execute passes, so keelson('<alias>') becomes
 	// keelson('<handle>') for every downstream consumer and the Preview
 	// "as sent" caption (ADR-0134 §SD4). Classification already ran on the
-	// authored buffer, which still names the alias.
+	// authored buffer, which still names the alias. Not traced: it is a
+	// textual substitution over bindings the user made explicitly, with no
+	// failure mode to report.
 	sql = inst.rewriteDatasetAliases(sql)
 	residual, params, exErr := ExtractParams(sql)
 	if exErr != nil {
@@ -412,8 +480,9 @@ func (inst *Client) buildResidual(sql string) (residual string, params map[strin
 		residual = sql
 		params = nil
 	}
-	residual = inst.passes.ApplyBestEffortBound(passreg.StagePreExecute, residual, inst.passBinding, log.Logger)
-	residual = inst.applyExposeConditions(residual)
+	observeStep(observe, rewriteStepExtractParams, orderExtractParams, exErr, sql, residual)
+	residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, inst.passBinding, log.Logger, observe)
+	residual = inst.applyExposeConditions(residual, observe)
 	return
 }
 
@@ -453,17 +522,21 @@ func (inst *Client) rewriteDatasetAliases(sql string) string {
 // Best-effort, like the registry stage: a refusal — a condition name colliding
 // with a real column of the table (§SD4), say — logs and ships the query as the
 // user wrote it, rather than failing the Run.
-func (inst *Client) applyExposeConditions(sql string) (out string) {
+func (inst *Client) applyExposeConditions(sql string, observe func(passreg.ApplyObservation)) (out string) {
 	out = sql
 	if !inst.exposeConditions.Load() || inst.conditionsPass.Apply == nil {
+		// Off, or never installed — not a degraded rewrite, so nothing to
+		// report. The toggle is its own visible state.
 		return
 	}
 	next, err := inst.conditionsPass.Run(sql)
 	if err != nil {
 		log.Warn().Err(err).Msg("play: selection-condition rewrite declined; query sent as written")
+		observeStep(observe, rewriteStepExposeConditions, orderExposeConditions, err, "", "")
 		return
 	}
 	out = next
+	observeStep(observe, rewriteStepExposeConditions, orderExposeConditions, nil, sql, out)
 	return
 }
 
