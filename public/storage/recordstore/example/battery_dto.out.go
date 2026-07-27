@@ -80,8 +80,9 @@ type batteryU64ArrayMembsReadI interface {
 
 // batteryReadRow reads row i as one optional Battery component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -96,19 +97,23 @@ func batteryReadRow[
 	// --- u64Array. ---
 	var u64ArrayChargeVal uint64
 	var u64ArrayChargeCount int
+	var u64ArrayChargeLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindDeviceCharge:
+				if u64ArrayChargeLastAttr != attrJ+1 {
+					u64ArrayChargeLastAttr = attrJ + 1
+					u64ArrayChargeCount++
+				}
 				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u64ArrayChargeVal = val
-				u64ArrayChargeCount++
 			}
 		}
 	}
 	if u64ArrayChargeCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Charge").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "deviceCharge").Int("got", u64ArrayChargeCount).Errorf("slot u64Array@deviceCharge (field Charge) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayChargeCount)
 		return
 	}
 	if u64ArrayChargeCount == 1 {

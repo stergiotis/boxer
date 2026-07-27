@@ -619,85 +619,161 @@ func ErrorFillFromArrow[
 		c.CapturedTs = append(c.CapturedTs, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- stringArray. ---
 		var stringArrayMessagesSlice []string
+		var stringArrayMessagesCount int
+		var stringArrayMessagesLastAttr int64
 		var stringArraySourcesSlice []string
+		var stringArraySourcesCount int
+		var stringArraySourcesLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindErrorMsg:
+					if stringArrayMessagesLastAttr != attrJ+1 {
+						stringArrayMessagesLastAttr = attrJ + 1
+						stringArrayMessagesCount++
+					}
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArrayMessagesSlice = append(stringArrayMessagesSlice, v)
 					}
 				case kindErrorSource:
+					if stringArraySourcesLastAttr != attrJ+1 {
+						stringArraySourcesLastAttr = attrJ + 1
+						stringArraySourcesCount++
+					}
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArraySourcesSlice = append(stringArraySourcesSlice, v)
 					}
 				}
 			}
 		}
+		if stringArrayMessagesCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "errorMsg").Int("got", stringArrayMessagesCount).Errorf("slot stringArray@errorMsg (field Messages) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayMessagesCount)
+			return
+		}
 		c.Messages = append(c.Messages, stringArrayMessagesSlice)
+		if stringArraySourcesCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "errorSource").Int("got", stringArraySourcesCount).Errorf("slot stringArray@errorSource (field Sources) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArraySourcesCount)
+			return
+		}
 		c.Sources = append(c.Sources, stringArraySourcesSlice)
 		// --- symbolArray. ---
 		var symbolArrayFuncsSlice []string
+		var symbolArrayFuncsCount int
+		var symbolArrayFuncsLastAttr int64
 		var symbolArrayStreamNamesSlice []string
+		var symbolArrayStreamNamesCount int
+		var symbolArrayStreamNamesLastAttr int64
 		nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindErrorFunc:
+					if symbolArrayFuncsLastAttr != attrJ+1 {
+						symbolArrayFuncsLastAttr = attrJ + 1
+						symbolArrayFuncsCount++
+					}
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayFuncsSlice = append(symbolArrayFuncsSlice, v)
 					}
 				case kindErrorStreamName:
+					if symbolArrayStreamNamesLastAttr != attrJ+1 {
+						symbolArrayStreamNamesLastAttr = attrJ + 1
+						symbolArrayStreamNamesCount++
+					}
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayStreamNamesSlice = append(symbolArrayStreamNamesSlice, v)
 					}
 				}
 			}
 		}
+		if symbolArrayFuncsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "errorFunc").Int("got", symbolArrayFuncsCount).Errorf("slot symbolArray@errorFunc (field Funcs) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayFuncsCount)
+			return
+		}
 		c.Funcs = append(c.Funcs, symbolArrayFuncsSlice)
+		if symbolArrayStreamNamesCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "errorStreamName").Int("got", symbolArrayStreamNamesCount).Errorf("slot symbolArray@errorStreamName (field StreamNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayStreamNamesCount)
+			return
+		}
 		c.StreamNames = append(c.StreamNames, symbolArrayStreamNamesSlice)
 		// --- u32Array. ---
 		var u32ArrayLinesSlice []uint32
+		var u32ArrayLinesCount int
+		var u32ArrayLinesLastAttr int64
 		nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 			for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindErrorLine:
+					if u32ArrayLinesLastAttr != attrJ+1 {
+						u32ArrayLinesLastAttr = attrJ + 1
+						u32ArrayLinesCount++
+					}
 					for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u32ArrayLinesSlice = append(u32ArrayLinesSlice, v)
 					}
 				}
 			}
 		}
+		if u32ArrayLinesCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "errorLine").Int("got", u32ArrayLinesCount).Errorf("slot u32Array@errorLine (field Lines) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayLinesCount)
+			return
+		}
 		c.Lines = append(c.Lines, u32ArrayLinesSlice)
 		// --- u64Array. ---
 		var u64ArrayFactIdsSlice []uint64
+		var u64ArrayFactIdsCount int
+		var u64ArrayFactIdsLastAttr int64
 		var u64ArrayParentIdsSlice []uint64
+		var u64ArrayParentIdsCount int
+		var u64ArrayParentIdsLastAttr int64
 		nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindErrorFactId:
+					if u64ArrayFactIdsLastAttr != attrJ+1 {
+						u64ArrayFactIdsLastAttr = attrJ + 1
+						u64ArrayFactIdsCount++
+					}
 					for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u64ArrayFactIdsSlice = append(u64ArrayFactIdsSlice, v)
 					}
 				case kindErrorParentId:
+					if u64ArrayParentIdsLastAttr != attrJ+1 {
+						u64ArrayParentIdsLastAttr = attrJ + 1
+						u64ArrayParentIdsCount++
+					}
 					for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u64ArrayParentIdsSlice = append(u64ArrayParentIdsSlice, v)
 					}
 				}
 			}
 		}
+		if u64ArrayFactIdsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "errorFactId").Int("got", u64ArrayFactIdsCount).Errorf("slot u64Array@errorFactId (field FactIds) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayFactIdsCount)
+			return
+		}
 		c.FactIds = append(c.FactIds, u64ArrayFactIdsSlice)
+		if u64ArrayParentIdsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "errorParentId").Int("got", u64ArrayParentIdsCount).Errorf("slot u64Array@errorParentId (field ParentIds) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayParentIdsCount)
+			return
+		}
 		c.ParentIds = append(c.ParentIds, u64ArrayParentIdsSlice)
 		// --- blobArray. ---
 		var blobArrayDataSlice [][]byte
+		var blobArrayDataCount int
+		var blobArrayDataLastAttr int64
 		nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindErrorData:
+					if blobArrayDataLastAttr != attrJ+1 {
+						blobArrayDataLastAttr = attrJ + 1
+						blobArrayDataCount++
+					}
 					for v := range blobArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						cp := make([]byte, len(v))
 						copy(cp, v)
@@ -706,6 +782,10 @@ func ErrorFillFromArrow[
 				}
 			}
 		}
+		if blobArrayDataCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "errorData").Int("got", blobArrayDataCount).Errorf("slot blobArray@errorData (field Data) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayDataCount)
+			return
+		}
 		c.Data = append(c.Data, blobArrayDataSlice)
 	}
 	return
@@ -713,8 +793,9 @@ func ErrorFillFromArrow[
 
 // ErrorReadRow reads row i as one optional Error component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -744,25 +825,45 @@ func ErrorReadRow[
 ) (row Error, present bool, err error) {
 	// --- stringArray. ---
 	var stringArrayMessagesSlice []string
+	var stringArrayMessagesCount int
+	var stringArrayMessagesLastAttr int64
 	var stringArraySourcesSlice []string
+	var stringArraySourcesCount int
+	var stringArraySourcesLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindErrorMsg:
+				if stringArrayMessagesLastAttr != attrJ+1 {
+					stringArrayMessagesLastAttr = attrJ + 1
+					stringArrayMessagesCount++
+				}
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayMessagesSlice = append(stringArrayMessagesSlice, v)
 				}
 			case kindErrorSource:
+				if stringArraySourcesLastAttr != attrJ+1 {
+					stringArraySourcesLastAttr = attrJ + 1
+					stringArraySourcesCount++
+				}
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArraySourcesSlice = append(stringArraySourcesSlice, v)
 				}
 			}
 		}
 	}
+	if stringArrayMessagesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "errorMsg").Int("got", stringArrayMessagesCount).Errorf("slot stringArray@errorMsg (field Messages) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayMessagesCount)
+		return
+	}
 	if stringArrayMessagesSlice != nil {
 		row.Messages = stringArrayMessagesSlice
 		present = true
+	}
+	if stringArraySourcesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "errorSource").Int("got", stringArraySourcesCount).Errorf("slot stringArray@errorSource (field Sources) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArraySourcesCount)
+		return
 	}
 	if stringArraySourcesSlice != nil {
 		row.Sources = stringArraySourcesSlice
@@ -770,25 +871,45 @@ func ErrorReadRow[
 	}
 	// --- symbolArray. ---
 	var symbolArrayFuncsSlice []string
+	var symbolArrayFuncsCount int
+	var symbolArrayFuncsLastAttr int64
 	var symbolArrayStreamNamesSlice []string
+	var symbolArrayStreamNamesCount int
+	var symbolArrayStreamNamesLastAttr int64
 	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindErrorFunc:
+				if symbolArrayFuncsLastAttr != attrJ+1 {
+					symbolArrayFuncsLastAttr = attrJ + 1
+					symbolArrayFuncsCount++
+				}
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayFuncsSlice = append(symbolArrayFuncsSlice, v)
 				}
 			case kindErrorStreamName:
+				if symbolArrayStreamNamesLastAttr != attrJ+1 {
+					symbolArrayStreamNamesLastAttr = attrJ + 1
+					symbolArrayStreamNamesCount++
+				}
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayStreamNamesSlice = append(symbolArrayStreamNamesSlice, v)
 				}
 			}
 		}
 	}
+	if symbolArrayFuncsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "errorFunc").Int("got", symbolArrayFuncsCount).Errorf("slot symbolArray@errorFunc (field Funcs) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayFuncsCount)
+		return
+	}
 	if symbolArrayFuncsSlice != nil {
 		row.Funcs = symbolArrayFuncsSlice
 		present = true
+	}
+	if symbolArrayStreamNamesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "errorStreamName").Int("got", symbolArrayStreamNamesCount).Errorf("slot symbolArray@errorStreamName (field StreamNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayStreamNamesCount)
+		return
 	}
 	if symbolArrayStreamNamesSlice != nil {
 		row.StreamNames = symbolArrayStreamNamesSlice
@@ -796,16 +917,26 @@ func ErrorReadRow[
 	}
 	// --- u32Array. ---
 	var u32ArrayLinesSlice []uint32
+	var u32ArrayLinesCount int
+	var u32ArrayLinesLastAttr int64
 	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindErrorLine:
+				if u32ArrayLinesLastAttr != attrJ+1 {
+					u32ArrayLinesLastAttr = attrJ + 1
+					u32ArrayLinesCount++
+				}
 				for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u32ArrayLinesSlice = append(u32ArrayLinesSlice, v)
 				}
 			}
 		}
+	}
+	if u32ArrayLinesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "errorLine").Int("got", u32ArrayLinesCount).Errorf("slot u32Array@errorLine (field Lines) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayLinesCount)
+		return
 	}
 	if u32ArrayLinesSlice != nil {
 		row.Lines = u32ArrayLinesSlice
@@ -813,25 +944,45 @@ func ErrorReadRow[
 	}
 	// --- u64Array. ---
 	var u64ArrayFactIdsSlice []uint64
+	var u64ArrayFactIdsCount int
+	var u64ArrayFactIdsLastAttr int64
 	var u64ArrayParentIdsSlice []uint64
+	var u64ArrayParentIdsCount int
+	var u64ArrayParentIdsLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindErrorFactId:
+				if u64ArrayFactIdsLastAttr != attrJ+1 {
+					u64ArrayFactIdsLastAttr = attrJ + 1
+					u64ArrayFactIdsCount++
+				}
 				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u64ArrayFactIdsSlice = append(u64ArrayFactIdsSlice, v)
 				}
 			case kindErrorParentId:
+				if u64ArrayParentIdsLastAttr != attrJ+1 {
+					u64ArrayParentIdsLastAttr = attrJ + 1
+					u64ArrayParentIdsCount++
+				}
 				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u64ArrayParentIdsSlice = append(u64ArrayParentIdsSlice, v)
 				}
 			}
 		}
 	}
+	if u64ArrayFactIdsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "errorFactId").Int("got", u64ArrayFactIdsCount).Errorf("slot u64Array@errorFactId (field FactIds) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayFactIdsCount)
+		return
+	}
 	if u64ArrayFactIdsSlice != nil {
 		row.FactIds = u64ArrayFactIdsSlice
 		present = true
+	}
+	if u64ArrayParentIdsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "errorParentId").Int("got", u64ArrayParentIdsCount).Errorf("slot u64Array@errorParentId (field ParentIds) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayParentIdsCount)
+		return
 	}
 	if u64ArrayParentIdsSlice != nil {
 		row.ParentIds = u64ArrayParentIdsSlice
@@ -839,11 +990,17 @@ func ErrorReadRow[
 	}
 	// --- blobArray. ---
 	var blobArrayDataSlice [][]byte
+	var blobArrayDataCount int
+	var blobArrayDataLastAttr int64
 	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindErrorData:
+				if blobArrayDataLastAttr != attrJ+1 {
+					blobArrayDataLastAttr = attrJ + 1
+					blobArrayDataCount++
+				}
 				for v := range blobArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					cp := make([]byte, len(v))
 					copy(cp, v)
@@ -851,6 +1008,10 @@ func ErrorReadRow[
 				}
 			}
 		}
+	}
+	if blobArrayDataCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "errorData").Int("got", blobArrayDataCount).Errorf("slot blobArray@errorData (field Data) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayDataCount)
+		return
 	}
 	if blobArrayDataSlice != nil {
 		row.Data = blobArrayDataSlice

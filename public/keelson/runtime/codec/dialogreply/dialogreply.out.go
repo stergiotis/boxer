@@ -390,57 +390,69 @@ func DialogReplyFillFromArrow[
 		// --- bool. ---
 		var boolApprovedVal bool
 		var boolApprovedCount int
+		var boolApprovedLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindDialogApproved:
+					if boolApprovedLastAttr != attrJ+1 {
+						boolApprovedLastAttr = attrJ + 1
+						boolApprovedCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolApprovedVal = val
-					boolApprovedCount++
 				}
 			}
 		}
 		if boolApprovedCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Approved").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "dialogApproved").Int("got", boolApprovedCount).Errorf("slot bool@dialogApproved (field Approved) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolApprovedCount)
 			return
 		}
 		c.Approved = append(c.Approved, boolApprovedVal)
 		// --- stringArray. ---
 		var stringArrayHandleSubjectPrefixVal string
 		var stringArrayHandleSubjectPrefixCount int
+		var stringArrayHandleSubjectPrefixLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindDialogHandleSubject:
+					if stringArrayHandleSubjectPrefixLastAttr != attrJ+1 {
+						stringArrayHandleSubjectPrefixLastAttr = attrJ + 1
+						stringArrayHandleSubjectPrefixCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayHandleSubjectPrefixVal = val
-					stringArrayHandleSubjectPrefixCount++
 				}
 			}
 		}
 		if stringArrayHandleSubjectPrefixCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "HandleSubjectPrefix").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "dialogHandleSubject").Int("got", stringArrayHandleSubjectPrefixCount).Errorf("slot stringArray@dialogHandleSubject (field HandleSubjectPrefix) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayHandleSubjectPrefixCount)
 			return
 		}
 		c.HandleSubjectPrefix = append(c.HandleSubjectPrefix, stringArrayHandleSubjectPrefixVal)
 		// --- textArray. ---
 		var textArrayReasonVal string
 		var textArrayReasonCount int
+		var textArrayReasonLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindReason:
+					if textArrayReasonLastAttr != attrJ+1 {
+						textArrayReasonLastAttr = attrJ + 1
+						textArrayReasonCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArrayReasonVal = val
-					textArrayReasonCount++
 				}
 			}
 		}
 		if textArrayReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Int("got", textArrayReasonCount).Errorf("slot textArray@reason (field Reason) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayReasonCount)
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
@@ -450,8 +462,9 @@ func DialogReplyFillFromArrow[
 
 // DialogReplyReadRow reads row i as one optional DialogReply component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -474,19 +487,23 @@ func DialogReplyReadRow[
 	// --- bool. ---
 	var boolApprovedVal bool
 	var boolApprovedCount int
+	var boolApprovedLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindDialogApproved:
+				if boolApprovedLastAttr != attrJ+1 {
+					boolApprovedLastAttr = attrJ + 1
+					boolApprovedCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolApprovedVal = val
-				boolApprovedCount++
 			}
 		}
 	}
 	if boolApprovedCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Approved").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "dialogApproved").Int("got", boolApprovedCount).Errorf("slot bool@dialogApproved (field Approved) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolApprovedCount)
 		return
 	}
 	if boolApprovedCount == 1 {
@@ -496,19 +513,23 @@ func DialogReplyReadRow[
 	// --- stringArray. ---
 	var stringArrayHandleSubjectPrefixVal string
 	var stringArrayHandleSubjectPrefixCount int
+	var stringArrayHandleSubjectPrefixLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindDialogHandleSubject:
+				if stringArrayHandleSubjectPrefixLastAttr != attrJ+1 {
+					stringArrayHandleSubjectPrefixLastAttr = attrJ + 1
+					stringArrayHandleSubjectPrefixCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayHandleSubjectPrefixVal = val
-				stringArrayHandleSubjectPrefixCount++
 			}
 		}
 	}
 	if stringArrayHandleSubjectPrefixCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "HandleSubjectPrefix").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "dialogHandleSubject").Int("got", stringArrayHandleSubjectPrefixCount).Errorf("slot stringArray@dialogHandleSubject (field HandleSubjectPrefix) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayHandleSubjectPrefixCount)
 		return
 	}
 	if stringArrayHandleSubjectPrefixCount == 1 {
@@ -518,19 +539,23 @@ func DialogReplyReadRow[
 	// --- textArray. ---
 	var textArrayReasonVal string
 	var textArrayReasonCount int
+	var textArrayReasonLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindReason:
+				if textArrayReasonLastAttr != attrJ+1 {
+					textArrayReasonLastAttr = attrJ + 1
+					textArrayReasonCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArrayReasonVal = val
-				textArrayReasonCount++
 			}
 		}
 	}
 	if textArrayReasonCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Int("got", textArrayReasonCount).Errorf("slot textArray@reason (field Reason) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayReasonCount)
 		return
 	}
 	if textArrayReasonCount == 1 {

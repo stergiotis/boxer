@@ -5,6 +5,7 @@ package pushoutstore
 import (
 	"iter"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
@@ -175,8 +176,9 @@ type retentionRetTimeMembsReadI interface {
 
 // retentionReadRow reads row i as one optional Retention component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -198,16 +200,26 @@ func retentionReadRow[
 ) (row Retention, present bool, err error) {
 	// --- retHash. ---
 	var retHashHashesSlice []string
+	var retHashHashesCount int
+	var retHashHashesLastAttr int64
 	nretHash := retHashAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nretHash; attrJ++ {
 		for membID := range retHashMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPushoutRetHash:
+				if retHashHashesLastAttr != attrJ+1 {
+					retHashHashesLastAttr = attrJ + 1
+					retHashHashesCount++
+				}
 				for v := range retHashAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					retHashHashesSlice = append(retHashHashesSlice, v)
 				}
 			}
 		}
+	}
+	if retHashHashesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "retHash").Str("membership", "pushoutRetHash").Int("got", retHashHashesCount).Errorf("slot retHash@pushoutRetHash (field Hashes) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", retHashHashesCount)
+		return
 	}
 	if retHashHashesSlice != nil {
 		row.Hashes = retHashHashesSlice
@@ -215,16 +227,26 @@ func retentionReadRow[
 	}
 	// --- retIndex. ---
 	var retIndexIndicesSlice []uint64
+	var retIndexIndicesCount int
+	var retIndexIndicesLastAttr int64
 	nretIndex := retIndexAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nretIndex; attrJ++ {
 		for membID := range retIndexMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPushoutRetIdx:
+				if retIndexIndicesLastAttr != attrJ+1 {
+					retIndexIndicesLastAttr = attrJ + 1
+					retIndexIndicesCount++
+				}
 				for v := range retIndexAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					retIndexIndicesSlice = append(retIndexIndicesSlice, v)
 				}
 			}
 		}
+	}
+	if retIndexIndicesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "retIndex").Str("membership", "pushoutRetIdx").Int("got", retIndexIndicesCount).Errorf("slot retIndex@pushoutRetIdx (field Indices) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", retIndexIndicesCount)
+		return
 	}
 	if retIndexIndicesSlice != nil {
 		row.Indices = retIndexIndicesSlice
@@ -232,16 +254,26 @@ func retentionReadRow[
 	}
 	// --- retTime. ---
 	var retTimeTimesSlice []int64
+	var retTimeTimesCount int
+	var retTimeTimesLastAttr int64
 	nretTime := retTimeAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nretTime; attrJ++ {
 		for membID := range retTimeMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPushoutRetTime:
+				if retTimeTimesLastAttr != attrJ+1 {
+					retTimeTimesLastAttr = attrJ + 1
+					retTimeTimesCount++
+				}
 				for v := range retTimeAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					retTimeTimesSlice = append(retTimeTimesSlice, v)
 				}
 			}
 		}
+	}
+	if retTimeTimesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "retTime").Str("membership", "pushoutRetTime").Int("got", retTimeTimesCount).Errorf("slot retTime@pushoutRetTime (field Times) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", retTimeTimesCount)
+		return
 	}
 	if retTimeTimesSlice != nil {
 		row.Times = retTimeTimesSlice

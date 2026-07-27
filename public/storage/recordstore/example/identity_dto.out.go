@@ -86,8 +86,9 @@ type identitySymbolMembsReadI interface {
 
 // identityReadRow reads row i as one optional Identity component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -102,25 +103,33 @@ func identityReadRow[
 	// --- symbol. ---
 	var symbolStatusVal string
 	var symbolStatusCount int
+	var symbolStatusLastAttr int64
 	var symbolNickVal string
 	var symbolNickCount int
+	var symbolNickLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindDeviceStatus:
+				if symbolStatusLastAttr != attrJ+1 {
+					symbolStatusLastAttr = attrJ + 1
+					symbolStatusCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolStatusVal = val
-				symbolStatusCount++
 			case kindDeviceNick:
+				if symbolNickLastAttr != attrJ+1 {
+					symbolNickLastAttr = attrJ + 1
+					symbolNickCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolNickVal = val
-				symbolNickCount++
 			}
 		}
 	}
 	if symbolStatusCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Status").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "deviceStatus").Int("got", symbolStatusCount).Errorf("slot symbol@deviceStatus (field Status) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolStatusCount)
 		return
 	}
 	if symbolStatusCount == 1 {
@@ -128,7 +137,7 @@ func identityReadRow[
 		present = true
 	}
 	if symbolNickCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Nick").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "deviceNick").Int("got", symbolNickCount).Errorf("slot symbol@deviceNick (field Nick) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolNickCount)
 		return
 	}
 	if symbolNickCount == 1 {

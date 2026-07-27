@@ -423,90 +423,114 @@ func PlayLaunchFillFromArrow[
 		// --- textArray. ---
 		var textArraySqlVal string
 		var textArraySqlCount int
+		var textArraySqlLastAttr int64
 		var textArrayBandsSqlVal string
 		var textArrayBandsSqlCount int
+		var textArrayBandsSqlLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindPlayLaunchSql:
+					if textArraySqlLastAttr != attrJ+1 {
+						textArraySqlLastAttr = attrJ + 1
+						textArraySqlCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArraySqlVal = val
-					textArraySqlCount++
 				case kindPlayLaunchBandsSql:
+					if textArrayBandsSqlLastAttr != attrJ+1 {
+						textArrayBandsSqlLastAttr = attrJ + 1
+						textArrayBandsSqlCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArrayBandsSqlVal = val
-					textArrayBandsSqlCount++
 				}
 			}
 		}
 		if textArraySqlCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Sql").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "playLaunchSql").Int("got", textArraySqlCount).Errorf("slot textArray@playLaunchSql (field Sql) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArraySqlCount)
 			return
 		}
 		c.Sql = append(c.Sql, textArraySqlVal)
 		if textArrayBandsSqlCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "BandsSql").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "playLaunchBandsSql").Int("got", textArrayBandsSqlCount).Errorf("slot textArray@playLaunchBandsSql (field BandsSql) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayBandsSqlCount)
 			return
 		}
 		c.BandsSql = append(c.BandsSql, textArrayBandsSqlVal)
 		// --- bool. ---
 		var boolAutoRunVal bool
 		var boolAutoRunCount int
+		var boolAutoRunLastAttr int64
 		var boolLiveVal bool
 		var boolLiveCount int
+		var boolLiveLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindPlayLaunchAutoRun:
+					if boolAutoRunLastAttr != attrJ+1 {
+						boolAutoRunLastAttr = attrJ + 1
+						boolAutoRunCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolAutoRunVal = val
-					boolAutoRunCount++
 				case kindPlayLaunchLive:
+					if boolLiveLastAttr != attrJ+1 {
+						boolLiveLastAttr = attrJ + 1
+						boolLiveCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolLiveVal = val
-					boolLiveCount++
 				}
 			}
 		}
 		if boolAutoRunCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "AutoRun").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "playLaunchAutoRun").Int("got", boolAutoRunCount).Errorf("slot bool@playLaunchAutoRun (field AutoRun) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolAutoRunCount)
 			return
 		}
 		c.AutoRun = append(c.AutoRun, boolAutoRunVal)
 		if boolLiveCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Live").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "playLaunchLive").Int("got", boolLiveCount).Errorf("slot bool@playLaunchLive (field Live) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolLiveCount)
 			return
 		}
 		c.Live = append(c.Live, boolLiveVal)
 		// --- symbol. ---
 		var symbolTabVal string
 		var symbolTabCount int
+		var symbolTabLastAttr int64
 		var symbolEndpointVal string
 		var symbolEndpointCount int
+		var symbolEndpointLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindPlayLaunchTab:
+					if symbolTabLastAttr != attrJ+1 {
+						symbolTabLastAttr = attrJ + 1
+						symbolTabCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolTabVal = val
-					symbolTabCount++
 				case kindPlayLaunchEndpoint:
+					if symbolEndpointLastAttr != attrJ+1 {
+						symbolEndpointLastAttr = attrJ + 1
+						symbolEndpointCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolEndpointVal = val
-					symbolEndpointCount++
 				}
 			}
 		}
 		if symbolTabCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Tab").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "playLaunchTab").Int("got", symbolTabCount).Errorf("slot symbol@playLaunchTab (field Tab) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolTabCount)
 			return
 		}
 		c.Tab = append(c.Tab, symbolTabVal)
 		if symbolEndpointCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Endpoint").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "playLaunchEndpoint").Int("got", symbolEndpointCount).Errorf("slot symbol@playLaunchEndpoint (field Endpoint) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolEndpointCount)
 			return
 		}
 		c.Endpoint = append(c.Endpoint, symbolEndpointVal)
@@ -516,8 +540,9 @@ func PlayLaunchFillFromArrow[
 
 // PlayLaunchReadRow reads row i as one optional PlayLaunch component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -540,25 +565,33 @@ func PlayLaunchReadRow[
 	// --- textArray. ---
 	var textArraySqlVal string
 	var textArraySqlCount int
+	var textArraySqlLastAttr int64
 	var textArrayBandsSqlVal string
 	var textArrayBandsSqlCount int
+	var textArrayBandsSqlLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPlayLaunchSql:
+				if textArraySqlLastAttr != attrJ+1 {
+					textArraySqlLastAttr = attrJ + 1
+					textArraySqlCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArraySqlVal = val
-				textArraySqlCount++
 			case kindPlayLaunchBandsSql:
+				if textArrayBandsSqlLastAttr != attrJ+1 {
+					textArrayBandsSqlLastAttr = attrJ + 1
+					textArrayBandsSqlCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArrayBandsSqlVal = val
-				textArrayBandsSqlCount++
 			}
 		}
 	}
 	if textArraySqlCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Sql").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "playLaunchSql").Int("got", textArraySqlCount).Errorf("slot textArray@playLaunchSql (field Sql) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArraySqlCount)
 		return
 	}
 	if textArraySqlCount == 1 {
@@ -566,7 +599,7 @@ func PlayLaunchReadRow[
 		present = true
 	}
 	if textArrayBandsSqlCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "BandsSql").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "playLaunchBandsSql").Int("got", textArrayBandsSqlCount).Errorf("slot textArray@playLaunchBandsSql (field BandsSql) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayBandsSqlCount)
 		return
 	}
 	if textArrayBandsSqlCount == 1 {
@@ -576,25 +609,33 @@ func PlayLaunchReadRow[
 	// --- bool. ---
 	var boolAutoRunVal bool
 	var boolAutoRunCount int
+	var boolAutoRunLastAttr int64
 	var boolLiveVal bool
 	var boolLiveCount int
+	var boolLiveLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPlayLaunchAutoRun:
+				if boolAutoRunLastAttr != attrJ+1 {
+					boolAutoRunLastAttr = attrJ + 1
+					boolAutoRunCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolAutoRunVal = val
-				boolAutoRunCount++
 			case kindPlayLaunchLive:
+				if boolLiveLastAttr != attrJ+1 {
+					boolLiveLastAttr = attrJ + 1
+					boolLiveCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolLiveVal = val
-				boolLiveCount++
 			}
 		}
 	}
 	if boolAutoRunCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "AutoRun").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "playLaunchAutoRun").Int("got", boolAutoRunCount).Errorf("slot bool@playLaunchAutoRun (field AutoRun) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolAutoRunCount)
 		return
 	}
 	if boolAutoRunCount == 1 {
@@ -602,7 +643,7 @@ func PlayLaunchReadRow[
 		present = true
 	}
 	if boolLiveCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Live").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "playLaunchLive").Int("got", boolLiveCount).Errorf("slot bool@playLaunchLive (field Live) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolLiveCount)
 		return
 	}
 	if boolLiveCount == 1 {
@@ -612,25 +653,33 @@ func PlayLaunchReadRow[
 	// --- symbol. ---
 	var symbolTabVal string
 	var symbolTabCount int
+	var symbolTabLastAttr int64
 	var symbolEndpointVal string
 	var symbolEndpointCount int
+	var symbolEndpointLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPlayLaunchTab:
+				if symbolTabLastAttr != attrJ+1 {
+					symbolTabLastAttr = attrJ + 1
+					symbolTabCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolTabVal = val
-				symbolTabCount++
 			case kindPlayLaunchEndpoint:
+				if symbolEndpointLastAttr != attrJ+1 {
+					symbolEndpointLastAttr = attrJ + 1
+					symbolEndpointCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolEndpointVal = val
-				symbolEndpointCount++
 			}
 		}
 	}
 	if symbolTabCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Tab").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "playLaunchTab").Int("got", symbolTabCount).Errorf("slot symbol@playLaunchTab (field Tab) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolTabCount)
 		return
 	}
 	if symbolTabCount == 1 {
@@ -638,7 +687,7 @@ func PlayLaunchReadRow[
 		present = true
 	}
 	if symbolEndpointCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Endpoint").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "playLaunchEndpoint").Int("got", symbolEndpointCount).Errorf("slot symbol@playLaunchEndpoint (field Endpoint) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolEndpointCount)
 		return
 	}
 	if symbolEndpointCount == 1 {

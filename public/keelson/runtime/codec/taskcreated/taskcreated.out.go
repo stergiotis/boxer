@@ -580,136 +580,168 @@ func TaskCreatedFillFromArrow[
 		// --- stringArray. ---
 		var stringArrayTaskIdVal string
 		var stringArrayTaskIdCount int
+		var stringArrayTaskIdLastAttr int64
 		var stringArrayOwnerAppIdVal string
 		var stringArrayOwnerAppIdCount int
+		var stringArrayOwnerAppIdLastAttr int64
 		var stringArrayOwnerRunIdVal string
 		var stringArrayOwnerRunIdCount int
+		var stringArrayOwnerRunIdLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindTaskId:
+					if stringArrayTaskIdLastAttr != attrJ+1 {
+						stringArrayTaskIdLastAttr = attrJ + 1
+						stringArrayTaskIdCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayTaskIdVal = val
-					stringArrayTaskIdCount++
 				case kindAppId:
+					if stringArrayOwnerAppIdLastAttr != attrJ+1 {
+						stringArrayOwnerAppIdLastAttr = attrJ + 1
+						stringArrayOwnerAppIdCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayOwnerAppIdVal = val
-					stringArrayOwnerAppIdCount++
 				case kindRunId:
+					if stringArrayOwnerRunIdLastAttr != attrJ+1 {
+						stringArrayOwnerRunIdLastAttr = attrJ + 1
+						stringArrayOwnerRunIdCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayOwnerRunIdVal = val
-					stringArrayOwnerRunIdCount++
 				}
 			}
 		}
 		if stringArrayTaskIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "taskId").Int("got", stringArrayTaskIdCount).Errorf("slot stringArray@taskId (field TaskId) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayTaskIdCount)
 			return
 		}
 		c.TaskId = append(c.TaskId, stringArrayTaskIdVal)
 		if stringArrayOwnerAppIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "OwnerAppId").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Int("got", stringArrayOwnerAppIdCount).Errorf("slot stringArray@appId (field OwnerAppId) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOwnerAppIdCount)
 			return
 		}
 		c.OwnerAppId = append(c.OwnerAppId, stringArrayOwnerAppIdVal)
 		if stringArrayOwnerRunIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "OwnerRunId").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "runId").Int("got", stringArrayOwnerRunIdCount).Errorf("slot stringArray@runId (field OwnerRunId) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOwnerRunIdCount)
 			return
 		}
 		c.OwnerRunId = append(c.OwnerRunId, stringArrayOwnerRunIdVal)
 		// --- symbol. ---
 		var symbolKindVal string
 		var symbolKindCount int
+		var symbolKindLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindTaskKind:
+					if symbolKindLastAttr != attrJ+1 {
+						symbolKindLastAttr = attrJ + 1
+						symbolKindCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolKindVal = val
-					symbolKindCount++
 				}
 			}
 		}
 		if symbolKindCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "taskKind").Int("got", symbolKindCount).Errorf("slot symbol@taskKind (field Kind) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolKindCount)
 			return
 		}
 		c.Kind = append(c.Kind, symbolKindVal)
 		// --- textArray. ---
 		var textArrayTitleVal string
 		var textArrayTitleCount int
+		var textArrayTitleLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindTitle:
+					if textArrayTitleLastAttr != attrJ+1 {
+						textArrayTitleLastAttr = attrJ + 1
+						textArrayTitleCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArrayTitleVal = val
-					textArrayTitleCount++
 				}
 			}
 		}
 		if textArrayTitleCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Title").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "title").Int("got", textArrayTitleCount).Errorf("slot textArray@title (field Title) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayTitleCount)
 			return
 		}
 		c.Title = append(c.Title, textArrayTitleVal)
 		// --- u64Array. ---
 		var u64ArrayOwnerTileKeyVal uint64
 		var u64ArrayOwnerTileKeyCount int
+		var u64ArrayOwnerTileKeyLastAttr int64
 		nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindTileKey:
+					if u64ArrayOwnerTileKeyLastAttr != attrJ+1 {
+						u64ArrayOwnerTileKeyLastAttr = attrJ + 1
+						u64ArrayOwnerTileKeyCount++
+					}
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayOwnerTileKeyVal = val
-					u64ArrayOwnerTileKeyCount++
 				}
 			}
 		}
 		if u64ArrayOwnerTileKeyCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "OwnerTileKey").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "tileKey").Int("got", u64ArrayOwnerTileKeyCount).Errorf("slot u64Array@tileKey (field OwnerTileKey) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayOwnerTileKeyCount)
 			return
 		}
 		c.OwnerTileKey = append(c.OwnerTileKey, u64ArrayOwnerTileKeyVal)
 		// --- bool. ---
 		var boolCancellableBVal bool
 		var boolCancellableBCount int
+		var boolCancellableBLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindTaskCancellableB:
+					if boolCancellableBLastAttr != attrJ+1 {
+						boolCancellableBLastAttr = attrJ + 1
+						boolCancellableBCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolCancellableBVal = val
-					boolCancellableBCount++
 				}
 			}
 		}
 		if boolCancellableBCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "CancellableB").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "taskCancellableB").Int("got", boolCancellableBCount).Errorf("slot bool@taskCancellableB (field CancellableB) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolCancellableBCount)
 			return
 		}
 		c.CancellableB = append(c.CancellableB, boolCancellableBVal)
 		// --- i64Array. ---
 		var i64ArrayEstimatedMsVal int64
 		var i64ArrayEstimatedMsCount int
+		var i64ArrayEstimatedMsLastAttr int64
 		ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
 			for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindTaskEstimatedMs:
+					if i64ArrayEstimatedMsLastAttr != attrJ+1 {
+						i64ArrayEstimatedMsLastAttr = attrJ + 1
+						i64ArrayEstimatedMsCount++
+					}
 					val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					i64ArrayEstimatedMsVal = val
-					i64ArrayEstimatedMsCount++
 				}
 			}
 		}
 		if i64ArrayEstimatedMsCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "EstimatedMs").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "taskEstimatedMs").Int("got", i64ArrayEstimatedMsCount).Errorf("slot i64Array@taskEstimatedMs (field EstimatedMs) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArrayEstimatedMsCount)
 			return
 		}
 		c.EstimatedMs = append(c.EstimatedMs, i64ArrayEstimatedMsVal)
@@ -719,8 +751,9 @@ func TaskCreatedFillFromArrow[
 
 // TaskCreatedReadRow reads row i as one optional TaskCreated component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -755,31 +788,43 @@ func TaskCreatedReadRow[
 	// --- stringArray. ---
 	var stringArrayTaskIdVal string
 	var stringArrayTaskIdCount int
+	var stringArrayTaskIdLastAttr int64
 	var stringArrayOwnerAppIdVal string
 	var stringArrayOwnerAppIdCount int
+	var stringArrayOwnerAppIdLastAttr int64
 	var stringArrayOwnerRunIdVal string
 	var stringArrayOwnerRunIdCount int
+	var stringArrayOwnerRunIdLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindTaskId:
+				if stringArrayTaskIdLastAttr != attrJ+1 {
+					stringArrayTaskIdLastAttr = attrJ + 1
+					stringArrayTaskIdCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayTaskIdVal = val
-				stringArrayTaskIdCount++
 			case kindAppId:
+				if stringArrayOwnerAppIdLastAttr != attrJ+1 {
+					stringArrayOwnerAppIdLastAttr = attrJ + 1
+					stringArrayOwnerAppIdCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayOwnerAppIdVal = val
-				stringArrayOwnerAppIdCount++
 			case kindRunId:
+				if stringArrayOwnerRunIdLastAttr != attrJ+1 {
+					stringArrayOwnerRunIdLastAttr = attrJ + 1
+					stringArrayOwnerRunIdCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayOwnerRunIdVal = val
-				stringArrayOwnerRunIdCount++
 			}
 		}
 	}
 	if stringArrayTaskIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "taskId").Int("got", stringArrayTaskIdCount).Errorf("slot stringArray@taskId (field TaskId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayTaskIdCount)
 		return
 	}
 	if stringArrayTaskIdCount == 1 {
@@ -787,7 +832,7 @@ func TaskCreatedReadRow[
 		present = true
 	}
 	if stringArrayOwnerAppIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "OwnerAppId").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Int("got", stringArrayOwnerAppIdCount).Errorf("slot stringArray@appId (field OwnerAppId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOwnerAppIdCount)
 		return
 	}
 	if stringArrayOwnerAppIdCount == 1 {
@@ -795,7 +840,7 @@ func TaskCreatedReadRow[
 		present = true
 	}
 	if stringArrayOwnerRunIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "OwnerRunId").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "runId").Int("got", stringArrayOwnerRunIdCount).Errorf("slot stringArray@runId (field OwnerRunId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOwnerRunIdCount)
 		return
 	}
 	if stringArrayOwnerRunIdCount == 1 {
@@ -805,19 +850,23 @@ func TaskCreatedReadRow[
 	// --- symbol. ---
 	var symbolKindVal string
 	var symbolKindCount int
+	var symbolKindLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindTaskKind:
+				if symbolKindLastAttr != attrJ+1 {
+					symbolKindLastAttr = attrJ + 1
+					symbolKindCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolKindVal = val
-				symbolKindCount++
 			}
 		}
 	}
 	if symbolKindCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "taskKind").Int("got", symbolKindCount).Errorf("slot symbol@taskKind (field Kind) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolKindCount)
 		return
 	}
 	if symbolKindCount == 1 {
@@ -827,19 +876,23 @@ func TaskCreatedReadRow[
 	// --- textArray. ---
 	var textArrayTitleVal string
 	var textArrayTitleCount int
+	var textArrayTitleLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindTitle:
+				if textArrayTitleLastAttr != attrJ+1 {
+					textArrayTitleLastAttr = attrJ + 1
+					textArrayTitleCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArrayTitleVal = val
-				textArrayTitleCount++
 			}
 		}
 	}
 	if textArrayTitleCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Title").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "title").Int("got", textArrayTitleCount).Errorf("slot textArray@title (field Title) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayTitleCount)
 		return
 	}
 	if textArrayTitleCount == 1 {
@@ -849,19 +902,23 @@ func TaskCreatedReadRow[
 	// --- u64Array. ---
 	var u64ArrayOwnerTileKeyVal uint64
 	var u64ArrayOwnerTileKeyCount int
+	var u64ArrayOwnerTileKeyLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindTileKey:
+				if u64ArrayOwnerTileKeyLastAttr != attrJ+1 {
+					u64ArrayOwnerTileKeyLastAttr = attrJ + 1
+					u64ArrayOwnerTileKeyCount++
+				}
 				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u64ArrayOwnerTileKeyVal = val
-				u64ArrayOwnerTileKeyCount++
 			}
 		}
 	}
 	if u64ArrayOwnerTileKeyCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "OwnerTileKey").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "tileKey").Int("got", u64ArrayOwnerTileKeyCount).Errorf("slot u64Array@tileKey (field OwnerTileKey) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayOwnerTileKeyCount)
 		return
 	}
 	if u64ArrayOwnerTileKeyCount == 1 {
@@ -871,19 +928,23 @@ func TaskCreatedReadRow[
 	// --- bool. ---
 	var boolCancellableBVal bool
 	var boolCancellableBCount int
+	var boolCancellableBLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindTaskCancellableB:
+				if boolCancellableBLastAttr != attrJ+1 {
+					boolCancellableBLastAttr = attrJ + 1
+					boolCancellableBCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolCancellableBVal = val
-				boolCancellableBCount++
 			}
 		}
 	}
 	if boolCancellableBCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "CancellableB").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "taskCancellableB").Int("got", boolCancellableBCount).Errorf("slot bool@taskCancellableB (field CancellableB) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolCancellableBCount)
 		return
 	}
 	if boolCancellableBCount == 1 {
@@ -893,19 +954,23 @@ func TaskCreatedReadRow[
 	// --- i64Array. ---
 	var i64ArrayEstimatedMsVal int64
 	var i64ArrayEstimatedMsCount int
+	var i64ArrayEstimatedMsLastAttr int64
 	ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
 		for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindTaskEstimatedMs:
+				if i64ArrayEstimatedMsLastAttr != attrJ+1 {
+					i64ArrayEstimatedMsLastAttr = attrJ + 1
+					i64ArrayEstimatedMsCount++
+				}
 				val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				i64ArrayEstimatedMsVal = val
-				i64ArrayEstimatedMsCount++
 			}
 		}
 	}
 	if i64ArrayEstimatedMsCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "EstimatedMs").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "taskEstimatedMs").Int("got", i64ArrayEstimatedMsCount).Errorf("slot i64Array@taskEstimatedMs (field EstimatedMs) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArrayEstimatedMsCount)
 		return
 	}
 	if i64ArrayEstimatedMsCount == 1 {

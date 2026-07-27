@@ -125,8 +125,9 @@ type provenanceSymbolArrayMembsReadI interface {
 
 // provenanceReadRow reads row i as one optional Provenance component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -145,19 +146,23 @@ func provenanceReadRow[
 	// --- symbol. ---
 	var symbolHostVal string
 	var symbolHostCount int
+	var symbolHostLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindProvHost:
+				if symbolHostLastAttr != attrJ+1 {
+					symbolHostLastAttr = attrJ + 1
+					symbolHostCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolHostVal = val
-				symbolHostCount++
 			}
 		}
 	}
 	if symbolHostCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Host").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "provHost").Int("got", symbolHostCount).Errorf("slot symbol@provHost (field Host) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolHostCount)
 		return
 	}
 	if symbolHostCount == 1 {
@@ -166,16 +171,26 @@ func provenanceReadRow[
 	}
 	// --- symbolArray. ---
 	var symbolArrayStackSlice []string
+	var symbolArrayStackCount int
+	var symbolArrayStackLastAttr int64
 	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindProvStack:
+				if symbolArrayStackLastAttr != attrJ+1 {
+					symbolArrayStackLastAttr = attrJ + 1
+					symbolArrayStackCount++
+				}
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayStackSlice = append(symbolArrayStackSlice, v)
 				}
 			}
 		}
+	}
+	if symbolArrayStackCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "provStack").Int("got", symbolArrayStackCount).Errorf("slot symbolArray@provStack (field Stack) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayStackCount)
+		return
 	}
 	if symbolArrayStackSlice != nil {
 		row.Stack = symbolArrayStackSlice

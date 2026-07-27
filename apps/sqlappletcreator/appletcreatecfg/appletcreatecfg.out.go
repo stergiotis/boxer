@@ -334,38 +334,46 @@ func AppletCreateFillFromArrow[
 		// --- textArray. ---
 		var textArraySqlVal string
 		var textArraySqlCount int
+		var textArraySqlLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindAppletCreateSql:
+					if textArraySqlLastAttr != attrJ+1 {
+						textArraySqlLastAttr = attrJ + 1
+						textArraySqlCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArraySqlVal = val
-					textArraySqlCount++
 				}
 			}
 		}
 		if textArraySqlCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Sql").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "appletCreateSql").Int("got", textArraySqlCount).Errorf("slot textArray@appletCreateSql (field Sql) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArraySqlCount)
 			return
 		}
 		c.Sql = append(c.Sql, textArraySqlVal)
 		// --- symbol. ---
 		var symbolEndpointVal string
 		var symbolEndpointCount int
+		var symbolEndpointLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindAppletCreateEndpoint:
+					if symbolEndpointLastAttr != attrJ+1 {
+						symbolEndpointLastAttr = attrJ + 1
+						symbolEndpointCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolEndpointVal = val
-					symbolEndpointCount++
 				}
 			}
 		}
 		if symbolEndpointCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Endpoint").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "appletCreateEndpoint").Int("got", symbolEndpointCount).Errorf("slot symbol@appletCreateEndpoint (field Endpoint) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolEndpointCount)
 			return
 		}
 		c.Endpoint = append(c.Endpoint, symbolEndpointVal)
@@ -375,8 +383,9 @@ func AppletCreateFillFromArrow[
 
 // AppletCreateReadRow reads row i as one optional AppletCreate component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -395,19 +404,23 @@ func AppletCreateReadRow[
 	// --- textArray. ---
 	var textArraySqlVal string
 	var textArraySqlCount int
+	var textArraySqlLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAppletCreateSql:
+				if textArraySqlLastAttr != attrJ+1 {
+					textArraySqlLastAttr = attrJ + 1
+					textArraySqlCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArraySqlVal = val
-				textArraySqlCount++
 			}
 		}
 	}
 	if textArraySqlCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Sql").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "appletCreateSql").Int("got", textArraySqlCount).Errorf("slot textArray@appletCreateSql (field Sql) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArraySqlCount)
 		return
 	}
 	if textArraySqlCount == 1 {
@@ -417,19 +430,23 @@ func AppletCreateReadRow[
 	// --- symbol. ---
 	var symbolEndpointVal string
 	var symbolEndpointCount int
+	var symbolEndpointLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAppletCreateEndpoint:
+				if symbolEndpointLastAttr != attrJ+1 {
+					symbolEndpointLastAttr = attrJ + 1
+					symbolEndpointCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolEndpointVal = val
-				symbolEndpointCount++
 			}
 		}
 	}
 	if symbolEndpointCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Endpoint").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "appletCreateEndpoint").Int("got", symbolEndpointCount).Errorf("slot symbol@appletCreateEndpoint (field Endpoint) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolEndpointCount)
 		return
 	}
 	if symbolEndpointCount == 1 {

@@ -80,8 +80,9 @@ type closedAcctClosedMembsReadI interface {
 
 // closedReadRow reads row i as one optional Closed component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -96,19 +97,23 @@ func closedReadRow[
 	// --- acctClosed. ---
 	var acctClosedReasonVal string
 	var acctClosedReasonCount int
+	var acctClosedReasonLastAttr int64
 	nacctClosed := acctClosedAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nacctClosed; attrJ++ {
 		for membID := range acctClosedMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLedgerClosed:
+				if acctClosedReasonLastAttr != attrJ+1 {
+					acctClosedReasonLastAttr = attrJ + 1
+					acctClosedReasonCount++
+				}
 				val := acctClosedAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				acctClosedReasonVal = val
-				acctClosedReasonCount++
 			}
 		}
 	}
 	if acctClosedReasonCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "acctClosed").Str("membership", "ledgerClosed").Int("got", acctClosedReasonCount).Errorf("slot acctClosed@ledgerClosed (field Reason) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", acctClosedReasonCount)
 		return
 	}
 	if acctClosedReasonCount == 1 {

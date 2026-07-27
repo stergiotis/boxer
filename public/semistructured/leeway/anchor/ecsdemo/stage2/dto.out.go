@@ -432,53 +432,71 @@ func DroneEntityFillFromArrow[
 		// --- symbol. ---
 		var symbolStatusVal string
 		var symbolStatusCount int
+		var symbolStatusLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindDroneStatus:
+					if symbolStatusLastAttr != attrJ+1 {
+						symbolStatusLastAttr = attrJ + 1
+						symbolStatusCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolStatusVal = val
-					symbolStatusCount++
 				}
 			}
 		}
 		if symbolStatusCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Status").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "droneStatus").Int("got", symbolStatusCount).Errorf("slot symbol@droneStatus (field Status) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolStatusCount)
 			return
 		}
 		c.Status = append(c.Status, symbolStatusVal)
 		// --- u64Array. ---
 		var u64ArrayBatteryVal uint64
 		var u64ArrayBatteryCount int
+		var u64ArrayBatteryLastAttr int64
 		nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindDroneBattery:
+					if u64ArrayBatteryLastAttr != attrJ+1 {
+						u64ArrayBatteryLastAttr = attrJ + 1
+						u64ArrayBatteryCount++
+					}
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayBatteryVal = val
-					u64ArrayBatteryCount++
 				}
 			}
 		}
 		if u64ArrayBatteryCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Battery").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "droneBattery").Int("got", u64ArrayBatteryCount).Errorf("slot u64Array@droneBattery (field Battery) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayBatteryCount)
 			return
 		}
 		c.Battery = append(c.Battery, u64ArrayBatteryVal)
 		// --- symbolArray. ---
 		var symbolArrayTagsSlice []string
+		var symbolArrayTagsCount int
+		var symbolArrayTagsLastAttr int64
 		nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindDroneTags:
+					if symbolArrayTagsLastAttr != attrJ+1 {
+						symbolArrayTagsLastAttr = attrJ + 1
+						symbolArrayTagsCount++
+					}
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
 					}
 				}
 			}
+		}
+		if symbolArrayTagsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "droneTags").Int("got", symbolArrayTagsCount).Errorf("slot symbolArray@droneTags (field Tags) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayTagsCount)
+			return
 		}
 		c.Tags = append(c.Tags, symbolArrayTagsSlice)
 		// --- geoPoint. ---
@@ -535,8 +553,9 @@ func DroneEntityFillFromArrow[
 
 // DroneEntityReadRow reads row i as one optional DroneEntity component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -567,19 +586,23 @@ func DroneEntityReadRow[
 	// --- symbol. ---
 	var symbolStatusVal string
 	var symbolStatusCount int
+	var symbolStatusLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindDroneStatus:
+				if symbolStatusLastAttr != attrJ+1 {
+					symbolStatusLastAttr = attrJ + 1
+					symbolStatusCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolStatusVal = val
-				symbolStatusCount++
 			}
 		}
 	}
 	if symbolStatusCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Status").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "droneStatus").Int("got", symbolStatusCount).Errorf("slot symbol@droneStatus (field Status) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolStatusCount)
 		return
 	}
 	if symbolStatusCount == 1 {
@@ -589,19 +612,23 @@ func DroneEntityReadRow[
 	// --- u64Array. ---
 	var u64ArrayBatteryVal uint64
 	var u64ArrayBatteryCount int
+	var u64ArrayBatteryLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindDroneBattery:
+				if u64ArrayBatteryLastAttr != attrJ+1 {
+					u64ArrayBatteryLastAttr = attrJ + 1
+					u64ArrayBatteryCount++
+				}
 				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u64ArrayBatteryVal = val
-				u64ArrayBatteryCount++
 			}
 		}
 	}
 	if u64ArrayBatteryCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Battery").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "droneBattery").Int("got", u64ArrayBatteryCount).Errorf("slot u64Array@droneBattery (field Battery) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayBatteryCount)
 		return
 	}
 	if u64ArrayBatteryCount == 1 {
@@ -610,16 +637,26 @@ func DroneEntityReadRow[
 	}
 	// --- symbolArray. ---
 	var symbolArrayTagsSlice []string
+	var symbolArrayTagsCount int
+	var symbolArrayTagsLastAttr int64
 	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindDroneTags:
+				if symbolArrayTagsLastAttr != attrJ+1 {
+					symbolArrayTagsLastAttr = attrJ + 1
+					symbolArrayTagsCount++
+				}
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
 				}
 			}
 		}
+	}
+	if symbolArrayTagsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "droneTags").Int("got", symbolArrayTagsCount).Errorf("slot symbolArray@droneTags (field Tags) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayTagsCount)
+		return
 	}
 	if symbolArrayTagsSlice != nil {
 		row.Tags = symbolArrayTagsSlice

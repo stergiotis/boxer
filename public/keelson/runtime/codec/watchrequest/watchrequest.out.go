@@ -345,49 +345,61 @@ func WatchRequestFillFromArrow[
 		// --- bool. ---
 		var boolPollFallbackVal bool
 		var boolPollFallbackCount int
+		var boolPollFallbackLastAttr int64
 		var boolRecursiveVal bool
 		var boolRecursiveCount int
+		var boolRecursiveLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindWatchPollFallback:
+					if boolPollFallbackLastAttr != attrJ+1 {
+						boolPollFallbackLastAttr = attrJ + 1
+						boolPollFallbackCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolPollFallbackVal = val
-					boolPollFallbackCount++
 				case kindWatchRecursive:
+					if boolRecursiveLastAttr != attrJ+1 {
+						boolRecursiveLastAttr = attrJ + 1
+						boolRecursiveCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolRecursiveVal = val
-					boolRecursiveCount++
 				}
 			}
 		}
 		if boolPollFallbackCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "PollFallback").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "watchPollFallback").Int("got", boolPollFallbackCount).Errorf("slot bool@watchPollFallback (field PollFallback) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolPollFallbackCount)
 			return
 		}
 		c.PollFallback = append(c.PollFallback, boolPollFallbackVal)
 		if boolRecursiveCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Recursive").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "watchRecursive").Int("got", boolRecursiveCount).Errorf("slot bool@watchRecursive (field Recursive) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolRecursiveCount)
 			return
 		}
 		c.Recursive = append(c.Recursive, boolRecursiveVal)
 		// --- i32Array. ---
 		var i32ArrayPollIntervalMsVal int32
 		var i32ArrayPollIntervalMsCount int
+		var i32ArrayPollIntervalMsLastAttr int64
 		ni32Array := i32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ni32Array; attrJ++ {
 			for membID := range i32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindWatchPollIntervalMs:
+					if i32ArrayPollIntervalMsLastAttr != attrJ+1 {
+						i32ArrayPollIntervalMsLastAttr = attrJ + 1
+						i32ArrayPollIntervalMsCount++
+					}
 					val := i32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					i32ArrayPollIntervalMsVal = val
-					i32ArrayPollIntervalMsCount++
 				}
 			}
 		}
 		if i32ArrayPollIntervalMsCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "PollIntervalMs").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "i32Array").Str("membership", "watchPollIntervalMs").Int("got", i32ArrayPollIntervalMsCount).Errorf("slot i32Array@watchPollIntervalMs (field PollIntervalMs) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i32ArrayPollIntervalMsCount)
 			return
 		}
 		c.PollIntervalMs = append(c.PollIntervalMs, i32ArrayPollIntervalMsVal)
@@ -397,8 +409,9 @@ func WatchRequestFillFromArrow[
 
 // WatchRequestReadRow reads row i as one optional WatchRequest component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -417,25 +430,33 @@ func WatchRequestReadRow[
 	// --- bool. ---
 	var boolPollFallbackVal bool
 	var boolPollFallbackCount int
+	var boolPollFallbackLastAttr int64
 	var boolRecursiveVal bool
 	var boolRecursiveCount int
+	var boolRecursiveLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindWatchPollFallback:
+				if boolPollFallbackLastAttr != attrJ+1 {
+					boolPollFallbackLastAttr = attrJ + 1
+					boolPollFallbackCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolPollFallbackVal = val
-				boolPollFallbackCount++
 			case kindWatchRecursive:
+				if boolRecursiveLastAttr != attrJ+1 {
+					boolRecursiveLastAttr = attrJ + 1
+					boolRecursiveCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolRecursiveVal = val
-				boolRecursiveCount++
 			}
 		}
 	}
 	if boolPollFallbackCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "PollFallback").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "watchPollFallback").Int("got", boolPollFallbackCount).Errorf("slot bool@watchPollFallback (field PollFallback) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolPollFallbackCount)
 		return
 	}
 	if boolPollFallbackCount == 1 {
@@ -443,7 +464,7 @@ func WatchRequestReadRow[
 		present = true
 	}
 	if boolRecursiveCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Recursive").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "watchRecursive").Int("got", boolRecursiveCount).Errorf("slot bool@watchRecursive (field Recursive) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolRecursiveCount)
 		return
 	}
 	if boolRecursiveCount == 1 {
@@ -453,19 +474,23 @@ func WatchRequestReadRow[
 	// --- i32Array. ---
 	var i32ArrayPollIntervalMsVal int32
 	var i32ArrayPollIntervalMsCount int
+	var i32ArrayPollIntervalMsLastAttr int64
 	ni32Array := i32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ni32Array; attrJ++ {
 		for membID := range i32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindWatchPollIntervalMs:
+				if i32ArrayPollIntervalMsLastAttr != attrJ+1 {
+					i32ArrayPollIntervalMsLastAttr = attrJ + 1
+					i32ArrayPollIntervalMsCount++
+				}
 				val := i32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				i32ArrayPollIntervalMsVal = val
-				i32ArrayPollIntervalMsCount++
 			}
 		}
 	}
 	if i32ArrayPollIntervalMsCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "PollIntervalMs").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "i32Array").Str("membership", "watchPollIntervalMs").Int("got", i32ArrayPollIntervalMsCount).Errorf("slot i32Array@watchPollIntervalMs (field PollIntervalMs) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i32ArrayPollIntervalMsCount)
 		return
 	}
 	if i32ArrayPollIntervalMsCount == 1 {

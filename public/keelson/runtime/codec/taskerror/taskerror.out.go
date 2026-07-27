@@ -345,49 +345,61 @@ func TaskErrorFillFromArrow[
 		// --- stringArray. ---
 		var stringArrayTaskIdVal string
 		var stringArrayTaskIdCount int
+		var stringArrayTaskIdLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindTaskId:
+					if stringArrayTaskIdLastAttr != attrJ+1 {
+						stringArrayTaskIdLastAttr = attrJ + 1
+						stringArrayTaskIdCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayTaskIdVal = val
-					stringArrayTaskIdCount++
 				}
 			}
 		}
 		if stringArrayTaskIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "taskId").Int("got", stringArrayTaskIdCount).Errorf("slot stringArray@taskId (field TaskId) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayTaskIdCount)
 			return
 		}
 		c.TaskId = append(c.TaskId, stringArrayTaskIdVal)
 		// --- textArray. ---
 		var textArrayReasonVal string
 		var textArrayReasonCount int
+		var textArrayReasonLastAttr int64
 		var textArrayErrorTextVal string
 		var textArrayErrorTextCount int
+		var textArrayErrorTextLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindReason:
+					if textArrayReasonLastAttr != attrJ+1 {
+						textArrayReasonLastAttr = attrJ + 1
+						textArrayReasonCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArrayReasonVal = val
-					textArrayReasonCount++
 				case kindErrorText:
+					if textArrayErrorTextLastAttr != attrJ+1 {
+						textArrayErrorTextLastAttr = attrJ + 1
+						textArrayErrorTextCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArrayErrorTextVal = val
-					textArrayErrorTextCount++
 				}
 			}
 		}
 		if textArrayReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Int("got", textArrayReasonCount).Errorf("slot textArray@reason (field Reason) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayReasonCount)
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
 		if textArrayErrorTextCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "ErrorText").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "errorText").Int("got", textArrayErrorTextCount).Errorf("slot textArray@errorText (field ErrorText) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayErrorTextCount)
 			return
 		}
 		c.ErrorText = append(c.ErrorText, textArrayErrorTextVal)
@@ -397,8 +409,9 @@ func TaskErrorFillFromArrow[
 
 // TaskErrorReadRow reads row i as one optional TaskError component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -417,19 +430,23 @@ func TaskErrorReadRow[
 	// --- stringArray. ---
 	var stringArrayTaskIdVal string
 	var stringArrayTaskIdCount int
+	var stringArrayTaskIdLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindTaskId:
+				if stringArrayTaskIdLastAttr != attrJ+1 {
+					stringArrayTaskIdLastAttr = attrJ + 1
+					stringArrayTaskIdCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayTaskIdVal = val
-				stringArrayTaskIdCount++
 			}
 		}
 	}
 	if stringArrayTaskIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "taskId").Int("got", stringArrayTaskIdCount).Errorf("slot stringArray@taskId (field TaskId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayTaskIdCount)
 		return
 	}
 	if stringArrayTaskIdCount == 1 {
@@ -439,25 +456,33 @@ func TaskErrorReadRow[
 	// --- textArray. ---
 	var textArrayReasonVal string
 	var textArrayReasonCount int
+	var textArrayReasonLastAttr int64
 	var textArrayErrorTextVal string
 	var textArrayErrorTextCount int
+	var textArrayErrorTextLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindReason:
+				if textArrayReasonLastAttr != attrJ+1 {
+					textArrayReasonLastAttr = attrJ + 1
+					textArrayReasonCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArrayReasonVal = val
-				textArrayReasonCount++
 			case kindErrorText:
+				if textArrayErrorTextLastAttr != attrJ+1 {
+					textArrayErrorTextLastAttr = attrJ + 1
+					textArrayErrorTextCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArrayErrorTextVal = val
-				textArrayErrorTextCount++
 			}
 		}
 	}
 	if textArrayReasonCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Int("got", textArrayReasonCount).Errorf("slot textArray@reason (field Reason) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayReasonCount)
 		return
 	}
 	if textArrayReasonCount == 1 {
@@ -465,7 +490,7 @@ func TaskErrorReadRow[
 		present = true
 	}
 	if textArrayErrorTextCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "ErrorText").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "errorText").Int("got", textArrayErrorTextCount).Errorf("slot textArray@errorText (field ErrorText) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayErrorTextCount)
 		return
 	}
 	if textArrayErrorTextCount == 1 {

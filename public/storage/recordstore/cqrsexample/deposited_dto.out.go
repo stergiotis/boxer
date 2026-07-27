@@ -80,8 +80,9 @@ type depositedAcctDepositMembsReadI interface {
 
 // depositedReadRow reads row i as one optional Deposited component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -96,19 +97,23 @@ func depositedReadRow[
 	// --- acctDeposit. ---
 	var acctDepositAmountVal uint64
 	var acctDepositAmountCount int
+	var acctDepositAmountLastAttr int64
 	nacctDeposit := acctDepositAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nacctDeposit; attrJ++ {
 		for membID := range acctDepositMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLedgerDeposit:
+				if acctDepositAmountLastAttr != attrJ+1 {
+					acctDepositAmountLastAttr = attrJ + 1
+					acctDepositAmountCount++
+				}
 				val := acctDepositAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				acctDepositAmountVal = val
-				acctDepositAmountCount++
 			}
 		}
 	}
 	if acctDepositAmountCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Amount").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "acctDeposit").Str("membership", "ledgerDeposit").Int("got", acctDepositAmountCount).Errorf("slot acctDeposit@ledgerDeposit (field Amount) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", acctDepositAmountCount)
 		return
 	}
 	if acctDepositAmountCount == 1 {

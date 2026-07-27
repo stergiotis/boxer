@@ -457,87 +457,107 @@ func GrantRequestFillFromArrow[
 		// --- stringArray. ---
 		var stringArrayAppIdVal string
 		var stringArrayAppIdCount int
+		var stringArrayAppIdLastAttr int64
 		var stringArrayFilterPatternVal string
 		var stringArrayFilterPatternCount int
+		var stringArrayFilterPatternLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindAppId:
+					if stringArrayAppIdLastAttr != attrJ+1 {
+						stringArrayAppIdLastAttr = attrJ + 1
+						stringArrayAppIdCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayAppIdVal = val
-					stringArrayAppIdCount++
 				case kindCapFilterPattern:
+					if stringArrayFilterPatternLastAttr != attrJ+1 {
+						stringArrayFilterPatternLastAttr = attrJ + 1
+						stringArrayFilterPatternCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayFilterPatternVal = val
-					stringArrayFilterPatternCount++
 				}
 			}
 		}
 		if stringArrayAppIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "AppId").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Int("got", stringArrayAppIdCount).Errorf("slot stringArray@appId (field AppId) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayAppIdCount)
 			return
 		}
 		c.AppId = append(c.AppId, stringArrayAppIdVal)
 		if stringArrayFilterPatternCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "FilterPattern").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "capFilterPattern").Int("got", stringArrayFilterPatternCount).Errorf("slot stringArray@capFilterPattern (field FilterPattern) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayFilterPatternCount)
 			return
 		}
 		c.FilterPattern = append(c.FilterPattern, stringArrayFilterPatternVal)
 		// --- textArray. ---
 		var textArrayFilterReasonVal string
 		var textArrayFilterReasonCount int
+		var textArrayFilterReasonLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindReason:
+					if textArrayFilterReasonLastAttr != attrJ+1 {
+						textArrayFilterReasonLastAttr = attrJ + 1
+						textArrayFilterReasonCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArrayFilterReasonVal = val
-					textArrayFilterReasonCount++
 				}
 			}
 		}
 		if textArrayFilterReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "FilterReason").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Int("got", textArrayFilterReasonCount).Errorf("slot textArray@reason (field FilterReason) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayFilterReasonCount)
 			return
 		}
 		c.FilterReason = append(c.FilterReason, textArrayFilterReasonVal)
 		// --- symbol. ---
 		var symbolFilterDirectionVal string
 		var symbolFilterDirectionCount int
+		var symbolFilterDirectionLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindCapDirection:
+					if symbolFilterDirectionLastAttr != attrJ+1 {
+						symbolFilterDirectionLastAttr = attrJ + 1
+						symbolFilterDirectionCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolFilterDirectionVal = val
-					symbolFilterDirectionCount++
 				}
 			}
 		}
 		if symbolFilterDirectionCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "FilterDirection").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "capDirection").Int("got", symbolFilterDirectionCount).Errorf("slot symbol@capDirection (field FilterDirection) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolFilterDirectionCount)
 			return
 		}
 		c.FilterDirection = append(c.FilterDirection, symbolFilterDirectionVal)
 		// --- bool. ---
 		var boolFilterStickyVal bool
 		var boolFilterStickyCount int
+		var boolFilterStickyLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindCapFilterSticky:
+					if boolFilterStickyLastAttr != attrJ+1 {
+						boolFilterStickyLastAttr = attrJ + 1
+						boolFilterStickyCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolFilterStickyVal = val
-					boolFilterStickyCount++
 				}
 			}
 		}
 		if boolFilterStickyCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "FilterSticky").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "capFilterSticky").Int("got", boolFilterStickyCount).Errorf("slot bool@capFilterSticky (field FilterSticky) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolFilterStickyCount)
 			return
 		}
 		c.FilterSticky = append(c.FilterSticky, boolFilterStickyVal)
@@ -547,8 +567,9 @@ func GrantRequestFillFromArrow[
 
 // GrantRequestReadRow reads row i as one optional GrantRequest component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -575,25 +596,33 @@ func GrantRequestReadRow[
 	// --- stringArray. ---
 	var stringArrayAppIdVal string
 	var stringArrayAppIdCount int
+	var stringArrayAppIdLastAttr int64
 	var stringArrayFilterPatternVal string
 	var stringArrayFilterPatternCount int
+	var stringArrayFilterPatternLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAppId:
+				if stringArrayAppIdLastAttr != attrJ+1 {
+					stringArrayAppIdLastAttr = attrJ + 1
+					stringArrayAppIdCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayAppIdVal = val
-				stringArrayAppIdCount++
 			case kindCapFilterPattern:
+				if stringArrayFilterPatternLastAttr != attrJ+1 {
+					stringArrayFilterPatternLastAttr = attrJ + 1
+					stringArrayFilterPatternCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayFilterPatternVal = val
-				stringArrayFilterPatternCount++
 			}
 		}
 	}
 	if stringArrayAppIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "AppId").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Int("got", stringArrayAppIdCount).Errorf("slot stringArray@appId (field AppId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayAppIdCount)
 		return
 	}
 	if stringArrayAppIdCount == 1 {
@@ -601,7 +630,7 @@ func GrantRequestReadRow[
 		present = true
 	}
 	if stringArrayFilterPatternCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "FilterPattern").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "capFilterPattern").Int("got", stringArrayFilterPatternCount).Errorf("slot stringArray@capFilterPattern (field FilterPattern) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayFilterPatternCount)
 		return
 	}
 	if stringArrayFilterPatternCount == 1 {
@@ -611,19 +640,23 @@ func GrantRequestReadRow[
 	// --- textArray. ---
 	var textArrayFilterReasonVal string
 	var textArrayFilterReasonCount int
+	var textArrayFilterReasonLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindReason:
+				if textArrayFilterReasonLastAttr != attrJ+1 {
+					textArrayFilterReasonLastAttr = attrJ + 1
+					textArrayFilterReasonCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArrayFilterReasonVal = val
-				textArrayFilterReasonCount++
 			}
 		}
 	}
 	if textArrayFilterReasonCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "FilterReason").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Int("got", textArrayFilterReasonCount).Errorf("slot textArray@reason (field FilterReason) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayFilterReasonCount)
 		return
 	}
 	if textArrayFilterReasonCount == 1 {
@@ -633,19 +666,23 @@ func GrantRequestReadRow[
 	// --- symbol. ---
 	var symbolFilterDirectionVal string
 	var symbolFilterDirectionCount int
+	var symbolFilterDirectionLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindCapDirection:
+				if symbolFilterDirectionLastAttr != attrJ+1 {
+					symbolFilterDirectionLastAttr = attrJ + 1
+					symbolFilterDirectionCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolFilterDirectionVal = val
-				symbolFilterDirectionCount++
 			}
 		}
 	}
 	if symbolFilterDirectionCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "FilterDirection").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "capDirection").Int("got", symbolFilterDirectionCount).Errorf("slot symbol@capDirection (field FilterDirection) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolFilterDirectionCount)
 		return
 	}
 	if symbolFilterDirectionCount == 1 {
@@ -655,19 +692,23 @@ func GrantRequestReadRow[
 	// --- bool. ---
 	var boolFilterStickyVal bool
 	var boolFilterStickyCount int
+	var boolFilterStickyLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindCapFilterSticky:
+				if boolFilterStickyLastAttr != attrJ+1 {
+					boolFilterStickyLastAttr = attrJ + 1
+					boolFilterStickyCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolFilterStickyVal = val
-				boolFilterStickyCount++
 			}
 		}
 	}
 	if boolFilterStickyCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "FilterSticky").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "capFilterSticky").Int("got", boolFilterStickyCount).Errorf("slot bool@capFilterSticky (field FilterSticky) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolFilterStickyCount)
 		return
 	}
 	if boolFilterStickyCount == 1 {

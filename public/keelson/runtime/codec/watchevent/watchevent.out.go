@@ -390,57 +390,69 @@ func WatchEventFillFromArrow[
 		// --- symbol. ---
 		var symbolKindVal string
 		var symbolKindCount int
+		var symbolKindLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindWatchEventKind:
+					if symbolKindLastAttr != attrJ+1 {
+						symbolKindLastAttr = attrJ + 1
+						symbolKindCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolKindVal = val
-					symbolKindCount++
 				}
 			}
 		}
 		if symbolKindCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "watchEventKind").Int("got", symbolKindCount).Errorf("slot symbol@watchEventKind (field Kind) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolKindCount)
 			return
 		}
 		c.Kind = append(c.Kind, symbolKindVal)
 		// --- stringArray. ---
 		var stringArrayNameVal string
 		var stringArrayNameCount int
+		var stringArrayNameLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindWatchEventName:
+					if stringArrayNameLastAttr != attrJ+1 {
+						stringArrayNameLastAttr = attrJ + 1
+						stringArrayNameCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayNameVal = val
-					stringArrayNameCount++
 				}
 			}
 		}
 		if stringArrayNameCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Name").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "watchEventName").Int("got", stringArrayNameCount).Errorf("slot stringArray@watchEventName (field Name) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayNameCount)
 			return
 		}
 		c.Name = append(c.Name, stringArrayNameVal)
 		// --- u32Array. ---
 		var u32ArrayCookieVal uint32
 		var u32ArrayCookieCount int
+		var u32ArrayCookieLastAttr int64
 		nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 			for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindWatchEventCookie:
+					if u32ArrayCookieLastAttr != attrJ+1 {
+						u32ArrayCookieLastAttr = attrJ + 1
+						u32ArrayCookieCount++
+					}
 					val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u32ArrayCookieVal = val
-					u32ArrayCookieCount++
 				}
 			}
 		}
 		if u32ArrayCookieCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Cookie").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "watchEventCookie").Int("got", u32ArrayCookieCount).Errorf("slot u32Array@watchEventCookie (field Cookie) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayCookieCount)
 			return
 		}
 		c.Cookie = append(c.Cookie, u32ArrayCookieVal)
@@ -450,8 +462,9 @@ func WatchEventFillFromArrow[
 
 // WatchEventReadRow reads row i as one optional WatchEvent component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -474,19 +487,23 @@ func WatchEventReadRow[
 	// --- symbol. ---
 	var symbolKindVal string
 	var symbolKindCount int
+	var symbolKindLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindWatchEventKind:
+				if symbolKindLastAttr != attrJ+1 {
+					symbolKindLastAttr = attrJ + 1
+					symbolKindCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolKindVal = val
-				symbolKindCount++
 			}
 		}
 	}
 	if symbolKindCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "watchEventKind").Int("got", symbolKindCount).Errorf("slot symbol@watchEventKind (field Kind) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolKindCount)
 		return
 	}
 	if symbolKindCount == 1 {
@@ -496,19 +513,23 @@ func WatchEventReadRow[
 	// --- stringArray. ---
 	var stringArrayNameVal string
 	var stringArrayNameCount int
+	var stringArrayNameLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindWatchEventName:
+				if stringArrayNameLastAttr != attrJ+1 {
+					stringArrayNameLastAttr = attrJ + 1
+					stringArrayNameCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayNameVal = val
-				stringArrayNameCount++
 			}
 		}
 	}
 	if stringArrayNameCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Name").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "watchEventName").Int("got", stringArrayNameCount).Errorf("slot stringArray@watchEventName (field Name) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayNameCount)
 		return
 	}
 	if stringArrayNameCount == 1 {
@@ -518,19 +539,23 @@ func WatchEventReadRow[
 	// --- u32Array. ---
 	var u32ArrayCookieVal uint32
 	var u32ArrayCookieCount int
+	var u32ArrayCookieLastAttr int64
 	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindWatchEventCookie:
+				if u32ArrayCookieLastAttr != attrJ+1 {
+					u32ArrayCookieLastAttr = attrJ + 1
+					u32ArrayCookieCount++
+				}
 				val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u32ArrayCookieVal = val
-				u32ArrayCookieCount++
 			}
 		}
 	}
 	if u32ArrayCookieCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Cookie").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "watchEventCookie").Int("got", u32ArrayCookieCount).Errorf("slot u32Array@watchEventCookie (field Cookie) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayCookieCount)
 		return
 	}
 	if u32ArrayCookieCount == 1 {

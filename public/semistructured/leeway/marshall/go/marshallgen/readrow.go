@@ -43,9 +43,11 @@ func ReadRowSupported(plan *mappingplan.Plan) (ok bool, reason string) {
 // batches (a row lacking a scalar/unit field is an error), ReadRow reads
 // one row of a FAT table on which the kind is an optional component
 // (ADR-0075): a row carrying none of the kind's memberships yields
-// present=false; a duplicated scalar field is an error, while duplicated
-// container memberships concatenate. Fields bound to plain columns are
-// left at their zero value — the caller owns the envelope.
+// present=false, while a slot carrying more attributes than the DTO's shape
+// admits is an error — for every shape, containers included (ADR-0146 D4;
+// duplicated container memberships used to concatenate silently). Fields
+// bound to plain columns are left at their zero value — the caller owns the
+// envelope.
 func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan, mode EmitModeE) (err error) {
 	kind := kindIdent(plan.KindType, mode)
 	if ok, reason := ReadRowSupported(plan); !ok {
@@ -56,8 +58,9 @@ func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan, mode EmitMo
 
 	linef(sb, 0, "// %sReadRow reads row i as one optional %s component: presence-", kind, plan.KindType)
 	line(sb, 0, "// gated (a row carrying none of the kind's memberships yields")
-	line(sb, 0, "// present=false), membership-matched. A duplicated scalar field is")
-	line(sb, 0, "// an error; duplicated container memberships concatenate. Plain-")
+	line(sb, 0, "// present=false), membership-matched. A slot carrying more")
+	line(sb, 0, "// attributes than this kind's shape admits is an error, for every")
+	line(sb, 0, "// shape including containers. Plain-")
 	line(sb, 0, "// bound fields stay zero — the caller owns the envelope. The")
 	line(sb, 0, "// Attrs/Membs readers bind by type inference at the call site, as")
 	line(sb, 0, "// with FillFromArrow.")
@@ -113,13 +116,15 @@ func writeReadRowHelper(sb *strings.Builder, plan *mappingplan.Plan, mode EmitMo
 // writeReadRowFieldFinish emits the presence-tolerant tail for one field
 // after writeSectionMatchLoops: assign into the row and mark the
 // component present on a match; leave the zero value (never error) on
-// absence; error on duplicate occurrences of a scalar-shaped field.
+// absence; error on a slot carrying more attributes than the shape admits.
 func writeReadRowFieldFinish(sb *strings.Builder, f mappingplan.TaggedField, prefix string) {
+	// ReadRow reads an optional component, so absence is reported through
+	// `present`, not as an error; only surplus is refused. Emitted for every
+	// shape now — a container's duplicate memberships used to concatenate
+	// silently (ADR-0146 D4).
+	writeSlotArityCheck(sb, f, prefix, false, -1)
 	switch {
 	case f.IsOption:
-		linef(sb, 1, "if %s%sCount > 1 {", prefix, f.GoFieldName)
-		linef(sb, 2, "err = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"occurs more than once on the row\")", f.GoFieldName)
-		line(sb, 2, "return\n\t}")
 		linef(sb, 1, "if %s%sCount == 1 {", prefix, f.GoFieldName)
 		// Field assignment, not option.Some — the generated file does not
 		// import the option package (same idiom as Row / Append).
@@ -138,9 +143,7 @@ func writeReadRowFieldFinish(sb *strings.Builder, f mappingplan.TaggedField, pre
 		line(sb, 2, "present = true")
 		line(sb, 1, "}")
 	default:
-		linef(sb, 1, "if %s%sCount > 1 {", prefix, f.GoFieldName)
-		linef(sb, 2, "err = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"occurs more than once on the row\")", f.GoFieldName)
-		line(sb, 2, "return\n\t}")
+		// The surplus gate above covers the duplicate case.
 		linef(sb, 1, "if %s%sCount == 1 {", prefix, f.GoFieldName)
 		linef(sb, 2, "row.%s = %s%sVal", f.GoFieldName, prefix, f.GoFieldName)
 		line(sb, 2, "present = true")

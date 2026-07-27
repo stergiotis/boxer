@@ -80,8 +80,9 @@ type withdrawnAcctWithdrawMembsReadI interface {
 
 // withdrawnReadRow reads row i as one optional Withdrawn component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -96,19 +97,23 @@ func withdrawnReadRow[
 	// --- acctWithdraw. ---
 	var acctWithdrawAmountVal uint64
 	var acctWithdrawAmountCount int
+	var acctWithdrawAmountLastAttr int64
 	nacctWithdraw := acctWithdrawAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nacctWithdraw; attrJ++ {
 		for membID := range acctWithdrawMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLedgerWithdraw:
+				if acctWithdrawAmountLastAttr != attrJ+1 {
+					acctWithdrawAmountLastAttr = attrJ + 1
+					acctWithdrawAmountCount++
+				}
 				val := acctWithdrawAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				acctWithdrawAmountVal = val
-				acctWithdrawAmountCount++
 			}
 		}
 	}
 	if acctWithdrawAmountCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Amount").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "acctWithdraw").Str("membership", "ledgerWithdraw").Int("got", acctWithdrawAmountCount).Errorf("slot acctWithdraw@ledgerWithdraw (field Amount) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", acctWithdrawAmountCount)
 		return
 	}
 	if acctWithdrawAmountCount == 1 {

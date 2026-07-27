@@ -390,59 +390,71 @@ func PersistReplyFillFromArrow[
 		// --- bool. ---
 		var boolFoundVal bool
 		var boolFoundCount int
+		var boolFoundLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindPersistFound:
+					if boolFoundLastAttr != attrJ+1 {
+						boolFoundLastAttr = attrJ + 1
+						boolFoundCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolFoundVal = val
-					boolFoundCount++
 				}
 			}
 		}
 		if boolFoundCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Found").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "persistFound").Int("got", boolFoundCount).Errorf("slot bool@persistFound (field Found) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolFoundCount)
 			return
 		}
 		c.Found = append(c.Found, boolFoundVal)
 		// --- blobArray. ---
 		var blobArrayValueVal []byte
 		var blobArrayValueCount int
+		var blobArrayValueLastAttr int64
 		nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindPersistValue:
+					if blobArrayValueLastAttr != attrJ+1 {
+						blobArrayValueLastAttr = attrJ + 1
+						blobArrayValueCount++
+					}
 					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					cp := make([]byte, len(val))
 					copy(cp, val)
 					blobArrayValueVal = cp
-					blobArrayValueCount++
 				}
 			}
 		}
 		if blobArrayValueCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Value").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "persistValue").Int("got", blobArrayValueCount).Errorf("slot blobArray@persistValue (field Value) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayValueCount)
 			return
 		}
 		c.Value = append(c.Value, blobArrayValueVal)
 		// --- textArray. ---
 		var textArrayReasonVal string
 		var textArrayReasonCount int
+		var textArrayReasonLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindReason:
+					if textArrayReasonLastAttr != attrJ+1 {
+						textArrayReasonLastAttr = attrJ + 1
+						textArrayReasonCount++
+					}
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArrayReasonVal = val
-					textArrayReasonCount++
 				}
 			}
 		}
 		if textArrayReasonCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Int("got", textArrayReasonCount).Errorf("slot textArray@reason (field Reason) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayReasonCount)
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
@@ -452,8 +464,9 @@ func PersistReplyFillFromArrow[
 
 // PersistReplyReadRow reads row i as one optional PersistReply component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -476,19 +489,23 @@ func PersistReplyReadRow[
 	// --- bool. ---
 	var boolFoundVal bool
 	var boolFoundCount int
+	var boolFoundLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPersistFound:
+				if boolFoundLastAttr != attrJ+1 {
+					boolFoundLastAttr = attrJ + 1
+					boolFoundCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolFoundVal = val
-				boolFoundCount++
 			}
 		}
 	}
 	if boolFoundCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Found").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "persistFound").Int("got", boolFoundCount).Errorf("slot bool@persistFound (field Found) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolFoundCount)
 		return
 	}
 	if boolFoundCount == 1 {
@@ -498,21 +515,25 @@ func PersistReplyReadRow[
 	// --- blobArray. ---
 	var blobArrayValueVal []byte
 	var blobArrayValueCount int
+	var blobArrayValueLastAttr int64
 	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPersistValue:
+				if blobArrayValueLastAttr != attrJ+1 {
+					blobArrayValueLastAttr = attrJ + 1
+					blobArrayValueCount++
+				}
 				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				cp := make([]byte, len(val))
 				copy(cp, val)
 				blobArrayValueVal = cp
-				blobArrayValueCount++
 			}
 		}
 	}
 	if blobArrayValueCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Value").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "persistValue").Int("got", blobArrayValueCount).Errorf("slot blobArray@persistValue (field Value) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayValueCount)
 		return
 	}
 	if blobArrayValueCount == 1 {
@@ -522,19 +543,23 @@ func PersistReplyReadRow[
 	// --- textArray. ---
 	var textArrayReasonVal string
 	var textArrayReasonCount int
+	var textArrayReasonLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindReason:
+				if textArrayReasonLastAttr != attrJ+1 {
+					textArrayReasonLastAttr = attrJ + 1
+					textArrayReasonCount++
+				}
 				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				textArrayReasonVal = val
-				textArrayReasonCount++
 			}
 		}
 	}
 	if textArrayReasonCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "reason").Int("got", textArrayReasonCount).Errorf("slot textArray@reason (field Reason) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayReasonCount)
 		return
 	}
 	if textArrayReasonCount == 1 {

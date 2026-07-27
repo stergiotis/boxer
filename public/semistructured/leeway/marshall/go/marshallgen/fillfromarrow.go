@@ -2,6 +2,7 @@ package marshallgen
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -412,14 +413,20 @@ func membElemGoType(m mappingplan.TupleMembership) string {
 // tolerant, row-assigning tails) build on it. Returns the non-const
 // fields the caller must finish.
 func writeSectionMatchLoops(sb *strings.Builder, g goplan.SectionGroup, attrsVar, membsVar, prefix string) (fields []mappingplan.TaggedField) {
+	// `fields` is what the caller projects — consts project nothing. `slots` is
+	// what gets counted and arity-checked, which includes consts: a const's
+	// attribute is part of what identifies the kind on the wire, so a row
+	// missing it is not a row of this kind (ADR-0146 D4).
+	var slots []mappingplan.TaggedField
 	for _, f := range g.SubColumns[0].Fields {
+		slots = append(slots, f)
 		if f.IsConst {
 			continue
 		}
 		fields = append(fields, f)
 	}
-	for _, f := range fields {
-		writeFieldAccumulatorDecl(sb, f, prefix)
+	for si, f := range slots {
+		writeFieldAccumulatorDecl(sb, f, prefix, si)
 	}
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
@@ -430,13 +437,58 @@ func writeSectionMatchLoops(sb *strings.Builder, g goplan.SectionGroup, attrsVar
 		linef(sb, 3, "for membID := range %s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {", membsVar, g.Channel().AddMethodSuffix())
 		line(sb, 4, "switch membID {")
 	}
-	for _, f := range fields {
-		writeFieldMembCase(sb, f, prefix, attrsVar)
+	for si, f := range slots {
+		writeFieldMembCase(sb, f, prefix, attrsVar, si)
 	}
 	line(sb, 4, "}")
 	line(sb, 3, "}")
 	line(sb, 2, "}")
+	// Const slots have no append tail to carry their arity check, so they are
+	// checked here; value fields are checked by their caller's tail, which
+	// differs between FillFromArrow (requires presence) and ReadRow (tolerates
+	// absence, refuses surplus).
+	for si, f := range slots {
+		if f.IsConst {
+			writeSlotArityCheck(sb, f, prefix, true, si)
+		}
+	}
 	return
+}
+
+// writeSlotArityCheck emits the read-contract gate for one slot. requirePresent
+// distinguishes the two callers: FillFromArrow decodes a kind-homogeneous batch
+// where a missing slot is an error, while ReadRow reads an optional component
+// and reports absence through `present`, so it refuses only surplus.
+func writeSlotArityCheck(sb *strings.Builder, f mappingplan.TaggedField, prefix string, requirePresent bool, constIdx int) {
+	name := accName(f, prefix, constIdx)
+	// The write path emits at most one attribute per slot; a splice-able shape
+	// (Option, container, const-free absence) may emit none.
+	alwaysEmits := !f.IsOption && !f.IsMulti()
+	if requirePresent && alwaysEmits {
+		linef(sb, 2, "if %sCount != 1 {", name)
+	} else {
+		linef(sb, 2, "if %sCount > 1 {", name)
+	}
+	linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"section\", %q).Str(\"membership\", %q).Int(\"got\", %sCount).Errorf(%q, %sCount)",
+		f.LWSection, f.LWMembership, name,
+		slotArityMessage(f, requirePresent && alwaysEmits), name)
+	line(sb, 3, "return\n\t\t}")
+}
+
+// slotArityMessage is the format string for a failed slot-arity check. It names
+// the slot and the cause: more than one attribute means several producers claim
+// it, and the reader cannot tell which is this kind's.
+func slotArityMessage(f mappingplan.TaggedField, exactlyOne bool) string {
+	slot := f.LWSection + "@" + f.LWMembership
+	if f.IsConst {
+		slot += " (const)"
+	} else if f.GoFieldName != "" {
+		slot += " (field " + f.GoFieldName + ")"
+	}
+	if exactlyOne {
+		return "slot " + slot + " carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's"
+	}
+	return "slot " + slot + " carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's"
 }
 
 // writeCarrierSectionDecode emits FillFromArrow decode for a mixed /
@@ -612,21 +664,55 @@ func writeCarrierContainerDecode(sb *strings.Builder, f mappingplan.TaggedField,
 	linef(sb, 2, "c.%s = append(c.%s, %s)", f.CarrierField, f.CarrierField, carrierVar)
 }
 
-func writeFieldAccumulatorDecl(sb *strings.Builder, f mappingplan.TaggedField, prefix string) {
+func writeFieldAccumulatorDecl(sb *strings.Builder, f mappingplan.TaggedField, prefix string, constIdx int) {
 	switch {
 	case f.IsSlice():
 		linef(sb, 2, "var %s%sSlice []%s", prefix, f.GoFieldName, f.GoType())
 	case f.IsRoaring():
 		linef(sb, 2, "var %s%sBitmap *roaring.Bitmap", prefix, f.GoFieldName)
 	default:
-		// Scalar or Option value: a Val slot plus an occurrence Count
-		// (Option's Has bool is written at append time, not here).
+		// Scalar or Option value: a Val slot (Option's Has bool is written at
+		// append time, not here).
 		linef(sb, 2, "var %s%sVal %s", prefix, f.GoFieldName, f.GoType())
-		linef(sb, 2, "var %s%sCount int", prefix, f.GoFieldName)
 	}
+	writeSlotCounterDecl(sb, accName(f, prefix, constIdx))
+}
+
+// writeSlotCounterDecl emits the per-slot attribute counter every shape now
+// carries (ADR-0146 D4). Count is the number of ATTRIBUTES claiming the slot on
+// this row; LastAttr dedups within one attribute, so an attribute repeating the
+// same membership counts once — the count is of attributes, not of membership
+// entries, and it must agree with the reflect codec's tally.
+func writeSlotCounterDecl(sb *strings.Builder, name string) {
+	linef(sb, 2, "var %sCount int", name)
+	linef(sb, 2, "var %sLastAttr int64", name)
+}
+
+// writeSlotCount emits the guarded increment at the top of a membership case.
+// attrJ+1 is the marker so the zero value of LastAttr never matches attribute 0.
+func writeSlotCount(sb *strings.Builder, indent int, name string) {
+	linef(sb, indent, "if %sLastAttr != attrJ+1 {", name)
+	linef(sb, indent+1, "%sLastAttr = attrJ + 1", name)
+	linef(sb, indent+1, "%sCount++", name)
+	line(sb, indent, "}")
+}
+
+// accName is the accumulator/counter prefix for a field. A const has no Go
+// field to name it after, and its membership cannot supply one either — a
+// verbatim membership is an arbitrary wire label, so `Const<Membership>` need
+// not be a Go identifier. Consts are therefore named by their position among
+// the section's slots, which is stable for a given Plan.
+func accName(f mappingplan.TaggedField, prefix string, constIdx int) string {
+	if f.IsConst {
+		return prefix + "Const" + strconv.Itoa(constIdx)
+	}
+	return prefix + f.GoFieldName
 }
 
 func writeFieldAppend(sb *strings.Builder, f mappingplan.TaggedField, prefix string) {
+	// Arity gate before the append: a surplus attribute on this slot used to
+	// concatenate silently (container / roaring) or decode as absent (Option).
+	writeSlotArityCheck(sb, f, prefix, true, -1)
 	switch {
 	case f.IsOption:
 		linef(sb, 2, "if %s%sCount == 1 {", prefix, f.GoFieldName)
@@ -642,18 +728,22 @@ func writeFieldAppend(sb *strings.Builder, f mappingplan.TaggedField, prefix str
 	case f.IsRoaring():
 		linef(sb, 2, "c.%s = append(c.%s, %s%sBitmap)", f.GoFieldName, f.GoFieldName, prefix, f.GoFieldName)
 	default:
-		linef(sb, 2, "if %s%sCount != 1 {", prefix, f.GoFieldName)
-		linef(sb, 3, "err = eb.Build().Int(\"row\", i).Str(\"field\", %q).Errorf(\"expected exactly one occurrence per row\")", f.GoFieldName)
-		line(sb, 3, "return\n\t\t}")
+		// The arity gate above already required exactly one occurrence.
 		linef(sb, 2, "c.%s = append(c.%s, %s%sVal)", f.GoFieldName, f.GoFieldName, prefix, f.GoFieldName)
 	}
 }
 
-func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, attrsVar string) {
+func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, attrsVar string, constIdx int) {
 	if f.Flags.Channel.EmbedsLiteralName() {
 		linef(sb, 4, "case %q:", f.LWMembership)
 	} else {
 		linef(sb, 4, "case %s:", f.KindVar())
+	}
+	writeSlotCount(sb, 5, accName(f, prefix, constIdx))
+	if f.IsConst {
+		// A const projects no Go field; its attribute is counted so the slot's
+		// arity is still checked, and nothing is consumed.
+		return
 	}
 	// Single-value read accessor chosen by field shape, shared with the
 	// reflect codec via goplan.SingleValueReadAccessor so the two
@@ -695,7 +785,6 @@ func writeFieldMembCase(sb *strings.Builder, f mappingplan.TaggedField, prefix, 
 		default:
 			linef(sb, 5, "%s%sVal = val", prefix, f.GoFieldName)
 		}
-		linef(sb, 5, "%s%sCount++", prefix, f.GoFieldName)
 	}
 }
 

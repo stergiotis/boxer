@@ -957,73 +957,95 @@ func M1SampleFillFromArrow[
 		// --- symbol. ---
 		var symbolSourceVal string
 		var symbolSourceCount int
+		var symbolSourceLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1Source:
+					if symbolSourceLastAttr != attrJ+1 {
+						symbolSourceLastAttr = attrJ + 1
+						symbolSourceCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolSourceVal = val
-					symbolSourceCount++
 				}
 			}
 		}
 		if symbolSourceCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Source").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "m1Source").Int("got", symbolSourceCount).Errorf("slot symbol@m1Source (field Source) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolSourceCount)
 			return
 		}
 		c.Source = append(c.Source, symbolSourceVal)
 		// --- u8Array. ---
 		var u8ArraySeverityVal uint8
 		var u8ArraySeverityCount int
+		var u8ArraySeverityLastAttr int64
 		nu8Array := u8ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu8Array; attrJ++ {
 			for membID := range u8ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1Severity:
+					if u8ArraySeverityLastAttr != attrJ+1 {
+						u8ArraySeverityLastAttr = attrJ + 1
+						u8ArraySeverityCount++
+					}
 					val := u8ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u8ArraySeverityVal = val
-					u8ArraySeverityCount++
 				}
 			}
 		}
 		if u8ArraySeverityCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Severity").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "m1Severity").Int("got", u8ArraySeverityCount).Errorf("slot u8Array@m1Severity (field Severity) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u8ArraySeverityCount)
 			return
 		}
 		c.Severity = append(c.Severity, u8ArraySeverityVal)
 		// --- u16Array. ---
 		var u16ArrayMajorVerVal uint16
 		var u16ArrayMajorVerCount int
+		var u16ArrayMajorVerLastAttr int64
 		nu16Array := u16ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu16Array; attrJ++ {
 			for membID := range u16ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1MajorVer:
+					if u16ArrayMajorVerLastAttr != attrJ+1 {
+						u16ArrayMajorVerLastAttr = attrJ + 1
+						u16ArrayMajorVerCount++
+					}
 					val := u16ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u16ArrayMajorVerVal = val
-					u16ArrayMajorVerCount++
 				}
 			}
 		}
 		if u16ArrayMajorVerCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "MajorVer").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "u16Array").Str("membership", "m1MajorVer").Int("got", u16ArrayMajorVerCount).Errorf("slot u16Array@m1MajorVer (field MajorVer) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u16ArrayMajorVerCount)
 			return
 		}
 		c.MajorVer = append(c.MajorVer, u16ArrayMajorVerVal)
 		// --- u32Array. ---
 		var u32ArraySequenceVal uint32
 		var u32ArraySequenceCount int
+		var u32ArraySequenceLastAttr int64
 		var u32ArrayCapBitsBitmap *roaring.Bitmap
+		var u32ArrayCapBitsCount int
+		var u32ArrayCapBitsLastAttr int64
 		nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 			for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1Sequence:
+					if u32ArraySequenceLastAttr != attrJ+1 {
+						u32ArraySequenceLastAttr = attrJ + 1
+						u32ArraySequenceCount++
+					}
 					val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u32ArraySequenceVal = val
-					u32ArraySequenceCount++
 				case kindM1CapBits:
+					if u32ArrayCapBitsLastAttr != attrJ+1 {
+						u32ArrayCapBitsLastAttr = attrJ + 1
+						u32ArrayCapBitsCount++
+					}
 					for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						if u32ArrayCapBitsBitmap == nil {
 							u32ArrayCapBitsBitmap = roaring.New()
@@ -1034,130 +1056,166 @@ func M1SampleFillFromArrow[
 			}
 		}
 		if u32ArraySequenceCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Sequence").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "m1Sequence").Int("got", u32ArraySequenceCount).Errorf("slot u32Array@m1Sequence (field Sequence) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArraySequenceCount)
 			return
 		}
 		c.Sequence = append(c.Sequence, u32ArraySequenceVal)
+		if u32ArrayCapBitsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "m1CapBits").Int("got", u32ArrayCapBitsCount).Errorf("slot u32Array@m1CapBits (field CapBits) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayCapBitsCount)
+			return
+		}
 		c.CapBits = append(c.CapBits, u32ArrayCapBitsBitmap)
 		// --- u64Array. ---
 		var u64ArrayLatencyNanosVal uint64
 		var u64ArrayLatencyNanosCount int
+		var u64ArrayLatencyNanosLastAttr int64
 		nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1LatencyNanos:
+					if u64ArrayLatencyNanosLastAttr != attrJ+1 {
+						u64ArrayLatencyNanosLastAttr = attrJ + 1
+						u64ArrayLatencyNanosCount++
+					}
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayLatencyNanosVal = val
-					u64ArrayLatencyNanosCount++
 				}
 			}
 		}
 		if u64ArrayLatencyNanosCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "LatencyNanos").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "m1LatencyNanos").Int("got", u64ArrayLatencyNanosCount).Errorf("slot u64Array@m1LatencyNanos (field LatencyNanos) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayLatencyNanosCount)
 			return
 		}
 		c.LatencyNanos = append(c.LatencyNanos, u64ArrayLatencyNanosVal)
 		// --- f32Array. ---
 		var f32ArrayCpuPctVal float32
 		var f32ArrayCpuPctCount int
+		var f32ArrayCpuPctLastAttr int64
 		nf32Array := f32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nf32Array; attrJ++ {
 			for membID := range f32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1CpuPct:
+					if f32ArrayCpuPctLastAttr != attrJ+1 {
+						f32ArrayCpuPctLastAttr = attrJ + 1
+						f32ArrayCpuPctCount++
+					}
 					val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					f32ArrayCpuPctVal = val
-					f32ArrayCpuPctCount++
 				}
 			}
 		}
 		if f32ArrayCpuPctCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "CpuPct").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "m1CpuPct").Int("got", f32ArrayCpuPctCount).Errorf("slot f32Array@m1CpuPct (field CpuPct) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", f32ArrayCpuPctCount)
 			return
 		}
 		c.CpuPct = append(c.CpuPct, f32ArrayCpuPctVal)
 		// --- f64Array. ---
 		var f64ArrayLoadAvg1Val float64
 		var f64ArrayLoadAvg1Count int
+		var f64ArrayLoadAvg1LastAttr int64
 		nf64Array := f64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nf64Array; attrJ++ {
 			for membID := range f64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1LoadAvg1:
+					if f64ArrayLoadAvg1LastAttr != attrJ+1 {
+						f64ArrayLoadAvg1LastAttr = attrJ + 1
+						f64ArrayLoadAvg1Count++
+					}
 					val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					f64ArrayLoadAvg1Val = val
-					f64ArrayLoadAvg1Count++
 				}
 			}
 		}
 		if f64ArrayLoadAvg1Count != 1 {
-			err = eb.Build().Int("row", i).Str("field", "LoadAvg1").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "f64Array").Str("membership", "m1LoadAvg1").Int("got", f64ArrayLoadAvg1Count).Errorf("slot f64Array@m1LoadAvg1 (field LoadAvg1) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", f64ArrayLoadAvg1Count)
 			return
 		}
 		c.LoadAvg1 = append(c.LoadAvg1, f64ArrayLoadAvg1Val)
 		// --- bool. ---
 		var boolHealthyVal bool
 		var boolHealthyCount int
+		var boolHealthyLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1Healthy:
+					if boolHealthyLastAttr != attrJ+1 {
+						boolHealthyLastAttr = attrJ + 1
+						boolHealthyCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolHealthyVal = val
-					boolHealthyCount++
 				}
 			}
 		}
 		if boolHealthyCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Healthy").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "m1Healthy").Int("got", boolHealthyCount).Errorf("slot bool@m1Healthy (field Healthy) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolHealthyCount)
 			return
 		}
 		c.Healthy = append(c.Healthy, boolHealthyVal)
 		// --- blobArray. ---
 		var blobArrayPeerV4Val [4]byte
 		var blobArrayPeerV4Count int
+		var blobArrayPeerV4LastAttr int64
 		var blobArrayPeerV6Val [16]byte
 		var blobArrayPeerV6Count int
+		var blobArrayPeerV6LastAttr int64
 		nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1PeerV4:
+					if blobArrayPeerV4LastAttr != attrJ+1 {
+						blobArrayPeerV4LastAttr = attrJ + 1
+						blobArrayPeerV4Count++
+					}
 					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					copy(blobArrayPeerV4Val[:], val)
-					blobArrayPeerV4Count++
 				case kindM1PeerV6:
+					if blobArrayPeerV6LastAttr != attrJ+1 {
+						blobArrayPeerV6LastAttr = attrJ + 1
+						blobArrayPeerV6Count++
+					}
 					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					copy(blobArrayPeerV6Val[:], val)
-					blobArrayPeerV6Count++
 				}
 			}
 		}
 		if blobArrayPeerV4Count != 1 {
-			err = eb.Build().Int("row", i).Str("field", "PeerV4").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "m1PeerV4").Int("got", blobArrayPeerV4Count).Errorf("slot blobArray@m1PeerV4 (field PeerV4) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayPeerV4Count)
 			return
 		}
 		c.PeerV4 = append(c.PeerV4, blobArrayPeerV4Val)
 		if blobArrayPeerV6Count != 1 {
-			err = eb.Build().Int("row", i).Str("field", "PeerV6").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "m1PeerV6").Int("got", blobArrayPeerV6Count).Errorf("slot blobArray@m1PeerV6 (field PeerV6) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayPeerV6Count)
 			return
 		}
 		c.PeerV6 = append(c.PeerV6, blobArrayPeerV6Val)
 		// --- timeArray. ---
 		var timeArrayLastSuccessVal time.Time
 		var timeArrayLastSuccessCount int
+		var timeArrayLastSuccessLastAttr int64
 		ntimeArray := timeArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntimeArray; attrJ++ {
 			for membID := range timeArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1LastSuccess:
+					if timeArrayLastSuccessLastAttr != attrJ+1 {
+						timeArrayLastSuccessLastAttr = attrJ + 1
+						timeArrayLastSuccessCount++
+					}
 					val := timeArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					timeArrayLastSuccessVal = val
-					timeArrayLastSuccessCount++
 				}
 			}
+		}
+		if timeArrayLastSuccessCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "timeArray").Str("membership", "m1LastSuccess").Int("got", timeArrayLastSuccessCount).Errorf("slot timeArray@m1LastSuccess (field LastSuccess) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", timeArrayLastSuccessCount)
+			return
 		}
 		if timeArrayLastSuccessCount == 1 {
 			c.LastSuccessVal = append(c.LastSuccessVal, timeArrayLastSuccessVal)
@@ -1170,16 +1228,24 @@ func M1SampleFillFromArrow[
 		// --- stringArray. ---
 		var stringArrayOperatorNameVal string
 		var stringArrayOperatorNameCount int
+		var stringArrayOperatorNameLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1OperatorName:
+					if stringArrayOperatorNameLastAttr != attrJ+1 {
+						stringArrayOperatorNameLastAttr = attrJ + 1
+						stringArrayOperatorNameCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayOperatorNameVal = val
-					stringArrayOperatorNameCount++
 				}
 			}
+		}
+		if stringArrayOperatorNameCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "m1OperatorName").Int("got", stringArrayOperatorNameCount).Errorf("slot stringArray@m1OperatorName (field OperatorName) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOperatorNameCount)
+			return
 		}
 		if stringArrayOperatorNameCount == 1 {
 			c.OperatorNameVal = append(c.OperatorNameVal, stringArrayOperatorNameVal)
@@ -1191,16 +1257,26 @@ func M1SampleFillFromArrow[
 		}
 		// --- textArray. ---
 		var textArrayTagsSlice []string
+		var textArrayTagsCount int
+		var textArrayTagsLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindM1Tags:
+					if textArrayTagsLastAttr != attrJ+1 {
+						textArrayTagsLastAttr = attrJ + 1
+						textArrayTagsCount++
+					}
 					for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						textArrayTagsSlice = append(textArrayTagsSlice, v)
 					}
 				}
 			}
+		}
+		if textArrayTagsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "m1Tags").Int("got", textArrayTagsCount).Errorf("slot textArray@m1Tags (field Tags) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayTagsCount)
+			return
 		}
 		c.Tags = append(c.Tags, textArrayTagsSlice)
 	}
@@ -1209,8 +1285,9 @@ func M1SampleFillFromArrow[
 
 // M1SampleReadRow reads row i as one optional M1Sample component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -1269,19 +1346,23 @@ func M1SampleReadRow[
 	// --- symbol. ---
 	var symbolSourceVal string
 	var symbolSourceCount int
+	var symbolSourceLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1Source:
+				if symbolSourceLastAttr != attrJ+1 {
+					symbolSourceLastAttr = attrJ + 1
+					symbolSourceCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolSourceVal = val
-				symbolSourceCount++
 			}
 		}
 	}
 	if symbolSourceCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Source").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "m1Source").Int("got", symbolSourceCount).Errorf("slot symbol@m1Source (field Source) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolSourceCount)
 		return
 	}
 	if symbolSourceCount == 1 {
@@ -1291,19 +1372,23 @@ func M1SampleReadRow[
 	// --- u8Array. ---
 	var u8ArraySeverityVal uint8
 	var u8ArraySeverityCount int
+	var u8ArraySeverityLastAttr int64
 	nu8Array := u8ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu8Array; attrJ++ {
 		for membID := range u8ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1Severity:
+				if u8ArraySeverityLastAttr != attrJ+1 {
+					u8ArraySeverityLastAttr = attrJ + 1
+					u8ArraySeverityCount++
+				}
 				val := u8ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u8ArraySeverityVal = val
-				u8ArraySeverityCount++
 			}
 		}
 	}
 	if u8ArraySeverityCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Severity").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "m1Severity").Int("got", u8ArraySeverityCount).Errorf("slot u8Array@m1Severity (field Severity) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u8ArraySeverityCount)
 		return
 	}
 	if u8ArraySeverityCount == 1 {
@@ -1313,19 +1398,23 @@ func M1SampleReadRow[
 	// --- u16Array. ---
 	var u16ArrayMajorVerVal uint16
 	var u16ArrayMajorVerCount int
+	var u16ArrayMajorVerLastAttr int64
 	nu16Array := u16ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu16Array; attrJ++ {
 		for membID := range u16ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1MajorVer:
+				if u16ArrayMajorVerLastAttr != attrJ+1 {
+					u16ArrayMajorVerLastAttr = attrJ + 1
+					u16ArrayMajorVerCount++
+				}
 				val := u16ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u16ArrayMajorVerVal = val
-				u16ArrayMajorVerCount++
 			}
 		}
 	}
 	if u16ArrayMajorVerCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "MajorVer").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "u16Array").Str("membership", "m1MajorVer").Int("got", u16ArrayMajorVerCount).Errorf("slot u16Array@m1MajorVer (field MajorVer) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u16ArrayMajorVerCount)
 		return
 	}
 	if u16ArrayMajorVerCount == 1 {
@@ -1335,16 +1424,26 @@ func M1SampleReadRow[
 	// --- u32Array. ---
 	var u32ArraySequenceVal uint32
 	var u32ArraySequenceCount int
+	var u32ArraySequenceLastAttr int64
 	var u32ArrayCapBitsBitmap *roaring.Bitmap
+	var u32ArrayCapBitsCount int
+	var u32ArrayCapBitsLastAttr int64
 	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1Sequence:
+				if u32ArraySequenceLastAttr != attrJ+1 {
+					u32ArraySequenceLastAttr = attrJ + 1
+					u32ArraySequenceCount++
+				}
 				val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u32ArraySequenceVal = val
-				u32ArraySequenceCount++
 			case kindM1CapBits:
+				if u32ArrayCapBitsLastAttr != attrJ+1 {
+					u32ArrayCapBitsLastAttr = attrJ + 1
+					u32ArrayCapBitsCount++
+				}
 				for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					if u32ArrayCapBitsBitmap == nil {
 						u32ArrayCapBitsBitmap = roaring.New()
@@ -1355,12 +1454,16 @@ func M1SampleReadRow[
 		}
 	}
 	if u32ArraySequenceCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Sequence").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "m1Sequence").Int("got", u32ArraySequenceCount).Errorf("slot u32Array@m1Sequence (field Sequence) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArraySequenceCount)
 		return
 	}
 	if u32ArraySequenceCount == 1 {
 		row.Sequence = u32ArraySequenceVal
 		present = true
+	}
+	if u32ArrayCapBitsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "m1CapBits").Int("got", u32ArrayCapBitsCount).Errorf("slot u32Array@m1CapBits (field CapBits) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayCapBitsCount)
+		return
 	}
 	if u32ArrayCapBitsBitmap != nil {
 		row.CapBits = u32ArrayCapBitsBitmap
@@ -1369,19 +1472,23 @@ func M1SampleReadRow[
 	// --- u64Array. ---
 	var u64ArrayLatencyNanosVal uint64
 	var u64ArrayLatencyNanosCount int
+	var u64ArrayLatencyNanosLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1LatencyNanos:
+				if u64ArrayLatencyNanosLastAttr != attrJ+1 {
+					u64ArrayLatencyNanosLastAttr = attrJ + 1
+					u64ArrayLatencyNanosCount++
+				}
 				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				u64ArrayLatencyNanosVal = val
-				u64ArrayLatencyNanosCount++
 			}
 		}
 	}
 	if u64ArrayLatencyNanosCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "LatencyNanos").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "m1LatencyNanos").Int("got", u64ArrayLatencyNanosCount).Errorf("slot u64Array@m1LatencyNanos (field LatencyNanos) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayLatencyNanosCount)
 		return
 	}
 	if u64ArrayLatencyNanosCount == 1 {
@@ -1391,19 +1498,23 @@ func M1SampleReadRow[
 	// --- f32Array. ---
 	var f32ArrayCpuPctVal float32
 	var f32ArrayCpuPctCount int
+	var f32ArrayCpuPctLastAttr int64
 	nf32Array := f32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nf32Array; attrJ++ {
 		for membID := range f32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1CpuPct:
+				if f32ArrayCpuPctLastAttr != attrJ+1 {
+					f32ArrayCpuPctLastAttr = attrJ + 1
+					f32ArrayCpuPctCount++
+				}
 				val := f32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				f32ArrayCpuPctVal = val
-				f32ArrayCpuPctCount++
 			}
 		}
 	}
 	if f32ArrayCpuPctCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "CpuPct").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "f32Array").Str("membership", "m1CpuPct").Int("got", f32ArrayCpuPctCount).Errorf("slot f32Array@m1CpuPct (field CpuPct) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", f32ArrayCpuPctCount)
 		return
 	}
 	if f32ArrayCpuPctCount == 1 {
@@ -1413,19 +1524,23 @@ func M1SampleReadRow[
 	// --- f64Array. ---
 	var f64ArrayLoadAvg1Val float64
 	var f64ArrayLoadAvg1Count int
+	var f64ArrayLoadAvg1LastAttr int64
 	nf64Array := f64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nf64Array; attrJ++ {
 		for membID := range f64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1LoadAvg1:
+				if f64ArrayLoadAvg1LastAttr != attrJ+1 {
+					f64ArrayLoadAvg1LastAttr = attrJ + 1
+					f64ArrayLoadAvg1Count++
+				}
 				val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				f64ArrayLoadAvg1Val = val
-				f64ArrayLoadAvg1Count++
 			}
 		}
 	}
 	if f64ArrayLoadAvg1Count > 1 {
-		err = eb.Build().Int("row", i).Str("field", "LoadAvg1").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "f64Array").Str("membership", "m1LoadAvg1").Int("got", f64ArrayLoadAvg1Count).Errorf("slot f64Array@m1LoadAvg1 (field LoadAvg1) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", f64ArrayLoadAvg1Count)
 		return
 	}
 	if f64ArrayLoadAvg1Count == 1 {
@@ -1435,19 +1550,23 @@ func M1SampleReadRow[
 	// --- bool. ---
 	var boolHealthyVal bool
 	var boolHealthyCount int
+	var boolHealthyLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1Healthy:
+				if boolHealthyLastAttr != attrJ+1 {
+					boolHealthyLastAttr = attrJ + 1
+					boolHealthyCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolHealthyVal = val
-				boolHealthyCount++
 			}
 		}
 	}
 	if boolHealthyCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Healthy").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "m1Healthy").Int("got", boolHealthyCount).Errorf("slot bool@m1Healthy (field Healthy) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolHealthyCount)
 		return
 	}
 	if boolHealthyCount == 1 {
@@ -1457,25 +1576,33 @@ func M1SampleReadRow[
 	// --- blobArray. ---
 	var blobArrayPeerV4Val [4]byte
 	var blobArrayPeerV4Count int
+	var blobArrayPeerV4LastAttr int64
 	var blobArrayPeerV6Val [16]byte
 	var blobArrayPeerV6Count int
+	var blobArrayPeerV6LastAttr int64
 	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1PeerV4:
+				if blobArrayPeerV4LastAttr != attrJ+1 {
+					blobArrayPeerV4LastAttr = attrJ + 1
+					blobArrayPeerV4Count++
+				}
 				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				copy(blobArrayPeerV4Val[:], val)
-				blobArrayPeerV4Count++
 			case kindM1PeerV6:
+				if blobArrayPeerV6LastAttr != attrJ+1 {
+					blobArrayPeerV6LastAttr = attrJ + 1
+					blobArrayPeerV6Count++
+				}
 				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				copy(blobArrayPeerV6Val[:], val)
-				blobArrayPeerV6Count++
 			}
 		}
 	}
 	if blobArrayPeerV4Count > 1 {
-		err = eb.Build().Int("row", i).Str("field", "PeerV4").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "m1PeerV4").Int("got", blobArrayPeerV4Count).Errorf("slot blobArray@m1PeerV4 (field PeerV4) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayPeerV4Count)
 		return
 	}
 	if blobArrayPeerV4Count == 1 {
@@ -1483,7 +1610,7 @@ func M1SampleReadRow[
 		present = true
 	}
 	if blobArrayPeerV6Count > 1 {
-		err = eb.Build().Int("row", i).Str("field", "PeerV6").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "m1PeerV6").Int("got", blobArrayPeerV6Count).Errorf("slot blobArray@m1PeerV6 (field PeerV6) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayPeerV6Count)
 		return
 	}
 	if blobArrayPeerV6Count == 1 {
@@ -1493,19 +1620,23 @@ func M1SampleReadRow[
 	// --- timeArray. ---
 	var timeArrayLastSuccessVal time.Time
 	var timeArrayLastSuccessCount int
+	var timeArrayLastSuccessLastAttr int64
 	ntimeArray := timeArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntimeArray; attrJ++ {
 		for membID := range timeArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1LastSuccess:
+				if timeArrayLastSuccessLastAttr != attrJ+1 {
+					timeArrayLastSuccessLastAttr = attrJ + 1
+					timeArrayLastSuccessCount++
+				}
 				val := timeArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				timeArrayLastSuccessVal = val
-				timeArrayLastSuccessCount++
 			}
 		}
 	}
 	if timeArrayLastSuccessCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "LastSuccess").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "timeArray").Str("membership", "m1LastSuccess").Int("got", timeArrayLastSuccessCount).Errorf("slot timeArray@m1LastSuccess (field LastSuccess) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", timeArrayLastSuccessCount)
 		return
 	}
 	if timeArrayLastSuccessCount == 1 {
@@ -1516,19 +1647,23 @@ func M1SampleReadRow[
 	// --- stringArray. ---
 	var stringArrayOperatorNameVal string
 	var stringArrayOperatorNameCount int
+	var stringArrayOperatorNameLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1OperatorName:
+				if stringArrayOperatorNameLastAttr != attrJ+1 {
+					stringArrayOperatorNameLastAttr = attrJ + 1
+					stringArrayOperatorNameCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayOperatorNameVal = val
-				stringArrayOperatorNameCount++
 			}
 		}
 	}
 	if stringArrayOperatorNameCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "OperatorName").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "m1OperatorName").Int("got", stringArrayOperatorNameCount).Errorf("slot stringArray@m1OperatorName (field OperatorName) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOperatorNameCount)
 		return
 	}
 	if stringArrayOperatorNameCount == 1 {
@@ -1538,16 +1673,26 @@ func M1SampleReadRow[
 	}
 	// --- textArray. ---
 	var textArrayTagsSlice []string
+	var textArrayTagsCount int
+	var textArrayTagsLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindM1Tags:
+				if textArrayTagsLastAttr != attrJ+1 {
+					textArrayTagsLastAttr = attrJ + 1
+					textArrayTagsCount++
+				}
 				for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					textArrayTagsSlice = append(textArrayTagsSlice, v)
 				}
 			}
 		}
+	}
+	if textArrayTagsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "m1Tags").Int("got", textArrayTagsCount).Errorf("slot textArray@m1Tags (field Tags) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayTagsCount)
+		return
 	}
 	if textArrayTagsSlice != nil {
 		row.Tags = textArrayTagsSlice

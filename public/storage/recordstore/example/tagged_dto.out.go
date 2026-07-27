@@ -5,6 +5,7 @@ package example
 import (
 	"iter"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
@@ -85,8 +86,9 @@ type taggedSymbolArrayMembsReadI interface {
 
 // taggedReadRow reads row i as one optional Tagged component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -100,16 +102,26 @@ func taggedReadRow[
 ) (row Tagged, present bool, err error) {
 	// --- symbolArray. ---
 	var symbolArrayTagsSlice []string
+	var symbolArrayTagsCount int
+	var symbolArrayTagsLastAttr int64
 	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindDeviceTags:
+				if symbolArrayTagsLastAttr != attrJ+1 {
+					symbolArrayTagsLastAttr = attrJ + 1
+					symbolArrayTagsCount++
+				}
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayTagsSlice = append(symbolArrayTagsSlice, v)
 				}
 			}
 		}
+	}
+	if symbolArrayTagsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "deviceTags").Int("got", symbolArrayTagsCount).Errorf("slot symbolArray@deviceTags (field Tags) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayTagsCount)
+		return
 	}
 	if symbolArrayTagsSlice != nil {
 		row.Tags = symbolArrayTagsSlice

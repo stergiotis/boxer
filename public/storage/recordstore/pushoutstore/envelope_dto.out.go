@@ -80,8 +80,9 @@ type envelopeEnvBlobMembsReadI interface {
 
 // envelopeReadRow reads row i as one optional Envelope component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -96,21 +97,25 @@ func envelopeReadRow[
 	// --- envBlob. ---
 	var envBlobFramedVal []byte
 	var envBlobFramedCount int
+	var envBlobFramedLastAttr int64
 	nenvBlob := envBlobAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nenvBlob; attrJ++ {
 		for membID := range envBlobMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPushoutFramed:
+				if envBlobFramedLastAttr != attrJ+1 {
+					envBlobFramedLastAttr = attrJ + 1
+					envBlobFramedCount++
+				}
 				val := envBlobAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				cp := make([]byte, len(val))
 				copy(cp, val)
 				envBlobFramedVal = cp
-				envBlobFramedCount++
 			}
 		}
 	}
 	if envBlobFramedCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Framed").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "envBlob").Str("membership", "pushoutFramed").Int("got", envBlobFramedCount).Errorf("slot envBlob@pushoutFramed (field Framed) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", envBlobFramedCount)
 		return
 	}
 	if envBlobFramedCount == 1 {

@@ -520,38 +520,46 @@ func CapabilityGrantFillFromArrow[
 		// --- stringArray. ---
 		var stringArraySubjectVal string
 		var stringArraySubjectCount int
+		var stringArraySubjectLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindCgSubject:
+					if stringArraySubjectLastAttr != attrJ+1 {
+						stringArraySubjectLastAttr = attrJ + 1
+						stringArraySubjectCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArraySubjectVal = val
-					stringArraySubjectCount++
 				}
 			}
 		}
 		if stringArraySubjectCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Subject").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "cgSubject").Int("got", stringArraySubjectCount).Errorf("slot stringArray@cgSubject (field Subject) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArraySubjectCount)
 			return
 		}
 		c.Subject = append(c.Subject, stringArraySubjectVal)
 		// --- symbol. ---
 		var symbolCapabilityVal string
 		var symbolCapabilityCount int
+		var symbolCapabilityLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindCgCapability:
+					if symbolCapabilityLastAttr != attrJ+1 {
+						symbolCapabilityLastAttr = attrJ + 1
+						symbolCapabilityCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolCapabilityVal = val
-					symbolCapabilityCount++
 				}
 			}
 		}
 		if symbolCapabilityCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Capability").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "cgCapability").Int("got", symbolCapabilityCount).Errorf("slot symbol@cgCapability (field Capability) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolCapabilityCount)
 			return
 		}
 		c.Capability = append(c.Capability, symbolCapabilityVal)
@@ -580,35 +588,47 @@ func CapabilityGrantFillFromArrow[
 		// --- bool. ---
 		var boolActiveVal bool
 		var boolActiveCount int
+		var boolActiveLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindCgActive:
+					if boolActiveLastAttr != attrJ+1 {
+						boolActiveLastAttr = attrJ + 1
+						boolActiveCount++
+					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolActiveVal = val
-					boolActiveCount++
 				}
 			}
 		}
 		if boolActiveCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Active").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "cgActive").Int("got", boolActiveCount).Errorf("slot bool@cgActive (field Active) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolActiveCount)
 			return
 		}
 		c.Active = append(c.Active, boolActiveVal)
 		// --- foreignKey. ---
 		var foreignKeyGranterFactVal uint64
 		var foreignKeyGranterFactCount int
+		var foreignKeyGranterFactLastAttr int64
 		nforeignKey := foreignKeyAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nforeignKey; attrJ++ {
 			for membID := range foreignKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindCgGranter:
+					if foreignKeyGranterFactLastAttr != attrJ+1 {
+						foreignKeyGranterFactLastAttr = attrJ + 1
+						foreignKeyGranterFactCount++
+					}
 					val := foreignKeyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					foreignKeyGranterFactVal = val
-					foreignKeyGranterFactCount++
 				}
 			}
+		}
+		if foreignKeyGranterFactCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "foreignKey").Str("membership", "cgGranter").Int("got", foreignKeyGranterFactCount).Errorf("slot foreignKey@cgGranter (field GranterFact) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", foreignKeyGranterFactCount)
+			return
 		}
 		if foreignKeyGranterFactCount == 1 {
 			c.GranterFactVal = append(c.GranterFactVal, foreignKeyGranterFactVal)
@@ -624,8 +644,9 @@ func CapabilityGrantFillFromArrow[
 
 // CapabilityGrantReadRow reads row i as one optional CapabilityGrant component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -656,19 +677,23 @@ func CapabilityGrantReadRow[
 	// --- stringArray. ---
 	var stringArraySubjectVal string
 	var stringArraySubjectCount int
+	var stringArraySubjectLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindCgSubject:
+				if stringArraySubjectLastAttr != attrJ+1 {
+					stringArraySubjectLastAttr = attrJ + 1
+					stringArraySubjectCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArraySubjectVal = val
-				stringArraySubjectCount++
 			}
 		}
 	}
 	if stringArraySubjectCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Subject").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "cgSubject").Int("got", stringArraySubjectCount).Errorf("slot stringArray@cgSubject (field Subject) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArraySubjectCount)
 		return
 	}
 	if stringArraySubjectCount == 1 {
@@ -678,19 +703,23 @@ func CapabilityGrantReadRow[
 	// --- symbol. ---
 	var symbolCapabilityVal string
 	var symbolCapabilityCount int
+	var symbolCapabilityLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindCgCapability:
+				if symbolCapabilityLastAttr != attrJ+1 {
+					symbolCapabilityLastAttr = attrJ + 1
+					symbolCapabilityCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolCapabilityVal = val
-				symbolCapabilityCount++
 			}
 		}
 	}
 	if symbolCapabilityCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Capability").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "cgCapability").Int("got", symbolCapabilityCount).Errorf("slot symbol@cgCapability (field Capability) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolCapabilityCount)
 		return
 	}
 	if symbolCapabilityCount == 1 {
@@ -725,19 +754,23 @@ func CapabilityGrantReadRow[
 	// --- bool. ---
 	var boolActiveVal bool
 	var boolActiveCount int
+	var boolActiveLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindCgActive:
+				if boolActiveLastAttr != attrJ+1 {
+					boolActiveLastAttr = attrJ + 1
+					boolActiveCount++
+				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolActiveVal = val
-				boolActiveCount++
 			}
 		}
 	}
 	if boolActiveCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Active").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "cgActive").Int("got", boolActiveCount).Errorf("slot bool@cgActive (field Active) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolActiveCount)
 		return
 	}
 	if boolActiveCount == 1 {
@@ -747,19 +780,23 @@ func CapabilityGrantReadRow[
 	// --- foreignKey. ---
 	var foreignKeyGranterFactVal uint64
 	var foreignKeyGranterFactCount int
+	var foreignKeyGranterFactLastAttr int64
 	nforeignKey := foreignKeyAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nforeignKey; attrJ++ {
 		for membID := range foreignKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindCgGranter:
+				if foreignKeyGranterFactLastAttr != attrJ+1 {
+					foreignKeyGranterFactLastAttr = attrJ + 1
+					foreignKeyGranterFactCount++
+				}
 				val := foreignKeyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				foreignKeyGranterFactVal = val
-				foreignKeyGranterFactCount++
 			}
 		}
 	}
 	if foreignKeyGranterFactCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "GranterFact").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "foreignKey").Str("membership", "cgGranter").Int("got", foreignKeyGranterFactCount).Errorf("slot foreignKey@cgGranter (field GranterFact) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", foreignKeyGranterFactCount)
 		return
 	}
 	if foreignKeyGranterFactCount == 1 {

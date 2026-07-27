@@ -125,8 +125,9 @@ type snapshotSnapGraggleMembsReadI interface {
 
 // snapshotReadRow reads row i as one optional Snapshot component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -144,16 +145,26 @@ func snapshotReadRow[
 ) (row Snapshot, present bool, err error) {
 	// --- snapApplied. ---
 	var snapAppliedAppliedSlice []string
+	var snapAppliedAppliedCount int
+	var snapAppliedAppliedLastAttr int64
 	nsnapApplied := snapAppliedAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsnapApplied; attrJ++ {
 		for membID := range snapAppliedMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPushoutApplied:
+				if snapAppliedAppliedLastAttr != attrJ+1 {
+					snapAppliedAppliedLastAttr = attrJ + 1
+					snapAppliedAppliedCount++
+				}
 				for v := range snapAppliedAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					snapAppliedAppliedSlice = append(snapAppliedAppliedSlice, v)
 				}
 			}
 		}
+	}
+	if snapAppliedAppliedCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "snapApplied").Str("membership", "pushoutApplied").Int("got", snapAppliedAppliedCount).Errorf("slot snapApplied@pushoutApplied (field Applied) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", snapAppliedAppliedCount)
+		return
 	}
 	if snapAppliedAppliedSlice != nil {
 		row.Applied = snapAppliedAppliedSlice
@@ -162,21 +173,25 @@ func snapshotReadRow[
 	// --- snapGraggle. ---
 	var snapGraggleGraggleVal []byte
 	var snapGraggleGraggleCount int
+	var snapGraggleGraggleLastAttr int64
 	nsnapGraggle := snapGraggleAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsnapGraggle; attrJ++ {
 		for membID := range snapGraggleMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPushoutGraggle:
+				if snapGraggleGraggleLastAttr != attrJ+1 {
+					snapGraggleGraggleLastAttr = attrJ + 1
+					snapGraggleGraggleCount++
+				}
 				val := snapGraggleAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				cp := make([]byte, len(val))
 				copy(cp, val)
 				snapGraggleGraggleVal = cp
-				snapGraggleGraggleCount++
 			}
 		}
 	}
 	if snapGraggleGraggleCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Graggle").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "snapGraggle").Str("membership", "pushoutGraggle").Int("got", snapGraggleGraggleCount).Errorf("slot snapGraggle@pushoutGraggle (field Graggle) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", snapGraggleGraggleCount)
 		return
 	}
 	if snapGraggleGraggleCount == 1 {

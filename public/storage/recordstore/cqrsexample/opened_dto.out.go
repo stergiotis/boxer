@@ -80,8 +80,9 @@ type openedAcctOwnerMembsReadI interface {
 
 // openedReadRow reads row i as one optional Opened component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -96,19 +97,23 @@ func openedReadRow[
 	// --- acctOwner. ---
 	var acctOwnerOwnerVal string
 	var acctOwnerOwnerCount int
+	var acctOwnerOwnerLastAttr int64
 	nacctOwner := acctOwnerAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nacctOwner; attrJ++ {
 		for membID := range acctOwnerMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLedgerOwner:
+				if acctOwnerOwnerLastAttr != attrJ+1 {
+					acctOwnerOwnerLastAttr = attrJ + 1
+					acctOwnerOwnerCount++
+				}
 				val := acctOwnerAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				acctOwnerOwnerVal = val
-				acctOwnerOwnerCount++
 			}
 		}
 	}
 	if acctOwnerOwnerCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Owner").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "acctOwner").Str("membership", "ledgerOwner").Int("got", acctOwnerOwnerCount).Errorf("slot acctOwner@ledgerOwner (field Owner) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", acctOwnerOwnerCount)
 		return
 	}
 	if acctOwnerOwnerCount == 1 {

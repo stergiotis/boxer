@@ -80,8 +80,9 @@ type logEntryLogHashMembsReadI interface {
 
 // logEntryReadRow reads row i as one optional LogEntry component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -96,19 +97,23 @@ func logEntryReadRow[
 	// --- logHash. ---
 	var logHashHashVal string
 	var logHashHashCount int
+	var logHashHashLastAttr int64
 	nlogHash := logHashAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nlogHash; attrJ++ {
 		for membID := range logHashMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindPushoutHash:
+				if logHashHashLastAttr != attrJ+1 {
+					logHashHashLastAttr = attrJ + 1
+					logHashHashCount++
+				}
 				val := logHashAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				logHashHashVal = val
-				logHashHashCount++
 			}
 		}
 	}
 	if logHashHashCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Hash").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "logHash").Str("membership", "pushoutHash").Int("got", logHashHashCount).Errorf("slot logHash@pushoutHash (field Hash) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", logHashHashCount)
 		return
 	}
 	if logHashHashCount == 1 {

@@ -197,8 +197,9 @@ type accountStateSnapAsOfMembsReadI interface {
 
 // accountStateReadRow reads row i as one optional AccountState component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -225,19 +226,23 @@ func accountStateReadRow[
 	// --- snapOwner. ---
 	var snapOwnerOwnerVal string
 	var snapOwnerOwnerCount int
+	var snapOwnerOwnerLastAttr int64
 	nsnapOwner := snapOwnerAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsnapOwner; attrJ++ {
 		for membID := range snapOwnerMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLedgerSnapOwner:
+				if snapOwnerOwnerLastAttr != attrJ+1 {
+					snapOwnerOwnerLastAttr = attrJ + 1
+					snapOwnerOwnerCount++
+				}
 				val := snapOwnerAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				snapOwnerOwnerVal = val
-				snapOwnerOwnerCount++
 			}
 		}
 	}
 	if snapOwnerOwnerCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Owner").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "snapOwner").Str("membership", "ledgerSnapOwner").Int("got", snapOwnerOwnerCount).Errorf("slot snapOwner@ledgerSnapOwner (field Owner) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", snapOwnerOwnerCount)
 		return
 	}
 	if snapOwnerOwnerCount == 1 {
@@ -247,19 +252,23 @@ func accountStateReadRow[
 	// --- snapBalance. ---
 	var snapBalanceBalanceVal uint64
 	var snapBalanceBalanceCount int
+	var snapBalanceBalanceLastAttr int64
 	nsnapBalance := snapBalanceAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsnapBalance; attrJ++ {
 		for membID := range snapBalanceMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLedgerSnapBalance:
+				if snapBalanceBalanceLastAttr != attrJ+1 {
+					snapBalanceBalanceLastAttr = attrJ + 1
+					snapBalanceBalanceCount++
+				}
 				val := snapBalanceAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				snapBalanceBalanceVal = val
-				snapBalanceBalanceCount++
 			}
 		}
 	}
 	if snapBalanceBalanceCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Balance").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "snapBalance").Str("membership", "ledgerSnapBalance").Int("got", snapBalanceBalanceCount).Errorf("slot snapBalance@ledgerSnapBalance (field Balance) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", snapBalanceBalanceCount)
 		return
 	}
 	if snapBalanceBalanceCount == 1 {
@@ -269,19 +278,23 @@ func accountStateReadRow[
 	// --- snapClosed. ---
 	var snapClosedClosedVal bool
 	var snapClosedClosedCount int
+	var snapClosedClosedLastAttr int64
 	nsnapClosed := snapClosedAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsnapClosed; attrJ++ {
 		for membID := range snapClosedMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLedgerSnapClosed:
+				if snapClosedClosedLastAttr != attrJ+1 {
+					snapClosedClosedLastAttr = attrJ + 1
+					snapClosedClosedCount++
+				}
 				val := snapClosedAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				snapClosedClosedVal = val
-				snapClosedClosedCount++
 			}
 		}
 	}
 	if snapClosedClosedCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Closed").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "snapClosed").Str("membership", "ledgerSnapClosed").Int("got", snapClosedClosedCount).Errorf("slot snapClosed@ledgerSnapClosed (field Closed) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", snapClosedClosedCount)
 		return
 	}
 	if snapClosedClosedCount == 1 {
@@ -291,19 +304,23 @@ func accountStateReadRow[
 	// --- snapAsOf. ---
 	var snapAsOfAsOfVal uint64
 	var snapAsOfAsOfCount int
+	var snapAsOfAsOfLastAttr int64
 	nsnapAsOf := snapAsOfAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsnapAsOf; attrJ++ {
 		for membID := range snapAsOfMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLedgerSnapAsOf:
+				if snapAsOfAsOfLastAttr != attrJ+1 {
+					snapAsOfAsOfLastAttr = attrJ + 1
+					snapAsOfAsOfCount++
+				}
 				val := snapAsOfAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				snapAsOfAsOfVal = val
-				snapAsOfAsOfCount++
 			}
 		}
 	}
 	if snapAsOfAsOfCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "AsOf").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "snapAsOf").Str("membership", "ledgerSnapAsOf").Int("got", snapAsOfAsOfCount).Errorf("slot snapAsOf@ledgerSnapAsOf (field AsOf) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", snapAsOfAsOfCount)
 		return
 	}
 	if snapAsOfAsOfCount == 1 {

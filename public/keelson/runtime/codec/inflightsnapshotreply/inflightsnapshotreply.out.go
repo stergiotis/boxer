@@ -682,109 +682,219 @@ func InflightSnapshotReplyFillFromArrow[
 		c.At = append(c.At, time.Unix(0, int64(tsCol.Value(i))).UTC())
 		// --- stringArray. ---
 		var stringArrayIdsSlice []string
+		var stringArrayIdsCount int
+		var stringArrayIdsLastAttr int64
 		var stringArrayOwnerAppIdsSlice []string
+		var stringArrayOwnerAppIdsCount int
+		var stringArrayOwnerAppIdsLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindInflightTaskId:
+					if stringArrayIdsLastAttr != attrJ+1 {
+						stringArrayIdsLastAttr = attrJ + 1
+						stringArrayIdsCount++
+					}
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArrayIdsSlice = append(stringArrayIdsSlice, v)
 					}
 				case kindInflightAppId:
+					if stringArrayOwnerAppIdsLastAttr != attrJ+1 {
+						stringArrayOwnerAppIdsLastAttr = attrJ + 1
+						stringArrayOwnerAppIdsCount++
+					}
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArrayOwnerAppIdsSlice = append(stringArrayOwnerAppIdsSlice, v)
 					}
 				}
 			}
 		}
+		if stringArrayIdsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "inflightTaskId").Int("got", stringArrayIdsCount).Errorf("slot stringArray@inflightTaskId (field Ids) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayIdsCount)
+			return
+		}
 		c.Ids = append(c.Ids, stringArrayIdsSlice)
+		if stringArrayOwnerAppIdsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "inflightAppId").Int("got", stringArrayOwnerAppIdsCount).Errorf("slot stringArray@inflightAppId (field OwnerAppIds) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOwnerAppIdsCount)
+			return
+		}
 		c.OwnerAppIds = append(c.OwnerAppIds, stringArrayOwnerAppIdsSlice)
 		// --- symbolArray. ---
 		var symbolArrayKindsSlice []string
+		var symbolArrayKindsCount int
+		var symbolArrayKindsLastAttr int64
 		var symbolArrayStatesSlice []string
+		var symbolArrayStatesCount int
+		var symbolArrayStatesLastAttr int64
 		var symbolArrayUnitsSlice []string
+		var symbolArrayUnitsCount int
+		var symbolArrayUnitsLastAttr int64
 		nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindInflightTaskKind:
+					if symbolArrayKindsLastAttr != attrJ+1 {
+						symbolArrayKindsLastAttr = attrJ + 1
+						symbolArrayKindsCount++
+					}
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayKindsSlice = append(symbolArrayKindsSlice, v)
 					}
 				case kindInflightState:
+					if symbolArrayStatesLastAttr != attrJ+1 {
+						symbolArrayStatesLastAttr = attrJ + 1
+						symbolArrayStatesCount++
+					}
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayStatesSlice = append(symbolArrayStatesSlice, v)
 					}
 				case kindInflightUnit:
+					if symbolArrayUnitsLastAttr != attrJ+1 {
+						symbolArrayUnitsLastAttr = attrJ + 1
+						symbolArrayUnitsCount++
+					}
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayUnitsSlice = append(symbolArrayUnitsSlice, v)
 					}
 				}
 			}
 		}
+		if symbolArrayKindsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "inflightTaskKind").Int("got", symbolArrayKindsCount).Errorf("slot symbolArray@inflightTaskKind (field Kinds) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayKindsCount)
+			return
+		}
 		c.Kinds = append(c.Kinds, symbolArrayKindsSlice)
+		if symbolArrayStatesCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "inflightState").Int("got", symbolArrayStatesCount).Errorf("slot symbolArray@inflightState (field States) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayStatesCount)
+			return
+		}
 		c.States = append(c.States, symbolArrayStatesSlice)
+		if symbolArrayUnitsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "inflightUnit").Int("got", symbolArrayUnitsCount).Errorf("slot symbolArray@inflightUnit (field Units) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayUnitsCount)
+			return
+		}
 		c.Units = append(c.Units, symbolArrayUnitsSlice)
 		// --- textArray. ---
 		var textArrayTitlesSlice []string
+		var textArrayTitlesCount int
+		var textArrayTitlesLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindInflightTitle:
+					if textArrayTitlesLastAttr != attrJ+1 {
+						textArrayTitlesLastAttr = attrJ + 1
+						textArrayTitlesCount++
+					}
 					for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						textArrayTitlesSlice = append(textArrayTitlesSlice, v)
 					}
 				}
 			}
 		}
+		if textArrayTitlesCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "inflightTitle").Int("got", textArrayTitlesCount).Errorf("slot textArray@inflightTitle (field Titles) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayTitlesCount)
+			return
+		}
 		c.Titles = append(c.Titles, textArrayTitlesSlice)
 		// --- i64Array. ---
 		var i64ArrayCreatedAtMssSlice []int64
+		var i64ArrayCreatedAtMssCount int
+		var i64ArrayCreatedAtMssLastAttr int64
 		var i64ArrayLastEmitMssSlice []int64
+		var i64ArrayLastEmitMssCount int
+		var i64ArrayLastEmitMssLastAttr int64
 		var i64ArrayEtaMssSlice []int64
+		var i64ArrayEtaMssCount int
+		var i64ArrayEtaMssLastAttr int64
 		ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
 			for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindInflightCreatedAtMs:
+					if i64ArrayCreatedAtMssLastAttr != attrJ+1 {
+						i64ArrayCreatedAtMssLastAttr = attrJ + 1
+						i64ArrayCreatedAtMssCount++
+					}
 					for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						i64ArrayCreatedAtMssSlice = append(i64ArrayCreatedAtMssSlice, v)
 					}
 				case kindInflightLastEmitMs:
+					if i64ArrayLastEmitMssLastAttr != attrJ+1 {
+						i64ArrayLastEmitMssLastAttr = attrJ + 1
+						i64ArrayLastEmitMssCount++
+					}
 					for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						i64ArrayLastEmitMssSlice = append(i64ArrayLastEmitMssSlice, v)
 					}
 				case kindInflightEtaMs:
+					if i64ArrayEtaMssLastAttr != attrJ+1 {
+						i64ArrayEtaMssLastAttr = attrJ + 1
+						i64ArrayEtaMssCount++
+					}
 					for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						i64ArrayEtaMssSlice = append(i64ArrayEtaMssSlice, v)
 					}
 				}
 			}
 		}
+		if i64ArrayCreatedAtMssCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "inflightCreatedAtMs").Int("got", i64ArrayCreatedAtMssCount).Errorf("slot i64Array@inflightCreatedAtMs (field CreatedAtMss) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArrayCreatedAtMssCount)
+			return
+		}
 		c.CreatedAtMss = append(c.CreatedAtMss, i64ArrayCreatedAtMssSlice)
+		if i64ArrayLastEmitMssCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "inflightLastEmitMs").Int("got", i64ArrayLastEmitMssCount).Errorf("slot i64Array@inflightLastEmitMs (field LastEmitMss) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArrayLastEmitMssCount)
+			return
+		}
 		c.LastEmitMss = append(c.LastEmitMss, i64ArrayLastEmitMssSlice)
+		if i64ArrayEtaMssCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "inflightEtaMs").Int("got", i64ArrayEtaMssCount).Errorf("slot i64Array@inflightEtaMs (field EtaMss) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArrayEtaMssCount)
+			return
+		}
 		c.EtaMss = append(c.EtaMss, i64ArrayEtaMssSlice)
 		// --- u64Array. ---
 		var u64ArrayCurrentsSlice []uint64
+		var u64ArrayCurrentsCount int
+		var u64ArrayCurrentsLastAttr int64
 		var u64ArrayTotalsSlice []uint64
+		var u64ArrayTotalsCount int
+		var u64ArrayTotalsLastAttr int64
 		nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindInflightCurrent:
+					if u64ArrayCurrentsLastAttr != attrJ+1 {
+						u64ArrayCurrentsLastAttr = attrJ + 1
+						u64ArrayCurrentsCount++
+					}
 					for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u64ArrayCurrentsSlice = append(u64ArrayCurrentsSlice, v)
 					}
 				case kindInflightTotal:
+					if u64ArrayTotalsLastAttr != attrJ+1 {
+						u64ArrayTotalsLastAttr = attrJ + 1
+						u64ArrayTotalsCount++
+					}
 					for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u64ArrayTotalsSlice = append(u64ArrayTotalsSlice, v)
 					}
 				}
 			}
 		}
+		if u64ArrayCurrentsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "inflightCurrent").Int("got", u64ArrayCurrentsCount).Errorf("slot u64Array@inflightCurrent (field Currents) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayCurrentsCount)
+			return
+		}
 		c.Currents = append(c.Currents, u64ArrayCurrentsSlice)
+		if u64ArrayTotalsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "inflightTotal").Int("got", u64ArrayTotalsCount).Errorf("slot u64Array@inflightTotal (field Totals) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayTotalsCount)
+			return
+		}
 		c.Totals = append(c.Totals, u64ArrayTotalsSlice)
 	}
 	return
@@ -792,8 +902,9 @@ func InflightSnapshotReplyFillFromArrow[
 
 // InflightSnapshotReplyReadRow reads row i as one optional InflightSnapshotReply component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -823,25 +934,45 @@ func InflightSnapshotReplyReadRow[
 ) (row InflightSnapshotReply, present bool, err error) {
 	// --- stringArray. ---
 	var stringArrayIdsSlice []string
+	var stringArrayIdsCount int
+	var stringArrayIdsLastAttr int64
 	var stringArrayOwnerAppIdsSlice []string
+	var stringArrayOwnerAppIdsCount int
+	var stringArrayOwnerAppIdsLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindInflightTaskId:
+				if stringArrayIdsLastAttr != attrJ+1 {
+					stringArrayIdsLastAttr = attrJ + 1
+					stringArrayIdsCount++
+				}
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayIdsSlice = append(stringArrayIdsSlice, v)
 				}
 			case kindInflightAppId:
+				if stringArrayOwnerAppIdsLastAttr != attrJ+1 {
+					stringArrayOwnerAppIdsLastAttr = attrJ + 1
+					stringArrayOwnerAppIdsCount++
+				}
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayOwnerAppIdsSlice = append(stringArrayOwnerAppIdsSlice, v)
 				}
 			}
 		}
 	}
+	if stringArrayIdsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "inflightTaskId").Int("got", stringArrayIdsCount).Errorf("slot stringArray@inflightTaskId (field Ids) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayIdsCount)
+		return
+	}
 	if stringArrayIdsSlice != nil {
 		row.Ids = stringArrayIdsSlice
 		present = true
+	}
+	if stringArrayOwnerAppIdsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "inflightAppId").Int("got", stringArrayOwnerAppIdsCount).Errorf("slot stringArray@inflightAppId (field OwnerAppIds) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOwnerAppIdsCount)
+		return
 	}
 	if stringArrayOwnerAppIdsSlice != nil {
 		row.OwnerAppIds = stringArrayOwnerAppIdsSlice
@@ -849,34 +980,64 @@ func InflightSnapshotReplyReadRow[
 	}
 	// --- symbolArray. ---
 	var symbolArrayKindsSlice []string
+	var symbolArrayKindsCount int
+	var symbolArrayKindsLastAttr int64
 	var symbolArrayStatesSlice []string
+	var symbolArrayStatesCount int
+	var symbolArrayStatesLastAttr int64
 	var symbolArrayUnitsSlice []string
+	var symbolArrayUnitsCount int
+	var symbolArrayUnitsLastAttr int64
 	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindInflightTaskKind:
+				if symbolArrayKindsLastAttr != attrJ+1 {
+					symbolArrayKindsLastAttr = attrJ + 1
+					symbolArrayKindsCount++
+				}
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayKindsSlice = append(symbolArrayKindsSlice, v)
 				}
 			case kindInflightState:
+				if symbolArrayStatesLastAttr != attrJ+1 {
+					symbolArrayStatesLastAttr = attrJ + 1
+					symbolArrayStatesCount++
+				}
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayStatesSlice = append(symbolArrayStatesSlice, v)
 				}
 			case kindInflightUnit:
+				if symbolArrayUnitsLastAttr != attrJ+1 {
+					symbolArrayUnitsLastAttr = attrJ + 1
+					symbolArrayUnitsCount++
+				}
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayUnitsSlice = append(symbolArrayUnitsSlice, v)
 				}
 			}
 		}
 	}
+	if symbolArrayKindsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "inflightTaskKind").Int("got", symbolArrayKindsCount).Errorf("slot symbolArray@inflightTaskKind (field Kinds) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayKindsCount)
+		return
+	}
 	if symbolArrayKindsSlice != nil {
 		row.Kinds = symbolArrayKindsSlice
 		present = true
 	}
+	if symbolArrayStatesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "inflightState").Int("got", symbolArrayStatesCount).Errorf("slot symbolArray@inflightState (field States) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayStatesCount)
+		return
+	}
 	if symbolArrayStatesSlice != nil {
 		row.States = symbolArrayStatesSlice
 		present = true
+	}
+	if symbolArrayUnitsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "inflightUnit").Int("got", symbolArrayUnitsCount).Errorf("slot symbolArray@inflightUnit (field Units) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayUnitsCount)
+		return
 	}
 	if symbolArrayUnitsSlice != nil {
 		row.Units = symbolArrayUnitsSlice
@@ -884,16 +1045,26 @@ func InflightSnapshotReplyReadRow[
 	}
 	// --- textArray. ---
 	var textArrayTitlesSlice []string
+	var textArrayTitlesCount int
+	var textArrayTitlesLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindInflightTitle:
+				if textArrayTitlesLastAttr != attrJ+1 {
+					textArrayTitlesLastAttr = attrJ + 1
+					textArrayTitlesCount++
+				}
 				for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					textArrayTitlesSlice = append(textArrayTitlesSlice, v)
 				}
 			}
 		}
+	}
+	if textArrayTitlesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "inflightTitle").Int("got", textArrayTitlesCount).Errorf("slot textArray@inflightTitle (field Titles) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayTitlesCount)
+		return
 	}
 	if textArrayTitlesSlice != nil {
 		row.Titles = textArrayTitlesSlice
@@ -901,34 +1072,64 @@ func InflightSnapshotReplyReadRow[
 	}
 	// --- i64Array. ---
 	var i64ArrayCreatedAtMssSlice []int64
+	var i64ArrayCreatedAtMssCount int
+	var i64ArrayCreatedAtMssLastAttr int64
 	var i64ArrayLastEmitMssSlice []int64
+	var i64ArrayLastEmitMssCount int
+	var i64ArrayLastEmitMssLastAttr int64
 	var i64ArrayEtaMssSlice []int64
+	var i64ArrayEtaMssCount int
+	var i64ArrayEtaMssLastAttr int64
 	ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
 		for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindInflightCreatedAtMs:
+				if i64ArrayCreatedAtMssLastAttr != attrJ+1 {
+					i64ArrayCreatedAtMssLastAttr = attrJ + 1
+					i64ArrayCreatedAtMssCount++
+				}
 				for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					i64ArrayCreatedAtMssSlice = append(i64ArrayCreatedAtMssSlice, v)
 				}
 			case kindInflightLastEmitMs:
+				if i64ArrayLastEmitMssLastAttr != attrJ+1 {
+					i64ArrayLastEmitMssLastAttr = attrJ + 1
+					i64ArrayLastEmitMssCount++
+				}
 				for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					i64ArrayLastEmitMssSlice = append(i64ArrayLastEmitMssSlice, v)
 				}
 			case kindInflightEtaMs:
+				if i64ArrayEtaMssLastAttr != attrJ+1 {
+					i64ArrayEtaMssLastAttr = attrJ + 1
+					i64ArrayEtaMssCount++
+				}
 				for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					i64ArrayEtaMssSlice = append(i64ArrayEtaMssSlice, v)
 				}
 			}
 		}
 	}
+	if i64ArrayCreatedAtMssCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "inflightCreatedAtMs").Int("got", i64ArrayCreatedAtMssCount).Errorf("slot i64Array@inflightCreatedAtMs (field CreatedAtMss) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArrayCreatedAtMssCount)
+		return
+	}
 	if i64ArrayCreatedAtMssSlice != nil {
 		row.CreatedAtMss = i64ArrayCreatedAtMssSlice
 		present = true
 	}
+	if i64ArrayLastEmitMssCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "inflightLastEmitMs").Int("got", i64ArrayLastEmitMssCount).Errorf("slot i64Array@inflightLastEmitMs (field LastEmitMss) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArrayLastEmitMssCount)
+		return
+	}
 	if i64ArrayLastEmitMssSlice != nil {
 		row.LastEmitMss = i64ArrayLastEmitMssSlice
 		present = true
+	}
+	if i64ArrayEtaMssCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "i64Array").Str("membership", "inflightEtaMs").Int("got", i64ArrayEtaMssCount).Errorf("slot i64Array@inflightEtaMs (field EtaMss) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", i64ArrayEtaMssCount)
+		return
 	}
 	if i64ArrayEtaMssSlice != nil {
 		row.EtaMss = i64ArrayEtaMssSlice
@@ -936,25 +1137,45 @@ func InflightSnapshotReplyReadRow[
 	}
 	// --- u64Array. ---
 	var u64ArrayCurrentsSlice []uint64
+	var u64ArrayCurrentsCount int
+	var u64ArrayCurrentsLastAttr int64
 	var u64ArrayTotalsSlice []uint64
+	var u64ArrayTotalsCount int
+	var u64ArrayTotalsLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindInflightCurrent:
+				if u64ArrayCurrentsLastAttr != attrJ+1 {
+					u64ArrayCurrentsLastAttr = attrJ + 1
+					u64ArrayCurrentsCount++
+				}
 				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u64ArrayCurrentsSlice = append(u64ArrayCurrentsSlice, v)
 				}
 			case kindInflightTotal:
+				if u64ArrayTotalsLastAttr != attrJ+1 {
+					u64ArrayTotalsLastAttr = attrJ + 1
+					u64ArrayTotalsCount++
+				}
 				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u64ArrayTotalsSlice = append(u64ArrayTotalsSlice, v)
 				}
 			}
 		}
 	}
+	if u64ArrayCurrentsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "inflightCurrent").Int("got", u64ArrayCurrentsCount).Errorf("slot u64Array@inflightCurrent (field Currents) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayCurrentsCount)
+		return
+	}
 	if u64ArrayCurrentsSlice != nil {
 		row.Currents = u64ArrayCurrentsSlice
 		present = true
+	}
+	if u64ArrayTotalsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "inflightTotal").Int("got", u64ArrayTotalsCount).Errorf("slot u64Array@inflightTotal (field Totals) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayTotalsCount)
+		return
 	}
 	if u64ArrayTotalsSlice != nil {
 		row.Totals = u64ArrayTotalsSlice

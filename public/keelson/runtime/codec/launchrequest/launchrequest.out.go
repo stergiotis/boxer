@@ -390,59 +390,71 @@ func LaunchRequestFillFromArrow[
 		// --- stringArray. ---
 		var stringArrayTargetAppIdVal string
 		var stringArrayTargetAppIdCount int
+		var stringArrayTargetAppIdLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindAppId:
+					if stringArrayTargetAppIdLastAttr != attrJ+1 {
+						stringArrayTargetAppIdLastAttr = attrJ + 1
+						stringArrayTargetAppIdCount++
+					}
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayTargetAppIdVal = val
-					stringArrayTargetAppIdCount++
 				}
 			}
 		}
 		if stringArrayTargetAppIdCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "TargetAppId").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Int("got", stringArrayTargetAppIdCount).Errorf("slot stringArray@appId (field TargetAppId) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayTargetAppIdCount)
 			return
 		}
 		c.TargetAppId = append(c.TargetAppId, stringArrayTargetAppIdVal)
 		// --- symbol. ---
 		var symbolConfigKindVal string
 		var symbolConfigKindCount int
+		var symbolConfigKindLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindLaunchConfigKind:
+					if symbolConfigKindLastAttr != attrJ+1 {
+						symbolConfigKindLastAttr = attrJ + 1
+						symbolConfigKindCount++
+					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolConfigKindVal = val
-					symbolConfigKindCount++
 				}
 			}
 		}
 		if symbolConfigKindCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "ConfigKind").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "launchConfigKind").Int("got", symbolConfigKindCount).Errorf("slot symbol@launchConfigKind (field ConfigKind) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolConfigKindCount)
 			return
 		}
 		c.ConfigKind = append(c.ConfigKind, symbolConfigKindVal)
 		// --- blobArray. ---
 		var blobArrayConfigVal []byte
 		var blobArrayConfigCount int
+		var blobArrayConfigLastAttr int64
 		nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
 				case kindLaunchConfig:
+					if blobArrayConfigLastAttr != attrJ+1 {
+						blobArrayConfigLastAttr = attrJ + 1
+						blobArrayConfigCount++
+					}
 					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					cp := make([]byte, len(val))
 					copy(cp, val)
 					blobArrayConfigVal = cp
-					blobArrayConfigCount++
 				}
 			}
 		}
 		if blobArrayConfigCount != 1 {
-			err = eb.Build().Int("row", i).Str("field", "Config").Errorf("expected exactly one occurrence per row")
+			err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "launchConfig").Int("got", blobArrayConfigCount).Errorf("slot blobArray@launchConfig (field Config) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayConfigCount)
 			return
 		}
 		c.Config = append(c.Config, blobArrayConfigVal)
@@ -452,8 +464,9 @@ func LaunchRequestFillFromArrow[
 
 // LaunchRequestReadRow reads row i as one optional LaunchRequest component: presence-
 // gated (a row carrying none of the kind's memberships yields
-// present=false), membership-matched. A duplicated scalar field is
-// an error; duplicated container memberships concatenate. Plain-
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
@@ -476,19 +489,23 @@ func LaunchRequestReadRow[
 	// --- stringArray. ---
 	var stringArrayTargetAppIdVal string
 	var stringArrayTargetAppIdCount int
+	var stringArrayTargetAppIdLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAppId:
+				if stringArrayTargetAppIdLastAttr != attrJ+1 {
+					stringArrayTargetAppIdLastAttr = attrJ + 1
+					stringArrayTargetAppIdCount++
+				}
 				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				stringArrayTargetAppIdVal = val
-				stringArrayTargetAppIdCount++
 			}
 		}
 	}
 	if stringArrayTargetAppIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "TargetAppId").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "appId").Int("got", stringArrayTargetAppIdCount).Errorf("slot stringArray@appId (field TargetAppId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayTargetAppIdCount)
 		return
 	}
 	if stringArrayTargetAppIdCount == 1 {
@@ -498,19 +515,23 @@ func LaunchRequestReadRow[
 	// --- symbol. ---
 	var symbolConfigKindVal string
 	var symbolConfigKindCount int
+	var symbolConfigKindLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLaunchConfigKind:
+				if symbolConfigKindLastAttr != attrJ+1 {
+					symbolConfigKindLastAttr = attrJ + 1
+					symbolConfigKindCount++
+				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolConfigKindVal = val
-				symbolConfigKindCount++
 			}
 		}
 	}
 	if symbolConfigKindCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "ConfigKind").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "launchConfigKind").Int("got", symbolConfigKindCount).Errorf("slot symbol@launchConfigKind (field ConfigKind) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolConfigKindCount)
 		return
 	}
 	if symbolConfigKindCount == 1 {
@@ -520,21 +541,25 @@ func LaunchRequestReadRow[
 	// --- blobArray. ---
 	var blobArrayConfigVal []byte
 	var blobArrayConfigCount int
+	var blobArrayConfigLastAttr int64
 	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindLaunchConfig:
+				if blobArrayConfigLastAttr != attrJ+1 {
+					blobArrayConfigLastAttr = attrJ + 1
+					blobArrayConfigCount++
+				}
 				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				cp := make([]byte, len(val))
 				copy(cp, val)
 				blobArrayConfigVal = cp
-				blobArrayConfigCount++
 			}
 		}
 	}
 	if blobArrayConfigCount > 1 {
-		err = eb.Build().Int("row", i).Str("field", "Config").Errorf("occurs more than once on the row")
+		err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "launchConfig").Int("got", blobArrayConfigCount).Errorf("slot blobArray@launchConfig (field Config) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayConfigCount)
 		return
 	}
 	if blobArrayConfigCount == 1 {
