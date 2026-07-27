@@ -19,6 +19,17 @@ package launchcfg
 
 import "time"
 
+// AppId is play's registered manifest id — the target another app names
+// in a `windowhost.open` request (ADR-0135 §SD7). Kept here, in the leaf
+// launch contract, rather than in the app package: importing `apps/play`
+// for a constant drags the whole playground — and its registry-registering
+// init() — into the importer, which silently registers the SQL playground
+// as a side effect (ADR-0017 §SD4). `play.AppId` re-exports this value, so
+// existing call sites are unaffected. Untyped so it flows into
+// app.AppIdT contexts (Manifest.Id, RequestOpen) without this leaf
+// depending on the app runtime. The appletcreatecfg.AppId precedent.
+const AppId = "github.com/stergiotis/boxer/apps/play"
+
 // Kind is the vocabulary kind name of this config — the value play's
 // manifest declares as LaunchKind and callers put in
 // launchrequest.LaunchRequest.ConfigKind.

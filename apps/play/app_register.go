@@ -152,7 +152,11 @@ var _ app.AppI = (*PlayLauncher)(nil)
 
 // AppId is play's registered manifest id — the target another app names
 // in a `windowhost.open` request (ADR-0135 §SD7).
-const AppId app.AppIdT = "github.com/stergiotis/boxer/apps/play"
+//
+// The value lives in the leaf [launchcfg] package so a requester can name
+// play without importing it (ADR-0017 §SD4); this re-export keeps the
+// existing `play.AppId` spelling working.
+const AppId app.AppIdT = launchcfg.AppId
 
 func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 	m = app.Manifest{
