@@ -84,6 +84,34 @@ canonical is the sole stored type is **pending** (refactor Phase 1).
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are
 append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-07-27 — B1 landed; C2's `,explode` was retired by ADR-0113 D1
+
+An ADR-corpus audit found this ADR's body and status line both out of date, in
+opposite directions.
+
+**B1 is done, not pending.** The 2026-06-07 status line records "removing the
+*derived* Go-type/shape fields so the canonical is the sole stored type" as
+pending refactor Phase 1. It has since landed: `mappingplan.TaggedField` and
+`PlainCol` store only `Canonical`, and `GoType()` / `IsSlice()` / `IsRoaring()`
+are methods derived from it on demand — the plan file says so at the field
+("derived from it on demand by the methods below, never stored") and the
+derived accessors panic on a nil canonical rather than falling back to a stored
+string. The canonical is the sole authoritative type, as B1 decided.
+
+**C2's `,explode` no longer exists.** The flag is rejected at tag-parse time
+with a message naming its replacement, and the N×1 shapes it selected were
+removed together with the `[]marshalltypes.X` slice carriers, by
+[ADR-0113](0113-leeway-marshall-nested-primary-consolidation.md) D1. A
+multi-element field now always emits one container attribute; the
+one-attribute-per-element spelling is a nested `[]Attr` section. C2's other
+half stands unchanged — explosion *was* a layout choice over the same value
+type, which is why retiring the flat spelling cost no expressiveness.
+
+Read C2 as history: the surviving decision is that multiplicity belongs to the
+value type (B1) and presence is orthogonal to it (B2), both of which hold.
+
 ## References
 
 - [ADR-0070 §Concept basis](0070-leeway-entity-assembly.md) — the shared axis model.

@@ -101,6 +101,37 @@ ownership exist (formerly ADR-0008 D1/SD3); this ADR only re-homes the decision.
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are
 append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-07-27 — D3 does not hold against a generated DML; retracted by ADR-0146 D6
+
+D3 states that two DTOs both declaring section `Foo` "cleanly produce two
+`BeginSectionFoo`…`EndSection` cycles". No generated DML supports this. The DML
+generator emits `beginSections()` once, from `BeginEntity`; `EndSection` returns
+the section object to `Initial`; nothing reopens it within the entity. A second
+visit therefore fails at the next `BeginAttribute` with
+`ErrInvalidStateTransition`, surfaced from `CommitEntity` as a bare
+`invalid state transition` that does not name the section.
+
+The claim survived because `RowComposer`'s tests drive a recording mock that
+logs calls without a state machine. Verified against
+`anchor.InEntityTestTable`: two DTOs on *different* sections compose cleanly
+(D1 holds); two DTOs on the *same* section fail, whether or not their
+memberships differ.
+
+The same defect makes `AddSingleValueAttributes` / `AddMultiValueAttributes`
+unusable for their stated purpose — producing
+[ADR-0008](0008-leeway-marshall-extensions.md) D2's per-section
+`1,1,…,>1,>1,…` ordering requires visiting a section in both passes, which is
+exactly the failing case. The existing test passes only because its one section
+emits in a single pass.
+
+D1 (multi-DTO composition) and D2 (per-row plain ownership) are unaffected and
+implemented. [ADR-0146](0146-leeway-marshall-component-read-contract.md) D6
+retracts D3 in favour of one section visit per entity, folding the cardinality
+ordering inside a single section frame; making sections re-enterable instead is
+recorded there as the rejected alternative, to revisit if a consumer appears.
+
 ## References
 
 - [ADR-0008](0008-leeway-marshall-extensions.md) — superseded; D1/SD3 re-cut here.

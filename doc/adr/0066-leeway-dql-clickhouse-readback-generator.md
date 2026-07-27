@@ -458,6 +458,28 @@ as `ValidatePlanAgainstIR(plan, ir) error`, so a consumer can verify a DTO Plan 
 schema at plan-build time without emitting SQL. `Generate` runs it first — behaviour
 unchanged. (Part of the 2026-06-19 marshall API stabilization, ADR-0008.)
 
+### 2026-07-27 — Open question 2 settled by what shipped; the artefacts generalise in ADR-0146
+
+**Open question 2 (named-tuple emission form) is resolved.** The generator emits the
+explicit `CAST(tuple(…), 'Tuple(slot T, …)')` form, and the emission table the question
+asked for is the existing `clickhouse.TechnologySpecificCodeGenerator`, reached through
+the generator's `chType`. Open questions 1 and 3 remain open as written.
+
+**The artefact trichotomy is being generalised.**
+[ADR-0146](0146-leeway-marshall-component-read-contract.md) lifts Presence / Validator /
+Projection out of this generator into a back-end-neutral `ReadContract` derived from the
+`mappingplan.Plan`, so the Go read paths stop re-deriving the same contract from Go shape
+and diverging from it. The ClickHouse artefacts are the reference implementation and their
+behaviour is unchanged; re-deriving *them* from `ReadContract` is explicitly deferred
+there, since this back-end already enforces the contract correctly.
+
+One property of the split is worth stating plainly for callers, because it is load-bearing
+and easy to miss: `Projection` alone is **not** the exact read. It locates an attribute
+with `indexOf`, so under a membership carried by more than one attribute it silently
+returns the first. `Validator` is what rejects that row, and `Filter` is the form that
+carries both. A caller embedding `Projection` without `Filter` gets first-match semantics,
+not conformance.
+
 ## References
 
 - [ADR-0008 — leeway marshall extensions](./0008-leeway-marshall-extensions.md) — the `Plan`, the `lw:` tag grammar, membership channels (D3), the Cut-2 parametrized/mixed channels the resolver anticipates.

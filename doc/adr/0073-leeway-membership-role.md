@@ -114,6 +114,31 @@ identity. **Implemented** (refactor Phase 3b, 2026-06-08).
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`. ADRs are
 append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-07-27 — E1's read-side rule does not reach the marshall codec
+
+The classifier, the default policy and the section use-aspects are implemented
+as recorded above. What an ADR-corpus audit clarified is how far E1's read-side
+consequence — "only primary memberships are discriminative" — actually reaches.
+
+`membershiprole` is consumed by `card`, the leeway widgets' `table2_emitter`,
+and `membership` itself. It is **not** consumed by `marshall/` or
+`recordstore/`. So in the DTO codec every membership on an attribute
+discriminates: a secondary, annotating tag whose name matches a DTO field's
+membership will pull that attribute's value into the field exactly as a primary
+one would. E1 holds in the card and widget read paths and not in the codec.
+
+This is a gap in adoption, not a change of decision.
+[ADR-0146](0146-leeway-marshall-component-read-contract.md) D3 closes it by
+having the codec take a `ClassifierI` alongside its `LookupI`, and records one
+trap worth repeating here: `DefaultClassifier`'s path-prefix convention
+(default `/`) classifies ordinary DTO memberships such as `health` or `battery`
+as **secondary**, so it is not a safe default for the codec. There the default
+is a nil classifier meaning all-primary — today's behaviour — with the
+`AspectSectionMembershipsAllPrimary` / `…AllSecondary` use-aspects
+short-circuiting it, as F intends.
+
 ## References
 
 - [ADR-0070 §Concept basis](0070-leeway-entity-assembly.md) — the shared axis model.

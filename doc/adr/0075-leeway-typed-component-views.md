@@ -239,6 +239,40 @@ to a follow-up.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-07-27 — the detection half was never built; ADR-0146 builds it
+
+An ADR-corpus audit found that the two-level detection this ADR decided on does
+not exist in any form. Correcting the record:
+
+- There is no `PresenceE`, no `Detect`, no `RequiredSections` and no
+  `SectionSpec` anywhere in the tree. The shipped `componentview.RendererI` is
+  `Kind() / Title() / Render(ids, value any)`; the `Detect` and
+  `RequiredSections` members of the decision's interface sketch were dropped,
+  and the package doc records detection as happening "upstream".
+- Upstream does not do it either. The demo constructs its `Component` values
+  unconditionally from an already-decoded flat DTO, gating only one of the
+  three on a non-empty slice — no population count, no `TableDesc` shape match.
+- The Consequences entry "the leeway-level approximate Presence is a
+  hand-written helper until/unless ADR-0066 codegen lands" is therefore wrong
+  as written: no such helper was built. The *deferral* of a codegen'd Presence
+  stands; what lapsed was the hand-written one it was deferred in favour of.
+
+What did ship is real and unaffected: the open renderer registry, the
+collapsing dispatcher with its generic fallback, the seed renderers, and the
+headless detect-and-decode *proof* in
+`marshallreflect_test/component_detect_test.go` — which exercises
+`GetNumberOfAttributes` plus a typed unmarshal by hand, i.e. demonstrates the
+mechanism without extracting it.
+
+[ADR-0146](0146-leeway-marshall-component-read-contract.md) D2 builds the
+primitive, with one refinement to this ADR's definition: `Exact` is decided
+from arity alone, without decoding values, because conflating conformance with
+a successful unmarshal makes detection cost a decode and hides decode failures
+inside a presence verdict. The `Absent | Approximate | Exact` vocabulary and
+the one-sided guarantee are kept as decided here.
+
 ## References
 
 - ECS background and the json stage-1 detect/unmarshal: `anchor/ecsdemo/EXPLANATION.md`,
