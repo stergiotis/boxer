@@ -93,7 +93,7 @@ identity is absent from the wire?
 - **C1 — Realizes decisions already accepted** rather than adding model.
 - **C2 — Uniformity** across the four read surfaces.
 - **C3 — Wire compatibility** — no format change, no migration.
-- **C4 — ECS legibility** — does the archetype become inspectable?
+- **C4 — ECS legibility** — does the archetype become inspectable per entity?
 - **C5 — Blast radius** on existing DTOs and generated code.
 
 **Assessment.** `++` strong positive, `+` positive, `−` negative, `−−` strong negative.
@@ -155,38 +155,62 @@ primary slot is an error on every read path. This closes the silent
 concatenation, the silent `Option` absence, and the SQL projection's
 first-match — the three rows of the table above become one behaviour.
 
-**D5 — Slot disjointness is the composition law, checked in a registry.** The
-ECS property that matters is that components compose independently, which is
-exactly: *two components may share a section, but must not claim the same
-`(section, primary membership)` slot.* A component registry holds the
-registered Plans and checks that pairwise. An archetype is a set of registered
-kinds; `ArchetypePresence` is the conjunction of their `Detect` results — the
-leeway twin of the `ecsdemo` stage-1 helper. The registry is a new package
-under `leeway/marshall`; it holds cross-kind state that does not belong in
-`mappingplan`.
+**D5 — Overlap is expected; the registry catalogues, it does not police.** A
+fact is not written once by one owner. Later stages fuse, enrich and aggregate
+entities — event-sourcing rules and similar — and those stages are not aware of
+every component in the system. No process holds the global component
+vocabulary, so nothing can decide that two kinds claiming one
+`(section, membership)` slot is a mistake, and refusing it at declaration time
+would forbid exactly the composition the pipeline exists to perform. **Detecting
+overwriting components is a non-goal.**
 
-The existing per-DTO guard is also wrong and is corrected here: `AddField` keys
-uniqueness on `membership + "\x00" + column`, **not** scoped by section, so it
-rejects a DTO declaring `tag,symbol` alongside `tag,u64Array` — unambiguous on
-read, because the two sections have separate readers. The key becomes
-section-scoped; the cross-DTO case moves to the registry, where it belongs.
+A component registry therefore holds contracts and answers questions —
+which kinds are known, which sections and slots they touch, and (via
+`ArchetypePresence` over per-kind `Detect` verdicts) which of them a row
+carries. That last question is the one that matters under fusion, because it is
+answerable by a stage that knows only its own components and ignores every
+attribute it does not claim. An archetype is a set of registered kinds.
 
-**D6 — One section visit per entity; ADR-0070 D3 is retracted.** ADR-0070 D3
-states that sections may repeat across DTOs in one entity, producing two
-`BeginSectionFoo`…`EndSection` cycles. No generated DML supports this:
-`BeginEntity` calls `beginSections()` once, `EndSection` returns the section to
-`Initial`, and nothing reopens it, so a second visit fails with a bare
-`invalid state transition`. It was only ever exercised against a recording mock
-with no state machine.
+*An earlier cut of this decision made slot disjointness a registration law. It
+was wrong on the premise above and is retracted; the registry keeps only the
+reporting surface (`Sections`, `SlotClaims`).*
 
-Rather than make sections re-enterable, the rule becomes one visit per section
-per entity, and [ADR-0008](0008-leeway-marshall-extensions.md) D2's per-section
-`1,1,…,>1,>1,…` cardinality ordering moves **inside** a single
-`GetSection`/`EndSection` frame — `marshalSection` already holds every field it
-needs. `RowComposer.AddSingleValueAttributes` / `AddMultiValueAttributes` are
-then removable: they exist to produce that ordering across two passes, and any
-section holding fields of both cardinality classes makes them visit it twice,
-which is the failure above. The API has no consumers outside its own tests.
+The per-DTO uniqueness guard is a different thing and stays, because it is
+decidable: within ONE DTO, two fields claiming one slot is unambiguously an
+authoring error. It was keyed on `membership + "\x00" + column`, **not** scoped
+by section, so it rejected a DTO declaring `tag,symbol` alongside
+`tag,u64Array` — unambiguous on read, because the two sections have separate
+readers. The key becomes section-scoped.
+
+**D6 — One section FRAME per entity, shared by every contributor; ADR-0070 D3
+is retracted.** ADR-0070 D3 states that sections may repeat across DTOs in one
+entity, producing two `BeginSectionFoo`…`EndSection` cycles. No generated DML
+supports this: `BeginEntity` calls `beginSections()` once, `EndSection` returns
+the section to `Initial`, and nothing reopens it, so a second visit fails with a
+bare `invalid state transition`. It was only ever exercised against a recording
+mock with no state machine.
+
+Since D5 makes overlap normal rather than exceptional, the write path has to be
+able to express it. `RowComposer` buffers each DTO's per-section attributes and
+writes them at `CommitRow`, one frame per section carrying every contribution in
+call order. Making sections re-enterable in the DML would also work and is
+rejected as far more invasive — it changes every generated DML's state machine
+and per-section attribute counter to reach the same wire.
+
+The cost is error timing: a failure inside the attribute emit surfaces from
+`CommitRow` rather than from the `AddSections` call that supplied it, and names
+the section. Everything decidable from the DTO alone — an unresolvable plan, a
+non-struct row — is still reported by the call that passed it.
+
+`RowComposer.AddSingleValueAttributes` / `AddMultiValueAttributes` are removed.
+They ordered a section's attributes by RUNTIME cardinality across two passes,
+which requires visiting a section twice; any section holding fields of both
+classes broke them. The ordering they produced was never an accepted decision —
+[ADR-0071](0071-leeway-value-and-emission.md) C1 asks only for a STATIC
+scalar-before-container partition, which is untouched — and reinstating it would
+mean sorting attributes at runtime in both front-ends, changing the wire for
+existing data to satisfy no consumer. [ADR-0101](0101-leeway-marshall-mixed-shape-sections.md)
+D7, which named the two passes, is superseded there.
 
 ### Scope and phasing
 
@@ -195,16 +219,17 @@ which is the failure above. The API has no consumers outside its own tests.
   `FillFromArrow` / `ReadRow`. ✓ Landed in two parts, because the codegen half
   regenerates 44 artefacts and its diff had to stay separable from the runtime
   half: **M2a** the reflect decode, **M2b** the two emitters.
-- **M3 — the registry + the section-scoped uniqueness key.** ✓
+- **M3 — the registry + the section-scoped uniqueness key.** ✓ Re-cut once D5
+  changed: the disjointness law it originally shipped is gone.
 - **M4 — role filtering**, inert by default. ✓ Reflect front-end only:
   generated codecs resolve memberships to package-level `kindXxx` vars at init
   and take no per-read policy, so giving them a classifier means a signature
   change across every generated codec. With the default the two front-ends
   agree exactly, so the asymmetry only exists for a caller that opts in; taking
   it to codegen waits for a consumer.
-- **M5 — the single-section-visit rule** and the two-pass removal. ✓ One
-  correction to D6 as written: the runtime-cardinality ordering is **dropped**,
-  not folded into the section frame. Folding it would reorder attributes at
+- **M5 — the shared section frame** and the two-pass removal. ✓ One
+  correction to D6 as first written: the runtime-cardinality ordering is
+  **dropped**, not folded into the section frame. Folding it would reorder attributes at
   runtime in the reflect front-end only, breaking the byte-parity invariant with
   marshallgen's `BuildEntities`; matching it in codegen would change the wire for
   existing data to satisfy no consumer. ADR-0071 C1's static

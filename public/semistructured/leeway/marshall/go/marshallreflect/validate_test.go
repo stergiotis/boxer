@@ -77,7 +77,12 @@ func TestMarshal_MissingMethodIsAnError(t *testing.T) {
 // The same backstop on the RowComposer entry points.
 func TestRowComposer_MissingMethodIsAnError(t *testing.T) {
 	c := marshallreflect.NewRowComposer(&recordingDML{}, marshallreflect.MapLookup{"m": 1})
-	err := c.BeginRow(validateMissingSectionDrone{Id: 1, NaturalKey: []byte("k"), Val: "v"})
+	// BeginRow buffers sections rather than writing them (ADR-0146 D6), so a
+	// DML missing a section getter is reported by CommitRow — the emit's error
+	// timing, documented on RowComposer. It is still an error, not a panic, and
+	// it still names the missing method.
+	require.NoError(t, c.BeginRow(validateMissingSectionDrone{Id: 1, NaturalKey: []byte("k"), Val: "v"}))
+	err := c.CommitRow()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "GetSectionBaz")
 }

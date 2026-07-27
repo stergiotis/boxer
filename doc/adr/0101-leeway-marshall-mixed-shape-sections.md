@@ -502,6 +502,10 @@ changing the wire for existing data to satisfy no consumer — so it is dropped
 rather than relocated. The classification D7 describes is still how a
 mixed-shape attribute behaves; it simply no longer selects a pass.
 
+`RowComposer` now buffers each DTO's per-section attributes and writes them at
+`CommitRow`, one frame per section carrying every contribution — so several
+DTOs may contribute to one section, which the passes could not express either.
+
 D1–D6 and the subsidiary decisions are unaffected: the zip rule, the S = 0
 splice, and the one-attribute-per-row shape all stand, and the round-trip tests
 that covered them now drive a single `AddSections` call per row.

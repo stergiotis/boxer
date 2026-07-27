@@ -91,42 +91,52 @@ func marshalPlain(dml, row reflect.Value, plan *mappingplan.Plan) (err error) {
 }
 
 func marshalSection(dml, row reflect.Value, g goplan.SectionGroup, lookup LookupI) (err error) {
-	method := mappingplan.UpperFirst(g.Section)
-	sec := mustCall(dml, "GetSection"+method)[0]
+	sec := openSection(dml, g.Section)
+	if err = emitSectionAttributes(sec, row, g, lookup); err != nil {
+		return
+	}
+	closeSection(sec)
+	return
+}
 
+// openSection / closeSection are the section FRAME, split from the emit so a
+// caller can open a section once and write several DTOs' attributes into it
+// (RowComposer). A section frame is opened once per entity and closed once —
+// the generated DML does not reopen one — so anything wanting to contribute to
+// a section another DTO also touches has to share the frame rather than take
+// its own (ADR-0146 D6).
+func openSection(dml reflect.Value, section string) reflect.Value {
+	return mustCall(dml, "GetSection"+mappingplan.UpperFirst(section))[0]
+}
+
+func closeSection(sec reflect.Value) {
+	mustCall(sec, "EndSection")
+}
+
+// emitSectionAttributes writes one row's attributes for a section into an
+// ALREADY-OPEN frame. It never opens or closes the frame, so it composes.
+func emitSectionAttributes(sec, row reflect.Value, g goplan.SectionGroup, lookup LookupI) (err error) {
 	if ts, ok := g.TupleSpec(); ok {
 		// Dynamic-membership tuple: one attribute per element of the outer
 		// slice, each with its own membership (ADR-0103). Dispatched before
 		// the sub-column-count split — a tuple may have any S + C ≥ 1.
-		err = marshalTupleSection(sec, row, g, ts, lookup)
-		if err != nil {
-			return
-		}
-		mustCall(sec, "EndSection")
-		return
+		return marshalTupleSection(sec, row, g, ts, lookup)
 	}
 
 	if len(g.SubColumns) > 1 {
-		// One tuple attribute per row; the shared container length drives
-		// the cardinality pass (N ≤ 1 single-value, N > 1 multi-value) and
-		// the S = 0 splice — ADR-0101 D7/D2. All-scalar tuples remain
-		// single-value.
+		// One tuple attribute per row, unless the S = 0 splice applies
+		// (ADR-0101 D2).
 		if multiSubColumnEmits(row, g) {
-			err = marshalMultiSubColumn(sec, row, g, lookup)
-			if err != nil {
-				return
-			}
+			return marshalMultiSubColumn(sec, row, g, lookup)
 		}
-		mustCall(sec, "EndSection")
 		return
 	}
+
 	for _, f := range g.SubColumns[0].Fields {
-		err = marshalField(sec, row, f, lookup)
-		if err != nil {
+		if err = marshalField(sec, row, f, lookup); err != nil {
 			return
 		}
 	}
-	mustCall(sec, "EndSection")
 	return
 }
 

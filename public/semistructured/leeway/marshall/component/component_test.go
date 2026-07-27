@@ -1,9 +1,15 @@
 package component_test
 
-// ADR-0146 D5: the registry's law is that two components may share a SECTION
-// but may not claim the same SLOT. The contracts here come from real DTOs
-// through marshallreflect, so the test exercises the same derivation the codec
-// uses rather than a hand-built approximation of it.
+// ADR-0146 D5: the registry is a CATALOGUE, not a gatekeeper. Facts are fused,
+// enriched and aggregated by later stages that do not know every component, so
+// no process holds the global vocabulary and slot overlap cannot be policed at
+// declaration time — detecting overwriting components is a non-goal. What the
+// registry answers is which kinds are known and what they claim; which of them
+// a row actually carries is Detect's question.
+//
+// The contracts here come from real DTOs through marshallreflect, so the tests
+// exercise the same derivation the codec uses rather than a hand-built
+// approximation of it.
 
 import (
 	"testing"
@@ -32,7 +38,8 @@ type posture struct {
 	Grade string   `lw:"devicePosture,symbol"`
 }
 
-// shadowIdentity claims identity's slot — the case the law forbids.
+// shadowIdentity claims identity's slot. Two components reading one attribute
+// is legal: it is what a fusion stage produces when it does not know both.
 type shadowIdentity struct {
 	_     struct{} `kind:"shadowIdentity"`
 	ID    uint64   `lw:",id"`
@@ -81,7 +88,7 @@ func contractOf[T any](t *testing.T) mappingplan.ReadContract {
 	return c
 }
 
-func TestRegistry_SharedSectionDistinctSlotsIsAllowed(t *testing.T) {
+func TestRegistry_SharedSectionIsAllowed(t *testing.T) {
 	r := component.New()
 	require.NoError(t, r.Register(contractOf[identity](t)))
 	require.NoError(t, r.Register(contractOf[posture](t)),
@@ -93,43 +100,31 @@ func TestRegistry_SharedSectionDistinctSlotsIsAllowed(t *testing.T) {
 	require.ElementsMatch(t, []string{"identity", "optionalOnly", "posture"}, sections["symbol"])
 }
 
-func TestRegistry_SameSlotIsRefused(t *testing.T) {
+func TestRegistry_SameSlotIsAllowedAndReported(t *testing.T) {
 	r := component.New()
 	require.NoError(t, r.Register(contractOf[identity](t)))
-	err := r.Register(contractOf[shadowIdentity](t))
-	require.Error(t, err)
-	require.ErrorContains(t, err, "identity")
-	require.ErrorContains(t, err, "shadowIdentity")
-	require.ErrorContains(t, err, "symbol")
-	require.ErrorContains(t, err, "deviceStatus")
+	require.NoError(t, r.Register(contractOf[shadowIdentity](t)),
+		"two components claiming one slot is not the registry's business to refuse")
+	require.Equal(t, []string{"identity", "shadowIdentity"}, r.Kinds())
 
-	// The rejected kind must not be half-registered.
-	require.Equal(t, []string{"identity"}, r.Kinds())
-	_, ok := r.Contract("shadowIdentity")
-	require.False(t, ok)
-	// And the slot still belongs to its original owner, so a third kind
-	// colliding on it is still reported against identity.
-	err = r.Register(contractOf[shadowIdentity](t))
-	require.ErrorContains(t, err, "identity")
+	// It is reported, though — a slot with two claimants is worth seeing.
+	claims := r.SlotClaims()
+	require.ElementsMatch(t, []string{"identity", "shadowIdentity"}, claims["symbol@deviceStatus"])
 }
 
-func TestRegistry_TupleOwnedSectionExcludesEverythingElse(t *testing.T) {
-	// Owner first, then a slot claim in its section.
+func TestRegistry_TupleOwnedSectionDoesNotExcludeOthers(t *testing.T) {
+	// A tuple owns its section on the WIRE (its memberships are per-element),
+	// but the registry does not use that to refuse a co-registration: whether
+	// two kinds reading one section is a mistake depends on how the facts were
+	// produced, which the registry cannot see.
 	r := component.New()
 	require.NoError(t, r.Register(contractOf[tupleOwner](t)))
-	err := r.Register(contractOf[identity](t))
-	require.Error(t, err)
-	require.ErrorContains(t, err, "exclusively")
-	require.ErrorContains(t, err, "tupleOwner")
+	require.NoError(t, r.Register(contractOf[identity](t)))
+	require.ElementsMatch(t, []string{"identity", "tupleOwner"}, r.Sections()["symbol"])
 
-	// The other order must fail too — a section already claimed cannot then be
-	// taken over wholesale.
 	r2 := component.New()
 	require.NoError(t, r2.Register(contractOf[identity](t)))
-	err = r2.Register(contractOf[tupleOwner](t))
-	require.Error(t, err)
-	require.ErrorContains(t, err, "exclusively")
-	require.ErrorContains(t, err, "identity")
+	require.NoError(t, r2.Register(contractOf[tupleOwner](t)), "order does not matter either")
 }
 
 func TestRegistry_TupleOwnerDoesNotBlockOtherSections(t *testing.T) {
@@ -161,16 +156,8 @@ func TestRegistry_CrossSectionMembershipReuse(t *testing.T) {
 
 	r := component.New()
 	require.NoError(t, r.Register(c))
-	// A second kind may still claim `tag` in a THIRD section, but not in
-	// either of these two.
-	require.Error(t, r.Register(mappingplan.ReadContract{
-		Kind:  "other",
-		Slots: []mappingplan.Slot{{Section: "symbol", Membership: "tag", MinAttrs: 1, MaxAttrs: 1}},
-	}))
-	require.NoError(t, r.Register(mappingplan.ReadContract{
-		Kind:  "third",
-		Slots: []mappingplan.Slot{{Section: "stringArray", Membership: "tag", MinAttrs: 0, MaxAttrs: 1}},
-	}))
+	require.Equal(t, []string{"crossSection"}, r.SlotClaims()["symbol@tag"])
+	require.Equal(t, []string{"crossSection"}, r.SlotClaims()["u64Array@tag"])
 }
 
 func TestArchetypePresence(t *testing.T) {

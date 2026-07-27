@@ -7,11 +7,14 @@ package marshallreflect_test
 // BeginEntity calls beginSections() once, EndSection returns the section to
 // Initial, and nothing reopens it. The second visit failed at the next
 // BeginAttribute, surfacing from CommitEntity as a bare "invalid state
-// transition" that named neither the section nor the DTO — which is why the
-// claim survived in tests driving a mock with no state machine.
+// transition" — which is why the claim survived in tests driving a mock with no
+// state machine.
 //
-// RowComposer now refuses the overlap up front. These tests use the real table
-// so they would catch a regression in either layer.
+// The overlap itself is legitimate: facts are fused and enriched by stages that
+// do not know every component, so two DTOs contributing to one section is
+// normal. RowComposer therefore buffers contributions and writes them into ONE
+// shared frame. These tests use the real table, so they would catch a
+// regression in either layer.
 
 import (
 	"testing"
@@ -48,19 +51,50 @@ func svLookup() marshallreflect.MapLookup {
 	return marshallreflect.MapLookup{"svHealth": 1, "svGrade": 2, "svNums": 3}
 }
 
-// Two DTOs on one section — distinct memberships, so the collision is purely
-// about revisiting the section frame.
-func TestSectionVisit_OverlapRefusedWithARealDML(t *testing.T) {
+// Two DTOs on one section, distinct memberships: the shared frame carries both,
+// and each component reads back independently. This is the case the DML's
+// once-per-entity section frame made impossible to express by stacking.
+func TestSectionVisit_OverlapSharesOneFrameOnARealDML(t *testing.T) {
 	tbl := anchor.NewInEntityTestTable(memory.NewGoAllocator(), 1)
 	rc := marshallreflect.NewRowComposer(tbl, svLookup())
 
 	require.NoError(t, rc.BeginRow(svSymbolA{ID: 1, Tracking: []byte("R"), State: "green"}))
-	err := rc.AddSections(svSymbolB{ID: 1, Tracking: []byte("R"), Grade: "A"})
-	require.Error(t, err)
-	require.ErrorContains(t, err, "symbol", "the message names the section")
-	require.ErrorContains(t, err, "svSymbolA", "and the DTO that already emitted it")
-	require.NotContains(t, err.Error(), "invalid state transition",
-		"the composer refuses before the DML state machine has to")
+	require.NoError(t, rc.AddSections(svSymbolB{ID: 1, Tracking: []byte("R"), Grade: "A"}))
+	require.NoError(t, rc.CommitRow(),
+		"a shared section frame must not trip the DML state machine")
+
+	recs, err := tbl.TransferRecords(nil)
+	require.NoError(t, err)
+	defer func() {
+		for _, r := range recs {
+			r.Release()
+		}
+	}()
+
+	idR := anchor.NewReadAccessTestTablePlainEntityIdAttributes()
+	idR.SetColumnIndices(idR.GetColumnIndices())
+	require.NoError(t, idR.LoadFromRecord(recs[0]))
+	defer idR.Release()
+	symR := anchor.NewReadAccessTestTableTaggedSymbol()
+	symR.SetColumnIndices(symR.GetColumnIndices())
+	require.NoError(t, symR.LoadFromRecord(recs[0]))
+	defer symR.Release()
+
+	require.Equal(t, int64(2), symR.GetAttributes().GetNumberOfAttributes(0),
+		"both contributions reached the wire")
+
+	mk := func() *marshallreflect.SectionReaders {
+		return marshallreflect.NewSectionReaders(idR.Len()).
+			PlainColumn("id", idR.ValueId).PlainColumn("naturalKey", idR.ValueNaturalKey).
+			Section("symbol", symR.GetAttributes(), symR.GetMemberships())
+	}
+	var gotA []svSymbolA
+	require.NoError(t, marshallreflect.Unmarshal(mk(), &gotA, svLookup()))
+	require.Equal(t, "green", gotA[0].State)
+	var gotB []svSymbolB
+	require.NoError(t, marshallreflect.Unmarshal(mk(), &gotB, svLookup()))
+	require.Equal(t, "A", gotB[0].Grade,
+		"each component reads its own slot off the fused row")
 }
 
 // Disjoint sections stack cleanly through the real DML — ADR-0070 D1, which is

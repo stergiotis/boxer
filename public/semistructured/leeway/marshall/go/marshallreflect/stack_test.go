@@ -272,18 +272,19 @@ func TestRowComposer_RejectsNonStructRow(t *testing.T) {
 	require.Contains(t, err.Error(), "row must be a struct")
 }
 
-// --- ADR-0146 D6: one section visit per entity ---
+// --- ADR-0146 D6: one section FRAME per entity, shared by every contributor ---
 //
 // ADR-0070 D3 claimed two DTOs could both emit into section Foo, producing two
 // BeginSectionFoo…EndSection cycles. No generated DML supports that: BeginEntity
 // opens each section once, EndSection returns it to Initial, and nothing
-// reopens it, so the second visit fails at the next BeginAttribute with a bare
-// "invalid state transition" naming neither the section nor the DTO. The
-// recordingDML used here has no state machine, which is why the two-pass
-// RowComposer API (AddSingleValueAttributes / AddMultiValueAttributes) appeared
-// to work in these tests while failing against a real DML. That API is gone;
-// RowComposer now refuses the overlap up front, with a message that says what
-// happened.
+// reopens it. The recordingDML used here has no state machine, which is why the
+// two-pass RowComposer API appeared to work in these tests while failing
+// against a real DML.
+//
+// Two DTOs on one section is nevertheless normal — facts get fused and enriched
+// by stages that do not know every component — so the composer buffers each
+// contribution and writes them into ONE shared frame at CommitRow, rather than
+// refusing the overlap.
 
 // stackedFoo targets the mock's `foo` section, so stacking it beside a DTO on
 // `symbol` exercises the disjoint case.
@@ -293,18 +294,43 @@ type stackedFoo struct {
 	Note string   `lw:"note,foo"`
 }
 
-// TestRowComposer_RejectsSectionOverlap confirms a second DTO touching a
-// section the row already emitted is refused, naming the section and both DTO
-// kinds.
-func TestRowComposer_RejectsSectionOverlap(t *testing.T) {
+// TestRowComposer_SharedSectionSharesOneFrame confirms two DTOs on one section
+// produce ONE section cycle carrying both their attributes.
+func TestRowComposer_SharedSectionSharesOneFrame(t *testing.T) {
 	dml := &recordingDML{}
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
 
 	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
-	err := m.AddSections(stackedB{Id: 99, Label: "alpha"})
-	require.Error(t, err, "stackedA and stackedB both emit into `symbol`")
-	require.Contains(t, err.Error(), "symbol")
-	require.Contains(t, err.Error(), "already emitted")
+	require.NoError(t, m.AddSections(stackedB{Id: 99, Label: "alpha"}),
+		"stackedA and stackedB both emit into `symbol`; that is allowed")
+	require.NoError(t, m.CommitRow())
+
+	joined := strings.Join(dml.log, "\n")
+	require.Equal(t, 1, strings.Count(joined, "GetSectionSymbol"),
+		"one frame, not one per contributor")
+	require.Equal(t, 1, strings.Count(joined, "Symbol.EndSection"))
+	require.Contains(t, joined, `Symbol.BeginAttribute("red")`)
+	require.Contains(t, joined, `Symbol.BeginAttribute("alpha")`)
+	// Call order is preserved inside the shared frame.
+	require.Less(t,
+		strings.Index(joined, `Symbol.BeginAttribute("red")`),
+		strings.Index(joined, `Symbol.BeginAttribute("alpha")`))
+}
+
+// TestRowComposer_SectionsWrittenAtCommit records the timing consequence of
+// buffering: nothing reaches the DML's section frames until CommitRow.
+func TestRowComposer_SectionsWrittenAtCommit(t *testing.T) {
+	dml := &recordingDML{}
+	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
+
+	require.NoError(t, m.BeginRow(stackedA{Id: 1, Color: "red"}))
+	require.NotContains(t, strings.Join(dml.log, "\n"), "GetSectionSymbol",
+		"sections are buffered until CommitRow")
+	// The entity header is not buffered — it must precede any section.
+	require.Contains(t, strings.Join(dml.log, "\n"), `SetId(1, "")`)
+
+	require.NoError(t, m.CommitRow())
+	require.Contains(t, strings.Join(dml.log, "\n"), "GetSectionSymbol")
 }
 
 // TestRowComposer_AllowsDisjointSections confirms the rule bites only on
@@ -323,9 +349,9 @@ func TestRowComposer_AllowsDisjointSections(t *testing.T) {
 	require.Contains(t, joined, "GetSectionFoo")
 }
 
-// TestRowComposer_SectionClaimsResetPerRow confirms the claim set is per
-// entity: the same DTO pair that collides within one row is fine across rows.
-func TestRowComposer_SectionClaimsResetPerRow(t *testing.T) {
+// TestRowComposer_SectionBufferResetsPerRow confirms the buffer is per entity:
+// row 2 must not replay row 1's contributions.
+func TestRowComposer_SectionBufferResetsPerRow(t *testing.T) {
 	dml := &recordingDML{}
 	m := marshallreflect.NewRowComposer(dml, fakeLookup{})
 
@@ -337,6 +363,8 @@ func TestRowComposer_SectionClaimsResetPerRow(t *testing.T) {
 	joined := strings.Join(dml.log, "\n")
 	require.Equal(t, 2, strings.Count(joined, "BeginEntity"))
 	require.Contains(t, joined, `Symbol.BeginAttribute("blue")`)
+	require.Equal(t, 1, strings.Count(joined, `Symbol.BeginAttribute("red")`),
+		"row 1's contribution must not be replayed into row 2")
 }
 
 // TestRowComposer_AddSectionsRequiresBeginRow keeps the state-machine guard
