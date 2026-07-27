@@ -27,6 +27,11 @@ Physical names still work if you paste them verbatim. The *Leeway column names*
 explanation covers the full story. Do not add a `FORMAT` clause — the app
 appends one.
 
+Run one statement at a time. The editor takes a single statement, and a buffer
+holding two parses as neither — the pre-execute rewrites are then skipped and
+the SQL ships as written, so the handles above never reach their physical names
+and the server rejects them. Each block below is one statement for that reason.
+
 In a real boxer deployment the equivalent table is `spinnaker.facts`; the
 queries transfer by swapping the table name.
 
@@ -64,11 +69,15 @@ holds the event kind (an array, so filter with `hasAny`):
 -- drone missions: always a geoPoint; sometimes geoArea / text
 SELECT * FROM anchor.facts
 WHERE hasAny(`symbol:value`, ['IN_TRANSIT', 'DELIVERED', 'HEARTBEAT'])
+```
 
+```sql
 -- cyber incidents
 SELECT * FROM anchor.facts
 WHERE hasAny(`symbol:value`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
+```
 
+```sql
 -- alpine sensor events
 SELECT * FROM anchor.facts
 WHERE hasAny(`symbol:value`, ['SEISMIC_ANOMALY', 'SNOW_SHIFT'])
@@ -90,7 +99,9 @@ to explode a section's parallel arrays:
 ```sql
 -- all three geoPoint value columns (pointLat, pointLng, h3)
 SELECT `geoPoint:*` FROM anchor.facts LIMIT 20
+```
 
+```sql
 -- one row per point, columns unnested together
 SELECT `id:id`, `geoPoint:*` FROM anchor.facts ARRAY JOIN `geoPoint:*` LIMIT 20
 ```
@@ -162,7 +173,13 @@ references `{selection:Int64}`); edits to the SQL itself still wait for Run.
 
 ```sql
 SELECT * FROM anchor.facts LIMIT 1      -- single card
+```
+
+```sql
 SELECT * FROM anchor.facts WHERE 1 = 0  -- empty-state rendering
+```
+
+```sql
 SELECT 1 AS hello, now() AS ts          -- non-leeway, ad-hoc path
 ```
 

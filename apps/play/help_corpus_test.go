@@ -1,8 +1,11 @@
 package play
 
 import (
+	"io/fs"
+	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stretchr/testify/require"
 )
@@ -44,4 +47,66 @@ func TestHelpCorpusIndexes(t *testing.T) {
 	for path, found := range want {
 		require.True(t, found, "expected help doc %q in the play book", path)
 	}
+}
+
+// TestHelpCorpusSQLBlocksParse asserts every fenced SQL block in the corpus
+// survives the precondition the whole pre-execute stage shares: the SET-prelude
+// harvest (ExtractParams), then a Grammar1 parse of what remains.
+//
+// It guards a failure mode with no visible symptom. Every unit of the stage is
+// best-effort (ADR-0108 §SD3) and every one of them starts by parsing, so a
+// block Grammar1 rejects does not fail — it skips CanonicalizeFull,
+// ExpandLwIdMacros and ResolveColumnNames alike and ships the buffer verbatim.
+// For the leeway how-to that means the `section:column` handles it teaches are
+// never resolved and the server rejects the query; the only trace is three warn
+// lines in the process log.
+//
+// The two shapes Grammar1 rejects and ClickHouse accepts are worth naming,
+// because both have reached this corpus: more than one statement in a block
+// (Grammar1 is single-statement), and a `#` line comment. A `#` inside a string
+// literal is fine — the snippet library's `text/markdown` cell carries one.
+func TestHelpCorpusSQLBlocksParse(t *testing.T) {
+	docs, err := fs.Glob(helpFS, "help/*.md")
+	require.NoError(t, err)
+	require.NotEmpty(t, docs, "help corpus must not be empty")
+
+	for _, path := range docs {
+		raw, readErr := fs.ReadFile(helpFS, path)
+		require.NoError(t, readErr, "read %s", path)
+		for _, blk := range sqlFences(string(raw)) {
+			residual, _, exErr := ExtractParams(blk.sql)
+			require.NoErrorf(t, exErr, "%s:%d: SET-prelude harvest rejects this block, so every pre-execute pass is skipped and the SQL ships verbatim\n%s",
+				path, blk.line, blk.sql)
+			_, parseErr := nanopass.Parse(residual)
+			require.NoErrorf(t, parseErr, "%s:%d: Grammar1 rejects this block, so every pre-execute pass is skipped and the SQL ships verbatim\n%s",
+				path, blk.line, blk.sql)
+		}
+	}
+}
+
+// sqlFence is one ```sql block: its body and the 1-based line its content
+// starts on, so a failure points at the source rather than at a copy of it.
+type sqlFence struct {
+	line int
+	sql  string
+}
+
+// sqlFences extracts the ```sql blocks of a markdown document. Deliberately
+// literal — it matches the fence openers the corpus actually uses rather than
+// re-implementing markdown, and non-SQL fences (the corpus has one `bash`
+// block) are not SQL to begin with.
+func sqlFences(md string) (out []sqlFence) {
+	lines := strings.Split(md, "\n")
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) != "```sql" {
+			continue
+		}
+		var body []string
+		start := i + 2
+		for i++; i < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i]), "```"); i++ {
+			body = append(body, lines[i])
+		}
+		out = append(out, sqlFence{line: start, sql: strings.Join(body, "\n")})
+	}
+	return
 }
