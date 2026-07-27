@@ -1616,6 +1616,143 @@ the limit, and resets on a human write, a buffer edit and a human Run; a
 ratcheting self-feeding query against the capture server tripping it after
 exactly the limit; and the `selection_id` cue appearing and clearing.
 
+### 2026-07-27 — The tab strip carries the graph (design): pane titles gain eligibility and signal wiring; the accepting-panes filter is descoped
+
+Three facts about a pane are computed today, purely and cheaply, and are
+reachable only by opening that pane or the Graph tab: whether it can render
+the result it would be handed (`AcceptForChannel`, SD6), whether it writes a
+signal the current split reads (the write-back edges the system graph draws),
+and which node feeds it (6c, already in the title). The dock strip is where a
+person chooses a pane, and it carries none of this — sixteen tabs, one static
+word each. This Update decides what the strip says, adds the menu that
+carries the prose a title cannot, and records the filter the dock will not
+grow.
+
+**Decision — the title is the system graph projected onto one line.** 6c's
+`boundTabTitle` grows from a binding decoration into a small closed mark
+vocabulary: at most one mark per tab, in one slot, after the existing
+`· node` suffix. In precedence order:
+
+- **`×` — shape reject.** A shape-gated pane whose required channels reject
+  the result it would be handed. It outranks the signal marks: a pane that
+  cannot draw this result is not a control over it either.
+- **`!` — blocked on you.** The pane writes a name the split reads that
+  nothing has filled (`unfilledInputs`), and it can render. Interacting here
+  is what unblocks the Run the gate currently refuses.
+- **`●` — drives this query.** The pane writes a name some split node reads,
+  so interacting re-filters rather than merely re-selects.
+- **`⚠` — a notice.** Reserved for chrome with something to report
+  (Diagnostics: a failed run, a truncation, a skipped pre-execute pass).
+  Chrome is not shape-gated, so it does not contend with the marks above.
+
+The glyph set is constrained by the host font rather than by taste: the
+endpoint switcher records that `→` renders as tofu, so the vocabulary is
+drawn from glyphs this app already paints (`●`, `⚠`, `×` in the Graph view)
+plus ASCII.
+
+**Mark only where the bit varies.** Table, Projection, Detail and Schema
+accept any schema; a mark that is always on informs nobody and widens every
+tab. `TabSpec` gains **`ShapeContract bool`** — "my rejection is about the
+result's column shape, so it is worth advertising" — true for Timeline,
+World, Kanban and Network, false for the universal panes, whose rejections
+are about interaction state ("select a row") rather than shape. Rejected:
+typing the rejection on `PanelI` (a reject-kind return beside the reason).
+It is the more honest model, but it widens the interface every embedder
+implements to serve one consumer; the trigger to revisit is a second
+consumer needing the distinction.
+
+**`TabSpec` also gains `Writes []SignalID`** — the names a pane may publish.
+The declaration lives there rather than on `PanelI` because the Map writes
+`vp_*` and is not a `PanelI` at all (it renders its driver directly, 5c).
+Declared rather than observed: provenance (`signalWriterFor`, already the
+source of the system graph's write-back edges) knows a writer only after the
+first interaction, so the World tab would be marked a control only once the
+user had found the loop unaided. The two must agree, and the declaration
+also lets the drawing show a write-back before it happens — a follow-on, not
+part of this decision.
+
+**Two obligations follow, both new load on existing contracts.**
+
+- `AcceptForChannel` is documented pure; the strip makes it hot. It moves
+  from once per visible pane per frame to once per registered tab per frame,
+  hidden tabs included. Every implementation today is a schema scan and
+  stays well inside that, but "cheap enough to run per tab per frame" now
+  belongs in SD6's contract text rather than in the implementations' good
+  behaviour.
+- **The title path must not demand** (SD2). Network's required channel is
+  the `edges` node; Kanban's lanes and the Timeline's bands are theirs.
+  Asking a lane whether it could fill a channel would execute a query every
+  frame for a hidden tab. Channels fed by a named node therefore get a
+  *structural* verdict from the split — is the node present — and never a
+  schema verdict. The strip says less about those panes than about
+  frame-fed ones, which is the honest amount: their shape is unknown until
+  something runs.
+
+**The menu carries what a title cannot.** The dock ships titles as a plain
+`[]string` with no tooltip and no styling, so a mark is a scent and nothing
+more. A topbar `MenuButton` — fixed label, since a dynamic one shifts its
+derived id and drops menu state — lists the panes for the current result in
+two groups:
+
+- *Shows this result*: one row per result pane, carrying the node that feeds
+  it (when a binding or the Detail follow points it off the active node) and
+  its verdict. An accepting row activates the pane on click; a rejecting row
+  shows the same reason string the pane body would, and still activates, so
+  the contract help stays one click away instead of being hidden behind a
+  pane the menu just advised against.
+- *Drives this query*: the panes whose declared writes meet the split's
+  `Reads`, naming the signals, with the unfilled ones marked.
+
+Activation goes through the existing `pendingDockActivate` seam. The menu
+hides nothing, moves nothing, and reuses the verdicts the titles computed
+this frame.
+
+**Descoped — a filter that shows only accepting panes.** The obvious
+affordance, a checkbox that drops non-accepting tabs, is destructive in this
+substrate and destructive silently. Go is authoritative about which tabs
+exist and the dock reconciles by `retain_tabs` + `push_to_first_leaf`
+(the EGUI_DOCK apply code): a tab withheld for one frame loses its position
+in the persisted `DockState`, and unhiding pushes it into the *first* leaf.
+Detail lives in the side leaf and Preview in the preview leaf by design, so
+one toggle-and-back collapses the arrangement into the editor leaf — and a
+filter is a control people flip casually. Two further edges: `ActivateTab`
+resolves its slug against the registry, so a delivery op aimed at a
+filtered-out tab succeeds in Go and finds nothing in Rust (the snippet
+Insert would land nowhere); and a `BOXER_PLAY_FOCUS_*` knob naming a
+filtered-out tab would capture a different pane with no error.
+
+The semantics are wrong twice over as well, independently of the substrate.
+Interaction-gated panes must never be filtered — hiding Detail until a row
+is selected removes it exactly when the click is about to need it — and
+before the first Run every pane rejects, so the filter's honest first state
+is an empty dock.
+
+Non-destructive hiding means teaching the interpreter to remember a hidden
+tab's surface/node/index and restore it there, since `egui_dock` has no
+hidden-tab concept; the trigger to spend that is the menu shipping and
+people still asking for fewer tabs rather than for faster navigation. Two
+cuts stay available meanwhile, neither needing the substrate: the pane set
+as an applet-time property (`TabRegistry.Remove` before the freeze, which is
+what the ADR-0132 chrome already does for the editor tab), where a saved
+query's pane selection honestly belongs; and, if a live gesture is ever
+wanted, a one-shot "rebuild the layout for this result" button that admits
+it re-lays-out rather than presenting itself as a view filter.
+
+Deferred with triggers: dock tab tooltips, which would let the strip carry
+the reject prose directly — an IDL argument plus interpreter work, waiting
+on evidence that the menu is not where that prose belongs. And the
+predictive write-back edges in the system graph, which the `Writes`
+declaration enables and which wait on the declaration existing.
+
+What lands first: the verdict as one pure function over (spec, frame
+schema, split, signals, bindings), unit-tested the way `boundTabTitle` is,
+then the marks, then the menu over the same verdicts. The live check the
+design cannot settle on paper is strip churn — the referenced-name set
+refreshes post-debounce, so typing a `{name:Type}` slot flips a mark
+mid-edit, correct as feedback and possibly jittery as layout. Whether the
+mark slot needs a fixed width is a question for the running app, not for
+this entry.
+
 ## References
 
 Internal:
