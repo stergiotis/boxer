@@ -33,13 +33,13 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindTaskId uint64
-	kindResult uint64
+	kindTaskId     uint64
+	kindTaskResult uint64
 )
 
 func init() {
 	kindTaskId = vdd.MembTaskId.GetId().Value()
-	kindResult = vdd.MembTaskResult.GetId().Value()
+	kindTaskResult = vdd.MembTaskResult.GetId().Value()
 	buscodec.Register[TaskDone](taskDoneBusCodec)
 }
 
@@ -179,10 +179,13 @@ type TaskDoneBlobArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// TaskDoneEntityI lists exactly the entity-level methods TaskDone uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// TaskDoneEntityI is the entity-builder surface TaskDoneAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type TaskDoneEntityI[
 	StringArrayAttr TaskDoneStringArrayAttrI,
 	StringArraySec TaskDoneStringArraySecI[StringArrayAttr, Ent],
@@ -228,7 +231,7 @@ func TaskDoneBuildEntities[
 		// --- blobArray. ---
 		blobArraySec := dml.GetSectionBlobArray()
 		blobArraySecAttr_Result := blobArraySec.BeginAttributeSingle(c.Result[i])
-		blobArraySecAttr_Result.AddMembershipLowCardRefP(kindResult)
+		blobArraySecAttr_Result.AddMembershipLowCardRefP(kindTaskResult)
 		blobArraySecAttr_Result.EndAttributeP()
 		blobArraySec.EndSection()
 		err = dml.CommitEntity()
@@ -237,6 +240,36 @@ func TaskDoneBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// TaskDoneAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func TaskDoneAddSections[
+	StringArrayAttr TaskDoneStringArrayAttrI,
+	StringArraySec TaskDoneStringArraySecI[StringArrayAttr, Ent],
+	BlobArrayAttr TaskDoneBlobArrayAttrI,
+	BlobArraySec TaskDoneBlobArraySecI[BlobArrayAttr, Ent],
+	Ent any,
+	DML TaskDoneEntityI[
+		StringArrayAttr, StringArraySec,
+		BlobArrayAttr, BlobArraySec,
+		Ent,
+	],
+](dml DML, row TaskDone) (err error) {
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
+	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
+	stringArraySecAttr_TaskId.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- blobArray. ---
+	blobArraySec := dml.GetSectionBlobArray()
+	blobArraySecAttr_Result := blobArraySec.BeginAttributeSingle(row.Result)
+	blobArraySecAttr_Result.AddMembershipLowCardRefP(kindTaskResult)
+	blobArraySecAttr_Result.EndAttributeP()
+	blobArraySec.EndSection()
 	return
 }
 
@@ -324,7 +357,7 @@ func TaskDoneFillFromArrow[
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindResult:
+				case kindTaskResult:
 					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					cp := make([]byte, len(val))
 					copy(cp, val)
@@ -338,6 +371,74 @@ func TaskDoneFillFromArrow[
 			return
 		}
 		c.Result = append(c.Result, blobArrayResultVal)
+	}
+	return
+}
+
+// TaskDoneReadRow reads row i as one optional TaskDone component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func TaskDoneReadRow[
+	StringArrayAttrs TaskDoneStringArrayAttrsReadI,
+	StringArrayMembs TaskDoneStringArrayMembsReadI,
+	BlobArrayAttrs TaskDoneBlobArrayAttrsReadI,
+	BlobArrayMembs TaskDoneBlobArrayMembsReadI,
+](
+	i int,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	blobArrayAttrs BlobArrayAttrs,
+	blobArrayMembs BlobArrayMembs,
+) (row TaskDone, present bool, err error) {
+	// --- stringArray. ---
+	var stringArrayTaskIdVal string
+	var stringArrayTaskIdCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTaskId:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayTaskIdVal = val
+				stringArrayTaskIdCount++
+			}
+		}
+	}
+	if stringArrayTaskIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayTaskIdCount == 1 {
+		row.TaskId = stringArrayTaskIdVal
+		present = true
+	}
+	// --- blobArray. ---
+	var blobArrayResultVal []byte
+	var blobArrayResultCount int
+	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
+		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTaskResult:
+				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				cp := make([]byte, len(val))
+				copy(cp, val)
+				blobArrayResultVal = cp
+				blobArrayResultCount++
+			}
+		}
+	}
+	if blobArrayResultCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Result").Errorf("occurs more than once on the row")
+		return
+	}
+	if blobArrayResultCount == 1 {
+		row.Result = blobArrayResultVal
+		present = true
 	}
 	return
 }

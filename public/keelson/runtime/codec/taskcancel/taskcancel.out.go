@@ -179,10 +179,13 @@ type TaskCancelTextArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// TaskCancelEntityI lists exactly the entity-level methods TaskCancel uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// TaskCancelEntityI is the entity-builder surface TaskCancelAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type TaskCancelEntityI[
 	StringArrayAttr TaskCancelStringArrayAttrI,
 	StringArraySec TaskCancelStringArraySecI[StringArrayAttr, Ent],
@@ -237,6 +240,36 @@ func TaskCancelBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// TaskCancelAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func TaskCancelAddSections[
+	StringArrayAttr TaskCancelStringArrayAttrI,
+	StringArraySec TaskCancelStringArraySecI[StringArrayAttr, Ent],
+	TextArrayAttr TaskCancelTextArrayAttrI,
+	TextArraySec TaskCancelTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+	DML TaskCancelEntityI[
+		StringArrayAttr, StringArraySec,
+		TextArrayAttr, TextArraySec,
+		Ent,
+	],
+](dml DML, row TaskCancel) (err error) {
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
+	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
+	stringArraySecAttr_TaskId.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	textArraySec.EndSection()
 	return
 }
 
@@ -336,6 +369,72 @@ func TaskCancelFillFromArrow[
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
+	}
+	return
+}
+
+// TaskCancelReadRow reads row i as one optional TaskCancel component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func TaskCancelReadRow[
+	StringArrayAttrs TaskCancelStringArrayAttrsReadI,
+	StringArrayMembs TaskCancelStringArrayMembsReadI,
+	TextArrayAttrs TaskCancelTextArrayAttrsReadI,
+	TextArrayMembs TaskCancelTextArrayMembsReadI,
+](
+	i int,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+) (row TaskCancel, present bool, err error) {
+	// --- stringArray. ---
+	var stringArrayTaskIdVal string
+	var stringArrayTaskIdCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTaskId:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayTaskIdVal = val
+				stringArrayTaskIdCount++
+			}
+		}
+	}
+	if stringArrayTaskIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayTaskIdCount == 1 {
+		row.TaskId = stringArrayTaskIdVal
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayReasonVal string
+	var textArrayReasonCount int
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindReason:
+				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				textArrayReasonVal = val
+				textArrayReasonCount++
+			}
+		}
+	}
+	if textArrayReasonCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		return
+	}
+	if textArrayReasonCount == 1 {
+		row.Reason = textArrayReasonVal
+		present = true
 	}
 	return
 }

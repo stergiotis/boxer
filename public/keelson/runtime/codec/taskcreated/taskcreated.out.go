@@ -33,25 +33,25 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindTaskId       uint64
-	kindKind         uint64
-	kindTitle        uint64
-	kindOwnerAppId   uint64
-	kindOwnerTileKey uint64
-	kindOwnerRunId   uint64
-	kindCancellableB uint64
-	kindEstimatedMs  uint64
+	kindTaskId           uint64
+	kindTaskKind         uint64
+	kindTitle            uint64
+	kindAppId            uint64
+	kindTileKey          uint64
+	kindRunId            uint64
+	kindTaskCancellableB uint64
+	kindTaskEstimatedMs  uint64
 )
 
 func init() {
 	kindTaskId = vdd.MembTaskId.GetId().Value()
-	kindKind = vdd.MembTaskKind.GetId().Value()
+	kindTaskKind = vdd.MembTaskKind.GetId().Value()
 	kindTitle = vdd.MembTitle.GetId().Value()
-	kindOwnerAppId = vdd.MembAppId.GetId().Value()
-	kindOwnerTileKey = vdd.MembTileKey.GetId().Value()
-	kindOwnerRunId = vdd.MembRunId.GetId().Value()
-	kindCancellableB = vdd.MembTaskCancellableB.GetId().Value()
-	kindEstimatedMs = vdd.MembTaskEstimatedMs.GetId().Value()
+	kindAppId = vdd.MembAppId.GetId().Value()
+	kindTileKey = vdd.MembTileKey.GetId().Value()
+	kindRunId = vdd.MembRunId.GetId().Value()
+	kindTaskCancellableB = vdd.MembTaskCancellableB.GetId().Value()
+	kindTaskEstimatedMs = vdd.MembTaskEstimatedMs.GetId().Value()
 	buscodec.Register[TaskCreated](taskCreatedBusCodec)
 }
 
@@ -269,10 +269,13 @@ type TaskCreatedI64ArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// TaskCreatedEntityI lists exactly the entity-level methods TaskCreated uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// TaskCreatedEntityI is the entity-builder surface TaskCreatedAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type TaskCreatedEntityI[
 	StringArrayAttr TaskCreatedStringArrayAttrI,
 	StringArraySec TaskCreatedStringArraySecI[StringArrayAttr, Ent],
@@ -339,16 +342,16 @@ func TaskCreatedBuildEntities[
 		stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
 		stringArraySecAttr_TaskId.EndAttributeP()
 		stringArraySecAttr_OwnerAppId := stringArraySec.BeginAttributeSingle(c.OwnerAppId[i])
-		stringArraySecAttr_OwnerAppId.AddMembershipLowCardRefP(kindOwnerAppId)
+		stringArraySecAttr_OwnerAppId.AddMembershipLowCardRefP(kindAppId)
 		stringArraySecAttr_OwnerAppId.EndAttributeP()
 		stringArraySecAttr_OwnerRunId := stringArraySec.BeginAttributeSingle(c.OwnerRunId[i])
-		stringArraySecAttr_OwnerRunId.AddMembershipLowCardRefP(kindOwnerRunId)
+		stringArraySecAttr_OwnerRunId.AddMembershipLowCardRefP(kindRunId)
 		stringArraySecAttr_OwnerRunId.EndAttributeP()
 		stringArraySec.EndSection()
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Kind := symbolSec.BeginAttribute(c.Kind[i])
-		symbolSecAttr_Kind.AddMembershipLowCardRefP(kindKind)
+		symbolSecAttr_Kind.AddMembershipLowCardRefP(kindTaskKind)
 		symbolSecAttr_Kind.EndAttributeP()
 		symbolSec.EndSection()
 		// --- textArray. ---
@@ -360,19 +363,19 @@ func TaskCreatedBuildEntities[
 		// --- u64Array. ---
 		u64ArraySec := dml.GetSectionU64Array()
 		u64ArraySecAttr_OwnerTileKey := u64ArraySec.BeginAttributeSingle(c.OwnerTileKey[i])
-		u64ArraySecAttr_OwnerTileKey.AddMembershipLowCardRefP(kindOwnerTileKey)
+		u64ArraySecAttr_OwnerTileKey.AddMembershipLowCardRefP(kindTileKey)
 		u64ArraySecAttr_OwnerTileKey.EndAttributeP()
 		u64ArraySec.EndSection()
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_CancellableB := boolSec.BeginAttribute(c.CancellableB[i])
-		boolSecAttr_CancellableB.AddMembershipLowCardRefP(kindCancellableB)
+		boolSecAttr_CancellableB.AddMembershipLowCardRefP(kindTaskCancellableB)
 		boolSecAttr_CancellableB.EndAttributeP()
 		boolSec.EndSection()
 		// --- i64Array. ---
 		i64ArraySec := dml.GetSectionI64Array()
 		i64ArraySecAttr_EstimatedMs := i64ArraySec.BeginAttributeSingle(c.EstimatedMs[i])
-		i64ArraySecAttr_EstimatedMs.AddMembershipLowCardRefP(kindEstimatedMs)
+		i64ArraySecAttr_EstimatedMs.AddMembershipLowCardRefP(kindTaskEstimatedMs)
 		i64ArraySecAttr_EstimatedMs.EndAttributeP()
 		i64ArraySec.EndSection()
 		err = dml.CommitEntity()
@@ -381,6 +384,78 @@ func TaskCreatedBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// TaskCreatedAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func TaskCreatedAddSections[
+	StringArrayAttr TaskCreatedStringArrayAttrI,
+	StringArraySec TaskCreatedStringArraySecI[StringArrayAttr, Ent],
+	SymbolAttr TaskCreatedSymbolAttrI,
+	SymbolSec TaskCreatedSymbolSecI[SymbolAttr, Ent],
+	TextArrayAttr TaskCreatedTextArrayAttrI,
+	TextArraySec TaskCreatedTextArraySecI[TextArrayAttr, Ent],
+	U64ArrayAttr TaskCreatedU64ArrayAttrI,
+	U64ArraySec TaskCreatedU64ArraySecI[U64ArrayAttr, Ent],
+	BoolAttr TaskCreatedBoolAttrI,
+	BoolSec TaskCreatedBoolSecI[BoolAttr, Ent],
+	I64ArrayAttr TaskCreatedI64ArrayAttrI,
+	I64ArraySec TaskCreatedI64ArraySecI[I64ArrayAttr, Ent],
+	Ent any,
+	DML TaskCreatedEntityI[
+		StringArrayAttr, StringArraySec,
+		SymbolAttr, SymbolSec,
+		TextArrayAttr, TextArraySec,
+		U64ArrayAttr, U64ArraySec,
+		BoolAttr, BoolSec,
+		I64ArrayAttr, I64ArraySec,
+		Ent,
+	],
+](dml DML, row TaskCreated) (err error) {
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
+	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
+	stringArraySecAttr_TaskId.EndAttributeP()
+	stringArraySecAttr_OwnerAppId := stringArraySec.BeginAttributeSingle(row.OwnerAppId)
+	stringArraySecAttr_OwnerAppId.AddMembershipLowCardRefP(kindAppId)
+	stringArraySecAttr_OwnerAppId.EndAttributeP()
+	stringArraySecAttr_OwnerRunId := stringArraySec.BeginAttributeSingle(row.OwnerRunId)
+	stringArraySecAttr_OwnerRunId.AddMembershipLowCardRefP(kindRunId)
+	stringArraySecAttr_OwnerRunId.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindTaskKind)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	textArraySecAttr_Title := textArraySec.BeginAttributeSingle(row.Title)
+	textArraySecAttr_Title.AddMembershipLowCardRefP(kindTitle)
+	textArraySecAttr_Title.EndAttributeP()
+	textArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	u64ArraySecAttr_OwnerTileKey := u64ArraySec.BeginAttributeSingle(row.OwnerTileKey)
+	u64ArraySecAttr_OwnerTileKey.AddMembershipLowCardRefP(kindTileKey)
+	u64ArraySecAttr_OwnerTileKey.EndAttributeP()
+	u64ArraySec.EndSection()
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_CancellableB := boolSec.BeginAttribute(row.CancellableB)
+	boolSecAttr_CancellableB.AddMembershipLowCardRefP(kindTaskCancellableB)
+	boolSecAttr_CancellableB.EndAttributeP()
+	boolSec.EndSection()
+	// --- i64Array. ---
+	i64ArraySec := dml.GetSectionI64Array()
+	i64ArraySecAttr_EstimatedMs := i64ArraySec.BeginAttributeSingle(row.EstimatedMs)
+	i64ArraySecAttr_EstimatedMs.AddMembershipLowCardRefP(kindTaskEstimatedMs)
+	i64ArraySecAttr_EstimatedMs.EndAttributeP()
+	i64ArraySec.EndSection()
 	return
 }
 
@@ -517,11 +592,11 @@ func TaskCreatedFillFromArrow[
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayTaskIdVal = val
 					stringArrayTaskIdCount++
-				case kindOwnerAppId:
+				case kindAppId:
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayOwnerAppIdVal = val
 					stringArrayOwnerAppIdCount++
-				case kindOwnerRunId:
+				case kindRunId:
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayOwnerRunIdVal = val
 					stringArrayOwnerRunIdCount++
@@ -550,7 +625,7 @@ func TaskCreatedFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindKind:
+				case kindTaskKind:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolKindVal = val
 					symbolKindCount++
@@ -588,7 +663,7 @@ func TaskCreatedFillFromArrow[
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindOwnerTileKey:
+				case kindTileKey:
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayOwnerTileKeyVal = val
 					u64ArrayOwnerTileKeyCount++
@@ -607,7 +682,7 @@ func TaskCreatedFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindCancellableB:
+				case kindTaskCancellableB:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolCancellableBVal = val
 					boolCancellableBCount++
@@ -626,7 +701,7 @@ func TaskCreatedFillFromArrow[
 		for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
 			for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindEstimatedMs:
+				case kindTaskEstimatedMs:
 					val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					i64ArrayEstimatedMsVal = val
 					i64ArrayEstimatedMsCount++
@@ -638,6 +713,204 @@ func TaskCreatedFillFromArrow[
 			return
 		}
 		c.EstimatedMs = append(c.EstimatedMs, i64ArrayEstimatedMsVal)
+	}
+	return
+}
+
+// TaskCreatedReadRow reads row i as one optional TaskCreated component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func TaskCreatedReadRow[
+	StringArrayAttrs TaskCreatedStringArrayAttrsReadI,
+	StringArrayMembs TaskCreatedStringArrayMembsReadI,
+	SymbolAttrs TaskCreatedSymbolAttrsReadI,
+	SymbolMembs TaskCreatedSymbolMembsReadI,
+	TextArrayAttrs TaskCreatedTextArrayAttrsReadI,
+	TextArrayMembs TaskCreatedTextArrayMembsReadI,
+	U64ArrayAttrs TaskCreatedU64ArrayAttrsReadI,
+	U64ArrayMembs TaskCreatedU64ArrayMembsReadI,
+	BoolAttrs TaskCreatedBoolAttrsReadI,
+	BoolMembs TaskCreatedBoolMembsReadI,
+	I64ArrayAttrs TaskCreatedI64ArrayAttrsReadI,
+	I64ArrayMembs TaskCreatedI64ArrayMembsReadI,
+](
+	i int,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+	i64ArrayAttrs I64ArrayAttrs,
+	i64ArrayMembs I64ArrayMembs,
+) (row TaskCreated, present bool, err error) {
+	// --- stringArray. ---
+	var stringArrayTaskIdVal string
+	var stringArrayTaskIdCount int
+	var stringArrayOwnerAppIdVal string
+	var stringArrayOwnerAppIdCount int
+	var stringArrayOwnerRunIdVal string
+	var stringArrayOwnerRunIdCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTaskId:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayTaskIdVal = val
+				stringArrayTaskIdCount++
+			case kindAppId:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayOwnerAppIdVal = val
+				stringArrayOwnerAppIdCount++
+			case kindRunId:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayOwnerRunIdVal = val
+				stringArrayOwnerRunIdCount++
+			}
+		}
+	}
+	if stringArrayTaskIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayTaskIdCount == 1 {
+		row.TaskId = stringArrayTaskIdVal
+		present = true
+	}
+	if stringArrayOwnerAppIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "OwnerAppId").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayOwnerAppIdCount == 1 {
+		row.OwnerAppId = stringArrayOwnerAppIdVal
+		present = true
+	}
+	if stringArrayOwnerRunIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "OwnerRunId").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayOwnerRunIdCount == 1 {
+		row.OwnerRunId = stringArrayOwnerRunIdVal
+		present = true
+	}
+	// --- symbol. ---
+	var symbolKindVal string
+	var symbolKindCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTaskKind:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolKindVal = val
+				symbolKindCount++
+			}
+		}
+	}
+	if symbolKindCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolKindCount == 1 {
+		row.Kind = symbolKindVal
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayTitleVal string
+	var textArrayTitleCount int
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTitle:
+				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				textArrayTitleVal = val
+				textArrayTitleCount++
+			}
+		}
+	}
+	if textArrayTitleCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Title").Errorf("occurs more than once on the row")
+		return
+	}
+	if textArrayTitleCount == 1 {
+		row.Title = textArrayTitleVal
+		present = true
+	}
+	// --- u64Array. ---
+	var u64ArrayOwnerTileKeyVal uint64
+	var u64ArrayOwnerTileKeyCount int
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTileKey:
+				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u64ArrayOwnerTileKeyVal = val
+				u64ArrayOwnerTileKeyCount++
+			}
+		}
+	}
+	if u64ArrayOwnerTileKeyCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "OwnerTileKey").Errorf("occurs more than once on the row")
+		return
+	}
+	if u64ArrayOwnerTileKeyCount == 1 {
+		row.OwnerTileKey = u64ArrayOwnerTileKeyVal
+		present = true
+	}
+	// --- bool. ---
+	var boolCancellableBVal bool
+	var boolCancellableBCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTaskCancellableB:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolCancellableBVal = val
+				boolCancellableBCount++
+			}
+		}
+	}
+	if boolCancellableBCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "CancellableB").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolCancellableBCount == 1 {
+		row.CancellableB = boolCancellableBVal
+		present = true
+	}
+	// --- i64Array. ---
+	var i64ArrayEstimatedMsVal int64
+	var i64ArrayEstimatedMsCount int
+	ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
+		for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTaskEstimatedMs:
+				val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				i64ArrayEstimatedMsVal = val
+				i64ArrayEstimatedMsCount++
+			}
+		}
+	}
+	if i64ArrayEstimatedMsCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "EstimatedMs").Errorf("occurs more than once on the row")
+		return
+	}
+	if i64ArrayEstimatedMsCount == 1 {
+		row.EstimatedMs = i64ArrayEstimatedMsVal
+		present = true
 	}
 	return
 }

@@ -33,15 +33,15 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindPollFallback   uint64
-	kindPollIntervalMs uint64
-	kindRecursive      uint64
+	kindWatchPollFallback   uint64
+	kindWatchPollIntervalMs uint64
+	kindWatchRecursive      uint64
 )
 
 func init() {
-	kindPollFallback = vdd.MembWatchPollFallback.GetId().Value()
-	kindPollIntervalMs = vdd.MembWatchPollIntervalMs.GetId().Value()
-	kindRecursive = vdd.MembWatchRecursive.GetId().Value()
+	kindWatchPollFallback = vdd.MembWatchPollFallback.GetId().Value()
+	kindWatchPollIntervalMs = vdd.MembWatchPollIntervalMs.GetId().Value()
+	kindWatchRecursive = vdd.MembWatchRecursive.GetId().Value()
 	buscodec.Register[WatchRequest](watchRequestBusCodec)
 }
 
@@ -184,10 +184,13 @@ type WatchRequestI32ArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// WatchRequestEntityI lists exactly the entity-level methods WatchRequest uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// WatchRequestEntityI is the entity-builder surface WatchRequestAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type WatchRequestEntityI[
 	BoolAttr WatchRequestBoolAttrI,
 	BoolSec WatchRequestBoolSecI[BoolAttr, Ent],
@@ -227,16 +230,16 @@ func WatchRequestBuildEntities[
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_PollFallback := boolSec.BeginAttribute(c.PollFallback[i])
-		boolSecAttr_PollFallback.AddMembershipLowCardRefP(kindPollFallback)
+		boolSecAttr_PollFallback.AddMembershipLowCardRefP(kindWatchPollFallback)
 		boolSecAttr_PollFallback.EndAttributeP()
 		boolSecAttr_Recursive := boolSec.BeginAttribute(c.Recursive[i])
-		boolSecAttr_Recursive.AddMembershipLowCardRefP(kindRecursive)
+		boolSecAttr_Recursive.AddMembershipLowCardRefP(kindWatchRecursive)
 		boolSecAttr_Recursive.EndAttributeP()
 		boolSec.EndSection()
 		// --- i32Array. ---
 		i32ArraySec := dml.GetSectionI32Array()
 		i32ArraySecAttr_PollIntervalMs := i32ArraySec.BeginAttributeSingle(c.PollIntervalMs[i])
-		i32ArraySecAttr_PollIntervalMs.AddMembershipLowCardRefP(kindPollIntervalMs)
+		i32ArraySecAttr_PollIntervalMs.AddMembershipLowCardRefP(kindWatchPollIntervalMs)
 		i32ArraySecAttr_PollIntervalMs.EndAttributeP()
 		i32ArraySec.EndSection()
 		err = dml.CommitEntity()
@@ -245,6 +248,39 @@ func WatchRequestBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// WatchRequestAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func WatchRequestAddSections[
+	BoolAttr WatchRequestBoolAttrI,
+	BoolSec WatchRequestBoolSecI[BoolAttr, Ent],
+	I32ArrayAttr WatchRequestI32ArrayAttrI,
+	I32ArraySec WatchRequestI32ArraySecI[I32ArrayAttr, Ent],
+	Ent any,
+	DML WatchRequestEntityI[
+		BoolAttr, BoolSec,
+		I32ArrayAttr, I32ArraySec,
+		Ent,
+	],
+](dml DML, row WatchRequest) (err error) {
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_PollFallback := boolSec.BeginAttribute(row.PollFallback)
+	boolSecAttr_PollFallback.AddMembershipLowCardRefP(kindWatchPollFallback)
+	boolSecAttr_PollFallback.EndAttributeP()
+	boolSecAttr_Recursive := boolSec.BeginAttribute(row.Recursive)
+	boolSecAttr_Recursive.AddMembershipLowCardRefP(kindWatchRecursive)
+	boolSecAttr_Recursive.EndAttributeP()
+	boolSec.EndSection()
+	// --- i32Array. ---
+	i32ArraySec := dml.GetSectionI32Array()
+	i32ArraySecAttr_PollIntervalMs := i32ArraySec.BeginAttributeSingle(row.PollIntervalMs)
+	i32ArraySecAttr_PollIntervalMs.AddMembershipLowCardRefP(kindWatchPollIntervalMs)
+	i32ArraySecAttr_PollIntervalMs.EndAttributeP()
+	i32ArraySec.EndSection()
 	return
 }
 
@@ -315,11 +351,11 @@ func WatchRequestFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindPollFallback:
+				case kindWatchPollFallback:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolPollFallbackVal = val
 					boolPollFallbackCount++
-				case kindRecursive:
+				case kindWatchRecursive:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolRecursiveVal = val
 					boolRecursiveCount++
@@ -343,7 +379,7 @@ func WatchRequestFillFromArrow[
 		for attrJ := int64(0); attrJ < ni32Array; attrJ++ {
 			for membID := range i32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindPollIntervalMs:
+				case kindWatchPollIntervalMs:
 					val := i32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					i32ArrayPollIntervalMsVal = val
 					i32ArrayPollIntervalMsCount++
@@ -355,6 +391,86 @@ func WatchRequestFillFromArrow[
 			return
 		}
 		c.PollIntervalMs = append(c.PollIntervalMs, i32ArrayPollIntervalMsVal)
+	}
+	return
+}
+
+// WatchRequestReadRow reads row i as one optional WatchRequest component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func WatchRequestReadRow[
+	BoolAttrs WatchRequestBoolAttrsReadI,
+	BoolMembs WatchRequestBoolMembsReadI,
+	I32ArrayAttrs WatchRequestI32ArrayAttrsReadI,
+	I32ArrayMembs WatchRequestI32ArrayMembsReadI,
+](
+	i int,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+	i32ArrayAttrs I32ArrayAttrs,
+	i32ArrayMembs I32ArrayMembs,
+) (row WatchRequest, present bool, err error) {
+	// --- bool. ---
+	var boolPollFallbackVal bool
+	var boolPollFallbackCount int
+	var boolRecursiveVal bool
+	var boolRecursiveCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindWatchPollFallback:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolPollFallbackVal = val
+				boolPollFallbackCount++
+			case kindWatchRecursive:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolRecursiveVal = val
+				boolRecursiveCount++
+			}
+		}
+	}
+	if boolPollFallbackCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "PollFallback").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolPollFallbackCount == 1 {
+		row.PollFallback = boolPollFallbackVal
+		present = true
+	}
+	if boolRecursiveCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Recursive").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolRecursiveCount == 1 {
+		row.Recursive = boolRecursiveVal
+		present = true
+	}
+	// --- i32Array. ---
+	var i32ArrayPollIntervalMsVal int32
+	var i32ArrayPollIntervalMsCount int
+	ni32Array := i32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ni32Array; attrJ++ {
+		for membID := range i32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindWatchPollIntervalMs:
+				val := i32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				i32ArrayPollIntervalMsVal = val
+				i32ArrayPollIntervalMsCount++
+			}
+		}
+	}
+	if i32ArrayPollIntervalMsCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "PollIntervalMs").Errorf("occurs more than once on the row")
+		return
+	}
+	if i32ArrayPollIntervalMsCount == 1 {
+		row.PollIntervalMs = i32ArrayPollIntervalMsVal
+		present = true
 	}
 	return
 }

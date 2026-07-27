@@ -33,31 +33,31 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindIds          uint64
-	kindKinds        uint64
-	kindTitles       uint64
-	kindOwnerAppIds  uint64
-	kindStates       uint64
-	kindCreatedAtMss uint64
-	kindLastEmitMss  uint64
-	kindCurrents     uint64
-	kindTotals       uint64
-	kindUnits        uint64
-	kindEtaMss       uint64
+	kindInflightTaskId      uint64
+	kindInflightTaskKind    uint64
+	kindInflightTitle       uint64
+	kindInflightAppId       uint64
+	kindInflightState       uint64
+	kindInflightCreatedAtMs uint64
+	kindInflightLastEmitMs  uint64
+	kindInflightCurrent     uint64
+	kindInflightTotal       uint64
+	kindInflightUnit        uint64
+	kindInflightEtaMs       uint64
 )
 
 func init() {
-	kindIds = vdd.MembInflightTaskId.GetId().Value()
-	kindKinds = vdd.MembInflightTaskKind.GetId().Value()
-	kindTitles = vdd.MembInflightTitle.GetId().Value()
-	kindOwnerAppIds = vdd.MembInflightAppId.GetId().Value()
-	kindStates = vdd.MembInflightState.GetId().Value()
-	kindCreatedAtMss = vdd.MembInflightCreatedAtMs.GetId().Value()
-	kindLastEmitMss = vdd.MembInflightLastEmitMs.GetId().Value()
-	kindCurrents = vdd.MembInflightCurrent.GetId().Value()
-	kindTotals = vdd.MembInflightTotal.GetId().Value()
-	kindUnits = vdd.MembInflightUnit.GetId().Value()
-	kindEtaMss = vdd.MembInflightEtaMs.GetId().Value()
+	kindInflightTaskId = vdd.MembInflightTaskId.GetId().Value()
+	kindInflightTaskKind = vdd.MembInflightTaskKind.GetId().Value()
+	kindInflightTitle = vdd.MembInflightTitle.GetId().Value()
+	kindInflightAppId = vdd.MembInflightAppId.GetId().Value()
+	kindInflightState = vdd.MembInflightState.GetId().Value()
+	kindInflightCreatedAtMs = vdd.MembInflightCreatedAtMs.GetId().Value()
+	kindInflightLastEmitMs = vdd.MembInflightLastEmitMs.GetId().Value()
+	kindInflightCurrent = vdd.MembInflightCurrent.GetId().Value()
+	kindInflightTotal = vdd.MembInflightTotal.GetId().Value()
+	kindInflightUnit = vdd.MembInflightUnit.GetId().Value()
+	kindInflightEtaMs = vdd.MembInflightEtaMs.GetId().Value()
 	buscodec.Register[InflightSnapshotReply](inflightSnapshotReplyBusCodec)
 }
 
@@ -274,10 +274,13 @@ type InflightSnapshotReplyU64ArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// InflightSnapshotReplyEntityI lists exactly the entity-level methods InflightSnapshotReply uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// InflightSnapshotReplyEntityI is the entity-builder surface InflightSnapshotReplyAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type InflightSnapshotReplyEntityI[
 	StringArrayAttr InflightSnapshotReplyStringArrayAttrI,
 	StringArraySec InflightSnapshotReplyStringArraySecI[StringArrayAttr, Ent],
@@ -339,7 +342,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.Ids[i] {
 				stringArraySecAttr_Ids.AddToContainerP(v)
 			}
-			stringArraySecAttr_Ids.AddMembershipLowCardRefP(kindIds)
+			stringArraySecAttr_Ids.AddMembershipLowCardRefP(kindInflightTaskId)
 			stringArraySecAttr_Ids.EndAttributeP()
 		}
 		if len(c.OwnerAppIds[i]) > 0 {
@@ -347,7 +350,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.OwnerAppIds[i] {
 				stringArraySecAttr_OwnerAppIds.AddToContainerP(v)
 			}
-			stringArraySecAttr_OwnerAppIds.AddMembershipLowCardRefP(kindOwnerAppIds)
+			stringArraySecAttr_OwnerAppIds.AddMembershipLowCardRefP(kindInflightAppId)
 			stringArraySecAttr_OwnerAppIds.EndAttributeP()
 		}
 		stringArraySec.EndSection()
@@ -358,7 +361,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.Kinds[i] {
 				symbolArraySecAttr_Kinds.AddToContainerP(v)
 			}
-			symbolArraySecAttr_Kinds.AddMembershipLowCardRefP(kindKinds)
+			symbolArraySecAttr_Kinds.AddMembershipLowCardRefP(kindInflightTaskKind)
 			symbolArraySecAttr_Kinds.EndAttributeP()
 		}
 		if len(c.States[i]) > 0 {
@@ -366,7 +369,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.States[i] {
 				symbolArraySecAttr_States.AddToContainerP(v)
 			}
-			symbolArraySecAttr_States.AddMembershipLowCardRefP(kindStates)
+			symbolArraySecAttr_States.AddMembershipLowCardRefP(kindInflightState)
 			symbolArraySecAttr_States.EndAttributeP()
 		}
 		if len(c.Units[i]) > 0 {
@@ -374,7 +377,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.Units[i] {
 				symbolArraySecAttr_Units.AddToContainerP(v)
 			}
-			symbolArraySecAttr_Units.AddMembershipLowCardRefP(kindUnits)
+			symbolArraySecAttr_Units.AddMembershipLowCardRefP(kindInflightUnit)
 			symbolArraySecAttr_Units.EndAttributeP()
 		}
 		symbolArraySec.EndSection()
@@ -385,7 +388,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.Titles[i] {
 				textArraySecAttr_Titles.AddToContainerP(v)
 			}
-			textArraySecAttr_Titles.AddMembershipLowCardRefP(kindTitles)
+			textArraySecAttr_Titles.AddMembershipLowCardRefP(kindInflightTitle)
 			textArraySecAttr_Titles.EndAttributeP()
 		}
 		textArraySec.EndSection()
@@ -396,7 +399,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.CreatedAtMss[i] {
 				i64ArraySecAttr_CreatedAtMss.AddToContainerP(v)
 			}
-			i64ArraySecAttr_CreatedAtMss.AddMembershipLowCardRefP(kindCreatedAtMss)
+			i64ArraySecAttr_CreatedAtMss.AddMembershipLowCardRefP(kindInflightCreatedAtMs)
 			i64ArraySecAttr_CreatedAtMss.EndAttributeP()
 		}
 		if len(c.LastEmitMss[i]) > 0 {
@@ -404,7 +407,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.LastEmitMss[i] {
 				i64ArraySecAttr_LastEmitMss.AddToContainerP(v)
 			}
-			i64ArraySecAttr_LastEmitMss.AddMembershipLowCardRefP(kindLastEmitMss)
+			i64ArraySecAttr_LastEmitMss.AddMembershipLowCardRefP(kindInflightLastEmitMs)
 			i64ArraySecAttr_LastEmitMss.EndAttributeP()
 		}
 		if len(c.EtaMss[i]) > 0 {
@@ -412,7 +415,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.EtaMss[i] {
 				i64ArraySecAttr_EtaMss.AddToContainerP(v)
 			}
-			i64ArraySecAttr_EtaMss.AddMembershipLowCardRefP(kindEtaMss)
+			i64ArraySecAttr_EtaMss.AddMembershipLowCardRefP(kindInflightEtaMs)
 			i64ArraySecAttr_EtaMss.EndAttributeP()
 		}
 		i64ArraySec.EndSection()
@@ -423,7 +426,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.Currents[i] {
 				u64ArraySecAttr_Currents.AddToContainerP(v)
 			}
-			u64ArraySecAttr_Currents.AddMembershipLowCardRefP(kindCurrents)
+			u64ArraySecAttr_Currents.AddMembershipLowCardRefP(kindInflightCurrent)
 			u64ArraySecAttr_Currents.EndAttributeP()
 		}
 		if len(c.Totals[i]) > 0 {
@@ -431,7 +434,7 @@ func InflightSnapshotReplyBuildEntities[
 			for _, v := range c.Totals[i] {
 				u64ArraySecAttr_Totals.AddToContainerP(v)
 			}
-			u64ArraySecAttr_Totals.AddMembershipLowCardRefP(kindTotals)
+			u64ArraySecAttr_Totals.AddMembershipLowCardRefP(kindInflightTotal)
 			u64ArraySecAttr_Totals.EndAttributeP()
 		}
 		u64ArraySec.EndSection()
@@ -441,6 +444,136 @@ func InflightSnapshotReplyBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// InflightSnapshotReplyAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func InflightSnapshotReplyAddSections[
+	StringArrayAttr InflightSnapshotReplyStringArrayAttrI,
+	StringArraySec InflightSnapshotReplyStringArraySecI[StringArrayAttr, Ent],
+	SymbolArrayAttr InflightSnapshotReplySymbolArrayAttrI,
+	SymbolArraySec InflightSnapshotReplySymbolArraySecI[SymbolArrayAttr, Ent],
+	TextArrayAttr InflightSnapshotReplyTextArrayAttrI,
+	TextArraySec InflightSnapshotReplyTextArraySecI[TextArrayAttr, Ent],
+	I64ArrayAttr InflightSnapshotReplyI64ArrayAttrI,
+	I64ArraySec InflightSnapshotReplyI64ArraySecI[I64ArrayAttr, Ent],
+	U64ArrayAttr InflightSnapshotReplyU64ArrayAttrI,
+	U64ArraySec InflightSnapshotReplyU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+	DML InflightSnapshotReplyEntityI[
+		StringArrayAttr, StringArraySec,
+		SymbolArrayAttr, SymbolArraySec,
+		TextArrayAttr, TextArraySec,
+		I64ArrayAttr, I64ArraySec,
+		U64ArrayAttr, U64ArraySec,
+		Ent,
+	],
+](dml DML, row InflightSnapshotReply) (err error) {
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	if len(row.Ids) > 0 {
+		stringArraySecAttr_Ids := stringArraySec.BeginAttribute()
+		for _, v := range row.Ids {
+			stringArraySecAttr_Ids.AddToContainerP(v)
+		}
+		stringArraySecAttr_Ids.AddMembershipLowCardRefP(kindInflightTaskId)
+		stringArraySecAttr_Ids.EndAttributeP()
+	}
+	if len(row.OwnerAppIds) > 0 {
+		stringArraySecAttr_OwnerAppIds := stringArraySec.BeginAttribute()
+		for _, v := range row.OwnerAppIds {
+			stringArraySecAttr_OwnerAppIds.AddToContainerP(v)
+		}
+		stringArraySecAttr_OwnerAppIds.AddMembershipLowCardRefP(kindInflightAppId)
+		stringArraySecAttr_OwnerAppIds.EndAttributeP()
+	}
+	stringArraySec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	if len(row.Kinds) > 0 {
+		symbolArraySecAttr_Kinds := symbolArraySec.BeginAttribute()
+		for _, v := range row.Kinds {
+			symbolArraySecAttr_Kinds.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Kinds.AddMembershipLowCardRefP(kindInflightTaskKind)
+		symbolArraySecAttr_Kinds.EndAttributeP()
+	}
+	if len(row.States) > 0 {
+		symbolArraySecAttr_States := symbolArraySec.BeginAttribute()
+		for _, v := range row.States {
+			symbolArraySecAttr_States.AddToContainerP(v)
+		}
+		symbolArraySecAttr_States.AddMembershipLowCardRefP(kindInflightState)
+		symbolArraySecAttr_States.EndAttributeP()
+	}
+	if len(row.Units) > 0 {
+		symbolArraySecAttr_Units := symbolArraySec.BeginAttribute()
+		for _, v := range row.Units {
+			symbolArraySecAttr_Units.AddToContainerP(v)
+		}
+		symbolArraySecAttr_Units.AddMembershipLowCardRefP(kindInflightUnit)
+		symbolArraySecAttr_Units.EndAttributeP()
+	}
+	symbolArraySec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	if len(row.Titles) > 0 {
+		textArraySecAttr_Titles := textArraySec.BeginAttribute()
+		for _, v := range row.Titles {
+			textArraySecAttr_Titles.AddToContainerP(v)
+		}
+		textArraySecAttr_Titles.AddMembershipLowCardRefP(kindInflightTitle)
+		textArraySecAttr_Titles.EndAttributeP()
+	}
+	textArraySec.EndSection()
+	// --- i64Array. ---
+	i64ArraySec := dml.GetSectionI64Array()
+	if len(row.CreatedAtMss) > 0 {
+		i64ArraySecAttr_CreatedAtMss := i64ArraySec.BeginAttribute()
+		for _, v := range row.CreatedAtMss {
+			i64ArraySecAttr_CreatedAtMss.AddToContainerP(v)
+		}
+		i64ArraySecAttr_CreatedAtMss.AddMembershipLowCardRefP(kindInflightCreatedAtMs)
+		i64ArraySecAttr_CreatedAtMss.EndAttributeP()
+	}
+	if len(row.LastEmitMss) > 0 {
+		i64ArraySecAttr_LastEmitMss := i64ArraySec.BeginAttribute()
+		for _, v := range row.LastEmitMss {
+			i64ArraySecAttr_LastEmitMss.AddToContainerP(v)
+		}
+		i64ArraySecAttr_LastEmitMss.AddMembershipLowCardRefP(kindInflightLastEmitMs)
+		i64ArraySecAttr_LastEmitMss.EndAttributeP()
+	}
+	if len(row.EtaMss) > 0 {
+		i64ArraySecAttr_EtaMss := i64ArraySec.BeginAttribute()
+		for _, v := range row.EtaMss {
+			i64ArraySecAttr_EtaMss.AddToContainerP(v)
+		}
+		i64ArraySecAttr_EtaMss.AddMembershipLowCardRefP(kindInflightEtaMs)
+		i64ArraySecAttr_EtaMss.EndAttributeP()
+	}
+	i64ArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	if len(row.Currents) > 0 {
+		u64ArraySecAttr_Currents := u64ArraySec.BeginAttribute()
+		for _, v := range row.Currents {
+			u64ArraySecAttr_Currents.AddToContainerP(v)
+		}
+		u64ArraySecAttr_Currents.AddMembershipLowCardRefP(kindInflightCurrent)
+		u64ArraySecAttr_Currents.EndAttributeP()
+	}
+	if len(row.Totals) > 0 {
+		u64ArraySecAttr_Totals := u64ArraySec.BeginAttribute()
+		for _, v := range row.Totals {
+			u64ArraySecAttr_Totals.AddToContainerP(v)
+		}
+		u64ArraySecAttr_Totals.AddMembershipLowCardRefP(kindInflightTotal)
+		u64ArraySecAttr_Totals.EndAttributeP()
+	}
+	u64ArraySec.EndSection()
 	return
 }
 
@@ -554,11 +687,11 @@ func InflightSnapshotReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindIds:
+				case kindInflightTaskId:
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArrayIdsSlice = append(stringArrayIdsSlice, v)
 					}
-				case kindOwnerAppIds:
+				case kindInflightAppId:
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArrayOwnerAppIdsSlice = append(stringArrayOwnerAppIdsSlice, v)
 					}
@@ -575,15 +708,15 @@ func InflightSnapshotReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindKinds:
+				case kindInflightTaskKind:
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayKindsSlice = append(symbolArrayKindsSlice, v)
 					}
-				case kindStates:
+				case kindInflightState:
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayStatesSlice = append(symbolArrayStatesSlice, v)
 					}
-				case kindUnits:
+				case kindInflightUnit:
 					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						symbolArrayUnitsSlice = append(symbolArrayUnitsSlice, v)
 					}
@@ -599,7 +732,7 @@ func InflightSnapshotReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindTitles:
+				case kindInflightTitle:
 					for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						textArrayTitlesSlice = append(textArrayTitlesSlice, v)
 					}
@@ -615,15 +748,15 @@ func InflightSnapshotReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
 			for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindCreatedAtMss:
+				case kindInflightCreatedAtMs:
 					for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						i64ArrayCreatedAtMssSlice = append(i64ArrayCreatedAtMssSlice, v)
 					}
-				case kindLastEmitMss:
+				case kindInflightLastEmitMs:
 					for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						i64ArrayLastEmitMssSlice = append(i64ArrayLastEmitMssSlice, v)
 					}
-				case kindEtaMss:
+				case kindInflightEtaMs:
 					for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						i64ArrayEtaMssSlice = append(i64ArrayEtaMssSlice, v)
 					}
@@ -640,11 +773,11 @@ func InflightSnapshotReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindCurrents:
+				case kindInflightCurrent:
 					for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u64ArrayCurrentsSlice = append(u64ArrayCurrentsSlice, v)
 					}
-				case kindTotals:
+				case kindInflightTotal:
 					for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						u64ArrayTotalsSlice = append(u64ArrayTotalsSlice, v)
 					}
@@ -653,6 +786,179 @@ func InflightSnapshotReplyFillFromArrow[
 		}
 		c.Currents = append(c.Currents, u64ArrayCurrentsSlice)
 		c.Totals = append(c.Totals, u64ArrayTotalsSlice)
+	}
+	return
+}
+
+// InflightSnapshotReplyReadRow reads row i as one optional InflightSnapshotReply component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func InflightSnapshotReplyReadRow[
+	StringArrayAttrs InflightSnapshotReplyStringArrayAttrsReadI,
+	StringArrayMembs InflightSnapshotReplyStringArrayMembsReadI,
+	SymbolArrayAttrs InflightSnapshotReplySymbolArrayAttrsReadI,
+	SymbolArrayMembs InflightSnapshotReplySymbolArrayMembsReadI,
+	TextArrayAttrs InflightSnapshotReplyTextArrayAttrsReadI,
+	TextArrayMembs InflightSnapshotReplyTextArrayMembsReadI,
+	I64ArrayAttrs InflightSnapshotReplyI64ArrayAttrsReadI,
+	I64ArrayMembs InflightSnapshotReplyI64ArrayMembsReadI,
+	U64ArrayAttrs InflightSnapshotReplyU64ArrayAttrsReadI,
+	U64ArrayMembs InflightSnapshotReplyU64ArrayMembsReadI,
+](
+	i int,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	symbolArrayAttrs SymbolArrayAttrs,
+	symbolArrayMembs SymbolArrayMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+	i64ArrayAttrs I64ArrayAttrs,
+	i64ArrayMembs I64ArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+) (row InflightSnapshotReply, present bool, err error) {
+	// --- stringArray. ---
+	var stringArrayIdsSlice []string
+	var stringArrayOwnerAppIdsSlice []string
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindInflightTaskId:
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayIdsSlice = append(stringArrayIdsSlice, v)
+				}
+			case kindInflightAppId:
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayOwnerAppIdsSlice = append(stringArrayOwnerAppIdsSlice, v)
+				}
+			}
+		}
+	}
+	if stringArrayIdsSlice != nil {
+		row.Ids = stringArrayIdsSlice
+		present = true
+	}
+	if stringArrayOwnerAppIdsSlice != nil {
+		row.OwnerAppIds = stringArrayOwnerAppIdsSlice
+		present = true
+	}
+	// --- symbolArray. ---
+	var symbolArrayKindsSlice []string
+	var symbolArrayStatesSlice []string
+	var symbolArrayUnitsSlice []string
+	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
+		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindInflightTaskKind:
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayKindsSlice = append(symbolArrayKindsSlice, v)
+				}
+			case kindInflightState:
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayStatesSlice = append(symbolArrayStatesSlice, v)
+				}
+			case kindInflightUnit:
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayUnitsSlice = append(symbolArrayUnitsSlice, v)
+				}
+			}
+		}
+	}
+	if symbolArrayKindsSlice != nil {
+		row.Kinds = symbolArrayKindsSlice
+		present = true
+	}
+	if symbolArrayStatesSlice != nil {
+		row.States = symbolArrayStatesSlice
+		present = true
+	}
+	if symbolArrayUnitsSlice != nil {
+		row.Units = symbolArrayUnitsSlice
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayTitlesSlice []string
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindInflightTitle:
+				for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					textArrayTitlesSlice = append(textArrayTitlesSlice, v)
+				}
+			}
+		}
+	}
+	if textArrayTitlesSlice != nil {
+		row.Titles = textArrayTitlesSlice
+		present = true
+	}
+	// --- i64Array. ---
+	var i64ArrayCreatedAtMssSlice []int64
+	var i64ArrayLastEmitMssSlice []int64
+	var i64ArrayEtaMssSlice []int64
+	ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
+		for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindInflightCreatedAtMs:
+				for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					i64ArrayCreatedAtMssSlice = append(i64ArrayCreatedAtMssSlice, v)
+				}
+			case kindInflightLastEmitMs:
+				for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					i64ArrayLastEmitMssSlice = append(i64ArrayLastEmitMssSlice, v)
+				}
+			case kindInflightEtaMs:
+				for v := range i64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					i64ArrayEtaMssSlice = append(i64ArrayEtaMssSlice, v)
+				}
+			}
+		}
+	}
+	if i64ArrayCreatedAtMssSlice != nil {
+		row.CreatedAtMss = i64ArrayCreatedAtMssSlice
+		present = true
+	}
+	if i64ArrayLastEmitMssSlice != nil {
+		row.LastEmitMss = i64ArrayLastEmitMssSlice
+		present = true
+	}
+	if i64ArrayEtaMssSlice != nil {
+		row.EtaMss = i64ArrayEtaMssSlice
+		present = true
+	}
+	// --- u64Array. ---
+	var u64ArrayCurrentsSlice []uint64
+	var u64ArrayTotalsSlice []uint64
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindInflightCurrent:
+				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u64ArrayCurrentsSlice = append(u64ArrayCurrentsSlice, v)
+				}
+			case kindInflightTotal:
+				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u64ArrayTotalsSlice = append(u64ArrayTotalsSlice, v)
+				}
+			}
+		}
+	}
+	if u64ArrayCurrentsSlice != nil {
+		row.Currents = u64ArrayCurrentsSlice
+		present = true
+	}
+	if u64ArrayTotalsSlice != nil {
+		row.Totals = u64ArrayTotalsSlice
+		present = true
 	}
 	return
 }

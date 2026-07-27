@@ -33,19 +33,19 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindAppId           uint64
-	kindFilterPattern   uint64
-	kindFilterReason    uint64
-	kindFilterDirection uint64
-	kindFilterSticky    uint64
+	kindAppId            uint64
+	kindCapFilterPattern uint64
+	kindReason           uint64
+	kindCapDirection     uint64
+	kindCapFilterSticky  uint64
 )
 
 func init() {
 	kindAppId = vdd.MembAppId.GetId().Value()
-	kindFilterPattern = vdd.MembCapFilterPattern.GetId().Value()
-	kindFilterReason = vdd.MembReason.GetId().Value()
-	kindFilterDirection = vdd.MembCapDirection.GetId().Value()
-	kindFilterSticky = vdd.MembCapFilterSticky.GetId().Value()
+	kindCapFilterPattern = vdd.MembCapFilterPattern.GetId().Value()
+	kindReason = vdd.MembReason.GetId().Value()
+	kindCapDirection = vdd.MembCapDirection.GetId().Value()
+	kindCapFilterSticky = vdd.MembCapFilterSticky.GetId().Value()
 	buscodec.Register[GrantRequest](grantRequestBusCodec)
 }
 
@@ -224,10 +224,13 @@ type GrantRequestBoolSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// GrantRequestEntityI lists exactly the entity-level methods GrantRequest uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// GrantRequestEntityI is the entity-builder surface GrantRequestAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type GrantRequestEntityI[
 	StringArrayAttr GrantRequestStringArrayAttrI,
 	StringArraySec GrantRequestStringArraySecI[StringArrayAttr, Ent],
@@ -282,25 +285,25 @@ func GrantRequestBuildEntities[
 		stringArraySecAttr_AppId.AddMembershipLowCardRefP(kindAppId)
 		stringArraySecAttr_AppId.EndAttributeP()
 		stringArraySecAttr_FilterPattern := stringArraySec.BeginAttributeSingle(c.FilterPattern[i])
-		stringArraySecAttr_FilterPattern.AddMembershipLowCardRefP(kindFilterPattern)
+		stringArraySecAttr_FilterPattern.AddMembershipLowCardRefP(kindCapFilterPattern)
 		stringArraySecAttr_FilterPattern.EndAttributeP()
 		stringArraySec.EndSection()
 		// --- textArray. ---
 		textArraySec := dml.GetSectionTextArray()
 		textArraySecAttr_FilterReason := textArraySec.BeginAttributeSingle(c.FilterReason[i])
-		textArraySecAttr_FilterReason.AddMembershipLowCardRefP(kindFilterReason)
+		textArraySecAttr_FilterReason.AddMembershipLowCardRefP(kindReason)
 		textArraySecAttr_FilterReason.EndAttributeP()
 		textArraySec.EndSection()
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_FilterDirection := symbolSec.BeginAttribute(c.FilterDirection[i])
-		symbolSecAttr_FilterDirection.AddMembershipLowCardRefP(kindFilterDirection)
+		symbolSecAttr_FilterDirection.AddMembershipLowCardRefP(kindCapDirection)
 		symbolSecAttr_FilterDirection.EndAttributeP()
 		symbolSec.EndSection()
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_FilterSticky := boolSec.BeginAttribute(c.FilterSticky[i])
-		boolSecAttr_FilterSticky.AddMembershipLowCardRefP(kindFilterSticky)
+		boolSecAttr_FilterSticky.AddMembershipLowCardRefP(kindCapFilterSticky)
 		boolSecAttr_FilterSticky.EndAttributeP()
 		boolSec.EndSection()
 		err = dml.CommitEntity()
@@ -309,6 +312,57 @@ func GrantRequestBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// GrantRequestAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func GrantRequestAddSections[
+	StringArrayAttr GrantRequestStringArrayAttrI,
+	StringArraySec GrantRequestStringArraySecI[StringArrayAttr, Ent],
+	TextArrayAttr GrantRequestTextArrayAttrI,
+	TextArraySec GrantRequestTextArraySecI[TextArrayAttr, Ent],
+	SymbolAttr GrantRequestSymbolAttrI,
+	SymbolSec GrantRequestSymbolSecI[SymbolAttr, Ent],
+	BoolAttr GrantRequestBoolAttrI,
+	BoolSec GrantRequestBoolSecI[BoolAttr, Ent],
+	Ent any,
+	DML GrantRequestEntityI[
+		StringArrayAttr, StringArraySec,
+		TextArrayAttr, TextArraySec,
+		SymbolAttr, SymbolSec,
+		BoolAttr, BoolSec,
+		Ent,
+	],
+](dml DML, row GrantRequest) (err error) {
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_AppId := stringArraySec.BeginAttributeSingle(row.AppId)
+	stringArraySecAttr_AppId.AddMembershipLowCardRefP(kindAppId)
+	stringArraySecAttr_AppId.EndAttributeP()
+	stringArraySecAttr_FilterPattern := stringArraySec.BeginAttributeSingle(row.FilterPattern)
+	stringArraySecAttr_FilterPattern.AddMembershipLowCardRefP(kindCapFilterPattern)
+	stringArraySecAttr_FilterPattern.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	textArraySecAttr_FilterReason := textArraySec.BeginAttributeSingle(row.FilterReason)
+	textArraySecAttr_FilterReason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_FilterReason.EndAttributeP()
+	textArraySec.EndSection()
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_FilterDirection := symbolSec.BeginAttribute(row.FilterDirection)
+	symbolSecAttr_FilterDirection.AddMembershipLowCardRefP(kindCapDirection)
+	symbolSecAttr_FilterDirection.EndAttributeP()
+	symbolSec.EndSection()
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_FilterSticky := boolSec.BeginAttribute(row.FilterSticky)
+	boolSecAttr_FilterSticky.AddMembershipLowCardRefP(kindCapFilterSticky)
+	boolSecAttr_FilterSticky.EndAttributeP()
+	boolSec.EndSection()
 	return
 }
 
@@ -413,7 +467,7 @@ func GrantRequestFillFromArrow[
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayAppIdVal = val
 					stringArrayAppIdCount++
-				case kindFilterPattern:
+				case kindCapFilterPattern:
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayFilterPatternVal = val
 					stringArrayFilterPatternCount++
@@ -437,7 +491,7 @@ func GrantRequestFillFromArrow[
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindFilterReason:
+				case kindReason:
 					val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					textArrayFilterReasonVal = val
 					textArrayFilterReasonCount++
@@ -456,7 +510,7 @@ func GrantRequestFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindFilterDirection:
+				case kindCapDirection:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolFilterDirectionVal = val
 					symbolFilterDirectionCount++
@@ -475,7 +529,7 @@ func GrantRequestFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindFilterSticky:
+				case kindCapFilterSticky:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolFilterStickyVal = val
 					boolFilterStickyCount++
@@ -487,6 +541,138 @@ func GrantRequestFillFromArrow[
 			return
 		}
 		c.FilterSticky = append(c.FilterSticky, boolFilterStickyVal)
+	}
+	return
+}
+
+// GrantRequestReadRow reads row i as one optional GrantRequest component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func GrantRequestReadRow[
+	StringArrayAttrs GrantRequestStringArrayAttrsReadI,
+	StringArrayMembs GrantRequestStringArrayMembsReadI,
+	TextArrayAttrs GrantRequestTextArrayAttrsReadI,
+	TextArrayMembs GrantRequestTextArrayMembsReadI,
+	SymbolAttrs GrantRequestSymbolAttrsReadI,
+	SymbolMembs GrantRequestSymbolMembsReadI,
+	BoolAttrs GrantRequestBoolAttrsReadI,
+	BoolMembs GrantRequestBoolMembsReadI,
+](
+	i int,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+) (row GrantRequest, present bool, err error) {
+	// --- stringArray. ---
+	var stringArrayAppIdVal string
+	var stringArrayAppIdCount int
+	var stringArrayFilterPatternVal string
+	var stringArrayFilterPatternCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindAppId:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayAppIdVal = val
+				stringArrayAppIdCount++
+			case kindCapFilterPattern:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayFilterPatternVal = val
+				stringArrayFilterPatternCount++
+			}
+		}
+	}
+	if stringArrayAppIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "AppId").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayAppIdCount == 1 {
+		row.AppId = stringArrayAppIdVal
+		present = true
+	}
+	if stringArrayFilterPatternCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "FilterPattern").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayFilterPatternCount == 1 {
+		row.FilterPattern = stringArrayFilterPatternVal
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayFilterReasonVal string
+	var textArrayFilterReasonCount int
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindReason:
+				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				textArrayFilterReasonVal = val
+				textArrayFilterReasonCount++
+			}
+		}
+	}
+	if textArrayFilterReasonCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "FilterReason").Errorf("occurs more than once on the row")
+		return
+	}
+	if textArrayFilterReasonCount == 1 {
+		row.FilterReason = textArrayFilterReasonVal
+		present = true
+	}
+	// --- symbol. ---
+	var symbolFilterDirectionVal string
+	var symbolFilterDirectionCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindCapDirection:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolFilterDirectionVal = val
+				symbolFilterDirectionCount++
+			}
+		}
+	}
+	if symbolFilterDirectionCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "FilterDirection").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolFilterDirectionCount == 1 {
+		row.FilterDirection = symbolFilterDirectionVal
+		present = true
+	}
+	// --- bool. ---
+	var boolFilterStickyVal bool
+	var boolFilterStickyCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindCapFilterSticky:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolFilterStickyVal = val
+				boolFilterStickyCount++
+			}
+		}
+	}
+	if boolFilterStickyCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "FilterSticky").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolFilterStickyCount == 1 {
+		row.FilterSticky = boolFilterStickyVal
+		present = true
 	}
 	return
 }

@@ -33,16 +33,16 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindStarted      uint64
-	kindEventSubject uint64
-	kindBackend      uint64
-	kindReason       uint64
+	kindWatchStarted      uint64
+	kindWatchEventSubject uint64
+	kindWatchBackend      uint64
+	kindReason            uint64
 )
 
 func init() {
-	kindStarted = vdd.MembWatchStarted.GetId().Value()
-	kindEventSubject = vdd.MembWatchEventSubject.GetId().Value()
-	kindBackend = vdd.MembWatchBackend.GetId().Value()
+	kindWatchStarted = vdd.MembWatchStarted.GetId().Value()
+	kindWatchEventSubject = vdd.MembWatchEventSubject.GetId().Value()
+	kindWatchBackend = vdd.MembWatchBackend.GetId().Value()
 	kindReason = vdd.MembReason.GetId().Value()
 	buscodec.Register[WatchReply](watchReplyBusCodec)
 }
@@ -219,10 +219,13 @@ type WatchReplyTextArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// WatchReplyEntityI lists exactly the entity-level methods WatchReply uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// WatchReplyEntityI is the entity-builder surface WatchReplyAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type WatchReplyEntityI[
 	BoolAttr WatchReplyBoolAttrI,
 	BoolSec WatchReplyBoolSecI[BoolAttr, Ent],
@@ -274,19 +277,19 @@ func WatchReplyBuildEntities[
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Started := boolSec.BeginAttribute(c.Started[i])
-		boolSecAttr_Started.AddMembershipLowCardRefP(kindStarted)
+		boolSecAttr_Started.AddMembershipLowCardRefP(kindWatchStarted)
 		boolSecAttr_Started.EndAttributeP()
 		boolSec.EndSection()
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_EventSubject := stringArraySec.BeginAttributeSingle(c.EventSubject[i])
-		stringArraySecAttr_EventSubject.AddMembershipLowCardRefP(kindEventSubject)
+		stringArraySecAttr_EventSubject.AddMembershipLowCardRefP(kindWatchEventSubject)
 		stringArraySecAttr_EventSubject.EndAttributeP()
 		stringArraySec.EndSection()
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Backend := symbolSec.BeginAttribute(c.Backend[i])
-		symbolSecAttr_Backend.AddMembershipLowCardRefP(kindBackend)
+		symbolSecAttr_Backend.AddMembershipLowCardRefP(kindWatchBackend)
 		symbolSecAttr_Backend.EndAttributeP()
 		symbolSec.EndSection()
 		// --- textArray. ---
@@ -301,6 +304,54 @@ func WatchReplyBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// WatchReplyAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func WatchReplyAddSections[
+	BoolAttr WatchReplyBoolAttrI,
+	BoolSec WatchReplyBoolSecI[BoolAttr, Ent],
+	StringArrayAttr WatchReplyStringArrayAttrI,
+	StringArraySec WatchReplyStringArraySecI[StringArrayAttr, Ent],
+	SymbolAttr WatchReplySymbolAttrI,
+	SymbolSec WatchReplySymbolSecI[SymbolAttr, Ent],
+	TextArrayAttr WatchReplyTextArrayAttrI,
+	TextArraySec WatchReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+	DML WatchReplyEntityI[
+		BoolAttr, BoolSec,
+		StringArrayAttr, StringArraySec,
+		SymbolAttr, SymbolSec,
+		TextArrayAttr, TextArraySec,
+		Ent,
+	],
+](dml DML, row WatchReply) (err error) {
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_Started := boolSec.BeginAttribute(row.Started)
+	boolSecAttr_Started.AddMembershipLowCardRefP(kindWatchStarted)
+	boolSecAttr_Started.EndAttributeP()
+	boolSec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_EventSubject := stringArraySec.BeginAttributeSingle(row.EventSubject)
+	stringArraySecAttr_EventSubject.AddMembershipLowCardRefP(kindWatchEventSubject)
+	stringArraySecAttr_EventSubject.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Backend := symbolSec.BeginAttribute(row.Backend)
+	symbolSecAttr_Backend.AddMembershipLowCardRefP(kindWatchBackend)
+	symbolSecAttr_Backend.EndAttributeP()
+	symbolSec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	textArraySec.EndSection()
 	return
 }
 
@@ -399,7 +450,7 @@ func WatchReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindStarted:
+				case kindWatchStarted:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolStartedVal = val
 					boolStartedCount++
@@ -418,7 +469,7 @@ func WatchReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindEventSubject:
+				case kindWatchEventSubject:
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayEventSubjectVal = val
 					stringArrayEventSubjectCount++
@@ -437,7 +488,7 @@ func WatchReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindBackend:
+				case kindWatchBackend:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolBackendVal = val
 					symbolBackendCount++
@@ -468,6 +519,124 @@ func WatchReplyFillFromArrow[
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
+	}
+	return
+}
+
+// WatchReplyReadRow reads row i as one optional WatchReply component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func WatchReplyReadRow[
+	BoolAttrs WatchReplyBoolAttrsReadI,
+	BoolMembs WatchReplyBoolMembsReadI,
+	StringArrayAttrs WatchReplyStringArrayAttrsReadI,
+	StringArrayMembs WatchReplyStringArrayMembsReadI,
+	SymbolAttrs WatchReplySymbolAttrsReadI,
+	SymbolMembs WatchReplySymbolMembsReadI,
+	TextArrayAttrs WatchReplyTextArrayAttrsReadI,
+	TextArrayMembs WatchReplyTextArrayMembsReadI,
+](
+	i int,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+) (row WatchReply, present bool, err error) {
+	// --- bool. ---
+	var boolStartedVal bool
+	var boolStartedCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindWatchStarted:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolStartedVal = val
+				boolStartedCount++
+			}
+		}
+	}
+	if boolStartedCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Started").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolStartedCount == 1 {
+		row.Started = boolStartedVal
+		present = true
+	}
+	// --- stringArray. ---
+	var stringArrayEventSubjectVal string
+	var stringArrayEventSubjectCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindWatchEventSubject:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayEventSubjectVal = val
+				stringArrayEventSubjectCount++
+			}
+		}
+	}
+	if stringArrayEventSubjectCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "EventSubject").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayEventSubjectCount == 1 {
+		row.EventSubject = stringArrayEventSubjectVal
+		present = true
+	}
+	// --- symbol. ---
+	var symbolBackendVal string
+	var symbolBackendCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindWatchBackend:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolBackendVal = val
+				symbolBackendCount++
+			}
+		}
+	}
+	if symbolBackendCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Backend").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolBackendCount == 1 {
+		row.Backend = symbolBackendVal
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayReasonVal string
+	var textArrayReasonCount int
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindReason:
+				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				textArrayReasonVal = val
+				textArrayReasonCount++
+			}
+		}
+	}
+	if textArrayReasonCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		return
+	}
+	if textArrayReasonCount == 1 {
+		row.Reason = textArrayReasonVal
+		present = true
 	}
 	return
 }

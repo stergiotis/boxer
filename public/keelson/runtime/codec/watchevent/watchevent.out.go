@@ -33,15 +33,15 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindKind   uint64
-	kindName   uint64
-	kindCookie uint64
+	kindWatchEventKind   uint64
+	kindWatchEventName   uint64
+	kindWatchEventCookie uint64
 )
 
 func init() {
-	kindKind = vdd.MembWatchEventKind.GetId().Value()
-	kindName = vdd.MembWatchEventName.GetId().Value()
-	kindCookie = vdd.MembWatchEventCookie.GetId().Value()
+	kindWatchEventKind = vdd.MembWatchEventKind.GetId().Value()
+	kindWatchEventName = vdd.MembWatchEventName.GetId().Value()
+	kindWatchEventCookie = vdd.MembWatchEventCookie.GetId().Value()
 	buscodec.Register[WatchEvent](watchEventBusCodec)
 }
 
@@ -199,10 +199,13 @@ type WatchEventU32ArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// WatchEventEntityI lists exactly the entity-level methods WatchEvent uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// WatchEventEntityI is the entity-builder surface WatchEventAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type WatchEventEntityI[
 	SymbolAttr WatchEventSymbolAttrI,
 	SymbolSec WatchEventSymbolSecI[SymbolAttr, Ent],
@@ -248,19 +251,19 @@ func WatchEventBuildEntities[
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Kind := symbolSec.BeginAttribute(c.Kind[i])
-		symbolSecAttr_Kind.AddMembershipLowCardRefP(kindKind)
+		symbolSecAttr_Kind.AddMembershipLowCardRefP(kindWatchEventKind)
 		symbolSecAttr_Kind.EndAttributeP()
 		symbolSec.EndSection()
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_Name := stringArraySec.BeginAttributeSingle(c.Name[i])
-		stringArraySecAttr_Name.AddMembershipLowCardRefP(kindName)
+		stringArraySecAttr_Name.AddMembershipLowCardRefP(kindWatchEventName)
 		stringArraySecAttr_Name.EndAttributeP()
 		stringArraySec.EndSection()
 		// --- u32Array. ---
 		u32ArraySec := dml.GetSectionU32Array()
 		u32ArraySecAttr_Cookie := u32ArraySec.BeginAttributeSingle(c.Cookie[i])
-		u32ArraySecAttr_Cookie.AddMembershipLowCardRefP(kindCookie)
+		u32ArraySecAttr_Cookie.AddMembershipLowCardRefP(kindWatchEventCookie)
 		u32ArraySecAttr_Cookie.EndAttributeP()
 		u32ArraySec.EndSection()
 		err = dml.CommitEntity()
@@ -269,6 +272,45 @@ func WatchEventBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// WatchEventAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func WatchEventAddSections[
+	SymbolAttr WatchEventSymbolAttrI,
+	SymbolSec WatchEventSymbolSecI[SymbolAttr, Ent],
+	StringArrayAttr WatchEventStringArrayAttrI,
+	StringArraySec WatchEventStringArraySecI[StringArrayAttr, Ent],
+	U32ArrayAttr WatchEventU32ArrayAttrI,
+	U32ArraySec WatchEventU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+	DML WatchEventEntityI[
+		SymbolAttr, SymbolSec,
+		StringArrayAttr, StringArraySec,
+		U32ArrayAttr, U32ArraySec,
+		Ent,
+	],
+](dml DML, row WatchEvent) (err error) {
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindWatchEventKind)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_Name := stringArraySec.BeginAttributeSingle(row.Name)
+	stringArraySecAttr_Name.AddMembershipLowCardRefP(kindWatchEventName)
+	stringArraySecAttr_Name.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- u32Array. ---
+	u32ArraySec := dml.GetSectionU32Array()
+	u32ArraySecAttr_Cookie := u32ArraySec.BeginAttributeSingle(row.Cookie)
+	u32ArraySecAttr_Cookie.AddMembershipLowCardRefP(kindWatchEventCookie)
+	u32ArraySecAttr_Cookie.EndAttributeP()
+	u32ArraySec.EndSection()
 	return
 }
 
@@ -352,7 +394,7 @@ func WatchEventFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindKind:
+				case kindWatchEventKind:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolKindVal = val
 					symbolKindCount++
@@ -371,7 +413,7 @@ func WatchEventFillFromArrow[
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindName:
+				case kindWatchEventName:
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayNameVal = val
 					stringArrayNameCount++
@@ -390,7 +432,7 @@ func WatchEventFillFromArrow[
 		for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 			for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindCookie:
+				case kindWatchEventCookie:
 					val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u32ArrayCookieVal = val
 					u32ArrayCookieCount++
@@ -402,6 +444,98 @@ func WatchEventFillFromArrow[
 			return
 		}
 		c.Cookie = append(c.Cookie, u32ArrayCookieVal)
+	}
+	return
+}
+
+// WatchEventReadRow reads row i as one optional WatchEvent component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func WatchEventReadRow[
+	SymbolAttrs WatchEventSymbolAttrsReadI,
+	SymbolMembs WatchEventSymbolMembsReadI,
+	StringArrayAttrs WatchEventStringArrayAttrsReadI,
+	StringArrayMembs WatchEventStringArrayMembsReadI,
+	U32ArrayAttrs WatchEventU32ArrayAttrsReadI,
+	U32ArrayMembs WatchEventU32ArrayMembsReadI,
+](
+	i int,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	u32ArrayAttrs U32ArrayAttrs,
+	u32ArrayMembs U32ArrayMembs,
+) (row WatchEvent, present bool, err error) {
+	// --- symbol. ---
+	var symbolKindVal string
+	var symbolKindCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindWatchEventKind:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolKindVal = val
+				symbolKindCount++
+			}
+		}
+	}
+	if symbolKindCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Kind").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolKindCount == 1 {
+		row.Kind = symbolKindVal
+		present = true
+	}
+	// --- stringArray. ---
+	var stringArrayNameVal string
+	var stringArrayNameCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindWatchEventName:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayNameVal = val
+				stringArrayNameCount++
+			}
+		}
+	}
+	if stringArrayNameCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Name").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayNameCount == 1 {
+		row.Name = stringArrayNameVal
+		present = true
+	}
+	// --- u32Array. ---
+	var u32ArrayCookieVal uint32
+	var u32ArrayCookieCount int
+	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
+		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindWatchEventCookie:
+				val := u32ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u32ArrayCookieVal = val
+				u32ArrayCookieCount++
+			}
+		}
+	}
+	if u32ArrayCookieCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Cookie").Errorf("occurs more than once on the row")
+		return
+	}
+	if u32ArrayCookieCount == 1 {
+		row.Cookie = u32ArrayCookieVal
+		present = true
 	}
 	return
 }

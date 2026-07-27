@@ -33,13 +33,13 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindApproved uint64
-	kindGrantId  uint64
-	kindReason   uint64
+	kindGrantApproved uint64
+	kindGrantId       uint64
+	kindReason        uint64
 )
 
 func init() {
-	kindApproved = vdd.MembGrantApproved.GetId().Value()
+	kindGrantApproved = vdd.MembGrantApproved.GetId().Value()
 	kindGrantId = vdd.MembGrantId.GetId().Value()
 	kindReason = vdd.MembReason.GetId().Value()
 	buscodec.Register[GrantReply](grantReplyBusCodec)
@@ -199,10 +199,13 @@ type GrantReplyTextArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// GrantReplyEntityI lists exactly the entity-level methods GrantReply uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// GrantReplyEntityI is the entity-builder surface GrantReplyAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type GrantReplyEntityI[
 	BoolAttr GrantReplyBoolAttrI,
 	BoolSec GrantReplyBoolSecI[BoolAttr, Ent],
@@ -248,7 +251,7 @@ func GrantReplyBuildEntities[
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Approved := boolSec.BeginAttribute(c.Approved[i])
-		boolSecAttr_Approved.AddMembershipLowCardRefP(kindApproved)
+		boolSecAttr_Approved.AddMembershipLowCardRefP(kindGrantApproved)
 		boolSecAttr_Approved.EndAttributeP()
 		boolSec.EndSection()
 		// --- stringArray. ---
@@ -269,6 +272,45 @@ func GrantReplyBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// GrantReplyAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func GrantReplyAddSections[
+	BoolAttr GrantReplyBoolAttrI,
+	BoolSec GrantReplyBoolSecI[BoolAttr, Ent],
+	StringArrayAttr GrantReplyStringArrayAttrI,
+	StringArraySec GrantReplyStringArraySecI[StringArrayAttr, Ent],
+	TextArrayAttr GrantReplyTextArrayAttrI,
+	TextArraySec GrantReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+	DML GrantReplyEntityI[
+		BoolAttr, BoolSec,
+		StringArrayAttr, StringArraySec,
+		TextArrayAttr, TextArraySec,
+		Ent,
+	],
+](dml DML, row GrantReply) (err error) {
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_Approved := boolSec.BeginAttribute(row.Approved)
+	boolSecAttr_Approved.AddMembershipLowCardRefP(kindGrantApproved)
+	boolSecAttr_Approved.EndAttributeP()
+	boolSec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_GrantId := stringArraySec.BeginAttributeSingle(row.GrantId)
+	stringArraySecAttr_GrantId.AddMembershipLowCardRefP(kindGrantId)
+	stringArraySecAttr_GrantId.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	textArraySec.EndSection()
 	return
 }
 
@@ -352,7 +394,7 @@ func GrantReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindApproved:
+				case kindGrantApproved:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolApprovedVal = val
 					boolApprovedCount++
@@ -402,6 +444,98 @@ func GrantReplyFillFromArrow[
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
+	}
+	return
+}
+
+// GrantReplyReadRow reads row i as one optional GrantReply component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func GrantReplyReadRow[
+	BoolAttrs GrantReplyBoolAttrsReadI,
+	BoolMembs GrantReplyBoolMembsReadI,
+	StringArrayAttrs GrantReplyStringArrayAttrsReadI,
+	StringArrayMembs GrantReplyStringArrayMembsReadI,
+	TextArrayAttrs GrantReplyTextArrayAttrsReadI,
+	TextArrayMembs GrantReplyTextArrayMembsReadI,
+](
+	i int,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+) (row GrantReply, present bool, err error) {
+	// --- bool. ---
+	var boolApprovedVal bool
+	var boolApprovedCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindGrantApproved:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolApprovedVal = val
+				boolApprovedCount++
+			}
+		}
+	}
+	if boolApprovedCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Approved").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolApprovedCount == 1 {
+		row.Approved = boolApprovedVal
+		present = true
+	}
+	// --- stringArray. ---
+	var stringArrayGrantIdVal string
+	var stringArrayGrantIdCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindGrantId:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayGrantIdVal = val
+				stringArrayGrantIdCount++
+			}
+		}
+	}
+	if stringArrayGrantIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "GrantId").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayGrantIdCount == 1 {
+		row.GrantId = stringArrayGrantIdVal
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayReasonVal string
+	var textArrayReasonCount int
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindReason:
+				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				textArrayReasonVal = val
+				textArrayReasonCount++
+			}
+		}
+	}
+	if textArrayReasonCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		return
+	}
+	if textArrayReasonCount == 1 {
+		row.Reason = textArrayReasonVal
+		present = true
 	}
 	return
 }

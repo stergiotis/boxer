@@ -33,14 +33,14 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindApproved            uint64
-	kindHandleSubjectPrefix uint64
+	kindDialogApproved      uint64
+	kindDialogHandleSubject uint64
 	kindReason              uint64
 )
 
 func init() {
-	kindApproved = vdd.MembDialogApproved.GetId().Value()
-	kindHandleSubjectPrefix = vdd.MembDialogHandleSubject.GetId().Value()
+	kindDialogApproved = vdd.MembDialogApproved.GetId().Value()
+	kindDialogHandleSubject = vdd.MembDialogHandleSubject.GetId().Value()
 	kindReason = vdd.MembReason.GetId().Value()
 	buscodec.Register[DialogReply](dialogReplyBusCodec)
 }
@@ -199,10 +199,13 @@ type DialogReplyTextArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// DialogReplyEntityI lists exactly the entity-level methods DialogReply uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// DialogReplyEntityI is the entity-builder surface DialogReplyAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type DialogReplyEntityI[
 	BoolAttr DialogReplyBoolAttrI,
 	BoolSec DialogReplyBoolSecI[BoolAttr, Ent],
@@ -248,13 +251,13 @@ func DialogReplyBuildEntities[
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Approved := boolSec.BeginAttribute(c.Approved[i])
-		boolSecAttr_Approved.AddMembershipLowCardRefP(kindApproved)
+		boolSecAttr_Approved.AddMembershipLowCardRefP(kindDialogApproved)
 		boolSecAttr_Approved.EndAttributeP()
 		boolSec.EndSection()
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
 		stringArraySecAttr_HandleSubjectPrefix := stringArraySec.BeginAttributeSingle(c.HandleSubjectPrefix[i])
-		stringArraySecAttr_HandleSubjectPrefix.AddMembershipLowCardRefP(kindHandleSubjectPrefix)
+		stringArraySecAttr_HandleSubjectPrefix.AddMembershipLowCardRefP(kindDialogHandleSubject)
 		stringArraySecAttr_HandleSubjectPrefix.EndAttributeP()
 		stringArraySec.EndSection()
 		// --- textArray. ---
@@ -269,6 +272,45 @@ func DialogReplyBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// DialogReplyAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func DialogReplyAddSections[
+	BoolAttr DialogReplyBoolAttrI,
+	BoolSec DialogReplyBoolSecI[BoolAttr, Ent],
+	StringArrayAttr DialogReplyStringArrayAttrI,
+	StringArraySec DialogReplyStringArraySecI[StringArrayAttr, Ent],
+	TextArrayAttr DialogReplyTextArrayAttrI,
+	TextArraySec DialogReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+	DML DialogReplyEntityI[
+		BoolAttr, BoolSec,
+		StringArrayAttr, StringArraySec,
+		TextArrayAttr, TextArraySec,
+		Ent,
+	],
+](dml DML, row DialogReply) (err error) {
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_Approved := boolSec.BeginAttribute(row.Approved)
+	boolSecAttr_Approved.AddMembershipLowCardRefP(kindDialogApproved)
+	boolSecAttr_Approved.EndAttributeP()
+	boolSec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_HandleSubjectPrefix := stringArraySec.BeginAttributeSingle(row.HandleSubjectPrefix)
+	stringArraySecAttr_HandleSubjectPrefix.AddMembershipLowCardRefP(kindDialogHandleSubject)
+	stringArraySecAttr_HandleSubjectPrefix.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	textArraySec.EndSection()
 	return
 }
 
@@ -352,7 +394,7 @@ func DialogReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindApproved:
+				case kindDialogApproved:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolApprovedVal = val
 					boolApprovedCount++
@@ -371,7 +413,7 @@ func DialogReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindHandleSubjectPrefix:
+				case kindDialogHandleSubject:
 					val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					stringArrayHandleSubjectPrefixVal = val
 					stringArrayHandleSubjectPrefixCount++
@@ -402,6 +444,98 @@ func DialogReplyFillFromArrow[
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
+	}
+	return
+}
+
+// DialogReplyReadRow reads row i as one optional DialogReply component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func DialogReplyReadRow[
+	BoolAttrs DialogReplyBoolAttrsReadI,
+	BoolMembs DialogReplyBoolMembsReadI,
+	StringArrayAttrs DialogReplyStringArrayAttrsReadI,
+	StringArrayMembs DialogReplyStringArrayMembsReadI,
+	TextArrayAttrs DialogReplyTextArrayAttrsReadI,
+	TextArrayMembs DialogReplyTextArrayMembsReadI,
+](
+	i int,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+) (row DialogReply, present bool, err error) {
+	// --- bool. ---
+	var boolApprovedVal bool
+	var boolApprovedCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindDialogApproved:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolApprovedVal = val
+				boolApprovedCount++
+			}
+		}
+	}
+	if boolApprovedCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Approved").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolApprovedCount == 1 {
+		row.Approved = boolApprovedVal
+		present = true
+	}
+	// --- stringArray. ---
+	var stringArrayHandleSubjectPrefixVal string
+	var stringArrayHandleSubjectPrefixCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindDialogHandleSubject:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayHandleSubjectPrefixVal = val
+				stringArrayHandleSubjectPrefixCount++
+			}
+		}
+	}
+	if stringArrayHandleSubjectPrefixCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "HandleSubjectPrefix").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayHandleSubjectPrefixCount == 1 {
+		row.HandleSubjectPrefix = stringArrayHandleSubjectPrefixVal
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayReasonVal string
+	var textArrayReasonCount int
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindReason:
+				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				textArrayReasonVal = val
+				textArrayReasonCount++
+			}
+		}
+	}
+	if textArrayReasonCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		return
+	}
+	if textArrayReasonCount == 1 {
+		row.Reason = textArrayReasonVal
+		present = true
 	}
 	return
 }

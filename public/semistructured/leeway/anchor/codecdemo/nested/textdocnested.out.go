@@ -84,10 +84,13 @@ type TextDocNestedTextSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// TextDocNestedEntityI lists exactly the entity-level methods TextDocNested uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// TextDocNestedEntityI is the entity-builder surface TextDocNestedAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type TextDocNestedEntityI[
 	TextAttr TextDocNestedTextAttrI,
 	TextSec TextDocNestedTextSecI[TextAttr, Ent],

@@ -33,22 +33,22 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindTaskId           uint64
-	kindCurrent          uint64
-	kindTotal            uint64
-	kindUnit             uint64
-	kindThroughputPerSec uint64
-	kindEtaMs            uint64
-	kindNote             uint64
+	kindTaskId                   uint64
+	kindProgressCurrent          uint64
+	kindProgressTotal            uint64
+	kindProgressUnit             uint64
+	kindProgressThroughputPerSec uint64
+	kindProgressEtaMs            uint64
+	kindNote                     uint64
 )
 
 func init() {
 	kindTaskId = vdd.MembTaskId.GetId().Value()
-	kindCurrent = vdd.MembProgressCurrent.GetId().Value()
-	kindTotal = vdd.MembProgressTotal.GetId().Value()
-	kindUnit = vdd.MembProgressUnit.GetId().Value()
-	kindThroughputPerSec = vdd.MembProgressThroughputPerSec.GetId().Value()
-	kindEtaMs = vdd.MembProgressEtaMs.GetId().Value()
+	kindProgressCurrent = vdd.MembProgressCurrent.GetId().Value()
+	kindProgressTotal = vdd.MembProgressTotal.GetId().Value()
+	kindProgressUnit = vdd.MembProgressUnit.GetId().Value()
+	kindProgressThroughputPerSec = vdd.MembProgressThroughputPerSec.GetId().Value()
+	kindProgressEtaMs = vdd.MembProgressEtaMs.GetId().Value()
 	kindNote = vdd.MembNote.GetId().Value()
 	buscodec.Register[TaskProgress](taskProgressBusCodec)
 }
@@ -264,10 +264,13 @@ type TaskProgressTextArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// TaskProgressEntityI lists exactly the entity-level methods TaskProgress uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// TaskProgressEntityI is the entity-builder surface TaskProgressAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type TaskProgressEntityI[
 	StringArrayAttr TaskProgressStringArrayAttrI,
 	StringArraySec TaskProgressStringArraySecI[StringArrayAttr, Ent],
@@ -337,28 +340,28 @@ func TaskProgressBuildEntities[
 		// --- u64Array. ---
 		u64ArraySec := dml.GetSectionU64Array()
 		u64ArraySecAttr_Current := u64ArraySec.BeginAttributeSingle(c.Current[i])
-		u64ArraySecAttr_Current.AddMembershipLowCardRefP(kindCurrent)
+		u64ArraySecAttr_Current.AddMembershipLowCardRefP(kindProgressCurrent)
 		u64ArraySecAttr_Current.EndAttributeP()
 		u64ArraySecAttr_Total := u64ArraySec.BeginAttributeSingle(c.Total[i])
-		u64ArraySecAttr_Total.AddMembershipLowCardRefP(kindTotal)
+		u64ArraySecAttr_Total.AddMembershipLowCardRefP(kindProgressTotal)
 		u64ArraySecAttr_Total.EndAttributeP()
 		u64ArraySec.EndSection()
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
 		symbolSecAttr_Unit := symbolSec.BeginAttribute(c.Unit[i])
-		symbolSecAttr_Unit.AddMembershipLowCardRefP(kindUnit)
+		symbolSecAttr_Unit.AddMembershipLowCardRefP(kindProgressUnit)
 		symbolSecAttr_Unit.EndAttributeP()
 		symbolSec.EndSection()
 		// --- f64Array. ---
 		f64ArraySec := dml.GetSectionF64Array()
 		f64ArraySecAttr_ThroughputPerSec := f64ArraySec.BeginAttributeSingle(c.ThroughputPerSec[i])
-		f64ArraySecAttr_ThroughputPerSec.AddMembershipLowCardRefP(kindThroughputPerSec)
+		f64ArraySecAttr_ThroughputPerSec.AddMembershipLowCardRefP(kindProgressThroughputPerSec)
 		f64ArraySecAttr_ThroughputPerSec.EndAttributeP()
 		f64ArraySec.EndSection()
 		// --- i64Array. ---
 		i64ArraySec := dml.GetSectionI64Array()
 		i64ArraySecAttr_EtaMs := i64ArraySec.BeginAttributeSingle(c.EtaMs[i])
-		i64ArraySecAttr_EtaMs.AddMembershipLowCardRefP(kindEtaMs)
+		i64ArraySecAttr_EtaMs.AddMembershipLowCardRefP(kindProgressEtaMs)
 		i64ArraySecAttr_EtaMs.EndAttributeP()
 		i64ArraySec.EndSection()
 		// --- textArray. ---
@@ -373,6 +376,75 @@ func TaskProgressBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// TaskProgressAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func TaskProgressAddSections[
+	StringArrayAttr TaskProgressStringArrayAttrI,
+	StringArraySec TaskProgressStringArraySecI[StringArrayAttr, Ent],
+	U64ArrayAttr TaskProgressU64ArrayAttrI,
+	U64ArraySec TaskProgressU64ArraySecI[U64ArrayAttr, Ent],
+	SymbolAttr TaskProgressSymbolAttrI,
+	SymbolSec TaskProgressSymbolSecI[SymbolAttr, Ent],
+	F64ArrayAttr TaskProgressF64ArrayAttrI,
+	F64ArraySec TaskProgressF64ArraySecI[F64ArrayAttr, Ent],
+	I64ArrayAttr TaskProgressI64ArrayAttrI,
+	I64ArraySec TaskProgressI64ArraySecI[I64ArrayAttr, Ent],
+	TextArrayAttr TaskProgressTextArrayAttrI,
+	TextArraySec TaskProgressTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+	DML TaskProgressEntityI[
+		StringArrayAttr, StringArraySec,
+		U64ArrayAttr, U64ArraySec,
+		SymbolAttr, SymbolSec,
+		F64ArrayAttr, F64ArraySec,
+		I64ArrayAttr, I64ArraySec,
+		TextArrayAttr, TextArraySec,
+		Ent,
+	],
+](dml DML, row TaskProgress) (err error) {
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	stringArraySecAttr_TaskId := stringArraySec.BeginAttributeSingle(row.TaskId)
+	stringArraySecAttr_TaskId.AddMembershipLowCardRefP(kindTaskId)
+	stringArraySecAttr_TaskId.EndAttributeP()
+	stringArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	u64ArraySecAttr_Current := u64ArraySec.BeginAttributeSingle(row.Current)
+	u64ArraySecAttr_Current.AddMembershipLowCardRefP(kindProgressCurrent)
+	u64ArraySecAttr_Current.EndAttributeP()
+	u64ArraySecAttr_Total := u64ArraySec.BeginAttributeSingle(row.Total)
+	u64ArraySecAttr_Total.AddMembershipLowCardRefP(kindProgressTotal)
+	u64ArraySecAttr_Total.EndAttributeP()
+	u64ArraySec.EndSection()
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	symbolSecAttr_Unit := symbolSec.BeginAttribute(row.Unit)
+	symbolSecAttr_Unit.AddMembershipLowCardRefP(kindProgressUnit)
+	symbolSecAttr_Unit.EndAttributeP()
+	symbolSec.EndSection()
+	// --- f64Array. ---
+	f64ArraySec := dml.GetSectionF64Array()
+	f64ArraySecAttr_ThroughputPerSec := f64ArraySec.BeginAttributeSingle(row.ThroughputPerSec)
+	f64ArraySecAttr_ThroughputPerSec.AddMembershipLowCardRefP(kindProgressThroughputPerSec)
+	f64ArraySecAttr_ThroughputPerSec.EndAttributeP()
+	f64ArraySec.EndSection()
+	// --- i64Array. ---
+	i64ArraySec := dml.GetSectionI64Array()
+	i64ArraySecAttr_EtaMs := i64ArraySec.BeginAttributeSingle(row.EtaMs)
+	i64ArraySecAttr_EtaMs.AddMembershipLowCardRefP(kindProgressEtaMs)
+	i64ArraySecAttr_EtaMs.EndAttributeP()
+	i64ArraySec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	textArraySecAttr_Note := textArraySec.BeginAttributeSingle(row.Note)
+	textArraySecAttr_Note.AddMembershipLowCardRefP(kindNote)
+	textArraySecAttr_Note.EndAttributeP()
+	textArraySec.EndSection()
 	return
 }
 
@@ -522,11 +594,11 @@ func TaskProgressFillFromArrow[
 		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindCurrent:
+				case kindProgressCurrent:
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayCurrentVal = val
 					u64ArrayCurrentCount++
-				case kindTotal:
+				case kindProgressTotal:
 					val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					u64ArrayTotalVal = val
 					u64ArrayTotalCount++
@@ -550,7 +622,7 @@ func TaskProgressFillFromArrow[
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindUnit:
+				case kindProgressUnit:
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolUnitVal = val
 					symbolUnitCount++
@@ -569,7 +641,7 @@ func TaskProgressFillFromArrow[
 		for attrJ := int64(0); attrJ < nf64Array; attrJ++ {
 			for membID := range f64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindThroughputPerSec:
+				case kindProgressThroughputPerSec:
 					val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					f64ArrayThroughputPerSecVal = val
 					f64ArrayThroughputPerSecCount++
@@ -588,7 +660,7 @@ func TaskProgressFillFromArrow[
 		for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
 			for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindEtaMs:
+				case kindProgressEtaMs:
 					val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					i64ArrayEtaMsVal = val
 					i64ArrayEtaMsCount++
@@ -619,6 +691,190 @@ func TaskProgressFillFromArrow[
 			return
 		}
 		c.Note = append(c.Note, textArrayNoteVal)
+	}
+	return
+}
+
+// TaskProgressReadRow reads row i as one optional TaskProgress component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func TaskProgressReadRow[
+	StringArrayAttrs TaskProgressStringArrayAttrsReadI,
+	StringArrayMembs TaskProgressStringArrayMembsReadI,
+	U64ArrayAttrs TaskProgressU64ArrayAttrsReadI,
+	U64ArrayMembs TaskProgressU64ArrayMembsReadI,
+	SymbolAttrs TaskProgressSymbolAttrsReadI,
+	SymbolMembs TaskProgressSymbolMembsReadI,
+	F64ArrayAttrs TaskProgressF64ArrayAttrsReadI,
+	F64ArrayMembs TaskProgressF64ArrayMembsReadI,
+	I64ArrayAttrs TaskProgressI64ArrayAttrsReadI,
+	I64ArrayMembs TaskProgressI64ArrayMembsReadI,
+	TextArrayAttrs TaskProgressTextArrayAttrsReadI,
+	TextArrayMembs TaskProgressTextArrayMembsReadI,
+](
+	i int,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	f64ArrayAttrs F64ArrayAttrs,
+	f64ArrayMembs F64ArrayMembs,
+	i64ArrayAttrs I64ArrayAttrs,
+	i64ArrayMembs I64ArrayMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+) (row TaskProgress, present bool, err error) {
+	// --- stringArray. ---
+	var stringArrayTaskIdVal string
+	var stringArrayTaskIdCount int
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindTaskId:
+				val := stringArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				stringArrayTaskIdVal = val
+				stringArrayTaskIdCount++
+			}
+		}
+	}
+	if stringArrayTaskIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "TaskId").Errorf("occurs more than once on the row")
+		return
+	}
+	if stringArrayTaskIdCount == 1 {
+		row.TaskId = stringArrayTaskIdVal
+		present = true
+	}
+	// --- u64Array. ---
+	var u64ArrayCurrentVal uint64
+	var u64ArrayCurrentCount int
+	var u64ArrayTotalVal uint64
+	var u64ArrayTotalCount int
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindProgressCurrent:
+				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u64ArrayCurrentVal = val
+				u64ArrayCurrentCount++
+			case kindProgressTotal:
+				val := u64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				u64ArrayTotalVal = val
+				u64ArrayTotalCount++
+			}
+		}
+	}
+	if u64ArrayCurrentCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Current").Errorf("occurs more than once on the row")
+		return
+	}
+	if u64ArrayCurrentCount == 1 {
+		row.Current = u64ArrayCurrentVal
+		present = true
+	}
+	if u64ArrayTotalCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Total").Errorf("occurs more than once on the row")
+		return
+	}
+	if u64ArrayTotalCount == 1 {
+		row.Total = u64ArrayTotalVal
+		present = true
+	}
+	// --- symbol. ---
+	var symbolUnitVal string
+	var symbolUnitCount int
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindProgressUnit:
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolUnitVal = val
+				symbolUnitCount++
+			}
+		}
+	}
+	if symbolUnitCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Unit").Errorf("occurs more than once on the row")
+		return
+	}
+	if symbolUnitCount == 1 {
+		row.Unit = symbolUnitVal
+		present = true
+	}
+	// --- f64Array. ---
+	var f64ArrayThroughputPerSecVal float64
+	var f64ArrayThroughputPerSecCount int
+	nf64Array := f64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nf64Array; attrJ++ {
+		for membID := range f64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindProgressThroughputPerSec:
+				val := f64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				f64ArrayThroughputPerSecVal = val
+				f64ArrayThroughputPerSecCount++
+			}
+		}
+	}
+	if f64ArrayThroughputPerSecCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "ThroughputPerSec").Errorf("occurs more than once on the row")
+		return
+	}
+	if f64ArrayThroughputPerSecCount == 1 {
+		row.ThroughputPerSec = f64ArrayThroughputPerSecVal
+		present = true
+	}
+	// --- i64Array. ---
+	var i64ArrayEtaMsVal int64
+	var i64ArrayEtaMsCount int
+	ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
+		for membID := range i64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindProgressEtaMs:
+				val := i64ArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				i64ArrayEtaMsVal = val
+				i64ArrayEtaMsCount++
+			}
+		}
+	}
+	if i64ArrayEtaMsCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "EtaMs").Errorf("occurs more than once on the row")
+		return
+	}
+	if i64ArrayEtaMsCount == 1 {
+		row.EtaMs = i64ArrayEtaMsVal
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayNoteVal string
+	var textArrayNoteCount int
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindNote:
+				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				textArrayNoteVal = val
+				textArrayNoteCount++
+			}
+		}
+	}
+	if textArrayNoteCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Note").Errorf("occurs more than once on the row")
+		return
+	}
+	if textArrayNoteCount == 1 {
+		row.Note = textArrayNoteVal
+		present = true
 	}
 	return
 }

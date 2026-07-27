@@ -33,14 +33,14 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindFound  uint64
-	kindValue  uint64
-	kindReason uint64
+	kindPersistFound uint64
+	kindPersistValue uint64
+	kindReason       uint64
 )
 
 func init() {
-	kindFound = vdd.MembPersistFound.GetId().Value()
-	kindValue = vdd.MembPersistValue.GetId().Value()
+	kindPersistFound = vdd.MembPersistFound.GetId().Value()
+	kindPersistValue = vdd.MembPersistValue.GetId().Value()
 	kindReason = vdd.MembReason.GetId().Value()
 	buscodec.Register[PersistReply](persistReplyBusCodec)
 }
@@ -199,10 +199,13 @@ type PersistReplyTextArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
-// PersistReplyEntityI lists exactly the entity-level methods PersistReply uses.
-// Type parameters compose the per-section Attr + Sec interfaces; Ent
-// is the entity type itself (return type of BeginEntity / SetId /
-// SetTimestamp / SetLifecycle — usually the DML pointer).
+// PersistReplyEntityI is the entity-builder surface PersistReplyAddSections drives.
+// It always lists the per-section getters; the entity-frame methods
+// (BeginEntity / plain setters / CommitEntity) are added only for the
+// full codec's BuildEntities. AddSections stacks sections onto a frame
+// the caller already owns, so it needs none of them — which lets a
+// store drive it with a builder whose frame control is unexported
+// (ADR-0100 SD6). Ent is the builder pointer.
 type PersistReplyEntityI[
 	BoolAttr PersistReplyBoolAttrI,
 	BoolSec PersistReplyBoolSecI[BoolAttr, Ent],
@@ -248,13 +251,13 @@ func PersistReplyBuildEntities[
 		// --- bool. ---
 		boolSec := dml.GetSectionBool()
 		boolSecAttr_Found := boolSec.BeginAttribute(c.Found[i])
-		boolSecAttr_Found.AddMembershipLowCardRefP(kindFound)
+		boolSecAttr_Found.AddMembershipLowCardRefP(kindPersistFound)
 		boolSecAttr_Found.EndAttributeP()
 		boolSec.EndSection()
 		// --- blobArray. ---
 		blobArraySec := dml.GetSectionBlobArray()
 		blobArraySecAttr_Value := blobArraySec.BeginAttributeSingle(c.Value[i])
-		blobArraySecAttr_Value.AddMembershipLowCardRefP(kindValue)
+		blobArraySecAttr_Value.AddMembershipLowCardRefP(kindPersistValue)
 		blobArraySecAttr_Value.EndAttributeP()
 		blobArraySec.EndSection()
 		// --- textArray. ---
@@ -269,6 +272,45 @@ func PersistReplyBuildEntities[
 			return
 		}
 	}
+	return
+}
+
+// PersistReplyAddSections contributes this kind's tagged sections to the OPEN
+// entity on dml — the BuildEntities body without the entity frame.
+// The caller owns BeginEntity / plain setters / CommitEntity.
+func PersistReplyAddSections[
+	BoolAttr PersistReplyBoolAttrI,
+	BoolSec PersistReplyBoolSecI[BoolAttr, Ent],
+	BlobArrayAttr PersistReplyBlobArrayAttrI,
+	BlobArraySec PersistReplyBlobArraySecI[BlobArrayAttr, Ent],
+	TextArrayAttr PersistReplyTextArrayAttrI,
+	TextArraySec PersistReplyTextArraySecI[TextArrayAttr, Ent],
+	Ent any,
+	DML PersistReplyEntityI[
+		BoolAttr, BoolSec,
+		BlobArrayAttr, BlobArraySec,
+		TextArrayAttr, TextArraySec,
+		Ent,
+	],
+](dml DML, row PersistReply) (err error) {
+	// --- bool. ---
+	boolSec := dml.GetSectionBool()
+	boolSecAttr_Found := boolSec.BeginAttribute(row.Found)
+	boolSecAttr_Found.AddMembershipLowCardRefP(kindPersistFound)
+	boolSecAttr_Found.EndAttributeP()
+	boolSec.EndSection()
+	// --- blobArray. ---
+	blobArraySec := dml.GetSectionBlobArray()
+	blobArraySecAttr_Value := blobArraySec.BeginAttributeSingle(row.Value)
+	blobArraySecAttr_Value.AddMembershipLowCardRefP(kindPersistValue)
+	blobArraySecAttr_Value.EndAttributeP()
+	blobArraySec.EndSection()
+	// --- textArray. ---
+	textArraySec := dml.GetSectionTextArray()
+	textArraySecAttr_Reason := textArraySec.BeginAttributeSingle(row.Reason)
+	textArraySecAttr_Reason.AddMembershipLowCardRefP(kindReason)
+	textArraySecAttr_Reason.EndAttributeP()
+	textArraySec.EndSection()
 	return
 }
 
@@ -352,7 +394,7 @@ func PersistReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindFound:
+				case kindPersistFound:
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolFoundVal = val
 					boolFoundCount++
@@ -371,7 +413,7 @@ func PersistReplyFillFromArrow[
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 				switch membID {
-				case kindValue:
+				case kindPersistValue:
 					val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					cp := make([]byte, len(val))
 					copy(cp, val)
@@ -404,6 +446,100 @@ func PersistReplyFillFromArrow[
 			return
 		}
 		c.Reason = append(c.Reason, textArrayReasonVal)
+	}
+	return
+}
+
+// PersistReplyReadRow reads row i as one optional PersistReply component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A duplicated scalar field is
+// an error; duplicated container memberships concatenate. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func PersistReplyReadRow[
+	BoolAttrs PersistReplyBoolAttrsReadI,
+	BoolMembs PersistReplyBoolMembsReadI,
+	BlobArrayAttrs PersistReplyBlobArrayAttrsReadI,
+	BlobArrayMembs PersistReplyBlobArrayMembsReadI,
+	TextArrayAttrs PersistReplyTextArrayAttrsReadI,
+	TextArrayMembs PersistReplyTextArrayMembsReadI,
+](
+	i int,
+	boolAttrs BoolAttrs,
+	boolMembs BoolMembs,
+	blobArrayAttrs BlobArrayAttrs,
+	blobArrayMembs BlobArrayMembs,
+	textArrayAttrs TextArrayAttrs,
+	textArrayMembs TextArrayMembs,
+) (row PersistReply, present bool, err error) {
+	// --- bool. ---
+	var boolFoundVal bool
+	var boolFoundCount int
+	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nbool; attrJ++ {
+		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindPersistFound:
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolFoundVal = val
+				boolFoundCount++
+			}
+		}
+	}
+	if boolFoundCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Found").Errorf("occurs more than once on the row")
+		return
+	}
+	if boolFoundCount == 1 {
+		row.Found = boolFoundVal
+		present = true
+	}
+	// --- blobArray. ---
+	var blobArrayValueVal []byte
+	var blobArrayValueCount int
+	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
+		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindPersistValue:
+				val := blobArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				cp := make([]byte, len(val))
+				copy(cp, val)
+				blobArrayValueVal = cp
+				blobArrayValueCount++
+			}
+		}
+	}
+	if blobArrayValueCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Value").Errorf("occurs more than once on the row")
+		return
+	}
+	if blobArrayValueCount == 1 {
+		row.Value = blobArrayValueVal
+		present = true
+	}
+	// --- textArray. ---
+	var textArrayReasonVal string
+	var textArrayReasonCount int
+	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
+		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindReason:
+				val := textArrayAttrs.GetAttrValueSingleOrDefault(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				textArrayReasonVal = val
+				textArrayReasonCount++
+			}
+		}
+	}
+	if textArrayReasonCount > 1 {
+		err = eb.Build().Int("row", i).Str("field", "Reason").Errorf("occurs more than once on the row")
+		return
+	}
+	if textArrayReasonCount == 1 {
+		row.Reason = textArrayReasonVal
+		present = true
 	}
 	return
 }
