@@ -195,7 +195,7 @@ which is the failure above. The API has no consumers outside its own tests.
   `FillFromArrow` / `ReadRow`. ✓ Landed in two parts, because the codegen half
   regenerates 44 artefacts and its diff had to stay separable from the runtime
   half: **M2a** the reflect decode, **M2b** the two emitters.
-- **M3 — the registry + the section-scoped uniqueness key.**
+- **M3 — the registry + the section-scoped uniqueness key.** ✓
 - **M4 — role filtering**, inert by default.
 - **M5 — the single-section-visit rule**, the ordering fold, and the two-pass
   removal.

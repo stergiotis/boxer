@@ -250,6 +250,29 @@ type MyDTO struct {
 	}
 }
 
+// The codegen front-end must accept the same cross-section membership reuse
+// the reflect front-end does (ADR-0146 D5) — the two share the builder, so a
+// divergence here would mean the key was applied twice.
+func TestParse_AllowsSharedMembershipAcrossSections(t *testing.T) {
+	plan, err := tryParse(t, `package foo
+type MyDTO struct {
+	_    struct{}  `+"`kind:\"my\"`"+`
+	Id   uint64    `+"`lw:\",id\"`"+`
+	Sym  string    `+"`lw:\"tag,symbol\"`"+`
+	Nums []uint64  `+"`lw:\"tag,u64Array\"`"+`
+}
+`)
+	if err != nil {
+		t.Fatalf("expected success, got: %v", err)
+	}
+	if len(plan.Fields) != 2 {
+		t.Fatalf("expected 2 fields sharing the tag membership across sections, got %d", len(plan.Fields))
+	}
+	if plan.Fields[0].LWSection == plan.Fields[1].LWSection {
+		t.Fatalf("expected distinct sections, both were %q", plan.Fields[0].LWSection)
+	}
+}
+
 func TestParse_RejectsOptionOfSlice(t *testing.T) {
 	_, err := tryParse(t, `package foo
 type MyDTO struct {

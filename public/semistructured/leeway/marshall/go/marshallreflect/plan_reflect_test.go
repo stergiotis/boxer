@@ -90,6 +90,25 @@ func TestPlanFor_RejectsDuplicateMembership(t *testing.T) {
 	require.ErrorContains(t, err, "appears on two DTO fields")
 }
 
+// crossSectionMemb reuses one membership name across two DIFFERENT sections.
+// The uniqueness key is (section, membership, sub-column), so this is legal:
+// each section has its own reader, so the two slots are distinguishable on
+// read. Keying without the section rejected it (ADR-0146 D5).
+type crossSectionMemb struct {
+	_    struct{} `kind:"crossSectionMemb"`
+	Id   uint64   `lw:",id"`
+	Sym  string   `lw:"tag,symbol"`
+	Nums []uint64 `lw:"tag,u64Array"`
+}
+
+func TestPlanFor_AllowsSharedMembershipAcrossSections(t *testing.T) {
+	plan, err := marshallreflect.PlanFor[crossSectionMemb]()
+	require.NoError(t, err)
+	require.Len(t, plan.Fields, 2)
+	require.Equal(t, plan.Fields[0].LWMembership, plan.Fields[1].LWMembership)
+	require.NotEqual(t, plan.Fields[0].LWSection, plan.Fields[1].LWSection)
+}
+
 type mixedChannels struct {
 	_  struct{} `kind:"mixedChannels"`
 	Id uint64   `lw:",id"`
