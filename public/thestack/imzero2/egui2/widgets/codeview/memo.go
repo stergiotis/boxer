@@ -46,6 +46,12 @@ const (
 	// was asked for.
 	langGoLines
 	langMarkdown
+	langRegex
+	// langRegexList is distinct from langRegex for the same reason: both
+	// run the regex lexer, but one lexes the source as a single pattern
+	// and the other as one independent pattern per line, so a shared key
+	// would serve either result for the other (ADR-0015 §SD3).
+	langRegexList
 )
 
 // memoKey identifies one prepared result. src is part of the key rather than a
