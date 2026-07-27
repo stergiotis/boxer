@@ -118,6 +118,7 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 
 	var exprs, slotTypes []string
 	presence := newPresenceSet()
+	optPresence := newPresenceSet()
 	validator := newTermSet()
 
 	addSlot := func(name, expr string, ct canonicaltypes.PrimitiveAstNodeI, nullable bool) error {
@@ -144,9 +145,17 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 		}
 	}
 
+	// The read contract is the single statement of how many attributes each
+	// slot may carry (ADR-0146 D1); Presence and Validator are its two halves
+	// rendered as SQL, rather than a second copy of the rule.
+	contract, err := mappingplan.DeriveReadContract(plan)
+	if err != nil {
+		return
+	}
+
 	for i := range plan.Fields {
 		f := &plan.Fields[i]
-		fa, ferr := g.field(f)
+		fa, ferr := g.field(f, contract)
 		if ferr != nil {
 			err = eb.Build().Str("field", f.GoFieldName).Str("section", f.LWSection).Str("membership", f.LWMembership).Errorf("unable to generate field: %w", ferr)
 			return
@@ -157,11 +166,23 @@ func (g *Generator) Generate(plan *mappingplan.Plan) (a Artefacts, err error) {
 			}
 		}
 		presence.add(fa.presence)
+		optPresence.add(fa.optPresence)
 		validator.add(fa.validator)
 	}
 
 	a.Projection = "CAST(tuple(" + strings.Join(exprs, ", ") + "), " + marshalling.EscapeString("Tuple("+strings.Join(slotTypes, ", ")+")") + ")"
 	presenceTerms := presence.terms()
+	if len(presenceTerms) == 0 {
+		// No slot is required, so no conjunction of literals can say the row
+		// carries this kind. The necessary condition is then the DISJUNCTION —
+		// at least one of the kind's slots is populated — which is exactly what
+		// mappingplan.ReadContract.Verdict calls `populated`, and what stops a
+		// container-only kind's Filter from matching every row. When some slot
+		// IS required the conjunction implies the disjunction, so it is omitted.
+		if anyTerms := optPresence.anyTerms(); len(anyTerms) > 0 {
+			presenceTerms = []string{joinOr(anyTerms)}
+		}
+	}
 	a.Presence = joinAnd(presenceTerms)
 	a.Validator = joinAnd(validator.terms)
 	a.Filter = joinAnd(slices.Concat(presenceTerms, validator.terms))
@@ -222,7 +243,8 @@ type fieldArtefacts struct {
 	valExpr       string // "" for const fields (validation-only)
 	canonicalType canonicaltypes.PrimitiveAstNodeI
 	nullableSlot  bool           // project as Nullable(T): scalar Option fields
-	presence      []presenceTerm // empty for Option fields
+	presence      []presenceTerm // the slot must be populated; empty for a slot that may carry zero attributes
+	optPresence   []presenceTerm // the slot MAY be populated — used only to build the "carries anything at all" disjunction
 	validator     string
 }
 
@@ -318,7 +340,7 @@ func (g *Generator) locate(f *mappingplan.TaggedField) (loc fieldLocators, err e
 	return
 }
 
-func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err error) {
+func (g *Generator) field(f *mappingplan.TaggedField, contract mappingplan.ReadContract) (res fieldArtefacts, err error) {
 	loc, err := g.locate(f)
 	if err != nil {
 		return
@@ -389,14 +411,24 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 			res.presence = append(res.presence, presenceTerm{col: vinfo.col, lit: constLit})
 		}
 		res.validator = countExpr + " = 1 AND " + valExpr + " = " + constLit
-	case f.IsOption:
-		// Optional: no presence requirement; if present, the membership must
-		// identify a single attribute. A scalar Option projects as
-		// Nullable(T) returning NULL when the membership is absent, so an
-		// absent optional is distinguishable from one present with the type
-		// default (ADR-0066 decision 4). Array/set Options cannot: ClickHouse
-		// forbids Nullable(Array(...)), so they keep the empty-array sentinel
-		// — absent and present-empty are indistinguishable there (v1 concern).
+	case !slotRequired(contract, f):
+		// The slot may legitimately carry zero attributes, so it contributes no
+		// presence requirement; if present, the membership must identify a
+		// single attribute. Two shapes reach here:
+		//
+		//   - Option[T], absent when Has=false.
+		//   - a CONTAINER ([]T / *roaring.Bitmap), which the write path splices
+		//     to zero attributes when empty (marshalContainer). Treating it as
+		//     mandatory — the pre-ADR-0146 behaviour — made a row with a
+		//     legitimately empty container fail the Presence and Validator its
+		//     own kind generates, while both Go read paths accepted it.
+		//
+		// A scalar Option projects as Nullable(T) returning NULL when the
+		// membership is absent, so an absent optional is distinguishable from
+		// one present with the type default (ADR-0066 decision 4). Array/set
+		// slots cannot: ClickHouse forbids Nullable(Array(...)), so they keep
+		// the empty-array sentinel. For a container that is not a limitation —
+		// absent and present-empty are the same thing on the write side.
 		// A `,unit` Option projects a scalar slot, so it gets the Nullable
 		// treatment even though its value column is an array.
 		if projectsScalar {
@@ -405,6 +437,7 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 		} else {
 			res.valExpr = valExpr
 		}
+		res.optPresence = []presenceTerm{{col: idCol, lit: lit}}
 		res.validator = countExpr + " <= 1"
 	default:
 		res.valExpr = valExpr
@@ -412,6 +445,17 @@ func (g *Generator) field(f *mappingplan.TaggedField) (res fieldArtefacts, err e
 		res.validator = countExpr + " = 1"
 	}
 	return
+}
+
+// slotRequired reports whether the contract requires the field's slot to be
+// populated. A Plan the contract cannot describe (a hand-built one, or a shape
+// DeriveReadContract does not model) falls back to the field's own shape, which
+// is the same rule the contract applies.
+func slotRequired(contract mappingplan.ReadContract, f *mappingplan.TaggedField) bool {
+	if slot, ok := contract.Slot(f.LWSection, f.LWMembership); ok {
+		return slot.Required()
+	}
+	return !f.IsOption && !f.IsMulti()
 }
 
 // presenceSet collects presence literals, dropping duplicates while preserving
@@ -454,6 +498,34 @@ func (s *presenceSet) terms() []string {
 		}
 	}
 	return out
+}
+
+// anyTerms renders the set as one index-eligible expression per column with OR
+// semantics — has(col, lit) for a single literal, hasAny(col, [lits...]) for
+// several. The caller ORs the per-column results together.
+func (s *presenceSet) anyTerms() []string {
+	out := make([]string, 0, len(s.cols))
+	for _, col := range s.cols {
+		lits := s.lits[col]
+		if len(lits) == 1 {
+			out = append(out, "has("+col+", "+lits[0]+")")
+		} else {
+			out = append(out, "hasAny("+col+", ["+strings.Join(lits, ", ")+"])")
+		}
+	}
+	return out
+}
+
+// joinOr ORs terms into one parenthesised expression, so the result composes
+// with joinAnd without changing precedence.
+func joinOr(terms []string) string {
+	if len(terms) == 0 {
+		return "1"
+	}
+	if len(terms) == 1 {
+		return terms[0]
+	}
+	return "(" + strings.Join(terms, " OR ") + ")"
 }
 
 // termSet collects boolean terms, dropping duplicates while preserving order.

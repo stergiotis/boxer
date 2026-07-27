@@ -868,8 +868,8 @@ func (inst *pushoutFetcher) FetchItemSinglePartition(ctx context.Context, partit
 const (
 	pushoutScanEnvelopeFilter  = "has(\"tv:envBlob:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:envBlob:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
 	pushoutScanLogEntryFilter  = "has(\"tv:logHash:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:logHash:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
-	pushoutScanSnapshotFilter  = "has(\"tv:snapApplied:lr:lr:u64:2q:0:0:0::data\", 1) AND has(\"tv:snapGraggle:lr:lr:u64:2q:0:0:0::data\", 2) AND countEqual(\"tv:snapApplied:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:snapGraggle:lr:lr:u64:2q:0:0:0::data\", 2) = 1"
-	pushoutScanRetentionFilter = "has(\"tv:retHash:lr:lr:u64:2q:0:0:0::data\", 1) AND has(\"tv:retIndex:lr:lr:u64:2q:0:0:0::data\", 2) AND has(\"tv:retTime:lr:lr:u64:2q:0:0:0::data\", 3) AND countEqual(\"tv:retHash:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:retIndex:lr:lr:u64:2q:0:0:0::data\", 2) = 1 AND countEqual(\"tv:retTime:lr:lr:u64:2q:0:0:0::data\", 3) = 1"
+	pushoutScanSnapshotFilter  = "has(\"tv:snapGraggle:lr:lr:u64:2q:0:0:0::data\", 2) AND countEqual(\"tv:snapApplied:lr:lr:u64:2q:0:0:0::data\", 1) <= 1 AND countEqual(\"tv:snapGraggle:lr:lr:u64:2q:0:0:0::data\", 2) = 1"
+	pushoutScanRetentionFilter = "(has(\"tv:retHash:lr:lr:u64:2q:0:0:0::data\", 1) OR has(\"tv:retIndex:lr:lr:u64:2q:0:0:0::data\", 2) OR has(\"tv:retTime:lr:lr:u64:2q:0:0:0::data\", 3)) AND countEqual(\"tv:retHash:lr:lr:u64:2q:0:0:0::data\", 1) <= 1 AND countEqual(\"tv:retIndex:lr:lr:u64:2q:0:0:0::data\", 2) <= 1 AND countEqual(\"tv:retTime:lr:lr:u64:2q:0:0:0::data\", 3) <= 1"
 )
 
 // ScanEnvelope iterates the entities whose rows carry a conforming Envelope

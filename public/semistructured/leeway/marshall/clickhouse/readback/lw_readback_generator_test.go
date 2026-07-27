@@ -142,16 +142,28 @@ func TestGenerator_Golden(t *testing.T) {
 	if n := strings.Count(a.Projection, "LEEWAY_LIST_BY_TAG_EQUAL("); n != 1 {
 		t.Errorf("want 1 list extract, got %d:\n%s", n, a.Projection)
 	}
-	// Three distinct memberships (mySym, myNums, window) — window dedup'd across
-	// the two timeRange sub-columns.
-	if n := strings.Count(a.Presence, "has("); n != 3 {
-		t.Errorf("want 3 presence terms (window dedup'd), got %d:\n%s", n, a.Presence)
+	// Presence carries only the memberships the writer always emits: mySym
+	// (scalar) and window (a multi-sub-column tuple with scalar sub-columns).
+	// myNums is a CONTAINER, which splices to zero attributes when empty, so it
+	// is not a presence requirement (ADR-0146 D1) — requiring it would drop
+	// rows whose slice is legitimately empty. window is dedup'd across the two
+	// timeRange sub-columns.
+	if n := strings.Count(a.Presence, "has("); n != 2 {
+		t.Errorf("want 2 presence terms (mySym + window; myNums is a container), got %d:\n%s", n, a.Presence)
 	}
+	// Every membership still contributes a validator term — the container's is
+	// `<= 1` rather than `= 1`.
 	if n := strings.Count(a.Validator, "countEqual("); n != 3 {
 		t.Errorf("want 3 validator terms, got %d:\n%s", n, a.Validator)
 	}
-	if !strings.Contains(a.Presence, "'mySym'") || !strings.Contains(a.Presence, "42") || !strings.Contains(a.Presence, "7") {
+	if !strings.Contains(a.Validator, "<= 1") {
+		t.Errorf("the container membership's validator must admit zero attributes:\n%s", a.Validator)
+	}
+	if !strings.Contains(a.Presence, "'mySym'") || !strings.Contains(a.Presence, "7") {
 		t.Errorf("presence missing a resolved literal:\n%s", a.Presence)
+	}
+	if strings.Contains(a.Presence, "42") {
+		t.Errorf("the container membership (42) must not be a presence requirement:\n%s", a.Presence)
 	}
 	// Filter is the WHERE embed: presence (index carrier) AND validator (exact).
 	if want := a.Presence + " AND " + a.Validator; a.Filter != want {
@@ -159,9 +171,18 @@ func TestGenerator_Golden(t *testing.T) {
 	}
 }
 
-// TestGenerator_FilterArtefact pins the Filter composition at the edges: no
-// presence terms (Option-only) degrades to the bare validator, an empty plan
-// to the trivial filter.
+// TestGenerator_FilterArtefact pins the Filter composition at the edges.
+//
+// An all-optional kind has no slot that a conformant row MUST populate, so no
+// conjunction of literals identifies it. Presence is then the disjunction —
+// at least one of its slots is populated — which is what
+// mappingplan.ReadContract.Verdict calls `populated` (ADR-0146 D1/D2). Before
+// that alignment the artefacts degraded to the bare validator here, and an
+// all-optional kind's Filter matched every row: fine as a conformance check,
+// wrong for the store Scan that is the artefacts' main consumer.
+//
+// A plan with no fields at all has nothing to disjoin, so it still degrades to
+// the trivial filter.
 func TestGenerator_FilterArtefact(t *testing.T) {
 	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{}))
 
@@ -175,11 +196,11 @@ func TestGenerator_FilterArtefact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	if a.Presence != "1" {
-		t.Errorf("Option-only presence = %q, want 1", a.Presence)
+	if !strings.Contains(a.Presence, "'maybe'") {
+		t.Errorf("Option-only presence should require the one slot to be populated, got %q", a.Presence)
 	}
-	if a.Filter != a.Validator {
-		t.Errorf("Option-only filter = %q, want bare validator %q", a.Filter, a.Validator)
+	if want := a.Presence + " AND " + a.Validator; a.Filter != want {
+		t.Errorf("Option-only filter = %q, want presence AND validator %q", a.Filter, want)
 	}
 
 	a, err = g.Generate(&mappingplan.Plan{KindName: "empty"})
@@ -440,8 +461,10 @@ func TestGenerator_ExecSetAndMultiSubcol(t *testing.T) {
 		t.Fatalf("Generate: %v", err)
 	}
 	// span is shared by Lo and Hi -> one membership term each in presence/validator.
-	if n := strings.Count(a.Presence, "has("); n != 2 {
-		t.Errorf("want 2 presence terms (zones + span), got %d:\n%s", n, a.Presence)
+	// zones is a SET (a container shape), so it splices to zero attributes when
+	// empty and carries no presence requirement (ADR-0146 D1); only span does.
+	if n := strings.Count(a.Presence, "has("); n != 1 {
+		t.Errorf("want 1 presence term (span; zones is a set), got %d:\n%s", n, a.Presence)
 	}
 	if n := strings.Count(a.Validator, "countEqual("); n != 2 {
 		t.Errorf("want 2 validator terms (span dedup'd), got %d:\n%s", n, a.Validator)

@@ -199,10 +199,12 @@ which is the failure above. The API has no consumers outside its own tests.
 - **M4 — role filtering**, inert by default.
 - **M5 — the single-section-visit rule**, the ordering fold, and the two-pass
   removal.
-- **Deferred** — re-deriving the ClickHouse artefacts from `ReadContract`;
-  verifying resolved `lookup` ids against the wire; archetype APIs beyond
-  `ArchetypePresence`; a generated Presence prefilter, which ADR-0075 already
-  deferred to ADR-0066's codegen.
+- **M2c — the ClickHouse artefacts take their arity from `ReadContract`.** ✓
+  Pulled forward out of Deferred once M1 showed the divergence was a defect,
+  not just an inconsistency.
+- **Deferred** — verifying resolved `lookup` ids against the wire; archetype
+  APIs beyond `ArchetypePresence`; a generated Presence prefilter, which
+  ADR-0075 already deferred to ADR-0066's codegen.
 
 M1 corrected one premise of that first deferral. It was written believing the
 ClickHouse back-end already enforced the contract correctly, so moving it would
@@ -215,11 +217,17 @@ container field is legitimately empty therefore fails the Presence and Validator
 its own kind generates. The Go read paths accept it, so the two back-ends
 disagree about the same row.
 
-The fix is one branch in `Generator.field` — a container field takes the Option
-treatment for arity while keeping its mandatory *value* semantics — but it
-changes generated SQL, so it stays deferred rather than riding along with M1.
-`TestGenerator_ContainerArityDivergesFromReadContract` pins the current
-behaviour so the divergence is not rediscovered.
+M2c fixed it: `Generate` derives the contract and reads each slot's arity from
+it. Landing that surfaced a second problem the ADR had not anticipated —
+dropping the container's presence literal left an all-optional kind with **no**
+presence terms, so its `Filter` matched every row and the store's
+`Scan<Component>` would have returned everything. `ReadContract.Verdict` does
+not have that hole: it reports a row populating nothing as `Absent`. So Presence
+now falls back to the **disjunction** of the kind's slots when none is required,
+which is the SQL reading of `Verdict`'s `populated`. Recorded on
+[ADR-0066](0066-leeway-dql-clickhouse-readback-generator.md), whose Presence
+this narrows from "necessary for conformance" to "necessary for carrying the
+kind" — the two differ only for all-optional kinds.
 
 M2 turned up a second thing worth recording, about the artefacts rather than
 the design. The committed `.out.go` codecs had fallen behind marshallgen:

@@ -480,6 +480,39 @@ returns the first. `Validator` is what rejects that row, and `Filter` is the for
 carries both. A caller embedding `Projection` without `Filter` gets first-match semantics,
 not conformance.
 
+### 2026-07-27 — the artefacts take their arity from the read contract, and Presence gains a disjunction
+
+`Generate` now derives [ADR-0146](0146-leeway-marshall-component-read-contract.md)'s
+`ReadContract` and reads each slot's arity from it rather than from the field's Go shape.
+Two behaviours change.
+
+**A non-Option container is no longer mandatory.** `marshalContainer` splices an empty
+`[]T` / `*roaring.Bitmap` to **zero** attributes, so such a slot is `[0..1]`. Treating
+every non-Option field as mandatory gave it a presence literal and `countEqual(…) = 1`,
+so a row whose container was legitimately empty failed the Presence and Validator its own
+kind generates while both Go read paths accepted it. It now takes the Option treatment
+for arity — `countEqual(…) <= 1`, no presence literal — keeping its value semantics.
+
+**Presence is a disjunction when no slot is required.** Dropping the container's presence
+literal exposed a gap: a kind whose slots are *all* optional then had no presence terms at
+all, so `Filter` degraded to the bare validator and matched every row. That is defensible
+for a pure conformance check — an absent optional conforms — but wrong for the store
+`Scan<Component>` that is the artefacts' main consumer, and it disagreed with
+`ReadContract.Verdict`, which reports a row populating nothing as `Absent`. So when no
+slot is required, Presence becomes the **disjunction** of the kind's slots
+(`has(…) OR hasAny(…)`, still skip-index eligible). When some slot *is* required the
+conjunction implies the disjunction, so it is omitted and nothing changes.
+
+The net effect on existing artefacts is small and visible in the generated stores: a
+container membership loses its `has(…)` conjunct and relaxes to `<= 1`, while
+`pushoutScanRetentionFilter` — an all-container kind — picks up the new
+`(has(a) OR has(b) OR has(c))` prefix instead of matching everything.
+
+This narrows Presence from "necessary condition for conformance" to "necessary condition
+for carrying the kind". The two coincide for every kind with an always-emitted field; they
+differ only for all-optional kinds, where the second is what callers were already
+assuming.
+
 ## References
 
 - [ADR-0008 — leeway marshall extensions](./0008-leeway-marshall-extensions.md) — the `Plan`, the `lw:` tag grammar, membership channels (D3), the Cut-2 parametrized/mixed channels the resolver anticipates.

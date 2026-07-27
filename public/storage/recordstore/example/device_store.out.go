@@ -865,7 +865,7 @@ func (inst *deviceFetcher) FetchItemSinglePartition(ctx context.Context, partiti
 const (
 	deviceScanIdentityFilter = "has(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 2) <= 1"
 	deviceScanBatteryFilter  = "has(\"tv:u64Array:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:u64Array:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
-	deviceScanTaggedFilter   = "has(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
+	deviceScanTaggedFilter   = "has(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 1) <= 1"
 	deviceScanLocatedFilter  = "has(\"tv:geoPoint:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:geoPoint:lr:lr:u64:2q:0:0:0::data\", 1) = 1"
 )
 

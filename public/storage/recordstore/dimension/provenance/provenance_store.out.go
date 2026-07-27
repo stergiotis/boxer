@@ -692,7 +692,7 @@ func (inst *provenanceFetcher) FetchItemSinglePartition(ctx context.Context, par
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	provenanceScanProvenanceFilter = "has(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) AND has(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 2) AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 2) = 1"
+	provenanceScanProvenanceFilter = "has(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) AND countEqual(\"tv:symbol:lr:lr:u64:2q:0:0:0::data\", 1) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:2q:0:0:0::data\", 2) <= 1"
 )
 
 // ScanProvenance iterates the entities whose rows carry a conforming Provenance

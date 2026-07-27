@@ -1,17 +1,16 @@
 package readback
 
-// ADR-0146 M1 found that this generator's arity for a non-Option CONTAINER
-// field disagrees with what the write path emits. This test pins the current
-// behaviour so the gap is visible rather than rediscovered; it is expected to
-// change when the deferred "re-derive the artefacts from ReadContract" work
-// lands, and changing it should be deliberate.
+// The artefacts' arity must equal the write path's, which
+// mappingplan.DeriveReadContract states (ADR-0146 D1). The case that used to
+// disagree is a non-Option CONTAINER: marshalContainer splices an empty []T /
+// *roaring.Bitmap to ZERO attributes, so the slot is [0..1], while this
+// generator treated every non-Option field as mandatory and emitted a presence
+// literal plus `countEqual(...) = 1`. A row whose container was legitimately
+// empty then passed both Go read paths and failed the Presence and Validator
+// its own kind generates.
 //
-// The disagreement: `marshalContainer` splices an empty []T / *roaring.Bitmap
-// to ZERO attributes, so mappingplan.DeriveReadContract gives such a slot
-// [0..1]. Generate treats every non-Option field as mandatory — a presence
-// literal plus `countEqual(...) = 1`, i.e. [1..1]. A row whose container field
-// is legitimately empty passes the Go read paths and fails the Presence and
-// Validator this generator emits for the same kind.
+// This file pins the agreement in the direction that matters: what the
+// generator emits, against what the contract says.
 
 import (
 	"strings"
@@ -22,9 +21,8 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
-func TestGenerator_ContainerArityDivergesFromReadContract(t *testing.T) {
-	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{"myNums": 42}))
-	plan := &mappingplan.Plan{
+func containerOnlyPlan() *mappingplan.Plan {
+	return &mappingplan.Plan{
 		KindName: "arityProbe",
 		KindType: "ArityProbe",
 		PlainCols: []mappingplan.PlainCol{
@@ -38,6 +36,10 @@ func TestGenerator_ContainerArityDivergesFromReadContract(t *testing.T) {
 			Flags:        mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardRef},
 		}},
 	}
+}
+
+func TestGenerator_ContainerSlotIsNotRequired(t *testing.T) {
+	plan := containerOnlyPlan()
 
 	contract, err := mappingplan.DeriveReadContract(plan)
 	if err != nil {
@@ -47,27 +49,61 @@ func TestGenerator_ContainerArityDivergesFromReadContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("contract has no slot for u64Array@myNums:\n%s", contract)
 	}
-	// The write path's guarantee: an empty container emits nothing.
 	if slot.MinAttrs != 0 || slot.MaxAttrs != 1 {
 		t.Fatalf("container slot arity = [%d..%d], want [0..1]", slot.MinAttrs, slot.MaxAttrs)
 	}
-	if slot.Required() {
-		t.Fatalf("a container slot must not be Required — an empty container splices")
-	}
 
+	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{"myNums": 42}))
 	a, err := g.Generate(plan)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	// KNOWN DIVERGENCE, pinned. The generator demands the slot be present
-	// exactly once, which the contract above says is not guaranteed.
-	if !strings.Contains(a.Validator, "= 1") {
-		t.Errorf("expected the pinned (divergent) `= 1` validator for a container field; "+
-			"if this now emits `<= 1`, the ADR-0146 deferred fix has landed — update this test "+
-			"and the ADR's Scope note:\n%s", a.Validator)
+
+	// At most one attribute, not exactly one. Checked on the whole term, since
+	// "= 1" is a substring of "<= 1" and asserting the substring alone would
+	// pass either way — the mistake this test previously made.
+	if !strings.Contains(a.Validator, "<= 1") {
+		t.Errorf("validator must admit zero attributes for a container slot:\n%s", a.Validator)
 	}
-	if a.Presence == "" {
-		t.Errorf("expected the pinned (divergent) presence term for a container field; " +
-			"an empty presence means the deferred fix has landed")
+	if strings.Contains(strings.ReplaceAll(a.Validator, "<= 1", ""), "= 1") {
+		t.Errorf("validator still requires exactly one attribute somewhere:\n%s", a.Validator)
+	}
+
+	// The container is the kind's ONLY slot, so nothing is required and the
+	// conjunctive presence is empty. Presence is then the disjunction — the row
+	// carries at least one of the kind's slots — so a container-only kind still
+	// detects instead of matching every row. With one slot the disjunction is
+	// just that slot's has() term.
+	if !strings.Contains(a.Presence, "42") {
+		t.Errorf("a container-only kind must still detect via the disjunction:\n%s", a.Presence)
+	}
+	if a.Presence == "1" {
+		t.Errorf("presence must not degrade to the trivial term — the Filter would match every row")
+	}
+}
+
+// A mandatory scalar alongside the container still carries the prefilter, so
+// dropping the container's presence term does not cost detection for kinds
+// that have any always-emitted field.
+func TestGenerator_MandatoryScalarStillCarriesPresence(t *testing.T) {
+	plan := containerOnlyPlan()
+	plan.Fields = append(plan.Fields, mappingplan.TaggedField{
+		GoFieldName:  "Sym",
+		Canonical:    ctabb.S,
+		LWMembership: "mySym",
+		LWSection:    "symbol",
+		Flags:        mappingplan.FieldFlags{Channel: mappingplan.MembershipChannelLowCardVerbatim},
+	})
+
+	g := NewGenerator(buildTestIR(t), NewLookupResolver(mapLookup{"myNums": 42}))
+	a, err := g.Generate(plan)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if !strings.Contains(a.Presence, "'mySym'") {
+		t.Errorf("the mandatory scalar must still contribute a presence literal:\n%s", a.Presence)
+	}
+	if strings.Contains(a.Presence, "42") {
+		t.Errorf("the container must still not contribute one:\n%s", a.Presence)
 	}
 }
