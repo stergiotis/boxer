@@ -1,5 +1,7 @@
 package example
 
+//go:generate sh -c "go test -tags=\"$(cat ../../../../tags)\" -run TestGenerateDeviceStore ."
+
 import (
 	"testing"
 

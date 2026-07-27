@@ -1,5 +1,7 @@
 package cqrsexample
 
+//go:generate sh -c "go test -tags=\"$(cat ../../../../tags)\" -run TestGenerateLedgerStore ."
+
 import (
 	"testing"
 

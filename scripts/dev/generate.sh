@@ -12,10 +12,17 @@
 #
 # Dropped — no targets in boxer (boxerstaging was not migrated here). Re-add
 # when/if boxerstaging lands:
-#   - keelsoncodec --target=anchor   boxerstaging/leeway/anchor/codecdemo
 #   - boxerstaging/spinnaker/generate.sh
 #   - boxerstaging/leeway/schema/generate.sh
-#   - boxerstaging/leeway/anchor   test-driven DDL/DML/read-access regen
+#
+# Everything else regenerates from here. Generators reached by an explicit
+# invocation below are the ones taking a repo-wide argument list; anything whose
+# regeneration is package-local carries a `//go:generate` directive next to the
+# artifact and is swept by the `go generate ./...` at the end. That includes the
+# anchor codecdemo codecs (`keelsoncodec --target=anchor`), the test-driven
+# recordstore / ecsdemo-stage2 store regenerations, and the two apps codec
+# goldens. Those four families used to be outside this script, which is how they
+# drifted from their emitters unnoticed — see ADR-0146's Scope note.
 set -e
 set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")

@@ -1,5 +1,7 @@
 package pushoutstore
 
+//go:generate sh -c "go test -tags=\"$(cat ../../../../tags)\" -run TestGeneratePushoutStore ."
+
 import (
 	"testing"
 

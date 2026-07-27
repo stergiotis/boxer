@@ -1,5 +1,7 @@
 package stage2
 
+//go:generate sh -c "go test -tags=\"$(cat ../../../../../../tags)\" -run TestGenerateDrone ."
+
 import (
 	"os"
 	"strings"

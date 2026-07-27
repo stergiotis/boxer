@@ -1,5 +1,7 @@
 package appletcreatecfg_test
 
+//go:generate sh -c "go test -tags=\"$(cat ../../../tags)\" -run TestGeneratorMatchesCheckedInOutput . -update"
+
 import (
 	"flag"
 	"os"
