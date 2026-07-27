@@ -482,6 +482,11 @@ not conformance.
 
 ### 2026-07-27 — the artefacts take their arity from the read contract, and Presence gains a disjunction
 
+This reverses the deferral the previous entry recorded: its premise — that this back-end
+already enforced the contract correctly — did not survive measurement (ADR-0146 M1 found
+the container-arity divergence below), so the re-derivation was pulled forward the same
+day.
+
 `Generate` now derives [ADR-0146](0146-leeway-marshall-component-read-contract.md)'s
 `ReadContract` and reads each slot's arity from it rather than from the field's Go shape.
 Two behaviours change.

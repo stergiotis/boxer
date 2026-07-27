@@ -269,10 +269,12 @@ the design. The committed `.out.go` codecs had fallen behind marshallgen:
 regenerating with an unchanged emitter produced a 24-file diff (`KindVar`
 naming, an ADR-0100 SD6 doc comment, the `AddSections` surface). Proving the
 generators reproduce their own output *before* changing them is what kept M2b's
-diff readable, and is worth doing again for M5. `scripts/dev/generate.sh` drives
-only the keelson codecs — the `--target=anchor` codecdemo set and the
-test-driven recordstore / ecsdemo regenerations live outside it, which is how
-the drift went unnoticed.
+diff readable, and is worth doing again for M5. At the time
+`scripts/dev/generate.sh` drove only the keelson codecs — the `--target=anchor`
+codecdemo set and the test-driven recordstore / ecsdemo regenerations lived
+outside it, which is how the drift went unnoticed. Closed the same day: every
+codec family now regenerates from that one script, the formerly out-of-band
+families via package-local `//go:generate` directives its final sweep picks up.
 
 ## Alternatives
 

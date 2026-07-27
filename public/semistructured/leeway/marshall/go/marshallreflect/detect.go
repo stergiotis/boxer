@@ -54,20 +54,34 @@ func Detect[T any](readers *SectionReaders, i int, lookup LookupI, opts ...ReadO
 }
 
 // DetectAll runs Detect over every row the readers carry, returning one
-// verdict per row. It resolves the plan and the membership ids once for the
-// whole batch rather than per row.
+// verdict per row. It resolves the plan, the coverage check and the membership
+// ids once for the whole batch rather than per row.
 func DetectAll[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOption) (out []mappingplan.PresenceE, err error) {
 	defer recoverContract(&err)
 	if readers == nil {
 		err = eb.Build().Errorf("SectionReaders is nil")
 		return
 	}
+	if lookup == nil {
+		lookup = NoLookup{}
+	}
 	ro := buildReadOptions(opts)
+	r, err := resolveForType(reflect.TypeFor[T]())
+	if err != nil {
+		return
+	}
+	if err = readers.checkCoverage(r.plan, r.groups); err != nil {
+		return
+	}
+	c := r.contract
+	ids, err := resolveSlotIDs(lookup, c)
+	if err != nil {
+		return
+	}
 	out = make([]mappingplan.PresenceE, 0, readers.numRows)
 	for i := range readers.numRows {
 		var counts map[int]int
-		var c mappingplan.ReadContract
-		counts, c, err = slotCounts[T](readers, i, lookup, ro)
+		counts, err = countSlotsWithIDs(readers, i, c, ids, ro)
 		if err != nil {
 			return
 		}
@@ -130,10 +144,19 @@ func DetectContract(readers *SectionReaders, i int, lookup LookupI, c mappingpla
 // on row i. Shared by the type-driven and contract-driven detect paths so they
 // cannot count differently.
 func countSlots(readers *SectionReaders, i int, lookup LookupI, c mappingplan.ReadContract, ro readOptions) (counts map[int]int, err error) {
-	// Resolve ref-channel membership ids once. A slot on a verbatim channel
-	// matches by literal bytes and needs none; a tuple-owned slot matches
-	// nothing (every attribute in its section is its own).
-	ids := make(map[int]uint64, len(c.Slots))
+	ids, err := resolveSlotIDs(lookup, c)
+	if err != nil {
+		return
+	}
+	return countSlotsWithIDs(readers, i, c, ids, ro)
+}
+
+// resolveSlotIDs resolves the ref-channel membership ids the contract's slots
+// match attributes by. A slot on a verbatim channel matches by literal bytes
+// and needs none; a tuple-owned slot matches nothing (every attribute in its
+// section is its own).
+func resolveSlotIDs(lookup LookupI, c mappingplan.ReadContract) (ids map[int]uint64, err error) {
+	ids = make(map[int]uint64, len(c.Slots))
 	for si, s := range c.Slots {
 		if s.OwnsSection || s.Membership == "" || s.Channel.UsesCarrier() || !s.Channel.NeedsKindVar() {
 			continue
@@ -146,7 +169,12 @@ func countSlots(readers *SectionReaders, i int, lookup LookupI, c mappingplan.Re
 		}
 		ids[si] = id
 	}
+	return
+}
 
+// countSlotsWithIDs is countSlots with the membership ids already resolved, so
+// a batch caller (DetectAll) resolves them once and counts per row.
+func countSlotsWithIDs(readers *SectionReaders, i int, c mappingplan.ReadContract, ids map[int]uint64, ro readOptions) (counts map[int]int, err error) {
 	counts = make(map[int]int, len(c.Slots))
 	for si, s := range c.Slots {
 		sr, ok := readers.sections[s.Section]

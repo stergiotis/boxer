@@ -128,9 +128,12 @@ emits in a single pass.
 
 D1 (multi-DTO composition) and D2 (per-row plain ownership) are unaffected and
 implemented. [ADR-0146](0146-leeway-marshall-component-read-contract.md) D6
-retracts D3 in favour of one section visit per entity, folding the cardinality
-ordering inside a single section frame; making sections re-enterable instead is
-recorded there as the rejected alternative, to revisit if a consumer appears.
+retracts D3 in favour of one section visit per entity: several DTOs'
+contributions share one buffered section frame, and the runtime-cardinality
+ordering the two-pass API existed for is **dropped**, not folded into that
+frame — reinstating it would reorder the wire to satisfy no consumer; ADR-0146
+M5 records the reasoning. Making sections re-enterable instead is recorded
+there as the rejected alternative, to revisit if a consumer appears.
 
 ## References
 
