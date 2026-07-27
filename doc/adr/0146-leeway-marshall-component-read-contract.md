@@ -196,7 +196,12 @@ which is the failure above. The API has no consumers outside its own tests.
   regenerates 44 artefacts and its diff had to stay separable from the runtime
   half: **M2a** the reflect decode, **M2b** the two emitters.
 - **M3 — the registry + the section-scoped uniqueness key.** ✓
-- **M4 — role filtering**, inert by default.
+- **M4 — role filtering**, inert by default. ✓ Reflect front-end only:
+  generated codecs resolve memberships to package-level `kindXxx` vars at init
+  and take no per-read policy, so giving them a classifier means a signature
+  change across every generated codec. With the default the two front-ends
+  agree exactly, so the asymmetry only exists for a caller that opts in; taking
+  it to codegen waits for a consumer.
 - **M5 — the single-section-visit rule**, the ordering fold, and the two-pass
   removal.
 - **M2c — the ClickHouse artefacts take their arity from `ReadContract`.** ✓

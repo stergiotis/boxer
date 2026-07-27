@@ -76,8 +76,9 @@ func (r *SectionReaders) Section(name string, attrs, membs any) *SectionReaders 
 //
 // Unmarshal first checks that readers covers every plain column and section T's
 // Plan declares, reporting all gaps in one error before reading any row.
-func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI) (err error) {
+func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI, opts ...ReadOption) (err error) {
 	defer recoverContract(&err)
+	ro := buildReadOptions(opts)
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
@@ -132,7 +133,7 @@ func Unmarshal[T any](readers *SectionReaders, out *[]T, lookup LookupI) (err er
 			return
 		}
 		for _, g := range groups {
-			err = unmarshalSection(rowVal, g, readers, i, membIDs, r.contract)
+			err = unmarshalSection(rowVal, g, readers, i, membIDs, r.contract, ro)
 			if err != nil {
 				err = eb.Build().Int("row", i).Str("section", g.Section).Errorf("%w", err)
 				return
@@ -253,7 +254,7 @@ func readPlainArrow(fld reflect.Value, goType string, col any, i int) (err error
 	return
 }
 
-func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *SectionReaders, i int, membIDs map[string]uint64, c mappingplan.ReadContract) (err error) {
+func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *SectionReaders, i int, membIDs map[string]uint64, c mappingplan.ReadContract, ro readOptions) (err error) {
 	sr := readers.sections[g.Section]
 	attrs := reflect.ValueOf(sr.attrs)
 	membs := reflect.ValueOf(sr.membs)
@@ -267,7 +268,7 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 	}
 
 	if len(g.SubColumns) > 1 {
-		return unmarshalMultiSubColumn(row, g, attrs, membs, i, membIDs, c)
+		return unmarshalMultiSubColumn(row, g, attrs, membs, i, membIDs, c, ro)
 	}
 
 	if g.Channel().UsesCarrier() {
@@ -298,6 +299,7 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 	// Section channel is uniform across its fields (enforced by the
 	// plan's channel-uniformity check); resolve it once for all attributes.
 	ch := g.Channel()
+	rf := ro.newRoleFilter(g.Section, ch)
 	// tally counts the attributes each membership claims on this row, so the
 	// slot arity can be checked before anything is projected (ADR-0146 D4).
 	// It is keyed by membership rather than by field so a const — which has no
@@ -308,7 +310,7 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 		// Every membership on the attribute dispatches to its field, mirroring
 		// the codegen switch — a multi-membership attribute feeds each matching
 		// field. dispatchMemberships filters consts, which have no accumulator.
-		for _, matchedField := range dispatchMemberships(membs, i, attrJ, fields, membIDs, ch, tally) {
+		for _, matchedField := range dispatchMemberships(membs, i, attrJ, fields, membIDs, ch, tally, rf) {
 			a := accs[matchedField.GoFieldName]
 			err = consumeValue(attrs, i, attrJ, matchedField, a)
 			if err != nil {
@@ -400,7 +402,7 @@ func arityError(s mappingplan.Slot, got int) error {
 // which has no accumulator to dispatch to. It is the input to the slot-arity
 // gate (ADR-0146 D4); a membership no field claims is not counted, since no
 // slot bounds it.
-func dispatchMemberships(membs reflect.Value, i int, attrJ int64, fields []mappingplan.TaggedField, membIDs map[string]uint64, ch mappingplan.MembershipChannel, tally map[string]int) (matched []mappingplan.TaggedField) {
+func dispatchMemberships(membs reflect.Value, i int, attrJ int64, fields []mappingplan.TaggedField, membIDs map[string]uint64, ch mappingplan.MembershipChannel, tally map[string]int, rf roleFilter) (matched []mappingplan.TaggedField) {
 	// ch is the section's (uniform) membership channel, resolved once by
 	// the caller — all fields in a section agree on it per the plan's
 	// channel-uniformity check.
@@ -421,6 +423,9 @@ func dispatchMemberships(membs reflect.Value, i int, attrJ int64, fields []mappi
 	if ch.EmbedsLiteralName() {
 		for _, v := range collectIterSeq(seq) {
 			name := string(v.Bytes())
+			if !rf.admitsVerbatim(name) {
+				continue // a secondary membership annotates; it does not select
+			}
 			for _, f := range fields {
 				if !f.Flags.Channel.EmbedsLiteralName() || f.LWMembership != name {
 					continue
@@ -440,6 +445,9 @@ func dispatchMemberships(membs reflect.Value, i int, attrJ int64, fields []mappi
 
 	for _, v := range collectIterSeq(seq) {
 		id := v.Uint()
+		if !rf.admitsRef(id) {
+			continue // a secondary membership annotates; it does not select
+		}
 		for _, f := range fields {
 			// A membership with no resolved id would compare equal to a wire id
 			// of 0; require the resolution to have happened.
@@ -544,7 +552,7 @@ func projectAccumulator(row reflect.Value, a *accumulator) (err error) {
 	return
 }
 
-func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, membs reflect.Value, i int, membIDs map[string]uint64, c mappingplan.ReadContract) (err error) {
+func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, membs reflect.Value, i int, membIDs map[string]uint64, c mappingplan.ReadContract, ro readOptions) (err error) {
 	if len(g.Memberships) != 1 {
 		err = eb.Build().Str("section", g.Section).Errorf("multi-sub-column section with multiple memberships not supported")
 		return
@@ -576,6 +584,7 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 	// The previous code never matched a verbatim membership (hasID==false),
 	// skipping every attribute and failing every such DTO (review E-1).
 	ch := g.Channel()
+	rf := ro.newRoleFilter(g.Section, ch)
 	method := "GetMembValue" + ch.AddMethodSuffix()
 	embedsName := ch.EmbedsLiteralName()
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
@@ -588,11 +597,12 @@ func unmarshalMultiSubColumn(row reflect.Value, g goplan.SectionGroup, attrs, me
 		seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
 			if embedsName {
-				if string(v.Bytes()) != memb.LWMembership {
+				name := string(v.Bytes())
+				if name != memb.LWMembership || !rf.admitsVerbatim(name) {
 					continue
 				}
 			} else {
-				if !hasID || v.Uint() != expectedID {
+				if !hasID || v.Uint() != expectedID || !rf.admitsRef(v.Uint()) {
 					continue
 				}
 			}

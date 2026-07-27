@@ -184,4 +184,26 @@
 // Membership reader, per section:
 //   - GetMembValue<Suffix>(e, a) — simple channels: iter.Seq[uint64] (Ref) or iter.Seq[[]byte] (Verbatim).
 //   - GetMembValue<CarrierReadSuffix>(e, a) — carrier channels: iter.Seq2[…] (mixed) or iter.Seq[[]byte] (parametrized).
+//
+// # Read options
+//
+// Unmarshal and Detect take variadic ReadOptions. The empty set is the
+// behaviour that predates ADR-0146 M4, so existing call sites are unaffected.
+//
+//   - WithRoleClassifier makes selection role-filtered (ADR-0073 E1): a
+//     membership the classifier calls SECONDARY annotates an attribute rather
+//     than locating one, so it no longer pulls a value into a like-named field.
+//     The default — no classifier — treats every membership as primary.
+//     membershiprole.DefaultClassifier is NOT a safe choice here: it marks
+//     primary by a "/" prefix, which ordinary DTO memberships do not carry, so
+//     under it every field reads back unpopulated. See role.go.
+//   - WithSectionAspects supplies the per-section use-aspect set the classifier
+//     sees, which a Plan does not carry.
+//
+// This is a deliberate front-end asymmetry: marshallgen-generated codecs
+// resolve their memberships to package-level kindXxx vars at init and take no
+// per-read policy, so they cannot be given a classifier without a signature
+// change across every generated codec. With the default (no classifier) the
+// two front-ends agree exactly; a caller that supplies one is choosing the
+// reflect path knowingly.
 package marshallreflect

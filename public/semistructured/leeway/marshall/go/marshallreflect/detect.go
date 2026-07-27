@@ -44,9 +44,9 @@ func Contract[T any]() (c mappingplan.ReadContract, err error) {
 //
 // Detect does not read values, so it does not report whether a value decodes —
 // only whether the row's attribute layout matches T's contract.
-func Detect[T any](readers *SectionReaders, i int, lookup LookupI) (p mappingplan.PresenceE, err error) {
+func Detect[T any](readers *SectionReaders, i int, lookup LookupI, opts ...ReadOption) (p mappingplan.PresenceE, err error) {
 	defer recoverContract(&err)
-	counts, c, err := slotCounts[T](readers, i, lookup)
+	counts, c, err := slotCounts[T](readers, i, lookup, buildReadOptions(opts))
 	if err != nil {
 		return
 	}
@@ -56,17 +56,18 @@ func Detect[T any](readers *SectionReaders, i int, lookup LookupI) (p mappingpla
 // DetectAll runs Detect over every row the readers carry, returning one
 // verdict per row. It resolves the plan and the membership ids once for the
 // whole batch rather than per row.
-func DetectAll[T any](readers *SectionReaders, lookup LookupI) (out []mappingplan.PresenceE, err error) {
+func DetectAll[T any](readers *SectionReaders, lookup LookupI, opts ...ReadOption) (out []mappingplan.PresenceE, err error) {
 	defer recoverContract(&err)
 	if readers == nil {
 		err = eb.Build().Errorf("SectionReaders is nil")
 		return
 	}
+	ro := buildReadOptions(opts)
 	out = make([]mappingplan.PresenceE, 0, readers.numRows)
 	for i := range readers.numRows {
 		var counts map[int]int
 		var c mappingplan.ReadContract
-		counts, c, err = slotCounts[T](readers, i, lookup)
+		counts, c, err = slotCounts[T](readers, i, lookup, ro)
 		if err != nil {
 			return
 		}
@@ -78,7 +79,7 @@ func DetectAll[T any](readers *SectionReaders, lookup LookupI) (out []mappingpla
 // slotCounts tallies, for row i, how many attributes each of T's slots carries.
 // The tally is keyed by slot index so a slot with an empty membership name (a
 // tuple-owned section) stays distinguishable from a named one.
-func slotCounts[T any](readers *SectionReaders, i int, lookup LookupI) (counts map[int]int, c mappingplan.ReadContract, err error) {
+func slotCounts[T any](readers *SectionReaders, i int, lookup LookupI, ro readOptions) (counts map[int]int, c mappingplan.ReadContract, err error) {
 	if lookup == nil {
 		lookup = NoLookup{}
 	}
@@ -136,17 +137,21 @@ func slotCounts[T any](readers *SectionReaders, i int, lookup LookupI) (counts m
 		membs := reflect.ValueOf(sr.membs)
 		method := "GetMembValue" + s.Channel.AddMethodSuffix()
 		embedsName := s.Channel.EmbedsLiteralName()
+		// The same role filter the decode uses. Detection and decode must agree
+		// about which memberships select, or a row could detect Exact and then
+		// fail to decode (ADR-0146 D3).
+		rf := ro.newRoleFilter(s.Section, s.Channel)
 		total := 0
 		for attrJ := int64(0); attrJ < n; attrJ++ {
 			seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 			for _, v := range collectIterSeq(seq) {
 				if embedsName {
-					if string(v.Bytes()) == s.Membership {
+					if name := string(v.Bytes()); name == s.Membership && rf.admitsVerbatim(name) {
 						total++
 					}
 					continue
 				}
-				if id, has := ids[si]; has && v.Uint() == id {
+				if id, has := ids[si]; has && v.Uint() == id && rf.admitsRef(id) {
 					total++
 				}
 			}
