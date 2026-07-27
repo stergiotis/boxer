@@ -1,17 +1,16 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "@stergiotis"
+reviewed-date: 2026-07-27
 ---
 
-> **Status: draft — pre-human-review.** Compiled 2026-07-27 from rclone's
-> public documentation and one upstream design post (see §4 Sources). No
-> rclone source code was read; every statement about internal mechanism is a
-> reconstruction from documented behavior. Note that rclone is MIT-licensed,
-> so this clean-room posture is not an IP firewall — it is a disclosure of how
-> far the claims below were verified.
+> **Provenance.** Compiled 2026-07-27 from rclone's public documentation and
+> one upstream design post (see §8 Sources). No rclone source code was read;
+> every statement about internal mechanism is a reconstruction from documented
+> behavior. rclone is MIT-licensed, so this clean-room posture is not an IP
+> firewall — it is a disclosure of how far the claims below were verified.
 
 # Lessons from rclone's architecture
 
@@ -35,7 +34,7 @@ interface one level richer (say, with per-vendor sharing semantics) would have
 had to change every time a backend was added.
 
 Corollary worth stating plainly: a narrow waist is only discoverable if the
-domain has one. §3 covers what happens when it does not.
+domain has one. §7 covers what happens when it does not.
 
 ## 2. Publish the capability matrix; own the leak
 
