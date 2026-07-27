@@ -127,6 +127,20 @@ func TestRegistry_TupleOwnedSectionDoesNotExcludeOthers(t *testing.T) {
 	require.NoError(t, r2.Register(contractOf[tupleOwner](t)), "order does not matter either")
 }
 
+// A tuple-owning kind claims EVERY attribute in its section, so its overlap
+// with a flat claimant must not vanish into a separate key: the owner is
+// listed on each flat slot of its section too.
+func TestRegistry_OwnerIsAClaimantOfEveryFlatSlotInItsSection(t *testing.T) {
+	r := component.New()
+	require.NoError(t, r.Register(contractOf[tupleOwner](t)))
+	require.NoError(t, r.Register(contractOf[identity](t)))
+
+	claims := r.SlotClaims()
+	require.Equal(t, []string{"identity", "tupleOwner"}, claims["symbol@deviceStatus"])
+	require.Equal(t, []string{"tupleOwner"}, claims["symbol[owns]"],
+		"a flat claimant does not claim the whole section, so there is no reverse fold")
+}
+
 func TestRegistry_TupleOwnerDoesNotBlockOtherSections(t *testing.T) {
 	r := component.New()
 	require.NoError(t, r.Register(contractOf[tupleOwner](t)))

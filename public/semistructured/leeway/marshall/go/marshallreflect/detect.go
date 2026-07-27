@@ -194,27 +194,23 @@ func countSlotsWithIDs(readers *SectionReaders, i int, c mappingplan.ReadContrac
 			continue
 		}
 		membs := reflect.ValueOf(sr.membs)
-		method := "GetMembValue" + s.Channel.AddMethodSuffix()
 		embedsName := s.Channel.EmbedsLiteralName()
 		// The same role filter the decode uses. Detection and decode must agree
 		// about which memberships select, or a row could detect Exact and then
 		// fail to decode (ADR-0146 D3).
 		rf := ro.newRoleFilter(s.Section, s.Channel)
 		total := 0
-		for attrJ := int64(0); attrJ < n; attrJ++ {
-			seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-			for _, v := range collectIterSeq(seq) {
-				if embedsName {
-					if name := string(v.Bytes()); name == s.Membership && rf.admitsVerbatim(name) {
-						total++
-					}
-					continue
-				}
-				if id, has := ids[si]; has && v.Uint() == id && rf.admitsRef(id) {
+		forEachMembershipValue(attrs, membs, i, s.Channel, func(v reflect.Value) {
+			if embedsName {
+				if name := string(v.Bytes()); name == s.Membership && rf.admitsVerbatim(name) {
 					total++
 				}
+				return
 			}
-		}
+			if id, has := ids[si]; has && v.Uint() == id && rf.admitsRef(id) {
+				total++
+			}
+		})
 		counts[si] = total
 	}
 	return

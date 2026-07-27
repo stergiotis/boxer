@@ -335,7 +335,7 @@ func unmarshalSection(row reflect.Value, g goplan.SectionGroup, readers *Section
 	// wrote into it; decoding anyway would silently concatenate a container or
 	// drop an Option, which is the failure mode this check exists to stop.
 	if err = checkSectionArity(c, g.Section, tally, func() []string {
-		return observedMemberships(membs, attrs, i, ch)
+		return observedMemberships(attrs, membs, i, ch)
 	}); err != nil {
 		return
 	}
@@ -374,29 +374,40 @@ func checkSectionArity(c mappingplan.ReadContract, section string, tally map[str
 	return
 }
 
-// observedMemberships lists the distinct memberships a section carries on one
-// row — ref ids or verbatim names per its channel. Error path only.
-func observedMemberships(membs, attrs reflect.Value, i int, ch mappingplan.MembershipChannel) (out []string) {
+// forEachMembershipValue calls fn with every membership value carried by row
+// i's attributes, in attribute order — the one walk shared by the detect
+// tally, the arity gate's error path and InspectLookup, so no two readers of
+// the membership columns can iterate them differently. Carrier channels carry
+// per-row identity with no schema-side membership value and yield nothing.
+func forEachMembershipValue(attrs, membs reflect.Value, i int, ch mappingplan.MembershipChannel, fn func(v reflect.Value)) {
 	if ch.UsesCarrier() {
 		return
 	}
 	method := "GetMembValue" + ch.AddMethodSuffix()
-	embedsName := ch.EmbedsLiteralName()
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	for attrJ := int64(0); attrJ < n; attrJ++ {
 		seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
 		for _, v := range collectIterSeq(seq) {
-			var s string
-			if embedsName {
-				s = string(v.Bytes())
-			} else {
-				s = strconv.FormatUint(v.Uint(), 10)
-			}
-			if !slices.Contains(out, s) {
-				out = append(out, s)
-			}
+			fn(v)
 		}
 	}
+}
+
+// observedMemberships lists the distinct memberships a section carries on one
+// row — ref ids or verbatim names per its channel. Error path only.
+func observedMemberships(attrs, membs reflect.Value, i int, ch mappingplan.MembershipChannel) (out []string) {
+	embedsName := ch.EmbedsLiteralName()
+	forEachMembershipValue(attrs, membs, i, ch, func(v reflect.Value) {
+		var s string
+		if embedsName {
+			s = string(v.Bytes())
+		} else {
+			s = strconv.FormatUint(v.Uint(), 10)
+		}
+		if !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	})
 	return
 }
 

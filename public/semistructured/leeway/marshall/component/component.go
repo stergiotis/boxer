@@ -108,18 +108,34 @@ func (r *Registry) Sections() map[string][]string {
 	return out
 }
 
-// SlotClaims returns, per `section@membership` slot, the kinds claiming it,
-// sorted. A slot with more than one claimant is where two components read the
-// same attribute — worth knowing, and deliberately not prevented.
+// SlotClaims returns, per slot, the kinds claiming it, sorted: a flat slot
+// keys as `section@membership`, a tuple-owning slot as `section[owns]`. A key
+// with more than one claimant is where two components read the same attribute
+// — worth knowing, and deliberately not prevented.
+//
+// A kind owning a section claims every attribute in it, so it is also listed
+// as a claimant of each flat slot other kinds hold in that section. The
+// reverse fold does not happen: a flat claimant does not claim the whole
+// section, so it does not appear under `section[owns]`.
 func (r *Registry) SlotClaims() map[string][]string {
+	owners := map[string][]string{}
+	for _, kind := range r.order {
+		for _, s := range r.kinds[kind].Slots {
+			if s.OwnsSection {
+				owners[s.Section] = append(owners[s.Section], kind)
+			}
+		}
+	}
 	out := map[string][]string{}
 	for _, kind := range r.order {
 		for _, s := range r.kinds[kind].Slots {
-			key := s.Section
 			if s.OwnsSection {
-				key += "[owns]"
-			} else {
-				key += "@" + s.Membership
+				out[s.Section+"[owns]"] = append(out[s.Section+"[owns]"], kind)
+				continue
+			}
+			key := s.Section + "@" + s.Membership
+			if _, seen := out[key]; !seen {
+				out[key] = append(out[key], owners[s.Section]...)
 			}
 			out[key] = append(out[key], kind)
 		}

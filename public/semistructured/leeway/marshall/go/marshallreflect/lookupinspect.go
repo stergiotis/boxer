@@ -213,27 +213,19 @@ func sectionChannel(c mappingplan.ReadContract, section string) mappingplan.Memb
 // rows — ref ids or verbatim names, per its channel. Carrier channels carry
 // per-row identity with no schema-side name, so they yield nothing.
 func observeSection(attrs, membs reflect.Value, numRows int, ch mappingplan.MembershipChannel) (ids []uint64, names []string) {
-	if ch.UsesCarrier() {
-		return
-	}
-	method := "GetMembValue" + ch.AddMethodSuffix()
 	embedsName := ch.EmbedsLiteralName()
 	for i := 0; i < numRows; i++ {
-		n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
-		for attrJ := int64(0); attrJ < n; attrJ++ {
-			seq := mustCall(membs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-			for _, v := range collectIterSeq(seq) {
-				if embedsName {
-					if name := string(v.Bytes()); !slices.Contains(names, name) {
-						names = append(names, name)
-					}
-					continue
+		forEachMembershipValue(attrs, membs, i, ch, func(v reflect.Value) {
+			if embedsName {
+				if name := string(v.Bytes()); !slices.Contains(names, name) {
+					names = append(names, name)
 				}
-				if id := v.Uint(); !slices.Contains(ids, id) {
-					ids = append(ids, id)
-				}
+				return
 			}
-		}
+			if id := v.Uint(); !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
+		})
 	}
 	slices.Sort(ids)
 	slices.Sort(names)

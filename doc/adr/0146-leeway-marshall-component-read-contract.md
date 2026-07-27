@@ -131,8 +131,11 @@ Validator both hold. One refinement to ADR-0075: `Exact` is decided **without
 decoding values** — conformance is an arity question, and conflating it with a
 successful unmarshal made the check more expensive than it needs to be and hid
 decode failures inside a detection result. `ReadComponent[T]` is Detect
-followed by Projection; `Unmarshal` becomes the batch form that requires
-Presence on every row.
+followed by Projection; `Unmarshal` becomes the batch form, requiring Presence
+on every row through the arity gate's minimum bounds. For an all-optional kind
+those bounds are vacuous — a row populating nothing decodes to the zero value,
+where `Detect` reports `Absent` — so distinguishing absence is
+`ReadComponent`'s job, not `Unmarshal`'s.
 
 **D3 — Selection is role-filtered, realizing ADR-0073 E1.** Only primary
 memberships discriminate; secondary memberships annotate the attribute a
@@ -205,9 +208,11 @@ They ordered a section's attributes by RUNTIME cardinality across two passes,
 which requires visiting a section twice; any section holding fields of both
 classes broke them. The ordering they produced was never an accepted decision —
 [ADR-0071](0071-leeway-value-and-emission.md) C1 asks only for a STATIC
-scalar-before-container partition, which is untouched — and reinstating it would
-mean sorting attributes at runtime in both front-ends, changing the wire for
-existing data to satisfy no consumer. [ADR-0101](0101-leeway-marshall-mixed-shape-sections.md)
+scalar-before-container partition, which is untouched — and reinstating it loses
+either way: sorting at runtime in the reflect front-end alone breaks the
+byte-parity invariant with marshallgen's `BuildEntities`, and matching it in
+codegen changes the wire for existing data to satisfy no consumer.
+[ADR-0101](0101-leeway-marshall-mixed-shape-sections.md)
 D7, which named the two passes, is superseded there.
 
 ### Scope and phasing
@@ -227,13 +232,8 @@ D7, which named the two passes, is superseded there.
   it to codegen waits for a consumer.
 - **M5 — the shared section frame** and the two-pass removal. ✓ One
   correction to D6 as first written: the runtime-cardinality ordering is
-  **dropped**, not folded into the section frame. Folding it would reorder attributes at
-  runtime in the reflect front-end only, breaking the byte-parity invariant with
-  marshallgen's `BuildEntities`; matching it in codegen would change the wire for
-  existing data to satisfy no consumer. ADR-0071 C1's static
-  scalar-before-container partition — the ordering that IS decided — is
-  untouched. [ADR-0101](0101-leeway-marshall-mixed-shape-sections.md) D7, which
-  named the two passes, is superseded there.
+  **dropped**, not folded into the section frame. D6 records the two-horned
+  reason (byte parity, wire stability) and the ADR-0101 D7 supersession.
 - **M2c — the ClickHouse artefacts take their arity from `ReadContract`.** ✓
   Pulled forward out of Deferred once M1 showed the divergence was a defect,
   not just an inconsistency.
