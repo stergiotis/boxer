@@ -491,9 +491,7 @@ pub fn ffmpeg_bin() -> String {
 /// [`ffmpeg_bin`] minus the environment read, so the fallback rule is testable
 /// without mutating process-wide state from a parallel test binary.
 fn resolve_ffmpeg_bin(configured: Option<String>) -> String {
-    configured
-        .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| "ffmpeg".to_owned())
+    configured.filter(|v| !v.trim().is_empty()).unwrap_or_else(|| "ffmpeg".to_owned())
 }
 
 /// SD5 host-encode probe: per codec, the **software** and **hardware** lane

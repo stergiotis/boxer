@@ -49,7 +49,7 @@
 //! it probes the software lane before returning it, so an unusable lane should
 //! not reach the sink in the first place.
 
-use crate::imzero2::codeclane::{ffmpeg_bin, CodecLane};
+use crate::imzero2::codeclane::{CodecLane, ffmpeg_bin};
 use crate::imzero2::framesink::FrameSink;
 use crate::imzero2::inputproto as pb;
 use crate::imzero2::nutreader::NutReader;
@@ -241,16 +241,26 @@ enum RestartAction {
 /// The restart policy, separated from the sink so it is testable without
 /// spawning a real encoder: given how long the dead encoder ran and how many
 /// fast restarts preceded it, decide whether to wait, respawn, or give up.
-fn restart_action(gave_up: bool, ran_for: std::time::Duration, fast_restarts: u32) -> RestartAction {
+fn restart_action(
+    gave_up: bool,
+    ran_for: std::time::Duration,
+    fast_restarts: u32,
+) -> RestartAction {
     if gave_up || ran_for < RESTART_BACKOFF {
         return RestartAction::Wait;
     }
     // A run that lasted counts as healthy, so the streak restarts at one.
-    let fast = if ran_for >= RESTART_STABLE_AFTER { 1 } else { fast_restarts + 1 };
+    let fast = if ran_for >= RESTART_STABLE_AFTER {
+        1
+    } else {
+        fast_restarts + 1
+    };
     if fast > MAX_FAST_RESTARTS {
         RestartAction::GiveUp
     } else {
-        RestartAction::Restart { fast_restarts: fast }
+        RestartAction::Restart {
+            fast_restarts: fast,
+        }
     }
 }
 
@@ -650,7 +660,10 @@ mod tests {
     #[test]
     fn restart_waits_until_the_backoff_elapses() {
         // The frame immediately after a death must not respawn.
-        assert_eq!(restart_action(false, Duration::ZERO, 0), RestartAction::Wait);
+        assert_eq!(
+            restart_action(false, Duration::ZERO, 0),
+            RestartAction::Wait
+        );
         assert_eq!(
             restart_action(false, RESTART_BACKOFF - Duration::from_millis(1), 0),
             RestartAction::Wait
@@ -667,7 +680,9 @@ mod tests {
         );
         assert_eq!(
             restart_action(false, RESTART_BACKOFF, MAX_FAST_RESTARTS - 1),
-            RestartAction::Restart { fast_restarts: MAX_FAST_RESTARTS }
+            RestartAction::Restart {
+                fast_restarts: MAX_FAST_RESTARTS
+            }
         );
     }
 
