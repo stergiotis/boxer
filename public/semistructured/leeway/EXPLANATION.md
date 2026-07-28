@@ -48,9 +48,8 @@ source of truth.
 
 ## How it works
 
-`leeway` splits the work into a six-stage pipeline. The same names appear in
-[`doc/leeway-map/VALUE-PROPOSITION.md`](../../../doc/leeway-map/VALUE-PROPOSITION.md)
-and in the package layout under
+`leeway` splits the work into a six-stage pipeline. The same names appear in the
+package layout under
 [`github.com/stergiotis/boxer/public/semistructured/leeway`](.):
 
 ```text
@@ -217,9 +216,7 @@ rows that never carried `user`; it filters them out.
 
 As of mid-2026, the write/marshal/DDL spine is the most exercised part of the
 pipeline. Read-back beyond scalars, stream read access, the leeway query
-language, and complete table-level DDL clauses are still partial. See
-[`doc/leeway-map/REVIEW-2026-06-11.md`](../../../doc/leeway-map/REVIEW-2026-06-11.md)
-for a fuller gap list.
+language, and complete table-level DDL clauses are still partial.
 
 ## Further reading
 
@@ -238,4 +235,4 @@ for a fuller gap list.
   [ADR-0074: leeway marshall package layout](../../../doc/adr/0074-leeway-marshall-package-layout.md),
   [ADR-0075: leeway typed component views](../../../doc/adr/0075-leeway-typed-component-views.md)
 - Orientation:
-  [`doc/leeway-map/VALUE-PROPOSITION.md`](../../../doc/leeway-map/VALUE-PROPOSITION.md)
+  [Why boxer](../../../doc/explanation/why-boxer.md)

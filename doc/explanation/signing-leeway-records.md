@@ -177,10 +177,10 @@ order and naming style. `common.TableNormalizer.Normalize(style)`
 `naming.NamingStyleE` and sorts columns/sections by name, after which two logically
 identical tables produce **byte-identical** CBOR (proven in
 `common/../test/lw_table_normalizer_test.go`; used as the equality primitive by
-`TableOperations.Compare`). Residual gaps (own review
-[`doc/leeway-map/REVIEW-2026-06-11.md`](../leeway-map/), finding **A-14**): no format
-version / magic; layout pinned to struct order; the naming style is an **out-of-band
-parameter**; some carried fields historically dropped on the compare path.
+`TableOperations.Compare`). Residual gaps (own review of the leeway subsystem,
+notes not carried in this repo): no format version / magic; layout pinned to
+struct order; the naming style is an **out-of-band parameter**; some carried
+fields historically dropped on the compare path.
 
 **Card schema document — closest to signing-grade today.**
 `card.JsonCardSchemaEmitter` (`card/leeway_card_json_schema.go`, per
