@@ -224,8 +224,13 @@ Ordered by how much new plumbing each needs.
 
 - **leeway friendly handles** ([ADR-0116](../adr/0116-play-leeway-column-handle-resolution.md))
   — arguably the *preferred* completion vocabulary, since the pass stack lowers
-  them to physical names. `lwsql.Resolver` is lookup-only today (`Resolve`);
-  enumeration is a new method over data the resolver already holds.
+  them to physical names. `lwsql.Resolver` is lookup-only (`Resolve`), but the
+  list completion wants is already computed inside it: a section's value columns
+  come back as `Candidates` on an unknown-column result. So the open question is
+  not how to derive handles but who owns exposing them — the Resolver's indexes
+  are built during a rewrite and invalidated on endpoint switch, a lifetime
+  tuned for the pass path rather than for frame-time reads of a table nobody has
+  queried.
 - **keelson macros** — the registered pre-execute passes
   ([ADR-0108](../adr/0108-keelson-sql-pass-registry.md)) expose vocabulary that
   the server has never heard of. An external language server structurally

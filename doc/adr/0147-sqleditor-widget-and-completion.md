@@ -174,14 +174,30 @@ deliberately deferred.
 - **SD8 — Candidate sources in scope.** Keywords from grammar1's vocabulary;
   param names and types from `collectParamSlots`; snippets from the existing
   help-corpus blocks; tables, columns, functions and settings from SD6 probes;
-  leeway handles via a new enumeration method on `lwsql.Resolver` over data it
-  already holds. Semantic-layer entries
+  leeway handles per SD9. Semantic-layer entries
   ([ADR-0139](./0139-semantic-layer-text2dsl.md) T1) are a later tier and not a
   dependency.
+- **SD9 — Handle enumeration is a separate reader.** `lwsql.Resolver` stays
+  lookup-only. The Resolver is a pass-time object: its per-table indexes are
+  built lazily during a rewrite and cached for the session, invalidated by
+  `Reset` on an endpoint switch. Completion reads on a different cadence, for a
+  table nobody has queried yet, and a miss must be cheap rather than
+  authoritative. Giving one object both lifetimes is what the split avoids.
+
+  **The derivation is shared, not duplicated.** Turning a physical column list
+  into sections and columns — the part that knows
+  `tv:geoPoint:pointLat:val:f32:…` means `geoPoint:pointLat` — is factored out
+  so the Resolver and the reader build the same index from the same
+  `passes.SchemaProviderI` and cache it independently. A second reading of the
+  physical-name grammar is the failure mode here: it would compile, pass its own
+  tests, and drift from the Resolver silently, so that completion offers a
+  handle the rewrite then refuses. The shape the reader exposes is already
+  computed internally — `Resolve` returns exactly this list as `Candidates` on
+  an unknown-column result.
 
 ### The FFI seam
 
-- **SD9 — Key capture is a `TextEdit` builder method, not a fetcher.** It runs
+- **SD10 — Key capture is a `TextEdit` builder method, not a fetcher.** It runs
   `consume_key` before `apply_widget` — the same point in `interpreter.rs` where
   the highlight layouter is installed — and pushes the pressed set back through
   a per-widget value channel, the way the caret channel already works. Go emits
@@ -190,24 +206,24 @@ deliberately deferred.
   is open, being the switch egui provides for exactly that key. The fetcher
   route is rejected on mechanism, not taste: fetchers drain at frame end, after
   the widget has consumed the event.
-- **SD10 — Replace-range is a selection method, not a second insertion path.**
+- **SD11 — Replace-range is a selection method, not a second insertion path.**
   A method setting the selection to a char range composes with `InsertAtCursor`,
   which already replaces any selection. No new mutation path, and no reliance on
   a `setCursor` that does not exist.
-- **SD11 — The list is unanchored, in this ADR.** It renders as a strip beside
+- **SD12 — The list is unanchored, in this ADR.** It renders as a strip beside
   the editor. No caret rect crosses the FFI and no window follows the caret.
 
 ### Milestones
 
 - **M0 — Extraction.** SD1–SD4, behaviour-identical, `sqlappletcreator` adopted.
-- **M1 — Context and candidates, headless.** SD5, SD7, SD8 as pure Go behind the
+- **M1 — Context and candidates, headless.** SD5, SD7–SD9 as pure Go behind the
   provider interface, table-tested without a UI.
 - **M2 — Probes.** SD6: tables, functions and settings probes; columns moved
   off the frame thread.
 - **M3 — The list, click-only.** Candidates rendered in the strip,
   click-to-insert through the existing insert-at-caret op. No IDL change to
   here.
-- **M4 — The seam.** SD9 and SD10: IDL, regen, Rust, generator. Type, arrow,
+- **M4 — The seam.** SD10 and SD11: IDL, regen, Rust, generator. Type, arrow,
   Enter, Esc.
 - **M5 — Record and close.** Dated Updates here and on ADR-0130; a help-corpus
   paragraph; full verification.
@@ -239,7 +255,12 @@ live — where they can be seen, and with no regen risk.
 - **`egui_code_editor`'s completion.** Rejected as a dependency, kept as a parts
   reference: keyword-set-grade classification, with its own theming and id
   handling.
-- **A fetcher-based key channel.** Rejected on mechanism (SD9): frame-end drain
+- **Handle enumeration as a method on `lwsql.Resolver`.** Rejected (SD9): it is
+  the smaller diff, and it gives one object two cache lifetimes — a pass-time
+  index built during a rewrite and invalidated on endpoint switch, serving
+  frame-time reads for tables no query has touched. The reader is kept separate
+  and the index derivation shared.
+- **A fetcher-based key channel.** Rejected on mechanism (SD10): frame-end drain
   is too late.
 - **Computing the caret's pixel position Go-side.** Rejected: unsound whenever
   the monospace face is unconfigured.
@@ -282,7 +303,7 @@ live — where they can be seen, and with no regen risk.
 - The completion list is one frame behind the buffer, as the highlight sections
   already are. Text stays authoritative in the `TextEdit`; candidates are
   advisory.
-- SD11 leaves the list further from the caret than an IDE popup. Whether that
+- SD12 leaves the list further from the caret than an IDE popup. Whether that
   reads as wrong is the trigger for C4 in the survey's ladder, not a defect to
   pre-empt.
 
@@ -302,7 +323,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0130](./0130-imzero2-textedit-highlight-seam.md) — the highlight seam and
   the L3 affordances this builds on.
 - [ADR-0063](./0063-imzero2-textedit-insert-at-cursor.md) — insert-at-cursor,
-  which SD10 composes with.
+  which SD11 composes with.
 - [ADR-0116](./0116-play-leeway-column-handle-resolution.md),
   [ADR-0108](./0108-keelson-sql-pass-registry.md),
   [ADR-0094](./0094-keelson-introspection-tables.md),
