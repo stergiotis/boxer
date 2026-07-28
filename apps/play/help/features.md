@@ -195,7 +195,9 @@ It tells the **input** (the editor SQL) and the **output** (the displayed result
 apart, so an empty result and a stale result are distinct, named states:
 
 - **idle** — neutral badge, `type SQL and press Run`. No query has run yet.
-- **running** — accent badge, `executing…`. A query is in flight.
+- **running** — accent badge, `executing…`, followed by the live counters when
+  the server sends them: `1.9B / 2.5B rows (77%) · 14.5 GB read · 1.2M rows/s ·
+  ETA 1m20s · mem 1.1 MB · 24.5s`.
 - **rows** — green badge, `N rows · 12ms · 4 kB read · 8s ago`.
 - **empty** — amber badge, `0 rows · ran 8s ago`. The query ran and matched nothing.
 - **failed** — red badge, `errored: <message>`.
@@ -209,6 +211,27 @@ that changed `selection`, a Map pan that moved `vp_*`, …). The table below is
 showing output for inputs you've since changed; press Run to refresh, or check
 **Live** to re-run on signal moves automatically (buffer edits always wait for
 Run).
+
+### Live progress
+
+While a query runs, ClickHouse streams counters back — rows read, bytes read,
+memory, elapsed. They appear in three places:
+
+- a bar beside **Cancel** in the top bar, with the percentage and the ETA;
+- a slim bar above a result pane whose contents are being replaced, so a re-run
+  is visible where you are reading rather than only in the chrome;
+- the status line, and the centred *Executing query…* state when there is no
+  previous result to show.
+
+The rate and the ETA are estimated from the tick stream (a smoothed rate, and an
+ETA that is allowed to fall freely but resists small rises, so it does not
+oscillate). Both need a couple of ticks before they appear. The percentage and
+the ETA need the server to report a **total** to divide by; it cannot always —
+an unbounded `system.numbers` scan, for instance, has no total — and the bar is
+then indeterminate, with rows and rate but no ETA.
+
+Endpoints that do not stream progress at all (the in-process query engines, and
+anything not plain `http://`) show the spinner alone.
 
 ## Result views
 

@@ -204,6 +204,20 @@ func (inst *PlayApp) frameFor(tabID string, base *TabFrame) (f TabFrame) {
 	return
 }
 
+// tabOnActiveLane reports whether the tab renders the ACTIVE result rather
+// than a bound node's own lane — frameFor's condition, asked directly. It is
+// what decides whether the frame-level progress numbers describe what THIS
+// pane is waiting for: a bound pane waits on a lane the progress tracker
+// does not follow, so its strip stays indeterminate.
+func (inst *PlayApp) tabOnActiveLane(tabID string) bool {
+	node, ok := inst.resolvedNodes[tabID]
+	if !ok || node == inst.activeNodeID() {
+		return true
+	}
+	_, has := inst.boundViews[node]
+	return !has
+}
+
 // boundTabTitle decorates a bound tab's dock title with its node —
 // "Table · by_kind" — so a rebound pane is never mistaken for the active
 // result. Dock identity is the DockID, so a varying title is safe.

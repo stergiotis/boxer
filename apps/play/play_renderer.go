@@ -289,8 +289,14 @@ type PlayApp struct {
 	// queryFSM tracks the result↔input lifecycle (play_querystate.go) so the
 	// status bar names the state and flags stale/empty output; queryFSMWidget
 	// surfaces the graph + transition history + provenance as a status-bar chip.
-	queryFSM               *fsmview.Machine[queryStateE]
-	queryFSMWidget         *fsmview.Widget[queryStateE]
+	queryFSM       *fsmview.Machine[queryStateE]
+	queryFSMWidget *fsmview.Widget[queryStateE]
+	// progress folds the observed lane's live ticks into a smoothed rate and
+	// a damped ETA (play_progress.go); frameProgress is this frame's answer,
+	// computed once in Render and read by every display site — the top bar,
+	// the pane strips, the loading empty-state and the status line.
+	progress               progressTracker
+	frameProgress          progressView
 	timeline               *TimelineDriver
 	timelineBandsSql       string
 	timelineNowLineEnabled bool
@@ -1000,6 +1006,11 @@ func (inst *PlayApp) Render() error {
 	// too. The status bar and its chip both read inst.queryFSM.
 	inst.syncQueryFSM(loading, numRows, executed, err)
 
+	// Fold this frame's progress tick into the ETA estimator, once, before
+	// any display site reads it (the damped ETA is stateful — see
+	// progressTracker.observe).
+	inst.syncProgress()
+
 	// The `main` live toggle (slice 5e, D2): a referenced-signal move
 	// re-runs the unchanged buffer through the ordinary Run path below.
 	// Re-checking Live retires the breaker's notice: the checkbox on screen
@@ -1137,6 +1148,19 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 		if pane.Skip() {
 			return
 		}
+	}
+	// A run replacing a result the pane is ALREADY showing: the body below
+	// keeps drawing the previous rows (last-good, no flicker — see
+	// nodeLane.demand), and without this strip nothing in the pane says a
+	// new result is on the way. The empty-state spinner cannot cover this:
+	// it is reached only when there is no result at all.
+	//
+	// Body-zone result panes only. Chrome tabs (Snippets, Graph, Passes …)
+	// do not render the frame at all, and the side zone is narrow by design
+	// — Detail is ~250 pt wide, where bar + numbers clip, and the body pane
+	// beside it is already carrying the same strip.
+	if spec.Panel != nil && spec.Zone == TabZoneBody && f.Loading && f.Rec != nil {
+		inst.renderPaneProgressStrip(inst.tabOnActiveLane(spec.ID))
 	}
 	spec.Render(f)
 }
@@ -1432,6 +1456,9 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				SendResp().HasPrimaryClicked() {
 				inst.graph.CancelMain()
 			}
+			// The bar rides beside Cancel so an in-flight run is legible
+			// from any tab, with or without a result already on screen.
+			inst.renderTopBarProgress()
 		} else {
 			if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
 				SendResp().HasPrimaryClicked() {
@@ -2534,8 +2561,9 @@ func (inst *PlayApp) renderResultsLoading() {
 		// Live tick from the in-band progress headers (ADR-0115 plane A);
 		// absent until the first tick lands or when the endpoint cannot
 		// stream them (non-http, mocks).
-		if p, fresh := inst.activeProgress(); fresh {
-			diagWeak(formatProgressLine(p))
+		if v := inst.frameProgress; v.fresh {
+			renderProgressBar(v, loadingProgressWidth)
+			diagWeak(formatProgressLine(v))
 		}
 	}
 }

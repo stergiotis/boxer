@@ -165,12 +165,170 @@ func TestQueryStoreProgressEndToEnd(t *testing.T) {
 }
 
 func TestFormatProgressLine(t *testing.T) {
-	s := formatProgressLine(runstream.Progress{ReadRows: 1_946_964_294, ReadBytes: 15_575_714_352,
-		TotalRowsToRead: 2_500_000_000, ElapsedNs: 300_006_531, MemoryUsage: 1_145_567})
+	v := progressView{
+		fresh: true,
+		p: runstream.Progress{ReadRows: 1_946_964_294, ReadBytes: 15_575_714_352,
+			TotalRowsToRead: 2_500_000_000, ElapsedNs: 300_006_531, MemoryUsage: 1_145_567},
+		knownTotal: true, percent: 77, fraction: 0.7788,
+		rate: 1_200_000, eta: 80 * time.Second, etaValid: true,
+	}
+	s := formatProgressLine(v)
 	require.Contains(t, s, "1.9B / 2.5B rows (77%)")
 	require.Contains(t, s, "14.5 GB read")
+	require.Contains(t, s, "1.2M rows/s")
+	require.Contains(t, s, "ETA 1m20s")
 	require.Contains(t, s, "mem 1.1 MB")
 	require.Contains(t, s, "300ms")
 
-	require.Equal(t, "12 rows · 0 B read", formatProgressLine(runstream.Progress{ReadRows: 12}))
+	// No total, no warm estimator: rows and bytes are all there is to say.
+	require.Equal(t, "12 rows · 0 B read",
+		formatProgressLine(progressView{fresh: true, p: runstream.Progress{ReadRows: 12}}))
+
+	// The top bar's short form carries the percentage the bar cannot show
+	// legibly, then prefers the ETA, falling back to the rate and to the bare
+	// row count while both warm up.
+	require.Equal(t, "77% · ETA 1m20s", formatProgressBrief(v))
+	require.Equal(t, "1% · 1.2M rows/s",
+		formatProgressBrief(progressView{fresh: true, knownTotal: true, percent: 1, rate: 1_200_000}))
+	require.Equal(t, "1%", formatProgressBrief(progressView{fresh: true, knownTotal: true, percent: 1}))
+	require.Equal(t, "1.2M rows/s", formatProgressBrief(progressView{fresh: true, rate: 1_200_000}))
+	require.Equal(t, "12 rows",
+		formatProgressBrief(progressView{fresh: true, p: runstream.Progress{ReadRows: 12}}))
+
+	// The pane strip drops the memory/elapsed tail the status bar carries.
+	strip := formatProgressStrip(v)
+	require.Equal(t, "1.9B / 2.5B rows · 1.2M rows/s · ETA 1m20s", strip)
+}
+
+// progressTicks feeds the tracker a run at a constant rate: one tick per
+// `spacing`, `perTick` rows each, with the server-reported elapsed clock the
+// real transport supplies. Returns the last view.
+func progressTicks(tr *progressTracker, lane string, n int, perTick uint64, total uint64, spacing time.Duration) (v progressView) {
+	base := time.Unix(1700000000, 0)
+	for i := 1; i <= n; i++ {
+		elapsed := time.Duration(i) * spacing
+		v = tr.observe(base.Add(elapsed), lane, runstream.Progress{
+			ReadRows:        perTick * uint64(i),
+			TotalRowsToRead: total,
+			ElapsedNs:       uint64(elapsed.Nanoseconds()),
+		}, true)
+	}
+	return
+}
+
+func TestProgressTrackerEstimates(t *testing.T) {
+	tr := &progressTracker{}
+	// One tick in: the fraction is exact, but an ETA needs a rate, and a
+	// rate needs two spacings to measure.
+	v := progressTicks(tr, "main", 1, 250_000, 10_000_000, 250*time.Millisecond)
+	require.True(t, v.fresh)
+	require.True(t, v.knownTotal)
+	require.EqualValues(t, 2, v.percent)
+	require.InDelta(t, 0.025, v.fraction, 0.001)
+	require.False(t, v.etaValid, "no ETA off a single tick")
+	require.Zero(t, v.rate)
+
+	// Three ticks of 250k rows every 250 ms is 1M rows/s; 10M total leaves
+	// 9.25M to read (the estimator's ETA has second resolution).
+	v = progressTicks(tr, "main", 3, 250_000, 10_000_000, 250*time.Millisecond)
+	require.True(t, v.etaValid)
+	require.InDelta(t, 1_000_000, v.rate, 50_000)
+	require.InDelta(t, 9.25, v.eta.Seconds(), 1)
+
+	// A row count that cannot be reached still yields a fraction of 1 and a
+	// zero ETA rather than an overrun.
+	v = tr.observe(time.Unix(1700000001, 0), "main", runstream.Progress{
+		ReadRows: 12_000_000, TotalRowsToRead: 10_000_000, ElapsedNs: uint64(time.Second)}, true)
+	require.EqualValues(t, 100, v.percent)
+	require.EqualValues(t, 1, v.fraction)
+	require.True(t, v.etaValid)
+	require.Zero(t, v.eta)
+}
+
+// TestProgressTrackerRepeatedTick is the property the render loop depends on:
+// observe runs every frame (~16 ms) while ticks land every ~250 ms, so the
+// same tick is seen a dozen times. Folding those re-reads in as samples would
+// drag the smoothed rate toward zero and inflate the ETA.
+func TestProgressTrackerRepeatedTick(t *testing.T) {
+	tr := &progressTracker{}
+	v := progressTicks(tr, "main", 4, 250_000, 10_000_000, 250*time.Millisecond)
+	rate, eta := v.rate, v.eta
+	require.NotZero(t, rate)
+
+	last := runstream.Progress{ReadRows: 1_000_000, TotalRowsToRead: 10_000_000,
+		ElapsedNs: uint64(time.Second)}
+	now := time.Unix(1700000001, 0)
+	for i := 0; i < 60; i++ {
+		now = now.Add(16 * time.Millisecond)
+		v = tr.observe(now, "main", last, true)
+	}
+	require.Equal(t, rate, v.rate, "re-reading one tick must not move the rate")
+	require.Equal(t, eta, v.eta)
+}
+
+// TestProgressTrackerReAnchors covers the three ways the run underneath the
+// tracker changes: the lane gate closing, the observed lane switching, and a
+// row count that restarts. Each must drop the previous run's level, or the
+// new run's first ETA is the old run's.
+func TestProgressTrackerReAnchors(t *testing.T) {
+	base := time.Unix(1700000000, 0)
+
+	t.Run("gate off", func(t *testing.T) {
+		tr := &progressTracker{}
+		progressTicks(tr, "main", 4, 250_000, 10_000_000, 250*time.Millisecond)
+		v := tr.observe(base, "main", runstream.Progress{}, false)
+		require.Equal(t, progressView{}, v, "a landed run shows nothing")
+		require.False(t, tr.tracking)
+		// The next run starts cold.
+		v = tr.observe(base, "main", runstream.Progress{
+			ReadRows: 10, TotalRowsToRead: 1_000_000, ElapsedNs: uint64(250 * time.Millisecond)}, true)
+		require.False(t, v.etaValid)
+		require.Zero(t, v.rate)
+	})
+
+	t.Run("lane switch", func(t *testing.T) {
+		tr := &progressTracker{}
+		progressTicks(tr, "main", 4, 250_000, 10_000_000, 250*time.Millisecond)
+		v := tr.observe(base, "by_kind", runstream.Progress{
+			ReadRows: 10, TotalRowsToRead: 1_000_000, ElapsedNs: uint64(250 * time.Millisecond)}, true)
+		require.False(t, v.etaValid, "the intermediate lane's run is not the main lane's")
+		require.Zero(t, v.rate)
+	})
+
+	t.Run("rows restart", func(t *testing.T) {
+		tr := &progressTracker{}
+		progressTicks(tr, "main", 4, 250_000, 10_000_000, 250*time.Millisecond)
+		// Same lane, same fresh gate, but a run that starts over: the
+		// supersede path can hand the render thread the new run's first
+		// tick without the gate ever closing.
+		v := tr.observe(base, "main", runstream.Progress{
+			ReadRows: 1_000, TotalRowsToRead: 10_000_000, ElapsedNs: uint64(250 * time.Millisecond)}, true)
+		require.False(t, v.etaValid)
+		require.Zero(t, v.rate)
+	})
+}
+
+// TestProgressTrackerNoElapsed covers the endpoints that report no run clock
+// (the tick shape is shared with the polled producer): the tracker falls back
+// to wall time and still refuses to fold a re-read of the same tick.
+func TestProgressTrackerNoElapsed(t *testing.T) {
+	tr := &progressTracker{}
+	now := time.Unix(1700000000, 0)
+	var v progressView
+	for i := 1; i <= 4; i++ {
+		now = now.Add(250 * time.Millisecond)
+		v = tr.observe(now, "main", runstream.Progress{
+			ReadRows: 250_000 * uint64(i), TotalRowsToRead: 10_000_000}, true)
+	}
+	require.False(t, tr.useElapsed)
+	require.True(t, v.etaValid)
+	require.InDelta(t, 1_000_000, v.rate, 50_000)
+
+	rate := v.rate
+	for i := 0; i < 10; i++ {
+		now = now.Add(250 * time.Millisecond)
+		v = tr.observe(now, "main", runstream.Progress{
+			ReadRows: 1_000_000, TotalRowsToRead: 10_000_000}, true)
+	}
+	require.Equal(t, rate, v.rate)
 }
