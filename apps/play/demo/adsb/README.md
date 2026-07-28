@@ -28,7 +28,11 @@ public instance.
 1. `setup.sql` — creates `planes_mercator` (+ the `sample10`/`sample100` tables
    and their materialized views), adopted from the upstream schema. `mercator_x`
    / `mercator_y` are `MATERIALIZED` from lat/lon with the same formulas
-   `play_map.go` mirrors in Go (ADR-0096 §SD4).
+   `play_map.go` mirrors in Go (ADR-0096 §SD4). Their world span is the one
+   deliberate deviation from upstream: 2^32 (ClickHouse's own full-`UInt32`
+   mercator space) rather than adsb.exposed's `0xFFFFFFFF` — see the ADR-0096
+   2026-07-28 Update. `ingest.sql`'s bbox still uses the upstream constant,
+   because it filters the *remote's* columns.
 2. `ingest.sql` — one `INSERT … SELECT * FROM remoteSecure(<public instance>)`
    filtered to the bbox and day. No file download and no JSON parsing: the rows
    arrive already-shaped, and the local materialized columns + sample views

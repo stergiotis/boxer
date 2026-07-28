@@ -93,9 +93,17 @@ $CH --data "SELECT count() FROM default.local_planes"
 This is a London box (`lon ∈ [-0.7, 0.4]`, `lat ∈ [51.10, 51.85]`), a one-time
 pull of roughly a minute or two. Notes:
 
-- The `WHERE` is the same Web-Mercator projection the panel uses
+- The `WHERE` is the Web-Mercator projection **the upstream corpus** uses
   (`x = 0xFFFFFFFF·(lon+180)/360`; `y = 0xFFFFFFFF·(½ − ln(tan((lat+90)/360·π))/2π)`),
-  and `y` is inverted, so the northern latitude is the lower bound.
+  and `y` is inverted, so the northern latitude is the lower bound. Keep this
+  constant: the predicate is evaluated against the remote's `MATERIALIZED`
+  columns. Since the ADR-0096 2026-07-28 Update the panel itself projects with a
+  world span of `2^32` instead, so `local_planes` — which copies the remote's
+  coordinates verbatim rather than recomputing them — reads back up to one
+  mercator unit off. That is far below one raster pixel until the viewport is a
+  couple of centimetres wide, so it does not affect this recipe. A table that
+  recomputes on `INSERT` (as `apps/play/demo/adsb/setup.sql` does) has no offset
+  at all.
 - `rand() % 2 = 0` halves the transferred rows to stay under the 1,048,576 cap
   **with even spatial coverage** — a bare `LIMIT` would bias the sample, since
   the corpus is Morton-ordered. A time window (`AND time >= '<date>'`) is an

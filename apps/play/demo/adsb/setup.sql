@@ -7,16 +7,47 @@
 --
 -- mercator_x / mercator_y are MATERIALIZED from lat/lon with the same formulas
 -- the Map panel mirrors in Go (apps/play/play_map.go lonToMercX / latToMercY,
--- ADR-0096 §SD4), so they recompute locally on INSERT and line up pixel-for-pixel
--- with the raster binning. The morton ORDER BY + minmax indexes make a viewport a
+-- ADR-0096 §SD4), so they recompute locally on INSERT and line up exactly with
+-- the raster binning. The morton ORDER BY + minmax indexes make a viewport a
 -- near-contiguous key range, so the bbox filter in ingest.sql prunes cheaply.
+--
+-- UPGRADING an existing database: the statements below are CREATE TABLE IF NOT
+-- EXISTS, so re-running this file against a database that already has these
+-- tables leaves the OLD column expressions in place — the projection changed on
+-- 2026-07-28 (see below) and a plain re-run will not pick it up. Drop the three
+-- tables and their materialized views and re-run, or ALTER TABLE ... MODIFY
+-- COLUMN and re-ingest. Rows already written keep whatever their part was
+-- written with; MATERIALIZED expressions are evaluated at INSERT, not on read.
+--
+-- The world span is 2^32, ClickHouse's own full-UInt32 mercator space (the one
+-- MVTEncodeGeom / MVTBoundingBoxMercator use), NOT upstream adsb.exposed's
+-- 0xFFFFFFFF — see the ADR-0096 2026-07-28 Update. The two differ by at most one
+-- mercator unit, so ingest.sql's bbox against the REMOTE's columns deliberately
+-- keeps the upstream constant; only these local columns moved.
+--
+-- The greatest/least clamp is load-bearing, not decoration: the scale is the
+-- world SPAN, so lon = +180 projects exactly onto 2^32 and toUInt32 wraps that
+-- to 0 — an unclamped antimeridian point would land at the far left of the
+-- world. It also pins the poles, where tan(lat) diverges.
+--
+-- Three spellings here are load-bearing for exact agreement with the Go side;
+-- verified 0 differing points over a 245861-point grid. Do not "tidy" them:
+--   * floor(x + 0.5), not the bare cast — the implicit UInt32 cast TRUNCATES
+--     where Go's math.Round rounds, and ClickHouse's round() is banker's
+--     rounding, which Go's is not.
+--   * ... * (lon + 180) / 360, not ... * ((lon + 180) / 360) — Go multiplies
+--     before dividing, and the association changes the last bit.
+--   * asinh(tan(lat/180*pi())), not log(tan((lat+90)/360*pi())) — the same
+--     isometric latitude, but ClickHouse's log() is a fast approximation
+--     carrying ~1.4e-9 relative error, which 2^32 magnifies into a whole
+--     mercator unit on ~36% of points. Its asinh() is correctly rounded.
 --
 -- Idempotent: safe to re-run (demo.sh TRUNCATEs before each load).
 
 CREATE TABLE IF NOT EXISTS planes_mercator
 (
-    mercator_x UInt32 MATERIALIZED 0xFFFFFFFF * ((lon + 180) / 360),
-    mercator_y UInt32 MATERIALIZED 0xFFFFFFFF * (1/2 - log(tan((lat + 90) / 360 * pi())) / 2 / pi()),
+    mercator_x UInt32 MATERIALIZED greatest(0., least(4294967295., floor(4294967296. * (lon + 180) / 360 + 0.5))),
+    mercator_y UInt32 MATERIALIZED greatest(0., least(4294967295., floor(4294967296. * (0.5 - asinh(tan(lat / 180 * pi())) / (2 * pi())) + 0.5))),
 
     INDEX idx_x (mercator_x) TYPE minmax,
     INDEX idx_y (mercator_y) TYPE minmax,

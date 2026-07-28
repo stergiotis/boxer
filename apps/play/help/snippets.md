@@ -555,10 +555,10 @@ injects the live viewport instead.
 WITH
   45.5 AS min_lat, 49.0 AS max_lat, 5.5 AS min_lon, 12.0 AS max_lon,
   256 AS W, 256 AS H, 100 AS sampling,
-  toUInt32(0xFFFFFFFF * ((min_lon + 180) / 360)) AS min_x,
-  toUInt32(0xFFFFFFFF * ((max_lon + 180) / 360)) AS max_x,
-  toUInt32(0xFFFFFFFF * (1/2 - log(tan((max_lat + 90) / 360 * pi())) / 2 / pi())) AS min_y,
-  toUInt32(0xFFFFFFFF * (1/2 - log(tan((min_lat + 90) / 360 * pi())) / 2 / pi())) AS max_y,
+  toUInt32(greatest(0., least(4294967295., floor(4294967296. * (min_lon + 180) / 360 + 0.5)))) AS min_x,
+  toUInt32(greatest(0., least(4294967295., floor(4294967296. * (max_lon + 180) / 360 + 0.5)))) AS max_x,
+  toUInt32(greatest(0., least(4294967295., floor(4294967296. * (0.5 - asinh(tan(max_lat / 180 * pi())) / (2 * pi())) + 0.5)))) AS min_y,
+  toUInt32(greatest(0., least(4294967295., floor(4294967296. * (0.5 - asinh(tan(min_lat / 180 * pi())) / (2 * pi())) + 0.5)))) AS max_y,
   toUInt64(max_x) - min_x AS span_x,
   toUInt64(max_y) - min_y AS span_y,
   mercator_x >= min_x AND mercator_x < max_x

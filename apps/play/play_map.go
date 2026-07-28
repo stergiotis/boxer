@@ -104,8 +104,24 @@ var mapViewportSignals = [...]SignalID{"vp_min_x", "vp_max_x", "vp_min_y", "vp_m
 const (
 	mapRasterID uint64 = 1
 	mapDebounce        = 250 * time.Millisecond
-	mapMaxDim   uint32 = 1024         // bounds query cost + Arrow size per view
-	mercMax            = 4294967295.0 // 0xFFFFFFFF — full Web-Mercator world
+	mapMaxDim   uint32 = 1024 // bounds query cost + Arrow size per view
+
+	// mercWorld is the Web-Mercator world SPAN: the projection maps the globe
+	// onto [0, mercWorld). It is 2^32 — the full-UInt32 mercator space that
+	// ClickHouse's MVT functions use (MVTBoundingBoxMercator(0,0,0) returns
+	// (0, 0, 4294967296, 4294967296), and MVTEncodeGeom documents "Web Mercator
+	// over the full UInt32 coordinate range" with the same downward y axis), so
+	// a column built with the setup.sql formulas and one built with the MVT
+	// functions agree. See the ADR-0096 2026-07-28 Update for why this moved off
+	// the upstream adsb.exposed 0xFFFFFFFF.
+	mercWorld = 4294967296.0 // 2^32 — full Web-Mercator world span
+	// mercUnitMax is the largest REPRESENTABLE coordinate, deliberately distinct
+	// from the span above: the columns are UInt32, so the last valid unit is
+	// 2^32-1. Keeping the two apart is what makes clampMerc saturate correctly —
+	// Go's uint32(4294967296.0) is 0, so a ceiling written against the span
+	// would wrap a pole/antimeridian point to the opposite corner of the world
+	// instead of pinning it to the edge.
+	mercUnitMax = 4294967295 // 0xFFFFFFFF — max UInt32, NOT the world span
 )
 
 // mapFetchTimeout bounds one raster round-trip. Generous because a remote()
@@ -659,11 +675,26 @@ func bboxFromLatLon(minLat, maxLat, minLon, maxLon float64) (b mercBox, ok bool)
 	return b, true
 }
 
-// lonToMercX / latToMercY mirror the materialized-column formulas in the
-// adsb.exposed setup.sql exactly (the one projection contract — ADR-0096 §SD4),
-// so the Go-computed bbox aligns pixel-for-pixel with the SQL's binning.
+// lonToMercX / latToMercY mirror the materialized-column formulas in
+// apps/play/demo/adsb/setup.sql (the one projection contract — ADR-0096 §SD4),
+// so the Go-computed bbox lines up with the SQL's binning. Both sides scale by
+// mercWorld = 2^32, matching ClickHouse's MVT mercator space rather than the
+// upstream adsb.exposed 0xFFFFFFFF.
+//
+// Agreement with setup.sql is EXACT — 0 differing points over a 245861-point
+// grid — and three spellings keep it that way, on both sides: math.Round against
+// the DDL's floor(x+0.5) (the bare cast truncates, and ClickHouse's round() is
+// banker's); multiply-before-divide on the x axis; and asinh rather than log for
+// the isometric latitude (see latToMercY). Change one side without the other and
+// the raster shifts by a unit on a third of all points.
+//
+// One residual remains, by construction: a table carrying upstream-convention
+// columns — filled by copying them verbatim off remoteSecure rather than
+// recomputing on INSERT — reads back up to 1 unit off, from the differing world
+// span. That reaches a whole raster pixel only when span_x ≲ vp_w, a viewport
+// roughly a centimetre across.
 func lonToMercX(lon float64) uint32 {
-	return clampMerc(math.Round(mercMax * (lon + 180.0) / 360.0))
+	return clampMerc(math.Round(mercWorld * (lon + 180.0) / 360.0))
 }
 
 // mercXToLon / mercYToLat invert lonToMercX / latToMercY (the SD4 projection
@@ -671,16 +702,23 @@ func lonToMercX(lon float64) uint32 {
 // SERVED vp_* values, so raster and query cannot disagree about the bounds.
 // The float64 round-trip error is far below a pixel at any zoom.
 func mercXToLon(x float64) float64 {
-	return x/mercMax*360.0 - 180.0
+	return x/mercWorld*360.0 - 180.0
 }
 
 func mercYToLat(y float64) float64 {
-	return math.Atan(math.Exp((0.5-y/mercMax)*2.0*math.Pi))*360.0/math.Pi - 90.0
+	return math.Atan(math.Exp((0.5-y/mercWorld)*2.0*math.Pi))*360.0/math.Pi - 90.0
 }
 
+// latToMercY uses the isometric latitude in its inverse-Gudermannian form,
+// asinh(tan φ), rather than the textbook ln(tan(π/4 + φ/2)). The two are the
+// same quantity, but ClickHouse's log() is a fast approximation carrying ~1.4e-9
+// of relative error — which the 2^32 scale magnifies to a whole mercator unit,
+// putting a ±1 disagreement on ~36% of points against the DDL. Its asinh() is
+// correctly rounded, so this form is what makes the two sides agree exactly
+// (ADR-0096 2026-07-28 Update). setup.sql must keep the matching spelling.
 func latToMercY(lat float64) uint32 {
 	lat = clampLat(lat)
-	return clampMerc(math.Round(mercMax * (0.5 - math.Log(math.Tan((lat+90.0)/360.0*math.Pi))/(2.0*math.Pi))))
+	return clampMerc(math.Round(mercWorld * (0.5 - math.Asinh(math.Tan(lat/180.0*math.Pi))/(2.0*math.Pi))))
 }
 
 func clampLat(lat float64) float64 {
@@ -694,12 +732,18 @@ func clampLat(lat float64) float64 {
 	return lat
 }
 
+// clampMerc saturates a projected coordinate into the UInt32 domain. The
+// ceiling is mercUnitMax (2^32-1), NOT the mercWorld span (2^32): lon = +180
+// and the south pole both project exactly onto the span, and Go converts an
+// out-of-range float to uint32 as 0 — so clamping against the span would send
+// the antimeridian to x = 0, wrapping a point at the right edge of the world to
+// the left edge. Keep the two constants distinct.
 func clampMerc(v float64) uint32 {
 	if v < 0 {
 		return 0
 	}
-	if v > mercMax {
-		return uint32(mercMax)
+	if v > mercUnitMax {
+		return mercUnitMax
 	}
 	return uint32(v)
 }

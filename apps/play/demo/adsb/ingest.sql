@@ -13,9 +13,16 @@
 --                                              explicit-UTC window (below), not a
 --                                              server-timezone toHour()
 --
--- The bbox is expressed in lat/lon and converted to the mercator UInt32 range
--- with the setup.sql formulas, so the WHERE prunes the remote's morton-indexed
--- mercator_x/mercator_y columns (cheap) rather than scanning lat/lon.
+-- The bbox is expressed in lat/lon and converted to the mercator UInt32 range,
+-- so the WHERE prunes the remote's morton-indexed mercator_x/mercator_y columns
+-- (cheap) rather than scanning lat/lon.
+--
+-- These use the UPSTREAM 0xFFFFFFFF world span, deliberately NOT setup.sql's
+-- 2^32 (ADR-0096 2026-07-28 Update): the predicate is evaluated against the
+-- remote's MATERIALIZED columns, which adsb.exposed computes with its own
+-- constant. Do not "align" it with setup.sql — the two are different tables'
+-- conventions. The difference is at most one unit either way, so as a coarse
+-- region filter it is immaterial; matching the remote is about intent.
 --
 -- NOTE: SELECT * excludes the remote's MATERIALIZED mercator_x/y, so the column
 -- list lines up with the local non-materialized columns positionally. If the

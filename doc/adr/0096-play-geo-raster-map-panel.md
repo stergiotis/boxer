@@ -412,6 +412,103 @@ last. Concretely (`apps/play/play_map.go`):
   referenceable by any other node — a query reading `{vp_min_x:UInt32}` now
   cross-filters against the map viewport with no new mechanism.
 
+## Update — 2026-07-28: SD4's world span moves to 2^32 (ClickHouse's MVT mercator space)
+
+SD4 fixed the projection constant at `0xFFFFFFFF` (2^32 − 1) because that is
+what upstream `adsb.exposed` materializes. ClickHouse 26.6 added an MVT function
+family — `MVTEncodeGeom`, `MVTEncode`, `MVTBoundingBoxMercator`, `ST_AsMVTGeom`
+— which projects into "Web Mercator over the full `UInt32` coordinate range"
+with the same downward y axis, i.e. the same space SD4 describes but spanning
+2^32. Measured on 26.7.1: `MVTBoundingBoxMercator(0,0,0)` returns
+`(0, 0, 4294967296, 4294967296)`, and over 2952 points spanning the globe the
+two conventions agree to within **one mercator unit** in both axes.
+
+The panel's Go projection and `apps/play/demo/adsb/setup.sql` now scale by 2^32.
+The reason is convention alignment, not accuracy: one unit in 4.29 × 10⁹ reaches
+one raster pixel only when `span_x ≲ vp_w`, a viewport roughly a centimetre
+across. A minor benefit is that the prime meridian and equator now land on
+exactly 2^31 rather than a half-unit.
+
+**What this costs.** SD4's guarantee — the Go bbox aligns with the column values
+— now holds against boxer's own `setup.sql`, not against upstream. The two
+cannot both be matched. A table filled by *copying* the
+remote's `MATERIALIZED` columns verbatim (`doc/howto/play-adsb-map.md` Step 2's
+`local_planes`) therefore reads back up to one unit off; a table that recomputes
+on `INSERT`, as `setup.sql` does, has no offset. `ingest.sql`'s bbox and the
+howto's `WHERE` deliberately keep `0xFFFFFFFF`, because they are predicates
+against the *remote's* columns; both now say so at the site.
+
+**A trap the migration exposed.** The constant silently served three roles:
+scale factor, clamp ceiling, and inverse divisor. They coincided only because
+2^32 − 1 is both the scale and the largest `UInt32`. At a span of 2^32 they
+diverge, and both languages convert the overflow to zero rather than saturating
+— verified: Go's `uint32(4294967296.0)` is `0`, and ClickHouse's
+`toUInt32(4294967296.)` is `0`. Left unhandled, a point at lon = +180 would have
+landed at `x = 0`, wrapping the antimeridian to the far left of the world. So:
+
+- Go splits the roles into `mercWorld` (2^32, the span) and `mercUnitMax`
+  (2^32 − 1, the ceiling `clampMerc` saturates against).
+- The DDL wraps each expression in `greatest(0., least(4294967295., …))`. This
+  also pins the poles, where `log(tan(…))` diverges — an unclamped divergence
+  the previous schema shared.
+
+**A residual this measurement surfaced — and closed.** Diffing the Go projection
+against the DDL over 2555 points showed the two disagreeing by up to **2 units**,
+so SD4's "pixel-for-pixel" wording had always been approximate; holding the
+rounding shapes fixed and varying only the constant showed the same spread under
+the old `0xFFFFFFFF`, so it predated this migration. Three distinct causes, all
+now fixed, verified at **0 differing points over a 245861-point grid**:
+
+1. **Rounding.** Go rounds (`math.Round`); the implicit `UInt32` cast truncates.
+   `round()` is *not* the fix — ClickHouse's is banker's rounding
+   (`round(0.5) = 0`, `round(2.5) = 2`) where Go's is half-away-from-zero. The
+   DDL uses `floor(x + 0.5)`, which agrees with Go over the non-negative domain.
+2. **Association.** Go computes `2^32 · (lon+180) / 360`, multiplying first; the
+   DDL wrote `2^32 · ((lon+180) / 360)`. Matching the order makes the x axis
+   agree bit-for-bit.
+3. **`log()` precision.** The largest term, and the least obvious. ClickHouse's
+   `log()` is a fast approximation carrying ~1.4e-9 of relative error — measured
+   against the correctly-rounded value, `log(tan(…))` returns
+   `1.0520656853338006` where the true value is `1.0520656867704066`. At a scale
+   of 2^32 that is very nearly one whole mercator unit, and it put a symmetric
+   ±1 disagreement on ~36% of points. `tan()` is accurate to the ULP; only
+   `log`/`ln` is approximate.
+
+   The fix is the isometric latitude's inverse-Gudermannian form:
+   `ln(tan(π/4 + φ/2)) = asinh(tan φ)`, the same quantity by identity.
+   ClickHouse's `asinh()` *is* correctly rounded, so both sides now spell it
+   `asinh(tan(lat/180·π))` and agree exactly.
+
+The three spellings are load-bearing and noted as such at each site. Changing
+one side alone reintroduces a unit of shift across a third of the world.
+
+**Why the SQL does not call the `MVT*` functions.** Expressing the projection
+through them was evaluated and is not possible. The family is four functions —
+`MVTBoundingBox`, `MVTBoundingBoxMercator`, `MVTEncode`, `MVTEncodeGeom` (plus
+the `ST_AsMVT` / `ST_AsMVTGeom` aliases) — and every one is *tile-addressed*:
+each takes a `(zoom, tile_x, tile_y)` triple. None maps a longitude/latitude to
+a global mercator coordinate, and there is no lon/lat → tile function to bridge
+the gap, so any attempt is circular: computing the tile index needs the very
+projection being sought.
+
+`MVTEncodeGeom` does project points, but into *tile-local* space with `extent`
+capped at 2^31 − 1, and returns a `Geometry` rather than a number. At zoom 0
+with maximum extent it yields exactly half the required resolution and needs a
+`toString` round-trip to read the coordinates back out — strictly worse than the
+arithmetic on every axis. Recovering full precision would mean descending to a
+zoom whose tiles fit the extent, deriving each point's tile from hardcoded
+inverse-mercator latitude thresholds, and reassembling `tile · size + local`:
+slower, far less readable, and still approximate at tile seams.
+
+`MVTBoundingBoxMercator` *is* useful, but for the inverse direction — a tile's
+bbox in exactly this coordinate space. It has no role in building the columns.
+Its optional `margin` argument is a ready-made server-side `keepBuffer` should
+SD10's deferral ever be taken up, though SD1's bbox-per-view choice would have
+to be revisited first.
+
+Unchanged: the raster template text, the reserved `vp_*` param contract, the
+bbox-per-view choice (SD1), and panel behaviour.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
