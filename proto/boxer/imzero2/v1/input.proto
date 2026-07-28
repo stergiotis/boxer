@@ -19,7 +19,7 @@
 //                                        connection, ADR-0086 SD2)
 //   0x03 both ways      SessionControl (hello, resize, ping, set-cadence,
 //                                        decode-caps, client-hello, roster,
-//                                        take-session, clipboard)
+//                                        take-session, clipboard, cursor-shape)
 
 syntax = "proto3";
 
@@ -108,7 +108,45 @@ message SessionControl {
     TakeSession take_session = 8;   // client→server
     // ADR-0082 SD6 clipboard (both ways):
     ClipboardData clipboard = 9;
+    // ADR-0024 Update 2026-07-28 mouse cursor shape:
+    CursorShape cursor_shape = 10;  // server→client, active connection only
   }
+}
+
+// Server→client (ADR-0024 Update 2026-07-28): the mouse cursor shape egui
+// resolved for this frame, so the viewer can set its canvas `cursor` CSS
+// property. Nothing cursor-shaped is ever drawn into the stream — the pointer
+// the user sees is the browser's own — so this is the only way a remote egui
+// can ask for a text caret over a TextEdit or a resize arrow over a splitter.
+//
+// Sent to the ACTIVE connection only: the shape is resolved from *its* pointer
+// position, so pushing it to a passive viewer would morph that viewer's local
+// cursor from someone else's hover.
+message CursorShape {
+  // Wire-stable shape code. Deliberately NOT `egui::CursorIcon as u32`: that
+  // enum carries no `#[repr]` and no ordering guarantee, so a variant inserted
+  // upstream would silently renumber every shape on the wire. The host maps it
+  // with an exhaustive match (inputmap::cursor_shape_code), which fails to
+  // compile — rather than mis-decoding — when egui gains a variant.
+  //
+  // The numbering below mirrors egui 0.35's declaration order and is now
+  // frozen; append new shapes at the end. The CSS keyword each code maps to is
+  // in parentheses; a receiver that does not know a code MUST fall back to
+  // `default` rather than error.
+  //
+  //   0 default (default)        12 copy (copy)              24 resize-se (se-resize)
+  //   1 none (none)              13 move (move)              25 resize-s (s-resize)
+  //   2 context-menu             14 no-drop (no-drop)        26 resize-sw (sw-resize)
+  //   3 help (help)              15 not-allowed              27 resize-w (w-resize)
+  //   4 pointing-hand (pointer)  16 grab (grab)              28 resize-nw (nw-resize)
+  //   5 progress (progress)      17 grabbing (grabbing)      29 resize-n (n-resize)
+  //   6 wait (wait)              18 all-scroll (all-scroll)  30 resize-ne (ne-resize)
+  //   7 cell (cell)              19 resize-h (ew-resize)     31 resize-col (col-resize)
+  //   8 crosshair (crosshair)    20 resize-nesw (nesw-)      32 resize-row (row-resize)
+  //   9 text (text)              21 resize-nwse (nwse-)      33 zoom-in (zoom-in)
+  //  10 vertical-text            22 resize-v (ns-resize)     34 zoom-out (zoom-out)
+  //  11 alias (alias)            23 resize-e (e-resize)
+  uint32 shape = 1;
 }
 
 // Connection role in the session (ADR-0086 SD1). Server-authoritative:

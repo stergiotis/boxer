@@ -170,7 +170,8 @@ class Reader {
 
 // SessionControl oneof (input.proto): hello=1, viewport_resize=2, ping=3,
 // set_cadence=4, decode_capabilities=5, client_hello=6, roster=7,
-// take_session=8, clipboard=9. The viewer receives hello, roster and clipboard.
+// take_session=8, clipboard=9, cursor_shape=10. The viewer receives hello,
+// roster, clipboard and cursor_shape.
 function parseSessionControl(bytes) {
   const r = new Reader(bytes);
   while (!r.eof()) {
@@ -180,6 +181,7 @@ function parseSessionControl(bytes) {
       if (field === 1) return { kind: "hello", hello: parseHelloBody(sub) };
       if (field === 7) return { kind: "roster", roster: parseRosterBody(sub) };
       if (field === 9) return { kind: "clipboard", text: parseClipboardBody(sub) };
+      if (field === 10) return { kind: "cursor", shape: parseCursorBody(sub) };
     } else {
       r.skip(wire);
     }
@@ -237,6 +239,17 @@ function parseClipboardBody(bytes) { // ClipboardData{ text }
     else r.skip(w);
   }
   return text;
+}
+
+function parseCursorBody(bytes) { // CursorShape{ shape }
+  const r = new Reader(bytes);
+  let shape = 0;
+  while (!r.eof()) {
+    const [f, w] = r.tag();
+    if (f === 1 && w === 0) shape = Number(r.varint());
+    else r.skip(w);
+  }
+  return shape;
 }
 
 function parseVideoChunk(bytes) {
@@ -889,6 +902,7 @@ function connect() {
   ws.onclose = () => {
     statusEl.textContent = "disconnected — reconnecting…";
     configured = false;
+    resetCursor();
     if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
     // A restarted server forgets the applied geometry; clear the echo
     // guard so the post-reconnect hello triggers a fresh viewport report.
@@ -909,6 +923,7 @@ function connect() {
       if (ctl.kind === "hello") onHello(ctl.hello);
       else if (ctl.kind === "roster") applyRoster(ctl.roster);
       else if (ctl.kind === "clipboard") onClipboard(ctl.text);
+      else if (ctl.kind === "cursor") applyCursor(ctl.shape);
     }
   };
 }
@@ -977,7 +992,10 @@ function applyRoster(roster) {
     lastSentGeometry = null;
     measureAndSend();
   }
-  // Demotion needs no teardown: input/resize/cadence are gated by myRole.
+  // Demotion needs no teardown beyond the cursor: input/resize/cadence are
+  // gated by myRole, but the CSS cursor is page state the host set and will
+  // now stop addressing, so it has to be cleared here.
+  if (myRole !== "active" && wasActive) resetCursor();
 }
 
 function renderRoster() {
@@ -1017,6 +1035,34 @@ function flushClipboardWrite() {
   navigator.clipboard.writeText(text)
     .then(() => { if (pendingClipboardWrite === text) pendingClipboardWrite = null; })
     .catch(() => { /* no user activation yet — a later gesture retries this */ });
+}
+
+// Host→viewer mouse cursor shape (ADR-0024 Update 2026-07-28). The stream
+// contains no drawn pointer — the cursor over the canvas is the browser's own —
+// so a remote egui asks for a text caret or a resize arrow by sending the shape
+// it resolved this pass, and we put it on the canvas as CSS. Indexed by the
+// wire code; the numbering is frozen in input.proto, which also documents it.
+// A code past the end of this table is a host newer than this page: fall back
+// to the arrow rather than throwing, so a future shape degrades gracefully.
+const CURSOR_CSS = [
+  "default", "none", "context-menu", "help", "pointer",           //  0- 4
+  "progress", "wait", "cell", "crosshair", "text",                //  5- 9
+  "vertical-text", "alias", "copy", "move", "no-drop",            // 10-14
+  "not-allowed", "grab", "grabbing", "all-scroll", "ew-resize",   // 15-19
+  "nesw-resize", "nwse-resize", "ns-resize", "e-resize",          // 20-23
+  "se-resize", "s-resize", "sw-resize", "w-resize", "nw-resize",  // 24-28
+  "n-resize", "ne-resize", "col-resize", "row-resize",            // 29-32
+  "zoom-in", "zoom-out",                                          // 33-34
+];
+function applyCursor(shape) {
+  canvas.style.cursor = CURSOR_CSS[shape] || "default";
+}
+// Reset to the plain arrow whenever this page stops being the one whose pointer
+// drives the app — on demotion to passive, and on disconnect. Without it a
+// viewer that was mid-drag at the handoff keeps a "grabbing" cursor forever,
+// since the host will never address it again.
+function resetCursor() {
+  canvas.style.cursor = "default";
 }
 
 const HAS_WEBCODECS = "VideoDecoder" in window;

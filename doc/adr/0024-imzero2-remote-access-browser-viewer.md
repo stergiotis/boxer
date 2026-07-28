@@ -189,6 +189,69 @@ Fixed (`encoderpipe.rs`, `wscarrier.rs`): the drain's send is now cancellable vi
 
 [ADR-0086](./0086-imzero2-active-passive-viewers-and-roster.md) (accepted 2026-06-22) adds a read-only **passive** viewer tier and a connection **roster** riding the same pipeline. To let late-joining passive viewers start without forcing an IDR that would pulse viewers already watching, the demo's shared encoder moves from the effectively-infinite GOP (SD3) to a **periodic IDR**, keeping `-bf 0` so the active latency target is unchanged. This does not contradict SD3 — it **clarifies its scope**: SD3's rule was chosen for the active low-latency single stream, and ADR-0086 SD10 accepts a tunable refresh on the shared stream as the lightness price, with its SD7 two-encoder split named as the trigger-gated upgrade that restores the pulse-free active stream when warranted. See ADR-0086 SD5/SD6/SD10.
 
+### 2026-07-28 — Mouse cursor shape crosses the wire; SD7's message list was output-blind
+
+SD7 enumerates the wire's messages as input events plus `SessionControl`, and the
+2026-06-13 clipboard fold-in (ADR-0082 SD6) was the first admission that *platform
+output* also has to travel. Cursor shape was the remaining gap, and unlike clipboard
+it is visible in ordinary use: egui resolves one `CursorIcon` per pass — a text caret
+over a `TextEdit`, `ew-resize` over a splitter, `grabbing` mid-drag — and under the
+desktop host `egui-winit` applies it to the window. The headless host read
+`platform_output` only for `CopyText` and dropped the icon, so every remote viewer saw
+a plain arrow everywhere. Nothing cursor-shaped is ever drawn into the stream (egui
+emits a request, not a pointer sprite), so the shape has to reach the browser for its
+*own* cursor to change; there is no pixel-path fallback.
+
+Implemented as a server→client `SessionControl.cursor_shape = 10` (`CursorShape`),
+additive per this file's versioning policy, plus `inputmap::cursor_shape_code`,
+`WsCarrier::send_cursor_to_active`, and a `CURSOR_CSS` table in the viewer that sets
+`canvas.style.cursor`. It reuses the existing `0x03` prefix and rides the same drain
+point as the clipboard, so no new channel appears. The lean `headless` build gets it
+too — `platform_output` predates the wgpu split — and the ADR-0128 mesh lane needs no
+special case, since it paints the same canvas.
+
+Three decisions are worth recording, because each guards a failure that is silent
+rather than loud:
+
+- **The wire code is not `egui::CursorIcon as u32`.** That enum carries no `#[repr]`
+  and no ordering guarantee, so a variant inserted upstream would renumber every shape
+  at the next dependency bump — surfacing as a browser showing the wrong cursor, with
+  nothing in the diff to blame. The host maps it with an exhaustive `match`, which
+  fails to *compile* when egui gains a variant; the numbering is frozen in the .proto,
+  which the viewer's hand-maintained table (the SD7 deviation) reads. Unknown codes
+  fall back to `default` rather than erroring, so a newer host degrades gracefully
+  against an older page.
+- **Active-only, and the dedupe memo is cleared on every roster change.** The shape is
+  resolved from the *active* pointer's position, so pushing it to a passive viewer
+  would morph that viewer's local cursor from someone else's hover. The memo that
+  keeps this from re-sending at render cadence therefore lives on `Inner`, cleared in
+  `broadcast_roster` — otherwise a viewer promoted by `take_session` has never been
+  told the current shape while the host believes it has. The memo is read-modify-write
+  under the registry lock that `broadcast_roster` already holds, since the two run on
+  different threads and a clear landing between a successful send and its record would
+  reintroduce exactly that stale state. The viewer resets its own canvas to `default`
+  on demotion and on disconnect, for the mirror reason.
+- **A dropped send must not latch.** Carrier sends are non-blocking `try_send` with
+  drop-on-full (SD9). A dropped clipboard copy loses one copy; a dropped cursor update
+  under a naive memo would strand the viewer on a stale shape indefinitely. The memo
+  advances only on a successful enqueue.
+
+Verified against the live headless host (`hmi_headless.sh --launch widgets`): a
+pointer sweep over the widgets demo produced `default`, `pointer`, `text`,
+`ew-resize`, `nesw-resize` and `nwse-resize` — 47 wire messages for ~4 000 pointer
+moves, i.e. the dedupe holds; the captured frames replayed through the viewer page's
+own decoder yield the matching CSS keywords, and an out-of-range code yields
+`default`; and a two-connection takeover confirmed the passive viewer receives nothing
+while the promoted one is told the current shape. Unit tests cover the numbering
+anchors, the dedupe, active-only delivery, drop-retry, and the roster reset.
+
+Not carried: `platform_output.cursor_image` (egui's custom RGBA cursor bitmap) — no
+imzero2 code sets it, and streaming it would mean per-frame image data plus a
+data-URL CSS cursor; falling back to `cursor_icon` is what `egui-winit` itself does
+where custom cursors are unsupported. Also still dropped headless, and a separate
+concern: `platform_output.ime` and `mutable_text_under_cursor`, which a browser viewer
+would need for IME composition and mobile soft keyboards.
+
 ## References
 
 - ImZero1 prior-art prototype: `~/repo/imzero_client_cpp` (memory `project_imzero1_video_prior_art`); video pipeline driver `skia/video_local_h264.sh`; `UserInteractionFB` and `DrawList` schemas in `spec/ImZeroFB.fbs`; libmpv-embedding client at `video_player/sdl3_mpv/`.

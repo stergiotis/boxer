@@ -76,6 +76,12 @@ const DEFAULT_MAX_CONNECTIONS: usize = 8;
 const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// Sentinel for [`Inner::cursor_sent`] meaning "no shape has been delivered to
+/// the current active connection" — not a valid wire code, so the next pass
+/// always sends. Distinct from code 0 (`default`), which *is* a real shape and
+/// must still be transmitted when the pointer returns to plain hover.
+const CURSOR_UNSENT: u32 = u32::MAX;
+
 /// One first-class connection (ADR-0086 SD1). Identity stays minimal (SD9):
 /// peer IP is used for rate-limiting/audit (ADR-0082) only and never enters
 /// the roster.
@@ -247,6 +253,15 @@ struct Inner {
     /// Latest decode capabilities reported by the active connection (ADR-0088
     /// SD2/SD8), drained by the render thread to forward to the Go interpreter.
     decode_caps: std::sync::Mutex<Option<pb::DecodeCapabilities>>,
+    /// Cursor shape last *delivered* to the active connection, or
+    /// [`CURSOR_UNSENT`] (ADR-0024 Update 2026-07-28). The render thread reads
+    /// egui's cursor icon every pass and would otherwise re-send an unchanged
+    /// shape 30–60×/s, so this dedupes — the same trick `egui-winit` plays with
+    /// its `current_cursor_icon`. Lives on `Inner` rather than on `WsCarrier`
+    /// because `broadcast_roster` (socket task, not render thread) has to clear
+    /// it: after a takeover the new active has never received the current shape,
+    /// and a memo saying "already sent" would strand it on a stale cursor.
+    cursor_sent: std::sync::atomic::AtomicU32,
     /// Wire telemetry (ADR-0088): bytes + frames the shared encoder produced
     /// (counted once per access unit in [`distribute`], not multiplied by the
     /// viewer count — it is the stream bitrate, not aggregate egress), and the
@@ -328,6 +343,7 @@ impl WsCarrier {
                 codec: lane.webcodecs_codec_string(width_px, height_px),
             }),
             decode_caps: std::sync::Mutex::new(None),
+            cursor_sent: std::sync::atomic::AtomicU32::new(CURSOR_UNSENT),
             bytes_sent: std::sync::atomic::AtomicU64::new(0),
             frames_sent: std::sync::atomic::AtomicU64::new(0),
             frames_decoded: std::sync::atomic::AtomicU64::new(0),
@@ -464,6 +480,24 @@ impl WsCarrier {
                 tracing::debug!("clipboard copy dropped — active viewer queue full or gone");
             }
         }
+    }
+
+    /// Push this pass's mouse cursor shape to the **active** connection
+    /// (ADR-0024 Update 2026-07-28), so its canvas can set the matching CSS
+    /// `cursor`. Called every pass with `inputmap::cursor_shape_code(…)`;
+    /// unchanged shapes cost nothing beyond an atomic load.
+    ///
+    /// Active-only for the same reason input is: the shape egui resolved comes
+    /// from the active pointer's position, so a passive viewer would get its
+    /// local cursor morphed by someone else's hover.
+    ///
+    /// Non-blocking (SD9). A drop here is *not* like a dropped clipboard copy,
+    /// which merely loses one copy: with a naive memo the host would believe
+    /// the shape had landed and never resend, stranding the viewer on a stale
+    /// cursor indefinitely. So the memo advances only on a successful enqueue —
+    /// a dropped update is simply retried next pass.
+    pub fn send_cursor_to_active(&self, shape: u32) {
+        push_cursor(&self.inner, shape);
     }
 
     /// Commit a new stream geometry (already clamped by the host): update the
@@ -759,6 +793,49 @@ fn broadcast_hello(inner: &Inner, hello: pb::SessionHello) {
     }
 }
 
+/// Body of [`WsCarrier::send_cursor_to_active`], split out so it can be
+/// exercised against a bare [`Inner`] (a whole carrier needs bound sockets and
+/// a tokio runtime).
+/// The whole check-send-record runs under the **registry lock**, which is also
+/// held by `broadcast_roster` when it clears the memo. Without that mutual
+/// exclusion there is a narrow but real race: a takeover could clear the memo
+/// between this send succeeding and it recording the shape, after which the
+/// host believes the promoted connection has a shape it was never sent — the
+/// exact stale-cursor failure the reset exists to prevent. The lock is held
+/// across a non-blocking `try_send` only, and `broadcast_roster` already holds
+/// it for a longer fan-out, so this adds no new contention shape.
+fn push_cursor(inner: &Inner, shape: u32) {
+    use std::sync::atomic::Ordering;
+    let Ok(reg) = inner.registry.lock() else {
+        return;
+    };
+    if inner.cursor_sent.load(Ordering::Relaxed) == shape {
+        return;
+    }
+    let Some(tx) = reg.active_tx() else {
+        // No active connection: forget what was last delivered, so whoever
+        // takes the slot next is told the shape from scratch.
+        inner.cursor_sent.store(CURSOR_UNSENT, Ordering::Relaxed);
+        return;
+    };
+    let msg = pb::SessionControl {
+        control: Some(pb::session_control::Control::CursorShape(pb::CursorShape {
+            shape,
+        })),
+    };
+    let mut framed = Vec::with_capacity(1 + msg.encoded_len());
+    framed.push(pb::PREFIX_SESSION);
+    let _ = msg.encode(&mut framed);
+    if tx.try_send(framed).is_ok() {
+        inner.cursor_sent.store(shape, Ordering::Relaxed);
+    } else {
+        tracing::debug!(
+            shape,
+            "cursor shape dropped — active viewer queue full; will retry"
+        );
+    }
+}
+
 /// Build and send each connection its own per-recipient [`pb::Roster`]
 /// (ADR-0086 SD1/SD8): every copy shares the connection list but carries its
 /// own `you_id`/`you_role`. Called on every membership/role change.
@@ -766,6 +843,12 @@ fn broadcast_roster(inner: &Inner) {
     let Ok(reg) = inner.registry.lock() else {
         return;
     };
+    // Cursor shape is delivered to the active connection only and deduped
+    // against what that connection already has (ADR-0024 Update 2026-07-28).
+    // Membership/role changes invalidate that memo — a promoted viewer has
+    // never been told the current shape — so clear it here, the one choke
+    // point every such change passes through. The next render pass re-sends.
+    inner.cursor_sent.store(CURSOR_UNSENT, std::sync::atomic::Ordering::Relaxed);
     // Conditional GOP (ADR-0086 SD10 Update): a passive viewer is present iff
     // there is more than one connection (≤1-active + lone-survivor auto-promote
     // ⇒ a single connection is always the active one). On a change, wake the
@@ -1136,6 +1219,7 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
                 // Server→client only; ignore if a client echoes one.
                 Some(pb::session_control::Control::Hello(_))
                 | Some(pb::session_control::Control::Roster(_))
+                | Some(pb::session_control::Control::CursorShape(_))
                 | None => {}
             },
             Err(e) => tracing::debug!(error=%e, "undecodable session control"),
@@ -1211,5 +1295,145 @@ mod tests {
         r.remove(b);
         assert_eq!(r.active_id, Some(a));
         assert_eq!(r.find(a).unwrap().role, pb::Role::Active);
+    }
+
+    // ---- cursor shape (ADR-0024 Update 2026-07-28) ----
+
+    /// A bare [`Inner`] — everything `push_cursor` and `broadcast_roster`
+    /// touch, without binding sockets or starting a runtime.
+    fn mk_inner() -> Inner {
+        Inner {
+            events: std::sync::Mutex::new(Vec::new()),
+            resize: std::sync::Mutex::new(None),
+            cadence_request: std::sync::Mutex::new(None),
+            paste: std::sync::Mutex::new(None),
+            waker: std::sync::mpsc::channel().0,
+            connected: std::sync::atomic::AtomicBool::new(false),
+            want_periodic: std::sync::atomic::AtomicBool::new(false),
+            registry: std::sync::Mutex::new(Registry::new(8)),
+            hello: std::sync::Mutex::new(pb::SessionHello::default()),
+            decode_caps: std::sync::Mutex::new(None),
+            cursor_sent: std::sync::atomic::AtomicU32::new(CURSOR_UNSENT),
+            bytes_sent: std::sync::atomic::AtomicU64::new(0),
+            frames_sent: std::sync::atomic::AtomicU64::new(0),
+            frames_decoded: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+
+    /// Decode a framed session-control message back to its cursor shape.
+    fn framed_cursor_shape(framed: &[u8]) -> u32 {
+        assert_eq!(
+            framed[0],
+            pb::PREFIX_SESSION,
+            "cursor rides the session prefix"
+        );
+        match pb::SessionControl::decode(&framed[1..]).expect("decodes").control {
+            Some(pb::session_control::Control::CursorShape(c)) => c.shape,
+            other => panic!("expected CursorShape, got {other:?}"),
+        }
+    }
+
+    /// The shape goes to the active connection once; an unchanged shape on the
+    /// next pass sends nothing (this runs at the render cadence, 30–60×/s).
+    #[test]
+    fn cursor_sends_once_then_dedupes() {
+        let inner = mk_inner();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4);
+        inner.registry.lock().unwrap().admit(tx).unwrap();
+
+        push_cursor(&inner, 9); // Text
+        assert_eq!(framed_cursor_shape(&rx.try_recv().expect("sent")), 9);
+        push_cursor(&inner, 9);
+        push_cursor(&inner, 9);
+        assert!(rx.try_recv().is_err(), "unchanged shape is not re-sent");
+        push_cursor(&inner, 0); // back to Default — a real shape, must be sent
+        assert_eq!(framed_cursor_shape(&rx.try_recv().expect("sent")), 0);
+    }
+
+    /// Passive connections never receive the shape: it is resolved from the
+    /// *active* pointer's position, so it would morph their local cursor from
+    /// someone else's hover.
+    #[test]
+    fn cursor_goes_only_to_the_active_connection() {
+        let inner = mk_inner();
+        let (atx, mut arx) = tokio::sync::mpsc::channel::<Vec<u8>>(4);
+        let (ptx, mut prx) = tokio::sync::mpsc::channel::<Vec<u8>>(4);
+        {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.admit(atx).unwrap();
+            reg.admit(ptx).unwrap();
+        }
+        push_cursor(&inner, 16); // Grab
+        assert_eq!(
+            framed_cursor_shape(&arx.try_recv().expect("active receives")),
+            16
+        );
+        assert!(prx.try_recv().is_err(), "passive receives nothing");
+    }
+
+    /// A drop must not latch. With the memo advanced on a failed enqueue the
+    /// host would believe the shape had landed and never resend it, stranding
+    /// the viewer on a stale cursor for as long as it kept hovering.
+    #[test]
+    fn cursor_drop_on_full_queue_retries() {
+        let inner = mk_inner();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        inner.registry.lock().unwrap().admit(tx.clone()).unwrap();
+        tx.try_send(vec![0xff]).expect("fill the queue"); // capacity 1, now full
+
+        push_cursor(&inner, 19); // ResizeHorizontal — dropped
+        assert_eq!(rx.try_recv().expect("the filler"), vec![0xff]);
+        assert!(
+            rx.try_recv().is_err(),
+            "the cursor update was dropped, not queued"
+        );
+
+        push_cursor(&inner, 19); // same shape, but never delivered → retried
+        assert_eq!(framed_cursor_shape(&rx.try_recv().expect("retried")), 19);
+    }
+
+    /// A takeover hands the pointer to a connection that has never been told
+    /// the current shape; the roster broadcast (every membership/role change
+    /// passes through it) clears the memo so the next pass re-sends.
+    #[test]
+    fn roster_change_clears_the_cursor_memo() {
+        let inner = mk_inner();
+        let (atx, mut arx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+        let (btx, mut brx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+        let b = {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.admit(atx).unwrap();
+            reg.admit(btx).unwrap()
+        };
+        push_cursor(&inner, 17); // Grabbing → the first active
+        assert_eq!(framed_cursor_shape(&arx.try_recv().expect("sent")), 17);
+
+        inner.registry.lock().unwrap().take_session(b);
+        broadcast_roster(&inner);
+        while brx.try_recv().is_ok() {} // discard b's roster frames
+
+        push_cursor(&inner, 17); // unchanged shape, new active → must be sent
+        assert_eq!(
+            framed_cursor_shape(&brx.try_recv().expect("re-sent after promotion")),
+            17,
+            "the promoted connection is told the current shape"
+        );
+    }
+
+    /// With the active slot empty the memo is cleared rather than left
+    /// pointing at a connection that is gone.
+    #[test]
+    fn cursor_memo_cleared_when_no_active() {
+        let inner = mk_inner();
+        assert_eq!(
+            inner.cursor_sent.load(std::sync::atomic::Ordering::Relaxed),
+            CURSOR_UNSENT
+        );
+        push_cursor(&inner, 4);
+        assert_eq!(
+            inner.cursor_sent.load(std::sync::atomic::Ordering::Relaxed),
+            CURSOR_UNSENT,
+            "nothing was delivered, so nothing is memoised"
+        );
     }
 }

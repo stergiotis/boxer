@@ -70,7 +70,7 @@ use crate::imzero2::codeclane::{CodecLane, LaneProbe, VideoCodec};
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
 #[cfg(feature = "headless_wgpu")]
 use crate::imzero2::framesink::{FrameSink, NullSink, PngDumpSink};
-use crate::imzero2::inputmap::InputTranslator;
+use crate::imzero2::inputmap::{self, InputTranslator};
 use crate::imzero2::interpreter::InterpretError;
 use crate::imzero2::wscarrier::WsCarrier;
 
@@ -966,6 +966,15 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // OutputCommand::CopyText, dropped until now. Borrow ends before `out`
         // is consumed by the render/readback below. Only the active session
         // syncs (enforced in the carrier).
+        //
+        // Mouse cursor shape rides the same drain (ADR-0024 Update
+        // 2026-07-28). egui resolves one `CursorIcon` per pass and never draws
+        // a pointer into its output — under the desktop host `egui-winit`
+        // applies it to the window; here the browser's own pointer is the only
+        // cursor there is, so the shape has to cross the wire for the viewer to
+        // set `canvas.style.cursor`. Sent unconditionally: the carrier holds
+        // the change-detection, since the memo has to survive a role handoff.
+        // `cursor_icon` is `Copy`, so this coexists with the `commands` borrow.
         if let Some(c) = &mut carrier {
             for cmd in &out.platform_output.commands {
                 if let egui::OutputCommand::CopyText(text) = cmd {
@@ -974,6 +983,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                     }
                 }
             }
+            c.send_cursor_to_active(inputmap::cursor_shape_code(out.platform_output.cursor_icon));
         }
 
         // ADR-0088: apply a runtime codec switch the Go control requested

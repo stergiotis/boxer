@@ -5,8 +5,64 @@
 //! learns that input is remote. Modifier state is tracked per session
 //! from the modifier bitmask each event carries (1=alt, 2=ctrl, 4=shift,
 //! 8=mac_cmd, 16=command — mirrors `egui::Modifiers`).
+//!
+//! The one *output*-side translation riding the same edge lives here too:
+//! [`cursor_shape_code`] maps egui's per-frame `CursorIcon` onto the wire's
+//! cursor-shape code (ADR-0024 Update 2026-07-28), the mirror of what
+//! `egui-winit`'s `translate_cursor` does for the desktop host.
 
 use crate::imzero2::inputproto as pb;
+
+/// egui's per-frame cursor request → the wire's shape code
+/// (`CursorShape.shape`; ADR-0024 Update 2026-07-28).
+///
+/// Deliberately an explicit exhaustive match rather than `icon as u32`:
+/// `egui::CursorIcon` has no `#[repr]` and no declared ordering stability, so
+/// a variant inserted upstream would silently renumber every shape on the
+/// wire — a class of bug that would only surface after a routine dependency
+/// bump, as a browser showing the wrong cursor. This way an egui that gains a
+/// variant fails the build here, where the numbering is decided. The codes are
+/// documented (with their CSS keywords) in `input.proto`.
+pub fn cursor_shape_code(icon: egui::CursorIcon) -> u32 {
+    use egui::CursorIcon as C;
+    match icon {
+        C::Default => 0,
+        C::None => 1,
+        C::ContextMenu => 2,
+        C::Help => 3,
+        C::PointingHand => 4,
+        C::Progress => 5,
+        C::Wait => 6,
+        C::Cell => 7,
+        C::Crosshair => 8,
+        C::Text => 9,
+        C::VerticalText => 10,
+        C::Alias => 11,
+        C::Copy => 12,
+        C::Move => 13,
+        C::NoDrop => 14,
+        C::NotAllowed => 15,
+        C::Grab => 16,
+        C::Grabbing => 17,
+        C::AllScroll => 18,
+        C::ResizeHorizontal => 19,
+        C::ResizeNeSw => 20,
+        C::ResizeNwSe => 21,
+        C::ResizeVertical => 22,
+        C::ResizeEast => 23,
+        C::ResizeSouthEast => 24,
+        C::ResizeSouth => 25,
+        C::ResizeSouthWest => 26,
+        C::ResizeWest => 27,
+        C::ResizeNorthWest => 28,
+        C::ResizeNorth => 29,
+        C::ResizeNorthEast => 30,
+        C::ResizeColumn => 31,
+        C::ResizeRow => 32,
+        C::ZoomIn => 33,
+        C::ZoomOut => 34,
+    }
+}
 
 fn modifiers_from_bits(bits: u32) -> egui::Modifiers {
     egui::Modifiers {
@@ -237,6 +293,29 @@ mod tests {
             t.modifiers.shift,
             "modifier state (bit 4 = shift) is still tracked"
         );
+    }
+
+    /// The wire numbering is frozen in `input.proto` and read by a
+    /// hand-maintained table in the browser viewer, so it must not drift.
+    /// The match itself is exhaustive — an egui that adds a `CursorIcon`
+    /// fails the build rather than renumbering silently — but these anchors
+    /// catch a *reordering* of the arms, which would still compile.
+    #[test]
+    fn cursor_shape_codes_are_pinned() {
+        use egui::CursorIcon as C;
+        for (icon, code) in [
+            (C::Default, 0),
+            (C::None, 1),
+            (C::PointingHand, 4),
+            (C::Text, 9),
+            (C::Grabbing, 17),
+            (C::ResizeHorizontal, 19),
+            (C::ResizeVertical, 22),
+            (C::ResizeRow, 32),
+            (C::ZoomOut, 34),
+        ] {
+            assert_eq!(cursor_shape_code(icon), code, "wire code for {icon:?}");
+        }
     }
 
     /// The existing PinchZoom guard stays in force (regression anchor).
