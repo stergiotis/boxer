@@ -18,7 +18,7 @@ imzero2_repo_branch: main
 # (go 1.26.0). Bump freely — the tarball is checksum-verified from go.dev's
 # sidecar, so any real version string just works. rust_version matches
 # rust/imzero2/rust-toolchain.
-go_version: "1.26.4"
+go_version: "1.26.5"
 rust_version: "1.92"
 
 # --- H.264 encoder ---

@@ -155,7 +155,7 @@ go build -tags "$(tr -d '\n' < tags)" -o /dev/null ./public/app   # rebuilds off
 
 ## Notes and limits
 
-- **`GOTOOLCHAIN=local` is load-bearing.** `go.mod` pins `toolchain go1.26.4`;
+- **`GOTOOLCHAIN=local` is load-bearing.** `go.mod` pins `toolchain go1.26.5`;
   without `GOTOOLCHAIN=local` the `go` command tries to *download* that
   toolchain when the running one differs. The env file sets it.
 - **Vendoring here is a packaging carve-out.** The repo's standing policy is no
