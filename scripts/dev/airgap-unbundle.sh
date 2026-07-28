@@ -43,6 +43,7 @@ tags="$(tr -d '\n' < "$repo/tags")"
 go_tc="$repo/_airgap/toolchains/go"
 rust_tc="$repo/_airgap/toolchains/rust"
 cargo_home="$repo/_airgap/cargo"
+ffmpeg_bin="$repo/_airgap/bin/ffmpeg"
 [ -d "$go_tc" ] || airgap_die "shipped Go SDK missing at $go_tc."
 
 # ---- offline environment file -----------------------------------------------
@@ -53,6 +54,10 @@ airgap_step "write boxer-airgap.env"
     if [ "$scope" = full ]; then
         airgap_cargo_env_lines "$rust_tc" "$cargo_home"
     fi
+    # Point the imzero2 headless encoder at the bundled static ffmpeg (both the
+    # lane probe and the stream encoder read this). Omitted when none was
+    # bundled, leaving the plain PATH lookup in force.
+    airgap_ffmpeg_env_lines "$ffmpeg_bin"
     echo "# Point boxer's OpenAI-compatible client at the environment's ollama, e.g.:"
     echo "#   export OPENAI_BASE_URL=http://127.0.0.1:11434/v1"
 } > "$repo/boxer-airgap.env"
@@ -73,8 +78,11 @@ if [ "$scope" = full ]; then
     airgap_preflight_c_compiler
 fi
 airgap_preflight_vulkan
+# ffmpeg is bundled when the packing host could build it; only fall back to
+# expecting one from the environment when it is not.
+airgap_preflight_ffmpeg "$ffmpeg_bin" || airgap_preflight_services ffmpeg
 # Environment-provided runtime deps (informational — not bundled by design).
-airgap_preflight_services clickhouse ffmpeg ollama
+airgap_preflight_services clickhouse ollama
 
 [ "$mode" = no-build ] && {
     echo "=== no-build: provisioned. To build: ==="

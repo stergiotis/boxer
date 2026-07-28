@@ -27,6 +27,10 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     exit 2
 fi
 
+# Where this library lives, so primitives can reach sibling scripts (e.g.
+# build-static-ffmpeg.sh) regardless of which repo sourced us.
+AIRGAP_LIB_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+
 # ---- messaging --------------------------------------------------------------
 airgap_die()  { echo "ERROR: $*" >&2; exit 1; }
 airgap_warn() { echo "  WARN: $*" >&2; }
@@ -204,6 +208,68 @@ airgap_preflight_vulkan() {
 }
 
 # Preflight environment-provided runtime services (informational; not bundled).
+# ---- ffmpeg (imzero2 headless encoder) --------------------------------------
+# Build the static, software-only ffmpeg the headless encoder spawns and stage it
+# into the bundle, so the target does not have to supply one.
+#
+# ffmpeg is the last runtime dependency of the video path that the environment
+# had to provide, and the hardest to assume: the encoder needs a specific
+# component set (rawvideo in, NUT out, the lavfi probe path, dump_extra, the
+# software encoders), and a distro build satisfying that pulls in ~290 shared
+# objects. One self-contained ~20 MiB binary removes the assumption entirely.
+#
+# Software-only by construction: a static binary cannot dlopen, which is how both
+# libva and NVENC load their drivers. That costs nothing on the hosts this
+# targets — a server CPU with no iGPU has no hardware encoder either way — and
+# CodecLane::best probes and falls back on its own.
+#
+# BEST-EFFORT: a build host without cmake/nasm/a static libc simply does not get
+# one, and the bundle falls back to the environment's ffmpeg exactly as before.
+# Echoes nothing; returns non-zero when no binary was staged.
+#   args: <destdir> <source-cache-dir> [extra build-static-ffmpeg.sh args...]
+airgap_ship_ffmpeg() {  # <destdir> <srccache> [args...]
+    local dest="$1" cache="$2"; shift 2
+    local builder="$AIRGAP_LIB_DIR/build-static-ffmpeg.sh"
+    if [ ! -x "$builder" ]; then
+        airgap_warn "build-static-ffmpeg.sh not found at $builder — not bundling ffmpeg."
+        return 1
+    fi
+    airgap_step "build static ffmpeg for the headless encoder"
+    mkdir -p "$dest"
+    # --fetch is safe here: this runs on the CONNECTED packing host. Sources are
+    # cached across runs, so a re-pack does not re-download.
+    if "$builder" --src-dir "$cache" --out "$dest/ffmpeg" --fetch "$@"; then
+        airgap_ok "shipped static ffmpeg ($(du -h "$dest/ffmpeg" | cut -f1)) -> ${dest##*/}/ffmpeg"
+        return 0
+    fi
+    airgap_warn "static ffmpeg build failed — the target will need one from its environment."
+    rm -f "$dest/ffmpeg"
+    return 1
+}
+
+# Emit the env line that points the imzero2 headless encoder at a bundled
+# ffmpeg. Boxer's Rust client reads IMZERO2_FFMPEG_BIN for both the lane probe
+# and the stream encoder; pointing it here rather than prepending to PATH keeps
+# the bundled build from shadowing the system ffmpeg for every other tool.
+# No-op when nothing was bundled, so the PATH lookup stays in force.
+#   args: <ffmpeg-path>
+airgap_ffmpeg_env_lines() {  # <ffmpeg-path>
+    [ -x "$1" ] || return 0
+    echo "export IMZERO2_FFMPEG_BIN=\"$1\""
+}
+
+# Report the bundled ffmpeg, or fall through to preflighting the environment for
+# one. Returns 0 when the bundle supplies it (so the caller can drop `ffmpeg`
+# from the environment-services list).
+#   args: <ffmpeg-path>
+airgap_preflight_ffmpeg() {  # <ffmpeg-path>
+    if [ -x "$1" ]; then
+        airgap_ok "ffmpeg bundled ($("$1" -hide_banner -version 2>/dev/null | head -1 | cut -d' ' -f1-3)); IMZERO2_FFMPEG_BIN points at it"
+        return 0
+    fi
+    return 1
+}
+
 airgap_preflight_services() {  # <tool...>
     local tool
     for tool in "$@"; do

@@ -112,6 +112,39 @@ such a consumer can now build its own airgap bundle by sourcing this library
 workspace, rather than forking these scripts. This is a mechanism/packaging
 change only; the ADR-0095 decision stands.
 
+### 2026-07-28 — `ffmpeg` moves from environment-provided to bundled
+
+The context above lists `ffmpeg` with `systemd`/`clickhouse`/`ollama` as
+environment-provided. It does not belong with them: those are services the
+deployment already runs, whereas `ffmpeg` is a *build-configuration* dependency
+of the imzero2 headless encoder. The encoder needs a specific component set —
+rawvideo in, NUT out, the `lavfi` probe path, `dump_extra`, the software
+encoders — so "the target has ffmpeg" was never a sufficient contract; it had to
+be an ffmpeg built the right way, and a distro build satisfying it pulls in ~290
+shared objects.
+
+`airgap-bundle.sh` now builds a static, software-only ffmpeg carrying exactly
+that set ([scripts/dev/build-static-ffmpeg.sh](../../scripts/dev/build-static-ffmpeg.sh),
+~20 MiB, no runtime library dependencies) into `_airgap/bin/ffmpeg`, and
+`airgap-unbundle.sh` exports `IMZERO2_FFMPEG_BIN` at it. Pinning by env rather
+than `PATH` is deliberate: the bundled build must not shadow the system `ffmpeg`
+for every other tool on the target.
+
+**Software-only by construction.** A static binary cannot `dlopen`, which is
+precisely how libva and NVENC load their drivers, so no static ffmpeg can do
+hardware encode. On a host without a GPU that costs nothing, and
+`CodecLane::best` probes and falls back to the software lane on its own, so the
+absent hardware lanes degrade silently and correctly. A deployment that needs
+hardware encode wants a dynamically linked ffmpeg — a different artifact, out of
+scope for a self-contained bundle.
+
+Best-effort, matching the shipped-`syft` precedent: a packing host without
+`cmake`/`nasm`/a static libc warns and produces a bundle that falls back to the
+environment's `ffmpeg` exactly as before; `--no-ffmpeg` opts out deliberately;
+the MANIFEST records which happened. Verify a bundled binary with
+[scripts/dev/verify-ffmpeg-lanes.sh](../../scripts/dev/verify-ffmpeg-lanes.sh),
+which replays the encoder's real argv rather than trusting `ffmpeg -encoders`.
+
 ## Status
 
 Accepted (2026-06-23; updated 2026-07-14).

@@ -53,6 +53,12 @@ rust/*/target/
 /boxer-airgap-*.tar.zst
 /boxer-airgap-*.tar.gz
 
+# Codec source tarballs + build tree for the bundled static ffmpeg
+# (airgap_ship_ffmpeg -> build-static-ffmpeg.sh). Cached at repo root across
+# packs so a re-pack does not re-download ~89 MB; only the linked binary is
+# shipped. Never committed.
+/.airgap-ffmpeg-src/
+
 # boxer adr tool cache — the `boxer adr build` default --out dir. It can be
 # created in any working directory (the command takes --root), so not anchored.
 .adrcache/

@@ -18,8 +18,17 @@
 #                    toolchain + ~660 vendored crates + the build-time C
 #                    compiler requirement. Much smaller.
 #
+# ffmpeg USED to be on that list and no longer is: the bundle now builds a
+# static, software-only ffmpeg carrying exactly the components the imzero2
+# headless encoder invokes, ships it at _airgap/bin/ffmpeg, and the unbundler
+# points IMZERO2_FFMPEG_BIN at it. That is best-effort — a packing host without
+# cmake/nasm/a static libc produces a bundle that falls back to the environment's
+# ffmpeg as before — and `--no-ffmpeg` opts out deliberately. It is software-only
+# by construction (a static binary cannot dlopen, which is how both VAAPI and
+# NVENC load their drivers); CodecLane::best probes and falls back on its own.
+#
 # What the bundle deliberately does NOT carry (provided by the target
-# environment, per the deploy contract): systemd, clickhouse, ffmpeg, ollama.
+# environment, per the deploy contract): systemd, clickhouse, ollama.
 # The NATS core bus is the exception among infra dependencies: nats-server is a
 # Go program, so it rides the Go vendor as a `tool` dependency and the target
 # builds it from that vendored source — no separate binary, no repo bloat
@@ -55,6 +64,7 @@ cd "$repo"
 scope=full
 out=""
 verify_rust=0
+ship_ffmpeg=1
 while [ $# -gt 0 ]; do
     case "$1" in
         --scope)        scope="${2:-}"; shift 2 ;;
@@ -62,6 +72,7 @@ while [ $# -gt 0 ]; do
         --out)          out="${2:-}"; shift 2 ;;
         --out=*)        out="${1#*=}"; shift ;;
         --verify-rust)  verify_rust=1; shift ;;  # full Rust compile is slow; off by default
+        --no-ffmpeg)    ship_ffmpeg=0; shift ;;  # rely on the target's own ffmpeg
         -h|--help)
             grep '^#' "$BASH_SOURCE" | sed 's/^# \?//'; exit 0 ;;
         *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
@@ -104,6 +115,10 @@ airgap_export_head "$repo" "$src"
 # is self-contained and the target has the unbundler + library + how-to.
 mkdir -p "$src/scripts/dev" "$src/doc/howto"
 cp "$here/airgap-unbundle.sh" "$here/airgap-bundle.sh" "$here/airgap-lib.sh" "$src/scripts/dev/" 2>/dev/null || true
+# ...and the ffmpeg toolchain, so the target can re-verify or rebuild the
+# bundled encoder binary without a checkout.
+cp "$here/build-static-ffmpeg.sh" "$here/verify-ffmpeg-lanes.sh" "$here/bench-ffmpeg-lanes.sh" \
+   "$src/scripts/dev/" 2>/dev/null || true
 cp "$repo/doc/howto/airgapped-build.md" "$src/doc/howto/" 2>/dev/null || true
 
 # ---- Go: vendor + offline-readiness verify ----------------------------------
@@ -174,6 +189,18 @@ else  # go-only: ship imzero2 prebuilt, drop the Rust toolchain + crates
     airgap_ship_goroot "$src/_airgap/toolchains/go"
 fi
 
+# ---- ffmpeg for the headless encoder ----------------------------------------
+# Cached outside the staging dir so re-packing does not re-download ~89 MB of
+# codec sources; the bundle carries only the linked binary.
+ffmpeg_shipped=0
+if [ "$ship_ffmpeg" = 1 ]; then
+    if airgap_ship_ffmpeg "$src/_airgap/bin" "$repo/.airgap-ffmpeg-src"; then
+        ffmpeg_shipped=1
+    fi
+else
+    echo "NOTE: --no-ffmpeg: the target must supply its own ffmpeg." >&2
+fi
+
 # ---- record what we built ----------------------------------------------------
 {
     echo "scope=$scope"
@@ -182,6 +209,7 @@ fi
     echo "go=$(go version)"
     echo "tags=$tags"
     [ "$scope" = full ] && echo "rust=$(cd rust/imzero2 && rustc --version 2>/dev/null || true)"
+    echo "ffmpeg=$([ "$ffmpeg_shipped" = 1 ] && "$src/_airgap/bin/ffmpeg" -hide_banner -version 2>/dev/null | head -1 || echo "none (environment-provided)")"
     echo "head=$(git rev-parse HEAD)"
 } > "$src/_airgap/MANIFEST"
 

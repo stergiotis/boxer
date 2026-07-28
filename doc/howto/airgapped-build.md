@@ -49,8 +49,22 @@ C-compiler requirement entirely — much smaller. Prefer it unless you genuinely
 need to rebuild the Rust render host on the target.
 
 **Provided by the environment, deliberately not bundled** (the deploy contract):
-`systemd`, `clickhouse`, `ffmpeg`, and `ollama` (the OpenAI-compatible API
+`systemd`, `clickhouse`, and `ollama` (the OpenAI-compatible API
 endpoint). The unbundler preflights for these but does not supply them.
+
+**`ffmpeg` is bundled** (it used to be on that list). The imzero2 headless
+encoder needs a specific component set — rawvideo in, NUT out, the `lavfi` probe
+path, `dump_extra`, the software encoders — and a distro build satisfying it
+pulls in ~290 shared objects. `scripts/dev/build-static-ffmpeg.sh` produces one
+static, self-contained binary (~20 MiB) into `_airgap/bin/ffmpeg`, and the
+unbundler exports `IMZERO2_FFMPEG_BIN` pointing at it, so it never shadows the
+system `ffmpeg` for anything else. It is **software-only by construction**: a
+static binary cannot `dlopen`, which is how both VAAPI and NVENC load their
+drivers. That costs nothing on a host without a GPU, and `CodecLane::best`
+probes and falls back on its own. Packing is best-effort: a build host lacking
+`cmake`/`nasm`/a static libc simply produces a bundle without it, and the old
+environment-provided behaviour returns. `--no-ffmpeg` opts out deliberately.
+Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
 
 **Not bundled and the target still needs** (no language vendoring covers these):
 
