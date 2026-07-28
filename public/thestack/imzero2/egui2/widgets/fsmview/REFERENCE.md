@@ -79,6 +79,7 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 | `PopupAnchor(x, y float32) *Widget[T]` | unset (egui cascade) | Pin the level-2 Window's `default_pos` to `(x, y)` in egui logical pixels. Applies on the first open of a fresh widget instance; egui retains the user's dragged position thereafter. |
 | `ClearPopupAnchor() *Widget[T]` | — | Revert to egui's default cascade positioning. |
 | `AutoAnchor(on bool) *Widget[T]` | `false` | Capture the cursor position the frame the chip is clicked (via [`StateManager.GetPointer`] / R20) and write it into `PopupAnchor` so the popup pops where the click landed. Overrides any prior manual anchor on the click frame. |
+| `HistoryFooter(fn func()) *Widget[T]` | `nil` (no footer, no separator) | Caller-owned action row under the History tab's table — the seam for exporting the log (publish it, copy it, hand it to a playground). Runs inside a `c.Horizontal`, so emit inline widgets only. The widget supplies no action of its own: what a log is worth exporting *to* depends on the host's capabilities, which a widget cannot know. |
 
 ### Per-frame state
 
@@ -89,6 +90,7 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 | `Open()` / `Close()` | Programmatically toggle the popup. |
 | `SelectedRenderer() RendererE` | Current level-2 view. |
 | `SetRenderer(r RendererE)` | Pin which view shows next. |
+| `HistorySnapshot() []Transition[T]` | Freshly allocated copy of the retained log, newest-first — the order the History tab shows. Unlike [`Machine.HistoryReverse`] it hands back plain data that outlives the frame, so it is safe to pass to a worker goroutine. Allocates per call: use it in a click branch, not per frame. |
 
 ## Affordances
 
@@ -102,6 +104,8 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 | Active state highlight | `defaultStateColor` returns `AccentDefault` for current, `NeutralSubtle` otherwise. Overridable via [`WithStateColor`]. | none |
 | Next-possible edge highlight | Edges leaving the current state are tinted `AccentSubtle`; others tinted `NeutralBorderFaint`. | none |
 | Graph layout | Static Graphviz layout computed once via `layeredgraph`/`goccyengine`, cached on the Widget and recomputed only when the state/edge count changes. | none |
+| History scroll | The History tab is a `c.EndETable` (`#` / From / To / When / Dwell, plus Reason when some retained row carries one), so it bounds its own height and scrolls internally instead of growing the popup. Rows are emitted only inside `et.VisibleRange()`. | one frame (the visible window is the previous frame's) |
+| History dwell | Per row, the gap to the preceding transition's timestamp — how long the machine sat in that row's `From` state. Renders `—` for the oldest retained row (its predecessor was evicted), a missing timestamp, or a backwards pair. | none |
 
 ## Conventions
 
@@ -138,6 +142,9 @@ for range c.Window(...).KeepIter() {
 - **AutoAnchor follows the cursor, not the chip's bottom-left** — the R20 pointer fetcher gives us the click position, which is *near* the chip but not its precise bottom-left corner. True bottom-left anchoring would need a widget-rect fetcher (recording every widget's `response.rect` keyed by id) — substantial Rust-side change; not yet scoped.
 - **statetrooper is not hierarchical** — surfaces that need substates (nested workflows) will either fork statetrooper locally or migrate to a richer FSM lib. M4 in the ADR.
 - **Graph layout is static** — the Graph tab lays out via Graphviz (in-process WASM) once and caches it, recomputing only when the topology (state/edge count) changes; there is no per-frame simulation. Pan/zoom is interactive; states sharing a label merge to one node (see [ADR-0069](../../../../../../doc/adr/0069-imzero2-layeredgraph-widget.md)).
+- **The Table tab is still unbounded** — the popup `c.Window` has no scroll of its own (egui's window does not scroll by default and the binding exposes no option), and only the History tab bounds itself. A machine with many states therefore grows the popup the way the History tab used to. States are few in every current call site, so this is recorded rather than fixed.
+- **History `#` counts the retained window, not the machine's lifetime** — it restarts at 1 at whatever the ring still holds, and every row's number shifts down by one on each eviction. `Machine` keeps no lifetime transition counter.
+- **The History footer is a seam, not a feature** — `HistoryFooter` gives a host somewhere to put an export action; the widget ships none, because publishing anywhere (e.g. an ad-hoc dataset per [ADR-0134](../../../../../../doc/adr/0134-adhoc-datasets.md)) needs capabilities declared on the *host's* manifest.
 
 ## See also
 

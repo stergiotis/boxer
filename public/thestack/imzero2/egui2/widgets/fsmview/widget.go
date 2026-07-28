@@ -22,8 +22,8 @@ import (
 // RendererE selects which level-2 view is rendered inside the popup. The
 // table is cheaper at small N; the graph reads better once edges outnumber
 // states (static layered / Sugiyama layout via Graphviz in-process, see the
-// layeredgraph package and ADR-0069); history shows the transition log from
-// oldest to newest.
+// layeredgraph package and ADR-0069); history shows the transition log
+// newest-first, as a scrolling table.
 type RendererE uint8
 
 const (
@@ -115,6 +115,34 @@ type Widget[T comparable] struct {
 	// state (severity); nil keeps the default TonePrimary. Applies in both
 	// tethered and plain modes.
 	badgeToneFn func(T) badge.ToneE
+
+	// historyFooterFn, set via [Widget.HistoryFooter], renders a caller-owned
+	// action row under the History tab's table. nil (default) emits no footer
+	// and no separator.
+	historyFooterFn func()
+
+	// historyBuf backs the History tab's per-frame row build. Held on the
+	// receiver and truncated rather than reallocated, so an open History tab
+	// costs no allocation per frame. Never escapes — callers reach the log
+	// through [Widget.HistorySnapshot], which copies.
+	historyBuf []historyRow[T]
+}
+
+// historyRow is one History-tab row: a recorded transition plus the dwell
+// time derived from its predecessor. Built oldest-first (dwell needs the
+// preceding entry) and rendered newest-first.
+type historyRow[T comparable] struct {
+	// seq is the 1-based position within the *retained* window, oldest
+	// first — not a lifetime transition counter, which the Machine does not
+	// keep. It shifts down by one whenever the ring evicts.
+	seq int
+	tr  Transition[T]
+	// dwell is how long the machine sat in tr.From before this transition
+	// fired. hasDwell is false for the oldest retained row (its predecessor
+	// has been evicted, or never existed) and whenever a timestamp is
+	// missing.
+	dwell    time.Duration
+	hasDwell bool
 }
 
 // New constructs a Widget bound to the given Machine. scopeKey scopes all
@@ -266,6 +294,37 @@ func (inst *Widget[T]) Summary(fn func()) *Widget[T] {
 func (inst *Widget[T]) BadgeTone(fn func(T) badge.ToneE) *Widget[T] {
 	inst.badgeToneFn = fn
 	return inst
+}
+
+// HistoryFooter sets a caller-owned action row rendered under the History
+// tab's table, below a separator — the place for whatever a host wants to do
+// with the transition log (publish it, copy it, hand it to a playground). It
+// runs inside a [c.Horizontal], so emit inline widgets only, the
+// [Widget.Summary] rule.
+//
+// The widget deliberately supplies no action of its own: what a log is worth
+// exporting *to* depends on the host's capabilities, which a widget cannot
+// know. Pair with [Widget.HistorySnapshot] inside the click branch to get the
+// rows. nil (default) emits neither footer nor separator. Returns the receiver
+// for chaining.
+func (inst *Widget[T]) HistoryFooter(fn func()) *Widget[T] {
+	inst.historyFooterFn = fn
+	return inst
+}
+
+// HistorySnapshot returns a freshly allocated copy of the retained transition
+// log, newest-first — the order the History tab shows. Unlike
+// [Machine.HistoryReverse] it hands back plain data that outlives the frame,
+// so it is safe to pass to a worker goroutine (the render-thread-snapshot
+// rule: gather here, do the blocking work there).
+//
+// Allocates on every call. Call it in a click branch, not per frame.
+func (inst *Widget[T]) HistorySnapshot() []Transition[T] {
+	out := make([]Transition[T], 0, inst.machine.HistoryLen())
+	for tr := range inst.machine.HistoryReverse() {
+		out = append(out, tr)
+	}
+	return out
 }
 
 // Render emits the level-1 chip and, when open, the level-2 popup (window +
@@ -631,60 +690,233 @@ const (
 	fsmGraphCanvasH float32 = 280
 )
 
-// renderHistory emits the transition log newest-first. Each row reads as
+// fsmHistCol* size the History tab's columns. The always-emitted five sum to
+// just inside the popup's MinWidth, so a default-sized window needs no
+// horizontal scroll; every column but the ordinal is resizable, and the
+// reason column — emitted only when some retained row carries one — sits last
+// so it is what gives when the window is narrow.
+const (
+	fsmHistColSeq    float32 = 30
+	fsmHistColState  float32 = 88
+	fsmHistColWhen   float32 = 92
+	fsmHistColDwell  float32 = 56
+	fsmHistColReason float32 = 120
+	// fsmHistoryRowH leaves room for a SizeSm badge plus breathing space
+	// from the row gridlines — the same 28px budget logviewer uses for the
+	// same badge-in-a-cell shape.
+	fsmHistoryRowH float32 = 28
+	// fsmHistoryMaxH caps the table's own height, and with it the popup's.
+	// Left to the framework the cap is 400px, which — stacked on the title
+	// bar, the tab row and the padding — runs a filled log off the bottom of
+	// a short viewport. Nine rows is enough to read a burst of transitions
+	// without the popup dominating whatever it floats over.
+	fsmHistoryMaxH float32 = 252
+	// fsmHistoryScrollbarH mirrors the allowance the framework's own height
+	// heuristic makes for the horizontal scrollbar, so the natural height
+	// computed here agrees with the one it would have computed.
+	fsmHistoryScrollbarH float32 = 16
+)
+
+// fsmHistId* namespace the History tab's PrepareSeq ids away from each other
+// (and leave room for future per-row sites). Sequence ids and label-hashed
+// ids share one 64-bit space, so the bases only need to separate this
+// widget's own seq users.
+const (
+	fsmHistIdFrom uint64 = 0x0001_0000
+	fsmHistIdTo   uint64 = 0x0002_0000
+)
+
+// renderHistory emits the transition log newest-first as a scrolling table:
+// ordinal, from-state, to-state, when it fired, how long the machine had sat
+// in the from-state, and the optional reason.
 //
-//	from → to    23s ago
+// It is an ETable rather than a flow of rows because the popup Window has no
+// scroll of its own (egui's Window does not scroll by default, and the
+// binding exposes no option for it) — a 64-entry log emitted as plain rows
+// grows the window past the screen with no way to reach the tail. ETable
+// bounds itself, scrolls internally, and lets the per-frame emission be
+// gated on [c.EndETableFluid.VisibleRange] so only drawn rows build cells.
 //
-// with the arrow tinted accent so the eye locks onto the direction. Empty
-// history shows a single muted "no transitions yet" line so the panel
+// Empty history shows a single muted "no transitions yet" line so the panel
 // doesn't read as broken.
 func (inst *Widget[T]) renderHistory() {
-	if inst.machine.HistoryLen() == 0 {
+	rows := inst.historyRows()
+	if len(rows) == 0 {
 		emptyAtoms := c.Atoms().BeginRichTextColored(
 			color.Hex(styletokens.NeutralTextSecondary.AsHex()),
 			color.Transparent, "no transitions yet").
 			Small().End().Keep()
 		c.LabelAtoms(emptyAtoms).Send()
+		inst.renderHistoryFooter()
 		return
 	}
-	arrowFg := color.Hex(styletokens.AccentDefault.AsHex())
-	mutedFg := color.Hex(styletokens.NeutralTextSecondary.AsHex())
-	idx := 0
-	for t := range inst.machine.HistoryReverse() {
-		for range c.Horizontal().KeepIter() {
-			badge.New(inst.ids.PrepareStr(fmt.Sprintf("h-from-%d", idx)),
-				inst.machine.Label(t.From)).
-				Tone(badge.ToneNeutral).
-				Variant(badge.VariantSoft).
-				Size(badge.SizeSm).
-				Send()
-			c.AddSpace(styletokens.GapInline(inst.density))
-			arrowAtoms := c.Atoms().BeginRichTextColored(arrowFg, color.Transparent, "→").
-				Strong().End().Keep()
-			c.LabelAtoms(arrowAtoms).Send()
-			c.AddSpace(styletokens.GapInline(inst.density))
-			badge.New(inst.ids.PrepareStr(fmt.Sprintf("h-to-%d", idx)),
-				inst.machine.Label(t.To)).
-				Tone(badge.ToneNeutral).
-				Variant(badge.VariantSoft).
-				Size(badge.SizeSm).
-				Send()
-			c.AddSpace(styletokens.GapInline(inst.density))
-			when := humanizeOrAbsolute(t.At)
-			whenAtoms := c.Atoms().BeginRichTextColored(mutedFg, color.Transparent, when).
-				Small().End().Keep()
-			c.LabelAtoms(whenAtoms).Send()
-			// Optional "why": the reason a mirrored transition recorded via
-			// [Machine.MirrorWithMetadata] (e.g. a validity FSM's rejection
-			// text). Absent/empty for plain Transition / Mirror history rows.
-			if reason := t.Metadata["reason"]; reason != "" {
-				c.AddSpace(styletokens.GapInline(inst.density))
-				reasonAtoms := c.Atoms().BeginRichTextColored(mutedFg, color.Transparent, "· "+reason).
-					Small().End().Keep()
-				c.LabelAtoms(reasonAtoms).Send()
+
+	// The reason column costs its width in every popup, so it is offered only
+	// when the machine actually records one — [Machine.MirrorWithMetadata]
+	// callers (e.g. a validity FSM's rejection text). Plain Transition /
+	// Mirror histories keep the narrower five-column table.
+	numCols := uint32(5)
+	for i := range rows {
+		if rows[i].tr.Metadata["reason"] != "" {
+			numCols = 6
+			break
+		}
+	}
+
+	// Every column carries a floor, not just a width: egui_table fits a
+	// column to its *cell* content, which for the narrow columns is shorter
+	// than the header word above them — without the floor, "Dwell" renders
+	// clipped over a column of "34ms".
+	c.EtColumn(fsmHistColSeq).Resizable(false).RangeMinMax(28, 60).Send()
+	c.EtColumn(fsmHistColState).Resizable(true).RangeMinMax(56, 240).Send()
+	c.EtColumn(fsmHistColState).Resizable(true).RangeMinMax(56, 240).Send()
+	c.EtColumn(fsmHistColWhen).Resizable(true).RangeMinMax(92, 240).Send()
+	c.EtColumn(fsmHistColDwell).Resizable(true).RangeMinMax(52, 140).Send()
+	if numCols == 6 {
+		c.EtColumn(fsmHistColReason).Resizable(true).RangeMinMax(80, 400).Send()
+	}
+
+	// Bound the table at the smaller of what the rows need and the cap, so a
+	// three-entry log stays three rows tall instead of reserving the cap.
+	naturalH := fsmHistoryRowH*float32(len(rows)+1) + fsmHistoryScrollbarH
+	et := c.EndETable(inst.ids.PrepareStr("history-table"),
+		uint64(len(rows)), fsmHistoryRowH, 1, 0).
+		Striped(true).
+		MaxHeight(min(naturalH, fsmHistoryMaxH))
+
+	cellPadX := styletokens.PaddingTight(inst.density)
+	headers := [...]string{"#", "From", "To", "When", "Dwell", "Reason"}
+	for col := uint32(0); col < numCols; col++ {
+		for range et.Headers(0, col) {
+			c.AddSpace(cellPadX)
+			for rt := range c.RichTextLabel(headers[col]) {
+				rt.Strong().Small()
 			}
 		}
-		idx++
+	}
+
+	mutedFg := color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	muted := func(text string) {
+		c.AddSpace(cellPadX)
+		atoms := c.Atoms().BeginRichTextColored(mutedFg, color.Transparent, text).
+			Small().End().Keep()
+		c.LabelAtoms(atoms).Send()
+	}
+	stateBadge := func(idBase uint64, seq int, label string) {
+		c.AddSpace(cellPadX)
+		badge.New(inst.ids.PrepareSeq(idBase+uint64(seq)), label).
+			Tone(badge.ToneNeutral).
+			Variant(badge.VariantSoft).
+			Size(badge.SizeSm).
+			Send()
+	}
+
+	// Emit only the rows egui_table will draw. VisibleRange reports the
+	// previous frame's window (one-frame lag, self-correcting) and is absent
+	// on the first frame a table is shown, where the full range is emitted.
+	rowLo, rowHi := uint64(0), uint64(len(rows))
+	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
+		// Clamped both ways: the reported window describes the PREVIOUS
+		// frame's table, so after the log shrinks (a shorter history bound to
+		// the same widget) it can name rows this frame no longer has.
+		rowHi = min(re, rowHi)
+		rowLo = min(rb, rowHi)
+	}
+	for i := rowLo; i < rowHi; i++ {
+		// rows is oldest-first (dwell reads off the predecessor); the table
+		// shows newest-first, so row index i maps to the tail.
+		r := rows[len(rows)-1-int(i)]
+		for range et.Cells(i, 0) {
+			muted(strconv.Itoa(r.seq))
+		}
+		for range et.Cells(i, 1) {
+			stateBadge(fsmHistIdFrom, r.seq, inst.machine.Label(r.tr.From))
+		}
+		for range et.Cells(i, 2) {
+			stateBadge(fsmHistIdTo, r.seq, inst.machine.Label(r.tr.To))
+		}
+		for range et.Cells(i, 3) {
+			muted(humanizeOrAbsolute(r.tr.At))
+		}
+		for range et.Cells(i, 4) {
+			if r.hasDwell {
+				muted(compactDuration(r.dwell))
+			} else {
+				muted("—")
+			}
+		}
+		if numCols == 6 {
+			for range et.Cells(i, 5) {
+				muted(r.tr.Metadata["reason"])
+			}
+		}
+	}
+	et.Send()
+	inst.renderHistoryFooter()
+}
+
+// historyRows rebuilds the History tab's row set into the receiver-held
+// buffer, oldest-first, deriving each entry's dwell from its predecessor's
+// timestamp. Oldest-first is the build order because dwell is only defined
+// against the preceding transition; the renderer walks it backwards.
+//
+// A machine's history is contiguous — [Machine.Transition] records from the
+// current state and a same-state [Machine.Mirror] is a no-op — so the
+// predecessor's timestamp is when the machine entered this row's From state.
+// The one gap is the oldest retained row, whose predecessor the ring has
+// evicted (or never had): it reports no dwell rather than a wrong one.
+func (inst *Widget[T]) historyRows() []historyRow[T] {
+	inst.historyBuf = inst.historyBuf[:0]
+	var prevAt time.Time
+	for tr := range inst.machine.History() {
+		row := historyRow[T]{seq: len(inst.historyBuf) + 1, tr: tr}
+		row.dwell, row.hasDwell = dwellBetween(prevAt, tr.At)
+		prevAt = tr.At
+		inst.historyBuf = append(inst.historyBuf, row)
+	}
+	return inst.historyBuf
+}
+
+// dwellBetween reports how long the machine sat in a transition's From state,
+// given the preceding transition's timestamp. Reports ok=false rather than a
+// wrong number in the three cases where the answer isn't known: no
+// predecessor (the oldest retained row, or the ring evicted it), a missing
+// timestamp (maxHistory=0), and a pair that runs backwards — wall-clock can
+// step back under NTP, and a negative dwell reads as data, not as a clock.
+func dwellBetween(prevAt, at time.Time) (d time.Duration, ok bool) {
+	if prevAt.IsZero() || at.IsZero() || at.Before(prevAt) {
+		return 0, false
+	}
+	return at.Sub(prevAt), true
+}
+
+// renderHistoryFooter emits the caller-owned action row under the table, and
+// the separator that sets it off. No-op when no footer was set — a widget
+// without one shows neither, so the plain History tab is unchanged.
+func (inst *Widget[T]) renderHistoryFooter() {
+	if inst.historyFooterFn == nil {
+		return
+	}
+	c.AddSpace(styletokens.GapInline(inst.density))
+	c.Separator().Horizontal().Send()
+	for range c.Horizontal().KeepIter() {
+		inst.historyFooterFn()
+	}
+}
+
+// compactDuration renders a dwell short enough for a narrow cell: sub-second
+// in whole milliseconds, then one decimal of seconds, then Go's own m/h form
+// truncated — so a long dwell reads "2m30s", never "2m30.000481922s".
+func compactDuration(d time.Duration) string {
+	switch {
+	case d < 0:
+		return "—"
+	case d < time.Second:
+		return d.Truncate(time.Millisecond).String()
+	case d < time.Minute:
+		return d.Truncate(100 * time.Millisecond).String()
+	default:
+		return d.Truncate(time.Second).String()
 	}
 }
 

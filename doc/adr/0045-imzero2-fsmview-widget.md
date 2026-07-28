@@ -196,6 +196,76 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-07-28 — History tab is a table, and grows a footer seam
+
+The M1 History view rendered the transition log as a flow of `c.Horizontal`
+rows — `badge(from) → badge(to) · when · reason`. Two things were wrong with
+that, one cosmetic and one not.
+
+**The log was unbounded.** The popup is a `c.Window`, egui's window does not
+scroll by default, and the binding exposes no option for it — so N rows of
+history meant N rows of window. At the demo's `maxHistory=16` that is already
+most of a short viewport; at play's 64 it runs off the screen with no way to
+reach the tail. The history was the only tab whose content scales with runtime
+events rather than with the machine's topology, so it was the only one where
+this mattered.
+
+The tab is now a `c.EndETable`: `#` / From / To / When / Dwell, plus a Reason
+column emitted only when some retained row carries one (`MirrorWithMetadata`
+callers — most machines never do, and the column costs its width in every
+popup). ETable was the choice over `c.Table` because its cells are deferred
+blocks that admit arbitrary widgets, so the state badges survive the move;
+`c.Table` takes only text and rich-text cell pushes. It also bounds its own
+height and scrolls internally, and reports a visible-row window
+(`VisibleRange`) so only drawn rows build cells.
+
+The framework's height heuristic caps an unbounded ETable at 400px, which —
+stacked on the title bar, the tab row and the padding — still ran a filled log
+off a 694pt viewport, so the widget passes an explicit `MaxHeight` of
+`min(natural, 252)`: nine rows, and a three-entry log stays three rows tall
+rather than reserving the cap. Every column also carries a `RangeMinMax`
+floor, because egui_table fits a column to its *cell* content and the narrow
+columns are narrower than the header word above them — without the floor,
+"Dwell" renders clipped over a column of `34ms`.
+
+**Dwell is new information, not a reformat.** Each row now reports how long the
+machine sat in that row's `From` state, read off the preceding entry's
+timestamp — the question a transition log is usually opened to answer. It is
+honest about the three cases where it does not know: the oldest retained row
+(the ring evicted its predecessor), a missing timestamp (`maxHistory=0`), and a
+pair that runs backwards under a clock step. All three render `—` rather than a
+plausible number.
+
+The `#` column counts the **retained window**, not the machine's lifetime: it
+restarts at 1 at whatever the ring still holds and every row's number shifts
+down by one on eviction. `Machine` keeps no lifetime counter and this change
+did not add one.
+
+**`HistoryFooter(fn func())`** adds a caller-owned action row under the table,
+and `HistorySnapshot() []Transition[T]` hands back a freshly allocated
+newest-first copy — plain data that outlives the frame, so a host can pass it
+to a worker goroutine under the usual render-thread-snapshot rule. The widget
+deliberately ships **no** action of its own. The motivating one is publishing
+the log as an ad-hoc dataset and opening it in a play window
+([ADR-0134](0134-adhoc-datasets.md) + [ADR-0135](0135-app-launch-requests.md),
+the shape ADR-0017 works out for the regex explorer), and that needs
+`adhoc.publish` on the *host's* manifest — which two apps in the tree declare.
+A widget cannot know its host's capabilities, so a built-in button would be a
+visible refusal in most of them. The seam is here; whether any host fills it is
+that host's decision.
+
+Two things this update does **not** fix, recorded rather than smuggled in:
+
+- **The Table tab is still unbounded** — same window, same missing scroll, and
+  a machine with many states grows the popup the way History used to. States
+  are few in every current call site.
+- **Per-machine export is the small half of the interesting question.** One
+  machine's log is at most a few dozen rows; the queries worth opening a
+  playground for are joins — play's query-state history against
+  `keelson('query_runs')`, or mappingplanview's per-field machines *in
+  aggregate*. Neither is reachable from a widget that sees only its own
+  `Machine`, so the cross-machine surface stays a host-level concern.
+
 ### 2026-06-07 — Graph tab migrated to the layeredgraph engine (ADR-0069)
 
 The Graph view no longer uses the `egui_graphs` force-directed (FR+CG)
