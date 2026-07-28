@@ -21,6 +21,15 @@ import (
 // directory, and stat's the result. Missing targets are errors;
 // permission or other unexpected stat failures are warnings so the
 // scan keeps going.
+//
+// A target git ignores counts as missing, at the same error severity.
+// It stat's fine in a working checkout and is absent from every clean
+// one, so without this the finding appears for the first time in CI.
+// That is not hypothetical: links into a git-ignored doc tree were
+// committed here and passed every local run until a CI-shaped checkout
+// reported them. Ignored state is read once per root by gitIgnoredSet;
+// when git is unavailable the set is empty and the rule degrades to the
+// plain existence check.
 type RuleDL007 struct{}
 
 func NewRuleDL007() (inst *RuleDL007) {
@@ -37,7 +46,7 @@ func (inst *RuleDL007) Check(roots []string) iter.Seq2[Finding, error] {
 	return runMarkdownCheck("DL007", roots, checkOneDL007)
 }
 
-func checkOneDL007(filePath string, yield func(Finding, error) bool) (cont bool, err error) {
+func checkOneDL007(filePath string, ignored map[string]struct{}, yield func(Finding, error) bool) (cont bool, err error) {
 	cont = true
 	var data []byte
 	data, err = os.ReadFile(filePath)
@@ -68,6 +77,22 @@ func checkOneDL007(filePath string, yield func(Finding, error) bool) (cont bool,
 		}
 		_, statErr := os.Stat(resolved)
 		if statErr == nil {
+			if !isGitIgnoredTree(ignored, resolved) {
+				continue
+			}
+			f := Finding{
+				RuleId:   "DL007",
+				Severity: FindingSeverityError,
+				Path:     filePath,
+				Line:     link.Line + lineOffset,
+				Col:      1,
+				Message: "link target '" + link.URL + "' is git-ignored (resolved to '" + resolved +
+					"'): it exists in this checkout but never in a clean one",
+			}
+			cont = yield(f, nil)
+			if !cont {
+				return
+			}
 			continue
 		}
 		if os.IsNotExist(statErr) {

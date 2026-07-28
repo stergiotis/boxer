@@ -255,6 +255,65 @@ func TestRuleDL007FlagsBrokenLinks(t *testing.T) {
 	require.False(t, bases["sibling.md"])
 }
 
+func TestIsGitIgnoredTreeMatchesAncestors(t *testing.T) {
+	// gitIgnoredSet collapses a fully-ignored directory to one entry, so the
+	// files beneath it are only reachable by walking up.
+	ignored := map[string]struct{}{
+		filepath.Join("/repo", "doc", "leeway-map"): {},
+		filepath.Join("/repo", "notes.md"):          {},
+	}
+	require.True(t, isGitIgnoredTree(ignored, "/repo/doc/leeway-map"))
+	require.True(t, isGitIgnoredTree(ignored, "/repo/doc/leeway-map/VALUE-PROPOSITION.md"))
+	require.True(t, isGitIgnoredTree(ignored, "/repo/doc/leeway-map/nested/deep/x.svg"))
+	require.True(t, isGitIgnoredTree(ignored, "/repo/notes.md"))
+	require.False(t, isGitIgnoredTree(ignored, "/repo/doc/leeway-mapping.md"),
+		"prefix match must not count as an ancestor")
+	require.False(t, isGitIgnoredTree(ignored, "/repo/doc/adr/0001-x.md"))
+	require.False(t, isGitIgnoredTree(nil, "/repo/doc/leeway-map/x.md"),
+		"empty set (git unavailable) matches nothing")
+}
+
+func TestRuleDL007FlagsGitIgnoredTargets(t *testing.T) {
+	// A link into a git-ignored directory stat's fine here and is absent from
+	// every clean checkout, so it must be reported like a missing target
+	// rather than passing locally and failing first in CI.
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ignored"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "tracked"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ignored", "notes.md"), []byte("x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked", "notes.md"), []byte("x\n"), 0o644))
+	doc := filepath.Join(dir, "doc.md")
+	require.NoError(t, os.WriteFile(doc, []byte(
+		"[gone](./ignored/notes.md)\n[dir](./ignored)\n[kept](./tracked/notes.md)\n"), 0o644))
+
+	ignored := map[string]struct{}{filepath.Join(dir, "ignored"): {}}
+	var findings []Finding
+	cont, err := checkOneDL007(doc, ignored, func(f Finding, e error) bool {
+		require.NoError(t, e)
+		findings = append(findings, f)
+		return true
+	})
+	require.NoError(t, err)
+	require.True(t, cont)
+	require.Len(t, findings, 2, "both the file and the directory link are ignored; ./tracked is not")
+	for _, f := range findings {
+		require.Equal(t, "DL007", f.RuleId)
+		require.Equal(t, FindingSeverityError, f.Severity)
+		require.Contains(t, f.Message, "git-ignored")
+	}
+	require.Equal(t, int32(1), findings[0].Line)
+	require.Equal(t, int32(2), findings[1].Line)
+
+	// Same document, no ignored set: the rule degrades to plain existence.
+	findings = nil
+	_, err = checkOneDL007(doc, nil, func(f Finding, e error) bool {
+		findings = append(findings, f)
+		return true
+	})
+	require.NoError(t, err)
+	require.Empty(t, findings)
+}
+
 func TestExtractInlineLinks(t *testing.T) {
 	body := []byte("intro [first](./a.md) prose\n[second](https://example.com)\n[`third`](../b)\n")
 	links := extractInlineLinks(body)

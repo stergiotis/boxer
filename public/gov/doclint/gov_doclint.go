@@ -118,18 +118,26 @@ func shouldSkipDir(name string) (skip bool) {
 	return
 }
 
-// gitIgnoredSet collects the absolute paths git ignores within root. It is
-// best-effort: when git is unavailable, root is not inside a work tree, or the
-// command fails, it returns nil and callers lint every file (the prior
-// behaviour). A file git would never track — e.g. the git-ignored
-// doc/leeway-map render artefacts (doc/.gitignore) — can only produce findings
-// that cannot be committed, so the walkers skip it to keep a local run aligned
-// with a clean CI checkout. Tracked files are never returned: --others lists
-// untracked paths only.
+// gitIgnoredSet collects the absolute paths git ignores in the work tree
+// containing root. It is best-effort: when git is unavailable, root is not
+// inside a work tree, or the command fails, it returns nil and callers lint
+// every file (the prior behaviour). A file git would never track — a generated
+// render artefact, a local scratch note — can only produce findings that cannot
+// be committed, so the walkers skip it to keep a local run aligned with a clean
+// CI checkout. Tracked files are never returned: --others lists untracked paths
+// only.
 //
-// Fully-ignored directories are collapsed to a single entry by --directory, so
-// the returned set holds directory paths (consult on the dir node to prune the
-// whole subtree via SkipDir) as well as individually-ignored file paths.
+// The query spans the whole work tree rather than root's subtree. Walking only
+// needs the subtree, but DL007 resolves link targets that routinely point above
+// root ('../../../doc/...'), and a set narrowed by pathspec would report those
+// as unignored — the check would then pass or fail depending on which directory
+// doclint was pointed at. Cost is the same either way: one git call per root,
+// low tens of entries, since --directory collapses a fully-ignored tree to its
+// top node.
+//
+// That collapsing is also why the set holds directory paths (consult on the dir
+// node to prune the whole subtree via SkipDir, or walk ancestors with
+// isGitIgnoredTree) as well as individually-ignored file paths.
 func gitIgnoredSet(root string) (ignored map[string]struct{}) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -147,9 +155,12 @@ func gitIgnoredSet(root string) (ignored map[string]struct{}) {
 	if toplevel == "" {
 		return
 	}
-	out, err := runGit(gitDir,
+	// Run from the toplevel, not gitDir: without a pathspec ls-files reports
+	// the cwd subtree only, and --full-name changes how paths are printed, not
+	// what is listed.
+	out, err := runGit(toplevel,
 		"ls-files", "--others", "--ignored", "--exclude-standard",
-		"--directory", "--full-name", "-z", "--", absRoot)
+		"--directory", "--full-name", "-z")
 	if err != nil {
 		return
 	}
@@ -190,6 +201,33 @@ func isGitIgnored(ignored map[string]struct{}, path string) (yes bool) {
 	return
 }
 
+// isGitIgnoredTree reports whether path — or any directory above it — is in the
+// ignored set. The walkers can consult isGitIgnored on the directory node they
+// are standing on, but a link target names a file directly, and gitIgnoredSet
+// collapses a fully-ignored directory to one entry (git ls-files --directory):
+// doc/leeway-map is in the set, doc/leeway-map/NOTES.md is not. Only the walk
+// upward finds the second form.
+func isGitIgnoredTree(ignored map[string]struct{}, path string) (yes bool) {
+	if len(ignored) == 0 {
+		return
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return
+	}
+	cur := filepath.Clean(abs)
+	for {
+		if _, yes = ignored[cur]; yes {
+			return
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return
+		}
+		cur = parent
+	}
+}
+
 // runMarkdownCheck is the shared filesystem traversal for rules whose scope is
 // "every in-scope Markdown file under the standard". It walks each root,
 // skipping the directories shouldSkipDir excludes, git-ignored paths, and the
@@ -197,13 +235,17 @@ func isGitIgnored(ignored map[string]struct{}, path string) (yes bool) {
 // file. A walk-time error aborts the rule's pass and is labelled with ruleID;
 // checkOne returning cont=false stops the walk early (filepath.SkipAll).
 //
+// The root's ignored set is handed to checkOne so a rule can ask the same
+// question about a path it derives rather than one the walk produced — DL007
+// resolves link targets that way. Rules that do not need it take '_'.
+//
 // DL001/003/004/006/007/010/011 share this verbatim; only ruleID and the
 // checkOne callback differ. Rules with a different scope (e.g. DL009) walk
 // directly.
 func runMarkdownCheck(
 	ruleID string,
 	roots []string,
-	checkOne func(path string, yield func(Finding, error) bool) (cont bool, err error),
+	checkOne func(path string, ignored map[string]struct{}, yield func(Finding, error) bool) (cont bool, err error),
 ) iter.Seq2[Finding, error] {
 	return func(yield func(Finding, error) bool) {
 		for _, root := range roots {
@@ -228,7 +270,7 @@ func runMarkdownCheck(
 				if !IsInScopeForDL001(path, base) {
 					return nil
 				}
-				cont, fErr := checkOne(path, yield)
+				cont, fErr := checkOne(path, ignored, yield)
 				if fErr != nil {
 					return fErr
 				}

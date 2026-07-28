@@ -44,7 +44,7 @@ func (inst *RuleDL010) Check(roots []string) iter.Seq2[Finding, error] {
 	return runMarkdownCheck("DL010", roots, checkOneDL010)
 }
 
-func checkOneDL010(path string, yield func(Finding, error) bool) (cont bool, err error) {
+func checkOneDL010(path string, _ map[string]struct{}, yield func(Finding, error) bool) (cont bool, err error) {
 	cont = true
 	var data []byte
 	data, err = os.ReadFile(path)
