@@ -341,7 +341,10 @@ impl CodecLane {
 pub enum LaneProbe {
     /// The trial encode produced output — the lane works.
     Ok,
-    /// ffmpeg has no such encoder (not compiled into this build).
+    /// This ffmpeg build lacks something the lane needs — the encoder itself,
+    /// or the format/filter/bitstream-filter its argv names, or (when the
+    /// encoder is absent) the private options it carries. See
+    /// [`MISSING_COMPONENT`] for why those all land in one bucket.
     NotBuilt,
     /// The hardware device/driver could not be opened (no VAAPI display).
     NoDevice,
@@ -371,25 +374,75 @@ impl LaneProbe {
     }
 }
 
-/// Classify a failed `ffmpeg` probe from its stderr, most-specific first. The
-/// substrings are taken from real ffmpeg 7 output (covered by the unit test):
-/// `Unknown encoder` (not compiled in), `No VA display` / `Device creation
-/// failed` (no usable VAAPI device), and `No usable encoding profile` /
-/// `Function not implemented` (device opened, encode rejected). Only called
-/// when the trial encode exited non-zero.
+/// stderr markers for "this ffmpeg build lacks something the lane's argv names"
+/// → [`LaneProbe::NotBuilt`]. A trimmed build (`--disable-everything` plus an
+/// explicit component list, which is what a size-constrained or airgapped
+/// deployment ships) can be missing any of these, and each reports differently:
+///
+/// - the encoder is simply absent;
+/// - a *format* is absent — the probe reads `-f lavfi` and writes `-f null`,
+///   the stream path muxes `-f nut`, the file dump `-f h264`;
+/// - a *filter* is absent — the hardware lanes run `-vf format=…,hwupload`;
+/// - the *bitstream filter* is absent — the H.264 lanes append `dump_extra`;
+/// - an absent encoder's **private option** is rejected by the argument parser
+///   *before* ffmpeg ever gets far enough to say "Unknown encoder". This is the
+///   one that reads least like a missing component: an ffmpeg without
+///   libopenh264 fails `CodecLane::software(H264)` with
+///   `Unrecognized option 'rc_mode'.` / `Error splitting the argument list:
+///   Option not found`, never naming the encoder at all. The same shape hides
+///   an absent VAAPI (`-vaapi_device` becomes an unrecognized option).
+///
+/// Caveat on the last pair: they also fire for a genuine typo in
+/// `IMZERO2_HEADLESS_ENCODER_ARGS`, which is a bad-argument problem rather than
+/// a missing component. Both mean "this lane cannot run on this ffmpeg", so
+/// [`LaneProbe::NotBuilt`] is the honest answer to the question the probe asks;
+/// the operator reads the inherited stderr for the distinction.
+const MISSING_COMPONENT: &[&str] = &[
+    "Unknown encoder",
+    "Encoder not found",
+    "Error selecting an encoder",
+    "Unknown decoder",
+    "Unknown input format",
+    "Requested output format",
+    "No such filter",
+    "Filter not found",
+    "Bitstream filter not found",
+    "Unrecognized option",
+    "Option not found",
+];
+
+/// stderr markers for "the hardware device could not be opened at all"
+/// → [`LaneProbe::NoDevice`]. Note that a build with no VAAPI *at all* does not
+/// land here — it never reaches device setup, because `-vaapi_device` is itself
+/// an unrecognized option (see [`MISSING_COMPONENT`]).
+const NO_DEVICE: &[&str] = &[
+    "No VA display",
+    "Device creation failed",
+    "Failed to initialise VAAPI",
+    "Cannot open the drm device",
+];
+
+/// stderr markers for "the encoder opened, then the driver refused the encode"
+/// → [`LaneProbe::EncodeRejected`]. The Fedora-mesa `h264_vaapi` class.
+const ENCODE_REJECTED: &[&str] = &[
+    "No usable encoding profile",
+    "Function not implemented",
+    "Error while opening encoder",
+    "Hardware does not support encoding at",
+];
+
+/// Classify a failed `ffmpeg` probe from its stderr, most-specific first: a
+/// missing component beats a device failure beats an encode rejection, because
+/// a build that lacks the encoder can also emit device noise on the way down.
+/// Every substring is taken from real ffmpeg 7 output and pinned by the unit
+/// tests below. Only called when the trial encode exited non-zero.
 fn classify_probe_stderr(stderr: &str) -> LaneProbe {
-    if stderr.contains("Unknown encoder") || stderr.contains("Encoder not found") {
+    let any = |set: &[&str]| set.iter().any(|m| stderr.contains(m));
+    if any(MISSING_COMPONENT) {
         LaneProbe::NotBuilt
-    } else if stderr.contains("No VA display")
-        || stderr.contains("Device creation failed")
-        || stderr.contains("Failed to initialise VAAPI")
-        || stderr.contains("Cannot open the drm device")
-    {
+    } else if any(NO_DEVICE) {
         LaneProbe::NoDevice
-    } else if stderr.contains("No usable encoding profile")
-        || stderr.contains("Function not implemented")
-        || stderr.contains("Error while opening encoder")
-    {
+    } else if any(ENCODE_REJECTED) {
         LaneProbe::EncodeRejected
     } else {
         LaneProbe::Other
@@ -397,12 +450,13 @@ fn classify_probe_stderr(stderr: &str) -> LaneProbe {
 }
 
 /// The ffmpeg binary every lane spawns — the [`probe_lane`] trial encode and
-/// the [`crate::imzero2::encoderpipe`] stream encoder alike. `IMZERO2_FFMPEG_BIN`
-/// replaces the bare `ffmpeg` PATH lookup with an explicit path, so a
-/// deployment can pin one known-good build without shadowing the system ffmpeg
-/// for every other tool on the host: an airgapped target ships a static ffmpeg
-/// under its own prefix and points this at it. Unset or blank keeps the PATH
-/// lookup, which is what every developer host does.
+/// the [`crate::imzero2::encoderpipe`] stream encoder alike.
+///
+/// `IMZERO2_FFMPEG_BIN` replaces the bare `ffmpeg` PATH lookup with an explicit
+/// path, so a deployment can pin one known-good build without shadowing the
+/// system ffmpeg for every other tool on the host: an airgapped target ships a
+/// static ffmpeg under its own prefix and points this at it. Unset or blank
+/// keeps the PATH lookup, which is what every developer host does.
 pub fn ffmpeg_bin() -> String {
     resolve_ffmpeg_bin(std::env::var("IMZERO2_FFMPEG_BIN").ok())
 }
@@ -474,7 +528,16 @@ pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
     match cmd.output() {
         Ok(out) if out.status.success() => LaneProbe::Ok,
         Ok(out) => classify_probe_stderr(&String::from_utf8_lossy(&out.stderr)),
-        Err(_) => LaneProbe::Other,
+        Err(e) => {
+            // The binary could not be spawned at all — every lane will fail
+            // identically and the dialog would just say "unavailable". Name the
+            // path, since IMZERO2_FFMPEG_BIN may be pointing somewhere wrong.
+            tracing::warn!(
+                ffmpeg = %ffmpeg_bin(), error = %e,
+                "ffmpeg could not be spawned for the lane probe"
+            );
+            LaneProbe::Other
+        }
     }
 }
 
@@ -550,6 +613,77 @@ mod tests {
     fn classifies_not_built_unknown_encoder() {
         let s = "[vost#0:0 @ 0x0] Unknown encoder 'libsvtav1'\n\
                  Error opening output files: Encoder not found\n";
+        assert_eq!(classify_probe_stderr(s), LaneProbe::NotBuilt);
+    }
+
+    // The rest of the missing-component family, captured verbatim from a
+    // --disable-everything ffmpeg 7.1.1 that omits each component in turn.
+    // A size-trimmed build is the realistic way to hit these, and before they
+    // were classified every one of them degraded to LaneProbe::Other — the Go
+    // video-output dialog then said "unavailable" with no cause.
+
+    #[test]
+    fn classifies_absent_encoder_private_option_as_not_built() {
+        // No libopenh264 in the build: the argument parser rejects that
+        // encoder's private option before "Unknown encoder" is ever reached,
+        // so the encoder is never named. This is CodecLane::software(H264)
+        // on a royalty-free build.
+        let s = "Unrecognized option 'rc_mode'.\n\
+                 Error splitting the argument list: Option not found\n";
+        assert_eq!(classify_probe_stderr(s), LaneProbe::NotBuilt);
+    }
+
+    #[test]
+    fn classifies_absent_vaapi_as_not_built_not_no_device() {
+        // A build without VAAPI fails the same way — `-vaapi_device` is simply
+        // not a known option. It must NOT read as NoDevice: the device is fine,
+        // the build cannot address it. This is every hardware lane on a fully
+        // static ffmpeg, which cannot dlopen a VA driver at all.
+        let s = "Unrecognized option 'vaapi_device'.\n\
+                 Error splitting the argument list: Option not found\n";
+        assert_eq!(classify_probe_stderr(s), LaneProbe::NotBuilt);
+    }
+
+    #[test]
+    fn classifies_missing_filter_as_not_built() {
+        // The hardware lanes run -vf format=nv12,hwupload.
+        let s = "[AVFilterGraph @ 0x0] No such filter: 'hwupload'\n\
+                 Error opening output file -.\n\
+                 Error opening output files: Filter not found\n";
+        assert_eq!(classify_probe_stderr(s), LaneProbe::NotBuilt);
+    }
+
+    #[test]
+    fn classifies_missing_muxer_as_not_built() {
+        let s = "[AVFormatContext @ 0x0] Requested output format 'matroska' is not known.\n\
+                 [out#0 @ 0x0] Error initializing the muxer for pipe:: Invalid argument\n";
+        assert_eq!(classify_probe_stderr(s), LaneProbe::NotBuilt);
+    }
+
+    #[test]
+    fn classifies_missing_input_device_as_not_built() {
+        // -f lavfi is an input *device*: a build without libavdevice loses the
+        // whole probe path, every lane at once.
+        let s = "[in#0 @ 0x0] Unknown input format: 'lavfi'\n";
+        assert_eq!(classify_probe_stderr(s), LaneProbe::NotBuilt);
+    }
+
+    #[test]
+    fn classifies_missing_bsf_as_not_built() {
+        // The H.264 lanes append -bsf:v dump_extra.
+        let s = "[vost#0:0/libopenh264 @ 0x0] Error parsing bitstream filter \
+                 sequence 'dump_extra=freq=keyframe': Bitstream filter not found\n\
+                 Error opening output files: Bitstream filter not found\n";
+        assert_eq!(classify_probe_stderr(s), LaneProbe::NotBuilt);
+    }
+
+    #[test]
+    fn missing_component_outranks_a_trailing_device_or_encode_error() {
+        // Ordering guard: a build that lacks the encoder can still emit device
+        // or encoder-open noise on the way down. The specific cause wins.
+        let s = "[vost#0:0 @ 0x0] Unknown encoder 'h264_vaapi'\n\
+                 Device creation failed: -22.\n\
+                 Error while opening encoder - maybe incorrect parameters\n";
         assert_eq!(classify_probe_stderr(s), LaneProbe::NotBuilt);
     }
 
