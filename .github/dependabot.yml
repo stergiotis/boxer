@@ -18,3 +18,18 @@ updates:
       default-days: 5
       semver-major-days: 14
     open-pull-requests-limit: 10
+
+  # The rust/ crates are three independent lockfiles, not a workspace, so each
+  # is listed separately.
+  - package-ecosystem: "cargo"
+    directories:
+      - "/rust/h3bridge"
+      - "/rust/imzero2"
+      - "/rust/watermark"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+    open-pull-requests-limit: 10
