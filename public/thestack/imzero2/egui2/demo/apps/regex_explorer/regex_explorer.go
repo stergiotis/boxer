@@ -638,7 +638,7 @@ func (inst *App) renderListTab() {
 	}
 
 	if out.YieldsGroups {
-		c.Label("note: the pattern captures, so extractAll returns capture group 1 — not the full match. Full matches are highlighted in the Preview tab.").Send()
+		c.Label("Note: the pattern captures, so extractAll returns capture group 1 — not the full match. Full matches are highlighted in the Preview tab.").Send()
 	}
 
 	for range c.ScrollArea().Vscroll(true).KeepIter() {
