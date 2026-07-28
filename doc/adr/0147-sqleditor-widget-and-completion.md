@@ -111,13 +111,36 @@ deliberately deferred.
   lands afterwards, never in the same commit. play's editor is load-bearing and
   its id handling is subtle; a combined commit would make a regression
   indistinguishable from a design flaw.
-- **SD2 — The provider seam.** The widget takes an injected provider interface,
-  shaped as *given a buffer and a caret, what may go here* plus *given a kind
-  and a prefix, what are the candidates*. Everything that is play's model rather
-  than the editor's stays in `apps/play`: param slots and the prelude
-  hide/mirror state machine, unfilled-input gating, run-under-cursor's coupling
-  to the query graph, endpoint routing, and the diagnostics banner. The seam is
-  also what makes the completion engine unit-testable without a UI.
+- **SD2 — The seam runs in both directions.** *Inwards*, the widget takes an
+  injected provider interface, shaped as *given a buffer and a caret, what may
+  go here* plus *given a kind and a prefix, what are the candidates* — which is
+  also what makes the completion engine unit-testable without a UI. *Outwards*,
+  the widget returns a result carrying the buffer, the caret, the active
+  statement's range, its 1-based number and the statement count, and the
+  composed run buffer. Anything derivable from buffer-and-caret alone is the
+  widget's to compute and publish; the embedder is told, not asked.
+
+  **Run-under-cursor is the worked example.** Its logic is already pure over
+  `(sql, caret)` — the split, the caret-to-statement boundary rule, and the
+  prelude-plus-statement composition — so all of it moves. What stays in
+  `apps/play` is only what the app does *with* the result: shipping it through
+  `BuildStatement`, the wire preview, the staleness witness that gates auto-run,
+  and history snapshotting the full buffer rather than the statement. The same
+  test applies to the rest of the exclusion list: param slots and the prelude
+  hide/mirror state machine, unfilled-input gating, endpoint routing and the
+  diagnostics banner stay because each needs play's model, not because the
+  feature happens to be consumed there.
+
+  Two contract details the result must state rather than leave implicit. A
+  single-statement body's run buffer is the whole trimmed buffer, not a
+  statement slice — a deliberate byte-identical-to-before path that an embedder
+  would otherwise have to rediscover. And the split skips a leading `SET`
+  prelude via `env.BodyOffset`, so a parameterised single-statement buffer does
+  not read as multi-statement; that is widget behaviour with a knob if a
+  consumer ever wants raw counting, not a policy pushed onto the embedder.
+
+  `sqlappletcreator` inherits run-under-cursor from this, having shipped only
+  whole buffers until now.
 - **SD3 — `sqlappletcreator` adopts the widget** with a narrower provider (or
   none), which is the acceptance test for SD2: if adoption needs play-shaped
   state, the seam is drawn in the wrong place.

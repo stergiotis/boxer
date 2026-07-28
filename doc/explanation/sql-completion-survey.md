@@ -328,14 +328,24 @@ A `widgets/sqleditor` package would own the buffer-shaped concerns: the
 statement splitting, caret resolution, the highlight tiers, and the completion
 engine's context and candidate machinery behind an injected provider interface.
 
-What must *not* move, because it is play's model rather than the editor's:
-param slots and the prelude hide/mirror state machine, unfilled-input gating,
-run-under-cursor's coupling to the query graph, endpoint routing, and the
-diagnostics banner. The seam between them is a provider interface — "given a
-buffer and a caret, what may go here" — which is also exactly the seam that
-makes the completion engine unit-testable without a UI, and lets
-`sqlappletcreator` adopt the editor while supplying a narrower provider (or
-none).
+The test for what moves is whether a thing is derivable from buffer-and-caret
+alone. Run-under-cursor passes it: every function in `play_statements.go` is
+already pure over `(sql, caret)` — the split, the caret-to-statement boundary
+rule, the prelude-plus-statement composition — with only three thin methods
+binding the app's buffer and holding a memo. So the derivation moves, and the
+widget publishes the statement under the cursor as a result; what stays behind
+is what play does *with* it (shipping it, the wire preview, the staleness
+witness that gates auto-run, history snapshotting the full buffer). By the same
+test, param slots and the prelude hide/mirror state machine, unfilled-input
+gating, endpoint routing and the diagnostics banner stay — each needs play's
+model, not merely play's screen.
+
+The seam therefore runs in both directions: inwards a provider interface
+("given a buffer and a caret, what may go here"), outwards a result carrying
+buffer, caret, active-statement range and number, and the composed run buffer.
+The inward half is what makes the completion engine unit-testable without a UI;
+the outward half is what lets `sqlappletcreator` inherit run-under-cursor,
+having shipped only whole buffers until now.
 
 This is a refactor with a real risk profile: play's editor is load-bearing and
 its id handling is subtle. It wants to land as a move-then-extend, not as a
