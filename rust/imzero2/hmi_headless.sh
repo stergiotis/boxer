@@ -12,6 +12,11 @@
 #
 # Viewer page: http://<host>:<port+1>/  (WebCodecs-capable browser required)
 #
+# The Rust feature set follows IMZERO2_HEADLESS_CODEC: `mesh` builds the lean
+# appliance host (`--features headless`, no wgpu/ffmpeg, ADR-0128 M3), anything
+# else builds the full one (`--features headless_wgpu`). So:
+#   IMZERO2_HEADLESS_CODEC=mesh ./hmi_headless.sh   # no GPU or ffmpeg needed
+#
 # Encoder defaults to VAAPI (ADR-0024 SD3). On boxes without VAAPI H.264
 # encode (e.g. Fedora's mesa without the freeworld drivers), override:
 #   IMZERO2_HEADLESS_ENCODER_ARGS="-c:v libopenh264 -rc_mode off -bf 0 -g 120"
@@ -94,8 +99,30 @@ esac
 # `./hmi_headless.sh | tee run.log` — still counts as interactive. HMI_BUILD=1/0
 # forces the decision; a missing binary rebuilds regardless, so a launcher never
 # starts nothing.
+# Which render host the requested codec needs (ADR-0128 M3). The lean `headless`
+# feature compiles in NO wgpu and NO ffmpeg and compile-time-forces
+# CodecLane::mesh(), so it can serve the mesh draw-stream lane and nothing else;
+# every video codec needs `headless_wgpu` for the offscreen renderer and the
+# GPU->CPU readback the encoder consumes. Selecting on IMZERO2_HEADLESS_CODEC
+# means `IMZERO2_HEADLESS_CODEC=mesh` gets the appliance build — no GPU, mesa,
+# Vulkan or ffmpeg needed at run time — while the default h264 gets the full one.
+# The two use separate --target-dirs so flipping between them does not thrash a
+# single incremental cache.
+case "${IMZERO2_HEADLESS_CODEC:-}" in
+    mesh|draw-stream|drawstream)
+        rust_build=./build_rust_headless_mesh.sh
+        rust_target=headless_mesh
+        rust_features=headless
+        ;;
+    *)
+        rust_build=./build_rust_headless.sh
+        rust_target=headless
+        rust_features=headless_wgpu
+        ;;
+esac
+
 go_bin="$here/main_go"
-rust_bin="$here/target/headless/release/imzero2"
+rust_bin="$here/target/$rust_target/release/imzero2"
 if [[ "$HMI_BUILD" == 0 ]]; then
 	do_build=0
 elif [[ "$HMI_BUILD" == 1 || -t 0 ]]; then
@@ -108,7 +135,8 @@ else
 	do_build=0
 fi
 if [[ "$do_build" == 1 ]]; then
-	./build_rust_headless.sh || exit 1
+	echo "hmi_headless.sh: codec '${IMZERO2_HEADLESS_CODEC:-h264 (default)}' -> --features $rust_features" >&2
+	"$rust_build" || exit 1
 	./build_go.sh || exit 1
 fi
 
@@ -133,7 +161,7 @@ fi
 echo "viewer page: http://$page_host:$ws_port/ (also :$((ws_port + 1)))" >&2
 
 cmd=("$here/main_go" --logFormat=console --logLevel=info imzero2 demo
-    --clientBinary "$here/target/headless/release/imzero2"
+    --clientBinary "$rust_bin"
     --clientInitialMainWindowWidth "$WINDOW_W"
     --clientInitialMainWindowHeight "$WINDOW_H")
 [ -n "$MAIN_FONT" ]     && cmd+=(--mainFontTTF "$MAIN_FONT")
