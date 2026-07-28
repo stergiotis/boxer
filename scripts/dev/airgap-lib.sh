@@ -148,7 +148,7 @@ airgap_rust_sysroot() {  # <cratedir>
             echo "  A distro-packaged Rust cannot be shipped as an isolated toolchain" >&2
             echo "  and ignores $1/rust-toolchain." >&2
             echo "  Install the pinned toolchain via rustup so it can be bundled, e.g.:" >&2
-            echo "      rustup toolchain install <channel> --component rustfmt clippy" >&2
+            echo "      rustup toolchain install <channel> -c rustfmt -c clippy" >&2
             exit 1 ;;
     esac
     [ -x "$sysroot/bin/cargo" ] || {

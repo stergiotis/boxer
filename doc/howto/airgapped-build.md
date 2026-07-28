@@ -80,10 +80,14 @@ Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
 
 - `go` — the signed release toolchain ([ADR-0085](../adr/0085-imzero2-demo-pull-build-atomic-deploy.md));
   its `GOROOT` is shipped verbatim.
-- `full` scope: `cargo`/`rustc` installed **via rustup** (so the channel-1.92
-  toolchain pinned by `rust/imzero2/rust-toolchain` can be shipped as an
-  isolated copy). A distro-packaged Rust under `/usr` is refused — the script
-  tells you to `rustup toolchain install 1.92 --component rustfmt clippy`.
+- `full` scope: `cargo`/`rustc` installed **via rustup**, so the channel pinned
+  by [rust/imzero2/rust-toolchain](../../rust/imzero2/rust-toolchain) can be
+  shipped as an isolated copy. A distro-packaged Rust under `/usr` is refused —
+  install the pinned channel with
+  `rustup toolchain install <channel> -c rustfmt -c clippy`. Do not run that
+  concurrently with a `cargo` invocation inside `rust/imzero2/`: the pin makes
+  cargo auto-install the same toolchain, the two races roll each other back, and
+  you are left with a half-installed sysroot.
 - `git`, `tar`, and `zstd` (falls back to `gzip`).
 - Commit your work first: the source tree is taken from `git archive HEAD`, so
   uncommitted changes are not included (the two airgap files are copied in
