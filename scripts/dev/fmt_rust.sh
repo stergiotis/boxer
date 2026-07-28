@@ -1,8 +1,11 @@
 #!/bin/bash
 # Format every Rust crate under ./rust with its OWN pinned toolchain.
 #
-# Each crate carries a rust-toolchain{,.toml} file (rust/imzero2 + rust/watermark
-# pin 1.92 -> rustfmt 1.8.0; rust/h3bridge pins stable). Running `cargo fmt` from
+# Each crate carries a rust-toolchain{,.toml} file (rust/imzero2 pins 1.96 ->
+# rustfmt 1.9.0; rust/watermark pins 1.92 -> rustfmt 1.8.0; rust/h3bridge pins
+# stable — so a checkout needs BOTH pinned toolchains installed to format the
+# whole tree, and the two rustfmt versions agree on the committed source today).
+# Running `cargo fmt` from
 # *inside* the crate directory makes the rustup proxy resolve that crate's pin,
 # so the committed Rust stays byte-stable regardless of which rustfmt happens to
 # be the machine's default toolchain.
@@ -24,7 +27,7 @@
 # Wired into scripts/ci/lint.sh via `--check`.
 #
 # NOTE: rust/h3bridge pins the rolling `stable` channel, so its formatting is
-# only reproducible until the next stable release; the 1.92-pinned crates are
+# only reproducible until the next stable release; the version-pinned crates are
 # fully reproducible.
 
 set -e
@@ -65,7 +68,7 @@ checked=0
 for manifest in "${manifests[@]}"; do
     crate=$(dirname "$manifest")
     # Skip gracefully when this crate's PINNED toolchain can't be resolved (e.g. a
-    # contributor with cargo but not the 1.92 toolchain, offline). `cargo --version`
+    # contributor with cargo but not that pinned channel, offline). `cargo --version`
     # runs from the crate dir so the rustup proxy resolves the pin; mirrors
     # scripts/ci/watermark_test.sh and keeps local lint green.
     if ! ( cd "$crate" && cargo --version >/dev/null 2>&1 ); then

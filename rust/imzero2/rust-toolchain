@@ -5,5 +5,8 @@
 # to the user in the error, instead of "error: invalid channel name '[toolchain]'".
 
 [toolchain]
-channel = "1.92"  # Avoid specifying a patch version here; see https://github.com/emilk/eframe_template/issues/145
+# 1.96 is a floor, not a preference: h3o 0.10 calls f64::mul_add from a const fn,
+# which rustc only const-stabilised in 1.94. Do not lower this below 1.94 without
+# checking the airgap bundle's Rust compile (scripts/dev/airgap-bundle.sh) first.
+channel = "1.96"  # Avoid specifying a patch version here; see https://github.com/emilk/eframe_template/issues/145
 components = [ "rustfmt", "clippy" ]
