@@ -36,6 +36,18 @@
 //! rawvideo dimensions are fixed per ffmpeg invocation. Every (re)spawn
 //! begins the stream at SPS/PPS + IDR, satisfying the SD4 (re)connect
 //! rule.
+//!
+//! That respawn is *budgeted* ([`restart_action`]). `dead` stays set until a
+//! spawn installs a fresh mailbox, so the frame path is itself the retry loop:
+//! an encoder that can never start — an ffmpeg missing the lane's encoder, a
+//! bad [`crate::imzero2::codeclane::ffmpeg_bin`] — would otherwise be reaped
+//! and respawned on every frame, at frame rate, forever, one error line each.
+//! Attempts are spaced by [`RESTART_BACKOFF`], a run lasting
+//! [`RESTART_STABLE_AFTER`] clears the streak (so transient deaths always
+//! recover), and [`MAX_FAST_RESTARTS`] consecutive fast deaths stop the retries
+//! with a single terminal error. [`CodecLane::best`] is the other half of this:
+//! it probes the software lane before returning it, so an unusable lane should
+//! not reach the sink in the first place.
 
 use crate::imzero2::codeclane::{ffmpeg_bin, CodecLane};
 use crate::imzero2::framesink::FrameSink;
@@ -186,6 +198,60 @@ pub struct EncoderSink {
     lane: CodecLane,
     target: EncoderTarget,
     restarts: u32,
+    /// When the current ffmpeg was spawned — the supervisor's clock for
+    /// [`RESTART_BACKOFF`] and [`RESTART_STABLE_AFTER`].
+    last_spawn: std::time::Instant,
+    /// Consecutive restarts where the encoder died before it had run for
+    /// [`RESTART_STABLE_AFTER`]. Reset by any run that lasts longer.
+    fast_restarts: u32,
+    /// Set once the fast-restart budget is spent: the encoder is broken in a
+    /// way retrying cannot fix, so stop retrying and stop logging. Cleared by
+    /// a geometry change, which is a genuinely new configuration.
+    gave_up: bool,
+}
+
+/// Minimum spacing between respawn attempts. Without it the sink retries on
+/// every frame — at 60 fps that is 60 process spawns and 60 error lines per
+/// second, which is the log flood that makes a broken encoder look like a
+/// render-loop bug.
+const RESTART_BACKOFF: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// An encoder that ran at least this long before dying counts as healthy: the
+/// failure was transient (an OOM kill, a GPU reset, a full disk on the file
+/// target) rather than a configuration that can never work.
+const RESTART_STABLE_AFTER: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Consecutive fast restarts tolerated before the sink gives up. With the
+/// backoff above this is a few seconds of trying, which covers a transient
+/// stall without spinning forever on an ffmpeg that exits immediately.
+const MAX_FAST_RESTARTS: u32 = 5;
+
+/// What the supervisor does about an encoder that just died.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RestartAction {
+    /// Drop this frame: either the backoff has not elapsed, or the sink has
+    /// already given up on the lane.
+    Wait,
+    /// Respawn, carrying the new consecutive-fast-restart count.
+    Restart { fast_restarts: u32 },
+    /// The budget is spent — stop retrying and stop logging.
+    GiveUp,
+}
+
+/// The restart policy, separated from the sink so it is testable without
+/// spawning a real encoder: given how long the dead encoder ran and how many
+/// fast restarts preceded it, decide whether to wait, respawn, or give up.
+fn restart_action(gave_up: bool, ran_for: std::time::Duration, fast_restarts: u32) -> RestartAction {
+    if gave_up || ran_for < RESTART_BACKOFF {
+        return RestartAction::Wait;
+    }
+    // A run that lasted counts as healthy, so the streak restarts at one.
+    let fast = if ran_for >= RESTART_STABLE_AFTER { 1 } else { fast_restarts + 1 };
+    if fast > MAX_FAST_RESTARTS {
+        RestartAction::GiveUp
+    } else {
+        RestartAction::Restart { fast_restarts: fast }
+    }
 }
 
 impl EncoderSink {
@@ -208,6 +274,9 @@ impl EncoderSink {
             lane,
             target,
             restarts: 0,
+            last_spawn: std::time::Instant::now(),
+            fast_restarts: 0,
+            gave_up: false,
         };
         sink.spawn(false)?;
         Ok(sink)
@@ -296,6 +365,9 @@ impl EncoderSink {
         self.drain_stop = drain_stop;
         self.feeder = Some(feeder);
         self.drain = Some(drain);
+        // Supervisor clock: how long this encoder survives decides whether its
+        // death counts as transient or as another fast restart.
+        self.last_spawn = std::time::Instant::now();
         Ok(())
     }
 
@@ -341,18 +413,51 @@ impl FrameSink for EncoderSink {
                     to_h = height,
                     "frame geometry changed — restarting encoder"
                 );
+                // A resize is a new configuration, not a retry of the failed
+                // one: it may well encode where the old geometry could not
+                // (hardware encoders reject sizes below their coded minimum),
+                // so it re-arms a sink that had given up.
+                self.gave_up = false;
+                self.fast_restarts = 0;
             } else {
-                self.restarts += 1;
-                tracing::error!(
-                    restarts = self.restarts,
-                    "ffmpeg encoder feeder died — restarting encoder"
-                );
+                // Supervised restart. `died` stays set until a spawn installs a
+                // fresh mailbox, so without rate limiting this branch runs on
+                // every frame for as long as the encoder stays broken.
+                match restart_action(self.gave_up, self.last_spawn.elapsed(), self.fast_restarts) {
+                    RestartAction::Wait => return,
+                    RestartAction::GiveUp => {
+                        self.gave_up = true;
+                        self.reap();
+                        tracing::error!(
+                            restarts = self.restarts,
+                            lane = ?self.lane.codec,
+                            ffmpeg = %crate::imzero2::codeclane::ffmpeg_bin(),
+                            "ffmpeg encoder died {MAX_FAST_RESTARTS} times without staying up — \
+                             giving up on this lane. The stream is dead until the viewport \
+                             resizes or the codec is switched; the mesh lane needs no encoder."
+                        );
+                        return;
+                    }
+                    RestartAction::Restart { fast_restarts } => {
+                        self.fast_restarts = fast_restarts;
+                        self.restarts += 1;
+                        tracing::error!(
+                            restarts = self.restarts,
+                            fast_restarts = self.fast_restarts,
+                            "ffmpeg encoder feeder died — restarting encoder"
+                        );
+                    }
+                }
             }
             self.reap();
             self.width = width;
             self.height = height;
             if let Err(e) = self.spawn(true) {
-                tracing::error!(error=%e, "ffmpeg encoder respawn failed; will retry on next frame");
+                tracing::error!(error=%e, "ffmpeg encoder respawn failed; will retry after backoff");
+                // Count the failed attempt against the budget: spawn() never
+                // installed a fresh mailbox, so `died` is still set and this
+                // branch is what the next frame re-enters.
+                self.last_spawn = std::time::Instant::now();
                 return;
             }
         }
@@ -534,6 +639,66 @@ fn drain_to_channel_nut(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    // Restart supervision. Before it, a lane that could never encode (an
+    // ffmpeg without the encoder, ADR-0088 SD5) made on_frame reap and respawn
+    // a doomed ffmpeg on every frame: 60 spawns and 60 error lines a second,
+    // forever. `died` stays set until a spawn installs a fresh mailbox, so the
+    // frame path itself is the retry loop and the policy has to stop it.
+
+    #[test]
+    fn restart_waits_until_the_backoff_elapses() {
+        // The frame immediately after a death must not respawn.
+        assert_eq!(restart_action(false, Duration::ZERO, 0), RestartAction::Wait);
+        assert_eq!(
+            restart_action(false, RESTART_BACKOFF - Duration::from_millis(1), 0),
+            RestartAction::Wait
+        );
+    }
+
+    #[test]
+    fn restart_counts_a_short_run_against_the_budget() {
+        // Past the backoff but well short of "healthy": each death advances
+        // the streak, and the last one inside the budget still restarts.
+        assert_eq!(
+            restart_action(false, RESTART_BACKOFF, 0),
+            RestartAction::Restart { fast_restarts: 1 }
+        );
+        assert_eq!(
+            restart_action(false, RESTART_BACKOFF, MAX_FAST_RESTARTS - 1),
+            RestartAction::Restart { fast_restarts: MAX_FAST_RESTARTS }
+        );
+    }
+
+    #[test]
+    fn restart_gives_up_once_the_budget_is_spent() {
+        assert_eq!(
+            restart_action(false, RESTART_BACKOFF, MAX_FAST_RESTARTS),
+            RestartAction::GiveUp
+        );
+    }
+
+    #[test]
+    fn restart_forgives_a_streak_after_a_healthy_run() {
+        // A transient death (OOM kill, GPU reset) after a long healthy run
+        // must not inherit an old streak, or a host that loses its encoder
+        // once an hour would eventually stop recovering.
+        assert_eq!(
+            restart_action(false, RESTART_STABLE_AFTER, MAX_FAST_RESTARTS),
+            RestartAction::Restart { fast_restarts: 1 }
+        );
+    }
+
+    #[test]
+    fn restart_stays_quiet_once_given_up() {
+        // No respawn and no log line, however long the sink keeps receiving
+        // frames — this is what turns the flood into a single error.
+        assert_eq!(
+            restart_action(true, RESTART_STABLE_AFTER * 100, 0),
+            RestartAction::Wait
+        );
+    }
 
     /// H1: a drain parked on a full video channel (a viewer that stopped
     /// reading the socket) must abandon its send the moment reap() sets the

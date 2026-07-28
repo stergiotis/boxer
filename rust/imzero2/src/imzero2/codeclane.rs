@@ -8,7 +8,8 @@
 //!
 //! Backend (hardware/software) selection is [`CodecLane::best`]: per codec it
 //! prefers the hardware (VAAPI) lane when [`probe_lane`] confirms it actually
-//! encodes on this host, else the portable software lane (ADR-0088 SD5). The
+//! encodes on this host, else the software lane when that probes clean, else
+//! the encoderless mesh lane (ADR-0088 SD5, ADR-0128). The
 //! same rule drives both the startup default and the runtime `setVideoPipeline`
 //! switch, so the encode backend reported to the Go control always matches what
 //! is used. H.264 also has an explicit-args escape hatch ([`CodecLane::h264`] —
@@ -312,10 +313,25 @@ impl CodecLane {
     }
 
     /// The best working lane for a codec on this host: hardware (VAAPI) if it
-    /// actually encodes here, else the portable software lane (SD5). The same
-    /// rule drives the startup default and the runtime switch, so the encode
-    /// backend reported to the Go control matches what is used. The mesh lane
-    /// (ADR-0128) has no encoder to probe and short-circuits.
+    /// actually encodes here, else the portable software lane (SD5), else the
+    /// encoderless mesh draw-stream lane (ADR-0128). The same rule drives the
+    /// startup default and the runtime switch, so the encode backend reported
+    /// to the Go control matches what is used. The mesh lane has no encoder to
+    /// probe and short-circuits.
+    ///
+    /// The software lane is probed rather than assumed. It is the last encoder
+    /// resort, so returning it unchecked hands [`crate::imzero2::encoderpipe`]
+    /// a lane that cannot spawn, and the sink then reaps and respawns a
+    /// doomed ffmpeg on every frame. That is not hypothetical on a trimmed
+    /// build: an ffmpeg without `libopenh264` fails the H.264 software lane
+    /// (see [`MISSING_COMPONENT`]), and a fully static ffmpeg — which cannot
+    /// `dlopen` a VA driver — fails *every* hardware lane, so software is the
+    /// only candidate left and its failure is terminal.
+    ///
+    /// Mesh is the honest fallback because it needs no encoder at all: the
+    /// host serializes tessellated draw commands and the viewer rasterizes
+    /// them in WebGL2. Losing video is worse than losing the requested codec,
+    /// and a silently dead stream is worse than both.
     pub fn best(codec: VideoCodec) -> Self {
         if codec == VideoCodec::Mesh {
             return Self::mesh();
@@ -324,7 +340,18 @@ impl CodecLane {
         if probe_lane(&hw).is_ok() {
             return hw;
         }
-        Self::software(codec)
+        let sw = Self::software(codec);
+        let reason = probe_lane(&sw);
+        if reason.is_ok() {
+            return sw;
+        }
+        tracing::warn!(
+            ?codec,
+            ?reason,
+            ffmpeg = %ffmpeg_bin(),
+            "no working encoder lane for this codec — falling back to the mesh draw-stream lane"
+        );
+        Self::mesh()
     }
 
     /// True when this lane uses a hardware (VAAPI) encoder.
