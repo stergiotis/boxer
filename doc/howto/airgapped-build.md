@@ -96,9 +96,10 @@ Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
 ## Steps
 
 ```bash
-# 1. Pack (on the connected host). Full scope, verifying the Rust offline
-#    compile too (slow — omit --verify-rust to skip it):
-scripts/dev/airgap-bundle.sh --scope full --verify-rust
+# 1. Pack (on the connected host). Full scope compiles the vendored crates
+#    offline with the toolchain the bundle ships (slow, and the only check that
+#    the Rust half builds on the target); --skip-rust-verify opts out:
+scripts/dev/airgap-bundle.sh --scope full
 #    ...or the lean path:
 scripts/dev/airgap-bundle.sh --scope go-only
 #    -> boxer-airgap-<scope>-<arch>-<date>.tar.zst

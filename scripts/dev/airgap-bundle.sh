@@ -18,6 +18,18 @@
 #                    toolchain + ~660 vendored crates + the build-time C
 #                    compiler requirement. Much smaller.
 #
+# For --scope full the vendored crates are COMPILED here, offline, with the very
+# toolchain the bundle ships, before the tarball is packed. This is slow (a full
+# release build of the imzero2 crate set) but it is the only check that the Rust
+# half of the bundle is actually buildable on the target: nothing else catches a
+# crate whose MSRV has drifted past rust/imzero2/rust-toolchain. That is not
+# hypothetical — h3o 0.10 calls f64::mul_add from a const fn, const-stable only
+# since rustc 1.94, which the then-1.92 pin could not compile. A crate that
+# declares no `rust-version` (h3o does not) defeats cargo's MSRV-aware resolver,
+# so this compile is the only line of defence.
+#   --skip-rust-verify  pack without compiling (local iteration; the bundle may
+#                       then ship a Rust tree its own toolchain cannot build).
+#
 # ffmpeg USED to be on that list and no longer is: the bundle now builds a
 # static, software-only ffmpeg carrying exactly the components the imzero2
 # headless encoder invokes, ships it at _airgap/bin/ffmpeg, and the unbundler
@@ -63,7 +75,7 @@ cd "$repo"
 # ---- args -------------------------------------------------------------------
 scope=full
 out=""
-verify_rust=0
+verify_rust=1
 ship_ffmpeg=1
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -71,7 +83,8 @@ while [ $# -gt 0 ]; do
         --scope=*)      scope="${1#*=}"; shift ;;
         --out)          out="${2:-}"; shift 2 ;;
         --out=*)        out="${1#*=}"; shift ;;
-        --verify-rust)  verify_rust=1; shift ;;  # full Rust compile is slow; off by default
+        --verify-rust)  verify_rust=1; shift ;;  # now the default; kept for callers that pass it
+        --skip-rust-verify) verify_rust=0; shift ;;
         --no-ffmpeg)    ship_ffmpeg=0; shift ;;  # rely on the target's own ffmpeg
         -h|--help)
             grep '^#' "$BASH_SOURCE" | sed 's/^# \?//'; exit 0 ;;
@@ -166,7 +179,8 @@ if [ "$scope" = full ]; then
         rm -rf -- "$tmp_cargo"
         echo "    Rust vendor is offline-complete."
     else
-        echo "NOTE: skipped the Rust offline compile (pass --verify-rust to run it)." >&2
+        airgap_warn "skipped the Rust offline compile (--skip-rust-verify)."
+        airgap_warn "  The bundle may ship a Rust tree its own pinned toolchain cannot build."
     fi
 
     airgap_ship_goroot "$src/_airgap/toolchains/go"

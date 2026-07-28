@@ -36,8 +36,9 @@ provisions and builds on the target. The recipe is
 - **Rust (imzero2)** — two scopes:
   - `full`: `cargo vendor` (the workspace + h3bridge, including the `egui-snarl`
     git dependency, whose source-replacement stanza the generated config keeps)
-    plus the rustup-pinned channel-1.92 toolchain sysroot; the target compiles
-    offline (`CARGO_NET_OFFLINE=true`, vendored sources).
+    plus the rustup-pinned toolchain sysroot named by
+    [rust/imzero2/rust-toolchain](../../rust/imzero2/rust-toolchain); the target
+    compiles offline (`CARGO_NET_OFFLINE=true`, vendored sources).
   - `go-only`: ship imzero2 **prebuilt**, dropping the Rust toolchain, the
     vendored crates, and the build-time C-compiler requirement.
 - **Non-vendorable residue** the environment must still supply (the unbundler
@@ -60,8 +61,8 @@ provisions and builds on the target. The recipe is
   integration / single portable artifact respectively, but multiple packaging
   pipelines or GPU passthrough; out of scope.
 - **Distro-packaged Rust.** Refused for `full` scope: a sysroot under `/usr`
-  cannot be relocated into the bundle and ignores the 1.92 pin. The bundle
-  requires a rustup-managed toolchain.
+  cannot be relocated into the bundle and ignores the `rust-toolchain` pin. The
+  bundle requires a rustup-managed toolchain.
 
 ## Consequences
 
@@ -145,9 +146,50 @@ the MANIFEST records which happened. Verify a bundled binary with
 [scripts/dev/verify-ffmpeg-lanes.sh](../../scripts/dev/verify-ffmpeg-lanes.sh),
 which replays the encoder's real argv rather than trusting `ffmpeg -encoders`.
 
+### 2026-07-28 — the Rust offline compile becomes the default, not an opt-in
+
+A `full` bundle reached a target and failed to build there:
+
+```text
+error: `std::f64::<impl f64>::mul_add` is not yet stable as a const fn
+  --> h3o-0.10.0/src/math/functions-std.rs:58:5
+```
+
+`h3o` — a direct imzero2 dependency — calls `f64::mul_add` from a `const fn`,
+which rustc const-stabilised in **1.94**. The bundle shipped and built with the
+then-pinned channel 1.92. The pin is now **1.96**.
+
+**What the original decision missed.** A pinned channel is a floor the crate
+graph can silently outgrow. Cargo's MSRV-aware resolution normally guards that,
+but only for crates that declare `rust-version`; `h3o` declares none, so
+resolution happily picked a release the pinned toolchain cannot compile. Nothing
+on the build host notices, because the host's own default toolchain is newer and
+every ordinary `cargo build` uses it — the pinned sysroot is exercised on exactly
+one path, and that path ran on the target, after the transfer, where there is no
+network and no second toolchain to fall back to. The one place the breakage was
+observable before shipping was the offline verification compile, and that was
+`--verify-rust`: opt-in, off by default, skipped with a `NOTE` on stderr.
+
+So the guarantee the `full` scope exists to provide — *this tarball builds on a
+disconnected host* — was never actually checked at pack time unless someone
+remembered a flag. **It is now the default.** `--skip-rust-verify` opts out and
+warns that the resulting bundle may ship a Rust tree its own toolchain cannot
+build.
+
+This corrects the Positive consequence above. That end-to-end validation was
+real, but it was a point-in-time observation, not an invariant: it said nothing
+about a bundle packed months later against a drifted crate graph. The compile is
+what turns it into a property of every `full` bundle, so the claim now holds by
+construction rather than by recollection.
+
+**Cost.** Packing `full` now takes an extra full release build of the imzero2
+crate set — ~1 minute cold on a 32-thread workstation, longer on a modest CI
+runner. That is the correct trade against shipping a tarball whose Rust half does
+not compile, which cannot be diagnosed or repaired on the far side of an air gap.
+
 ## Status
 
-Accepted (2026-06-23; updated 2026-07-14).
+Accepted (2026-06-23; updated 2026-07-28).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
