@@ -16,7 +16,7 @@ path = "src/bin/emit_golden.rs"
 required-features = []
 
 [dependencies]
-h3o = { version = "0.9.4", features = ["geo"] }
+h3o = { version = "0.10.0", features = ["geo"] }
 geo-types = { version = "0.7", default-features = false }
 
 # h3o[geo] pulls geo → rand → getrandom. On wasm32-unknown-unknown, getrandom
