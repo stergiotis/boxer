@@ -28,6 +28,13 @@
 #   builtin -- on Fedora 42, which drops the `which` package and puts nasm in
 #   /usr/sbin, an otherwise complete toolchain fails with "Neither yasm nor
 #   nasm have been found" while nasm is plainly installed.
+#
+#   The default build also needs a static C++ runtime (libstdc++-static on RPM
+#   distros): openh264 is C++, its pkg-config file carries -lstdc++, and the
+#   static link therefore needs libstdc++.a. Without it ffmpeg's configure
+#   reports "openh264 >= 1.3.0 not found using pkg-config" -- which reads as a
+#   missing openh264, though openh264 built and installed perfectly well.
+#   --without-h264 drops that requirement along with the encoder.
 set -e
 set -o pipefail
 
@@ -115,6 +122,16 @@ echo 'int main(void){return 0;}' >"$src_dir/.cc-probe.c"
 "${CC:-cc}" -static -o "$src_dir/.cc-probe" "$src_dir/.cc-probe.c" 2>/dev/null ||
     die "this toolchain cannot link -static (install glibc-static or build on a musl host)"
 rm -f "$src_dir/.cc-probe" "$src_dir/.cc-probe.c"
+if [ "$with_h264" = 1 ]; then
+    # Probe the static C++ link the way ffmpeg's configure will: openh264 is
+    # C++ and its .pc carries -lstdc++, so a missing libstdc++.a surfaces much
+    # later as "openh264 >= 1.3.0 not found using pkg-config", blaming the
+    # wrong component entirely.
+    echo 'int main(void){return 0;}' >"$src_dir/.cxx-probe.cc"
+    "${CXX:-c++}" -static -o "$src_dir/.cxx-probe" "$src_dir/.cxx-probe.cc" 2>/dev/null ||
+        die "this toolchain cannot link C++ -static (install libstdc++-static; needed by openh264, or pass --without-h264)"
+    rm -f "$src_dir/.cxx-probe" "$src_dir/.cxx-probe.cc"
+fi
 
 fetch_one() { # <url> <file>
     [ -f "$src_dir/$2" ] && return 0
