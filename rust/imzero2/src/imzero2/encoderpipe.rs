@@ -37,7 +37,7 @@
 //! begins the stream at SPS/PPS + IDR, satisfying the SD4 (re)connect
 //! rule.
 
-use crate::imzero2::codeclane::CodecLane;
+use crate::imzero2::codeclane::{ffmpeg_bin, CodecLane};
 use crate::imzero2::framesink::FrameSink;
 use crate::imzero2::inputproto as pb;
 use crate::imzero2::nutreader::NutReader;
@@ -219,7 +219,7 @@ impl EncoderSink {
     }
 
     fn spawn(&mut self, restart: bool) -> std::io::Result<()> {
-        let mut cmd = std::process::Command::new("ffmpeg");
+        let mut cmd = std::process::Command::new(ffmpeg_bin());
         cmd.arg("-hide_banner")
             .arg("-loglevel")
             .arg("warning")

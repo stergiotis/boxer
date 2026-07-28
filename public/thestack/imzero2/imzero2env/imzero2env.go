@@ -185,6 +185,18 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// FfmpegBin pins the ffmpeg binary the Rust client spawns for both the
+	// SD5 lane probe and the stream encoder (codeclane.rs, encoderpipe.rs),
+	// replacing the bare PATH lookup. Set it when the host must use one
+	// specific build — an airgapped target pointing at a bundled static
+	// ffmpeg — without shadowing the system ffmpeg for other tools. Empty
+	// keeps the PATH lookup. Read by the Rust client, not by Go.
+	FfmpegBin = env.NewPath(env.Spec{
+		Name:        "IMZERO2_FFMPEG_BIN",
+		Description: "explicit path to the ffmpeg binary the headless encoder and lane probe spawn; empty uses the PATH lookup",
+		Category:    env.CategoryDev,
+	})
+
 	// HeadlessCodec picks the startup video codec lane (ADR-0088 SD4): the host
 	// muxes through NUT and the viewer decodes via WebCodecs. h264 (default)
 	// also honours IMZERO2_HEADLESS_ENCODER_ARGS; vp9/av1 use the built-in

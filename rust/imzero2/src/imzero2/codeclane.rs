@@ -396,6 +396,25 @@ fn classify_probe_stderr(stderr: &str) -> LaneProbe {
     }
 }
 
+/// The ffmpeg binary every lane spawns — the [`probe_lane`] trial encode and
+/// the [`crate::imzero2::encoderpipe`] stream encoder alike. `IMZERO2_FFMPEG_BIN`
+/// replaces the bare `ffmpeg` PATH lookup with an explicit path, so a
+/// deployment can pin one known-good build without shadowing the system ffmpeg
+/// for every other tool on the host: an airgapped target ships a static ffmpeg
+/// under its own prefix and points this at it. Unset or blank keeps the PATH
+/// lookup, which is what every developer host does.
+pub fn ffmpeg_bin() -> String {
+    resolve_ffmpeg_bin(std::env::var("IMZERO2_FFMPEG_BIN").ok())
+}
+
+/// [`ffmpeg_bin`] minus the environment read, so the fallback rule is testable
+/// without mutating process-wide state from a parallel test binary.
+fn resolve_ffmpeg_bin(configured: Option<String>) -> String {
+    configured
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "ffmpeg".to_owned())
+}
+
 /// SD5 host-encode probe: per codec, the **software** and **hardware** lane
 /// outcomes on this host. A 2-frame probe-encode to `-f null` per lane — a
 /// *listing* would miss the Fedora-mesa `h264_vaapi`→ENOSYS class, where the
@@ -426,7 +445,7 @@ pub fn probe_host_encode() -> Vec<(VideoCodec, LaneProbe, LaneProbe)> {
 /// on stock Fedora mesa). stderr is captured to classify the failure and
 /// discarded on success.
 pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
-    let mut cmd = std::process::Command::new("ffmpeg");
+    let mut cmd = std::process::Command::new(ffmpeg_bin());
     // The probe frame must clear hardware encoders' minimum coded size: AMD VCN
     // rejects anything below 128×128 ("Hardware does not support encoding at
     // size …" → "Error while opening encoder"), which classify_probe_stderr
@@ -496,6 +515,24 @@ fn av1_level(width: u32, height: u32) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // IMZERO2_FFMPEG_BIN: an explicit path wins, anything blank falls back to
+    // the PATH lookup. Blank-is-unset matters because a deployment env file
+    // may always write the key, empty when no ffmpeg is bundled.
+    #[test]
+    fn ffmpeg_bin_defaults_to_path_lookup() {
+        assert_eq!(resolve_ffmpeg_bin(None), "ffmpeg");
+        assert_eq!(resolve_ffmpeg_bin(Some(String::new())), "ffmpeg");
+        assert_eq!(resolve_ffmpeg_bin(Some("   ".to_owned())), "ffmpeg");
+    }
+
+    #[test]
+    fn ffmpeg_bin_honours_explicit_path() {
+        assert_eq!(
+            resolve_ffmpeg_bin(Some("/opt/airgap/bin/ffmpeg".to_owned())),
+            "/opt/airgap/bin/ffmpeg"
+        );
+    }
 
     // Real ffmpeg 7 stderr captured on a Fedora-mesa host for each failure
     // class. These pin classify_probe_stderr against the actual wording so a
