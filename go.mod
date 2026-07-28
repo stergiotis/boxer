@@ -34,7 +34,7 @@ require (
 	github.com/hishamk/statetrooper v0.1.4
 	github.com/klauspost/compress v1.19.1
 	github.com/matoous/go-nanoid/v2 v2.1.0
-	github.com/mattn/go-isatty v0.0.22
+	github.com/mattn/go-isatty v0.0.23
 	github.com/nao1215/markdown v0.13.0
 	github.com/nats-io/nats.go v1.52.0
 	github.com/nozzle/umap-go v0.0.0-20260301204052-79bd84384eff
