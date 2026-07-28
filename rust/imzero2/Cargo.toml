@@ -121,7 +121,7 @@ roaring = "0.11.2"
 tracing = "0.1.43"
 tracing-subscriber = "0.3.22"
 byteorder = "1.5.0"
-puffin_http = {version = "0.16.1", optional = true }
+puffin_http = {version = "0.17.0", optional = true }
 puffin = {version = "0.19.1", optional = true }
 profiling = "1.0.17"
 mimalloc = "0.1.48"
