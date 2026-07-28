@@ -2692,7 +2692,7 @@ dependencies = [
  "prost",
  "prost-build",
  "protox",
- "puffin 0.19.1",
+ "puffin 0.20.0",
  "puffin_egui",
  "puffin_http",
  "rand 0.9.5",
