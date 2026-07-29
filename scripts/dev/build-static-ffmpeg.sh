@@ -41,7 +41,12 @@ set -o pipefail
 here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 
 FFMPEG_VER=7.1.1
-AOM_VER=3.12.1
+# >= 3.13 is REQUIRED on a host with nasm 3.x. Up to 3.12.1, libaom's test_nasm
+# looked for the literal "-Ox" in `nasm -hf` output; nasm 3.0 moved that text to
+# `nasm -hO`, so the probe reports "Unsupported nasm: multipass optimization not
+# supported" and stops the build -- on a nasm that supports -Ox perfectly well.
+# Newer libaom probes -hO for the flag and -hf only for object formats.
+AOM_VER=3.14.1
 SVTAV1_VER=2.3.0
 VPX_VER=1.15.0
 OPENH264_VER=2.6.0
@@ -174,10 +179,19 @@ fi
 if have libSvtAv1Enc.a; then step "SVT-AV1 cached"; else
     step "build SVT-AV1 ${SVTAV1_VER}"
     mkdir -p "$src_dir/_b/svt" && cd "$src_dir/_b/svt"
+    # CMAKE_POLICY_VERSION_MINIMUM is needed from CMake 4 on: SVT-AV1's vendored
+    # third_party/cpuinfo still declares cmake_minimum_required below 3.5, and
+    # CMake 4 removed compatibility with it ("Compatibility with CMake < 3.5 has
+    # been removed"). This is CMake's own documented escape hatch, and it is
+    # inert on older CMake -- an unused-variable warning, not an error -- so it
+    # does not fork the build by toolchain version. Preferred over bumping the
+    # pin: SVT-AV1 3.0 dropped deprecated API that ffmpeg 7.1.1's libsvtav1
+    # wrapper still uses.
     run svt cmake "$src_dir/SVT-AV1-v${SVTAV1_VER}" \
         -DCMAKE_INSTALL_PREFIX="$prefix" -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-        -DBUILD_APPS=OFF -DBUILD_TESTING=OFF -DBUILD_DEC=OFF
+        -DBUILD_APPS=OFF -DBUILD_TESTING=OFF -DBUILD_DEC=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     run svt make -j"$jobs" install
 fi
 
