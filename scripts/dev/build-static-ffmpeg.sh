@@ -20,21 +20,27 @@
 # Nothing else is downloaded. Verify a result with scripts/dev/verify-ffmpeg-lanes.sh.
 #
 # Build-host prerequisites (system packages, all of them ordinary toolchain):
-#   cc/c++, make, cmake, nasm, perl, GNU diff, the `which` BINARY, and a static
-#   libc (glibc-static on RPM distros; musl hosts have it already and give the
-#   smaller binary). The last two are easy to miss because a modern distro may
-#   ship neither: busybox diff lacks options libvpx's configure uses, and
-#   libvpx probes for its assembler with `which nasm` rather than the shell
-#   builtin -- on Fedora 42, which drops the `which` package and puts nasm in
-#   /usr/sbin, an otherwise complete toolchain fails with "Neither yasm nor
-#   nasm have been found" while nasm is plainly installed.
+#   cc/c++, make, cmake, nasm, perl, pkg-config, tar, GNU diff, the `which`
+#   BINARY, a static libc, and -- for the default h264 build -- a static
+#   libstdc++. You do not have to work from this list: --preflight-only checks
+#   every one of them and prints those that are missing TOGETHER, each with the
+#   package that supplies it on the host it is run on.
 #
-#   The default build also needs a static C++ runtime (libstdc++-static on RPM
-#   distros): openh264 is C++, its pkg-config file carries -lstdc++, and the
-#   static link therefore needs libstdc++.a. Without it ffmpeg's configure
-#   reports "openh264 >= 1.3.0 not found using pkg-config" -- which reads as a
-#   missing openh264, though openh264 built and installed perfectly well.
-#   --without-h264 drops that requirement along with the encoder.
+#   Four of them are easy to miss because a modern distro may ship none of them,
+#   and each fails in a way that names the wrong culprit:
+#     * busybox diff lacks options libvpx's configure uses, which then fails
+#       with a bare "Configuration failed" that names no cause;
+#     * libvpx probes for its assembler with `which nasm` rather than the shell
+#       builtin -- on Fedora 42, which drops the `which` package and puts nasm
+#       in /usr/sbin, an otherwise complete toolchain fails with "Neither yasm
+#       nor nasm have been found" while nasm is plainly installed;
+#     * without a static libc nothing links at all (glibc-static on RPM distros;
+#       musl hosts have one already, and give the smaller binary);
+#     * openh264 is C++ and its pkg-config file carries -lstdc++, so the static
+#       link needs libstdc++.a. Without it ffmpeg's configure reports "openh264
+#       >= 1.3.0 not found using pkg-config" -- which reads as a missing
+#       openh264, though openh264 built and installed perfectly well.
+#       --without-h264 drops that requirement along with the encoder.
 set -e
 set -o pipefail
 
@@ -57,6 +63,7 @@ out=""
 jobs=$(nproc 2>/dev/null || echo 4)
 fetch=0
 with_h264=1
+preflight_only=0
 
 usage() {
     cat <<EOF
@@ -71,6 +78,10 @@ usage: $(basename "$0") [options]
                   then resolve to the encoderless mesh lane -- set the codec
                   explicitly (av1 is the portable choice) if you use this.
   --jobs N        parallel build jobs (default: $jobs)
+  --preflight-only
+                  check the build-host prerequisites and exit, building nothing.
+                  For a caller that runs this build LATE in a longer flow: gate
+                  on it up front instead of discovering a missing cmake at the end.
 EOF
 }
 
@@ -85,6 +96,7 @@ while [ $# -gt 0 ]; do
     --jobs) jobs="$2"; shift 2 ;;
     --fetch) fetch=1; shift ;;
     --without-h264) with_h264=0; shift ;;
+    --preflight-only) preflight_only=1; shift ;;
     -h | --help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -93,7 +105,6 @@ done
 [ -n "$prefix" ] || prefix="$src_dir/_prefix"
 [ -n "$out" ] || out="$PWD/ffmpeg-static"
 log_dir="$src_dir/_logs"
-mkdir -p "$src_dir" "$prefix" "$log_dir"
 export PKG_CONFIG_PATH="$prefix/lib/pkgconfig"
 
 step() { echo "== $*"; }
@@ -113,33 +124,127 @@ run() {
 have() { [ -f "$prefix/lib/$1" ]; }
 
 step "preflight"
-for t in cc make cmake nasm perl; do
-    command -v "$t" >/dev/null 2>&1 || die "$t not on PATH (see the header for prerequisites)"
+
+# Every missing prerequisite is reported AT ONCE, each named with the package
+# that supplies it on this host. Failing on the first one costs the operator a
+# round trip per package, and a distro may plausibly be missing four of these at
+# a time -- a modern Fedora ships neither a static libc nor a static libstdc++,
+# and nasm and cmake are not in any base install.
+pkgmgr=""
+for m in dnf apt-get apk pacman; do
+    if command -v "$m" >/dev/null 2>&1; then pkgmgr=$m; break; fi
 done
+case "$pkgmgr" in
+apt-get) pkg_install="sudo apt-get install" ;;
+apk)     pkg_install="sudo apk add" ;;
+pacman)  pkg_install="sudo pacman -S" ;;
+dnf)     pkg_install="sudo dnf install" ;;
+*)       pkg_install="" ;;
+esac
+
+# Pick the package for this host's family. Where a family ships a thing inside a
+# broader package rather than its own -- Debian's libc.a lives in libc6-dev, its
+# libstdc++.a comes with the g++ metapackage -- name what actually installs it.
+pkg_for() { # <rpm> <deb> <apk> <arch>
+    case "$pkgmgr" in
+    dnf)     echo "$1" ;;
+    apt-get) echo "$2" ;;
+    apk)     echo "$3" ;;
+    pacman)  echo "$4" ;;
+    *)       echo "" ;;
+    esac
+}
+
+miss_what=() miss_pkg=() miss_why=()
+need() { # <what> <package> <why>
+    miss_what+=("$1")
+    miss_pkg+=("$2")
+    miss_why+=("$3")
+}
+lacks() { ! command -v "$1" >/dev/null 2>&1; }
+
+lacks cc         && need cc         "$(pkg_for gcc build-essential build-base gcc)"         "nothing here compiles without it"
+lacks c++        && need c++        "$(pkg_for gcc-c++ build-essential build-base gcc)"     "libaom's cmake project declares CXX"
+lacks make       && need make       "$(pkg_for make build-essential make make)"             "libvpx, openh264 and ffmpeg build with it"
+lacks cmake      && need cmake      "$(pkg_for cmake cmake cmake cmake)"                    "libaom and SVT-AV1 are cmake projects"
+lacks nasm       && need nasm       "$(pkg_for nasm nasm nasm nasm)"                        "libaom, libvpx and ffmpeg assemble their hot paths"
+lacks perl       && need perl       "$(pkg_for perl perl perl perl)"                        "ffmpeg's configure and openh264's makefiles use it"
+lacks tar        && need tar        "$(pkg_for tar tar tar tar)"                            "the pinned sources are tarballs"
+lacks pkg-config && need pkg-config "$(pkg_for pkgconf-pkg-config pkg-config pkgconf pkgconf)" \
+    "ffmpeg's configure locates the codec libraries with it"
+if [ "$fetch" = 1 ]; then
+    lacks curl && need curl "$(pkg_for curl curl curl curl)" "--fetch downloads the tarballs with it"
+fi
+
 # libvpx's configure needs GNU diff; busybox diff lacks the options it uses and
 # fails with a bare "Configuration failed" that names no cause.
-diff --help 2>&1 | grep -q -- '--unified' || die "GNU diff required (busybox diff is not enough)"
+if ! diff --help 2>&1 | grep -q -- '--unified'; then
+    need "GNU diff" "$(pkg_for diffutils diffutils diffutils diffutils)" \
+        "libvpx's configure uses options busybox diff lacks"
+fi
 # ...and it locates its assembler with `which nasm`, not the shell builtin. Test
 # the binary the way libvpx will, or the build dies much later claiming nasm is
 # absent when it is merely unreachable that way.
-command -v which >/dev/null 2>&1 ||
-    die "the 'which' binary is required (libvpx's configure uses it to find nasm)"
-which nasm >/dev/null 2>&1 ||
-    die "'which nasm' fails though nasm is on PATH -- libvpx will not find it (nasm may be in /usr/sbin; add it to PATH)"
-echo 'int main(void){return 0;}' >"$src_dir/.cc-probe.c"
-"${CC:-cc}" -static -o "$src_dir/.cc-probe" "$src_dir/.cc-probe.c" 2>/dev/null ||
-    die "this toolchain cannot link -static (install glibc-static or build on a musl host)"
-rm -f "$src_dir/.cc-probe" "$src_dir/.cc-probe.c"
-if [ "$with_h264" = 1 ]; then
-    # Probe the static C++ link the way ffmpeg's configure will: openh264 is
-    # C++ and its .pc carries -lstdc++, so a missing libstdc++.a surfaces much
-    # later as "openh264 >= 1.3.0 not found using pkg-config", blaming the
-    # wrong component entirely.
-    echo 'int main(void){return 0;}' >"$src_dir/.cxx-probe.cc"
-    "${CXX:-c++}" -static -o "$src_dir/.cxx-probe" "$src_dir/.cxx-probe.cc" 2>/dev/null ||
-        die "this toolchain cannot link C++ -static (install libstdc++-static; needed by openh264, or pass --without-h264)"
-    rm -f "$src_dir/.cxx-probe" "$src_dir/.cxx-probe.cc"
+if lacks which; then
+    need "the 'which' binary" "$(pkg_for which debianutils which which)" \
+        "libvpx's configure finds nasm with it, not the shell builtin"
+elif ! lacks nasm && ! which nasm >/dev/null 2>&1; then
+    need "nasm reachable by 'which'" "" \
+        "nasm is installed but 'which nasm' fails (often /usr/sbin; add it to PATH)"
 fi
+
+probe_dir=$(mktemp -d)
+trap 'rm -rf -- "$probe_dir"' EXIT
+if ! lacks "${CC:-cc}"; then
+    echo 'int main(void){return 0;}' >"$probe_dir/probe.c"
+    if ! "${CC:-cc}" -static -o "$probe_dir/probe" "$probe_dir/probe.c" 2>/dev/null; then
+        need "a static libc" "$(pkg_for glibc-static libc6-dev musl-dev glibc)" \
+            "cc -static cannot link (a musl host already has one)"
+    fi
+fi
+# Probe the static C++ link the way ffmpeg's configure will: openh264 is C++ and
+# its .pc carries -lstdc++, so a missing libstdc++.a surfaces much later as
+# "openh264 >= 1.3.0 not found using pkg-config", blaming the wrong component
+# entirely.
+if [ "$with_h264" = 1 ] && ! lacks "${CXX:-c++}"; then
+    echo 'int main(void){return 0;}' >"$probe_dir/probe.cc"
+    if ! "${CXX:-c++}" -static -o "$probe_dir/probecc" "$probe_dir/probe.cc" 2>/dev/null; then
+        need "a static libstdc++" "$(pkg_for libstdc++-static g++ g++ gcc)" \
+            "c++ -static cannot link; openh264 is C++ (or pass --without-h264)"
+    fi
+fi
+
+n=${#miss_what[@]}
+if [ "$n" -gt 0 ]; then
+    w=0 pw=0 pkgs=()
+    for ((i = 0; i < n; i++)); do
+        if [ ${#miss_what[i]} -gt "$w" ]; then w=${#miss_what[i]}; fi
+        if [ ${#miss_pkg[i]} -gt "$pw" ]; then pw=${#miss_pkg[i]}; fi
+        if [ -n "${miss_pkg[i]}" ]; then pkgs+=("${miss_pkg[i]}"); fi
+    done
+    {
+        printf 'error: %d missing build-host prerequisite%s:\n\n' "$n" "$([ "$n" = 1 ] || echo s)"
+        for ((i = 0; i < n; i++)); do
+            printf '  %-*s  %-*s  %s\n' "$w" "${miss_what[i]}" "$pw" "${miss_pkg[i]}" "${miss_why[i]}"
+        done
+        echo
+        if [ -n "$pkg_install" ] && [ ${#pkgs[@]} -gt 0 ]; then
+            # de-duplicate preserving order: one package can supply several needs
+            printf '  %s %s\n' "$pkg_install" \
+                "$(printf '%s\n' "${pkgs[@]}" | awk '!seen[$0]++' | paste -sd' ')"
+        else
+            echo "  (no package manager recognised here -- install the above by hand)"
+        fi
+    } >&2
+    exit 1
+fi
+
+if [ "$preflight_only" = 1 ]; then
+    echo "  all prerequisites present"
+    exit 0
+fi
+
+mkdir -p "$src_dir" "$prefix" "$log_dir"
 
 fetch_one() { # <url> <file>
     [ -f "$src_dir/$2" ] && return 0

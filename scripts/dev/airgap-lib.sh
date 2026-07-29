@@ -247,6 +247,25 @@ airgap_ship_ffmpeg() {  # <destdir> <srccache> [args...]
     return 1
 }
 
+# Check ONLY the above build's host prerequisites, building nothing. For a caller
+# that ships ffmpeg late in a long flow, gate on this up front: airgap_ship_ffmpeg
+# is best-effort, so without it the first sign of a missing cmake is a finished
+# bundle with no ffmpeg in it. Pass the same extra args as airgap_ship_ffmpeg, or
+# the two disagree about what to check (--without-h264 decides whether a static
+# libstdc++ is required). Success is silent; a failure leaves the builder's report
+# of what is missing, and what package supplies it, on stderr.
+#   args: [extra build-static-ffmpeg.sh args...]
+airgap_preflight_ffmpeg_build() {  # [args...]
+    local builder="$AIRGAP_LIB_DIR/build-static-ffmpeg.sh"
+    if [ ! -x "$builder" ]; then
+        airgap_warn "build-static-ffmpeg.sh not found at $builder — cannot preflight the ffmpeg build."
+        return 1
+    fi
+    # --fetch mirrors airgap_ship_ffmpeg's own invocation: it is what decides
+    # whether curl counts as a prerequisite.
+    "$builder" --preflight-only --fetch "$@" >/dev/null
+}
+
 # Emit the env line that points the imzero2 headless encoder at a bundled
 # ffmpeg. Boxer's Rust client reads IMZERO2_FFMPEG_BIN for both the lane probe
 # and the stream encoder; pointing it here rather than prepending to PATH keeps
