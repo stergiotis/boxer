@@ -91,6 +91,41 @@ func TestSubqueryPickInnermost(t *testing.T) {
 	}
 }
 
+// Exactly one unit is the statement's own query, and it is the one hanging off
+// the outermost `query` — NOT the first the walk reaches, nor everything at
+// nesting depth 1. `query: setStmt* ctes? selectUnionStmt` puts the CTE clause
+// first, so a top-level CTE body is visited earlier and sits at the same depth;
+// classifying by either made a caret in a CTE body report "nothing to narrow
+// to", which is the case run-subquery exists for.
+func TestSubqueryRootIsTheStatementsOwnQuery(t *testing.T) {
+	const s = "WITH recent AS (SELECT number AS n FROM numbers(50)) SELECT r.n FROM recent r"
+	units := parseSubqueryUnits(s)
+	var roots []string
+	for _, u := range units {
+		if u.Root {
+			roots = append(roots, s[u.Src.Start:u.Src.End])
+		}
+	}
+	if len(roots) != 1 {
+		t.Fatalf("got %d root units %q, want exactly 1", len(roots), roots)
+	}
+	if roots[0] != "SELECT r.n FROM recent r" {
+		t.Errorf("root = %q, want the statement's own query", roots[0])
+	}
+}
+
+// …and the caret-level consequence: a top-level CTE body narrows.
+func TestSubqueryCaretInTopLevelCteBodyNarrows(t *testing.T) {
+	run, narrowed := runAtCaret(t,
+		"WITH recent AS (SELECT number AS |n FROM numbers(50)) SELECT r.n FROM recent r")
+	if !narrowed {
+		t.Error("a caret in a top-level CTE body must narrow to that body")
+	}
+	if want := "SELECT number AS n FROM numbers(50)"; run != want {
+		t.Errorf("run:\n got %q\nwant %q", run, want)
+	}
+}
+
 func TestSubqueryHoistsEnclosingWith(t *testing.T) {
 	cases := []struct {
 		name   string

@@ -192,14 +192,41 @@ func parseSubqueryUnits(text string) (units []subqueryUnit) {
 			}
 		}
 	}
-	collectSubqueries(pr, pr.Tree, nil, 0, scopes, &units)
+	collectSubqueries(pr, pr.Tree, nil, 0, scopes, rootUnitNode(pr.Tree), &units)
 	return units
+}
+
+// rootUnitNode returns the statement's own top-level query: the
+// selectUnionStmt hanging directly off the outermost `query`.
+//
+// It has to be identified structurally rather than as "the first one the walk
+// reaches" or "the one at nesting depth 1". `query: setStmt* ctes?
+// selectUnionStmt` puts the CTE clause FIRST, and a top-level CTE body's own
+// selectUnionStmt is reached without passing through any other — so it is
+// visited earlier AND sits at the same depth. Taking either for the root made
+// a caret in a top-level CTE body report "nothing to narrow to", which is
+// precisely the case run-subquery exists for.
+func rootUnitNode(tree antlr.ParserRuleContext) *grammar1.SelectUnionStmtContext {
+	if tree == nil || tree.GetChildCount() == 0 {
+		return nil
+	}
+	// The queryStmt → query shape nanopass.BuildScopes also asserts.
+	query, ok := tree.GetChild(0).(*grammar1.QueryContext)
+	if !ok {
+		return nil
+	}
+	for i := 0; i < query.GetChildCount(); i++ {
+		if u, isUnion := query.GetChild(i).(*grammar1.SelectUnionStmtContext); isUnion {
+			return u
+		}
+	}
+	return nil
 }
 
 // collectSubqueries walks the CST, carrying the scopes open at each node. The
 // chain is extended for a subtree rather than recovered by walking parents back
 // up, so each unit's environment is a copy of what was already in hand.
-func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeFrame, depth int, scopes scopeIndex, out *[]subqueryUnit) {
+func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeFrame, depth int, scopes scopeIndex, root *grammar1.SelectUnionStmtContext, out *[]subqueryUnit) {
 	switch n := node.(type) {
 	case *grammar1.QueryContext:
 		// `query: setStmt* ctes? selectUnionStmt` — the clause sits ABOVE the
@@ -223,13 +250,13 @@ func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeF
 		}
 	case *grammar1.SelectUnionStmtContext:
 		depth++
-		if u, ok := unitFor(pr, n, chain, depth, scopes); ok {
+		if u, ok := unitFor(pr, n, chain, depth, scopes, root); ok {
 			*out = append(*out, u)
 		}
 	}
 	for i := 0; i < node.GetChildCount(); i++ {
 		if child := node.GetChild(i); child != nil {
-			collectSubqueries(pr, child, chain, depth, scopes, out)
+			collectSubqueries(pr, child, chain, depth, scopes, root, out)
 		}
 	}
 }
@@ -242,12 +269,12 @@ func extendChain(chain []scopeFrame, frame scopeFrame) []scopeFrame {
 
 // unitFor builds the unit for one selectUnionStmt node from the scopes open
 // above it.
-func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, chain []scopeFrame, depth int, scopes scopeIndex) (unit subqueryUnit, ok bool) {
+func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, chain []scopeFrame, depth int, scopes scopeIndex, root *grammar1.SelectUnionStmtContext) (unit subqueryUnit, ok bool) {
 	src := pr.SourceRangeOf(node)
 	if src.Empty() {
 		return unit, false
 	}
-	unit = subqueryUnit{Src: src, Root: depth == 1, depth: depth, bodyAt: src.Start}
+	unit = subqueryUnit{Src: src, Root: node == root, depth: depth, bodyAt: src.Start}
 	// The unit's own WITH clause, when its first branch is a bare select. Its
 	// items stay in the shipped text; what is needed here is where they start,
 	// so the hoisted items can be spliced in front of them.
