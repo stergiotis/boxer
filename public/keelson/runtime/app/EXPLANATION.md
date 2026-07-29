@@ -93,6 +93,9 @@ type Manifest struct {
     BackgroundTickHz uint8           // unfocused tick rate; 0 = no tick
 
     PersistedKeys []string  // auto-managed state keys (M2.5+ via storage)
+
+    LaunchKind string  // config kind accepted over windowhost.open (ADR-0135)
+    Workingset bool    // participates in workingsets (ADR-0148); needs LaunchKind
 }
 ```
 
@@ -338,6 +341,89 @@ pinged with a 2s timeout, and on failure an `InMemoryFactsStore` is
 used silently. The audit trail is *best-effort* — write errors are
 logged at warn, but never block the runtime.
 
+### Workingsets — what a closed window leaves behind
+
+A *workingset* is the named record of your app's user-authored working
+state, and it is an instance of your own launch-config DTO: "the launch
+that would reproduce this window". The host writes it at the closing edge
+exactly as it writes a launch row at the opening edge, and hands it back
+at a later plain open. ADR-0148 has the reasoning; this is what you
+implement.
+
+**Participation is three things.** A non-empty `LaunchKind` (the record
+is an instance of that DTO, so an app without a launch config cannot
+have a workingset — `Manifest.Validate` refuses the pair), `Workingset:
+true` in the manifest, and one method:
+
+```go
+type WorkingsetComposerI interface {
+    ComposeWorkingset() (cfg []byte, dirty bool, err error)
+}
+```
+
+Also register with `RegisterFactory`. A singleton instance can only
+consume a config at its one `Mount`, so the host refuses to deliver a
+restore to an instance that already has a window — the same refusal
+ADR-0135 applies to caller-delivered configs.
+
+**The host calls compose at close, before `Unmount`.** That ordering is
+load-bearing: `Unmount` is where you release things, so composing
+afterwards would read a torn-down app. Return the same bytes a caller
+would send to open your app in this state (`buscodec.Encode` over your
+launch DTO).
+
+**`dirty` is the whole gate.** It means a person acted in *this* window —
+an edit, a manual run, a deliberate view change. The host writes nothing
+when it is false, and nothing anywhere byte-compares your bytes against
+the stored record (a config carrying its own timestamp is never
+byte-equal). This rule is what keeps a window someone opened with
+arguments and closed untouched from overwriting the state a user built
+by hand. Compose errors are logged and skip the save; they never disturb
+the close.
+
+**Scope: drafts in, caches and chrome out.** Carry what the user authored
+or chose — buffers, draft parameters, the active view. Not result
+histories or memos (recomputable), not window geometry (the host's), not
+published artifacts. Content too large for a 64 KiB config stays under
+your declared persist keys, and the record carries the reference.
+
+**Restore arrives through the door you already have.** There is no second
+delivery channel: the host routes the stored record through its own
+`OpenWithConfig`, so you decode a launch config in `Mount` as usual.
+What tells the two apart is `MountContextI.LaunchReason()`:
+
+| Reason | What happened |
+|--------|---------------|
+| `plain` | No config was delivered. |
+| `caller` | Another app opened this window with these arguments. |
+| `restore` | The host recovered your own stored record. |
+
+The documented precedence for adopters is **caller config > env override
+> restored config > default**, which is why the reason exists — without
+it you cannot place an environment override between the two config
+tiers. Two rules worth copying from play:
+
+- On `restore`, apply optional fields **unconditionally**. The
+  caller-tier habit of "apply only when non-empty" is wrong for a
+  restored record: an empty field there is a value the user arrived at,
+  and skipping it silently resurrects what they cleared.
+- Leave alone whatever a restored record composes by construction rather
+  than by intent. play composes `AutoRun` false always — restoration is
+  not re-execution — so its restore tier does not touch the `AutoRun`
+  decision at all.
+
+**Where the record lives.** `boxer.facts`, beside the launch rows, keyed
+by (app id, name). v1 wires exactly one name, `default`. Restored opens
+are audited as launches whose caller is `runtime.workingset`, so "which
+windows opened from restored state" is a facts query. Rows are
+append-only — the trail is the history. With ClickHouse down the facts
+store falls back to memory and workingsets last only for the process;
+that is the same best-effort stance as the audit trail, not a bug.
+
+`apps/play` is the reference adoption: `ComposeLaunch` /
+`WorkingsetDirty` on `PlayApp`, `ComposeWorkingset` on its launcher, and
+a reason-aware precedence chain in `Mount`.
+
 ## Invariants
 
 - **`Manifest.Id` is stable for the lifetime of an app.** Once an Id
@@ -404,6 +490,11 @@ That means: don't pickle to disk, don't open badger, don't shell out to
 Storage handle is the only sanctioned path; the runtime takes care of
 backups, retention, and multi-app discovery.
 
+For the state a user *authored* — buffers, drafts, the active view — the
+storage handle is the lower layer, not the interface you want: see
+Workingsets above. Raw keys remain right for content too large or
+complex to sit in a launch config, which the record then references.
+
 ### Hygiene, not security
 
 The capability model is enforced by `google/capslock` plus code review,
@@ -430,6 +521,10 @@ directly.
 
 - [ADR-0026](../../../../doc/adr/0026-app-runtime-and-capability-subjects.md)
   — architecture, subject taxonomy, phasing.
+- [ADR-0135](../../../../doc/adr/0135-app-launch-requests.md) — launch
+  configs, the `windowhost.open` subject, `kindcheck`.
+- [ADR-0148](../../../../doc/adr/0148-app-workingsets.md) — workingsets:
+  the compose contract, the intent gate, the restore precedence.
 - [`registry.go`](./registry.go), [`manifest.go`](./manifest.go),
   [`app.go`](./app.go) — the contract surface and Go-doc reference.
 - `runtime/inprocbus` — bus implementation (M2.1).

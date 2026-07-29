@@ -317,9 +317,81 @@ written at the closing edge exactly as `LaunchRow` records the opening edge.
 - Applets remain stateless across close; the applet primitive is the
   frozen, curated point of the same axis, unchanged by this ADR.
 
+## Update — 2026-07-29: implemented
+
+SD1–SD9 are implemented and green: the facts row and both store backends,
+the `runtime/app` contract growth, the host's save and restore paths, and
+play's adoption. What the implementation settled differently from the
+decision text, or had to decide because the text was silent:
+
+- **Vocabulary home.** SD6 anticipated a dimdata cohort file. There was
+  nothing to declare there: SD2 makes the record an instance of the app's
+  existing `LaunchKind` DTO, so no new codec module and no new DTO
+  columns exist. The two new terms — the workingset kind tag and the set
+  name — are appended to the end of `runtime/vocab`'s membership block
+  instead, which is the same append-only id discipline the ordering
+  constraint asks for. Everything else reuses the launch cohort
+  (`MembRuntimeApp`, `MembRuntimeRun`, `MembLifecycleTileKey`,
+  `MembLaunchConfigKind`, `MembLaunchConfig`, `MembLifecycleStopReason`);
+  a delete row reuses `MembPersistTombstone` rather than minting a
+  parallel term, since the kind tag already disambiguates the row.
+
+- **Where the restore's launch row is written.** `WriteLaunch` lives in
+  the bus-facing open service, which attributes callers from the bus
+  envelope. A restore has no envelope, and the only place that knows a
+  restore happened is `OpenWithConfig`, so the host writes that row
+  itself beside the app-lifecycle "started" row. A plain open that
+  arrived over the bus and then restored therefore produces two launch
+  rows — the caller's plain request and the restore — which is the
+  honest record; `caller = runtime.workingset` still isolates restores.
+
+- **Singleton participation.** The registry does not expose whether an
+  app was registered as a singleton, and nothing was added to make it. On
+  the restore side the existing config-delivery refusal already covers it
+  (SD4's "applies unchanged"): a second window of a singleton participant
+  is refused, loudly, which is the enforcement. On the save side the host
+  skips a window whose AppI instance another window still holds — that
+  state belongs to the survivor — and logs why.
+
+- **Restore-tier field rules, beyond the recorded `BandsSql` case.** A
+  field a record composes by construction rather than by intent must not
+  be applied on restore at all: play composes `AutoRun` false always, so
+  its restore tier leaves the `BOXER_PLAY_AUTORUN` decision untouched
+  rather than overriding it with a meaningless false. The general rule
+  for adopters: on restore, apply what the user chose (unconditionally,
+  empty included), and stay out of what the composer hard-codes.
+
+- **The legacy bridge is narrower than "when env did not win".** play
+  consults its persist keys only for a window that received no config at
+  all. A restored record is the authority for its own window even where
+  it is empty; falling through to the keys there would resurrect exactly
+  what the record says the user cleared.
+
+- **play's "active tab" is what play raised.** The dock's own focus state
+  lives on the Rust side and is not readable from Go, so `ComposeLaunch`
+  reports the last tab play itself raised (panes menu, a snippet
+  delivering into the editor, a launch config's `Tab` tier). A tab the
+  user raised by clicking the dock strip is invisible to the record.
+
+- **Intent tracking is a per-frame comparison.** The editor and the Live
+  checkbox write through `SendRespVal`, whose change-detection callback
+  never fires, so there is no edit event to hang `dirty` on. play
+  snapshots the composed fields each frame and takes its baseline on the
+  first frame — after Mount has finished seeding — which is what makes a
+  launch-seeded window closed untouched read as clean. The one machine
+  writer of a composed field (the Live circuit breaker) re-anchors the
+  baseline instead of marking intent.
+
+- **chstore tests.** The workingset round-trip tests follow the chstore
+  package's existing probe-and-skip convention (skip when no live
+  ClickHouse answers) rather than moving to the integration lane, which
+  would have split one package's tests across two lanes.
+
+Deferred items are unchanged and untouched.
+
 ## Status
 
-Accepted (2026-07-29).
+Accepted (2026-07-29). Implemented 2026-07-29.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

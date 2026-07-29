@@ -268,6 +268,19 @@ written:
   existing dimdata file and documents the constraint for the next
   cohort.
 
+## Update (2026-07-29) — one launch caller is not a bus sender
+
+[ADR-0148](./0148-app-workingsets.md) restores an app's stored
+workingset by routing a plain open through this ADR's own
+`OpenWithConfig`, and audits it as a launch. That row has no `Msg.Sender`
+to attribute — the host is acting on a user's plain open, with no
+requesting app — so it carries the synthetic caller `runtime.workingset`,
+written by the host rather than the open service. The attribution rule
+above ("the bus stamps `Msg.Sender`") still holds for every open that
+crosses the subject; this is the one caller that does not. The singleton
+refusal recorded above now guards restores too, for the same reason: a
+restore is a config delivery.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
