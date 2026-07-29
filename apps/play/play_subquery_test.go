@@ -275,6 +275,38 @@ func TestSubqueryUnparseableStatement(t *testing.T) {
 	}
 }
 
+// Each button is exactly its keystroke: the toggle changes which buttons are
+// on the bar, never what a keystroke means. Both request paths set the same
+// two flags, so what executeRun sees is identical whichever fired.
+func TestRunSubqueryRequestMatchesTheChord(t *testing.T) {
+	byButton := &PlayApp{}
+	// What the Run subquery button's click arm sets.
+	byButton.requestRun, byButton.requestSubquery = true, true
+
+	byChord := &PlayApp{}
+	byChord.applyRunShortcut(false, true)
+
+	if byButton.requestRun != byChord.requestRun ||
+		byButton.requestSubquery != byChord.requestSubquery {
+		t.Errorf("button set (run=%v sub=%v), chord set (run=%v sub=%v) — they must agree",
+			byButton.requestRun, byButton.requestSubquery,
+			byChord.requestRun, byChord.requestSubquery)
+	}
+	// …and the plain chord never asks for a subquery.
+	plain := &PlayApp{}
+	plain.applyRunShortcut(true, false)
+	if !plain.requestRun || plain.requestSubquery {
+		t.Errorf("plain Ctrl+Enter set (run=%v sub=%v), want (true false)",
+			plain.requestRun, plain.requestSubquery)
+	}
+	// Neither fires without a press.
+	idle := &PlayApp{}
+	idle.applyRunShortcut(false, false)
+	if idle.requestRun || idle.requestSubquery {
+		t.Error("no press must request no run")
+	}
+}
+
 // The Subquery toggle is a DISPLAY switch. It must not change what a run
 // ships, and with it off the editor must look exactly as it did before the
 // feature existed.

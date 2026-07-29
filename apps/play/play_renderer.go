@@ -1212,6 +1212,17 @@ func (inst *PlayApp) pollRunShortcuts() {
 	if inst.graph.MainLoading() {
 		return
 	}
+	inst.applyRunShortcut(run, sub)
+}
+
+// applyRunShortcut turns a press into a run request. Split from the poll above
+// the way executeRun is split from Render — no c.* calls, no lane state — so a
+// test can assert that the Run subquery button and Ctrl+Shift+Enter leave the
+// app in the same state, which is the rule the toggle rests on.
+func (inst *PlayApp) applyRunShortcut(run, sub bool) {
+	if !run && !sub {
+		return
+	}
 	inst.requestRun = true
 	inst.runIsAuto = false
 	inst.requestSubquery = sub
@@ -1531,6 +1542,25 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 					inst.requestRun = true
 				}
 			}
+			// Run subquery: the mouse path for Ctrl+Shift+Enter, offered
+			// beside the Subquery mode that explains what it would ship.
+			//
+			// Always enabled, and exactly the chord's action — degrade
+			// included, so a caret at statement level runs the whole query and
+			// the status line says so. Greying it out when there is nothing to
+			// narrow to would be the more informative shape, but egui shows no
+			// hover text on a disabled widget, so it could not say why it was
+			// grey; a button that quietly means something else is worse than
+			// one that does what its twin keystroke does, always.
+			if inst.subqueryMode {
+				for range c.HoverText("Runs just the query the caret is in, with the WITH items and SET prelude it needs carried along — the tinted region in the editor. Same as Ctrl+Shift+Enter. With the caret at statement level there is nothing narrower, and this runs the whole query.").KeepIter() {
+					if c.Button(ids.PrepareStr("runSubquery"), c.Atoms().Text("Run subquery").Keep()).
+						SendResp().HasPrimaryClicked() {
+						inst.requestRun = true
+						inst.requestSubquery = true
+					}
+				}
+			}
 		}
 
 		// Copy SQL — the toolbarMinimal escape hatch (ADR-0132 §SD3): the
@@ -1723,7 +1753,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 		// travels with it. Offered only where there is an editor to decorate.
 		if inst.editorTabPresent() && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
-			for range c.HoverText("Shows what Ctrl+Shift+Enter would run: the query the caret is in, the WITH items and SET prelude carried with it, and any reference to an outer table alias that will NOT resolve once it runs alone.").KeepIter() {
+			for range c.HoverText("Shows what Ctrl+Shift+Enter would run: the query the caret is in, the WITH items and SET prelude carried with it, and any reference to an outer table alias that will NOT resolve once it runs alone. Also adds a Run subquery button beside Run. Changes nothing about what Run or Ctrl+Enter do.").KeepIter() {
 				c.Checkbox(ids.PrepareStr("subqueryMode"), inst.subqueryMode, "Subquery").
 					SendRespVal(&inst.subqueryMode)
 			}

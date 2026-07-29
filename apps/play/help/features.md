@@ -106,7 +106,18 @@ query.
 ### The Subquery toggle
 
 The **Subquery** checkbox in the top bar, off by default, turns on the editor's
-full account of that gesture. It changes nothing about what runs.
+full account of that gesture, and adds a **Run subquery** button beside Run. It
+changes nothing about what Run or Ctrl+Enter do.
+
+Each button is exactly its keystroke, in both directions and in both states of
+the toggle: Run is Ctrl+Enter, Run subquery is Ctrl+Shift+Enter. Neither
+keystroke ever changes meaning — the toggle changes which buttons are on the
+bar, not what anything does.
+
+Run subquery is never greyed out. With the caret at statement level it does
+what the keystroke does: runs the whole query, and says so in the status line.
+
+What the toggle draws:
 
 - The **query that would run** is tinted.
 - The **environment carried with it** — the WITH items in scope, and the `SET`

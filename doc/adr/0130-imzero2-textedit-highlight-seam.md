@@ -611,6 +611,35 @@ all, which is the defect this entry exists for. It arrives as its own argument
 to `buildGutterModel`, in the same coordinates, taking the same rebase behind
 the hide-prelude toggle.
 
+### 2026-07-29 — the toggle adds a button, and the keystrokes stay fixed
+
+Asked whether Ctrl+Shift+Enter should switch the mode on, and then whether
+there should be one chord whose meaning the mode changes. Neither, and the
+deciding argument is the same for both: **coupling the display to the
+behaviour makes the display expensive to adopt.** The tint is worth leaving on
+while working on nested queries; if leaving it on also rebinds the primary run
+key, nobody leaves it on, and the decoration the mode exists for goes unused.
+Two lesser costs of the rebind: the toolbar and the keyboard would disagree
+(the Run button would still run the whole query), and alternating between the
+two granularities — run the subquery, run the whole thing, compare, which is
+the workflow this serves — would need a toggle round-trip each time.
+
+What the question did surface is a real asymmetry: the whole-query run had a
+button and a chord, the subquery run only a chord. So the mode now adds a
+**Run subquery** button beside Run, and the rule is stated rather than implied:
+
+> Each button is exactly its keystroke. The toggle changes which buttons are
+> on the bar, never what a keystroke means.
+
+The button is **not** disabled when the caret has nothing to narrow to. It does
+what the chord does — runs the whole query, and the status line says so.
+Greying it out would carry more information, but the bindings expose no
+`on_disabled_hover_text`, so a grey button could not say why it was grey; a
+button that silently means something else is worse than one that always agrees
+with its twin keystroke. `applyRunShortcut` is split out of the poll (the same
+split as `executeRun` from `Render`) so a test asserts the two request paths
+leave identical state.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
