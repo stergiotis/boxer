@@ -140,6 +140,13 @@ type Inst struct {
 	// window is reaped.
 	mountState map[app.AppI]*instMount
 
+	// warnedNoComposer remembers which app ids have already been reported
+	// as declaring Manifest.Workingset without implementing
+	// app.WorkingsetComposerI (ADR-0148 §SD4) — the check can only run at
+	// the first save attempt, and the mismatch is worth saying once, not
+	// once per window close.
+	warnedNoComposer map[app.AppIdT]struct{}
+
 	// Per-window "Save as SVG" affordance (M2 of the per-window SVG
 	// export plan). One singleton picker for all windows — when a
 	// window's Save button is clicked, pendingExportKey records which
@@ -434,15 +441,7 @@ func (inst *Inst) ReapAll(reason string) {
 	inst.mu.Unlock()
 
 	for _, w := range wins {
-		if uc := inst.releaseMount(w); uc != nil {
-			umErr := w.appInst.Unmount(uc)
-			if umErr != nil {
-				inst.logger.Warn().Err(umErr).
-					Str("id", string(w.manifest.Id)).
-					Uint64("windowKey", uint64(w.key)).
-					Msg("windowhost: unmount on shutdown error")
-			}
-		}
+		inst.reapWindow(w, reason, "windowhost: unmount on shutdown error")
 		if facts != nil {
 			emitStopped(facts, inst.logger, runId, w, reason)
 		}
@@ -455,7 +454,14 @@ func (inst *Inst) ReapAll(reason string) {
 // or the instance was never mounted). Removes the mountState entry on last
 // release. Takes the host lock; the returned Unmount runs outside it so an
 // Unmount that re-enters the host cannot deadlock.
-func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext) {
+//
+// stillShared distinguishes the two nil cases: true means another window
+// kept the instance alive (only possible for a singleton-registered app
+// shown more than once), false with a nil context means the instance was
+// never mounted. The workingset save (ADR-0148) needs the distinction —
+// there is nothing to save from an unmounted instance, and nothing this
+// window may save from a shared one.
+func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext, stillShared bool) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	ms := w.mount
@@ -464,6 +470,7 @@ func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext) {
 	}
 	ms.refs--
 	if ms.refs > 0 {
+		stillShared = true
 		return
 	}
 	delete(inst.mountState, w.appInst)
@@ -471,6 +478,33 @@ func (inst *Inst) releaseMount(w *window) (unmountCtx *app.StaticMountContext) {
 		unmountCtx = ms.mountCtx
 	}
 	return
+}
+
+// reapWindow runs one reaped window's closing-edge work, outside the host
+// lock so an Unmount that re-enters the host cannot deadlock: pull the
+// workingset (ADR-0148 §SD4 — before Unmount, which tears the app down),
+// then Unmount. reason is the stop reason the caller settled on; it also
+// lands on the workingset row as save provenance. unmountMsg names the
+// caller's context in the failure log (reap vs shutdown).
+func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) {
+	uc, shared := inst.releaseMount(w)
+	if shared {
+		inst.warnWorkingsetSharedInstance(w)
+		return
+	}
+	if uc == nil {
+		// Never mounted: no state was ever built, so there is nothing to
+		// compose and nothing to unmount.
+		return
+	}
+	inst.saveWorkingset(w, reason)
+	umErr := w.appInst.Unmount(uc)
+	if umErr != nil {
+		inst.logger.Warn().Err(umErr).
+			Str("id", string(w.manifest.Id)).
+			Uint64("windowKey", uint64(w.key)).
+			Msg(unmountMsg)
+	}
 }
 
 // Close requests removal of the window with the given key, attaching
@@ -576,17 +610,10 @@ func (inst *Inst) reapClosed() {
 	inst.mu.Unlock()
 
 	for _, w := range reaped {
-		if uc := inst.releaseMount(w); uc != nil {
-			umErr := w.appInst.Unmount(uc)
-			if umErr != nil {
-				inst.logger.Warn().Err(umErr).
-					Str("id", string(w.manifest.Id)).
-					Uint64("windowKey", uint64(w.key)).
-					Msg("windowhost: unmount error")
-			}
-		}
+		reason := defaultStopReason(w)
+		inst.reapWindow(w, reason, "windowhost: unmount error")
 		if facts != nil {
-			emitStopped(facts, inst.logger, runId, w, defaultStopReason(w))
+			emitStopped(facts, inst.logger, runId, w, reason)
 		}
 	}
 }
