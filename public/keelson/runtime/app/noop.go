@@ -62,6 +62,7 @@ type StaticMountContext struct {
 	instanceKey  uint64
 	runId        string
 	launchConfig []byte
+	launchReason LaunchReasonE
 }
 
 var _ MountContextI = (*StaticMountContext)(nil)
@@ -166,6 +167,19 @@ func (inst *StaticMountContext) SetLaunchConfig(cfg []byte) {
 
 func (inst *StaticMountContext) LaunchConfig() (cfg []byte) {
 	cfg = inst.launchConfig
+	return
+}
+
+// SetLaunchReason records why the launch config is there (ADR-0148 §SD5):
+// a caller supplied it, the host restored a stored workingset, or neither.
+// Defaults to LaunchReasonPlain when not set — the shape every context
+// without a config has, so tests and CLI bootstrap need no wiring.
+func (inst *StaticMountContext) SetLaunchReason(reason LaunchReasonE) {
+	inst.launchReason = reason
+}
+
+func (inst *StaticMountContext) LaunchReason() (reason LaunchReasonE) {
+	reason = inst.launchReason
 	return
 }
 

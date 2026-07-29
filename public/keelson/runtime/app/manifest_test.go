@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,6 +58,59 @@ func TestManifest_Validate_UnspecifiedSurface(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Surface must be set")
 	assert.Contains(t, err.Error(), "org.test.x")
+}
+
+func TestManifest_Validate_WorkingsetNeedsLaunchKind(t *testing.T) {
+	m := Manifest{
+		Id:         "org.test.x",
+		Display:    "X",
+		Surface:    SurfaceWindowed,
+		Workingset: true,
+	}
+	err := m.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Workingset requires a non-empty LaunchKind")
+	assert.Contains(t, err.Error(), "org.test.x")
+}
+
+func TestManifest_Validate_WorkingsetWithLaunchKind_OK(t *testing.T) {
+	m := Manifest{
+		Id:         "org.test.x",
+		Display:    "X",
+		Surface:    SurfaceWindowed,
+		LaunchKind: "xLaunch",
+		Workingset: true,
+	}
+	require.NoError(t, m.Validate())
+}
+
+func TestManifest_Validate_LaunchKindWithoutWorkingset_OK(t *testing.T) {
+	// Launchable without participating: the common ADR-0135 shape.
+	m := Manifest{
+		Id:         "org.test.x",
+		Display:    "X",
+		Surface:    SurfaceWindowed,
+		LaunchKind: "xLaunch",
+	}
+	require.NoError(t, m.Validate())
+}
+
+func TestLaunchReasonE_String(t *testing.T) {
+	cases := map[LaunchReasonE]string{
+		LaunchReasonPlain:   "plain",
+		LaunchReasonCaller:  "caller",
+		LaunchReasonRestore: "restore",
+	}
+	for r, want := range cases {
+		assert.Equal(t, want, r.String(), "for %d", uint8(r))
+	}
+}
+
+func TestStaticMountContext_LaunchReason_DefaultsPlain(t *testing.T) {
+	mc := NewStaticMountContext("org.test.x", zerolog.Nop(), nil, nil, nil)
+	assert.Equal(t, LaunchReasonPlain, mc.LaunchReason())
+	mc.SetLaunchReason(LaunchReasonRestore)
+	assert.Equal(t, LaunchReasonRestore, mc.LaunchReason())
 }
 
 func TestManifest_WindowTitle_TitleWins(t *testing.T) {

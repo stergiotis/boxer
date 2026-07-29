@@ -73,6 +73,17 @@ type MountContextI interface {
 	// label), never in a silent fallback. Frozen per window: post-mount
 	// parameter changes stay per-app ops.
 	LaunchConfig() (cfg []byte)
+	// LaunchReason says why LaunchConfig holds what it holds (ADR-0148
+	// §SD5): a caller asked for this window and supplied the config, the
+	// host restored the app's own stored workingset onto an otherwise
+	// plain open, or nothing was delivered at all. Adopters read it to
+	// place their environment overrides between the two config tiers —
+	// caller config > env override > restored config > default — and to
+	// apply restored optional fields by different rules than caller ones
+	// (an empty field in a restored record is a value the user arrived
+	// at, not an omission). LaunchReasonPlain whenever LaunchConfig is
+	// nil.
+	LaunchReason() (reason LaunchReasonE)
 }
 
 // FrameContextI extends MountContextI with frame-scoped resources. The host

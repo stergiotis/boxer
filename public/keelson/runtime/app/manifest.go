@@ -247,6 +247,19 @@ type Manifest struct {
 	// the host boundary. Plain opens are unaffected either way.
 	LaunchKind string
 
+	// Workingset marks this app as a workingset participant (ADR-0148
+	// §SD7): the host pulls a record out of the closing window via
+	// [WorkingsetComposerI] and, at a later plain open, routes the stored
+	// record back in through OpenWithConfig. Requires a non-empty
+	// LaunchKind — the record IS an instance of that DTO (§SD2) — which
+	// Validate enforces, and factory registration, which the host's
+	// singleton refusal enforces at the boundary.
+	//
+	// Orthogonal to PersistedKeys: raw keys stay the right declaration for
+	// content too large or complex for the record, which then carries only
+	// a reference to it (§SD1).
+	Workingset bool
+
 	// Help is the optional inline-help corpus for this app. When non-nil,
 	// the keelson/runtime/help package's DefaultLibrary will lazily index
 	// every `*.md` file under the fs.FS (any depth) on first access and
@@ -301,6 +314,16 @@ func (inst Manifest) Validate() (err error) {
 	}
 	if inst.Surface == SurfaceUnspecified {
 		err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: Surface must be set id=%s", string(inst.Id))
+		return
+	}
+	// ADR-0148 §SD7: a workingset record is an instance of the app's
+	// launch-config DTO and restore is OpenWithConfig, so declaring
+	// participation without a launch kind describes something that cannot
+	// be stored or restored. Refuse at registration rather than at the
+	// first close.
+	if inst.Workingset && inst.LaunchKind == "" {
+		err = eb.Build().Str("id", string(inst.Id)).
+			Errorf("manifest: Workingset requires a non-empty LaunchKind id=%s", string(inst.Id))
 		return
 	}
 	return
