@@ -10,6 +10,9 @@ import (
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
 // newWorkingsetTestApp is a PlayApp with no client, already past its
@@ -291,22 +294,50 @@ func TestMount_RestoredLiveAndTabApplyAsComposed(t *testing.T) {
 }
 
 func TestWorkingset_ComposeRestoreRoundTrip(t *testing.T) {
-	// Close a window the user acted in, reopen with what it composed, and
-	// the buffers come back — empty bands included.
+	// The whole loop with the host's own steps in between: compose what a
+	// closing window holds, put it through the gate the host applies
+	// before storing, store it, read it back, and open with it. The
+	// kindcheck step is the one that would catch play composing bytes the
+	// host would refuse — a save that fails there is silent by design.
 	first := newWorkingsetTestApp(t, "SELECT 1")
 	first.sql = "SELECT 'authored'"
-	first.timelineBandsSql = ""
+	first.timelineBandsSql = "" // the user cleared the bands buffer
 	first.liveMain = true
 	first.syncWorkingsetDirty()
 	require.True(t, first.WorkingsetDirty())
 
 	cfg, err := buscodec.Encode(first.ComposeLaunch())
 	require.NoError(t, err)
+	m := (&PlayLauncher{}).Manifest()
+	require.NoError(t, kindcheck.Check(m.LaunchKind, cfg),
+		"composed bytes must satisfy the host's boundary check")
+	require.LessOrEqual(t, len(cfg), 64<<10, "…and the host's size cap")
 
+	facts := factsstore.NewInMemoryFactsStore()
+	_, err = facts.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-1", AppId: m.Id, Name: windowhost.WorkingsetDefaultName,
+		Kind: m.LaunchKind, Config: cfg, TileKey: 1, Reason: "user-close",
+	})
+	require.NoError(t, err)
+	stored, kind, found, err := facts.LatestWorkingset(m.Id, windowhost.WorkingsetDefaultName)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, m.LaunchKind, kind)
+
+	// A stale legacy bands value sits underneath; the restored record's
+	// empty buffer must win.
 	store := mapStorage{persistKeyTimelineBandsSql: []byte("SELECT 'old bands'")}
-	second, err := mountLauncherReason(t, cfg, store, app.LaunchReasonRestore)
+	second, err := mountLauncherReason(t, stored, store, app.LaunchReasonRestore)
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 'authored'", second.inner.sql)
 	assert.Empty(t, second.inner.timelineBandsSql)
 	assert.True(t, second.inner.liveMain)
+
+	// A restored window is clean until someone acts in it.
+	second.inner.syncWorkingsetDirty()
+	assert.False(t, second.inner.WorkingsetDirty())
+	out, dirty, err := second.ComposeWorkingset()
+	require.NoError(t, err)
+	assert.False(t, dirty)
+	assert.Empty(t, out)
 }
