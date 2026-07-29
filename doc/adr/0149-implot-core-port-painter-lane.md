@@ -1,0 +1,306 @@
+---
+type: adr
+status: proposed
+date: 2026-07-29
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+---
+
+> **Status: proposed — pre-human-review.** Decision under consideration; do not
+> implement as if accepted. The dependency profile of upstream ImPlot below is
+> measured; the port-size and wire-cost figures are estimates and are marked as
+> such.
+
+# ADR-0149: porting the ImPlot core to Go on the painter lane
+
+## Context
+
+Charting in imzero2 lives on two substrates today, and both are showing their
+limits from opposite directions.
+
+**The egui_plot bridge is narrow and grows by seam work.**
+`egui2_definition_d_plot.go` bridges eight elements (line, scatter, bars,
+h/v-line, boxes, polygon, text) into a Rust-side `egui_plot` drain. Roughly
+eight call sites use it (imztop's cpu/gpu/mem/rate panels, imzrt's sched/heap
+panels, play's projection pane, fibscope, terrainscope, the ecdf widget). Every
+missing feature — heatmaps, error bars, annotations, drag tools, subplots,
+linked axes, legend interaction readback — costs a bespoke IDL element plus a
+bespoke readback channel, and the plotting logic accumulates in the Rust layer
+that the architecture otherwise keeps thin. `egui_plot` itself is a
+community-maintained crate since its split from egui, on a slower cadence than
+egui proper.
+
+**The canvas widget zoo re-rolls plot machinery.** The widget layer holds ~48
+Go widgets on the painter lane; among them `axisruler`, `ecdf`, `boxenplot`,
+`distsummary`, `spectrumdisplay` and `timeline` each hand-roll some subset of
+axes, tick placement, zooming and legends. The duplication is visible and the
+interaction idioms have started to diverge.
+
+What is missing is a shared plotting *core* — transforms, axis/tick machinery,
+an interaction state machine, legends, and a breadth of item renderers — in Go,
+where every other widget already lives. Rather than design one from scratch,
+this ADR proposes porting the core of [ImPlot](https://github.com/epezent/implot)
+(MIT, Evan Pezent), chosen because it is single-author consistent, proven, and
+immediate-mode first — its frame protocol maps onto imzero2's per-frame
+declaration model as a transliteration, not a paradigm inversion.
+
+Load-bearing findings, measured against upstream ImPlot v1.1-WIP (commit
+`d65a2be`) and the current tree:
+
+- ImPlot is ~12.6k LOC of C++ excluding its demo (`implot.h` 1.4k, internal
+  header 1.7k, core 5.9k, items 3.5k) with 159 public entry points, most
+  instantiated over ten scalar types by macro — a surface Go generics collapse
+  to one implementation each.
+- Its Dear-ImGui contract is four seams: raw triangle emission (the item
+  renderers write vertices directly; 111 `_VtxWritePtr` / 72 `_IdxWritePtr`
+  sites), text draw + measure (23 `CalcTextSize` sites), mouse input with
+  anchored wheel and cursor shape (15 `SetMouseCursor` sites), and ID-keyed
+  per-plot state (`ImPool`/`ImGuiStorage` — plain maps in Go). There is no
+  draw-list splitter; series drag-drop is an optional feature (18 sites).
+- A large share of `implot.cpp` (estimated ~40%) is chrome, not core: the
+  style editor, metrics window, user guide, and ImGui-widget context menus.
+- The painter lane (`egui2_definition_d_painter.go`) already carries
+  implot-shaped primitives: polyline and filled polygon **with homogeneous
+  array arguments**, line/dashed line, rect, circle, ellipse, bezier, anchored
+  text, sense regions — accumulated Rust-side and drained by `paintCanvas`
+  into an `allocate_painter` canvas in relative coordinates.
+- Input readback is essentially complete for a plot: per-canvas hover (r14),
+  response flags (r7), and hover-scoped wheel scroll/zoom **with the hover
+  anchor** (r23, [ADR-0140](./0140-imzero2-hover-scoped-wheel-capture.md)) —
+  the anchored-zoom primitive ImPlot's pan/zoom needs. Modifier and pointer
+  fetchers exist; cursor-shape control shipped separately.
+- Two gaps are real: `drain_paint_cmds_to_painter` applies no per-command clip
+  (ImPlot needs an inner plot-area clip with tick labels outside it), and no
+  text-measurement channel exists — widgets estimate character widths
+  (`timeline.go`'s ASCII-only estimate, documented as underestimating CJK
+  2–4×). For numeric tick labels the estimation idiom is nearly exact.
+- The mesh draw-stream lane
+  ([ADR-0128](./0128-imzero2-mesh-draw-stream-codec-lane.md)) is the
+  remote-access *output* codec (egui → viewer). It is not a Go-side triangle
+  API and does not serve as the ImDrawList replacement.
+- An ImGui-based predecessor of imzero2 bound ImPlot's C++ API to Go over
+  generated FFI wrappers, so the API surface is familiar territory; that
+  approach's premise (a live Dear ImGui context) vanished with the move to
+  egui.
+
+## Design space (QOC)
+
+**Question.** Where does the plotting engine live, and where does its design
+come from?
+
+**Options.**
+
+- **O1** — **Deep-bridge `egui_plot`.** Keep the engine Rust-side; extend the
+  IDL element-by-element toward ImPlot's feature set.
+- **O2** — **Port the ImPlot core to Go** on the painter lane; re-idiomize the
+  API, preserve the frame protocol and interaction model.
+- **O3** — **Continue the organic widget zoo**, extracting shared axis/scale
+  packages opportunistically (`axisruler` as the seed).
+- **O4** — **Adopt a retained-mode Go library** (gonum/plot or similar).
+- **O5** — **Render-to-texture** via a Rust plotting backend, shown as an
+  image.
+- **O6** — **FFI-bind ImPlot's C++** as the predecessor did.
+
+**Criteria.** Seam tax per new feature; where logic accumulates (Go-first
+doctrine); interaction fidelity (hover, anchored zoom, box-select, legend
+interaction); immediate-mode fit; performance ceiling; dependency sovereignty;
+effort.
+
+## Decision
+
+Adopt **O2**: port the ImPlot core to a new Go package on the painter lane.
+
+### SD1 — Port, don't bind
+
+ImPlot cannot run without a live Dear ImGui context (`GetCurrentWindow`,
+`ButtonBehavior`, IO, font atlas). Binding it beside egui means embedding a
+second UI runtime — second input pipeline, second font atlas, second draw
+list — inside one surface. The predecessor's binding was sound *under ImGui*;
+under egui the approach is structurally dead. The port carries the design, not
+the object code.
+
+### SD2 — Port contract: core, not chrome; protocol, not API
+
+Ported: the plot frame (`BeginPlot`/`Setup*`/`Plot*`/`EndPlot` ordering
+semantics), f64 transforms, axis/tick locators and formatters, the interaction
+state machine (pan, anchored zoom, box-select, double-click fit,
+axis-constrained variants), legends, and the item renderers.
+
+Not ported: the style editor, metrics window, user guide, demo shell, and the
+ImGui-widget context menus — menus are re-expressed with native egui2 widgets
+in a later milestone; series drag-drop is deferred (SD6).
+
+The public API is re-idiomized Go, not a mirror: generics replace the
+ten-type macro instantiation, option builders replace flag soup, `c.IdScope`
+carries the id discipline. What is preserved verbatim is the *frame protocol*
+and interaction semantics — that is the proven part.
+
+### SD3 — Substrate prerequisites (M0)
+
+Two small painter-lane additions, both generally useful beyond plotting:
+
+- **Clip push/pop opcode** (`PaintCmd::PushClip`/`PopClip` over
+  `Painter::with_clip_rect`) — the inner plot-area clip. Also retires the
+  manual overflow workarounds in existing canvas widgets.
+- **Batched markers and rects** (`paintMarkers(xs, ys, shape, size, col)`,
+  `paintRectsFilled(...)` with homogeneous arrays) — scatter and small
+  heatmaps at one opcode per series instead of one per point.
+
+### SD4 — Precision split: f64 plot space, f32 emission
+
+Plot-space math stays `float64` Go-side; projection to `f32` happens only at
+paint-command emission. This is ImPlot's own double/float split and is what
+keeps deep zoom correct; the painter lane's f32 relative coordinates are
+post-projection, so nothing is lost.
+
+### SD5 — Dense-raster routing
+
+Small heatmaps draw as batched rects; above a cell-count threshold they route
+to the existing `scrollingTexture` raster lane (the spectrogram precedent).
+The threshold is measured, not guessed, during M4.
+
+### SD6 — Deferrals, recorded
+
+- **Text-measurement fetcher.** Numeric ticks are served by the estimation
+  idiom; a frame-lagged `fetchTextSize` would polish legend sizing. Deferred.
+- **Per-vertex-color mesh opcode** (`paintMesh` over `epaint::Mesh`) — needed
+  only for colormap-gradient fills (two call sites upstream) and a future
+  ImPlot3D port. Deferred.
+- **Series drag-drop** and the re-expressed context menus follow the core.
+
+### SD7 — Coexistence and migration
+
+The egui_plot bridge stays untouched while the port lands. New chart work
+targets the port once M1 ships; the existing bridge users migrate
+opportunistically; bespoke widgets (`axisruler` first) adopt the shared core
+where it pays. Deprecating the bridge is a separate later decision, taken only
+when the port covers the subset actually in use.
+
+### SD8 — Home, license, provenance
+
+Package `implot` under `public/thestack/imzero2/egui2/widgets/implot` — the
+name states the provenance honestly. The port is a derivative work: it carries
+upstream's MIT license text and attribution in-package. Authorship provenance
+follows the git-trailer discipline
+([ADR-0083](./0083-retire-llm-generated-build-tags.md)); no in-file markers.
+
+### Milestones
+
+- **M0** — SD3 primitives in the painter IDL + regen.
+- **M1** — plot frame core: transforms, linear axes, tick locator/formatter,
+  grid, line series, pan / anchored zoom / box-select / double-click fit,
+  hover readout.
+- **M2** — legend (toggle, hover-highlight) + item breadth: scatter/markers,
+  bars, shaded, stairs, stems, infinite lines.
+- **M3** — scales and time: log/symlog, time-axis locators and formatting
+  (Go `time` replaces the C localtime machinery).
+- **M4** — heatmap + histograms (1D/2D) with SD5 routing; colormap
+  integration with the existing `colormap`/`colorscale` widgets.
+- **M5** — tools: drag lines/points/rects, annotations, tags; native context
+  menus.
+- **M6** — subplots and linked axes.
+- **M7** — remainder: error bars, pie, digital, images; bridge-user migration
+  begins.
+
+Each milestone ports its sections of `implot_demo.cpp` (3k lines — the de
+facto spec) into the demo registry
+([ADR-0057](./0057-demo-registry-and-drivers.md)) as the acceptance corpus,
+with TestDriver screenshot goldens.
+
+## Alternatives
+
+- **O1 — deep-bridge `egui_plot`.** Cheapest per *element*, but every
+  interactive feature (legend clicks, drag tools, linked axes, subplots)
+  needs its own IDL seam and readback channel; the seam tax compounds, and
+  plotting logic accumulates Rust-side against the Go-first doctrine, in a
+  community crate on a slower cadence. Killed as the growth path; the
+  existing bridge is retained as-is during migration (SD7).
+- **O6 — FFI-bind ImPlot C++.** Requires a Dear ImGui runtime beside egui:
+  two input pipelines, two font atlases, two draw lists. Structurally dead
+  since the ImGui→egui move. Killed.
+- **O4 — retained-mode Go libraries (gonum/plot et al.).** Figure-oriented,
+  allocation-per-frame, no interaction model; inverting them to immediate
+  mode discards the thing adopted. Killed.
+- **O5 — render-to-texture backends.** Forfeits per-element hover and
+  interaction granularity, is resolution-coupled, and reintroduces a
+  Rust-side plotting dependency. Killed as a general path; the texture lane
+  remains exactly for dense rasters where interaction is per-region anyway
+  (SD5).
+- **O3 — organic widget zoo only.** Bespoke widgets stay right for bespoke
+  domains, but as the *only* path it keeps re-rolling axes/zoom/legend with
+  diverging idioms. Not killed — demoted from only path to sibling path; the
+  ported core becomes its shared substrate.
+- **Other port sources.** ImPlot3D: same author family, plausible follow-on,
+  blocked on the deferred mesh opcode (SD6) — deferred, not killed. uPlot /
+  ECharts and similar: wrong substrate (DOM/JS) and wrong paradigm. Killed.
+
+## Consequences
+
+### Positive
+
+- One coherent, Go-native plotting layer with a proven interaction model;
+  the hard-to-design part (zoom/fit/select/legend semantics) arrives
+  pre-designed and battle-tested.
+- Consolidation target for the axis/tick/zoom machinery currently re-rolled
+  across the chart-like widgets.
+- Sovereignty: the plot engine moves out of a community Rust crate into code
+  governed by the repo's own tooling; upstream ImPlot is stable and
+  slow-moving, so the port does not chase a target.
+- The M0 primitives (clip, batched markers/rects) benefit every canvas
+  widget, not just plots.
+- Go generics land the core meaningfully smaller than the C++ it ports.
+- The demo corpus doubles as an acceptance suite that slots directly into
+  the demo-registry screenshot pipeline.
+
+### Negative
+
+- A substantial port: estimated 8–12k LOC of Go across the milestones
+  (roughly five timeline-widgets); each milestone ships usable value, but
+  the total is real.
+- Performance ceiling: the port inherits epaint tessellation rather than
+  ImPlot's raw pre-tessellated vertex path. This matches the status quo
+  (the egui_plot bridge pays the same cost) but not native C++ ImPlot;
+  very large series need Go-side decimation (min-max/LTTB), which is
+  desirable anyway. Estimated wire cost is not the bottleneck (a 100k-point
+  polyline is ~800 KB/frame of bulk f32 copy during interaction).
+- Two plotting systems coexist until migration completes (SD7).
+- Chrome re-expression (context menus, legend popups) is a second pass;
+  part of ImPlot's feel lives there and M1–M4 will feel spartan.
+- MIT attribution and derivative-work bookkeeping must be carried
+  in-package (SD8).
+
+### Neutral
+
+- The egui_plot bridge and its call sites are untouched short-term.
+- ADR-0128's mesh lane is unaffected; it remains the remote-access codec.
+- The `axisruler`/`colormap`/`colorscale` widgets continue to work; they
+  become adoption candidates, not casualties.
+
+## Status
+
+Proposed, pre-human-review. The upstream dependency profile and the
+painter-lane/readback inventory above are measured against the tree; the
+port-size, chrome-share, and wire-cost figures are estimates. Next concrete
+step on acceptance: M0 (SD3) — the clip and batch opcodes — which is small,
+independently useful, and de-risks the item-renderer wire costs before M1
+commits to them.
+
+## References
+
+- Upstream: [ImPlot](https://github.com/epezent/implot) v1.1-WIP, commit
+  `d65a2be`, MIT — Evan Pezent.
+- Painter lane: `public/thestack/imzero2/egui2/definition/egui2_definition_d_painter.go`;
+  drain: `rust/imzero2/src/imzero2/interpreter.rs`
+  (`drain_paint_cmds_to_painter`).
+- egui_plot bridge: `public/thestack/imzero2/egui2/definition/egui2_definition_d_plot.go`.
+
+### Related ADRs
+
+- [ADR-0140](./0140-imzero2-hover-scoped-wheel-capture.md) — hover-scoped
+  wheel capture; supplies the anchored-zoom input this port consumes.
+- [ADR-0128](./0128-imzero2-mesh-draw-stream-codec-lane.md) — mesh
+  draw-stream codec lane; disambiguated: outward codec, not a drawing API.
+- [ADR-0057](./0057-demo-registry-and-drivers.md) — demo registry; the
+  acceptance-corpus vehicle.
+- [ADR-0083](./0083-retire-llm-generated-build-tags.md) — provenance via git
+  trailers.
