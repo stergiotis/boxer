@@ -160,6 +160,13 @@ func (s *blockingStore) LatestState(_ app.AppIdT, _ string) (value []byte, found
 	return
 }
 func (s *blockingStore) DeleteState(_ app.AppIdT, _ string) (err error) { return }
+func (s *blockingStore) WriteWorkingset(_ factsstore.WorkingsetRow) (uint64, error) {
+	return 0, nil
+}
+func (s *blockingStore) LatestWorkingset(_ app.AppIdT, _ string) (cfg []byte, kind string, found bool, err error) {
+	return
+}
+func (s *blockingStore) DeleteWorkingset(_ app.AppIdT, _ string) (err error) { return }
 
 // TestSink_Close_DrainsPending guarantees the close path flushes any
 // buffered rows synchronously so a process exit does not lose log data

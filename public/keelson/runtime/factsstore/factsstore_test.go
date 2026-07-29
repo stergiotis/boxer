@@ -84,3 +84,87 @@ func mustWrite(s FactsStoreI, appId app.AppIdT, key string, value []byte) (err e
 	_, err = s.WriteState(StateRow{AppId: appId, Key: key, Value: value, Ts: time.Now()})
 	return
 }
+
+// Workingset trail (ADR-0148 §SD6) — LatestState semantics: append-only,
+// reverse-scan latest, tombstone delete, isolated per (app, name).
+
+func TestInMemoryFactsStore_Workingset_LatestWins(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	_, err := s.WriteWorkingset(WorkingsetRow{
+		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("v1"),
+	})
+	require.NoError(t, err)
+	_, err = s.WriteWorkingset(WorkingsetRow{
+		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("v2"),
+	})
+	require.NoError(t, err)
+	cfg, kind, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "v2", string(cfg))
+	assert.Equal(t, "playLaunch", kind, "kind is a stored column, not sniffed from the bytes")
+	assert.Len(t, s.Workingsets(), 2, "the trail keeps both writes")
+}
+
+func TestInMemoryFactsStore_Workingset_Missing(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	_, _, found, err := s.LatestWorkingset("nope", "default")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+func TestInMemoryFactsStore_DeleteWorkingset_Tombstones(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	_, err := s.WriteWorkingset(WorkingsetRow{
+		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("v1"),
+	})
+	require.NoError(t, err)
+	require.NoError(t, s.DeleteWorkingset("play", "default"))
+	_, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.False(t, found)
+	// A write after the tombstone reads back again — the tombstone marks a
+	// point in the trail, it does not close the name.
+	_, err = s.WriteWorkingset(WorkingsetRow{
+		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("v3"),
+	})
+	require.NoError(t, err)
+	cfg, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "v3", string(cfg))
+}
+
+func TestInMemoryFactsStore_Workingset_NameIsolation(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	_, err := s.WriteWorkingset(WorkingsetRow{
+		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("d"),
+	})
+	require.NoError(t, err)
+	_, err = s.WriteWorkingset(WorkingsetRow{
+		AppId: "play", Name: "scratch", Kind: "playLaunch", Config: []byte("s"),
+	})
+	require.NoError(t, err)
+	cfg, _, _, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.Equal(t, "d", string(cfg))
+	cfg, _, _, err = s.LatestWorkingset("play", "scratch")
+	require.NoError(t, err)
+	assert.Equal(t, "s", string(cfg))
+	// …and the same name under another app is a different record.
+	_, _, found, err := s.LatestWorkingset("imztop", "default")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+func TestInMemoryFactsStore_WriteWorkingset_DefensiveCopy(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	cfg := []byte("hello")
+	_, err := s.WriteWorkingset(WorkingsetRow{
+		AppId: "play", Name: "default", Kind: "playLaunch", Config: cfg,
+	})
+	require.NoError(t, err)
+	cfg[0] = 'X'
+	got, _, _, _ := s.LatestWorkingset("play", "default")
+	assert.Equal(t, "hello", string(got))
+}

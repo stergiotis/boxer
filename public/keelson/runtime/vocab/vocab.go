@@ -194,6 +194,28 @@ var (
 	MembLaunchCaller     = NkRegistry.MustBegin("runtimeLaunchCaller").End()
 	MembLaunchConfigKind = NkRegistry.MustBegin("runtimeLaunchConfigKind").End()
 	MembLaunchConfig     = NkRegistry.MustBegin("runtimeLaunchConfig").End()
+
+	// App-workingset (kind + name), ADR-0148 §SD6 — one row per saved
+	// workingset: the launch config that would reproduce the closing
+	// window's user-authored state, written at the closing edge exactly as
+	// the launch row records the opening edge. The record IS the app's
+	// launch-config DTO (§SD2), so the columns that coincide reuse the
+	// launch cohort's terms rather than minting parallel ones:
+	// MembRuntimeApp / MembRuntimeRun for identity, MembLifecycleTileKey
+	// for the closing window's key, MembLaunchConfigKind /
+	// MembLaunchConfig for the payload, MembLifecycleStopReason for the
+	// save provenance ("user-close" / "shutdown" / …), and
+	// MembPersistTombstone on the bool section for a DeleteWorkingset row
+	// (the LatestState short-circuit pattern). Only two terms are new: the
+	// kind tag, and the caller-chosen set name on the symbol section (v1
+	// wires exactly one name, "default" — §SD3).
+	//
+	// Appended at the end of the block deliberately: membership ids are
+	// assigned in declaration order and persisted facts rows carry those
+	// ids, so new entries append instead of renumbering existing ones (the
+	// ADR-0135 ordering constraint).
+	MembKindWorkingset = NkRegistry.MustBegin("runtimeKindWorkingset").End()
+	MembWorkingsetName = NkRegistry.MustBegin("runtimeWorkingsetName").End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -217,4 +239,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembQueryRunAuthoredFp, MembQueryRunSentFp, MembQueryRunChainFp, MembQueryRunEnvFp,
 	MembQueryRunProfileEvent,
 	MembKindLaunch, MembLaunchCaller, MembLaunchConfigKind, MembLaunchConfig,
+	MembKindWorkingset, MembWorkingsetName,
 }

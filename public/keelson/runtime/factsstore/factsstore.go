@@ -163,6 +163,36 @@ type LaunchRow struct {
 	Ts          time.Time
 }
 
+// WorkingsetRow records one saved app workingset (ADR-0148 §SD6): the
+// launch config that would reproduce the closing window's user-authored
+// state, written at the closing edge exactly as LaunchRow records the
+// opening edge. Maps to a boxer.facts row with KindWorkingset +
+// AppRefPrefix(appId) + RunRef(runId) + WorkingsetName + LaunchConfigKind
+// + LifecycleTileKey + LifecycleStopReason, with the config bytes on the
+// blob section under the LaunchConfig membership — the launch cohort's
+// vocabulary, reused because the record IS the app's LaunchKind DTO
+// (§SD2).
+//
+// Identity is (AppId, Name): the durable app id plus a caller-chosen
+// name (§SD3). v1 wires exactly one name, "default". Kind is the app's
+// Manifest.LaunchKind, stored as its own column because the facts wire
+// carries no kind marker — readers must not sniff the bytes.
+//
+// TileKey and Reason are provenance, not identity: which window wrote the
+// record and why it closed ("user-close" / "shutdown" / …). Rows are
+// append-only; the latest row for (AppId, Name) wins and a tombstone
+// (DeleteWorkingset) reads back as not-found — the LatestState semantics.
+type WorkingsetRow struct {
+	RunId   string
+	AppId   app.AppIdT
+	Name    string
+	Kind    string
+	Config  []byte
+	TileKey uint64
+	Reason  string
+	Ts      time.Time
+}
+
 // LogFieldKindE discriminates the runtime type of a LogField's value. Drives
 // the typed-section fan-out in chstore.WriteLog — fields decoded from
 // zerolog's CBOR wire format land in i64 / u64 / f64 / string / bool / blob
@@ -312,6 +342,18 @@ type FactsStoreI interface {
 	WriteLaunch(row LaunchRow) (id uint64, err error)
 	LatestState(appId app.AppIdT, key string) (value []byte, found bool, err error)
 	DeleteState(appId app.AppIdT, key string) (err error)
+	// WriteWorkingset appends one saved workingset record (ADR-0148 §SD6).
+	// Append-only: a second write for the same (AppId, Name) supersedes the
+	// first without erasing it, so the row trail is the history.
+	WriteWorkingset(row WorkingsetRow) (id uint64, err error)
+	// LatestWorkingset returns the most recent non-tombstoned record for
+	// (appId, name). kind is read back as its own column, never sniffed from
+	// the bytes — the facts wire has no kind marker (ADR-0135 Update). A
+	// missing record is found=false with no error.
+	LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error)
+	// DeleteWorkingset appends a tombstone for (appId, name); subsequent
+	// LatestWorkingset calls read back found=false until the next write.
+	DeleteWorkingset(appId app.AppIdT, name string) (err error)
 }
 
 // InMemoryFactsStore is the M2.5 backend. Stores grants / audit / state in
@@ -329,11 +371,19 @@ type InMemoryFactsStore struct {
 	heartbeats []HeartbeatRow
 	lifecycles []AppLifecycleRow
 	launches   []LaunchRow
-	nextId     atomic.Uint64
+	// workingsets is the append-only workingset trail (ADR-0148 §SD6),
+	// read latest-wins by the same reverse scan LatestState uses.
+	workingsets []workingsetEntry
+	nextId      atomic.Uint64
 }
 
 type stateEntry struct {
 	row       StateRow
+	tombstone bool
+}
+
+type workingsetEntry struct {
+	row       WorkingsetRow
 	tombstone bool
 }
 
@@ -472,6 +522,60 @@ func (inst *InMemoryFactsStore) WriteLaunch(row LaunchRow) (id uint64, err error
 	return
 }
 
+// WriteWorkingset appends one saved workingset record (ADR-0148 §SD6).
+// Config bytes are defensively copied so the composing app can recycle
+// its buffer.
+func (inst *InMemoryFactsStore) WriteWorkingset(row WorkingsetRow) (id uint64, err error) {
+	id = inst.nextId.Add(1)
+	if row.Ts.IsZero() {
+		row.Ts = time.Now().UTC()
+	}
+	if row.Config != nil {
+		cp := make([]byte, len(row.Config))
+		copy(cp, row.Config)
+		row.Config = cp
+	}
+	inst.mu.Lock()
+	inst.workingsets = append(inst.workingsets, workingsetEntry{row: row})
+	inst.mu.Unlock()
+	return
+}
+
+// LatestWorkingset scans the trail in reverse so the most recent write for
+// (appId, name) wins; a tombstone reached first reads back as not-found.
+// The kind comes off the stored column, never from the bytes.
+func (inst *InMemoryFactsStore) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	for i := len(inst.workingsets) - 1; i >= 0; i-- {
+		e := inst.workingsets[i]
+		if e.row.AppId != appId || e.row.Name != name {
+			continue
+		}
+		if e.tombstone {
+			return
+		}
+		cfg = make([]byte, len(e.row.Config))
+		copy(cfg, e.row.Config)
+		kind = e.row.Kind
+		found = true
+		return
+	}
+	return
+}
+
+// DeleteWorkingset appends a tombstone for (appId, name) — the
+// DeleteState pattern, so history stays in the trail.
+func (inst *InMemoryFactsStore) DeleteWorkingset(appId app.AppIdT, name string) (err error) {
+	inst.mu.Lock()
+	inst.workingsets = append(inst.workingsets, workingsetEntry{
+		row:       WorkingsetRow{AppId: appId, Name: name, Ts: time.Now().UTC()},
+		tombstone: true,
+	})
+	inst.mu.Unlock()
+	return
+}
+
 func (inst *InMemoryFactsStore) LatestState(appId app.AppIdT, key string) (value []byte, found bool, err error) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
@@ -562,6 +666,21 @@ func (inst *InMemoryFactsStore) Launches() (rows []LaunchRow) {
 	defer inst.mu.RUnlock()
 	rows = make([]LaunchRow, len(inst.launches))
 	copy(rows, inst.launches)
+	return
+}
+
+// Workingsets returns a snapshot of recorded workingset rows in insertion
+// order, tombstones excluded (they carry no config to inspect).
+func (inst *InMemoryFactsStore) Workingsets() (rows []WorkingsetRow) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	rows = make([]WorkingsetRow, 0, len(inst.workingsets))
+	for _, e := range inst.workingsets {
+		if e.tombstone {
+			continue
+		}
+		rows = append(rows, e.row)
+	}
 	return
 }
 

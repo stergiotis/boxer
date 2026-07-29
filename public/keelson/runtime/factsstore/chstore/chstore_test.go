@@ -396,3 +396,103 @@ func TestStore_LatestState_BinaryValue_LiveCH(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, binary, got, "hex transport must preserve raw bytes")
 }
+
+// Workingset trail (ADR-0148 §SD6). Same probe-and-skip shape as the
+// LatestState tests above — these need a live CH, and the package's
+// convention is to skip rather than split the file across lanes.
+
+func TestStore_LatestWorkingset_RoundTrip_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	want := []byte{0x00, 0xFF, 0x10, 0x7F, 0x80, 0xCA, 0xFE}
+	_, err := s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-1", AppId: "play", Name: "default", Kind: "playLaunch",
+		Config: want, TileKey: 7, Reason: "user-close", Ts: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	cfg, kind, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, want, cfg, "hex transport must preserve raw bytes")
+	assert.Equal(t, "playLaunch", kind, "kind reads back as a column, never sniffed")
+}
+
+func TestStore_LatestWorkingset_Missing_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	_, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+func TestStore_LatestWorkingset_LatestWins_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	t0 := time.Now().UTC()
+	_, err := s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-1", AppId: "play", Name: "default", Kind: "playLaunch",
+		Config: []byte("v1"), TileKey: 1, Ts: t0,
+	})
+	require.NoError(t, err)
+	_, err = s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-1", AppId: "play", Name: "default", Kind: "playLaunch",
+		Config: []byte("v2"), TileKey: 2, Ts: t0.Add(time.Second),
+	})
+	require.NoError(t, err)
+	cfg, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "v2", string(cfg))
+}
+
+func TestStore_LatestWorkingset_NameAndAppIsolation_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	ts := time.Now().UTC()
+	_, err := s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-1", AppId: "play", Name: "default", Kind: "playLaunch",
+		Config: []byte("d"), TileKey: 1, Ts: ts,
+	})
+	require.NoError(t, err)
+	_, err = s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-1", AppId: "play", Name: "scratch", Kind: "playLaunch",
+		Config: []byte("s"), TileKey: 2, Ts: ts,
+	})
+	require.NoError(t, err)
+	cfg, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "d", string(cfg))
+	cfg, _, found, err = s.LatestWorkingset("play", "scratch")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "s", string(cfg))
+	_, _, found, err = s.LatestWorkingset("imztop", "default")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+func TestStore_DeleteWorkingset_Tombstones_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	t0 := time.Now().UTC()
+	_, err := s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-1", AppId: "play", Name: "default", Kind: "playLaunch",
+		Config: []byte("v1"), TileKey: 1, Ts: t0,
+	})
+	require.NoError(t, err)
+	require.NoError(t, s.DeleteWorkingset("play", "default"))
+	_, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.False(t, found, "tombstone should hide the prior record")
+	// A later write resurrects the name.
+	_, err = s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-1", AppId: "play", Name: "default", Kind: "playLaunch",
+		Config: []byte("v2"), TileKey: 2, Ts: t0.Add(2 * time.Second),
+	})
+	require.NoError(t, err)
+	cfg, _, found, err := s.LatestWorkingset("play", "default")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "v2", string(cfg))
+}
