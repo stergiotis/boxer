@@ -78,7 +78,10 @@ while [ $# -gt 0 ]; do
     case "$1" in
     --src-dir) src_dir=$(readlink -f "$2"); shift 2 ;;
     --prefix) prefix=$(readlink -f "$2"); shift 2 ;;
-    --out) out="$2"; shift 2 ;;
+    # Absolute, because the install below runs from inside the ffmpeg source
+    # tree: a relative --out would silently land there instead of the caller's
+    # cwd. readlink -f resolves a path whose final component does not exist yet.
+    --out) out=$(readlink -f "$2"); shift 2 ;;
     --jobs) jobs="$2"; shift 2 ;;
     --fetch) fetch=1; shift ;;
     --without-h264) with_h264=0; shift ;;
@@ -142,7 +145,15 @@ fetch_one() { # <url> <file>
     [ -f "$src_dir/$2" ] && return 0
     [ "$fetch" = 1 ] || die "missing $src_dir/$2 (pass --fetch, or stage the tarballs first)"
     step "fetch $2"
-    curl -sSL --retry 3 -o "$src_dir/$2" "$1"
+    # Download aside and rename only on success. A tarball truncated by a dropped
+    # connection would otherwise satisfy the -f test above on the next run, which
+    # never re-fetches it -- turning a transient network failure into a permanent
+    # "tar: unexpected EOF" that no amount of re-running clears.
+    curl -sSL --retry 3 -o "$src_dir/$2.part" "$1" || {
+        rm -f "$src_dir/$2.part"
+        die "could not download $2 from $1"
+    }
+    mv -f "$src_dir/$2.part" "$src_dir/$2"
 }
 
 step "sources"
