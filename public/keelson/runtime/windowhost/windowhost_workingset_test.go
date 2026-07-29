@@ -542,3 +542,44 @@ func TestRestore_CallerConfigOutranksStoredRecord(t *testing.T) {
 	assert.Equal(t, app.LaunchReasonCaller, instances[0].gotReason)
 	assert.Empty(t, facts.Launches(), "the open service, not the host, audits caller opens")
 }
+
+func TestWindowInfos_ReportLaunchProvenance(t *testing.T) {
+	// The introspection surface reads this snapshot (keelson('windows')):
+	// a restored window has to be tellable from a plain one, since nothing
+	// in the window itself says so.
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
+	h, facts := newWorkingsetHost(t, a)
+	seedWorkingset(t, facts, "test.ws", testCfgBytes)
+
+	_, err := h.Open("test.ws")
+	require.NoError(t, err)
+	infos := h.WindowInfos()
+	require.Len(t, infos, 1)
+	assert.Equal(t, app.LaunchReasonRestore, infos[0].LaunchReason)
+	assert.Equal(t, testCfgKind, infos[0].ConfigKind)
+	assert.Equal(t, len(testCfgBytes), infos[0].ConfigBytes)
+	assert.False(t, infos[0].SharesInstance)
+}
+
+func TestWindowInfos_PlainOpenAndSharedInstance(t *testing.T) {
+	reg, _ := mkRegistryWithSingleton(t, "test.a")
+	h := NewInst(reg, zerolog.Nop())
+
+	_, err := h.Open("test.a")
+	require.NoError(t, err)
+	infos := h.WindowInfos()
+	require.Len(t, infos, 1)
+	assert.Equal(t, app.LaunchReasonPlain, infos[0].LaunchReason)
+	assert.Empty(t, infos[0].ConfigKind)
+	assert.Zero(t, infos[0].ConfigBytes)
+	assert.False(t, infos[0].SharesInstance, "one window holds the instance alone")
+
+	// A second window over the same singleton shares the instance — the
+	// state neither window may save nor be handed a config for.
+	_, err = h.Open("test.a")
+	require.NoError(t, err)
+	infos = h.WindowInfos()
+	require.Len(t, infos, 2)
+	assert.True(t, infos[0].SharesInstance)
+	assert.True(t, infos[1].SharesInstance)
+}

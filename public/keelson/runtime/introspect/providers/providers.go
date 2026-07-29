@@ -123,7 +123,17 @@ func appsTable(ms []app.Manifest) *introspect.Table {
 		Int32("background_tick_hz", func(i int) int32 { return int32(ms[i].BackgroundTickHz) }).
 		Bool("has_help", func(i int) bool { return ms[i].Help != nil }).
 		StringList("caps", caps).
-		StringList("persisted_keys", func(i int) []string { return ms[i].PersistedKeys })
+		StringList("persisted_keys", func(i int) []string { return ms[i].PersistedKeys }).
+		// The two argument/state declarations (ADR-0135 §SD3, ADR-0148
+		// §SD7). launch_kind answers what a caller must send to open this
+		// app with arguments — empty means it accepts none, and an
+		// argument-carrying open is refused at the host boundary.
+		// workingset says whether the host pulls a record out of a closing
+		// window and hands it back at the next plain open; it implies a
+		// non-empty launch_kind, since the record is an instance of that
+		// kind (manifest validation enforces the pair).
+		String("launch_kind", func(i int) string { return ms[i].LaunchKind }).
+		Bool("workingset", func(i int) bool { return ms[i].Workingset })
 }
 
 // --- build (runinfo + vcs) ---------------------------------------------------

@@ -102,5 +102,17 @@ func windowsTable(ws []windowhost.WindowInfo) *introspect.Table {
 		String("title", func(i int) string { return ws[i].Title }).
 		String("surface", func(i int) string { return ws[i].Surface.String() }).
 		String("category", func(i int) string { return ws[i].Category }).
-		String("stop_reason", func(i int) string { return ws[i].StopReason })
+		String("stop_reason", func(i int) string { return ws[i].StopReason }).
+		// How this window came to hold what it holds (ADR-0148 §SD5):
+		// "plain" (nobody delivered a config), "caller" (another app opened
+		// it with arguments), "restore" (the host handed back the app's own
+		// stored workingset). config_kind / config_bytes describe the
+		// payload that arrived; the payload itself stays in the window.
+		String("launch_reason", func(i int) string { return ws[i].LaunchReason.String() }).
+		String("config_kind", func(i int) string { return ws[i].ConfigKind }).
+		Int64("config_bytes", func(i int) int64 { return int64(ws[i].ConfigBytes) }).
+		// True when another open window shares this one's app instance
+		// (a singleton-registered app shown twice): such a window takes no
+		// config and saves no workingset.
+		Bool("shares_instance", func(i int) bool { return ws[i].SharesInstance })
 }

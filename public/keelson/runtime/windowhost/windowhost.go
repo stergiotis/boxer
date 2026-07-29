@@ -611,24 +611,64 @@ type WindowInfo struct {
 	Surface    app.SurfaceE
 	Category   string
 	StopReason string
+
+	// LaunchReason says where this window's content came from: nobody
+	// delivered a config, a caller did, or the host restored the app's
+	// stored workingset (ADR-0148 §SD5). The distinction is invisible in
+	// the window itself, and it is what "which of my windows came back
+	// from stored state" asks about.
+	LaunchReason app.LaunchReasonE
+	// ConfigKind is the vocabulary kind of the delivered launch config,
+	// empty for a plain open. It is the manifest's LaunchKind — the host
+	// refuses any other at the boundary — repeated here so a row is
+	// readable without joining the app table.
+	ConfigKind string
+	// ConfigBytes is the delivered config's size, 0 for a plain open. The
+	// bytes themselves stay inside the window: they are the app's own DTO,
+	// may carry a user's query text, and the audit trail already records
+	// them where that is intended (ADR-0135 §SD6).
+	ConfigBytes int
+	// SharesInstance reports that another open window points at the same
+	// AppI instance — only possible for a singleton-registered app shown
+	// more than once. Load-bearing rather than trivia: such a window can
+	// neither be handed a config nor have its workingset saved, because
+	// the state is not this window's alone.
+	SharesInstance bool
 }
 
 // WindowInfos returns a metadata snapshot of the currently open windows
-// in declaration order. Like the rest of Inst it is not goroutine-safe
-// against concurrent Open/Close; call it from the render goroutine.
+// in declaration order.
+//
+// Every field it reads is either immutable for the window's lifetime
+// (the manifest, the key, the mount context's delivered config and
+// reason — both set at Open before the window is published) or mutated
+// only under inst.mu (stop reason, the shared-instance refcount), so the
+// snapshot is safe to take off the render thread — which the
+// introspection provider does, serving a query from an HTTP handler.
+// Deliberately absent for that reason: the lazy Mount flags, which the
+// render thread writes without the lock.
 func (inst *Inst) WindowInfos() (out []WindowInfo) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	out = make([]WindowInfo, 0, len(inst.windows))
 	for _, w := range inst.windows {
+		cfg := w.mountCtx.LaunchConfig()
+		kind := ""
+		if len(cfg) > 0 {
+			kind = w.manifest.LaunchKind
+		}
 		out = append(out, WindowInfo{
-			Key:        w.key,
-			AppId:      w.manifest.Id,
-			Display:    w.manifest.Display,
-			Title:      w.manifest.WindowTitle(),
-			Surface:    w.manifest.Surface,
-			Category:   w.manifest.Category,
-			StopReason: w.stopReason,
+			Key:            w.key,
+			AppId:          w.manifest.Id,
+			Display:        w.manifest.Display,
+			Title:          w.manifest.WindowTitle(),
+			Surface:        w.manifest.Surface,
+			Category:       w.manifest.Category,
+			StopReason:     w.stopReason,
+			LaunchReason:   w.mountCtx.LaunchReason(),
+			ConfigKind:     kind,
+			ConfigBytes:    len(cfg),
+			SharesInstance: w.mount != nil && w.mount.refs > 1,
 		})
 	}
 	return

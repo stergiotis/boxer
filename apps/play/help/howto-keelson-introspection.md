@@ -64,6 +64,24 @@ open and close windows:
 SELECT key, app_id, title, surface FROM keelson('windows') ORDER BY key
 ```
 
+Ask where each open window's content came from — `plain` means nobody supplied
+one, `caller` means another app opened it with arguments, and `restore` means
+the shell handed back the state that window's app was left in:
+
+```sql
+SELECT key, app_id, launch_reason, config_kind, config_bytes
+FROM keelson('windows') ORDER BY key
+```
+
+Which apps accept arguments, and which of them keep their working state across a
+close (`launch_kind` names the config an opener must send; `workingset` implies
+one):
+
+```sql
+SELECT id, launch_kind, workingset, persisted_keys
+FROM keelson('apps') WHERE launch_kind != '' ORDER BY id
+```
+
 Because `/query` runs the statement through `clickhouse-local`, ordinary SQL
 works too — aggregate, filter, or join a keelson table against a generated one:
 

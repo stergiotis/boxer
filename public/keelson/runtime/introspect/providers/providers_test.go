@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
@@ -95,4 +96,36 @@ func firstString(t *testing.T, rec arrow.RecordBatch, col string) string {
 	idx := rec.Schema().FieldIndices(col)
 	require.NotEmpty(t, idx, "column %q not found", col)
 	return rec.Column(idx[0]).(*array.String).Value(0)
+}
+
+// TestAppsTableRendersLaunchAndWorkingset covers the two declaration
+// columns the launch/workingset contracts added (ADR-0135 §SD3, ADR-0148
+// §SD7): together they answer "what can I open this app with, and does it
+// remember anything" without reading Go source.
+func TestAppsTableRendersLaunchAndWorkingset(t *testing.T) {
+	ms := []app.Manifest{
+		{Id: "test.plain", Display: "Plain", Surface: app.SurfaceWindowed},
+		{
+			Id: "test.stateful", Display: "Stateful", Surface: app.SurfaceWindowed,
+			LaunchKind: "testLaunch", Workingset: true,
+		},
+	}
+	for _, m := range ms {
+		require.NoError(t, m.Validate(), "the fixtures must be manifests the registry would accept")
+	}
+	rec := appsTable(ms).Build(introspect.AllColumns(), len(ms))
+	defer rec.Release()
+	require.EqualValues(t, 2, rec.NumRows())
+
+	kinds := rec.Schema().FieldIndices("launch_kind")
+	require.NotEmpty(t, kinds)
+	kindCol := rec.Column(kinds[0]).(*array.String)
+	assert.Empty(t, kindCol.Value(0), "an app that accepts no arguments reads as empty, not absent")
+	assert.Equal(t, "testLaunch", kindCol.Value(1))
+
+	ws := rec.Schema().FieldIndices("workingset")
+	require.NotEmpty(t, ws)
+	wsCol := rec.Column(ws[0]).(*array.Boolean)
+	assert.False(t, wsCol.Value(0))
+	assert.True(t, wsCol.Value(1))
 }
