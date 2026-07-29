@@ -251,7 +251,12 @@ type PlayApp struct {
 	// dock scope. A hidden tab's body buffer is discarded uninterpreted, so
 	// delivery ops must ride an activated tab.
 	pendingDockActivate uint64
-	requestRun          bool
+	// raisedTab is the last dock tab play itself raised (0 = none), kept
+	// after pendingDockActivate is consumed so ComposeLaunch can report an
+	// active tab (ADR-0148 §SD8). Not the dock's own notion of focus — that
+	// lives on the Rust side; see raiseDockTab.
+	raisedTab  uint64
+	requestRun bool
 	// requestSubquery narrows the pending requestRun to the innermost query
 	// the caret is in (the Ctrl+Shift+Enter gesture). Consumed with the run
 	// request it qualifies.
@@ -361,6 +366,20 @@ type PlayApp struct {
 	formatted    string
 	formattedFor string
 	formattedErr error
+
+	// Workingset intent tracking (ADR-0148 §SD4/§SD8). workingsetSeen is
+	// last frame's snapshot of the fields ComposeLaunch carries; its
+	// baseline is taken on the first frame — after Mount has finished
+	// seeding — so the seeded state itself never reads as an edit. That is
+	// what closes the poisoned-inheritance case: a window opened on a
+	// launch config and closed untouched stores nothing.
+	//
+	// The comparison is per-frame rather than response-driven because the
+	// toolkit forces it: the SQL editor and the Live checkbox write through
+	// SendRespVal, whose change-detection callback never fires, so there is
+	// no edit event to hang this on.
+	workingsetSeen  workingsetSnapshot
+	workingsetDirty bool
 
 	// Caret report (ADR-0130 L3). caretPacked is the raw r9_u64 databinding
 	// target for the main SQL editor: the sorted cursor CHAR range packed
@@ -568,9 +587,14 @@ func (inst *PlayApp) SetCapabilities(bus app.BusI, storage app.StorageI, logger 
 // RestorePersistedSql replaces inst.sql with the value stored under
 // persistKeyLastSql when storage is wired and the value is non-empty.
 // Best-effort: errors are logged at debug level and the existing
-// inst.sql stays. The caller (PlayLauncher.Mount) decides precedence:
-// today it lets BOXER_PLAY_SQL win over persist, persist win over
-// the literal default.
+// inst.sql stays.
+//
+// Read-only bridge (ADR-0148 §SD8, added 2026-07-29): nothing writes this
+// key any more — the editor buffer now survives as a workingset record
+// the window host pulls at close. Mount consults the key only for a
+// window that received no config at all, so a session that predates the
+// workingset era still finds its buffer. Retire the key, this function,
+// and the PersistedKeys entry one release on.
 func (inst *PlayApp) RestorePersistedSql() {
 	if inst.storage == nil {
 		return
@@ -586,21 +610,9 @@ func (inst *PlayApp) RestorePersistedSql() {
 	inst.sql = string(value)
 }
 
-// PersistSql writes inst.sql under persistKeyLastSql when storage is
-// wired. Called on Run + Unmount; errors are logged at debug level
-// (audit-trail concern, not a user-visible failure).
-func (inst *PlayApp) PersistSql() {
-	if inst.storage == nil {
-		return
-	}
-	err := inst.storage.Set(persistKeyLastSql, []byte(inst.sql))
-	if err != nil {
-		inst.logger.Debug().Err(err).Msg("play: persist save failed")
-	}
-}
-
 // RestorePersistedTimelineBandsSql loads the bands-SQL editor buffer
-// from the persist cap. Same best-effort semantics as RestorePersistedSql.
+// from the persist cap. Same best-effort semantics — and the same
+// one-release read-only bridge — as RestorePersistedSql.
 func (inst *PlayApp) RestorePersistedTimelineBandsSql() {
 	if inst.storage == nil {
 		return
@@ -614,20 +626,6 @@ func (inst *PlayApp) RestorePersistedTimelineBandsSql() {
 		return
 	}
 	inst.timelineBandsSql = string(value)
-}
-
-// PersistTimelineBandsSql writes the current bands-SQL editor buffer
-// to the persist cap. Called from Unmount so the user's bands query
-// survives session restart; the value-write happens unconditionally
-// so an empty buffer also persists (and overrides a previous value).
-func (inst *PlayApp) PersistTimelineBandsSql() {
-	if inst.storage == nil {
-		return
-	}
-	err := inst.storage.Set(persistKeyTimelineBandsSql, []byte(inst.timelineBandsSql))
-	if err != nil {
-		inst.logger.Debug().Err(err).Msg("play: persist save (bands) failed")
-	}
 }
 
 // loadFromPicker is the goroutine driving an fs.dialog.read +
@@ -1047,6 +1045,12 @@ func (inst *PlayApp) Render() error {
 	}
 	inst.pollRunShortcuts()
 
+	// Fold this frame's state into the workingset intent flag (ADR-0148
+	// §SD8), once, before anything reads it. Runs every frame regardless
+	// of which tabs are open — an edit in the Timeline's bands editor is
+	// intent whether or not the Editor tab is visible.
+	inst.syncWorkingsetDirty()
+
 	// Run the canonical-form pipeline once per frame regardless of which
 	// tab is active. The pipeline is debounced internally (previewDebounce),
 	// so most frames are a no-op; running it here keeps the Preview tab's
@@ -1311,11 +1315,11 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	}
 	inst.graph.RunMain(executable, sigParams, sourceBuffer)
 	if !auto {
-		// Persist on Run: the user's intent is "this is the SQL I
-		// want to keep around". Save-on-Unmount is the fallback
-		// for sessions that never Run; doing both keeps the
-		// persistence point user-intent-anchored.
-		inst.PersistSql()
+		// A manual Run is intent by construction — "this is the query I
+		// want" — even when it re-runs an unchanged buffer, so it marks
+		// the workingset dirty (ADR-0148 §SD4). The host does the saving,
+		// at close; a live-toggle run is signal churn and marks nothing.
+		inst.noteWorkingsetIntent()
 		// A human Run is the reset for the Live circuit breaker: whatever
 		// the streak was measuring, a person has just said what to run.
 		inst.resumeLiveAfterHumanAction()

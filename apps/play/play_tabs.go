@@ -330,6 +330,22 @@ func (inst *TabRegistry) dockIDForSlug(id string) (dockID uint64, ok bool) {
 	return
 }
 
+// slugForDockID is dockIDForSlug's inverse — the workingset composer maps
+// the last tab play raised back to the slug a PlayLaunch names it by
+// (ADR-0148 §SD8). ok is false for 0 (nothing raised) and for a dock id no
+// registered tab claims.
+func (inst *TabRegistry) slugForDockID(dockID uint64) (id string, ok bool) {
+	if dockID == 0 {
+		return
+	}
+	for i := range inst.specs {
+		if inst.specs[i].DockID == dockID {
+			return inst.specs[i].ID, true
+		}
+	}
+	return
+}
+
 // dockIDsOf projects specs onto their dock ids, in order.
 func dockIDsOf(specs []TabSpec) (out []uint64) {
 	out = make([]uint64, len(specs))

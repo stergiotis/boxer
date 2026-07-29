@@ -29,7 +29,7 @@ import (
 // to hold, not each caller's to remember.
 func (inst *PlayApp) InsertSqlAtCaret(text string) {
 	inst.pendingSnippetInsert = text
-	inst.pendingDockActivate = dockTabEditor
+	inst.raiseDockTab(dockTabEditor)
 }
 
 // ReplaceSql swaps the whole SQL editor buffer with text on the next editor
@@ -37,7 +37,7 @@ func (inst *PlayApp) InsertSqlAtCaret(text string) {
 // InsertSqlAtCaret. See InsertSqlAtCaret for the activation rationale.
 func (inst *PlayApp) ReplaceSql(text string) {
 	inst.pendingSnippetReplace = text
-	inst.pendingDockActivate = dockTabEditor
+	inst.raiseDockTab(dockTabEditor)
 }
 
 // ActivateTab focuses the dock tab with the given registry slug ("editor",
@@ -50,8 +50,20 @@ func (inst *PlayApp) ActivateTab(id string) (err error) {
 		err = eh.Errorf("play: ActivateTab: unknown tab %q", id)
 		return
 	}
-	inst.pendingDockActivate = dockID
+	inst.raiseDockTab(dockID)
 	return
+}
+
+// raiseDockTab queues the dock activation and remembers which tab was
+// raised. The remembered id is what ComposeLaunch reports as the active
+// tab (ADR-0148 §SD8) — the dock's own tab state lives on the Rust side
+// and is not readable from here, so a tab the user raised by clicking the
+// dock strip directly is invisible to the record. What play itself
+// raises — the panes menu, a snippet delivering into the editor, a launch
+// config's Tab tier — is what it can honestly report.
+func (inst *PlayApp) raiseDockTab(dockID uint64) {
+	inst.pendingDockActivate = dockID
+	inst.raisedTab = dockID
 }
 
 // SetTimelineBandsSql seeds the Timeline panel's bands editor (the

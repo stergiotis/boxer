@@ -279,6 +279,10 @@ func (inst *PlayApp) noteAutoRunFired() {
 		return
 	}
 	inst.liveMain = false
+	// The breaker is the one writer of liveMain that is not a person, so
+	// re-anchor the workingset baseline instead of letting the flip read as
+	// intent (ADR-0148 §SD4).
+	inst.rebaseWorkingsetLive(false)
 	inst.autoRunStreak = 0
 	inst.liveSuspendReason = "Live suspended: " + strings.Join(cycling, ", ") +
 		" kept moving with no edit (a query feeding its own input) — re-check Live to resume"

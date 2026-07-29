@@ -200,34 +200,41 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Reason:    "open the applet creator window (ADR-0135 §SD7 / ADR-0132 O4)",
 			},
 		},
-		// PersistedKeys → host auto-injects
-		// runtime.persist.play.> cap; the editor buffer survives
-		// session restart. BOXER_PLAY_SQL still wins when set.
-		// timelineBandsSql persists the Timeline panel's bands-SQL
-		// editor across sessions; empty is a valid value (no bands).
+		// PersistedKeys → host auto-injects the runtime.persist.play.>
+		// cap. Kept for the read-only bridge only (ADR-0148 §SD8, added
+		// 2026-07-29): the two buffers are now saved as a workingset
+		// record, and Mount reads these keys solely so a session that
+		// predates the change still finds its buffers. Retire the keys
+		// and this entry one release on — the cap is what the read needs.
 		PersistedKeys: []string{persistKeyLastSql, persistKeyTimelineBandsSql},
 		// Launch config (ADR-0135 §SD7): windows opened over
 		// `windowhost.open` may carry a launchcfg.PlayLaunch; Mount
 		// decodes it and seeds the editor above the env/persisted chain.
 		LaunchKind: launchcfg.Kind,
+		// Workingset participation (ADR-0148 §SD7): the host pulls a
+		// PlayLaunch out of a window the user acted in and hands it back
+		// at the next plain open. play is the reference adopter (§SD8).
+		Workingset: true,
 	}
 	return
 }
 
 func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
-	// Precedence for the initial SQL buffer:
-	//   1. Launch config (ADR-0135 §SD7) — a window opened over
-	//      `windowhost.open` with a playLaunch config; per-window
-	//      intent beats process-wide defaults. Plain windows skip
-	//      this tier entirely.
-	//   2. BOXER_PLAY_SQL env var — explicit user override
-	//      (one-shot screenshots, scripted runs).
-	//   3. runtime.persist.play.lastSql — restored from the previous
-	//      session via MountCtx.Storage.
-	//   4. Default literal — first run, no prior state.
-	// The persist restore happens after NewPlayApp because the
-	// PlayApp's Storage handle is set via SetCapabilities below;
-	// RestorePersistedSql replaces inst.sql in place.
+	// Precedence for the initial SQL buffer, highest first:
+	//   1. Caller launch config (ADR-0135 §SD7) — another app opened this
+	//      window over `windowhost.open` with a playLaunch config;
+	//      per-window intent beats process-wide defaults.
+	//   2. BOXER_PLAY_SQL env var — explicit user override (one-shot
+	//      screenshots, scripted runs).
+	//   3. Restored workingset (ADR-0148 §SD5) — this app's own state from
+	//      a window the user acted in, delivered as a config on an
+	//      otherwise plain open. Ambient, so an env override outranks it.
+	//   4. runtime.persist.play.lastSql — the one-release read bridge, for
+	//      sessions that predate the workingset record.
+	//   5. Default literal — first run, no prior state.
+	//
+	// Tiers 1 and 3 arrive through the same door and differ only by
+	// LaunchReason, which is exactly what tier 2 needs to sit between them.
 	var launch *launchcfg.PlayLaunch
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
 		lc, dErr := buscodec.Decode[launchcfg.PlayLaunch](raw)
@@ -241,14 +248,27 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		}
 		launch = &lc
 	}
-	initSQL, envProvided := SQLOverride.Lookup()
+	restored := ctx.LaunchReason() == app.LaunchReasonRestore
+	envSQL, envProvided := SQLOverride.Lookup()
 	// Per the env var's description, only a NON-EMPTY override wins over the
-	// persisted restore; set-but-empty behaves like unset.
-	envOverride := envProvided && initSQL != ""
-	if launch != nil && launch.Sql != "" {
-		initSQL = launch.Sql
-		envOverride = true // suppress the persisted restore below, same as the env tier
+	// lower tiers; set-but-empty behaves like unset.
+	envOverride := envProvided && envSQL != ""
+	var initSQL string
+	configSQL := ""
+	if launch != nil {
+		configSQL = launch.Sql
 	}
+	switch {
+	case configSQL != "" && !restored:
+		initSQL = configSQL
+	case envOverride:
+		initSQL = envSQL
+	case configSQL != "":
+		initSQL = configSQL // restored tier
+	}
+	// seededSQL records whether a tier above the legacy bridge produced a
+	// buffer, so the bridge below knows to stay out of the way.
+	seededSQL := initSQL != ""
 	if initSQL == "" {
 		initSQL = "SELECT * FROM spinnaker.facts"
 	}
@@ -290,30 +310,49 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	inner.ExitOnShot = ExitOnShot.Get() != ""
 	inner.previewAsSent = PreviewAsSent.Get() != ""
 	inner.SetCapabilities(ctx.Bus(), ctx.Storage(), ctx.Log())
-	if !envOverride {
-		// Storage restore is best-effort — silent miss leaves the
-		// default literal in place.
-		inner.RestorePersistedSql()
+	if launch == nil {
+		// Legacy read bridge (ADR-0148 §SD8), one release: only a window
+		// that received no config at all consults the persist keys. A
+		// restored record is the authority for its own window even where
+		// it is empty — falling through to the keys there would resurrect
+		// exactly what the record says the user cleared. Best-effort;
+		// a silent miss leaves the default literal in place.
+		if !seededSQL {
+			inner.RestorePersistedSql()
+		}
+		// Bands SQL is restored regardless of the main env override — it's
+		// panel-local, not main-SQL, so BOXER_PLAY_SQL has no bearing on
+		// whether the user's last bands query should come back.
+		inner.RestorePersistedTimelineBandsSql()
 	}
-	// Bands SQL is always restored regardless of the main env override —
-	// it's panel-local, not main-SQL, so BOXER_PLAY_SQL has no
-	// bearing on whether the user's last bands query should come back.
-	inner.RestorePersistedTimelineBandsSql()
+	// Timeline bands, in ascending precedence: the bridge above, then the
+	// restored record, then the env override, then a caller's config.
+	if launch != nil && restored {
+		// Applied unconditionally, unlike the caller tier below: an empty
+		// bands buffer is a value the user arrived at, and "only when
+		// non-empty" would silently bring back bands they cleared.
+		inner.SetTimelineBandsSql(launch.BandsSql)
+	}
 	// Dedicated bands env override (parallel to BOXER_PLAY_SQL) lets
 	// scripted screenshots seed the bands editor without interactive input.
 	if bandsSQL, hasBands := TimelineBandsSQLOverride.Lookup(); hasBands && bandsSQL != "" {
 		inner.timelineBandsSql = bandsSQL
 	}
 	if launch != nil {
-		// Config tier for the non-SQL knobs (the SQL seed rode initSQL
-		// above): the flags replace their env counterparts wholesale —
-		// a config-carrying window states its complete opening intent —
-		// and the two optional fields apply only when non-empty.
-		inner.AutoRun = launch.AutoRun
-		inner.SetLiveMain(launch.Live)
-		if launch.BandsSql != "" {
-			inner.SetTimelineBandsSql(launch.BandsSql)
+		if !restored {
+			// A caller-configured window states its complete opening
+			// intent, so its flags replace their env counterparts
+			// wholesale and its optional fields apply when non-empty.
+			inner.AutoRun = launch.AutoRun
+			if launch.BandsSql != "" {
+				inner.SetTimelineBandsSql(launch.BandsSql)
+			}
 		}
+		// A restored record composes AutoRun false by construction
+		// (restoration is not re-execution), so it stays out of the way of
+		// BOXER_PLAY_AUTORUN rather than overriding it with a
+		// meaningless false.
+		inner.SetLiveMain(launch.Live)
 		if launch.Tab != "" {
 			if tabErr := inner.ActivateTab(launch.Tab); tabErr != nil {
 				// An unknown tab id is a degraded open, not a failed one
@@ -338,12 +377,11 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 }
 
 func (inst *PlayLauncher) Unmount(ctx app.MountContextI) (err error) {
-	// Save-on-Unmount fallback: catches sessions that edited the
-	// buffer without ever clicking Run. Idempotent — same value
-	// already persisted on Run paths.
+	// Nothing is saved here any more: the window host pulls the
+	// workingset through ComposeWorkingset before it calls Unmount
+	// (ADR-0148 §SD4), which is why that ordering is load-bearing —
+	// the inner app is released below.
 	if inst.inner != nil {
-		inst.inner.PersistSql()
-		inst.inner.PersistTimelineBandsSql()
 		// Tear down the async machinery: cancel in-flight queries and the
 		// projector, release held results, close every lane.
 		inst.inner.Close()

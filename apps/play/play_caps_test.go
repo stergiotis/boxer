@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -116,16 +117,14 @@ func TestPlayApp_LoadFromPicker_NilBus_NoOp(t *testing.T) {
 	assert.Equal(t, "-- initial", inst.sql)
 }
 
-func TestPlayApp_PersistSql_SetGetRoundTrip(t *testing.T) {
+func TestPlayApp_RestorePersistedSql_ReadsALegacyValue(t *testing.T) {
+	// The one-release read bridge (ADR-0148 §SD8): nothing writes the key
+	// any more, so the test writes it the way a pre-workingset session
+	// left it and asserts a fresh app still finds it.
 	inst, _, cleanup := setupPlayWithCaps(t)
 	defer cleanup()
+	require.NoError(t, inst.storage.Set(persistKeyLastSql, []byte("SELECT 1 AS persisted")))
 
-	inst.sql = "SELECT 1 AS persisted"
-	inst.PersistSql()
-
-	// Build a sibling PlayApp on the same bus + storage so the
-	// Restore path sees the saved value (simulates a process
-	// restart where the storage backend was durable).
 	inst2 := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "-- default")
 	inst2.SetCapabilities(inst.bus, inst.storage, zerolog.Nop())
 	inst2.RestorePersistedSql()
@@ -133,11 +132,10 @@ func TestPlayApp_PersistSql_SetGetRoundTrip(t *testing.T) {
 		"Restore must replace default with the persisted value")
 }
 
-func TestPlayApp_PersistSql_NilStorage_NoOp(t *testing.T) {
+func TestPlayApp_RestorePersistedSql_NilStorage_NoOp(t *testing.T) {
 	graph := newLiveQueryGraph(nil, memory.NewGoAllocator(), 10)
 	inst := NewPlayApp(nil, graph, "-- initial")
 	// No SetCapabilities → inst.storage stays nil.
-	inst.PersistSql() // must not panic / error
 	inst.RestorePersistedSql()
 	assert.Equal(t, "-- initial", inst.sql, "Restore is a no-op when storage is nil")
 }
@@ -167,10 +165,15 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
 	assert.Contains(t, patterns, windowhost.OpenSubject)
 	assert.NotContains(t, patterns, appletstore.SubjectSave)
-	// PersistedKeys → host-injected runtime.persist.play.> cap.
-	// lastSql + timelineBandsSql; both panel-local strings the user
-	// expects to survive session restart.
+	// PersistedKeys → host-injected runtime.persist.play.> cap. Both keys
+	// are read-only now (ADR-0148 §SD8): the buffers are saved as a
+	// workingset record, and the cap is what the one-release read bridge
+	// needs. Drop the keys and this assertion when the bridge retires.
 	require.Len(t, m.PersistedKeys, 2)
 	assert.Contains(t, m.PersistedKeys, persistKeyLastSql)
 	assert.Contains(t, m.PersistedKeys, persistKeyTimelineBandsSql)
+	// Workingset participation (§SD7) requires a launch kind.
+	assert.True(t, m.Workingset)
+	assert.Equal(t, launchcfg.Kind, m.LaunchKind)
+	require.NoError(t, m.Validate())
 }

@@ -43,11 +43,28 @@ func encodePlayLaunch(t *testing.T, lc launchcfg.PlayLaunch) (b []byte) {
 // mountLauncher runs PlayLauncher.Mount with the given launch-config
 // bytes and storage contents, returning the launcher for inner-state
 // assertions. The caller owns Unmount (registered as cleanup here).
+// Config-carrying mounts get LaunchReasonCaller, the reason the host sets
+// for a config another app delivered; mountLauncherRestored is the
+// workingset counterpart.
 func mountLauncher(t *testing.T, cfg []byte, storage app.StorageI) (inst *PlayLauncher, err error) {
+	t.Helper()
+	reason := app.LaunchReasonPlain
+	if len(cfg) > 0 {
+		reason = app.LaunchReasonCaller
+	}
+	inst, err = mountLauncherReason(t, cfg, storage, reason)
+	return
+}
+
+// mountLauncherReason is mountLauncher with the launch reason spelled
+// out — the tier discriminator play's precedence chain reads (ADR-0148
+// §SD5).
+func mountLauncherReason(t *testing.T, cfg []byte, storage app.StorageI, reason app.LaunchReasonE) (inst *PlayLauncher, err error) {
 	t.Helper()
 	inst = &PlayLauncher{}
 	mc := app.NewStaticMountContext("test.play.launch", zerolog.Nop(), storage, nil, nil)
 	mc.SetLaunchConfig(cfg)
+	mc.SetLaunchReason(reason)
 	err = inst.Mount(mc)
 	if err == nil {
 		t.Cleanup(func() { _ = inst.Unmount(mc) })
