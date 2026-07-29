@@ -6,6 +6,12 @@ import (
 	"iter"
 )
 
+func (inst *Fetcher) FetchCommandEnterPressed() (pressed bool, shiftPressed bool) {
+	inst.invoke(FuncProcIdFetchCommandEnterPressed)
+	pressed = inst.readB()
+	shiftPressed = inst.readB()
+	return
+}
 func (inst *Fetcher) FetchF1KeyPressed() (pressed bool) {
 	inst.invoke(FuncProcIdFetchF1KeyPressed)
 	pressed = inst.readB()

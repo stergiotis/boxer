@@ -231,8 +231,17 @@ type StateManager struct {
 	// this via GetF1KeyPressed and opens HelpHost on true; widgets
 	// inside an app should NOT poll, since they'd race the carousel
 	// for the same consumed event.
-	f1KeyPressed   bool
-	snarlEvents    SnarlEventsValue
+	f1KeyPressed bool
+	// commandEnter mirrors the per-frame fetchCommandEnterPressed drain: the
+	// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter "submit" pair, each true exactly
+	// once per physical press and never both. Read via
+	// GetCommandEnterPressed. Unlike F1 this is not a runtime binding — no
+	// carousel-level consumer exists — so the app that polls it owns it for
+	// the process; two apps polling in the same frame would both see the press
+	// and both act on it.
+	commandEnter      bool
+	commandEnterShift bool
+	snarlEvents       SnarlEventsValue
 	graphEvents    GraphEventsValue
 	graphSelection GraphSelectionValue
 	graphMetrics   GraphMetricsValue
@@ -326,6 +335,21 @@ func (inst *StateManager) GetZoomDelta() ZoomDeltaValue {
 func (inst *StateManager) GetF1KeyPressed() (pressed bool) {
 	pressed = inst.f1KeyPressed
 	return
+}
+
+// GetCommandEnterPressed reports whether the user pressed Ctrl+Enter
+// (Cmd+Enter on macOS) or Ctrl+Shift+Enter between this frame's Sync
+// and the previous one — the conventional "submit what I am editing"
+// pair. The two are mutually exclusive: the modified form is consumed
+// first, so a press with Shift down never also reports as plain.
+//
+// egui's consume_key has already removed the event, so as with
+// [StateManager.GetF1KeyPressed] this is the single opportunity to
+// react — but the binding belongs to the polling app, not to the
+// runtime. A focused TextEdit does not compete for it: egui acts on
+// Enter only through its return_key, which requires no modifiers.
+func (inst *StateManager) GetCommandEnterPressed() (pressed bool, shiftPressed bool) {
+	return inst.commandEnter, inst.commandEnterShift
 }
 
 // GetUiRect returns last frame's R21 captured ui.min_rect for the given
@@ -721,6 +745,14 @@ func (inst *StateManager) Sync() {
 		// egui's input queue so other widgets in the same frame don't
 		// also react — the runtime owns this shortcut exclusively.
 		inst.f1KeyPressed = fetcher.FetchF1KeyPressed()
+	}
+	{
+		// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter. Draining these at
+		// frame end is safe where plain Enter would not be: a focused
+		// TextEdit reacts to Enter only through its return_key, which
+		// carries no modifiers, so the widgets have already declined
+		// these two by the time Sync runs.
+		inst.commandEnter, inst.commandEnterShift = fetcher.FetchCommandEnterPressed()
 	}
 	{
 		seqs, minX, minY, maxX, maxYSeq := fetcher.FetchR21UiRects()

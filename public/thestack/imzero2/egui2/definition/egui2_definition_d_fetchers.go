@@ -416,5 +416,39 @@ self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
 		AddReturnValue("hoverYs", ctabb.F32h).
 		Build())
 
+	// fetchCommandEnterPressed — drains the per-frame Ctrl+Enter /
+	// Ctrl+Shift+Enter press events, the conventional "submit what I am
+	// editing" pair. Two bools, one per shortcut, each true exactly once per
+	// physical press; they are mutually exclusive.
+	//
+	// Unlike plain Enter this is safe to drain at frame end, AFTER the widgets
+	// have run: a focused TextEdit acts on Enter only through its `return_key`,
+	// which defaults to Modifiers::NONE, and egui's cmd_ctrl_matches rejects a
+	// NONE pattern outright while ctrl is held. So the editor never sees these
+	// as a newline and the ordering does not race. (Plain Enter would NOT be
+	// safe here — it is consumed by the TextEdit before any fetcher runs.)
+	//
+	// Shift first, and this is load-bearing: consume_key matches modifiers
+	// with matches_logically, which ignores an EXTRA Shift, so a plain
+	// COMMAND+Enter pattern would also swallow Ctrl+Shift+Enter. Most specific
+	// wins by going first, as egui's own docs direct.
+	//
+	// COMMAND rather than CTRL, so the binding is Ctrl on Linux/Windows and
+	// Cmd on macOS. Like fetchF1KeyPressed this is one hardcoded binding
+	// rather than a parametric "any key" fetcher, which keeps the ownership of
+	// a consumed event explicit: whoever polls this owns Ctrl+Enter for the
+	// whole process.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchCommandEnterPressed").
+		WithApplyCodeClientRust(rustClientCode(`
+let shift = {{EguiContext}}.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Enter));
+let plain = {{EguiContext}}.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
+self.io.write_plain_b(plain)?;
+self.io.write_plain_b(shift)?;
+{{SendMessage}}
+`)).
+		AddReturnValue("pressed", ctabb.B).
+		AddReturnValue("shiftPressed", ctabb.B).
+		Build())
+
 	return
 }

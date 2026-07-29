@@ -48,6 +48,7 @@ status: draft
 | EtRowHeight | BuilderFactory | No | 1 | 0 | 0 | Immediate |
 | ExportSvg | Procedural | No | 3 | 0 | - | - |
 | ExportSvgWindow | Procedural | Yes | 4 | 0 | - | - |
+| FetchCommandEnterPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchF1KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchFrameMetrics | Fetcher | No | 0 | 0 | - | - |
 | FetchGraphEvents | Fetcher | No | 0 | 0 | - | - |
@@ -3485,6 +3486,19 @@ Block
 ---
 
 ## Fetcher Nodes
+
+### FetchCommandEnterPressed
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| pressed | b |
+| shiftPressed | b |
+
+---
 
 ### FetchF1KeyPressed
 
