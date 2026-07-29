@@ -1753,7 +1753,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 		// travels with it. Offered only where there is an editor to decorate.
 		if inst.editorTabPresent() && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
-			for range c.HoverText("Shows what Ctrl+Shift+Enter would run: the query the caret is in, the WITH items and SET prelude carried with it, and any reference to an outer table alias that will NOT resolve once it runs alone. Also adds a Run subquery button beside Run. Changes nothing about what Run or Ctrl+Enter do.").KeepIter() {
+			for range c.HoverText("Marks the query the caret is in: its extent, the WITH items and SET prelude it closes over, and any reference to an outer table alias that would not resolve if it ran alone. The gutter's | says when running it alone would differ from Run. Adds a Run subquery button; changes nothing about what Run or Ctrl+Enter do.").KeepIter() {
 				c.Checkbox(ids.PrepareStr("subqueryMode"), inst.subqueryMode, "Subquery").
 					SendRespVal(&inst.subqueryMode)
 			}

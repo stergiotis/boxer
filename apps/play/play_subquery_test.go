@@ -318,35 +318,46 @@ func TestSubqueryModeMarksTheRootQuerysClosure(t *testing.T) {
 	app.subqueryMode = true
 	app.caretByte = len("WITH\n  ['a', 'b'] AS lifecycle,\n  sub AS (SELECT 1 AS x)\nSELECT x FRO")
 
-	var carried []string
-	var backgrounds int
+	var carried, tinted []string
 	for _, s := range app.editorStyledSections() {
 		switch {
 		case s.Flags&codeview.StyleBackground != 0:
-			backgrounds++
+			tinted = append(tinted, sql[s.Start:s.Stop])
 		case s.Flags&codeview.StyleUnderline != 0 && s.Color == styleCarriedTone:
 			carried = append(carried, sql[s.Start:s.Stop])
 		}
 	}
-	if backgrounds != 0 {
-		t.Errorf("got %d background sections on the statement's own query, want 0", backgrounds)
+	// The main query IS tinted: the WITH clause sits outside it, so it is a
+	// proper subset of the statement and the tint distinguishes the two.
+	wantTint := "SELECT x FROM sub ORDER BY indexOf(lifecycle, 'a')"
+	if strings.Join(tinted, "|") != wantTint {
+		t.Errorf("tinted = %v, want just the main query", tinted)
 	}
 	want := []string{"['a', 'b'] AS lifecycle", "sub AS (SELECT 1 AS x)"}
 	if strings.Join(carried, "|") != strings.Join(want, "|") {
 		t.Errorf("closure = %v, want %v", carried, want)
 	}
 	// Still not a narrowing: the gesture degrades, and the gutter stays quiet.
+	// The tint must not leak a mark into it — `>` means the caret's statement,
+	// and this is a single-statement buffer with no statement tint at all.
 	if _, scope := app.runSubqueryBuffer(); scope != runScopeNoSubquery {
 		t.Errorf("scope = %v, want runScopeNoSubquery", scope)
 	}
 	if r := app.caretSubqueryRange(); !r.Empty() {
 		t.Errorf("gutter range = %v, want empty at statement level", r)
 	}
+	m := app.buildGutterModel(sql, app.editorStyledSections(), app.caretSubqueryRange())
+	for i, mark := range m.marks {
+		if mark != gutterMarkNone {
+			t.Errorf("line %d mark = %v, want none — the query tint is not a statement mark", i+1, mark)
+		}
+	}
 }
 
-// A statement with no WITH clause and no prelude has no closure to draw, so
-// the common buffer stays undecorated even with the mode on.
-func TestSubqueryModeQuietWithoutAClosure(t *testing.T) {
+// A query that IS the whole statement has nothing outside it to be
+// distinguished from, and no closure to draw — so the plain buffer stays
+// undecorated even with the mode on. A full-width wash would say nothing.
+func TestSubqueryModeQuietWhenTheQueryIsTheStatement(t *testing.T) {
 	const sql = "SELECT 1 AS a"
 	app := debouncedApp(t, sql)
 	app.updatePreview()

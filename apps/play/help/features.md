@@ -117,9 +117,11 @@ bar, not what anything does.
 Run subquery is never greyed out. With the caret at statement level it does
 what the keystroke does: runs the whole query, and says so in the status line.
 
-What the toggle draws:
+Everything it draws describes one thing: **the query the caret is in.**
 
-- The **query that would run** is tinted.
+- The **query itself** is tinted — its extent, marked off from whatever
+  surrounds it. A query that *is* the whole statement is not tinted: there is
+  nothing to distinguish it from, and a full-width wash would say nothing.
 - Its **environment** — the WITH items in scope, and the `SET` prelude — is
   underlined in the info tone. These are lines elsewhere in the buffer that the
   query depends on, and that travel with it when it runs alone.
@@ -132,11 +134,14 @@ What the toggle draws:
 A qualified name that resolves nowhere at all is left unmarked, since
 `tuple.field` on a Tuple column looks the same to the parser.
 
-The environment is drawn for the statement's own query as well, not only for
-nested ones — a `WITH` clause that runs to most of the buffer, with the query
-it feeds at the bottom, is exactly where seeing the closure helps. That query
-gets no tint, because it is what Run ships either way, and no `|` in the
-gutter, because there is nothing narrower to run.
+All of this is drawn for the statement's own query as well, not only for nested
+ones — a `WITH` clause running to most of the buffer, with the query it feeds
+at the bottom, is exactly where seeing the query and its closure helps.
+
+What the toggle does **not** say is what Ctrl+Shift+Enter would run — the
+gutter's `|` says that, and it appears only where running the query alone
+would differ from Run. So a tinted region with no `|` beside it reads as
+"this is the query, and it is already what runs".
 
 ## Query parameters
 

@@ -631,18 +631,37 @@ button and a chord, the subquery run only a chord. So the mode now adds a
 > Each button is exactly its keystroke. The toggle changes which buttons are
 > on the bar, never what a keystroke means.
 
-A follow-up from use: the mode drew **nothing at all** with the caret in the
-statement's own query, because the whole producer early-returned on `Root`.
-That skipped the environment too — so a buffer whose `WITH` clause is most of
-its length, with the query it feeds at the bottom, said nothing about what that
-query rests on. The early return was written for the tint, where it is right
-(the statement's own query is what Run ships; tinting it says nothing), and
-over-applied to the other two channels. A root query closes over its WITH items
-no less than a nested one does; the only difference is that they already travel
-with it rather than being spliced in front. The environment now draws either
-way, the tint still only when there is a narrowing, and the gutter `|` likewise.
-`unit.WithItems` was already populated for the root — nothing had to be
-computed, only drawn.
+Two follow-ups from use, and the second corrects the first.
+
+The mode drew **nothing at all** with the caret in the statement's own query:
+the whole producer early-returned on `Root`, which skipped the environment too,
+so a buffer whose `WITH` clause is most of its length said nothing about what
+the query at the bottom rests on. `unit.WithItems` was already populated for
+the root — the `ctes` clause sits above the `selectUnionStmt`, so the hoist
+walk collects it there like anywhere else. It was only never drawn.
+
+Drawing the environment but not the tint then exposed the real defect: **the
+channels had different referents.** The underline described "the query the
+caret is in"; the tint described "what Ctrl+Shift+Enter would run *instead of*
+the whole thing". Everywhere but the root those coincide, so the split was
+invisible — at the root they diverge and one channel goes dark. A rule you
+have to learn rather than guess.
+
+One referent now, for all three: **the query the caret is in.** The tint marks
+it as distinct from what surrounds it, which makes the gate not `!Root` but
+whether the unit is a PROPER SUBSET of the statement — a `WITH` clause, a
+trailing `FORMAT`, or an enclosing query all put something outside it and earn
+the tint, while a query that IS the whole statement is left alone, since a
+full-width wash says nothing. "What would run" is a different question, and
+the gutter's `|` is its only answer: a tinted region with no `|` reads as
+"this is the query, and it is already what runs".
+
+That split had to be made real in the gutter too. `buildGutterModel` derived
+`>` from ANY background section, so tinting a root query silently claimed its
+lines were the caret's *statement* — the one thing `>` means. It now keys on
+`styleStmtTint` specifically. The masking was accidental before: `|` outranks
+`>`, and a narrowing always produced both, so the wrong mark never surfaced
+until a tint appeared without a narrowing beside it.
 
 The button is **not** disabled when the caret has nothing to narrow to. It does
 what the chord does — runs the whole query, and the status line says so.

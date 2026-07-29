@@ -254,10 +254,19 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 //     rejects it. This is the correlated-subquery case the composition cannot
 //     repair.
 //
-// The statement's own query gets the environment but no background: it closes
-// over its WITH items no less than a nested query does — the difference is only
-// that they already travel with it rather than being spliced in front — while
-// tinting it would say nothing, since it is what Run ships either way.
+// All three answer the same question — "the query the caret is in" — so all
+// three are drawn from the same unit, root or not. What gates the tint is not
+// whether the unit is the statement's own query but whether it is a PROPER
+// SUBSET of the statement: the tint marks the query as distinct from what
+// surrounds it, and a unit covering the whole statement has nothing to be
+// distinct from. That is the plain `SELECT …` buffer, where a full-width wash
+// would say nothing; a `WITH …` clause, a trailing FORMAT, or an enclosing
+// query all put something outside the unit and earn the tint.
+//
+// "What Ctrl+Shift+Enter would run" is a different question, and the gutter's
+// `|` mark answers it — present only where running the query alone differs
+// from Run. So a tinted region without a `|` reads as "this is the query, and
+// it is already what runs".
 func (inst *PlayApp) subqueryModeSections() (out []codeview.StyledSection) {
 	if !inst.subqueryMode {
 		return nil
@@ -267,7 +276,7 @@ func (inst *PlayApp) subqueryModeSections() (out []codeview.StyledSection) {
 		return nil
 	}
 	base := stmt.Src.Start
-	if !sub.Root {
+	if sub.Src.Start > 0 || sub.Src.End < stmt.Src.End-base {
 		out = append(out, codeview.StyledSection{
 			Start: uint32(base + sub.Src.Start), Stop: uint32(base + sub.Src.End),
 			Flags: codeview.StyleBackground,

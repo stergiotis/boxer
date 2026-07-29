@@ -110,7 +110,11 @@ func (inst *PlayApp) buildGutterModel(buf string, styled []codeview.StyledSectio
 		switch {
 		case s.Flags&codeview.StyleUnderline != 0 && s.Color == styleErrorTone:
 			mark = gutterMarkError
-		case s.Flags&codeview.StyleBackground != 0:
+		// The STATEMENT tint specifically, not any background: the Subquery
+		// mode's query tint is a background too, and it means something the
+		// `>` mark does not. `>` says "the statement the caret is in"; the
+		// query inside it has its own mark, from its own input below.
+		case s.Flags&codeview.StyleBackground != 0 && s.Color == styleStmtTint:
 			mark = gutterMarkActive
 		default:
 			continue
