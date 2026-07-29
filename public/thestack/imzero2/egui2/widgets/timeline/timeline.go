@@ -108,6 +108,14 @@ type Visuals struct {
 	SelectionStrokeColor color.Color
 	NowLineColor         color.Color
 	AnnotationFgColor    color.Color
+	// LaneCursorColor tints the horizontal lane cursor — the rule marking
+	// the click-selected lane. Defaults to the same faint border token the
+	// vertical hover crosshair uses, because the cursor is a locator, not
+	// an emphasis: it runs the full width of an already-dense canvas and
+	// must not compete with the event glyphs it passes behind. Dial it up
+	// (SelectionStrokeColor, an accent) for a sparse timeline where the
+	// row needs to announce itself.
+	LaneCursorColor color.Color
 
 	// Flat event fills — used for interval bars and raw rug marks when
 	// intensity is NOT the encoded dimension (see WithIntensityEncoding).
@@ -156,6 +164,7 @@ func DefaultVisuals() (v Visuals) {
 	v.SelectionStrokeColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.NowLineColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
 	v.AnnotationFgColor = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
+	v.LaneCursorColor = color.Hex(styletokens.NeutralBorderFaint.AsHex()).Keep()
 	// Flat fills for the intensity-off path: the soft accent for the larger
 	// bar areas, the brighter info hue for the thin 1-px rug marks that need
 	// more punch to read. Both sit at IDS lightness ~0.80 — high contrast
@@ -201,6 +210,10 @@ const (
 	labelPaddingX            float32 = 8
 	labelBandMaxW            float32 = 200
 	crosshairWidthPx         float32 = 1
+	// laneCursorWidthPx is the stroke of the horizontal lane cursor. Held
+	// at the vertical crosshair's weight on purpose: the two read as one
+	// pair of orthogonal locators rather than as two competing marks.
+	laneCursorWidthPx        float32 = 1
 	selectionStrokeWidthPx   float32 = 2
 	annotationGap            float32 = 4
 	annotationFlagPaddingY   float32 = 2
@@ -243,6 +256,7 @@ const (
 	SelectionInterval
 	SelectionBucket
 	SelectionAnnotation
+	SelectionLane
 )
 
 // verticalLayout bundles the per-frame Y geometry of the timeline canvas
@@ -334,14 +348,42 @@ func (inst *Timeline) flagRowY(row int32) (flagY0, flagY1 float32) {
 }
 
 // SelectionInfo is the snapshot returned by Timeline.Selection. Interval,
-// Bucket, and Annotation are all pointers — non-nil iff Kind matches the
-// corresponding SelectionKindE value. The zero value (Kind ==
+// Bucket, Annotation, and Lane are all pointers — non-nil iff Kind matches
+// the corresponding SelectionKindE value. The zero value (Kind ==
 // SelectionNone, all pointers nil) is what callers see before any click.
+//
+// Lane addresses a copy of the lane as the most recent Render packed it,
+// not the widget's live row: the assignment is rebuilt from scratch every
+// frame (see laneRef), so a pointer into it would go stale after one
+// frame. The copy is a stable snapshot — its Items are caller-owned
+// *IntervalEvent pointers that stay valid — but it does not track later
+// repacks. Re-read Selection each frame to follow them.
 type SelectionInfo struct {
 	Kind       SelectionKindE
 	Interval   *layout.IntervalEvent
 	Bucket     *layout.Bucket
 	Annotation *layout.Annotation
+	Lane       *layout.Lane
+}
+
+// laneRef identifies a click-selected lane by stable identity rather than
+// by a *layout.Lane or a bare row index. renderBody reruns
+// layout.PackLanes every frame, so the assignment (and therefore any
+// pointer into it) is rebuilt from scratch each time.
+//
+// Hinted lanes re-resolve by hint — PackLanes emits exactly one lane per
+// distinct LaneHint, so the name survives repacks, data swaps, and lane
+// reordering. Unhinted auto lanes have no stable name and re-resolve by
+// index, which holds as long as the interval set does; once the greedy
+// packer reshuffles them the reference stops resolving and the selection
+// reads as SelectionNone (see resolveLane).
+//
+// Only meaningful while selection.Kind == SelectionLane — every read site
+// gates on that, so a stale ref left behind by another selection kind is
+// unreachable rather than wrong.
+type laneRef struct {
+	hint  string
+	index int32
 }
 
 // defaultLODScales is the binning ladder used by Timeline when the caller
@@ -408,6 +450,10 @@ type Timeline struct {
 	intervalColors   []color.Color // categorical interval palette (KindID-indexed); overrides intensity when non-empty
 
 	selection SelectionInfo
+	// selLane backs a SelectionLane selection. Read only while
+	// selection.Kind == SelectionLane; see laneRef for why the lane cannot
+	// be stored as a pointer.
+	selLane laneRef
 
 	cursorTimeMS    int64
 	cursorTimeValid bool
@@ -472,6 +518,7 @@ type SelectionListener func(sel SelectionInfo)
 //	    case timeline.SelectionInterval:   useInterval(sel.Interval)
 //	    case timeline.SelectionBucket:     useBucket(sel.Bucket)
 //	    case timeline.SelectionAnnotation: useAnnotation(sel.Annotation)
+//	    case timeline.SelectionLane:       useLane(sel.Lane)
 //	    case timeline.SelectionNone:       // click cleared selection
 //	    }
 //	})
@@ -689,6 +736,11 @@ func (inst *Timeline) annotationReserved() (yes bool) {
 // user-driven viewport pin is dropped so new data auto-fits — callers
 // who want their pinned range preserved across data swaps should re-pin
 // via SetRange after.
+//
+// A lane selection is deliberately NOT cleared: it is held by stable
+// identity, so a hinted lane keeps its cursor across the swap (the same
+// actor's row, refilled with new events) while an unhinted auto lane
+// degrades to SelectionNone once the packer reshuffles it. See laneRef.
 func (inst *Timeline) SetIntervals(intervals []*layout.IntervalEvent) {
 	inst.intervals = intervals
 	if inst.selection.Kind == SelectionInterval {
@@ -807,11 +859,100 @@ func (inst *Timeline) SelectBucketAt(tMS int64) {
 	inst.selection = SelectionInfo{Kind: SelectionBucket, Bucket: &bucket}
 }
 
+// SelectLaneByHint programmatically selects the lane pinned to the given
+// LaneHint — the lane counterpart of SelectAnnotationByNumber /
+// SelectIntervalByPointer for the cross-widget-linking pattern. A sibling
+// table listing the same actors ("which scope / provider / host is this
+// row?") drives the timeline's lane cursor by calling this with the row's
+// hint.
+//
+// No-op when:
+//   - hint is empty (unhinted auto lanes have no stable name to address).
+//   - No render has happened yet — Render is what runs the packer that
+//     turns hints into lanes, so the assignment is empty before it.
+//   - No lane carries that hint in the most recent assignment.
+//
+// Never panics; never clears an existing selection on a miss.
+func (inst *Timeline) SelectLaneByHint(hint string) {
+	if hint == "" {
+		return
+	}
+	for i := range inst.laneAssn.Lanes {
+		if inst.laneAssn.Lanes[i].Hint != hint {
+			continue
+		}
+		inst.selection = SelectionInfo{Kind: SelectionLane}
+		inst.selLane = laneRef{hint: hint, index: int32(i)}
+		return
+	}
+}
+
 // Selection returns the current click-driven selection. Kind ==
 // SelectionNone before the first click and after any click-miss or
 // click-same-to-clear gesture.
+//
+// A SelectionLane is re-resolved against the most recent Render's lane
+// assignment on every call (the widget stores a stable laneRef, not a
+// pointer) and materialises Lane as a snapshot copy. A lane reference that
+// no longer resolves — an unhinted auto lane the packer reshuffled, a
+// hinted lane whose events all vanished — degrades to SelectionNone rather
+// than reporting SelectionLane with a nil Lane, so the "pointer non-nil iff
+// Kind matches" invariant holds unconditionally.
 func (inst *Timeline) Selection() (sel SelectionInfo) {
 	sel = inst.selection
+	if sel.Kind != SelectionLane {
+		return
+	}
+	idx, ok := inst.resolveLane(inst.selLane)
+	if !ok {
+		sel = SelectionInfo{}
+		return
+	}
+	lane := inst.laneAssn.Lanes[idx]
+	sel.Lane = &lane
+	return
+}
+
+// resolveLane maps a laneRef onto the most recent Render's lane
+// assignment. Hinted refs match by name — surviving repacks, reordering,
+// and data swaps. Unhinted refs match by index, and only while that index
+// still holds an unhinted lane: once a hint claims the slot the auto lane
+// the ref meant is gone, and reporting the newcomer would silently move
+// the user's selection to a row they never clicked.
+func (inst *Timeline) resolveLane(ref laneRef) (idx int32, ok bool) {
+	if ref.hint != "" {
+		for i := range inst.laneAssn.Lanes {
+			if inst.laneAssn.Lanes[i].Hint == ref.hint {
+				idx, ok = int32(i), true
+				return
+			}
+		}
+		return
+	}
+	if ref.index < 0 || ref.index >= inst.laneAssn.LaneCount() {
+		return
+	}
+	if inst.laneAssn.Lanes[ref.index].Hint != "" {
+		return
+	}
+	idx, ok = ref.index, true
+	return
+}
+
+// sameLane reports whether ref designates the lane currently at idx —
+// the comparison behind the click-the-selected-lane-again toggle. Uses the
+// same identity rule as resolveLane: by hint when either side carries one,
+// by index otherwise.
+func (inst *Timeline) sameLane(ref laneRef, idx int32) (yes bool) {
+	if idx < 0 || idx >= inst.laneAssn.LaneCount() {
+		return
+	}
+	hint := inst.laneAssn.Lanes[idx].Hint
+	if hint != "" || ref.hint != "" {
+		yes = ref.hint == hint
+		return
+	}
+	yes = ref.index == idx
 	return
 }
 
@@ -974,6 +1115,7 @@ func (inst *Timeline) renderBody() {
 	if inst.rugReserved() {
 		inst.paintRug(tm, vl, viewMinMS, viewMaxMS)
 	}
+	inst.paintLaneCursor(vl)
 	inst.paintLanes(tm, vl)
 	inst.paintLaneLabels(vl)
 	inst.paintAxis(tm, vl)
@@ -1017,10 +1159,13 @@ func (inst *Timeline) renderBody() {
 // dispatchClick updates the selection state and fires the registered
 // click callbacks for a primary-click over the canvas. Annotation hits
 // take precedence over lane-bar hits, which take precedence over rug-strip
-// hits — mirroring the visual z-order (annotations on top). Off-target
-// clicks clear the selection. Clicking the already-selected target toggles
-// the selection off. cp.Clicked is edge-triggered by egui (true only on
-// the frame the release lands), so callers don't need to debounce.
+// hits, which take precedence over bare-lane-row hits — mirroring the
+// visual z-order (annotations on top) and ending with the lane, the
+// coarsest target, so a bar always wins over the row carrying it.
+// Off-target clicks clear the selection. Clicking the already-selected
+// target toggles the selection off. cp.Clicked is edge-triggered by egui
+// (true only on the frame the release lands), so callers don't need to
+// debounce.
 func (inst *Timeline) dispatchClick(tm layout.TickMap, fl flagLayout, vl verticalLayout, cursorX, cursorY float32) {
 	if a := inst.hitTestAnnotation(fl, cursorX, cursorY); a != nil {
 		if inst.selection.Kind == SelectionAnnotation && inst.selection.Annotation == a {
@@ -1052,13 +1197,61 @@ func (inst *Timeline) dispatchClick(tm layout.TickMap, fl flagLayout, vl vertica
 			return
 		}
 	}
+	if idx, ok := inst.hitTestLane(vl, cursorY); ok {
+		if inst.selection.Kind == SelectionLane && inst.sameLane(inst.selLane, idx) {
+			inst.selection = SelectionInfo{}
+		} else {
+			inst.selection = SelectionInfo{Kind: SelectionLane}
+			inst.selLane = laneRef{hint: inst.laneAssn.Lanes[idx].Hint, index: idx}
+		}
+		inst.fireSelectionListener()
+		return
+	}
 	inst.selection = SelectionInfo{}
 	inst.fireSelectionListener()
 }
 
+// hitTestLane returns the index of the lane row containing cursorY, or
+// ok=false when the cursor is outside the lane area (annotation band, rug
+// strip, axis, rollover rows) or no lanes are packed.
+//
+// Each lane owns its full row pitch — bar height plus the LaneGap below it
+// — so the gutters between rows belong to the lane above rather than
+// forming dead strips that would read as "click missed" and clear the
+// selection. The area as a whole is still bounded by laneAreaH, which
+// excludes the trailing gap after the last lane, so the row band ends where
+// the lanes do.
+//
+// X is not consulted: the lane is a row, selectable anywhere along it.
+// renderBody only reaches dispatchClick for cursors at or right of
+// axisStartPx, which keeps clicks in the lane-label band inert.
+func (inst *Timeline) hitTestLane(vl verticalLayout, cursorY float32) (idx int32, ok bool) {
+	n := inst.laneAssn.LaneCount()
+	if n == 0 {
+		return
+	}
+	pitch := inst.visuals.LaneHeight + inst.visuals.LaneGap
+	if pitch <= 0 {
+		return
+	}
+	if cursorY < vl.laneBaseY || cursorY >= vl.laneBaseY+vl.laneAreaH {
+		return
+	}
+	idx = int32((cursorY - vl.laneBaseY) / pitch)
+	if idx < 0 || idx >= n {
+		idx = 0
+		return
+	}
+	ok = true
+	return
+}
+
+// fireSelectionListener hands the listener the same value Selection would
+// return — not the raw selection field — so a SelectionLane arrives with
+// its Lane snapshot already materialised.
 func (inst *Timeline) fireSelectionListener() {
 	if inst.onSelection != nil {
-		inst.onSelection(inst.selection)
+		inst.onSelection(inst.Selection())
 	}
 }
 
@@ -1313,6 +1506,31 @@ func clamp01ToRange(v, lo, hi float32) (out float32) {
 		out = v
 	}
 	return
+}
+
+// paintLaneCursor draws the horizontal lane cursor: a hairline down the
+// vertical center of the click-selected lane, spanning the full time axis.
+// It is the horizontal twin of the vertical hover crosshair — same weight,
+// same faint border token — so the pair reads as one locator idiom rather
+// than as new chrome.
+//
+// Painted BEFORE paintLanes, which is what keeps it unobtrusive on a dense
+// canvas: every bar in the lane occludes the segment behind it, so the rule
+// survives only in the gaps and never strikes through an event glyph. On a
+// lane of degenerate 1-px marks — a per-actor event stream rather than a
+// span chart — that reads as a guide threading the marks together and out
+// to the lane's label; on a lane packed with wide bars it recedes to almost
+// nothing, which is the correct emphasis for a row the user can already see.
+func (inst *Timeline) paintLaneCursor(vl verticalLayout) {
+	if inst.selection.Kind != SelectionLane {
+		return
+	}
+	idx, ok := inst.resolveLane(inst.selLane)
+	if !ok {
+		return
+	}
+	y := vl.laneBaseY + float32(idx)*(inst.visuals.LaneHeight+inst.visuals.LaneGap) + inst.visuals.LaneHeight/2
+	c.PaintLine(vl.axisStartPx, y, vl.axisEndPx, y, inst.visuals.LaneCursorColor, laneCursorWidthPx).Send()
 }
 
 func (inst *Timeline) paintLanes(tm layout.TickMap, vl verticalLayout) {

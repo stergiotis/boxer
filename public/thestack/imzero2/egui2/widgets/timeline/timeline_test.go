@@ -783,3 +783,268 @@ func TestClipToAxis(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Lane selection + lane cursor
+// =============================================================================
+
+// newLaneTestTimeline builds a timeline over three hinted lanes and does
+// what renderBody would: run the packer. Lane order is first-seen hint
+// order — a, b, c — so lane i sits at laneBaseY + i*(LaneHeight+LaneGap).
+func newLaneTestTimeline(t *testing.T, opts ...Option) (tl *Timeline, intervals []*layout.IntervalEvent) {
+	t.Helper()
+	intervals = []*layout.IntervalEvent{
+		{FromMS: 0, ToMS: 100, LaneHint: "a"},
+		{FromMS: 0, ToMS: 100, LaneHint: "b"},
+		{FromMS: 0, ToMS: 100, LaneHint: "c"},
+	}
+	tl = newTestTimeline(t, intervals, opts...)
+	tl.laneAssn = layout.PackLanes(intervals)
+	return
+}
+
+func TestHitTestLane_RowsOwnTheirTrailingGap(t *testing.T) {
+	tl, _ := newLaneTestTimeline(t)
+	vl := tl.computeVerticalLayout(0, 0, 0, 1000)
+	pitch := tl.visuals.LaneHeight + tl.visuals.LaneGap
+	cases := []struct {
+		name    string
+		cursorY float32
+		wantIdx int32
+		wantOk  bool
+	}{
+		{"above_lane_area", vl.laneBaseY - 1, 0, false},
+		{"lane_0_top", vl.laneBaseY, 0, true},
+		{"lane_0_middle", vl.laneBaseY + tl.visuals.LaneHeight/2, 0, true},
+		// The gutter below a bar belongs to the lane above it, so a click
+		// between rows selects rather than clears.
+		{"lane_0_trailing_gap", vl.laneBaseY + tl.visuals.LaneHeight + 1, 0, true},
+		{"lane_1_middle", vl.laneBaseY + pitch + tl.visuals.LaneHeight/2, 1, true},
+		{"lane_2_middle", vl.laneBaseY + 2*pitch + tl.visuals.LaneHeight/2, 2, true},
+		// laneAreaH excludes the trailing gap after the last lane, so the
+		// row band ends flush with the bars.
+		{"below_lane_area", vl.laneBaseY + vl.laneAreaH, 0, false},
+		{"on_the_axis", vl.axisBaselineY, 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			idx, ok := tl.hitTestLane(vl, tc.cursorY)
+			if ok != tc.wantOk {
+				t.Fatalf("ok: got %v want %v", ok, tc.wantOk)
+			}
+			if ok && idx != tc.wantIdx {
+				t.Errorf("idx: got %d want %d", idx, tc.wantIdx)
+			}
+		})
+	}
+}
+
+func TestHitTestLane_NoLanesIsAMiss(t *testing.T) {
+	tl := newTestTimeline(t, nil)
+	tl.laneAssn = layout.PackLanes(nil)
+	// laneAreaH falls back to one LaneHeight for the empty state; nothing
+	// there is clickable.
+	vl := tl.computeVerticalLayout(0, 0, 0, 1000)
+	if _, ok := tl.hitTestLane(vl, vl.laneBaseY+1); ok {
+		t.Error("empty assignment should not report a lane hit")
+	}
+}
+
+// dispatchTestTickMap mirrors the tick map renderBody builds: a 0..1000ms
+// view across the full 0..1000px axis, i.e. 1px per ms.
+func dispatchTestTickMap(vl verticalLayout) (tm layout.TickMap) {
+	tm = layout.ComputeTickMap(
+		time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC(),
+		float64(vl.axisStartPx), float64(vl.axisEndPx), nil, timeticks.TimeStep{})
+	return
+}
+
+func TestDispatchClick_BareLaneRowSelectsTheLane(t *testing.T) {
+	var fired []SelectionInfo
+	tl, _ := newLaneTestTimeline(t, WithOnSelection(func(sel SelectionInfo) {
+		fired = append(fired, sel)
+	}))
+	vl := tl.computeVerticalLayout(0, 0, 0, 1000)
+	tm := dispatchTestTickMap(vl)
+	pitch := tl.visuals.LaneHeight + tl.visuals.LaneGap
+	// x=500 is past the events (which end at 100ms → x=100), so this lands
+	// on bare row space in lane 1.
+	tl.dispatchClick(tm, flagLayout{}, vl, 500, vl.laneBaseY+pitch+tl.visuals.LaneHeight/2)
+
+	sel := tl.Selection()
+	if sel.Kind != SelectionLane {
+		t.Fatalf("Kind: got %v want SelectionLane", sel.Kind)
+	}
+	if sel.Lane == nil || sel.Lane.Hint != "b" {
+		t.Fatalf("Lane: got %+v want hint %q", sel.Lane, "b")
+	}
+	if len(fired) != 1 {
+		t.Fatalf("listener fired %d times, want 1", len(fired))
+	}
+	// The listener must see the materialised lane, not a bare Kind.
+	if fired[0].Lane == nil || fired[0].Lane.Hint != "b" {
+		t.Errorf("listener payload: got %+v want hint %q", fired[0].Lane, "b")
+	}
+}
+
+func TestDispatchClick_ClickingTheSelectedLaneAgainClears(t *testing.T) {
+	tl, _ := newLaneTestTimeline(t)
+	vl := tl.computeVerticalLayout(0, 0, 0, 1000)
+	tm := dispatchTestTickMap(vl)
+	y := vl.laneBaseY + tl.visuals.LaneHeight/2
+	tl.dispatchClick(tm, flagLayout{}, vl, 500, y)
+	if tl.Selection().Kind != SelectionLane {
+		t.Fatal("setup: first click should select lane 0")
+	}
+	tl.dispatchClick(tm, flagLayout{}, vl, 500, y)
+	if got := tl.Selection().Kind; got != SelectionNone {
+		t.Errorf("second click on the same lane: got %v want SelectionNone", got)
+	}
+}
+
+func TestDispatchClick_BarWinsOverItsLane(t *testing.T) {
+	tl, intervals := newLaneTestTimeline(t)
+	vl := tl.computeVerticalLayout(0, 0, 0, 1000)
+	tm := dispatchTestTickMap(vl)
+	// x=50 is inside lane 0's bar ([0,100]ms → [0,100]px); the interval tier
+	// runs before the lane tier so the finer target wins.
+	tl.dispatchClick(tm, flagLayout{}, vl, 50, vl.laneBaseY+tl.visuals.LaneHeight/2)
+	sel := tl.Selection()
+	if sel.Kind != SelectionInterval || sel.Interval != intervals[0] {
+		t.Errorf("got Kind=%v Interval=%p want SelectionInterval %p", sel.Kind, sel.Interval, intervals[0])
+	}
+}
+
+func TestDispatchClick_OutsideTheLaneAreaStillClears(t *testing.T) {
+	tl, _ := newLaneTestTimeline(t)
+	vl := tl.computeVerticalLayout(0, 0, 0, 1000)
+	tm := dispatchTestTickMap(vl)
+	tl.dispatchClick(tm, flagLayout{}, vl, 500, vl.laneBaseY+tl.visuals.LaneHeight/2)
+	if tl.Selection().Kind != SelectionLane {
+		t.Fatal("setup: expected a lane selection")
+	}
+	tl.dispatchClick(tm, flagLayout{}, vl, 500, vl.axisBaselineY+2) // on the axis
+	if got := tl.Selection().Kind; got != SelectionNone {
+		t.Errorf("click below the lane area: got %v want SelectionNone", got)
+	}
+}
+
+func TestSelectionLane_HintedLaneSurvivesARepack(t *testing.T) {
+	tl, _ := newLaneTestTimeline(t)
+	tl.SelectLaneByHint("c") // last lane, index 2
+	if idx, ok := tl.resolveLane(tl.selLane); !ok || idx != 2 {
+		t.Fatalf("setup: resolveLane got (%d,%v) want (2,true)", idx, ok)
+	}
+	// New data reorders the hints and drops one: "c" moves to index 0.
+	next := []*layout.IntervalEvent{
+		{FromMS: 500, ToMS: 600, LaneHint: "c"},
+		{FromMS: 500, ToMS: 600, LaneHint: "a"},
+	}
+	tl.SetIntervals(next)
+	tl.laneAssn = layout.PackLanes(next)
+
+	sel := tl.Selection()
+	if sel.Kind != SelectionLane {
+		t.Fatalf("Kind after repack: got %v want SelectionLane", sel.Kind)
+	}
+	if sel.Lane == nil || sel.Lane.Hint != "c" {
+		t.Fatalf("Lane after repack: got %+v want hint %q", sel.Lane, "c")
+	}
+	if idx, _ := tl.resolveLane(tl.selLane); idx != 0 {
+		t.Errorf("resolved index after repack: got %d want 0", idx)
+	}
+}
+
+func TestSelectionLane_HintedLaneDegradesWhenItDisappears(t *testing.T) {
+	tl, _ := newLaneTestTimeline(t)
+	tl.SelectLaneByHint("b")
+	next := []*layout.IntervalEvent{{FromMS: 0, ToMS: 10, LaneHint: "a"}}
+	tl.SetIntervals(next)
+	tl.laneAssn = layout.PackLanes(next)
+	sel := tl.Selection()
+	if sel.Kind != SelectionNone {
+		t.Errorf("vanished lane: got Kind=%v want SelectionNone", sel.Kind)
+	}
+	if sel.Lane != nil {
+		t.Errorf("vanished lane: Lane should be nil, got %+v", sel.Lane)
+	}
+}
+
+func TestSelectionLane_AutoLaneResolvesByIndexOnly(t *testing.T) {
+	// Two fully-overlapping unhinted events → two auto lanes, no names.
+	intervals := []*layout.IntervalEvent{
+		{FromMS: 0, ToMS: 100},
+		{FromMS: 0, ToMS: 100},
+	}
+	tl := newTestTimeline(t, intervals)
+	tl.laneAssn = layout.PackLanes(intervals)
+	vl := tl.computeVerticalLayout(0, 0, 0, 1000)
+	tm := dispatchTestTickMap(vl)
+	pitch := tl.visuals.LaneHeight + tl.visuals.LaneGap
+	tl.dispatchClick(tm, flagLayout{}, vl, 500, vl.laneBaseY+pitch+tl.visuals.LaneHeight/2)
+	if sel := tl.Selection(); sel.Kind != SelectionLane || sel.Lane == nil || sel.Lane.Hint != "" {
+		t.Fatalf("auto-lane selection: got %+v", sel)
+	}
+	if tl.selLane.hint != "" || tl.selLane.index != 1 {
+		t.Fatalf("auto-lane ref: got %+v want {hint:\"\" index:1}", tl.selLane)
+	}
+	// A hint claiming that index means the auto lane the ref meant is gone.
+	// PackLanes emits every hinted lane before the auto lanes, so two hints
+	// are what it takes to reach index 1.
+	next := []*layout.IntervalEvent{
+		{FromMS: 0, ToMS: 100, LaneHint: "first"},
+		{FromMS: 0, ToMS: 100, LaneHint: "second"},
+		{FromMS: 0, ToMS: 100},
+	}
+	tl.laneAssn = layout.PackLanes(next)
+	if tl.laneAssn.Lanes[1].Hint == "" {
+		t.Fatal("setup: expected index 1 to be claimed by a hinted lane")
+	}
+	if got := tl.Selection().Kind; got != SelectionNone {
+		t.Errorf("auto lane displaced by a hint: got %v want SelectionNone", got)
+	}
+}
+
+func TestSelectLaneByHint_MissAndEmptyAreNoOps(t *testing.T) {
+	tl, _ := newLaneTestTimeline(t)
+	tl.SelectLaneByHint("nope")
+	if got := tl.Selection().Kind; got != SelectionNone {
+		t.Errorf("unknown hint: got %v want SelectionNone", got)
+	}
+	tl.SelectLaneByHint("b")
+	tl.SelectLaneByHint("")
+	if sel := tl.Selection(); sel.Kind != SelectionLane || sel.Lane.Hint != "b" {
+		t.Errorf("empty hint should not disturb an existing selection: got %+v", sel)
+	}
+	tl.SelectLaneByHint("nope")
+	if sel := tl.Selection(); sel.Kind != SelectionLane || sel.Lane.Hint != "b" {
+		t.Errorf("missed hint should not disturb an existing selection: got %+v", sel)
+	}
+}
+
+func TestSelectLaneByHint_BeforeFirstRenderIsANoOp(t *testing.T) {
+	// laneAssn is populated by Render; nothing to match before then.
+	tl := newTestTimeline(t, []*layout.IntervalEvent{{FromMS: 0, ToMS: 10, LaneHint: "a"}})
+	tl.SelectLaneByHint("a")
+	if got := tl.Selection().Kind; got != SelectionNone {
+		t.Errorf("select before first render: got %v want SelectionNone", got)
+	}
+}
+
+func TestSelectionInfo_LaneIsASnapshotNotAnAlias(t *testing.T) {
+	tl, _ := newLaneTestTimeline(t)
+	tl.SelectLaneByHint("a")
+	before := tl.Selection().Lane
+	if before == nil {
+		t.Fatal("setup: expected a lane")
+	}
+	// Repacking must not mutate a SelectionInfo the caller already holds.
+	next := []*layout.IntervalEvent{{FromMS: 0, ToMS: 10, LaneHint: "a"}, {FromMS: 0, ToMS: 10, LaneHint: "a"}}
+	tl.laneAssn = layout.PackLanes(next)
+	if len(before.Items) != 1 {
+		t.Errorf("held snapshot mutated by a repack: got %d items want 1", len(before.Items))
+	}
+	if after := tl.Selection().Lane; len(after.Items) != 2 {
+		t.Errorf("fresh read should see the repack: got %d items want 2", len(after.Items))
+	}
+}

@@ -45,7 +45,7 @@ func init() {
 		Stage:       [2]float32{1200, 720},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "Calendar-axis timeline with greedy lane-packed interval bars (LLM sessions) over three days and a top rug strip of ~150 synthetic git commits. Click a bar or bucket to select; click again or off-target to clear.",
+		Description: "Calendar-axis timeline with greedy lane-packed interval bars (LLM sessions) over three days and a top rug strip of ~150 synthetic git commits. Click a bar, bucket, or bare lane row to select; click again or off-target to clear.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			s := &timelineDemoState{}
 			s.annotations = makeAnnotationFixture()
@@ -67,6 +67,7 @@ func init() {
 			c.Label("Top rug strip: ~150 PCG-seeded synthetic git commits over 3 days. Lane bars: 20 LLM sessions in three provider rows (claude / gpt / gemini).").Send()
 			c.Label("Annotation flags at the very top mark deploys/alerts/releases (6 sample markers); click a flag or its dashed line to select. The alert + hotfix pair sits too close for one row, so those flags stagger into a second row instead of overlapping.").Send()
 			c.Label("Background bands (iter.Seq, computed each frame from the view range): muted weekend shade + warm office-hours overlay 09–17. Bright vertical line = now.").Send()
+			c.Label("Click a bare stretch of a lane row (past the bars) to select the whole row: a faint hairline runs the lane's full width, painted under the bars so it never strikes through an event. Bars win over the row they sit on; the gap below a row belongs to it.").Send()
 			c.Label("Hover for tooltip · click to select (outline + card below) · Ctrl+scroll over a session zooms anchored at the cursor · drag to pan through time.").Send()
 			s.tl.Render()
 			c.Separator().Send()
@@ -142,8 +143,21 @@ func formatSelectionCard(sel timeline.SelectionInfo) (text string) {
 			a.Number,
 			a.AsTime().Format("2006-01-02 15:04:05"),
 			a.Label)
+	case timeline.SelectionLane:
+		text = fmt.Sprintf("Selected lane:        %s  %d session(s)  —  the hairline marks the row",
+			laneName(sel.Lane), len(sel.Lane.Items))
 	default:
-		text = "Selection: (none)  —  click an interval bar, rug bucket, or annotation flag to select"
+		text = "Selection: (none)  —  click an interval bar, rug bucket, annotation flag, or a bare lane row to select"
+	}
+	return
+}
+
+// laneName labels a lane for the readouts. Auto-packed lanes carry no
+// LaneHint, so they can only be described by what they are.
+func laneName(lane *layout.Lane) (name string) {
+	name = lane.Hint
+	if name == "" {
+		name = "(auto-packed lane)"
 	}
 	return
 }
@@ -176,6 +190,9 @@ func formatSelectionClickLine(sel timeline.SelectionInfo) (line string) {
 			a.Number,
 			a.AsTime().Format("01-02 15:04"),
 			a.Label)
+	case timeline.SelectionLane:
+		line = fmt.Sprintf("lane      %s  %d session(s)",
+			laneName(sel.Lane), len(sel.Lane.Items))
 	default:
 		line = "(selection cleared)"
 	}
