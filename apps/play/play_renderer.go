@@ -252,9 +252,22 @@ type PlayApp struct {
 	// delivery ops must ride an activated tab.
 	pendingDockActivate uint64
 	requestRun          bool
-	cards               *CardDriver
-	detailTimeline      *DetailTimeline
-	projector           *Projector
+	// requestSubquery narrows the pending requestRun to the innermost query
+	// the caret is in (the Ctrl+Shift+Enter gesture). Consumed with the run
+	// request it qualifies.
+	requestSubquery bool
+	// subqueryMode is the top-bar display toggle for that gesture: while on,
+	// the editor tints the query it would run and the environment travelling
+	// with it. Off by default — the decoration is only wanted while working on
+	// a nested query, and it is the gesture that does the work, not the mode.
+	subqueryMode bool
+	// lastRunScope records what the previous run actually shipped, for the
+	// status line. A gesture that silently degraded to the whole query is the
+	// one thing the tints cannot explain — they are not drawn in that case.
+	lastRunScope   runScopeE
+	cards          *CardDriver
+	detailTimeline *DetailTimeline
+	projector      *Projector
 
 	// tableOpts holds the Table pane's leeway display-mode configuration — the
 	// options bar's three orthogonal controls (row granularity, reveal support
@@ -362,6 +375,12 @@ type PlayApp struct {
 	stmtErrFor string
 	stmtErrPos syntaxErrorPos
 	stmtErrOk  bool
+	// One-entry memo for the CST-tier subquery split of the caret's statement
+	// (see statementSubqueries) — what run-subquery narrows to, and what the
+	// editor tints while the caret is inside a nested query.
+	subqFor   string
+	subqUnits []subqueryUnit
+	subqOk    bool
 	// Memo for the lex-tier statement split, keyed on the buffer it describes
 	// (see statementRanges). Its consumers run per frame while the split
 	// itself changes only with the buffer.
@@ -1026,6 +1045,7 @@ func (inst *PlayApp) Render() error {
 		// cycle is only visible in the sequence of auto-runs.
 		inst.noteAutoRunFired()
 	}
+	inst.pollRunShortcuts()
 
 	// Run the canonical-form pipeline once per frame regardless of which
 	// tab is active. The pipeline is debounced internally (previewDebounce),
@@ -1121,7 +1141,9 @@ func (inst *PlayApp) Render() error {
 		inst.requestRun = false
 		auto := inst.runIsAuto
 		inst.runIsAuto = false
-		inst.executeRun(auto)
+		sub := inst.requestSubquery
+		inst.requestSubquery = false
+		inst.executeRun(auto, sub)
 	}
 
 	inst.frame++
@@ -1165,12 +1187,40 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 	spec.Render(f)
 }
 
+// pollRunShortcuts turns this frame's Ctrl+Enter / Ctrl+Shift+Enter press into
+// a run request. Ctrl+Enter is the Run button; Ctrl+Shift+Enter is the same
+// run narrowed to the query under the caret.
+//
+// The press was drained from egui's input queue during the PREVIOUS frame's
+// Sync, so polling it here is what claims the binding — nothing else in the
+// process does. A press while a run is already in flight is dropped rather
+// than queued, which is what the toolbar does too: it shows Cancel, not Run.
+//
+// The caret this reads is refreshed later in the same frame, when the editor
+// renders, and the request is consumed after that — so a narrowed run always
+// resolves against the caret the user can see. With the Editor tab closed the
+// caret is wherever it last was, exactly as for the Run button.
+func (inst *PlayApp) pollRunShortcuts() {
+	run, sub := c.CurrentApplicationState.StateManager.GetCommandEnterPressed()
+	if !run && !sub {
+		return
+	}
+	if inst.graph.MainLoading() {
+		return
+	}
+	inst.requestRun = true
+	inst.runIsAuto = false
+	inst.requestSubquery = sub
+}
+
 // executeRun is the Run path (manual and, since 5e, live-toggle-fired): split
 // the buffer, resolve its signal inputs, and launch the main lane. Extracted
 // from Render's requestRun block verbatim (no c.* calls) so tests can drive
 // it without a UI frame. auto marks a live-toggle run: it skips the persist
 // (the persistence point stays anchored to user intent, not signal churn).
-func (inst *PlayApp) executeRun(auto bool) {
+// subquery narrows what ships to the innermost query the caret is in; it is
+// the Ctrl+Shift+Enter gesture and never fires from the live toggle.
+func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	sql := strings.TrimSpace(inst.sql)
 	if sql == "" {
 		return
@@ -1201,7 +1251,16 @@ func (inst *PlayApp) executeRun(auto bool) {
 	// returns itself, so everything below this line is byte-identical to what
 	// it was. Deliberately AFTER the signal resolution and the unfilled gate,
 	// both of which stay buffer-wide in this first cut.
+	//
+	// Run-subquery narrows one level further, to the innermost query the caret
+	// is in, with the enclosing WITH items hoisted in front of it. It degrades
+	// to the statement when the caret is already at statement level or the
+	// statement does not parse.
 	runSQL, _, _ := inst.runBuffer()
+	inst.lastRunScope = runScopeWhole
+	if subquery {
+		runSQL, inst.lastRunScope = inst.runSubqueryBuffer()
+	}
 	// ADR-0097 3c: split the buffer into the node graph and fuse to the
 	// sink for execution. For a single statement the fused SQL is the
 	// original (the client re-lifts the SET prelude either way), so this
@@ -1460,9 +1519,13 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			// from any tab, with or without a result already on screen.
 			inst.renderTopBarProgress()
 		} else {
-			if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
-				SendResp().HasPrimaryClicked() {
-				inst.requestRun = true
+			// The two keyboard gestures have no chrome of their own — the
+			// button they duplicate is where anyone would look for them.
+			for range c.HoverText("Ctrl+Enter runs this. Ctrl+Shift+Enter runs just the query the caret is in — a subquery, a CTE body, or one statement of several — with the enclosing WITH items carried along.").KeepIter() {
+				if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
+					SendResp().HasPrimaryClicked() {
+					inst.requestRun = true
+				}
 			}
 		}
 
@@ -1648,6 +1711,18 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			// store is a plain atomic; paying it per frame is cheaper than a
 			// timing assumption about when the response lands.
 			inst.client.SetExposeConditions(inst.exposeConditions)
+		}
+
+		// Subquery mode: a display toggle for the run-subquery gesture, off by
+		// default. The gesture works either way — what this turns on is the
+		// editor saying, before you press it, which query would run and what
+		// travels with it. Offered only where there is an editor to decorate.
+		if inst.editorTabPresent() && !inst.toolbarMinimal {
+			c.Separator().Vertical().Send()
+			for range c.HoverText("Shows what Ctrl+Shift+Enter would run: the query the caret is in, the WITH items and SET prelude carried with it, and any reference to an outer table alias that will NOT resolve once it runs alone.").KeepIter() {
+				c.Checkbox(ids.PrepareStr("subqueryMode"), inst.subqueryMode, "Subquery").
+					SendRespVal(&inst.subqueryMode)
+			}
 		}
 
 		// Unfilled inputs (D3): the buffer references a name nothing fills —
@@ -1924,8 +1999,11 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	inst.refreshCaret(inst.sql, 0)
 	// ADR-0130 L3 overlays, in inst.sql coordinates.
 	styled := inst.editorStyledSections()
+	// The gutter's subquery mark travels beside them rather than inside them:
+	// it is drawn whether or not the Subquery toggle produced any sections.
+	subq := inst.caretSubqueryRange()
 	if !inst.paramHidePrelude {
-		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled)
+		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled, subq)
 		return
 	}
 
@@ -1934,7 +2012,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 		// Parse broken — fall back to the unsliced editor so the
 		// user can fix the syntax. Don't try to slice a buffer we
 		// don't understand.
-		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled)
+		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled, subq)
 		return
 	}
 	inst.sql = pre.Canonical
@@ -1955,7 +2033,8 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	// by the elided prelude's length rather than being dropped in this mode.
 	inst.gutteredEditor("sqlEditorResidual", &inst.paramSqlEdit,
 		"-- type SQL (prelude hidden)", rows, pending,
-		shiftStyledSections(styled, len(pre.Prelude), len(pre.Mirror)))
+		shiftStyledSections(styled, len(pre.Prelude), len(pre.Mirror)),
+		shiftRange(subq, len(pre.Prelude), len(pre.Mirror)))
 }
 
 // gutteredEditor lays the line-number gutter beside the editor (ADR-0130 L3).
@@ -1975,13 +2054,13 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 // editor are given that one list — behind the hide-prelude toggle the caller
 // rebases it once, rather than each consumer subtracting the elided prefix
 // for itself.
-func (inst *PlayApp) gutteredEditor(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string, styled []codeview.StyledSection) {
+func (inst *PlayApp) gutteredEditor(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string, styled []codeview.StyledSection, subq nanopass.SourceRange) {
 	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
 	paneW := avail.W
 	if math.IsNaN(float64(paneW)) || paneW <= 0 {
 		paneW = editorFallbackWidthPx
 	}
-	m := inst.buildGutterModel(*valuePtr, styled)
+	m := inst.buildGutterModel(*valuePtr, styled, subq)
 	editorW := editorWidthPx(*valuePtr, m.charPx, paneW-m.widthPx())
 	for range c.Horizontal().KeepIter() {
 		for range c.Vertical().KeepIter() {

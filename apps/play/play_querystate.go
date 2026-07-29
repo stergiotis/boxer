@@ -300,17 +300,21 @@ func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, su
 // status bar and the Diagnostics tab's "Last run" section.
 func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) string {
 	var s string
+	// What the last run shipped, appended below to the states that describe a
+	// result. Not to idle or running: before there are rows, "subquery only"
+	// describes nothing on screen.
+	scope := runScopeNote(inst.lastRunScope)
 	switch inst.queryFSM.Current() {
 	case queryStateIdle:
-		s = "type SQL and press Run"
+		return "type SQL and press Run"
 	case queryStateRunning:
-		s = "executing…"
-		// Live tick from the in-band progress headers (ADR-0115 plane A),
-		// with the rate and ETA the tracker derives from it: the badge
-		// counts up while the server reads.
 		if v := inst.frameProgress; v.fresh {
-			s = "executing… " + formatProgressLine(v)
+			// Live tick from the in-band progress headers (ADR-0115 plane A),
+			// with the rate and ETA the tracker derives from it: the badge
+			// counts up while the server reads.
+			return "executing… " + formatProgressLine(v)
 		}
+		return "executing…"
 	case queryStateRows:
 		s = fmt.Sprintf("%d rows · %s · %s read · %s",
 			numRows, elapsed.Round(time.Millisecond), humanBytes(summary.ReadBytes), humanizeAgo(executed))
@@ -338,7 +342,27 @@ func (inst *PlayApp) querySummaryLine(numRows int64, elapsed time.Duration, summ
 	case queryStateFailedStale:
 		s = "errored · inputs changed"
 	}
-	return s
+	if s == "" {
+		return s
+	}
+	return s + scope
+}
+
+// runScopeNote is what a run-subquery gesture appends to the summary.
+//
+// Only the two outcomes a result cannot show on its own are worth a word. A
+// narrowed run says so because the rows on screen are not the buffer's answer;
+// a gesture that found nothing to narrow to says so because it is otherwise
+// indistinguishable from a plain Run — which is exactly how the shortcut first
+// read as broken.
+func runScopeNote(scope runScopeE) string {
+	switch scope {
+	case runScopeSubquery:
+		return " · subquery only"
+	case runScopeNoSubquery:
+		return " · no subquery at the caret — ran the whole query"
+	}
+	return ""
 }
 
 // humanizeAgo renders a coarse "Xs/Xm/Xh ago" for the time a result was

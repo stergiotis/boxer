@@ -653,14 +653,14 @@ func TestExecuteRunBlockedOnUnfilledThenRuns(t *testing.T) {
 	app.sql = "SELECT {x:Int64} AS v"
 	app.frameSig = app.graph.signals()
 
-	app.executeRun(false)
+	app.executeRun(false, false)
 	require.Contains(t, app.runBlockedReason, "{x}")
 	require.Empty(t, got(), "no request goes to the server")
 	require.Empty(t, app.lastSentSql, "a blocked run records nothing as sent")
 
 	app.graph.setSignalRawFrom("x", "3", signalWriterEditor)
 	app.frameSig = app.graph.signals()
-	app.executeRun(false)
+	app.executeRun(false, false)
 	require.Empty(t, app.runBlockedReason)
 	require.Eventually(t, func() bool { return len(got()) == 1 }, 2*time.Second, time.Millisecond)
 	require.Equal(t, "3", got()[0].Get("param_x"))
@@ -681,7 +681,7 @@ func TestAutoRunLoopOnSignalDivergence(t *testing.T) {
 
 	app.graph.setSignalRawFrom("x", "1", signalWriterEditor)
 	app.frameSig = app.graph.signals()
-	app.executeRun(false) // the first run is manual — live means re-run
+	app.executeRun(false, false) // the first run is manual — live means re-run
 	require.Eventually(t, func() bool { return len(got()) == 1 && !app.graph.MainLoading() },
 		2*time.Second, time.Millisecond)
 	require.False(t, app.shouldAutoRun(), "freshly run, nothing diverged")
@@ -689,7 +689,7 @@ func TestAutoRunLoopOnSignalDivergence(t *testing.T) {
 	app.graph.setSignalRawFrom("x", "2", signalWriterEditor)
 	app.frameSig = app.graph.signals()
 	require.True(t, app.shouldAutoRun(), "a referenced signal moved")
-	app.executeRun(true)
+	app.executeRun(true, false)
 	require.Eventually(t, func() bool { return len(got()) == 2 && !app.graph.MainLoading() },
 		2*time.Second, time.Millisecond)
 	require.Equal(t, "2", got()[1].Get("param_x"), "the re-run ships the moved value")

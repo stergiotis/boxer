@@ -41,15 +41,23 @@ fill the pane. The empty-buffer hint is `-- type SQL, press Run`. The buffer is
 persisted across sessions (saved on Run and when the window closes) and restored on
 the next launch.
 
-There are no app-specific keyboard shortcuts: Run is a button (top bar), and the
-editor supports the usual text-editing keys (select-all, copy, paste). Use the
-**Snippets** tab to drop in fragments, and the **Preview** tab to see the parsed
-canonical form.
+Two keyboard shortcuts reach the Run button without leaving the editor
+(`Cmd` in place of `Ctrl` on macOS):
+
+- **Ctrl+Enter** — run, exactly as the button does.
+- **Ctrl+Shift+Enter** — run just the query the caret is in. See *Running one
+  query* below.
+
+Beyond those the editor supports the usual text-editing keys (select-all, copy,
+paste). Use the **Snippets** tab to drop in fragments, and the **Preview** tab
+to see the parsed canonical form.
 
 A line-number gutter runs down the left edge, with a marks lane beside the
-numbers: `!` on a line whose statement has a syntax error, `>` on the lines of
-the statement the caret is in. Lines are not wrapped — long lines scroll
-sideways, and the gutter stays put while they do.
+numbers: `!` on a line carrying an error, `|` on the lines of the query
+Ctrl+Shift+Enter would run, `>` on the lines of the statement the caret is in.
+A line qualifying for more than one shows the first of those that applies.
+Lines are not wrapped — long lines scroll sideways, and the gutter stays put
+while they do.
 
 The editor annotates as you pause typing:
 
@@ -66,9 +74,52 @@ The editor annotates as you pause typing:
   one statement does not stop another from running. Parameters, signals, and
   the saved history stay whole-buffer: history restores everything you had, not
   just the statement that ran.
-
 A single-statement buffer — the common case — is unchanged by all of this: no
-tint, and Run sends the whole buffer as before.
+statement tint, and Run sends the whole buffer as before.
+
+### Running one query
+
+**Ctrl+Shift+Enter** runs the innermost query the caret is in, rather than the
+whole statement. That covers a subquery in a `FROM` or a `WHERE`, a CTE body,
+and — since the statement split runs first — one statement of a `;`-separated
+buffer.
+
+The gutter marks it: `|` on every line of the query that would run. That mark
+is always on, so the shortcut is never invisible.
+
+The WITH items in scope are carried along: run a subquery that reads a CTE
+defined further out and the definition ships with it, flattened into one `WITH`
+list, outermost first. Items the query cannot see anyway — a sibling defined
+after the CTE body you are in, or the body's own definition — are left behind.
+
+Two cases fall back to an ordinary Run rather than refusing: a caret already at
+statement level, which has nothing narrower to resolve to, and a statement that
+does not currently parse, which has no structure to narrow within. The status
+line says which happened — *subquery only*, or *no subquery at the caret — ran
+the whole query* — so a run that did not narrow never looks like one that did.
+
+Note that the caret must have been **placed** in the editor at least once. A
+buffer restored from the last session, or one seeded by `BOXER_PLAY_SQL`, has
+its caret at offset 0 — the head of the buffer, which resolves to the whole
+query.
+
+### The Subquery toggle
+
+The **Subquery** checkbox in the top bar, off by default, turns on the editor's
+full account of that gesture. It changes nothing about what runs.
+
+- The **query that would run** is tinted.
+- The **environment carried with it** — the WITH items in scope, and the `SET`
+  prelude — is underlined in the info tone. These are lines elsewhere in the
+  buffer that travel along.
+- References that **will not resolve** are underlined in the error tone. This
+  is the *correlated* subquery: one referring to a table alias belonging to the
+  query around it. Nothing can make that runnable on its own — carrying the
+  WITH items does not help — and ClickHouse rejects it with the name it could
+  not find. The mark is there so you see it before you run rather than after.
+
+A qualified name that resolves nowhere at all is left unmarked, since
+`tuple.field` on a Tuple column looks the same to the parser.
 
 ## Query parameters
 

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -33,6 +34,23 @@ var (
 	styleErrorTone   = color.Hex(styletokens.ErrorDefault.AsHex())
 	styleWarningTone = color.Hex(styletokens.WarningDefault.AsHex())
 	styleStmtTint    = color.Hex(styletokens.NeutralBgFaint.AsHex())
+	// styleSubqueryTint marks the nested query run-subquery would ship.
+	//
+	// The accent at a quarter opacity, not a palette background token. The
+	// palette's background family tops out at NeutralBgSurface (29,32,33) and
+	// every `*Subtle` sits at OKLCh L=0.200 — all within a few levels of the
+	// code editor's near-black, which is why the first cut of this (plain
+	// AccentSubtle) needed a 4× magnification to see at all. Alpha is the
+	// honest instrument here: same accent hue the design system already owns,
+	// blended by egui over whatever is behind it (the FFI carries straight
+	// alpha, `color32_from_rgba_u32`), landing near rgb(42,47,61) — legible
+	// under the bright syntax colours without competing with them.
+	styleSubqueryTint = color.RGBA(styletokens.AccentDefault.R,
+		styletokens.AccentDefault.G, styletokens.AccentDefault.B, 0x40)
+	// styleCarriedTone underlines the environment a narrowed run takes with
+	// it: the WITH items in scope and the SET prelude. Info rather than accent
+	// so it does not read as "part of the query", which the tint above means.
+	styleCarriedTone = color.Hex(styletokens.InfoDefault.AsHex())
 	// styleCaretRowMark outlines the PARAMETERS row holding the placeholder the
 	// caret is in — the pane's counterpart to the editor's statement tint.
 	//
@@ -184,6 +202,7 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 			Color: styleStmtTint,
 		})
 	}
+	out = append(out, inst.subqueryModeSections()...)
 	// Unfilled-placeholder underlines (ADR-0124 §SD8's `Src` consumers). The
 	// set is unfilledSet — the SAME set the Run gate and the pane's
 	// "needs a value" mark read, so the editor cannot disagree with either
@@ -212,6 +231,63 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 	if start, stop, ok := inst.errorSpan(stmt, total, haveStmt); ok {
 		out = append(out, codeview.StyledSection{
 			Start: start, Stop: stop,
+			Flags: codeview.StyleUnderline,
+			Color: styleErrorTone,
+		})
+	}
+	return out
+}
+
+// subqueryModeSections is the Subquery toggle's decoration: what
+// Ctrl+Shift+Enter would ship, and what does or does not travel with it.
+//
+// Three channels, because they are three different claims:
+//
+//   - The query itself gets a BACKGROUND — it is a region, and the only one
+//     here that is.
+//   - The environment carried with it — the WITH items in scope and the SET
+//     prelude — gets an info-toned UNDERLINE. A second background would read
+//     as a second region, when the point is that these are lines elsewhere in
+//     the buffer that come along.
+//   - References that will NOT resolve get the error tone, the same one a
+//     syntax error uses, because the consequence is the same: the server
+//     rejects it. This is the correlated-subquery case the composition cannot
+//     repair.
+//
+// Nothing is emitted when the caret is at statement level: there is no
+// narrowing to show, and the gesture would be an ordinary Run.
+func (inst *PlayApp) subqueryModeSections() (out []codeview.StyledSection) {
+	if !inst.subqueryMode {
+		return nil
+	}
+	sub, stmt, ok := inst.caretSubquery()
+	if !ok || sub.Root {
+		return nil
+	}
+	base := stmt.Src.Start
+	out = append(out, codeview.StyledSection{
+		Start: uint32(base + sub.Src.Start), Stop: uint32(base + sub.Src.End),
+		Flags: codeview.StyleBackground,
+		Color: styleSubqueryTint,
+	})
+	if p := inst.preludeRange(); !p.Empty() {
+		out = append(out, codeview.StyledSection{
+			Start: uint32(p.Start), Stop: uint32(p.End),
+			Flags: codeview.StyleUnderline,
+			Color: styleCarriedTone,
+		})
+	}
+	for _, r := range sub.WithItems {
+		out = append(out, codeview.StyledSection{
+			Start: uint32(base + r.Start), Stop: uint32(base + r.End),
+			Flags: codeview.StyleUnderline,
+			Color: styleCarriedTone,
+		})
+	}
+	// Last, so a reference that sits inside the tinted query composes on top.
+	for _, r := range sub.Unresolved {
+		out = append(out, codeview.StyledSection{
+			Start: uint32(base + r.Start), Stop: uint32(base + r.End),
 			Flags: codeview.StyleUnderline,
 			Color: styleErrorTone,
 		})
@@ -256,6 +332,46 @@ func (inst *PlayApp) statementSyntaxError(text string) syntaxErrorPos {
 	inst.stmtErrPos = firstSyntaxError(text)
 	inst.stmtErrOk = true
 	return inst.stmtErrPos
+}
+
+// caretSubqueryRange is the query run-subquery would ship, in inst.sql
+// coordinates — empty when the caret is at statement level, when the statement
+// does not parse, or while the buffer is mid-edit.
+//
+// Unlike the styled sections this ignores the Subquery toggle: the gutter marks
+// it either way, so the gesture is never entirely without an affordance.
+func (inst *PlayApp) caretSubqueryRange() (r nanopass.SourceRange) {
+	if inst.sql == "" || inst.sql != inst.formattedFor {
+		return r
+	}
+	sub, stmt, ok := inst.caretSubquery()
+	if !ok || sub.Root {
+		return r
+	}
+	return nanopass.SourceRange{
+		Start: stmt.Src.Start + sub.Src.Start,
+		End:   stmt.Src.Start + sub.Src.End,
+	}
+}
+
+// shiftRange rebases one range the way shiftStyledSections rebases a list, for
+// the gutter's subquery mark. A range falling entirely inside the elided prefix
+// comes back empty.
+func shiftRange(r nanopass.SourceRange, offset, viewLen int) nanopass.SourceRange {
+	if r.Empty() || offset == 0 {
+		return r
+	}
+	start, end := r.Start-offset, r.End-offset
+	if start < 0 {
+		start = 0
+	}
+	if end > viewLen {
+		end = viewLen
+	}
+	if end <= start {
+		return nanopass.SourceRange{}
+	}
+	return nanopass.SourceRange{Start: start, End: end}
 }
 
 // shiftStyledSections rebases spans expressed in inst.sql onto a view that

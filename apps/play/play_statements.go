@@ -174,16 +174,104 @@ func composeRunBuffer(sql string, ranges []statementRange, bodyOffset, caret int
 		return trimmed, 0, total
 	}
 	stmt := ranges[i]
-	body := sql[stmt.Src.Start:stmt.Src.End]
+	return withPrelude(sql, bodyOffset, sql[stmt.Src.Start:stmt.Src.End]), i + 1, total
+}
+
+// withPrelude puts a statement back behind the buffer's SET prelude. The
+// prelude rides along with whatever ships because its `SET param_*` bindings
+// are what make any of it executable.
+func withPrelude(sql string, bodyOffset int, body string) string {
 	prelude := strings.TrimRight(sql[:bodyOffset], " \t\r\n")
 	if prelude == "" {
-		return body, i + 1, total
+		return body
 	}
-	return prelude + "\n" + body, i + 1, total
+	return prelude + "\n" + body
 }
 
 // runBuffer is runBufferFor against the app's current buffer and caret.
 func (inst *PlayApp) runBuffer() (run string, number, total int) {
 	ranges, bodyOffset := inst.statementRanges()
 	return composeRunBuffer(inst.sql, ranges, bodyOffset, inst.caretByte)
+}
+
+// statementSubqueries is parseSubqueryUnits memoised on the statement text —
+// the same one-entry shape, and for the same reason, as statementSyntaxError:
+// the caret is inside one statement at a time, so the parse runs when that
+// statement's text changes or the caret leaves it, not once per frame.
+func (inst *PlayApp) statementSubqueries(text string) []subqueryUnit {
+	if inst.subqOk && inst.subqFor == text {
+		return inst.subqUnits
+	}
+	inst.subqFor = text
+	inst.subqUnits = parseSubqueryUnits(text)
+	inst.subqOk = true
+	return inst.subqUnits
+}
+
+// caretSubquery resolves the caret to the innermost query of its statement,
+// reporting the statement it lives in so callers can rebase its offsets.
+//
+// ok is false when there is no statement, or when the statement does not parse
+// — a buffer mid-edit has no CST to narrow within, and the caller falls back
+// to shipping the statement whole.
+func (inst *PlayApp) caretSubquery() (unit subqueryUnit, stmt statementRange, ok bool) {
+	stmt, _, _, haveStmt := inst.caretStatement()
+	if !haveStmt {
+		return unit, stmt, false
+	}
+	text := inst.sql[stmt.Src.Start:stmt.Src.End]
+	caret := inst.caretByte - stmt.Src.Start
+	if caret < 0 {
+		caret = 0
+	} else if caret > len(text) {
+		caret = len(text)
+	}
+	unit, ok = pickSubquery(inst.statementSubqueries(text), caret)
+	return unit, stmt, ok
+}
+
+// runScopeE is what a run actually shipped, for the status line. The gesture
+// degrades rather than refusing, so the difference between asking for a
+// subquery and getting one is not otherwise visible.
+type runScopeE uint8
+
+const (
+	// runScopeWhole is an ordinary Run: the buffer, or the caret's statement.
+	runScopeWhole runScopeE = iota
+	// runScopeSubquery is a run-subquery that narrowed.
+	runScopeSubquery
+	// runScopeNoSubquery is a run-subquery that found nothing narrower and
+	// shipped the whole query instead.
+	runScopeNoSubquery
+)
+
+// runSubqueryBuffer returns what the run-subquery gesture ships: the SET
+// prelude plus the innermost query the caret is in, with the WITH items of
+// every enclosing scope hoisted in front of it.
+//
+// scope is runScopeNoSubquery when the caret resolved to the statement's own
+// query, or to no query at all because the statement does not parse. run is
+// then exactly what runBuffer returns — the gesture degrades to an ordinary Run
+// rather than refusing, and the status line says so.
+func (inst *PlayApp) runSubqueryBuffer() (run string, scope runScopeE) {
+	unit, stmt, ok := inst.caretSubquery()
+	if !ok || unit.Root {
+		run, _, _ = inst.runBuffer()
+		return run, runScopeNoSubquery
+	}
+	_, bodyOffset := inst.statementRanges()
+	text := inst.sql[stmt.Src.Start:stmt.Src.End]
+	return withPrelude(inst.sql, bodyOffset, unit.compose(text)), runScopeSubquery
+}
+
+// preludeRange is the SET prelude's extent in inst.sql, trailing whitespace
+// excluded. Empty when the buffer has no prelude. It is part of what a narrowed
+// run carries, so the editor tints it with the WITH items.
+func (inst *PlayApp) preludeRange() nanopass.SourceRange {
+	_, bodyOffset := inst.statementRanges()
+	end := len(strings.TrimRight(inst.sql[:bodyOffset], " \t\r\n;"))
+	if end <= 0 {
+		return nanopass.SourceRange{}
+	}
+	return nanopass.SourceRange{Start: 0, End: end}
 }

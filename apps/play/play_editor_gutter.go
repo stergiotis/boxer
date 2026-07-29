@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
@@ -59,6 +60,11 @@ type gutterMarkE uint8
 const (
 	gutterMarkNone gutterMarkE = iota
 	gutterMarkActive
+	// gutterMarkSubquery is the query run-subquery would ship. It outranks
+	// gutterMarkActive because it is the narrower claim about the same lines —
+	// the caret's statement contains it — and stays below the error mark,
+	// which is about whether anything can run at all.
+	gutterMarkSubquery
 	gutterMarkError
 )
 
@@ -82,7 +88,13 @@ type gutterModel struct {
 // it as an argument rather than re-deriving it is what keeps the two in step:
 // re-deriving would mean a second coordinate transform here, and two transforms
 // of one list is one too many places to get the elided prefix wrong.
-func (inst *PlayApp) buildGutterModel(buf string, styled []codeview.StyledSection) (m gutterModel) {
+//
+// `subq` is the one exception, and it takes the same treatment: the query
+// run-subquery would ship, in `buf` coordinates, empty when there is none. It
+// arrives separately because it must be marked whether or not the Subquery
+// toggle drew it — a gesture with no affordance at all is how this feature was
+// first missed — and the toggle is off by default.
+func (inst *PlayApp) buildGutterModel(buf string, styled []codeview.StyledSection, subq nanopass.SourceRange) (m gutterModel) {
 	if buf == "" {
 		return
 	}
@@ -103,15 +115,24 @@ func (inst *PlayApp) buildGutterModel(buf string, styled []codeview.StyledSectio
 		default:
 			continue
 		}
-		first := lineIndexOf(starts, int(s.Start))
-		last := lineIndexOf(starts, int(s.Stop)-1)
-		for i := first; i <= last && i < m.lines; i++ {
-			if mark > m.marks[i] {
-				m.marks[i] = mark
-			}
-		}
+		markLines(&m, starts, int(s.Start), int(s.Stop), mark)
+	}
+	if !subq.Empty() {
+		markLines(&m, starts, subq.Start, subq.End, gutterMarkSubquery)
 	}
 	return
+}
+
+// markLines raises the mark on every line a byte range touches. Raises only:
+// a line qualifying for two marks keeps the higher one.
+func markLines(m *gutterModel, starts []int, start, stop int, mark gutterMarkE) {
+	first := lineIndexOf(starts, start)
+	last := lineIndexOf(starts, stop-1)
+	for i := first; i <= last && i < m.lines; i++ {
+		if mark > m.marks[i] {
+			m.marks[i] = mark
+		}
+	}
 }
 
 // lineStarts returns the byte offset of each line's first byte. A trailing
@@ -162,6 +183,11 @@ func (m gutterModel) gutterText() (text string, markSpans, restSpans [][2]int) {
 		switch m.marks[i] {
 		case gutterMarkError:
 			b.WriteString("!")
+		case gutterMarkSubquery:
+			// A bar, not a second arrow: `>` points at the caret's statement,
+			// and the subquery is a span WITHIN it rather than another thing
+			// being pointed at.
+			b.WriteString("|")
 		case gutterMarkActive:
 			b.WriteString(">")
 		default:

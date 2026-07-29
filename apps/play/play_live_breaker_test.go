@@ -164,7 +164,7 @@ func TestBreakerTripsOnRatchetingSelfFeedingQuery(t *testing.T) {
 
 	app.graph.setSignalRawFrom("tl_min", "1", signalWriterParamWidget)
 	app.frameSig = app.graph.signals()
-	app.executeRun(false) // the first run is the human's
+	app.executeRun(false, false) // the first run is the human's
 	require.Eventually(t, func() bool { return len(got()) == 1 && !app.graph.MainLoading() },
 		2*time.Second, time.Millisecond)
 
@@ -178,7 +178,7 @@ func TestBreakerTripsOnRatchetingSelfFeedingQuery(t *testing.T) {
 			break
 		}
 		app.noteAutoRunFired()
-		app.executeRun(true)
+		app.executeRun(true, false)
 		runs++
 		require.Eventually(t, func() bool { return !app.graph.MainLoading() },
 			2*time.Second, time.Millisecond)

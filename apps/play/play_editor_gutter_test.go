@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stretchr/testify/require"
 )
@@ -91,7 +92,7 @@ func TestGutterModelMarksFollowTheOverlays(t *testing.T) {
 	app.updatePreview()
 	app.caretByte = 3 // in the healthy first statement
 
-	m := app.buildGutterModel(sql, app.editorStyledSections())
+	m := app.buildGutterModel(sql, app.editorStyledSections(), nanopass.SourceRange{})
 	require.True(t, m.present)
 	require.Equal(t, 3, m.lines)
 	require.Equal(t, 1, m.digits)
@@ -100,7 +101,7 @@ func TestGutterModelMarksFollowTheOverlays(t *testing.T) {
 	// Caret into the broken statement: its line takes the error mark, which
 	// outranks the active mark on the same line.
 	app.caretByte = 12
-	m = app.buildGutterModel(sql, app.editorStyledSections())
+	m = app.buildGutterModel(sql, app.editorStyledSections(), nanopass.SourceRange{})
 	require.Equal(t, []gutterMarkE{gutterMarkNone, gutterMarkError, gutterMarkNone}, m.marks)
 }
 
@@ -110,7 +111,7 @@ func TestGutterModelMarksSpanMultipleLines(t *testing.T) {
 	app := debouncedApp(t, sql)
 	app.updatePreview()
 	app.caretByte = len(sql)
-	m := app.buildGutterModel(sql, app.editorStyledSections())
+	m := app.buildGutterModel(sql, app.editorStyledSections(), nanopass.SourceRange{})
 	require.Equal(t, []gutterMarkE{
 		gutterMarkNone, gutterMarkActive, gutterMarkActive, gutterMarkActive,
 	}, m.marks)
@@ -118,7 +119,7 @@ func TestGutterModelMarksSpanMultipleLines(t *testing.T) {
 
 func TestGutterModelEmptyBuffer(t *testing.T) {
 	app := debouncedApp(t, "")
-	require.False(t, app.buildGutterModel("", nil).present)
+	require.False(t, app.buildGutterModel("", nil, nanopass.SourceRange{}).present)
 }
 
 // The digit width grows with the line count, so a 100-line buffer reserves
@@ -130,7 +131,7 @@ func TestGutterDigitsGrowWithLineCount(t *testing.T) {
 		app.sql = buf
 		app.formattedFor = buf
 		app.lastEditAt = time.Now().Add(-2 * previewDebounce)
-		m := app.buildGutterModel(buf, nil)
+		m := app.buildGutterModel(buf, nil, nanopass.SourceRange{})
 		require.Equal(t, tc.lines, m.lines)
 		require.Equal(t, tc.digits, m.digits, "%d lines", tc.lines)
 	}
@@ -166,7 +167,7 @@ func TestGutterModelTakesTheEditorsOwnSections(t *testing.T) {
 	require.NotEmpty(t, whole)
 	rebased := shiftStyledSections(whole, len(prelude), len(mirror))
 
-	m := app.buildGutterModel(mirror, rebased)
+	m := app.buildGutterModel(mirror, rebased, nanopass.SourceRange{})
 	require.Equal(t, 2, m.lines)
 	require.Equal(t, []gutterMarkE{gutterMarkNone, gutterMarkActive}, m.marks,
 		"the mark lands on the mirror's own line 2, not shifted twice")
@@ -177,6 +178,7 @@ func TestGutterModelTakesTheEditorsOwnSections(t *testing.T) {
 		Start: 4, Stop: 9, Flags: codeview.StyleUnderline, Color: styleErrorTone,
 	}}
 	require.Empty(t, shiftStyledSections(inPrelude, len(prelude), len(mirror)))
-	m = app.buildGutterModel(mirror, shiftStyledSections(inPrelude, len(prelude), len(mirror)))
+	m = app.buildGutterModel(mirror, shiftStyledSections(inPrelude, len(prelude), len(mirror)),
+		nanopass.SourceRange{})
 	require.Equal(t, []gutterMarkE{gutterMarkNone, gutterMarkNone}, m.marks)
 }

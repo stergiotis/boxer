@@ -509,6 +509,108 @@ test debt was always collateral from the egui bump, noted here only because
 fixing the crate's test target to run the seam's own tests is what surfaced
 it. The out-of-scope lists' remaining items stand.
 
+### 2026-07-29 — keyboard run gestures, and run-under-cursor extended to subqueries
+
+L3 shipped run-under-cursor as a *statement*-granular feature driven by the
+Run button. Two additions, both requested directly:
+
+- **Ctrl+Enter runs; Ctrl+Shift+Enter runs the query under the caret.**
+  (`Cmd` on macOS — the binding is egui's `Modifiers::COMMAND`.)
+- **The narrowing goes one level below the statement**, to the innermost
+  query the caret is in — a `FROM` or expression subquery, a CTE body, or,
+  since the statement split still runs first, one statement of several.
+
+**A new IDL fetcher carries the keys** (`fetchCommandEnterPressed` →
+`StateManager.GetCommandEnterPressed`), which ADR-0147 §seam-facts says key
+capture cannot be. That fact holds for *plain* Enter and not for this pair:
+fetchers drain in `StateManager.Sync` at frame end, after the widgets, and a
+focused `TextEdit` acts on Enter only through its `return_key`, which defaults
+to `Modifiers::NONE` — egui's `cmd_ctrl_matches` (`modifiers.rs:312`) rejects
+a NONE pattern outright while ctrl is held, so the editor has already declined
+the event by the time the fetcher runs. Two details are load-bearing:
+`consume_key` matches with `matches_logically`, which ignores an *extra*
+Shift, so Ctrl+Shift+Enter is consumed first or the plain pattern swallows it;
+and, as with F1, whoever polls the fetcher owns the binding process-wide.
+
+**Narrowing is at the CST tier**, unlike the statement split. grammar1's
+`selectUnionStmt` is the runnable unit — one SELECT plus its UNION / EXCEPT /
+INTERSECT chain — and every nesting site wraps one, so "the query under the
+caret" is the innermost `selectUnionStmt` containing it and the statement's
+own query is the outermost. This needs a parse that *succeeded*, so it can
+only add: an unparseable statement, or a caret already at statement level,
+degrades to the ordinary Run rather than refusing.
+
+**The composition hoists the WITH items in scope**, flattened into one list,
+outermost first — SQL permits a single `WITH` per query level, so a unit that
+heads its own clause has the hoisted items spliced in front of its own rather
+than a second `WITH` emitted. Visibility is respected on the way: within the
+clause containing the unit only the items *before* it are hoisted, since a
+later sibling is not visible and the item the unit is inside would be defined
+in terms of the very text about to ship. An inner rebinding of an outer name
+wins at the outer position, `RECURSIVE` anywhere in the chain survives, and a
+name the unit rebinds itself is not hoisted — each of those, left alone, is a
+duplicate-CTE-name rejection at the server.
+
+What hoisting does **not** repair is a *correlated* subquery — one referring
+to a table alias from the query around it. No editor makes that independently
+runnable; it fails at the server with the name it could not resolve. Not
+deferred, out of scope.
+
+The editor tints the resolved subquery whenever it is narrower than the
+statement, so the target is visible before the gesture. It nests inside the
+statement tint and had to read as a different region at the same weight: the
+neutral steps at that end of the palette are indistinguishable behind text,
+so it is `AccentSubtle` — the same tone, a different hue.
+
+### 2026-07-29 — the gesture was invisible; a Subquery mode, and two defects behind it
+
+Reported within the hour of the entry above: Ctrl+Shift+Enter "does not tint
+anything and runs the same query". Reproduced exactly. The narrowing was
+correct throughout — two *surfacing* defects, both introduced by that entry:
+
+- **The caret reads as 0 until it is placed.** `caretByte` derives from the
+  databinding the editor fills in under `ReportCursor`, and its zero value is a
+  valid position: offset 0 resolves to the statement's own query. A buffer
+  restored from the persisted session, or seeded by `BOXER_PLAY_SQL`, therefore
+  starts with the gesture silently degrading. Not fixed by distinguishing
+  "unset" — offset 0 is a real place to be — but by **saying what the run did**
+  (`runScopeE` → the status line), which makes it self-diagnosing.
+- **`AccentSubtle` was unreadable as a tint.** rgb(17,21,36) over the code
+  editor's near-black needed 4× magnification to confirm it was rendering at
+  all. The palette has no mid-tone background: the family stops at
+  `NeutralBgSurface` (29,32,33) and every `*Subtle` sits at OKLCh L=0.200. The
+  fix is **alpha, not a new token** — `AccentDefault` at 0x40, blended by egui
+  (`color32_from_rgba_u32` takes straight alpha), landing near rgb(42,47,61).
+  Same hue the design system already owns, at a weight that survives the
+  backdrop.
+
+Both fixed unconditionally. On top, at the user's request, a **Subquery display
+toggle** (top bar, default off) that reports the whole gesture:
+
+- the query that would run — a **background**, the only region here;
+- the environment carried with it (WITH items in scope + the SET prelude) — an
+  info-toned **underline**, since a second background would read as a second
+  region when the point is that these are lines elsewhere that travel along;
+- references that will not resolve — the **error tone**, because the
+  consequence is the server's rejection.
+
+**Correlated references are now detected, and the rule is narrow on purpose.**
+A qualified reference is reported only when its qualifier is bound OUTSIDE the
+unit and nowhere inside it, nor by a WITH item travelling with it. Requiring
+the *outward* binding is what keeps it quiet on `tuple.field`, which grammar1
+parses as table-qualified too — such a qualifier resolves nowhere, so it is not
+reported. Table binders come from `nanopass.BuildScopes` rather than a second
+reading of the FROM grammar, per ADR-0147 §SD9's share-don't-duplicate rule.
+This supersedes the previous entry's "not deferred, out of scope": correlation
+still cannot be *repaired*, but it is no longer discovered at the endpoint.
+
+The gutter's `|` mark is the one piece that ignores the toggle. That lane
+otherwise derives from the styled sections — deliberately, so the two cannot
+disagree — but a default-off mode would leave the gesture with no affordance at
+all, which is the defect this entry exists for. It arrives as its own argument
+to `buildGutterModel`, in the same coordinates, taking the same rebase behind
+the hide-prelude toggle.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
