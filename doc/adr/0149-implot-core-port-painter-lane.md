@@ -74,6 +74,14 @@ Load-bearing findings, measured against upstream ImPlot v1.1-WIP (commit
   text-measurement channel exists — widgets estimate character widths
   (`timeline.go`'s ASCII-only estimate, documented as underestimating CJK
   2–4×). For numeric tick labels the estimation idiom is nearly exact.
+- In-plot raster composition has one in-tree precedent, and it is not
+  general: the play map's `MapRaster` overlay (bounds-pinned texture,
+  version bump + starved-texture re-ship) drains inside the walkers widget
+  only; the painter lane has no textured-image command. Complex (concave,
+  holed) polygon fill is likewise served today by CPU rasterization in the
+  `worldmap` widget — supersampled scanline even-odd fill plus a per-pixel
+  index buffer for O(1) hover picking — precisely because egui's polygon
+  fill is convex-only.
 - The mesh draw-stream lane
   ([ADR-0128](./0128-imzero2-mesh-draw-stream-codec-lane.md)) is the
   remote-access *output* codec (egui → viewer). It is not a Go-side triangle
@@ -153,19 +161,33 @@ paint-command emission. This is ImPlot's own double/float split and is what
 keeps deep zoom correct; the painter lane's f32 relative coordinates are
 post-projection, so nothing is lost.
 
-### SD5 — Dense-raster routing
+### SD5 — Dense-raster routing and in-plot image composition
 
 Small heatmaps draw as batched rects; above a cell-count threshold they route
-to the existing `scrollingTexture` raster lane (the spectrogram precedent).
-The threshold is measured, not guessed, during M4.
+to a texture (the spectrogram and play-map rasters are the data-path
+precedents). The threshold is measured, not guessed, during M4.
+
+The texture route needs raster, vector and axes composited inside one plot,
+and no general primitive exists for that today (see Context: `MapRaster` is
+walkers-only). M4 therefore adds a **`paintImage` opcode** — a textured rect
+by texture id, clipped like any other paint command — generalizing the
+`MapRaster` protocol (version bump + starved-texture re-ship) rather than
+inventing a new one. The same opcode serves `PlotImage` and future raster
+underlays (maps, geo panels). It is deliberately not in M0: M0 carries only
+what M1–M2 consume, and `paintImage`'s first consumer is M4.
 
 ### SD6 — Deferrals, recorded
 
 - **Text-measurement fetcher.** Numeric ticks are served by the estimation
   idiom; a frame-lagged `fetchTextSize` would polish legend sizing. Deferred.
 - **Per-vertex-color mesh opcode** (`paintMesh` over `epaint::Mesh`) — needed
-  only for colormap-gradient fills (two call sites upstream) and a future
-  ImPlot3D port. Deferred.
+  only for colormap-gradient fills (two call sites upstream), concave fills,
+  and a future ImPlot3D port. Deferred, with a proven fallback: the
+  `worldmap` widget already CPU-rasterizes concave, holed polygons
+  (supersampled scanline fill plus a per-pixel index buffer for picking)
+  because egui's fill is convex-only. Filled contours and similar geoms take
+  that path — rendered through SD5's `paintImage` — until a tessellating
+  opcode exists.
 - **Series drag-drop** and the re-expressed context menus follow the core.
 
 ### SD7 — Coexistence and migration
@@ -194,8 +216,9 @@ follows the git-trailer discipline
   bars, shaded, stairs, stems, infinite lines.
 - **M3** — scales and time: log/symlog, time-axis locators and formatting
   (Go `time` replaces the C localtime machinery).
-- **M4** — heatmap + histograms (1D/2D) with SD5 routing; colormap
-  integration with the existing `colormap`/`colorscale` widgets.
+- **M4** — heatmap + histograms (1D/2D) with SD5 routing; the `paintImage`
+  opcode lands here with its first consumer; colormap integration with the
+  existing `colormap`/`colorscale` widgets.
 - **M5** — tools: drag lines/points/rects, annotations, tags; native context
   menus.
 - **M6** — subplots and linked axes.
@@ -293,6 +316,9 @@ commits to them.
   drain: `rust/imzero2/src/imzero2/interpreter.rs`
   (`drain_paint_cmds_to_painter`).
 - egui_plot bridge: `public/thestack/imzero2/egui2/definition/egui2_definition_d_plot.go`.
+- In-plot raster precedent: `apps/play/play_map.go` (`MapRaster` overlay,
+  viewport raster node); concave-fill precedent:
+  `public/thestack/imzero2/egui2/widgets/worldmap/raster.go`.
 
 ### Related ADRs
 
