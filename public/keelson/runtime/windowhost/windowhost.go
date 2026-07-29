@@ -234,6 +234,10 @@ func (inst *Inst) SetAudit(runId string, facts factsstore.FactsStoreI) {
 // ctor fails. The window is mounted lazily on first Frame; if Mount
 // fails the window stays open with an error label so the user can
 // Close it.
+//
+// For an app that declares Manifest.Workingset this is also the restore
+// path: OpenWithConfig looks up the app's stored record and, when one is
+// usable, opens the window carrying it (ADR-0148 §SD5).
 func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 	key, err = inst.OpenWithConfig(appId, "", nil)
 	return
@@ -256,6 +260,14 @@ const maxLaunchConfigBytes = 64 << 10
 // the claimed kind (kindcheck). Refusals are returned as named errors —
 // the bus-facing open service turns them into LaunchReply refusals,
 // never silent drops (§SD1).
+//
+// A plain open of a workingset participant (ADR-0148 §SD5) is where the
+// host supplies a config of its own: the stored record for the app is
+// looked up and, when it survives the same boundary rules, the open
+// proceeds as a config-carrying one with LaunchReasonRestore. Restore
+// therefore has no second delivery channel — the app decodes a launch
+// config in Mount either way, and reads MountContextI.LaunchReason to
+// tell the two tiers apart.
 func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key WindowKeyT, err error) {
 	if len(cfg) == 0 {
 		// The wire cannot distinguish nil from empty; normalise so a
@@ -271,6 +283,18 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		err = eb.Build().Str("id", string(appId)).Int("len", len(cfg)).
 			Errorf("windowhost: launch config bytes without a config kind")
 		return
+	}
+	reason := app.LaunchReasonPlain
+	if kind != "" {
+		reason = app.LaunchReasonCaller
+	} else if restored := inst.restoreWorkingset(m); len(restored) > 0 {
+		// From here the open is indistinguishable from a config-carrying
+		// one — same validation ladder, same singleton refusal, same
+		// delivery at Mount. Only the reason on the mount context, and
+		// the caller on the audit row, say where the bytes came from.
+		kind = m.LaunchKind
+		cfg = restored
+		reason = app.LaunchReasonRestore
 	}
 	if kind != "" {
 		if len(cfg) == 0 {
@@ -314,7 +338,12 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	if kind != "" {
 		if ms := inst.mountState[a]; ms != nil && ms.refs > 0 {
 			inst.mu.Unlock()
-			err = eb.Build().Str("id", string(appId)).Str("kind", kind).
+			// A restore is a config delivery too (ADR-0148 §SD5), so it
+			// meets the same refusal — which is how the requirement that
+			// participants be factory-registered gets enforced. The reason
+			// rides the structured data so the two cases are tellable
+			// apart in the log.
+			err = eb.Build().Str("id", string(appId)).Str("kind", kind).Str("reason", reason.String()).
 				Errorf("windowhost: app instance is already open (singleton registration); launch config would never be delivered")
 			return
 		}
@@ -369,6 +398,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	mountCtx.SetInstanceKey(uint64(key))
 	mountCtx.SetRunId(inst.runId)
 	mountCtx.SetLaunchConfig(cfg)
+	mountCtx.SetLaunchReason(reason)
 	appIds := c.NewWidgetIdStack()
 	mountCtx.SetIds(appIds)
 	frameCtx := app.NewStaticFrameContext(mountCtx, nil)
@@ -407,6 +437,29 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 				Str("id", string(m.Id)).
 				Uint64("windowKey", uint64(key)).
 				Msg("windowhost: write app-lifecycle started failed")
+		}
+		if reason == app.LaunchReasonRestore {
+			// Audit the restore as what it is — a launch nobody asked for
+			// by name (ADR-0148 §SD6). Caller-delivered opens are attributed
+			// by the open service from the bus envelope; this one has no
+			// envelope, so the synthetic id stands in. A plain open that
+			// arrived over the bus and then restored writes both rows — the
+			// caller's plain request and this restore — which is the honest
+			// record of what happened. Best-effort, like every audit write.
+			_, lErr := facts.WriteLaunch(factsstore.LaunchRow{
+				RunId:       runId,
+				CallerAppId: WorkingsetCallerAppId,
+				TargetAppId: m.Id,
+				TileKey:     uint64(key),
+				ConfigKind:  kind,
+				Config:      cfg,
+			})
+			if lErr != nil {
+				inst.logger.Warn().Err(lErr).
+					Str("id", string(m.Id)).
+					Uint64("windowKey", uint64(key)).
+					Msg("windowhost: write restored-launch fact failed")
+			}
 		}
 	}
 	return

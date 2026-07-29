@@ -16,6 +16,67 @@ import (
 // so a named-set UX needs no migration; nothing mints another value yet.
 const WorkingsetDefaultName = "default"
 
+// WorkingsetCallerAppId is the synthetic caller a restored open is
+// attributed to in the launch facts (ADR-0148 §SD6), so "which windows
+// opened from restored state" is one predicate on the same column that
+// answers "which app asked for this window". Nothing registers under it —
+// the restore has no requesting app; the host is acting on the user's
+// plain open. Mirrors OpenServiceAppId's shape.
+const WorkingsetCallerAppId app.AppIdT = "runtime.workingset"
+
+// restoreWorkingset resolves the stored record a plain open of a
+// participating app should carry (ADR-0148 §SD5). Returns nil for every
+// degrade path — no participation, no store, no record, a record whose
+// kind no longer matches the manifest, or bytes the open boundary would
+// refuse — because a restore that cannot be delivered must leave the user
+// with a plain window, never a failed one.
+//
+// The lookup runs on the caller's goroutine, which for a menu click is
+// the render thread; against the CH-backed store that is one round-trip.
+// Accepted for v1 (the client carries its own timeout) rather than
+// introducing async machinery on the open path.
+func (inst *Inst) restoreWorkingset(m app.Manifest) (cfg []byte) {
+	if !m.Workingset {
+		return
+	}
+	inst.mu.Lock()
+	facts := inst.facts
+	inst.mu.Unlock()
+	if facts == nil {
+		return
+	}
+	stored, kind, found, err := facts.LatestWorkingset(m.Id, WorkingsetDefaultName)
+	if err != nil {
+		inst.logger.Debug().Err(err).Str("id", string(m.Id)).
+			Msg("windowhost: workingset lookup failed; opening plainly")
+		return
+	}
+	if !found || len(stored) == 0 {
+		return
+	}
+	if kind != m.LaunchKind {
+		// The app's launch kind moved since the record was written; the
+		// bytes describe a contract it no longer speaks.
+		inst.logger.Debug().Str("id", string(m.Id)).
+			Str("storedKind", kind).Str("launchKind", m.LaunchKind).
+			Msg("windowhost: stored workingset kind no longer matches the manifest; opening plainly")
+		return
+	}
+	if len(stored) > maxLaunchConfigBytes {
+		inst.logger.Debug().Str("id", string(m.Id)).
+			Int("len", len(stored)).Int("max", maxLaunchConfigBytes).
+			Msg("windowhost: stored workingset exceeds the size cap; opening plainly")
+		return
+	}
+	if cErr := kindcheck.Check(kind, stored); cErr != nil {
+		inst.logger.Debug().Err(cErr).Str("id", string(m.Id)).Str("kind", kind).
+			Msg("windowhost: stored workingset refused by kindcheck; opening plainly")
+		return
+	}
+	cfg = stored
+	return
+}
+
 // saveWorkingset pulls the closing window's workingset and writes it as a
 // boxer.facts row (ADR-0148 §SD4). Best-effort throughout: every failure
 // path logs and returns, because persisting a record must never disturb a

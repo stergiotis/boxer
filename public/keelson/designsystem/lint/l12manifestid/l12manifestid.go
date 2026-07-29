@@ -57,6 +57,7 @@ var AllowedSpecialIds = map[string]bool{
 	"runtime.sysmetrics":       true,
 	"runtime.adhoc":            true,
 	"runtime.windowhost":       true,
+	"runtime.workingset":       true,
 	"runtime.introspect.query": true,
 	"runtime.introspect.topo":  true,
 }

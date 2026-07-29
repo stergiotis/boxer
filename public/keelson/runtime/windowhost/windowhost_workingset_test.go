@@ -23,6 +23,9 @@ type wsApp struct {
 	composeCalls int
 	unmountCalls int
 	composedLate bool
+	// What Mount observed on the context — the restore tests read these.
+	gotCfg    []byte
+	gotReason app.LaunchReasonE
 }
 
 var (
@@ -30,8 +33,12 @@ var (
 	_ app.WorkingsetComposerI = (*wsApp)(nil)
 )
 
-func (inst *wsApp) Manifest() (m app.Manifest)                { return inst.manifest }
-func (inst *wsApp) Mount(ctx app.MountContextI) (err error)   { return }
+func (inst *wsApp) Manifest() (m app.Manifest) { return inst.manifest }
+func (inst *wsApp) Mount(ctx app.MountContextI) (err error) {
+	inst.gotCfg = ctx.LaunchConfig()
+	inst.gotReason = ctx.LaunchReason()
+	return
+}
 func (inst *wsApp) Frame(ctx app.FrameContextI) (err error)   { return }
 func (inst *wsApp) Unmount(ctx app.MountContextI) (err error) { inst.unmountCalls++; return }
 func (inst *wsApp) ComposeWorkingset() (cfg []byte, dirty bool, err error) {
@@ -318,4 +325,220 @@ func TestWorkingset_NoFactsStoreSkipsCompose(t *testing.T) {
 
 	assert.Zero(t, a.composeCalls)
 	assert.Equal(t, 1, a.unmountCalls)
+}
+
+// Restore (ADR-0148 §SD5): a plain open of a participant carries the
+// stored record, and every failure to produce one leaves a plain window
+// rather than a failed open.
+
+// seedWorkingset writes a usable record for id so the next plain open
+// restores it.
+func seedWorkingset(t *testing.T, facts *factsstore.InMemoryFactsStore, id app.AppIdT, cfg []byte) {
+	t.Helper()
+	_, err := facts.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "run-prev", AppId: id, Name: WorkingsetDefaultName,
+		Kind: testCfgKind, Config: cfg, TileKey: 1, Reason: "user-close",
+	})
+	require.NoError(t, err)
+}
+
+func TestRestore_PlainOpenCarriesStoredRecord(t *testing.T) {
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
+	h, facts := newWorkingsetHost(t, a)
+	seedWorkingset(t, facts, "test.ws", testCfgBytes)
+
+	k, err := h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+
+	assert.Equal(t, testCfgBytes, a.gotCfg, "the stored record arrives as a launch config")
+	assert.Equal(t, app.LaunchReasonRestore, a.gotReason)
+
+	launches := facts.Launches()
+	require.Len(t, launches, 1, "a restore is audited as a launch")
+	assert.Equal(t, WorkingsetCallerAppId, launches[0].CallerAppId)
+	assert.Equal(t, app.AppIdT("test.ws"), launches[0].TargetAppId)
+	assert.Equal(t, testCfgKind, launches[0].ConfigKind)
+	assert.Equal(t, testCfgBytes, launches[0].Config)
+	assert.Equal(t, uint64(k), launches[0].TileKey)
+	assert.Equal(t, "run-xyz", launches[0].RunId, "the restore joins the current run, not the one that saved it")
+}
+
+func TestRestore_CloseThenReopenRoundTrip(t *testing.T) {
+	// The whole loop: a dirty close writes the record, the next plain open
+	// hands it back.
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws"), cfg: testCfgBytes, dirty: true}
+	h, facts := newWorkingsetHost(t, a)
+
+	k, err := h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+	assert.Nil(t, a.gotCfg, "nothing stored yet: the first open is plain")
+	assert.Equal(t, app.LaunchReasonPlain, a.gotReason)
+	h.Close(k, "user-close")
+	h.reapClosed()
+	require.Len(t, facts.Workingsets(), 1)
+
+	_, err = h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+	assert.Equal(t, testCfgBytes, a.gotCfg)
+	assert.Equal(t, app.LaunchReasonRestore, a.gotReason)
+}
+
+func TestRestore_NoRecordOpensPlain(t *testing.T) {
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
+	h, facts := newWorkingsetHost(t, a)
+
+	_, err := h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+
+	assert.Nil(t, a.gotCfg)
+	assert.Equal(t, app.LaunchReasonPlain, a.gotReason)
+	assert.Empty(t, facts.Launches(), "a plain open writes no launch row")
+}
+
+func TestRestore_KindMismatchDegradesToPlain(t *testing.T) {
+	// The app's launch kind moved since the record was written.
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
+	h, facts := newWorkingsetHost(t, a)
+	_, err := facts.WriteWorkingset(factsstore.WorkingsetRow{
+		AppId: "test.ws", Name: WorkingsetDefaultName,
+		Kind: "someOtherKind", Config: testCfgBytes,
+	})
+	require.NoError(t, err)
+
+	_, err = h.Open("test.ws")
+	require.NoError(t, err, "a stale record degrades the open, it does not fail it")
+	mountOpenWindows(t, h)
+	assert.Nil(t, a.gotCfg)
+	assert.Equal(t, app.LaunchReasonPlain, a.gotReason)
+}
+
+func TestRestore_RefusedBytesDegradeToPlain(t *testing.T) {
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
+	h, facts := newWorkingsetHost(t, a)
+	seedWorkingset(t, facts, "test.ws", []byte("not a valid payload"))
+
+	_, err := h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+	assert.Nil(t, a.gotCfg)
+	assert.Equal(t, app.LaunchReasonPlain, a.gotReason)
+}
+
+func TestRestore_TombstonedRecordOpensPlain(t *testing.T) {
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
+	h, facts := newWorkingsetHost(t, a)
+	seedWorkingset(t, facts, "test.ws", testCfgBytes)
+	require.NoError(t, facts.DeleteWorkingset("test.ws", WorkingsetDefaultName))
+
+	_, err := h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+	assert.Nil(t, a.gotCfg)
+	assert.Equal(t, app.LaunchReasonPlain, a.gotReason)
+}
+
+func TestRestore_NonParticipantIgnoresStoredRecord(t *testing.T) {
+	m := mkLaunchManifest("test.ws", testCfgKind) // Workingset stays false
+	a := &wsApp{manifest: m}
+	h, facts := newWorkingsetHost(t, a)
+	seedWorkingset(t, facts, "test.ws", testCfgBytes)
+
+	_, err := h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+	assert.Nil(t, a.gotCfg, "participation is the manifest's word, not the store's")
+	assert.Equal(t, app.LaunchReasonPlain, a.gotReason)
+}
+
+func TestRestore_NoFactsStoreOpensPlain(t *testing.T) {
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
+	reg := app.NewRegistry()
+	require.NoError(t, reg.Register(a))
+	h := NewInst(reg, zerolog.Nop())
+
+	_, err := h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+	assert.Nil(t, a.gotCfg)
+	assert.Equal(t, app.LaunchReasonPlain, a.gotReason)
+}
+
+func TestRestore_RefusedForAlreadyOpenSingletonInstance(t *testing.T) {
+	// A restore is a config delivery, so it meets the ADR-0135 refusal:
+	// the singleton instance already has a window, and Mount — where a
+	// config is consumed — runs once per instance. This is how the
+	// factory-registration requirement (§SD4) is enforced.
+	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
+	h, facts := newWorkingsetHost(t, a)
+	seedWorkingset(t, facts, "test.ws", testCfgBytes)
+
+	_, err := h.Open("test.ws")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+	require.Equal(t, app.LaunchReasonRestore, a.gotReason)
+
+	_, err = h.Open("test.ws")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "never be delivered")
+	assert.Equal(t, 1, h.Len())
+}
+
+func TestRestore_FactoryAppRestoresPerWindow(t *testing.T) {
+	// The supported shape: each Open mints its own instance, so every
+	// window consumes its own copy of the record.
+	m := mkWorkingsetManifest("test.factory")
+	var instances []*wsApp
+	reg := app.NewRegistry()
+	require.NoError(t, reg.RegisterFactory(m, func() (a app.AppI, ctorErr error) {
+		w := &wsApp{manifest: m}
+		instances = append(instances, w)
+		a = w
+		return
+	}))
+	h := NewInst(reg, zerolog.Nop())
+	facts := factsstore.NewInMemoryFactsStore()
+	h.SetAudit("run-xyz", facts)
+	seedWorkingset(t, facts, "test.factory", testCfgBytes)
+
+	_, err := h.Open("test.factory")
+	require.NoError(t, err)
+	_, err = h.Open("test.factory")
+	require.NoError(t, err)
+	mountOpenWindows(t, h)
+
+	require.Len(t, instances, 2)
+	for i, w := range instances {
+		assert.Equal(t, testCfgBytes, w.gotCfg, "window %d restores its own copy", i)
+		assert.Equal(t, app.LaunchReasonRestore, w.gotReason, "window %d", i)
+	}
+}
+
+func TestRestore_CallerConfigOutranksStoredRecord(t *testing.T) {
+	// A caller who states the arguments gets exactly those, with the
+	// reason that says so — the stored record is not consulted.
+	m := mkWorkingsetManifest("test.factory")
+	var instances []*wsApp
+	reg := app.NewRegistry()
+	require.NoError(t, reg.RegisterFactory(m, func() (a app.AppI, ctorErr error) {
+		w := &wsApp{manifest: m}
+		instances = append(instances, w)
+		a = w
+		return
+	}))
+	h := NewInst(reg, zerolog.Nop())
+	facts := factsstore.NewInMemoryFactsStore()
+	h.SetAudit("run-xyz", facts)
+	seedWorkingset(t, facts, "test.factory", []byte("not a valid payload"))
+
+	_, err := h.OpenWithConfig("test.factory", testCfgKind, testCfgBytes)
+	require.NoError(t, err, "an unusable stored record cannot spoil a caller-delivered open")
+	mountOpenWindows(t, h)
+	require.Len(t, instances, 1)
+	assert.Equal(t, testCfgBytes, instances[0].gotCfg)
+	assert.Equal(t, app.LaunchReasonCaller, instances[0].gotReason)
+	assert.Empty(t, facts.Launches(), "the open service, not the host, audits caller opens")
 }
