@@ -120,9 +120,9 @@ what the keystroke does: runs the whole query, and says so in the status line.
 What the toggle draws:
 
 - The **query that would run** is tinted.
-- The **environment carried with it** — the WITH items in scope, and the `SET`
-  prelude — is underlined in the info tone. These are lines elsewhere in the
-  buffer that travel along.
+- Its **environment** — the WITH items in scope, and the `SET` prelude — is
+  underlined in the info tone. These are lines elsewhere in the buffer that the
+  query depends on, and that travel with it when it runs alone.
 - References that **will not resolve** are underlined in the error tone. This
   is the *correlated* subquery: one referring to a table alias belonging to the
   query around it. Nothing can make that runnable on its own — carrying the
@@ -131,6 +131,12 @@ What the toggle draws:
 
 A qualified name that resolves nowhere at all is left unmarked, since
 `tuple.field` on a Tuple column looks the same to the parser.
+
+The environment is drawn for the statement's own query as well, not only for
+nested ones — a `WITH` clause that runs to most of the buffer, with the query
+it feeds at the bottom, is exactly where seeing the closure helps. That query
+gets no tint, because it is what Run ships either way, and no `|` in the
+gutter, because there is nothing narrower to run.
 
 ## Query parameters
 

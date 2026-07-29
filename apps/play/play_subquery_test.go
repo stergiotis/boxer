@@ -307,6 +307,56 @@ func TestRunSubqueryRequestMatchesTheChord(t *testing.T) {
 	}
 }
 
+// The statement's own query closes over its WITH items too — it is just that
+// they already travel with it. It gets the environment underlines and no
+// background, so a buffer whose WITH clause is most of its length says which
+// definitions the query at the bottom rests on.
+func TestSubqueryModeMarksTheRootQuerysClosure(t *testing.T) {
+	const sql = "WITH\n  ['a', 'b'] AS lifecycle,\n  sub AS (SELECT 1 AS x)\nSELECT x FROM sub ORDER BY indexOf(lifecycle, 'a')"
+	app := debouncedApp(t, sql)
+	app.updatePreview()
+	app.subqueryMode = true
+	app.caretByte = len("WITH\n  ['a', 'b'] AS lifecycle,\n  sub AS (SELECT 1 AS x)\nSELECT x FRO")
+
+	var carried []string
+	var backgrounds int
+	for _, s := range app.editorStyledSections() {
+		switch {
+		case s.Flags&codeview.StyleBackground != 0:
+			backgrounds++
+		case s.Flags&codeview.StyleUnderline != 0 && s.Color == styleCarriedTone:
+			carried = append(carried, sql[s.Start:s.Stop])
+		}
+	}
+	if backgrounds != 0 {
+		t.Errorf("got %d background sections on the statement's own query, want 0", backgrounds)
+	}
+	want := []string{"['a', 'b'] AS lifecycle", "sub AS (SELECT 1 AS x)"}
+	if strings.Join(carried, "|") != strings.Join(want, "|") {
+		t.Errorf("closure = %v, want %v", carried, want)
+	}
+	// Still not a narrowing: the gesture degrades, and the gutter stays quiet.
+	if _, scope := app.runSubqueryBuffer(); scope != runScopeNoSubquery {
+		t.Errorf("scope = %v, want runScopeNoSubquery", scope)
+	}
+	if r := app.caretSubqueryRange(); !r.Empty() {
+		t.Errorf("gutter range = %v, want empty at statement level", r)
+	}
+}
+
+// A statement with no WITH clause and no prelude has no closure to draw, so
+// the common buffer stays undecorated even with the mode on.
+func TestSubqueryModeQuietWithoutAClosure(t *testing.T) {
+	const sql = "SELECT 1 AS a"
+	app := debouncedApp(t, sql)
+	app.updatePreview()
+	app.subqueryMode = true
+	app.caretByte = len("SELECT 1")
+	if secs := app.editorStyledSections(); len(secs) != 0 {
+		t.Errorf("got %d sections, want none", len(secs))
+	}
+}
+
 // The Subquery toggle is a DISPLAY switch. It must not change what a run
 // ships, and with it off the editor must look exactly as it did before the
 // feature existed.

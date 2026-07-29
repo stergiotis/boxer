@@ -245,31 +245,35 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 //
 //   - The query itself gets a BACKGROUND — it is a region, and the only one
 //     here that is.
-//   - The environment carried with it — the WITH items in scope and the SET
-//     prelude — gets an info-toned UNDERLINE. A second background would read
-//     as a second region, when the point is that these are lines elsewhere in
-//     the buffer that come along.
+//   - Its environment — the WITH items in scope and the SET prelude — gets an
+//     info-toned UNDERLINE. A second background would read as a second region,
+//     when the point is that these are lines elsewhere in the buffer that the
+//     query depends on.
 //   - References that will NOT resolve get the error tone, the same one a
 //     syntax error uses, because the consequence is the same: the server
 //     rejects it. This is the correlated-subquery case the composition cannot
 //     repair.
 //
-// Nothing is emitted when the caret is at statement level: there is no
-// narrowing to show, and the gesture would be an ordinary Run.
+// The statement's own query gets the environment but no background: it closes
+// over its WITH items no less than a nested query does — the difference is only
+// that they already travel with it rather than being spliced in front — while
+// tinting it would say nothing, since it is what Run ships either way.
 func (inst *PlayApp) subqueryModeSections() (out []codeview.StyledSection) {
 	if !inst.subqueryMode {
 		return nil
 	}
 	sub, stmt, ok := inst.caretSubquery()
-	if !ok || sub.Root {
+	if !ok {
 		return nil
 	}
 	base := stmt.Src.Start
-	out = append(out, codeview.StyledSection{
-		Start: uint32(base + sub.Src.Start), Stop: uint32(base + sub.Src.End),
-		Flags: codeview.StyleBackground,
-		Color: styleSubqueryTint,
-	})
+	if !sub.Root {
+		out = append(out, codeview.StyledSection{
+			Start: uint32(base + sub.Src.Start), Stop: uint32(base + sub.Src.End),
+			Flags: codeview.StyleBackground,
+			Color: styleSubqueryTint,
+		})
+	}
 	if p := inst.preludeRange(); !p.Empty() {
 		out = append(out, codeview.StyledSection{
 			Start: uint32(p.Start), Stop: uint32(p.End),

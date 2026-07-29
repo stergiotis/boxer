@@ -631,6 +631,19 @@ button and a chord, the subquery run only a chord. So the mode now adds a
 > Each button is exactly its keystroke. The toggle changes which buttons are
 > on the bar, never what a keystroke means.
 
+A follow-up from use: the mode drew **nothing at all** with the caret in the
+statement's own query, because the whole producer early-returned on `Root`.
+That skipped the environment too — so a buffer whose `WITH` clause is most of
+its length, with the query it feeds at the bottom, said nothing about what that
+query rests on. The early return was written for the tint, where it is right
+(the statement's own query is what Run ships; tinting it says nothing), and
+over-applied to the other two channels. A root query closes over its WITH items
+no less than a nested one does; the only difference is that they already travel
+with it rather than being spliced in front. The environment now draws either
+way, the tint still only when there is a narrowing, and the gutter `|` likewise.
+`unit.WithItems` was already populated for the root — nothing had to be
+computed, only drawn.
+
 The button is **not** disabled when the caret has nothing to narrow to. It does
 what the chord does — runs the whole query, and the status line says so.
 Greying it out would carry more information, but the bindings expose no
