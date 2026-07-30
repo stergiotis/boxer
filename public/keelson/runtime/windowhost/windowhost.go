@@ -79,6 +79,13 @@ type window struct {
 	// Frame loop reads openFlag at the end of each pass and triggers
 	// Close(key, "user-close") on the false transition.
 	openFlag bool
+
+	// focusHandle is the c.Window block handle of this window's last
+	// emit. Frame reads WINDOW_TOPMOST off it — one frame late, like
+	// every r7 signal — to decide the shell's active window; the zero
+	// handle of a window that has not rendered yet resolves to empty
+	// flags. Render-thread only.
+	focusHandle widgethandle.WidgetHandle
 }
 
 // instMount is the Mount/Unmount lifecycle shared by every window pointing
@@ -158,6 +165,14 @@ type Inst struct {
 	// original handle this frame.
 	pendingExportKey WindowKeyT
 	fpSaveSvg        *filepicker.Inst
+
+	// activeKey names the shell's active window — the one whose frame
+	// context reads focused (app.WindowFocusI), and therefore the one
+	// instance process-global input like the Ctrl+Enter chord belongs
+	// to. Derived each Frame by pickActiveWindow from the windows' r7
+	// WINDOW_TOPMOST reports; zero while no window is open. Mutated
+	// only inside Frame: render-thread only, like searchText below.
+	activeKey WindowKeyT
 
 	// searchText backs the launcher search box (rendered both at the
 	// top of the Apps ▾ menu and at the top of the empty-state pane).
@@ -789,6 +804,21 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// ui scope (it uses egui::Context directly), so no PanelCentral
 	// wrap here.
 	sm := c.CurrentApplicationState.StateManager
+	// Decide the shell's active window from last frame's stacking
+	// reports, then stamp every window's frame context below so each
+	// app's Frame can gate process-global input (app.WindowFocusI) on
+	// whether ITS window is the active one — the seam that keeps one
+	// Ctrl+Enter from running a query in every open playground.
+	{
+		facts := make([]windowFocusFact, 0, len(snapshot))
+		for _, w := range snapshot {
+			facts = append(facts, windowFocusFact{
+				key:     w.key,
+				topmost: sm.GetResponse(w.focusHandle).HasWindowTopmost(),
+			})
+		}
+		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
+	}
 	for _, w := range snapshot {
 		title := w.manifest.WindowTitle()
 		if title == "" {
@@ -805,13 +835,18 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		openBindingId := openBindingIdFor(w.key)
 		sm.AddR10Databinding(openBindingId, &w.openFlag)
 		ww, hh := windowDefaultSize(w.manifest.SurfaceHints)
-		for range c.Window(winId, c.WidgetText().Text(title).Keep()).
+		wf := c.Window(winId, c.WidgetText().Text(title).Keep()).
 			Resizable(true).
 			TitleBar(true).
 			DefaultOpen(true).
 			DefaultSize(ww, hh).
-			OpenBound(openBindingId).
-			KeepIter() {
+			OpenBound(openBindingId)
+		// The handle feeds next frame's active-window decision; the
+		// focus stamp is this frame's answer, set before the app's
+		// Frame runs inside the block body.
+		w.focusHandle = wf.Handle()
+		w.frameCtx.SetWindowFocused(w.key == inst.activeKey)
+		for range wf.KeepIter() {
 			// Top-of-body chrome: a small "Save as SVG…" affordance
 			// rendered above the app's Frame. egui::Window has no
 			// custom-title-bar-button API in this IDL (the open(&mut
@@ -887,6 +922,42 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.mu.Unlock()
 	inst.reapClosed()
 	return
+}
+
+// windowFocusFact is one open window's contribution to the active-window
+// decision, in Frame order (oldest open first).
+type windowFocusFact struct {
+	key     WindowKeyT
+	topmost bool
+}
+
+// pickActiveWindow decides which open window is the shell's active one.
+//
+// The primary signal is egui's own stacking: the window whose Area is the
+// top layer of the Middle order (r7 WINDOW_TOPMOST, one frame late like
+// every response signal) — egui raises a window on any press inside it, so
+// topmost tracks where the user last clicked. When NO host window is
+// topmost — an app's tethered child window, the SVG-save picker, or the
+// help host holds the top layer — the previous answer stands: a child
+// surface belongs to the interaction that opened it, and "the window I am
+// working in" does not change because something popped up over it. A
+// previous answer that is gone (window closed, or nothing decided yet)
+// falls to the newest window, which is also the one egui opens on top.
+func pickActiveWindow(prev WindowKeyT, facts []windowFocusFact) (active WindowKeyT) {
+	if len(facts) == 0 {
+		return 0
+	}
+	for _, f := range facts {
+		if f.topmost {
+			return f.key
+		}
+	}
+	for _, f := range facts {
+		if f.key == prev {
+			return prev
+		}
+	}
+	return facts[len(facts)-1].key
 }
 
 // openBindingIdFor derives the r10 binding id for a window key. The

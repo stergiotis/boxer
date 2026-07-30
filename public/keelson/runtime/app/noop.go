@@ -191,9 +191,16 @@ func (inst *StaticMountContext) LaunchReason() (reason LaunchReasonE) {
 type StaticFrameContext struct {
 	*StaticMountContext
 	scope any
+	// windowFocused backs the WindowFocusI capability. Constructed true:
+	// a host that never says otherwise is a single-surface host, whose
+	// sole instance is the active one by definition. A multi-window host
+	// (windowhost) overwrites it before every Frame with whether this
+	// context's window is the shell's topmost.
+	windowFocused bool
 }
 
 var _ FrameContextI = (*StaticFrameContext)(nil)
+var _ WindowFocusI = (*StaticFrameContext)(nil)
 
 // NewStaticFrameContext wraps a MountContext with a host-supplied egui scope.
 // scope may be nil in M1; consumers that need it should error at the per-app
@@ -202,11 +209,24 @@ func NewStaticFrameContext(mc *StaticMountContext, scope any) (inst *StaticFrame
 	inst = &StaticFrameContext{
 		StaticMountContext: mc,
 		scope:              scope,
+		windowFocused:      true,
 	}
 	return
 }
 
 func (inst *StaticFrameContext) EguiScope() (scope any) {
 	scope = inst.scope
+	return
+}
+
+// SetWindowFocused records whether the window carrying this context is the
+// shell's active window. Multi-window hosts call it before every Frame;
+// nothing else should.
+func (inst *StaticFrameContext) SetWindowFocused(focused bool) {
+	inst.windowFocused = focused
+}
+
+func (inst *StaticFrameContext) WindowFocused() (focused bool) {
+	focused = inst.windowFocused
 	return
 }

@@ -35,6 +35,11 @@ bitflags::bitflags! {
         const CHANGED = 1u32 << 18;
         const SHOULD_CLOSE = 1u32 << 19;
         const IS_TOOLTIP_OPEN = 1u32 << 20;
+        // WINDOW_TOPMOST: this block's Area is the top layer of egui's
+        // Middle order — the shell notion of "the active window". Set only
+        // by the Window apply arm (it is a fact about the window's layer,
+        // not about a response), so populate() below does not touch it.
+        const WINDOW_TOPMOST = 1u32 << 21;
 
         const NODELIKE_SELECTED = 1u32 << 30;
         const BLOCK_SKIPPED = 1u32 << 31;

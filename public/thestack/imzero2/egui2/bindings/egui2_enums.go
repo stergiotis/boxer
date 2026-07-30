@@ -30,6 +30,12 @@ const (
 	ChangedResponseFlags             ResponseFlagsE = 1 << 18
 	ShouldCloseResponseFlags         ResponseFlagsE = 1 << 19
 	IsTooltipOpenResponseFlags       ResponseFlagsE = 1 << 20
+	// WindowTopmostResponseFlags: the block's Area is the top layer of
+	// egui's Middle order — the shell notion of "the active window". Set
+	// only by the Window apply arm (fenums.rs WINDOW_TOPMOST); every other
+	// widget reports it clear. Read it off a WindowFluid.Handle() one frame
+	// later, like any r7-derived signal.
+	WindowTopmostResponseFlags ResponseFlagsE = 1 << 21
 
 	NodelikeSelectedFlags ResponseFlagsE = 1 << 30
 	BlockSkippedFlags     ResponseFlagsE = 1 << 31
@@ -57,6 +63,7 @@ var AllResponseFlags = []ResponseFlagsE{
 	ChangedResponseFlags,
 	ShouldCloseResponseFlags,
 	IsTooltipOpenResponseFlags,
+	WindowTopmostResponseFlags,
 	NodelikeSelectedFlags,
 	BlockSkippedFlags,
 }
@@ -155,6 +162,9 @@ func (inst ResponseFlagsE) HasShouldClose() bool {
 }
 func (inst ResponseFlagsE) HasIsTooltipOpen() bool {
 	return inst.Has(IsTooltipOpenResponseFlags)
+}
+func (inst ResponseFlagsE) HasWindowTopmost() bool {
+	return inst.Has(WindowTopmostResponseFlags)
 }
 func (inst ResponseFlagsE) HasNodelikeSelected() bool {
 	return inst.Has(NodelikeSelectedFlags)

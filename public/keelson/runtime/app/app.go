@@ -89,6 +89,11 @@ type MountContextI interface {
 // FrameContextI extends MountContextI with frame-scoped resources. The host
 // pre-prepares the WidgetIdStack before each Frame() call (ADR-0026 §SD9),
 // so apps must not call Prepare() themselves.
+//
+// Hosts that can tell which of their windows is active additionally
+// implement [WindowFocusI] on the same context — an optional capability,
+// not part of this interface, so single-surface hosts and test fakes owe
+// nothing.
 type FrameContextI interface {
 	MountContextI
 	// EguiScope returns the host-provided egui rendering scope. The concrete
@@ -96,6 +101,25 @@ type FrameContextI interface {
 	// then, M1 hosts return nil and apps fall back to the legacy global
 	// bindings via a LegacyFuncApp wrapper.
 	EguiScope() (scope any)
+}
+
+// WindowFocusI is the optional frame-context capability a multi-window
+// host provides so an app instance can tell whether ITS window is the
+// shell's active one this frame. Process-global input — a keyboard chord
+// drained once from egui's shared queue — is visible to every open
+// instance's Frame alike, so an app acting on such input must gate on
+// this or one press fans out into every window hosting that app.
+//
+// Type-assert from the FrameContextI; a context without it belongs to a
+// single-surface host, where the only instance is the active one — treat
+// absence as focused:
+//
+//	focused := true
+//	if f, ok := ctx.(app.WindowFocusI); ok {
+//		focused = f.WindowFocused()
+//	}
+type WindowFocusI interface {
+	WindowFocused() (focused bool)
 }
 
 // BusI is the cap-broker / inter-app message bus described by ADR-0026 §SD3
