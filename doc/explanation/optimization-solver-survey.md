@@ -1,12 +1,10 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-30
 ---
-
-> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
 > **Provenance.** Compiled 2026-07-30 from vendor release notes, project
 > READMEs, package indexes and paper abstracts. Provenance is uneven: solver
@@ -14,8 +12,11 @@ status: draft
 > documentation, but the comparative speedup figures (cuPDLPx, Gurobi 13.0,
 > SOAP, Muon) are quoted from the announcing party and have not been
 > independently reproduced. Nothing here has been benchmarked against boxer
-> workloads, and no solver below is currently a boxer dependency. Treat it as
-> an orientation map, not a measurement.
+> workloads, and no solver below is currently a boxer dependency. Package names
+> were checked against the JuMP solver index, crates.io and pkg.go.dev rather
+> than recalled, and every external link was verified to resolve on 2026-07-30
+> — excepting three publisher domains (SIAM, OpenReview, ResearchGate) that
+> refuse automated requests. Treat it as an orientation map, not a measurement.
 
 # Optimization solvers by problem class — a survey
 
@@ -97,7 +98,7 @@ basis for warm-starting a MIP is needed, simplex still wins.
 - [HiGHS](https://highs.dev/) — C++, open source, the default open LP/MIP solver
 - [cuPDLPx](https://github.com/MIT-Lu-Lab/cuPDLPx) (CUDA/C) · [cuPDLP-C](https://github.com/COPT-Public/cuPDLP-C) · [cuPDLP.jl](https://github.com/jinwen-yang/cuPDLP.jl) (Julia)
 - **Julia:** `HiGHS.jl` and `Tulip.jl` (a pure-Julia interior-point method) through JuMP; [cuPDLP.jl](https://github.com/jinwen-yang/cuPDLP.jl) for the GPU path
-- **Rust:** [good_lp](https://github.com/rust-or/good_lp) models LPs over pluggable backends — [Clarabel](https://crates.io/crates/clarabel) and `microlp` are pure Rust; HiGHS, CBC and lp_solve are C/C++ bindings
+- **Rust:** [good_lp](https://github.com/rust-or/good_lp) models LPs over pluggable backends — [Clarabel](https://docs.rs/clarabel) and `microlp` are pure Rust; HiGHS, CBC and lp_solve are C/C++ bindings
 - **Go:** [`gonum.org/v1/gonum/optimize/convex/lp`](https://pkg.go.dev/gonum.org/v1/gonum/optimize/convex/lp) — a dense simplex, adequate for small problems only; [golp](https://github.com/draffensperger/golp) wraps LPSolve over cgo
 
 ## 2. Mixed-integer programming
@@ -126,7 +127,7 @@ openly discussed by the HiGHS maintainers themselves — budget for it rather
 than being surprised by it. Note again that GPUs do not transfer here.
 
 **Links.**
-- [Gurobi 13.0 release notes](https://www.gurobi.com/news/gurobi-releases-version-13-0-with-improved-performance-and-new-solving-capabilities/) — vendor
+- [Gurobi 13.0 release notes](https://www.gurobi.com/company/newsroom/gurobi-releases-version-13-0-with-improved-performance-and-new-solving-capabilities) — vendor
 - [Using GPUs to Solve LPs vs. MIPs: What's the Difference?](https://www.gurobi.com/resources/blog/using-gpus-to-solve-lps-vs-mips-what-s-the-difference) — the LP/MIP asymmetry, stated by a vendor with no incentive to understate GPUs
 - [Why are open source MIP solvers slower than commercial ones?](https://github.com/ERGO-Code/HiGHS/discussions/1683) — maintainers' own answer
 - [SCIP](https://www.scipopt.org/) — C, open source, customizable, MINLP-capable
@@ -205,7 +206,7 @@ which no nonconvex method will ever provide.
 - [CVXPY solver features matrix](https://www.cvxpy.org/tutorial/solvers/index.html) — which backend supports which cone
 - [SCS](https://github.com/cvxgrp/scs) — C, first-order, large and low-accuracy
 - **Julia:** [JuMP](https://jump.dev/) plus `Clarabel.jl`, `SCS.jl`, `COSMO.jl` or `Hypatia.jl` (pure Julia, non-symmetric cones). See the [JuMP solver index](https://jump.dev/JuMP.jl/stable/packages/solvers/) for the current cone-support matrix.
-- **Rust:** [Clarabel](https://crates.io/crates/clarabel) is a native Rust crate rather than a binding — LP, QP, SOCP, SDP plus exponential and power cones. No integer variables. Since Clarabel is also CVXPY's default, a Rust program can reach the same solver the Python recommendation points at, without Python in the loop.
+- **Rust:** [Clarabel](https://docs.rs/clarabel) is a native Rust crate rather than a binding — LP, QP, SOCP, SDP plus exponential and power cones. No integer variables. Since Clarabel is also CVXPY's default, a Rust program can reach the same solver the Python recommendation points at, without Python in the loop.
 - **Go:** nothing. Conic modelling and solving are absent from the Go ecosystem.
 
 ## 5. Quadratic programming and embedded model-predictive control
@@ -237,7 +238,7 @@ occasionally taking 50 ms is useless in a 10 ms control loop.
 - [OSQP: An Operator Splitting Solver for Quadratic Programs](https://osqp.org/citing/) — paper and solver, **C** with embedded code generation
 - [acados](https://github.com/acados/acados) — C, nonlinear MPC and optimal control
 - **Julia:** `OSQP.jl` and `DAQP.jl` through JuMP; note that Julia's startup and JIT behaviour make it a poor fit for the hard-real-time end of this class regardless of solver quality.
-- **Rust:** [Clarabel](https://crates.io/crates/clarabel) covers QP natively, and Rust's lack of a runtime makes it a more natural fit here than Julia or Go.
+- **Rust:** [Clarabel](https://docs.rs/clarabel) covers QP natively, and Rust's lack of a runtime makes it a more natural fit here than Julia or Go.
 - **Go:** nothing native. OSQP's C API is small and cgo-wrappable if a Go control loop ever needs it.
 
 ## 6. Smooth constrained nonlinear programming
@@ -306,7 +307,7 @@ that the Jacobian was already carrying for free.
 - [MINPACK](https://github.com/fortran-lang/minpack) — the **Fortran** original (Moré, Garbow, Hillstrom), modernized under fortran-lang; [Jacob Williams' edition](https://github.com/jacobwilliams/minpack) adds CMake and examples
 - [DFO-LS](https://github.com/numericalalgorithmsgroup/dfols) — Python, derivative-free and noise-tolerant
 - **Julia:** `LsqFit.jl` for curve fitting; [NonlinearSolve.jl](https://github.com/SciML/NonlinearSolve.jl) in the SciML stack for the systems-of-equations side
-- **Rust:** [levenberg-marquardt](https://crates.io/crates/levenberg-marquardt) — a port of MINPACK's LM over `nalgebra` — and argmin's `gaussnewton` module. One of the few classes where Rust is better served than Go.
+- **Rust:** [levenberg-marquardt](https://docs.rs/levenberg-marquardt) — a port of MINPACK's LM over `nalgebra` — and argmin's `gaussnewton` module. One of the few classes where Rust is better served than Go.
 - **Go:** a genuine gap — [`gonum.org/v1/gonum/optimize`](https://pkg.go.dev/gonum.org/v1/gonum/optimize) provides no Levenberg–Marquardt or dedicated least-squares method. Generic BFGS over the squared residual is the available fallback and forfeits the structure.
 
 ## 8. Smooth unconstrained and bound-constrained minimization
@@ -532,7 +533,7 @@ a poor fit for the hard-real-time end of §5, independent of solver quality.
 ## The Rust ecosystem, summarized
 
 Rust's coverage is narrow but sharper than Go's, and it has one genuine
-advantage: [Clarabel](https://crates.io/crates/clarabel) is a native Rust crate
+advantage: [Clarabel](https://docs.rs/clarabel) is a native Rust crate
 rather than a binding, and it is the same solver CVXPY defaults to for LP and
 SOCP. A Rust program can therefore reach the solver this survey recommends for
 convex conic work with no C shim, no Python runtime, and no cgo boundary.
@@ -543,7 +544,7 @@ lp_solve as bindings; SCIP through the optional `russcip` dependency),
 [argmin](https://argmin-rs.org/) provides local unconstrained methods —
 `quasinewton`, `conjugategradient`, `newton`, `trustregion`, `neldermead`,
 `particleswarm`, `simulatedannealing` — generic over `Vec`, `ndarray` and
-`nalgebra`, [levenberg-marquardt](https://crates.io/crates/levenberg-marquardt)
+`nalgebra`, [levenberg-marquardt](https://docs.rs/levenberg-marquardt)
 ports MINPACK's LM, and [egobox](https://github.com/relf/egobox) covers
 Bayesian optimization with Gaussian-process mixtures.
 
