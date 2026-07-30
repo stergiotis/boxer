@@ -1,12 +1,12 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-30
 ---
 
-> **Status: draft — pre-human-review.** Compiled 2026-07-30 from published
+> **Provenance.** Compiled 2026-07-30 from published
 > papers and their artifact repositories. Provenance is uneven and marked
 > per claim: findings from the VLDB'25 motif-discovery evaluation were read
 > from the paper itself (methodology, Table 2, RQ1–RQ6); the TSB-AD leaderboard

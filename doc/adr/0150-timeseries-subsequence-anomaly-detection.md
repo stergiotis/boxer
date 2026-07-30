@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-30
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-30
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0150: streaming subsequence anomaly detection in Go
 
@@ -234,21 +232,28 @@ M1 hands it the substrate for free.
 
 ## Status
 
-Proposed — awaiting review.
+Accepted 2026-07-30. Implementation started at M1.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
-for the edit-policy tiers.
+for the edit-policy tiers. Subsequent refinements land as dated `## Updates`
+entries, not as silent rewrites.
 
-Open questions for review:
+Three sub-decisions were deliberately left open at acceptance, each deferred
+to the milestone where it first becomes concrete rather than guessed at now:
 
-1. Is anomaly-only the right first cut, or should M1 ship with a motif reader
-   attached given that the substrate is shared?
-2. Should M4's aggregation be MDL-based (as mSTAMP specifies) or a fixed
-   `k`-of-`d` chosen by the caller? MDL removes a parameter and adds a
-   failure mode.
-3. Does `slidingwindow` gain a head-index mode, or do these packages own their
-   buffers?
+1. **Motif readers on M1.** The substrate carries motif information whether or
+   not anything reads it. Whether M1 exposes a motif accessor or leaves it for
+   the follow-up ADR is a surface question, not a structural one, and does not
+   change what M1 computes.
+2. **M4's aggregation.** MDL-based subset selection (as mSTAMP specifies)
+   removes a caller-facing parameter and adds a failure mode of its own; a
+   fixed `k`-of-`d` is predictable and pushes the choice outward. Decide at M4
+   against M2's harness rather than in the abstract.
+3. **Buffer ownership.** Whether
+   [`github.com/stergiotis/boxer/public/observability/slidingwindow`](../../public/observability/slidingwindow)
+   gains a head-index mode or these packages carry their own ring is decided at
+   M3, where a streaming detector first makes the `O(cap)`-per-push cost real.
 
 <!--
 ## Updates
