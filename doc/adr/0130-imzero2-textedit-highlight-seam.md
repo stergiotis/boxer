@@ -741,6 +741,28 @@ marked-correlation tripwire beside the self-reference one: the original
 must run, the mark must be present, and the composition must still be
 rejected — an analyzer that learns the shape flags the rule for relaxing.
 
+### 2026-07-30 — a bare union branch narrows too
+
+The review recorded an asymmetry: `(SELECT 1) UNION ALL (SELECT |2)`
+narrowed to the branch — a parenthesised branch nests a selectUnionStmt,
+which is a unit — while the bare spelling of the same query did not, the
+branch being a plain selectStmt. A branch is independently runnable SQL,
+so each bare branch of a multi-branch chain is now a unit of its own: the
+caret inside one narrows to it, the caret on the connective still ships
+the chain, and nesting inside a branch outranks the branch (unit depth
+counts in twos so a branch orders between its chain and anything nested
+within it).
+
+A branch's closure adds one rule the chain never needed, pinned live
+before it was written: the server scopes a branch's WITH clause FORWARD
+across the chain — branch 2 sees branch 1's items, never the reverse — so
+a branch unit hoists the withClauses of the EARLIER bare branches, and
+everything nested inside a branch inherits the same frames. The first
+branch ships its own clause in its text like any unit heading a WITH.
+The live lane pins the composed branches by value (a passthrough
+comparison cannot hold here: a branch returns a subset of its statement
+by design).
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
