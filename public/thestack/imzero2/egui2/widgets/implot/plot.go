@@ -65,6 +65,12 @@ type plotState struct {
 	hoverPos [2]float32
 	hoverOk  bool
 
+	// Legend state: per-label visibility toggles (clicks) and the label
+	// hovered last frame (series highlight). Labels must be unique within
+	// a plot, as in ImPlot.
+	hidden      map[string]bool
+	legendHover string
+
 	// scratch buffers reused across frames to keep steady-state allocation flat.
 	scratchX []float32
 	scratchY []float32
@@ -74,11 +80,17 @@ type plotState struct {
 
 var pool = make(map[uint64]*plotState, 8)
 
-// seriesFrame is one Line call, held until End so auto-fit sees the whole
-// frame's data before the ranges freeze.
+// seriesFrame is one item call, held until End so auto-fit sees the whole
+// frame's data before the ranges freeze. Fields beyond xs/ys apply per
+// kind: marker+radius for scatter, width for bars, yref for shaded/stems.
 type seriesFrame struct {
+	kind   seriesKind
 	label  string
 	xs, ys []float64
+	marker MarkerE
+	radius float32
+	width  float64
+	yref   float64
 }
 
 // Plot is the frame-transient handle between Begin and End. Methods follow
@@ -107,7 +119,7 @@ func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 	scopeId := scope.DeriveStacked()
 	st, ok := pool[scopeId]
 	if !ok {
-		st = &plotState{}
+		st = &plotState{hidden: make(map[string]bool, 4)}
 		pool[scopeId] = st
 	}
 	p := &Plot{ids: ids, st: st, scopeId: scopeId, w: w, h: h, title: title,
@@ -286,20 +298,7 @@ func (p *Plot) warnIfLocked(fn string) bool {
 // split the line, as in ImPlot. Data is not copied — the slices must stay
 // valid until End.
 func (p *Plot) Line(label string, xs []float64, ys []float64) *Plot {
-	p.setupLocked = true
-	n := min(len(xs), len(ys))
-	for i := range n {
-		x, y := xs[i], ys[i]
-		if math.IsNaN(x) || math.IsNaN(y) {
-			continue
-		}
-		p.dataXMin = math.Min(p.dataXMin, x)
-		p.dataXMax = math.Max(p.dataXMax, x)
-		p.dataYMin = math.Min(p.dataYMin, y)
-		p.dataYMax = math.Max(p.dataYMax, y)
-		p.dataOk = true
-	}
-	p.series = append(p.series, seriesFrame{label: label, xs: xs[:n], ys: ys[:n]})
+	p.addSeries(seriesFrame{kind: kindLine, label: label, xs: xs, ys: ys}, true, true)
 	return p
 }
 
