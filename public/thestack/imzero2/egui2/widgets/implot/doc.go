@@ -14,11 +14,16 @@
 // log/time scales, subplots and linked axes follow in later milestones per
 // the ADR.
 //
-// Known deviations from upstream, M1:
+// Known deviations from upstream:
 //   - Box-zoom is Shift+drag (upstream: right-drag). The response-flag
 //     register does not yet distinguish which button a drag uses.
 //   - Setup* calls after the first item are ignored with a debug log
 //     (upstream asserts).
+//   - The y-axis label renders horizontally (no rotated-text command).
+//   - SymLog uses the asinh transform with the default locator on raw
+//     values; upstream's dedicated symlog locator is not yet ported.
+//   - Time axes label in UTC only and place major ticks only — upstream's
+//     minor time ticks and second-line context labels are deferred.
 //
 // Interaction state is read one frame behind, like every imzero2 register
 // (ADR-0140 wheel, R24 canvas pointer, R7 response flags) — imperceptible

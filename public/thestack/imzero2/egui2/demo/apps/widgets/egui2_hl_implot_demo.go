@@ -15,6 +15,13 @@ type implotDemoState struct {
 	xs, sin, cos, damped []float64
 }
 
+// implotM3State carries the M3 scales demo's series.
+type implotM3State struct {
+	tXs, tYs         []float64
+	eXs              []float64
+	e1Ys, e2Ys, e3Ys []float64
+}
+
 // implotM2State carries the M2 item-breadth demo's series.
 type implotM2State struct {
 	barXs, barYs     []float64
@@ -108,6 +115,48 @@ func init() {
 			p.Shaded("shaded", st.shXs, st.shYs, 8.8)
 			p.InfLinesH("mean ref", []float64{4.6})
 			p.End()
+		},
+	})
+	registry.Register(registry.Demo{
+		Name:        "implot_m3",
+		Category:    "Graphics & canvas",
+		Title:       icons.IconPaintBucket + " implot M3 (time / log scales)",
+		Stage:       [2]float32{660, 580},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "ADR-0149 M3 axis scales, two plots in one frame (the per-id R24 register at work): a Unix-seconds time axis with boundary-snapped ticks, and a log10 y axis with decade ticks turning exponentials into straight lines.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			st := &implotM3State{}
+			// Fixed epoch keeps the tour capture deterministic.
+			base := float64(1_780_000_000)
+			const n = 200
+			for i := range n {
+				tt := base + float64(i)/float64(n-1)*48*3600
+				st.tXs = append(st.tXs, tt)
+				st.tYs = append(st.tYs, 42+9*math.Sin(float64(i)/11)+3*math.Cos(float64(i)/3.1))
+				x := float64(i) / float64(n-1) * 10
+				st.eXs = append(st.eXs, x)
+				st.e1Ys = append(st.e1Ys, math.Exp(x*0.9))
+				st.e2Ys = append(st.e2Ys, 40*math.Exp(x*0.35))
+				st.e3Ys = append(st.e3Ys, 3000*math.Exp(-x*0.4))
+			}
+			return st
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			st := state.(*implotM3State)
+			p := implot.Begin(ids, "requests over 48 h", 620, 240)
+			p.SetupAxes("", "rate", implot.AxisFlagsNone, implot.AxisFlagsNone)
+			p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
+			p.Line("rate", st.tXs, st.tYs)
+			p.End()
+			p2 := implot.Begin(ids, "log-scale growth", 620, 240)
+			p2.SetupAxes("x", "value (log10)", implot.AxisFlagsNone, implot.AxisFlagsNone)
+			p2.SetupAxisScale(implot.AxisY1, implot.ScaleLog10)
+			p2.SetupAxisLimits(implot.AxisY1, 0.5, 20000, implot.CondOnce)
+			p2.Line("e^0.9x", st.eXs, st.e1Ys)
+			p2.Line("40·e^0.35x", st.eXs, st.e2Ys)
+			p2.Line("3000·e^-0.4x", st.eXs, st.e3Ys)
+			p2.End()
 		},
 	})
 }

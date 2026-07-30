@@ -3,6 +3,7 @@ package implot
 import (
 	"math"
 	"strconv"
+	"time"
 )
 
 // Range is a closed interval in plot space. Plot space is float64
@@ -78,6 +79,65 @@ type tick struct {
 	label string // empty for minor ticks
 }
 
+// ScaleE selects an axis scale, mirroring ImPlotScale. Time is a linear
+// transform with the time locator/formatter; Log10 and SymLog change the
+// value↔pixel mapping itself.
+type ScaleE uint8
+
+const (
+	ScaleLinear ScaleE = iota
+	// ScaleTime treats values as Unix seconds (UTC labels, ImPlot's
+	// default; a UseLocalTime knob can follow when needed).
+	ScaleTime
+	ScaleLog10
+	// ScaleSymLog is ImPlot's asinh-based symmetric log: linear near
+	// zero, logarithmic in both tails.
+	ScaleSymLog
+)
+
+// scaleFwd / scaleInv are the plot-value ↔ transformed-space maps; nil
+// means identity (linear and time). Log10 guards non-positive input the
+// way ImPlot's TransformForward_Log10 does.
+func scaleFwd(s ScaleE) func(float64) float64 {
+	switch s {
+	case ScaleLog10:
+		return func(v float64) float64 {
+			if v <= 0 {
+				v = 5e-324
+			}
+			return math.Log10(v)
+		}
+	case ScaleSymLog:
+		return func(v float64) float64 { return 2 * math.Asinh(v/2) }
+	}
+	return nil
+}
+
+func scaleInv(s ScaleE) func(float64) float64 {
+	switch s {
+	case ScaleLog10:
+		return func(t float64) float64 { return math.Pow(10, t) }
+	case ScaleSymLog:
+		return func(t float64) float64 { return 2 * math.Sinh(t/2) }
+	}
+	return nil
+}
+
+// sanitizeScaled is sanitize plus the per-scale domain constraint: a log
+// axis must stay strictly positive (ImPlot constrains the same way).
+func sanitizeScaled(r Range, s ScaleE) Range {
+	r = r.sanitize()
+	if s == ScaleLog10 {
+		if r.Max <= 0 {
+			return Range{1e-3, 1}
+		}
+		if r.Min <= 0 {
+			r.Min = r.Max * 1e-4
+		}
+	}
+	return r
+}
+
 // niceNum is Heckbert's nice-number rounding, the same helper ImPlot's
 // default locator is built on: the largest "nice" step (1/2/5 × 10^k) not
 // exceeding x (round=false), or the nicest step closest to x (round=true).
@@ -145,6 +205,120 @@ func locateTicks(rng Range, sizePx float32, dst []tick) []tick {
 	return dst
 }
 
+// locateTicksScaled dispatches to the scale's locator. SymLog currently
+// uses the default locator on raw values — an approximation recorded in
+// the package doc; Log10 and Time have faithful ports.
+func locateTicksScaled(rng Range, sizePx float32, scale ScaleE, dst []tick) []tick {
+	switch scale {
+	case ScaleLog10:
+		return locateTicksLog10(rng, dst)
+	case ScaleTime:
+		return locateTicksTime(rng, sizePx, dst)
+	}
+	return locateTicks(rng, sizePx, dst)
+}
+
+// locateTicksLog10 ports ImPlot's log locator: major ticks at decades
+// 10^k with minors at 2..9 × 10^k. Inside a single decade (deep zoom)
+// the default locator takes over, as upstream does.
+func locateTicksLog10(rng Range, dst []tick) []tick {
+	dst = dst[:0]
+	rng = sanitizeScaled(rng, ScaleLog10)
+	kLo := int(math.Floor(math.Log10(rng.Min)))
+	kHi := int(math.Ceil(math.Log10(rng.Max)))
+	if kHi-kLo < 1 {
+		return locateTicks(rng, 300, dst)
+	}
+	for k := kLo; k <= kHi; k++ {
+		dec := math.Pow(10, float64(k))
+		if rng.Contains(dec) {
+			dst = append(dst, tick{value: dec, major: true, label: formatLogTick(dec)})
+		}
+		for m := 2; m <= 9; m++ {
+			mv := float64(m) * dec
+			if rng.Contains(mv) {
+				dst = append(dst, tick{value: mv})
+			}
+		}
+	}
+	return dst
+}
+
+func formatLogTick(v float64) string {
+	if v >= 1e-3 && v < 1e5 {
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return strconv.FormatFloat(v, 'g', 2, 64)
+}
+
+// timeStep is one rung of the time-unit ladder. Month and year rungs walk
+// calendar boundaries instead of fixed seconds.
+type timeStep struct {
+	sec    float64 // nominal length; calendar rungs approximate
+	months int     // 0 = fixed-duration rung
+	format string  // Go reference-time layout for tick labels
+}
+
+var timeSteps = []timeStep{
+	{1, 0, "15:04:05"}, {5, 0, "15:04:05"}, {15, 0, "15:04:05"}, {30, 0, "15:04:05"},
+	{60, 0, "15:04"}, {300, 0, "15:04"}, {900, 0, "15:04"}, {1800, 0, "15:04"},
+	{3600, 0, "15:04"}, {3 * 3600, 0, "15:04"}, {6 * 3600, 0, "Jan 2 15:04"},
+	{12 * 3600, 0, "Jan 2 15:04"}, {86400, 0, "Jan 2"}, {7 * 86400, 0, "Jan 2"},
+	{2629800, 1, "Jan '06"}, {3 * 2629800, 3, "Jan '06"}, {6 * 2629800, 6, "Jan '06"},
+	{31557600, 12, "2006"}, {10 * 31557600, 120, "2006"}, {100 * 31557600, 1200, "2006"},
+}
+
+// locateTicksTime ports the shape of ImPlot's time locator: pick the
+// smallest unit whose tick count fits the pixel density, snap the first
+// tick to that unit's boundary (UTC), and walk. Minor ticks and the
+// two-level context labels of upstream are deferred (package doc).
+func locateTicksTime(rng Range, sizePx float32, dst []tick) []tick {
+	dst = dst[:0]
+	rng = rng.sanitize()
+	nMax := int(math.Round(float64(sizePx) / 110.0))
+	if nMax < 2 {
+		nMax = 2
+	}
+	span := rng.Size()
+	step := timeSteps[len(timeSteps)-1]
+	for _, s := range timeSteps {
+		if span/s.sec <= float64(nMax) {
+			step = s
+			break
+		}
+	}
+	tMin := time.Unix(int64(math.Floor(rng.Min)), 0).UTC()
+	var cur time.Time
+	if step.months > 0 {
+		monthsSinceZero := (tMin.Year()*12 + int(tMin.Month()) - 1) / step.months * step.months
+		cur = time.Date(monthsSinceZero/12, time.Month(monthsSinceZero%12+1), 1, 0, 0, 0, 0, time.UTC)
+		for len(dst) < 64 {
+			v := float64(cur.Unix())
+			if v > rng.Max {
+				break
+			}
+			if rng.Contains(v) {
+				dst = append(dst, tick{value: v, major: true, label: cur.Format(step.format)})
+			}
+			cur = cur.AddDate(0, step.months, 0)
+		}
+		return dst
+	}
+	d := time.Duration(step.sec * float64(time.Second))
+	cur = tMin.Truncate(d)
+	for len(dst) < 128 {
+		v := float64(cur.Unix())
+		if v > rng.Max {
+			break
+		}
+		if rng.Contains(v) {
+			dst = append(dst, tick{value: v, major: true, label: cur.Format(step.format)})
+		}
+		cur = cur.Add(d)
+	}
+	return dst
+}
+
 // stepPrecision is the number of fractional digits needed to print
 // multiples of step exactly (0 for steps ≥ 1).
 func stepPrecision(step float64) int {
@@ -174,40 +348,64 @@ func formatTick(v float64, prec int) string {
 	return strconv.FormatFloat(v, 'f', prec, 64)
 }
 
-// transform maps plot space to canvas-relative pixels. Built once per
-// frame from the sanitized ranges and the plot-area rect; float64 until
-// the final cast (SD4). y is inverted: plot-space up is pixel-space down.
+// transform maps plot space to canvas-relative pixels through the axis
+// scales: value → transformed space (fwd) → affine → pixels. Built once
+// per frame; float64 until the final cast (SD4). y is inverted:
+// plot-space up is pixel-space down. Nil fwd/inv means identity.
 type transform struct {
-	xmin, ymin   float64
-	sx, sy       float64 // px per plot unit
+	fwdX, invX   func(float64) float64
+	fwdY, invY   func(float64) float64
+	txmin, tymin float64 // transformed-space minimums
+	sx, sy       float64 // px per transformed unit
 	px0, py0     float64 // plot-area origin (canvas px)
 	plotW, plotH float64 // plot-area size (canvas px)
 }
 
-func newTransform(xr, yr Range, areaX, areaY, areaW, areaH float32) transform {
-	xr = xr.sanitize()
-	yr = yr.sanitize()
-	return transform{
-		xmin: xr.Min, ymin: yr.Min,
-		sx:  float64(areaW) / xr.Size(),
-		sy:  float64(areaH) / yr.Size(),
+func newTransform(xr, yr Range, xs, ys ScaleE, areaX, areaY, areaW, areaH float32) transform {
+	xr = sanitizeScaled(xr, xs)
+	yr = sanitizeScaled(yr, ys)
+	t := transform{
+		fwdX: scaleFwd(xs), invX: scaleInv(xs),
+		fwdY: scaleFwd(ys), invY: scaleInv(ys),
 		px0: float64(areaX), py0: float64(areaY),
 		plotW: float64(areaW), plotH: float64(areaH),
 	}
+	tx0, tx1 := apply(t.fwdX, xr.Min), apply(t.fwdX, xr.Max)
+	ty0, ty1 := apply(t.fwdY, yr.Min), apply(t.fwdY, yr.Max)
+	t.txmin, t.tymin = tx0, ty0
+	t.sx = float64(areaW) / (tx1 - tx0)
+	t.sy = float64(areaH) / (ty1 - ty0)
+	return t
 }
 
-func (t transform) pxX(v float64) float32 { return float32(t.px0 + (v-t.xmin)*t.sx) }
+func apply(f func(float64) float64, v float64) float64 {
+	if f == nil {
+		return v
+	}
+	return f(v)
+}
+
+func (t transform) pxX(v float64) float32 {
+	return float32(t.px0 + (apply(t.fwdX, v)-t.txmin)*t.sx)
+}
+
 func (t transform) pxY(v float64) float32 {
-	return float32(t.py0 + t.plotH - (v-t.ymin)*t.sy)
+	return float32(t.py0 + t.plotH - (apply(t.fwdY, v)-t.tymin)*t.sy)
 }
 
 // plotX / plotY invert the transform (canvas px → plot space), used by
-// interactions: pan deltas, zoom anchors, box-zoom corners, hover readout.
-func (t transform) plotX(px float32) float64 { return t.xmin + (float64(px)-t.px0)/t.sx }
+// interactions: pan deltas, zoom anchors, box-zoom corners, hover
+// readout. Because they run through the scale's inverse, pixel-space
+// gesture math stays correct on any monotone scale.
+func (t transform) plotX(px float32) float64 {
+	return apply(t.invX, t.txmin+(float64(px)-t.px0)/t.sx)
+}
+
 func (t transform) plotY(px float32) float64 {
-	return t.ymin + (t.py0+t.plotH-float64(px))/t.sy
+	return apply(t.invY, t.tymin+(t.py0+t.plotH-float64(px))/t.sy)
 }
 
 func (t transform) valid() bool {
-	return t.sx != 0 && t.sy != 0 && !math.IsNaN(t.sx) && !math.IsNaN(t.sy)
+	return t.sx != 0 && t.sy != 0 && !math.IsNaN(t.sx) && !math.IsNaN(t.sy) &&
+		!math.IsInf(t.sx, 0) && !math.IsInf(t.sy, 0)
 }

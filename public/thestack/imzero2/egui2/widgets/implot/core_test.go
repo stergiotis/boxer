@@ -60,7 +60,7 @@ func TestTickLabelsExact(t *testing.T) {
 }
 
 func TestTransformRoundTrip(t *testing.T) {
-	tr := newTransform(Range{-3, 7}, Range{10, 250}, 40, 20, 500, 300)
+	tr := newTransform(Range{-3, 7}, Range{10, 250}, ScaleLinear, ScaleLinear, 40, 20, 500, 300)
 	for _, v := range []float64{-3, 0, 3.21, 7} {
 		back := tr.plotX(tr.pxX(v))
 		if math.Abs(back-v) > 1e-4 {
@@ -76,6 +76,92 @@ func TestTransformRoundTrip(t *testing.T) {
 	// y inversion: larger plot value = smaller pixel y.
 	if tr.pxY(250) >= tr.pxY(10) {
 		t.Error("y axis not inverted")
+	}
+}
+
+func TestLogTransformRoundTrip(t *testing.T) {
+	tr := newTransform(Range{0.1, 1000}, Range{1, 100}, ScaleLog10, ScaleLog10, 40, 20, 500, 300)
+	for _, v := range []float64{0.1, 1, 32.5, 1000} {
+		back := tr.plotX(tr.pxX(v))
+		if math.Abs(back-v)/v > 1e-4 {
+			t.Errorf("log x round-trip %v -> %v", v, back)
+		}
+	}
+	// Equal pixel spacing per decade: 1→10 and 10→100 must span the same px.
+	d1 := tr.pxX(10) - tr.pxX(1)
+	d2 := tr.pxX(100) - tr.pxX(10)
+	if math.Abs(float64(d1-d2)) > 0.01 {
+		t.Errorf("decades not equally spaced: %v vs %v", d1, d2)
+	}
+}
+
+func TestSymLogRoundTrip(t *testing.T) {
+	tr := newTransform(Range{-1000, 1000}, Range{0, 1}, ScaleSymLog, ScaleLinear, 0, 0, 600, 100)
+	for _, v := range []float64{-1000, -1, 0, 2.5, 1000} {
+		back := tr.plotX(tr.pxX(v))
+		if math.Abs(back-v) > math.Max(1e-3, math.Abs(v)*1e-3) {
+			t.Errorf("symlog round-trip %v -> %v", v, back)
+		}
+	}
+	// Symmetry: ±v sit mirrored about the center.
+	if math.Abs(float64(tr.pxX(0)-300)) > 0.01 {
+		t.Errorf("symlog zero not centered: %v", tr.pxX(0))
+	}
+}
+
+func TestLog10Ticks(t *testing.T) {
+	ticks := locateTicksLog10(Range{0.5, 2000}, nil)
+	var majors []float64
+	for _, tk := range ticks {
+		if tk.major {
+			majors = append(majors, tk.value)
+		}
+	}
+	want := []float64{1, 10, 100, 1000}
+	if len(majors) != len(want) {
+		t.Fatalf("majors = %v, want %v", majors, want)
+	}
+	for i := range want {
+		if math.Abs(majors[i]-want[i]) > 1e-9 {
+			t.Errorf("major[%d] = %v, want %v", i, majors[i], want[i])
+		}
+	}
+}
+
+func TestTimeTicks(t *testing.T) {
+	// 48 h window starting mid-hour: ticks must snap to unit boundaries.
+	t0 := float64(1_780_000_000) // fixed epoch, keeps the test deterministic
+	ticks := locateTicksTime(Range{t0, t0 + 48*3600}, 500, nil)
+	if len(ticks) < 2 {
+		t.Fatalf("too few time ticks: %d", len(ticks))
+	}
+	if len(ticks) > 8 {
+		t.Errorf("too many time ticks for the density: %d", len(ticks))
+	}
+	step := ticks[1].value - ticks[0].value
+	for i := 1; i < len(ticks); i++ {
+		if d := ticks[i].value - ticks[i-1].value; math.Abs(d-step) > 1 {
+			t.Errorf("uneven time step: %v vs %v", d, step)
+		}
+	}
+	for _, tk := range ticks {
+		if tk.label == "" {
+			t.Errorf("time tick %v without label", tk.value)
+		}
+		if int64(tk.value)%3600 != 0 {
+			t.Errorf("time tick %v not on an hour boundary", tk.value)
+		}
+	}
+}
+
+func TestSanitizeScaledLog(t *testing.T) {
+	r := sanitizeScaled(Range{-5, 100}, ScaleLog10)
+	if r.Min <= 0 {
+		t.Errorf("log sanitize left non-positive min: %+v", r)
+	}
+	r = sanitizeScaled(Range{-5, -1}, ScaleLog10)
+	if r.Min <= 0 || r.Max <= 0 {
+		t.Errorf("log sanitize of all-negative range: %+v", r)
 	}
 }
 

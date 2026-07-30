@@ -32,8 +32,8 @@ func (p *Plot) End() {
 		}
 	}
 	st.x.fitNext, st.y.fitNext = false, false
-	st.x.rng = st.x.rng.sanitize()
-	st.y.rng = st.y.rng.sanitize()
+	st.x.rng = sanitizeScaled(st.x.rng, st.x.scale)
+	st.y.rng = sanitizeScaled(st.y.rng, st.y.scale)
 	st.initialized = true
 	st.onceApplied = true
 
@@ -53,7 +53,7 @@ func (p *Plot) End() {
 	if areaH < 16 {
 		areaH = 16
 	}
-	st.ticksY = locateTicks(st.y.rng, areaH, st.ticksY)
+	st.ticksY = locateTicksScaled(st.y.rng, areaH, st.y.scale, st.ticksY)
 	maxYChars := 1
 	for i := range st.ticksY {
 		if n := len(st.ticksY[i].label); n > maxYChars {
@@ -69,9 +69,9 @@ func (p *Plot) End() {
 	if areaW < 16 {
 		areaW = 16
 	}
-	st.ticksX = locateTicks(st.x.rng, areaW, st.ticksX)
+	st.ticksX = locateTicksScaled(st.x.rng, areaW, st.x.scale, st.ticksX)
 	areaX, areaY := leftGutter, topGutter
-	tr := newTransform(st.x.rng, st.y.rng, areaX, areaY, areaW, areaH)
+	tr := newTransform(st.x.rng, st.y.rng, st.x.scale, st.y.scale, areaX, areaY, areaW, areaH)
 
 	// --- Chrome: area fill, grid, tick marks + labels, axis labels, title.
 	c.PaintRectFilled(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colAreaBg)).Send()

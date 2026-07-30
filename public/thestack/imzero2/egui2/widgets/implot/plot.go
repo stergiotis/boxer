@@ -44,6 +44,7 @@ type axisState struct {
 	hasRange bool
 	flags    AxisFlags
 	label    string
+	scale    ScaleE
 }
 
 // plotState is the retained state of one plot id across frames — the
@@ -196,25 +197,37 @@ func (p *Plot) applyInteractions() {
 		st.boxCur = st.boxStart
 		st.lastDrag = st.boxStart
 	}
+
+	// Pan and zoom compose in one pixel-space window against last frame's
+	// transform: start from the previous plot-area window, shift it by the
+	// pan delta, scale it about the wheel anchor, and invert the corners
+	// through the transform once. Working in pixels keeps every gesture
+	// correct on any monotone scale (log, symlog), not just linear.
+	pr := st.prev
+	wx0, wx1 := float32(pr.px0), float32(pr.px0+pr.plotW)
+	wy0, wy1 := float32(pr.py0), float32(pr.py0+pr.plotH)
+	windowMoved := false
+
 	if st.dragging && flags.HasDragged() && posOk {
 		if st.dragBox {
 			st.boxCur = [2]float32{posX, posY}
 		} else {
-			dxPlot := float64(posX-st.lastDrag[0]) / st.prev.sx
-			dyPlot := float64(posY-st.lastDrag[1]) / st.prev.sy
-			st.x.rng.Min -= dxPlot
-			st.x.rng.Max -= dxPlot
-			st.y.rng.Min += dyPlot // pixel y grows downward
-			st.y.rng.Max += dyPlot
+			dx := posX - st.lastDrag[0]
+			dy := posY - st.lastDrag[1]
+			wx0 -= dx
+			wx1 -= dx
+			wy0 -= dy
+			wy1 -= dy
 			st.lastDrag = [2]float32{posX, posY}
+			windowMoved = true
 		}
 	}
 	if flags.HasDragStopped() && st.dragging {
 		if st.dragBox {
-			x0 := st.prev.plotX(st.boxStart[0])
-			x1 := st.prev.plotX(st.boxCur[0])
-			y0 := st.prev.plotY(st.boxStart[1])
-			y1 := st.prev.plotY(st.boxCur[1])
+			x0 := pr.plotX(st.boxStart[0])
+			x1 := pr.plotX(st.boxCur[0])
+			y0 := pr.plotY(st.boxStart[1])
+			y1 := pr.plotY(st.boxCur[1])
 			if abs32(st.boxCur[0]-st.boxStart[0]) > 5 && abs32(st.boxCur[1]-st.boxStart[1]) > 5 {
 				st.x.rng = Range{math.Min(x0, x1), math.Max(x0, x1)}
 				st.y.rng = Range{math.Min(y0, y1), math.Max(y0, y1)}
@@ -231,21 +244,25 @@ func (p *Plot) applyInteractions() {
 	// Wheel: egui delivers pinch/ctrl-wheel as Zoom and plain wheel as
 	// ScrollY; ImPlot's convention is that the plain wheel zooms a plot, so
 	// both fold into one multiplicative factor, anchored at the pointer.
-	zoom := float64(wheel.Zoom)
+	zoom := float32(wheel.Zoom)
 	if wheel.ScrollY != 0 {
-		zoom *= math.Pow(1.1, float64(wheel.ScrollY)/40.0)
+		zoom *= float32(math.Pow(1.1, float64(wheel.ScrollY)/40.0))
 	}
 	if zoom != 1.0 && zoom > 0 {
-		ax := st.prev.plotX(wheel.HoverX)
-		ay := st.prev.plotY(wheel.HoverY)
-		if isNaN32(wheel.HoverX) {
-			ax = (st.x.rng.Min + st.x.rng.Max) / 2
-			ay = (st.y.rng.Min + st.y.rng.Max) / 2
+		ax, ay := wheel.HoverX, wheel.HoverY
+		if isNaN32(ax) {
+			ax = (wx0 + wx1) / 2
+			ay = (wy0 + wy1) / 2
 		}
-		st.x.rng.Min = ax - (ax-st.x.rng.Min)/zoom
-		st.x.rng.Max = ax + (st.x.rng.Max-ax)/zoom
-		st.y.rng.Min = ay - (ay-st.y.rng.Min)/zoom
-		st.y.rng.Max = ay + (st.y.rng.Max-ay)/zoom
+		wx0 = ax - (ax-wx0)/zoom
+		wx1 = ax + (wx1-ax)/zoom
+		wy0 = ay - (ay-wy0)/zoom
+		wy1 = ay + (wy1-ay)/zoom
+		windowMoved = true
+	}
+	if windowMoved {
+		st.x.rng = Range{pr.plotX(wx0), pr.plotX(wx1)}
+		st.y.rng = Range{pr.plotY(wy1), pr.plotY(wy0)}
 	}
 }
 
@@ -279,8 +296,22 @@ func (p *Plot) SetupAxisLimits(axis AxisE, vmin float64, vmax float64, cond Cond
 		ax = &p.st.y
 	}
 	if cond == CondAlways || !p.st.onceApplied {
-		ax.rng = Range{vmin, vmax}.sanitize()
+		ax.rng = sanitizeScaled(Range{vmin, vmax}, ax.scale)
 		ax.hasRange = true
+	}
+	return p
+}
+
+// SetupAxisScale selects the axis scale (linear, time, log10, symlog).
+// Like every Setup call it must precede the first item.
+func (p *Plot) SetupAxisScale(axis AxisE, scale ScaleE) *Plot {
+	if p.warnIfLocked("SetupAxisScale") {
+		return p
+	}
+	if axis == AxisY1 {
+		p.st.y.scale = scale
+	} else {
+		p.st.x.scale = scale
 	}
 	return p
 }
