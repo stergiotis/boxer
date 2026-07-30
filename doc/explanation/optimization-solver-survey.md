@@ -54,8 +54,10 @@ no GPU windfall on integer problems.
 Each entry gives the problem's name and synonyms, its defining conditions, what
 it is used for, the current solver landscape, and links to papers and
 implementations. Implementations are tagged with their language where that is
-not obvious; **Go** and **Fortran** availability is called out explicitly,
-since both are uneven across classes and are summarized again at the end.
+not obvious; **Julia**, **Rust**, **Go** and **Fortran** availability is called
+out explicitly, since all four are uneven across classes and are summarized
+again at the end. Python is the unmarked default — where an entry names a
+library with no language tag, it is a Python one.
 
 ---
 
@@ -94,6 +96,8 @@ basis for warm-starting a MIP is needed, simplex still wins.
 - [D-PDLP: Scaling PDLP to Distributed Multi-GPU Systems](https://arxiv.org/pdf/2601.07628) · [Presolving for GPU-Accelerated First-Order LP Solvers](https://arxiv.org/pdf/2604.23951)
 - [HiGHS](https://highs.dev/) — C++, open source, the default open LP/MIP solver
 - [cuPDLPx](https://github.com/MIT-Lu-Lab/cuPDLPx) (CUDA/C) · [cuPDLP-C](https://github.com/COPT-Public/cuPDLP-C) · [cuPDLP.jl](https://github.com/jinwen-yang/cuPDLP.jl) (Julia)
+- **Julia:** `HiGHS.jl` and `Tulip.jl` (a pure-Julia interior-point method) through JuMP; [cuPDLP.jl](https://github.com/jinwen-yang/cuPDLP.jl) for the GPU path
+- **Rust:** [good_lp](https://github.com/rust-or/good_lp) models LPs over pluggable backends — [Clarabel](https://crates.io/crates/clarabel) and `microlp` are pure Rust; HiGHS, CBC and lp_solve are C/C++ bindings
 - **Go:** [`gonum.org/v1/gonum/optimize/convex/lp`](https://pkg.go.dev/gonum.org/v1/gonum/optimize/convex/lp) — a dense simplex, adequate for small problems only; [golp](https://github.com/draffensperger/golp) wraps LPSolve over cgo
 
 ## 2. Mixed-integer programming
@@ -127,6 +131,8 @@ than being surprised by it. Note again that GPUs do not transfer here.
 - [Why are open source MIP solvers slower than commercial ones?](https://github.com/ERGO-Code/HiGHS/discussions/1683) — maintainers' own answer
 - [SCIP](https://www.scipopt.org/) — C, open source, customizable, MINLP-capable
 - [MIPLIB](https://miplib.zib.de/) — the standard instance library
+- **Julia:** JuMP with `HiGHS.jl`, `SCIP.jl` or `Cbc.jl`, or commercial `Gurobi.jl` / `CPLEX.jl` / `Xpress.jl`; `Juniper.jl` for MINLP. Swapping backends is a one-line change, which makes JuMP a good place to benchmark solvers against your own instances.
+- **Rust:** [good_lp](https://github.com/rust-or/good_lp) — every backend it exposes supports integer variables, and SCIP is reachable through its optional `russcip` dependency
 - **Go:** no native solver. [OR-Tools MathOpt](https://developers.google.com/optimization) exposes HiGHS/Gurobi/SCIP backends and has an informally-supported Go surface; [golp](https://github.com/draffensperger/golp) for small MILPs over cgo
 
 ## 3. Constraint programming, scheduling and routing
@@ -161,6 +167,8 @@ is a MIP.
 - [The CP-SAT Primer](https://d-krupke.github.io/cpsat-primer/) — book-length practical guide to modelling for CP-SAT
 - [MiniZinc Challenge](https://www.minizinc.org/challenge/) — the benchmark that decides this class
 - [OR-Tools](https://github.com/google/or-tools) — C++ core with Python/Java/.NET bindings
+- **Julia:** `MiniZinc.jl` is the practical route, since it reaches CP-SAT and every other MiniZinc backend from JuMP; `JaCoP.jl` wraps a native Java solver. There is no pure-Julia CP solver worth preferring to CP-SAT.
+- **Rust:** nothing comparable. Calling CP-SAT over FFI is the realistic path.
 - **Go:** [`github.com/google/or-tools/ortools/sat/go`](https://pkg.go.dev/github.com/google/or-tools/ortools/sat/go) — a real CP-SAT model builder, but support is Bazel-oriented and informal; see [issue #5042](https://github.com/google/or-tools/issues/5042) requesting formal Go support. This is the one class where Go is genuinely served.
 
 ## 4. Convex conic programming
@@ -196,6 +204,8 @@ which no nonconvex method will ever provide.
 - [CVXPY](https://www.cvxpy.org/) (Python) · [JuMP](https://jump.dev/) (Julia) — modelling layers
 - [CVXPY solver features matrix](https://www.cvxpy.org/tutorial/solvers/index.html) — which backend supports which cone
 - [SCS](https://github.com/cvxgrp/scs) — C, first-order, large and low-accuracy
+- **Julia:** [JuMP](https://jump.dev/) plus `Clarabel.jl`, `SCS.jl`, `COSMO.jl` or `Hypatia.jl` (pure Julia, non-symmetric cones). See the [JuMP solver index](https://jump.dev/JuMP.jl/stable/packages/solvers/) for the current cone-support matrix.
+- **Rust:** [Clarabel](https://crates.io/crates/clarabel) is a native Rust crate rather than a binding — LP, QP, SOCP, SDP plus exponential and power cones. No integer variables. Since Clarabel is also CVXPY's default, a Rust program can reach the same solver the Python recommendation points at, without Python in the loop.
 - **Go:** nothing. Conic modelling and solving are absent from the Go ecosystem.
 
 ## 5. Quadratic programming and embedded model-predictive control
@@ -226,6 +236,8 @@ occasionally taking 50 ms is useless in a 10 ms control loop.
 **Links.**
 - [OSQP: An Operator Splitting Solver for Quadratic Programs](https://osqp.org/citing/) — paper and solver, **C** with embedded code generation
 - [acados](https://github.com/acados/acados) — C, nonlinear MPC and optimal control
+- **Julia:** `OSQP.jl` and `DAQP.jl` through JuMP; note that Julia's startup and JIT behaviour make it a poor fit for the hard-real-time end of this class regardless of solver quality.
+- **Rust:** [Clarabel](https://crates.io/crates/clarabel) covers QP natively, and Rust's lack of a runtime makes it a more natural fit here than Julia or Go.
 - **Go:** nothing native. OSQP's C API is small and cgo-wrappable if a Go control loop ever needs it.
 
 ## 6. Smooth constrained nonlinear programming
@@ -260,6 +272,8 @@ a symbolic graph, and Ipopt without exact Hessians is a much weaker tool.
 - [CasADi](https://web.casadi.org/) — C++ with Python/MATLAB/Octave bindings; symbolic AD front-end
 - [SLSQP](https://github.com/jacobwilliams/slsqp) — **modern Fortran**, object-oriented rewrite of Kraft's SQP code; a good small-problem choice ([PySLSQP paper](https://arxiv.org/pdf/2408.13420))
 - [CONMIN](https://github.com/jacobwilliams/conmin) — **modern Fortran**, feasible-directions method
+- **Julia:** `Ipopt.jl`, [MadNLP.jl](https://github.com/MadNLP/MadNLP.jl), `NLopt.jl` and commercial `KNITRO.jl`, all behind JuMP's single modelling surface with derivatives supplied automatically. This is the class where Julia's integration pays off most.
+- **Rust:** nothing. [argmin](https://argmin-rs.org/) is unconstrained by design, so this class has no Rust-native answer.
 - **Go:** nothing. [`gonum.org/v1/gonum/optimize`](https://pkg.go.dev/gonum.org/v1/gonum/optimize) explicitly supports no constraints of any kind.
 
 ## 7. Nonlinear least squares
@@ -291,6 +305,8 @@ that the Jacobian was already carrying for free.
 - [Ceres Solver](http://ceres-solver.org/) — C++, the standard for large sparse geometry problems
 - [MINPACK](https://github.com/fortran-lang/minpack) — the **Fortran** original (Moré, Garbow, Hillstrom), modernized under fortran-lang; [Jacob Williams' edition](https://github.com/jacobwilliams/minpack) adds CMake and examples
 - [DFO-LS](https://github.com/numericalalgorithmsgroup/dfols) — Python, derivative-free and noise-tolerant
+- **Julia:** `LsqFit.jl` for curve fitting; [NonlinearSolve.jl](https://github.com/SciML/NonlinearSolve.jl) in the SciML stack for the systems-of-equations side
+- **Rust:** [levenberg-marquardt](https://crates.io/crates/levenberg-marquardt) — a port of MINPACK's LM over `nalgebra` — and argmin's `gaussnewton` module. One of the few classes where Rust is better served than Go.
 - **Go:** a genuine gap — [`gonum.org/v1/gonum/optimize`](https://pkg.go.dev/gonum.org/v1/gonum/optimize) provides no Levenberg–Marquardt or dedicated least-squares method. Generic BFGS over the squared residual is the available fallback and forfeits the structure.
 
 ## 8. Smooth unconstrained and bound-constrained minimization
@@ -319,6 +335,8 @@ has no good resolution.
 **Links.**
 - [L-BFGS-B](https://users.iems.northwestern.edu/~nocedal/lbfgsb.html) — Byrd, Lu, Nocedal, Zhu; the reference **Fortran** implementation
 - [JAX](https://github.com/jax-ml/jax) · [Enzyme](https://enzyme.mit.edu/) · [CasADi](https://web.casadi.org/) — AD front-ends worth more than any optimizer choice
+- **Julia:** [Optim.jl](https://github.com/JuliaNLSolvers/Optim.jl) for the classical methods, and [Optimization.jl](https://github.com/SciML/Optimization.jl) as a common interface that composes with Julia's AD backends — so the gradient advice above is satisfied by default rather than by extra work
+- **Rust:** [argmin](https://argmin-rs.org/) provides `quasinewton` (L-BFGS, BFGS), `conjugategradient`, `newton`, `trustregion`, `gradientdescent` and `linesearch`, generic over `Vec`, `ndarray` and `nalgebra`. Unconstrained only, and gradients are the caller's problem — Rust has no mature AD either.
 - **Go:** [`gonum.org/v1/gonum/optimize`](https://pkg.go.dev/gonum.org/v1/gonum/optimize) provides `LBFGS`, `BFGS`, `CG` (five β variants), `Newton` and `GradientDescent` — unconstrained only, so bounds must be handled by transformation. Gradients via [`gonum.org/v1/gonum/diff/fd`](https://pkg.go.dev/gonum.org/v1/gonum/diff/fd) are finite differences; Go has no mature AD.
 
 ## 9. Derivative-free local optimization
@@ -365,6 +383,8 @@ meaningless minimum and then reports convergence.
 - [Benchmarking Derivative-Free Optimization Algorithms](https://epubs.siam.org/doi/10.1137/080724083) — Moré and Wild; the standard methodology
 - [Derivative-free optimization: a review and comparison of software](https://www.researchgate.net/publication/257588610_Derivative-free_optimization_A_review_of_algorithms_and_comparison_of_software_implementations) — Rios and Sahinidis
 - [PRAXIS](https://link.springer.com/article/10.3758/BF03203605) — Gegenfurtner's account of Brent's algorithm; Brent, *Algorithms for Minimization without Derivatives* (Dover, 2002, ISBN 0-486-41998-3)
+- **Julia:** [PRIMA.jl](https://github.com/libprima/PRIMA.jl) wraps PRIMA directly, which makes it the recommended source for BOBYQA and COBYLA rather than an older port; `NLopt.jl` for the wider derivative-free set
+- **Rust:** [argmin](https://argmin-rs.org/) has `neldermead` only. [egobox](https://github.com/relf/egobox) reaches COBYLA and SLSQP through an optional `nlopt` feature, which is a binding rather than a Rust implementation.
 - **Go:** [`gonum.org/v1/gonum/optimize`](https://pkg.go.dev/gonum.org/v1/gonum/optimize) provides `NelderMead` and `CmaEsChol`. No Powell-family method exists in Go.
 
 ## 10. Expensive black-box optimization and hyperparameter search
@@ -399,6 +419,8 @@ model-based method from §9 will do better.
 - [Optimizing with Low Budgets: a Comparison on BBOB and OpenAI Gym](https://arxiv.org/pdf/2310.00077) — cross-library comparison
 - [AutoML HPO tool overview](https://www.automl.org/hpo-overview/hpo-tools/hpo-packages/) — index
 - [Optuna](https://github.com/optuna/optuna) · [Ax/BoTorch](https://github.com/facebook/Ax) · [Nevergrad](https://github.com/facebookresearch/nevergrad) · [SMAC3](https://github.com/automl/SMAC3) — all Python
+- **Julia:** `Hyperopt.jl` — random search, Latin hypercube sampling and Bayesian optimization
+- **Rust:** [egobox](https://github.com/relf/egobox) — efficient global optimization with Gaussian-process mixtures and sampling methods, and the strongest Rust entry in this survey
 - **Go:** [goptuna](https://github.com/c-bata/goptuna) — a pure-Go Optuna-alike with TPE, CMA-ES and bandit samplers, continuously benchmarked in CI. The strongest Go offering in this survey after CP-SAT.
 
 ## 11. Stochastic optimization for machine learning
@@ -435,7 +457,7 @@ wall-clock than AdamW in the large-batch regime, at higher per-step overhead.
 - [Navigating LLM Valley: From AdamW to Memory-Efficient and Matrix-Based Optimizers](https://arxiv.org/pdf/2605.09176) — 2026 survey of the family
 - [Towards Robust Scaling Laws for Optimizers](https://arxiv.org/pdf/2602.07712) — how these comparisons should be run
 - [Optax](https://github.com/google-deepmind/optax) (JAX) · [`torch.optim`](https://pytorch.org/docs/stable/optim.html) (PyTorch)
-- **Go:** out of scope in practice. Go is not a training language, and no Go framework carries these optimizers.
+- **Julia, Rust, Go:** all three have neural-network frameworks, but none is where frontier training happens. Muon and SOAP land in PyTorch and JAX first and reach the others late or not at all, so an optimizer choice made here is a choice to track someone else's roadmap.
 
 ## 12. Global optimization
 
@@ -466,9 +488,74 @@ different in each: a heuristic that finds the optimum cannot tell you it did.
 - [COCO/BBOB](https://numbbo.github.io/coco/) — the benchmarking platform for this class
 - [SCIP](https://www.scipopt.org/) — C, deterministic global MINLP, open source
 - [pycma](https://github.com/CMA-ES/pycma) — the reference CMA-ES implementation, Python
+- **Julia:** [BlackBoxOptim.jl](https://github.com/robertfeldt/BlackBoxOptim.jl) — meta-heuristic and stochastic methods (differential evolution, natural evolution strategies), single- and multi-objective, with no differentiability requirement; `SCIP.jl` for the certified half
+- **Rust:** [argmin](https://argmin-rs.org/) carries `particleswarm` and `simulatedannealing`, but no CMA-ES
 - **Go:** [`CmaEsChol`](https://pkg.go.dev/gonum.org/v1/gonum/optimize#CmaEsChol) in gonum implements CMA-ES via a Cholesky-factor update, reducing the per-generation cost from `O(d³)` to `O(d²·popsize)`. This is the most substantive optimizer in the Go ecosystem.
 
 ---
+
+## The Julia ecosystem, summarized
+
+Julia has the most complete coverage of any language in this survey after
+Python, and it is the only one where the *modelling layer* rather than the
+solvers is the distinguishing asset.
+
+[JuMP](https://jump.dev/) sits on MathOptInterface, which defines the API
+solvers implement, supplies a bridge system that automatically reformulates a
+problem into whatever form the chosen solver actually accepts, and carries
+shared test infrastructure that solver authors run against. The practical
+consequence is that changing solver is close to a one-line edit, which makes
+JuMP a good place to benchmark candidates against your own instances rather
+than against a published table. Alongside it,
+[Optimization.jl](https://github.com/SciML/Optimization.jl) in the SciML stack
+provides a common interface that composes with Julia's AD backends, so an
+optimization problem can sit inside a differentiable program — the property
+that makes the §8 advice about AD hold by default rather than by extra work.
+
+Coverage is near-complete across the classes above: `HiGHS.jl` and `SCIP.jl`
+for LP and MIP, `Clarabel.jl` / `SCS.jl` / `COSMO.jl` / `Hypatia.jl` for conic,
+`Ipopt.jl` and [MadNLP.jl](https://github.com/MadNLP/MadNLP.jl) for NLP,
+[PRIMA.jl](https://github.com/libprima/PRIMA.jl) for the Powell family,
+[BlackBoxOptim.jl](https://github.com/robertfeldt/BlackBoxOptim.jl) for global
+search, and `MiniZinc.jl` as a route to CP-SAT. The
+[JuMP solver index](https://jump.dev/JuMP.jl/stable/packages/solvers/) is the
+current authority on which package supports which class.
+
+Two caveats. Many of these packages are bindings to the same C, C++ and Fortran
+codes every other ecosystem calls, so "available in Julia" does not imply a
+distinct implementation — the uniform surface is the value, not the solver.
+And the pure-Julia solvers (`Tulip.jl`, `Hypatia.jl`, `COSMO.jl`) are better
+understood as research vehicles and extension points than as faster
+replacements for the incumbents. Julia's startup and JIT behaviour also make it
+a poor fit for the hard-real-time end of §5, independent of solver quality.
+
+## The Rust ecosystem, summarized
+
+Rust's coverage is narrow but sharper than Go's, and it has one genuine
+advantage: [Clarabel](https://crates.io/crates/clarabel) is a native Rust crate
+rather than a binding, and it is the same solver CVXPY defaults to for LP and
+SOCP. A Rust program can therefore reach the solver this survey recommends for
+convex conic work with no C shim, no Python runtime, and no cgo boundary.
+
+Around it: [good_lp](https://github.com/rust-or/good_lp) models LP and MILP
+over pluggable backends (Clarabel and `microlp` pure Rust; HiGHS, CBC and
+lp_solve as bindings; SCIP through the optional `russcip` dependency),
+[argmin](https://argmin-rs.org/) provides local unconstrained methods —
+`quasinewton`, `conjugategradient`, `newton`, `trustregion`, `neldermead`,
+`particleswarm`, `simulatedannealing` — generic over `Vec`, `ndarray` and
+`nalgebra`, [levenberg-marquardt](https://crates.io/crates/levenberg-marquardt)
+ports MINPACK's LM, and [egobox](https://github.com/relf/egobox) covers
+Bayesian optimization with Gaussian-process mixtures.
+
+The gaps are the same shape as Go's: no constrained nonlinear programming, no
+native Powell-family derivative-free methods, no constraint programming, no
+CMA-ES, and no mature automatic differentiation. Rust is a reasonable place to
+*embed* a convex or least-squares solve in a larger system, and not yet a place
+to do large-scale nonlinear optimization.
+
+This is also the one entry with a plausible path into this repository, which
+already carries a Rust component under `rust/`; the others would require a new
+runtime.
 
 ## The Go ecosystem, summarized
 
