@@ -255,13 +255,57 @@ to the milestone where it first becomes concrete rather than guessed at now:
    gains a head-index mode or these packages carry their own ring is decided at
    M3, where a streaming detector first makes the `O(cap)`-per-push cost real.
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-07-30 — M1 implemented; four numerical findings
+
+`public/analytics/timeseries/matrixprofile` carries MASS, the STOMP recurrence,
+the exclusion zone and the constant-window rule, tested against a brute-force
+oracle that shares no code path with it. The dependency claim held: no new
+module, and the package declares `WASMFreestanding: WASMCompiles`.
+
+Four things the decision above assumed, or did not consider, turned out
+differently. Property-based testing found all of them; none was visible in the
+deterministic fixtures.
+
+1. **Rolling statistics cannot use prefix sums.** Computing window variance as
+   E[x²]−E[x]² in one pass is the standard O(n) trick and is unusable here: near
+   zero variance it cancels catastrophically, so an exactly constant window
+   reports a standard deviation many orders above its true value, reads as real
+   structure, and yields a garbage correlation. The implementation computes each
+   window's statistics two-pass at O(n·Window) — the same order as the single
+   direct distance profile the design already pays, and negligible against the
+   O(n²) body.
+2. **The constant-window threshold must be relative.** An absolute
+   standard-deviation floor silently reclassifies windows when the same signal
+   arrives in millivolts rather than volts, which contradicts the scale
+   invariance z-normalization exists to provide. The floor is a fraction of the
+   series' own standard deviation.
+3. **The series is kept in two conditionings.** Centering on the global mean is
+   what keeps the dot-product search away from cancellation on a large constant
+   offset — but it *hurts* whenever a window's internal variation is tiny
+   relative to the whole series' range, because the centered values land where
+   the ULP swamps the variation being measured. Neither conditioning dominates,
+   so the search runs on centered values while the per-window statistics and the
+   refinement pass run on the originals.
+4. **Reported distances need a refinement pass.** Through the d = sqrt(2m(1−ρ))
+   identity alone, an exactly matching pair reports roughly 1e-6 rather than 0,
+   because a correlation error δ surfaces as sqrt(2mδ) of distance. Recomputing
+   each reported pair from materialized z-normalized values costs O(n·Window)
+   and removes the effect from everything a caller sees.
+
+One limit is documented rather than fixed, because it is inherent to STOMP: on
+a series mixing local scales across many orders of magnitude, the centered
+representation cannot resolve the small-scale region's shape and the search can
+return a genuinely worse neighbour than exists. **Soundness holds
+unconditionally** — the reported distance is the true distance to the reported
+neighbour, and never understates the true minimum, so the failure mode is
+missing a match rather than inventing one. Optimality holds on well-conditioned
+input. The test suite asserts these separately.
+
+This also answers open sub-decision 1: M1 does expose motif and discord
+readers, since both are single scans over a profile that already exists.
+Motif *set* discovery remains deferred.
 
 ## References
 
