@@ -117,6 +117,32 @@ var nilCanvasWheel = CanvasWheelValue{
 	HoverY: float32(math.NaN()),
 }
 
+// CanvasCursorValue is one R24 canvas-pointer row: the canvas's screen
+// origin plus the pointer in canvas-relative coordinates (NaN when the
+// pointer is neither over the canvas nor dragging it). Per canvas id —
+// unlike the single-slot R14 pointer, which is last-canvas-wins and so
+// unusable with several canvases in one frame. PosX/PosY are drag-stable
+// (interact_pointer_pos first), so a drag keeps reporting positions after
+// the pointer crosses the canvas edge. One-frame lag like every register.
+type CanvasCursorValue struct {
+	OriginX float32
+	OriginY float32
+	PosX    float32
+	PosY    float32
+	// Mods is the modifier state carried with the row (bit0 shift,
+	// bit1 ctrl, bit2 alt, bit3 command). On a sense region's
+	// drag-started frame it comes from the press event itself, so a
+	// modifier pressed and released within one batched frame is still
+	// seen; otherwise it is the frame-end state.
+	Mods uint8
+}
+
+// CanvasCursorValue modifier accessors.
+func (v CanvasCursorValue) Shift() bool   { return v.Mods&1 != 0 }
+func (v CanvasCursorValue) Ctrl() bool    { return v.Mods&2 != 0 }
+func (v CanvasCursorValue) Alt() bool     { return v.Mods&4 != 0 }
+func (v CanvasCursorValue) Command() bool { return v.Mods&8 != 0 }
+
 // ModifiersValue is the cached payload of the R17 modifiers drain.
 // Modifier-key state from egui's InputState for the previous frame.
 // Command is the platform-native primary modifier (Cmd on macOS, Ctrl
@@ -218,6 +244,10 @@ type StateManager struct {
 	// r23CanvasWheel holds LAST frame's per-canvas wheel captures (ADR-0140),
 	// keyed by canvas widget id. Rebuilt each Sync; read via GetCanvasWheel.
 	r23CanvasWheel map[uint64]CanvasWheelValue
+	// r24CanvasPointers holds LAST frame's per-canvas pointer rows (ADR-0149
+	// M1), keyed by canvas widget id. Rebuilt each Sync; read via
+	// GetCanvasCursor.
+	r24CanvasPointers map[uint64]CanvasCursorValue
 	// r22StarvedTextures holds LAST frame's starved-texture report: ids the
 	// host interpreted with no pixels and no usable cache entry (a send-once
 	// upload lost to a discarded hidden-tab buffer, or an idle-LRU eviction).
@@ -259,6 +289,7 @@ func NewStateManager() *StateManager {
 		fetcher:              NewFetcher(),
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
 		r23CanvasWheel:       make(map[uint64]CanvasWheelValue, 8),
+		r24CanvasPointers:    make(map[uint64]CanvasCursorValue, 8),
 		r22StarvedTextures:   make(map[uint64]struct{}, 8),
 	}
 }
@@ -390,6 +421,16 @@ func (inst *StateManager) GetCanvasWheel(h widgethandle.WidgetHandle) CanvasWhee
 		return v
 	}
 	return nilCanvasWheel
+}
+
+// GetCanvasCursor returns last frame's R24 pointer row for the paintCanvas
+// identified by the handle: the canvas screen origin plus the drag-stable
+// pointer in canvas-relative coordinates (NaN when the pointer is neither
+// over the canvas nor dragging it). ok=false means that canvas did not
+// render last frame (hidden tab, culled block, first frame).
+func (inst *StateManager) GetCanvasCursor(h widgethandle.WidgetHandle) (v CanvasCursorValue, ok bool) {
+	v, ok = inst.r24CanvasPointers[h.Resolve()]
+	return
 }
 
 // GetPointer returns last frame's R20 latest-pointer-position from egui's
@@ -789,6 +830,26 @@ func (inst *StateManager) Sync() {
 				Zoom:    zooms[i],
 				HoverX:  hoverXs[i],
 				HoverY:  hoverY,
+			}
+			i++
+		}
+	}
+	{
+		ids, originXs, originYs, posXs, posYs, modsSeq := fetcher.FetchR24CanvasPointers()
+		for k := range inst.r24CanvasPointers {
+			delete(inst.r24CanvasPointers, k)
+		}
+		i := 0
+		for mods := range modsSeq {
+			if i >= len(ids) {
+				break
+			}
+			inst.r24CanvasPointers[ids[i]] = CanvasCursorValue{
+				OriginX: originXs[i],
+				OriginY: originYs[i],
+				PosX:    posXs[i],
+				PosY:    posYs[i],
+				Mods:    mods,
 			}
 			i++
 		}

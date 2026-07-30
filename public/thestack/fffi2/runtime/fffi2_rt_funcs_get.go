@@ -246,6 +246,25 @@ func IterateFloat64SliceRetr[D UnmarshallReaderI, T ~float64](unmarshaller D) it
 		}
 	}
 }
+func IterateUint8SliceRetr[D UnmarshallReaderI, T ~uint8](unmarshaller D) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		l, isNil := unmarshaller.ReadSliceLength()
+		if isNil {
+			return
+		}
+		var i int
+		for i = 0; i < l; i++ {
+			if !yield(T(unmarshaller.ReadUInt8())) {
+				i++ // element i was already read before yield aborted
+				break
+			}
+		}
+		for ; i < l; i++ {
+			_ = unmarshaller.ReadUInt8()
+		}
+	}
+}
+
 func IterateFloat32SliceRetr[D UnmarshallReaderI, T ~float32](unmarshaller D) iter.Seq[T] {
 	return func(yield func(T) bool) {
 		l, isNil := unmarshaller.ReadSliceLength()

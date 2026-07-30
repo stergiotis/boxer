@@ -66,6 +66,7 @@ status: draft
 | FetchR21UiRects | Fetcher | No | 0 | 0 | - | - |
 | FetchR22StarvedTextures | Fetcher | No | 0 | 0 | - | - |
 | FetchR23CanvasWheel | Fetcher | No | 0 | 0 | - | - |
+| FetchR24CanvasPointers | Fetcher | No | 0 | 0 | - | - |
 | FetchR7 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9EtPrefetch | Fetcher | No | 0 | 0 | - | - |
 | FetchR9F64 | Fetcher | No | 0 | 0 | - | - |
@@ -3835,6 +3836,23 @@ Block
 | zooms | f32h |
 | hoverXs | f32h |
 | hoverYs | f32h |
+
+---
+
+### FetchR24CanvasPointers
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+| originXs | f32h |
+| originYs | f32h |
+| posXs | f32h |
+| posYs | f32h |
+| mods | u8h |
 
 ---
 

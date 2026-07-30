@@ -97,6 +97,12 @@ func (inst *Fetcher) readF32h() (r []float32) {
 	}
 	return
 }
+func (inst *Fetcher) iterateU8h() iter.Seq[uint8] {
+	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
+		return runtime.IterateUint8SliceRetr[*runtime.Unmarshaller, uint8](u)
+	}
+	return nil
+}
 func (inst *Fetcher) iterateF32h() iter.Seq[float32] {
 	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
 		return runtime.IterateFloat32SliceRetr[*runtime.Unmarshaller, float32](u)

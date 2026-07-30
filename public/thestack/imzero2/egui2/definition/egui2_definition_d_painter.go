@@ -429,6 +429,22 @@ if {{EguiUiOptionalOuter}}.is_some() {
         self.r14_canvas_hover_x = f32::NAN;
         self.r14_canvas_hover_y = f32::NAN;
     }
+    // ADR-0149 M1: the per-id pointer row (r24) beside the legacy single-slot
+    // r14. interact_pointer_pos first, so an active drag keeps reporting after
+    // the pointer leaves the canvas (edge-crossing pan); hover_pos otherwise.
+    {
+        let pp = resp.interact_pointer_pos().or_else(|| resp.hover_pos());
+        let (ppx, ppy) = match pp {
+            Some(p) => (p.x - origin.x, p.y - origin.y),
+            None => (f32::NAN, f32::NAN),
+        };
+        let m = ui.input(|inp| inp.modifiers);
+        let mods = (m.shift as u8)
+            | ((m.ctrl as u8) << 1)
+            | ((m.alt as u8) << 2)
+            | ((m.command as u8) << 3);
+        self.r24_canvas_pointer_push({{Id}}.value(), origin.x, origin.y, ppx, ppy, mods);
+    }
     // ADR-0140 hover-scoped wheel capture: own the wheel only while the pointer
     // is over this canvas (egui's own topmost-under-pointer hit-test). Scroll is
     // consumed (zeroed) so egui-native ScrollAreas and later readers this frame

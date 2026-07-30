@@ -255,6 +255,17 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         }
         return Ok(());
     }
+    pub fn write_plain_u8h(
+        &mut self,
+        len: usize,
+        it: impl IntoIterator<Item = u8>,
+    ) -> Result<(), FffiError> {
+        self.write_plain_u32(len as u32)?;
+        for e in it.into_iter() {
+            self.write_plain_u8(e)?;
+        }
+        return Ok(());
+    }
     pub fn write_plain_f32h(
         &mut self,
         len: usize,

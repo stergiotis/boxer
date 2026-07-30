@@ -416,6 +416,38 @@ self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
 		AddReturnValue("hoverYs", ctabb.F32h).
 		Build())
 
+	// ADR-0149 M1: drains the per-frame canvas pointer rows — one per rendered
+	// paintCanvas, keyed by the canvas widget id: the canvas screen origin plus
+	// the pointer in canvas-relative coordinates (NaN when the pointer is
+	// neither over the canvas nor dragging it). The per-id replacement for the
+	// single-slot r14 pointer, which is last-canvas-wins and so unusable with
+	// several canvases in one frame; posX/posY are drag-stable
+	// (interact_pointer_pos first), which the plot pan gesture needs when the
+	// pointer crosses the canvas edge mid-drag.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchR24CanvasPointers").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.r24_canvas_pointer_ids.len();
+debug_assert_eq!(len, self.r24_canvas_pointer_origin_x.len());
+debug_assert_eq!(len, self.r24_canvas_pointer_origin_y.len());
+debug_assert_eq!(len, self.r24_canvas_pointer_pos_x.len());
+debug_assert_eq!(len, self.r24_canvas_pointer_pos_y.len());
+debug_assert_eq!(len, self.r24_canvas_pointer_mods.len());
+self.io.write_plain_u64h(len, self.r24_canvas_pointer_ids.drain(..))?;
+self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_x.drain(..))?;
+self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_y.drain(..))?;
+self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_x.drain(..))?;
+self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_y.drain(..))?;
+self.io.write_plain_u8h(len, self.r24_canvas_pointer_mods.drain(..))?;
+{{SendMessage}}
+`)).
+		AddReturnValue("ids", ctabb.U64h).
+		AddReturnValue("originXs", ctabb.F32h).
+		AddReturnValue("originYs", ctabb.F32h).
+		AddReturnValue("posXs", ctabb.F32h).
+		AddReturnValue("posYs", ctabb.F32h).
+		AddReturnValue("mods", ctabb.U8h).
+		Build())
+
 	// fetchCommandEnterPressed — drains the per-frame Ctrl+Enter /
 	// Ctrl+Shift+Enter press events, the conventional "submit what I am
 	// editing" pair. Two bools, one per shortcut, each true exactly once per

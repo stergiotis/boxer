@@ -302,6 +302,50 @@ port-size, chrome-share, and wire-cost figures are estimates. Next concrete
 step: M0 (SD3) — the clip and batch opcodes — which is small, independently
 useful, and de-risks the item-renderer wire costs before M1 commits to them.
 
+## Update 2026-07-30 — M0 and M1 landed; the substrate grew a per-canvas pointer register
+
+M0 shipped as specified (commit fd225712): the clip stack, marker batch and
+rect batch opcodes, with a `painter_m0` gallery demo as the acceptance
+capture. M1 shipped as `widgets/implot`: the Begin/Setup*/items/End protocol
+with setup locking, the ported nice-number locator and step-precision
+formatter, the f64→f32 transform split, layout/grid/ticks/border, NaN-split
+line series clipped by the M0 stack, and the four gestures — drag pan,
+pointer-anchored wheel zoom, double-click fit, Shift+drag box-zoom — all
+verified interactively (egui-mcp driving; the box transform additionally
+verified numerically against a logged probe).
+
+Implementing the gestures surfaced substrate needs beyond SD3, now part of
+the painter lane:
+
+- **R24, a per-canvas pointer register.** The existing R14 canvas pointer is
+  a single-slot, last-canvas-wins register — workable only while one canvas
+  renders per interpreted frame. R24 mirrors ADR-0140's R23 shape: every
+  `paintCanvas` and every `paintSenseRegion` stamps a row keyed by its
+  widget id — screen origin, canvas-relative pointer, and a modifier
+  bitmask — drained by `fetchR24CanvasPointers` into
+  `StateManager.GetCanvasCursor`.
+- **Event-exact anchoring.** Machine-speed input batches press, moves and
+  release into one or two frames, which breaks frame-end sampling twice
+  over: a gesture position read at frame end starts mid-drag, and a
+  modifier pressed and released within a batch is invisible to the
+  frame-end modifier state. The sense-region row therefore reports the
+  press origin (`pointer.press_origin`) and the press event's own
+  modifiers on the drag-started frame. Human-speed input never notices;
+  driven input requires it.
+- **u8h wire write.** The modifier column is the first u8 array a fetcher
+  returns; the FFFI io layer gained `write_plain_u8h` and the Go runtime
+  the matching slice iterator.
+
+Deviations recorded in the package doc: box-zoom is Shift+drag rather than
+upstream's right-drag (the R7 response flags do not say which button
+dragged; a `DraggedBy` flag is a candidate substrate addition), and the
+y-axis label renders horizontally (no rotated-text paint command). One
+verification caveat: the egui-mcp driver does not stamp modifiers onto
+synthesized pointer events, so the Shift-gated path itself was verified by
+temporarily inverting the gesture mapping; the modifier routing is
+code-reviewed for held-shift input but has not been exercised by a real
+hand.
+
 ## References
 
 - Upstream: [ImPlot](https://github.com/epezent/implot) v1.1-WIP, commit

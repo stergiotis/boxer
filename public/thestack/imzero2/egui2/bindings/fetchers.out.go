@@ -149,6 +149,16 @@ func (inst *Fetcher) FetchR23CanvasWheel() (ids []uint64, scrollXs []float32, sc
 	hoverYs = inst.iterateF32h()
 	return
 }
+func (inst *Fetcher) FetchR24CanvasPointers() (ids []uint64, originXs []float32, originYs []float32, posXs []float32, posYs []float32, mods iter.Seq[uint8]) {
+	inst.invoke(FuncProcIdFetchR24CanvasPointers)
+	ids = inst.readU64h()
+	originXs = inst.readF32h()
+	originYs = inst.readF32h()
+	posXs = inst.readF32h()
+	posYs = inst.readF32h()
+	mods = inst.iterateU8h()
+	return
+}
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchR7)
 	ids = inst.readU64h()

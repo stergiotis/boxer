@@ -2404,6 +2404,22 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     r23_canvas_wheel_hover_x: Vec<f32>,
     r23_canvas_wheel_hover_y: Vec<f32>,
 
+    // ADR-0149 M1 canvas pointer, per id: every paintCanvas contributes one
+    // row per frame — its screen origin plus the pointer in canvas-relative
+    // coordinates (NaN when the pointer is neither over it nor dragging it).
+    // Unlike the single-slot r14 registers this survives multiple canvases
+    // per frame; unlike r23 it is unconditional, not capture-gated. The
+    // pointer is interact_pointer_pos-first so a drag that leaves the canvas
+    // keeps reporting (pan beyond the edge). Parallel arrays keyed by the
+    // canvas widget id, drained by FetchR24CanvasPointers; cleared in
+    // prepare_next_frame.
+    r24_canvas_pointer_ids: Vec<u64>,
+    r24_canvas_pointer_origin_x: Vec<f32>,
+    r24_canvas_pointer_origin_y: Vec<f32>,
+    r24_canvas_pointer_pos_x: Vec<f32>,
+    r24_canvas_pointer_pos_y: Vec<f32>,
+    r24_canvas_pointer_mods: Vec<u8>,
+
     // egui_plot click pointer state — set by the plot apply when the user
     // primary-clicks anywhere inside the plot area. Stores plot-data
     // coordinates (already transformed via PlotResponse.transform), keyed
@@ -2680,6 +2696,12 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r23_canvas_wheel_zoom: Vec::with_capacity(16),
             r23_canvas_wheel_hover_x: Vec::with_capacity(16),
             r23_canvas_wheel_hover_y: Vec::with_capacity(16),
+            r24_canvas_pointer_ids: Vec::with_capacity(16),
+            r24_canvas_pointer_origin_x: Vec::with_capacity(16),
+            r24_canvas_pointer_origin_y: Vec::with_capacity(16),
+            r24_canvas_pointer_pos_x: Vec::with_capacity(16),
+            r24_canvas_pointer_pos_y: Vec::with_capacity(16),
+            r24_canvas_pointer_mods: Vec::with_capacity(16),
             r15_plot_clicked_id: 0,
             r15_plot_clicked_x: f64::NAN,
             r15_plot_clicked_y: f64::NAN,
@@ -2781,6 +2803,17 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             self.r23_canvas_wheel_zoom.clear();
             self.r23_canvas_wheel_hover_x.clear();
             self.r23_canvas_wheel_hover_y.clear();
+        }
+
+        {
+            // r24 rows are re-stamped by every canvas every frame; an unfetched
+            // frame is normal (no reader registered), so no debug log here.
+            self.r24_canvas_pointer_ids.clear();
+            self.r24_canvas_pointer_origin_x.clear();
+            self.r24_canvas_pointer_origin_y.clear();
+            self.r24_canvas_pointer_pos_x.clear();
+            self.r24_canvas_pointer_pos_y.clear();
+            self.r24_canvas_pointer_mods.clear();
         }
 
         // Hyperlink zones — cleared so a removed link doesn't carry into
@@ -6208,6 +6241,29 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
                 self.io.flush()?;
             }
+            FuncProcId::FetchR24CanvasPointers => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR24CanvasPointers");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let len = self.r24_canvas_pointer_ids.len();
+                debug_assert_eq!(len, self.r24_canvas_pointer_origin_x.len());
+                debug_assert_eq!(len, self.r24_canvas_pointer_origin_y.len());
+                debug_assert_eq!(len, self.r24_canvas_pointer_pos_x.len());
+                debug_assert_eq!(len, self.r24_canvas_pointer_pos_y.len());
+                debug_assert_eq!(len, self.r24_canvas_pointer_mods.len());
+                self.io.write_plain_u64h(len, self.r24_canvas_pointer_ids.drain(..))?;
+                self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_x.drain(..))?;
+                self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_y.drain(..))?;
+                self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_x.drain(..))?;
+                self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_y.drain(..))?;
+                self.io.write_plain_u8h(len, self.r24_canvas_pointer_mods.drain(..))?;
+                self.io.flush()?;
+            }
             FuncProcId::FetchR7 => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::FetchR7");
@@ -8671,6 +8727,22 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                     } else {
                         self.r14_canvas_hover_x = f32::NAN;
                         self.r14_canvas_hover_y = f32::NAN;
+                    }
+                    // ADR-0149 M1: the per-id pointer row (r24) beside the legacy single-slot
+                    // r14. interact_pointer_pos first, so an active drag keeps reporting after
+                    // the pointer leaves the canvas (edge-crossing pan); hover_pos otherwise.
+                    {
+                        let pp = resp.interact_pointer_pos().or_else(|| resp.hover_pos());
+                        let (ppx, ppy) = match pp {
+                            Some(p) => (p.x - origin.x, p.y - origin.y),
+                            None => (f32::NAN, f32::NAN),
+                        };
+                        let m = ui.input(|inp| inp.modifiers);
+                        let mods = (m.shift as u8)
+                            | ((m.ctrl as u8) << 1)
+                            | ((m.alt as u8) << 2)
+                            | ((m.command as u8) << 3);
+                        self.r24_canvas_pointer_push(i.value(), origin.x, origin.y, ppx, ppy, mods);
                     }
                     // ADR-0140 hover-scoped wheel capture: own the wheel only while the pointer
                     // is over this canvas (egui's own topmost-under-pointer hit-test). Scroll is
@@ -14060,6 +14132,22 @@ egui::Window::new(label).id(i);
         self.r23_canvas_wheel_hover_x.push(hx);
         self.r23_canvas_wheel_hover_y.push(hy);
     }
+    pub fn r24_canvas_pointer_push(
+        &mut self,
+        i: u64,
+        ox: f32,
+        oy: f32,
+        px: f32,
+        py: f32,
+        mods: u8,
+    ) {
+        self.r24_canvas_pointer_ids.push(i);
+        self.r24_canvas_pointer_origin_x.push(ox);
+        self.r24_canvas_pointer_origin_y.push(oy);
+        self.r24_canvas_pointer_pos_x.push(px);
+        self.r24_canvas_pointer_pos_y.push(py);
+        self.r24_canvas_pointer_mods.push(mods);
+    }
     pub fn r9_u64_push(&mut self, i: u64, r: u64) {
         self.r9_u64_ids.push(i);
         self.r9_u64_values.push(r);
@@ -14863,6 +14951,61 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                         let mut flags = ResponseFlags::empty();
                         flags.populate(&sub_resp);
                         self.r7_push(id.value(), flags);
+                        // ADR-0149 M1: the region's own r24 pointer row. On the
+                        // drag-started frame report the press origin, not the
+                        // end-of-frame pointer — fast input batches several
+                        // move events into the press frame, and a box/pan
+                        // anchor read one frame later would otherwise start
+                        // mid-gesture (canvas-relative, like the canvas row).
+                        {
+                            let pp = if sub_resp.drag_started() {
+                                ui.input(|inp| inp.pointer.press_origin())
+                            } else if sub_resp.dragged() {
+                                sub_resp.interact_pointer_pos()
+                            } else {
+                                sub_resp.hover_pos()
+                            };
+                            let (ppx, ppy) = match pp {
+                                Some(p) => (p.x - origin.x, p.y - origin.y),
+                                None => (f32::NAN, f32::NAN),
+                            };
+                            // Modifiers travel with the row. On the drag-started
+                            // frame take them from the press event itself — the
+                            // frame-end modifier state misses a modifier that was
+                            // pressed and released within one batched frame
+                            // (machine-speed input); the press event's modifiers
+                            // are exact at any speed.
+                            let m = ui.input(|inp| {
+                                if sub_resp.drag_started() {
+                                    inp.events
+                                        .iter()
+                                        .rev()
+                                        .find_map(|e| match e {
+                                            egui::Event::PointerButton {
+                                                pressed: true,
+                                                modifiers,
+                                                ..
+                                            } => Some(*modifiers),
+                                            _ => None,
+                                        })
+                                        .unwrap_or(inp.modifiers)
+                                } else {
+                                    inp.modifiers
+                                }
+                            });
+                            let mods = (m.shift as u8)
+                                | ((m.ctrl as u8) << 1)
+                                | ((m.alt as u8) << 2)
+                                | ((m.command as u8) << 3);
+                            self.r24_canvas_pointer_push(
+                                id.value(),
+                                origin.x,
+                                origin.y,
+                                ppx,
+                                ppy,
+                                mods,
+                            );
+                        }
                     } else {
                         tracing::warn!(
                             id = id.value(),
