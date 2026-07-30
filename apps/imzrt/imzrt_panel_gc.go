@@ -40,52 +40,37 @@ func (inst *App) renderGCPanel(snap *PublishedSnapshot) {
 	if len(snap.HistPauseP99Ms) == len(t) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("GC pause percentiles")
-		c.PlotLine("max", t, snap.HistPauseMaxMs).Width(1.0).Color(colorHot).Send()
-		c.PlotLine("p99", t, snap.HistPauseP99Ms).Width(1.5).Color(colorWarn).Send()
-		c.PlotLine("p50", t, snap.HistPauseP50Ms).Width(2.0).Color(colorMetricPrimary).Send()
-		c.Plot(inst.ids.PrepareStr("gc-pauses-plot")).
-			Height(180).
-			YAxisLabel("ms").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false).
-			Send()
+		p := inst.beginTimePlot("##gc-pauses", 180, "ms", t)
+		p.SetNextColor(colorHot.Literal()).SetNextWeight(1.0)
+		p.Line("max", t, snap.HistPauseMaxMs)
+		p.SetNextColor(colorWarn.Literal()).SetNextWeight(1.5)
+		p.Line("p99", t, snap.HistPauseP99Ms)
+		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
+		p.Line("p50", t, snap.HistPauseP50Ms)
+		p.End()
 	}
 
 	// GC cycle rate, total vs forced.
 	if len(snap.HistGCPerSec) == len(t) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("GC rate")
-		c.PlotLine("cycles/s", t, snap.HistGCPerSec).Width(2.0).Color(colorMetricPrimary).Send()
+		p := inst.beginTimePlot("##gc-rate", 140, "1/s", t)
+		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
+		p.Line("cycles/s", t, snap.HistGCPerSec)
 		if len(snap.HistGCForcedPerSec) == len(t) {
-			c.PlotLine("forced/s", t, snap.HistGCForcedPerSec).Width(1.0).Color(colorHot).Send()
+			p.SetNextColor(colorHot.Literal()).SetNextWeight(1.0)
+			p.Line("forced/s", t, snap.HistGCForcedPerSec)
 		}
-		c.Plot(inst.ids.PrepareStr("gc-rate-plot")).
-			Height(140).
-			YAxisLabel("1/s").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false).
-			Send()
+		p.End()
 	}
 
 	// Allocation rate — the pressure driving GC pacing.
 	if len(snap.HistAllocMiBs) == len(t) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("Allocation rate")
-		c.PlotLine("MiB/s", t, snap.HistAllocMiBs).Width(2.0).Color(colorMetricPrimary).Send()
-		c.Plot(inst.ids.PrepareStr("gc-alloc-plot")).
-			Height(140).
-			YAxisLabel("MiB/s").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false).
-			Send()
+		p := inst.beginTimePlot("##gc-alloc", 140, "MiB/s", t)
+		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
+		p.Line("MiB/s", t, snap.HistAllocMiBs)
+		p.End()
 	}
 }

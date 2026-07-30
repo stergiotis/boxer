@@ -52,22 +52,18 @@ func (inst *App) renderHeapPanel(snap *PublishedSnapshot) {
 	if len(snap.HistHeapObjectsMiB) == len(t) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("GC sawtooth")
-		c.PlotLine("heap in use", t, snap.HistHeapObjectsMiB).Width(2.0).Color(colorMetricPrimary).Send()
+		p := inst.beginTimePlot("##heap-sawtooth", 180, "MiB", t)
+		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
+		p.Line("heap in use", t, snap.HistHeapObjectsMiB)
 		if len(snap.HistHeapGoalMiB) == len(t) {
-			c.PlotLine("GC goal", t, snap.HistHeapGoalMiB).Width(1.0).Color(colorWarn).Send()
+			p.SetNextColor(colorWarn.Literal()).SetNextWeight(1.0)
+			p.Line("GC goal", t, snap.HistHeapGoalMiB)
 		}
 		if snap.MemLimitSet() {
-			c.PlotHLine("GOMEMLIMIT", mib(snap.GOMemLimitBytes)).Width(1.0).Color(colorHot).Send()
+			p.SetNextColor(colorHot.Literal()).SetNextWeight(1.0)
+			p.InfLinesH("GOMEMLIMIT", []float64{mib(snap.GOMemLimitBytes)})
 		}
-		c.Plot(inst.ids.PrepareStr("heap-sawtooth-plot")).
-			Height(180).
-			YAxisLabel("MiB").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false).
-			Send()
+		p.End()
 	}
 
 	// Stacked memory classes over time. Drawn as cumulative boundaries filled to
@@ -78,18 +74,12 @@ func (inst *App) renderHeapPanel(snap *PublishedSnapshot) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("Memory classes")
 		cum := cumulativeBands(bands)
+		p := inst.beginTimePlot("##heap-classes", 180, "MiB", t)
 		for k := len(cum) - 1; k >= 0; k-- {
-			c.PlotLine(bands[k].name, t, cum[k]).Width(1.0).Color(bandColor(k)).Fill(0).Send()
+			p.SetNextColor(bandColor(k).Literal()).SetNextWeight(1.0)
+			p.Shaded(bands[k].name, t, cum[k], 0)
 		}
-		c.Plot(inst.ids.PrepareStr("heap-classes-plot")).
-			Height(180).
-			YAxisLabel("MiB").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false).
-			Send()
+		p.End()
 	}
 }
 

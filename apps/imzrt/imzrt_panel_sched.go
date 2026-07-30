@@ -90,16 +90,10 @@ func (inst *App) renderSchedPanel(snap *PublishedSnapshot) {
 	if len(t) >= 2 && len(snap.HistGoroutines) == len(t) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("Goroutines")
-		c.PlotLine("goroutines", t, snap.HistGoroutines).Width(2.0).Color(colorMetricPrimary).Send()
-		c.Plot(inst.ids.PrepareStr("sched-goroutines-plot")).
-			Height(140).
-			YAxisLabel("count").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false).
-			Send()
+		p := inst.beginTimePlot("##sched-goroutines", 140, "count", t)
+		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
+		p.Line("goroutines", t, snap.HistGoroutines)
+		p.End()
 	}
 
 	// Scheduling-latency spectrogram: each column is one interval's /sched/latencies
@@ -112,16 +106,10 @@ func (inst *App) renderSchedPanel(snap *PublishedSnapshot) {
 	if len(t) >= 2 && len(snap.HistSchedP99Ms) == len(t) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("Scheduling latency p99")
-		c.PlotLine("p99", t, snap.HistSchedP99Ms).Width(2.0).Color(colorWarn).Send()
-		c.Plot(inst.ids.PrepareStr("sched-p99-plot")).
-			Height(140).
-			YAxisLabel("ms").
-			Legend().
-			IncludeY(0).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false).
-			Send()
+		p := inst.beginTimePlot("##sched-p99", 140, "ms", t)
+		p.SetNextColor(colorWarn.Literal()).SetNextWeight(2.0)
+		p.Line("p99", t, snap.HistSchedP99Ms)
+		p.End()
 	}
 }
 
