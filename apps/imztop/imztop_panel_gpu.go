@@ -70,27 +70,25 @@ func (inst *App) renderGPUPanel(snap *PublishedSnapshot) {
 		return
 	}
 	drew := false
-	for i, dev := range snap.HistoryGPUBusyPerDev {
-		if len(dev) != len(times) {
-			continue
+	for _, dev := range snap.HistoryGPUBusyPerDev {
+		if len(dev) == len(times) {
+			drew = true
+			break
 		}
-		c.PlotLine(fmt.Sprintf("gpu%d %%", i), times, dev).
-			Width(1.8).Color(markerColor(i)).Send()
-		drew = true
 	}
 	if !drew {
 		return
 	}
 	c.AddSpace(inst.spaceTight())
-	c.PlotHLine("100%", 100).Color(colorGridLine).Width(0.5).Send()
-	plot := c.Plot(inst.ids.PrepareStr("gpu-busy-plot")).
-		Height(144).
-		YAxisLabel("%").
-		Legend().
-		IncludeY(0).IncludeY(100).
-		AllowZoom2(true, false).
-		AllowDrag2(true, false).
-		AllowScroll2(true, false)
-	plot = applyYTalbotTicks(plot, 0, 100, 5)
-	plot.Send()
+	p := inst.beginTimePlot("##gpu-busy", 144, "%", times, 0, 100)
+	for i, dev := range snap.HistoryGPUBusyPerDev {
+		if len(dev) != len(times) {
+			continue
+		}
+		p.SetNextColor(markerColor(i).Literal()).SetNextWeight(1.8)
+		p.Line(fmt.Sprintf("gpu%d %%", i), times, dev)
+	}
+	p.SetNextColor(colorGridLine.Literal()).SetNextWeight(0.5)
+	p.InfLinesH("100%", []float64{100})
+	p.End()
 }

@@ -5,20 +5,18 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/math/numerical/finddivisions"
-	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// applyYTalbotTicks routes the plot's Y axis through boxer's Talbot
-// (Extended Wilkinson) tick generator. SimpleLegibilityScorer + DefaultWeights
-// + FastMode is the no-config preset called out in MEMORY.md
-// (project_finddivisions_talbot_weights); empty TalbotOptions{} degenerates
-// scoring, so the defaults must be set explicitly.
+// talbotTicks routes a plot's Y axis through boxer's Talbot (Extended
+// Wilkinson) tick generator, shaped for implot.SetupAxisTicks.
+// SimpleLegibilityScorer + DefaultWeights + FastMode is the no-config
+// preset; empty TalbotOptions{} degenerates scoring, so the defaults must
+// be set explicitly.
 //
 // dmin/dmax bound the data range; m is the desired tick count (5 reads as
-// "around 5"). Returns the original fluid unmodified when the range is
-// degenerate so egui_plot's auto-axis takes over.
-func applyYTalbotTicks(p c.PlotFluid, dmin, dmax float64, m int) (out c.PlotFluid) {
-	out = p
+// "around 5"). Returns empty slices when the range is degenerate so the
+// axis falls back to implot's own locator.
+func talbotTicks(dmin, dmax float64, m int) (values []float64, labels []string) {
 	if !(dmax > dmin) || math.IsNaN(dmin) || math.IsNaN(dmax) {
 		return
 	}
@@ -29,14 +27,14 @@ func applyYTalbotTicks(p c.PlotFluid, dmin, dmax float64, m int) (out c.PlotFlui
 	if len(layout.TickValues) == 0 {
 		return
 	}
-	labels := layout.TickLabels
-	if len(labels) != len(layout.TickValues) {
-		labels = make([]string, len(layout.TickValues))
-		for i, v := range layout.TickValues {
+	values = layout.TickValues
+	labels = layout.TickLabels
+	if len(labels) != len(values) {
+		labels = make([]string, len(values))
+		for i, v := range values {
 			labels[i] = fmt.Sprintf("%g", v)
 		}
 	}
-	out = p.YGridMarks(layout.TickValues, labels)
 	return
 }
 

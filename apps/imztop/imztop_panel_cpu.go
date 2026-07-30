@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 )
 
@@ -213,17 +214,18 @@ func (inst *App) renderOneCPUSparkline(idx int, times, core []float64) {
 			for rt := range c.RichTextLabelColored(thresholdColor(latest), colorBgClear, fmt.Sprintf("c%d %3.0f%%", idx, latest)) {
 				_ = rt
 			}
-			c.PlotLine("c", times, core).
-				Width(1.5).Color(qualitativeColor(idx)).Send()
-			c.Plot(inst.ids.PrepareSeq(uint64(0x780+idx))).
-				Width(cpuSparklineWidth).Height(cpuSparklineHeight).
-				ShowAxes(false, false).
-				ShowGrid(false, false).
-				IncludeY(0).IncludeY(100).
-				AllowZoom2(false, false).
-				AllowDrag2(false, false).
-				AllowScroll2(false, false).
-				Send()
+			// An inert implot thumbnail: no axes chrome, no gestures, no
+			// wheel capture (the pane keeps scrolling), y pinned 0..100.
+			p := implot.Begin(inst.ids, fmt.Sprintf("##cpu-spark-%d", idx),
+				cpuSparklineWidth, cpuSparklineHeight)
+			p.SetupAxes("", "",
+				implot.AxisFlagsAutoFit|implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels,
+				implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels)
+			p.SetupAxisLimits(implot.AxisY1, 0, 100, implot.CondAlways)
+			p.NoInputs()
+			p.SetNextColor(qualitativeColor(idx).Literal()).SetNextWeight(1.5)
+			p.Line("", times, core)
+			p.End()
 		}
 	}
 }

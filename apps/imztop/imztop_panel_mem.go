@@ -71,20 +71,12 @@ func (inst *App) renderMemPanel(snap *PublishedSnapshot) {
 
 	if len(snap.HistoryTimeUnixSec) >= 2 && len(snap.HistoryMemUsed) == len(snap.HistoryTimeUnixSec) {
 		c.AddSpace(inst.spaceTight())
-		c.PlotLine("RAM %", snap.HistoryTimeUnixSec, snap.HistoryMemUsed).
-			Width(2.0).Color(colorMetricPrimary).Send()
-		c.PlotHLine("100%", 100).Color(colorGridLine).Width(0.5).Send()
-		renderXAxisTicks(snap.HistoryTimeUnixSec, 0)
-		plot := c.Plot(inst.ids.PrepareStr("mem-history-plot")).
-			Height(168).
-			YAxisLabel("%").
-			Legend().
-			IncludeY(0).IncludeY(100).
-			AllowZoom2(true, false).
-			AllowDrag2(true, false).
-			AllowScroll2(true, false)
-		plot = applyYTalbotTicks(plot, 0, 100, 5)
-		plot.Send()
+		p := inst.beginTimePlot("##mem-history", 168, "%", snap.HistoryTimeUnixSec, 0, 100)
+		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
+		p.Line("RAM %", snap.HistoryTimeUnixSec, snap.HistoryMemUsed)
+		p.SetNextColor(colorGridLine.Literal()).SetNextWeight(0.5)
+		p.InfLinesH("100%", []float64{100})
+		p.End()
 	}
 }
 

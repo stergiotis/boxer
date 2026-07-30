@@ -27,36 +27,29 @@ func (inst *App) renderRateHistoryPlot(times []float64, spec ratePlotSpec) {
 	c.AddSpace(inst.spaceInner())
 	c.Separator().Horizontal().Send()
 	c.AddSpace(inst.spaceOuter())
+	p := inst.beginTimePlot("##"+spec.plotID, 168, "MiB/s", times,
+		0, rateUpperBound(spec.primarySum, spec.secondarySum))
 	for i, s := range spec.primaryByDev {
 		if len(s.Y) != len(times) {
 			continue
 		}
-		c.PlotLine(fmt.Sprintf("%s %s", s.Name, spec.primaryDevLabel), times, s.Y).
-			Width(1.2).Color(markerColor(i)).Send()
+		p.SetNextColor(markerColor(i).Literal()).SetNextWeight(1.2)
+		p.Line(fmt.Sprintf("%s %s", s.Name, spec.primaryDevLabel), times, s.Y)
 	}
 	for i, s := range spec.secondaryByDev {
 		if len(s.Y) != len(times) {
 			continue
 		}
-		c.PlotLine(fmt.Sprintf("%s %s", s.Name, spec.secondaryDevLabel), times, s.Y).
-			Width(1.2).Color(markerColor(i)).Highlight(false).Send()
+		p.SetNextColor(markerColor(i).Literal()).SetNextWeight(1.2)
+		p.Line(fmt.Sprintf("%s %s", s.Name, spec.secondaryDevLabel), times, s.Y)
 	}
 	if len(spec.primarySum) == len(times) {
-		c.PlotLine(spec.primarySumLabel, times, spec.primarySum).
-			Width(2.4).Color(markerColor(0)).Send()
+		p.SetNextColor(markerColor(0).Literal()).SetNextWeight(2.4)
+		p.Line(spec.primarySumLabel, times, spec.primarySum)
 	}
 	if len(spec.secondarySum) == len(times) {
-		c.PlotLine(spec.secondarySumLabel, times, spec.secondarySum).
-			Width(2.4).Color(markerColor(1)).Send()
+		p.SetNextColor(markerColor(1).Literal()).SetNextWeight(2.4)
+		p.Line(spec.secondarySumLabel, times, spec.secondarySum)
 	}
-	plot := c.Plot(inst.ids.PrepareStr(spec.plotID)).
-		Height(168).
-		YAxisLabel("MiB/s").
-		Legend().
-		IncludeY(0).
-		AllowZoom2(true, false).
-		AllowDrag2(true, false).
-		AllowScroll2(true, false)
-	plot = applyYTalbotTicks(plot, 0, rateUpperBound(spec.primarySum, spec.secondarySum), 5)
-	plot.Send()
+	p.End()
 }
