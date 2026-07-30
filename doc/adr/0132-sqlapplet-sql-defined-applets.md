@@ -441,6 +441,25 @@ playground toolbar — is factored out into a standalone window,
 This is the second real adopter of ADR-0135 (after play's own "Open in
 Playground"), and it leaves the inline menu with no remaining consumer.
 
+## Update (2026-07-30) — correction: the O4 store is not durable today
+
+O4-D1 describes the store as "`boxer.facts`-backed where ClickHouse is up".
+That overstates what is wired: the store persists through `StorageI`, and
+the persist service behind it runs on `persist.NewMemoryBackend()` (the
+carousel's only wiring) — the facts-backed `StorageBackendI` of ADR-0026
+§SD6 was never built. The facts *store* being CH-backed does not help; no
+adapter connects the persist service to it. Consequence: saved applets and
+the `index` key live exactly as long as the process — a restart silently
+empties the runtime applet library. Export (fs Powerbox save) remains the
+only durable path out of an authoring session.
+
+The repair is recorded as a milestone of ADR-0151 (proposed): a thin
+`persist.FactsBackend` over the existing `FactsStoreI`
+`WriteState`/`LatestState`/`DeleteState` methods, plus the carousel wiring
+flip. When that lands, stored applets become durable with no change to this
+ADR's design; until then, O4-D1's durability phrasing should be read as
+intent, not behavior.
+
 ## References
 
 Internal:
