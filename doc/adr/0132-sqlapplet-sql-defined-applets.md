@@ -460,6 +460,29 @@ flip. When that lands, stored applets become durable with no change to this
 ADR's design; until then, O4-D1's durability phrasing should be read as
 intent, not behavior.
 
+## Update (2026-07-30, later) — the O4 store is durable again
+
+The backend named in the correction above is built and wired (see
+[ADR-0026](./0026-app-runtime-and-capability-subjects.md), Update
+2026-07-30). Stored applets and the `index` key now land as `boxer.facts`
+`KindState` rows whenever ClickHouse is up, so a restart no longer empties
+the runtime applet library, and O4-D1's "`boxer.facts`-backed where
+ClickHouse is up" describes behavior rather than intent. This ADR's design
+is unchanged — the store still persists through `StorageI` and knows nothing
+about what lies behind it.
+
+Two details of the repair touch this ADR's store specifically. Its identity
+`runtime.appletstore` is synthetic: the store is a runtime service, never a
+registered app, which is why the persist service attributes the durable app
+id from the bus envelope rather than resolving the subject alias through the
+app registry — a registry lookup would have missed this consumer. And the
+`index` key's newline-joined enumeration workaround (O4-D1) is unaffected:
+`StorageI` still has no listing operation, and that remains an open
+limitation rather than something durability closed.
+
+Export (fs Powerbox save) is no longer the only durable path out of an
+authoring session, but it stays the only *portable* one.
+
 ## References
 
 Internal:

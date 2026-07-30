@@ -469,6 +469,28 @@ what this ADR settled:
 
 Deferred items are unchanged and untouched.
 
+## Update — 2026-07-30: the persist-backend follow-up landed
+
+The *Neutral* consequences record the facts-backed persist backend as "a
+follow-up worth landing for referenced content and stored applets, but no
+longer a prerequisite for workingsets". It is now built and wired
+(`persist.FactsBackend`; see [ADR-0026](./0026-app-runtime-and-capability-subjects.md),
+Update 2026-07-30), so `runtime.persist` is durable whenever ClickHouse is
+up.
+
+This changes nothing about the design here. Workingsets were deliberately
+routed around `StorageI` and onto typed facts, and they stay there —
+`WorkingsetRow` is not reimplemented over the persist channel. What the
+backend closes is the store-the-ID half of §SD2: a record that references
+big content by persist key can now expect that content to still be there on
+the next open, which was the one place workingsets depended on a channel
+weaker than their own.
+
+The Context's description of the wired backend as in-memory is superseded
+for the same reason the *Consequences* degradation note is not: with
+ClickHouse down, persist and workingsets both fall back to process
+lifetime, together, and the runtime status bar says so.
+
 ## Status
 
 Accepted (2026-07-29). Implemented 2026-07-29.
