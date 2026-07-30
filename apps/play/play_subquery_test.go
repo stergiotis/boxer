@@ -152,13 +152,46 @@ func TestSubqueryHoistsEnclosingWith(t *testing.T) {
 		marked: "WITH RECURSIVE a AS (SELECT 1) SELECT * FROM (SELECT * FROM |a)",
 		want:   "WITH RECURSIVE a AS (SELECT 1) SELECT * FROM a",
 	}, {
-		name:   "a CTE body sees the items defined before it, not itself",
+		name:   "a CTE body sees its siblings, not itself",
 		marked: "WITH a AS (SELECT 1 AS x), b AS (SELECT |x FROM a) SELECT * FROM b",
 		want:   "WITH a AS (SELECT 1 AS x) SELECT x FROM a",
+	}, {
+		// ClickHouse binds the names of one WITH level regardless of order, so
+		// a body referencing a sibling defined after it is a running statement
+		// — the later sibling must travel or the narrowed run invents an
+		// unknown-table error (found live; the differential test pins it).
+		name:   "a CTE body sees a sibling defined after it",
+		marked: "WITH a AS (SELECT * FROM |b), b AS (SELECT 1 AS one) SELECT * FROM a",
+		want:   "WITH b AS (SELECT 1 AS one) SELECT * FROM b",
 	}, {
 		name:   "an inner rebinding wins, at the outer position",
 		marked: "WITH t AS (SELECT 1) SELECT * FROM (WITH t AS (SELECT 2) SELECT |* FROM t)",
 		want:   "WITH t AS (SELECT 2) SELECT * FROM t",
+	}, {
+		// Scalar aliases collide on the server exactly like CTE names
+		// (MULTIPLE_EXPRESSIONS_FOR_ALIAS), so they take the same inner-wins
+		// deduplication — here via the unit's own clause…
+		name:   "a scalar alias the unit rebinds itself is not hoisted",
+		marked: "WITH 7 AS k SELECT * FROM (WITH 8 AS k SELECT |k)",
+		want:   "WITH 8 AS k SELECT k",
+	}, {
+		// …and here via an enclosing scope's rebinding.
+		name:   "an inner scalar rebinding wins, at the outer position",
+		marked: "WITH 7 AS k SELECT * FROM (WITH 8 AS k SELECT * FROM (SELECT |k))",
+		want:   "WITH 8 AS k SELECT k",
+	}, {
+		// The two kinds are separate namespaces: the server lets a named query
+		// and a scalar alias share one name, each answering in its own
+		// positions, so neither may deduplicate the other away.
+		name:   "a named query and a scalar alias sharing a name both travel",
+		marked: "WITH t AS (SELECT 1 AS v) SELECT * FROM (WITH 7 AS t SELECT |t FROM t)",
+		want:   "WITH t AS (SELECT 1 AS v), 7 AS t SELECT t FROM t",
+	}, {
+		// A non-recursive rebinding is not visible in its own body — the
+		// reference resolves to the OUTER definition, which travels.
+		name:   "a non-recursive rebinding's body reaches the outer name",
+		marked: "WITH t AS (SELECT 1 AS v) SELECT * FROM (WITH t AS (SELECT v+1 AS v FROM |t) SELECT * FROM t)",
+		want:   "WITH t AS (SELECT 1 AS v) SELECT v+1 AS v FROM t",
 	}, {
 		name:   "the statement's own query is never rewritten",
 		marked: "WITH t AS (SELECT 1) SELECT |* FROM t",
@@ -185,6 +218,10 @@ func TestSubqueryCompositionReparses(t *testing.T) {
 		"WITH RECURSIVE a AS (SELECT 1) SELECT * FROM (SELECT * FROM |a)",
 		"WITH 7 AS k SELECT * FROM (SELECT |k)",
 		"SELECT * FROM (SELECT 1 AS a UNION ALL SELECT |2)",
+		"WITH a AS (SELECT * FROM |b), b AS (SELECT 1 AS one) SELECT * FROM a",
+		"WITH 7 AS k SELECT * FROM (WITH 8 AS k SELECT |k)",
+		"WITH t AS (SELECT 1 AS v) SELECT * FROM (WITH 7 AS t SELECT |t FROM t)",
+		"WITH t AS (SELECT 1 AS v) SELECT * FROM (WITH t AS (SELECT v+1 AS v FROM |t) SELECT * FROM t)",
 	}
 	for _, marked := range markedCases {
 		run, _ := runAtCaret(t, marked)
@@ -226,6 +263,26 @@ func TestSubqueryUnresolvedRefs(t *testing.T) {
 		name:   "two distinct outer qualifiers are both reported",
 		marked: "SELECT 1 FROM t a, s b WHERE a.k IN (SELECT z FROM u WHERE u.p = a.q AND u.r = |b.q)",
 		want:   []string{"a", "b"},
+	}, {
+		// A recursive body naming itself is the one WITH item that can never
+		// travel — the definition would be in terms of the text being shipped
+		// — so the reference is marked like a correlated qualifier.
+		name:   "a recursive body's reference to itself cannot travel",
+		marked: "WITH RECURSIVE r AS (SELECT 1 AS n UNION ALL SELECT n+1 FROM |r WHERE n < 5) SELECT * FROM r",
+		want:   []string{"r"},
+	}, {
+		// Without RECURSIVE the definition is not visible in its own body:
+		// the reference binds the OUTER t, which travels, and the mark would
+		// warn off a narrowing that runs.
+		name:   "a non-recursive rebinding is not a self-reference",
+		marked: "WITH t AS (SELECT 1 AS v) SELECT * FROM (WITH t AS (SELECT v+1 AS v FROM |t) SELECT * FROM t)",
+		want:   nil,
+	}, {
+		// Referencing a recursive definition from OUTSIDE its body is the
+		// ordinary hoist case — the definition travels whole.
+		name:   "a recursive CTE referenced from outside its body is fine",
+		marked: "WITH RECURSIVE r AS (SELECT 1 AS n) SELECT * FROM (SELECT * FROM |r)",
+		want:   nil,
 	}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

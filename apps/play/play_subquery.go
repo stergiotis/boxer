@@ -22,11 +22,14 @@ package play
 //   - What CAN be carried: every WITH item in scope — the enclosing selects'
 //     `withClause`, the enclosing queries' `ctes`, outermost first. compose
 //     re-emits these in front of the unit.
-//   - What CANNOT: a reference qualified by a table alias that belongs to a
-//     query further out. That is what makes a subquery *correlated*, no editor
-//     can make one independently runnable, and left unmarked it becomes an
-//     unknown-identifier error at the server. Unresolved records their spans so
-//     the editor can say so first.
+//   - What CANNOT: a reference only an enclosing query can satisfy. Two kinds:
+//     a reference qualified by a table alias bound further out (the correlated
+//     subquery), and a reference to the WITH definition the unit itself lives
+//     inside (a recursive CTE body naming itself) — carrying that one would
+//     define it in terms of the very text being shipped. No editor can make
+//     either independently runnable, and left unmarked each becomes an
+//     unknown-name error at the server. Unresolved records their spans so the
+//     editor can say so first.
 
 import (
 	"strings"
@@ -51,9 +54,10 @@ type subqueryUnit struct {
 	// deduplicated by CTE name. These are what compose carries along, and what
 	// the editor tints as the carried environment.
 	WithItems []nanopass.SourceRange
-	// Unresolved are references the unit inherits but cannot carry: qualified
-	// by a name bound only by an enclosing query. Empty for a unit that stands
-	// alone once its WITH items travel with it.
+	// Unresolved are references the unit cannot take along: a qualifier bound
+	// only by an enclosing query's FROM clause, or a table reference to the
+	// WITH definition the unit itself lives inside. Empty for a unit that
+	// stands alone once its WITH items travel with it.
 	Unresolved []nanopass.SourceRange
 
 	// depth is the nesting depth of the unit, the tie-break for innermost.
@@ -103,8 +107,14 @@ func (inst subqueryUnit) compose(text string) string {
 // items and binds nothing; a select defines items only if it has a
 // `withClause`, and binds whatever it selects from.
 type scopeFrame struct {
-	items     []nanopass.SourceRange
-	names     []string // decoded CTE name per item; "" for a scalar `expr AS x` item
+	items []nanopass.SourceRange
+	// keys deduplicate rebindings across scopes, one per item: the decoded
+	// name, kind-prefixed ("q:" named query, "s:" scalar alias), or "" for an
+	// item binding no name. The kinds are separate namespaces deliberately —
+	// ClickHouse holds them apart (a named query and a scalar alias sharing
+	// one name coexist, each answering in its own positions), so only a
+	// same-kind rebinding may collapse to one item.
+	keys      []string
 	recursive bool
 	binds     []string // decoded table names / aliases in scope from this select
 }
@@ -148,15 +158,30 @@ func withItemsOf(pr *nanopass.ParseResult, items []grammar1.IWithItemContext, re
 			continue
 		}
 		frame.items = append(frame.items, r)
-		frame.names = append(frame.names, cteNameOf(it))
+		frame.keys = append(frame.keys, withItemKey(it))
 	}
 	return frame
 }
 
-// cteNameOf returns the decoded name a WITH item binds, or "" when the item is
-// the scalar `expr AS alias` form. Only named queries are deduplicated across
-// scopes — a repeated CTE name is what ClickHouse rejects outright, and a
-// repeated scalar alias is rare enough to leave to the server.
+// withItemKey returns the deduplication key a WITH item binds: its decoded
+// name behind a kind prefix, or "" for an item binding no name. Rebinding
+// either kind across scopes flattens to a duplicate the server rejects
+// outright (a repeated CTE name, or MULTIPLE_EXPRESSIONS_FOR_ALIAS for a
+// repeated scalar alias), so both take the same inner-wins deduplication.
+func withItemKey(item grammar1.IWithItemContext) string {
+	if name := cteNameOf(item); name != "" {
+		return "q:" + name
+	}
+	if alias := scalarAliasOf(item); alias != "" {
+		return "s:" + alias
+	}
+	return ""
+}
+
+// cteNameOf returns the decoded name a WITH item binds as a named query, or
+// "" for the scalar `expr AS alias` form. Beyond keying, named queries are
+// the only items a column reference can use as a table qualifier, which is
+// why unresolvedRefs consults these names and not the scalar aliases.
 func cteNameOf(item grammar1.IWithItemContext) string {
 	named, ok := item.(*grammar1.WithItemNamedQueryContext)
 	if !ok {
@@ -171,6 +196,28 @@ func cteNameOf(item grammar1.IWithItemContext) string {
 		return ""
 	}
 	return nanopass.DecodeIdentifier(name.GetText())
+}
+
+// scalarAliasOf returns the decoded alias of a scalar `expr AS alias` WITH
+// item, or "" for the named-query form and for shapes carrying no alias.
+func scalarAliasOf(item grammar1.IWithItemContext) string {
+	cols, ok := item.(*grammar1.WithItemColumnsExprContext)
+	if !ok {
+		return ""
+	}
+	col, ok := cols.ColumnsExpr().(*grammar1.ColumnsExprColumnContext)
+	if !ok {
+		return ""
+	}
+	aliased, ok := col.ColumnExpr().(*grammar1.ColumnExprAliasContext)
+	if !ok {
+		return ""
+	}
+	id := aliased.Identifier()
+	if id == nil {
+		return ""
+	}
+	return nanopass.DecodeIdentifier(id.GetText())
 }
 
 // parseSubqueryUnits splits a single statement into its runnable queries.
@@ -243,7 +290,7 @@ func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeF
 		frame := scopeFrame{binds: scopes.bindsOf(n)}
 		if wc := n.WithClause(); wc != nil {
 			items := withItemsOf(pr, wc.AllWithItem(), wc.RECURSIVE() != nil)
-			frame.items, frame.names, frame.recursive = items.items, items.names, items.recursive
+			frame.items, frame.keys, frame.recursive = items.items, items.keys, items.recursive
 		}
 		if len(frame.items) > 0 || len(frame.binds) > 0 {
 			chain = extendChain(chain, frame)
@@ -277,29 +324,38 @@ func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, ch
 	unit = subqueryUnit{Src: src, Root: node == root, depth: depth, bodyAt: src.Start}
 	// The unit's own WITH clause, when its first branch is a bare select. Its
 	// items stay in the shipped text; what is needed here is where they start,
-	// so the hoisted items can be spliced in front of them.
-	ownNames := map[string]struct{}{}
+	// so the hoisted items can be spliced in front of them. qualifiers collects
+	// the named-query names that travel — own or hoisted — which is what a
+	// correlated qualifier below must NOT be.
+	ownKeys := map[string]struct{}{}
+	qualifiers := map[string]struct{}{}
 	if wc := ownWithClause(node); wc != nil {
 		if items := wc.AllWithItem(); len(items) > 0 {
 			if first := pr.SourceRangeOf(items[0]); !first.Empty() {
 				unit.bodyAt = first.Start
 				unit.recursive = wc.RECURSIVE() != nil
 				for _, it := range items {
+					if k := withItemKey(it); k != "" {
+						ownKeys[k] = struct{}{}
+					}
 					if n := cteNameOf(it); n != "" {
-						ownNames[n] = struct{}{}
+						qualifiers[n] = struct{}{}
 					}
 				}
 			}
 		}
 	}
-	// Hoist, outermost scope first. Within a scope only the items BEFORE the
-	// one containing this unit are in scope: SQL binds a WITH list left to
-	// right, so a later sibling cannot be referenced, and the item we are
-	// inside would be defined in terms of the very text about to ship.
+	// Hoist, outermost scope first. Every item in scope travels except the one
+	// the unit lives inside, which would be defined in terms of the very text
+	// about to ship. Later siblings travel too: ClickHouse resolves the names
+	// of one WITH level regardless of order — a body may reference a sibling
+	// defined after it — so hoisting only the earlier ones composed
+	// unknown-table errors for statements the server accepts (the live
+	// differential test pins this). Items the unit never references cost
+	// nothing: the server analyses only what the shipped query reaches.
 	//
 	// The same walk collects what the enclosing scopes BIND, which is what a
 	// correlated reference below resolves against.
-	carried := map[string]struct{}{}
 	outer := map[string]struct{}{}
 	at := map[string]int{}
 	for _, frame := range chain {
@@ -308,17 +364,19 @@ func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, ch
 		}
 		for i, r := range frame.items {
 			if r.Start <= src.Start && src.End <= r.End {
-				break
-			}
-			name := frame.names[i]
-			if _, own := ownNames[name]; own {
-				// The unit rebinds this name itself; hoisting it too would be
-				// the duplicate-name error ClickHouse rejects the query for.
 				continue
 			}
-			if name != "" {
-				carried[name] = struct{}{}
-				if prev, seen := at[name]; seen {
+			if key := frame.keys[i]; key != "" {
+				if _, own := ownKeys[key]; own {
+					// The unit rebinds this name itself; hoisting it too would
+					// be the duplicate-name error ClickHouse rejects the query
+					// for, and the inner binding is the one in scope here.
+					continue
+				}
+				if name, isQuery := strings.CutPrefix(key, "q:"); isQuery {
+					qualifiers[name] = struct{}{}
+				}
+				if prev, seen := at[key]; seen {
 					// An inner scope rebinding an outer name: the inner
 					// definition is the one in scope here, but it keeps the
 					// outer's position, since items already emitted may refer
@@ -326,16 +384,14 @@ func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, ch
 					unit.WithItems[prev] = r
 					continue
 				}
-				at[name] = len(unit.WithItems)
+				at[key] = len(unit.WithItems)
 			}
 			unit.WithItems = append(unit.WithItems, r)
 		}
 		unit.recursive = unit.recursive || frame.recursive
 	}
-	for n := range ownNames {
-		carried[n] = struct{}{}
-	}
-	unit.Unresolved = unresolvedRefs(pr, node, outer, carried, scopes)
+	unit.Unresolved = unresolvedRefs(pr, node, outer, qualifiers, scopes)
+	unit.Unresolved = append(unit.Unresolved, selfRefs(pr, node, src, scopes)...)
 	return unit, true
 }
 
@@ -347,7 +403,7 @@ func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, ch
 // outward binding is what keeps this quiet on the shapes it would otherwise
 // misread: grammar1 parses `tup.field` on a Tuple column as a table-qualified
 // reference too, and such a qualifier resolves nowhere, so it is not reported.
-func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, outer, carried map[string]struct{}, scopes scopeIndex) (out []nanopass.SourceRange) {
+func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, outer, qualifiers map[string]struct{}, scopes scopeIndex) (out []nanopass.SourceRange) {
 	if len(outer) == 0 {
 		return nil
 	}
@@ -387,7 +443,7 @@ func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtCont
 		if _, isInner := inner[q]; isInner {
 			return true
 		}
-		if _, isCarried := carried[q]; isCarried {
+		if _, isCarried := qualifiers[q]; isCarried {
 			return true
 		}
 		if r := pr.SourceRangeOf(tbl); !r.Empty() {
@@ -396,6 +452,52 @@ func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtCont
 		return true
 	})
 	return out
+}
+
+// selfRefs finds table references inside the unit that resolve to a WITH
+// definition the unit itself lives inside — a recursive CTE body naming
+// itself. The hoist above can never carry that definition (it would be
+// defined in terms of the very text being shipped), so, exactly like a
+// correlated qualifier, the reference cannot resolve in the narrowed run and
+// is marked rather than discovered at the endpoint.
+//
+// Resolution comes from nanopass's scopes rather than a name comparison here.
+// The test is containment of the unit in the RESOLVED definition: a body's
+// reference binds to its own definition only under `WITH RECURSIVE` (the
+// self-entry BuildScopes plants, CTEDef.Recursive), while a non-recursive
+// rebinding resolves to an outer definition — one that does travel, and the
+// server agrees the outer binding answers — whose extent lies elsewhere.
+func selfRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, src nanopass.SourceRange, scopes scopeIndex) (out []nanopass.SourceRange) {
+	if len(scopes) == 0 {
+		return nil
+	}
+	nanopass.WalkCST(node, func(ctx antlr.ParserRuleContext) bool {
+		sel, isSel := ctx.(*grammar1.SelectStmtContext)
+		if !isSel {
+			return true
+		}
+		scope := scopes[sel]
+		if scope == nil {
+			return true
+		}
+		for _, ts := range scope.Tables {
+			if !ts.IsCTE || ts.Node == nil {
+				continue
+			}
+			def, found := scope.ResolveCTE(ts.Table)
+			if !found || def.Node == nil {
+				continue
+			}
+			if dr := pr.SourceRangeOf(def.Node); dr.Empty() || dr.Start > src.Start || src.End > dr.End {
+				continue
+			}
+			if r := pr.SourceRangeOf(ts.Node); !r.Empty() {
+				out = append(out, r)
+			}
+		}
+		return true
+	})
+	return
 }
 
 // ownWithClause returns the WITH clause the unit itself heads, or nil. Only a
