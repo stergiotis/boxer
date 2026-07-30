@@ -164,6 +164,21 @@ func TestQueryStoreProgressEndToEnd(t *testing.T) {
 	require.False(t, fresh)
 }
 
+// Every decimal tier gets its suffix — a trillion-row scan reads "1.5T",
+// not "1500.0B" (the review's last piece of trivia).
+func TestHumanCountTiers(t *testing.T) {
+	cases := map[uint64]string{
+		999:               "999",
+		1_500:             "1.5K",
+		2_500_000:         "2.5M",
+		3_500_000_000:     "3.5B",
+		1_500_000_000_000: "1.5T",
+	}
+	for n, want := range cases {
+		require.Equal(t, want, humanCount(n), "n=%d", n)
+	}
+}
+
 func TestFormatProgressLine(t *testing.T) {
 	v := progressView{
 		fresh: true,

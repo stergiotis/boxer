@@ -319,10 +319,12 @@ func (inst *PlayApp) renderPaneProgressStrip(numbers bool) {
 	c.AddSpace(pad)
 }
 
-// humanCount renders a row count with K/M/B suffixes (counts, unlike
+// humanCount renders a row count with K/M/B/T suffixes (counts, unlike
 // bytes, conventionally use decimal thousands).
 func humanCount(n uint64) string {
 	switch {
+	case n >= 1_000_000_000_000:
+		return fmt.Sprintf("%.1fT", float64(n)/1e12)
 	case n >= 1_000_000_000:
 		return fmt.Sprintf("%.1fB", float64(n)/1e9)
 	case n >= 1_000_000:
