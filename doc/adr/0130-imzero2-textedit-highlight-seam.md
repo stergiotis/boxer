@@ -672,6 +672,54 @@ with its twin keystroke. `applyRunShortcut` is split out of the poll (the same
 split as `executeRun` from `Render`) so a test asserts the two request paths
 leave identical state.
 
+### 2026-07-30 — the hoist's visibility model was wrong about the server, three ways
+
+An adversarial review ran the narrowed compositions *next to their original
+statements* on a live ClickHouse (26.7). The reparse test could not have caught
+what that found: a composition can be valid SQL and still not be the query the
+caret meant. Three corrections, and a new net under all of it — a live
+differential lane (`play_subquery_live_test.go`, integration build) that
+requires every narrowed composition to either return exactly what its
+original's passthrough returns, or to have been marked unresolvable *before*
+the run. The hoist rules are claims about the connected analyzer's scoping,
+not about the grammar, so that lane — not the reparse suite — is their
+regression net.
+
+- **Sibling visibility is by name, not order.** The first 2026-07-29 entry
+  justified hoisting only the items before the unit's own with "a later
+  sibling is not visible". That is not ClickHouse's rule: a body may reference
+  a sibling defined after it (`WITH a AS (SELECT * FROM b), b AS (…)` runs),
+  so narrowing inside `a` composed an unknown-table error for a statement the
+  server accepts. Every sibling now travels except the one item the unit lives
+  inside, which would be defined in terms of the very text being shipped.
+  Unreferenced extras cost nothing — the server analyses only what the shipped
+  query reaches (verified: an unreferenced CTE with a broken body does not
+  even error).
+- **A recursive body's self-reference is the correlation case, not a hoist
+  case.** With the caret inside `WITH RECURSIVE r AS (… FROM r …)`, the one
+  item that cannot travel is the one the body references, and the composition
+  failed at the endpoint — the exact failure mode the correlated-reference
+  detection exists to pre-empt. Such references now join `Unresolved` through
+  the same channel: a table reference whose *resolved* definition contains the
+  unit (nanopass's scopes resolve it; the self-entry exists only under
+  `RECURSIVE`). A non-recursive rebinding stays quiet — its body reference
+  resolves to the outer definition, which does travel, and the server agrees
+  the outer binding answers.
+- **Scalar aliases deduplicate like named queries, in their own namespace.**
+  `WITH 7 AS k SELECT * FROM (WITH 8 AS k SELECT k)` runs (the inner binding
+  answers: 8), but the flattening carried both and the server rejects that
+  outright (`MULTIPLE_EXPRESSIONS_FOR_ALIAS`) — the same duplicate-name error
+  the named-query dedup already prevented. Scalar aliases now take the same
+  inner-wins-at-the-outer-position rule. The namespaces stay separate: a named
+  query and a scalar alias sharing one name coexist on the server, each
+  answering in its own positions, so only a same-kind rebinding collapses.
+
+What the review *confirmed* stands unchanged: an inner rebinding winning at
+the outer position matches the server's flat-list resolution exactly (both
+forms return the inner value — differentially verified), and the correlation
+rule stays narrow. The run still ships when a reference is marked — detection
+warns, it does not refuse, the same stance the correlation entry took.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
