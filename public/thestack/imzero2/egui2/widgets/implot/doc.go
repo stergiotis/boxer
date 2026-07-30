@@ -9,6 +9,12 @@
 // instead of an implicit current-plot context, float64 plot space projected
 // to float32 only at paint-command emission (SD4).
 //
+// For straight-line plot bodies prefer the range-based scope over the
+// loose pair — `for p := range implot.Scoped(...)` (and sp.Scoped inside
+// Subplots cells) guarantees End on early exit, the same contract as the
+// house c.IdScope; Begin/End remains for bodies where the handle must
+// outlive a lexical block.
+//
 // Coverage (M1–M7 per the ADR, plus the SD7 migration batch):
 // linear/time/log10/symlog axes with the ported locators, grid,
 // line/scatter/bars/shaded (constant or two-curve)/stairs/stems/infinite

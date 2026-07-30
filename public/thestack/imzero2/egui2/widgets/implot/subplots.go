@@ -2,6 +2,7 @@ package implot
 
 import (
 	"fmt"
+	"iter"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -84,6 +85,17 @@ type SubplotCtx struct {
 	titled string
 }
 
+// Scoped opens this cell's plot and yields it exactly once; End runs
+// when the body finishes or breaks early — the range-based counterpart
+// to Plot, mirroring the package-level Scoped.
+func (sp *SubplotCtx) Scoped(title string) iter.Seq[*Plot] {
+	return func(yield func(*Plot) bool) {
+		p := sp.Plot(title)
+		defer p.End()
+		yield(p)
+	}
+}
+
 // Plot opens this cell's plot (the callback must End it) with the grid's
 // links applied per the flags.
 func (sp *SubplotCtx) Plot(title string) *Plot {
@@ -103,8 +115,8 @@ func (sp *SubplotCtx) Plot(title string) *Plot {
 
 // Subplots lays out rows×cols plot cells in a grid, owning the row
 // scaffolding and the shared-axis storage. The callback runs once per
-// cell in row-major order and must Begin (via sp.Plot) and End exactly
-// one plot.
+// cell in row-major order and must open exactly one plot — via
+// sp.Scoped (preferred), or sp.Plot paired with End.
 func Subplots(ids *c.WidgetIdStack, title string, rows int, cols int, w float32, h float32, flags SubplotFlags, cell func(sp *SubplotCtx, row int, col int)) {
 	if rows < 1 || cols < 1 {
 		return

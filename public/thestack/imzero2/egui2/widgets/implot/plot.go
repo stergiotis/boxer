@@ -1,6 +1,7 @@
 package implot
 
 import (
+	"iter"
 	"math"
 	"strings"
 
@@ -158,6 +159,7 @@ type Plot struct {
 	nextWeight    float32
 	noInputs      bool
 	noLegend      bool
+	ended         bool
 	clickOk       bool
 	clickPos      [2]float32
 	xCustomTicks  []tick
@@ -183,6 +185,28 @@ func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 		dataXMin: math.Inf(1), dataXMax: math.Inf(-1), dataYMin: math.Inf(1), dataYMax: math.Inf(-1)}
 	p.applyInteractions()
 	return p
+}
+
+// Scoped opens a plot and yields it exactly once; End runs when the
+// body finishes or breaks early, so the id scope always closes — the
+// range-based counterpart to Begin/End, mirroring c.IdScope (including
+// its deferred pop-on-panic discipline). Prefer it for straight-line
+// plot bodies:
+//
+//	for p := range implot.Scoped(ids, "##rates", w, h) {
+//		p.SetupAxes("t", "MiB/s", implot.AxisFlagsNone, implot.AxisFlagsNone)
+//		p.Line("rate", xs, ys)
+//	}
+//
+// Begin/End remains for bodies where the handle must outlive a lexical
+// block; an explicit End inside a Scoped body is harmless (End is
+// idempotent).
+func Scoped(ids *c.WidgetIdStack, title string, w float32, h float32) iter.Seq[*Plot] {
+	return func(yield func(*Plot) bool) {
+		p := Begin(ids, title, w, h)
+		defer p.End()
+		yield(p)
+	}
 }
 
 // NewDetached returns a plot handle bound to no canvas and no frame,

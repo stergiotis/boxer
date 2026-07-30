@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -11,8 +12,16 @@ import (
 
 // End resolves fits, lays the plot out, emits every paint command and the
 // canvas, stores this frame's transform for next frame's gestures, and
-// closes the id scope opened by Begin.
+// closes the id scope opened by Begin. Idempotent: a second call is a
+// debug-logged no-op, so an explicit End inside a Scoped body cannot
+// double-pop the id scope.
 func (p *Plot) End() {
+	if p.ended {
+		log.Debug().Str("plot", p.title).
+			Msg("implot: End called twice (a Scoped body needs no explicit End)")
+		return
+	}
+	p.ended = true
 	st := p.st
 	defer func() {
 		p.ids.PopIdFromStackChecked(p.scopeId)
