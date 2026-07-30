@@ -376,18 +376,22 @@ type PlayApp struct {
 	formattedErr error
 
 	// Workingset intent tracking (ADR-0148 §SD4/§SD8). workingsetSeen is
-	// last frame's snapshot of the fields ComposeLaunch carries; its
-	// baseline is taken on the first frame — after Mount has finished
-	// seeding — so the seeded state itself never reads as an edit. That is
-	// what closes the poisoned-inheritance case: a window opened on a
-	// launch config and closed untouched stores nothing.
+	// last frame's baseline — the launch ComposeLaunch would compose,
+	// normalized by workingsetBaseline — so a field added to PlayLaunch and
+	// ComposeLaunch participates in dirty detection automatically, with no
+	// parallel field list to keep in step. The baseline is taken on the
+	// first frame — after Mount has finished seeding — so the seeded state
+	// itself never reads as an edit. That is what closes the
+	// poisoned-inheritance case: a window opened on a launch config and
+	// closed untouched stores nothing.
 	//
 	// The comparison is per-frame rather than response-driven because the
 	// toolkit forces it: the SQL editor and the Live checkbox write through
 	// SendRespVal, whose change-detection callback never fires, so there is
 	// no edit event to hang this on.
-	workingsetSeen  workingsetSnapshot
-	workingsetDirty bool
+	workingsetSeen      launchcfg.PlayLaunch
+	workingsetSeenTaken bool
+	workingsetDirty     bool
 
 	// Caret report (ADR-0130 L3). caretPacked is the raw r9_u64 databinding
 	// target for the main SQL editor: the sorted cursor CHAR range packed

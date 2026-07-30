@@ -1,6 +1,7 @@
 package play
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
@@ -18,15 +19,16 @@ import (
 // ComposeLaunch / WorkingsetDirty instead of copying the field list —
 // which is how the seam stays one definition when PlayLaunch grows.
 
-// workingsetSnapshot is the set of fields a workingset carries, sampled
-// once per frame. Compared field-by-field rather than hashed so a future
-// field addition is a compile-time obligation here.
-type workingsetSnapshot struct {
-	taken    bool
-	sql      string
-	bandsSql string
-	live     bool
-	tab      uint64
+// workingsetBaseline is the launch this window would compose right now,
+// normalized for equality: At is stamped fresh on every compose, so it is
+// zeroed out of the comparison. Deriving the baseline FROM ComposeLaunch —
+// rather than keeping a parallel field list beside it — is what makes a
+// future PlayLaunch field a compile-time obligation in one place only:
+// whatever ComposeLaunch carries, dirty detection watches.
+func (inst *PlayApp) workingsetBaseline() (cfg launchcfg.PlayLaunch) {
+	cfg = inst.ComposeLaunch()
+	cfg.At = time.Time{}
+	return
 }
 
 // syncWorkingsetDirty folds this frame's state into the intent flag. Runs
@@ -36,20 +38,20 @@ type workingsetSnapshot struct {
 // then (launch config, env overrides, the legacy read bridge), so the
 // state a window opens with is never itself an edit. Every later
 // divergence is a person acting — typing in either editor, toggling Live,
-// raising a pane — since nothing else writes these fields.
+// raising a pane — since nothing else writes the composed fields.
 func (inst *PlayApp) syncWorkingsetDirty() {
-	now := workingsetSnapshot{
-		taken:    true,
-		sql:      inst.sql,
-		bandsSql: inst.timelineBandsSql,
-		live:     inst.liveMain,
-		tab:      inst.raisedTab,
-	}
-	if !inst.workingsetSeen.taken {
+	now := inst.workingsetBaseline()
+	if !inst.workingsetSeenTaken {
 		inst.workingsetSeen = now
+		inst.workingsetSeenTaken = true
 		return
 	}
-	if inst.workingsetSeen != now {
+	// DeepEqual rather than == because the DTO carries bus-plumbing slice
+	// fields (NaturalKey) that make the type incomparable — and because the
+	// baseline's whole point is that FUTURE ComposeLaunch fields join the
+	// comparison whatever their kind. Per-frame cost is the string fast
+	// path: an unchanged buffer compares by header, not by content.
+	if !reflect.DeepEqual(inst.workingsetSeen, now) {
 		inst.workingsetDirty = true
 		inst.workingsetSeen = now
 	}
@@ -69,10 +71,10 @@ func (inst *PlayApp) noteWorkingsetIntent() {
 // the box afterwards diverges from this new baseline and reads as intent,
 // which is right — that is the resume gesture.
 func (inst *PlayApp) rebaseWorkingsetLive(on bool) {
-	if !inst.workingsetSeen.taken {
+	if !inst.workingsetSeenTaken {
 		return
 	}
-	inst.workingsetSeen.live = on
+	inst.workingsetSeen.Live = on
 }
 
 // WorkingsetDirty reports whether user intent occurred in this window

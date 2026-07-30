@@ -101,7 +101,7 @@ func TestWorkingsetDirty_BreakerTripIsNotIntent(t *testing.T) {
 	inst.liveMain = true
 	inst.syncWorkingsetDirty()
 	inst.workingsetDirty = false // ignore the (genuine) toggle above
-	inst.workingsetSeen.live = true
+	inst.workingsetSeen.Live = true
 
 	inst.liveMain = false
 	inst.rebaseWorkingsetLive(false)
