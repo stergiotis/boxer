@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
@@ -214,13 +215,20 @@ func NewCommand() *cli.Command {
 			}
 
 			// M2 Phase C: runtime.persist.> Powerbox (ADR-0026 §SD3,
-			// §SD6). In-memory backend for now; a boxer.facts-backed
-			// backend lands in a follow-up so state writes appear as
-			// auditable rows alongside grants + lifecycle events. The
-			// host auto-injects runtime.persist.{ownAlias}.> for any
-			// app declaring PersistedKeys in its manifest, so apps
-			// don't have to repeat that boilerplate.
-			persistSvc, pErr := persist.NewService(bus, log.Logger, persist.NewMemoryBackend())
+			// §SD6). The host auto-injects runtime.persist.{ownAlias}.>
+			// for any app declaring PersistedKeys in its manifest, so
+			// apps don't have to repeat that boilerplate.
+			//
+			// Backend follows the facts store: when chstore reached
+			// ClickHouse, persist writes land as boxer.facts KindState
+			// rows beside the grant + lifecycle events, and app state
+			// outlives the process. When it fell back to the in-memory
+			// facts store there is nothing to gain from routing through
+			// it — both are process-scoped, and the append-only trail
+			// would only grow — so the memory backend stays. The choice
+			// is surfaced in the status bar rather than inferred.
+			persistBackend, persistBackendLabel := selectPersistBackend(facts, isChStore, log.Logger)
+			persistSvc, pErr := persist.NewService(bus, log.Logger, persistBackend)
 			if pErr != nil {
 				log.Warn().Err(pErr).Msg("persist: service start failed; runtime.persist.* will be unbound")
 				persistSvc = nil
@@ -354,7 +362,7 @@ func NewCommand() *cli.Command {
 			// whole run). Threaded into both screenshot- and windowed-
 			// mode renderers so the indicator is visible in either
 			// path.
-			status := buildStatusSnapshot(runInst, isChStore, bus, fsSvc, persistSvc)
+			status := buildStatusSnapshot(runInst, isChStore, bus, fsSvc, persistSvc, persistBackendLabel)
 
 			u := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 
@@ -514,7 +522,7 @@ func NewCommand() *cli.Command {
 // the snapshot's fields are process-static so a single read suffices
 // for the lifetime of the run. runInst may be nil (runinfo failed
 // to init) — the short id falls back to "standalone".
-func buildStatusSnapshot(runInst *runinfo.Inst, isChStore bool, bus *inprocbus.Inst, fsSvc *fsbroker.Service, persistSvc *persist.Service) (s *runtimestatus.Snapshot) {
+func buildStatusSnapshot(runInst *runinfo.Inst, isChStore bool, bus *inprocbus.Inst, fsSvc *fsbroker.Service, persistSvc *persist.Service, persistBackendLabel string) (s *runtimestatus.Snapshot) {
 	s = &runtimestatus.Snapshot{
 		BusActive:      bus != nil,
 		FsBrokerActive: fsSvc != nil,
@@ -530,11 +538,33 @@ func buildStatusSnapshot(runInst *runinfo.Inst, isChStore bool, bus *inprocbus.I
 		s.FactsBackend = "mem"
 	}
 	if persistSvc != nil {
-		// The carousel wires NewMemoryBackend today; a future commit
-		// passes through a label so this stays in sync with whatever
-		// backend type the service actually owns.
-		s.PersistBackend = "mem"
+		s.PersistBackend = persistBackendLabel
 	}
+	return
+}
+
+// selectPersistBackend picks the StorageBackendI the persist service runs
+// on and the label the status bar shows for it. The facts-backed backend is
+// chosen only when chstore reached ClickHouse — that is the whole of what
+// makes it worth having over the memory backend, since over the in-memory
+// facts store it would be process-scoped too.
+//
+// A construction failure degrades to the memory backend rather than leaving
+// runtime.persist unbound: losing durability is a smaller regression than
+// losing the subject family, and the label says which one ran.
+func selectPersistBackend(facts factsstore.FactsStoreI, isChStore bool, logger zerolog.Logger) (backend persist.StorageBackendI, label string) {
+	if isChStore {
+		fb, err := persist.NewFactsBackend(facts)
+		if err == nil {
+			backend = fb
+			label = "facts"
+			return
+		}
+		logger.Warn().Err(err).
+			Msg("persist: facts backend construction failed; falling back to in-memory (app state will not survive restart)")
+	}
+	backend = persist.NewMemoryBackend()
+	label = "mem"
 	return
 }
 

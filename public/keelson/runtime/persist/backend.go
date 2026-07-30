@@ -1,26 +1,61 @@
 // Package persist implements the ADR-0026 §SD3 runtime.persist.{alias}.{key}.{op}
 // subject family. The Service subscribes to runtime.persist.>, parses each
 // request, and dispatches to a pluggable StorageBackendI for the actual
-// read/write/delete. M2.4 ships an in-memory backend; M2.5 introduces a
-// boxer.facts-backed implementation that lands grants + audit + state
-// writes through the same CH+leeway table.
+// read/write/delete. Two backends ship: MemoryBackend, whose contents last
+// exactly as long as the process, and FactsBackend, which lands every write
+// as a boxer.facts KindState row so app state is durable and queryable
+// beside the grant + audit + lifecycle rows of §SD6.
 package persist
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
+// StorageRef identifies the persist namespace one request addresses.
+//
+// Alias is authoritative and always set: the subject family is
+// alias-addressed by construction (§SD3), the per-app cap is written
+// against the alias, and the alias is what the service parses out of the
+// subject. Backends key on it.
+//
+// AppId is the durable identity of the requesting app, attributed by the
+// service from the bus envelope (Msg.Sender) exactly as launch and audit
+// rows are attributed — never from the request payload. Backends that
+// record facts stamp it on the row so a state fact joins that app's grant,
+// audit, and launch facts on one column, which is the property §SD6 argues
+// the single-table design exists to preserve. It is empty when the sender
+// could not be attributed to the addressed alias; a backend that needs an
+// id then derives one from Alias via StateAppId.
+type StorageRef struct {
+	Alias string
+	AppId app.AppIdT
+}
+
+// StateAppId is the app identity a fact-recording backend should stamp on
+// a row: the attributed AppId when the service could vouch for it, else
+// the alias promoted to an id so reads and writes still agree with each
+// other. The fallback loses the join to that app's other facts; it does
+// not lose the state.
+func (inst StorageRef) StateAppId() (id app.AppIdT) {
+	id = inst.AppId
+	if id == "" {
+		id = app.AppIdT(inst.Alias)
+	}
+	return
+}
+
 // StorageBackendI is the persistence contract. Keys are addressed by
-// (appAlias, key) where appAlias is the AppIdT.SubjectAlias of the owning
+// (ref.Alias, key) where ref.Alias is the AppIdT.SubjectAlias of the owning
 // app. The alias rather than the raw AppId lets the service trust subject
-// parsing without a reverse-lookup step.
+// parsing without a reverse-lookup step; ref.AppId carries the durable
+// identity alongside it for backends that record provenance.
 //
 // All methods are expected to be safe for concurrent use. Errors propagate
 // to the requester as PersistReply.Error.
 type StorageBackendI interface {
-	Get(appAlias string, key string) (value []byte, found bool, err error)
-	Set(appAlias string, key string, value []byte) (err error)
-	Delete(appAlias string, key string) (err error)
+	Get(ref StorageRef, key string) (value []byte, found bool, err error)
+	Set(ref StorageRef, key string, value []byte) (err error)
+	Delete(ref StorageRef, key string) (err error)
 }
 
 // Convenience: a backend that knows the AppId of every call (when the caller

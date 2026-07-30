@@ -72,8 +72,19 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// Hygiene-only sender check: Sender's alias should equal the subject's
 	// alias. Log a warning on mismatch but proceed — M4 NKey identity will
 	// be the real enforcement boundary.
+	//
+	// The check doubles as the attribution gate for StorageRef.AppId. On a
+	// match the envelope's Sender is the durable identity behind this alias
+	// and the backend may stamp it on a recorded fact; on a mismatch the
+	// request addresses a namespace the sender is not the owner of, and
+	// stamping the sender's id on a row in someone else's namespace would
+	// misattribute it — so the id is withheld and the backend falls back to
+	// the alias.
 	senderAlias := msg.Sender.SubjectAlias()
-	if senderAlias != alias && msg.Sender != ServiceAppId {
+	ref := StorageRef{Alias: alias}
+	if senderAlias == alias {
+		ref.AppId = msg.Sender
+	} else if msg.Sender != ServiceAppId {
 		inst.log.Warn().
 			Str("sender", string(msg.Sender)).
 			Str("senderAlias", senderAlias).
@@ -82,18 +93,18 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	}
 	switch op {
 	case OpGet:
-		inst.handleGet(msg.Reply, alias, key)
+		inst.handleGet(msg.Reply, ref, key)
 	case OpSet:
-		inst.handleSet(msg.Reply, alias, key, msg.Payload)
+		inst.handleSet(msg.Reply, ref, key, msg.Payload)
 	case OpDelete:
-		inst.handleDelete(msg.Reply, alias, key)
+		inst.handleDelete(msg.Reply, ref, key)
 	default:
 		inst.replyError(msg.Reply, "unknown op: "+op)
 	}
 }
 
-func (inst *Service) handleGet(replySubject, alias, key string) {
-	value, found, err := inst.backend.Get(alias, key)
+func (inst *Service) handleGet(replySubject string, ref StorageRef, key string) {
+	value, found, err := inst.backend.Get(ref, key)
 	if err != nil {
 		inst.replyError(replySubject, err.Error())
 		return
@@ -101,8 +112,8 @@ func (inst *Service) handleGet(replySubject, alias, key string) {
 	inst.reply(replySubject, PersistReply{Found: found, Value: value})
 }
 
-func (inst *Service) handleSet(replySubject, alias, key string, value []byte) {
-	err := inst.backend.Set(alias, key, value)
+func (inst *Service) handleSet(replySubject string, ref StorageRef, key string, value []byte) {
+	err := inst.backend.Set(ref, key, value)
 	if err != nil {
 		inst.replyError(replySubject, err.Error())
 		return
@@ -110,8 +121,8 @@ func (inst *Service) handleSet(replySubject, alias, key string, value []byte) {
 	inst.reply(replySubject, PersistReply{})
 }
 
-func (inst *Service) handleDelete(replySubject, alias, key string) {
-	err := inst.backend.Delete(alias, key)
+func (inst *Service) handleDelete(replySubject string, ref StorageRef, key string) {
+	err := inst.backend.Delete(ref, key)
 	if err != nil {
 		inst.replyError(replySubject, err.Error())
 		return

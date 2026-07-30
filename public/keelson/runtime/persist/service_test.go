@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -158,7 +159,97 @@ func TestService_AliasMismatch_LoggedButProceeds(t *testing.T) {
 	require.NoError(t, err)
 	// The subject's alias is "play", so the value lands under "play"
 	// regardless of the actual sender's identity (M4 NKey would enforce).
-	got, found, _ := mem.Get("play", "tabs")
+	got, found, _ := mem.Get(aliasRef("play"), "tabs")
 	assert.True(t, found)
 	assert.Equal(t, "x", string(got))
+}
+
+// refRecorder is a StorageBackendI that captures the ref of the last call
+// so the service's attribution rule can be asserted at its own boundary.
+type refRecorder struct {
+	mu   sync.Mutex
+	last StorageRef
+}
+
+var _ StorageBackendI = (*refRecorder)(nil)
+
+func (inst *refRecorder) record(ref StorageRef) {
+	inst.mu.Lock()
+	inst.last = ref
+	inst.mu.Unlock()
+}
+
+func (inst *refRecorder) Last() (ref StorageRef) {
+	inst.mu.Lock()
+	ref = inst.last
+	inst.mu.Unlock()
+	return
+}
+
+func (inst *refRecorder) Get(ref StorageRef, key string) (value []byte, found bool, err error) {
+	inst.record(ref)
+	return
+}
+
+func (inst *refRecorder) Set(ref StorageRef, key string, value []byte) (err error) {
+	inst.record(ref)
+	return
+}
+
+func (inst *refRecorder) Delete(ref StorageRef, key string) (err error) {
+	inst.record(ref)
+	return
+}
+
+func newRecorderSetup(t *testing.T) (inst *inprocbus.Inst, svc *Service, rec *refRecorder) {
+	t.Helper()
+	inst = inprocbus.NewInst(zerolog.Nop())
+	inst.SetRequestTimeout(100 * time.Millisecond)
+	rec = &refRecorder{}
+	svc, err := NewService(inst, zerolog.Nop(), rec)
+	require.NoError(t, err)
+	return
+}
+
+// The service attributes the durable AppId from the bus envelope whenever
+// the sender owns the addressed alias. A fact-recording backend stamps that
+// id on the row, so an app whose id differs from its alias still joins its
+// own grant / audit / launch facts.
+func TestService_AttributesSenderAppId(t *testing.T) {
+	inst, svc, rec := newRecorderSetup(t)
+	defer svc.Close()
+
+	const id app.AppIdT = "elle/factsplay"
+	require.Equal(t, "factsplay", id.SubjectAlias())
+	bus := inst.NewClient(id, []app.SubjectFilter{
+		{Pattern: "runtime.persist.factsplay.>", Direction: app.CapDirectionPub, Reason: "own state"},
+	})
+
+	_, err := bus.Request(SubjectFor(id.SubjectAlias(), "lastSql", OpSet), []byte("x"))
+	require.NoError(t, err)
+
+	got := rec.Last()
+	assert.Equal(t, "factsplay", got.Alias)
+	assert.Equal(t, id, got.AppId)
+	assert.Equal(t, id, got.StateAppId())
+}
+
+// A sender addressing an alias it does not own is not vouched for: the id
+// is withheld so a recorded row is never misattributed to the sender. The
+// write still proceeds — this stays the hygiene-only check it was.
+func TestService_WithholdsAppIdOnAliasMismatch(t *testing.T) {
+	inst, svc, rec := newRecorderSetup(t)
+	defer svc.Close()
+
+	imzBus := inst.NewClient("imztop", []app.SubjectFilter{
+		{Pattern: "runtime.persist.>", Direction: app.CapDirectionPub, Reason: "permissive for the test"},
+	})
+
+	_, err := imzBus.Request(SubjectFor("play", "tabs", OpSet), []byte("x"))
+	require.NoError(t, err)
+
+	got := rec.Last()
+	assert.Equal(t, "play", got.Alias)
+	assert.Empty(t, got.AppId, "sender does not own the addressed alias")
+	assert.Equal(t, app.AppIdT("play"), got.StateAppId(), "falls back to the addressed alias")
 }
