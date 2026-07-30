@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"math"
 
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	dataenc "github.com/stergiotis/boxer/public/keelson/designsystem/styletokens/data_encoding"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // App is the per-window IDS showcase instance.
@@ -46,14 +47,14 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 
 // render is the IDS showcase panel layout. Vertical stack:
 //
-//	1. header — title + active density readout
-//	2. neutral spine — 10 swatches (bg.extreme → text.extreme)
-//	3. semantic palette — 6 roles × 3 emphasis grid
-//	4. type scale — IDS-bound TextStyle slots
-//	5. data encoding — qualitative / sequential / diverging palettes
-//	6. density spec — PX_TABLE column for the active preset
-//	7. rounding ladder — 4 swatches at corner radius 0/2/4/6
-//	8. stroke ladder — 3 framed rows at width 1.0/1.5/2.0
+//  1. header — title + active density readout
+//  2. neutral spine — 10 swatches (bg.extreme → text.extreme)
+//  3. semantic palette — 6 roles × 3 emphasis grid
+//  4. type scale — IDS-bound TextStyle slots
+//  5. data encoding — qualitative / sequential / diverging palettes
+//  6. density spec — PX_TABLE column for the active preset
+//  7. rounding ladder — 4 swatches at corner radius 0/2/4/6
+//  8. stroke ladder — 3 framed rows at width 1.0/1.5/2.0
 func (inst *App) render() {
 	c.Label("IDS token catalogue — ADR-0029 / 0031 / 0032").Send()
 	c.Label(fmt.Sprintf("active density: %s   (IMZERO2_DENSITY)", inst.density.String())).Send()
@@ -74,7 +75,7 @@ func (inst *App) render() {
 	inst.renderDataEncoding()
 	c.AddSpace(styletokens.GapSections(inst.density))
 
-	c.Label("Data encoding in egui_plot — QualitativeCycle drives series colors").Send()
+	c.Label("Data encoding in implot — QualitativeCycle drives series colors").Send()
 	inst.renderDataEncodingPlot()
 	c.AddSpace(styletokens.GapSections(inst.density))
 
@@ -121,10 +122,10 @@ func (inst *App) renderNeutralSpine() {
 // semanticRow is one role across three emphasis levels. Order matches
 // the ADR-0031 §SD2 table.
 type semanticRow struct {
-	role    string
-	subtle  styletokens.RGBA8
-	deflt   styletokens.RGBA8
-	strong  styletokens.RGBA8
+	role   string
+	subtle styletokens.RGBA8
+	deflt  styletokens.RGBA8
+	strong styletokens.RGBA8
 }
 
 var semanticRows = []semanticRow{
@@ -284,24 +285,22 @@ func (inst *App) renderDataEncodingPlot() {
 	for i := range xs {
 		xs[i] = float64(i) * 0.1
 	}
+	// Renders through the implot port (ADR-0149 SD7); NoInputs keeps the
+	// showcase panel inert, as the bridge version's disabled gestures did.
+	p := implot.Begin(inst.ids, "##de-plot", 720, 240)
+	p.SetupAxes("x", "sin(x + phase)", implot.AxisFlagsNone, implot.AxisFlagsNone)
+	p.NoInputs()
 	for s := 0; s < dataEncodingPlotSeries; s++ {
 		ys := make([]float64, dataEncodingPlotSamples)
 		phase := float64(s) * math.Pi / 3.0
 		for i := range ys {
 			ys[i] = math.Sin(xs[i] + phase)
 		}
-		seriesColor := color.Hex(styletokens.QualitativeCycle(s).AsHex())
-		c.PlotLine(fmt.Sprintf("series %d", s), xs, ys).
-			Width(styletokens.StrokeRegular).
-			Color(seriesColor).
-			Send()
+		p.SetNextColor(styletokens.QualitativeCycle(s).AsHex()).
+			SetNextWeight(styletokens.StrokeRegular)
+		p.Line(fmt.Sprintf("series %d", s), xs, ys)
 	}
-	c.Plot(inst.ids.PrepareStr("de-plot")).
-		Width(720).Height(240).
-		XAxisLabel("x").YAxisLabel("sin(x + phase)").
-		Legend().
-		AllowZoom(false).AllowDrag(false).
-		Send()
+	p.End()
 }
 
 // renderDensitySpec displays the active density's 8-value PX_TABLE
@@ -344,7 +343,7 @@ func (inst *App) renderRoundingLadder() {
 	}
 	for range c.Horizontal().KeepIter() {
 		for _, r := range rounds {
-			for range c.Frame(inst.ids.PrepareStr("rd:"+r.name)).
+			for range c.Frame(inst.ids.PrepareStr("rd:" + r.name)).
 				Fill(fill).
 				InnerMargin(styletokens.PaddingOuter(inst.density)).
 				CornerRadius(r.val).

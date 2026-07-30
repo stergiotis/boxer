@@ -23,7 +23,7 @@
 //     verbatim from Crameri 2018 (MIT-licensed scientific colormaps).
 //   - Data encoding in egui_plot — six phase-shifted sine waves
 //     colored by `styletokens.QualitativeCycle(i)`, validating that
-//     the IDS palette consumes through `c.PlotLine(...).Color(...)`
+//     the IDS palette consumes through implot series colors
 //     end-to-end. ADR-0031 §SD7.
 //   - Density readout — the active DensityE and its 8-value PX_TABLE
 //     column. Set IMZERO2_DENSITY=tight|standard|roomy at startup to
