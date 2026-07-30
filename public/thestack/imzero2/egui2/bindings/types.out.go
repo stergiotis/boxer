@@ -342,6 +342,16 @@ type PaintCircleStrokeFluid struct {
 }
 type PaintCircleStrokeMethodIdE uint32
 
+type PaintClipPopFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintClipPopMethodIdE uint32
+
+type PaintClipPushFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintClipPushMethodIdE uint32
+
 type PaintCubicBezierFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -367,6 +377,11 @@ type PaintLineFluid struct {
 }
 type PaintLineMethodIdE uint32
 
+type PaintMarkersFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintMarkersMethodIdE uint32
+
 type PaintPolygonFilledFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -386,6 +401,11 @@ type PaintRectStrokeFluid struct {
 	r *typed.RetainedFffiBuilder
 }
 type PaintRectStrokeMethodIdE uint32
+
+type PaintRectsFilledFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintRectsFilledMethodIdE uint32
 
 type PaintSenseRegionFluid struct {
 	r     *typed.RetainedFffiBuilder

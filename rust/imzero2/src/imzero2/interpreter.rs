@@ -1126,6 +1126,28 @@ pub enum PaintCmd {
         sw: f32,
         sh: f32,
     },
+    ClipPush {
+        min_x: f32,
+        min_y: f32,
+        max_x: f32,
+        max_y: f32,
+    },
+    ClipPop,
+    Markers {
+        xs: Vec<f32>,
+        ys: Vec<f32>,
+        shape: u8,
+        radius: f32,
+        color: egui::Color32,
+        weight: f32,
+    },
+    RectsFilled {
+        min_xs: Vec<f32>,
+        min_ys: Vec<f32>,
+        max_xs: Vec<f32>,
+        max_ys: Vec<f32>,
+        cols: Vec<u32>,
+    },
 }
 
 // ===========================================================================
@@ -8744,6 +8766,41 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                     stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)),
                 });
             }
+            FuncProcId::PaintClipPop => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintClipPop");
+                // arguments
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                self.paint_cmds.push(PaintCmd::ClipPop);
+            }
+            FuncProcId::PaintClipPush => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintClipPush");
+                // arguments
+                #[allow(unused_mut)]
+                let mut min_x = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut min_y = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut max_x = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut max_y = self.io.read_plain_f32()?;
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                self.paint_cmds.push(PaintCmd::ClipPush {
+                    min_x,
+                    min_y,
+                    max_x,
+                    max_y,
+                });
+            }
             FuncProcId::PaintCubicBezier => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::PaintCubicBezier");
@@ -8905,6 +8962,36 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                     stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)),
                 });
             }
+            FuncProcId::PaintMarkers => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintMarkers");
+                // arguments
+                #[allow(unused_mut)]
+                let mut xs = self.io.read_plain_f32h()?;
+                #[allow(unused_mut)]
+                let mut ys = self.io.read_plain_f32h()?;
+                #[allow(unused_mut)]
+                let mut shape = self.io.read_plain_u8()?;
+                #[allow(unused_mut)]
+                let mut radius = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut col = self.io.read_plain_u32()?;
+                #[allow(unused_mut)]
+                let mut weight = self.io.read_plain_f32()?;
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                self.paint_cmds.push(PaintCmd::Markers {
+                    xs,
+                    ys,
+                    shape,
+                    radius,
+                    color: color32_from_rgba_u32(col),
+                    weight,
+                });
+            }
             FuncProcId::PaintPolygonFilled => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::PaintPolygonFilled");
@@ -9021,6 +9108,33 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                     max_y,
                     rounding,
                     stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)),
+                });
+            }
+            FuncProcId::PaintRectsFilled => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintRectsFilled");
+                // arguments
+                #[allow(unused_mut)]
+                let mut min_xs = self.io.read_plain_f32h()?;
+                #[allow(unused_mut)]
+                let mut min_ys = self.io.read_plain_f32h()?;
+                #[allow(unused_mut)]
+                let mut max_xs = self.io.read_plain_f32h()?;
+                #[allow(unused_mut)]
+                let mut max_ys = self.io.read_plain_f32h()?;
+                #[allow(unused_mut)]
+                let mut cols = self.io.read_plain_u32h()?;
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                self.paint_cmds.push(PaintCmd::RectsFilled {
+                    min_xs,
+                    min_ys,
+                    max_xs,
+                    max_ys,
+                    cols,
                 });
             }
             FuncProcId::PaintSenseRegion => {
@@ -14528,6 +14642,11 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         mut ui_for_sense: Option<&mut egui::Ui>,
     ) {
         let cmds: Vec<PaintCmd> = self.paint_cmds.drain(..).collect();
+        // ClipPush swaps the active painter for a clip-intersected clone; the
+        // stack restores the previous clip on ClipPop, and an underflowing pop
+        // restores the canvas painter.
+        let mut cur = painter.clone();
+        let mut clip_stack: Vec<egui::Painter> = Vec::new();
         for cmd in &cmds {
             match cmd {
                 PaintCmd::CircleFilled {
@@ -14536,7 +14655,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     radius,
                     fill,
                 } => {
-                    painter.circle_filled(
+                    cur.circle_filled(
                         egui::Pos2::new(origin.x + cx, origin.y + cy),
                         *radius,
                         *fill,
@@ -14548,7 +14667,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     radius,
                     stroke,
                 } => {
-                    painter.circle_stroke(
+                    cur.circle_stroke(
                         egui::Pos2::new(origin.x + cx, origin.y + cy),
                         *radius,
                         *stroke,
@@ -14562,7 +14681,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     rounding,
                     fill,
                 } => {
-                    painter.rect_filled(
+                    cur.rect_filled(
                         egui::Rect::from_min_max(
                             egui::Pos2::new(origin.x + min_x, origin.y + min_y),
                             egui::Pos2::new(origin.x + max_x, origin.y + max_y),
@@ -14579,7 +14698,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     rounding,
                     stroke,
                 } => {
-                    painter.rect_stroke(
+                    cur.rect_stroke(
                         egui::Rect::from_min_max(
                             egui::Pos2::new(origin.x + min_x, origin.y + min_y),
                             egui::Pos2::new(origin.x + max_x, origin.y + max_y),
@@ -14596,7 +14715,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     to_y,
                     stroke,
                 } => {
-                    painter.line_segment(
+                    cur.line_segment(
                         [
                             egui::Pos2::new(origin.x + from_x, origin.y + from_y),
                             egui::Pos2::new(origin.x + to_x, origin.y + to_y),
@@ -14619,7 +14738,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     ];
                     let shapes = egui::Shape::dashed_line(&path, *stroke, *dash_len, *gap_len);
                     for shape in shapes {
-                        painter.add(shape);
+                        cur.add(shape);
                     }
                 }
                 PaintCmd::Arrow {
@@ -14629,7 +14748,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     dy,
                     stroke,
                 } => {
-                    painter.arrow(
+                    cur.arrow(
                         egui::Pos2::new(origin.x + ox, origin.y + oy),
                         egui::Vec2::new(*dx, *dy),
                         *stroke,
@@ -14640,14 +14759,14 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                         .iter()
                         .map(|p| egui::Pos2::new(origin.x + p[0], origin.y + p[1]))
                         .collect();
-                    painter.line(pts, *stroke);
+                    cur.line(pts, *stroke);
                 }
                 PaintCmd::PolygonFilled { points, fill } => {
                     let pts: Vec<egui::Pos2> = points
                         .iter()
                         .map(|p| egui::Pos2::new(origin.x + p[0], origin.y + p[1]))
                         .collect();
-                    painter.add(egui::Shape::convex_polygon(pts, *fill, egui::Stroke::NONE));
+                    cur.add(egui::Shape::convex_polygon(pts, *fill, egui::Stroke::NONE));
                 }
                 PaintCmd::EllipseFilled {
                     cx,
@@ -14656,7 +14775,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     ry,
                     fill,
                 } => {
-                    painter.add(egui::Shape::ellipse_filled(
+                    cur.add(egui::Shape::ellipse_filled(
                         egui::Pos2::new(origin.x + cx, origin.y + cy),
                         egui::Vec2::new(*rx, *ry),
                         *fill,
@@ -14669,7 +14788,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     ry,
                     stroke,
                 } => {
-                    painter.add(egui::Shape::ellipse_stroke(
+                    cur.add(egui::Shape::ellipse_stroke(
                         egui::Pos2::new(origin.x + cx, origin.y + cy),
                         egui::Vec2::new(*rx, *ry),
                         *stroke,
@@ -14702,7 +14821,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                     } else {
                         egui::FontId::proportional(*font_size)
                     };
-                    painter.text(
+                    cur.text(
                         egui::Pos2::new(origin.x + px, origin.y + py),
                         align2,
                         text,
@@ -14732,7 +14851,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                         egui::Color32::TRANSPARENT,
                         *stroke,
                     );
-                    painter.add(shape);
+                    cur.add(shape);
                 }
                 PaintCmd::SenseRegion { id, px, py, sw, sh } => {
                     if let Some(ui) = ui_for_sense.as_deref_mut() {
@@ -14748,6 +14867,193 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                         tracing::warn!(
                             id = id.value(),
                             "PaintCmd::SenseRegion drained without a Ui scope (paintAbsoluteOverlay?); skipped"
+                        );
+                    }
+                }
+                PaintCmd::ClipPush {
+                    min_x,
+                    min_y,
+                    max_x,
+                    max_y,
+                } => {
+                    let clip = egui::Rect::from_min_max(
+                        egui::Pos2::new(origin.x + min_x, origin.y + min_y),
+                        egui::Pos2::new(origin.x + max_x, origin.y + max_y),
+                    )
+                    .intersect(cur.clip_rect());
+                    clip_stack.push(cur.clone());
+                    cur = cur.with_clip_rect(clip);
+                }
+                PaintCmd::ClipPop => {
+                    cur = clip_stack.pop().unwrap_or_else(|| painter.clone());
+                }
+                PaintCmd::Markers {
+                    xs,
+                    ys,
+                    shape,
+                    radius,
+                    color,
+                    weight,
+                } => {
+                    // Shape numbering is the IDL/ImPlot contract: 0=circle
+                    // 1=square 2=diamond 3=up 4=down 5=left 6=right 7=cross
+                    // 8=plus 9=asterisk; 0-6 filled, 7-9 stroked at weight.
+                    // Polygon vertices are inscribed in the radius-ra circle.
+                    const SIN60: f32 = 0.866_025_4;
+                    const INV_SQRT2: f32 = 0.707_106_77;
+                    let n = xs.len().min(ys.len());
+                    let ra = *radius;
+                    let st = egui::Stroke::new(*weight, *color);
+                    for k in 0..n {
+                        let p = egui::Pos2::new(origin.x + xs[k], origin.y + ys[k]);
+                        match *shape {
+                            1 => {
+                                let hs = ra * INV_SQRT2;
+                                cur.rect_filled(
+                                    egui::Rect::from_center_size(p, egui::Vec2::splat(2.0 * hs)),
+                                    0.0,
+                                    *color,
+                                );
+                            }
+                            2 => {
+                                cur.add(egui::Shape::convex_polygon(
+                                    vec![
+                                        egui::Pos2::new(p.x - ra, p.y),
+                                        egui::Pos2::new(p.x, p.y - ra),
+                                        egui::Pos2::new(p.x + ra, p.y),
+                                        egui::Pos2::new(p.x, p.y + ra),
+                                    ],
+                                    *color,
+                                    egui::Stroke::NONE,
+                                ));
+                            }
+                            3 => {
+                                cur.add(egui::Shape::convex_polygon(
+                                    vec![
+                                        egui::Pos2::new(p.x, p.y - ra),
+                                        egui::Pos2::new(p.x - ra * SIN60, p.y + ra * 0.5),
+                                        egui::Pos2::new(p.x + ra * SIN60, p.y + ra * 0.5),
+                                    ],
+                                    *color,
+                                    egui::Stroke::NONE,
+                                ));
+                            }
+                            4 => {
+                                cur.add(egui::Shape::convex_polygon(
+                                    vec![
+                                        egui::Pos2::new(p.x, p.y + ra),
+                                        egui::Pos2::new(p.x + ra * SIN60, p.y - ra * 0.5),
+                                        egui::Pos2::new(p.x - ra * SIN60, p.y - ra * 0.5),
+                                    ],
+                                    *color,
+                                    egui::Stroke::NONE,
+                                ));
+                            }
+                            5 => {
+                                cur.add(egui::Shape::convex_polygon(
+                                    vec![
+                                        egui::Pos2::new(p.x - ra, p.y),
+                                        egui::Pos2::new(p.x + ra * 0.5, p.y - ra * SIN60),
+                                        egui::Pos2::new(p.x + ra * 0.5, p.y + ra * SIN60),
+                                    ],
+                                    *color,
+                                    egui::Stroke::NONE,
+                                ));
+                            }
+                            6 => {
+                                cur.add(egui::Shape::convex_polygon(
+                                    vec![
+                                        egui::Pos2::new(p.x + ra, p.y),
+                                        egui::Pos2::new(p.x - ra * 0.5, p.y + ra * SIN60),
+                                        egui::Pos2::new(p.x - ra * 0.5, p.y - ra * SIN60),
+                                    ],
+                                    *color,
+                                    egui::Stroke::NONE,
+                                ));
+                            }
+                            7 => {
+                                let dd = ra * INV_SQRT2;
+                                cur.line_segment(
+                                    [
+                                        egui::Pos2::new(p.x - dd, p.y - dd),
+                                        egui::Pos2::new(p.x + dd, p.y + dd),
+                                    ],
+                                    st,
+                                );
+                                cur.line_segment(
+                                    [
+                                        egui::Pos2::new(p.x - dd, p.y + dd),
+                                        egui::Pos2::new(p.x + dd, p.y - dd),
+                                    ],
+                                    st,
+                                );
+                            }
+                            8 => {
+                                cur.line_segment(
+                                    [
+                                        egui::Pos2::new(p.x - ra, p.y),
+                                        egui::Pos2::new(p.x + ra, p.y),
+                                    ],
+                                    st,
+                                );
+                                cur.line_segment(
+                                    [
+                                        egui::Pos2::new(p.x, p.y - ra),
+                                        egui::Pos2::new(p.x, p.y + ra),
+                                    ],
+                                    st,
+                                );
+                            }
+                            9 => {
+                                cur.line_segment(
+                                    [
+                                        egui::Pos2::new(p.x, p.y - ra),
+                                        egui::Pos2::new(p.x, p.y + ra),
+                                    ],
+                                    st,
+                                );
+                                cur.line_segment(
+                                    [
+                                        egui::Pos2::new(p.x - ra * SIN60, p.y - ra * 0.5),
+                                        egui::Pos2::new(p.x + ra * SIN60, p.y + ra * 0.5),
+                                    ],
+                                    st,
+                                );
+                                cur.line_segment(
+                                    [
+                                        egui::Pos2::new(p.x - ra * SIN60, p.y + ra * 0.5),
+                                        egui::Pos2::new(p.x + ra * SIN60, p.y - ra * 0.5),
+                                    ],
+                                    st,
+                                );
+                            }
+                            _ => {
+                                cur.circle_filled(p, ra, *color);
+                            }
+                        }
+                    }
+                }
+                PaintCmd::RectsFilled {
+                    min_xs,
+                    min_ys,
+                    max_xs,
+                    max_ys,
+                    cols,
+                } => {
+                    let n = min_xs
+                        .len()
+                        .min(min_ys.len())
+                        .min(max_xs.len())
+                        .min(max_ys.len())
+                        .min(cols.len());
+                    for k in 0..n {
+                        cur.rect_filled(
+                            egui::Rect::from_min_max(
+                                egui::Pos2::new(origin.x + min_xs[k], origin.y + min_ys[k]),
+                                egui::Pos2::new(origin.x + max_xs[k], origin.y + max_ys[k]),
+                            ),
+                            0.0,
+                            color32_from_rgba_u32(cols[k]),
                         );
                     }
                 }

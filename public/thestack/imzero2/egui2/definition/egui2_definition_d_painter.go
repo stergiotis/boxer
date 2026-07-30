@@ -277,6 +277,77 @@ self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u
 		WithReturnType(structPaintCmd()).
 		Build())
 
+	// paintClipPush — push a clip rectangle (canvas-relative, like every other
+	// paint command). Commands after it render clipped to the intersection of
+	// this rect with the clip in effect, until the matching paintClipPop.
+	// Pushes nest as a stack; unbalanced pushes end with the canvas (ADR-0149
+	// SD3 - the inner plot-area clip: series clipped, tick labels outside).
+	registered = append(registered, idl.NewBuilderFactoryNode("paintClipPush").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("minX", ctabb.F32).
+			PlainArg("minY", ctabb.F32).
+			PlainArg("maxX", ctabb.F32).
+			PlainArg("maxY", ctabb.F32).
+			Build()).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::ClipPush { min_x, min_y, max_x, max_y });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
+	// paintClipPop — restore the clip in effect before the matching
+	// paintClipPush. Popping with nothing pushed restores the canvas clip.
+	registered = append(registered, idl.NewBuilderFactoryNode("paintClipPop").
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::ClipPop);
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
+	// paintMarkers — one marker glyph per (xs[i], ys[i]) point, one opcode
+	// per series (ADR-0149 SD3: a scatter series costs one opcode, not one
+	// per point). shape follows ImPlot's marker numbering so the port maps
+	// 1:1 — 0=circle 1=square 2=diamond 3=up 4=down 5=left 6=right 7=cross
+	// 8=plus 9=asterisk; anything else falls back to circle. Shapes 0-6 are
+	// filled with col; 7-9 are line glyphs stroked with col at weight.
+	// radius is the glyph half-extent in pixels.
+	registered = append(registered, idl.NewBuilderFactoryNode("paintMarkers").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("xs", ctabb.F32h).
+			PlainArg("ys", ctabb.F32h).
+			PlainArg("shape", ctabb.U8).
+			PlainArg("radius", ctabb.F32).
+			PlainArg("col", ctabb.U32).AsColor().
+			PlainArg("weight", ctabb.F32).
+			Build()).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::Markers { xs, ys, shape, radius, color: color32_from_rgba_u32(col), weight });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
+	// paintRectsFilled — one axis-aligned filled rect per index with a
+	// per-rect color (ADR-0149 SD3: a small heatmap costs one opcode per
+	// grid, not one per cell; SD5 routes large grids to a texture instead).
+	// Arrays are truncated to the shortest length Rust-side.
+	registered = append(registered, idl.NewBuilderFactoryNode("paintRectsFilled").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("minXs", ctabb.F32h).
+			PlainArg("minYs", ctabb.F32h).
+			PlainArg("maxXs", ctabb.F32h).
+			PlainArg("maxYs", ctabb.F32h).
+			PlainArg("cols", ctabb.U32h).AsColors().
+			Build()).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::RectsFilled { min_xs, min_ys, max_xs, max_ys, cols });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
 	// paintSenseRegion — invisible interaction region, drained by PaintCanvas
 	registered = append(registered, idl.NewBuilderFactoryNode("paintSenseRegion").
 		WithIdentityId(true).

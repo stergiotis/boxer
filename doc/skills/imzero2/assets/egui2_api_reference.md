@@ -118,15 +118,19 @@ status: draft
 | PaintCanvas | BuilderFactory | Yes | 2 | 0 | 5 | Immediate, Retained |
 | PaintCircleFilled | BuilderFactory | No | 4 | 0 | 0 | Immediate |
 | PaintCircleStroke | BuilderFactory | No | 5 | 0 | 0 | Immediate |
+| PaintClipPop | BuilderFactory | No | 0 | 0 | 0 | Immediate |
+| PaintClipPush | BuilderFactory | No | 4 | 0 | 0 | Immediate |
 | PaintCubicBezier | BuilderFactory | No | 10 | 0 | 0 | Immediate |
 | PaintDashedLine | BuilderFactory | No | 8 | 0 | 0 | Immediate |
 | PaintEllipseFilled | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | PaintEllipseStroke | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintLine | BuilderFactory | No | 6 | 0 | 0 | Immediate |
+| PaintMarkers | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintPolygonFilled | BuilderFactory | No | 3 | 0 | 0 | Immediate |
 | PaintPolyline | BuilderFactory | No | 4 | 0 | 0 | Immediate |
 | PaintRectFilled | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintRectStroke | BuilderFactory | No | 7 | 0 | 0 | Immediate |
+| PaintRectsFilled | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | PaintSenseRegion | BuilderFactory | Yes | 4 | 0 | 0 | Immediate |
 | PaintText | BuilderFactory | No | 7 | 0 | 1 | Immediate |
 | PanelBottom | BuilderFactory | Yes | 0 | 0 | 3 | Immediate, BlockIterator |
@@ -1535,6 +1539,39 @@ PaintCmd
 
 ---
 
+### PaintClipPop
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintClipPush
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| minX | plain | f32 |
+| minY | plain | f32 |
+| maxX | plain | f32 |
+| maxY | plain | f32 |
+
+#### Return Type
+
+PaintCmd
+
+---
+
 ### PaintCubicBezier
 
 - **Type:** BuilderFactory
@@ -1655,6 +1692,29 @@ PaintCmd
 
 ---
 
+### PaintMarkers
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| xs | plain | f32h |
+| ys | plain | f32h |
+| shape | plain | u8 |
+| radius | plain | f32 |
+| col | plain | u32 |
+| weight | plain | f32 |
+
+#### Return Type
+
+PaintCmd
+
+---
+
 ### PaintPolygonFilled
 
 - **Type:** BuilderFactory
@@ -1736,6 +1796,28 @@ PaintCmd
 | rounding | plain | f32 |
 | col | plain | u32 |
 | strokeWidth | plain | f32 |
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintRectsFilled
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| minXs | plain | f32h |
+| minYs | plain | f32h |
+| maxXs | plain | f32h |
+| maxYs | plain | f32h |
+| cols | plain | u32h |
 
 #### Return Type
 

@@ -42,6 +42,16 @@ func init() {
 			}
 		},
 	})
+	registry.Register(registry.Demo{
+		Name:        "painter_m0",
+		Category:    "Graphics & canvas",
+		Title:       icons.IconPaintBucket + " painter M0 (clip / markers / rect batch)",
+		Stage:       [2]float32{520, 470},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "ADR-0149 M0 painter primitives: a pushed/popped clip rectangle, the ten batched marker glyphs, and a per-rect-colored filled-rect batch.",
+		Render:      demoPainterM0,
+	})
 }
 
 // =============================================================================
@@ -135,6 +145,97 @@ func demoPainterShapes(ids *c.WidgetIdStack) {
 	c.PaintText(40.0, 372.0, 0, 0, "coordinates: 0.0, 0.0 = top-left", 11.0, color.Hex(0xaaaaaaff)).Monospace().Send()
 
 	c.PaintCanvas(ids.PrepareStr("painter-shapes"), 400.0, 385.0).
+		Background(color.Hex(0x1a1a1aff)).
+		Send()
+}
+
+// =============================================================================
+// DEMO: ADR-0149 M0 primitives — clip push/pop, marker batch, rect batch
+// =============================================================================
+
+func demoPainterM0(ids *c.WidgetIdStack) {
+	c.PaintText(235.0, 8.0, 1, 0, "M0: clip / markers / rect batch", 14.0, color.Hex(0xffffffff)).Send()
+
+	// --- Clip push/pop. The dashed rect marks the pushed clip; the sine
+	// polyline and the two corner circles deliberately overrun it and are
+	// cut at its edges. The caption after PaintClipPop is not clipped.
+	clMinX, clMinY := float32(25.0), float32(40.0)
+	clMaxX, clMaxY := float32(215.0), float32(150.0)
+	c.PaintDashedLine(clMinX, clMinY, clMaxX, clMinY, 4.0, 3.0, color.Hex(0x888888ff), 1.0).Send()
+	c.PaintDashedLine(clMinX, clMaxY, clMaxX, clMaxY, 4.0, 3.0, color.Hex(0x888888ff), 1.0).Send()
+	c.PaintDashedLine(clMinX, clMinY, clMinX, clMaxY, 4.0, 3.0, color.Hex(0x888888ff), 1.0).Send()
+	c.PaintDashedLine(clMaxX, clMinY, clMaxX, clMaxY, 4.0, 3.0, color.Hex(0x888888ff), 1.0).Send()
+	c.PaintClipPush(clMinX, clMinY, clMaxX, clMaxY).Send()
+	const waveN = 60
+	waveXs := make([]float32, waveN)
+	waveYs := make([]float32, waveN)
+	for i := range waveN {
+		t := float64(i) / float64(waveN-1)
+		waveXs[i] = float32(-20.0 + t*280.0)
+		waveYs[i] = float32(95.0 + 65.0*math.Sin(t*4.0*math.Pi))
+	}
+	c.PaintPolyline(waveXs, waveYs, color.Hex(0x44ddffff), 2.0).Send()
+	c.PaintCircleFilled(clMinX, clMaxY, 18.0, color.Hex(0xff6600cc)).Send()
+	c.PaintCircleFilled(clMaxX, clMinY, 18.0, color.Hex(0x44ff44cc)).Send()
+	c.PaintClipPop().Send()
+	c.PaintText((clMinX+clMaxX)/2.0, clMaxY+8.0, 1, 0, "clip push/pop: cut at the dashed rect", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
+
+	// --- The ten marker glyphs, one per shape number (the IDL/ImPlot
+	// numbering), plus one batched call: a whole scatter series in a
+	// single PaintMarkers opcode.
+	markerCols := [10]color.Color{
+		color.Hex(0xff4444ff), color.Hex(0xff8844ff), color.Hex(0xffcc44ff),
+		color.Hex(0x88ff44ff), color.Hex(0x44ffaaff), color.Hex(0x44ddffff),
+		color.Hex(0x4488ffff), color.Hex(0xaa66ffff), color.Hex(0xff66ccff),
+		color.Hex(0xffffffff),
+	}
+	for i := range 10 {
+		mx := []float32{30.0 + float32(i)*44.0}
+		my := []float32{215.0}
+		c.PaintMarkers(mx, my, uint8(i), 8.0, markerCols[i], 1.5).Send()
+		c.PaintText(mx[0], 232.0, 1, 0, string(rune('0'+i)), 9.0, color.Hex(0x888888ff)).Monospace().Send()
+	}
+	const scatterN = 30
+	scXs := make([]float32, scatterN)
+	scYs := make([]float32, scatterN)
+	for i := range scatterN {
+		t := float64(i) / float64(scatterN-1)
+		scXs[i] = float32(30.0 + t*400.0)
+		scYs[i] = float32(268.0 + 14.0*math.Sin(t*3.0*math.Pi))
+	}
+	c.PaintMarkers(scXs, scYs, 0, 3.0, color.Hex(0x44ddffcc), 1.0).Send()
+	c.PaintText(30.0, 288.0, 0, 0, "one PaintMarkers opcode: 10 glyph shapes / 30-point series", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
+
+	// --- Filled-rect batch: an 8x4 grid with a per-rect color ramp in a
+	// single PaintRectsFilled opcode (the small-heatmap path of SD5).
+	const gridCols, gridRows = 8, 4
+	const cell, gap = 24.0, 2.0
+	gridX0, gridY0 := float32(250.0), float32(40.0)
+	nRects := gridCols * gridRows
+	rMinXs := make([]float32, 0, nRects)
+	rMinYs := make([]float32, 0, nRects)
+	rMaxXs := make([]float32, 0, nRects)
+	rMaxYs := make([]float32, 0, nRects)
+	rCols := make([]uint32, 0, nRects)
+	for gy := range gridRows {
+		for gx := range gridCols {
+			x0 := gridX0 + float32(gx)*(cell+gap)
+			y0 := gridY0 + float32(gy)*(cell+gap)
+			rMinXs = append(rMinXs, x0)
+			rMinYs = append(rMinYs, y0)
+			rMaxXs = append(rMaxXs, x0+cell)
+			rMaxYs = append(rMaxYs, y0+cell)
+			t := float64(gy*gridCols+gx) / float64(nRects-1)
+			rr := uint32(0x1e + t*(0xf5-0x1e))
+			gg := uint32(0x3a + t*(0x9e-0x3a))
+			bb := uint32(0x8a - t*(0x8a-0x0b))
+			rCols = append(rCols, rr<<24|gg<<16|bb<<8|0xff)
+		}
+	}
+	c.PaintRectsFilled(rMinXs, rMinYs, rMaxXs, rMaxYs, color.ColorsFromU32(rCols)).Send()
+	c.PaintText(gridX0+float32(gridCols)*(cell+gap)/2.0, gridY0+float32(gridRows)*(cell+gap)+4.0, 1, 0, "one PaintRectsFilled opcode: 32 rects", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
+
+	c.PaintCanvas(ids.PrepareStr("painter-m0"), 470.0, 400.0).
 		Background(color.Hex(0x1a1a1aff)).
 		Send()
 }

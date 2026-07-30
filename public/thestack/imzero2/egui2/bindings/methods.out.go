@@ -2560,6 +2560,16 @@ func (inst PaintCircleStrokeFluid) Send() {
 
 	r.SendIntermediate()
 }
+func (inst PaintClipPopFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintClipPushFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
 func (inst PaintCubicBezierFluid) Send() {
 	r := inst.r
 
@@ -2585,6 +2595,11 @@ func (inst PaintLineFluid) Send() {
 
 	r.SendIntermediate()
 }
+func (inst PaintMarkersFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
 func (inst PaintPolygonFilledFluid) Send() {
 	r := inst.r
 
@@ -2601,6 +2616,11 @@ func (inst PaintRectFilledFluid) Send() {
 	r.SendIntermediate()
 }
 func (inst PaintRectStrokeFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst PaintRectsFilledFluid) Send() {
 	r := inst.r
 
 	r.SendIntermediate()

@@ -1007,6 +1007,32 @@ func PaintCircleStroke(cx float32, cy float32, radius float32, col color.Color, 
 	return
 }
 
+func PaintClipPop() (inst PaintClipPopFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintClipPop))
+
+	inst = PaintClipPopFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintClipPush(minX float32, minY float32, maxX float32, maxY float32) (inst PaintClipPushFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintClipPush))
+	r.WriteFloat32(minX)
+	r.WriteFloat32(minY)
+	r.WriteFloat32(maxX)
+	r.WriteFloat32(maxY)
+
+	inst = PaintClipPushFluid{
+		r: r,
+	}
+
+	return
+}
+
 func PaintCubicBezier(startX float32, startY float32, cp1x float32, cp1y float32, cp2x float32, cp2y float32, endX float32, endY float32, col color.Color, strokeWidth float32) (inst PaintCubicBezierFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPaintCubicBezier))
@@ -1097,6 +1123,23 @@ func PaintLine(fromX float32, fromY float32, toX float32, toY float32, col color
 	return
 }
 
+func PaintMarkers(xs []float32, ys []float32, shape uint8, radius float32, col color.Color, weight float32) (inst PaintMarkersFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintMarkers))
+	runtime.PutFloat32SliceArg(r, xs)
+	runtime.PutFloat32SliceArg(r, ys)
+	r.WriteUint8(shape)
+	r.WriteFloat32(radius)
+	color.PutAsU32(r, col)
+	r.WriteFloat32(weight)
+
+	inst = PaintMarkersFluid{
+		r: r,
+	}
+
+	return
+}
+
 func PaintPolygonFilled(xs []float32, ys []float32, col color.Color) (inst PaintPolygonFilledFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPaintPolygonFilled))
@@ -1155,6 +1198,22 @@ func PaintRectStroke(minX float32, minY float32, maxX float32, maxY float32, rou
 	r.WriteFloat32(strokeWidth)
 
 	inst = PaintRectStrokeFluid{
+		r: r,
+	}
+
+	return
+}
+
+func PaintRectsFilled(minXs []float32, minYs []float32, maxXs []float32, maxYs []float32, cols color.Colors) (inst PaintRectsFilledFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintRectsFilled))
+	runtime.PutFloat32SliceArg(r, minXs)
+	runtime.PutFloat32SliceArg(r, minYs)
+	runtime.PutFloat32SliceArg(r, maxXs)
+	runtime.PutFloat32SliceArg(r, maxYs)
+	color.PutColorsSlice(r, cols)
+
+	inst = PaintRectsFilledFluid{
 		r: r,
 	}
 
