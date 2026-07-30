@@ -64,16 +64,18 @@ The editor annotates as you pause typing:
 - **Syntax errors** get an error-toned underline on the token the parser tripped
   on; the syntax colours stay up underneath, and the underline clears when the
   buffer parses.
-- **Unfilled placeholders** get a warning-toned underline. These are exactly the
-  names that block a Run, so the underline agrees with the Run button and with
-  the "needs a value" mark in the parameters pane.
+- **Unfilled placeholders** get a warning-toned underline, agreeing with the
+  "needs a value" mark in the parameters pane. A Run is blocked only by the
+  unfilled names in what it ships: one in a sibling statement marks the buffer
+  but does not stop running this one.
 - **Multi-statement buffers** — statements separated by `;` — tint the statement
   the caret is in, and Run ships just that statement, with any leading `SET`
   prelude riding along. The **Preview** tab's "As sent to server" view names it
   ("statement 2 of 4") and shows exactly what would be sent. A syntax error in
-  one statement does not stop another from running. Parameters, signals, and
-  the saved history stay whole-buffer: history restores everything you had, not
-  just the statement that ran.
+  one statement does not stop another from running. Parameter values ride the
+  request only for the statement that ships, and a signal moving elsewhere in
+  the buffer does not mark its result stale; the saved history still records
+  the whole buffer, so restoring a run brings back everything you had.
 A single-statement buffer — the common case — is unchanged by all of this: no
 statement tint, and Run sends the whole buffer as before.
 
@@ -81,16 +83,24 @@ statement tint, and Run sends the whole buffer as before.
 
 **Ctrl+Shift+Enter** runs the innermost query the caret is in, rather than the
 whole statement. That covers a subquery in a `FROM` or a `WHERE`, a CTE body,
-and — since the statement split runs first — one statement of a `;`-separated
-buffer.
+one branch of a `UNION` / `EXCEPT` / `INTERSECT` chain, and — since the
+statement split runs first — one statement of a `;`-separated buffer.
+
+For a chain, the caret inside a branch runs just that branch, parenthesised or
+not; the caret on the connective itself belongs to no branch and runs the
+whole chain.
 
 The gutter marks it: `|` on every line of the query that would run. That mark
 is always on, so the shortcut is never invisible.
 
 The WITH items in scope are carried along: run a subquery that reads a CTE
 defined further out and the definition ships with it, flattened into one `WITH`
-list, outermost first. Items the query cannot see anyway — a sibling defined
-after the CTE body you are in, or the body's own definition — are left behind.
+list, outermost first. Sibling definitions travel too, wherever they sit in
+the clause — ClickHouse binds the names of one `WITH` list regardless of order
+— and a branch of a chain also carries the `WITH` clauses of the branches
+before it, which ClickHouse scopes forward across the chain. The one item that
+can never travel is the definition you are inside: it would be defined in
+terms of the very text being run.
 
 Two cases fall back to an ordinary Run rather than refusing: a caret already at
 statement level, which has nothing narrower to resolve to, and a statement that
@@ -126,10 +136,12 @@ Everything it draws describes one thing: **the query the caret is in.**
   underlined in the info tone. These are lines elsewhere in the buffer that the
   query depends on, and that travel with it when it runs alone.
 - References that **will not resolve** are underlined in the error tone. This
-  is the *correlated* subquery: one referring to a table alias belonging to the
-  query around it. Nothing can make that runnable on its own — carrying the
-  WITH items does not help — and ClickHouse rejects it with the name it could
-  not find. The mark is there so you see it before you run rather than after.
+  is the *correlated* subquery — one referring to a table alias belonging to
+  the query around it — and its cousin, a recursive CTE body naming itself,
+  whose own definition is the one thing that cannot travel with it. Nothing
+  makes either runnable on its own — carrying the WITH items does not help —
+  and ClickHouse rejects the run with the name it could not find. The mark is
+  there so you see it before you run rather than after.
 
 A qualified name that resolves nowhere at all is left unmarked, since
 `tuple.field` on a Tuple column looks the same to the parser.
