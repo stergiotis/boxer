@@ -361,14 +361,15 @@ type WorkingsetComposerI interface {
 }
 ```
 
-Also register with `RegisterFactory`. A singleton instance can only
-consume a config at its one `Mount`, so the host refuses to deliver a
-restore to an instance that already has a window — the same refusal
-ADR-0135 applies to caller-delivered configs. Which mode an app used is
-not in its manifest, so the registry records it: `Registrations()` reports
-it, and `keelson('apps').registration` makes
-`workingset AND registration = 'singleton'` — the misdeclaration this
-paragraph is about — a query rather than a log line at the first close.
+Also register with `RegisterFactory`: `Register` refuses a manifest that
+declares `Workingset`, because a singleton instance can only consume a
+config at its one `Mount`. A ctor that *returns* a shared instance is
+indistinguishable from one that allocates, so that case is caught later
+instead — the host refuses to deliver a config, restores included, to an
+instance that already has a window, which is the refusal ADR-0135 already
+applies to caller-delivered ones. Which mode an app registered under is
+not in its manifest either, so the registry records it: `Registrations()`
+reports it and `keelson('apps').registration` renders it.
 
 **The host calls compose at close, before `Unmount`.** That ordering is
 load-bearing: `Unmount` is where you release things, so composing

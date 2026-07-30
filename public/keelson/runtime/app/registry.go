@@ -105,6 +105,9 @@ func RegisterFactory(m Manifest, ctor AppCtor) {
 
 // Register inserts a singleton app, preserving sorted-Id iteration order.
 // Internally creates a ctor that returns a on every call.
+//
+// Refuses a manifest declaring Workingset: that contract needs one
+// instance per window (see register).
 func (inst *Registry) Register(a AppI) (err error) {
 	if a == nil {
 		err = eh.Errorf("registry: nil app")
@@ -136,6 +139,18 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 	err = m.Validate()
 	if err != nil {
 		err = eh.Errorf("registry: invalid manifest: %w", err)
+		return
+	}
+	// ADR-0148 §SD4: a workingset needs one instance per window. A config —
+	// and a restored record is one — is delivered at Mount, which runs once
+	// per instance, so a singleton that already has a window can consume
+	// neither. Refuse the pair here rather than let the host discover it at
+	// the second open. The mirror case, a factory ctor that hands out one
+	// shared instance, is undetectable from here; the host's delivery-time
+	// refusal is what covers that one.
+	if singleton && m.Workingset {
+		err = eb.Build().Str("id", string(m.Id)).
+			Errorf("registry: Workingset requires factory registration (RegisterFactory), not Register id=%s", string(m.Id))
 		return
 	}
 	inst.mu.Lock()

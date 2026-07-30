@@ -389,6 +389,36 @@ decision text, or had to decide because the text was silent:
 
 Deferred items are unchanged and untouched.
 
+## Update — 2026-07-30: the factory requirement is enforced at registration
+
+The Update above recorded that SD4's "participation requires factory
+registration" was left to the host's existing config-delivery refusal —
+a singleton participant worked until its second window, which then failed
+to open. That is now refused where it is stated instead:
+`Registry.Register` rejects a manifest declaring `Workingset`, naming
+`RegisterFactory` in the error. Nothing in the tree was registered that
+way, so no app changed behaviour.
+
+Two consequences worth recording:
+
+- **The host's delivery-time refusal stays, and is no longer redundant.**
+  A factory whose ctor returns one shared instance is indistinguishable
+  from one that allocates, so the registry cannot see that case; the host
+  still refuses to deliver a config — a restore included — to an instance
+  that already has a window, and still skips the save while another window
+  holds it. The windowhost tests cover exactly that shape now (a factory
+  handing out a fixed instance) rather than a declared singleton, which
+  the registry no longer admits.
+
+- **The registration mode became data.** The mode is not in the manifest
+  and cannot be recovered from the ctor, so the registry records which
+  entry point each app came through and `Registrations()` reports it;
+  `keelson('apps').registration` renders it beside `launch_kind` and
+  `workingset`. With the refusal in place that column no longer serves as
+  a misdeclaration audit — the combination is unreachable — and answers
+  the question it is actually good for: whether two windows of an app are
+  independent.
+
 ## Status
 
 Accepted (2026-07-29). Implemented 2026-07-29.

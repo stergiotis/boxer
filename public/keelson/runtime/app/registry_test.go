@@ -283,3 +283,44 @@ func TestRegistrations_RecordTheEntryPoint(t *testing.T) {
 func TestRegistrations_EmptyRegistry(t *testing.T) {
 	assert.Empty(t, NewRegistry().Registrations())
 }
+
+// TestRegister_RefusesWorkingsetSingleton pins the tightened rule
+// (ADR-0148 §SD4): a workingset needs one instance per window, so declaring
+// one over a singleton registration is refused where it is stated rather
+// than where it would first bite — the second open of the app.
+func TestRegister_RefusesWorkingsetSingleton(t *testing.T) {
+	m := testManifest("org.test.ws")
+	m.LaunchKind = "wsLaunch"
+	m.Workingset = true
+	require.NoError(t, m.Validate(), "the manifest itself is well-formed; only the registration mode is wrong")
+
+	a, err := NewLegacyFuncApp(m, func() (e error) { return })
+	require.NoError(t, err)
+
+	reg := NewRegistry()
+	err = reg.Register(a)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires factory registration")
+	assert.Contains(t, err.Error(), "org.test.ws")
+	assert.Zero(t, reg.Len(), "a refused registration must leave nothing behind")
+
+	// The same manifest through the factory path is the supported shape.
+	require.NoError(t, reg.RegisterFactory(m, func() (out AppI, cErr error) {
+		out, cErr = NewLegacyFuncApp(m, func() (e error) { return })
+		return
+	}))
+	regs := reg.Registrations()
+	require.Len(t, regs, 1)
+	assert.False(t, regs[0].Singleton)
+}
+
+// TestRegister_SingletonWithoutWorkingsetStillAllowed guards the blast
+// radius: the legacy singleton path is untouched for every app that does
+// not declare a workingset.
+func TestRegister_SingletonWithoutWorkingsetStillAllowed(t *testing.T) {
+	reg := NewRegistry()
+	require.NoError(t, reg.Register(newTestApp(t, "org.test.plain")))
+	regs := reg.Registrations()
+	require.Len(t, regs, 1)
+	assert.True(t, regs[0].Singleton)
+}

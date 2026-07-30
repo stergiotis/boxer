@@ -251,9 +251,11 @@ type Manifest struct {
 	// §SD7): the host pulls a record out of the closing window via
 	// [WorkingsetComposerI] and, at a later plain open, routes the stored
 	// record back in through OpenWithConfig. Requires a non-empty
-	// LaunchKind — the record IS an instance of that DTO (§SD2) — which
-	// Validate enforces, and factory registration, which the host's
-	// singleton refusal enforces at the boundary.
+	// LaunchKind — the record IS an instance of that DTO (§SD2), which
+	// Validate enforces — and factory registration, which Registry.Register
+	// refuses this field outright to enforce. (A factory whose ctor hands
+	// out one shared instance is indistinguishable from here; the host
+	// refuses to deliver a config to such an instance at open time.)
 	//
 	// Orthogonal to PersistedKeys: raw keys stay the right declaration for
 	// content too large or complex for the record, which then carries only

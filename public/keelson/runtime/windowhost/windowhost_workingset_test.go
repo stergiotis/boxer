@@ -75,12 +75,26 @@ func mountOpenWindows(t *testing.T, h *Inst) {
 	}
 }
 
-// newWorkingsetHost registers one singleton participant and returns the
+// registerSharedInstance registers a as a factory whose ctor hands out that
+// one instance for every Open. Two reasons: these tests need a fixed instance
+// to inspect afterwards, and a workingset participant may not be Register()ed
+// at all — the registry refuses that pair outright (ADR-0148 §SD4). What is
+// left is the case the registry cannot detect and the host therefore still
+// checks at delivery time: one AppI behind however many windows.
+func registerSharedInstance(t *testing.T, reg *app.Registry, a app.AppI) {
+	t.Helper()
+	require.NoError(t, reg.RegisterFactory(a.Manifest(), func() (out app.AppI, err error) {
+		out = a
+		return
+	}))
+}
+
+// newWorkingsetHost registers one participant and returns the
 // host with the audit wiring attached.
 func newWorkingsetHost(t *testing.T, a *wsApp) (h *Inst, facts *factsstore.InMemoryFactsStore) {
 	t.Helper()
 	reg := app.NewRegistry()
-	require.NoError(t, reg.Register(a))
+	registerSharedInstance(t, reg, a)
 	h = NewInst(reg, zerolog.Nop())
 	facts = factsstore.NewInMemoryFactsStore()
 	h.SetAudit("run-xyz", facts)
@@ -248,7 +262,7 @@ func TestWorkingset_ParticipantWithoutComposerIsDiagnosed(t *testing.T) {
 	// break the close.
 	reg := app.NewRegistry()
 	ca := &counterApp{manifest: mkWorkingsetManifest("test.ws")}
-	require.NoError(t, reg.Register(ca))
+	registerSharedInstance(t, reg, ca)
 	h := NewInst(reg, zerolog.Nop())
 	facts := factsstore.NewInMemoryFactsStore()
 	h.SetAudit("run-xyz", facts)
@@ -268,7 +282,7 @@ func TestWorkingset_ParticipantWithoutComposerIsDiagnosed(t *testing.T) {
 }
 
 func TestWorkingset_SharedInstanceSkipsSaveUntilLastWindow(t *testing.T) {
-	// A singleton-registered app shown twice shares one AppI: the state is
+	// Two windows over one shared AppI (registerSharedInstance): the state is
 	// not the closing window's to save while another window still holds it
 	// — the mirror of OpenWithConfig's refusal to deliver a config to an
 	// instance that already has a window.
@@ -314,7 +328,7 @@ func TestWorkingset_NoFactsStoreSkipsCompose(t *testing.T) {
 	// would be work for nothing (§SD5's degrade-quietly stance).
 	a := &wsApp{manifest: mkWorkingsetManifest("test.ws"), cfg: testCfgBytes, dirty: true}
 	reg := app.NewRegistry()
-	require.NoError(t, reg.Register(a))
+	registerSharedInstance(t, reg, a)
 	h := NewInst(reg, zerolog.Nop())
 
 	k, err := h.Open("test.ws")
@@ -457,7 +471,7 @@ func TestRestore_NonParticipantIgnoresStoredRecord(t *testing.T) {
 func TestRestore_NoFactsStoreOpensPlain(t *testing.T) {
 	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
 	reg := app.NewRegistry()
-	require.NoError(t, reg.Register(a))
+	registerSharedInstance(t, reg, a)
 	h := NewInst(reg, zerolog.Nop())
 
 	_, err := h.Open("test.ws")
@@ -467,11 +481,12 @@ func TestRestore_NoFactsStoreOpensPlain(t *testing.T) {
 	assert.Equal(t, app.LaunchReasonPlain, a.gotReason)
 }
 
-func TestRestore_RefusedForAlreadyOpenSingletonInstance(t *testing.T) {
-	// A restore is a config delivery, so it meets the ADR-0135 refusal:
-	// the singleton instance already has a window, and Mount — where a
-	// config is consumed — runs once per instance. This is how the
-	// factory-registration requirement (§SD4) is enforced.
+func TestRestore_RefusedForAlreadyOpenSharedInstance(t *testing.T) {
+	// A restore is a config delivery, so it meets the ADR-0135 refusal: the
+	// shared instance already has a window, and Mount — where a config is
+	// consumed — runs once per instance. The registry refuses a declared
+	// singleton outright (§SD4); this is the case it cannot see, a factory
+	// handing out one instance, and the reason the host still checks here.
 	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
 	h, facts := newWorkingsetHost(t, a)
 	seedWorkingset(t, facts, "test.ws", testCfgBytes)
