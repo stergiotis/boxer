@@ -266,9 +266,10 @@ type StateManager struct {
 	// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter "submit" pair, each true exactly
 	// once per physical press and never both. Read via
 	// GetCommandEnterPressed. Unlike F1 this is not a runtime binding — no
-	// carousel-level consumer exists — so the app that polls it owns it for
-	// the process; two apps polling in the same frame would both see the press
-	// and both act on it.
+	// chrome-level consumer exists — and every poller in a frame sees the
+	// same press, so an app consumer gates on its window being the shell's
+	// active one (app.WindowFocusI); see GetCommandEnterPressed for the
+	// contract.
 	commandEnter      bool
 	commandEnterShift bool
 	snarlEvents       SnarlEventsValue
@@ -356,13 +357,20 @@ func (inst *StateManager) GetZoomDelta() ZoomDeltaValue {
 
 // GetF1KeyPressed reports whether the user pressed F1 between this
 // frame's Sync and the previous one. egui's consume_key has already
-// removed the event from the input queue, so this is the one and
-// only opportunity any widget in the same frame has to react. The
-// carousel polls this from decorateRenderer to open HelpHost; if a
-// future widget polls it as well, the two consumers race for the
-// single bool — so by convention this is the runtime's shortcut
-// only, and apps that need help-focused affordances expose their
-// own buttons / shortcuts on top of [app.OpenRef].
+// removed the event from the input queue, and the value here is
+// per-frame state every reader sees alike — so a global key binding
+// is only sane in one of two consumer shapes:
+//
+//   - a PROCESS-SINGLETON consumer, which is what F1 has: the host
+//     chrome (DecorateRenderer) polls it and opens-or-raises HelpHost.
+//     Apps must not poll it too — they would act on the same press.
+//   - a PER-INSTANCE consumer gated on the shell's active window
+//     (the app.WindowFocusI capability), which is what Ctrl+Enter has
+//     — see [StateManager.GetCommandEnterPressed]. Without the gate,
+//     one press fans out into every open instance of the app.
+//
+// Apps that need help-focused affordances expose their own buttons /
+// shortcuts on top of [app.OpenRef] rather than polling this.
 func (inst *StateManager) GetF1KeyPressed() (pressed bool) {
 	pressed = inst.f1KeyPressed
 	return
@@ -376,9 +384,15 @@ func (inst *StateManager) GetF1KeyPressed() (pressed bool) {
 //
 // egui's consume_key has already removed the event, so as with
 // [StateManager.GetF1KeyPressed] this is the single opportunity to
-// react — but the binding belongs to the polling app, not to the
-// runtime. A focused TextEdit does not compete for it: egui acts on
-// Enter only through its return_key, which requires no modifiers.
+// react. The value is per-frame state every reader sees alike — with
+// the app open in more than one shell window, every instance's poll
+// observes the same press, so a consumer must gate on whether ITS
+// window is the shell's active one (the app.WindowFocusI frame-context
+// capability; absent capability = single-surface host = focused).
+// play's claimRunChord is the reference consumer — one press ran a
+// query in every open playground before that gate existed. A focused
+// TextEdit does not compete for the chord: egui acts on Enter only
+// through its return_key, which requires no modifiers.
 func (inst *StateManager) GetCommandEnterPressed() (pressed bool, shiftPressed bool) {
 	return inst.commandEnter, inst.commandEnterShift
 }

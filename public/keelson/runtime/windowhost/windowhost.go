@@ -141,6 +141,15 @@ type Inst struct {
 	nextKey uint64
 	windows []*window
 
+	// pendingRaise queues one window to be raised to the top of egui's
+	// stacking on the next Frame — OpenOrRaise's "focus the existing
+	// window" half. Written under mu (OpenOrRaise may be called off the
+	// render thread like Open); consumed and cleared by Frame on the
+	// render thread, where the window's block handle is at hand. A key
+	// whose window closed in between matches nothing and the raise is
+	// dropped, which is the right answer. Zero = nothing pending.
+	pendingRaise WindowKeyT
+
 	// mountState shares Mount/Unmount lifecycle across windows that point at
 	// the same AppI instance (singleton-registered apps). Keyed by the AppI
 	// interface value; an entry is created on Open and removed when its last
@@ -255,6 +264,33 @@ func (inst *Inst) SetAudit(runId string, facts factsstore.FactsStoreI) {
 // usable, opens the window carrying it (ADR-0148 §SD5).
 func (inst *Inst) Open(appId app.AppIdT) (key WindowKeyT, err error) {
 	key, err = inst.OpenWithConfig(appId, "", nil)
+	return
+}
+
+// OpenOrRaise opens appId — unless a window over that app is already
+// open, in which case that window is queued to be raised instead of a
+// second one stacking. This is the affordance a recurring global
+// shortcut wants (F1 → help): the first press opens, every further
+// press brings the same window back to the front.
+//
+// The raise runs on the next Frame, and egui's stacking then reports
+// the window topmost — so it also becomes the shell's active window
+// (app.WindowFocusI), exactly as a fresh open would be: both halves
+// end with the window on top and focused. The oldest window wins when
+// several show the app. opened reports which half ran.
+func (inst *Inst) OpenOrRaise(appId app.AppIdT) (key WindowKeyT, opened bool, err error) {
+	inst.mu.Lock()
+	for _, w := range inst.windows {
+		if w.manifest.Id == appId && !w.closeReq {
+			inst.pendingRaise = w.key
+			key = w.key
+			inst.mu.Unlock()
+			return
+		}
+	}
+	inst.mu.Unlock()
+	opened = true
+	key, err = inst.Open(appId)
 	return
 }
 
@@ -785,6 +821,8 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.mu.Lock()
 	snapshot := make([]*window, len(inst.windows))
 	copy(snapshot, inst.windows)
+	raiseKey := inst.pendingRaise
+	inst.pendingRaise = 0
 	inst.mu.Unlock()
 
 	if len(snapshot) == 0 {
@@ -846,6 +884,12 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		// Frame runs inside the block body.
 		w.focusHandle = wf.Handle()
 		w.frameCtx.SetWindowFocused(w.key == inst.activeKey)
+		if w.key == raiseKey {
+			// OpenOrRaise's queued raise: bring the existing window to
+			// the front of egui's stacking. The topmost report follows a
+			// frame later and moves the active window here with it.
+			c.MoveWindowToTop(w.focusHandle)
+		}
 		for range wf.KeepIter() {
 			// Top-of-body chrome: a small "Save as SVG…" affordance
 			// rendered above the app's Frame. egui::Window has no

@@ -1,6 +1,10 @@
 package windowhost
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/rs/zerolog"
+)
 
 // pickActiveWindow routes process-global input, so each branch is a claim
 // about who receives a keystroke — worth pinning individually.
@@ -67,5 +71,59 @@ func TestPickActiveWindow(t *testing.T) {
 				t.Errorf("pickActiveWindow(%d, %v) = %d, want %d", tc.prev, tc.facts, got, tc.want)
 			}
 		})
+	}
+}
+
+// OpenOrRaise is the recurring-global-shortcut shape (F1 → help): the first
+// request opens, every further one raises the existing window instead of
+// stacking another. The raise emit itself needs the render loop; what is
+// pinned here is the decision — same key back, no second window, and the
+// queued raise naming the window that already shows the app.
+func TestOpenOrRaise(t *testing.T) {
+	reg, _ := mkRegistryWithSingleton(t, "app-a", "app-b")
+	h := NewInst(reg, zerolog.Nop())
+
+	k1, opened, err := h.OpenOrRaise("app-a")
+	if err != nil {
+		t.Fatalf("first OpenOrRaise: %v", err)
+	}
+	if !opened {
+		t.Error("the first request must open")
+	}
+	k2, opened2, err2 := h.OpenOrRaise("app-a")
+	if err2 != nil {
+		t.Fatalf("second OpenOrRaise: %v", err2)
+	}
+	if opened2 {
+		t.Error("the second request must raise, not open")
+	}
+	if k1 != k2 {
+		t.Errorf("raise returned key %d, want the existing window %d", k2, k1)
+	}
+	if n := h.Len(); n != 1 {
+		t.Errorf("Len = %d after open+raise, want 1", n)
+	}
+	h.mu.Lock()
+	queued := h.pendingRaise
+	h.mu.Unlock()
+	if queued != k1 {
+		t.Errorf("pendingRaise = %d, want %d", queued, k1)
+	}
+
+	// A different app opens fresh alongside.
+	if _, openedB, errB := h.OpenOrRaise("app-b"); errB != nil || !openedB {
+		t.Errorf("other app: opened=%v err=%v, want a fresh open", openedB, errB)
+	}
+
+	// A window already queued for close no longer counts as showing the
+	// app: the next request opens a fresh window rather than raising a
+	// dying one.
+	h.Close(k1, "test")
+	k3, opened3, err3 := h.OpenOrRaise("app-a")
+	if err3 != nil {
+		t.Fatalf("OpenOrRaise after Close: %v", err3)
+	}
+	if !opened3 || k3 == k1 {
+		t.Errorf("after Close: key=%d opened=%v, want a fresh window", k3, opened3)
 	}
 }

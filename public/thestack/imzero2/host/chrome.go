@@ -96,14 +96,19 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 	// capabilities (so it is invisible under the desktop host).
 	videoState := &videooutput.State{}
 	return func() error {
-		// F1 global shortcut: open or focus HelpHost. The cached value
+		// F1 global shortcut: open or raise HelpHost. The cached value
 		// was drained from egui's input queue during StateManager.Sync
-		// of the previous frame (consume_key already removed it), so
-		// polling here is the one owner of this binding. Skipped in
-		// tour mode (host == nil) since there's no windowhost to open
-		// into.
+		// of the previous frame (consume_key already removed it), and
+		// this chrome is a process singleton — the safe shape for a
+		// consumer of process-global input (the other shape is a
+		// per-instance consumer gated on app.WindowFocusI; see
+		// GetF1KeyPressed). OpenOrRaise is what makes the recurring
+		// press sane: the first opens the help window, every further
+		// one brings the same window back to the front instead of
+		// stacking another. Skipped in tour mode (host == nil) since
+		// there's no windowhost to open into.
 		if cc.HelpHost && cc.Host != nil && c.CurrentApplicationState.StateManager.GetF1KeyPressed() {
-			if _, openErr := cc.Host.Open(helphost.ManifestId); openErr != nil {
+			if _, _, openErr := cc.Host.OpenOrRaise(helphost.ManifestId); openErr != nil {
 				log.Warn().Err(openErr).Msg("F1: helphost open failed")
 			}
 		}
