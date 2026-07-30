@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // Minimum number of rows required to compute a meaningful UMAP projection.
@@ -686,68 +687,68 @@ func formatRunningLabel(snap projectorSnapshot) (label string) {
 // plot. The hit is the nearest-by-euclidean-distance point in plot-data
 // coordinates; with well-separated clusters this is the obvious cluster
 // member, but a click in empty space still snaps to the closest point (no
-// max-distance threshold). One-frame lag inherited from FetchR15PlotPointer.
+// max-distance threshold). One-frame lag inherited from the implot
+// click register read.
 func renderProjectionPlot(ids *c.WidgetIdStack, snap projectorSnapshot, selectedRow int64, colorByFeature int8) (newSelectedRow int64, hit bool) {
 	coords := snap.coords
 	coordRow := snap.coordRow
 
+	// Fill the remaining panel area in both axes (R18 available-size, one
+	// frame behind) — the greedy-fill choice of the bridge version; a
+	// pinned aspect would preserve cluster shapes but letterbox one axis.
+	// The port renders through implot (ADR-0149 SD7); pan, anchored zoom,
+	// Shift+drag box-zoom and double-click fit come with it.
+	c.CaptureAvailableSize()
+	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
+	w, h := avail.W, avail.H
+	if !(w >= 200) {
+		w = 700
+	}
+	if !(h >= 200) {
+		h = 480
+	}
+	p := implot.Begin(ids, "##projectionPlot", w-8, h-8)
+	p.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+
 	useColor := colorByFeature >= 0 && int(colorByFeature) < card.NumFeatures &&
 		len(snap.featureColumns[colorByFeature]) == len(coords)
 	if useColor {
-		emitBucketedScatters(coords, snap.featureColumns[colorByFeature],
+		emitBucketedScatters(p, coords, snap.featureColumns[colorByFeature],
 			card.FeatureNames()[colorByFeature])
 	} else {
 		xs := make([]float64, len(coords))
 		ys := make([]float64, len(coords))
-		for i, p := range coords {
-			xs[i] = p[0]
-			ys[i] = p[1]
+		for i, pt := range coords {
+			xs[i] = pt[0]
+			ys[i] = pt[1]
 		}
-		c.PlotScatter("entities", xs, ys).
-			Color(projectionColorPoint).
-			Radius(projectionPointRadius).
-			Shape(0).
-			Filled(true).
-			Send()
+		p.SetNextColor(projectionColorPoint.Literal())
+		p.Scatter("entities", xs, ys, implot.MarkerCircle, projectionPointRadius)
 	}
 
 	if selectedRow >= 0 {
 		for i, row := range coordRow {
 			if row == selectedRow {
 				sel := coords[i]
-				c.PlotScatter("selected",
-					[]float64{sel[0]}, []float64{sel[1]}).
-					Color(projectionColorSelected).
-					Radius(projectionSelectRadius).
-					Shape(1).
-					Filled(true).
-					Send()
+				p.SetNextColor(projectionColorSelected.Literal())
+				p.Scatter("selected", []float64{sel[0]}, []float64{sel[1]},
+					implot.MarkerDiamond, projectionSelectRadius)
 				break
 			}
 		}
 	}
-	// No Width/Height/ViewAspect/DataAspect: the Rust handler defaults all
-	// four to None, which makes egui_plot use ui.available_size() — the
-	// plot fills the remaining panel area in both axes. Constraining the
-	// aspect (DataAspect(1.0)) would preserve cluster shapes but letterbox
-	// one axis; for an exploratory view we prefer the greedy fill.
-	resp := c.Plot(ids.PrepareStr("projectionPlot")).
-		AllowZoom(true).
-		AllowDrag(true).
-		AllowBoxedZoom(true).
-		ShowGrid(true, true).
-		Legend().
-		SendResp()
-	if !resp.Clicked {
+	clickX, clickY, clicked := p.Clicked()
+	p.End()
+	if !clicked || len(coords) == 0 {
 		return
 	}
 	bestI := 0
-	dx0 := coords[0][0] - resp.X
-	dy0 := coords[0][1] - resp.Y
+	dx0 := coords[0][0] - clickX
+	dy0 := coords[0][1] - clickY
 	bestD := dx0*dx0 + dy0*dy0
 	for i := 1; i < len(coords); i++ {
-		dx := coords[i][0] - resp.X
-		dy := coords[i][1] - resp.Y
+		dx := coords[i][0] - clickX
+		dy := coords[i][1] - clickY
 		d := dx*dx + dy*dy
 		if d < bestD {
 			bestI, bestD = i, d
@@ -784,7 +785,7 @@ func bucketIndex(v, mn, mx float64, n int) int {
 // legend doubles as a colour-scale legend. Constant columns (max == min)
 // fall back to a single bucket — equivalent to monochrome but using the
 // palette's lowest stop.
-func emitBucketedScatters(coords [][2]float64, values []float64, featureName string) {
+func emitBucketedScatters(p *implot.Plot, coords [][2]float64, values []float64, featureName string) {
 	if len(values) == 0 {
 		return
 	}
@@ -821,12 +822,7 @@ func emitBucketedScatters(coords [][2]float64, values []float64, featureName str
 		}
 		name := fmt.Sprintf("%s [%.2g, %.2g]", featureName, lo, hi)
 		bucketT := float32(b) / float32(nBuckets-1)
-		bucketColor := color.Hex(styletokens.Sequential(styletokens.SequentialViridis, bucketT).AsHex())
-		c.PlotScatter(name, bucketXs[b], bucketYs[b]).
-			Color(bucketColor).
-			Radius(projectionPointRadius).
-			Shape(0).
-			Filled(true).
-			Send()
+		p.SetNextColor(styletokens.Sequential(styletokens.SequentialViridis, bucketT).AsHex())
+		p.Scatter(name, bucketXs[b], bucketYs[b], implot.MarkerCircle, projectionPointRadius)
 	}
 }
