@@ -98,32 +98,42 @@ func (appsProvider) Freshness() introspect.FreshnessClass { return introspect.Fr
 func (appsProvider) Schema() *arrow.Schema                { return appsTable(nil).Schema() }
 
 func (appsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
-	ms := app.AllManifests() // sorted by Id
-	return appsTable(ms).Build(proj, len(ms)), nil
+	rs := app.AllRegistrations() // sorted by Id
+	return appsTable(rs).Build(proj, len(rs)), nil
 }
 
-func appsTable(ms []app.Manifest) *introspect.Table {
+// appsTable renders registrations rather than bare manifests: how an app
+// was registered decides whether two windows of it are independent, and
+// the manifest cannot say.
+func appsTable(rs []app.Registration) *introspect.Table {
+	m := func(i int) app.Manifest { return rs[i].Manifest }
 	caps := func(i int) (out []string) {
-		out = make([]string, 0, len(ms[i].Caps))
-		for _, c := range ms[i].Caps {
+		out = make([]string, 0, len(m(i).Caps))
+		for _, c := range m(i).Caps {
 			out = append(out, c.Pattern+" ["+c.Direction.String()+"]")
 		}
 		return
 	}
+	registration := func(i int) string {
+		if rs[i].Singleton {
+			return "singleton"
+		}
+		return "factory"
+	}
 	return introspect.NewTable().
-		String("id", func(i int) string { return string(ms[i].Id) }).
-		String("version", func(i int) string { return ms[i].Version }).
-		String("display", func(i int) string { return ms[i].Display }).
-		String("title", func(i int) string { return ms[i].WindowTitle() }).
-		String("icon", func(i int) string { return ms[i].Icon }).
-		String("category", func(i int) string { return ms[i].Category }).
-		String("surface", func(i int) string { return ms[i].Surface.String() }).
-		Int32("preferred_width", func(i int) int32 { return int32(ms[i].SurfaceHints.PreferredWidth) }).
-		Int32("preferred_height", func(i int) int32 { return int32(ms[i].SurfaceHints.PreferredHeight) }).
-		Int32("background_tick_hz", func(i int) int32 { return int32(ms[i].BackgroundTickHz) }).
-		Bool("has_help", func(i int) bool { return ms[i].Help != nil }).
+		String("id", func(i int) string { return string(m(i).Id) }).
+		String("version", func(i int) string { return m(i).Version }).
+		String("display", func(i int) string { return m(i).Display }).
+		String("title", func(i int) string { return m(i).WindowTitle() }).
+		String("icon", func(i int) string { return m(i).Icon }).
+		String("category", func(i int) string { return m(i).Category }).
+		String("surface", func(i int) string { return m(i).Surface.String() }).
+		Int32("preferred_width", func(i int) int32 { return int32(m(i).SurfaceHints.PreferredWidth) }).
+		Int32("preferred_height", func(i int) int32 { return int32(m(i).SurfaceHints.PreferredHeight) }).
+		Int32("background_tick_hz", func(i int) int32 { return int32(m(i).BackgroundTickHz) }).
+		Bool("has_help", func(i int) bool { return m(i).Help != nil }).
 		StringList("caps", caps).
-		StringList("persisted_keys", func(i int) []string { return ms[i].PersistedKeys }).
+		StringList("persisted_keys", func(i int) []string { return m(i).PersistedKeys }).
 		// The two argument/state declarations (ADR-0135 §SD3, ADR-0148
 		// §SD7). launch_kind answers what a caller must send to open this
 		// app with arguments — empty means it accepts none, and an
@@ -132,8 +142,16 @@ func appsTable(ms []app.Manifest) *introspect.Table {
 		// window and hands it back at the next plain open; it implies a
 		// non-empty launch_kind, since the record is an instance of that
 		// kind (manifest validation enforces the pair).
-		String("launch_kind", func(i int) string { return ms[i].LaunchKind }).
-		Bool("workingset", func(i int) bool { return ms[i].Workingset })
+		String("launch_kind", func(i int) string { return m(i).LaunchKind }).
+		Bool("workingset", func(i int) bool { return m(i).Workingset }).
+		// How the app was registered: "factory" mints a fresh instance per
+		// Open, "singleton" hands the same one to every window. It bounds
+		// both of the columns above — a config, and therefore a restored
+		// workingset, is delivered at the Mount that runs once per
+		// instance, so a singleton app with a window open can consume
+		// neither. `workingset AND registration = 'singleton'` is a
+		// misdeclaration the host can otherwise only report at first close.
+		String("registration", registration)
 }
 
 // --- build (runinfo + vcs) ---------------------------------------------------

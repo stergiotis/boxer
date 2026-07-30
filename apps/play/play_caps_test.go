@@ -177,3 +177,20 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	assert.Equal(t, launchcfg.Kind, m.LaunchKind)
 	require.NoError(t, m.Validate())
 }
+
+// TestRegisteredAsFactory pins the half of workingset participation the
+// manifest cannot state (ADR-0148 §SD4): a singleton registration hands one
+// instance to every window, and a config — a restored record included — is
+// delivered at the Mount that runs once per instance, so play must mint one
+// instance per Open. The registration mode is what keelson('apps').registration
+// reports.
+func TestRegisteredAsFactory(t *testing.T) {
+	for _, r := range app.DefaultRegistry.Registrations() {
+		if r.Manifest.Id != AppId {
+			continue
+		}
+		assert.False(t, r.Singleton, "play declares a workingset, so each window needs its own instance")
+		return
+	}
+	t.Fatalf("play is not in the default registry; its init() should have registered %s", AppId)
+}

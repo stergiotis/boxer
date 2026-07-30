@@ -533,11 +533,27 @@ kind, because the record *is* an instance of that kind. `persisted_keys` is the
 older untyped channel, still the right declaration for content too large to
 travel inside a config.
 
+`registration` is the one column here that no manifest declares — it is how the
+app was registered. `factory` mints a fresh instance per window, `singleton`
+hands the same one to every window, and that bounds both columns before it: a
+config, and so a restored workingset, is delivered at the Mount that runs once
+per instance, so a singleton app with a window already open can consume neither.
+A row that says `workingset` and `singleton` together is therefore a
+misdeclaration — and the reason to look for it here is that the shell would
+otherwise only mention it in a log line, at the first close.
+
 ```sql
-SELECT id, launch_kind, workingset, persisted_keys, surface
+SELECT id, launch_kind, workingset, registration, persisted_keys, surface
 FROM keelson('apps')
 WHERE launch_kind != '' OR length(persisted_keys) > 0
 ORDER BY workingset DESC, id
+```
+
+The audit itself, which should return nothing:
+
+```sql
+SELECT id, launch_kind FROM keelson('apps')
+WHERE workingset AND registration = 'singleton'
 ```
 
 Where each open window's content came from. `launch_reason` is `plain` when

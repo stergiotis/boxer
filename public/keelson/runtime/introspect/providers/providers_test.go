@@ -103,17 +103,17 @@ func firstString(t *testing.T, rec arrow.RecordBatch, col string) string {
 // §SD7): together they answer "what can I open this app with, and does it
 // remember anything" without reading Go source.
 func TestAppsTableRendersLaunchAndWorkingset(t *testing.T) {
-	ms := []app.Manifest{
-		{Id: "test.plain", Display: "Plain", Surface: app.SurfaceWindowed},
-		{
+	rs := []app.Registration{
+		{Manifest: app.Manifest{Id: "test.plain", Display: "Plain", Surface: app.SurfaceWindowed}},
+		{Manifest: app.Manifest{
 			Id: "test.stateful", Display: "Stateful", Surface: app.SurfaceWindowed,
 			LaunchKind: "testLaunch", Workingset: true,
-		},
+		}},
 	}
-	for _, m := range ms {
-		require.NoError(t, m.Validate(), "the fixtures must be manifests the registry would accept")
+	for _, r := range rs {
+		require.NoError(t, r.Manifest.Validate(), "the fixtures must be manifests the registry would accept")
 	}
-	rec := appsTable(ms).Build(introspect.AllColumns(), len(ms))
+	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
 	defer rec.Release()
 	require.EqualValues(t, 2, rec.NumRows())
 
@@ -128,4 +128,29 @@ func TestAppsTableRendersLaunchAndWorkingset(t *testing.T) {
 	wsCol := rec.Column(ws[0]).(*array.Boolean)
 	assert.False(t, wsCol.Value(0))
 	assert.True(t, wsCol.Value(1))
+}
+
+// TestAppsTableRendersRegistrationMode pins the column that bounds the two
+// above: a workingset over a singleton registration is a misdeclaration,
+// and this is what makes it a query instead of a host warning at the first
+// window close.
+func TestAppsTableRendersRegistrationMode(t *testing.T) {
+	rs := []app.Registration{
+		{Manifest: app.Manifest{
+			Id: "test.factory", Display: "Factory", Surface: app.SurfaceWindowed,
+			LaunchKind: "testLaunch", Workingset: true,
+		}},
+		{Manifest: app.Manifest{
+			Id: "test.singleton", Display: "Singleton", Surface: app.SurfaceWindowed,
+			LaunchKind: "testLaunch", Workingset: true,
+		}, Singleton: true},
+	}
+	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
+	defer rec.Release()
+
+	idx := rec.Schema().FieldIndices("registration")
+	require.NotEmpty(t, idx)
+	col := rec.Column(idx[0]).(*array.String)
+	assert.Equal(t, "factory", col.Value(0))
+	assert.Equal(t, "singleton", col.Value(1), "the row a workingset audit would flag")
 }

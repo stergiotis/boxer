@@ -260,3 +260,26 @@ func TestRegistry_All_BackwardCompat_FactoryAppsInstantiate(t *testing.T) {
 	_ = reg.All()
 	assert.Equal(t, 2, ctorCalls)
 }
+
+// TestRegistrations_RecordTheEntryPoint pins what the ctor closure cannot
+// say: which of the two registration calls the app came through. The
+// introspection table reports it, and the host's config-delivery rules turn
+// on it (ADR-0135, ADR-0148 §SD4).
+func TestRegistrations_RecordTheEntryPoint(t *testing.T) {
+	reg := NewRegistry()
+	require.NoError(t, reg.Register(newTestApp(t, "org.test.singleton")))
+	require.NoError(t, reg.RegisterFactory(testManifest("org.test.factory"),
+		func() (a AppI, err error) { a = newTestApp(t, "org.test.factory"); return }))
+
+	regs := reg.Registrations()
+	require.Len(t, regs, 2)
+	// Sorted by Id: factory sorts before singleton.
+	assert.Equal(t, AppIdT("org.test.factory"), regs[0].Manifest.Id)
+	assert.False(t, regs[0].Singleton)
+	assert.Equal(t, AppIdT("org.test.singleton"), regs[1].Manifest.Id)
+	assert.True(t, regs[1].Singleton)
+}
+
+func TestRegistrations_EmptyRegistry(t *testing.T) {
+	assert.Empty(t, NewRegistry().Registrations())
+}

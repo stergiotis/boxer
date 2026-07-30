@@ -25,9 +25,30 @@ type AppCtor func() (a AppI, err error)
 // entry is what the Registry stores: a static Manifest and a factory
 // that produces AppI instances. Singletons register a closure that
 // returns the same a; factories register a closure that allocates fresh.
+//
+// singleton records which of the two the caller used. The ctor cannot be
+// asked — a closure that happens to return the same instance is
+// indistinguishable from one that allocates — and the difference is
+// load-bearing beyond per-window state isolation: a config (and
+// therefore a restored workingset) is delivered at Mount, which runs once
+// per instance, so a singleton app that already has a window can consume
+// neither (ADR-0135, ADR-0148 §SD4).
 type entry struct {
-	manifest Manifest
-	ctor     AppCtor
+	manifest  Manifest
+	ctor      AppCtor
+	singleton bool
+}
+
+// Registration is one registry row: a manifest plus how it was
+// registered. Returned by Registrations for callers that need the
+// distinction — the introspection table (keelson.apps) surfaces it so a
+// manifest declaring a workingset over a singleton registration is
+// visible as a query rather than only as a host warning at first close.
+type Registration struct {
+	Manifest Manifest
+	// Singleton is true for Register (one AppI for every Open) and false
+	// for RegisterFactory (a fresh AppI per Open).
+	Singleton bool
 }
 
 // Registry is the canonical list of apps in this process. Apps register
@@ -94,13 +115,20 @@ func (inst *Registry) Register(a AppI) (err error) {
 		singleton = a
 		return
 	}
-	err = inst.RegisterFactory(m, ctor)
+	err = inst.register(m, ctor, true)
 	return
 }
 
 // RegisterFactory inserts a factory-backed app, preserving sorted-Id
 // iteration order. The ctor is held until Open(id) is invoked.
 func (inst *Registry) RegisterFactory(m Manifest, ctor AppCtor) (err error) {
+	err = inst.register(m, ctor, false)
+	return
+}
+
+// register is the shared insert. singleton records which entry point the
+// caller came through, since the ctor closure does not say.
+func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err error) {
 	if ctor == nil {
 		err = eb.Build().Str("id", string(m.Id)).Errorf("registry: nil ctor")
 		return
@@ -137,7 +165,7 @@ func (inst *Registry) RegisterFactory(m Manifest, ctor AppCtor) (err error) {
 	})
 	inst.entries = append(inst.entries, entry{})
 	copy(inst.entries[idx+1:], inst.entries[idx:])
-	inst.entries[idx] = entry{manifest: m, ctor: ctor}
+	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton}
 	for i := idx; i < len(inst.entries); i++ {
 		inst.byId[inst.entries[i].manifest.Id] = i
 	}
@@ -213,6 +241,27 @@ func (inst *Registry) AllManifests() (manifests []Manifest) {
 	manifests = make([]Manifest, len(inst.entries))
 	for i, e := range inst.entries {
 		manifests[i] = e.manifest
+	}
+	return
+}
+
+// AllRegistrations returns the registered manifests paired with how they
+// were registered, in sorted-Id order, from DefaultRegistry.
+func AllRegistrations() (regs []Registration) {
+	regs = DefaultRegistry.Registrations()
+	return
+}
+
+// Registrations returns manifest + registration mode per app in
+// sorted-Id order. Use it over AllManifests only when the mode matters
+// (multi-instance behaviour, config delivery, workingset participation);
+// the returned slice is a fresh copy.
+func (inst *Registry) Registrations() (regs []Registration) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	regs = make([]Registration, len(inst.entries))
+	for i, e := range inst.entries {
+		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton}
 	}
 	return
 }
