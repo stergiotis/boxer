@@ -1,15 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-29
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-29
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted. The dependency profile of upstream ImPlot below is
-> measured; the port-size and wire-cost figures are estimates and are marked as
-> such.
 
 # ADR-0149: porting the ImPlot core to Go on the painter lane
 
@@ -301,12 +296,11 @@ with TestDriver screenshot goldens.
 
 ## Status
 
-Proposed, pre-human-review. The upstream dependency profile and the
+Accepted (2026-07-29). The upstream dependency profile and the
 painter-lane/readback inventory above are measured against the tree; the
 port-size, chrome-share, and wire-cost figures are estimates. Next concrete
-step on acceptance: M0 (SD3) — the clip and batch opcodes — which is small,
-independently useful, and de-risks the item-renderer wire costs before M1
-commits to them.
+step: M0 (SD3) — the clip and batch opcodes — which is small, independently
+useful, and de-risks the item-renderer wire costs before M1 commits to them.
 
 ## References
 
