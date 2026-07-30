@@ -423,6 +423,61 @@ bridge call sites remain (imztop cpu/gpu/mem/rate, imzrt sched/heap/gc,
 play's projection pane, terrainscope, the ecdf widget); bridge
 deprecation remains a separate later decision per SD7.
 
+## Update 2026-07-30 (4) — SD7 migration complete: the bridge has no consumer left but its own demo
+
+Every remaining egui_plot-bridge call site moved onto the port in one
+arc: imzrt's seven history plots (sched ×2, heap ×2 including the
+stacked memory-class bands and the GOMEMLIMIT reference line, gc ×3),
+imztop's panels (network/disk rate plots, gpu busy, memory history, and
+the per-core sparkline grid), terrainscope's sweep and distribution
+plots, play's UMAP projection pane with its click-to-select readback,
+the ecdf and boxenplot widgets with their distsummary host (both
+inspector tabs) and ecdfdigest adapter, and the IDS showcase's
+data-encoding plot. The bridge (`egui2_definition_d_plot.go` and its
+Rust drain) now has exactly one in-tree consumer: its own gallery demo.
+Deprecating it remains a separate decision per SD7 — but that decision
+is now unblocked.
+
+The migrations pulled a second batch of ports and house extensions into
+implot, each named for what it is:
+
+- Upstream API ports: two-curve `ShadedBetween` (terrainscope's
+  uncertainty envelopes; the ecdf band as step-expanded plateau
+  rectangles), `SetupAxisTicks` (imztop's Talbot y-ticks; the fixed
+  quarter-point F(x) marks), `SetupAxisLimitsConstraints` (the ecdf
+  popups' clamped viewports), `NoInputs` (sparklines and inert popups —
+  hover sensing stays on so crosshair readers keep working), `NoLegend`,
+  `Text` (upstream PlotText; the boxenplot "+N" outlier labels), and
+  `FitNext` (the programmatic reset-zoom fit).
+- House extensions, documented as such: a `Boxes` letter-value series
+  (upstream has no box item; per-box fills), `IncludeX`/`IncludeY`
+  (egui_plot's include, natural on the existing fit machinery),
+  `TimeTicksLocal` (local-calendar ticks the monitoring apps want;
+  upstream's time locator is UTC), `AxisFlagsFollow`
+  (follow-the-rolling-window-until-touched, the egui_plot auto-bounds
+  model; a double-click resumes following — verified live on imzrt's GC
+  sawtooth), `Clicked`/`HoverPlotPos` accessors (plot-space readback:
+  play's nearest-point selection, the ecdf/boxenplot crosshairs), and
+  `NewDetached` for headless widget tests. Gutters collapse under
+  NoTickLabels so 88×44 sparklines keep a usable plot area; plots that
+  filled their pane on the bridge now size from the R18 available-size
+  register (one frame behind).
+
+Verified by the widgets tour (ecdf, boxenplot, distsummary,
+terrainscope, fibscope captures) and live egui-mcp sessions against
+real data: imztop's network rate plot with local-time ticks and
+per-device legend, the per-core sparkline grid, imzrt's GC sawtooth
+(including the follow/freeze/resume interaction contract), and
+distsummary's both inspector tabs — the boxenplot tab's hover readout
+exercising HoverPlotPos on a NoInputs plot. Play's projection pane
+compiles and is code-reviewed but was not driven live (it needs a
+ClickHouse-backed query run plus a UMAP fit); its Clicked() path is the
+same register mechanism the drag tools use. Known visual deltas, all
+accepted: the boxenplot popup no longer hides its plot background, the
+per-box hover highlight of egui_plot's BoxPlot is replaced by the
+crosshair + status-line affordance, and pan is now enabled on the ecdf
+plots (constraints bound it).
+
 ## References
 
 - Upstream: [ImPlot](https://github.com/epezent/implot) v1.1-WIP, commit
