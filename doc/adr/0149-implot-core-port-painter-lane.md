@@ -346,6 +346,43 @@ temporarily inverting the gesture mapping; the modifier routing is
 code-reviewed for held-shift input but has not been exercised by a real
 hand.
 
+## Update 2026-07-30 (2) — M1 through M6 landed; the estimate was high
+
+The remaining structural milestones shipped the same day, one commit each:
+M2 items + interactive legend (03cae65e), M3 time/log/symlog scales
+(c5a43940), M4 heatmaps/histograms + the `paintImage` opcode (afa77f85),
+M5 drag tools, annotations, tags and the native context menu (fd03b35c),
+M6 subplots + linked axes via the upstream `SetupAxisLinks` pointer
+contract (06d5020f). Each milestone landed with unit tests, a gallery
+demo captured by the tour, and — for every interactive feature — an
+egui-mcp driving session against the live app; the driving sessions
+caught three real gesture bugs the tour structurally cannot see.
+
+Calibration against the proposal: the estimate of 8–12k lines of Go was
+high by roughly 4×. The package stands at ~2.3k lines including tests
+for the M0–M6 feature set, because the painter lane and egui absorb what
+`implot.cpp` spends most of its bulk on (draw-list management, text
+shaping, input plumbing) and Go generics collapse the ten-type getter
+expansion to nothing. One design change earned its keep beyond the
+port: gestures compose in a pixel-space window inverted through the
+transform once, which made pan/zoom/box-zoom scale-agnostic — log and
+symlog axes got correct interaction with zero scale-specific gesture
+code.
+
+Two repo-level cautions surfaced en route, neither implot-specific:
+widgets addressed by absolute ids render and take clicks but do not
+read back through `SendResp` (the context menu uses relative ids; the
+bindings quirk deserves a root-cause pass), and a committed hand-patch
+was found living inside interpreter.rs's generated region
+(`WINDOW_TOPMOST`), which every regen silently deletes — re-applied and
+flagged in afa77f85; it needs a home in the IDL or the hand-maintained
+section.
+
+Remaining: M7 (error bars, pie, digital, image items; the egui_plot
+bridge call-site migration begins) and the deferred set of SD6 — all
+still descoped, none blocking. Accrued contract deviations live in the
+package doc.
+
 ## References
 
 - Upstream: [ImPlot](https://github.com/epezent/implot) v1.1-WIP, commit
