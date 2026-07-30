@@ -53,19 +53,24 @@ func init() {
 }
 
 // pendingMu guards pendingSelections — the FIFO queue of cap ids the
-// status-bar clicks push into before opening an inspector. Each
-// newApp() pops the head so the window opened by click N gets the
-// selection set at click N.
+// status-bar clicks push into before opening (or raising) an
+// inspector. A fresh open pops the head at newApp(); a raise pops it
+// at the live instance's next Frame. Either way the click's selection
+// reaches the window the click produced.
 var (
 	pendingMu         sync.Mutex
 	pendingSelections []CapId
 )
 
-// PushSelection enqueues a capId for the next newApp() to consume.
-// The carousel calls this immediately before host.Open(ManifestId) so
-// the inspector window opens already pointing at the right cap. The
-// queue is FIFO so two rapid clicks open two windows in the click
-// order.
+// PushSelection enqueues a capId for the inspector to consume. The
+// carousel calls this immediately before host.OpenOrRaise(ManifestId),
+// and the two halves of that call consume differently: a fresh open
+// pops at newApp() so the window opens already pointing at the right
+// cap, while a raise leaves construction to the past and the LIVE
+// instance drains the queue at its next Frame
+// (consumePendingSelection) — the raised inspector navigates to the
+// chip that was just clicked. The queue stays FIFO, so rapid clicks
+// retarget the one window in click order, converging on the last.
 func PushSelection(capId CapId) {
 	pendingMu.Lock()
 	defer pendingMu.Unlock()
@@ -132,8 +137,24 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
 // discards the host salt and collides with sibling apps that share a
 // label string).
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.consumePendingSelection()
 	inst.renderBody()
 	return
+}
+
+// consumePendingSelection adopts a status-bar selection pushed while this
+// instance was already showing — the OpenOrRaise half of the click flow,
+// where no constructor runs. Without it the push would leak in the queue
+// (a later fresh open would pop a stale cap) and the raised inspector
+// would ignore the chip the user just clicked. The fresh-open half is
+// covered by newApp()'s pop, which drains the queue before this ever
+// sees it. With several inspectors open (the Apps menu opens freely) the
+// first instance to Frame wins the pop; the status bar's OpenOrRaise
+// keeps the steady state at one.
+func (inst *App) consumePendingSelection() {
+	if capId := popSelection(); capId != "" {
+		inst.selectedCap = capId
+	}
 }
 
 func (inst *App) renderBody() {

@@ -171,13 +171,17 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 						var onClick runtimestatus.ClickHandler
 						if cc.Host != nil {
 							onClick = func(capId string) {
-								// Push the selection first so newApp()
-								// pops it during Open. FIFO queue —
-								// rapid clicks open multiple inspector
-								// windows, each tagged with the cap
-								// that was clicked.
+								// Push the selection first: a fresh
+								// open pops it in newApp(), a raise
+								// leaves it for the live instance's
+								// next Frame (consumePendingSelection).
+								// OpenOrRaise keeps the status bar at
+								// one inspector — clicking another
+								// chip retargets and raises that
+								// window rather than stacking a
+								// sibling per click.
 								capinspector.PushSelection(capinspector.CapId(capId))
-								_, openErr := cc.Host.Open(capinspector.ManifestId)
+								_, _, openErr := cc.Host.OpenOrRaise(capinspector.ManifestId)
 								if openErr != nil {
 									log.Warn().Err(openErr).Str("capId", capId).
 										Msg("status-bar: capinspector open failed")

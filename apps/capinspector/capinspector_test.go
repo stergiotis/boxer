@@ -49,6 +49,30 @@ func TestNewApp_CapturesSelectionAtConstruction(t *testing.T) {
 	assert.Equal(t, CapPersist, b.selectedCap)
 }
 
+// The OpenOrRaise half of a status-bar click: no constructor runs, so the
+// LIVE instance adopts the pushed selection at its next Frame. Without the
+// drain the raised inspector would ignore the clicked chip and the push
+// would leak to some later fresh open.
+func TestConsumePendingSelection_AdoptsPushAfterRaise(t *testing.T) {
+	for popSelection() != "" {
+	}
+	PushSelection(CapFs)
+	a := newApp() // the original open consumed its click
+	require.Equal(t, CapFs, a.selectedCap)
+
+	// A later click while the window is already showing: push, raise —
+	// no ctor. The next Frame's drain navigates.
+	PushSelection(CapBus)
+	a.consumePendingSelection()
+	assert.Equal(t, CapBus, a.selectedCap)
+
+	// An empty queue leaves the current selection alone — ordinary
+	// frames must not reset what the in-window picker chose.
+	a.selectedCap = CapPersist
+	a.consumePendingSelection()
+	assert.Equal(t, CapPersist, a.selectedCap)
+}
+
 func TestNewApp_NoSelection_EmptyCap(t *testing.T) {
 	for popSelection() != "" {
 	}
@@ -129,10 +153,10 @@ func TestActiveBackend_SetGetRoundtrip(t *testing.T) {
 
 func TestShortAppName(t *testing.T) {
 	cases := map[app.AppIdT]string{
-		"github.com/example/play":                                                "play",
-		"github.com/stergiotis/boxer/apps/capdemo":       "capdemo",
-		"flat":                                                                   "flat",
-		"":                                                                       "",
+		"github.com/example/play":                  "play",
+		"github.com/stergiotis/boxer/apps/capdemo": "capdemo",
+		"flat": "flat",
+		"":     "",
 	}
 	for in, want := range cases {
 		got := shortAppName(app.Manifest{Id: in})
