@@ -460,6 +460,7 @@ func BenchmarkPushDAMP(b *testing.B) {
 
 func benchmarkPush(b *testing.B, values []float64, cfg damp.Config) {
 	b.Helper()
+	guardThrottling(b)
 	b.ReportAllocs()
 	for b.Loop() {
 		inst, err := damp.NewDetectorE(cfg)

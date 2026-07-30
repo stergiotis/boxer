@@ -2,6 +2,8 @@ package damp_test
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,14 +52,95 @@ func TestScanMethodsAgree(t *testing.T) {
 	}
 }
 
+func TestThrottleWarnings(t *testing.T) {
+	tests := []struct {
+		name     string
+		governor string
+		boost    string
+		want     []string
+	}{
+		{name: "unthrottled", governor: "performance", boost: "1"},
+		{name: "cpufreq absent", governor: "", boost: ""},
+		{name: "powersave", governor: "powersave", boost: "1", want: []string{"GOVERNOR-POWERSAVE"}},
+		{name: "boost off", governor: "performance", boost: "0", want: []string{"BOOST-OFF"}},
+		{
+			name:     "both",
+			governor: "schedutil",
+			boost:    "0",
+			want:     []string{"GOVERNOR-SCHEDUTIL", "BOOST-OFF"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, throttleWarnings(tt.governor, tt.boost))
+		})
+	}
+}
+
+func TestReadSysfsMissingPathIsEmpty(t *testing.T) {
+	assert.Equal(t, "", readSysfs("/proc/definitely-not-a-real-cpufreq-node"))
+
+	path := t.TempDir() + "/governor"
+	require.NoError(t, os.WriteFile(path, []byte("powersave\n"), 0o600))
+	assert.Equal(t, "powersave", readSysfs(path), "trailing newline must be trimmed")
+}
+
 func TestScanMethodStrings(t *testing.T) {
 	assert.Equal(t, "auto", damp.ScanMethodAuto.String())
 	assert.Equal(t, "direct", damp.ScanMethodDirect.String())
 	assert.Equal(t, "transform", damp.ScanMethodTransform.String())
 }
 
+// readSysfs returns a trimmed sysfs value, empty when it cannot be read —
+// which is the normal case off Linux, or inside a container without cpufreq.
+func readSysfs(path string) (value string) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	value = strings.TrimSpace(string(raw))
+	return
+}
+
+// guardThrottling makes a power-saving CPU state visible on the benchmark's own
+// result line, not merely in a log message.
+//
+// This exists because it already went wrong: the scan comparison in ADR-0150
+// was first measured under a power-saving governor, the output was read through
+// a grep for benchmark lines, and the warning a b.Logf would have printed was
+// filtered out with everything else. A custom metric survives that, because it
+// is part of the result line itself.
+//
+// It reports rather than skips. A benchmark that refuses to run on a machine
+// whose governor cannot be changed — CI, a container, a laptop on battery — is
+// worse than one that runs and says so.
+func guardThrottling(b *testing.B) {
+	b.Helper()
+	for _, w := range throttleWarnings(
+		readSysfs("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
+		readSysfs("/sys/devices/system/cpu/cpufreq/boost"),
+	) {
+		b.Logf("%s: throughput is understated", w)
+		b.ReportMetric(1, w)
+	}
+}
+
+// throttleWarnings names each power-saving setting in force. An unreadable
+// value yields no warning: absent is not the same as throttled, and this must
+// stay silent on machines that simply do not expose cpufreq.
+func throttleWarnings(governor string, boost string) (warnings []string) {
+	if governor != "" && governor != "performance" {
+		warnings = append(warnings, "GOVERNOR-"+strings.ToUpper(governor))
+	}
+	if boost == "0" {
+		warnings = append(warnings, "BOOST-OFF")
+	}
+	return
+}
+
 func benchmarkScan(b *testing.B, window int32, method damp.ScanMethodE) {
 	b.Helper()
+	guardThrottling(b)
 	values := quasiPeriodic(12000, float64(window)*0.8, 0.05)
 	cfg := damp.Config{
 		Window:       window,
