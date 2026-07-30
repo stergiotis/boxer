@@ -120,10 +120,10 @@ func (inst U64EditFluid) Interactive(interactive bool) U64EditFluid {
 //   - Standard one-frame FFI lag applies: a keystroke on frame N is visible in
 //     *val on frame N+1. Call every frame for the binding to stay live.
 func (inst U64EditFluid) SendRespVal(val *uint64) ResponseFlagsE {
-	// The inner TextEdit derives ensureNotZeroIdHighEntropyFast(eid) from the
-	// absolute id we hand it; key the draft state (and thus every databinding
-	// lookup) by that same value so they all agree.
-	key := ensureNotZeroIdHighEntropyFast(inst.eid)
+	// The inner TextEdit derives ensureNotZeroId(eid) from the absolute id we
+	// hand it; key the draft state (and thus every databinding lookup) by that
+	// same value so they all agree.
+	key := ensureNotZeroId(inst.eid)
 	st := u64EditStates[key]
 	if st == nil {
 		st = &u64EditState{}

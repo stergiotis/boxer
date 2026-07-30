@@ -78,6 +78,46 @@ Use of numerical low-entropy (e.g. counter) (relative) id:
 ```go
 components.Button(ids.PrepareSeq(i), c.Atoms().Text("button").Keey()).Send()
 ```
+
+### The id value is carried verbatim — and it is the read-back key
+
+Two properties of the derivation are worth knowing, because response
+read-back depends on both:
+
+- **Derivation is injective.** Distinct inputs produce distinct wire ids,
+  for every creator above. Only one value is rewritten: an id that derives
+  to exactly `0`, which egui rejects (`egui::Id` is a `NonZeroU64`), is
+  replaced by a fixed high-entropy stand-in. Adjacent integers
+  (`MakeAbsoluteIdHighEntropy(base+0)`, `+1`, `+2`, …) are safe.
+- **An `AbsoluteWidgetId`'s numeric value *is* its wire id**, so
+  `uint64(absId)` and `absId.Derive()` agree. Side tables keyed by an
+  absolute id may use either spelling.
+
+Neither held before 2026-07-30: derivation OR-ed bit 0 into every id, so
+each even id merged with its odd successor. Losing a bit of a label hash
+is unobservable, which is why the flaw hid — but for caller-supplied
+numbers it collapsed adjacent ids in pairs. See §11 "Silent SendResp" for
+the failure it produced.
+
+### Colliding ids fail silently on read-back, not on render
+
+Worth internalising once: **egui does not hit-test on the id you supply.**
+`apply_widget` calls `w.ui(ui)`, and egui allocates the widget's own
+interaction id from `ui.next_auto_id()`. Your id is used for exactly one
+thing — as the key under which the frame's response flags are pushed into
+r7 and read back by `SendResp` / `StateManager.GetResponse`.
+
+So a duplicate id never breaks rendering or clicking. It breaks only the
+read-back, and quietly: `Sync` compacts duplicate r7 keys newest-wins, so
+the *later* widget keeps the slot and every earlier one reads
+`NilResponseFlags` forever. The symptom is a widget that is visibly
+pressed by the click it appears to accept while its handler never runs.
+
+`checkId` logs `id has already been used` (WARN, with caller) on the
+emitting frame. In a chatty console that line is easy to miss — when a
+`SendResp` never fires, grep the log for it before suspecting anything
+else.
+
 ### Explicit ID Scoping
 When the framework cannot derive an ID (e.g., in a loop with identical labels), the user must manage the stack using **`components.IdScope(id)`**:
 ```go
@@ -633,6 +673,7 @@ func RenderDemoWindow() {
 2.  **Focus Loss**: If a text field loses focus as soon as you type, your ID is **unstable**. Check if your ID is derived from a string that changes based on the input text.
 3.  **Missing Nodes**: If nodes aren't appearing in your Tree, ensure you aren't calling `Tree()` before the `NodeDir` loops finish, or that you aren't mixing node registers intended for different trees.
 4.  **Layout Jumps**: Ensure Absolute widgets (like Windows) use `AbsoluteLabelDefinedIdG` to avoid being shifted by the relative stack of a parent container.
+5.  **Silent `SendResp`**: A widget renders, visibly reacts to the click, and its handler never runs — `SendResp()` keeps returning `NilResponseFlags`. The id is not reaching the read-back map under the value you look it up by. In order of likelihood: (a) **two widgets share one id** — r7 is a flat map and `Sync` keeps the last writer, so every earlier twin reads nothing; grep the log for `id has already been used`. (b) **The id is not stable across frames** — responses arrive one frame late, so an id salted by a per-frame counter is looked up after it has already changed. (c) **You are reading a different id than you emitted** — `sm.GetResponse(widgethandle.Make(...))` needs the same value the widget put on the wire; call `Derive()` on the creator rather than reconstructing the number by hand. Note that clicking is *not* evidence the id is right: egui hit-tests on its own auto-ids, so a wrong or duplicated id still renders and still accepts input. See §3 for the derivation contract.
 
 # 12. Pitfalls
 ##  Pattern: Stable Pointers for Delayed FFI State (ImZero2)

@@ -54,8 +54,11 @@ const (
 	srTestCanvasH = srTestHeaderH + float32(srTestRows)*srTestCellH + float32(srTestRows-1)*srTestGap
 )
 
-// Base ID for sense regions. Step by 2 between cells so the |1 that Derive
-// applies cannot collapse adjacent ids to the same value.
+// Base ID for sense regions; cells step by 1. This used to step by 2,
+// because Derive OR-ed bit 0 into every absolute id and so collapsed each
+// even id onto its odd successor — adjacent cells shared one r7 slot. The
+// derivation is injective now (see ensureNotZeroId), and the dense stride
+// is the demo's standing check that it stays that way.
 const srTestIdBase uint64 = 0xbb00ff0000
 
 var srTestCellColors = [srTestCols * srTestRows]uint32{
@@ -96,7 +99,7 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 			label := fmt.Sprintf("%s (%d)", srTestCellNames[idx], st.clickCounts[idx])
 			c.PaintText(x+srTestCellW/2, y+srTestCellH/2, 1, 1, label, 14.0, color.Hex(0xffffffff)).Send()
 
-			senseAbsId := c.MakeAbsoluteIdHighEntropy(srTestIdBase + uint64(idx)*2)
+			senseAbsId := c.MakeAbsoluteIdHighEntropy(srTestIdBase + uint64(idx))
 			c.PaintSenseRegion(senseAbsId, x, y, srTestCellW, srTestCellH).Send()
 
 			if sm.GetResponse(widgethandle.Make(senseAbsId.Derive())).HasHovered() {
@@ -116,7 +119,7 @@ func demoSenseRegionTest(ids *c.WidgetIdStack, st *senseRegionTestDemoState) {
 	for row := 0; row < srTestRows; row++ {
 		for col := 0; col < srTestCols; col++ {
 			idx := row*srTestCols + col
-			senseAbsId := c.MakeAbsoluteIdHighEntropy(srTestIdBase + uint64(idx)*2)
+			senseAbsId := c.MakeAbsoluteIdHighEntropy(srTestIdBase + uint64(idx))
 			resp := sm.GetResponse(widgethandle.Make(senseAbsId.Derive()))
 
 			if resp.HasPrimaryClicked() {

@@ -26,16 +26,39 @@ func checkId(id uint64) uint64 {
 	return id
 }
 
-//	func ensureNotZeroIdHighEntropySlow(id uint64) uint64 {
-//		if id == 0 {
-//			return 1 // egui disallows 0 as id
-//		}
-//		return id
-//	}
-func ensureNotZeroIdHighEntropyFast(id uint64) uint64 {
-	// loose one bit of a high entropy number should not matter in practice.
-	// this is a fast way to prevent zero as id which is forbidden by egui
-	id |= uint64(1) // ensure bit 0 is high
+// zeroIdReplacement stands in for a derived id of exactly zero, the one
+// value egui forbids (`egui::Id` wraps a NonZeroU64; the client's
+// `Id::from_high_entropy_bits` panics on zero). An arbitrary high-entropy
+// odd constant — the only requirements are non-zero and "unlikely to be
+// produced by a real derivation", since an id that genuinely derives to
+// this value would alias the stand-in.
+const zeroIdReplacement uint64 = 0xd6e8feb86659fd93
+
+// ensureNotZeroId maps zero onto [zeroIdReplacement] and leaves every
+// other value untouched.
+//
+// The mapping is INJECTIVE, and that is the whole point. Its predecessor
+// was `id |= 1`, which is not: it merges each even id with its odd
+// successor. Losing one bit of a 64-bit hash is unobservable, so the
+// merge was invisible for ids derived from a label — but these creators
+// also take an id the caller supplies directly, and there the collapse
+// bites. MakeAbsoluteIdHighEntropy(n) and MakeAbsoluteIdHighEntropy(n+1)
+// for even n derived to the SAME id, so two widgets shared one r7
+// response slot and only the later one's flags survived Sync's
+// newest-wins compaction: the earlier widget rendered, took its click
+// Rust-side (egui hit-tests on its own auto-ids, not on ours — see
+// apply_widget), and then read back nothing through SendResp. Numbering a
+// handful of buttons with consecutive integers is exactly what a caller
+// reaches for.
+//
+// Applied at the derive boundary rather than at construction, so a
+// relative id whose XOR chain cancels to zero (nesting the same key twice:
+// PrepareStr("a") inside IdScope(PrepareStr("a"))) is caught too — that
+// case used to put a zero id on the wire and panic the client.
+func ensureNotZeroId(id uint64) uint64 {
+	if id == 0 {
+		return zeroIdReplacement
+	}
 	return id
 }
 
@@ -60,21 +83,38 @@ func hashLabelToId(label string) uint64 {
 	return xxh3.HashString(label)
 }
 
+// AbsoluteWidgetId is an id that replaces the stack value instead of
+// composing with it — for top-level windows, modals and global overlays.
+//
+// The constructors normalise, so the numeric value of an AbsoluteWidgetId
+// IS the id that goes on the wire: `uint64(id) == id.Derive()` for every
+// id built through them. Code that keys its own side tables by an
+// absolute id (probe seqs, retained per-widget state) can therefore use
+// either spelling without the two drifting apart. That did not hold
+// before: `Derive` OR-ed in bit 0, so `uint64(MakeAbsoluteIdStr(s))`
+// disagreed with the id on the wire for roughly half of all labels.
 type AbsoluteWidgetId uint64
 
 var _ WidgetIdCreatorI = AbsoluteWidgetId(0)
 
 func MakeAbsoluteIdStr(str string) AbsoluteWidgetId {
-	return AbsoluteWidgetId(hashLabelToId(str))
+	return AbsoluteWidgetId(ensureNotZeroId(hashLabelToId(str)))
 }
+
+// MakeAbsoluteIdHighEntropy takes the caller's value as the id verbatim.
+// Distinct arguments yield distinct ids — including adjacent integers,
+// which an earlier normalisation silently collapsed in pairs. The name
+// still asks for high entropy because the value reaches egui's IdMap
+// unhashed, so clustered ids cost lookup performance; they no longer cost
+// correctness.
 func MakeAbsoluteIdHighEntropy(id uint64) AbsoluteWidgetId {
-	return AbsoluteWidgetId(id)
+	return AbsoluteWidgetId(ensureNotZeroId(id))
 }
 func MakeAbsoluteIdSeq(idx uint64) AbsoluteWidgetId {
-	return AbsoluteWidgetId(makeHighEntropy(idx))
+	return AbsoluteWidgetId(ensureNotZeroId(makeHighEntropy(idx)))
 }
 func (inst AbsoluteWidgetId) Derive() uint64 {
-	return ensureNotZeroIdHighEntropyFast(uint64(inst))
+	return ensureNotZeroId(uint64(inst))
 }
 func (inst AbsoluteWidgetId) DeriveStacked() uint64 {
 	return inst.Derive()
@@ -143,7 +183,7 @@ func (inst *WidgetIdStack) Derive() (id uint64) {
 	inst.transitionState(WidgetIdStackInitial, WidgetIdStackPrepared)
 	id = inst.currentId
 	last := inst.peekIdFromStack()
-	id = last ^ id
+	id = ensureNotZeroId(last ^ id)
 	return
 }
 func (inst *WidgetIdStack) DeriveStacked() uint64 {
@@ -163,10 +203,16 @@ func (inst *WidgetIdStack) verifyState(allowed WidgetIdStackStateE) {
 		log.Panic().Msg("builder is in wrong state")
 	}
 }
+
+// PrepareStr, PrepareSeq and PrepareHighEntropy keep the caller's value
+// verbatim; the non-zero guard runs once at [WidgetIdStack.Derive], after
+// the XOR with the enclosing scope. Normalising here instead would be both
+// too early (the XOR can still land on zero) and lossy, since it applied
+// to distinct arguments before they were ever combined.
 func (inst *WidgetIdStack) PrepareStr(str string) *WidgetIdStack {
 	inst.transitionState(WidgetIdStackPrepared, WidgetIdStackInitial)
 	inst.currentName = str
-	inst.currentId = ensureNotZeroIdHighEntropyFast(hashLabelToId(str)) // high entropy
+	inst.currentId = hashLabelToId(str) // high entropy
 	return inst
 }
 
@@ -174,13 +220,17 @@ func (inst *WidgetIdStack) PrepareStr(str string) *WidgetIdStack {
 func (inst *WidgetIdStack) PrepareSeq(idx uint64) *WidgetIdStack {
 	inst.transitionState(WidgetIdStackPrepared, WidgetIdStackInitial)
 	inst.currentName = ""
-	inst.currentId = ensureNotZeroIdHighEntropyFast(makeHighEntropy(idx))
+	inst.currentId = makeHighEntropy(idx)
 	return inst
 }
+
+// PrepareHighEntropy takes the caller's value as the scope-relative id
+// verbatim. Distinct arguments stay distinct — including adjacent
+// integers, which the previous normalisation collapsed in pairs.
 func (inst *WidgetIdStack) PrepareHighEntropy(id uint64) *WidgetIdStack {
 	inst.transitionState(WidgetIdStackPrepared, WidgetIdStackInitial)
 	inst.currentName = ""
-	inst.currentId = ensureNotZeroIdHighEntropyFast(id)
+	inst.currentId = id
 	return inst
 }
 
