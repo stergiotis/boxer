@@ -763,6 +763,36 @@ The live lane pins the composed branches by value (a passthrough
 comparison cannot hold here: a branch returns a subset of its statement
 by design).
 
+### 2026-07-30 — the Run gates judge what ships
+
+The first cut's "everything else deliberately stays buffer-wide" is
+resolved for params and signals: executeRun now narrows first — the
+caret's statement, then the subquery when the gesture asks — and resolves
+the SHIPPED text. An unfilled slot in a sibling statement, or outside the
+narrowed unit, neither blocks the run nor rides its request; narrowing
+away a broken half is precisely what the gesture is for. The narrowed
+text carries the full SET prelude, so the bound-name set is unchanged —
+only the referenced-slot set narrows.
+
+The staleness witness scopes symmetrically, which is what makes the gate
+change safe: runSignalsDiverged now ranges over the params the last run
+actually sent, because a signal referenced only outside what ran cannot
+invalidate its result — compared buffer-wide, a narrowed run read as
+perpetually diverged, staling every result and looping the Live toggle
+into its circuit breaker. Two properties the first cut recorded survive
+unchanged: the history entry still snapshots the full buffer, and a caret
+move still cannot flip the witness — it consults the last run's params,
+never the caret's current statement. One refinement fell out at the
+breaker: a human write to a signal the run never shipped is orthogonal to
+a machine loop — it cannot diverge the run, so it no longer shields the
+streak on the name that does.
+
+Deliberately still buffer-wide: the top-bar unfilled hint and the
+PARAMETERS marks (they describe the buffer, not a run), Live's
+conservative pre-gate on any unfilled input (an auto-run is a
+convenience; the manual gates are the contract), and the prelude itself —
+trimming unused SET lines from a narrowed run remains unattempted.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
