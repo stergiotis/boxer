@@ -9,10 +9,14 @@
 // instead of an implicit current-plot context, float64 plot space projected
 // to float32 only at paint-command emission (SD4).
 //
-// M1 scope: linear x/y axes, default tick locator/formatter, grid, line
-// series, pan/zoom/fit/box-zoom, hover readout. Legends, more item types,
-// log/time scales, subplots and linked axes follow in later milestones per
-// the ADR.
+// Coverage (M1–M7 per the ADR): linear/time/log10/symlog axes with the
+// ported locators, grid, line/scatter/bars/shaded/stairs/stems/infinite
+// lines, error bars, heatmaps (rect and texture routes), histograms
+// (1D/2D), pie, digital channels, images, interactive legend, drag
+// tools/annotations/tags, a native context menu, subplots and linked
+// axes. Same-label items share one legend entry and palette slot (the
+// upstream label→item registry semantics), so error bars merge with the
+// series they decorate.
 //
 // Known deviations from upstream:
 //   - Box-zoom is Shift+drag (upstream: right-drag). The response-flag
@@ -24,6 +28,13 @@
 //     values; upstream's dedicated symlog locator is not yet ported.
 //   - Time axes label in UTC only and place major ticks only — upstream's
 //     minor time ticks and second-line context labels are deferred.
+//   - Digital channels use fixed bit-height/gap constants (there is no
+//     style system to override upstream's defaults).
+//   - Image takes caller-owned RGBA pixels plus a content version (the
+//     painter lane's ship-once texture protocol); upstream's GPU
+//     texture-id parameter has no equivalent on this substrate.
+//   - Error bars draw in a fixed foreground color and a fixed whisker
+//     width (upstream styles both).
 //
 // Interaction state is read one frame behind, like every imzero2 register
 // (ADR-0140 wheel, R24 canvas pointer, R7 response flags) — imperceptible

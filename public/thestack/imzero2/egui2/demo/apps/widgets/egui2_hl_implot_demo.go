@@ -53,6 +53,19 @@ type implotM2State struct {
 	shXs, shYs       []float64
 }
 
+// implotM7State carries the M7 remainder demo's data: error-barred series,
+// pie shares, digital channels with their analog overlay, and the
+// caller-owned RGBA image.
+type implotM7State struct {
+	ebXs, ebBars, ebErr          []float64
+	ebLXs, ebLYs, ebLNeg, ebLPos []float64
+	pieLabels                    []string
+	pieVals                      []float64
+	digXs, digA, digB, digSin    []float64
+	imgPix                       []uint32
+	imgMarkX, imgMarkY           []float64
+}
+
 func init() {
 	registry.Register(registry.Demo{
 		Name:        "implot_m1",
@@ -270,6 +283,109 @@ func init() {
 			p.Annotation(st.probeX, st.probeY, 18, -24, 0xc44e52ff, true,
 				"probe")
 			p.End()
+		},
+	})
+	registry.Register(registry.Demo{
+		Name:        "implot_m7",
+		Category:    "Graphics & canvas",
+		Title:       icons.IconPaintBucket + " implot M7 (error bars / pie / digital / image)",
+		Stage:       [2]float32{660, 690},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "ADR-0149 M7 remainder: (a)symmetric error whiskers merged into their series' legend entry, a pie with per-slice legend toggles, bottom-pinned digital channels (immune to y pan/zoom), and an RGBA image in plot space.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			st := &implotM7State{}
+			// Error bars: five bars with symmetric errors, a trend line
+			// with asymmetric errors.
+			st.ebXs = []float64{1, 2, 3, 4, 5}
+			st.ebBars = []float64{2.3, 3.8, 3.1, 4.4, 2.9}
+			st.ebErr = []float64{0.35, 0.5, 0.28, 0.6, 0.4}
+			for i := range 21 {
+				x := 0.6 + float64(i)/20*4.4
+				st.ebLXs = append(st.ebLXs, x)
+				st.ebLYs = append(st.ebLYs, 5.4+0.5*math.Sin(x*1.4))
+				st.ebLNeg = append(st.ebLNeg, 0.12)
+				st.ebLPos = append(st.ebLPos, 0.3)
+			}
+			// Pie: fibonacci shares, auto-normalized (sum > 1).
+			st.pieLabels = []string{"A", "B", "C", "D", "E"}
+			st.pieVals = []float64{1, 1, 2, 3, 5}
+			// Digital: two logic channels (one with a NaN gap) + analog sin.
+			const n = 300
+			for i := range n {
+				x := float64(i) / float64(n-1) * 10
+				st.digXs = append(st.digXs, x)
+				hi := 0.0
+				if math.Sin(x) > 0 {
+					hi = 1
+				}
+				st.digA = append(st.digA, hi)
+				sq := 0.0
+				if math.Mod(x, 2) < 1 {
+					sq = 1
+				}
+				if x > 6.2 && x < 6.8 {
+					sq = math.NaN() // proves the run-split contract
+				}
+				st.digB = append(st.digB, sq)
+				st.digSin = append(st.digSin, math.Sin(x))
+			}
+			// Image: a 48×48 plasma field, RGBA 0xRRGGBBAA, row 0 = top.
+			const side = 48
+			st.imgPix = make([]uint32, side*side)
+			for r := range side {
+				for cix := range side {
+					fx := float64(cix) / side * 6
+					fy := float64(r) / side * 6
+					v := math.Sin(fx) + math.Cos(fy) + math.Sin((fx+fy)/2)
+					rr := uint32(128 + 90*math.Sin(v*math.Pi/3))
+					gg := uint32(128 + 90*math.Sin(v*math.Pi/3+2.1))
+					bb := uint32(128 + 90*math.Sin(v*math.Pi/3+4.2))
+					st.imgPix[r*side+cix] = rr<<24 | gg<<16 | bb<<8 | 0xff
+				}
+			}
+			st.imgMarkX = []float64{0.7, 1.6, 2.5, 3.4}
+			st.imgMarkY = []float64{0.8, 2.9, 1.5, 3.3}
+			return st
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			st := state.(*implotM7State)
+			for range c.Horizontal().KeepIter() {
+				p := implot.Begin(ids, "error bars", 306, 236)
+				p.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p.SetupAxisLimits(implot.AxisX1, 0.2, 5.8, implot.CondOnce)
+				p.SetupAxisLimits(implot.AxisY1, 0, 6.4, implot.CondOnce)
+				p.Bars("bars", st.ebXs, st.ebBars, 0.55)
+				p.ErrorBars("bars", st.ebXs, st.ebBars, st.ebErr, st.ebErr)
+				p.Line("trend", st.ebLXs, st.ebLYs)
+				p.ErrorBars("trend", st.ebLXs, st.ebLYs, st.ebLNeg, st.ebLPos)
+				p.End()
+				p2 := implot.Begin(ids, "pie (fib shares)", 306, 236)
+				p2.SetupAxes("", "",
+					implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels,
+					implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels)
+				p2.SetupAxisLimits(implot.AxisX1, 0, 1, implot.CondOnce)
+				p2.SetupAxisLimits(implot.AxisY1, 0, 1, implot.CondOnce)
+				p2.Pie(st.pieLabels, st.pieVals, 0.5, 0.5, 0.42, 90, "%.0f")
+				p2.End()
+			}
+			for range c.Horizontal().KeepIter() {
+				p3 := implot.Begin(ids, "digital + analog", 306, 236)
+				p3.SetupAxes("t [s]", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p3.SetupAxisLimits(implot.AxisX1, 0, 10, implot.CondOnce)
+				p3.SetupAxisLimits(implot.AxisY1, -1.4, 1.4, implot.CondOnce)
+				p3.Line("analog sin", st.digXs, st.digSin)
+				p3.Digital("d0: sin>0", st.digXs, st.digA)
+				p3.Digital("d1: square", st.digXs, st.digB)
+				p3.End()
+				p4 := implot.Begin(ids, "image", 306, 236)
+				p4.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p4.SetupAxisLimits(implot.AxisX1, -0.3, 4.3, implot.CondOnce)
+				p4.SetupAxisLimits(implot.AxisY1, -0.3, 4.3, implot.CondOnce)
+				p4.Image("plasma", st.imgPix, 48, 48, 0, 0, 4, 4, 1)
+				p4.Scatter("probes", st.imgMarkX, st.imgMarkY, implot.MarkerCross, 4.5)
+				p4.End()
+			}
 		},
 	})
 	registry.Register(registry.Demo{

@@ -41,13 +41,14 @@ type heatTex struct {
 // texture starved.
 func (p *Plot) Heatmap(label string, values []float64, rows int, cols int, cm *colormap.Config, x0 float64, y0 float64, x1 float64, y1 float64) *Plot {
 	p.setupLocked = true
+	p.takeNextStyle() // colormap-driven; a pending override must not leak
 	if !p.st.hidden[label] {
 		p.fitX(x0)
 		p.fitX(x1)
 		p.fitY(y0)
 		p.fitY(y1)
 	}
-	p.series = append(p.series, seriesFrame{kind: kindHeatmap, label: label,
+	p.series = append(p.series, seriesFrame{kind: kindHeatmap, label: label, slot: p.assignSlot(label),
 		heat: &heatFrame{values: values, rows: rows, cols: cols, cm: cm, x0: x0, y0: y0, x1: x1, y1: y1}})
 	return p
 }

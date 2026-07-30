@@ -2,6 +2,7 @@ package implot
 
 import (
 	"math"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -28,6 +29,7 @@ const (
 	colReadout    = 0x8891a0ff
 	colBoxFill    = 0x4c72b028
 	colBoxStroke  = 0x4c72b0cc
+	colErrorBar   = 0xc9cfdaff
 	tickFontSize  = 10.5
 	labelFontSize = 12.0
 	titleFontSize = 13.5
@@ -73,11 +75,12 @@ type plotState struct {
 	hoverOk  bool
 
 	// Legend state: per-label visibility toggles (clicks) and the label
-	// hovered last frame (series highlight). Labels must be unique within
-	// a plot, as in ImPlot.
+	// hovered last frame (series highlight). Same-label items share one
+	// legend entry and palette slot, as in ImPlot's label→item registry.
 	hidden      map[string]bool
 	legendHover string
 	heatCache   map[string]*heatTex
+	imgSent     map[string]uint64
 
 	// Context-menu state: open flag, screen anchor, and an open-counter
 	// that salts the window id so each opening re-anchors at the pointer.
@@ -96,42 +99,60 @@ var pool = make(map[uint64]*plotState, 8)
 
 // seriesFrame is one item call, held until End so auto-fit sees the whole
 // frame's data before the ranges freeze. Fields beyond xs/ys apply per
-// kind: marker+radius for scatter, width for bars, yref for shaded/stems.
+// kind: marker+radius for scatter, width for bars, yref for shaded/stems,
+// neg/pos for error bars. slot is the palette slot assigned per label in
+// first-declaration order.
 type seriesFrame struct {
-	kind   seriesKind
-	label  string
-	xs, ys []float64
-	marker MarkerE
-	radius float32
-	width  float64
-	yref   float64
-	heat   *heatFrame
+	kind     seriesKind
+	label    string
+	xs, ys   []float64
+	neg, pos []float64
+	marker   MarkerE
+	radius   float32
+	width    float64
+	yref     float64
+	slot     int
+	colHex   uint32
+	colOk    bool
+	weight   float32
+	heat     *heatFrame
+	pie      *pieFrame
+	img      *imageFrame
 }
 
 // Plot is the frame-transient handle between Begin and End. Methods follow
 // ImPlot's protocol: Setup* first, then items; the first item locks setup.
 type Plot struct {
-	ids         *c.WidgetIdStack
-	st          *plotState
-	scopeId     uint64
-	w, h        float32
-	title       string
-	setupLocked bool
-	series      []seriesFrame
-	tools       []toolFrame
-	toolPos     [2]float32
-	toolPosOk   bool
-	dataXMin    float64
-	dataXMax    float64
-	dataYMin    float64
-	dataYMax    float64
-	dataOk      bool
+	ids           *c.WidgetIdStack
+	st            *plotState
+	scopeId       uint64
+	w, h          float32
+	title         string // full identity string; titleShown is what renders
+	titleShown    string
+	setupLocked   bool
+	series        []seriesFrame
+	tools         []toolFrame
+	toolPos       [2]float32
+	toolPosOk     bool
+	dataXMin      float64
+	dataXMax      float64
+	dataYMin      float64
+	dataYMax      float64
+	dataOk        bool
+	slotByLabel   map[string]int
+	nextSlot      int
+	digitalOffset float32
+	nextColHex    uint32
+	nextColOk     bool
+	nextWeight    float32
 }
 
 // Begin opens a plot with the given title (which is also its identity, as
-// in ImPlot) and canvas size in pixels. Interactions from the previous
-// frame are applied to the retained ranges here, before any Setup call.
-// Every Begin must be paired with End.
+// in ImPlot — the "##" convention applies: everything from "##" on is
+// identity only and does not render, so "##rates" shows no title bar) and
+// canvas size in pixels. Interactions from the previous frame are applied
+// to the retained ranges here, before any Setup call. Every Begin must be
+// paired with End.
 func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 	scope := ids.PrepareStr(title)
 	scopeId := scope.DeriveStacked()
@@ -140,7 +161,8 @@ func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 		st = &plotState{hidden: make(map[string]bool, 4)}
 		pool[scopeId] = st
 	}
-	p := &Plot{ids: ids, st: st, scopeId: scopeId, w: w, h: h, title: title,
+	shown, _, _ := strings.Cut(title, "##")
+	p := &Plot{ids: ids, st: st, scopeId: scopeId, w: w, h: h, title: title, titleShown: shown,
 		dataXMin: math.Inf(1), dataXMax: math.Inf(-1), dataYMin: math.Inf(1), dataYMax: math.Inf(-1)}
 	p.applyInteractions()
 	return p
@@ -356,6 +378,68 @@ func (p *Plot) warnIfLocked(fn string) bool {
 func (p *Plot) Line(label string, xs []float64, ys []float64) *Plot {
 	p.addSeries(seriesFrame{kind: kindLine, label: label, xs: xs, ys: ys}, true, true)
 	return p
+}
+
+// SetNextColor overrides the next declared item's series color (the color
+// half of upstream's SetNextLineStyle). It applies to the immediately
+// following item declaration only; the legend swatch follows the override.
+func (p *Plot) SetNextColor(colHex uint32) *Plot {
+	p.nextColHex = colHex
+	p.nextColOk = true
+	return p
+}
+
+// SetNextWeight overrides the next declared item's stroke weight (the
+// weight half of upstream's SetNextLineStyle).
+func (p *Plot) SetNextWeight(weight float32) *Plot {
+	p.nextWeight = weight
+	return p
+}
+
+// takeNextStyle consumes the pending SetNext* overrides. Declarators that
+// cannot use them (heatmap, pie, image) still consume, so a pending
+// override never leaks onto a later item.
+func (p *Plot) takeNextStyle() (colHex uint32, colOk bool, weight float32) {
+	colHex, colOk, weight = p.nextColHex, p.nextColOk, p.nextWeight
+	p.nextColHex, p.nextColOk, p.nextWeight = 0, false, 0
+	return
+}
+
+// assignSlot maps a label to its palette slot in first-declaration order.
+// Same-label items share one slot (and one legend entry) — the upstream
+// label→item registry semantics, which lets error bars decorate the series
+// they belong to. Unlabeled items each consume a slot of their own.
+func (p *Plot) assignSlot(label string) int {
+	if label != "" {
+		if s, ok := p.slotByLabel[label]; ok {
+			return s
+		}
+	}
+	s := p.nextSlot
+	p.nextSlot++
+	if label != "" {
+		if p.slotByLabel == nil {
+			p.slotByLabel = make(map[string]int, 8)
+		}
+		p.slotByLabel[label] = s
+	}
+	return s
+}
+
+// legendIndices returns the index of each label's first declaration, in
+// declaration order — one legend row per distinct label.
+func legendIndices(series []seriesFrame) []int {
+	idxs := make([]int, 0, len(series))
+	seen := make(map[string]bool, len(series))
+	for si := range series {
+		l := series[si].label
+		if l == "" || seen[l] {
+			continue
+		}
+		seen[l] = true
+		idxs = append(idxs, si)
+	}
+	return idxs
 }
 
 func isNaN32(v float32) bool { return v != v }

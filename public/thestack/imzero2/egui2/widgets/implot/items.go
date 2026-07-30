@@ -15,6 +15,11 @@ const (
 	kindInfV
 	kindInfH
 	kindHeatmap
+	kindErrV
+	kindErrH
+	kindDigital
+	kindPieSlice
+	kindImage
 )
 
 // MarkerE selects a scatter glyph; the numbering is the paintMarkers wire
@@ -94,12 +99,89 @@ func (p *Plot) InfLinesH(label string, ys []float64) *Plot {
 	return p
 }
 
-// addSeries locks setup, accumulates fit extents (skipping a series the
-// legend has hidden), and records the item for End's render pass.
+// ErrorBars declares vertical error whiskers about (xs, ys): bar i spans
+// ys[i]-neg[i] to ys[i]+pos[i]. Pass the same slice twice for symmetric
+// errors. Reusing the label of the series the bars decorate merges them
+// into that series' legend entry and visibility toggle; the whiskers
+// themselves draw in a fixed foreground color, as upstream's error-bar
+// style color does.
+func (p *Plot) ErrorBars(label string, xs []float64, ys []float64, neg []float64, pos []float64) *Plot {
+	p.addSeries(seriesFrame{kind: kindErrV, label: label, xs: xs, ys: ys, neg: neg, pos: pos}, true, false)
+	if !p.st.hidden[label] {
+		n := min(len(xs), len(ys), len(neg), len(pos))
+		for i := range n {
+			if math.IsNaN(xs[i]) || math.IsNaN(ys[i]) {
+				continue
+			}
+			p.fitY(ys[i] - neg[i])
+			p.fitY(ys[i] + pos[i])
+		}
+	}
+	return p
+}
+
+// ErrorBarsH declares horizontal error whiskers: bar i spans xs[i]-neg[i]
+// to xs[i]+pos[i] at height ys[i].
+func (p *Plot) ErrorBarsH(label string, xs []float64, ys []float64, neg []float64, pos []float64) *Plot {
+	p.addSeries(seriesFrame{kind: kindErrH, label: label, xs: xs, ys: ys, neg: neg, pos: pos}, false, true)
+	if !p.st.hidden[label] {
+		n := min(len(xs), len(ys), len(neg), len(pos))
+		for i := range n {
+			if math.IsNaN(xs[i]) || math.IsNaN(ys[i]) {
+				continue
+			}
+			p.fitX(xs[i] - neg[i])
+			p.fitX(xs[i] + pos[i])
+		}
+	}
+	return p
+}
+
+// Digital declares a digital channel: y > 0 is high (the value scales the
+// bit height, so 0/1 data reads as a logic trace), rendered as filled
+// runs pinned to the bottom of the plot area in pixel space — digital
+// channels never scale or pan with the y axis, per upstream. Visible
+// digital series stack upward in declaration order. Contributes only x to
+// auto-fit.
+func (p *Plot) Digital(label string, xs []float64, ys []float64) *Plot {
+	p.addSeries(seriesFrame{kind: kindDigital, label: label, xs: xs, ys: ys}, true, false)
+	return p
+}
+
+// digitalRuns walks (xs, ys) pairwise and emits one run per stretch of
+// equal y: emit(x0, x1, v) covers x0..x1 at value v, ending at the next
+// transition sample. NaN in either coordinate ends the current run before
+// it and starts fresh past it, like the upstream digital renderer.
+func digitalRuns(xs []float64, ys []float64, emit func(x0 float64, x1 float64, v float64)) {
+	n := min(len(xs), len(ys))
+	i := 0
+	for i < n {
+		if math.IsNaN(xs[i]) || math.IsNaN(ys[i]) {
+			i++
+			continue
+		}
+		j := i + 1
+		for j < n && !math.IsNaN(xs[j]) && !math.IsNaN(ys[j]) && ys[j] == ys[i] {
+			j++
+		}
+		if j < n && !math.IsNaN(xs[j]) && !math.IsNaN(ys[j]) {
+			emit(xs[i], xs[j], ys[i])
+		} else if j-1 > i {
+			emit(xs[i], xs[j-1], ys[i])
+		}
+		i = j
+	}
+}
+
+// addSeries locks setup, assigns the palette slot, accumulates fit extents
+// (skipping a series the legend has hidden), and records the item for
+// End's render pass.
 func (p *Plot) addSeries(s seriesFrame, fitXs bool, fitYs bool) {
 	p.setupLocked = true
+	s.slot = p.assignSlot(s.label)
+	s.colHex, s.colOk, s.weight = p.takeNextStyle()
 	if !p.st.hidden[s.label] {
-		n := len(s.xs)
+		n := max(len(s.xs), len(s.ys))
 		if fitXs && fitYs {
 			n = min(len(s.xs), len(s.ys))
 		}

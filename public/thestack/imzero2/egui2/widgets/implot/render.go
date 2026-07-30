@@ -44,7 +44,7 @@ func (p *Plot) End() {
 	// left gutter, and only then are the x ticks located against the final
 	// width (no iteration needed, see core.go locateTicks).
 	topGutter := float32(6.0)
-	if p.title != "" {
+	if p.titleShown != "" {
 		topGutter = 24
 	}
 	bottomGutter := float32(6 + tickLen + 14)
@@ -121,8 +121,8 @@ func (p *Plot) End() {
 			c.PaintText(areaX-tickLen-2, py, 2, 1, t.label, tickFontSize, color.Hex(colTickLabel)).Monospace().Send()
 		}
 	}
-	if p.title != "" {
-		c.PaintText(areaX+areaW/2, 4, 1, 0, p.title, titleFontSize, color.Hex(colTitle)).Send()
+	if p.titleShown != "" {
+		c.PaintText(areaX+areaW/2, 4, 1, 0, p.titleShown, titleFontSize, color.Hex(colTitle)).Send()
 	}
 	if st.x.label != "" {
 		c.PaintText(areaX+areaW/2, p.h-16, 1, 0, st.x.label, labelFontSize, color.Hex(colAxisLabel)).Send()
@@ -134,14 +134,13 @@ func (p *Plot) End() {
 	}
 
 	// --- Legend interaction: last frame's flags for each entry's sense
-	// region, read before the draw so a toggle applies this frame.
+	// region, read before the draw so a toggle applies this frame. One
+	// entry per distinct label — same-label items share it.
 	st.legendHover = ""
 	sm := c.CurrentApplicationState.StateManager
-	for si := range p.series {
+	leg := legendIndices(p.series)
+	for _, si := range leg {
 		s := &p.series[si]
-		if s.label == "" {
-			continue
-		}
 		h := widgethandle.Make(p.ids.PrepareStr("legend-" + s.label).Derive())
 		lf := sm.GetResponse(h)
 		if lf.HasPrimaryClicked() {
@@ -159,10 +158,16 @@ func (p *Plot) End() {
 		if st.hidden[s.label] {
 			continue
 		}
-		colHex := paletteDeep[si%len(paletteDeep)]
+		colHex := paletteDeep[s.slot%len(paletteDeep)]
+		if s.colOk {
+			colHex = s.colHex
+		}
 		weight := float32(1.5)
+		if s.weight > 0 {
+			weight = s.weight
+		}
 		if s.label != "" && s.label == st.legendHover {
-			weight = 3.0
+			weight *= 2
 		}
 		p.emitSeries(s, tr, areaX, areaY, areaW, areaH, colHex, weight)
 	}
@@ -183,7 +188,7 @@ func (p *Plot) End() {
 	c.PaintRectStroke(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colBorder), 1.0).Send()
 
 	// --- Legend, ImPlot's default north-west placement, inside the area.
-	p.emitLegend(areaX, areaY)
+	p.emitLegend(leg, areaX, areaY)
 
 	// --- Hover readout, ImPlot's mouse-position text, bottom-right corner.
 	if st.hoverOk {
@@ -335,41 +340,101 @@ func (p *Plot) emitSeries(s *seriesFrame, tr transform, areaX, areaY, areaW, are
 			py := tr.pxY(y)
 			c.PaintLine(areaX, py, areaX+areaW, py, color.Hex(colHex), weight).Send()
 		}
+	case kindErrV:
+		// Whiskers default to the fixed error-bar foreground (upstream's
+		// ErrorBar style color), not the series color, so they read on
+		// top of the bars/lines they decorate; SetNextColor overrides.
+		ec := uint32(colErrorBar)
+		if s.colOk {
+			ec = s.colHex
+		}
+		n := min(len(s.xs), len(s.ys), len(s.neg), len(s.pos))
+		for i := range n {
+			if math.IsNaN(s.xs[i]) || math.IsNaN(s.ys[i]) {
+				continue
+			}
+			px := tr.pxX(s.xs[i])
+			py0 := tr.pxY(s.ys[i] - s.neg[i])
+			py1 := tr.pxY(s.ys[i] + s.pos[i])
+			c.PaintLine(px, py0, px, py1, color.Hex(ec), weight).Send()
+			c.PaintLine(px-errCapPx, py0, px+errCapPx, py0, color.Hex(ec), weight).Send()
+			c.PaintLine(px-errCapPx, py1, px+errCapPx, py1, color.Hex(ec), weight).Send()
+		}
+	case kindErrH:
+		ec := uint32(colErrorBar)
+		if s.colOk {
+			ec = s.colHex
+		}
+		n := min(len(s.xs), len(s.ys), len(s.neg), len(s.pos))
+		for i := range n {
+			if math.IsNaN(s.xs[i]) || math.IsNaN(s.ys[i]) {
+				continue
+			}
+			py := tr.pxY(s.ys[i])
+			px0 := tr.pxX(s.xs[i] - s.neg[i])
+			px1 := tr.pxX(s.xs[i] + s.pos[i])
+			c.PaintLine(px0, py, px1, py, color.Hex(ec), weight).Send()
+			c.PaintLine(px0, py-errCapPx, px0, py+errCapPx, color.Hex(ec), weight).Send()
+			c.PaintLine(px1, py-errCapPx, px1, py+errCapPx, color.Hex(ec), weight).Send()
+		}
+	case kindDigital:
+		// Digital channels pin to the plot-area bottom in pixel space and
+		// ignore the y axis entirely (upstream contract); visible channels
+		// stack upward in declaration order via the per-frame offset.
+		base := areaY + areaH - 1 - p.digitalOffset
+		chanMax := float32(digitalBitH)
+		digitalRuns(s.xs, s.ys, func(x0, x1, v float64) {
+			h := float32(1.5)
+			if v > 0 {
+				h = digitalBitH * float32(v)
+			}
+			chanMax = max(chanMax, h)
+			c.PaintRectFilled(tr.pxX(x0), base-h, tr.pxX(x1), base, 0, color.Hex(colHex)).Send()
+		})
+		p.digitalOffset += chanMax + digitalBitGap
+	case kindPieSlice:
+		p.emitPieSlice(s, tr, colHex)
+	case kindImage:
+		p.emitImage(s, tr)
 	}
 }
 
+// Digital-channel geometry: bit height scaled by the sample value, and the
+// stacking gap between channels (upstream's DigitalBitHeight/DigitalBitGap
+// defaults; there is no style system to override them yet, see doc.go).
+const (
+	digitalBitH   = 8.0
+	digitalBitGap = 4.0
+	errCapPx      = 3.0
+)
+
 // emitLegend draws the entry list with color swatches and stamps one sense
-// region per entry; clicks toggle series visibility, hover highlights.
-func (p *Plot) emitLegend(areaX, areaY float32) {
+// region per entry; clicks toggle series visibility, hover highlights. leg
+// holds each distinct label's first series index (legendIndices).
+func (p *Plot) emitLegend(leg []int, areaX, areaY float32) {
 	st := p.st
-	entries := 0
 	maxChars := 0
-	for si := range p.series {
-		if p.series[si].label == "" {
-			continue
-		}
-		entries++
+	for _, si := range leg {
 		if n := len(p.series[si].label); n > maxChars {
 			maxChars = n
 		}
 	}
-	if entries == 0 {
+	if len(leg) == 0 {
 		return
 	}
 	const rowH, pad, swatch = 16.0, 6.0, 10.0
 	lw := pad*3 + swatch + float32(maxChars)*charW
-	lh := pad*2 + float32(entries)*rowH
+	lh := pad*2 + float32(len(leg))*rowH
 	lx, ly := areaX+8, areaY+8
 	c.PaintRectFilled(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(0x14171dee)).Send()
 	c.PaintRectStroke(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colBorder), 1.0).Send()
-	row := 0
-	for si := range p.series {
+	for row, si := range leg {
 		s := &p.series[si]
-		if s.label == "" {
-			continue
-		}
 		ry := ly + pad + float32(row)*rowH
-		colHex := paletteDeep[si%len(paletteDeep)]
+		colHex := paletteDeep[s.slot%len(paletteDeep)]
+		if s.colOk {
+			colHex = s.colHex
+		}
 		swCol, txtCol := colHex, uint32(colTickLabel)
 		if st.hidden[s.label] {
 			swCol = (colHex &^ 0xff) | 0x40
@@ -378,7 +443,6 @@ func (p *Plot) emitLegend(areaX, areaY float32) {
 		c.PaintRectFilled(lx+pad, ry+(rowH-swatch)/2, lx+pad+swatch, ry+(rowH+swatch)/2, 2.0, color.Hex(swCol)).Send()
 		c.PaintText(lx+pad*2+swatch, ry+rowH/2, 0, 1, s.label, tickFontSize, color.Hex(txtCol)).Monospace().Send()
 		c.PaintSenseRegion(p.ids.PrepareStr("legend-"+s.label), lx, ry, lw, rowH).Send()
-		row++
 	}
 }
 
