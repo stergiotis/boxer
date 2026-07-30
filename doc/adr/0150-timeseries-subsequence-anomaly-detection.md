@@ -366,6 +366,55 @@ M3 inherits both: DAMP must decide where a left-discord score lands relative to
 its window, and the window-length sensitivity is the parameter MERLIN and MADRID
 exist to remove, deferred in the decision above.
 
+### 2026-07-30 — M3 implemented; DAMP's published speed rests on two things we do not have
+
+`public/analytics/timeseries/damp` carries a streaming `Detector` over left
+discords — nearest neighbour restricted to the past — with DAMP's backward
+expanding-block scan and early abandoning, plus an exact mode. No new module
+dependency. 15 tests, checked against a brute-force left-matrix-profile oracle.
+
+Four findings, two of which qualify the decision above.
+
+1. **Forward pruning is not implementable in a stream.** The published
+   algorithm's second optimization looks ahead from the current subsequence and
+   prunes future positions already shown to have a close neighbour. Those
+   positions have not arrived yet. It is available only when replaying a stored
+   series, which is how the paper's throughput figures were produced. This
+   package implements the streaming-admissible half and says so.
+2. **DAMP does not produce a score vector, and the failure is quiet.** Early
+   abandoning stops as soon as a subsequence is shown not to be the discord, so
+   most readings carry an upper bound rather than a distance. DAMP answers
+   "where is the anomaly" exactly and "how anomalous is each position" not at
+   all. Measured on M2's fixtures: VUS-PR 0.458 for a DAMP score vector against
+   0.558 for the same detector in exact mode. Both look like score vectors.
+   The package therefore ships an exact mode and marks every reading with
+   whether its score is real.
+3. **The FFT deferral's trigger is met.** The decision above deferred
+   FFT-accelerated MASS on the grounds that the batch path pays it once. That
+   reasoning does not carry to M3, where a block scan is the hot loop at
+   O(block·Window) rather than O(block·log block). Benchmarked at Window 50 over
+   an 8000-sample horizon: **57k samples/s under DAMP, 19k exact** — early
+   abandoning is worth about 3×, and the whole figure sits roughly 5× below the
+   published one, consistent with the missing transform. Adopting it would widen
+   `gonum` from one call site to two without adding a module; it remains
+   deferred pending a decision rather than taken silently.
+4. **The argmax is a bracket, not a hit, when the window outruns the anomaly.**
+   A 50-sample window over a 20-sample anomaly peaks at the window starting just
+   before the novel content enters, so its centre lands past the anomaly's
+   trailing edge and neither endpoint falls inside the event. This does not
+   contradict M2's centre-attribution finding — a per-position scorer integrates
+   the whole plateau of overlapping windows, which is centred — but code reading
+   a single reading should read the plateau.
+
+Two smaller notes. `Series` in M1 is immutable, so M3 realizes the same
+primitive incrementally rather than calling it; "on M1's MASS" in the decision
+above should be read as sharing the conventions, not the code. And **open
+sub-decision 3 is resolved**: these packages own their buffer.
+[`github.com/stergiotis/boxer/public/observability/slidingwindow`](../../public/observability/slidingwindow)
+was not adopted and does not need a head-index mode on this account — the dot
+product needs its history *contiguous*, which a ring would not give, so the
+right structure is an append-and-compact slice at amortized O(1).
+
 ## References
 
 - Survey and literature landscape:
