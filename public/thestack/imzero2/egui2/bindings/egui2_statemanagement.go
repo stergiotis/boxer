@@ -40,27 +40,6 @@ type CanvasPointerValue struct {
 	Clicked bool
 }
 
-// PlotPointerValue is the cached payload of the R15 plot-pointer
-// register, drained once per frame by StateManager.Sync. PlotId is the
-// widget id of the plot the latest click landed on; consumers (e.g.
-// PlotFluid.SendResp) compare against their own widget id and report
-// no-click for stale entries.
-//
-// HoverPlotId / HoverX / HoverY are the non-consuming hover companion:
-// HoverX / HoverY are NaN when no plot is currently under the cursor.
-// HoverPlotId names which plot the cursor is over — match it against
-// your own plot's widget id (call .Derive() on the AbsoluteWidgetId
-// you passed to c.Plot) to suppress stale-other-plot reads.
-type PlotPointerValue struct {
-	PlotId      uint64
-	X           float64
-	Y           float64
-	Clicked     bool
-	HoverPlotId uint64
-	HoverX      float64
-	HoverY      float64
-}
-
 // WalkersCameraValue is the cached payload of the R15 walkers-camera
 // register, drained once per frame by StateManager.Sync. Found is
 // false until at least one WalkersMap widget has rendered. Mirrors the
@@ -233,7 +212,6 @@ type StateManager struct {
 	// the render scope was inside a deferred-block capture (e.g. a
 	// dock.Tab body).
 	r14CanvasPointer CanvasPointerValue
-	r15PlotPointer   PlotPointerValue
 	r15WalkersCamera WalkersCameraValue
 	r16ScrollDelta   ScrollDeltaValue
 	r17Modifiers     ModifiersValue
@@ -273,9 +251,9 @@ type StateManager struct {
 	commandEnter      bool
 	commandEnterShift bool
 	snarlEvents       SnarlEventsValue
-	graphEvents    GraphEventsValue
-	graphSelection GraphSelectionValue
-	graphMetrics   GraphMetricsValue
+	graphEvents       GraphEventsValue
+	graphSelection    GraphSelectionValue
+	graphMetrics      GraphMetricsValue
 }
 
 func NewStateManager() *StateManager {
@@ -300,11 +278,6 @@ func NewStateManager() *StateManager {
 // inline — the latter buffers (and deadlocks) inside dock.Tab bodies.
 func (inst *StateManager) GetCanvasPointer() CanvasPointerValue {
 	return inst.r14CanvasPointer
-}
-
-// GetPlotPointer returns last frame's R15 plot-pointer state.
-func (inst *StateManager) GetPlotPointer() PlotPointerValue {
-	return inst.r15PlotPointer
 }
 
 // GetWalkersCamera returns last frame's R15 walkers-camera state.
@@ -752,13 +725,6 @@ func (inst *StateManager) Sync() {
 	{
 		hx, hy, clicked := fetcher.FetchR14CanvasPointer()
 		inst.r14CanvasPointer = CanvasPointerValue{HoverX: hx, HoverY: hy, Clicked: clicked}
-	}
-	{
-		plotId, x, y, clicked, hoverPlotId, hx, hy := fetcher.FetchR15PlotPointer()
-		inst.r15PlotPointer = PlotPointerValue{
-			PlotId: plotId, X: x, Y: y, Clicked: clicked,
-			HoverPlotId: hoverPlotId, HoverX: hx, HoverY: hy,
-		}
 	}
 	{
 		found, mapId, zoom, cLat, cLon, minLat, minLon, maxLat, maxLon,

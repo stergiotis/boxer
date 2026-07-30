@@ -1307,7 +1307,7 @@ dependencies = [
  "bitflags 2.13.1",
  "emath 0.35.0",
  "epaint 0.35.0",
- "itertools 0.14.0",
+ "itertools",
  "log",
  "nohash-hasher",
  "profiling",
@@ -1416,7 +1416,7 @@ dependencies = [
  "ahash",
  "egui 0.35.0",
  "enum-map",
- "itertools 0.14.0",
+ "itertools",
  "jiff",
  "log",
  "mime_guess2",
@@ -1476,17 +1476,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac61e806d7926406d92cc34b755b8589cad658c0662d7a457499eeb2cfa3d8aa"
 dependencies = [
  "egui 0.35.0",
-]
-
-[[package]]
-name = "egui_plot"
-version = "0.36.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "302515219c63e7f380058ecc899c5a6b2c5fe9f140ef1d91c3b685c9f0355fa3"
-dependencies = [
- "ahash",
- "egui 0.35.0",
- "emath 0.35.0",
 ]
 
 [[package]]
@@ -2685,7 +2674,6 @@ dependencies = [
  "egui_extras 0.35.0",
  "egui_graphs",
  "egui_ltreeview",
- "egui_plot",
  "egui_table",
  "env_logger",
  "futures-util",
@@ -2702,7 +2690,7 @@ dependencies = [
  "prost",
  "prost-build",
  "protox",
- "puffin 0.20.0",
+ "puffin",
  "puffin_egui",
  "puffin_http",
  "rand 0.9.5",
@@ -2759,15 +2747,6 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
-
-[[package]]
-name = "itertools"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
-]
 
 [[package]]
 name = "itertools"
@@ -4129,7 +4108,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 dependencies = [
  "profiling-procmacros",
- "puffin 0.20.0",
+ "puffin",
 ]
 
 [[package]]
@@ -4159,7 +4138,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03da047801ff44bb6a4d407d4860c05fd70bb81714e6b2f3812603d5b145b042"
 dependencies = [
  "heck",
- "itertools 0.14.0",
+ "itertools",
  "log",
  "multimap",
  "petgraph",
@@ -4178,7 +4157,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools",
  "proc-macro2",
  "quote",
  "syn",
@@ -4234,20 +4213,6 @@ dependencies = [
 
 [[package]]
 name = "puffin"
-version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa9dae7b05c02ec1a6bc9bcf20d8bc64a7dcbf57934107902a872014899b741f"
-dependencies = [
- "anyhow",
- "byteorder",
- "cfg-if",
- "itertools 0.10.5",
- "once_cell",
- "parking_lot",
-]
-
-[[package]]
-name = "puffin"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84b514d95a258be801fde8a1ff1c974f4a4841d9750f5d1d6690fc07a5ad4049"
@@ -4256,7 +4221,7 @@ dependencies = [
  "bincode",
  "byteorder",
  "cfg-if",
- "itertools 0.14.0",
+ "itertools",
  "lz4_flex",
  "parking_lot",
  "serde",
@@ -4275,7 +4240,7 @@ dependencies = [
  "log-once",
  "natord",
  "parking_lot",
- "puffin 0.20.0",
+ "puffin",
  "time",
  "vec1",
  "web-time",
@@ -4291,7 +4256,7 @@ dependencies = [
  "crossbeam-channel",
  "log",
  "parking_lot",
- "puffin 0.20.0",
+ "puffin",
 ]
 
 [[package]]

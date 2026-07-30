@@ -194,35 +194,6 @@ self.io.write_plain_b(self.r14_canvas_clicked)?;
 		AddReturnValue("clicked", ctabb.B).
 		Build())
 
-	// egui_plot click+hover pointer state — returns the most recent in-plot
-	// primary click in plot-data coordinates, plus the plot widget id so
-	// the caller can ignore stale clicks from a different plot. The hover
-	// trio (hoverPlotId, hoverX, hoverY) is a non-consuming companion:
-	// hoverX/hoverY are NaN when no plot is currently hovered. Click is
-	// single-slot (drained on read); hover persists until the next plot
-	// render flips it. One-frame lag (event happened during the previous
-	// frame's plot.show); the pattern matches r7 / r10 / r14.
-	fetchers = append(fetchers, idl.NewFetcherNode("fetchR15PlotPointer").
-		WithApplyCodeClientRust(rustClientCode(`
-self.io.write_plain_u64(self.r15_plot_clicked_id)?;
-self.io.write_plain_f64(self.r15_plot_clicked_x)?;
-self.io.write_plain_f64(self.r15_plot_clicked_y)?;
-self.io.write_plain_b(self.r15_plot_clicked)?;
-self.io.write_plain_u64(self.r15_plot_hover_id)?;
-self.io.write_plain_f64(self.r15_plot_hover_x)?;
-self.io.write_plain_f64(self.r15_plot_hover_y)?;
-self.r15_plot_clicked = false;
-{{SendMessage}}
-`)).
-		AddReturnValue("plotId", ctabb.U64).
-		AddReturnValue("x", ctabb.F64).
-		AddReturnValue("y", ctabb.F64).
-		AddReturnValue("clicked", ctabb.B).
-		AddReturnValue("hoverPlotId", ctabb.U64).
-		AddReturnValue("hoverX", ctabb.F64).
-		AddReturnValue("hoverY", ctabb.F64).
-		Build())
-
 	// Smoothed scroll-wheel delta for the current frame, read directly from
 	// egui's InputState. Use for pan / zoom gestures inside custom-drawn
 	// canvases. Values are in egui's logical pixel space (positive Y =

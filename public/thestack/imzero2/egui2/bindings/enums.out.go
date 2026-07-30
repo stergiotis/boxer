@@ -46,162 +46,152 @@ const (
 	FuncProcIdFetchGraphSelection                 FuncProcIdE = FuncProcIdOffset + 38
 	FuncProcIdFetchR10                            FuncProcIdE = FuncProcIdOffset + 39
 	FuncProcIdFetchR14CanvasPointer               FuncProcIdE = FuncProcIdOffset + 40
-	FuncProcIdFetchR15PlotPointer                 FuncProcIdE = FuncProcIdOffset + 41
-	FuncProcIdFetchR15WalkersCamera               FuncProcIdE = FuncProcIdOffset + 42
-	FuncProcIdFetchR16ScrollDelta                 FuncProcIdE = FuncProcIdOffset + 43
-	FuncProcIdFetchR17Modifiers                   FuncProcIdE = FuncProcIdOffset + 44
-	FuncProcIdFetchR18AvailableSize               FuncProcIdE = FuncProcIdOffset + 45
-	FuncProcIdFetchR19ZoomDelta                   FuncProcIdE = FuncProcIdOffset + 46
-	FuncProcIdFetchR20Pointer                     FuncProcIdE = FuncProcIdOffset + 47
-	FuncProcIdFetchR21UiRects                     FuncProcIdE = FuncProcIdOffset + 48
-	FuncProcIdFetchR22StarvedTextures             FuncProcIdE = FuncProcIdOffset + 49
-	FuncProcIdFetchR23CanvasWheel                 FuncProcIdE = FuncProcIdOffset + 50
-	FuncProcIdFetchR24CanvasPointers              FuncProcIdE = FuncProcIdOffset + 51
-	FuncProcIdFetchR7                             FuncProcIdE = FuncProcIdOffset + 52
-	FuncProcIdFetchR9EtPrefetch                   FuncProcIdE = FuncProcIdOffset + 53
-	FuncProcIdFetchR9F64                          FuncProcIdE = FuncProcIdOffset + 54
-	FuncProcIdFetchR9I64                          FuncProcIdE = FuncProcIdOffset + 55
-	FuncProcIdFetchR9S                            FuncProcIdE = FuncProcIdOffset + 56
-	FuncProcIdFetchR9U64                          FuncProcIdE = FuncProcIdOffset + 57
-	FuncProcIdFetchSnarlEvents                    FuncProcIdE = FuncProcIdOffset + 58
-	FuncProcIdFetchVideoCapabilities              FuncProcIdE = FuncProcIdOffset + 59
-	FuncProcIdFetchVideoStreamInfo                FuncProcIdE = FuncProcIdOffset + 60
-	FuncProcIdFrame                               FuncProcIdE = FuncProcIdOffset + 61
-	FuncProcIdGraph                               FuncProcIdE = FuncProcIdOffset + 62
-	FuncProcIdGraphEdge                           FuncProcIdE = FuncProcIdOffset + 63
-	FuncProcIdGraphNode                           FuncProcIdE = FuncProcIdOffset + 64
-	FuncProcIdGrid                                FuncProcIdE = FuncProcIdOffset + 65
-	FuncProcIdGroup                               FuncProcIdE = FuncProcIdOffset + 66
-	FuncProcIdGuiZoomZoomMenuButtons              FuncProcIdE = FuncProcIdOffset + 67
-	FuncProcIdH3CellsColored                      FuncProcIdE = FuncProcIdOffset + 68
-	FuncProcIdH3Region                            FuncProcIdE = FuncProcIdOffset + 69
-	FuncProcIdHorizontal                          FuncProcIdE = FuncProcIdOffset + 70
-	FuncProcIdHorizontalCentered                  FuncProcIdE = FuncProcIdOffset + 71
-	FuncProcIdHorizontalTop                       FuncProcIdE = FuncProcIdOffset + 72
-	FuncProcIdHorizontalWrapped                   FuncProcIdE = FuncProcIdOffset + 73
-	FuncProcIdHoverText                           FuncProcIdE = FuncProcIdOffset + 74
-	FuncProcIdHoverUi                             FuncProcIdE = FuncProcIdOffset + 75
-	FuncProcIdHyperlink                           FuncProcIdE = FuncProcIdOffset + 76
-	FuncProcIdHyperlinkTo                         FuncProcIdE = FuncProcIdOffset + 77
-	FuncProcIdImage                               FuncProcIdE = FuncProcIdOffset + 78
-	FuncProcIdImageRelease                        FuncProcIdE = FuncProcIdOffset + 79
-	FuncProcIdIndent                              FuncProcIdE = FuncProcIdOffset + 80
-	FuncProcIdLabel                               FuncProcIdE = FuncProcIdOffset + 81
-	FuncProcIdLabelAtoms                          FuncProcIdE = FuncProcIdOffset + 82
-	FuncProcIdLabelWidgetText                     FuncProcIdE = FuncProcIdOffset + 83
-	FuncProcIdMapMarker                           FuncProcIdE = FuncProcIdOffset + 84
-	FuncProcIdMapPolyline                         FuncProcIdE = FuncProcIdOffset + 85
-	FuncProcIdMapRaster                           FuncProcIdE = FuncProcIdOffset + 86
-	FuncProcIdMeasureText                         FuncProcIdE = FuncProcIdOffset + 87
-	FuncProcIdMeasureTextSize                     FuncProcIdE = FuncProcIdOffset + 88
-	FuncProcIdMemoryResetAreas                    FuncProcIdE = FuncProcIdOffset + 89
-	FuncProcIdMenuBar                             FuncProcIdE = FuncProcIdOffset + 90
-	FuncProcIdMenuButton                          FuncProcIdE = FuncProcIdOffset + 91
-	FuncProcIdMoveWindowToTop                     FuncProcIdE = FuncProcIdOffset + 92
-	FuncProcIdNewTable                            FuncProcIdE = FuncProcIdOffset + 93
-	FuncProcIdNewTableColumn                      FuncProcIdE = FuncProcIdOffset + 94
-	FuncProcIdNewTableRowHeight                   FuncProcIdE = FuncProcIdOffset + 95
-	FuncProcIdNodeDir                             FuncProcIdE = FuncProcIdOffset + 96
-	FuncProcIdNodeDirClose                        FuncProcIdE = FuncProcIdOffset + 97
-	FuncProcIdNodeLeaf                            FuncProcIdE = FuncProcIdOffset + 98
-	FuncProcIdPaintAbsoluteOverlay                FuncProcIdE = FuncProcIdOffset + 99
-	FuncProcIdPaintArrow                          FuncProcIdE = FuncProcIdOffset + 100
-	FuncProcIdPaintCanvas                         FuncProcIdE = FuncProcIdOffset + 101
-	FuncProcIdPaintCircleFilled                   FuncProcIdE = FuncProcIdOffset + 102
-	FuncProcIdPaintCircleStroke                   FuncProcIdE = FuncProcIdOffset + 103
-	FuncProcIdPaintClipPop                        FuncProcIdE = FuncProcIdOffset + 104
-	FuncProcIdPaintClipPush                       FuncProcIdE = FuncProcIdOffset + 105
-	FuncProcIdPaintCubicBezier                    FuncProcIdE = FuncProcIdOffset + 106
-	FuncProcIdPaintDashedLine                     FuncProcIdE = FuncProcIdOffset + 107
-	FuncProcIdPaintEllipseFilled                  FuncProcIdE = FuncProcIdOffset + 108
-	FuncProcIdPaintEllipseStroke                  FuncProcIdE = FuncProcIdOffset + 109
-	FuncProcIdPaintImage                          FuncProcIdE = FuncProcIdOffset + 110
-	FuncProcIdPaintLine                           FuncProcIdE = FuncProcIdOffset + 111
-	FuncProcIdPaintMarkers                        FuncProcIdE = FuncProcIdOffset + 112
-	FuncProcIdPaintPolygonFilled                  FuncProcIdE = FuncProcIdOffset + 113
-	FuncProcIdPaintPolyline                       FuncProcIdE = FuncProcIdOffset + 114
-	FuncProcIdPaintRectFilled                     FuncProcIdE = FuncProcIdOffset + 115
-	FuncProcIdPaintRectStroke                     FuncProcIdE = FuncProcIdOffset + 116
-	FuncProcIdPaintRectsFilled                    FuncProcIdE = FuncProcIdOffset + 117
-	FuncProcIdPaintSenseRegion                    FuncProcIdE = FuncProcIdOffset + 118
-	FuncProcIdPaintText                           FuncProcIdE = FuncProcIdOffset + 119
-	FuncProcIdPanelBottom                         FuncProcIdE = FuncProcIdOffset + 120
-	FuncProcIdPanelBottomInside                   FuncProcIdE = FuncProcIdOffset + 121
-	FuncProcIdPanelCentral                        FuncProcIdE = FuncProcIdOffset + 122
-	FuncProcIdPanelCentralInside                  FuncProcIdE = FuncProcIdOffset + 123
-	FuncProcIdPanelLeft                           FuncProcIdE = FuncProcIdOffset + 124
-	FuncProcIdPanelLeftInside                     FuncProcIdE = FuncProcIdOffset + 125
-	FuncProcIdPanelRight                          FuncProcIdE = FuncProcIdOffset + 126
-	FuncProcIdPanelRightInside                    FuncProcIdE = FuncProcIdOffset + 127
-	FuncProcIdPanelTop                            FuncProcIdE = FuncProcIdOffset + 128
-	FuncProcIdPanelTopInside                      FuncProcIdE = FuncProcIdOffset + 129
-	FuncProcIdPassthrough                         FuncProcIdE = FuncProcIdOffset + 130
-	FuncProcIdPlot                                FuncProcIdE = FuncProcIdOffset + 131
-	FuncProcIdPlotBars                            FuncProcIdE = FuncProcIdOffset + 132
-	FuncProcIdPlotBoxes                           FuncProcIdE = FuncProcIdOffset + 133
-	FuncProcIdPlotHLine                           FuncProcIdE = FuncProcIdOffset + 134
-	FuncProcIdPlotLine                            FuncProcIdE = FuncProcIdOffset + 135
-	FuncProcIdPlotPolygon                         FuncProcIdE = FuncProcIdOffset + 136
-	FuncProcIdPlotScatter                         FuncProcIdE = FuncProcIdOffset + 137
-	FuncProcIdPlotText                            FuncProcIdE = FuncProcIdOffset + 138
-	FuncProcIdPlotVLine                           FuncProcIdE = FuncProcIdOffset + 139
-	FuncProcIdPrepareNextFrame                    FuncProcIdE = FuncProcIdOffset + 140
-	FuncProcIdProgressBar                         FuncProcIdE = FuncProcIdOffset + 141
-	FuncProcIdPushId                              FuncProcIdE = FuncProcIdOffset + 142
-	FuncProcIdRadioButton                         FuncProcIdE = FuncProcIdOffset + 143
-	FuncProcIdRequestRepaint                      FuncProcIdE = FuncProcIdOffset + 144
-	FuncProcIdRequestRepaintAfter                 FuncProcIdE = FuncProcIdOffset + 145
-	FuncProcIdRequestScreenshot                   FuncProcIdE = FuncProcIdOffset + 146
-	FuncProcIdRequestScreenshotRect               FuncProcIdE = FuncProcIdOffset + 147
-	FuncProcIdScalarSize                          FuncProcIdE = FuncProcIdOffset + 148
-	FuncProcIdScope                               FuncProcIdE = FuncProcIdOffset + 149
-	FuncProcIdScrollArea                          FuncProcIdE = FuncProcIdOffset + 150
-	FuncProcIdScrollToCursor                      FuncProcIdE = FuncProcIdOffset + 151
-	FuncProcIdScrollingTexture                    FuncProcIdE = FuncProcIdOffset + 152
-	FuncProcIdScrollingTextureRelease             FuncProcIdE = FuncProcIdOffset + 153
-	FuncProcIdSelectableLabel                     FuncProcIdE = FuncProcIdOffset + 154
-	FuncProcIdSeparator                           FuncProcIdE = FuncProcIdOffset + 155
-	FuncProcIdSetAnimationFreeze                  FuncProcIdE = FuncProcIdOffset + 156
-	FuncProcIdSetVideoPipeline                    FuncProcIdE = FuncProcIdOffset + 157
-	FuncProcIdSetWindowCollapsed                  FuncProcIdE = FuncProcIdOffset + 158
-	FuncProcIdShowDebugTools                      FuncProcIdE = FuncProcIdOffset + 159
-	FuncProcIdShowPuffinProfiler                  FuncProcIdE = FuncProcIdOffset + 160
-	FuncProcIdSliderF64                           FuncProcIdE = FuncProcIdOffset + 161
-	FuncProcIdSliderI64                           FuncProcIdE = FuncProcIdOffset + 162
-	FuncProcIdSliderU64                           FuncProcIdE = FuncProcIdOffset + 163
-	FuncProcIdSnarlConnection                     FuncProcIdE = FuncProcIdOffset + 164
-	FuncProcIdSnarlEditor                         FuncProcIdE = FuncProcIdOffset + 165
-	FuncProcIdSnarlNode                           FuncProcIdE = FuncProcIdOffset + 166
-	FuncProcIdSnarlPin                            FuncProcIdE = FuncProcIdOffset + 167
-	FuncProcIdSpinner                             FuncProcIdE = FuncProcIdOffset + 168
-	FuncProcIdStyledSections                      FuncProcIdE = FuncProcIdOffset + 169
-	FuncProcIdTable                               FuncProcIdE = FuncProcIdOffset + 170
-	FuncProcIdTableCellRichText                   FuncProcIdE = FuncProcIdOffset + 171
-	FuncProcIdTableCellText                       FuncProcIdE = FuncProcIdOffset + 172
-	FuncProcIdTableColumn                         FuncProcIdE = FuncProcIdOffset + 173
-	FuncProcIdTableHeaderText                     FuncProcIdE = FuncProcIdOffset + 174
-	FuncProcIdTextEdit                            FuncProcIdE = FuncProcIdOffset + 175
-	FuncProcIdTimeRangePicker                     FuncProcIdE = FuncProcIdOffset + 176
-	FuncProcIdTintedScope                         FuncProcIdE = FuncProcIdOffset + 177
-	FuncProcIdTree                                FuncProcIdE = FuncProcIdOffset + 178
-	FuncProcIdUiClipToMaxRect                     FuncProcIdE = FuncProcIdOffset + 179
-	FuncProcIdUiDisable                           FuncProcIdE = FuncProcIdOffset + 180
-	FuncProcIdUiSetHeight                         FuncProcIdE = FuncProcIdOffset + 181
-	FuncProcIdUiSetMaxHeight                      FuncProcIdE = FuncProcIdOffset + 182
-	FuncProcIdUiSetMaxWidth                       FuncProcIdE = FuncProcIdOffset + 183
-	FuncProcIdUiSetMinHeight                      FuncProcIdE = FuncProcIdOffset + 184
-	FuncProcIdUiSetMinWidth                       FuncProcIdE = FuncProcIdOffset + 185
-	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 186
-	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 187
-	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 188
-	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 189
-	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 190
-	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 191
-	FuncProcIdWalkersMap                          FuncProcIdE = FuncProcIdOffset + 192
-	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 193
-	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 194
-	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 195
-	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 196
+	FuncProcIdFetchR15WalkersCamera               FuncProcIdE = FuncProcIdOffset + 41
+	FuncProcIdFetchR16ScrollDelta                 FuncProcIdE = FuncProcIdOffset + 42
+	FuncProcIdFetchR17Modifiers                   FuncProcIdE = FuncProcIdOffset + 43
+	FuncProcIdFetchR18AvailableSize               FuncProcIdE = FuncProcIdOffset + 44
+	FuncProcIdFetchR19ZoomDelta                   FuncProcIdE = FuncProcIdOffset + 45
+	FuncProcIdFetchR20Pointer                     FuncProcIdE = FuncProcIdOffset + 46
+	FuncProcIdFetchR21UiRects                     FuncProcIdE = FuncProcIdOffset + 47
+	FuncProcIdFetchR22StarvedTextures             FuncProcIdE = FuncProcIdOffset + 48
+	FuncProcIdFetchR23CanvasWheel                 FuncProcIdE = FuncProcIdOffset + 49
+	FuncProcIdFetchR24CanvasPointers              FuncProcIdE = FuncProcIdOffset + 50
+	FuncProcIdFetchR7                             FuncProcIdE = FuncProcIdOffset + 51
+	FuncProcIdFetchR9EtPrefetch                   FuncProcIdE = FuncProcIdOffset + 52
+	FuncProcIdFetchR9F64                          FuncProcIdE = FuncProcIdOffset + 53
+	FuncProcIdFetchR9I64                          FuncProcIdE = FuncProcIdOffset + 54
+	FuncProcIdFetchR9S                            FuncProcIdE = FuncProcIdOffset + 55
+	FuncProcIdFetchR9U64                          FuncProcIdE = FuncProcIdOffset + 56
+	FuncProcIdFetchSnarlEvents                    FuncProcIdE = FuncProcIdOffset + 57
+	FuncProcIdFetchVideoCapabilities              FuncProcIdE = FuncProcIdOffset + 58
+	FuncProcIdFetchVideoStreamInfo                FuncProcIdE = FuncProcIdOffset + 59
+	FuncProcIdFrame                               FuncProcIdE = FuncProcIdOffset + 60
+	FuncProcIdGraph                               FuncProcIdE = FuncProcIdOffset + 61
+	FuncProcIdGraphEdge                           FuncProcIdE = FuncProcIdOffset + 62
+	FuncProcIdGraphNode                           FuncProcIdE = FuncProcIdOffset + 63
+	FuncProcIdGrid                                FuncProcIdE = FuncProcIdOffset + 64
+	FuncProcIdGroup                               FuncProcIdE = FuncProcIdOffset + 65
+	FuncProcIdGuiZoomZoomMenuButtons              FuncProcIdE = FuncProcIdOffset + 66
+	FuncProcIdH3CellsColored                      FuncProcIdE = FuncProcIdOffset + 67
+	FuncProcIdH3Region                            FuncProcIdE = FuncProcIdOffset + 68
+	FuncProcIdHorizontal                          FuncProcIdE = FuncProcIdOffset + 69
+	FuncProcIdHorizontalCentered                  FuncProcIdE = FuncProcIdOffset + 70
+	FuncProcIdHorizontalTop                       FuncProcIdE = FuncProcIdOffset + 71
+	FuncProcIdHorizontalWrapped                   FuncProcIdE = FuncProcIdOffset + 72
+	FuncProcIdHoverText                           FuncProcIdE = FuncProcIdOffset + 73
+	FuncProcIdHoverUi                             FuncProcIdE = FuncProcIdOffset + 74
+	FuncProcIdHyperlink                           FuncProcIdE = FuncProcIdOffset + 75
+	FuncProcIdHyperlinkTo                         FuncProcIdE = FuncProcIdOffset + 76
+	FuncProcIdImage                               FuncProcIdE = FuncProcIdOffset + 77
+	FuncProcIdImageRelease                        FuncProcIdE = FuncProcIdOffset + 78
+	FuncProcIdIndent                              FuncProcIdE = FuncProcIdOffset + 79
+	FuncProcIdLabel                               FuncProcIdE = FuncProcIdOffset + 80
+	FuncProcIdLabelAtoms                          FuncProcIdE = FuncProcIdOffset + 81
+	FuncProcIdLabelWidgetText                     FuncProcIdE = FuncProcIdOffset + 82
+	FuncProcIdMapMarker                           FuncProcIdE = FuncProcIdOffset + 83
+	FuncProcIdMapPolyline                         FuncProcIdE = FuncProcIdOffset + 84
+	FuncProcIdMapRaster                           FuncProcIdE = FuncProcIdOffset + 85
+	FuncProcIdMeasureText                         FuncProcIdE = FuncProcIdOffset + 86
+	FuncProcIdMeasureTextSize                     FuncProcIdE = FuncProcIdOffset + 87
+	FuncProcIdMemoryResetAreas                    FuncProcIdE = FuncProcIdOffset + 88
+	FuncProcIdMenuBar                             FuncProcIdE = FuncProcIdOffset + 89
+	FuncProcIdMenuButton                          FuncProcIdE = FuncProcIdOffset + 90
+	FuncProcIdMoveWindowToTop                     FuncProcIdE = FuncProcIdOffset + 91
+	FuncProcIdNewTable                            FuncProcIdE = FuncProcIdOffset + 92
+	FuncProcIdNewTableColumn                      FuncProcIdE = FuncProcIdOffset + 93
+	FuncProcIdNewTableRowHeight                   FuncProcIdE = FuncProcIdOffset + 94
+	FuncProcIdNodeDir                             FuncProcIdE = FuncProcIdOffset + 95
+	FuncProcIdNodeDirClose                        FuncProcIdE = FuncProcIdOffset + 96
+	FuncProcIdNodeLeaf                            FuncProcIdE = FuncProcIdOffset + 97
+	FuncProcIdPaintAbsoluteOverlay                FuncProcIdE = FuncProcIdOffset + 98
+	FuncProcIdPaintArrow                          FuncProcIdE = FuncProcIdOffset + 99
+	FuncProcIdPaintCanvas                         FuncProcIdE = FuncProcIdOffset + 100
+	FuncProcIdPaintCircleFilled                   FuncProcIdE = FuncProcIdOffset + 101
+	FuncProcIdPaintCircleStroke                   FuncProcIdE = FuncProcIdOffset + 102
+	FuncProcIdPaintClipPop                        FuncProcIdE = FuncProcIdOffset + 103
+	FuncProcIdPaintClipPush                       FuncProcIdE = FuncProcIdOffset + 104
+	FuncProcIdPaintCubicBezier                    FuncProcIdE = FuncProcIdOffset + 105
+	FuncProcIdPaintDashedLine                     FuncProcIdE = FuncProcIdOffset + 106
+	FuncProcIdPaintEllipseFilled                  FuncProcIdE = FuncProcIdOffset + 107
+	FuncProcIdPaintEllipseStroke                  FuncProcIdE = FuncProcIdOffset + 108
+	FuncProcIdPaintImage                          FuncProcIdE = FuncProcIdOffset + 109
+	FuncProcIdPaintLine                           FuncProcIdE = FuncProcIdOffset + 110
+	FuncProcIdPaintMarkers                        FuncProcIdE = FuncProcIdOffset + 111
+	FuncProcIdPaintPolygonFilled                  FuncProcIdE = FuncProcIdOffset + 112
+	FuncProcIdPaintPolyline                       FuncProcIdE = FuncProcIdOffset + 113
+	FuncProcIdPaintRectFilled                     FuncProcIdE = FuncProcIdOffset + 114
+	FuncProcIdPaintRectStroke                     FuncProcIdE = FuncProcIdOffset + 115
+	FuncProcIdPaintRectsFilled                    FuncProcIdE = FuncProcIdOffset + 116
+	FuncProcIdPaintSenseRegion                    FuncProcIdE = FuncProcIdOffset + 117
+	FuncProcIdPaintText                           FuncProcIdE = FuncProcIdOffset + 118
+	FuncProcIdPanelBottom                         FuncProcIdE = FuncProcIdOffset + 119
+	FuncProcIdPanelBottomInside                   FuncProcIdE = FuncProcIdOffset + 120
+	FuncProcIdPanelCentral                        FuncProcIdE = FuncProcIdOffset + 121
+	FuncProcIdPanelCentralInside                  FuncProcIdE = FuncProcIdOffset + 122
+	FuncProcIdPanelLeft                           FuncProcIdE = FuncProcIdOffset + 123
+	FuncProcIdPanelLeftInside                     FuncProcIdE = FuncProcIdOffset + 124
+	FuncProcIdPanelRight                          FuncProcIdE = FuncProcIdOffset + 125
+	FuncProcIdPanelRightInside                    FuncProcIdE = FuncProcIdOffset + 126
+	FuncProcIdPanelTop                            FuncProcIdE = FuncProcIdOffset + 127
+	FuncProcIdPanelTopInside                      FuncProcIdE = FuncProcIdOffset + 128
+	FuncProcIdPassthrough                         FuncProcIdE = FuncProcIdOffset + 129
+	FuncProcIdPrepareNextFrame                    FuncProcIdE = FuncProcIdOffset + 130
+	FuncProcIdProgressBar                         FuncProcIdE = FuncProcIdOffset + 131
+	FuncProcIdPushId                              FuncProcIdE = FuncProcIdOffset + 132
+	FuncProcIdRadioButton                         FuncProcIdE = FuncProcIdOffset + 133
+	FuncProcIdRequestRepaint                      FuncProcIdE = FuncProcIdOffset + 134
+	FuncProcIdRequestRepaintAfter                 FuncProcIdE = FuncProcIdOffset + 135
+	FuncProcIdRequestScreenshot                   FuncProcIdE = FuncProcIdOffset + 136
+	FuncProcIdRequestScreenshotRect               FuncProcIdE = FuncProcIdOffset + 137
+	FuncProcIdScalarSize                          FuncProcIdE = FuncProcIdOffset + 138
+	FuncProcIdScope                               FuncProcIdE = FuncProcIdOffset + 139
+	FuncProcIdScrollArea                          FuncProcIdE = FuncProcIdOffset + 140
+	FuncProcIdScrollToCursor                      FuncProcIdE = FuncProcIdOffset + 141
+	FuncProcIdScrollingTexture                    FuncProcIdE = FuncProcIdOffset + 142
+	FuncProcIdScrollingTextureRelease             FuncProcIdE = FuncProcIdOffset + 143
+	FuncProcIdSelectableLabel                     FuncProcIdE = FuncProcIdOffset + 144
+	FuncProcIdSeparator                           FuncProcIdE = FuncProcIdOffset + 145
+	FuncProcIdSetAnimationFreeze                  FuncProcIdE = FuncProcIdOffset + 146
+	FuncProcIdSetVideoPipeline                    FuncProcIdE = FuncProcIdOffset + 147
+	FuncProcIdSetWindowCollapsed                  FuncProcIdE = FuncProcIdOffset + 148
+	FuncProcIdShowDebugTools                      FuncProcIdE = FuncProcIdOffset + 149
+	FuncProcIdShowPuffinProfiler                  FuncProcIdE = FuncProcIdOffset + 150
+	FuncProcIdSliderF64                           FuncProcIdE = FuncProcIdOffset + 151
+	FuncProcIdSliderI64                           FuncProcIdE = FuncProcIdOffset + 152
+	FuncProcIdSliderU64                           FuncProcIdE = FuncProcIdOffset + 153
+	FuncProcIdSnarlConnection                     FuncProcIdE = FuncProcIdOffset + 154
+	FuncProcIdSnarlEditor                         FuncProcIdE = FuncProcIdOffset + 155
+	FuncProcIdSnarlNode                           FuncProcIdE = FuncProcIdOffset + 156
+	FuncProcIdSnarlPin                            FuncProcIdE = FuncProcIdOffset + 157
+	FuncProcIdSpinner                             FuncProcIdE = FuncProcIdOffset + 158
+	FuncProcIdStyledSections                      FuncProcIdE = FuncProcIdOffset + 159
+	FuncProcIdTable                               FuncProcIdE = FuncProcIdOffset + 160
+	FuncProcIdTableCellRichText                   FuncProcIdE = FuncProcIdOffset + 161
+	FuncProcIdTableCellText                       FuncProcIdE = FuncProcIdOffset + 162
+	FuncProcIdTableColumn                         FuncProcIdE = FuncProcIdOffset + 163
+	FuncProcIdTableHeaderText                     FuncProcIdE = FuncProcIdOffset + 164
+	FuncProcIdTextEdit                            FuncProcIdE = FuncProcIdOffset + 165
+	FuncProcIdTimeRangePicker                     FuncProcIdE = FuncProcIdOffset + 166
+	FuncProcIdTintedScope                         FuncProcIdE = FuncProcIdOffset + 167
+	FuncProcIdTree                                FuncProcIdE = FuncProcIdOffset + 168
+	FuncProcIdUiClipToMaxRect                     FuncProcIdE = FuncProcIdOffset + 169
+	FuncProcIdUiDisable                           FuncProcIdE = FuncProcIdOffset + 170
+	FuncProcIdUiSetHeight                         FuncProcIdE = FuncProcIdOffset + 171
+	FuncProcIdUiSetMaxHeight                      FuncProcIdE = FuncProcIdOffset + 172
+	FuncProcIdUiSetMaxWidth                       FuncProcIdE = FuncProcIdOffset + 173
+	FuncProcIdUiSetMinHeight                      FuncProcIdE = FuncProcIdOffset + 174
+	FuncProcIdUiSetMinWidth                       FuncProcIdE = FuncProcIdOffset + 175
+	FuncProcIdUiSetWidth                          FuncProcIdE = FuncProcIdOffset + 176
+	FuncProcIdUiWithLayout                        FuncProcIdE = FuncProcIdOffset + 177
+	FuncProcIdVectorSize                          FuncProcIdE = FuncProcIdOffset + 178
+	FuncProcIdVertical                            FuncProcIdE = FuncProcIdOffset + 179
+	FuncProcIdVerticalCentered                    FuncProcIdE = FuncProcIdOffset + 180
+	FuncProcIdVerticalCenteredJustified           FuncProcIdE = FuncProcIdOffset + 181
+	FuncProcIdWalkersMap                          FuncProcIdE = FuncProcIdOffset + 182
+	FuncProcIdWarnIfDebugBuild                    FuncProcIdE = FuncProcIdOffset + 183
+	FuncProcIdWidgetText                          FuncProcIdE = FuncProcIdOffset + 184
+	FuncProcIdWidgetsGlobalThemePreferenceButtons FuncProcIdE = FuncProcIdOffset + 185
+	FuncProcIdWindow                              FuncProcIdE = FuncProcIdOffset + 186
 )
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
@@ -670,105 +660,6 @@ const (
 	PanelTopInsideMethodIdResizable   PanelTopInsideMethodIdE = 1
 	PanelTopInsideMethodIdDefaultSize PanelTopInsideMethodIdE = 2
 	PanelTopInsideMethodIdExactSize   PanelTopInsideMethodIdE = 3
-)
-
-const (
-	PlotMethodIdBuild PlotMethodIdE = 0
-
-	PlotMethodIdWidth                 PlotMethodIdE = 1
-	PlotMethodIdHeight                PlotMethodIdE = 2
-	PlotMethodIdViewAspect            PlotMethodIdE = 3
-	PlotMethodIdDataAspect            PlotMethodIdE = 4
-	PlotMethodIdXAxisLabel            PlotMethodIdE = 5
-	PlotMethodIdYAxisLabel            PlotMethodIdE = 6
-	PlotMethodIdLegend                PlotMethodIdE = 7
-	PlotMethodIdAllowZoom             PlotMethodIdE = 8
-	PlotMethodIdAllowDrag             PlotMethodIdE = 9
-	PlotMethodIdAllowScroll           PlotMethodIdE = 10
-	PlotMethodIdAllowZoom2            PlotMethodIdE = 11
-	PlotMethodIdAllowDrag2            PlotMethodIdE = 12
-	PlotMethodIdAllowScroll2          PlotMethodIdE = 13
-	PlotMethodIdAllowBoxedZoom        PlotMethodIdE = 14
-	PlotMethodIdAllowDoubleClickReset PlotMethodIdE = 15
-	PlotMethodIdShowGrid              PlotMethodIdE = 16
-	PlotMethodIdShowAxes              PlotMethodIdE = 17
-	PlotMethodIdShowBackground        PlotMethodIdE = 18
-	PlotMethodIdIncludeX              PlotMethodIdE = 19
-	PlotMethodIdIncludeY              PlotMethodIdE = 20
-	PlotMethodIdIncludeXRange         PlotMethodIdE = 21
-	PlotMethodIdIncludeYRange         PlotMethodIdE = 22
-	PlotMethodIdCenterXAxis           PlotMethodIdE = 23
-	PlotMethodIdCenterYAxis           PlotMethodIdE = 24
-	PlotMethodIdYGridMarks            PlotMethodIdE = 25
-	PlotMethodIdClampX                PlotMethodIdE = 26
-	PlotMethodIdClampY                PlotMethodIdE = 27
-	PlotMethodIdXAxisAutoTicks        PlotMethodIdE = 28
-	PlotMethodIdResetBounds           PlotMethodIdE = 29
-)
-
-const (
-	PlotBarsMethodIdBuild PlotBarsMethodIdE = 0
-
-	PlotBarsMethodIdColor      PlotBarsMethodIdE = 1
-	PlotBarsMethodIdWidth      PlotBarsMethodIdE = 2
-	PlotBarsMethodIdHorizontal PlotBarsMethodIdE = 3
-	PlotBarsMethodIdHighlight  PlotBarsMethodIdE = 4
-)
-
-const (
-	PlotBoxesMethodIdBuild PlotBoxesMethodIdE = 0
-
-	PlotBoxesMethodIdHorizontal          PlotBoxesMethodIdE = 1
-	PlotBoxesMethodIdHighlight           PlotBoxesMethodIdE = 2
-	PlotBoxesMethodIdAllowHover          PlotBoxesMethodIdE = 3
-	PlotBoxesMethodIdSuppressElementText PlotBoxesMethodIdE = 4
-)
-
-const (
-	PlotHLineMethodIdBuild PlotHLineMethodIdE = 0
-
-	PlotHLineMethodIdColor     PlotHLineMethodIdE = 1
-	PlotHLineMethodIdWidth     PlotHLineMethodIdE = 2
-	PlotHLineMethodIdHighlight PlotHLineMethodIdE = 3
-)
-
-const (
-	PlotLineMethodIdBuild PlotLineMethodIdE = 0
-
-	PlotLineMethodIdColor     PlotLineMethodIdE = 1
-	PlotLineMethodIdWidth     PlotLineMethodIdE = 2
-	PlotLineMethodIdHighlight PlotLineMethodIdE = 3
-	PlotLineMethodIdFill      PlotLineMethodIdE = 4
-)
-
-const (
-	PlotPolygonMethodIdBuild PlotPolygonMethodIdE = 0
-
-	PlotPolygonMethodIdHighlight PlotPolygonMethodIdE = 1
-)
-
-const (
-	PlotScatterMethodIdBuild PlotScatterMethodIdE = 0
-
-	PlotScatterMethodIdColor     PlotScatterMethodIdE = 1
-	PlotScatterMethodIdRadius    PlotScatterMethodIdE = 2
-	PlotScatterMethodIdShape     PlotScatterMethodIdE = 3
-	PlotScatterMethodIdHighlight PlotScatterMethodIdE = 4
-	PlotScatterMethodIdFilled    PlotScatterMethodIdE = 5
-)
-
-const (
-	PlotTextMethodIdBuild PlotTextMethodIdE = 0
-
-	PlotTextMethodIdColor PlotTextMethodIdE = 1
-)
-
-const (
-	PlotVLineMethodIdBuild PlotVLineMethodIdE = 0
-
-	PlotVLineMethodIdColor     PlotVLineMethodIdE = 1
-	PlotVLineMethodIdWidth     PlotVLineMethodIdE = 2
-	PlotVLineMethodIdHighlight PlotVLineMethodIdE = 3
 )
 
 const (

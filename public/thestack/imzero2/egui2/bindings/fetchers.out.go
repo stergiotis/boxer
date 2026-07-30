@@ -61,17 +61,6 @@ func (inst *Fetcher) FetchR14CanvasPointer() (hoverX float32, hoverY float32, cl
 	clicked = inst.readB()
 	return
 }
-func (inst *Fetcher) FetchR15PlotPointer() (plotId uint64, x float64, y float64, clicked bool, hoverPlotId uint64, hoverX float64, hoverY float64) {
-	inst.invoke(FuncProcIdFetchR15PlotPointer)
-	plotId = inst.readU64()
-	x = inst.readF64()
-	y = inst.readF64()
-	clicked = inst.readB()
-	hoverPlotId = inst.readU64()
-	hoverX = inst.readF64()
-	hoverY = inst.readF64()
-	return
-}
 func (inst *Fetcher) FetchR15WalkersCamera() (found bool, mapId uint64, zoom float64, centerLat float64, centerLon float64, minLat float64, minLon float64, maxLat float64, maxLon float64, screenWidthPx float32, screenHeightPx float32, hoverLat float64, hoverLon float64, hoverValid bool, clicked bool, viewHash uint64) {
 	inst.invoke(FuncProcIdFetchR15WalkersCamera)
 	found = inst.readB()

@@ -490,53 +490,6 @@ type PanelTopInsideFluid struct {
 }
 type PanelTopInsideMethodIdE uint32
 
-type PlotFluid struct {
-	r     *typed.RetainedFffiBuilder
-	id    uint64
-	idGen WidgetIdCreatorI
-}
-type PlotMethodIdE uint32
-
-type PlotBarsFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type PlotBarsMethodIdE uint32
-
-type PlotBoxesFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type PlotBoxesMethodIdE uint32
-
-type PlotHLineFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type PlotHLineMethodIdE uint32
-
-type PlotLineFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type PlotLineMethodIdE uint32
-
-type PlotPolygonFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type PlotPolygonMethodIdE uint32
-
-type PlotScatterFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type PlotScatterMethodIdE uint32
-
-type PlotTextFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type PlotTextMethodIdE uint32
-
-type PlotVLineFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type PlotVLineMethodIdE uint32
-
 type ProgressBarFluid struct {
 	r *typed.RetainedFffiBuilder
 }
@@ -847,10 +800,6 @@ type NodeCommandS struct{}
 type PaintCanvasS struct{}
 
 type PaintCmdS struct{}
-
-type PlotDrainS struct{}
-
-type PlotElementS struct{}
 
 type ProgressBarS struct{}
 

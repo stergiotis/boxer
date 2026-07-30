@@ -119,36 +119,6 @@ func (inst SelectableLabelFluid) SendResp() ResponseFlagsE {
 	return CurrentApplicationState.StateManager.GetResponseByIdRaw(inst.id)
 }
 
-// PlotResponse carries the most-recent in-plot primary click, in plot-data
-// coordinates. Filled by PlotFluid.SendResp via FetchR15PlotPointer; carries
-// the standard one-frame lag — a click on frame N is reported on frame N+1.
-// Clicked is false (and X/Y are NaN-or-zero) when there was no recent click
-// or the latest click was on a different plot.
-type PlotResponse struct {
-	X, Y    float64
-	Clicked bool
-}
-
-// SendResp emits the plot opcode and reads the cached r15 plot-pointer
-// state (populated last frame by StateManager.Sync). Single-slot
-// semantics — only the latest click across all plots is retained — so
-// we filter on the plot widget id and report Clicked=false if the
-// latest click belongs to a different plot.
-//
-// The cache read replaces an earlier inline FetchR15PlotPointer call:
-// inline fetches inside a deferred-block capture (e.g. dock.Tab
-// bodies, post-M3) buffer rather than flush and deadlock the render
-// loop. The "one-frame lag" semantics are unchanged — the inline
-// fetch already ran on the prior frame's data.
-func (inst PlotFluid) SendResp() PlotResponse {
-	inst.Send()
-	p := CurrentApplicationState.StateManager.GetPlotPointer()
-	if !p.Clicked || p.PlotId != inst.id {
-		return PlotResponse{}
-	}
-	return PlotResponse{X: p.X, Y: p.Y, Clicked: true}
-}
-
 // Handle returns the runtime-scoped widget handle for the block. Use for
 // app-level skip on heavy bodies that should short-circuit when the parent
 // is collapsed: `if c.IsBlockSkipped(ch.Handle()) { continue }`.

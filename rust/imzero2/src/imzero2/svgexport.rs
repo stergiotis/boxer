@@ -894,7 +894,7 @@ pub fn render_svg_from_context(
     if !layer_ids.contains(&bg) {
         layer_ids.insert(0, bg);
     }
-    // egui_snarl, egui_plot zoom, and any caller of `Context::set_transform_layer`
+    // egui_snarl and any caller of `Context::set_transform_layer`
     // attach a TSTransform to a layer; egui's `GraphicLayers::drain` applies it
     // in-place before tessellation. We can't mutate (read-only borrow), so we
     // clone shapes that have a non-identity transform and transform the clone.

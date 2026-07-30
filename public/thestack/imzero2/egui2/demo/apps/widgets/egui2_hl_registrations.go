@@ -92,27 +92,6 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
-		Name: "plots", Category: "Charts & plots", Title: icons.IconChartLine + " plots",
-		Stage:       [2]float32{1024, 700},
-		Flags:       registry.DemoFlagNeedsLargeArea,
-		Kind:        registry.DemoKindUX,
-		Description: "Line, scatter and bar plots plus a combined view that overlays multiple series with horizontal-line and text annotations.",
-		Render: func(ids *c.WidgetIdStack) {
-			for range c.CollapsingHeader(ids.PrepareStr("plot-lines-demo"), c.WidgetText().Text("line chart (sin/cos)").Keep()).DefaultOpen(true).KeepIter() {
-				demoPlotLines(ids)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("plot-scatter-demo"), c.WidgetText().Text("scatter").Keep()).KeepIter() {
-				demoPlotScatter(ids)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("plot-bars-demo"), c.WidgetText().Text("bars").Keep()).KeepIter() {
-				demoPlotBars(ids)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("plot-combined-demo"), c.WidgetText().Text("combined (line + scatter + hline + text)").Keep()).KeepIter() {
-				demoPlotCombined(ids)
-			}
-		},
-	})
-	registry.Register(registry.Demo{
 		Name: "graphs", Category: "Charts & plots", Title: icons.IconChartBar + " graphs",
 		Stage: [2]float32{1024, 700}, Flags: registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic, // dynamic-tree demo grows by time.Since(start)
 		Kind:        registry.DemoKindUX,
