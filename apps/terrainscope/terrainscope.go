@@ -40,6 +40,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 const (
@@ -583,13 +584,22 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 		metric(fmt.Sprintf("compute %s", fmtDur(res.computeDur)), tipSimTime)
 	}
 
+	// The sweep plot renders through the implot port (ADR-0149 SD7);
+	// bumping plotEpoch still resets the view by changing the plot's
+	// identity. Margins keep a legend taller than the plot body from
+	// colliding with the labels above or the panel edge below.
+	c.AddSpace(plotMargin)
+	p := implot.Begin(inst.ids, fmt.Sprintf("##sweep-plot-%d", inst.plotEpoch), mapStageW, plotHeight)
+	p.SetupAxes("Distance along ray (m)", "Elevation (m a.s.l.)", implot.AxisFlagsNone, implot.AxisFlagsNone)
+
 	// Elevation envelope bands behind the profiles (only meaningful with a
-	// non-degenerate ensemble). All bands share one legend entry to keep it
-	// readable; each is a closed max-forward / min-backward polygon.
+	// non-degenerate ensemble). All bands share one label — and therefore
+	// one legend entry — while each keeps its own bearing-ramp fill.
 	if ens.Samples > 0 && len(ens.Distance) > 1 {
 		for j := range rays {
-			xs, ys := envelopePolygon(ens.Distance, ens.TerrainMax[j], ens.TerrainMin[j])
-			c.PlotPolygon("± uncertainty", xs, ys, rayFillRGBA(j, len(rays), envelopeBandAlpha), 0x00000000, 0).Send()
+			p.SetNextColor(rayFillRGBA(j, len(rays), envelopeBandAlpha))
+			p.ShadedBetween("± uncertainty", ens.Distance,
+				f32sToF64(ens.TerrainMax[j]), f32sToF64(ens.TerrainMin[j]))
 		}
 	}
 
@@ -608,11 +618,11 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 		if ens.Samples > 0 {
 			name = fmt.Sprintf("%+.1f° %.0f%%", ens.AngleDeg[i], ens.VisProb[i]*100)
 		}
-		c.PlotLine(name, ray.ProfileDist, f32sToF64(ray.ProfileElev)).
-			Color(col).Width(width).Highlight(isCenter).Send()
+		p.SetNextColor(col.Literal()).SetNextWeight(width)
+		p.Line(name, ray.ProfileDist, f32sToF64(ray.ProfileElev))
 	}
-	c.PlotLine("sight line", center.ProfileDist, f32sToF64(center.LOSElev)).
-		Color(color.Hex(0xff8800ff)).Width(1.5).Send()
+	p.SetNextColor(0xff8800ff).SetNextWeight(1.5)
+	p.Line("sight line", center.ProfileDist, f32sToF64(center.LOSElev))
 
 	var obsX []float64
 	var obsY []float64
@@ -623,18 +633,10 @@ func (inst *App) renderSweepPanel(res *sweepResult) {
 		}
 	}
 	if len(obsX) > 0 {
-		c.PlotScatter("obstructions", obsX, obsY).
-			Color(color.Hex(0xff2222ff)).Radius(4.0).Shape(2).Filled(true).Send()
+		p.SetNextColor(0xff2222ff)
+		p.Scatter("obstructions", obsX, obsY, implot.MarkerSquare, 4.0)
 	}
-
-	// Margin around the plot so a legend taller than the plot body (many
-	// rays → many entries) has room to overflow without colliding with the
-	// labels above or the panel edge below.
-	c.AddSpace(plotMargin)
-	c.Plot(inst.ids.PrepareStr(fmt.Sprintf("sweep-plot-%d", inst.plotEpoch))).
-		Width(mapStageW).Height(plotHeight).
-		XAxisLabel("Distance along ray (m)").YAxisLabel("Elevation (m a.s.l.)").
-		Legend().AllowZoom(true).AllowDrag(true).AllowScroll(false).Send()
+	p.End()
 	c.AddSpace(plotMargin)
 }
 
@@ -652,16 +654,18 @@ func (inst *App) renderDistPane(res *sweepResult) {
 	metric(fmt.Sprintf("Input distributions — empirical CDF of %d samples (deviation from nominal)", ens.Samples),
 		"Each randomised input is drawn from its own Gaussian; this is the empirical CDF (fraction of samples ≤ x) of the realised "+
 			"deviations from the nominal value, in metres. Position deviations are radial offsets (≥0); height deviations are signed.")
+	c.AddSpace(plotMargin)
+	p := implot.Begin(inst.ids, fmt.Sprintf("##dist-plot-%d", inst.plotEpoch), mapStageW, ecdfHeight)
+	p.SetupAxes("deviation from nominal (m)", "cumulative probability",
+		implot.AxisFlagsNone, implot.AxisFlagsNone)
+	p.IncludeY(0)
+	p.IncludeY(1)
 	for i, in := range ens.Inputs {
 		xs, ys := ecdfStep(in.Dev)
-		c.PlotLine(in.Name, xs, ys).Color(distColorAt(i)).Width(1.8).Send()
+		p.SetNextColor(distColorAt(i).Literal()).SetNextWeight(1.8)
+		p.Line(in.Name, xs, ys)
 	}
-	c.AddSpace(plotMargin)
-	c.Plot(inst.ids.PrepareStr(fmt.Sprintf("dist-plot-%d", inst.plotEpoch))).
-		Width(mapStageW).Height(ecdfHeight).
-		XAxisLabel("deviation from nominal (m)").YAxisLabel("cumulative probability").
-		Legend().AllowZoom(true).AllowDrag(true).AllowScroll(false).
-		IncludeY(0).IncludeY(1).Send()
+	p.End()
 	c.AddSpace(plotMargin)
 }
 
@@ -850,23 +854,6 @@ func centerRayIndex(angleDeg []float64) (idx int) {
 			best = abs
 			idx = i
 		}
-	}
-	return
-}
-
-// envelopePolygon returns the closed (xs, ys) ring of an elevation band:
-// max curve left→right, then min curve right→left.
-func envelopePolygon(dist []float64, hi []float32, lo []float32) (xs []float64, ys []float64) {
-	n := len(dist)
-	xs = make([]float64, 0, 2*n)
-	ys = make([]float64, 0, 2*n)
-	for k := range n {
-		xs = append(xs, dist[k])
-		ys = append(ys, float64(hi[k]))
-	}
-	for k := n - 1; k >= 0; k-- {
-		xs = append(xs, dist[k])
-		ys = append(ys, float64(lo[k]))
 	}
 	return
 }
