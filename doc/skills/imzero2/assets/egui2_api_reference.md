@@ -125,6 +125,7 @@ status: draft
 | PaintDashedLine | BuilderFactory | No | 8 | 0 | 0 | Immediate |
 | PaintEllipseFilled | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | PaintEllipseStroke | BuilderFactory | No | 6 | 0 | 0 | Immediate |
+| PaintImage | BuilderFactory | No | 9 | 0 | 2 | Immediate |
 | PaintLine | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintMarkers | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintPolygonFilled | BuilderFactory | No | 3 | 0 | 0 | Immediate |
@@ -1663,6 +1664,37 @@ PaintCmd
 | ry | plain | f32 |
 | col | plain | u32 |
 | strokeWidth | plain | f32 |
+
+#### Return Type
+
+PaintCmd
+
+---
+
+### PaintImage
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| imageId | plain | u64 |
+| minX | plain | f32 |
+| minY | plain | f32 |
+| maxX | plain | f32 |
+| maxY | plain | f32 |
+| widthPx | plain | u32 |
+| heightPx | plain | u32 |
+| contentVersion | plain | u64 |
+| pixels | plain | u32h |
+
+#### Builder Methods
+
+- **Opacity**(op: f32)
+- **Nearest**(on: b)
 
 #### Return Type
 

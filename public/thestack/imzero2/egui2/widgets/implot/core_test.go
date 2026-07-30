@@ -179,3 +179,61 @@ func TestSanitize(t *testing.T) {
 		t.Errorf("inverted range not swapped: %+v", r)
 	}
 }
+
+func TestBinSamples(t *testing.T) {
+	samples := []float64{0, 0.1, 0.2, 0.5, 0.9, 1.0, math.NaN()}
+	counts, lo, width, n := binSamples(samples, 4, false)
+	if n != 6 {
+		t.Fatalf("n = %d, want 6", n)
+	}
+	if lo != 0 || math.Abs(width-0.25) > 1e-12 {
+		t.Errorf("lo=%v width=%v", lo, width)
+	}
+	sum := 0.0
+	for _, cn := range counts {
+		sum += cn
+	}
+	if sum != 6 {
+		t.Errorf("counts sum %v, want 6 (max sample must clamp into last bin)", sum)
+	}
+	// Density integrates to one.
+	dcounts, _, dw, _ := binSamples(samples, 4, true)
+	integ := 0.0
+	for _, cn := range dcounts {
+		integ += cn * dw
+	}
+	if math.Abs(integ-1) > 1e-9 {
+		t.Errorf("density integral %v, want 1", integ)
+	}
+	// Sturges default: n=6 → ceil(log2 6)+1 = 4 bins.
+	sc, _, _, _ := binSamples(samples, 0, false)
+	if len(sc) != 4 {
+		t.Errorf("sturges bins = %d, want 4", len(sc))
+	}
+}
+
+func TestBin2DOrientation(t *testing.T) {
+	// One point at max-y must land in row 0 (top), one at min-y in the last row.
+	xs := []float64{0, 1}
+	ys := []float64{0, 1}
+	values, _, _, _, _, ok := bin2D(xs, ys, 2, 2)
+	if !ok {
+		t.Fatal("bin2D failed")
+	}
+	// (x=1, y=1) → top-right = row 0, col 1; (x=0, y=0) → bottom-left = row 1, col 0.
+	if values[0*2+1] != 1 || values[1*2+0] != 1 {
+		t.Errorf("orientation wrong: %v", values)
+	}
+}
+
+func TestHashF64s(t *testing.T) {
+	a := []float64{1, 2, 3}
+	b := []float64{1, 2, 3}
+	cc := []float64{1, 2, 3.0000001}
+	if hashF64s(a) != hashF64s(b) {
+		t.Error("hash not stable")
+	}
+	if hashF64s(a) == hashF64s(cc) {
+		t.Error("hash not sensitive")
+	}
+}

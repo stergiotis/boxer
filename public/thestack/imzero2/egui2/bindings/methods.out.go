@@ -2590,6 +2590,27 @@ func (inst PaintEllipseStrokeFluid) Send() {
 
 	r.SendIntermediate()
 }
+func (inst PaintImageFluid) Opacity(op float32) PaintImageFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintImageMethodIdOpacity))
+	r.WriteFloat32(op)
+
+	return inst
+}
+
+func (inst PaintImageFluid) Nearest(on bool) PaintImageFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintImageMethodIdNearest))
+	r.WriteBool(on)
+
+	return inst
+}
+
+func (inst PaintImageFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintImageMethodIdBuild))
+	r.SendIntermediate()
+}
 func (inst PaintLineFluid) Send() {
 	r := inst.r
 

@@ -14,6 +14,7 @@ const (
 	kindStems
 	kindInfV
 	kindInfH
+	kindHeatmap
 )
 
 // MarkerE selects a scatter glyph; the numbering is the paintMarkers wire

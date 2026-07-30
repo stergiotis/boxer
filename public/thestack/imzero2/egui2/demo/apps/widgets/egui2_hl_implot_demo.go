@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
@@ -20,6 +21,13 @@ type implotM3State struct {
 	tXs, tYs         []float64
 	eXs              []float64
 	e1Ys, e2Ys, e3Ys []float64
+}
+
+// implotM4State carries the M4 heatmap/histogram demo's data.
+type implotM4State struct {
+	smallVals, bigVals []float64
+	cmSmall, cmBig     *colormap.Config
+	samples            []float64
 }
 
 // implotM2State carries the M2 item-breadth demo's series.
@@ -156,6 +164,62 @@ func init() {
 			p2.Line("e^0.9x", st.eXs, st.e1Ys)
 			p2.Line("40·e^0.35x", st.eXs, st.e2Ys)
 			p2.Line("3000·e^-0.4x", st.eXs, st.e3Ys)
+			p2.End()
+		},
+	})
+	registry.Register(registry.Demo{
+		Name:        "implot_m4",
+		Category:    "Graphics & canvas",
+		Title:       icons.IconPaintBucket + " implot M4 (heatmaps / histograms)",
+		Stage:       [2]float32{660, 580},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "ADR-0149 M4: a small heatmap on the rect-batch route and a 256×160 field on the paintImage texture route (Viridis and Inferno via the colormap widget), plus a Sturges-binned histogram.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			st := &implotM4State{}
+			st.smallVals = make([]float64, 24*14)
+			for r := range 14 {
+				for cix := range 24 {
+					st.smallVals[r*24+cix] = math.Sin(float64(cix)/3.5) * math.Cos(float64(r)/2.2)
+				}
+			}
+			st.cmSmall = colormap.NewConfig(colormap.Viridis8, -1, 1)
+			st.bigVals = make([]float64, 256*160)
+			for r := range 160 {
+				for cix := range 256 {
+					x := float64(cix) / 32.0
+					y := float64(r) / 24.0
+					st.bigVals[r*256+cix] = math.Sin(x)*math.Cos(y) + 0.4*math.Sin(2.4*x+1.7*y)
+				}
+			}
+			st.cmBig = colormap.NewConfig(colormap.Inferno8, -1.4, 1.4)
+			// Deterministic LCG samples: a Gaussian-ish sum of uniforms.
+			lcg := uint64(88172645463325252)
+			next := func() float64 {
+				lcg = lcg*6364136223846793005 + 1442695040888963407
+				return float64(lcg>>11) / float64(1<<53)
+			}
+			for range 4000 {
+				s := 0.0
+				for range 6 {
+					s += next()
+				}
+				st.samples = append(st.samples, s)
+			}
+			return st
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			st := state.(*implotM4State)
+			p := implot.Begin(ids, "heatmaps: rect route / texture route", 620, 250)
+			p.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+			p.SetupAxisLimits(implot.AxisX1, 0, 21, implot.CondOnce)
+			p.SetupAxisLimits(implot.AxisY1, 0, 10, implot.CondOnce)
+			p.Heatmap("small (336 rects)", st.smallVals, 14, 24, st.cmSmall, 0, 0, 10, 10)
+			p.Heatmap("big (256x160 texture)", st.bigVals, 160, 256, st.cmBig, 11, 0, 21, 10)
+			p.End()
+			p2 := implot.Begin(ids, "histograms", 620, 250)
+			p2.SetupAxes("value", "count", implot.AxisFlagsAutoFit, implot.AxisFlagsAutoFit)
+			p2.Histogram("histogram", st.samples, 0, false)
 			p2.End()
 		},
 	})

@@ -208,6 +208,8 @@ func (p *Plot) End() {
 func (p *Plot) emitSeries(s *seriesFrame, tr transform, areaX, areaY, areaW, areaH float32, colHex uint32, weight float32) {
 	st := p.st
 	switch s.kind {
+	case kindHeatmap:
+		p.emitHeatmap(s, tr)
 	case kindLine:
 		p.emitLineWeighted(s, tr, colHex, weight)
 	case kindScatter:

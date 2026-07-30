@@ -71,6 +71,7 @@ type plotState struct {
 	// a plot, as in ImPlot.
 	hidden      map[string]bool
 	legendHover string
+	heatCache   map[string]*heatTex
 
 	// scratch buffers reused across frames to keep steady-state allocation flat.
 	scratchX []float32
@@ -92,6 +93,7 @@ type seriesFrame struct {
 	radius float32
 	width  float64
 	yref   float64
+	heat   *heatFrame
 }
 
 // Plot is the frame-transient handle between Begin and End. Methods follow

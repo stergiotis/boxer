@@ -1148,6 +1148,19 @@ pub enum PaintCmd {
         max_ys: Vec<f32>,
         cols: Vec<u32>,
     },
+    Image {
+        id: u64,
+        min_x: f32,
+        min_y: f32,
+        max_x: f32,
+        max_y: f32,
+        width_px: u32,
+        height_px: u32,
+        content_version: u64,
+        pixels: Vec<u32>,
+        nearest: bool,
+        opacity: f32,
+    },
 }
 
 // ===========================================================================
@@ -2523,6 +2536,12 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // plumbing. The overlay paints the texture itself (ImageCache::ensure).
     pub walkers_raster_cache: ImageCache,
 
+    // ADR-0149 M4 paintImage — a third ImageCache for painter-lane textured
+    // rects (heatmap texture route and future raster underlays), keyed by a
+    // Go-derived image id. Same content-version + starved-report protocol
+    // as the walkers raster cache.
+    pub paint_image_cache: ImageCache,
+
     // egui-snarl (ADR-0021) — node-editor binding. Per-frame pending
     // accumulators (drained by the `snarlEditor` opcode) + retained
     // Snarl<u64> per editor id (positions, drag/connect state, viewport
@@ -2744,6 +2763,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             scrolling_texture: ScrollingTextureCache::new(),
             image_cache: ImageCache::new(),
             walkers_raster_cache: ImageCache::new(),
+            paint_image_cache: ImageCache::new(),
             snarl_pending_nodes: Vec::with_capacity(64),
             snarl_pending_connections: Vec::with_capacity(64),
             snarl_pending_pins: Vec::with_capacity(64),
@@ -2761,6 +2781,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         // URL for image widgets, heatmaps, and scrolling textures alike.
         s.image_cache.attach_texture_cache(s.texture_cache.clone());
         s.walkers_raster_cache.attach_texture_cache(s.texture_cache.clone());
+        s.paint_image_cache.attach_texture_cache(s.texture_cache.clone());
         s.scrolling_texture.attach_texture_cache(s.texture_cache.clone());
         s
     }
@@ -2920,6 +2941,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         self.scrolling_texture.tick();
         self.image_cache.tick();
         self.walkers_raster_cache.tick();
+        self.paint_image_cache.tick();
         // egui 0.35: root panels (`Panel::{top,bottom,left,right}`, `CentralPanel`)
         // now render *inside* a `Ui` — the `Panel::show(&Context)` that attached
         // straight to the screen in 0.34 was removed. Every host drives us from a
@@ -9003,6 +9025,75 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                     rx,
                     ry,
                     stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(col)),
+                });
+            }
+            FuncProcId::PaintImage => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintImage");
+                // arguments
+                #[allow(unused_mut)]
+                let mut image_id = self.io.read_plain_u64()?;
+                #[allow(unused_mut)]
+                let mut min_x = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut min_y = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut max_x = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut max_y = self.io.read_plain_f32()?;
+                #[allow(unused_mut)]
+                let mut width_px = self.io.read_plain_u32()?;
+                #[allow(unused_mut)]
+                let mut height_px = self.io.read_plain_u32()?;
+                #[allow(unused_mut)]
+                let mut content_version = self.io.read_plain_u64()?;
+                #[allow(unused_mut)]
+                let mut pixels = self.io.read_plain_u32h()?;
+                // construct
+
+                #[allow(unused_mut)]
+                let mut w = 0u8;
+                let mut opacity: f32 = 1.0;
+                let mut nearest: bool = false;
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(PaintImageBuilderMethodId::from_repr)?;
+                    match m {
+                        PaintImageBuilderMethodId::Build => {
+                            break;
+                        }
+                        PaintImageBuilderMethodId::Opacity => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintImageBuilderMethodId::Opacity");
+                            #[allow(unused_mut)]
+                            let mut op = self.io.read_plain_f32()?;
+                            opacity = op;
+                        }
+                        PaintImageBuilderMethodId::Nearest => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match PaintImageBuilderMethodId::Nearest");
+                            #[allow(unused_mut)]
+                            let mut on = self.io.read_plain_b()?;
+                            nearest = on;
+                        }
+                    }
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                self.paint_cmds.push(PaintCmd::Image {
+                    id: image_id,
+                    min_x,
+                    min_y,
+                    max_x,
+                    max_y,
+                    width_px,
+                    height_px,
+                    content_version,
+                    pixels,
+                    nearest,
+                    opacity,
                 });
             }
             FuncProcId::PaintLine => {
@@ -15188,6 +15279,55 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                                 cur.circle_filled(p, ra, *color);
                             }
                         }
+                    }
+                }
+                PaintCmd::Image {
+                    id,
+                    min_x,
+                    min_y,
+                    max_x,
+                    max_y,
+                    width_px,
+                    height_px,
+                    content_version,
+                    pixels,
+                    nearest,
+                    opacity,
+                } => {
+                    let opts = if *nearest {
+                        egui::TextureOptions::NEAREST
+                    } else {
+                        egui::TextureOptions::LINEAR
+                    };
+                    let ctx2 = cur.ctx().clone();
+                    if let Some(tex) = self.paint_image_cache.ensure(
+                        &ctx2,
+                        *id,
+                        *width_px,
+                        *height_px,
+                        *content_version,
+                        opts,
+                        pixels,
+                    ) {
+                        let rect = egui::Rect::from_min_max(
+                            egui::Pos2::new(origin.x + min_x, origin.y + min_y),
+                            egui::Pos2::new(origin.x + max_x, origin.y + max_y),
+                        );
+                        let tint = egui::Color32::WHITE.gamma_multiply(*opacity);
+                        cur.image(
+                            tex,
+                            rect,
+                            egui::Rect::from_min_max(
+                                egui::Pos2::new(0.0, 0.0),
+                                egui::Pos2::new(1.0, 1.0),
+                            ),
+                            tint,
+                        );
+                    } else {
+                        // No cache entry and no pixels: the upload went into a
+                        // discarded buffer or the LRU evicted the texture.
+                        // Report starved so Go re-ships (fetchR22).
+                        self.r22_starved_texture_ids.push(*id);
                     }
                 }
                 PaintCmd::RectsFilled {

@@ -348,6 +348,40 @@ self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u
 		WithReturnType(structPaintCmd()).
 		Build())
 
+	// paintImage — a textured rect by image id, clipped like any other paint
+	// command (ADR-0149 SD5: the in-plot raster route — large heatmaps, map
+	// underlays). Generalizes the mapRaster protocol: pixels are 0xRRGGBBAA
+	// row-major (row 0 = top), ship only when contentVersion changes; an
+	// unchanged version sends empty pixels and reuses the per-imageId cached
+	// texture, re-shipping when the starved report (fetchR22) names the id.
+	registered = append(registered, idl.NewBuilderFactoryNode("paintImage").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("imageId", ctabb.U64).
+			PlainArg("minX", ctabb.F32).
+			PlainArg("minY", ctabb.F32).
+			PlainArg("maxX", ctabb.F32).
+			PlainArg("maxY", ctabb.F32).
+			PlainArg("widthPx", ctabb.U32).
+			PlainArg("heightPx", ctabb.U32).
+			PlainArg("contentVersion", ctabb.U64).
+			PlainArg("pixels", ctabb.U32h).
+			Build()).
+		AddMethods(idl.NewMethodBuilder().
+			BeginMethod("opacity").Arg("op", ctabb.F32).
+			CodeClientRust(rustClientCode("opacity = op;\n")).EndMethod().
+			BeginMethod("nearest").Arg("on", ctabb.B).
+			CodeClientRust(rustClientCode("nearest = on;\n")).EndMethod().
+			Build()...).
+		WithConstructionCodeClientRust(rustClientCode(`0u8;
+let mut opacity: f32 = 1.0;
+let mut nearest: bool = false;
+`)).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::Image { id: image_id, min_x, min_y, max_x, max_y, width_px, height_px, content_version, pixels, nearest, opacity });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
 	// paintSenseRegion — invisible interaction region, drained by PaintCanvas
 	registered = append(registered, idl.NewBuilderFactoryNode("paintSenseRegion").
 		WithIdentityId(true).

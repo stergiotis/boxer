@@ -1106,6 +1106,26 @@ func PaintEllipseStroke(cx float32, cy float32, rx float32, ry float32, col colo
 	return
 }
 
+func PaintImage(imageId uint64, minX float32, minY float32, maxX float32, maxY float32, widthPx uint32, heightPx uint32, contentVersion uint64, pixels []uint32) (inst PaintImageFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintImage))
+	r.WriteUint64(imageId)
+	r.WriteFloat32(minX)
+	r.WriteFloat32(minY)
+	r.WriteFloat32(maxX)
+	r.WriteFloat32(maxY)
+	r.WriteUint32(widthPx)
+	r.WriteUint32(heightPx)
+	r.WriteUint64(contentVersion)
+	runtime.PutUint32SliceArg(r, pixels)
+
+	inst = PaintImageFluid{
+		r: r,
+	}
+
+	return
+}
+
 func PaintLine(fromX float32, fromY float32, toX float32, toY float32, col color.Color, strokeWidth float32) (inst PaintLineFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPaintLine))

@@ -372,6 +372,11 @@ type PaintEllipseStrokeFluid struct {
 }
 type PaintEllipseStrokeMethodIdE uint32
 
+type PaintImageFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintImageMethodIdE uint32
+
 type PaintLineFluid struct {
 	r *typed.RetainedFffiBuilder
 }
