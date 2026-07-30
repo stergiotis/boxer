@@ -307,6 +307,65 @@ This also answers open sub-decision 1: M1 does expose motif and discord
 readers, since both are single scans over a profile that already exists.
 Motif *set* discovery remains deferred.
 
+### 2026-07-30 — M2 implemented; VUS is not calibrated the way an AUC is
+
+`public/analytics/timeseries/adscore` carries VUS-PR and VUS-ROC, the
+range-based curve they integrate, the flaw-avoiding fixture generator, and the
+triviality check. No new module dependency.
+
+**The sweep is exact and cheaper than the reference.** The published
+implementation re-derives the curve per threshold; this one admits positions in
+decreasing score order and accumulates true- and false-positive mass
+incrementally, including the existence reward, so a full curve costs O(n) once
+the sort is paid. Total O(n log n + n·maxBuffer). Tied scores enter together, or
+the result would depend on sort stability.
+
+**VUS does not run 0 to 1, and a caller who assumes it does will overstate a
+mediocre detector.** Two effects, both measured on our own fixtures:
+
+- *Chance is not 0.5 under VUS-ROC.* Positives are counted as the mean of the
+  binary and buffered label mass while true positives are credited against the
+  full buffered label, so a random scorer earns recall faster than
+  false-positive rate. Measured on 50-sample anomalies: 0.49 at buffer 0, 0.53
+  at buffer 25, **0.66 at buffer 100**. The existence reward damps it, not
+  removes it.
+- *A perfect detector caps near 0.92.* Firing on exactly the labelled extent
+  scores 1.0 point-wise, but a wider buffer adds positive mass at positions the
+  detector scored 0.
+
+So the usable VUS-ROC band is roughly [0.55, 0.92], not [0.5, 1.0]. VUS-PR is
+far less distorted — a random scorer lands about 1.4× the prevalence — which
+independently corroborates TSB-AD's choice to lead with VUS-PR. Both are
+reported; the package documents the bands.
+
+**The triviality check justified itself immediately, against our own code.**
+The first generator — anomalies injected into a pure sine — was solved by a
+moving-average residual at VUS-PR 0.45 to 0.76 on every anomaly kind. A pure
+periodic background makes any shape change locally obvious, which is Wu and
+Keogh's first flaw reproduced by accident. Three changes fixed it: a
+quasi-periodic background (incommensurate components, so the waveform never
+repeats and a transplanted segment is genuinely wrong), cross-faded segment
+edges (an abrupt join is itself locally detectable), and choosing each
+transplant donor and phase offset to *match the displaced segment's level and
+spread* subject to a correlation ceiling. Best one-liner now scores 0.035 to
+0.116 across the four kinds, against 0.57 to 0.63 for the matrix profile.
+
+**Two operational facts about M1 as a detector, both worth more than half the
+achievable accuracy.** They surfaced only because M2 existed to measure them,
+and both bear on M3:
+
+1. **A window's score belongs at the window's centre.** Leaving it at the start
+   displaces every peak by half a window: VUS-PR 0.255 start-aligned against
+   **0.587** centre-aligned, same data and window.
+2. **The window must track the signal's period, not the expected anomaly
+   length.** At window 20 against a period of 50 the profile scores about 0.15
+   regardless of alignment — barely above the one-liners — because a window
+   shorter than the pattern being violated cannot see the violation.
+
+M3 inherits both: DAMP must decide where a left-discord score lands relative to
+its window, and the window-length sensitivity is the parameter MERLIN and MADRID
+exist to remove, deferred in the decision above.
+
 ## References
 
 - Survey and literature landscape:
