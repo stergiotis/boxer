@@ -94,31 +94,38 @@ func (inst *PlayApp) observeQueryState(loading bool, numRows int64, executed tim
 	return kind
 }
 
-// runSignalsDiverged reports whether the buffer's CURRENT signal resolution
-// differs from what the last Run shipped — the signal half of the staleness
-// witness (slice-5 D2): a referenced signal that moved since the run makes
-// the shown result stale, symmetric with a buffer edit (and it clears the
-// same way when the value moves back). It reads the debounced slot caches
-// (paramSlots for the referenced names, paramSyncedValues for the SET-bound
-// set — a SET pins, D1) against the frame snapshot: O(#slots) per frame, no
-// parse.
+// runSignalsDiverged reports whether the signals the last Run SHIPPED would
+// resolve differently now — the signal half of the staleness witness
+// (slice-5 D2): a signal the run used that moved since makes the shown
+// result stale, symmetric with a buffer edit (and it clears the same way
+// when the value moves back). The comparison ranges over the last run's own
+// params, not the buffer's slots: a narrowed run (a statement of several,
+// a subquery) ships a subset of the buffer, and a signal referenced only
+// OUTSIDE what ran cannot invalidate its result — comparing buffer-wide
+// read as perpetual divergence the moment a run narrowed, staling every
+// result and looping the Live toggle into its breaker. A run that shipped
+// no params has nothing a signal move can stale. O(#shipped params) per
+// frame, no parse.
 func (inst *PlayApp) runSignalsDiverged() (diverged bool) {
-	if len(inst.paramSlots) == 0 && len(inst.lastSentSigParams) == 0 {
+	if len(inst.lastSentSigParams) == 0 {
 		return
 	}
-	diverged = !maps.Equal(inst.resolveSignalsNow(), inst.lastSentSigParams)
+	diverged = !maps.Equal(inst.resolveLastRunSignalsNow(), inst.lastSentSigParams)
 	return
 }
 
-// resolveSignalsNow is the buffer's CURRENT signal resolution, URL-keyed —
-// the left-hand side of the staleness comparison. Shared with the Live
-// circuit breaker so the breaker judges exactly the values the witness
-// compares (resolveSignalNamesWithDefaults is the same helper the Run uses,
-// so all three stay in lockstep on the reserved-String default).
-func (inst *PlayApp) resolveSignalsNow() map[string]string {
-	names := make([]string, 0, len(inst.paramSlots))
-	for _, s := range inst.paramSlots {
-		names = append(names, s.Name)
+// resolveLastRunSignalsNow re-resolves exactly the names the last Run
+// shipped, URL-keyed — the left-hand side of the staleness comparison.
+// Shared with the Live circuit breaker so the breaker judges exactly the
+// values the witness compares (resolveSignalNamesWithDefaults is the same
+// helper the Run uses, so all three stay in lockstep on the reserved-String
+// default). The bound set is the buffer's current SET-synced names: the
+// staleness branches run only on an unchanged buffer, where that equals
+// the set the run resolved against.
+func (inst *PlayApp) resolveLastRunSignalsNow() map[string]string {
+	names := make([]string, 0, len(inst.lastSentSigParams))
+	for key := range inst.lastSentSigParams {
+		names = append(names, strings.TrimPrefix(key, "param_"))
 	}
 	bound := make(map[string]bool, len(inst.paramSyncedValues))
 	for name := range inst.paramSyncedValues {
@@ -127,24 +134,24 @@ func (inst *PlayApp) resolveSignalsNow() map[string]string {
 	return resolveSignalNamesWithDefaults(names, bound, inst.frameSig)
 }
 
-// divergedSignalNames names the referenced signals whose current value
-// differs from what the last Run shipped — runSignalsDiverged's witness,
-// itemised for the Live circuit breaker, which has to say WHICH signal is
-// cycling. Names are bare (no `param_` prefix) and sorted, so a status line
-// built from them is stable frame to frame.
+// divergedSignalNames names the shipped signals whose current value differs
+// from what the last Run sent — runSignalsDiverged's witness, itemised for
+// the Live circuit breaker, which has to say WHICH signal is cycling. Names
+// are bare (no `param_` prefix) and sorted, so a status line built from
+// them is stable frame to frame. A name that no longer resolves (bound in
+// the meantime, value gone from the store) counts as diverged, like any
+// other change to what a re-run would send.
 func (inst *PlayApp) divergedSignalNames() (names []string) {
-	now := inst.resolveSignalsNow()
-	seen := make(map[string]struct{}, len(now)+len(inst.lastSentSigParams))
-	for key, v := range now {
-		if sent, ok := inst.lastSentSigParams[key]; ok && sent == v {
+	if len(inst.lastSentSigParams) == 0 {
+		return
+	}
+	now := inst.resolveLastRunSignalsNow()
+	seen := make(map[string]struct{}, len(inst.lastSentSigParams))
+	for key, sent := range inst.lastSentSigParams {
+		if v, ok := now[key]; ok && v == sent {
 			continue
 		}
 		seen[strings.TrimPrefix(key, "param_")] = struct{}{}
-	}
-	for key := range inst.lastSentSigParams {
-		if _, ok := now[key]; !ok {
-			seen[strings.TrimPrefix(key, "param_")] = struct{}{}
-		}
 	}
 	names = make([]string, 0, len(seen))
 	for name := range seen {

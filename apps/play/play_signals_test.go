@@ -667,6 +667,79 @@ func TestExecuteRunBlockedOnUnfilledThenRuns(t *testing.T) {
 	require.Equal(t, map[string]string{"param_x": "3"}, app.lastSentSigParams)
 }
 
+// The gates judge what SHIPS, not the buffer: an unfilled slot in a sibling
+// statement neither blocks a narrowed run nor rides its request.
+func TestExecuteRunScopesGatesToTheCaretStatement(t *testing.T) {
+	srv, got := captureServer(t)
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	defer app.graph.close()
+	app.sql = "SELECT {x:Int64} AS v;\nSELECT {z:String} AS w"
+	app.caretByte = len("SELECT {x")
+	app.graph.setSignalRawFrom("x", "3", signalWriterEditor)
+	app.frameSig = app.graph.signals()
+
+	app.executeRun(false, false)
+	require.Empty(t, app.runBlockedReason,
+		"z lives in the sibling statement — it is not in what ships")
+	require.Eventually(t, func() bool { return len(got()) == 1 }, 2*time.Second, time.Millisecond)
+	require.Equal(t, "3", got()[0].Get("param_x"))
+	require.False(t, got()[0].Has("param_z"), "an unshipped slot must not ride the request")
+	require.Equal(t, map[string]string{"param_x": "3"}, app.lastSentSigParams,
+		"the staleness witness ranges over the shipped params only")
+
+	// The caret in the OTHER statement gates on z and blocks.
+	app.caretByte = len(app.sql) - 1
+	app.executeRun(false, false)
+	require.Contains(t, app.runBlockedReason, "{z}")
+	require.Len(t, got(), 1, "the blocked run sends nothing")
+}
+
+// The same scoping one level further down: a run-subquery judges the unit
+// plus its carried environment, not the statement around it.
+func TestExecuteRunSubqueryScopesGatesToTheUnit(t *testing.T) {
+	srv, got := captureServer(t)
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+	app := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "")
+	defer app.graph.close()
+	app.sql = "SELECT {z:String} AS w FROM (SELECT {x:Int64} AS v)"
+	app.caretByte = len("SELECT {z:String} AS w FROM (SELECT {x")
+	app.graph.setSignalRawFrom("x", "3", signalWriterEditor)
+	app.frameSig = app.graph.signals()
+
+	app.executeRun(false, true)
+	require.Empty(t, app.runBlockedReason,
+		"z sits outside the narrowed unit — it is not in what ships")
+	require.Equal(t, runScopeSubquery, app.lastRunScope)
+	require.Eventually(t, func() bool { return len(got()) == 1 }, 2*time.Second, time.Millisecond)
+	require.Equal(t, "3", got()[0].Get("param_x"))
+	require.False(t, got()[0].Has("param_z"))
+}
+
+// Staleness follows the shipped params: a signal outside the narrowed run
+// cannot stale its result, one inside still does.
+func TestNarrowedRunStalenessScopedToShippedSignals(t *testing.T) {
+	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "")
+	app.sql = "SELECT {x:Int64} AS v;\nSELECT {z:String} AS w"
+	app.lastSentSql = app.sql
+	app.paramSlots = []paramSlot{{Name: "x", Type: "Int64"}, {Name: "z", Type: "String"}}
+	app.lastSentSigParams = map[string]string{"param_x": "3"} // a narrowed run's params
+	app.graph.setSignalRaw("x", "3")
+	app.graph.setSignalRaw("z", "moved")
+	app.frameSig = app.graph.signals()
+
+	require.False(t, app.runSignalsDiverged(),
+		"z moved, but the run never read it — its result is not stale")
+	require.Empty(t, app.divergedSignalNames())
+
+	app.graph.setSignalRaw("x", "4")
+	app.frameSig = app.graph.signals()
+	require.True(t, app.runSignalsDiverged(), "a shipped signal moving stales the result")
+	require.Equal(t, []string{"x"}, app.divergedSignalNames())
+}
+
 // The live loop end to end: run, move a referenced signal, the toggle fires
 // the same Run path with the new value, and the divergence clears.
 func TestAutoRunLoopOnSignalDivergence(t *testing.T) {

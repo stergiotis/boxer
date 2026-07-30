@@ -1264,17 +1264,36 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	if sql == "" {
 		return
 	}
-	// Resolve the buffer's unbound param slots against the frame's
-	// signal snapshot (slice 5a): the values ride the request URL and
-	// the run's history entry snapshots them (D4). The resolution and
-	// the bound-name set also feed the staleness condition and the
-	// observed intermediates.
-	sigParams, boundNames, unfilled := inst.resolveRunSignals(sql)
-	// An unfilled input (referenced, neither SET-bound nor signal-written)
-	// can only fail server-side — block the doomed request with an
-	// actionable hint instead (slice-5 D3's empty-state, applied at the
-	// Run gate). The raw-fallback path (parse failure) resolves nothing
-	// and reports nothing unfilled, so it still defers to the server.
+	// Run-under-cursor (ADR-0130 L3): a multi-statement body ships the SET
+	// prelude plus the statement under the caret; run-subquery narrows one
+	// level further, to the innermost query the caret is in, with the
+	// enclosing WITH items hoisted in front of it (degrading to the
+	// statement when there is nothing narrower). A single-statement,
+	// no-subquery buffer ships itself, byte-identical to what it always
+	// was. Narrowing runs FIRST so the signal resolution and the unfilled
+	// gate below judge the text that actually ships — a slot referenced
+	// only outside it neither blocks the run nor rides its request, and
+	// narrowing away a broken half is precisely what the gesture is for.
+	runSQL, _, _ := inst.runBuffer()
+	scope := runScopeWhole
+	if subquery {
+		runSQL, scope = inst.runSubqueryBuffer()
+	}
+	// Resolve the SHIPPED text's unbound param slots against the frame's
+	// signal snapshot (slice 5a): the values ride the request URL and the
+	// run's history entry snapshots them (D4). The narrowed text carries
+	// the full SET prelude (withPrelude), so the bound-name set matches
+	// the buffer's; only the referenced-slot set narrows. The resolution
+	// and the bound-name set also feed the staleness condition — scoped to
+	// these same params, see runSignalsDiverged — and the observed
+	// intermediates.
+	sigParams, boundNames, unfilled := inst.resolveRunSignals(runSQL)
+	// An unfilled input (referenced in what ships, neither SET-bound nor
+	// signal-written) can only fail server-side — block the doomed request
+	// with an actionable hint instead (slice-5 D3's empty-state, applied
+	// at the Run gate). The raw-fallback path (parse failure) resolves
+	// nothing and reports nothing unfilled, so it still defers to the
+	// server.
 	if len(unfilled) > 0 {
 		// The hint points AT the fix: since the pane writes the live tier
 		// (ADR-0124's 2026-07-22 amendment) every unfilled name has its own
@@ -1285,21 +1304,7 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 		return
 	}
 	inst.runBlockedReason = ""
-	// Run-under-cursor (ADR-0130 L3): a multi-statement body ships the SET
-	// prelude plus the statement under the caret. A single-statement buffer
-	// returns itself, so everything below this line is byte-identical to what
-	// it was. Deliberately AFTER the signal resolution and the unfilled gate,
-	// both of which stay buffer-wide in this first cut.
-	//
-	// Run-subquery narrows one level further, to the innermost query the caret
-	// is in, with the enclosing WITH items hoisted in front of it. It degrades
-	// to the statement when the caret is already at statement level or the
-	// statement does not parse.
-	runSQL, _, _ := inst.runBuffer()
-	inst.lastRunScope = runScopeWhole
-	if subquery {
-		runSQL, inst.lastRunScope = inst.runSubqueryBuffer()
-	}
+	inst.lastRunScope = scope
 	// ADR-0097 3c: split the buffer into the node graph and fuse to the
 	// sink for execution. For a single statement the fused SQL is the
 	// original (the client re-lifts the SET prelude either way), so this

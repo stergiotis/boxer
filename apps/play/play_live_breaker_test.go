@@ -45,12 +45,23 @@ func TestMachineDrivenDivergenceGates(t *testing.T) {
 			"a human write is never a loop to break: "+human)
 	}
 
-	// One human among several diverging names is enough — a person is driving.
+	// One human among several diverging SHIPPED names is enough — a person
+	// is driving a value the run actually reads.
 	mixed := breakerApp(t, "timeline")
 	mixed.paramSlots = append(mixed.paramSlots, paramSlot{Name: "q", Type: "String"})
+	mixed.lastSentSigParams["param_q"] = "old"
 	mixed.graph.setSignalRawFrom("q", "typed", signalWriterParamWidget)
 	mixed.frameSig = mixed.graph.signals()
 	require.Nil(t, mixed.machineDrivenDivergence())
+
+	// A human write to a signal the run never shipped is orthogonal to the
+	// loop: it cannot diverge a run that does not read it, so it neither
+	// re-fires Live nor shields the machine streak on the name that does.
+	outside := breakerApp(t, "timeline")
+	outside.paramSlots = append(outside.paramSlots, paramSlot{Name: "q", Type: "String"})
+	outside.graph.setSignalRawFrom("q", "typed", signalWriterParamWidget)
+	outside.frameSig = outside.graph.signals()
+	require.Equal(t, []string{"tl_min"}, outside.machineDrivenDivergence())
 
 	// A diverging name the store does not hold has no writer to judge:
 	// conservative, so the breaker does not fire.
