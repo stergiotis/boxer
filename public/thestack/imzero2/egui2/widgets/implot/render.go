@@ -37,6 +37,7 @@ func (p *Plot) End() {
 	st.y.rng = sanitizeScaled(st.y.rng, st.y.scale)
 	st.initialized = true
 	st.onceApplied = true
+	st.writeLinks()
 
 	// --- Layout. Vertical gutters are label-independent, so the plot-area
 	// height is final immediately; the y ticks computed against it size the

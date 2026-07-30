@@ -237,3 +237,40 @@ func TestHashF64s(t *testing.T) {
 		t.Error("hash not sensitive")
 	}
 }
+
+func TestAxisLinkAdoption(t *testing.T) {
+	// Two axes sharing pointers: an external write is adopted; own writes
+	// are not re-adopted (the gesture wins).
+	lo, hi := 0.0, 10.0
+	var a, b axisState
+	adopt := func(ax *axisState) {
+		if lo != ax.lastLinkMin || hi != ax.lastLinkMax {
+			ax.rng = Range{lo, hi}
+		}
+		ax.linkMin, ax.linkMax = &lo, &hi
+	}
+	write := func(ax *axisState) {
+		*ax.linkMin = ax.rng.Min
+		*ax.linkMax = ax.rng.Max
+		ax.lastLinkMin, ax.lastLinkMax = ax.rng.Min, ax.rng.Max
+	}
+	adopt(&a)
+	write(&a) // a settles 0..10
+	adopt(&b)
+	write(&b)
+	// b pans to 5..15 and writes.
+	b.rng = Range{5, 15}
+	write(&b)
+	// a's next frame: values moved externally → adopt.
+	adopt(&a)
+	if a.rng != (Range{5, 15}) {
+		t.Errorf("a did not adopt external move: %+v", a.rng)
+	}
+	write(&a)
+	// a pans itself to 2..12; on adopt it must KEEP its own gesture.
+	a.rng = Range{2, 12}
+	adopt(&a)
+	if a.rng != (Range{2, 12}) {
+		t.Errorf("a re-adopted its own values over its gesture: %+v", a.rng)
+	}
+}

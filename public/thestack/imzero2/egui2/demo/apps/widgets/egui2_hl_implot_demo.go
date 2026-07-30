@@ -39,6 +39,11 @@ type implotM5State struct {
 	limitY         float64
 }
 
+// implotM6State carries the M6 linked-subplots demo's series.
+type implotM6State struct {
+	xs, a, b, c, d []float64
+}
+
 // implotM2State carries the M2 item-breadth demo's series.
 type implotM2State struct {
 	barXs, barYs     []float64
@@ -265,6 +270,42 @@ func init() {
 			p.Annotation(st.probeX, st.probeY, 18, -24, 0xc44e52ff, true,
 				"probe")
 			p.End()
+		},
+	})
+	registry.Register(registry.Demo{
+		Name:        "implot_m6",
+		Category:    "Graphics & canvas",
+		Title:       icons.IconPaintBucket + " implot M6 (subplots / linked axes)",
+		Stage:       [2]float32{660, 580},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "ADR-0149 M6: a 2×2 subplot grid with all x axes linked (SetupAxisLinks, the upstream pointer contract) — pan or zoom any cell and the other three follow.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			st := &implotM6State{}
+			const n = 240
+			for i := range n {
+				x := float64(i) / float64(n-1) * 12
+				st.xs = append(st.xs, x)
+				st.a = append(st.a, math.Sin(x))
+				st.b = append(st.b, math.Cos(x*1.3)*0.8)
+				st.c = append(st.c, math.Sin(x*0.7)+0.3*math.Sin(x*2.9))
+				st.d = append(st.d, math.Exp(-x/8)*math.Cos(2*x))
+			}
+			return st
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			st := state.(*implotM6State)
+			series := [][]float64{st.a, st.b, st.c, st.d}
+			names := []string{"sin x", "0.8 cos 1.3x", "mixed", "damped"}
+			implot.Subplots(ids, "linked grid", 2, 2, 620, 440, implot.SubplotFlagsLinkAllX,
+				func(sp *implot.SubplotCtx, row int, col int) {
+					i := row*2 + col
+					p := sp.Plot(names[i])
+					p.SetupAxisLimits(implot.AxisX1, 0, 12, implot.CondOnce)
+					p.SetupAxisLimits(implot.AxisY1, -1.3, 1.3, implot.CondOnce)
+					p.Line(names[i], st.xs, series[i])
+					p.End()
+				})
 		},
 	})
 }

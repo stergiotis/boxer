@@ -45,6 +45,12 @@ type axisState struct {
 	flags    AxisFlags
 	label    string
 	scale    ScaleE
+
+	// Axis links (SetupAxisLinks): caller-held shared range endpoints and
+	// the values this plot last wrote, distinguishing an external move
+	// from this plot's own gesture.
+	linkMin, linkMax         *float64
+	lastLinkMin, lastLinkMax float64
 }
 
 // plotState is the retained state of one plot id across frames — the
