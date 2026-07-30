@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 const (
@@ -65,11 +66,18 @@ const (
 )
 
 // Region colours for the 64-bit strip. Distinct in both hue and lightness so
-// the three regions read apart at a glance and the comma pops.
+// the three regions read apart at a glance and the comma pops. The raw hex
+// values also feed the trade-off plot's series (implot styles by u32).
+const (
+	colTagCodeHex = uint32(0x5b9dffff) // fibonacci code bits (blue)
+	colCommaHex   = uint32(0xffb454ff) // the trailing 11 comma (amber)
+	colBodyHex    = uint32(0x5fd39bff) // body bits (green)
+)
+
 var (
-	colTagCode = color.Hex(0x5b9dffff) // fibonacci code bits (blue)
-	colComma   = color.Hex(0xffb454ff) // the trailing 11 comma (amber)
-	colBody    = color.Hex(0x5fd39bff) // body bits (green)
+	colTagCode = color.Hex(colTagCodeHex)
+	colComma   = color.Hex(colCommaHex)
+	colBody    = color.Hex(colBodyHex)
 	colInvalid = color.Hex(0x9aa0a6ff) // a word with no comma (neutral grey)
 )
 
@@ -529,16 +537,21 @@ func (inst *App) renderTradeoffPlot(recWidth int) {
 		bodyBits = append(bodyBits, float64(64-cl.Width)) // log2(max ids/tag) == 64−width
 		tagBits = append(tagBits, math.Log2(float64(max(uint64(1), cl.TagValueCount))))
 	}
-	c.PlotLine("body headroom (log2 ids/tag)", xs, bodyBits).Color(colBody).Width(2).Send()
-	c.PlotLine("tag capacity (log2 tag values)", xs, tagBits).Color(colTagCode).Width(2).Send()
-	if recWidth >= 2 {
-		c.PlotLine("your pick", []float64{float64(recWidth), float64(recWidth)}, []float64{0, 64}).
-			Color(colComma).Width(1.5).Send()
-	}
 	c.AddSpace(margin)
-	c.Plot(inst.ids.PrepareStr("tradeoff-plot")).Width(stageW).Height(240).
-		XAxisLabel("tag width (bits)").YAxisLabel("bits (log2)").
-		Legend().AllowZoom(true).AllowDrag(true).AllowScroll(false).Send()
+	// ADR-0149 SD7: this plot moved off the egui_plot bridge onto the
+	// implot port (pan/zoom/fit and the clickable legend come with it).
+	// The series colors mirror the bit-strip regions above.
+	p := implot.Begin(inst.ids, "##tradeoff", stageW, 240)
+	p.SetupAxes("tag width (bits)", "bits (log2)", implot.AxisFlagsNone, implot.AxisFlagsNone)
+	p.SetNextColor(colBodyHex).SetNextWeight(2)
+	p.Line("body headroom (log2 ids/tag)", xs, bodyBits)
+	p.SetNextColor(colTagCodeHex).SetNextWeight(2)
+	p.Line("tag capacity (log2 tag values)", xs, tagBits)
+	if recWidth >= 2 {
+		p.SetNextColor(colCommaHex).SetNextWeight(1.5)
+		p.InfLinesV("your pick", []float64{float64(recWidth)})
+	}
+	p.End()
 	c.AddSpace(margin)
 }
 
