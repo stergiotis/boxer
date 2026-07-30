@@ -720,6 +720,27 @@ forms return the inner value — differentially verified), and the correlation
 rule stays narrow. The run still ships when a reference is marked — detection
 warns, it does not refuse, the same stance the correlation entry took.
 
+### 2026-07-30 — "inside" in the correlation rule becomes scope-accurate
+
+The correlation rule suppressed a reference when its qualifier was bound
+anywhere inside the unit — a flat set over the whole subtree. A nested FROM
+subquery rebinding the outer alias therefore hid a unit-level correlation:
+the nested bind does not enclose the reference, SQL never consults it, and
+the composed run failed at the endpoint unannounced. Live, the gap is
+concrete: the original statement resolves such a reference against the
+OUTER alias and runs; the narrowed unit alone is UNKNOWN_IDENTIFIER.
+
+Suppression now resolves per reference along nanopass's lexical scope
+chain — the selects that enclose the reference, walked upward and stopped
+at the unit boundary, which are exactly the scopes still surrounding it
+when the unit ships alone. The walk crossing CTE-body and FROM-subquery
+boundaries on the way up is accepted slack: a reference relying on such a
+bind fails in the original statement too, so suppressing its mark promises
+nothing the server would have honoured. The live lane gains a
+marked-correlation tripwire beside the self-reference one: the original
+must run, the mark must be present, and the composition must still be
+rejected — an analyzer that learns the shape flags the rule for relaxing.
+
 ## References
 
 - [sql-editor-highlighting-survey](../explanation/sql-editor-highlighting-survey.md) —
