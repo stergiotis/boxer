@@ -46,6 +46,10 @@ func (p *Plot) End() {
 	topGutter := float32(6.0)
 	if p.titleShown != "" {
 		topGutter = 24
+	} else if st.y.label != "" {
+		// The horizontal y label sits in the top gutter; without a title
+		// it still needs the band, or it clips above the canvas.
+		topGutter = 20
 	}
 	bottomGutter := float32(6 + tickLen + 14)
 	if st.x.label != "" {
@@ -187,9 +191,6 @@ func (p *Plot) End() {
 	c.PaintClipPop().Send()
 	c.PaintRectStroke(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colBorder), 1.0).Send()
 
-	// --- Legend, ImPlot's default north-west placement, inside the area.
-	p.emitLegend(leg, areaX, areaY)
-
 	// --- Hover readout, ImPlot's mouse-position text, bottom-right corner.
 	if st.hoverOk {
 		hx := tr.plotX(st.hoverPos[0])
@@ -198,9 +199,16 @@ func (p *Plot) End() {
 			fmt.Sprintf("%.6g, %.6g", hx, hy), tickFontSize, color.Hex(colReadout)).Monospace().Send()
 	}
 
-	// --- Interaction surfaces + the canvas drain.
+	// --- Interaction surfaces + the canvas drain. Sense-region emission
+	// order is hit-test priority (later wins): plot area first, then the
+	// drag tools, then the legend rows on top of everything — a legend
+	// click must never fall through and start a pan (upstream's legend
+	// hover blocks plot interaction the same way). The legend was emitted
+	// before the area region until M7; its rows rendered but the area
+	// swallowed every click.
 	c.PaintSenseRegion(p.ids.PrepareStr("implot-area"), areaX, areaY, areaW, areaH).Send()
 	p.emitToolChrome(tr, areaX, areaY, areaW, areaH)
+	p.emitLegend(leg, areaX, areaY)
 	c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
 		Background(color.Hex(colPlotBg)).
 		Sense(true, true, true).
