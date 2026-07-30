@@ -10,6 +10,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // =============================================================================
@@ -185,56 +186,31 @@ func demoEcdf(ids *c.WidgetIdStack, st *ecdfDemoState) {
 		Alpha(alpha).
 		SeriesName(sample.name)
 
-	// Absolute plot id so the ecdf widget can match its own r15 hover
-	// register read against the c.Plot block's id. Using AbsoluteWidgetId
-	// instead of ids.PrepareStr keeps the id stable independent of the
-	// surrounding WidgetIdStack context.
-	plotID := c.MakeAbsoluteIdStr("ecdf-plot")
-
-	ch := r.At(plotID, sample.sorted)
-	_ = r.Render(sample.sorted)
-	r.PaintCrosshair(ch)
-
-	// Panning is disabled via both AllowDrag(false) and
-	// AllowScroll(false) — the band is bounded in y ∈ [0, 1]
-	// and the data range bounds x, so there is nowhere
-	// meaningful to pan to. Scroll defaults to [true, true]
-	// in the interpreter, so leaving it implicit still lets
-	// trackpad two-finger scroll translate the plot. Zoom
-	// stays on — readers often want to inspect tail detail.
-	//
-	// ClampX / ClampY pin the outer viewport so zooming out
-	// cannot strand the reader in empty space — ECDF support
-	// is naturally [0, 1] on Y, and the sample's [min, max]
-	// bounds X. Zooming in remains unrestricted.
-	//
-	// XAxisAutoTicks swaps egui_plot's default log spacer for a nice-number
-	// spacer that keeps a healthy, round-numbered tick count at every zoom
-	// level — the default culls labels on a bounded range and can leave 0–1
-	// ticks. YGridMarks pins F(x) to quarter points. ResetBounds (wired to the
-	// Reset zoom button above) re-fits the view to the data.
+	// The plot renders through the implot port (ADR-0149 SD7). The
+	// viewport constraints pin the outer view so zooming out cannot
+	// strand the reader in empty space — ECDF support is naturally
+	// [0, 1] on Y, and the sample's [min, max] bounds X; zooming in
+	// remains unrestricted. The fixed quarter-point marks stay on y;
+	// implot's own nice-number locator serves x. FitNext (wired to the
+	// Reset zoom button above) re-fits the view, as does a double-click.
 	xLo, xHi := sample.sorted[0], sample.sorted[len(sample.sorted)-1]
 	// Consume the one-frame reset latch set by the Reset zoom button.
 	resetZoom := st.resetRequested
 	st.resetRequested = false
-	plot := c.Plot(plotID).
-		Width(900).Height(500).
-		XAxisLabel("value").
-		YAxisLabel("F(x)").
-		Legend().
-		AllowZoom(true).
-		AllowDrag(false).
-		AllowScroll(false).
-		ShowGrid(true, true).
-		XAxisAutoTicks().
-		YGridMarks(ecdfDemoYTickVals, ecdfDemoYTickLabels).
-		IncludeY(0).IncludeY(1).
-		ClampX(xLo, xHi).
-		ClampY(0, 1)
+	p := implot.Begin(ids, "##ecdf-plot", 900, 500)
+	p.SetupAxes("value", "F(x)", implot.AxisFlagsNone, implot.AxisFlagsNone)
+	p.SetupAxisTicks(implot.AxisY1, ecdfDemoYTickVals, ecdfDemoYTickLabels)
+	p.SetupAxisLimitsConstraints(implot.AxisX1, xLo, xHi)
+	p.SetupAxisLimitsConstraints(implot.AxisY1, 0, 1)
+	p.IncludeY(0)
+	p.IncludeY(1)
 	if resetZoom {
-		plot = plot.ResetBounds()
+		p.FitNext()
 	}
-	plot.Send()
+	ch := r.At(p, sample.sorted)
+	_ = r.Render(p, sample.sorted)
+	r.PaintCrosshair(p, ch)
+	p.End()
 
 	c.AddSpace(padInner())
 	ecdf.WriteStatusLine(ch)

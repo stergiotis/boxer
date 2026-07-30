@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,7 +90,7 @@ func TestBuildDigestGridClampsMinSize(t *testing.T) {
 func TestRenderDigestRejectsEmpty(t *testing.T) {
 	d := tdigest.NewTDigest()
 	r := ecdf.New()
-	err := RenderDigest(r, d, 50)
+	err := RenderDigest(implot.NewDetached(), r, d, 50)
 	assert.Error(t, err)
 }
 
@@ -101,14 +102,14 @@ func TestRenderDigestRejectsCollapsed(t *testing.T) {
 		d.Push(7.0)
 	}
 	r := ecdf.New()
-	err := RenderDigest(r, d, 50)
+	err := RenderDigest(implot.NewDetached(), r, d, 50)
 	assert.Error(t, err)
 }
 
 // TestRenderDigestRejectsNil catches the nil-digest mistake.
 func TestRenderDigestRejectsNil(t *testing.T) {
 	r := ecdf.New()
-	err := RenderDigest(r, nil, 50)
+	err := RenderDigest(implot.NewDetached(), r, nil, 50)
 	assert.Error(t, err)
 }
 
@@ -121,6 +122,6 @@ func TestRenderDigestRejectsTinyGrid(t *testing.T) {
 		d.Push(float64(i))
 	}
 	r := ecdf.New()
-	err := RenderDigest(r, d, 1)
+	err := RenderDigest(implot.NewDetached(), r, d, 1)
 	assert.Error(t, err)
 }

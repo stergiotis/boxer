@@ -11,6 +11,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/boxenplot"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // =============================================================================
@@ -175,34 +176,24 @@ func demoBoxenplot(ids *c.WidgetIdStack, st *boxenplotDemoState) {
 		r = r.Palette(styletokens.SequentialGrayC)
 	}
 
-	// Absolute plot id so the bottom-status-line lookup can match its
-	// r15 hover register read against the c.Plot block's id (mirrors
-	// the ecdf demo). Using AbsoluteWidgetId keeps the id stable
-	// independent of the surrounding WidgetIdStack context.
-	plotID := c.MakeAbsoluteIdStr("bp-plot")
-
+	// The plot renders through the implot port (ADR-0149 SD7); the
+	// crosshair reads the plot's own hover state right after Begin.
+	p := implot.Begin(ids, "##bp-plot", 940, 460)
+	p.SetupAxes("distribution", "value", implot.AxisFlagsNone, implot.AxisFlagsNone)
+	p.IncludeX(0.0)
+	p.IncludeX(5.0)
 	var ch boxenplot.Crosshair
 	for i, d := range bpDistributions {
 		arg := float64(i) + 1.0
 		levels := letterval.RecommendedLevels(d.digest)
 		rd := r.SeriesName(d.name)
-		if maybe := rd.At(plotID, arg, d.name, levels); maybe.Valid {
+		if maybe := rd.At(p, arg, d.name, levels); maybe.Valid {
 			ch = maybe
 		}
-		rd.Render(arg, levels, d.extremes, -1)
+		rd.Render(p, arg, levels, d.extremes, -1)
 	}
-	r.PaintCrosshair(ch)
-
-	c.Plot(plotID).
-		Width(940).Height(460).
-		XAxisLabel("distribution").
-		YAxisLabel("value").
-		Legend().
-		AllowZoom(true).
-		AllowDrag(true).
-		ShowGrid(true, true).
-		IncludeXRange(0.0, 5.0).
-		Send()
+	r.PaintCrosshair(p, ch)
+	p.End()
 
 	c.AddSpace(padInner())
 	boxenplot.WriteStatusLine(ch)

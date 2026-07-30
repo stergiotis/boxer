@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // RenderDigest renders the ECDF and simultaneous confidence band of
@@ -23,14 +24,14 @@ import (
 // with gridN samples (gridN ≥ 2). The band's calibration depends on
 // the total observation count digest.Count(), not on gridN.
 //
-// The caller must already be inside a c.Plot block — RenderDigest
-// invokes renderer.RenderGrid which enqueues PlotPolygon /
-// PlotLine primitives in the usual way.
+// The caller passes its open *implot.Plot (between Begin and End) —
+// RenderDigest invokes renderer.RenderGrid, which declares the band
+// and curve into that plot.
 //
 // Returns an error if gridN < 2 or if the digest's support has
 // collapsed (Min ≥ Max — typically because Count == 0 or all
 // observations were identical).
-func RenderDigest(renderer ecdf.Renderer, digest *tdigest.TDigest, gridN int) (err error) {
+func RenderDigest(p *implot.Plot, renderer ecdf.Renderer, digest *tdigest.TDigest, gridN int) (err error) {
 	if digest == nil {
 		err = eh.Errorf("nil digest")
 		return
@@ -51,7 +52,7 @@ func RenderDigest(renderer ecdf.Renderer, digest *tdigest.TDigest, gridN int) (e
 		return
 	}
 	xs, fn := BuildDigestGrid(digest, gridN)
-	err = renderer.RenderGrid(xs, fn, int(n))
+	err = renderer.RenderGrid(p, xs, fn, int(n))
 	return
 }
 

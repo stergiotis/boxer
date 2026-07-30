@@ -3,15 +3,15 @@
 //
 //   - boxer/public/analytics/stats/letterval — LV math + oracle
 //   - boxer/public/analytics/stats/tdigest   — streaming quantile source
-//   - egui2 plotBoxes / plotScatter / plotText primitives — rendering
+//   - the implot port's Boxes / Scatter / Text items — rendering
+//     (ADR-0149 SD7; formerly the egui_plot bridge's plotBoxes)
 //
 // The widget is stateless: construct one Renderer, then call Render
-// any number of times per frame. Configure-once / render-many is the
-// canonical pattern (see fieldview / errorview).
-//
-// Caller must wrap Render calls inside a c.Plot(id) block. Each
-// Render emits one BoxPlot series (with N nested BoxElems) plus
-// optional outlier scatter/text annotations.
+// any number of times per frame with the host's open *implot.Plot
+// (between Begin and End). Configure-once / render-many is the
+// canonical pattern (see fieldview / errorview). Each Render declares
+// one nested letter-value box series plus optional outlier
+// scatter/text annotations.
 package boxenplot
 
 import (
@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // OutlierModeE controls how observations beyond the deepest rendered
@@ -222,8 +223,8 @@ func (inst Renderer) BoxWidth(base, shrink float64) (out Renderer) {
 	return
 }
 
-// Render emits the boxenplot primitives for one distribution at the
-// given x position. Caller must already be inside a Plot block.
+// Render declares the boxenplot items for one distribution at the
+// given x position, into the host's open plot.
 //
 //   - levels: from letterval.RecommendedLevels(oracle) or
 //     letterval.Levels(oracle, maxDepth). May be empty (no-op) or
@@ -236,7 +237,7 @@ func (inst Renderer) BoxWidth(base, shrink float64) (out Renderer) {
 //     for Count / Auto modes. Pass -1 to use the analytical estimate
 //     (deepest LV's TailCount). Use the override when the caller
 //     tracks the true count separately (a top-K + counter).
-func (inst Renderer) Render(argument float64, levels []letterval.LVLevel, extremes []float64, perTailCountOverride int64) {
+func (inst Renderer) Render(p *implot.Plot, argument float64, levels []letterval.LVLevel, extremes []float64, perTailCountOverride int64) {
 	if len(levels) == 0 {
 		return
 	}
@@ -245,7 +246,7 @@ func (inst Renderer) Render(argument float64, levels []letterval.LVLevel, extrem
 
 	// Only depth 1 (median) available → draw a single marker, skip boxes.
 	if len(levels) == 1 {
-		inst.emitMedianMarker(argument, medianValue)
+		inst.emitMedianMarker(p, argument, medianValue)
 		return
 	}
 
@@ -259,7 +260,7 @@ func (inst Renderer) Render(argument float64, levels []letterval.LVLevel, extrem
 	}
 	n := len(boxes)
 	if n == 0 {
-		inst.emitMedianMarker(argument, medianValue)
+		inst.emitMedianMarker(p, argument, medianValue)
 		return
 	}
 
@@ -273,8 +274,6 @@ func (inst Renderer) Render(argument float64, levels []letterval.LVLevel, extrem
 	wmaxs := make([]float64, n)
 	widths := make([]float64, n)
 	fills := make([]uint32, n)
-	strokes := make([]uint32, n)
-	sws := make([]float32, n)
 
 	for i, lv := range boxes {
 		arguments[i] = argument
@@ -285,19 +284,14 @@ func (inst Renderer) Render(argument float64, levels []letterval.LVLevel, extrem
 		wmaxs[i] = lv.UpperValue
 		widths[i] = computeBoxWidth(inst.boxWidth, inst.widthShrink, lv.Depth)
 		fills[i] = inst.fillForDepth(lv.Depth, maxDepth)
-		strokes[i] = inst.strokeColorPacked
-		sws[i] = inst.strokeWidth
 	}
 
-	// SuppressElementText silences egui_plot's auto-generated text label
-	// ("Max / Upper whisker / Q3 / median / Q1 / Lower whisker / Min")
-	// — the auto-sized envelope that clipped at narrow tooltips and
-	// windows — while keeping the on-hover box highlight and the axis
-	// rulers. The bottom WriteStatusLine becomes the textual readout;
-	// the highlight + rulers remain as the visual "this box is selected"
-	// affordance.
-	c.PlotBoxes(inst.seriesName, arguments, q1s, medians, q3s, wmins, wmaxs,
-		widths, fills, strokes, sws).SuppressElementText().Send()
+	// The nested rings render as one Boxes series (whiskers coincide with
+	// the box edges here, so only the rects and the median line draw).
+	// There is no per-box hover highlight on the port — the crosshair +
+	// WriteStatusLine remain the "this box is selected" affordance.
+	p.Boxes(inst.seriesName, arguments, q1s, medians, q3s, wmins, wmaxs,
+		widths, fills, inst.strokeColorPacked, inst.strokeWidth)
 
 	tailCount := perTailCountOverride
 	if tailCount < 0 {
@@ -306,26 +300,21 @@ func (inst Renderer) Render(argument float64, levels []letterval.LVLevel, extrem
 	mode := resolveOutlierMode(inst.outlierMode, tailCount, inst.outlierAutoThreshold)
 	switch mode {
 	case OutlierModePoints:
-		inst.emitOutlierPoints(argument, extremes)
+		inst.emitOutlierPoints(p, argument, extremes)
 	case OutlierModeCount:
-		inst.emitOutlierCount(argument, deepest, tailCount)
+		inst.emitOutlierCount(p, argument, deepest, tailCount)
 	}
 }
 
 // emitMedianMarker draws a single scatter point when only depth-1 LV
 // (the median) is available — small-n case where no boxes are
 // statistically meaningful.
-func (inst Renderer) emitMedianMarker(argument, median float64) {
-	annotationColor := color.Hex(inst.annotationColorPacked)
-	c.PlotScatter(inst.seriesName,
-		[]float64{argument}, []float64{median}).
-		Color(annotationColor).
-		Radius(3).
-		Shape(0).
-		Send()
+func (inst Renderer) emitMedianMarker(p *implot.Plot, argument, median float64) {
+	p.SetNextColor(inst.annotationColorPacked)
+	p.Scatter(inst.seriesName, []float64{argument}, []float64{median}, implot.MarkerCircle, 3)
 }
 
-func (inst Renderer) emitOutlierPoints(argument float64, extremes []float64) {
+func (inst Renderer) emitOutlierPoints(p *implot.Plot, argument float64, extremes []float64) {
 	if len(extremes) == 0 {
 		return
 	}
@@ -335,26 +324,17 @@ func (inst Renderer) emitOutlierPoints(argument float64, extremes []float64) {
 	}
 	ys := make([]float64, len(extremes))
 	copy(ys, extremes)
-	annotationColor := color.Hex(inst.annotationColorPacked)
-	c.PlotScatter(inst.suffixedName("-out"), xs, ys).
-		Color(annotationColor).
-		Radius(2).
-		Shape(0).
-		Send()
+	p.SetNextColor(inst.annotationColorPacked)
+	p.Scatter(inst.suffixedName("-out"), xs, ys, implot.MarkerCircle, 2)
 }
 
-func (inst Renderer) emitOutlierCount(argument float64, deepest letterval.LVLevel, perTailCount int64) {
+func (inst Renderer) emitOutlierCount(p *implot.Plot, argument float64, deepest letterval.LVLevel, perTailCount int64) {
 	if perTailCount <= 0 {
 		return
 	}
 	label := fmt.Sprintf("+%d", perTailCount)
-	annotationColor := color.Hex(inst.annotationColorPacked)
-	c.PlotText(inst.suffixedName("-cb"), argument, deepest.LowerValue, label).
-		Color(annotationColor).
-		Send()
-	c.PlotText(inst.suffixedName("-ca"), argument, deepest.UpperValue, label).
-		Color(annotationColor).
-		Send()
+	p.Text(argument, deepest.LowerValue, inst.annotationColorPacked, label)
+	p.Text(argument, deepest.UpperValue, inst.annotationColorPacked, label)
 }
 
 // suffixedName decorates the series name with a fixed suffix. Returns
@@ -417,7 +397,7 @@ func paletteIsWhiteToBlack(p styletokens.SequentialE) bool {
 //
 // Crosshair is intentionally analogous to ecdf.Crosshair so callers
 // already familiar with the ECDF pattern (At → Render → PaintCrosshair
-// → c.Plot(...).Send → WriteStatusLine) can lift the same scaffold
+// → End → WriteStatusLine) can lift the same scaffold
 // across the two widgets without re-learning the contract.
 type Crosshair struct {
 	Valid bool
@@ -455,15 +435,12 @@ type Crosshair struct {
 }
 
 // At returns the Crosshair for the (argument, name, levels) tuple
-// describing one distribution rendered into the given plot. The
-// caller passes the same plotID it will hand to c.Plot — as an
-// AbsoluteWidgetId (not ids.PrepareStr), so the id is stable across
-// frames and matches the r15 hover register's stored value.
+// describing one distribution rendered into the given plot, using the
+// plot's own hover state (one frame behind, like every register read).
 //
 // Crosshair.Valid is true when:
-//   - the r15 hover register names plotID as the hovered plot,
-//   - HoverX is finite,
-//   - and |HoverX - argument| ≤ snapWindow (default 0.5).
+//   - the plot area is hovered,
+//   - and |hoverX - argument| ≤ snapWindow (default 0.5).
 //
 // The typical caller loops over its distributions and keeps the last
 // Valid Crosshair the loop produced — the snap window is half the
@@ -471,22 +448,22 @@ type Crosshair struct {
 // hover. levels may be empty (the depth-1-only median-marker case);
 // the returned Crosshair still reports the median and Argument while
 // Depth stays at 0.
-func (inst Renderer) At(plotID c.AbsoluteWidgetId, argument float64, name string, levels []letterval.LVLevel) (out Crosshair) {
+func (inst Renderer) At(p *implot.Plot, argument float64, name string, levels []letterval.LVLevel) (out Crosshair) {
 	out.Argument = argument
 	out.Name = name
-	hover := c.CurrentApplicationState.StateManager.GetPlotPointer()
-	if hover.HoverPlotId != plotID.Derive() || math.IsNaN(hover.HoverX) {
+	hx, hy, ok := p.HoverPlotPos()
+	if !ok {
 		return
 	}
-	if math.Abs(hover.HoverX-argument) > inst.snapWindow {
+	if math.Abs(hx-argument) > inst.snapWindow {
 		return
 	}
 	if len(levels) == 0 {
 		return
 	}
 	out.Valid = true
-	out.PlotX = hover.HoverX
-	out.PlotY = hover.HoverY
+	out.PlotX = hx
+	out.PlotY = hy
 	out.Median = medianFromLevels(levels)
 	out.TotalN = recoverN(levels)
 	deepest := deepestLevel(levels)
@@ -496,7 +473,7 @@ func (inst Renderer) At(plotID c.AbsoluteWidgetId, argument float64, name string
 		out.MaxDepthHigh = deepest.UpperValue
 		out.MaxDepthTailCount = deepest.TailCount
 	}
-	if matched := findContainingLevel(levels, hover.HoverY); matched != nil {
+	if matched := findContainingLevel(levels, hy); matched != nil {
 		out.Depth = matched.Depth
 		out.DepthLowerQ = matched.LowerQ
 		out.DepthUpperQ = matched.UpperQ
@@ -512,31 +489,28 @@ func (inst Renderer) At(plotID c.AbsoluteWidgetId, argument float64, name string
 	return
 }
 
-// PaintCrosshair emits a vertical PlotVLine at ch.Argument (snapped
-// to the matched distribution's centre, not the raw hover X) using
-// the renderer's annotation colour at half alpha. No-op when
-// ch.Valid is false. Must be invoked inside the same c.Plot block as
-// Render — the egui_plot drain renders vlines after box series so
-// the crosshair sits visually on top of every box.
+// PaintCrosshair declares a vertical reference line at ch.Argument
+// (snapped to the matched distribution's centre, not the raw hover X)
+// using the renderer's annotation colour at half alpha. No-op when
+// ch.Valid is false. Declare it after Render inside the same plot so
+// the line draws on top of every box.
 //
 // The vline anchors to the argument rather than HoverX because the
 // boxenplot's argument axis is categorical (one column per
 // distribution); a vline at the raw cursor X would slide between
 // columns and read as a "no-man's-land" cursor instead of a
 // "selected distribution" affordance.
-func (inst Renderer) PaintCrosshair(ch Crosshair) {
+func (inst Renderer) PaintCrosshair(p *implot.Plot, ch Crosshair) {
 	if !ch.Valid {
 		return
 	}
-	c.PlotVLine(inst.suffixedName("-cursor"), ch.Argument).
-		Color(color.Hex(withAlpha(inst.annotationColorPacked, 0x80))).
-		Width(1.0).
-		Send()
+	p.SetNextColor(withAlpha(inst.annotationColorPacked, 0x80)).SetNextWeight(1.0)
+	p.InfLinesV(inst.suffixedName("-cursor"), []float64{ch.Argument})
 }
 
 // WriteStatusLine emits a single weak-styled LabelAtoms row that
 // fully summarises the hovered letter-value box for the reader,
-// suitable for placement immediately below c.Plot(...).Send(). The
+// suitable for placement immediately below the plot block. The
 // content names the distribution, anchors the cursor on the value
 // axis, and describes the hovered ring by the quantiles its edges
 // represent (the directly-meaningful concept) rather than by the

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/analytics/stats/letterval"
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -82,10 +83,10 @@ func TestFillForDepthRampOrdering(t *testing.T) {
 func TestRenderEmptyLevelsIsNoOp(t *testing.T) {
 	r := New("x")
 	require.NotPanics(t, func() {
-		r.Render(0.0, nil, nil, -1)
+		r.Render(implot.NewDetached(), 0.0, nil, nil, -1)
 	})
 	require.NotPanics(t, func() {
-		r.Render(0.0, []letterval.LVLevel{}, nil, -1)
+		r.Render(implot.NewDetached(), 0.0, []letterval.LVLevel{}, nil, -1)
 	})
 }
 

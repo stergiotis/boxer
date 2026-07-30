@@ -4,14 +4,14 @@
 // available per the underlying ecdfbands library).
 //
 // The widget is stateless: construct one Renderer with a fluent
-// builder, then call Render once per frame inside a c.Plot block.
-// Each Render emits two FFFI2 primitives — one shaded polygon for
-// the band and one polyline for the ECDF step curve.
+// builder, then call Render once per frame with the host's open
+// *implot.Plot (between Begin and End — the widget renders through the
+// implot port per ADR-0149 SD7). Each Render declares the shaded band
+// and the ECDF step curve into that plot.
 package ecdf
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/ecdfbands"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // Renderer is the configured ECDF + confidence band visualiser.
@@ -115,18 +116,16 @@ func (inst Renderer) SeriesName(name string) (out Renderer) {
 	return
 }
 
-// Render emits the ECDF + confidence band primitives for one sorted
-// iid sample. The caller must already be inside a c.Plot block.
+// Render declares the ECDF + confidence band for one sorted iid sample
+// into the host's open plot.
 //
 // sorted must be non-decreasing; the underlying ecdfbands library
 // rejects unsorted inputs with an error. n must be ≥ 2 for a
 // meaningful band; n = 0 / 1 short-circuit (no emit).
 //
-// The render order is:
-//  1. n-1 PlotPolygon rectangles for the shaded band (one per ECDF
-//     plateau, drawn first so they sit under the curve).
-//  2. One PlotLine for the ECDF step polyline (drawn on top).
-func (inst Renderer) Render(sorted []float64) (err error) {
+// The render order is: the shaded band first (it sits under the
+// curve), then the ECDF step polyline.
+func (inst Renderer) Render(p *implot.Plot, sorted []float64) (err error) {
 	n := len(sorted)
 	if n < 2 {
 		return
@@ -136,8 +135,8 @@ func (inst Renderer) Render(sorted []float64) (err error) {
 		err = eh.Errorf("ecdf band: %w", err)
 		return
 	}
-	inst.emitBandRectangles(band.Xs, band.LowerCDF, band.UpperCDF)
-	inst.emitEcdfPolyline(sorted)
+	inst.emitBand(p, band.Xs, band.LowerCDF, band.UpperCDF)
+	inst.emitEcdfPolyline(p, sorted)
 	return
 }
 
@@ -155,7 +154,7 @@ func (inst Renderer) Render(sorted []float64) (err error) {
 //
 // Render order matches Render: band rectangles first, then the
 // ECDF step curve from the (xs, fnAt) grid.
-func (inst Renderer) RenderGrid(xs, fnAt []float64, n int) (err error) {
+func (inst Renderer) RenderGrid(p *implot.Plot, xs, fnAt []float64, n int) (err error) {
 	if len(xs) < 2 {
 		return
 	}
@@ -164,8 +163,8 @@ func (inst Renderer) RenderGrid(xs, fnAt []float64, n int) (err error) {
 		err = eh.Errorf("ecdf grid band: %w", err)
 		return
 	}
-	inst.emitBandRectangles(g.Xs, g.LowerCDF, g.UpperCDF)
-	inst.emitGridEcdfPolyline(g.Xs, fnAt)
+	inst.emitBand(p, g.Xs, g.LowerCDF, g.UpperCDF)
+	inst.emitGridEcdfPolyline(p, g.Xs, fnAt)
 	return
 }
 
@@ -175,9 +174,8 @@ func (inst Renderer) RenderGrid(xs, fnAt []float64, n int) (err error) {
 // frame while the tighter exact band (the renderer's configured Method)
 // warms in the background or waits behind an explicit compute request. The
 // conservative DKW strip is wider than the exact band — most visibly in
-// the tails — so swapping to the exact band reads as a tightening. The
-// caller must already be inside a c.Plot block.
-func (inst Renderer) RenderGridPreview(xs, fnAt []float64, n int) (err error) {
+// the tails — so swapping to the exact band reads as a tightening.
+func (inst Renderer) RenderGridPreview(p *implot.Plot, xs, fnAt []float64, n int) (err error) {
 	if len(xs) < 2 {
 		return
 	}
@@ -186,8 +184,8 @@ func (inst Renderer) RenderGridPreview(xs, fnAt []float64, n int) (err error) {
 		err = eh.Errorf("ecdf preview band: %w", err)
 		return
 	}
-	inst.emitBandRectangles(g.Xs, g.LowerCDF, g.UpperCDF)
-	inst.emitGridEcdfPolyline(g.Xs, fnAt)
+	inst.emitBand(p, g.Xs, g.LowerCDF, g.UpperCDF)
+	inst.emitGridEcdfPolyline(p, g.Xs, fnAt)
 	return
 }
 
@@ -226,59 +224,62 @@ func CancelBandJob(jobKey string) {
 
 // RenderGridCurveOnly emits only the ECDF step polyline for an (xs,
 // fnAt) grid — the band-free counterpart to RenderGrid, drawn while the
-// confidence band is still warming in the background. The caller must
-// already be inside a c.Plot block.
-func (inst Renderer) RenderGridCurveOnly(xs, fnAt []float64) {
+// confidence band is still warming in the background.
+func (inst Renderer) RenderGridCurveOnly(p *implot.Plot, xs, fnAt []float64) {
 	if len(xs) < 2 {
 		return
 	}
-	inst.emitGridEcdfPolyline(xs, fnAt)
+	inst.emitGridEcdfPolyline(p, xs, fnAt)
 }
 
-// emitBandRectangles emits the confidence band as a sequence of
-// convex per-segment rectangles. Each rectangle covers one ECDF
-// plateau [xs[i], xs[i+1]] × [lower[i], upper[i]] and renders
-// via one PlotPolygon. We use rectangles rather than a single
-// staircase polygon because egui_plot's polygon tessellator
-// produces visible triangulation artifacts on highly non-convex
-// staircase shapes; per-rectangle emission costs more FFFI2
-// primitives (n-1 vs 1) but is correct by construction.
-//
-// All rectangles share the same legend entry (bandSeriesName),
-// achieved by passing the same name to every PlotPolygon call —
-// egui_plot deduplicates legend entries by name.
-func (inst Renderer) emitBandRectangles(xs, lower, upper []float64) {
+// emitBand declares the confidence band as one step-expanded
+// ShadedBetween: plateau i covers [xs[i], xs[i+1]] at constant
+// (lower[i], upper[i]), so duplicating each interior x makes the
+// per-segment quads exactly the per-plateau rectangles the bridge
+// version emitted as individual polygons (a plain two-curve fill
+// would slant across the plateaus). An optional staircase outline
+// follows when a band stroke is configured.
+func (inst Renderer) emitBand(p *implot.Plot, xs, lower, upper []float64) {
 	n := len(xs)
+	if n < 2 {
+		return
+	}
+	ex := make([]float64, 0, 2*(n-1))
+	el := make([]float64, 0, 2*(n-1))
+	eu := make([]float64, 0, 2*(n-1))
 	for i := 0; i < n-1; i++ {
-		rxs := []float64{xs[i], xs[i+1], xs[i+1], xs[i]}
-		rys := []float64{lower[i], lower[i], upper[i], upper[i]}
-		c.PlotPolygon(inst.bandSeriesName, rxs, rys,
-			inst.bandFillPacked, inst.bandStrokePacked, inst.bandStrokeWidth).Send()
+		ex = append(ex, xs[i], xs[i+1])
+		el = append(el, lower[i], lower[i])
+		eu = append(eu, upper[i], upper[i])
+	}
+	p.SetNextColor(inst.bandFillPacked)
+	p.ShadedBetween(inst.bandSeriesName, ex, el, eu)
+	if inst.bandStrokeWidth > 0 {
+		p.SetNextColor(inst.bandStrokePacked).SetNextWeight(inst.bandStrokeWidth)
+		p.Stairs(inst.bandSeriesName, xs, upper)
+		p.SetNextColor(inst.bandStrokePacked).SetNextWeight(inst.bandStrokeWidth)
+		p.Stairs(inst.bandSeriesName, xs, lower)
 	}
 }
 
 // emitEcdfPolyline walks the ECDF step function for a complete
-// sorted sample and emits one PlotLine. The polyline starts at
+// sorted sample and declares one line series. The polyline starts at
 // (sorted[0], 0) and ascends in 1/n steps up to (sorted[n-1], 1).
-func (inst Renderer) emitEcdfPolyline(sorted []float64) {
+func (inst Renderer) emitEcdfPolyline(p *implot.Plot, sorted []float64) {
 	xs, ys := buildEcdfPolyline(sorted)
-	c.PlotLine(inst.seriesName, xs, ys).
-		Color(color.Hex(inst.ecdfStrokePacked)).
-		Width(inst.ecdfStrokeWidth).
-		Send()
+	p.SetNextColor(inst.ecdfStrokePacked).SetNextWeight(inst.ecdfStrokeWidth)
+	p.Line(inst.seriesName, xs, ys)
 }
 
-// emitGridEcdfPolyline emits the ECDF curve at an explicit grid
+// emitGridEcdfPolyline declares the ECDF curve at an explicit grid
 // where F_n is already known. The curve is rendered as a piecewise-
 // linear polyline through (xs[i], fnAt[i]) — appropriate for grids
 // dense enough that the underlying step structure is below visual
 // resolution. Coarse grids will show as linear segments between
 // known points; that is the right visual for sketch-backed ECDFs.
-func (inst Renderer) emitGridEcdfPolyline(xs, fnAt []float64) {
-	c.PlotLine(inst.seriesName, xs, fnAt).
-		Color(color.Hex(inst.ecdfStrokePacked)).
-		Width(inst.ecdfStrokeWidth).
-		Send()
+func (inst Renderer) emitGridEcdfPolyline(p *implot.Plot, xs, fnAt []float64) {
+	p.SetNextColor(inst.ecdfStrokePacked).SetNextWeight(inst.ecdfStrokeWidth)
+	p.Line(inst.seriesName, xs, fnAt)
 }
 
 // packRGBA combines an RGBA color token with an explicit alpha byte
@@ -351,36 +352,33 @@ type Crosshair struct {
 	FromGrid bool
 }
 
-// At returns the crosshair info for the sample at the cursor
-// position reported by the StateManager hover register. plotID is
-// the absolute widget id you passed to c.Plot — its Derive() output
-// is compared against the hover register's HoverPlotId so a stale
-// cached hover from a different plot does not surface as a valid
-// crosshair.
+// At returns the crosshair info for the sample at the cursor position
+// over the given plot (implot's per-plot hover state — one frame
+// behind, like every register read; a pointer over a different plot
+// never surfaces here).
 //
-// Crosshair.Valid is false when the hover is unset, refers to a
-// different plot, or sorted is empty. Cheap to call: BandsForSample
-// is cached by (n, α, method); the per-call cost is two O(log n)
-// binary searches plus a slice copy out of the band cache.
-func (inst Renderer) At(plotID c.AbsoluteWidgetId, sorted []float64) (out Crosshair) {
+// Crosshair.Valid is false when the plot is not hovered or sorted is
+// empty. Cheap to call: BandsForSample is cached by (n, α, method);
+// the per-call cost is two O(log n) binary searches plus a slice copy
+// out of the band cache.
+func (inst Renderer) At(p *implot.Plot, sorted []float64) (out Crosshair) {
 	out.NearestIdx = -1
 	out.Alpha = inst.alpha
 	if len(sorted) < 1 {
 		return
 	}
-	hover := c.CurrentApplicationState.StateManager.GetPlotPointer()
-	if hover.HoverPlotId != plotID.Derive() || math.IsNaN(hover.HoverX) {
+	x, y, ok := p.HoverPlotPos()
+	if !ok {
 		return
 	}
 	band, err := ecdfbands.BandsForSample(sorted, inst.alpha, inst.method)
 	if err != nil {
 		return
 	}
-	x := hover.HoverX
 	nIdx := nearestIdx(sorted, x)
 	out.Valid = true
 	out.X = x
-	out.Y = hover.HoverY
+	out.Y = y
 	out.FnX = fnAtXSorted(sorted, x)
 	out.LowerX, out.UpperX = bandAtX(band.Xs, band.LowerCDF, band.UpperCDF, x)
 	out.NearestX = sorted[nIdx]
@@ -397,25 +395,24 @@ func (inst Renderer) At(plotID c.AbsoluteWidgetId, sorted []float64) (out Crossh
 // xs and fnAt are the same grid arrays passed to RenderGrid; n is
 // the total sample size on which the underlying ECDF estimator was
 // built (typically much larger than len(xs)).
-func (inst Renderer) AtGrid(plotID c.AbsoluteWidgetId, xs, fnAt []float64, n int) (out Crosshair) {
+func (inst Renderer) AtGrid(p *implot.Plot, xs, fnAt []float64, n int) (out Crosshair) {
 	out.NearestIdx = -1
 	out.Alpha = inst.alpha
 	if len(xs) < 1 {
 		return
 	}
-	hover := c.CurrentApplicationState.StateManager.GetPlotPointer()
-	if hover.HoverPlotId != plotID.Derive() || math.IsNaN(hover.HoverX) {
+	x, y, ok := p.HoverPlotPos()
+	if !ok {
 		return
 	}
 	g, err := ecdfbands.BandsForGrid(xs, fnAt, n, inst.alpha, inst.method)
 	if err != nil {
 		return
 	}
-	x := hover.HoverX
 	nIdx := nearestIdx(xs, x)
 	out.Valid = true
 	out.X = x
-	out.Y = hover.HoverY
+	out.Y = y
 	out.FnX = fnAtXGrid(xs, fnAt, x)
 	out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
 	out.NearestX = xs[nIdx]
@@ -433,25 +430,24 @@ func (inst Renderer) AtGrid(plotID c.AbsoluteWidgetId, xs, fnAt []float64, n int
 // rather than the warmed exact band, so a hover readout is available before
 // (or without) the exact inversion. Crosshair.Alpha echoes the renderer's
 // alpha as usual.
-func (inst Renderer) AtGridPreview(plotID c.AbsoluteWidgetId, xs, fnAt []float64, n int) (out Crosshair) {
+func (inst Renderer) AtGridPreview(p *implot.Plot, xs, fnAt []float64, n int) (out Crosshair) {
 	out.NearestIdx = -1
 	out.Alpha = inst.alpha
 	if len(xs) < 1 {
 		return
 	}
-	hover := c.CurrentApplicationState.StateManager.GetPlotPointer()
-	if hover.HoverPlotId != plotID.Derive() || math.IsNaN(hover.HoverX) {
+	x, y, ok := p.HoverPlotPos()
+	if !ok {
 		return
 	}
 	g, err := ecdfbands.DkwBandForGrid(xs, fnAt, n, inst.alpha)
 	if err != nil {
 		return
 	}
-	x := hover.HoverX
 	nIdx := nearestIdx(xs, x)
 	out.Valid = true
 	out.X = x
-	out.Y = hover.HoverY
+	out.Y = y
 	out.FnX = fnAtXGrid(xs, fnAt, x)
 	out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
 	out.NearestX = xs[nIdx]
@@ -464,19 +460,16 @@ func (inst Renderer) AtGridPreview(plotID c.AbsoluteWidgetId, xs, fnAt []float64
 	return
 }
 
-// PaintCrosshair emits a vertical PlotVLine at ch.X using the
-// renderer's ECDF stroke colour at half alpha. No-op when ch.Valid
-// is false. Must be invoked inside the same c.Plot block as Render —
-// the egui_plot drain renders vlines after polygons and lines, so
-// the crosshair sits visually on top of the band and curve.
-func (inst Renderer) PaintCrosshair(ch Crosshair) {
+// PaintCrosshair declares a vertical reference line at ch.X using the
+// renderer's ECDF stroke colour at half alpha. No-op when ch.Valid is
+// false. Declare it after Render inside the same plot so the line
+// draws on top of the band and curve.
+func (inst Renderer) PaintCrosshair(p *implot.Plot, ch Crosshair) {
 	if !ch.Valid {
 		return
 	}
-	c.PlotVLine(inst.seriesName+" cursor", ch.X).
-		Color(color.Hex(withAlpha(inst.ecdfStrokePacked, 0x80))).
-		Width(1.0).
-		Send()
+	p.SetNextColor(withAlpha(inst.ecdfStrokePacked, 0x80)).SetNextWeight(1.0)
+	p.InfLinesV(inst.seriesName+" cursor", []float64{ch.X})
 }
 
 // ReadoutLineCount is the fixed number of text rows WriteStatusLine

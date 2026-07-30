@@ -47,16 +47,16 @@ func TestFluentSettersAreImmutable(t *testing.T) {
 // requires n ≥ 1 and would otherwise allocate).
 func TestRenderShortSampleNoOp(t *testing.T) {
 	r := New()
-	require.NoError(t, r.Render(nil))
-	require.NoError(t, r.Render([]float64{}))
-	require.NoError(t, r.Render([]float64{0.5}))
+	require.NoError(t, r.Render(nil, nil))
+	require.NoError(t, r.Render(nil, []float64{}))
+	require.NoError(t, r.Render(nil, []float64{0.5}))
 }
 
 // TestRenderRejectsUnsortedSample propagates the underlying
 // ecdfbands.BandsForSample validation error.
 func TestRenderRejectsUnsortedSample(t *testing.T) {
 	r := New()
-	err := r.Render([]float64{0.5, 0.2, 0.8})
+	err := r.Render(nil, []float64{0.5, 0.2, 0.8})
 	require.Error(t, err)
 }
 
@@ -173,7 +173,7 @@ func TestWithAlphaReplacesLowByte(t *testing.T) {
 // must produce an invalid Crosshair.
 func TestAtReturnsInvalidWhenSortedEmpty(t *testing.T) {
 	r := New()
-	ch := r.At(0, nil)
+	ch := r.At(nil, nil)
 	assert.False(t, ch.Valid)
 	assert.Equal(t, -1, ch.NearestIdx)
 	assert.Equal(t, 0.05, ch.Alpha)

@@ -66,6 +66,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/boxenplot"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdfdigest"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
@@ -744,21 +745,14 @@ func (inst Renderer) renderTabBar(scope string, state *instanceState) {
 // inspector content extracted into its own helper so the tab switch
 // in [renderLevel2Body] reads as a flat case dispatch.
 //
-// Order matters: the boxenplot.Render call stages the letter-value
-// series in-memory; c.Plot then opens the egui_plot block that
-// actually draws them. The crosshair At() must run before Render so
-// PaintCrosshair can layer the vline above the boxes inside the same
-// plot block. The plot id is an AbsoluteWidgetId so its r15-hover
-// lookup matches across frames (a stack-prepared id would XOR the
-// surrounding stack top in and silently miss).
+// The plot renders through the implot port (ADR-0149 SD7) on a fresh
+// scope-salted id stack (the popup has no host WidgetIdStack; the
+// derivation is deterministic, so ids are stable across frames and
+// unique per inspector scope). At() reads the plot's own hover state
+// right after Begin, so the crosshair still layers above the boxes
+// declared after it.
 func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, extremes []float64) {
-	plotID := c.MakeAbsoluteIdStr(scope + "-bp-plot")
 	levels := letterval.RecommendedLevels(digest)
-	// The boxenplot's argument axis is hidden, so any single x
-	// position works — 0.0 keeps the median annotation centred.
-	ch := inst.plot.At(plotID, 0.0, inst.idPrefix, levels)
-	inst.plot.Render(0.0, levels, extremes, -1)
-	inst.plot.PaintCrosshair(ch)
 	pad := inst.popupPad
 	// Centre the fixed-width boxenplot horizontally: the window opens wide for
 	// the ECDF tab (see [defaultEcdfPlotWidth]), so without a centring lead the
@@ -777,23 +771,28 @@ func (inst Renderer) renderBoxenplotBody(scope string, digest *tdigest.TDigest, 
 	if pad > 0 {
 		c.AddSpace(pad)
 	}
+	var ch boxenplot.Crosshair
 	for range c.Horizontal().KeepIter() {
 		if lead > 0 {
 			c.AddSpace(lead)
 		}
-		c.Plot(plotID).
-			Width(inst.popupWidth).
-			Height(inst.popupHeight).
-			YAxisLabel("value").
-			ShowAxes(false, true).
-			ShowGrid(false, true).
-			ShowBackground(false).
-			AllowZoom(false).
-			AllowDrag(false).
-			AllowScroll(false).
-			IncludeX(-0.6).
-			IncludeX(0.6).
-			Send()
+		ids := c.NewWidgetIdStack()
+		salt := ids.PrepareStr(scope).DeriveStacked()
+		pl := implot.Begin(ids, "##bp-plot", inst.popupWidth, inst.popupHeight)
+		pl.SetupAxes("", "value",
+			implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels,
+			implot.AxisFlagsNone)
+		pl.NoInputs()
+		pl.NoLegend()
+		pl.IncludeX(-0.6)
+		pl.IncludeX(0.6)
+		// The boxenplot's argument axis is hidden, so any single x
+		// position works — 0.0 keeps the median annotation centred.
+		ch = inst.plot.At(pl, 0.0, inst.idPrefix, levels)
+		inst.plot.Render(pl, 0.0, levels, extremes, -1)
+		inst.plot.PaintCrosshair(pl, ch)
+		pl.End()
+		ids.PopIdFromStackChecked(salt)
 		if pad > 0 {
 			c.AddSpace(pad)
 		}
@@ -857,7 +856,6 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	if !(xmax > xmin) {
 		return
 	}
-	plotID := c.MakeAbsoluteIdStr(scope + "-ecdf-plot")
 	n := int(digest.Count())
 	// Adaptive, per-side tail cutoff: clip a long tail to a quantile so the
 	// body fills the plot, and build the grid over the clipped window so the
@@ -893,24 +891,6 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 
 	exactReady := inst.ecdfPlot.BandReady(nExact)
 	warming := !exactReady && state.exactRequested
-	var ch ecdf.Crosshair
-	switch {
-	case exactReady:
-		ch = inst.ecdfPlot.AtGrid(plotID, xs, fn, nExact)
-		ch.SampleN = n // AtGrid only knew the bucketed/capped solve size
-		if err := inst.ecdfPlot.RenderGrid(xs, fn, nExact); err != nil {
-			// A grid the exact band rejects (e.g. a sub-ULP non-monotone F_n)
-			// must not blank the plot — fall back to the curve so the ECDF is
-			// still drawn instead of vanishing along with the band.
-			inst.ecdfPlot.RenderGridCurveOnly(xs, fn)
-		}
-		inst.ecdfPlot.PaintCrosshair(ch)
-	default: // warming or preview — both draw the instant DKW preview band
-		ch = inst.ecdfPlot.AtGridPreview(plotID, xs, fn, n)
-		ch.SampleN = n // already the true n on the preview path; explicit for parity
-		_ = inst.ecdfPlot.RenderGridPreview(xs, fn, n)
-		inst.ecdfPlot.PaintCrosshair(ch)
-	}
 
 	var job ecdf.BandJobSnapshot
 	if warming {
@@ -961,34 +941,48 @@ func (inst Renderer) renderEcdfBody(scope string, state *instanceState, digest *
 	// Consume the one-frame reset latch set by the Reset zoom button below.
 	resetZoom := state.ecdfResetReq
 	state.ecdfResetReq = false
+	var ch ecdf.Crosshair
 	for range c.Horizontal().KeepIter() {
 		if pad > 0 {
 			c.AddSpace(pad)
 		}
-		// XAxisAutoTicks replaces egui_plot's default log spacer with a nice-
-		// number spacer that keeps a healthy, round-numbered tick count through
-		// zoom — the default culls labels on this bounded, sometimes-narrow
-		// surface and was the cause of the 0–1 X ticks worked around by the
-		// width logic above.
-		plot := c.Plot(plotID).
-			Width(plotW).
-			Height(inst.popupHeight).
-			XAxisLabel("value").
-			YAxisLabel("F(x)").
-			ShowGrid(true, true).
-			XAxisAutoTicks().
-			YGridMarks(ecdfYTickVals, ecdfYTickLabels).
-			AllowZoom(true).
-			AllowDrag(false).
-			AllowScroll(false).
-			IncludeY(0).
-			IncludeY(1).
-			ClampX(clipLo, clipHi).
-			ClampY(0, 1)
+		// The plot renders through the implot port (ADR-0149 SD7) on a
+		// fresh scope-salted id stack (deterministic, stable across
+		// frames, unique per inspector scope). implot's own nice-number
+		// locator serves the x axis (the bridge needed XAxisAutoTicks to
+		// dodge egui_plot's label culling); the fixed 0/¼/½/¾/1 marks
+		// stay on y, and the viewport constraints replace ClampX/ClampY.
+		ids := c.NewWidgetIdStack()
+		salt := ids.PrepareStr(scope).DeriveStacked()
+		pl := implot.Begin(ids, "##ecdf-plot", plotW, inst.popupHeight)
+		pl.SetupAxes("value", "F(x)", implot.AxisFlagsNone, implot.AxisFlagsNone)
+		pl.SetupAxisTicks(implot.AxisY1, ecdfYTickVals, ecdfYTickLabels)
+		pl.SetupAxisLimitsConstraints(implot.AxisX1, clipLo, clipHi)
+		pl.SetupAxisLimitsConstraints(implot.AxisY1, 0, 1)
+		pl.IncludeY(0)
+		pl.IncludeY(1)
 		if resetZoom {
-			plot = plot.ResetBounds()
+			pl.FitNext()
 		}
-		plot.Send()
+		switch {
+		case exactReady:
+			ch = inst.ecdfPlot.AtGrid(pl, xs, fn, nExact)
+			ch.SampleN = n // AtGrid only knew the bucketed/capped solve size
+			if err := inst.ecdfPlot.RenderGrid(pl, xs, fn, nExact); err != nil {
+				// A grid the exact band rejects (e.g. a sub-ULP non-monotone
+				// F_n) must not blank the plot — fall back to the curve so the
+				// ECDF is still drawn instead of vanishing along with the band.
+				inst.ecdfPlot.RenderGridCurveOnly(pl, xs, fn)
+			}
+			inst.ecdfPlot.PaintCrosshair(pl, ch)
+		default: // warming or preview — both draw the instant DKW preview band
+			ch = inst.ecdfPlot.AtGridPreview(pl, xs, fn, n)
+			ch.SampleN = n // already the true n on the preview path; explicit for parity
+			_ = inst.ecdfPlot.RenderGridPreview(pl, xs, fn, n)
+			inst.ecdfPlot.PaintCrosshair(pl, ch)
+		}
+		pl.End()
+		ids.PopIdFromStackChecked(salt)
 		if pad > 0 {
 			c.AddSpace(pad)
 		}
