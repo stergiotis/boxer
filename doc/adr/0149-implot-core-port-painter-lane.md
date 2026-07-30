@@ -383,6 +383,46 @@ bridge call-site migration begins) and the deferred set of SD6 — all
 still descoped, none blocking. Accrued contract deviations live in the
 package doc.
 
+## Update 2026-07-30 (3) — M7 landed; bridge migration opened; a legend hit-test bug found and fixed
+
+M7 shipped the remaining items: vertical and horizontal error bars
+(asymmetric; symmetric by passing the same slice twice), pie charts
+(plot-space geometry like upstream, so anisotropic axes render an
+ellipse; slices wider than a half circle are split so the painter's
+convex-only fill renders them correctly, where upstream accepts the
+artifact), digital channels (bottom-pinned in pixel space, x-fit only,
+visible channels stack in declaration order), and the image item on the
+M4 `paintImage` opcode (caller-owned RGBA pixels plus a content version
+driving the ship-once protocol — the substrate has no GPU texture
+handles to pass, so upstream's texture-id parameter re-expresses as
+pixels + version). The `implot_m7` gallery demo is the acceptance
+capture; unit tests cover the new pure logic (pie spans, arc chunking,
+digital run merging, error-bar fit).
+
+Three API additions came from porting fidelity rather than new scope:
+same-label items now share one palette slot and one legend entry (the
+upstream label→item registry semantics — error bars merge into the
+series they decorate), `SetNextColor`/`SetNextWeight` port the two
+halves of upstream's `SetNextLineStyle`, and `Begin` honors the
+ImGui-family `"##id"` hidden-title convention.
+
+The egui-mcp driving pass for M7 caught a bug present since M2: the
+legend's sense regions were emitted before the plot-area region, and
+sense-region emission order is hit-test priority (later wins), so the
+area region swallowed every legend click — the legend rendered but
+never toggled. Legend regions now emit last, after the area and the
+drag tools, matching upstream's z-order where the legend outranks plot
+interaction. A second latent fit bug fell out of the new tests: the
+shared fit loop keyed its bound to `len(xs)`, so `InfLinesH` (nil xs)
+never contributed its y extent to auto-fit.
+
+SD7 migration opened with fibscope: its egui_plot-bridge trade-off plot
+now renders through the port (the advisor's pick line became
+`InfLinesV`; the pinned series colors ride `SetNextColor`). Seven-ish
+bridge call sites remain (imztop cpu/gpu/mem/rate, imzrt sched/heap/gc,
+play's projection pane, terrainscope, the ecdf widget); bridge
+deprecation remains a separate later decision per SD7.
+
 ## References
 
 - Upstream: [ImPlot](https://github.com/epezent/implot) v1.1-WIP, commit
