@@ -517,6 +517,67 @@ WITH
 SELECT * FROM edges
 ```
 
+## The shell's own apps and windows
+
+Two more in-process tables, same no-setup path as the ADR board above: point the
+**Endpoint** menu at *Keelson introspection* and Run. `keelson('apps')` is the
+registry — every app this binary links, open or not — and `keelson('windows')` is
+what is open right now, so it changes under you as windows come and go.
+
+What can be opened with arguments, and what remembers where you left it
+(ADR-0135, ADR-0148). `launch_kind` names the config an opener must send; empty
+means the app accepts none, and an argument-carrying open of it is refused at the
+host boundary. `workingset` says the shell pulls a record out of the window when
+you close it and hands that back at the next plain open — it implies a launch
+kind, because the record *is* an instance of that kind. `persisted_keys` is the
+older untyped channel, still the right declaration for content too large to
+travel inside a config.
+
+```sql
+SELECT id, launch_kind, workingset, persisted_keys, surface
+FROM keelson('apps')
+WHERE launch_kind != '' OR length(persisted_keys) > 0
+ORDER BY workingset DESC, id
+```
+
+Where each open window's content came from. `launch_reason` is `plain` when
+nobody supplied a config, `caller` when another app opened the window with
+arguments — press **Save as applet…** and the creator window that appears is one
+— and `restore` when the shell handed back the state that window's app was left
+in. To see that third one: open a second Playground from the **Apps** menu, type
+in it, close it, then open another; its row says `restore`, and this window's
+still says whatever it opened as. `config_bytes` is the payload's size. The
+payload itself stays in the window — it is the app's own DTO and may carry your
+query text.
+
+```sql
+SELECT key, app_id, launch_reason, config_kind, config_bytes, title
+FROM keelson('windows')
+ORDER BY key
+```
+
+Which of the windows in front of you *can* leave anything behind — the join the
+two tables exist to allow. It answers half the question honestly rather than the
+whole: a window leaves a record only if its app participates **and** someone
+acted in it, and the second half is the app's own to judge. The rarely-true
+`shares_instance` column, absent here, is the exception worth knowing — a window
+sharing its app instance with another open window neither takes a config nor
+saves anything, because the state is not that window's alone.
+
+```sql
+SELECT w.key, w.app_id, w.launch_reason, a.workingset, a.launch_kind
+FROM keelson('windows') AS w
+LEFT JOIN keelson('apps') AS a ON a.id = w.app_id
+ORDER BY a.workingset DESC, w.key
+```
+
+Two caveats. `keelson('windows')` exists only where a window host does — the
+desktop shell registers it, so a play started on its own has no windows to report
+and naming the table is an error rather than an empty result. And the stored
+records are not a keelson table yet: what these rows show is this process's live
+state, while what was written lives in `boxer.facts`, where a restored window's
+launch row carries the caller `runtime.workingset`.
+
 ## ADS-B geo-raster (demo loader)
 
 These target `planes_mercator`, the aircraft-position table loaded by
