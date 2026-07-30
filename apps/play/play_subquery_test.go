@@ -68,9 +68,31 @@ func TestSubqueryPickInnermost(t *testing.T) {
 		want:     "SELECT 1 AS x",
 		narrowed: true,
 	}, {
-		name:     "a union subquery ships the whole chain",
+		// A bare branch narrows exactly like its parenthesised spelling —
+		// the asymmetry the review recorded.
+		name:     "a caret inside a union branch narrows to the branch",
 		marked:   "SELECT * FROM (SELECT 1 AS a UNION ALL SELECT |2)",
+		want:     "SELECT 2",
+		narrowed: true,
+	}, {
+		// Between the branches — on the connective itself — nothing
+		// narrower than the chain contains the caret.
+		name:     "a caret on the UNION keyword ships the whole chain",
+		marked:   "SELECT * FROM (SELECT 1 AS a UNION |ALL SELECT 2)",
 		want:     "SELECT 1 AS a UNION ALL SELECT 2",
+		narrowed: true,
+	}, {
+		// At the statement's own top level the branch still narrows —
+		// a branch is never the statement's own query.
+		name:     "a top-level union branch narrows too",
+		marked:   "SELECT 1 AS a UNION ALL SELECT |2 AS a",
+		want:     "SELECT 2 AS a",
+		narrowed: true,
+	}, {
+		// Nesting inside a branch outranks the branch.
+		name:     "a subquery within a branch wins over the branch",
+		marked:   "SELECT 1 UNION ALL SELECT * FROM (SELECT |2 AS b)",
+		want:     "SELECT 2 AS b",
 		narrowed: true,
 	}, {
 		name:     "a plain statement has only its own query",
@@ -196,6 +218,25 @@ func TestSubqueryHoistsEnclosingWith(t *testing.T) {
 		name:   "the statement's own query is never rewritten",
 		marked: "WITH t AS (SELECT 1) SELECT |* FROM t",
 		want:   "WITH t AS (SELECT 1) SELECT * FROM t",
+	}, {
+		// The server scopes a branch's WITH clause FORWARD across the
+		// chain (live-verified), so a later branch hoists the earlier
+		// branch's items…
+		name:   "a union branch carries the first branch's WITH",
+		marked: "WITH t AS (SELECT 1 AS x) SELECT x FROM t UNION ALL SELECT |x + 1 FROM t",
+		want:   "WITH t AS (SELECT 1 AS x) SELECT x + 1 FROM t",
+	}, {
+		// …while the first branch already holds its own clause in its
+		// text and needs nothing hoisted.
+		name:   "the first branch ships its own WITH as-is",
+		marked: "WITH t AS (SELECT 1 AS x) SELECT |x FROM t UNION ALL SELECT x + 1 FROM t",
+		want:   "WITH t AS (SELECT 1 AS x) SELECT x FROM t",
+	}, {
+		// An enclosing scope's items reach a branch like any other unit,
+		// composing with the earlier-branch hoist in outer-first order.
+		name:   "an enclosing WITH reaches a union branch",
+		marked: "WITH a AS (SELECT 1) SELECT * FROM (SELECT * FROM a UNION ALL SELECT |2)",
+		want:   "WITH a AS (SELECT 1) SELECT 2",
 	}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -222,6 +263,9 @@ func TestSubqueryCompositionReparses(t *testing.T) {
 		"WITH 7 AS k SELECT * FROM (WITH 8 AS k SELECT |k)",
 		"WITH t AS (SELECT 1 AS v) SELECT * FROM (WITH 7 AS t SELECT |t FROM t)",
 		"WITH t AS (SELECT 1 AS v) SELECT * FROM (WITH t AS (SELECT v+1 AS v FROM |t) SELECT * FROM t)",
+		"WITH t AS (SELECT 1 AS x) SELECT x FROM t UNION ALL SELECT |x + 1 FROM t",
+		"WITH a AS (SELECT 1) SELECT * FROM (SELECT * FROM a UNION ALL SELECT |2)",
+		"SELECT 1 AS a UNION ALL SELECT |2 AS a",
 	}
 	for _, marked := range markedCases {
 		run, _ := runAtCaret(t, marked)

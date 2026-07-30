@@ -106,6 +106,55 @@ func TestLiveSubqueryCompositionDifferential(t *testing.T) {
 	}
 }
 
+// A narrowed union branch is not a passthrough of its statement — it returns
+// a subset by design — so the differential harness above cannot hold the
+// pair equal. What the server must still agree to: the branch's WITH
+// visibility is FORWARD across the chain, so a later branch composed with
+// the first branch's items hoisted runs and yields the branch's own value.
+func TestLiveSubqueryUnionBranchCarriesForwardWith(t *testing.T) {
+	url := liveClickHouseURL(t)
+	cases := []struct {
+		name   string
+		marked string
+		want   string
+	}{{
+		name:   "a later branch hoists the first branch's WITH",
+		marked: "WITH t AS (SELECT 1 AS x) SELECT x FROM t UNION ALL SELECT |x + 1 FROM t",
+		want:   "2",
+	}, {
+		name:   "the first branch ships its own WITH as-is",
+		marked: "WITH t AS (SELECT 1 AS x) SELECT |x FROM t UNION ALL SELECT x + 1 FROM t",
+		want:   "1",
+	}, {
+		name:   "a plain branch stands alone",
+		marked: "SELECT 41 AS v UNION ALL SELECT |42 AS v",
+		want:   "42",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			text, caret := caretAt(t, tc.marked)
+			unit, ok := pickSubquery(parseSubqueryUnits(text), caret)
+			if !ok || unit.Root {
+				t.Fatal("case does not narrow — it is not exercising a branch")
+			}
+			if len(unit.Unresolved) > 0 {
+				t.Fatalf("case unexpectedly marked unresolved: %v", unit.Unresolved)
+			}
+			if _, err := chQueryTSV(t, url, text); err != nil {
+				t.Fatalf("the original statement does not run — the case is broken: %v", err)
+			}
+			composed := unit.compose(text)
+			got, err := chQueryTSV(t, url, composed)
+			if err != nil {
+				t.Fatalf("the server rejected the branch composition:\n  %v\n  composed %q", err, composed)
+			}
+			if got != tc.want {
+				t.Errorf("branch composition = %q, want %q\n from %q", got, tc.want, composed)
+			}
+		})
+	}
+}
+
 // A correlated reference whose qualifier is rebound by a NESTED subquery of
 // the unit: the nested bind does not enclose the reference, so the original
 // resolves it against the OUTER alias and runs, while the narrowed unit is

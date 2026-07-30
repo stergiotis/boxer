@@ -5,12 +5,16 @@ package play
 // that runs it on its own.
 //
 // The statement split in play_statements.go is at the LEX tier and stops at
-// the statement boundary. Going inside one needs the CST. grammar1's runnable
-// unit is `selectUnionStmt` — one SELECT plus whatever UNION / EXCEPT /
-// INTERSECT chain it heads — and it is the node every nesting site wraps,
-// whether the nesting is a FROM source, an expression subquery, or a CTE body.
-// So "the query under the caret" is the innermost selectUnionStmt containing
-// it, and the statement's own query is the outermost one.
+// the statement boundary. Going inside one needs the CST. The primary
+// runnable unit is grammar1's `selectUnionStmt` — one SELECT plus whatever
+// UNION / EXCEPT / INTERSECT chain it heads — the node every nesting site
+// wraps, whether the nesting is a FROM source, an expression subquery, or a
+// CTE body. Each bare branch of a multi-branch chain is additionally a unit
+// of its own: a branch is independently runnable SQL, and its parenthesised
+// spelling already narrowed, so the bare spelling narrowing too is the only
+// consistent reading of "the query under the caret". That phrase resolves to
+// the innermost unit containing the caret; the statement's own query is the
+// outermost chain.
 //
 // Unlike the lex split this needs a parse that SUCCEEDED, so it can only ever
 // add to what Run already does: no units means no narrowing, and the ordinary
@@ -42,10 +46,11 @@ import (
 // subqueryUnit is one runnable query of a statement, in that statement's own
 // byte coordinates.
 type subqueryUnit struct {
-	// Src is the selectUnionStmt's extent. For a nested unit that is the text
-	// BETWEEN the parentheses wrapping it, not including them; for a unit whose
-	// enclosing query carries a `ctes` clause it excludes that clause, which is
-	// why the clause has to be hoisted back in.
+	// Src is the unit's extent — a selectUnionStmt's, or a bare union
+	// branch's selectStmt's. For a nested chain that is the text BETWEEN the
+	// parentheses wrapping it, not including them; for a unit whose
+	// enclosing query carries a `ctes` clause it excludes that clause, which
+	// is why the clause has to be hoisted back in.
 	Src nanopass.SourceRange
 	// Root marks the statement's own top-level query. Resolving to it is the
 	// "nothing to narrow to" answer: it is what Run ships anyway.
@@ -61,6 +66,8 @@ type subqueryUnit struct {
 	Unresolved []nanopass.SourceRange
 
 	// depth is the nesting depth of the unit, the tie-break for innermost.
+	// Chains count in twos so their bare branches order between the chain
+	// and anything nested within a branch — see collectSubqueries.
 	depth int
 	// recursive is set when any contributing WITH clause — hoisted, or the
 	// unit's own — carried RECURSIVE.
@@ -273,6 +280,11 @@ func rootUnitNode(tree antlr.ParserRuleContext) *grammar1.SelectUnionStmtContext
 // collectSubqueries walks the CST, carrying the scopes open at each node. The
 // chain is extended for a subtree rather than recovered by walking parents back
 // up, so each unit's environment is a copy of what was already in hand.
+//
+// Depth counts in steps of two so a chain's bare branches fit BETWEEN the
+// chain and anything nested inside them: a chain sits at 2k, its branches at
+// 2k+1, and a subquery within a branch opens the next chain at 2k+2 —
+// pickSubquery's innermost-wins tie-break then orders all three correctly.
 func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeFrame, depth int, scopes scopeIndex, root *grammar1.SelectUnionStmtContext, out *[]subqueryUnit) {
 	switch n := node.(type) {
 	case *grammar1.QueryContext:
@@ -283,6 +295,27 @@ func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeF
 			chain = extendChain(chain, withItemsOf(pr, ct.AllWithItem(), ct.RECURSIVE() != nil))
 		}
 	case *grammar1.SelectStmtContext:
+		// A bare branch of a multi-branch chain is a runnable unit of its
+		// own: the caret in `SELECT 1 UNION ALL SELECT |2` narrows to
+		// `SELECT 2`, exactly as it already did for the parenthesised
+		// spelling of the same branch. The server scopes a branch's WITH
+		// clause FORWARD only (live-verified: branch 2 sees branch 1's
+		// items, never the reverse), so the frames extend with the
+		// withClauses of the EARLIER bare branches — for the unit emitted
+		// here, and for everything nested inside this branch alike.
+		if chainNode, index := unionBranchOf(n); index >= 0 {
+			for _, earlier := range bareBranches(chainNode)[:index] {
+				if earlier == nil {
+					continue
+				}
+				if wc := earlier.WithClause(); wc != nil {
+					chain = extendChain(chain, withItemsOf(pr, wc.AllWithItem(), wc.RECURSIVE() != nil))
+				}
+			}
+			if u, ok := unitFor(pr, n, n.WithClause(), chain, depth+1, scopes, false); ok {
+				*out = append(*out, u)
+			}
+		}
 		// A select's own `withClause` and FROM sources are visible to the
 		// subqueries inside it, but not to the selectUnionStmt that heads it —
 		// that unit carries the clause in its own text (see bodyAt) and its own
@@ -296,8 +329,8 @@ func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeF
 			chain = extendChain(chain, frame)
 		}
 	case *grammar1.SelectUnionStmtContext:
-		depth++
-		if u, ok := unitFor(pr, n, chain, depth, scopes, root); ok {
+		depth += 2
+		if u, ok := unitFor(pr, n, ownWithClause(n), chain, depth, scopes, n == root); ok {
 			*out = append(*out, u)
 		}
 	}
@@ -308,28 +341,87 @@ func collectSubqueries(pr *nanopass.ParseResult, node antlr.Tree, chain []scopeF
 	}
 }
 
+// unionBranchOf reports whether sel is a bare branch of a chain with MORE
+// than one branch, returning the chain and sel's branch position. A single
+// branch is coextensive with its chain — the chain's unit already covers it —
+// and a parenthesised branch nests a chain of its own, so both answer -1.
+func unionBranchOf(sel *grammar1.SelectStmtContext) (chain *grammar1.SelectUnionStmtContext, index int) {
+	index = -1
+	parens, isParens := sel.GetParent().(*grammar1.SelectStmtWithParensContext)
+	if !isParens {
+		return nil, -1
+	}
+	switch p := parens.GetParent().(type) {
+	case *grammar1.SelectUnionStmtContext:
+		chain = p
+		index = 0
+	case *grammar1.SelectUnionStmtItemContext:
+		c2, isChain := p.GetParent().(*grammar1.SelectUnionStmtContext)
+		if !isChain {
+			return nil, -1
+		}
+		chain = c2
+		for i, item := range c2.AllSelectUnionStmtItem() {
+			if item == antlr.Tree(p) {
+				index = i + 1
+				break
+			}
+		}
+	default:
+		return nil, -1
+	}
+	if chain == nil || index < 0 || len(chain.AllSelectUnionStmtItem()) == 0 {
+		return nil, -1
+	}
+	return chain, index
+}
+
+// bareBranches lists a chain's branches in source order, nil where a branch
+// is parenthesised (those nest a chain of their own and carry no top-level
+// withClause of the outer chain's).
+func bareBranches(chain *grammar1.SelectUnionStmtContext) (out []*grammar1.SelectStmtContext) {
+	wrap := func(p grammar1.ISelectStmtWithParensContext) *grammar1.SelectStmtContext {
+		ctx, isParens := p.(*grammar1.SelectStmtWithParensContext)
+		if !isParens {
+			return nil
+		}
+		sel, isSel := ctx.SelectStmt().(*grammar1.SelectStmtContext)
+		if !isSel {
+			return nil
+		}
+		return sel
+	}
+	items := chain.AllSelectUnionStmtItem()
+	out = make([]*grammar1.SelectStmtContext, 0, 1+len(items))
+	out = append(out, wrap(chain.SelectStmtWithParens()))
+	for _, it := range items {
+		out = append(out, wrap(it.SelectStmtWithParens()))
+	}
+	return out
+}
+
 // extendChain appends a frame without letting sibling subtrees share — and then
 // overwrite — the same backing array. The full slice expression forces the copy.
 func extendChain(chain []scopeFrame, frame scopeFrame) []scopeFrame {
 	return append(chain[:len(chain):len(chain)], frame)
 }
 
-// unitFor builds the unit for one selectUnionStmt node from the scopes open
-// above it.
-func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, chain []scopeFrame, depth int, scopes scopeIndex, root *grammar1.SelectUnionStmtContext) (unit subqueryUnit, ok bool) {
+// unitFor builds one unit — a whole selectUnionStmt chain, or a bare branch
+// of one — from the scopes open above it. ownWc is the WITH clause living
+// inside the unit's own text (a chain's first bare branch's, a branch's own),
+// nil when there is none; its items stay in the shipped text and hoisted
+// items are spliced in front of them.
+func unitFor(pr *nanopass.ParseResult, node antlr.ParserRuleContext, ownWc grammar1.IWithClauseContext, chain []scopeFrame, depth int, scopes scopeIndex, isRoot bool) (unit subqueryUnit, ok bool) {
 	src := pr.SourceRangeOf(node)
 	if src.Empty() {
 		return unit, false
 	}
-	unit = subqueryUnit{Src: src, Root: node == root, depth: depth, bodyAt: src.Start}
-	// The unit's own WITH clause, when its first branch is a bare select. Its
-	// items stay in the shipped text; what is needed here is where they start,
-	// so the hoisted items can be spliced in front of them. qualifiers collects
-	// the named-query names that travel — own or hoisted — which is what a
-	// correlated qualifier below must NOT be.
+	unit = subqueryUnit{Src: src, Root: isRoot, depth: depth, bodyAt: src.Start}
+	// qualifiers collects the named-query names that travel — own or hoisted
+	// — which is what a correlated qualifier below must NOT be.
 	ownKeys := map[string]struct{}{}
 	qualifiers := map[string]struct{}{}
-	if wc := ownWithClause(node); wc != nil {
+	if wc := ownWc; wc != nil {
 		if items := wc.AllWithItem(); len(items) > 0 {
 			if first := pr.SourceRangeOf(items[0]); !first.Empty() {
 				unit.bodyAt = first.Start
@@ -413,7 +505,7 @@ func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, ch
 // would otherwise misread: grammar1 parses `tup.field` on a Tuple column as a
 // table-qualified reference too, and such a qualifier resolves nowhere, so it
 // is not reported.
-func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, outer, qualifiers map[string]struct{}, scopes scopeIndex, src nanopass.SourceRange) (out []nanopass.SourceRange) {
+func unresolvedRefs(pr *nanopass.ParseResult, node antlr.ParserRuleContext, outer, qualifiers map[string]struct{}, scopes scopeIndex, src nanopass.SourceRange) (out []nanopass.SourceRange) {
 	if len(outer) == 0 {
 		return nil
 	}
@@ -514,7 +606,7 @@ func boundAbove(pr *nanopass.ParseResult, ref antlr.ParserRuleContext, qualifier
 // self-entry BuildScopes plants, CTEDef.Recursive), while a non-recursive
 // rebinding resolves to an outer definition — one that does travel, and the
 // server agrees the outer binding answers — whose extent lies elsewhere.
-func selfRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, src nanopass.SourceRange, scopes scopeIndex) (out []nanopass.SourceRange) {
+func selfRefs(pr *nanopass.ParseResult, node antlr.ParserRuleContext, src nanopass.SourceRange, scopes scopeIndex) (out []nanopass.SourceRange) {
 	if len(scopes) == 0 {
 		return nil
 	}
