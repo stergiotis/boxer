@@ -54,18 +54,18 @@
 //
 // # Throughput, and where the transform actually helps
 //
-// At Window 50 over an 8000-sample horizon: about 57k samples/s under DAMP
-// against 19k in exact mode, so early abandoning is worth roughly 3×.
+// At Window 50 over an 8000-sample horizon: about 64k samples/s under DAMP
+// against 21k in exact mode, so early abandoning is worth roughly 3×.
 //
 // A block scan can be done two ways, and which is faster is not what the
 // asymptotics suggest. Measured over the same benchmark, samples/s:
 //
 //	Window    direct    transform
-//	    16   365,671       88,393   direct 4.1× faster
-//	    50    57,405       19,744   direct 2.9× faster
-//	   128    12,981        9,446   direct 1.4× faster
-//	   256     3,474        5,256   transform 1.5× faster
-//	   512     1,097        2,948   transform 2.7× faster
+//	    16   566,000       96,000   direct 5.9× faster
+//	    50    60,700       21,600   direct 2.8× faster
+//	   128    14,300       10,300   direct 1.4× faster
+//	   256     3,800        5,740   transform 1.5× faster
+//	   512     1,190        3,240   transform 2.7× faster
 //
 // The crossover sits between 128 and 256, which is why [TransformMinWindow] is
 // 256 and why [ScanMethodAuto] is the right default. Below it the transform is

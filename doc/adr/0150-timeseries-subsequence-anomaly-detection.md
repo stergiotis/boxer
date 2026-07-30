@@ -459,6 +459,35 @@ Three things follow:
    package at direct scanning would be a defensible simplification if that
    regime never materializes.
 
+### 2026-07-30 — re-measured on an unthrottled CPU; figures corrected, conclusions unchanged
+
+The two entries above were benchmarked while the machine sat in a power-saving
+frequency governor. Re-run with the governor at `performance` (boost enabled,
+`amd-pstate-epp`), two repetitions, agreeing to within 2%:
+
+| Window | direct | transform | |
+| ---: | ---: | ---: | --- |
+| 16 | 566,000 | 96,000 | direct 5.9× faster |
+| 50 | 60,700 | 21,600 | direct 2.8× faster |
+| 128 | 14,300 | 10,300 | direct 1.4× faster |
+| 256 | 3,800 | **5,740** | transform 1.5× faster |
+| 512 | 1,190 | **3,240** | transform 2.7× faster |
+
+DAMP against exact mode at Window 50 is 64k samples/s against 21k, so early
+abandoning is worth 3.0×.
+
+Everything moved up by about 10% except the Window 16 direct case, which gained
+55% — it is by far the shortest-running benchmark, so it was the one the
+frequency ramp had least time to catch up with. **Every conclusion drawn above
+survives**: the crossover still sits between 128 and 256, `TransformMinWindow`
+stays 256, and the transform is still a 2.8× loss at Window 50. The ratios were
+the load-bearing part and they barely moved, which is what one would expect from
+a frequency effect applied to both arms.
+
+Recorded because the earlier figures are quoted in the package documentation and
+in the entries above, and because "benchmarked under an unnoticed governor" is a
+failure mode worth naming rather than quietly patching.
+
 ## References
 
 - Survey and literature landscape:
