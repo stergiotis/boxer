@@ -73,6 +73,12 @@ type plotState struct {
 	legendHover string
 	heatCache   map[string]*heatTex
 
+	// Context-menu state: open flag, screen anchor, and an open-counter
+	// that salts the window id so each opening re-anchors at the pointer.
+	ctxOpen   bool
+	ctxScreen [2]float32
+	ctxSeq    uint64
+
 	// scratch buffers reused across frames to keep steady-state allocation flat.
 	scratchX []float32
 	scratchY []float32
@@ -106,6 +112,9 @@ type Plot struct {
 	title       string
 	setupLocked bool
 	series      []seriesFrame
+	tools       []toolFrame
+	toolPos     [2]float32
+	toolPosOk   bool
 	dataXMin    float64
 	dataXMax    float64
 	dataYMin    float64
@@ -181,6 +190,9 @@ func (p *Plot) applyInteractions() {
 		}
 	}
 
+	p.toolPos = [2]float32{posX, posY}
+	p.toolPosOk = posOk
+
 	st.hoverOk = posOk && canvasFlags.HasContainsPointer() && st.prevOk &&
 		float64(posX) >= st.prev.px0 && float64(posX) <= st.prev.px0+st.prev.plotW &&
 		float64(posY) >= st.prev.py0 && float64(posY) <= st.prev.py0+st.prev.plotH
@@ -241,6 +253,11 @@ func (p *Plot) applyInteractions() {
 	if flags.HasDoubleClicked() {
 		st.x.fitNext = true
 		st.y.fitNext = true
+	}
+	if flags.HasSecondaryClicked() && posOk && curOk {
+		st.ctxOpen = true
+		st.ctxSeq++
+		st.ctxScreen = [2]float32{cur.OriginX + posX, cur.OriginY + posY}
 	}
 
 	// Wheel: egui delivers pinch/ctrl-wheel as Zoom and plain wheel as

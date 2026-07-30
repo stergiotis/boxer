@@ -30,6 +30,15 @@ type implotM4State struct {
 	samples            []float64
 }
 
+// implotM5State carries the M5 tools demo: the series plus the caller-held
+// tool values (stable across frames, per the heap-pointer rule).
+type implotM5State struct {
+	xs, ys         []float64
+	threshold      float64
+	probeX, probeY float64
+	limitY         float64
+}
+
 // implotM2State carries the M2 item-breadth demo's series.
 type implotM2State struct {
 	barXs, barYs     []float64
@@ -221,6 +230,41 @@ func init() {
 			p2.SetupAxes("value", "count", implot.AxisFlagsAutoFit, implot.AxisFlagsAutoFit)
 			p2.Histogram("histogram", st.samples, 0, false)
 			p2.End()
+		},
+	})
+	registry.Register(registry.Demo{
+		Name:        "implot_m5",
+		Category:    "Graphics & canvas",
+		Title:       icons.IconPaintBucket + " implot M5 (drag tools / annotations / tags)",
+		Stage:       [2]float32{660, 580},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "ADR-0149 M5 tools: a draggable x threshold line and horizontal limit line with axis tags, a draggable probe point with a clamped annotation callout — drag tools win the hit-test over plot pan — and a right-click context menu with the fit actions.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			st := &implotM5State{threshold: 7.5, probeX: 3.2, probeY: 0.6, limitY: -0.8}
+			const n = 300
+			for i := range n {
+				x := float64(i) / float64(n-1) * 4 * math.Pi
+				st.xs = append(st.xs, x)
+				st.ys = append(st.ys, math.Sin(x)*math.Exp(-x/12))
+			}
+			return st
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			st := state.(*implotM5State)
+			p := implot.Begin(ids, "tools", 620, 420)
+			p.SetupAxes("x", "y", implot.AxisFlagsNone, implot.AxisFlagsNone)
+			p.SetupAxisLimits(implot.AxisX1, 0, 4*math.Pi, implot.CondOnce)
+			p.SetupAxisLimits(implot.AxisY1, -1.2, 1.2, implot.CondOnce)
+			p.Line("signal", st.xs, st.ys)
+			p.DragLineX("threshold", &st.threshold, 0xdd8452ff)
+			p.DragLineY("limit", &st.limitY, 0x55a868ff)
+			p.DragPoint("probe", &st.probeX, &st.probeY, 0xc44e52ff)
+			p.TagX(st.threshold, 0xdd8452ff)
+			p.TagY(st.limitY, 0x55a868ff)
+			p.Annotation(st.probeX, st.probeY, 18, -24, 0xc44e52ff, true,
+				"probe")
+			p.End()
 		},
 	})
 }

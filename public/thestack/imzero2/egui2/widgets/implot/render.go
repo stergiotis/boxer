@@ -17,6 +17,7 @@ func (p *Plot) End() {
 	defer func() {
 		p.ids.PopIdFromStackChecked(p.scopeId)
 		p.series = nil
+		p.tools = nil
 	}()
 
 	// --- Fit: explicit request (double-click), AutoFit flag, or a plot that
@@ -176,6 +177,7 @@ func (p *Plot) End() {
 		c.PaintRectFilled(x0, y0, x1, y1, 0, color.Hex(colBoxFill)).Send()
 		c.PaintRectStroke(x0, y0, x1, y1, 0, color.Hex(colBoxStroke), 1.0).Send()
 	}
+	p.emitToolsClipped(tr, areaX, areaY, areaW, areaH)
 	c.PaintClipPop().Send()
 	c.PaintRectStroke(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colBorder), 1.0).Send()
 
@@ -192,6 +194,7 @@ func (p *Plot) End() {
 
 	// --- Interaction surfaces + the canvas drain.
 	c.PaintSenseRegion(p.ids.PrepareStr("implot-area"), areaX, areaY, areaW, areaH).Send()
+	p.emitToolChrome(tr, areaX, areaY, areaW, areaH)
 	c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
 		Background(color.Hex(colPlotBg)).
 		Sense(true, true, true).
@@ -201,6 +204,8 @@ func (p *Plot) End() {
 
 	st.prev = tr
 	st.prevOk = tr.valid()
+
+	p.emitContextMenu()
 }
 
 // emitSeries dispatches one frame-declared item to its renderer. All
