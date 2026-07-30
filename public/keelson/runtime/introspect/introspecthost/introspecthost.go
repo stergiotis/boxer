@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
@@ -72,6 +73,11 @@ type Deps struct {
 	// Decryptor, when set, lets /table stream ad-hoc datasets' in-process
 	// decryption (ADR-0134 §SD3, revised). nil keeps the refusal.
 	Decryptor adhocdata.DecryptorI
+	// Facts is the runtime's facts store, backing keelson.workingsets
+	// (ADR-0148 §SD7). nil is allowed and leaves that table empty rather
+	// than absent, so the set of table names does not depend on whether a
+	// store was wired.
+	Facts factsstore.FactsStoreI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -102,6 +108,12 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	}
 	if e := introspectprovidersgui.RegisterAll(reg, deps.WindowHost); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: GUI provider registration failed")
+	}
+	// ADR-0148 §SD7: the stored workingset records, read through the facts
+	// store this process writes them with. Registered unconditionally — a nil
+	// store answers with an empty table, so the table name is always there.
+	if e := introspectproviders.RegisterWorkingsets(reg, deps.Facts); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: workingsets provider registration failed")
 	}
 	// ADR-0126 §SD5: a process-lifetime metric-plane consumer feeds the
 	// observed-topology tables (keelson.procs, keelson.sockets). imztop's

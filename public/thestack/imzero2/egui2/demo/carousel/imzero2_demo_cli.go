@@ -447,7 +447,11 @@ func NewCommand() *cli.Command {
 				Bus:              bus,
 				ChlocalAvailable: chlocalSvc != nil,
 				Registry:         introspectReg,
-				Log:              log.Logger,
+				// The same store the window host saves workingsets through, so
+				// keelson('workingsets') reports what a restore would find
+				// (ADR-0148 §SD7).
+				Facts: facts,
+				Log:   log.Logger,
 			}
 			// Guard against the typed-nil interface trap: only hand over the
 			// broker as the ad-hoc decryptor when it actually started.
