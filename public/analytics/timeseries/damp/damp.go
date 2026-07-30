@@ -3,9 +3,57 @@ package damp
 import (
 	"math"
 
+	"gonum.org/v1/gonum/dsp/fourier"
+
 	"github.com/stergiotis/boxer/public/analytics/timeseries/matrixprofile"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
+
+// ScanMethodE selects how a block of candidate neighbours is scored.
+type ScanMethodE uint8
+
+const (
+	// ScanMethodAuto picks per block, by [TransformMinWindow].
+	ScanMethodAuto ScanMethodE = iota
+	// ScanMethodDirect evaluates each candidate's dot product independently, at
+	// O(candidates·Window).
+	ScanMethodDirect
+	// ScanMethodTransform computes the whole block's sliding dot product as one
+	// cross-correlation, at O(N log N) in the padded transform length. This is
+	// the MASS formulation from the matrix profile literature.
+	ScanMethodTransform
+)
+
+// String returns the method's name.
+func (inst ScanMethodE) String() (name string) {
+	switch inst {
+	case ScanMethodAuto:
+		name = "auto"
+	case ScanMethodDirect:
+		name = "direct"
+	case ScanMethodTransform:
+		name = "transform"
+	default:
+		name = "unknown"
+	}
+	return
+}
+
+// TransformMinWindow is the window length at or above which [ScanMethodAuto]
+// switches to the transform.
+//
+// The asymptotics say the transform should always win: O(N log N) against
+// O(candidates·Window). The constants say otherwise at the window lengths that
+// occur in practice. A direct scan does candidates·Window fused multiply-adds
+// over contiguous memory; the transform does three length-N passes of complex
+// butterflies plus a pointwise product, and N is rounded up to a power of two.
+// The crossover is where Window overtakes roughly fifteen times log2(N), which
+// lands well above the tens-of-samples windows that most signals want.
+//
+// This value is measured, not derived — see the benchmark in this package and
+// the 2026-07-30 M3 update in
+// doc/adr/0150-timeseries-subsequence-anomaly-detection.md.
+const TransformMinWindow = 256
 
 // Config parameterizes a [Detector].
 type Config struct {
@@ -37,6 +85,12 @@ type Config struct {
 	// training prefix's standard deviation. Zero accepts
 	// [matrixprofile.DefaultStdDevFloorRel].
 	StdDevFloorRel float64
+
+	// ScanMethod overrides how blocks are scored. The zero value,
+	// [ScanMethodAuto], is what callers should use; the explicit settings exist
+	// for benchmarking and for the rare series whose window sits near the
+	// crossover.
+	ScanMethod ScanMethodE
 }
 
 // Reading is one scored subsequence.
@@ -105,7 +159,94 @@ type Detector struct {
 	dots     []float64
 	dotQuery int32
 
-	scratch []float64
+	transform *transformScanner
+}
+
+// transformScanner holds the plans and buffers for cross-correlation by
+// transform. Plans are cached by length because a block scan reuses only a
+// handful of distinct padded lengths.
+type transformScanner struct {
+	plans   map[int]*fourier.FFT
+	series  []float64
+	query   []float64
+	coefA   []complex128
+	coefB   []complex128
+	inverse []float64
+	// dots is the extracted result, kept separate from inverse so the extraction
+	// loop never reads and writes the same array.
+	dots []float64
+}
+
+func newTransformScanner() (inst *transformScanner) {
+	inst = &transformScanner{plans: make(map[int]*fourier.FFT, 8)}
+	return
+}
+
+func (inst *transformScanner) plan(n int) (p *fourier.FFT) {
+	p, ok := inst.plans[n]
+	if !ok {
+		p = fourier.NewFFT(n)
+		inst.plans[n] = p
+	}
+	return
+}
+
+// nextPow2 returns the smallest power of two at or above v.
+func nextPow2(v int) (n int) {
+	n = 1
+	for n < v {
+		n *= 2
+	}
+	return
+}
+
+// slidingDot returns the dot product of query against every window of series,
+// via one cross-correlation.
+//
+// Convolving the series with the *reversed* query turns convolution into
+// correlation, so entry m-1+p of the result is the dot product at offset p.
+// The transform length is padded past len(series)+len(query) so the circular
+// convolution the transform computes agrees with the linear one that is wanted.
+func (inst *transformScanner) slidingDot(query []float64, series []float64, dst []float64) (out []float64) {
+	m := len(query)
+	valid := len(series) - m + 1
+	n := nextPow2(len(series) + m)
+
+	if cap(inst.series) < n {
+		inst.series = make([]float64, n)
+		inst.query = make([]float64, n)
+		inst.inverse = make([]float64, n)
+		inst.dots = make([]float64, n)
+		inst.coefA = make([]complex128, n/2+1)
+		inst.coefB = make([]complex128, n/2+1)
+	}
+	ta := inst.series[:n]
+	qa := inst.query[:n]
+	clear(ta)
+	clear(qa)
+	copy(ta, series)
+	for i := range m {
+		qa[i] = query[m-1-i]
+	}
+
+	p := inst.plan(n)
+	ca := p.Coefficients(inst.coefA[:n/2+1], ta)
+	cb := p.Coefficients(inst.coefB[:n/2+1], qa)
+	for i := range ca {
+		ca[i] *= cb[i]
+	}
+	conv := p.Sequence(inst.inverse[:n], ca)
+
+	if cap(dst) >= valid {
+		out = dst[:valid]
+	} else {
+		out = make([]float64, valid)
+	}
+	scale := 1.0 / float64(n)
+	for i := range out {
+		out[i] = conv[m-1+i] * scale
+	}
+	return
 }
 
 // NewDetectorE validates cfg and returns a detector.
@@ -332,12 +473,58 @@ func (inst *Detector) dotAt(i int32, j int32) (dot float64) {
 }
 
 // scanRange returns the smallest distance from the query to any window starting
-// in [lo, hi), and the index that achieved it. Direct, at O((hi−lo)·Window).
+// in [lo, hi), and the index that achieved it.
 func (inst *Detector) scanRange(query int32, lo int32, hi int32) (dist float64, at int32) {
+	if inst.useTransform(hi - lo) {
+		return inst.scanRangeTransform(query, lo, hi)
+	}
+	return inst.scanRangeDirect(query, lo, hi)
+}
+
+// useTransform decides between the two block-scoring methods. A block too small
+// to amortize three transforms always goes direct.
+func (inst *Detector) useTransform(candidates int32) (yes bool) {
+	switch inst.cfg.ScanMethod {
+	case ScanMethodDirect:
+		return
+	case ScanMethodTransform:
+		yes = candidates > 1
+		return
+	}
+	yes = inst.cfg.Window >= TransformMinWindow && candidates > inst.cfg.Window
+	return
+}
+
+// scanRangeDirect evaluates each candidate independently, at O((hi−lo)·Window).
+func (inst *Detector) scanRangeDirect(query int32, lo int32, hi int32) (dist float64, at int32) {
 	dist = math.Inf(1)
 	at = -1
 	for j := lo; j < hi; j++ {
 		d := inst.distanceFromDot(inst.dotAt(query, j), query, j)
+		if d < dist {
+			dist = d
+			at = j
+		}
+	}
+	return
+}
+
+// scanRangeTransform scores the whole block from one cross-correlation.
+func (inst *Detector) scanRangeTransform(query int32, lo int32, hi int32) (dist float64, at int32) {
+	dist = math.Inf(1)
+	at = -1
+	if inst.transform == nil {
+		inst.transform = newTransformScanner()
+	}
+	m := inst.cfg.Window
+	dots := inst.transform.slidingDot(
+		inst.centred[query:query+m],
+		inst.centred[lo:hi-1+m],
+		inst.transform.dots[:0],
+	)
+	for i, dot := range dots {
+		j := lo + int32(i)
+		d := inst.distanceFromDot(dot, query, j)
 		if d < dist {
 			dist = d
 			at = j

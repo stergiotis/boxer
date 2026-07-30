@@ -415,6 +415,50 @@ was not adopted and does not need a head-index mode on this account — the dot
 product needs its history *contiguous*, which a ring would not give, so the
 right structure is an append-and-compact slice at amortized O(1).
 
+### 2026-07-30 — the FFT was implemented and measured; the M3 entry above was wrong about it
+
+The M3 entry treats FFT-accelerated MASS as the explanation for the gap to the
+published throughput, and as a change worth making. Implemented and benchmarked,
+neither holds at the window lengths that matter. Correcting it here rather than
+editing that entry, per the edit policy.
+
+Both scan methods now ship — `ScanMethodDirect`, `ScanMethodTransform`, and
+`ScanMethodAuto` — and are tested to agree on every reading and on the discord.
+Measured over the same benchmark (8000-sample horizon), samples/s:
+
+| Window | direct | transform | |
+| ---: | ---: | ---: | --- |
+| 16 | 365,671 | 88,393 | direct 4.1× faster |
+| 50 | 57,405 | 19,744 | direct 2.9× faster |
+| 128 | 12,981 | 9,446 | direct 1.4× faster |
+| 256 | 3,474 | **5,256** | transform 1.5× faster |
+| 512 | 1,097 | **2,948** | transform 2.7× faster |
+
+The crossover sits between 128 and 256, so `TransformMinWindow` is 256 and
+`ScanMethodAuto` picks per block. Below that the transform is a substantial
+loss: three length-N passes of complex butterflies over a power-of-two padded
+buffer do not compete with a few hundred fused multiply-adds over contiguous
+memory, and `O(N log N)` does not care. The earlier estimate of a ~6× *gain* at
+Window 50 came from counting operations and ignoring constants; the measured
+result there is a 2.9× loss.
+
+Three things follow:
+
+1. **The deferral in the decision above was right for the wrong reason, and is
+   now closed on evidence.** The transform is adopted, but only above a measured
+   threshold, and it is inert at the window lengths this repository's fixtures
+   use.
+2. **The gap to the published figures is not the missing transform.** At Window
+   50 an FFT-based MASS would widen it. Forward pruning — unavailable to a
+   stream, per the M3 entry — remains the explanation we can point at, along
+   with the usual hardware and data differences that make the comparison loose
+   in the first place.
+3. **`gonum` now has a second call site**, `dsp/fourier`, still with no new
+   module and no loss of the WASM-freestanding declaration. Given the measured
+   benefit is confined to Window ≥ 256, removing it again and capping the
+   package at direct scanning would be a defensible simplification if that
+   regime never materializes.
+
 ## References
 
 - Survey and literature landscape:
