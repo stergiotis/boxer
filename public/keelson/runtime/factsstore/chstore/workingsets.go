@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -108,6 +110,41 @@ func (inst *Store) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, 
 	return
 }
 
+// ListWorkingsets returns the latest non-tombstoned record per (appId, name)
+// — the set a restore would find (ADR-0148 §SD7). One round-trip: the trail
+// is collapsed server-side, and the caller (the keelson('workingsets')
+// provider) runs on an HTTP handler goroutine where that is affordable,
+// unlike LatestWorkingset which sits on a window opener's thread.
+//
+// The result is bounded by (participating apps × names) and so carries no
+// LIMIT: a cap here would silently truncate an answer whose whole point is
+// completeness.
+func (inst *Store) ListWorkingsets() (rows []factsstore.WorkingsetRow, err error) {
+	ctx := context.Background()
+	sql := composeListWorkingsetsSql(inst.qualifiedTable())
+	body, qerr := inst.cli.Query(ctx, sql)
+	if qerr != nil {
+		err = eh.Errorf("chstore: list workingsets query: %w", qerr)
+		return
+	}
+	defer body.Close()
+	// io.ReadAll, not one body.Read into a fixed buffer: this read is
+	// multi-row, and a single Read would truncate silently at whatever the
+	// transport handed over first.
+	raw, rerr := io.ReadAll(body)
+	if rerr != nil {
+		err = eh.Errorf("chstore: list workingsets read: %w", rerr)
+		return
+	}
+	rows, err = parseListWorkingsetsRows(raw)
+	if err != nil {
+		err = eh.Errorf("chstore: list workingsets parse: %w", err)
+		return
+	}
+	factsstore.SortWorkingsets(rows)
+	return
+}
+
 // DeleteWorkingset writes a tombstone row for (appId, name): the identity
 // attributes of a workingset row plus a bool-section attribute marked with
 // MembPersistTombstone — the same term DeleteState uses, reused rather than
@@ -175,6 +212,172 @@ FORMAT TabSeparated`,
 		table,
 		strings.Join(whereParts, " AND "),
 		tsCol)
+	return
+}
+
+// columnExprsWorkingset gathers the per-row projections the ListWorkingsets
+// subquery emits. Order MUST match parseListWorkingsetsRows — the SELECT
+// list below and the parser are one contract in two places.
+type columnExprsWorkingset struct {
+	appId   string
+	name    string
+	kind    string
+	cfgHex  string
+	tileKey string
+	reason  string
+	runId   string
+	tsSec   string
+	isTomb  string
+	sortKey string
+}
+
+func buildWorkingsetColumnExprs() (e columnExprsWorkingset) {
+	const (
+		symLR      = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
+		symLMR     = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
+		symMRHP    = "`tv:symbol:mrhp:mrhp:y:g:0:0:0::data`"
+		symValue   = "`tv:symbol:value:val:s:m:0:24:0::data`"
+		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		strLR      = "`tv:stringArray:lr:lr:u64:2q:0:0:0::data`"
+		strValue   = "`tv:stringArray:value:val:sh:g:0:0:0::data`"
+		strLRCard  = "`tv:stringArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		u64LR      = "`tv:u64Array:lr:lr:u64:2q:0:0:0::data`"
+		u64Value   = "`tv:u64Array:value:val:u64h:g:0:0:0::data`"
+		u64LRCard  = "`tv:u64Array:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		blobLR     = "`tv:blobArray:lr:lr:u64:2q:0:0:0::data`"
+		blobValue  = "`tv:blobArray:value:val:yh:g:0:0:0::data`"
+		blobLRCard = "`tv:blobArray:lrcard:lrcard:u64:4gw:0:0:0::data`"
+		boolLR     = "`tv:bool:lr:lr:u64:2q:0:0:0::data`"
+		idCol      = "`id:id:u64:2k:0:0:`"
+		tsCol      = "`ts:ts:z64:2k:0:0:`"
+	)
+	e.appId = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
+		vocab.MembRuntimeApp.GetId().Value(), symMRHP, symLMR)
+	e.runId = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
+		vocab.MembRuntimeRun.GetId().Value(), symMRHP, symLMR)
+	e.name = pickLcrString(symValue, symLR, symLRCard, vocab.MembWorkingsetName.GetId().Value())
+	e.kind = pickLcrString(symValue, symLR, symLRCard, vocab.MembLaunchConfigKind.GetId().Value())
+	e.reason = pickLcrString(strValue, strLR, strLRCard, vocab.MembLifecycleStopReason.GetId().Value())
+	e.tileKey = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembLifecycleTileKey.GetId().Value(), "0")
+	// The blob rides hex, as LatestWorkingset's does: TabSeparated is a text
+	// transport and the config bytes are arbitrary.
+	blobIdxInLr := fmt.Sprintf("indexOf(%s, %d)", blobLR, vocab.MembLaunchConfig.GetId().Value())
+	e.cfgHex = fmt.Sprintf("hex(if(%s > 0, arrayElement(%s, indexOf(arrayCumSum(%s), %s)), ''))",
+		blobIdxInLr, blobValue, blobLRCard, blobIdxInLr)
+	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
+	e.isTomb = fmt.Sprintf("has(%s, %d)", boolLR, vocab.MembPersistTombstone.GetId().Value())
+	// (ts, id) rather than ts alone: two saves can share a timestamp — the
+	// ADR's last-writer-wins policy on one name only says the later write
+	// wins, and the monotonic entity id is what makes "later" total.
+	e.sortKey = fmt.Sprintf("tuple(%s, %s)", tsCol, idCol)
+	return
+}
+
+// composeListWorkingsetsSql builds the latest-per-(app, name) read. Unlike
+// this package's other composers it nests: the inner SELECT lifts each row's
+// values out of the membership arrays, the outer one collapses the trail per
+// key with argMax over the (ts, id) sort key. Flat SQL cannot express that —
+// argMax needs the picks as plain columns.
+//
+// The tombstone test is a HAVING on the WINNING row, not a WHERE on the
+// candidates: `WHERE NOT is_tomb` plus argMax would return the last
+// surviving non-tombstone row and so resurrect a deleted record.
+func composeListWorkingsetsSql(table string) (sql string) {
+	e := buildWorkingsetColumnExprs()
+	const (
+		symLR  = "`tv:symbol:lr:lr:u64:2q:0:0:0::data`"
+		symLMR = "`tv:symbol:lmr:lmr:u64:2q:0:0:0::data`"
+	)
+	whereParts := []string{
+		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindWorkingset.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", symLMR, vocab.MembRuntimeApp.GetId().Value()),
+	}
+	// ORDER BY keeps the wire deterministic for anyone running this query by
+	// hand; the Go caller re-sorts so the two backends agree regardless of
+	// server collation.
+	sql = fmt.Sprintf(`
+SELECT
+  app_id,
+  ws_name,
+  argMax(cfg_kind, sk) AS cfg_kind,
+  argMax(cfg_hex, sk) AS cfg_hex,
+  argMax(tile_key, sk) AS tile_key,
+  argMax(reason, sk) AS reason,
+  argMax(run_id, sk) AS run_id,
+  argMax(ts_sec, sk) AS ts_sec
+FROM (
+  SELECT
+    %s AS app_id,
+    %s AS ws_name,
+    %s AS cfg_kind,
+    %s AS cfg_hex,
+    %s AS tile_key,
+    %s AS reason,
+    %s AS run_id,
+    %s AS ts_sec,
+    %s AS is_tomb,
+    %s AS sk
+  FROM %s
+  WHERE %s
+)
+GROUP BY app_id, ws_name
+HAVING argMax(is_tomb, sk) = 0
+ORDER BY app_id, ws_name
+FORMAT TabSeparated`,
+		e.appId, e.name, e.kind, e.cfgHex, e.tileKey, e.reason, e.runId,
+		e.tsSec, e.isTomb, e.sortKey,
+		table,
+		strings.Join(whereParts, " AND "))
+	return
+}
+
+// parseListWorkingsetsRows decodes the TabSeparated payload. The column
+// order MUST match composeListWorkingsetsSql. String fields go through
+// unescapeTabSeparated — a `reason` or a name carrying a tab or newline is
+// not expected today, but the reader costs nothing and the alternative is a
+// silently split row.
+func parseListWorkingsetsRows(raw []byte) (rows []factsstore.WorkingsetRow, err error) {
+	rows = []factsstore.WorkingsetRow{}
+	if len(raw) == 0 {
+		return
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) != 8 {
+			err = eh.Errorf("chstore: list workingsets: expected 8 columns, got %d (line=%q)", len(parts), line)
+			return
+		}
+		// cfg_hex needs no unescaping: hex digits carry no backslash.
+		cfg, derr := hex.DecodeString(parts[3])
+		if derr != nil {
+			err = eh.Errorf("chstore: list workingsets: hex decode: %w", derr)
+			return
+		}
+		tileKey, perr := strconv.ParseUint(parts[4], 10, 64)
+		if perr != nil {
+			err = eh.Errorf("chstore: list workingsets: parse tile_key %q: %w", parts[4], perr)
+			return
+		}
+		tsSec, perr := strconv.ParseInt(parts[7], 10, 64)
+		if perr != nil {
+			err = eh.Errorf("chstore: list workingsets: parse ts %q: %w", parts[7], perr)
+			return
+		}
+		rows = append(rows, factsstore.WorkingsetRow{
+			AppId:   app.AppIdT(unescapeTabSeparated(parts[0])),
+			Name:    unescapeTabSeparated(parts[1]),
+			Kind:    unescapeTabSeparated(parts[2]),
+			Config:  cfg,
+			TileKey: tileKey,
+			Reason:  unescapeTabSeparated(parts[5]),
+			RunId:   unescapeTabSeparated(parts[6]),
+			Ts:      time.Unix(tsSec, 0).UTC(),
+		})
+	}
 	return
 }
 

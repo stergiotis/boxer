@@ -166,6 +166,9 @@ func (s *blockingStore) WriteWorkingset(_ factsstore.WorkingsetRow) (uint64, err
 func (s *blockingStore) LatestWorkingset(_ app.AppIdT, _ string) (cfg []byte, kind string, found bool, err error) {
 	return
 }
+func (s *blockingStore) ListWorkingsets() (rows []factsstore.WorkingsetRow, err error) {
+	return
+}
 func (s *blockingStore) DeleteWorkingset(_ app.AppIdT, _ string) (err error) { return }
 
 // TestSink_Close_DrainsPending guarantees the close path flushes any

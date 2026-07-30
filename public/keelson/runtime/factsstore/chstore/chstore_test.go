@@ -496,3 +496,98 @@ func TestStore_DeleteWorkingset_Tombstones_LiveCH(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, "v2", string(cfg))
 }
+
+// ListWorkingsets (ADR-0148 §SD7) — the same probe-and-skip convention;
+// these mirror the in-memory tests so the two backends are held to one
+// contract.
+
+func TestStore_ListWorkingsets_Empty_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	rows, err := s.ListWorkingsets()
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestStore_ListWorkingsets_LatestPerKey_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	t0 := time.Now().UTC().Truncate(time.Second)
+	binary := []byte{0x00, 0xFF, 0x10, 0x7F, 0x80, 0xCA, 0xFE}
+	for _, row := range []factsstore.WorkingsetRow{
+		{RunId: "r1", AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("v1"), TileKey: 1, Reason: "user-close", Ts: t0},
+		{RunId: "r2", AppId: "play", Name: "default", Kind: "playLaunch", Config: binary, TileKey: 2, Reason: "shutdown", Ts: t0.Add(time.Second)},
+		{RunId: "r2", AppId: "play", Name: "scratch", Kind: "playLaunch", Config: []byte("s"), TileKey: 3, Ts: t0},
+		{RunId: "r2", AppId: "imztop", Name: "default", Kind: "imztopLaunch", Config: []byte("i"), TileKey: 4, Ts: t0},
+	} {
+		_, err := s.WriteWorkingset(row)
+		require.NoError(t, err)
+	}
+	rows, err := s.ListWorkingsets()
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "one row per (app, name), not per write")
+	assert.Equal(t, []string{"imztop/default", "play/default", "play/scratch"},
+		[]string{
+			string(rows[0].AppId) + "/" + rows[0].Name,
+			string(rows[1].AppId) + "/" + rows[1].Name,
+			string(rows[2].AppId) + "/" + rows[2].Name,
+		})
+	won := rows[1]
+	assert.Equal(t, binary, won.Config, "hex transport must preserve raw bytes")
+	assert.Equal(t, "playLaunch", won.Kind)
+	assert.Equal(t, "shutdown", won.Reason)
+	assert.EqualValues(t, 2, won.TileKey)
+	assert.Equal(t, "r2", won.RunId)
+	assert.Equal(t, t0.Add(time.Second), won.Ts, "Ts is the winning row's write time")
+}
+
+func TestStore_ListWorkingsets_TombstoneExcludesKey_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	t0 := time.Now().UTC().Truncate(time.Second)
+	_, err := s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "r1", AppId: "play", Name: "default", Kind: "playLaunch",
+		Config: []byte("v1"), TileKey: 1, Ts: t0,
+	})
+	require.NoError(t, err)
+	_, err = s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "r1", AppId: "imztop", Name: "default", Kind: "imztopLaunch",
+		Config: []byte("keep"), TileKey: 2, Ts: t0,
+	})
+	require.NoError(t, err)
+	require.NoError(t, s.DeleteWorkingset("play", "default"))
+
+	rows, err := s.ListWorkingsets()
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the tombstone must be judged on the winning row, not filtered out of the candidates")
+	assert.EqualValues(t, "imztop", rows[0].AppId)
+
+	// A write after the tombstone brings the key back.
+	_, err = s.WriteWorkingset(factsstore.WorkingsetRow{
+		RunId: "r1", AppId: "play", Name: "default", Kind: "playLaunch",
+		Config: []byte("v2"), TileKey: 3, Ts: time.Now().UTC().Add(time.Minute),
+	})
+	require.NoError(t, err)
+	rows, err = s.ListWorkingsets()
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "v2", string(rows[1].Config))
+}
+
+func TestStore_ListWorkingsets_IgnoresOtherKinds_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	// A launch row shares the workingset row's whole vocabulary except the
+	// kind tag (ADR-0148 §SD6), so the kind predicate is what separates them.
+	_, err := s.WriteLaunch(factsstore.LaunchRow{
+		RunId: "r1", CallerAppId: "imztop", TargetAppId: "play",
+		TileKey: 9, ConfigKind: "playLaunch", Config: []byte("not-a-workingset"),
+		Ts: time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	_, err = s.WriteState(factsstore.StateRow{AppId: "play", Key: "k", Value: []byte("v")})
+	require.NoError(t, err)
+	rows, err := s.ListWorkingsets()
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}

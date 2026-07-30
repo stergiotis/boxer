@@ -351,6 +351,16 @@ type FactsStoreI interface {
 	// the bytes — the facts wire has no kind marker (ADR-0135 Update). A
 	// missing record is found=false with no error.
 	LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error)
+	// ListWorkingsets returns the latest non-tombstoned record for every
+	// (AppId, Name) the store holds — the set a restore would find, not the
+	// write trail (ADR-0148 §SD7). A key whose newest row is a tombstone is
+	// absent, exactly as LatestWorkingset reports it. Ts is the winning
+	// row's write time; the trail itself stays a boxer.facts query, since
+	// history-as-rows is the ADR's stance rather than a method. Rows come
+	// back ordered by AppId then Name — see [SortWorkingsets]. No filter
+	// arguments: the result is bounded by (participating apps × names),
+	// which v1 caps at one name per app.
+	ListWorkingsets() (rows []WorkingsetRow, err error)
 	// DeleteWorkingset appends a tombstone for (appId, name); subsequent
 	// LatestWorkingset calls read back found=false until the next write.
 	DeleteWorkingset(appId app.AppIdT, name string) (err error)
@@ -562,6 +572,58 @@ func (inst *InMemoryFactsStore) LatestWorkingset(appId app.AppIdT, name string) 
 		return
 	}
 	return
+}
+
+// ListWorkingsets walks the trail once in reverse, so the first entry seen
+// for a key is its newest, and reports the winners (ADR-0148 §SD7). A key
+// whose newest entry is a tombstone is skipped but still consumed, which is
+// what keeps a deleted record from being resurrected by the write that
+// preceded its tombstone.
+//
+// With ClickHouse down this is the store the runtime uses, so the answer is
+// then this process's own saves only — ADR-0148's documented degradation.
+func (inst *InMemoryFactsStore) ListWorkingsets() (rows []WorkingsetRow, err error) {
+	type wsKey struct {
+		appId app.AppIdT
+		name  string
+	}
+	inst.mu.RLock()
+	seen := make(map[wsKey]struct{}, len(inst.workingsets))
+	rows = make([]WorkingsetRow, 0, len(inst.workingsets))
+	for i := len(inst.workingsets) - 1; i >= 0; i-- {
+		e := inst.workingsets[i]
+		k := wsKey{appId: e.row.AppId, name: e.row.Name}
+		if _, dup := seen[k]; dup {
+			continue
+		}
+		seen[k] = struct{}{}
+		if e.tombstone {
+			continue
+		}
+		row := e.row
+		if e.row.Config != nil {
+			cp := make([]byte, len(e.row.Config))
+			copy(cp, e.row.Config)
+			row.Config = cp
+		}
+		rows = append(rows, row)
+	}
+	inst.mu.RUnlock()
+	SortWorkingsets(rows)
+	return
+}
+
+// SortWorkingsets orders rows by AppId then Name — the ListWorkingsets
+// ordering (ADR-0148 §SD7). Both backends call it rather than each trusting
+// its own collation, so a caller comparing an in-memory answer with a
+// ClickHouse one sees the same sequence.
+func SortWorkingsets(rows []WorkingsetRow) {
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].AppId != rows[j].AppId {
+			return rows[i].AppId < rows[j].AppId
+		}
+		return rows[i].Name < rows[j].Name
+	})
 }
 
 // DeleteWorkingset appends a tombstone for (appId, name) — the

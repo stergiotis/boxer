@@ -168,3 +168,77 @@ func TestInMemoryFactsStore_WriteWorkingset_DefensiveCopy(t *testing.T) {
 	got, _, _, _ := s.LatestWorkingset("play", "default")
 	assert.Equal(t, "hello", string(got))
 }
+
+// ListWorkingsets (ADR-0148 §SD7) — the stored set, not the trail.
+
+func TestInMemoryFactsStore_ListWorkingsets_LatestPerKey(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	t0 := time.Now().UTC()
+	for _, row := range []WorkingsetRow{
+		{RunId: "r1", AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("v1"), TileKey: 1, Reason: "user-close", Ts: t0},
+		{RunId: "r2", AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("v2"), TileKey: 2, Reason: "shutdown", Ts: t0.Add(time.Second)},
+		{RunId: "r2", AppId: "play", Name: "scratch", Kind: "playLaunch", Config: []byte("s"), TileKey: 3, Ts: t0},
+		{RunId: "r2", AppId: "imztop", Name: "default", Kind: "imztopLaunch", Config: []byte("i"), TileKey: 4, Ts: t0},
+	} {
+		_, err := s.WriteWorkingset(row)
+		require.NoError(t, err)
+	}
+	rows, err := s.ListWorkingsets()
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "one row per (app, name), not per write")
+	// Sorted by AppId then Name.
+	assert.Equal(t, []string{"imztop/default", "play/default", "play/scratch"},
+		[]string{
+			string(rows[0].AppId) + "/" + rows[0].Name,
+			string(rows[1].AppId) + "/" + rows[1].Name,
+			string(rows[2].AppId) + "/" + rows[2].Name,
+		})
+	// The winner is the newest write, with its own provenance.
+	assert.Equal(t, "v2", string(rows[1].Config))
+	assert.Equal(t, "shutdown", rows[1].Reason)
+	assert.EqualValues(t, 2, rows[1].TileKey)
+	assert.Equal(t, "r2", rows[1].RunId)
+	assert.Equal(t, "playLaunch", rows[1].Kind)
+	assert.Equal(t, t0.Add(time.Second), rows[1].Ts, "Ts is the winning row's write time")
+}
+
+func TestInMemoryFactsStore_ListWorkingsets_Empty(t *testing.T) {
+	rows, err := NewInMemoryFactsStore().ListWorkingsets()
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestInMemoryFactsStore_ListWorkingsets_TombstoneExcludesKey(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	_, err := s.WriteWorkingset(WorkingsetRow{AppId: "play", Name: "default", Config: []byte("v1")})
+	require.NoError(t, err)
+	_, err = s.WriteWorkingset(WorkingsetRow{AppId: "imztop", Name: "default", Config: []byte("keep")})
+	require.NoError(t, err)
+	require.NoError(t, s.DeleteWorkingset("play", "default"))
+
+	rows, err := s.ListWorkingsets()
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "a tombstoned key is absent, and its earlier write must not stand in for it")
+	assert.EqualValues(t, "imztop", rows[0].AppId)
+
+	// A write after the tombstone brings the key back.
+	_, err = s.WriteWorkingset(WorkingsetRow{AppId: "play", Name: "default", Config: []byte("v2")})
+	require.NoError(t, err)
+	rows, err = s.ListWorkingsets()
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "v2", string(rows[1].Config))
+}
+
+func TestInMemoryFactsStore_ListWorkingsets_DefensiveCopy(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	_, err := s.WriteWorkingset(WorkingsetRow{AppId: "play", Name: "default", Config: []byte("hello")})
+	require.NoError(t, err)
+	rows, err := s.ListWorkingsets()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	rows[0].Config[0] = 'X'
+	rows, err = s.ListWorkingsets()
+	require.NoError(t, err)
+	assert.Equal(t, "hello", string(rows[0].Config), "the caller must not be able to edit the store")
+}
