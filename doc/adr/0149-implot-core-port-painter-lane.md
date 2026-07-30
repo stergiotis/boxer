@@ -478,6 +478,29 @@ per-box hover highlight of egui_plot's BoxPlot is replaced by the
 crosshair + status-line affordance, and pan is now enabled on the ecdf
 plots (constraints bound it).
 
+## Update 2026-07-30 (5) — the egui_plot bridge is retired
+
+With the in-tree call sites migrated (Update 4) and the remaining
+out-of-tree consumers ported by hand, the SD7 deprecation decision is
+taken: the bridge is removed. Gone are the plot IDL definition (eight
+elements plus the ~30-option drain node), the generated Go and Rust
+surfaces it produced, the hand-maintained Rust element structs and
+per-frame registers, the R15 plot-pointer register with its
+`PlotFluid.SendResp` click readback, the bridge's own gallery demo, and
+the `egui_plot` crate dependency. The walkers camera register (the
+other R15 family) and the register-drain pattern itself — still used by
+the table, tree and graph drains — are untouched; the skills documents
+now cite those as the pattern's live examples.
+
+Removal mechanics worth recording: the regen deleted the
+`WINDOW_TOPMOST` hand-patch from `interpreter.rs`'s generated region
+for the second time (re-applied again; its promotion to an IDL or
+hand-region home is overdue), and the plot element structs, state
+fields, constructor inits and per-frame clears all lived in the
+hand-maintained region and were removed by hand ahead of the regen —
+`egui2gen` type-checks the bindings package before writing, so the
+hand-written `PlotResponse`/`GetPlotPointer` plumbing had to go first.
+
 ## References
 
 - Upstream: [ImPlot](https://github.com/epezent/implot) v1.1-WIP, commit
