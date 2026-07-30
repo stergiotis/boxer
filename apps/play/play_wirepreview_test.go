@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow/memory"
+
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	passregdefaults "github.com/stergiotis/boxer/public/keelson/data/passreg/defaults"
 )
@@ -70,6 +72,40 @@ func TestUpdateWirePreviewComputesAndDebounces(t *testing.T) {
 	app.updateWirePreview()
 	if !strings.Contains(app.wireBody, "SELECT 1") {
 		t.Errorf("wire preview stale after debounce: %q", app.wireBody)
+	}
+}
+
+// The signal caption follows what a Run would ship: since the Run gates
+// judge the narrowed text, a sibling statement's signal is a value no Run
+// sends, and showing it under "signals on URL" would misreport the wire.
+// The caret's statement number is in the cache key, so moving the caret
+// re-resolves without an edit.
+func TestUpdateWirePreviewScopesSignalsToTheCaretStatement(t *testing.T) {
+	cl := newTestClientWithStandardSet(t)
+	app := NewPlayApp(cl, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "")
+	defer app.graph.close()
+	app.previewAsSent = true
+	app.sql = "SELECT {x:Int64} AS v;\nSELECT {z:String} AS w"
+	app.graph.setSignalRaw("x", "3")
+	app.graph.setSignalRaw("z", "9")
+	app.frameSig = app.graph.signals()
+
+	app.caretByte = len("SELECT {x")
+	app.updateWirePreview()
+	if app.wireStmtNumber != 1 || app.wireStmtTotal != 2 {
+		t.Fatalf("statement %d of %d, want 1 of 2", app.wireStmtNumber, app.wireStmtTotal)
+	}
+	if len(app.wireSignals) != 1 || app.wireSignals["param_x"] != "3" {
+		t.Errorf("wireSignals = %v, want only param_x=3 — z belongs to the sibling", app.wireSignals)
+	}
+
+	app.caretByte = len(app.sql) - 1
+	app.updateWirePreview()
+	if app.wireStmtNumber != 2 {
+		t.Fatalf("statement %d, want 2 after the caret move", app.wireStmtNumber)
+	}
+	if len(app.wireSignals) != 1 || app.wireSignals["param_z"] != "9" {
+		t.Errorf("wireSignals = %v, want only param_z=9 after the caret move", app.wireSignals)
 	}
 }
 

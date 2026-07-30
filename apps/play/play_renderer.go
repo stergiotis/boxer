@@ -2217,8 +2217,8 @@ func (inst *PlayApp) renderWirePreview() {
 			}
 		}
 		if len(inst.wireSignals) > 0 {
-			// Signal values the store would supply at Run for the buffer's
-			// unbound slots (slice 5a) — name=value, values truncated.
+			// Signal values the store would supply at Run for the SHIPPED
+			// statement's unbound slots (slice 5a) — name=value, truncated.
 			pairs := make([]string, 0, len(inst.wireSignals))
 			for k, v := range inst.wireSignals {
 				pairs = append(pairs, k+"="+truncateRunes(v, 24))
@@ -2365,9 +2365,13 @@ func (inst *PlayApp) updateWirePreview() {
 		return
 	}
 	inst.wireBody, inst.wireParams = inst.client.BuildStatement(runSQL)
-	// Signals stay buffer-wide: what the store would supply is a property of
-	// the buffer's slots, not of which statement happens to run.
-	inst.wireSignals, _, _ = inst.resolveRunSignals(strings.TrimSpace(inst.sql))
+	// Signals follow the Run gate's scoping (executeRun): the caption says
+	// "signals on URL", and since the gates judge what ships, the URL
+	// carries only the narrowed text's unbound slots — a sibling
+	// statement's signal on this caption would be a value no Run sends.
+	// The cache key above already covers the inputs: the caret's statement
+	// number keys the text, sigRev keys the store.
+	inst.wireSignals, _, _ = inst.resolveRunSignals(runSQL)
 }
 
 // renderStatus is the bottom-bar status line. Per-frame snapshot values
