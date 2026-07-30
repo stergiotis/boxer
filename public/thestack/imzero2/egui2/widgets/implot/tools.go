@@ -148,20 +148,30 @@ func (p *Plot) emitToolsClipped(tr transform, areaX, areaY, areaW, areaH float32
 	}
 }
 
-// emitToolChrome renders the axis tags (outside the clip) and stamps the
-// drag tools' sense regions — after the plot-area region, so they sit on
-// top in egui's hit-test and win the gesture.
-func (p *Plot) emitToolChrome(tr transform, areaX, areaY, areaW, areaH float32) {
+// emitToolChrome renders the axis tags (outside the clip) and — unless
+// the plot is NoInputs — stamps the drag tools' sense regions after the
+// plot-area region, so they sit on top in egui's hit-test and win the
+// gesture.
+func (p *Plot) emitToolChrome(tr transform, areaX, areaY, areaW, areaH float32, regions bool) {
 	for ti := range p.tools {
 		t := &p.tools[ti]
 		switch t.kind {
 		case toolDragLineX:
+			if !regions {
+				continue
+			}
 			px := tr.pxX(t.x)
 			c.PaintSenseRegion(p.ids.PrepareStr("tool-"+t.key), px-grabPx, areaY, 2*grabPx, areaH).Send()
 		case toolDragLineY:
+			if !regions {
+				continue
+			}
 			py := tr.pxY(t.y)
 			c.PaintSenseRegion(p.ids.PrepareStr("tool-"+t.key), areaX, py-grabPx, areaW, 2*grabPx).Send()
 		case toolDragPoint:
+			if !regions {
+				continue
+			}
 			px, py := tr.pxX(t.x), tr.pxY(t.y)
 			c.PaintSenseRegion(p.ids.PrepareStr("tool-"+t.key), px-7, py-7, 14, 14).Send()
 		case toolTagX:

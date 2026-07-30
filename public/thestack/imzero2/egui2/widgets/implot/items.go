@@ -20,6 +20,9 @@ const (
 	kindDigital
 	kindPieSlice
 	kindImage
+	kindShadedBetween
+	kindBoxes
+	kindText
 )
 
 // MarkerE selects a scatter glyph; the numbering is the paintMarkers wire
@@ -134,6 +137,38 @@ func (p *Plot) ErrorBarsH(label string, xs []float64, ys []float64, neg []float6
 			p.fitX(xs[i] + pos[i])
 		}
 	}
+	return p
+}
+
+// ShadedBetween declares a filled region between two curves sharing xs —
+// upstream's two-curve PlotShaded. Each segment renders as one quad;
+// segments where the curves cross render the crossing quad as-is, like
+// upstream. With SetupNextColor the fill uses the given color verbatim
+// (bring your own alpha); the palette default gets a soft alpha.
+func (p *Plot) ShadedBetween(label string, xs []float64, ys1 []float64, ys2 []float64) *Plot {
+	p.addSeries(seriesFrame{kind: kindShadedBetween, label: label, xs: xs, ys: ys1, ys2: ys2}, true, true)
+	if !p.st.hidden[label] {
+		n := min(len(xs), len(ys2))
+		for i := range n {
+			if !math.IsNaN(xs[i]) && !math.IsNaN(ys2[i]) {
+				p.fitY(ys2[i])
+			}
+		}
+	}
+	return p
+}
+
+// IncludeX extends auto-fit to cover v on the x axis (the fit itself
+// still only applies on fitting frames: first show, AutoFit, or a
+// double-click / context-menu fit).
+func (p *Plot) IncludeX(v float64) *Plot {
+	p.fitX(v)
+	return p
+}
+
+// IncludeY extends auto-fit to cover v on the y axis.
+func (p *Plot) IncludeY(v float64) *Plot {
+	p.fitY(v)
 	return p
 }
 

@@ -47,12 +47,20 @@ type axisState struct {
 	flags    AxisFlags
 	label    string
 	scale    ScaleE
+	// touched: a gesture moved this axis; AxisFlagsFollow stops
+	// refitting until the next explicit fit clears it.
+	touched bool
 
 	// Axis links (SetupAxisLinks): caller-held shared range endpoints and
 	// the values this plot last wrote, distinguishing an external move
 	// from this plot's own gesture.
 	linkMin, linkMax         *float64
 	lastLinkMin, lastLinkMax float64
+
+	// Viewport constraints (SetupAxisLimitsConstraints): the visible
+	// range is clamped inside [consMin, consMax] after gestures and fits.
+	consMin, consMax float64
+	consOk           bool
 }
 
 // plotState is the retained state of one plot id across frames — the
@@ -107,6 +115,7 @@ type seriesFrame struct {
 	label    string
 	xs, ys   []float64
 	neg, pos []float64
+	ys2      []float64
 	marker   MarkerE
 	radius   float32
 	width    float64
@@ -118,6 +127,8 @@ type seriesFrame struct {
 	heat     *heatFrame
 	pie      *pieFrame
 	img      *imageFrame
+	boxes    *boxFrame
+	txt      *textFrame
 }
 
 // Plot is the frame-transient handle between Begin and End. Methods follow
@@ -145,6 +156,12 @@ type Plot struct {
 	nextColHex    uint32
 	nextColOk     bool
 	nextWeight    float32
+	noInputs      bool
+	noLegend      bool
+	clickOk       bool
+	clickPos      [2]float32
+	xCustomTicks  []tick
+	yCustomTicks  []tick
 }
 
 // Begin opens a plot with the given title (which is also its identity, as
@@ -166,6 +183,16 @@ func Begin(ids *c.WidgetIdStack, title string, w float32, h float32) *Plot {
 		dataXMin: math.Inf(1), dataXMax: math.Inf(-1), dataYMin: math.Inf(1), dataYMax: math.Inf(-1)}
 	p.applyInteractions()
 	return p
+}
+
+// NewDetached returns a plot handle bound to no canvas and no frame,
+// for headless tests of widgets that declare into a *Plot: items
+// accumulate and fit extents compute, nothing renders. End must not be
+// called on it (there is no id stack to close).
+func NewDetached() *Plot {
+	return &Plot{st: &plotState{hidden: make(map[string]bool, 4)},
+		dataXMin: math.Inf(1), dataXMax: math.Inf(-1),
+		dataYMin: math.Inf(1), dataYMax: math.Inf(-1)}
 }
 
 // canvasHandle / areaHandle derive the same ids the render pass will use,
@@ -227,6 +254,8 @@ func (p *Plot) applyInteractions() {
 	if posOk {
 		st.hoverPos = [2]float32{posX, posY}
 	}
+	p.clickOk = flags.HasPrimaryClicked() && posOk
+	p.clickPos = [2]float32{posX, posY}
 
 	if !st.prevOk {
 		return
@@ -273,6 +302,7 @@ func (p *Plot) applyInteractions() {
 			if abs32(st.boxCur[0]-st.boxStart[0]) > 5 && abs32(st.boxCur[1]-st.boxStart[1]) > 5 {
 				st.x.rng = Range{math.Min(x0, x1), math.Max(x0, x1)}
 				st.y.rng = Range{math.Min(y0, y1), math.Max(y0, y1)}
+				st.x.touched, st.y.touched = true, true
 			}
 		}
 		st.dragging = false
@@ -310,6 +340,7 @@ func (p *Plot) applyInteractions() {
 	if windowMoved {
 		st.x.rng = Range{pr.plotX(wx0), pr.plotX(wx1)}
 		st.y.rng = Range{pr.plotY(wy1), pr.plotY(wy0)}
+		st.x.touched, st.y.touched = true, true
 	}
 }
 
@@ -361,6 +392,121 @@ func (p *Plot) SetupAxisScale(axis AxisE, scale ScaleE) *Plot {
 		p.st.x.scale = scale
 	}
 	return p
+}
+
+// SetupAxisLimitsConstraints clamps the axis's visible range inside
+// [vmin, vmax] — upstream's SetupAxisLimitsConstraints. Pan and zoom
+// cannot escape the constraint; a viewport wider than it is pulled in.
+// Like all Setup state it is re-declared every frame.
+func (p *Plot) SetupAxisLimitsConstraints(axis AxisE, vmin float64, vmax float64) *Plot {
+	if p.warnIfLocked("SetupAxisLimitsConstraints") {
+		return p
+	}
+	ax := &p.st.x
+	if axis == AxisY1 {
+		ax = &p.st.y
+	}
+	ax.consMin, ax.consMax, ax.consOk = vmin, vmax, true
+	return p
+}
+
+// constrain pulls the range inside the axis's constraints, preserving
+// the span when it fits and clamping to the full constraint otherwise.
+func (ax *axisState) constrain() {
+	if !ax.consOk {
+		return
+	}
+	lo, hi := ax.consMin, ax.consMax
+	if !(hi > lo) {
+		return
+	}
+	r := ax.rng
+	if r.Size() >= hi-lo {
+		ax.rng = Range{lo, hi}
+		return
+	}
+	if r.Min < lo {
+		ax.rng = Range{lo, lo + r.Size()}
+	} else if r.Max > hi {
+		ax.rng = Range{hi - r.Size(), hi}
+	}
+}
+
+// SetupAxisTicks replaces the axis's located ticks with caller-supplied
+// major ticks (upstream's SetupAxisTicks): values in plot space with
+// their labels, re-declared every frame like all Setup state. Ticks
+// outside the visible range are dropped at render. An empty values
+// slice restores the default locator.
+func (p *Plot) SetupAxisTicks(axis AxisE, values []float64, labels []string) *Plot {
+	if p.warnIfLocked("SetupAxisTicks") {
+		return p
+	}
+	n := min(len(values), len(labels))
+	dst := p.xCustomTicks
+	if axis == AxisY1 {
+		dst = p.yCustomTicks
+	}
+	dst = dst[:0]
+	for i := range n {
+		dst = append(dst, tick{value: values[i], major: true, label: labels[i]})
+	}
+	if axis == AxisY1 {
+		p.yCustomTicks = dst
+	} else {
+		p.xCustomTicks = dst
+	}
+	return p
+}
+
+// NoInputs disables every interaction surface of this plot for the
+// frame — upstream's ImPlotFlags_NoInputs: no pan/zoom/box-zoom/fit
+// gestures, no wheel capture (the wheel scrolls the surrounding pane
+// instead), no clickable legend rows. For sparklines and other inert
+// thumbnails. Callable any time before End.
+func (p *Plot) NoInputs() *Plot {
+	p.noInputs = true
+	return p
+}
+
+// NoLegend suppresses the legend for the frame even when labeled
+// series exist — upstream's ImPlotFlags_NoLegend.
+func (p *Plot) NoLegend() *Plot {
+	p.noLegend = true
+	return p
+}
+
+// FitNext requests a data re-fit of both axes this frame — the
+// programmatic double-click fit (upstream's SetNextAxesToFit, applied
+// to the already-open plot). Drive it from a one-frame flag, e.g. a
+// "Reset zoom" button clicked last frame.
+func (p *Plot) FitNext() *Plot {
+	p.st.x.fitNext = true
+	p.st.y.fitNext = true
+	return p
+}
+
+// Clicked reports a primary click on the plot area, with the click
+// position in plot space — one frame behind, like every register read.
+// Serves nearest-point selection on scatter clouds.
+func (p *Plot) Clicked() (x float64, y float64, ok bool) {
+	if p == nil || p.st == nil || !p.clickOk || !p.st.prevOk {
+		return 0, 0, false
+	}
+	return p.st.prev.plotX(p.clickPos[0]), p.st.prev.plotY(p.clickPos[1]), true
+}
+
+// HoverPlotPos returns the pointer's plot-space position while it is
+// over the plot area (one-frame lag). ok is false when the pointer is
+// elsewhere or the plot has not rendered yet.
+func (p *Plot) HoverPlotPos() (x float64, y float64, ok bool) {
+	if p == nil || p.st == nil {
+		return 0, 0, false // nil-safe for headless widget tests
+	}
+	st := p.st
+	if !st.hoverOk || !st.prevOk {
+		return 0, 0, false
+	}
+	return st.prev.plotX(st.hoverPos[0]), st.prev.plotY(st.hoverPos[1]), true
 }
 
 func (p *Plot) warnIfLocked(fn string) bool {

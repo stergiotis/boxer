@@ -9,14 +9,21 @@
 // instead of an implicit current-plot context, float64 plot space projected
 // to float32 only at paint-command emission (SD4).
 //
-// Coverage (M1–M7 per the ADR): linear/time/log10/symlog axes with the
-// ported locators, grid, line/scatter/bars/shaded/stairs/stems/infinite
+// Coverage (M1–M7 per the ADR, plus the SD7 migration batch):
+// linear/time/log10/symlog axes with the ported locators, grid,
+// line/scatter/bars/shaded (constant or two-curve)/stairs/stems/infinite
 // lines, error bars, heatmaps (rect and texture routes), histograms
-// (1D/2D), pie, digital channels, images, interactive legend, drag
-// tools/annotations/tags, a native context menu, subplots and linked
-// axes. Same-label items share one legend entry and palette slot (the
-// upstream label→item registry semantics), so error bars merge with the
-// series they decorate.
+// (1D/2D), pie, digital channels, images, inlay text, a letter-value box
+// series, interactive legend, drag tools/annotations/tags, a native
+// context menu, subplots and linked axes, caller-supplied axis ticks,
+// viewport constraints, NoInputs/NoLegend, and plot-space click/hover
+// readback. Same-label items share one legend entry and palette slot
+// (the upstream label→item registry semantics), so error bars merge
+// with the series they decorate.
+//
+// House extensions beyond the upstream surface, named as such in their
+// doc comments: Boxes, IncludeX/IncludeY, TimeTicksLocal,
+// AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached.
 //
 // Known deviations from upstream:
 //   - Box-zoom is Shift+drag (upstream: right-drag). The response-flag

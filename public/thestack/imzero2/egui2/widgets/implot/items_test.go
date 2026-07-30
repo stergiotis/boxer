@@ -7,11 +7,7 @@ import (
 
 // newTestPlot builds a bare Plot for the declaration/fit layer, which is
 // bindings-free (Begin needs a live StateManager; declarations do not).
-func newTestPlot() *Plot {
-	return &Plot{st: &plotState{hidden: make(map[string]bool, 4)},
-		dataXMin: math.Inf(1), dataXMax: math.Inf(-1),
-		dataYMin: math.Inf(1), dataYMax: math.Inf(-1)}
-}
+func newTestPlot() *Plot { return NewDetached() }
 
 func TestPieSpans(t *testing.T) {
 	// Sum > 1 normalizes to a full circle, honoring angle0 and order.
@@ -194,6 +190,36 @@ func TestSetNextStyleConsumedOnce(t *testing.T) {
 	last := p.series[len(p.series)-1]
 	if last.colOk {
 		t.Error("override leaked through a pie declaration")
+	}
+}
+
+func TestShadedBetweenAndIncludeFit(t *testing.T) {
+	p := newTestPlot()
+	p.ShadedBetween("band", []float64{0, 1}, []float64{2, 3}, []float64{5, 7})
+	if p.dataYMin != 2 || p.dataYMax != 7 {
+		t.Errorf("between fit y = [%v, %v], want [2, 7]", p.dataYMin, p.dataYMax)
+	}
+	p.IncludeY(-1)
+	p.IncludeX(10)
+	if p.dataYMin != -1 || p.dataXMax != 10 {
+		t.Errorf("include not applied: y min %v, x max %v", p.dataYMin, p.dataXMax)
+	}
+}
+
+func TestCustomTicksFilter(t *testing.T) {
+	p := newTestPlot()
+	p.SetupAxisTicks(AxisY1, []float64{0, 25, 50, 75, 100}, []string{"0", "25", "50", "75", "100"})
+	if len(p.yCustomTicks) != 5 || p.yCustomTicks[1].label != "25" || !p.yCustomTicks[1].major {
+		t.Fatalf("custom ticks not recorded: %+v", p.yCustomTicks)
+	}
+	got := filterTicksInRange(Range{20, 80}, p.yCustomTicks, nil)
+	if len(got) != 3 || got[0].value != 25 || got[2].value != 75 {
+		t.Errorf("range filter = %+v, want the 25/50/75 ticks", got)
+	}
+	// Mismatched lengths clip to the shorter side.
+	p.SetupAxisTicks(AxisX1, []float64{1, 2, 3}, []string{"a", "b"})
+	if len(p.xCustomTicks) != 2 {
+		t.Errorf("length clip failed: %+v", p.xCustomTicks)
 	}
 }
 

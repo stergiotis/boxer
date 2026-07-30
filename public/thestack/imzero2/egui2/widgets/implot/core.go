@@ -59,6 +59,12 @@ const (
 	AxisFlagsNoGrid AxisFlags = 1 << 1
 	// AxisFlagsNoTickLabels suppresses the tick labels (marks remain).
 	AxisFlagsNoTickLabels AxisFlags = 1 << 2
+	// AxisFlagsFollow keeps refitting the axis to the data until the user
+	// pans or zooms it; a double-click (or context-menu) fit resumes
+	// following. The egui_plot auto-bounds model, carried over for the
+	// monitoring panels whose data is a rolling window — not an upstream
+	// ImPlot flag.
+	AxisFlagsFollow AxisFlags = 1 << 3
 )
 
 // Cond controls when SetupAxisLimits applies, mirroring ImPlot's ImPlotCond.
@@ -200,6 +206,19 @@ func locateTicks(rng Range, sizePx float32, dst []tick) []tick {
 			if rng.Contains(mv) {
 				dst = append(dst, tick{value: mv})
 			}
+		}
+	}
+	return dst
+}
+
+// filterTicksInRange copies the caller-supplied SetupAxisTicks ticks
+// that fall inside the (sanitized) visible range into dst.
+func filterTicksInRange(rng Range, src []tick, dst []tick) []tick {
+	dst = dst[:0]
+	rng = rng.sanitize()
+	for _, t := range src {
+		if rng.Contains(t.value) {
+			dst = append(dst, t)
 		}
 	}
 	return dst

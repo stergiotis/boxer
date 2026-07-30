@@ -20,10 +20,19 @@ func (p *Plot) End() {
 		p.tools = nil
 	}()
 
-	// --- Fit: explicit request (double-click), AutoFit flag, or a plot that
-	// has never had ranges. ImPlot fit is exact to the data extents.
-	fitX := st.x.fitNext || st.x.flags&AxisFlagsAutoFit != 0 || (!st.initialized && !st.x.hasRange)
-	fitY := st.y.fitNext || st.y.flags&AxisFlagsAutoFit != 0 || (!st.initialized && !st.y.hasRange)
+	// --- Fit: explicit request (double-click), AutoFit flag, Follow (auto
+	// until a gesture, resumed by an explicit fit), or a plot that has
+	// never had ranges. ImPlot fit is exact to the data extents.
+	if st.x.fitNext {
+		st.x.touched = false
+	}
+	if st.y.fitNext {
+		st.y.touched = false
+	}
+	fitX := st.x.fitNext || st.x.flags&AxisFlagsAutoFit != 0 || (!st.initialized && !st.x.hasRange) ||
+		(st.x.flags&AxisFlagsFollow != 0 && !st.x.touched)
+	fitY := st.y.fitNext || st.y.flags&AxisFlagsAutoFit != 0 || (!st.initialized && !st.y.hasRange) ||
+		(st.y.flags&AxisFlagsFollow != 0 && !st.y.touched)
 	if p.dataOk {
 		if fitX {
 			st.x.rng = Range{p.dataXMin, p.dataXMax}.sanitize()
@@ -35,6 +44,11 @@ func (p *Plot) End() {
 	st.x.fitNext, st.y.fitNext = false, false
 	st.x.rng = sanitizeScaled(st.x.rng, st.x.scale)
 	st.y.rng = sanitizeScaled(st.y.rng, st.y.scale)
+	st.x.constrain()
+	st.y.constrain()
+	// Constraints are per-frame Setup state: consumed here, re-declared
+	// by the caller next frame.
+	st.x.consOk, st.y.consOk = false, false
 	st.initialized = true
 	st.onceApplied = true
 	st.writeLinks()
@@ -52,6 +66,9 @@ func (p *Plot) End() {
 		topGutter = 20
 	}
 	bottomGutter := float32(6 + tickLen + 14)
+	if st.x.flags&AxisFlagsNoTickLabels != 0 {
+		bottomGutter = 6 // no label row to reserve (sparklines)
+	}
 	if st.x.label != "" {
 		bottomGutter += 16
 	}
@@ -59,7 +76,11 @@ func (p *Plot) End() {
 	if areaH < 16 {
 		areaH = 16
 	}
-	st.ticksY = locateTicksScaled(st.y.rng, areaH, st.y.scale, st.ticksY)
+	if len(p.yCustomTicks) > 0 {
+		st.ticksY = filterTicksInRange(st.y.rng, p.yCustomTicks, st.ticksY)
+	} else {
+		st.ticksY = locateTicksScaled(st.y.rng, areaH, st.y.scale, st.ticksY)
+	}
 	maxYChars := 1
 	for i := range st.ticksY {
 		if n := len(st.ticksY[i].label); n > maxYChars {
@@ -67,6 +88,9 @@ func (p *Plot) End() {
 		}
 	}
 	leftGutter := float32(maxYChars)*charW + tickLen + 10
+	if st.y.flags&AxisFlagsNoTickLabels != 0 {
+		leftGutter = 8
+	}
 	if st.y.label != "" {
 		leftGutter += 16
 	}
@@ -75,7 +99,11 @@ func (p *Plot) End() {
 	if areaW < 16 {
 		areaW = 16
 	}
-	st.ticksX = locateTicksScaled(st.x.rng, areaW, st.x.scale, st.ticksX)
+	if len(p.xCustomTicks) > 0 {
+		st.ticksX = filterTicksInRange(st.x.rng, p.xCustomTicks, st.ticksX)
+	} else {
+		st.ticksX = locateTicksScaled(st.x.rng, areaW, st.x.scale, st.ticksX)
+	}
 	areaX, areaY := leftGutter, topGutter
 	tr := newTransform(st.x.rng, st.y.rng, st.x.scale, st.y.scale, areaX, areaY, areaW, areaH)
 
@@ -142,7 +170,10 @@ func (p *Plot) End() {
 	// entry per distinct label — same-label items share it.
 	st.legendHover = ""
 	sm := c.CurrentApplicationState.StateManager
-	leg := legendIndices(p.series)
+	var leg []int
+	if !p.noLegend {
+		leg = legendIndices(p.series)
+	}
 	for _, si := range leg {
 		s := &p.series[si]
 		h := widgethandle.Make(p.ids.PrepareStr("legend-" + s.label).Derive())
@@ -191,8 +222,11 @@ func (p *Plot) End() {
 	c.PaintClipPop().Send()
 	c.PaintRectStroke(areaX, areaY, areaX+areaW, areaY+areaH, 0, color.Hex(colBorder), 1.0).Send()
 
-	// --- Hover readout, ImPlot's mouse-position text, bottom-right corner.
-	if st.hoverOk {
+	// --- Hover readout, ImPlot's mouse-position text, bottom-right
+	// corner. Suppressed on NoInputs plots (sparklines, inert popups):
+	// hover state stays readable through HoverPlotPos, the inlay text
+	// would just be noise there.
+	if st.hoverOk && !p.noInputs {
 		hx := tr.plotX(st.hoverPos[0])
 		hy := tr.plotY(st.hoverPos[1])
 		c.PaintText(areaX+areaW-4, areaY+areaH-3, 2, 2,
@@ -205,16 +239,29 @@ func (p *Plot) End() {
 	// click must never fall through and start a pan (upstream's legend
 	// hover blocks plot interaction the same way). The legend was emitted
 	// before the area region until M7; its rows rendered but the area
-	// swallowed every click.
-	c.PaintSenseRegion(p.ids.PrepareStr("implot-area"), areaX, areaY, areaW, areaH).Send()
-	p.emitToolChrome(tr, areaX, areaY, areaW, areaH)
-	p.emitLegend(leg, areaX, areaY)
-	c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
-		Background(color.Hex(colPlotBg)).
-		Sense(true, true, true).
-		CaptureZoom().
-		CaptureScroll().
-		Send()
+	// swallowed every click. Under NoInputs no region is stamped and the
+	// canvas neither senses nor captures the wheel — the legend still
+	// paints, it just is not clickable.
+	if !p.noInputs {
+		c.PaintSenseRegion(p.ids.PrepareStr("implot-area"), areaX, areaY, areaW, areaH).Send()
+		p.emitToolChrome(tr, areaX, areaY, areaW, areaH, true)
+		p.emitLegend(leg, areaX, areaY, true)
+		c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
+			Background(color.Hex(colPlotBg)).
+			Sense(true, true, true).
+			CaptureZoom().
+			CaptureScroll().
+			Send()
+	} else {
+		p.emitToolChrome(tr, areaX, areaY, areaW, areaH, false)
+		p.emitLegend(leg, areaX, areaY, false)
+		// Hover sense stays on: HoverPlotPos consumers (crosshairs) keep
+		// working on an inert plot; only gestures and the wheel are gone.
+		c.PaintCanvas(p.ids.PrepareStr("implot-canvas"), p.w, p.h).
+			Background(color.Hex(colPlotBg)).
+			Sense(false, false, true).
+			Send()
+	}
 
 	st.prev = tr
 	st.prevOk = tr.valid()
@@ -385,6 +432,25 @@ func (p *Plot) emitSeries(s *seriesFrame, tr transform, areaX, areaY, areaW, are
 			c.PaintLine(px0, py-errCapPx, px0, py+errCapPx, color.Hex(ec), weight).Send()
 			c.PaintLine(px1, py-errCapPx, px1, py+errCapPx, color.Hex(ec), weight).Send()
 		}
+	case kindShadedBetween:
+		// One quad per segment between the curves. A crossing segment
+		// renders its bowtie quad as-is, like upstream's two-curve
+		// shaded. An explicit SetNextColor is used verbatim (caller owns
+		// the alpha); the palette default gets a soft fill alpha.
+		fill := (colHex &^ 0xff) | 0x55
+		if s.colOk {
+			fill = s.colHex
+		}
+		n := min(len(s.xs), len(s.ys), len(s.ys2))
+		for i := 1; i < n; i++ {
+			if math.IsNaN(s.xs[i-1]) || math.IsNaN(s.ys[i-1]) || math.IsNaN(s.ys2[i-1]) ||
+				math.IsNaN(s.xs[i]) || math.IsNaN(s.ys[i]) || math.IsNaN(s.ys2[i]) {
+				continue
+			}
+			qx := []float32{tr.pxX(s.xs[i-1]), tr.pxX(s.xs[i]), tr.pxX(s.xs[i]), tr.pxX(s.xs[i-1])}
+			qy := []float32{tr.pxY(s.ys[i-1]), tr.pxY(s.ys[i]), tr.pxY(s.ys2[i]), tr.pxY(s.ys2[i-1])}
+			c.PaintPolygonFilled(qx, qy, color.Hex(fill)).Send()
+		}
 	case kindDigital:
 		// Digital channels pin to the plot-area bottom in pixel space and
 		// ignore the y axis entirely (upstream contract); visible channels
@@ -404,6 +470,10 @@ func (p *Plot) emitSeries(s *seriesFrame, tr transform, areaX, areaY, areaW, are
 		p.emitPieSlice(s, tr, colHex)
 	case kindImage:
 		p.emitImage(s, tr)
+	case kindBoxes:
+		p.emitBoxes(s, tr)
+	case kindText:
+		p.emitText(s, tr)
 	}
 }
 
@@ -416,10 +486,11 @@ const (
 	errCapPx      = 3.0
 )
 
-// emitLegend draws the entry list with color swatches and stamps one sense
-// region per entry; clicks toggle series visibility, hover highlights. leg
-// holds each distinct label's first series index (legendIndices).
-func (p *Plot) emitLegend(leg []int, areaX, areaY float32) {
+// emitLegend draws the entry list with color swatches and — when
+// interactive — stamps one sense region per entry; clicks toggle series
+// visibility, hover highlights. leg holds each distinct label's first
+// series index (legendIndices).
+func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
 	st := p.st
 	maxChars := 0
 	for _, si := range leg {
@@ -450,7 +521,9 @@ func (p *Plot) emitLegend(leg []int, areaX, areaY float32) {
 		}
 		c.PaintRectFilled(lx+pad, ry+(rowH-swatch)/2, lx+pad+swatch, ry+(rowH+swatch)/2, 2.0, color.Hex(swCol)).Send()
 		c.PaintText(lx+pad*2+swatch, ry+rowH/2, 0, 1, s.label, tickFontSize, color.Hex(txtCol)).Monospace().Send()
-		c.PaintSenseRegion(p.ids.PrepareStr("legend-"+s.label), lx, ry, lw, rowH).Send()
+		if interactive {
+			c.PaintSenseRegion(p.ids.PrepareStr("legend-"+s.label), lx, ry, lw, rowH).Send()
+		}
 	}
 }
 
