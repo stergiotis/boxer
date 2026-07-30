@@ -329,6 +329,43 @@ bus exists, and their rows are empty — not absent — until a scraper publishe
 §SD2 Table builder gained `Uint64` and `Float64` columns. Canonical queries
 over the set live in [doc/howto/topology-queries.md](../howto/topology-queries.md).
 
+## Update (2026-07-30) — `keelson.workingsets` (stored app workingsets)
+
+[ADR-0148](./0148-app-workingsets.md) §SD7 recorded a workingsets provider as a
+follow-up; it is built.
+
+  | table | source | freshness |
+  |-------|--------|-----------|
+  | `keelson.workingsets` | `factsstore.FactsStoreI.ListWorkingsets()` (latest per app+name) | Live |
+
+Columns: `app_id`, `name`, `kind`, `config_bytes`, `tile_key`, `reason`,
+`run_id`, `saved_at`. One row per **stored record** — the set a plain open would
+restore from — not per save; the save trail stays an append-only `boxer.facts`
+query, which is where ADR-0148 puts history.
+
+Three things about it are worth recording as pattern rather than detail:
+
+- It is the first provider fed by the **facts store**, so it is also the first
+  whose `Snapshot` may make a ClickHouse round-trip. That is affordable only
+  because `Snapshot` runs on the HTTP handler goroutine; a provider reading a
+  store on a latency-sensitive thread would not be.
+- `RegisterWorkingsets(reg, facts)` takes the `FactsStoreI` interface, never
+  `chstore`, so the GUI-free providers package stays importable headless. It
+  registers through its own function — the `RegisterTopology` shape — because it
+  needs a live object; unlike the topology tables it registers *unconditionally*,
+  and a nil store yields an empty table rather than an absent one (the
+  `keelson.windows` precedent), so the set of table names does not depend on
+  whether a store was wired.
+- The record's bytes are deliberately **not** a column: facts-CBOR up to 64 KiB
+  that only the owning app's codec can read, so the table reports size and kind,
+  as `keelson.windows.config_bytes` does. A generic CBOR-diagnostic-notation
+  column is possible — `factsstore.LogErrorFact.DataDiag` does exactly that — and
+  was rejected here: it would decode every record on every query to produce
+  something no user reads.
+
+`keelson.tables` / `keelson.columns` picked the new table up with no work, as
+§SD1's registry enumeration intends.
+
 ## References
 
 - [ADR-0009 — environment variable registry](./0009-environment-variable-registry.md)
@@ -338,5 +375,7 @@ over the set live in [doc/howto/topology-queries.md](../howto/topology-queries.m
 - [ADR-0084 — nanopass ANTLR DFA cache bounding](./0084-nanopass-antlr-dfa-cache-bounding.md)
 - [ADR-0090 — sysmetrics pub/sub data plane](./0090-sysmetrics-pubsub-data-plane.md)
 - [ADR-0092 — ADR overview tool (structs→Arrow→clickhouse-local precedent)](./0092-adr-overview-tool.md)
+- [ADR-0148 — app workingsets](./0148-app-workingsets.md) — §SD7's recorded
+  provider follow-up, built in the 2026-07-30 update above
 </content>
 </invoke>

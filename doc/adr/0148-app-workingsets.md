@@ -419,6 +419,56 @@ Two consequences worth recording:
   the question it is actually good for: whether two windows of an app are
   independent.
 
+## Update — 2026-07-30: §SD7's `keelson.workingsets` follow-up is built
+
+The introspection provider §SD7 recorded as a follow-up exists:
+`keelson('workingsets')`, registered through
+`providers.RegisterWorkingsets(reg, facts)` and wired from the host by
+`introspecthost.Deps.Facts` — the same store the window host saves through, so
+the table is not a second account of the records. Roster row and provider-pattern
+notes are in [ADR-0094](./0094-keelson-introspection-tables.md)'s dated update;
+what this ADR settled:
+
+- **The table is the stored set, not the trail.** `FactsStoreI` grew one method,
+  `ListWorkingsets`, returning the latest non-tombstoned record per (app id,
+  name) — definitionally what a restore would find, since it is `LatestWorkingset`
+  generalised over every key rather than a second reading of the rows. The trail
+  stays a `boxer.facts` query: §SD6 makes history the row sequence, and a
+  `workingset_history` table would only be a view over it with a schema to keep
+  in step. There are no filter arguments for the same reason — a caller who wants
+  the trail is already in SQL.
+
+- **Judging the tombstone is the whole difficulty.** The obvious ClickHouse
+  shape — filter the tombstone rows out, then take the newest survivor per key —
+  is wrong in a way that is easy to ship: it returns the write *before* the
+  delete and so resurrects a deleted record. The predicate has to run on the
+  winning row (`HAVING argMax(is_tomb, …) = 0`), and the sort key has to be
+  (ts, entity id) rather than ts alone, because two saves can share a timestamp
+  and §SD3's last-writer-wins only says the later write wins. Both backends are
+  tested on exactly that sequence: write, delete, write.
+
+- **No payload column, generically or per app.** The record is an instance of the
+  app's `LaunchKind` DTO (§SD2) — facts-CBOR up to 64 KiB, decodable only by that
+  app's codec — so the table carries its size and its kind. A generic
+  CBOR-diagnostic column was considered and rejected: it would decode every
+  record on every query to produce text no user reads, and it would quietly make
+  a diagnostic surface the place where one app's state becomes another's input.
+
+- **Writing through the table stays out.** `keelson('…')` tables are read-only by
+  construction, so deletion remains `DeleteWorkingset` behind the named-set UX
+  this ADR defers. The table does make that deferral cheaper to design: a picker
+  now has a query to enumerate from.
+
+- **The degradation is documented where it is visible.** With ClickHouse down the
+  runtime runs on the in-memory facts store, so the table then reports this
+  process's own saves only. That is the stance the Consequences already record;
+  the play help text says so rather than leaving a reader to infer that an empty
+  table means nothing was ever saved. In the same spirit the provider *returns* a
+  failed store read instead of rendering zero rows — "no records stored" and "the
+  store did not answer" are different claims about restorable state.
+
+Deferred items are unchanged and untouched.
+
 ## Status
 
 Accepted (2026-07-29). Implemented 2026-07-29.

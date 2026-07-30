@@ -581,12 +581,45 @@ LEFT JOIN keelson('apps') AS a ON a.id = w.app_id
 ORDER BY a.workingset DESC, w.key
 ```
 
-Two caveats. `keelson('windows')` exists only where a window host does — the
+What is actually stored, as opposed to declared or open. `keelson('workingsets')`
+is one row per stored record — the set a plain open would restore from, not the
+trail of saves — so a name that has been saved four times and then deleted is
+simply absent, and one saved four times shows the fourth. `config_bytes` is the
+payload's size: the record is an instance of the app's own launch DTO, readable
+only by that app's codec, so the table reports its size and its kind rather than
+pretending to decode it. `reason` is why the window that wrote it closed,
+`tile_key` which window that was, `run_id` which process — the last joins to
+`keelson('build').run_id`.
+
+```sql
+SELECT app_id, name, kind, config_bytes, reason, tile_key, saved_at
+FROM keelson('workingsets')
+ORDER BY app_id, name
+```
+
+Which participating apps have nothing stored yet — the anti-join that says where a
+plain open will start from scratch. An app can be missing here because nobody has
+opened it, or because nobody acted in the window they did open: the shell writes a
+record only on intent, so a window opened and closed untouched leaves the previous
+one standing (or nothing at all).
+
+```sql
+SELECT a.id, a.launch_kind
+FROM keelson('apps') AS a
+LEFT JOIN keelson('workingsets') AS w ON w.app_id = a.id
+WHERE a.workingset AND w.app_id = ''
+ORDER BY a.id
+```
+
+Three caveats. `keelson('windows')` exists only where a window host does — the
 desktop shell registers it, so a play started on its own has no windows to report
-and naming the table is an error rather than an empty result. And the stored
-records are not a keelson table yet: what these rows show is this process's live
-state, while what was written lives in `boxer.facts`, where a restored window's
-launch row carries the caller `runtime.workingset`.
+and naming the table is an error rather than an empty result.
+`keelson('workingsets')` reads through whichever facts store the shell got at
+start: with ClickHouse down that is the in-memory one, so the table then shows
+this process's saves only and they go with the process. And the *history* stays
+untabled on purpose — the saves are append-only rows in `boxer.facts`, queried
+there directly, where a restored window's launch row also carries the caller
+`runtime.workingset`.
 
 ## ADS-B geo-raster (demo loader)
 

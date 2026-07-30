@@ -10,8 +10,9 @@ title: Querying keelson introspection tables
 # Querying keelson introspection tables
 
 The running shell exposes its own state — env vars, apps, demos, build info, the
-SBOM, open windows — as ClickHouse tables (the keelson introspection facility).
-You can browse them from `play` without a separate ClickHouse server.
+SBOM, open windows, stored workingsets — as ClickHouse tables (the keelson
+introspection facility). You can browse them from `play` without a separate
+ClickHouse server.
 
 ## Point play at the /query endpoint
 
@@ -82,6 +83,16 @@ SELECT id, launch_kind, workingset, persisted_keys
 FROM keelson('apps') WHERE launch_kind != '' ORDER BY id
 ```
 
+And what is actually *stored* — the records a plain open would restore from, one
+row per stored record rather than one per save. `config_bytes` is the payload's
+size; the payload itself is the app's own DTO and stays out of the table.
+`reason` says why the window that wrote the record closed:
+
+```sql
+SELECT app_id, name, kind, config_bytes, reason, saved_at
+FROM keelson('workingsets') ORDER BY app_id
+```
+
 Because `/query` runs the statement through `clickhouse-local`, ordinary SQL
 works too — aggregate, filter, or join a keelson table against a generated one:
 
@@ -98,5 +109,8 @@ FROM keelson('env') GROUP BY category ORDER BY n DESC
   runs.
 - play's read-rows / bytes readout stays at zero here — the endpoint does not
   emit the `X-ClickHouse-Summary` header a full server would.
+- `keelson('workingsets')` reads through whichever facts store the shell got at
+  start. With ClickHouse down that is the in-memory one, so the table then shows
+  only what this process saved, and the records go with the process.
 - This is a local diagnostic surface bound to loopback; it is not a substitute
   for the ClickHouse server `play` normally talks to.
