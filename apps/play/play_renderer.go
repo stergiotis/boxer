@@ -266,6 +266,14 @@ type PlayApp struct {
 	// with it. Off by default — the decoration is only wanted while working on
 	// a nested query, and it is the gesture that does the work, not the mode.
 	subqueryMode bool
+	// windowUnfocused says the shell's active window is some OTHER window
+	// this frame (app.WindowFocusI, stamped by PlayLauncher.Frame). It
+	// gates the Ctrl+Enter poll alone: the chord is process-global input
+	// every open play instance sees, and only the instance the user is in
+	// may act on it. Inverted so the zero value — tests building PlayApp
+	// directly, hosts without the capability — stays focused. Buttons need
+	// no gate: a click already names its window.
+	windowUnfocused bool
 	// lastRunScope records what the previous run actually shipped, for the
 	// status line. A gesture that silently degraded to the whole query is the
 	// one thing the tints cannot explain — they are not drawn in that case.
@@ -1196,8 +1204,12 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 // run narrowed to the query under the caret.
 //
 // The press was drained from egui's input queue during the PREVIOUS frame's
-// Sync, so polling it here is what claims the binding — nothing else in the
-// process does. A press while a run is already in flight is dropped rather
+// Sync, and the StateManager holds it as per-frame state every reader sees —
+// so with more than one play instance open, each instance's poll observes the
+// same press. The focus gate below is what makes the binding belong to ONE of
+// them: the instance whose window the shell reports active (app.WindowFocusI,
+// via PlayLauncher.Frame). Without it, one press ran a query in every open
+// playground. A press while a run is already in flight is dropped rather
 // than queued, which is what the toolbar does too: it shows Cancel, not Run.
 //
 // The caret this reads is refreshed later in the same frame, when the editor
@@ -1206,7 +1218,19 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 // caret is wherever it last was, exactly as for the Run button.
 func (inst *PlayApp) pollRunShortcuts() {
 	run, sub := c.CurrentApplicationState.StateManager.GetCommandEnterPressed()
+	inst.claimRunChord(run, sub)
+}
+
+// claimRunChord is pollRunShortcuts minus the fetch — the seam a test can
+// drive with a synthetic press. Split the way applyRunShortcut is split from
+// the poll: no c.* calls past this point.
+func (inst *PlayApp) claimRunChord(run, sub bool) {
 	if !run && !sub {
+		return
+	}
+	if inst.windowUnfocused {
+		// The press belongs to whichever instance IS focused; acting here
+		// too is the multi-instance broadcast this gate exists to stop.
 		return
 	}
 	if inst.graph.MainLoading() {

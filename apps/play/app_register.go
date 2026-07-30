@@ -372,6 +372,17 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 		err = eh.Errorf("playlauncher: Frame called before Mount")
 		return
 	}
+	// The Ctrl+Enter chord is drained once from egui's shared queue and
+	// is visible to every open play instance alike; only the instance in
+	// the shell's active window may act on it, or one press runs a query
+	// in every open playground. Hosts that cannot say (single-surface,
+	// tests) don't implement the capability, and the only instance there
+	// is the active one.
+	focused := true
+	if f, ok := ctx.(app.WindowFocusI); ok {
+		focused = f.WindowFocused()
+	}
+	inst.inner.windowUnfocused = !focused
 	err = inst.inner.Render()
 	return
 }

@@ -364,6 +364,34 @@ func TestRunSubqueryRequestMatchesTheChord(t *testing.T) {
 	}
 }
 
+// The chord is process-global: every open play instance's poll sees the same
+// press. Only the instance in the shell's active window may act on it — the
+// unfocused sibling dropping the press IS the fix for one Ctrl+Enter running
+// a query in every open playground.
+func TestChordClaimRespectsWindowFocus(t *testing.T) {
+	unfocused := debouncedApp(t, "SELECT 1")
+	unfocused.windowUnfocused = true
+	unfocused.claimRunChord(true, false)
+	if unfocused.requestRun || unfocused.requestSubquery {
+		t.Error("an unfocused instance must drop the press")
+	}
+	unfocused.claimRunChord(false, true)
+	if unfocused.requestRun || unfocused.requestSubquery {
+		t.Error("an unfocused instance must drop the narrowed press too")
+	}
+
+	// The zero value is focused: a host without the capability (tests,
+	// single-surface hosts) keeps today's behavior.
+	focused := debouncedApp(t, "SELECT 1")
+	if focused.windowUnfocused {
+		t.Fatal("focus must be the zero-value default")
+	}
+	focused.claimRunChord(false, true)
+	if !focused.requestRun || !focused.requestSubquery {
+		t.Error("the focused instance must claim the press")
+	}
+}
+
 // The statement's own query closes over its WITH items too — it is just that
 // they already travel with it. It gets the environment underlines and no
 // background, so a buffer whose WITH clause is most of its length says which
