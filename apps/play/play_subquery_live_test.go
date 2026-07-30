@@ -106,6 +106,34 @@ func TestLiveSubqueryCompositionDifferential(t *testing.T) {
 	}
 }
 
+// A correlated reference whose qualifier is rebound by a NESTED subquery of
+// the unit: the nested bind does not enclose the reference, so the original
+// resolves it against the OUTER alias and runs, while the narrowed unit is
+// UNKNOWN_IDENTIFIER. The flat suppression missed exactly this shape (the
+// review's scope-blindness finding) — the contract is that the editor marks
+// it before the server rejects it. The rejection is asserted as a tripwire,
+// like the self-reference test below.
+func TestLiveSubqueryCorrelationIsMarkedBeforeTheServerRejects(t *testing.T) {
+	url := liveClickHouseURL(t)
+	const marked = "SELECT (SELECT max(z) FROM (SELECT number AS z FROM numbers(5) a) WHERE |a.k > 0) FROM (SELECT 3 AS k) a"
+	text, caret := caretAt(t, marked)
+	unit, ok := pickSubquery(parseSubqueryUnits(text), caret)
+	if !ok || unit.Root {
+		t.Fatal("case does not narrow")
+	}
+	if got, err := chQueryTSV(t, url, text); err != nil {
+		t.Fatalf("the original statement does not run — the case is broken: %v", err)
+	} else if got != "4" {
+		t.Fatalf("original = %q, want 4 — the reference must bind the OUTER alias", got)
+	}
+	if len(unit.Unresolved) == 0 {
+		t.Fatal("the correlation went unmarked — the narrowed run would fail at the endpoint with no warning")
+	}
+	if _, err := chQueryTSV(t, url, unit.compose(text)); err == nil {
+		t.Error("the composition now runs — the correlation mark may be too strict for this server")
+	}
+}
+
 // A recursive body's self-reference is the failure composition cannot
 // repair, and the contract is that the editor says so before the server
 // does. The server-side rejection is asserted too — not as contract, but as

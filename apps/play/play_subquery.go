@@ -390,7 +390,7 @@ func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, ch
 		}
 		unit.recursive = unit.recursive || frame.recursive
 	}
-	unit.Unresolved = unresolvedRefs(pr, node, outer, qualifiers, scopes)
+	unit.Unresolved = unresolvedRefs(pr, node, outer, qualifiers, scopes, src)
 	unit.Unresolved = append(unit.Unresolved, selfRefs(pr, node, src, scopes)...)
 	return unit, true
 }
@@ -399,26 +399,32 @@ func unitFor(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, ch
 // query can satisfy — the correlation the composition cannot repair.
 //
 // A reference qualifies only when its qualifier is bound OUTSIDE the unit and
-// bound nowhere inside it, nor by a WITH item travelling with it. Requiring the
-// outward binding is what keeps this quiet on the shapes it would otherwise
-// misread: grammar1 parses `tup.field` on a Tuple column as a table-qualified
-// reference too, and such a qualifier resolves nowhere, so it is not reported.
-func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, outer, qualifiers map[string]struct{}, scopes scopeIndex) (out []nanopass.SourceRange) {
+// resolves against nothing that ships with it: not the FROM/JOIN binds of a
+// select enclosing the reference within the unit (boundAbove — the scopes SQL
+// actually consults), not a CTE the unit defines, not a carried WITH item.
+// "Enclosing" is the load-bearing word: a sibling or nested subquery's alias
+// is invisible at the reference's own level, so a flat any-bind-inside-the-
+// unit set suppressed genuinely correlated references — the composed run then
+// failed at the endpoint with the exact unknown-identifier error this channel
+// exists to pre-empt (found live: a nested FROM subquery rebinding the outer
+// alias hid the unit-level correlation).
+//
+// Requiring the outward binding is what keeps this quiet on the shapes it
+// would otherwise misread: grammar1 parses `tup.field` on a Tuple column as a
+// table-qualified reference too, and such a qualifier resolves nowhere, so it
+// is not reported.
+func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtContext, outer, qualifiers map[string]struct{}, scopes scopeIndex, src nanopass.SourceRange) (out []nanopass.SourceRange) {
 	if len(outer) == 0 {
 		return nil
 	}
-	// Everything the unit binds for itself, at any depth inside it: its own
-	// FROM sources, those of its nested queries, and any CTE it defines.
-	inner := map[string]struct{}{}
+	// CTE names the unit defines anywhere inside itself. A defined name is
+	// never a correlation whatever level it is used from — the definition
+	// ships with the unit's text.
+	innerCtes := map[string]struct{}{}
 	nanopass.WalkCST(node, func(ctx antlr.ParserRuleContext) bool {
-		switch n := ctx.(type) {
-		case *grammar1.SelectStmtContext:
-			for _, b := range scopes.bindsOf(n) {
-				inner[b] = struct{}{}
-			}
-		case *grammar1.WithItemNamedQueryContext:
+		if n, isItem := ctx.(*grammar1.WithItemNamedQueryContext); isItem {
 			if name := cteNameOf(n); name != "" {
-				inner[name] = struct{}{}
+				innerCtes[name] = struct{}{}
 			}
 		}
 		return true
@@ -440,10 +446,13 @@ func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtCont
 		if _, isOuter := outer[q]; !isOuter {
 			return true
 		}
-		if _, isInner := inner[q]; isInner {
+		if _, isCte := innerCtes[q]; isCte {
 			return true
 		}
 		if _, isCarried := qualifiers[q]; isCarried {
+			return true
+		}
+		if boundAbove(pr, col, q, scopes, src) {
 			return true
 		}
 		if r := pr.SourceRangeOf(tbl); !r.Empty() {
@@ -452,6 +461,44 @@ func unresolvedRefs(pr *nanopass.ParseResult, node *grammar1.SelectUnionStmtCont
 		return true
 	})
 	return out
+}
+
+// boundAbove reports whether a qualifier resolves against the FROM/JOIN binds
+// of a select that both ENCLOSES the reference and lies WITHIN the unit — the
+// scopes that still surround the reference when the unit ships alone. The walk
+// follows nanopass's lexical Parent chain from the reference's nearest select
+// and stops at the first scope outside the unit: anything bound beyond that
+// boundary is exactly the correlation the caller reports.
+//
+// The chain crosses CTE-body and FROM-subquery boundaries as if their outer
+// binds were visible, which SQL denies — but a reference relying on such a
+// bind fails in the ORIGINAL statement too, so suppressing its mark promises
+// nothing the server would have honoured anyway. The direction that matters —
+// a nested scope's alias wrongly excusing a reference it does not enclose —
+// cannot happen here, since the walk only ever ascends.
+func boundAbove(pr *nanopass.ParseResult, ref antlr.ParserRuleContext, qualifier string, scopes scopeIndex, unit nanopass.SourceRange) bool {
+	var sel *grammar1.SelectStmtContext
+	for p := ref.GetParent(); p != nil; p = p.GetParent() {
+		if s, isSel := p.(*grammar1.SelectStmtContext); isSel {
+			sel = s
+			break
+		}
+	}
+	if sel == nil {
+		return false
+	}
+	for scope := scopes[sel]; scope != nil; scope = scope.Parent {
+		if scope.Node == nil {
+			break
+		}
+		if nr := pr.SourceRangeOf(scope.Node); nr.Empty() || nr.Start < unit.Start || unit.End < nr.End {
+			break
+		}
+		if _, found := scope.ResolveAlias(qualifier); found {
+			return true
+		}
+	}
+	return false
 }
 
 // selfRefs finds table references inside the unit that resolve to a WITH

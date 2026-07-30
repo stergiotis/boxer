@@ -283,6 +283,31 @@ func TestSubqueryUnresolvedRefs(t *testing.T) {
 		name:   "a recursive CTE referenced from outside its body is fine",
 		marked: "WITH RECURSIVE r AS (SELECT 1 AS n) SELECT * FROM (SELECT * FROM |r)",
 		want:   nil,
+	}, {
+		// A nested FROM subquery rebinds the outer alias, but its bind is
+		// not visible at the unit's own level — the unit-level reference
+		// still correlates with the OUTER query and must be marked. The
+		// flat any-bind-inside-the-unit set suppressed exactly this (found
+		// in review): the composition failed at the server unannounced.
+		name:   "a nested rebind does not excuse a reference it does not enclose",
+		marked: "SELECT 1 FROM t a WHERE a.k IN (SELECT z FROM (SELECT 1 AS z FROM u a) WHERE |a.q = 1)",
+		want:   []string{"a"},
+	}, {
+		// The scalar-subquery variant, live-verified against the server:
+		// the original runs (the reference binds the outer alias), the
+		// narrowed unit alone is UNKNOWN_IDENTIFIER — the exact shape the
+		// error channel exists to pre-empt.
+		name:   "the scalar-position nested rebind is marked too",
+		marked: "SELECT (SELECT max(z) FROM (SELECT number AS z FROM numbers(5) a) WHERE |a.k > 0) FROM (SELECT 3 AS k) a",
+		want:   []string{"a"},
+	}, {
+		// The mirror image: a reference inside a nested subquery bound by
+		// an ANCESTOR select within the unit resolves in the shipped text —
+		// the whole chain travels — and stays quiet even though the same
+		// name is also bound outside.
+		name:   "an enclosing bind within the unit still suppresses",
+		marked: "SELECT 1 FROM t a WHERE a.k IN (SELECT (SELECT max(v.y) FROM v WHERE v.z = a.x) |FROM u a)",
+		want:   nil,
 	}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
