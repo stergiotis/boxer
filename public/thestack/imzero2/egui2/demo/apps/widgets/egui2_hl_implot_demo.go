@@ -97,14 +97,14 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			st := state.(*implotDemoState)
-			p := implot.Begin(ids, "waves", 620, 380)
-			p.SetupAxes("x [rad]", "amplitude", implot.AxisFlagsNone, implot.AxisFlagsNone)
-			p.SetupAxisLimits(implot.AxisX1, 0, 4*math.Pi, implot.CondOnce)
-			p.SetupAxisLimits(implot.AxisY1, -1.25, 1.25, implot.CondOnce)
-			p.Line("sin(x)", st.xs, st.sin)
-			p.Line("0.75·cos(x)", st.xs, st.cos)
-			p.Line("damped (NaN gap)", st.xs, st.damped)
-			p.End()
+			for p := range implot.Scoped(ids, "waves", 620, 380) {
+				p.SetupAxes("x [rad]", "amplitude", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p.SetupAxisLimits(implot.AxisX1, 0, 4*math.Pi, implot.CondOnce)
+				p.SetupAxisLimits(implot.AxisY1, -1.25, 1.25, implot.CondOnce)
+				p.Line("sin(x)", st.xs, st.sin)
+				p.Line("0.75·cos(x)", st.xs, st.cos)
+				p.Line("damped (NaN gap)", st.xs, st.damped)
+			}
 		},
 	})
 	registry.Register(registry.Demo{
@@ -139,17 +139,17 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			st := state.(*implotM2State)
-			p := implot.Begin(ids, "item breadth", 620, 400)
-			p.SetupAxes("x", "value", implot.AxisFlagsNone, implot.AxisFlagsNone)
-			p.SetupAxisLimits(implot.AxisX1, -0.8, 23.8, implot.CondOnce)
-			p.SetupAxisLimits(implot.AxisY1, -2.6, 10.6, implot.CondOnce)
-			p.Bars("bars", st.barXs, st.barYs, 0.66)
-			p.Stairs("stairs", st.stairXs, st.stairYs)
-			p.Stems("stems", st.stemXs, st.stemYs, -2.2)
-			p.Scatter("scatter", st.scXs, st.scYs, implot.MarkerDiamond, 3.5)
-			p.Shaded("shaded", st.shXs, st.shYs, 8.8)
-			p.InfLinesH("mean ref", []float64{4.6})
-			p.End()
+			for p := range implot.Scoped(ids, "item breadth", 620, 400) {
+				p.SetupAxes("x", "value", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p.SetupAxisLimits(implot.AxisX1, -0.8, 23.8, implot.CondOnce)
+				p.SetupAxisLimits(implot.AxisY1, -2.6, 10.6, implot.CondOnce)
+				p.Bars("bars", st.barXs, st.barYs, 0.66)
+				p.Stairs("stairs", st.stairXs, st.stairYs)
+				p.Stems("stems", st.stemXs, st.stemYs, -2.2)
+				p.Scatter("scatter", st.scXs, st.scYs, implot.MarkerDiamond, 3.5)
+				p.Shaded("shaded", st.shXs, st.shYs, 8.8)
+				p.InfLinesH("mean ref", []float64{4.6})
+			}
 		},
 	})
 	registry.Register(registry.Demo{
@@ -179,19 +179,19 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			st := state.(*implotM3State)
-			p := implot.Begin(ids, "requests over 48 h", 620, 240)
-			p.SetupAxes("", "rate", implot.AxisFlagsNone, implot.AxisFlagsNone)
-			p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
-			p.Line("rate", st.tXs, st.tYs)
-			p.End()
-			p2 := implot.Begin(ids, "log-scale growth", 620, 240)
-			p2.SetupAxes("x", "value (log10)", implot.AxisFlagsNone, implot.AxisFlagsNone)
-			p2.SetupAxisScale(implot.AxisY1, implot.ScaleLog10)
-			p2.SetupAxisLimits(implot.AxisY1, 0.5, 20000, implot.CondOnce)
-			p2.Line("e^0.9x", st.eXs, st.e1Ys)
-			p2.Line("40·e^0.35x", st.eXs, st.e2Ys)
-			p2.Line("3000·e^-0.4x", st.eXs, st.e3Ys)
-			p2.End()
+			for p := range implot.Scoped(ids, "requests over 48 h", 620, 240) {
+				p.SetupAxes("", "rate", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p.SetupAxisScale(implot.AxisX1, implot.ScaleTime)
+				p.Line("rate", st.tXs, st.tYs)
+			}
+			for p2 := range implot.Scoped(ids, "log-scale growth", 620, 240) {
+				p2.SetupAxes("x", "value (log10)", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p2.SetupAxisScale(implot.AxisY1, implot.ScaleLog10)
+				p2.SetupAxisLimits(implot.AxisY1, 0.5, 20000, implot.CondOnce)
+				p2.Line("e^0.9x", st.eXs, st.e1Ys)
+				p2.Line("40·e^0.35x", st.eXs, st.e2Ys)
+				p2.Line("3000·e^-0.4x", st.eXs, st.e3Ys)
+			}
 		},
 	})
 	registry.Register(registry.Demo{
@@ -237,17 +237,17 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			st := state.(*implotM4State)
-			p := implot.Begin(ids, "heatmaps: rect route / texture route", 620, 250)
-			p.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
-			p.SetupAxisLimits(implot.AxisX1, 0, 21, implot.CondOnce)
-			p.SetupAxisLimits(implot.AxisY1, 0, 10, implot.CondOnce)
-			p.Heatmap("small (336 rects)", st.smallVals, 14, 24, st.cmSmall, 0, 0, 10, 10)
-			p.Heatmap("big (256x160 texture)", st.bigVals, 160, 256, st.cmBig, 11, 0, 21, 10)
-			p.End()
-			p2 := implot.Begin(ids, "histograms", 620, 250)
-			p2.SetupAxes("value", "count", implot.AxisFlagsAutoFit, implot.AxisFlagsAutoFit)
-			p2.Histogram("histogram", st.samples, 0, false)
-			p2.End()
+			for p := range implot.Scoped(ids, "heatmaps: rect route / texture route", 620, 250) {
+				p.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p.SetupAxisLimits(implot.AxisX1, 0, 21, implot.CondOnce)
+				p.SetupAxisLimits(implot.AxisY1, 0, 10, implot.CondOnce)
+				p.Heatmap("small (336 rects)", st.smallVals, 14, 24, st.cmSmall, 0, 0, 10, 10)
+				p.Heatmap("big (256x160 texture)", st.bigVals, 160, 256, st.cmBig, 11, 0, 21, 10)
+			}
+			for p2 := range implot.Scoped(ids, "histograms", 620, 250) {
+				p2.SetupAxes("value", "count", implot.AxisFlagsAutoFit, implot.AxisFlagsAutoFit)
+				p2.Histogram("histogram", st.samples, 0, false)
+			}
 		},
 	})
 	registry.Register(registry.Demo{
@@ -270,19 +270,19 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			st := state.(*implotM5State)
-			p := implot.Begin(ids, "tools", 620, 420)
-			p.SetupAxes("x", "y", implot.AxisFlagsNone, implot.AxisFlagsNone)
-			p.SetupAxisLimits(implot.AxisX1, 0, 4*math.Pi, implot.CondOnce)
-			p.SetupAxisLimits(implot.AxisY1, -1.2, 1.2, implot.CondOnce)
-			p.Line("signal", st.xs, st.ys)
-			p.DragLineX("threshold", &st.threshold, 0xdd8452ff)
-			p.DragLineY("limit", &st.limitY, 0x55a868ff)
-			p.DragPoint("probe", &st.probeX, &st.probeY, 0xc44e52ff)
-			p.TagX(st.threshold, 0xdd8452ff)
-			p.TagY(st.limitY, 0x55a868ff)
-			p.Annotation(st.probeX, st.probeY, 18, -24, 0xc44e52ff, true,
-				"probe")
-			p.End()
+			for p := range implot.Scoped(ids, "tools", 620, 420) {
+				p.SetupAxes("x", "y", implot.AxisFlagsNone, implot.AxisFlagsNone)
+				p.SetupAxisLimits(implot.AxisX1, 0, 4*math.Pi, implot.CondOnce)
+				p.SetupAxisLimits(implot.AxisY1, -1.2, 1.2, implot.CondOnce)
+				p.Line("signal", st.xs, st.ys)
+				p.DragLineX("threshold", &st.threshold, 0xdd8452ff)
+				p.DragLineY("limit", &st.limitY, 0x55a868ff)
+				p.DragPoint("probe", &st.probeX, &st.probeY, 0xc44e52ff)
+				p.TagX(st.threshold, 0xdd8452ff)
+				p.TagY(st.limitY, 0x55a868ff)
+				p.Annotation(st.probeX, st.probeY, 18, -24, 0xc44e52ff, true,
+					"probe")
+			}
 		},
 	})
 	registry.Register(registry.Demo{
@@ -351,40 +351,40 @@ func init() {
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			st := state.(*implotM7State)
 			for range c.Horizontal().KeepIter() {
-				p := implot.Begin(ids, "error bars", 306, 236)
-				p.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
-				p.SetupAxisLimits(implot.AxisX1, 0.2, 5.8, implot.CondOnce)
-				p.SetupAxisLimits(implot.AxisY1, 0, 6.4, implot.CondOnce)
-				p.Bars("bars", st.ebXs, st.ebBars, 0.55)
-				p.ErrorBars("bars", st.ebXs, st.ebBars, st.ebErr, st.ebErr)
-				p.Line("trend", st.ebLXs, st.ebLYs)
-				p.ErrorBars("trend", st.ebLXs, st.ebLYs, st.ebLNeg, st.ebLPos)
-				p.End()
-				p2 := implot.Begin(ids, "pie (fib shares)", 306, 236)
-				p2.SetupAxes("", "",
-					implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels,
-					implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels)
-				p2.SetupAxisLimits(implot.AxisX1, 0, 1, implot.CondOnce)
-				p2.SetupAxisLimits(implot.AxisY1, 0, 1, implot.CondOnce)
-				p2.Pie(st.pieLabels, st.pieVals, 0.5, 0.5, 0.42, 90, "%.0f")
-				p2.End()
+				for p := range implot.Scoped(ids, "error bars", 306, 236) {
+					p.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+					p.SetupAxisLimits(implot.AxisX1, 0.2, 5.8, implot.CondOnce)
+					p.SetupAxisLimits(implot.AxisY1, 0, 6.4, implot.CondOnce)
+					p.Bars("bars", st.ebXs, st.ebBars, 0.55)
+					p.ErrorBars("bars", st.ebXs, st.ebBars, st.ebErr, st.ebErr)
+					p.Line("trend", st.ebLXs, st.ebLYs)
+					p.ErrorBars("trend", st.ebLXs, st.ebLYs, st.ebLNeg, st.ebLPos)
+				}
+				for p2 := range implot.Scoped(ids, "pie (fib shares)", 306, 236) {
+					p2.SetupAxes("", "",
+						implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels,
+						implot.AxisFlagsNoGrid|implot.AxisFlagsNoTickLabels)
+					p2.SetupAxisLimits(implot.AxisX1, 0, 1, implot.CondOnce)
+					p2.SetupAxisLimits(implot.AxisY1, 0, 1, implot.CondOnce)
+					p2.Pie(st.pieLabels, st.pieVals, 0.5, 0.5, 0.42, 90, "%.0f")
+				}
 			}
 			for range c.Horizontal().KeepIter() {
-				p3 := implot.Begin(ids, "digital + analog", 306, 236)
-				p3.SetupAxes("t [s]", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
-				p3.SetupAxisLimits(implot.AxisX1, 0, 10, implot.CondOnce)
-				p3.SetupAxisLimits(implot.AxisY1, -1.4, 1.4, implot.CondOnce)
-				p3.Line("analog sin", st.digXs, st.digSin)
-				p3.Digital("d0: sin>0", st.digXs, st.digA)
-				p3.Digital("d1: square", st.digXs, st.digB)
-				p3.End()
-				p4 := implot.Begin(ids, "image", 306, 236)
-				p4.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
-				p4.SetupAxisLimits(implot.AxisX1, -0.3, 4.3, implot.CondOnce)
-				p4.SetupAxisLimits(implot.AxisY1, -0.3, 4.3, implot.CondOnce)
-				p4.Image("plasma", st.imgPix, 48, 48, 0, 0, 4, 4, 1)
-				p4.Scatter("probes", st.imgMarkX, st.imgMarkY, implot.MarkerCross, 4.5)
-				p4.End()
+				for p3 := range implot.Scoped(ids, "digital + analog", 306, 236) {
+					p3.SetupAxes("t [s]", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+					p3.SetupAxisLimits(implot.AxisX1, 0, 10, implot.CondOnce)
+					p3.SetupAxisLimits(implot.AxisY1, -1.4, 1.4, implot.CondOnce)
+					p3.Line("analog sin", st.digXs, st.digSin)
+					p3.Digital("d0: sin>0", st.digXs, st.digA)
+					p3.Digital("d1: square", st.digXs, st.digB)
+				}
+				for p4 := range implot.Scoped(ids, "image", 306, 236) {
+					p4.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
+					p4.SetupAxisLimits(implot.AxisX1, -0.3, 4.3, implot.CondOnce)
+					p4.SetupAxisLimits(implot.AxisY1, -0.3, 4.3, implot.CondOnce)
+					p4.Image("plasma", st.imgPix, 48, 48, 0, 0, 4, 4, 1)
+					p4.Scatter("probes", st.imgMarkX, st.imgMarkY, implot.MarkerCross, 4.5)
+				}
 			}
 		},
 	})
@@ -416,11 +416,11 @@ func init() {
 			implot.Subplots(ids, "linked grid", 2, 2, 620, 440, implot.SubplotFlagsLinkAllX,
 				func(sp *implot.SubplotCtx, row int, col int) {
 					i := row*2 + col
-					p := sp.Plot(names[i])
-					p.SetupAxisLimits(implot.AxisX1, 0, 12, implot.CondOnce)
-					p.SetupAxisLimits(implot.AxisY1, -1.3, 1.3, implot.CondOnce)
-					p.Line(names[i], st.xs, series[i])
-					p.End()
+					for p := range sp.Scoped(names[i]) {
+						p.SetupAxisLimits(implot.AxisX1, 0, 12, implot.CondOnce)
+						p.SetupAxisLimits(implot.AxisY1, -1.3, 1.3, implot.CondOnce)
+						p.Line(names[i], st.xs, series[i])
+					}
 				})
 		},
 	})
