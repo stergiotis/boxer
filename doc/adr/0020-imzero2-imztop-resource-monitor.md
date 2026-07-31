@@ -302,7 +302,7 @@ Runtime-tree path references in this ADR were swept from `public/thestack/runtim
 - `../../doc/observability/sysmetrics/REFERENCE.md` — public API of sysmetrics.
 - [`../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go`](../../public/thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go) — host shell + subcommand registry.
 - [`../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer.go`](../../public/thestack/imzero2/egui2/demo/apps/regex_explorer/regex_explorer.go) — multi-panel demo precedent.
-- [`../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_plot_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_plot_demo.go) — `PlotLine` / `PlotBars` usage.
+- [`../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_implot_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_implot_demo.go) — line / marker / subplot usage. Stands in for `egui2_hl_plot_demo.go`, which demonstrated the `PlotLine` / `PlotBars` surface this ADR was written against; that demo and the egui_plot bridge behind it were removed with the ImPlot port ([ADR-0149](./0149-implot-core-port-painter-lane.md)).
 - [`../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go) — virtualized-table usage at 10k rows.
 - [`public/math/numerical/timeticks/`](../../public/math/numerical/timeticks/) — calendar-aware time-axis tick generator (M5).
 - [`../../tags`](../../tags) — build-tag listing; `gpu_rocm` appended in M1.
