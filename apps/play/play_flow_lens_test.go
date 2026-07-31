@@ -1,9 +1,16 @@
 package play
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 )
 
@@ -12,22 +19,55 @@ import (
 // `SELECT * FROM (EXPLAIN … <stmt>)` — if a server version changes the output
 // dialect, these pin what the parsers were written against.
 
-func TestWrapExplainKinds(t *testing.T) {
-	sql := "SELECT 1"
-	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1)", wrapExplain(lensAST, sql))
-	require.Equal(t, "SELECT * FROM (EXPLAIN PLAN json = 1 SELECT 1)", wrapExplain(lensPlan, sql))
-	require.Equal(t, "SELECT * FROM (EXPLAIN PIPELINE SELECT 1)", wrapExplain(lensPipeline, sql))
-	require.Equal(t, sql, wrapExplain(lensStatement, sql), "the static lens passes through")
+func TestExplainWrapKinds(t *testing.T) {
+	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1)", explainWrap(lensAST)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN PLAN json = 1 SELECT 1)", explainWrap(lensPlan)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN PIPELINE SELECT 1)", explainWrap(lensPipeline)("SELECT 1"))
+	require.Nil(t, explainWrap(lensStatement), "the static lens has no wire wrap")
+	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1)", explainWrap(lensAST)("SELECT 1;\n"),
+		"a trailing delimiter must not end up inside the parens")
 }
 
-// A SET prelude cannot ride inside the parens — the wrapper re-lifts it in
-// front, where the client harvests it onto the URL as usual.
-func TestWrapExplainReliftsPrelude(t *testing.T) {
-	fused := "SET max_threads = 1;\nSELECT number FROM numbers(10)"
-	got := wrapExplain(lensPlan, fused)
-	require.Equal(t,
-		"SET max_threads = 1;\nSELECT * FROM (EXPLAIN PLAN json = 1 SELECT number FROM numbers(10))",
-		got)
+// The wrap is wire-body-only (ExecOptions.WrapStatement): the SET prelude is
+// harvested onto the URL — never inside the parens — the rewrites see the
+// plain statement, and the outer FORMAT lands after the wrapper. This is the
+// contract that lets a lens statement ROUTE as itself: the dispatch decision
+// is made from the plain SQL before the transport ever wraps (index structure
+// and schema are endpoint-local, so the EXPLAIN must reach the endpoint the
+// query would actually run on).
+func TestExecuteArrowStreamWrapStatement(t *testing.T) {
+	stream := arrowStreamBytes(t, []int64{1})
+	var mu sync.Mutex
+	var bodies []string
+	var urls []url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(b))
+		urls = append(urls, r.URL.Query())
+		mu.Unlock()
+		w.Header().Set("X-ClickHouse-Summary", `{"read_rows":"1","read_bytes":"8"}`)
+		_, _ = w.Write(stream)
+	}))
+	defer srv.Close()
+	c := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+
+	opts := newExecOptions("flow-plan-test")
+	opts.WrapStatement = explainWrap(lensPlan)
+	sql := "SET param_a = '7';\nSELECT {a:UInt64} FROM numbers(10) LIMIT 3"
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), opts,
+		nil, c.Dispatch(sql, ""))
+	require.NoError(t, err)
+	rdr.Release()
+	_ = closer.Close()
+
+	require.Len(t, bodies, 1)
+	body := bodies[0]
+	require.Contains(t, body, "SELECT * FROM (EXPLAIN PLAN json = 1 ")
+	require.True(t, strings.HasSuffix(body, ") FORMAT ArrowStream"),
+		"the outer FORMAT must land after the wrapper, got: %s", body)
+	require.NotContains(t, body, "SET param_a", "the prelude rides the URL, never the parens")
+	require.Equal(t, "7", urls[0].Get("param_a"))
 }
 
 // Captured: SELECT * FROM (EXPLAIN AST SELECT 1 UNION ALL SELECT 2).

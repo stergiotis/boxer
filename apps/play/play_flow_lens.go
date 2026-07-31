@@ -38,11 +38,28 @@ const (
 // the static statement lens).
 func (l flowLens) remote() bool { return l != lensStatement }
 
-// wrapExplain builds the wire statement for a remote lens over a fused node:
-// leading SET statements are kept in front (the client re-lifts them onto the
-// URL; inside the parens they would be a syntax error), the core statement is
-// wrapped in the EXPLAIN subquery.
-func wrapExplain(l flowLens, fusedSQL string) string {
+func (l flowLens) String() string {
+	switch l {
+	case lensAST:
+		return "ast"
+	case lensPlan:
+		return "plan"
+	case lensPipeline:
+		return "pipeline"
+	}
+	return "statement"
+}
+
+// explainWrap returns a remote lens's wire-body wrap for
+// ExecOptions.WrapStatement: the lane compiles and routes the PLAIN fused
+// statement — placement resolves from it, the pre-execute rewrites apply to
+// it, SET preludes are harvested off it — and the transport wraps the
+// residual at the last moment. Index structure and schema are endpoint-local,
+// so the EXPLAIN must interrogate the endpoint the statement itself routes
+// to; wrapping earlier would also hide the statement from the rewrites
+// (grammar1 cannot parse the wrapper, so every pass would skip). nil for the
+// static statement lens.
+func explainWrap(l flowLens) func(string) string {
 	var kind string
 	switch l {
 	case lensAST:
@@ -52,25 +69,11 @@ func wrapExplain(l flowLens, fusedSQL string) string {
 	case lensPipeline:
 		kind = "EXPLAIN PIPELINE"
 	default:
-		return fusedSQL
+		return nil
 	}
-	stmts := statementSplit(fusedSQL)
-	var b strings.Builder
-	core := fusedSQL
-	for i, s := range stmts {
-		if i == len(stmts)-1 {
-			core = s
-			break
-		}
-		b.WriteString(s)
-		b.WriteString(";\n")
+	return func(residual string) string {
+		return "SELECT * FROM (" + kind + " " + strings.TrimRight(strings.TrimSpace(residual), ";") + ")"
 	}
-	b.WriteString("SELECT * FROM (")
-	b.WriteString(kind)
-	b.WriteString(" ")
-	b.WriteString(core)
-	b.WriteString(")")
-	return b.String()
 }
 
 // lensGraphAssembler accumulates a flowGraph under the shared caps, with the

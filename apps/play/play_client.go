@@ -142,6 +142,20 @@ type ExecOptions struct {
 	// exists. Frames are how a party that is NOT the connection holder sees
 	// progress, and this lane is the connection holder.
 	OnProgress func(p runstream.Progress)
+
+	// WrapStatement, when set, wraps the WIRE body only — applied to the
+	// residual after the client-side rewrites and before the FORMAT step
+	// (a FORMAT inside a wrapper's parens would bind to the inner
+	// statement). Everything else — the routing decision, the URL params,
+	// the pre-execute rewrites, the row cap — is derived from the plain
+	// statement, so a wrapped run routes and rewrites exactly as the
+	// statement it wraps would: the ADR-0141 probe precedent ("resolve from
+	// the statement it wraps") generalized to lanes. The Flow tab's EXPLAIN
+	// lenses are the consumer: index structure and schema are
+	// endpoint-local, so the EXPLAIN must interrogate the endpoint the
+	// query would actually run on. The wrapper is machine-built and must
+	// not carry its own FORMAT clause.
+	WrapStatement func(residual string) string
 }
 
 // newExecOptions mints a lane's stable ExecOptions.
@@ -624,7 +638,23 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if err != nil {
 		return
 	}
-	q, params := inst.BuildStatement(sql)
+	var q string
+	var params map[string]string
+	rowCap := readResultRowCap(sql)
+	if opts != nil && opts.WrapStatement != nil {
+		// Wire-body wrap (see ExecOptions.WrapStatement): the rewrites and
+		// the param harvest ran on the plain statement; the outer FORMAT is
+		// appended textually because the machine-built wrapper carries none
+		// and one inside the parens would bind to the inner statement. The
+		// row cap is the wire statement's own declaration — the inner LIMIT
+		// bounds the query being explained, not the wrapper's result.
+		var residual string
+		residual, params = inst.buildResidualObserved(sql, nil)
+		q = opts.WrapStatement(residual) + " FORMAT ArrowStream"
+		rowCap = readResultRowCap(q)
+	} else {
+		q, params = inst.BuildStatement(sql)
+	}
 	req := queryengine.Request{
 		SQL: q,
 		// Params ride the URL rather than the body: ClickHouse reads the
@@ -637,7 +667,7 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		// engine to judge the delivery against (R9). play parses it; the
 		// engine, which is the only party that sees the response counters,
 		// decides.
-		Cap: readResultRowCap(sql),
+		Cap: rowCap,
 		// What the run touches, decided at the dispatch seam. It rides here
 		// so the engine refuses a confined run on its own account rather
 		// than trusting whatever placed it (ADR-0145 §SD4).

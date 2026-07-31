@@ -77,10 +77,19 @@ func newFlowDriver(ids *c.WidgetIdStack, client *Client) (inst *flowDriver) {
 	// System graph made the same choice (ADR-0153 §SD3).
 	inst = &flowDriver{ids: ids, idSeed: nextVizSeed(), rankDir: layeredgraph.RankDirLeftRight}
 	if client != nil {
+		lane := func(label string, l flowLens) *nodeLane {
+			// The lane compiles the PLAIN fused statement; the EXPLAIN wrap
+			// is wire-body-only, applied by the transport to the residual
+			// (ExecOptions.WrapStatement) — so routing, rewrites and params
+			// are exactly the wrapped statement's own.
+			opts := newExecOptions(label)
+			opts.WrapStatement = explainWrap(l)
+			return newNodeLane(clientExecutor{client: client, opts: opts}, memory.NewGoAllocator(), 0)
+		}
 		inst.lanes = map[flowLens]*nodeLane{
-			lensAST:      newNodeLane(clientExecutor{client: client, opts: newExecOptions("flow-ast")}, memory.NewGoAllocator(), 0),
-			lensPlan:     newNodeLane(clientExecutor{client: client, opts: newExecOptions("flow-plan")}, memory.NewGoAllocator(), 0),
-			lensPipeline: newNodeLane(clientExecutor{client: client, opts: newExecOptions("flow-pipeline")}, memory.NewGoAllocator(), 0),
+			lensAST:      lane("flow-ast", lensAST),
+			lensPlan:     lane("flow-plan", lensPlan),
+			lensPipeline: lane("flow-pipeline", lensPipeline),
 		}
 	}
 	return
@@ -167,8 +176,13 @@ func (inst *flowDriver) syncLens() {
 }
 
 // ensureLensGraph parses a lens lane's served lines once per served key; a
-// selection whose node vanished is dropped.
+// selection whose node vanished is dropped. The memo key is lens-scoped:
+// with the wrap on the transport, all three lanes compile the SAME plain
+// statement, so their served keys collide across lenses by construction.
 func (inst *flowDriver) ensureLensGraph(key string, lines []string) {
+	if key != "" {
+		key = inst.lens.String() + "\x00" + key
+	}
 	if key == "" || key == inst.lensKey {
 		return
 	}
@@ -272,8 +286,11 @@ func (inst *PlayApp) demandFlowLens(active NodeID) (lines []string, feed flowLen
 		feed.reason = "Run a query first — the lens explains the active node's SQL."
 		return
 	}
+	// The compiled SQL is the PLAIN fused node — the lane's transport applies
+	// the EXPLAIN wrap to the residual (explainWrap), so the demand memo, the
+	// routing decision and the rewrites all see the statement itself.
 	v := lane.demand(compiledNode{
-		SQL:    wrapExplain(d.lens, fuseNode(inst.currentSplit, active)),
+		SQL:    fuseNode(inst.currentSplit, active),
 		Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	feed.loading = v.loading
