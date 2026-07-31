@@ -273,8 +273,8 @@ func FindSpansE(ctx context.Context, client *Client, lookback time.Duration, ste
 // runs four times longer than the data supports.
 //
 // Every timestamp is rendered through toDateTime(_, 'UTC'). ClickHouse renders
-// a DateTime in the *server's* timezone, and this server runs on Europe/Zurich,
-// so a value read back and re-parsed as UTC lands two hours away — which is
+// a DateTime in the *server's* timezone, so on a non-UTC server a value read
+// back and re-parsed as UTC lands a full timezone offset away — which is
 // exactly far enough to select a neighbouring stretch of real data and look
 // plausible.
 func spanSQL(from time.Time, step int32, minBins int32) (sql string) {

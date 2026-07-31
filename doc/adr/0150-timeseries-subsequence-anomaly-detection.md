@@ -550,8 +550,9 @@ warm-up on real data than a synthetic fixture suggests.
 both of the kind that yield confident wrong answers rather than errors:
 
 - ClickHouse renders `DateTime` in the *server's* timezone. Reading a timestamp
-  back and re-parsing it as UTC shifted every window by two hours — far enough to
-  select a neighbouring stretch of real data and look entirely plausible.
+  back and re-parsing it as UTC shifted every window by the server's UTC
+  offset — far enough to select a neighbouring stretch of real data and look
+  entirely plausible.
 - `rowNumberInAllBlocks()` does not respect a subquery's `ORDER BY` once the scan
   is split across blocks, so the gap-free-run detector over-reported run lengths
   roughly three-fold. Runs are now delimited with `lagInFrame` over an explicit

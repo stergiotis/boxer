@@ -102,7 +102,7 @@ func TestSeriesIsWorthStudying(t *testing.T) {
 			// The invariant that catches a shifted or mis-detected span. The span
 			// was found on OSUserTimeNormalized, so cpu_user must come back with
 			// nothing forward-filled. A timezone round-trip through the server's
-			// Europe/Zurich rendering, and a run detector that over-reported, both
+			// local-time rendering, and a run detector that over-reported, both
 			// showed up here as a channel that was entirely invented.
 			cpuGaps, ok := series.GapsFor("cpu_user")
 			require.True(t, ok)
