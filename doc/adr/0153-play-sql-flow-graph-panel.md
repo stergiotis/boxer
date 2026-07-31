@@ -295,6 +295,19 @@ WHERE/GROUP BY without being projected (filter provenance, not output
 lineage), cross-node lineage through sibling CTEs (needs a whole-split
 view), and schema-informed star expansion (needs the server).
 
+The §SD5 deferral (live-on-edit / caret-follow) closed as one **source**
+toggle: run (the default, unchanged) or caret — the statement under the
+editor caret in the *current* buffer, split live and memoised on its text
+(the same per-edit parse-cost class as the editor's own statement
+machinery), with the caret also picking the node inside the statement via
+`splitNode.SrcOff`, the verified anchor the editor highlight already
+carries — editing inside a CTE body shows that CTE's flow. Local lenses
+re-derive on change; remote lenses demand only when the buffer is quiescent
+(the diagnostics-probe discipline), so a half-typed statement keeps the
+last-good graph. The highlight chain is unchanged: in caret mode the live
+statement is in the buffer by construction, so the text-equality locate and
+the slice guard hold as before.
+
 Two affordances added on use: a remote lens gained a **view** toggle between
 the parsed graph and the raw EXPLAIN text as the server returned it
 (monospace, indentation intact — the graph is a reading of that text, the
