@@ -142,6 +142,79 @@ The O1 decision (viewer-trait binding) and the wire/state shape are unchanged;
 only the version coordinates moved, and the `snarl` demo was re-verified rendering
 under 0.11 after the bump.
 
+## Update — 2026-07-31: measured behaviour — the editor renders, but is not usable
+
+The binding was exercised end to end on 2026-07-31 while surveying node-editor
+options for app composition. The decision recorded above is **not** superseded
+here; this Update records what the binding does today, because the 2026-07-08
+Update above ("the `snarl` demo was re-verified rendering under 0.11") reads
+more favourably than the current behaviour warrants — it is true that the demo
+is not blank, and that is about as far as it goes.
+
+Method, with its limits: the `snarl` gallery demo was captured through the
+ADR-0057 TestDriver tour (8 settle frames per demo) and separately driven live
+via egui-mcp, both on one headless box against one build of the prebuilt
+client. Two different hosts (the tour's stage rect and the gallery's window +
+collapsing scope), same result. Not tested: a top-level host with no enclosing
+window or deferred-block capture.
+
+**Works.** The background grid draws — its diagonal appearance is upstream's
+`DEFAULT_GRID_ANGLE = 1.0` rad, not a defect. Node frames draw, and per-node
+`nodeBody` deferred blocks (the demo's value editor and label) draw inside
+them. The event lane works: dragging a node header produces `NodeMoved`
+events that reach Go through `fetchSnarlEvents` and update the demo's model,
+i.e. SD1/SD5/SD6's round trip is intact. Double-click centering works.
+
+**Does not work.**
+
+- **Wires never reach the screen.** None of the three declared connections is
+  visible, at any viewport position, before or after dragging the nodes apart.
+  They *are* generated: the SVG export of the same frame carries exactly three
+  stroked polylines in the pin colour (upstream paints wires as sampled
+  `Shape::line`, and `svgexport.rs` handles that shape). So the fault lies
+  between shape emission and the framebuffer, not in SD7's reconciliation.
+- **Pins are missing on nodes that have only pins.** The demo's `Add` and
+  `Sink` nodes show no pin circles at all; the only pins drawn sit beside
+  nodes that also have a body.
+- **Geometry disagrees with the Go coordinate space.** Node frames are drawn
+  far wider than their content, so nodes declared 190 px apart overlap
+  heavily; text inside the editor renders at roughly 1.7× the surrounding UI;
+  and a drag moving the pointer 340 px reported a model delta of 197 units on
+  one axis with a differently-scaled delta on the other. This is consistent
+  with content being measured at one scale and painted at another. Node
+  frames this oversized would occlude short wires on their own, so the two
+  defects may share a cause.
+- **Hit-testing follows rects that are not the painted ones.** With nodes
+  overlapping, drags aimed at a visibly-clear node header were swallowed;
+  only the top-most node responded.
+
+**Two mismatches already recorded in the tree are the leading suspects.**
+`apphost.rs` pins `max_passes = 1` because the FFFI opcode stream is consumed
+by the first pass; its comment names `egui_snarl`'s `SnarlState` / `NodeState`
+first-frame fitup as the machinery that wants multipass, and argues state
+stored via `cx.data_mut` makes later frames converge regardless. The
+measurements above are from frame 8 and later, so that argument does not fully
+hold. Separately, the apply (`render_snarl_editor`) carries a KNOWN ISSUE
+comment stating that snarl's `Scene` + `set_sublayer` painting does not reach
+the framebuffer in this pipeline, with diagnosis deferred; `svgexport.rs`
+independently special-cases `set_transform_layer` layers. Transform layers are
+how snarl implements zoom, and zoom is where the geometry disagreement shows.
+
+**Adoption.** `snarlEditor` and its accumulators have exactly one caller in
+the tree — the demo registered by
+[`egui2_hl_snarl_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_snarl_demo.go).
+No app, widget or panel consumes the binding, so nothing depends on its
+behaviour today.
+
+**Not decided here.** Whether to diagnose and repair the binding, replace it
+with a Go-side editor on the painter lane in the manner of
+[ADR-0149](0149-implot-core-port-painter-lane.md), or delete it outright, is
+being weighed separately and would be its own ADR or a supersession of this
+one. What is recorded here is only the measurement, so that the binding is not
+read as working machinery in the meantime. Diagnosing the sublayer/transform
+interaction has value beyond this widget: it is the same question any future
+`egui::Scene` binding has to answer.
+
 ## References
 
 - [ADR-0056 — Slippy map + H3 cell overlays via `walkers` + `h3o`](0056-walkers-map-h3-binding.md) — sibling external-egui-crate binding ADR; same template shape.
