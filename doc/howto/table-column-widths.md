@@ -7,9 +7,20 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** Describes the width machinery as of
-> 2026-07-31, with play's attr grid as the first adopter (ADR-0151 M4). The
-> snippets follow that call site; nothing here has been exercised against a
-> live ClickHouse-backed store.
+> 2026-07-31, with play's attr grid as the first adopter (ADR-0151 M4); the
+> snippets follow that call site.
+>
+> Verified against live ClickHouse on that date, at the Go layer: a captured
+> width resolves back through a fresh store client, the column tier reaches
+> another table, the font rescale survives the round-trip, a clear stays
+> cleared, and overrides do not cross apps. Two separate processes were also
+> run against the real `boxer.facts` — one captured a width, the other
+> resolved it.
+>
+> Not verified: the rendered behaviour. Nobody has dragged a column in a
+> running window and seen the width come back. Everything between the drag
+> and the store — the read-back register, the epoch apply, the capture
+> gate — is covered by tests rather than by use.
 
 # Controlling table column widths
 
