@@ -348,6 +348,10 @@ func (inst *PlayApp) followDocsLink(label string, url string) {
 		s.back = append(s.back, s.shown)
 	}
 	s.follow = false
+	// The lookup box outranks everything, so a stale entry in it would drag
+	// the pane straight back to the name the reader just navigated away from —
+	// the click would land, resolve, and be undone on the same frame.
+	s.manual = ""
 	s.nav, s.navURL = cands, url
 	s.lastMiss = ""
 }

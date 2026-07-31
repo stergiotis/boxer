@@ -368,3 +368,22 @@ func TestFollowDocsLinkKeepsTheURLOnAMiss(t *testing.T) {
 	require.Equal(t, "/operations/weird-page", app.docsPane.navURL,
 		"the browser escape hatch survives a miss")
 }
+
+// The lookup box outranks everything, so following a link has to clear it —
+// otherwise the click resolves and is undone on the same frame by the stale
+// name still sitting in the box.
+func TestFollowDocsLinkClearsTheLookupBox(t *testing.T) {
+	app := docsApp(map[string]*docsResult{
+		"tohour": withDoc("toHour", "Function"),
+		"uint8":  withDoc("UInt8", "Data Type"),
+	})
+	app.docsPane.manual = "toHour"
+	app.docsPane.shown = "toHour"
+
+	app.followDocsLink("UInt8", "/sql-reference/data-types/int-uint")
+	require.Empty(t, app.docsPane.manual, "the box no longer describes what is shown")
+
+	res := app.resolveDocs(nil)
+	require.NotNil(t, res)
+	require.Equal(t, "UInt8", app.docsPane.shown, "the navigation survives the frame")
+}
