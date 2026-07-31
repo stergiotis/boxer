@@ -355,12 +355,51 @@ store and degrades to process lifetime when ClickHouse is down. The persist
 facts backend that discharged M2 keeps its value for every other adopter;
 it is simply no longer this ADR's storage route.
 
+## Update — 2026-07-31: the fact kind and M1 are implemented
+
+Both landed as described, with three details worth recording because
+reading the decisions above would not predict them.
+
+**Tier is its own stored column, not an inference.** Whether an entry is
+instance-, shape-, or column-tier is recoverable from whether its scope is
+empty, and storing it anyway is one redundant low-cardinality column. The
+redundancy is the point: a reader that reconstructs one field from the
+shape of another is correct only until a fourth tier exists.
+
+**Per-entry rows removed more than the merge rule.** §SD2's
+read-merge-write and the same-entry race it explicitly could not close are
+both simply absent — last-writer-wins now lands at entry granularity by
+construction rather than by a rule the save path has to run. The resolver
+has no merge step at all.
+
+**Eviction changed meaning.** §SD5 lists it as a resolver responsibility,
+which it was when the store was one document that had to be rewritten
+whole. It now bounds only the in-memory working set: it never deletes a
+row and never touches an unflushed capture, so an evicted override returns
+on the next load. Bounding the durable trail is a retention question over
+the facts table, alongside every other fact kind's.
+
+Two facts for whoever picks up M3. The f64 value column is
+`` `tv:f64Array:value:val:f64h:gM:0:0:0::data` `` — the encoding segment is
+`gM`, not the `g` the other array sections use, so a name extrapolated from
+the u64 block compiles and matches nothing. And "latest" means insertion
+order in `InMemoryFactsStore` and `(ts, id)` in `chstore`, as it already
+does for state and workingsets: the backends agree for any caller that lets
+`Ts` default to now, and diverge only for one that dates a write forward or
+back.
+
+The remaining milestones are unchanged. M3's binding work is where the
+apply/capture loop meets a real crate, and the echo-suppression rule the
+resolver implements — a captured drag updates the applied value without
+bumping the epoch — is the part to hold on to.
+
 ## Status
 
 Accepted 2026-07-30. M2 was discharged outside this ADR before acceptance
-(§SD3); implementation of M1/M3–M6 not started. Q2/§SD2's storage choice
-was superseded by the ADR-0148 data-centricity invariant (Update
-2026-07-30) before any of it was built.
+(§SD3). Q2/§SD2's storage choice was superseded by the ADR-0148
+data-centricity invariant (Update 2026-07-30) before any of it was built.
+The fact kind and M1 are implemented (Update 2026-07-31); M3–M6 are not
+started.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
