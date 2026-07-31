@@ -61,6 +61,13 @@ type ComboBoxFluid struct {
 }
 type ComboBoxMethodIdE uint32
 
+type ContextMenuFluid struct {
+	r              *typed.RetainedFffiBuilder
+	deferredMenu   *runtime.DeferredBlockScope
+	deferredTarget *runtime.DeferredBlockScope
+}
+type ContextMenuMethodIdE uint32
+
 type DatePickerButtonFluid struct {
 	r     *typed.RetainedFffiBuilder
 	id    uint64
@@ -726,6 +733,8 @@ func (inst CodeViewS) DummyInterfaceImplementationMethodWidgetI() {}
 var _ WidgetI = CodeViewS{}
 
 type Color32S struct{}
+
+type ContextMenuDummyS struct{}
 
 type DatePickerButtonS struct{}
 
