@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -136,13 +137,17 @@ func init() {
 
 				// Declaration order is z-order: band under the line, lanes
 				// and flags over it, the callout on top and unclipped.
+				// Chrome colors source from the IDS neutral spine
+				// (styletokens, ADR-0031) with demo-local alpha; data marks
+				// keep the plot's own palette via dc.Color so they always
+				// match their legend swatches.
 				p.Custom("", func(dc implot.DrawCtx) {
 					x0 := dc.T.PxX(st.tMin + 36*3600)
 					x1 := dc.T.PxX(st.tMin + 42*3600)
 					c.PaintRectFilled(x0, dc.AreaY, x1, dc.AreaY+dc.AreaH, 0,
-						color.Hex(0x8891a01c)).Send()
+						color.Hex(styletokens.NeutralBorderFaint.AsHex()&^0xff|0x1c)).Send()
 					c.PaintText((x0+x1)/2, dc.AreaY+dc.AreaH-6, 1, 2, "maintenance",
-						10.5, color.Hex(0x8891a0aa)).Send()
+						10.5, color.Hex(styletokens.NeutralTextSecondary.AsHex()&^0xff|0xaa)).Send()
 				})
 				p.Line("load", st.loadXs, st.loadYs)
 				p.Custom("deploys", func(dc implot.DrawCtx) {
@@ -156,12 +161,13 @@ func init() {
 						}
 						c.PaintRectFilled(x0, y0, x1, y0+implotLaneH, 3, color.Hex(fill)).Send()
 						if i == st.selected {
+							// Selection is the accent role, not a bare white.
 							c.PaintRectStroke(x0, y0, x1, y0+implotLaneH, 3,
-								color.Hex(0xe6e9eeff), 1.5).Send()
+								color.Hex(styletokens.AccentStrong.AsHex()), 1.5).Send()
 						}
 						if x1-x0 > float32(len(iv.name))*6.5+8 {
 							c.PaintText(x0+5, y0+implotLaneH/2, 0, 1, iv.name,
-								10.5, color.Hex(0x111318ff)).Send()
+								10.5, color.Hex(styletokens.NeutralBgExtreme.AsHex())).Send()
 						}
 					}
 				})
@@ -185,9 +191,12 @@ func init() {
 					w := float32(len(txt))*6.5 + 10
 					// Deliberately allowed to spill past the plot border —
 					// the unclipped lane's reason to exist.
-					c.PaintRectFilled(x+6, y-9, x+6+w, y+9, 3, color.Hex(0x14171dee)).Send()
-					c.PaintRectStroke(x+6, y-9, x+6+w, y+9, 3, color.Hex(0x3a3f4bff), 1).Send()
-					c.PaintText(x+11, y, 0, 1, txt, 10.5, color.Hex(0xcdd3ddff)).Send()
+					c.PaintRectFilled(x+6, y-9, x+6+w, y+9, 3,
+						color.Hex(styletokens.NeutralBgPanel.AsHex()&^0xff|0xee)).Send()
+					c.PaintRectStroke(x+6, y-9, x+6+w, y+9, 3,
+						color.Hex(styletokens.NeutralBorderFaint.AsHex()), 1).Send()
+					c.PaintText(x+11, y, 0, 1, txt, 10.5,
+						color.Hex(styletokens.NeutralTextPrimary.AsHex())).Send()
 				})
 			}
 			status := "hover a lane; click selects (click empty space to clear)"

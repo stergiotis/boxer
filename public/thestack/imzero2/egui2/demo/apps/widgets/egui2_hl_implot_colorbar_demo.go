@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -79,7 +80,10 @@ func init() {
 									x1 := dc.T.PxX(float64(cix + 1))
 									y0 := dc.T.PxY(float64(implotCbRows - r))
 									y1 := dc.T.PxY(float64(implotCbRows - r - 1))
-									c.PaintRectFilled(x0, y0, x1, y1, 0, color.Hex(0x111318b8)).Send()
+									// Dim toward the IDS neutral background
+									// (demo-local alpha over the token).
+									c.PaintRectFilled(x0, y0, x1, y1, 0,
+										color.Hex(styletokens.NeutralBgFaint.AsHex()&^0xff|0xb8)).Send()
 								}
 							}
 						})
