@@ -53,6 +53,10 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 		}
 		c.Separator().Vertical().Send()
 
+		// Trend smoothing (ADR-0152); acts on the rate/latency plots only.
+		inst.renderSmoothControls()
+		c.Separator().Vertical().Send()
+
 		ts := time.UnixMilli(snap.SampledAtUnixMs).Format("15:04:05")
 		c.Label(fmt.Sprintf("last %s", ts)).Send()
 

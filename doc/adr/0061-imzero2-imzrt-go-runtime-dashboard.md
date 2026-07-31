@@ -378,6 +378,29 @@ were always supported (ADR-0058 SD8); only the consumer's choice flipped.
 The accepted decision stands; this records a presentation reversal of SD10, so
 `status` / `reviewed-date` are not re-stamped.
 
+### 2026-07-31 — trend smoothing on the rate/latency plots (ADR-0152)
+
+The noisy trend series — GC pause percentiles, GC cycle rate, allocation
+rate, goroutine count, scheduling-latency p99 — gained an optional
+modified-sinc smoothing overlay
+([ADR-0152](./0152-modified-sinc-smoothing.md), for which imzrt is the first
+app consumer). A top-bar toggle plus a ±half-width stepper, mirroring the
+sampler's pause/interval idiom, controls it per window; off by default, so
+the monitor opens honest. When on, the raw series stays visible as a faint
+underlay beneath the smoothed curve — a monitor must not hide spikes — and
+both carry one label, sharing a legend entry and visibility toggle.
+
+Two series are deliberately excluded, and the exclusions are the point of
+the wiring decision: the heap sawtooth (with the stacked memory classes),
+whose sharp GC drops are structure a low-pass would misreport, and the
+forced-GC series, a spike train of discrete events that smoothing smears
+into a blur. The degree is fixed at 4 per the paper's guidance; only the
+half-width is exposed. The tour scenes pin the overlay on so the captures
+showcase it.
+
+The accepted decision stands; this is a panel-level display option, so
+`status` / `reviewed-date` are not re-stamped.
+
 ## References
 
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — `imztop`; the structural template this ADR mirrors.

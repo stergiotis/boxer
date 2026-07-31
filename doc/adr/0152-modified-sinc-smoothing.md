@@ -252,9 +252,17 @@ A first consumer-visible surface also landed: the demo-registry entry
 `mssmooth` (Charts & plots), a live strip chart of a scrolling noisy peak
 train against its smoothed curve and, below, the derivative — raw
 differencing against smooth-then-difference against the analytic truth —
-with degree/half-width/noise controls. The open sub-decision on *app*
-consumer wiring (Status point 1) stands; a gallery demo demonstrates, it
-does not wire.
+with degree/half-width/noise controls.
+
+Later the same day, the open sub-decision on app consumer wiring (Status
+point 1) closed with imzrt as the first app consumer: an optional smoothing
+overlay on its rate/latency trend plots, raw kept visible as a faint
+underlay, degree fixed at 4 with only the half-width exposed, and the heap
+sawtooth plus the forced-GC spike train deliberately excluded as structure
+a low-pass would misreport. The consuming-app record is the dated update in
+[ADR-0061](./0061-imzero2-imzrt-go-runtime-dashboard.md); the exclusions
+there are a worked example of this ADR's scope note that peak-*shaped*
+signals are the design center, not peak-*valued* event trains.
 
 ## References
 

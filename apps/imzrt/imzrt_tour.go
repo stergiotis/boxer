@@ -75,6 +75,10 @@ func makeTourInit(scene string) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
 		inst.ids = ids
+		// The tour showcases the smoothing overlay (ADR-0152 wiring): the
+		// interactive default stays off — a monitor opens honest — but a
+		// capture with it on shows both the faint raw underlay and the trend.
+		inst.smoothOn = true
 		if s, err := ensureSampler(); err == nil && s != nil {
 			s.SetInterval(tourSamplerPeriod)
 		}
@@ -105,6 +109,7 @@ func tourRenderStateful(ids *c.WidgetIdStack, state any) {
 // renderTourScene draws the top bar plus one panel full-width (no dock), so each
 // scene captures a single tab cleanly. Mirrors interactive layout otherwise.
 func (inst *App) renderTourScene(snap *PublishedSnapshot, s *Sampler, scene string) {
+	inst.beginSmoothFrame()
 	for range c.PanelTopInside(inst.ids.PrepareStr("imzrt-topbar")).Resizable(false).KeepIter() {
 		inst.renderTopBar(snap, s)
 	}

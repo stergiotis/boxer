@@ -41,12 +41,9 @@ func (inst *App) renderGCPanel(snap *PublishedSnapshot) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("GC pause percentiles")
 		p := inst.beginTimePlot("##gc-pauses", 180, "ms", t)
-		p.SetNextColor(colorHot.Literal()).SetNextWeight(1.0)
-		p.Line("max", t, snap.HistPauseMaxMs)
-		p.SetNextColor(colorWarn.Literal()).SetNextWeight(1.5)
-		p.Line("p99", t, snap.HistPauseP99Ms)
-		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
-		p.Line("p50", t, snap.HistPauseP50Ms)
+		inst.lineSmoothed(p, "max", t, snap.HistPauseMaxMs, colorHot, colorHotFaint, 1.0)
+		inst.lineSmoothed(p, "p99", t, snap.HistPauseP99Ms, colorWarn, colorWarnFaint, 1.5)
+		inst.lineSmoothed(p, "p50", t, snap.HistPauseP50Ms, colorMetricPrimary, colorMetricPrimaryFaint, 2.0)
 		p.End()
 	}
 
@@ -55,9 +52,10 @@ func (inst *App) renderGCPanel(snap *PublishedSnapshot) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("GC rate")
 		p := inst.beginTimePlot("##gc-rate", 140, "1/s", t)
-		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
-		p.Line("cycles/s", t, snap.HistGCPerSec)
+		inst.lineSmoothed(p, "cycles/s", t, snap.HistGCPerSec, colorMetricPrimary, colorMetricPrimaryFaint, 2.0)
 		if len(snap.HistGCForcedPerSec) == len(t) {
+			// Deliberately raw: forced GCs are discrete events, and a low-pass
+			// smears their spike train into a misleading blur (imzrt_smooth.go).
 			p.SetNextColor(colorHot.Literal()).SetNextWeight(1.0)
 			p.Line("forced/s", t, snap.HistGCForcedPerSec)
 		}
@@ -69,8 +67,7 @@ func (inst *App) renderGCPanel(snap *PublishedSnapshot) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("Allocation rate")
 		p := inst.beginTimePlot("##gc-alloc", 140, "MiB/s", t)
-		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
-		p.Line("MiB/s", t, snap.HistAllocMiBs)
+		inst.lineSmoothed(p, "MiB/s", t, snap.HistAllocMiBs, colorMetricPrimary, colorMetricPrimaryFaint, 2.0)
 		p.End()
 	}
 }
