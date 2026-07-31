@@ -332,6 +332,23 @@ func (inst *Resolver) Clear(tableTag string, col Column) (err error) {
 	return
 }
 
+// ClearAll returns every column of one table to defaults — the
+// "reset this table's widths" gesture that pairs with per-column Clear.
+//
+// Unlike Clear it does not stop at the first failure. A partial clear is
+// the worst outcome for this gesture: the user asked for a uniform table
+// and would get some columns reset and others not, with no way to tell
+// which. So every column is attempted and the first error is returned
+// once all of them have been.
+func (inst *Resolver) ClearAll(tableTag string, cols []Column) (err error) {
+	for _, col := range cols {
+		if cerr := inst.Clear(tableTag, col); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+	return
+}
+
 // PendingCount reports how many captures are waiting to be written. Tests
 // and diagnostics use it; the render path does not.
 func (inst *Resolver) PendingCount() (n int) {

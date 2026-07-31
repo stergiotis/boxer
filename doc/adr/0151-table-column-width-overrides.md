@@ -432,14 +432,50 @@ M5 and M6 are unaffected and can proceed.
 The options and their costs are laid out in
 [persist-api-surface-recordstore](../adr-background-work/persist-api-surface-recordstore.md).
 
+## Update — 2026-07-31: M5 and M6, and what M6 could not build
+
+**M5 landed as specified.** `c.Table` and `c.NewTable` take
+`ApplyWidths(epoch)`; because `egui_extras` keeps its widths in a private
+`TableState` with no seam to seed them, the apply is `TableBuilder::reset`
+and the widths ride the `Initial()` those columns already had. Two crate
+behaviours the design rests on are pinned by tests against the real crate —
+that stored state beats a later `initial()` (without which the reset would
+be unnecessary), and that a reset before the body restores it.
+
+**M6's docs half landed; its affordance half could not.** §SD5 asks for the
+clear action on a header *context menu*, and egui2 has no context-menu
+binding — there is nothing to hang it on without adding a wire surface,
+which is more than an affordance milestone should decide. What shipped
+instead:
+
+- `Resolver.ClearAll(tableTag, cols)` beside the existing per-column
+  `Clear`, so "reset this table" is one call. It deliberately does not stop
+  at the first failure: a partial clear is the worst outcome for this
+  gesture, leaving some columns reset and others not with nothing to
+  distinguish them.
+- [doc/howto/table-column-widths.md](../howto/table-column-widths.md),
+  covering the tier model, the call-site shape, and the four behaviours that
+  surprise: the one-frame lag, grow-to-fit being captured like a drag, the
+  epoch meaning "widths changed" rather than "frame happened", and the
+  egui_extras surfaces losing an in-flight drag on an epoch change.
+- The clear gesture as a documented recipe — secondary click on the header
+  cell — rather than a component. Header content is app-specific, and a
+  helper that rendered it would be more intrusive than the two lines it
+  replaced.
+
+A context-menu binding would make the intended affordance a small addition;
+that is a separate piece of work and no consumer is waiting on it, since M4
+is blocked and nothing renders these headers yet.
+
 ## Status
 
 Accepted 2026-07-30. M2 was discharged outside this ADR before acceptance
 (§SD3). Q2/§SD2's storage choice was superseded by the ADR-0148
 data-centricity invariant (Update 2026-07-30) before any of it was built.
-The fact kind, M1 and M3 are implemented (Updates 2026-07-31); **M4 is
-blocked** on the app-state seam recorded in the second Update of that date;
-M5–M6 are not started.
+The fact kind, M1, M3 and M5 are implemented, and M6 is implemented except
+for the header context menu, which has no binding to build on (Updates
+2026-07-31). **M4 is blocked** on the app-state seam recorded in the second
+Update of that date — so nothing here is reachable from an app yet.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

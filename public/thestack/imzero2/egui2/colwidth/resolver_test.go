@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -446,3 +447,66 @@ func (inst *failingStore) WriteColumnWidth(row factsstore.ColumnWidthRow) (id ui
 var _ StoreI = (*failingStore)(nil)
 var _ StoreI = (*factsstore.InMemoryFactsStore)(nil)
 var _ StoreI = (factsstore.FactsStoreI)(nil)
+
+func TestClearAll_ResetsEveryColumn(t *testing.T) {
+	r, store := newResolver(t)
+	cols := []Column{colA, colB}
+	r.Resolve("tbl", cols, 12, []float64{50, 60})
+	r.Observe("tbl", cols, []float64{140, 160}, 12, false, t0)
+	_, err := r.Flush(t0.Add(time.Hour))
+	require.NoError(t, err)
+	rows, err := store.ListColumnWidths("play")
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+
+	require.NoError(t, r.ClearAll("tbl", cols))
+
+	rows, err = store.ListColumnWidths("play")
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+	assert.Equal(t, []float64{50, 60}, r.Resolve("tbl", cols, 12, []float64{50, 60}))
+}
+
+// A partial clear is the worst outcome for this gesture, so a failure on
+// one column must not abandon the rest.
+func TestClearAll_ContinuesPastAFailure(t *testing.T) {
+	store := &failingDeleteStore{InMemoryFactsStore: factsstore.NewInMemoryFactsStore(), failFor: colA.Key()}
+	r, err := New(store, Opts{AppId: "play"})
+	require.NoError(t, err)
+	cols := []Column{colA, colB}
+	r.Resolve("tbl", cols, 12, []float64{50, 60})
+	r.Observe("tbl", cols, []float64{140, 160}, 12, false, t0)
+	_, err = r.Flush(t0.Add(time.Hour))
+	require.NoError(t, err)
+
+	err = r.ClearAll("tbl", cols)
+	require.Error(t, err, "the failure must be reported")
+
+	rows, lerr := store.ListColumnWidths("play")
+	require.NoError(t, lerr)
+	for _, row := range rows {
+		assert.Equal(t, colA.Key(), row.ColumnKey,
+			"only the column whose delete failed may survive")
+	}
+}
+
+func TestClearAll_EmptyColumnSetIsNoop(t *testing.T) {
+	r, _ := newResolver(t)
+	require.NoError(t, r.ClearAll("tbl", nil))
+}
+
+// failingDeleteStore fails DeleteColumnWidth for one column key.
+type failingDeleteStore struct {
+	*factsstore.InMemoryFactsStore
+	failFor string
+}
+
+func (inst *failingDeleteStore) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
+	if columnKey == inst.failFor {
+		err = eh.Errorf("synthetic delete failure")
+		return
+	}
+	return inst.InMemoryFactsStore.DeleteColumnWidth(appId, tier, scope, columnKey)
+}
+
+var _ StoreI = (*failingDeleteStore)(nil)
