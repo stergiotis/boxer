@@ -2,10 +2,11 @@ package cbor
 
 import (
 	"hash"
+	"math/bits"
 	"math/rand/v2"
 	"strings"
+	"unicode/utf8"
 
-	gofakeit "github.com/brianvoe/gofakeit/v7"
 	"github.com/zeebo/xxh3"
 )
 
@@ -13,7 +14,6 @@ type Generator struct {
 	Hasher             hash.Hash64
 	Enc                *Encoder
 	rand               *rand.Rand
-	faker              *gofakeit.Faker
 	stringGenerators   []func() string
 	MaxNestingLevel    int
 	MaxTotalPrimitives int
@@ -21,6 +21,37 @@ type Generator struct {
 	seed               int64
 	nPrimitives        int
 }
+
+const maxByteSliceLength = 4 * 1024
+
+// randomWords is a deliberately small, self-contained corpus. The encoder only
+// observes byte length and UTF-8 validity, so lexical variety beyond this buys
+// nothing; it exists to keep generated strings distinguishable when inspected
+// by hand.
+var randomWords = [...]string{
+	"alpha", "anchor", "arena", "beacon", "bridge", "buffer",
+	"cadence", "canopy", "cipher", "cluster", "column", "cursor",
+	"delta", "digest", "domain", "ember", "envelope", "fabric",
+	"filter", "forest", "gadget", "gateway", "granite", "harbor",
+	"header", "index", "island", "kernel", "lattice", "ledger",
+	"marker", "meadow", "module", "nested", "nozzle", "opaque",
+	"orbit", "packet", "parcel", "pebble", "pointer", "quarry",
+	"record", "region", "ripple", "sample", "scalar", "segment",
+	"shuttle", "signal", "slice", "socket", "stream", "tangent",
+	"tessera", "thicket", "token", "vector", "vertex", "window",
+}
+
+// sampleRunes spans all four UTF-8 encoded widths.
+var sampleRunes = [...]rune{
+	'a', 'q', 'z', '7', '~',
+	'ä', 'ß', 'π', 'ж',
+	'漢', '€', '↦',
+	'🚀', '🌍', '𝄞',
+}
+
+// cborLengthBoundaries are the byte lengths either side of every head-size
+// class change in encodeHead.
+var cborLengthBoundaries = [...]int{0, 1, 23, 24, 255, 256, 65535, 65536}
 
 func NewGenerator(w EncoderWriterI, randSeed int64) *Generator {
 	const maxStringLength = 4 * 1024
@@ -36,7 +67,6 @@ func NewGenerator(w EncoderWriterI, randSeed int64) *Generator {
 		Hasher:             hasher,
 		nPrimitives:        0,
 		maxStringLength:    maxStringLength,
-		faker:              gofakeit.NewFaker(src, false),
 		stringGenerators:   nil,
 	}
 	r.SetMaxStringLength(maxStringLength)
@@ -50,218 +80,20 @@ func (inst *Generator) SetMaxStringLength(n int) {
 	inst.maxStringLength = n
 
 	if inst.stringGenerators == nil {
-		sg := make([]func() string, 0, 300)
-		add := func(f func() string) {
-			sg = append(sg, f)
+		sg := make([]func() string, 0, 12)
+		add := func(weight int, f func() string) {
+			for i := 0; i < weight; i++ {
+				sg = append(sg, f)
+			}
 		}
-		f := inst.faker
-		add(f.ProductName)
-		add(f.ProductDescription)
-		add(f.ProductCategory)
-		add(f.ProductFeature)
-		add(f.ProductMaterial)
-		add(f.ProductUPC)
-		add(f.ProductDimension)
-		add(f.ProductUseCase)
-		add(f.ProductBenefit)
-		add(f.ProductSuffix)
-		add(f.Name)
-		add(f.NamePrefix)
-		add(f.NameSuffix)
-		add(f.FirstName)
-		add(f.MiddleName)
-		add(f.LastName)
-		add(f.Gender)
-		add(f.SSN)
-		add(f.Hobby)
-		add(f.Email)
-		add(f.Phone)
-		add(f.PhoneFormatted)
-		add(f.Username)
-		add(f.City)
-		add(f.Country)
-		add(f.CountryAbr)
-		add(f.State)
-		add(f.StateAbr)
-		add(f.Street)
-		add(f.StreetName)
-		add(f.StreetNumber)
-		add(f.StreetPrefix)
-		add(f.StreetSuffix)
-		add(f.Zip)
-		add(f.Gamertag)
-		add(f.BeerAlcohol)
-		add(f.BeerBlg)
-		add(f.BeerHop)
-		add(f.BeerIbu)
-		add(f.BeerMalt)
-		add(f.BeerName)
-		add(f.BeerStyle)
-		add(f.BeerYeast)
-		add(f.CarMaker)
-		add(f.CarModel)
-		add(f.CarType)
-		add(f.CarFuelType)
-		add(f.CarTransmissionType)
-		add(f.Noun)
-		add(f.NounCommon)
-		add(f.NounConcrete)
-		add(f.NounAbstract)
-		add(f.NounCollectivePeople)
-		add(f.NounCollectiveAnimal)
-		add(f.NounCollectiveThing)
-		add(f.NounCountable)
-		add(f.NounUncountable)
-		add(f.Verb)
-		add(f.VerbAction)
-		add(f.VerbLinking)
-		add(f.VerbHelping)
-		add(f.Adverb)
-		add(f.AdverbManner)
-		add(f.AdverbDegree)
-		add(f.AdverbPlace)
-		add(f.AdverbTimeDefinite)
-		add(f.AdverbTimeIndefinite)
-		add(f.AdverbFrequencyDefinite)
-		add(f.AdverbFrequencyIndefinite)
-		add(f.Preposition)
-		add(f.PrepositionSimple)
-		add(f.PrepositionDouble)
-		add(f.PrepositionCompound)
-		add(f.Adjective)
-		add(f.AdjectiveDescriptive)
-		add(f.AdjectiveQuantitative)
-		add(f.AdjectiveProper)
-		add(f.AdjectiveDemonstrative)
-		add(f.AdjectivePossessive)
-		add(f.AdjectiveInterrogative)
-		add(f.AdjectiveIndefinite)
-		add(f.Pronoun)
-		add(f.PronounPersonal)
-		add(f.PronounObject)
-		add(f.PronounPossessive)
-		add(f.PronounReflective)
-		add(f.PronounDemonstrative)
-		add(f.PronounInterrogative)
-		add(f.PronounRelative)
-		add(f.Connective)
-		add(f.ConnectiveTime)
-		add(f.ConnectiveComparative)
-		add(f.ConnectiveComplaint)
-		add(f.ConnectiveListing)
-		add(f.ConnectiveCasual)
-		add(f.ConnectiveExamplify)
-		add(f.Word)
-		add(f.LoremIpsumWord)
-		add(f.Question)
-		add(f.Quote)
-		add(f.Phrase)
-		add(f.Fruit)
-		add(f.Vegetable)
-		add(f.Breakfast)
-		add(f.Lunch)
-		add(f.Dinner)
-		add(f.Snack)
-		add(f.Dessert)
-		add(f.UUID)
-		add(f.FlipACoin)
-		add(f.Color)
-		add(f.HexColor)
-		add(f.SafeColor)
-		add(f.URL)
-		add(f.DomainName)
-		add(f.DomainSuffix)
-		add(f.IPv4Address)
-		add(f.IPv6Address)
-		add(f.MacAddress)
-		add(f.HTTPMethod)
-		add(f.HTTPVersion)
-		add(f.UserAgent)
-		add(f.ChromeUserAgent)
-		add(f.FirefoxUserAgent)
-		add(f.OperaUserAgent)
-		add(f.SafariUserAgent)
-		add(f.InputName)
-		add(f.MonthString)
-		add(f.WeekDay)
-		add(f.TimeZone)
-		add(f.TimeZoneAbv)
-		add(f.TimeZoneFull)
-		add(f.TimeZoneRegion)
-		add(f.CreditCardCvv)
-		add(f.CreditCardExp)
-		add(f.CreditCardType)
-		add(f.CurrencyLong)
-		add(f.CurrencyShort)
-		add(f.AchRouting)
-		add(f.AchAccount)
-		add(f.BitcoinAddress)
-		add(f.BitcoinPrivateKey)
-		add(f.Cusip)
-		add(f.Isin)
-		add(f.BS)
-		add(f.Blurb)
-		add(f.BuzzWord)
-		add(f.Company)
-		add(f.CompanySuffix)
-		add(f.JobDescriptor)
-		add(f.JobLevel)
-		add(f.JobTitle)
-		add(f.Slogan)
-		add(f.HackerAbbreviation)
-		add(f.HackerAdjective)
-		add(f.HackeringVerb)
-		add(f.HackerNoun)
-		add(f.HackerPhrase)
-		add(f.HackerVerb)
-		add(f.HipsterWord)
-		add(f.AppName)
-		add(f.AppVersion)
-		add(f.AppAuthor)
-		add(f.PetName)
-		add(f.Animal)
-		add(f.AnimalType)
-		add(f.FarmAnimal)
-		add(f.Cat)
-		add(f.Dog)
-		add(f.Bird)
-		add(f.Emoji)
-		//add(f.EmojiDescription)
-		add(f.EmojiCategory)
-		add(f.EmojiAlias)
-		add(f.EmojiTag)
-		add(f.Language)
-		add(f.LanguageAbbreviation)
-		add(f.ProgrammingLanguage)
-		add(f.Digit)
-		add(f.Letter)
-		add(f.CelebrityActor)
-		add(f.CelebrityBusiness)
-		add(f.CelebritySport)
-		add(f.MinecraftOre)
-		add(f.MinecraftWood)
-		add(f.MinecraftArmorTier)
-		add(f.MinecraftArmorPart)
-		add(f.MinecraftWeapon)
-		add(f.MinecraftTool)
-		add(f.MinecraftDye)
-		add(f.MinecraftFood)
-		add(f.MinecraftAnimal)
-		add(f.MinecraftVillagerJob)
-		add(f.MinecraftVillagerStation)
-		add(f.MinecraftVillagerLevel)
-		add(f.MinecraftMobPassive)
-		add(f.MinecraftMobNeutral)
-		add(f.MinecraftMobHostile)
-		add(f.MinecraftMobBoss)
-		add(f.MinecraftBiome)
-		add(f.MinecraftWeather)
-		add(f.BookTitle)
-		add(f.BookAuthor)
-		add(f.BookGenre)
-		add(f.MovieName)
-		add(f.MovieGenre)
-		add(f.School)
+		// The multiplicities weight the draw in generateString towards short,
+		// word-shaped strings, leaving the wider shapes as a minority.
+		add(3, inst.generateWord)
+		add(3, inst.generateSentence)
+		add(2, inst.generateASCIIRun)
+		add(2, inst.generateUnicodeRun)
+		add(1, inst.generateBoundaryRun)
+		add(1, func() string { return "" })
 		inst.stringGenerators = sg
 	}
 }
@@ -270,6 +102,64 @@ func (inst *Generator) Reset() {
 	inst.Enc.Reset()
 	inst.nPrimitives = 0
 }
+
+// randomLength draws a length that is log-uniform in magnitude: short values
+// stay common while every head-size class of encodeHead still gets exercised.
+func (inst *Generator) randomLength(maxLen int) int {
+	if maxLen <= 0 {
+		return 0
+	}
+	l := inst.rand.IntN(1 << inst.rand.IntN(bits.Len(uint(maxLen))+1))
+	return min(l, maxLen)
+}
+
+func (inst *Generator) generateWord() string {
+	return randomWords[inst.rand.IntN(len(randomWords))]
+}
+
+func (inst *Generator) generateSentence() string {
+	var b strings.Builder
+	n := 1 + inst.rand.IntN(12)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(inst.generateWord())
+	}
+	return b.String()
+}
+
+func (inst *Generator) generateASCIIRun() string {
+	const first, last = ' ', '~'
+	l := inst.randomLength(inst.maxStringLength)
+	b := make([]byte, l)
+	for i := range b {
+		b[i] = byte(first + rune(inst.rand.IntN(last-first+1)))
+	}
+	return string(b)
+}
+
+func (inst *Generator) generateUnicodeRun() string {
+	budget := inst.randomLength(inst.maxStringLength)
+	var b strings.Builder
+	b.Grow(budget)
+	for {
+		r := sampleRunes[inst.rand.IntN(len(sampleRunes))]
+		if b.Len()+utf8.RuneLen(r) > budget {
+			return b.String()
+		}
+		b.WriteRune(r)
+	}
+}
+
+// generateBoundaryRun returns a run of single-byte runes whose length is
+// exactly one of cborLengthBoundaries, so the head-size class changes are hit
+// head-on rather than only by chance.
+func (inst *Generator) generateBoundaryRun() string {
+	l := cborLengthBoundaries[inst.rand.IntN(len(cborLengthBoundaries))]
+	return strings.Repeat("x", min(l, inst.maxStringLength))
+}
+
 func (inst *Generator) generateString() string {
 	sg := inst.stringGenerators
 	s := sg[inst.rand.IntN(len(sg))]()
@@ -279,8 +169,13 @@ func (inst *Generator) generateString() string {
 	}
 	return s
 }
+
 func (inst *Generator) generateBytes() []byte {
-	return inst.faker.ImagePng(inst.rand.IntN(100)+10, 20)
+	b := make([]byte, inst.randomLength(maxByteSliceLength))
+	for i := range b {
+		b[i] = byte(inst.rand.Uint64())
+	}
+	return b
 }
 
 func (inst *Generator) GenerateRandomCborScalar() (n int, err error) {
