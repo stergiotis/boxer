@@ -342,11 +342,39 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 			case runKindAtoms:
 				c.LabelAtoms(r.atoms).Wrap().Send()
 			case runKindLink:
-				c.HyperlinkTo(r.label, r.url).OpenInNewTab(true).Send()
+				renderLinkRun(r, rc)
 			case runKindImage:
 				renderImageRun(r, rc)
 			}
 		}
+	}
+}
+
+// renderLinkRun emits one link: a browser hyperlink by default, or — when
+// the host claimed it via [WithLinkRouter] — a frameless button that reads
+// as a link and reports its click instead of navigating away.
+//
+// A frameless Button rather than a Hyperlink because the two things a link
+// needs here are a click the host hears and text it does not own: Hyperlink
+// consumes the click itself (it opens a URL), and Label has no click sense at
+// all. Frame(false) plus the link tone leaves it looking like the hyperlink
+// beside it, which matters — a reader should not have to learn which links
+// stay in the app.
+func renderLinkRun(r *paragraphRun, rc *renderCtx) {
+	if rc.linkClaims == nil || rc.linkClicked == nil || !rc.linkClaims(r.url) {
+		c.HyperlinkTo(r.label, r.url).OpenInNewTab(true).Send()
+		return
+	}
+	seq := rc.idSeq
+	rc.idSeq++
+	atoms := c.Atoms()
+	for rt := range atoms.StyledTextColored(linkFg, linkBg, r.label) {
+		_ = rt
+	}
+	if c.Button(rc.ids.PrepareSeq(seq), atoms.Keep()).
+		Frame(false).
+		SendResp().HasPrimaryClicked() {
+		rc.linkClicked(r.label, r.url)
 	}
 }
 

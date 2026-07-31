@@ -185,6 +185,8 @@ func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabels []string, acti
 		headings:       inst.headings,
 		actionsEnabled: actionsEnabled,
 		actionLabels:   actionLabels,
+		linkClaims:     ro.linkClaims,
+		linkClicked:    ro.linkClicked,
 	}
 	for i := range inst.segments {
 		inst.segments[i].render(&rc)
@@ -200,6 +202,8 @@ type RenderOpt func(*renderOptions)
 
 type renderOptions struct {
 	scrollToSlug string
+	linkClaims   func(url string) bool
+	linkClicked  func(label string, url string)
 }
 
 // WithScrollToSection asks the next [Doc.Render] to schedule an egui
@@ -217,6 +221,32 @@ type renderOptions struct {
 func WithScrollToSection(slug string) (opt RenderOpt) {
 	opt = func(o *renderOptions) {
 		o.scrollToSlug = slug
+	}
+	return
+}
+
+// WithLinkRouter lets the host take ownership of the links it recognises,
+// so a link into content the host itself can display navigates in place
+// instead of leaving for a browser.
+//
+// `claims` runs during layout, once per link, and decides how that link
+// RENDERS: true makes it an in-document link — visually a link, but a widget
+// whose click the host hears about — and false leaves it the ordinary
+// [c.HyperlinkTo] hyperlink. It must be a pure function of the URL, because
+// it is consulted every frame and a link that changes shape mid-scroll reads
+// as a glitch.
+//
+// `clicked` fires during the render of the frame the click landed on. That is
+// the immediate-mode contract the code-block actions already follow: the
+// document is drawn eagerly and the callback merely reports what the user
+// did to it. A host that navigates in response should record the intent and
+// act on it, rather than re-entering Render from inside the callback.
+//
+// Either function may be nil, which disables routing entirely.
+func WithLinkRouter(claims func(url string) bool, clicked func(label string, url string)) (opt RenderOpt) {
+	opt = func(o *renderOptions) {
+		o.linkClaims = claims
+		o.linkClicked = clicked
 	}
 	return
 }
@@ -252,6 +282,11 @@ type renderCtx struct {
 	actionLabels   []string
 	codeActions    []CodeBlockAction
 	codeBlockIdx   int
+
+	// Link routing state ([WithLinkRouter]). Both nil under the plain path,
+	// which is what keeps every link an ordinary hyperlink.
+	linkClaims  func(url string) bool
+	linkClicked func(label string, url string)
 }
 
 // Option configures [Parse]. Pass options at construction time.

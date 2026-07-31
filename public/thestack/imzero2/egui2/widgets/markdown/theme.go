@@ -16,6 +16,12 @@ import (
 var (
 	highlightFg = color.Hex(styletokens.NeutralBgExtreme.AsHex())
 	highlightBg = color.Hex(styletokens.AccentDefault.AsHex())
+	// A host-claimed link ([WithLinkRouter]) is drawn by us rather than by
+	// egui's Hyperlink, so it needs its own tone. Info, which is what the
+	// design system uses for "this points elsewhere", over a transparent
+	// background so the frameless button reads as text until hovered.
+	linkFg = color.Hex(styletokens.InfoDefault.AsHex())
+	linkBg = color.RGBA(0, 0, 0, 0)
 )
 
 // calloutThemeE selects a callout color family. Obsidian's vocabulary
