@@ -560,6 +560,45 @@ written before.
 in `scripts/ci/lint.sh`; the modelling rule is not mechanically checkable
 and rests on review, which is the honest description of its strength.
 
+## Update — 2026-07-31: the invariant names a substrate, not a table
+
+**The invariant above over-specified itself, and as written it contradicts
+an accepted decision.** It says state "is stored in the runtime facts table
+(`boxer.facts`) and modelled as facts there".
+[ADR-0105](./0105-keelson-adopts-generated-record-stores.md) §D3a — accepted
+2026-07-05, before that Update was written — puts the durable persist
+backend on its own generated table and says in as many words that "persist
+state thereby leaves the `boxer.facts` substrate". Both cannot be followed.
+
+**The table name was never doing the work.** Every argument the invariant
+makes is about modelling: that storing bytes *in* a table is not storing
+data *as* facts, and that an opaque payload forfeits typed query, dictionary
+compression, membership ACL and subset projection. A generated leeway table
+has all four. Read literally, the invariant would forbid the more
+data-centric of the two options and permit the less — a blob on
+`boxer.facts` passes, a typed row on a generated table fails — which is the
+opposite of what it exists to say.
+
+**So the invariant binds the substrate, not the table.** Runtime and app
+state lives in the runtime's modelled fact substrate — `boxer.facts`, or a
+generated leeway table such as ADR-0105's `runtime.persiststate` — and is
+modelled there. Nothing else changes: opaque payloads are still not a
+destination for new state, `eframe` persistence is still prohibited and
+still gated, per-app files are still out, and the carve-outs for asset
+loads, user-requested outputs, transport and ephemeral interaction state
+stand as written.
+
+This is a correction of wording, not a relaxation. A second table is
+permitted only because it is *more* modelled, and only where an ADR has
+decided one; "some other store would be convenient here" remains exactly
+what the invariant refuses.
+
+ADR-0105 also records that the tree currently deviates from D3a in the other
+direction — a facts-bound persist backend shipped on 2026-07-30 — with the
+reasoning and the exit. Workingsets themselves are unaffected either way:
+`WorkingsetRow` is append-shaped, has no state view to lose, and stays on
+`boxer.facts`.
+
 ## Status
 
 Accepted (2026-07-29). Implemented 2026-07-29.

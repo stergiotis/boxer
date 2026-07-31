@@ -393,13 +393,53 @@ apply/capture loop meets a real crate, and the echo-suppression rule the
 resolver implements — a captured drag updates the applied value without
 bumping the epoch — is the part to hold on to.
 
+## Update — 2026-07-31: the fact kind inherits a recorded deviation, and M4 is blocked
+
+Two things surfaced while attempting M4, neither of them visible from this
+ADR alone.
+
+**The fact kind is state-shaped on a substrate that cannot give it a state
+view.** [ADR-0105](./0105-keelson-adopts-generated-record-stores.md)'s
+2026-07-11 reconciliation measured that `boxer.facts` has no u8 lifecycle
+column, so no generated state view can ever emit against it — which is why
+that ADR moved persist state to its own table. A column-width override is
+state: latest-wins per key, cleared by tombstone. Implementing it on
+`boxer.facts` therefore committed it to hand-written leeway-encoded SQL —
+`composeListColumnWidthsSql`, nested `argMax` with `HAVING`, cumulative-sum
+membership lookups — which is the code class ADR-0105 exists to delete. That
+ADR's Update of this date records the deviation, why the shipped code is not
+being reverted today, and the exit; this kind travels with it and moves to a
+generated store when D3a lands. Nothing about §SD1's tiers, §SD4's wire or
+M1's resolver depends on which table the rows sit in.
+
+**M4 is blocked on a seam that does not exist.** The milestone reads
+"play adoption on the attr-results table", and when the storage was
+`runtime.persist` it needed nothing new: an app reaches persist through
+`MountCtx.Storage()`. Moving to a fact kind removed that access path without
+replacing it — `MountContextI` exposes `Storage()` and `Bus()`, and no app in
+the tree holds a `FactsStoreI`. Handing one over is not the answer either:
+`recordstore.ExecutorI` is SQL text plus Arrow batches, so an app holding a
+store could read and write every other app's rows, outside the capability
+model ADR-0026 establishes.
+
+ADR-0148's host-composes shape does not fit this case. `WorkingsetComposerI`
+is called once at the closing edge; this resolver reads the whole override
+set at Mount and writes debounced captures mid-session. So the open question
+is a typed app-state seam — a subject family mirroring `runtime.persist.*`,
+or something more general — and it is larger than this ADR. M4 waits on it;
+M5 and M6 are unaffected and can proceed.
+
+The options and their costs are laid out in
+[persist-api-surface-recordstore](../adr-background-work/persist-api-surface-recordstore.md).
+
 ## Status
 
 Accepted 2026-07-30. M2 was discharged outside this ADR before acceptance
 (§SD3). Q2/§SD2's storage choice was superseded by the ADR-0148
 data-centricity invariant (Update 2026-07-30) before any of it was built.
-The fact kind and M1 are implemented (Update 2026-07-31); M3–M6 are not
-started.
+The fact kind, M1 and M3 are implemented (Updates 2026-07-31); **M4 is
+blocked** on the app-state seam recorded in the second Update of that date;
+M5–M6 are not started.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

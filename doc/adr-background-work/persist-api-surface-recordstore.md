@@ -13,6 +13,15 @@ status: draft
 > ADR decided are quotations from the ADR text; line counts come from `wc -l`;
 > effort figures are estimates and are marked as such. Nothing here was
 > measured at runtime.
+>
+> §5's findings were acted on the same day. The record was reconciled by
+> dated Updates on [ADR-0105](../adr/0105-keelson-adopts-generated-record-stores.md)
+> (the deviation, why it stands today, and the one-adapter exit),
+> [ADR-0148](../adr/0148-app-workingsets.md) (the invariant binds the
+> modelled fact substrate, not one table name) and
+> [ADR-0151](../adr/0151-table-column-width-overrides.md) (the column-width
+> kind travels with the deviation; M4 blocked). Those ADRs are
+> authoritative; this page is the reasoning behind them.
 
 # Would a record store beat `Storage()` as the app-facing state API?
 

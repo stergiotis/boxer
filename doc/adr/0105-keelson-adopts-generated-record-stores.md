@@ -282,6 +282,66 @@ for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / T
 
 ## Updates
 
+### 2026-07-31 — the tree deviates from D3a: a facts-bound persist backend shipped
+
+**A durable `StorageBackendI` landed on 2026-07-30 (`66ac54c9`) that is the
+alternative this ADR rejects by name.** `persist.FactsBackend` routes
+`Get`/`Set`/`Delete` onto `FactsStoreI.LatestState`/`WriteState`/`DeleteState`
+— persist state facts-bound, tombstoned by `MembPersistTombstone`, read
+through `composeLatestStateSql`. *Alternatives* calls that shape out
+specifically, and the kill-reason it gives is unaffected by anything that has
+happened since: the live read stays hand-written leeway-encoded SQL, which is
+the code class this ADR exists to delete.
+
+The deviation was not a decision. The implementing session did not consult
+this ADR, and its commit message asserts that "only the adapter was ever
+missing" — untrue, since D3a specifies a different adapter and left it
+unbuilt. Recording it here rather than quietly, because the tree and an
+accepted decision disagree and the disagreement is not self-evident from
+either side.
+
+**D3a is unchanged and remains the target.** Nothing below reopens it.
+
+**What the deviation bought, and why it is not being reverted today.** The
+backend closed a real defect: the runtime applet store persists user-authored
+documents through `StorageI` under ADR-0132's assumption of facts-backing,
+and with the memory backend wired those documents evaporated at every
+restart. That is fixed and verified against live ClickHouse. Reverting now
+would restore the defect and buy nothing, because D3a cannot be built in its
+place today — **D1 (`keelson/data/storeexec`) does not exist**, and
+`recordstore/chexec` still ships only the clickhouse-local executor, so no
+keelson service has a `recordstore.ExecutorI` to bind.
+
+**The exit is one adapter.** Checked on 2026-07-31: `persist.FactsBackend` is
+the *only* production caller of the `FactsStoreI` state verbs — the other
+references are comments and the in-memory store's own implementation. D3a's
+"until its callers migrate" therefore describes exactly one migration: build
+D1, generate the `runtime.persiststate` store, and swap the backend behind
+the unchanged `StorageBackendI` seam. No app and no service sees the change,
+because the app-facing surface is `StorageI` either way.
+
+**The deviation grew before it was noticed.** ADR-0151's column-width fact
+kind (2026-07-31, `7f5e5852`) added roughly 250 further lines of the same
+hand-written class — `composeListColumnWidthsSql` with its nested `argMax`
+and cumulative-sum membership lookups — for a kind that is state-shaped and
+so, by the force this ADR's own reconciliation measured, can never acquire a
+state view while it lives on `boxer.facts`. It carries the same target and
+the same exit; see [ADR-0151](./0151-table-column-width-overrides.md)'s
+Update of the same date.
+
+**A conflicting invariant was also written in the interim, and is corrected
+elsewhere.** [ADR-0148](./0148-app-workingsets.md)'s data-centricity Update
+(2026-07-30) says state "is stored in the runtime facts table
+(`boxer.facts`)", which contradicts D3a's "persist state thereby leaves the
+`boxer.facts` substrate". That ADR carries the correction: the invariant's
+binding clause is that state be *modelled*, and naming one table
+over-specified it. A generated leeway table satisfies the invariant more
+completely than an opaque payload on `boxer.facts` does, so D3a and the
+invariant agree once the wording is fixed.
+
+Background for all of the above:
+[persist-api-surface-recordstore](../adr-background-work/persist-api-surface-recordstore.md).
+
 ### 2026-07-11 — reconciled in place (pre-implementation)
 
 A code-level pass before implementation start found the original D3 not
