@@ -198,6 +198,56 @@ CTE-self-join query. The click path (local highlight + detail line) is
 covered by the driver tests, not yet driven interactively. The code landed
 as `50902410`. Post-acceptance changes arrive as dated Updates.
 
+## Updates
+
+### 2026-07-31 — editor-range highlight and EXPLAIN lenses
+
+Both deferrals landed together on their recorded triggers (a direct user
+request; the lenses are the IR's second producer).
+
+**Editor-range highlight (§SD4 realized).** Clicking a clause node on the
+statement lens tints that clause's bytes in the SQL editor, through the
+ADR-0130 `sectionStyled` channel (a `StyleBackground` section appended by
+`editorStyledSections`, so it inherits the quiescence gate). Three coordinate
+systems meet and every hop re-verifies: `flowNode` gained `Start`/`End`
+(clause range within the derived SQL, captured from the CST); `splitNode`
+gained `SrcOff` (the fragment's offset within its parsed statement, anchored
+by an actual substring match against the CST source range and `-1` when the
+token-stream text and the source disagree); the statement is located in the
+*current* buffer by trimmed-text equality against the editor's own statement
+split (`locateStatementStart`) — equality, not containment, is the staleness
+gate, since the split describes the last Run and the buffer may have moved
+on. A final slice-equality guard compares the actual bytes; any mismatch
+anywhere declines silently rather than tinting plausible-but-wrong text. The
+tint is info-toned alpha (the palette has no mid-tone background token, and
+the accent alpha is already the subquery region's voice); its value is not
+one the gutter recognises, so it earns no spurious gutter mark. Remote-lens
+nodes carry no ranges — the highlight is statement-lens only.
+
+**EXPLAIN lenses (§SD2 realized).** The controls row gained a lens selector —
+statement (default) · ast · plan · pipeline. Remote lenses ship
+`SELECT * FROM (EXPLAIN … <fused node>)`: the subquery form keeps the outer
+statement an ordinary SELECT, so FORMAT, URL params and endpoint dispatch
+behave exactly as for any node — verified against ClickHouse 26.7, including
+`{p:Type}` substitution inside the explained statement. It does require a
+server recent enough to accept EXPLAIN in a table subquery. A SET prelude is
+re-lifted in front of the wrapper (inside the parens it would be a syntax
+error; the client harvests it onto the URL as usual). Output dialects: PLAN
+uses `json = 1` (a recursive document; the server's `Node Id` becomes the
+node id), AST parses one-space-per-level indentation, PIPELINE two-space
+indentation with `(PlanStep)` group markers folded into the processors'
+detail. Edges point child→parent throughout, so storage sits left and the
+output right, as on the statement lens; `ReadFrom*` steps render as sources,
+everything else as a new generic `flowOp` kind. Each lens runs on its own
+lane — forgotten on Run (the ADR-0129 memo-on-error lesson) and closed in
+Close — and the parse is memoised on the lane's served key.
+
+Even at two producers no lens *interface* materialized: the seam is the
+`flowGraph` IR itself plus one dispatch switch (`parseLensRecord`), and a Go
+interface would wrap a single call site. The parsers are pinned by verbatim
+fixtures captured from the live server, so a future output-dialect change
+fails a test rather than a render.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the layeredgraph widget stack this renders through.
