@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
 // caretAt turns a marked-up statement into (text, caret): the first `|` is the
@@ -500,10 +501,15 @@ func TestSubqueryModeMarksTheRootQuerysClosure(t *testing.T) {
 	if r := app.caretSubqueryRange(); !r.Empty() {
 		t.Errorf("gutter range = %v, want empty at statement level", r)
 	}
-	m := app.buildGutterModel(sql, app.editorStyledSections(), app.caretSubqueryRange())
-	for i, mark := range m.marks {
-		if mark != gutterMarkNone {
-			t.Errorf("line %d mark = %v, want none — the query tint is not a statement mark", i+1, mark)
+	// Nothing for the gutter to mark, from either of its two inputs: the
+	// range is empty (asserted above) and no section carries the STATEMENT
+	// tint. The query tint here is a background too, but in its own tone, and
+	// the gutter recognises marks by tone — which is its own test now
+	// (sqleditor.TestGutterModelIgnoresForeignTones).
+	for _, sec := range app.editorStyledSections() {
+		if sec.Flags&codeview.StyleBackground != 0 && sec.Color == sqleditor.ToneStatementTint {
+			t.Errorf("emitted a statement tint over %q — this is a single-statement buffer",
+				sql[sec.Start:sec.Stop])
 		}
 	}
 }
@@ -582,9 +588,12 @@ func TestGutterMarksSubqueryWithModeOff(t *testing.T) {
 		t.Fatal("the toggle must default to off")
 	}
 	styled := app.editorStyledSections()
-	m := app.buildGutterModel(sql, styled, app.caretSubqueryRange())
-	if m.marks[1] != gutterMarkSubquery {
-		t.Errorf("line 2 mark = %v, want gutterMarkSubquery", m.marks[1])
+	r := app.caretSubqueryRange()
+	if r.Empty() {
+		t.Fatal("the mark's input must survive the toggle being off")
+	}
+	if got := sql[r.Start:r.End]; got != "SELECT 1 AS a" {
+		t.Errorf("range covers %q, want the nested query on line 2", got)
 	}
 	// …and it really is coming from the range, not from a section: with the
 	// toggle off this buffer produces no background at all.

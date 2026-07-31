@@ -24,7 +24,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
-	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
@@ -34,6 +33,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker/evaluator"
 )
@@ -133,19 +133,11 @@ type PlayApp struct {
 	sql         string
 	lastSentSql string
 
-	// ADR-0130 editor-highlight cache: the lex-tier CodeViewJob describing
-	// sqlHlSrc, rebuilt only when the rendered buffer changed since the last
-	// frame. Deliberately BuildSqlLex (uncached): per-keystroke content is
-	// new by construction, so the ADR-0125 memo would only churn. The job is
-	// one frame stale while typing; reconciling that against the live buffer
-	// is the Rust layouter's job, not ours.
-	sqlHlSrc string
-	sqlHlJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	sqlHlOk  bool
-
-	// sqlSem is the L2 tier on top: a bgjob-backed semantic upgrade that
-	// replaces the lex job once the buffer sits quiescent (play_sql_highlight.go).
-	sqlSem sqlSemanticHl
+	// editor is the SQL editing surface (ADR-0147). It owns what follows
+	// from the buffer and the caret alone — the colour tiers, the statement
+	// split and its memo, the gutter, the run-under-cursor composition — and
+	// publishes them through its Result. The zero value is ready.
+	editor sqleditor.Editor
 
 	// Slice-5a signal-store state. frameSig is the per-frame immutable
 	// snapshot of the graph's signal store, taken at Render top so every
@@ -393,14 +385,14 @@ type PlayApp struct {
 	workingsetSeenTaken bool
 	workingsetDirty     bool
 
-	// Caret report (ADR-0130 L3). caretPacked is the raw r9_u64 databinding
-	// target for the main SQL editor: the sorted cursor CHAR range packed
-	// low=start / high=end, refreshed every frame the editor renders and
-	// carrying the usual one-frame lag. caretByte is its start converted to a
-	// byte offset into inst.sql — computed once per frame at the top of the
-	// editor render, so every consumer sees the same value.
-	caretPacked uint64
-	caretByte   int
+	// caretByte is the caret's byte offset into inst.sql, taken from the
+	// editor's published Result once per frame at the top of the editor
+	// render so every consumer sees the same value. The raw packed CHAR
+	// range and its one-frame lag are the widget's business now (ADR-0147);
+	// what play keeps is the resolved offset, because its own producers —
+	// the param pane, the Run gate — run before the editor's turn in the
+	// frame and need a caret to read.
+	caretByte int
 	// One-entry memo for the per-statement syntax check the error underline
 	// runs on multi-statement buffers (see statementSyntaxError).
 	stmtErrFor string
@@ -412,13 +404,6 @@ type PlayApp struct {
 	subqFor   string
 	subqUnits []subqueryUnit
 	subqOk    bool
-	// Memo for the lex-tier statement split, keyed on the buffer it describes
-	// (see statementRanges). Its consumers run per frame while the split
-	// itself changes only with the buffer.
-	stmtRangesFor    string
-	stmtRanges       []statementRange
-	stmtRangesOffset int
-	stmtRangesOk     bool
 
 	// "As sent" preview toggle (ADR-0108): when on, the Preview tab shows
 	// the statement Client.BuildStatement would ship — params harvested,
@@ -1961,77 +1946,6 @@ func (inst *PlayApp) renderEditorTab() {
 	}
 }
 
-// sqlTextEditField is the shared multi-line CodeEditor TextEdit
-// builder for the SQL editor surface — three variants reuse this
-// single chain (canonical, fallback when slicing fails, residual
-// mirror in hide mode). idSlot keeps each instance's stable widget
-// id distinct; valuePtr is the bound buffer (both displayed value
-// and SendRespVal target); hint is the empty-buffer placeholder.
-//
-// reportCaret opts this instance into the ADR-0130 L3 caret channel. Exactly
-// one editor renders per frame, so the single caretPacked slot is unambiguous;
-// it is set for the editor bound to the buffer inst.caretByte is expressed in.
-//
-// widthPx is the editor's desired width. No-wrap layout (the gutter's
-// alignment contract) makes the galley as wide as the longest line, and egui
-// caps a TextEdit's allocation at its desired width — so this has to be the
-// content width, not +Inf, or the tail of a long line is clipped and the
-// enclosing scroll area never learns it is there.
-func (inst *PlayApp) sqlTextEditField(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string, styled []codeview.StyledSection, reportCaret bool, widthPx float32) {
-	b := c.TextEdit(inst.ids.PrepareStr(idSlot), *valuePtr, true).
-		CodeEditor().
-		NoWrapLayout().
-		DesiredRows(rows).
-		DesiredWidth(widthPx).
-		HintText(hint)
-	// Snippet-library Insert: hand the pending snippet to the editor so the
-	// Rust side splices it at the caret next frame (TextEditFluid.InsertAtCursor,
-	// ADR-0063). Only the visible editor is given the text, so it lands where
-	// the user is looking; empty means no insert this frame.
-	if pendingInsert != "" {
-		b = b.InsertAtCursor(pendingInsert)
-	}
-	// Lex-tier syntax color (ADR-0130): sections describe the buffer as of
-	// this frame's binding; the Rust layouter applies them advisorily.
-	if job, ok := inst.sqlEditorHighlightJob(*valuePtr); ok {
-		b = b.HighlightJob(job)
-		// L3 overlays ride the same layouter, so they only reach the buffer
-		// when a highlight job installed one — which is also the only case
-		// where their spans have been reconciled against a live edit.
-		if job, ok := codeview.BuildStyledSections(styled); ok {
-			b = b.SectionStyled(job)
-		}
-	}
-	if reportCaret {
-		b.ReportCursor().SendRespValCursor(valuePtr, &inst.caretPacked)
-		return
-	}
-	b.SendRespVal(valuePtr)
-}
-
-// sqlEditorHighlightJob returns the retained lex-tier CodeViewJob for the
-// editor buffer, rebuilding only when the buffer changed since the last
-// frame (~26 µs per rebuild at CTE sizes; idle frames re-splice the retained
-// holder for free). An empty buffer renders plain — the hint text has no
-// bytes to color.
-func (inst *PlayApp) sqlEditorHighlightJob(src string) (job typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool) {
-	if src == "" {
-		return job, false
-	}
-	// L2: a quiescent buffer gets the semantic tier (async; see
-	// sqlSemanticHl); while typing — or while the parse is still in
-	// flight — the lex tier below answers.
-	if sem, semOk := inst.sqlSem.jobFor(src); semOk {
-		return sem, true
-	}
-	if !inst.sqlHlOk || inst.sqlHlSrc != src {
-		inst.sqlHlJob = codeview.BuildSqlLex(src)
-		inst.sqlHlSrc = src
-		inst.sqlHlOk = true
-	}
-	return inst.sqlHlJob, true
-}
-
 // consumePendingSnippet applies the snippet-library delivery ops staged since
 // the last frame (InsertSqlAtCaret / ReplaceSql, play_delivery.go) and returns
 // the insert text handed to whichever editor renders this frame (empty when
@@ -2051,96 +1965,72 @@ func (inst *PlayApp) consumePendingSnippet() (insert string) {
 	return
 }
 
-// renderSqlEditor wires the main SQL TextEdit and the show/hide
-// parameter-prelude toggle. Default mode binds the editor to
-// inst.sql verbatim — the user sees and can hand-edit the SET
-// prelude. Hide mode delegates the canonical/mirror state machine
-// to recomposeMirror (see play_param_inject.go) and renders the
-// sliced-off prelude as a read-only label above the residual editor.
+// renderSqlEditor binds the sqleditor widget and the show/hide
+// parameter-prelude toggle. Default mode binds the editor to inst.sql
+// verbatim — the user sees and can hand-edit the SET prelude. Hide mode
+// delegates the canonical/mirror state machine to recomposeMirror (see
+// play_param_inject.go) and renders the sliced-off prelude as a read-only
+// label above the residual editor.
+//
+// The binding is resolved BEFORE Bind, not after. The caret arrives in the
+// coordinates of whichever buffer rendered last frame, so binding first is
+// what lets the widget resolve it against that same buffer and lift it into
+// inst.sql coordinates in one step. (The pre-extraction code resolved twice in
+// hide mode — once against the canonical buffer, which was short by the elided
+// prelude, and again against the mirror after the overlays had already been
+// derived from the first answer. The ordering here is what retires that.)
 func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	const mainHint = "-- type SQL, press Run"
 	pending := inst.consumePendingSnippet()
-	// Resolve last frame's caret into this frame's buffer BEFORE the
-	// producers below read it: the overlays and the run-under-cursor gate
-	// must all see one value per frame.
-	inst.refreshCaret(inst.sql, 0)
-	// ADR-0130 L3 overlays, in inst.sql coordinates.
-	styled := inst.editorStyledSections()
-	// The gutter's subquery mark travels beside them rather than inside them:
-	// it is drawn whether or not the Subquery toggle produced any sections.
-	subq := inst.caretSubqueryRange()
-	if !inst.paramHidePrelude {
-		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled, subq)
-		return
+
+	f := sqleditor.Frame{
+		IDSlot:  "sqlEditor",
+		Value:   &inst.sql,
+		Hint:    mainHint,
+		Rows:    rows,
+		Insert:  pending,
+		Density: inst.density,
+	}
+	var prelude string
+	if inst.paramHidePrelude {
+		// A parse we cannot make sense of falls through to the unsliced
+		// editor so the user can fix the syntax — don't try to slice a
+		// buffer we don't understand.
+		if pre := recomposeMirror(inst.sql, inst.paramSqlEdit, inst.paramSqlEditSyncedFrom); pre.OK {
+			inst.sql = pre.Canonical
+			inst.paramSqlEdit = pre.Mirror
+			inst.paramSqlEditSyncedFrom = pre.SyncedFrom
+			prelude = pre.Prelude
+			// recomposeMirror guarantees Canonical == Prelude+Mirror, so the
+			// mirror is a suffix view: the widget rebases the overlays onto it
+			// by the elided prelude's length rather than dropping them.
+			f.IDSlot = "sqlEditorResidual"
+			f.Value = &inst.paramSqlEdit
+			f.Offset = len(pre.Prelude)
+			f.Canonical = pre.Canonical
+			f.Hint = "-- type SQL (prelude hidden)"
+		}
 	}
 
-	pre := recomposeMirror(inst.sql, inst.paramSqlEdit, inst.paramSqlEditSyncedFrom)
-	if !pre.OK {
-		// Parse broken — fall back to the unsliced editor so the
-		// user can fix the syntax. Don't try to slice a buffer we
-		// don't understand.
-		inst.gutteredEditor("sqlEditor", &inst.sql, mainHint, rows, pending, styled, subq)
-		return
-	}
-	inst.sql = pre.Canonical
-	inst.paramSqlEdit = pre.Mirror
-	inst.paramSqlEditSyncedFrom = pre.SyncedFrom
-	// The mirror is what the user's caret actually moves in; re-resolve
-	// against it, offset by the elided prelude so caretByte stays in
-	// inst.sql coordinates like every other span here.
-	inst.refreshCaret(pre.Mirror, len(pre.Prelude))
+	res := inst.editor.Bind(f)
+	// One caret per frame, in inst.sql coordinates, for the producers below
+	// and for everything outside this render that reads it.
+	inst.caretByte = res.Caret
 
-	if pre.Prelude != "" {
-		for rt := range c.RichTextLabel(strings.TrimRight(pre.Prelude, "\n")) {
+	if prelude != "" {
+		for rt := range c.RichTextLabel(strings.TrimRight(prelude, "\n")) {
 			rt.Small().Weak().Monospace()
 		}
 	}
-	// The residual mirror is a suffix view of inst.sql (recomposeMirror
-	// guarantees Canonical == Prelude+Mirror), so the overlays rebase onto it
-	// by the elided prelude's length rather than being dropped in this mode.
-	inst.gutteredEditor("sqlEditorResidual", &inst.paramSqlEdit,
-		"-- type SQL (prelude hidden)", rows, pending,
-		shiftStyledSections(styled, len(pre.Prelude), len(pre.Mirror)),
-		shiftRange(subq, len(pre.Prelude), len(pre.Mirror)))
-}
-
-// gutteredEditor lays the line-number gutter beside the editor (ADR-0130 L3).
-//
-// One horizontal row. The two columns share the dock tab's VERTICAL scroll
-// scope — they are siblings in it, so a line's number stays on its line — but
-// the editor owns the HORIZONTAL one: no-wrap makes the galley as wide as the
-// longest line, and a gutter that slid out of view on the first long line
-// would not be a gutter. The editor's own scroll area is therefore inside the
-// row, with the gutter pinned outside it.
-//
-// The gutter is nudged down by the TextEdit's inner top margin so row 1 sits
-// on line 1 rather than on the frame; the offsets are named constants in
-// play_editor_gutter.go.
-//
-// `styled` is in valuePtr's own coordinates, and both the gutter and the
-// editor are given that one list — behind the hide-prelude toggle the caller
-// rebases it once, rather than each consumer subtracting the elided prefix
-// for itself.
-func (inst *PlayApp) gutteredEditor(idSlot string, valuePtr *string, hint string, rows uint32, pendingInsert string, styled []codeview.StyledSection, subq nanopass.SourceRange) {
-	avail := c.CurrentApplicationState.StateManager.GetAvailableSize()
-	paneW := avail.W
-	if math.IsNaN(float64(paneW)) || paneW <= 0 {
-		paneW = editorFallbackWidthPx
-	}
-	m := inst.buildGutterModel(*valuePtr, styled, subq)
-	editorW := editorWidthPx(*valuePtr, m.charPx, paneW-m.widthPx())
-	for range c.Horizontal().KeepIter() {
-		for range c.Vertical().KeepIter() {
-			c.AddSpace(textEditTopMarginPx)
-			inst.renderEditorGutter(idSlot+"Gutter", m)
-		}
-		// AutoShrink(false, false): the row must keep its full width and
-		// height rather than collapsing onto the content, which is the
-		// standing quirk of scroll areas in this toolkit.
-		for range c.ScrollArea().Hscroll(true).Vscroll(false).AutoShrink(false, false).KeepIter() {
-			inst.sqlTextEditField(idSlot, valuePtr, hint, rows, pendingInsert, styled, true, editorW)
-		}
-	}
+	// ADR-0130 L3 overlays, in inst.sql coordinates. Composed after Bind
+	// because every one of them reads the caret the Bind just published; the
+	// statement tint is absent because the widget emits that itself.
+	inst.editor.Render(inst.ids, sqleditor.Decoration{
+		Styled: inst.editorStyledSections(),
+		// The subquery mark travels beside the sections rather than inside
+		// them: it is drawn whether or not the Subquery toggle produced any.
+		SubqueryMark: inst.caretSubqueryRange(),
+	})
 }
 
 // renderPreviewTab is the Preview dock tab body: the canonical-form

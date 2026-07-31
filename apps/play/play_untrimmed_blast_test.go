@@ -26,6 +26,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -226,7 +227,7 @@ func TestWhitespaceEditMovesThePreviewNotTheRun(t *testing.T) {
 	assert.Equal(t, app.lastSentSql, strings.TrimSpace(app.sql))
 	assert.Equal(t, queryStateRows, app.observeQueryState(false, 3, time.Unix(1_700_000_000, 0), nil),
 		"a whitespace-only edit must not mark the result stale")
-	runSQL, _, total := runBufferFor(app.sql, app.caretByte)
+	runSQL, _, total := sqleditor.RunBufferFor(app.sql, app.caretByte)
 	assert.Equal(t, app.lastSentSql, runSQL)
 	assert.Equal(t, 1, total)
 

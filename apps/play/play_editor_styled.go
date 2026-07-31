@@ -14,45 +14,25 @@ package play
 // on edits — so a text-keyed cache would miss more often than it hit.
 
 import (
-	"strings"
-	"unicode/utf8"
-
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
-// Overlay tones, all from the design system (ADR-0037 palette) so the editor
-// agrees with the banners and pane chrome that report the same conditions.
-// The statement tint is one faint step above the code editor's extreme
-// background rather than a colour of its own — it marks a region, it does not
-// carry a severity.
+// Overlay tones. The editor's own vocabulary is the widget's (ADR-0147) so
+// play cannot disagree with the gutter about what a tone means — the marks
+// lane recognises a section BY its tone, and a second definition here would
+// compile, look right, and silently stop earning marks the day either moved.
 var (
-	styleErrorTone   = color.Hex(styletokens.ErrorDefault.AsHex())
-	styleWarningTone = color.Hex(styletokens.WarningDefault.AsHex())
-	styleStmtTint    = color.Hex(styletokens.NeutralBgFaint.AsHex())
-	// styleSubqueryTint marks the nested query run-subquery would ship.
-	//
-	// The accent at a quarter opacity, not a palette background token. The
-	// palette's background family tops out at NeutralBgSurface (29,32,33) and
-	// every `*Subtle` sits at OKLCh L=0.200 — all within a few levels of the
-	// code editor's near-black, which is why the first cut of this (plain
-	// AccentSubtle) needed a 4× magnification to see at all. Alpha is the
-	// honest instrument here: same accent hue the design system already owns,
-	// blended by egui over whatever is behind it (the FFI carries straight
-	// alpha, `color32_from_rgba_u32`), landing near rgb(42,47,61) — legible
-	// under the bright syntax colours without competing with them.
-	styleSubqueryTint = color.RGBA(styletokens.AccentDefault.R,
-		styletokens.AccentDefault.G, styletokens.AccentDefault.B, 0x40)
-	// styleCarriedTone underlines the environment a narrowed run takes with
-	// it: the WITH items in scope and the SET prelude. Info rather than accent
-	// so it does not read as "part of the query", which the tint above means.
-	styleCarriedTone = color.Hex(styletokens.InfoDefault.AsHex())
+	styleErrorTone    = sqleditor.ToneError
+	styleWarningTone  = sqleditor.ToneWarning
+	styleCarriedTone  = sqleditor.ToneCarried
+	styleSubqueryTint = sqleditor.ToneSubqueryTint
 	// styleCaretRowMark outlines the PARAMETERS row holding the placeholder the
-	// caret is in — the pane's counterpart to the editor's statement tint.
+	// caret is in — the pane's counterpart to the editor's statement tint. It
+	// stays play's because the pane is play's.
 	//
 	// An outline, not a fill, and this is empirical: the pane's own background
 	// is a surface tone, so a fill has to thread between invisible and
@@ -63,71 +43,6 @@ var (
 	styleCaretRowMark = color.Hex(styletokens.AccentDefault.AsHex())
 )
 
-// byteOffsetOfChar converts a char (rune) offset into a byte offset into s,
-// clamping to the buffer.
-//
-// The clamp is load-bearing, not defensive: the caret arrives one frame late,
-// so an offset computed against a longer buffer routinely outruns the copy we
-// hold after a deletion. Clamping to the end is the honest answer — the caret
-// really is at the end of what we can see.
-func byteOffsetOfChar(s string, chars int) int {
-	if chars <= 0 {
-		return 0
-	}
-	off := 0
-	for n := 0; n < chars; n++ {
-		if off >= len(s) {
-			return len(s)
-		}
-		_, sz := utf8.DecodeRuneInString(s[off:])
-		off += sz
-	}
-	return off
-}
-
-// refreshCaret converts the packed caret the editor reported last frame into a
-// byte offset into the buffer we currently hold. Called once per editor render
-// so every consumer within the frame agrees.
-//
-// `offset` is where the reporting editor's buffer starts inside inst.sql — 0
-// for the plain editor, the elided prelude's length for the residual mirror —
-// so caretByte is always in inst.sql coordinates.
-func (inst *PlayApp) refreshCaret(buf string, offset int) {
-	start, _ := c.UnpackCursorRange(inst.caretPacked)
-	inst.caretByte = offset + byteOffsetOfChar(buf, start)
-}
-
-// byteOffsetOfLineCol converts ANTLR's (1-based line, 0-based rune column)
-// into a byte offset into sql. Out-of-range positions clamp into the buffer:
-// a parser that ran off the end reports the position after the last token,
-// and the caller wants the nearest real token, not a failure.
-func byteOffsetOfLineCol(sql string, line, col int) int {
-	if line < 1 {
-		line = 1
-	}
-	off := 0
-	for l := 1; l < line; l++ {
-		nl := strings.IndexByte(sql[off:], '\n')
-		if nl < 0 {
-			// Fewer lines than reported — clamp to the end.
-			return len(sql)
-		}
-		off += nl + 1
-	}
-	// Walk `col` runes from the start of the line, stopping at its end.
-	for r := 0; r < col && off < len(sql); r++ {
-		if sql[off] == '\n' {
-			break
-		}
-		_, sz := utf8.DecodeRuneInString(sql[off:])
-		off += sz
-	}
-	if off > len(sql) {
-		off = len(sql)
-	}
-	return off
-}
-
 // errorTokenSpan returns the byte range of the lexical token a syntax error
 // points at, for the error underline.
 //
@@ -137,46 +52,13 @@ func byteOffsetOfLineCol(sql string, line, col int) int {
 // whitespace — which is what an unexpected-EOF error reports — resolves to
 // the nearest real token, preferring the one that follows so the underline
 // sits where the user is typing.
+// The resolution itself is the widget's ([sqleditor.ErrorTokenSpan]); what
+// stays here is the syntaxErrorPos shape play's parse pipeline reports in.
 func errorTokenSpan(sql string, pos syntaxErrorPos) (start, stop uint32, ok bool) {
-	if !pos.Ok || sql == "" {
+	if !pos.Ok {
 		return
 	}
-	off := byteOffsetOfLineCol(sql, pos.Line, pos.Column)
-	spans := highlight.HighlightLex(sql)
-	if len(spans) == 0 {
-		return
-	}
-	real := func(s highlight.Span) bool {
-		return s.Category != highlight.CatWhitespace && s.Stop > s.Start
-	}
-	// The covering span, if it is a real token.
-	for i, s := range spans {
-		if off < s.Start || off >= s.Stop {
-			continue
-		}
-		if real(s) {
-			return uint32(s.Start), uint32(s.Stop), true
-		}
-		// Whitespace: look forward, then back.
-		for j := i + 1; j < len(spans); j++ {
-			if real(spans[j]) {
-				return uint32(spans[j].Start), uint32(spans[j].Stop), true
-			}
-		}
-		for j := i - 1; j >= 0; j-- {
-			if real(spans[j]) {
-				return uint32(spans[j].Start), uint32(spans[j].Stop), true
-			}
-		}
-		return
-	}
-	// Past the last span (position at EOF): the last real token.
-	for j := len(spans) - 1; j >= 0; j-- {
-		if real(spans[j]) {
-			return uint32(spans[j].Start), uint32(spans[j].Stop), true
-		}
-	}
-	return
+	return sqleditor.ErrorTokenSpan(sql, pos.Line, pos.Column)
 }
 
 // editorStyledSections assembles this frame's overlay list for the buffer the
@@ -192,16 +74,10 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 		return nil
 	}
 	stmt, _, total, haveStmt := inst.caretStatement()
-	// Active-statement tint, multi-statement buffers only — the common
-	// single-statement buffer stays visually unchanged. Emitted first so the
-	// error underline, which is narrower, composes on top of it.
-	if haveStmt && total > 1 {
-		out = append(out, codeview.StyledSection{
-			Start: uint32(stmt.Src.Start), Stop: uint32(stmt.Src.End),
-			Flags: codeview.StyleBackground,
-			Color: styleStmtTint,
-		})
-	}
+	// The active-statement tint is deliberately absent: it follows from the
+	// buffer and the caret alone, so the widget emits it (ADR-0147 §SD2).
+	// Emitting it here too would draw it twice — and would put it back under
+	// this function's quiescence gate, which it never needed.
 	out = append(out, inst.subqueryModeSections()...)
 	// Unfilled-placeholder underlines (ADR-0124 §SD8's `Src` consumers). The
 	// set is unfilledSet — the SAME set the Run gate and the pane's
@@ -365,49 +241,4 @@ func (inst *PlayApp) caretSubqueryRange() (r nanopass.SourceRange) {
 		Start: stmt.Src.Start + sub.Src.Start,
 		End:   stmt.Src.Start + sub.Src.End,
 	}
-}
-
-// shiftRange rebases one range the way shiftStyledSections rebases a list, for
-// the gutter's subquery mark. A range falling entirely inside the elided prefix
-// comes back empty.
-func shiftRange(r nanopass.SourceRange, offset, viewLen int) nanopass.SourceRange {
-	if r.Empty() || offset == 0 {
-		return r
-	}
-	start, end := r.Start-offset, r.End-offset
-	if start < 0 {
-		start = 0
-	}
-	if end > viewLen {
-		end = viewLen
-	}
-	if end <= start {
-		return nanopass.SourceRange{}
-	}
-	return nanopass.SourceRange{Start: start, End: end}
-}
-
-// shiftStyledSections rebases spans expressed in inst.sql onto a view that
-// starts `offset` bytes into it (the residual mirror behind the hide-prelude
-// toggle). Spans that fall entirely inside the elided prefix are dropped;
-// one that straddles the boundary is trimmed to the visible part.
-func shiftStyledSections(secs []codeview.StyledSection, offset int, viewLen int) (out []codeview.StyledSection) {
-	if offset == 0 {
-		return secs
-	}
-	for _, s := range secs {
-		start, stop := int(s.Start)-offset, int(s.Stop)-offset
-		if start < 0 {
-			start = 0
-		}
-		if stop > viewLen {
-			stop = viewLen
-		}
-		if stop <= start {
-			continue
-		}
-		s.Start, s.Stop = uint32(start), uint32(stop)
-		out = append(out, s)
-	}
-	return
 }

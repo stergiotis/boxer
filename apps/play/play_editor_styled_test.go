@@ -11,40 +11,9 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
-	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stretchr/testify/require"
 )
-
-func TestByteOffsetOfLineCol(t *testing.T) {
-	cases := []struct {
-		name string
-		sql  string
-		line int
-		col  int
-		want int
-	}{
-		{"first line, first column", "SELECT 1", 1, 0, 0},
-		{"first line, mid", "SELECT 1", 1, 7, 7},
-		{"second line", "SELECT 1\nFROM t", 2, 0, 9},
-		{"second line, mid", "SELECT 1\nFROM t", 2, 5, 14},
-		{"third line", "a\nb\nc", 3, 0, 4},
-		// The column is a RUNE offset: three 3-byte chars ahead of the caret.
-		{"multibyte column", "SELECT '€€€' , x", 1, 11, 17},
-		{"multibyte second line", "SELECT '€'\nFROM t", 2, 4, 17},
-		// Clamping: past the end of the buffer, past the end of a line.
-		{"line past end", "SELECT 1", 9, 0, 8},
-		{"column past line end", "SELECT 1\nFROM t", 1, 99, 8},
-		{"column past buffer end", "SELECT 1", 1, 99, 8},
-		{"line zero clamps to one", "SELECT 1", 0, 3, 3},
-		{"empty buffer", "", 1, 0, 0},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, byteOffsetOfLineCol(tc.sql, tc.line, tc.col))
-		})
-	}
-}
 
 // The underline must land on a real token, whatever the parser pointed at.
 func TestErrorTokenSpanCoversARealToken(t *testing.T) {
@@ -129,26 +98,6 @@ func TestEditorStyledSectionsGatedOnQuiescence(t *testing.T) {
 		"a buffer the pipeline has not seen carries no overlays")
 }
 
-func TestShiftStyledSections(t *testing.T) {
-	secs := []codeview.StyledSection{
-		{Start: 2, Stop: 5, Flags: codeview.StyleUnderline},    // inside the prelude
-		{Start: 8, Stop: 14, Flags: codeview.StyleUnderline},   // straddles
-		{Start: 20, Stop: 24, Flags: codeview.StyleBackground}, // fully visible
-	}
-	// prelude is 10 bytes, the visible view is 20 bytes
-	got := shiftStyledSections(secs, 10, 20)
-	require.Len(t, got, 2)
-	require.Equal(t, uint32(0), got[0].Start, "the straddling span trims to the view start")
-	require.Equal(t, uint32(4), got[0].Stop)
-	require.Equal(t, uint32(10), got[1].Start)
-	require.Equal(t, uint32(14), got[1].Stop)
-
-	// A zero offset is the identity.
-	require.Equal(t, secs, shiftStyledSections(secs, 0, 24))
-	// Everything past the view end drops.
-	require.Empty(t, shiftStyledSections(secs, 30, 20))
-}
-
 // A no-op app (bare construction, no pipeline run) must not panic or produce
 // spans — several unit tests build a PlayApp this way for unrelated work.
 func TestEditorStyledSectionsOnBareApp(t *testing.T) {
@@ -157,107 +106,57 @@ func TestEditorStyledSectionsOnBareApp(t *testing.T) {
 	require.Empty(t, app.editorStyledSections())
 }
 
-// --- caret channel (ADR-0130 L3, M4) ---
-
-func TestByteOffsetOfChar(t *testing.T) {
-	cases := []struct {
-		name  string
-		s     string
-		chars int
-		want  int
-	}{
-		{"ascii start", "SELECT 1", 0, 0},
-		{"ascii mid", "SELECT 1", 6, 6},
-		{"ascii end", "SELECT 1", 8, 8},
-		{"multibyte", "a€b", 2, 4},
-		{"multibyte end", "a€b", 3, 5},
-		{"newlines are one char", "a\nb", 2, 2},
-		// A stale caret from a longer buffer clamps to the end rather than
-		// panicking or reading past it.
-		{"clamps past end", "SELECT 1", 99, 8},
-		{"clamps on empty", "", 5, 0},
-		{"negative clamps to zero", "SELECT 1", -3, 0},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, byteOffsetOfChar(tc.s, tc.chars))
-		})
-	}
-}
-
-func TestUnpackCursorRangeRoundTrip(t *testing.T) {
-	// The Rust side packs low=start, high=end.
-	packed := uint64(7) | uint64(11)<<32
-	start, end := c.UnpackCursorRange(packed)
-	require.Equal(t, 7, start)
-	require.Equal(t, 11, end)
-	// A collapsed caret reports start == end.
-	start, end = c.UnpackCursorRange(uint64(4) | uint64(4)<<32)
-	require.Equal(t, start, end)
-	// The zero value is a caret at the buffer start.
-	start, end = c.UnpackCursorRange(0)
-	require.Equal(t, 0, start)
-	require.Equal(t, 0, end)
-}
-
-func TestRefreshCaretConvertsAndOffsets(t *testing.T) {
-	app := &PlayApp{sql: "SELECT '€' FROM t"}
-	// caret after the multibyte char: char 9 → byte 11
-	app.caretPacked = uint64(9) | uint64(9)<<32
-	app.refreshCaret(app.sql, 0)
-	require.Equal(t, 11, app.caretByte)
-
-	// The residual mirror reports offsets into its own view; refreshCaret
-	// lifts them back into inst.sql coordinates.
-	const prelude = "SET param_a = 1;\n"
-	mirror := "SELECT 1"
-	app = &PlayApp{sql: prelude + mirror}
-	app.caretPacked = uint64(3) | uint64(3)<<32
-	app.refreshCaret(mirror, len(prelude))
-	require.Equal(t, len(prelude)+3, app.caretByte)
-	require.Equal(t, byte('L'), app.sql[app.caretByte-1], "caret sits just past SEL")
-}
-
 // --- multi-statement composition (M3 × M5) ---
 
 // A multi-statement buffer never parses whole (grammar1's QueryStmt is
 // single-statement), so the underline must come from the caret's statement —
 // otherwise every such buffer is flagged as broken at the boundary between two
 // perfectly good statements.
+//
+// The active-statement TINT is no longer play's (ADR-0147 §SD2 gave it to the
+// widget, which derives it from buffer and caret), so what these assert is
+// play's own contribution: the error underline and nothing else.
 func TestMultiStatementErrorUnderlineScopesToTheCaretsStatement(t *testing.T) {
 	const sql = "SELECT 1; SELCT 2"
 	app := debouncedApp(t, sql)
 	app.updatePreview()
 	require.Error(t, app.formattedErr, "the whole buffer does not parse…")
 
-	// Caret in the healthy statement: tint only, no underline.
+	// Caret in the healthy statement: nothing at all.
 	app.caretByte = 3
-	secs := app.editorStyledSections()
-	require.Len(t, secs, 1, "…yet the healthy statement carries no error")
-	require.Equal(t, codeview.StyleBackground, secs[0].Flags)
-	require.Equal(t, "SELECT 1", sql[secs[0].Start:secs[0].Stop])
+	require.Empty(t, app.editorStyledSections(),
+		"…yet the healthy statement carries no error")
 
-	// Caret in the broken one: tint plus an underline on its bad token.
+	// Caret in the broken one: an underline on its bad token.
 	app.caretByte = len(sql)
-	secs = app.editorStyledSections()
-	require.Len(t, secs, 2)
-	require.Equal(t, codeview.StyleBackground, secs[0].Flags)
-	require.Equal(t, "SELCT 2", sql[secs[0].Start:secs[0].Stop])
-	require.Equal(t, codeview.StyleUnderline, secs[1].Flags)
-	require.Equal(t, "SELCT", sql[secs[1].Start:secs[1].Stop],
+	secs := app.editorStyledSections()
+	require.Len(t, secs, 1)
+	require.Equal(t, codeview.StyleUnderline, secs[0].Flags)
+	require.Equal(t, "SELCT", sql[secs[0].Start:secs[0].Stop],
 		"the underline sits on the offending token, in buffer coordinates")
+
+	// The tint the widget will draw covers the caret's statement, so the
+	// underline lands inside it — the property the two used to share by being
+	// built together, now asserted across the seam.
+	stmt, _, total, ok := app.caretStatement()
+	require.True(t, ok)
+	require.Equal(t, 2, total)
+	require.GreaterOrEqual(t, int(secs[0].Start), stmt.Src.Start)
+	require.LessOrEqual(t, int(secs[0].Stop), stmt.Src.End)
 }
 
-// Two healthy statements: a tint, and nothing else.
+// Two healthy statements: play contributes nothing, and the widget's tint is
+// what marks the active one.
 func TestMultiStatementHealthyBufferTintsOnly(t *testing.T) {
 	const sql = "SELECT 1; SELECT 2"
 	app := debouncedApp(t, sql)
 	app.updatePreview()
 	app.caretByte = 3
-	secs := app.editorStyledSections()
-	require.Len(t, secs, 1)
-	require.Equal(t, codeview.StyleBackground, secs[0].Flags)
-	require.Equal(t, "SELECT 1", sql[secs[0].Start:secs[0].Stop])
+	require.Empty(t, app.editorStyledSections())
+	stmt, _, total, ok := app.caretStatement()
+	require.True(t, ok)
+	require.Equal(t, 2, total, "…but the buffer IS multi-statement")
+	require.Equal(t, "SELECT 1", sql[stmt.Src.Start:stmt.Src.End])
 }
 
 // A single-statement buffer is visually unchanged: no tint at all.
@@ -265,6 +164,8 @@ func TestSingleStatementBufferHasNoTint(t *testing.T) {
 	app := debouncedApp(t, "SELECT 1")
 	app.updatePreview()
 	require.Empty(t, app.editorStyledSections())
+	_, _, total, _ := app.caretStatement()
+	require.Equal(t, 1, total, "the widget's tint is gated on total > 1")
 }
 
 // The per-statement parse is memoised on the statement text, so caret travel
