@@ -277,6 +277,24 @@ pane says so) and **indexes** (`EXPLAIN PLAN indexes = 1, json = 1`, riding
 the existing PLAN parser — the `Indexes` entries fold into the ReadFrom
 node's detail as selected-vs-initial parts and granules per index).
 
+The column-lineage deferral closed the same day as a seventh lens —
+**lineage**, local like the statement lens: output-column provenance of the
+active node's SELECT list. Each item is a node fed by the source columns its
+expression references, resolved with ClickHouse's own precedence — a
+select-list alias shadows a column (the alias-in-WHERE behaviour), then the
+FROM sources by qualifier or as the single source, and a bare name over
+several sources is drawn flagged ambiguous rather than guessed. `*` renders
+as one star per matching source (the column set is unknowable offline);
+scalar subqueries are marked, not traced (nested SELECTs are pruned from the
+identifier walk so inner scopes never read as outer lineage); a union
+statement traces its first member and says so. Lineage nodes carry ranges —
+an item's expression, an identifier's first occurrence — so the editor
+highlight works on this lens exactly as on the statement lens. Deliberate
+non-goals, each with its trigger recorded here: columns consumed by
+WHERE/GROUP BY without being projected (filter provenance, not output
+lineage), cross-node lineage through sibling CTEs (needs a whole-split
+view), and schema-informed star expansion (needs the server).
+
 Two affordances added on use: a remote lens gained a **view** toggle between
 the parsed graph and the raw EXPLAIN text as the server returned it
 (monospace, indentation intact — the graph is a reading of that text, the
