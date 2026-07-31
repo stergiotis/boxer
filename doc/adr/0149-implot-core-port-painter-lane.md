@@ -494,8 +494,9 @@ now cite those as the pattern's live examples.
 
 Removal mechanics worth recording: the regen deleted the
 `WINDOW_TOPMOST` hand-patch from `interpreter.rs`'s generated region
-for the second time (re-applied again; its promotion to an IDL or
-hand-region home is overdue), and the plot element structs, state
+for the second time — that patch has since been moved into the Window
+block's IDL snippet (commit `c00ae94d`), so it now regenerates rather
+than needing re-application — and the plot element structs, state
 fields, constructor inits and per-frame clears all lived in the
 hand-maintained region and were removed by hand ahead of the regen —
 `egui2gen` type-checks the bindings package before writing, so the
