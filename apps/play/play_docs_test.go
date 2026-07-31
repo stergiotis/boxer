@@ -270,3 +270,101 @@ func TestResolveDocsSurfacesAFailure(t *testing.T) {
 func candsAt(sql string, off int) []string {
 	return docsCandidates(highlight.EntityAtIn(sql, off))
 }
+
+// --- link routing (ADR-0147's caret seam's sibling: a link is the other way
+// a reader says "tell me about this") ---
+
+// Claiming is a syntactic test that runs per link per frame, so it must not
+// depend on what happens to be cached — a link that changed shape as the
+// reader scrolled would read as a glitch.
+func TestDocsLinkClaimed(t *testing.T) {
+	claimed := []string{
+		"/sql-reference/data-types/datetime",
+		"../data-types/int-uint.md",
+		"./functions/date-time-functions",
+		docsSiteBase + "/sql-reference/functions/date-time-functions#tohour",
+	}
+	for _, u := range claimed {
+		require.True(t, docsLinkClaimed(u), "should stay in the pane: %s", u)
+	}
+	notClaimed := []string{
+		"",
+		"#syntax",                         // addresses this same page
+		"https://github.com/ClickHouse/x", // genuinely elsewhere
+		"http://example.org/",
+		"mailto:a@b.c",
+	}
+	for _, u := range notClaimed {
+		require.False(t, docsLinkClaimed(u), "should leave for a browser: %s", u)
+	}
+}
+
+// The label leads, because it is what the author wrote to name the thing: a
+// page covering a whole family is addressed by one URL and only the label
+// says which member was meant.
+func TestDocsLinkCandidatesPreferTheLabel(t *testing.T) {
+	got := docsLinkCandidates("UInt8", "/sql-reference/data-types/int-uint")
+	require.Equal(t, []string{"UInt8", "int-uint"}, got,
+		"the label answers where the page name cannot")
+
+	// A fragment names a section, which is usually the entity.
+	got = docsLinkCandidates("date and time functions",
+		"/sql-reference/functions/date-time-functions#tohour")
+	require.Equal(t, []string{"tohour", "date-time-functions"}, got,
+		"a multi-word label is not an entity name and is dropped")
+
+	// Backticks are markup, not part of the name; `.md` is not either. The
+	// segment then collapses into the label, because the dedup is
+	// case-insensitive — which it must be, since the lookup is.
+	require.Equal(t, []string{"DateTime"},
+		docsLinkCandidates("`DateTime`", "../data-types/datetime.md"))
+
+	// Label and fragment collapse when they agree, and the page they live on
+	// stays as the last resort — `date-time` is not an entity, but a corpus
+	// where it became one should still be reachable.
+	require.Equal(t, []string{"toHour", "date-time"},
+		docsLinkCandidates("toHour", "/sql-reference/functions/date-time#toHour"))
+}
+
+func TestDocsAbsoluteURL(t *testing.T) {
+	require.Equal(t, docsSiteBase+"/sql-reference/x", docsAbsoluteURL("/sql-reference/x"))
+	require.Equal(t, "https://example.org/a", docsAbsoluteURL("https://example.org/a"))
+	require.Equal(t, docsSiteBase+"/data-types/x.md", docsAbsoluteURL("../data-types/x.md"))
+	require.Equal(t, docsSiteBase+"/functions/y", docsAbsoluteURL("./functions/y"))
+}
+
+// Following a link pins the pane: the caret has not moved, so leaving Follow
+// on would snap it back on the next frame and the click would look inert.
+func TestFollowDocsLinkPinsAndRecordsHistory(t *testing.T) {
+	app := docsApp(map[string]*docsResult{
+		"tohour": withDoc("toHour", "Function"),
+		"uint8":  withDoc("UInt8", "Data Type"),
+	})
+	app.docsPane.shown = "toHour"
+
+	app.followDocsLink("UInt8", "/sql-reference/data-types/int-uint")
+	require.False(t, app.docsPane.follow, "a followed link pins the pane")
+	require.Equal(t, []string{"toHour"}, app.docsPane.back, "…and is undoable")
+	require.Equal(t, []string{"UInt8", "int-uint"}, app.docsPane.nav)
+
+	res := app.resolveDocs(nil)
+	require.NotNil(t, res)
+	require.Equal(t, "UInt8", app.docsPane.shown)
+	require.Empty(t, app.docsPane.nav, "a resolved navigation is consumed")
+	require.Empty(t, app.docsPane.navURL, "…and needs no browser fallback")
+}
+
+// A link into something this server does not document keeps its URL, so the
+// page it named is still reachable rather than a dead end.
+func TestFollowDocsLinkKeepsTheURLOnAMiss(t *testing.T) {
+	app := docsApp(map[string]*docsResult{
+		"nosuchthing": {}, // cached, no documentation
+		"weird-page":  {},
+	})
+	app.followDocsLink("nosuchthing", "/operations/weird-page")
+	res := app.resolveDocs(nil)
+	require.NotNil(t, res)
+	require.Empty(t, res.entries)
+	require.Equal(t, "/operations/weird-page", app.docsPane.navURL,
+		"the browser escape hatch survives a miss")
+}

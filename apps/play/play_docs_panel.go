@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 // docsPaneState is the pane's own view state — what it is showing and how it
@@ -35,6 +36,15 @@ type docsPaneState struct {
 	// lastMiss is the most recent name that resolved to nothing, so the pane
 	// can say so without discarding what it is showing.
 	lastMiss string
+
+	// nav is a followed link's ranked candidate names, best first, pending
+	// resolution; navURL is the link's original target, kept so a link into
+	// something this server does not document still has somewhere to go.
+	// Both empty when no navigation is in flight.
+	nav    []string
+	navURL string
+	// back is the names visited before the current one, most recent last.
+	back []string
 }
 
 // docsFollowDefault is true: a pane that has to be switched on before it does
@@ -49,6 +59,14 @@ func (inst *PlayApp) renderDocsTab() {
 	// Header: the follow toggle and the manual lookup box, always drawn so the
 	// pane never reflows around them.
 	for range c.Horizontal().KeepIter() {
+		if len(s.back) > 0 {
+			if c.Button(ids.PrepareStr("docsBack"), c.Atoms().Text("←").Keep()).
+				SendResp().HasPrimaryClicked() {
+				s.shown = s.back[len(s.back)-1]
+				s.back = s.back[:len(s.back)-1]
+				s.shownKind, s.nav, s.navURL, s.lastMiss = "", nil, "", ""
+			}
+		}
 		c.Checkbox(ids.PrepareStr("docsFollow"), s.follow, "Follow caret").
 			SendRespVal(&s.follow)
 		c.Label("look up").Send()
@@ -94,6 +112,12 @@ func (inst *PlayApp) renderDocsTab() {
 		for rt := range c.RichTextLabel(fmt.Sprintf("No documentation for %q on this endpoint.", s.shown)) {
 			rt.Small().Weak()
 		}
+		// A followed link into something this server does not document is the
+		// one case where leaving for a browser is the right answer, so the
+		// target it named is still reachable.
+		if s.navURL != "" {
+			c.HyperlinkTo("open "+s.navURL, docsAbsoluteURL(s.navURL)).OpenInNewTab(true).Send()
+		}
 		return
 	}
 
@@ -113,7 +137,8 @@ func (inst *PlayApp) renderDocsTab() {
 		// documented invariant) so the pane cannot collide with the Snippets
 		// tab or the Help center rendering another document the same frame.
 		for range c.IdScope(ids.PrepareStr("docsBody")) {
-			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels) {
+			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels,
+				markdown.WithLinkRouter(docsLinkClaimed, inst.followDocsLink)) {
 				// The corpus is full of runnable examples; only SQL (or
 				// untyped) blocks may reach the editor. A ```response block
 				// showing ClickHouse's box-drawing output must never be
@@ -165,6 +190,38 @@ func (inst *PlayApp) resolveDocs(cands []string) (res *docsResult) {
 		res, _ = inst.docs.lookup(manual)
 		return
 	}
+	// A followed link, still being resolved. Its candidates are walked the
+	// same way the caret's are — one lookup per frame — because the reason is
+	// the same: a name may simply not be documented, and the next candidate is
+	// the better guess rather than a failure.
+	if len(s.nav) > 0 {
+		for i, cand := range s.nav {
+			hit := inst.docs.cached(cand)
+			if hit == nil {
+				res, _ = inst.docs.lookup(cand)
+				if res == nil {
+					s.shown = cand // so the "Looking up …" line names it
+					return
+				}
+				hit = res
+			}
+			if len(hit.entries) > 0 || hit.err != nil {
+				s.shown, s.shownKind, s.lastMiss = cand, "", ""
+				s.nav, s.navURL = nil, s.navURL
+				if hit.err == nil {
+					s.navURL = ""
+				}
+				return hit
+			}
+			_ = i
+		}
+		// Nothing the link could have meant is documented here. Keep the URL
+		// so the pane can still offer the page it pointed at.
+		s.shown, s.shownKind = s.nav[0], ""
+		s.nav = nil
+		return inst.docs.cached(s.shown)
+	}
+
 	if !s.follow {
 		// Pinned: keep serving whatever was resolved, and finish a lookup that
 		// was still in flight when the toggle went off.
@@ -271,4 +328,41 @@ func (inst *PlayApp) renderDocsError(err error) {
 	for rt := range c.RichTextLabel("Documentation lookup failed: " + text) {
 		rt.Small().Weak()
 	}
+}
+
+// followDocsLink is the markdown widget's link-click callback: it records the
+// intent and lets the next resolution act on it, rather than re-entering the
+// render from inside a callback fired mid-document.
+//
+// Following a link pins the pane (Follow goes off). A link is a deliberate act
+// and the caret is almost certainly still sitting where it was, so leaving
+// Follow on would snap the pane back on the very next frame — the click would
+// look like it did nothing.
+func (inst *PlayApp) followDocsLink(label string, url string) {
+	cands := docsLinkCandidates(label, url)
+	if len(cands) == 0 {
+		return
+	}
+	s := inst.docsPane
+	if s.shown != "" {
+		s.back = append(s.back, s.shown)
+	}
+	s.follow = false
+	s.nav, s.navURL = cands, url
+	s.lastMiss = ""
+}
+
+// docsAbsoluteURL turns a corpus link target into something a browser can
+// open. Relative forms are resolved against the documentation site root
+// rather than against the entity's own page, whose location the corpus does
+// not record — good enough to land the reader on the right site, and honest
+// about being a fallback for the case where nothing here could answer.
+func docsAbsoluteURL(url string) string {
+	switch {
+	case strings.HasPrefix(url, "http://"), strings.HasPrefix(url, "https://"):
+		return url
+	case strings.HasPrefix(url, "/"):
+		return docsSiteBase + url
+	}
+	return docsSiteBase + "/" + strings.TrimLeft(strings.TrimPrefix(url, "./"), "./")
 }

@@ -369,3 +369,73 @@ func docsCandidates(e highlight.CaretEntity, ok bool) (out []string) {
 	}
 	return
 }
+
+// docsLinkClaimed reports whether a link target is a ClickHouse documentation
+// page, and so belongs in this pane rather than in a browser.
+//
+// It runs once per link per frame during layout, so it is a cheap syntactic
+// test and never a lookup: whether the target names something this server
+// documents is decided on the click, where a query is affordable. Claiming a
+// page that turns out to be undocumented is recoverable — the pane says so and
+// offers the original URL — whereas consulting the cache here would make a
+// link's appearance depend on what happened to be cached, and links would
+// change shape as the reader scrolled.
+//
+// Absolute URLs are claimed only for the documentation site; a link out to
+// GitHub or an RFC is exactly the case that should still leave for a browser.
+func docsLinkClaimed(url string) bool {
+	switch {
+	case url == "":
+		return false
+	case strings.HasPrefix(url, "#"):
+		// A fragment alone addresses this same page. There is nothing to
+		// navigate TO, and the widget cannot scroll to it from here.
+		return false
+	case strings.HasPrefix(url, docsSiteBase):
+		return true
+	case strings.HasPrefix(url, "http://"), strings.HasPrefix(url, "https://"):
+		return false
+	case strings.HasPrefix(url, "/"), strings.HasPrefix(url, "../"), strings.HasPrefix(url, "./"):
+		// The corpus's own relative and root-relative forms.
+		return true
+	}
+	return false
+}
+
+// docsLinkCandidates ranks the names a claimed link might be naming, best
+// first, for the pane to try in order.
+//
+// The LABEL leads, because it is what the author wrote to name the thing:
+// “[`UInt8`](/sql-reference/data-types/int-uint)“ points at a page covering
+// a dozen types and only the label says which one. Measured over the corpus
+// the label and the URL's last segment each resolve about 60% of links on
+// their own, and they fail on different links — the page-per-family targets
+// (`int-uint`, `special-data-types/expression`) are exactly where the label
+// carries the answer.
+//
+// The fragment comes second: doc URLs point at a section of a page, and the
+// section is usually the entity (`.../date-time-functions#tohour`).
+func docsLinkCandidates(label string, url string) (out []string) {
+	seen := make(map[string]struct{}, 3)
+	add := func(n string) {
+		n = strings.TrimSpace(strings.Trim(n, "`"))
+		if n == "" || strings.ContainsAny(n, " \t/\\") {
+			return
+		}
+		k := strings.ToLower(n)
+		if _, dup := seen[k]; dup {
+			return
+		}
+		seen[k] = struct{}{}
+		out = append(out, n)
+	}
+	add(label)
+
+	path, frag, _ := strings.Cut(url, "#")
+	add(frag)
+	if i := strings.LastIndexByte(path, '/'); i >= 0 {
+		path = path[i+1:]
+	}
+	add(strings.TrimSuffix(path, ".md"))
+	return
+}
