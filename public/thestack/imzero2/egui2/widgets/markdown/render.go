@@ -53,7 +53,8 @@ func (inst *segment) render(rc *renderCtx) {
 		// iter.Seq. The CodeView's own selectable text (Ctrl+C) is
 		// independent of this. codeBlockIdx advances per code block so the
 		// action's ordinal is stable regardless of whether buttons render.
-		if rc.actionsEnabled {
+		if rc.actionsEnabled &&
+			(rc.actionAccept == nil || rc.actionAccept(inst.codeText, inst.codeLang)) {
 			renderCodeActionButtons(rc, inst.codeText, inst.codeLang, rc.codeBlockIdx)
 		}
 		rc.codeBlockIdx++

@@ -187,6 +187,7 @@ func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabels []string, acti
 		actionLabels:   actionLabels,
 		linkClaims:     ro.linkClaims,
 		linkClicked:    ro.linkClicked,
+		actionAccept:   ro.actionAccept,
 	}
 	for i := range inst.segments {
 		inst.segments[i].render(&rc)
@@ -204,6 +205,7 @@ type renderOptions struct {
 	scrollToSlug string
 	linkClaims   func(url string) bool
 	linkClicked  func(label string, url string)
+	actionAccept func(text string, lang string) bool
 }
 
 // WithScrollToSection asks the next [Doc.Render] to schedule an egui
@@ -251,6 +253,24 @@ func WithLinkRouter(claims func(url string) bool, clicked func(label string, url
 	return
 }
 
+// WithCodeActionFilter limits which fenced blocks carry an action-button row.
+//
+// `accept` runs during layout, once per block, and decides whether that block
+// gets the buttons at all. Without it every fenced block gets them, and a host
+// that can only act on some kinds is left suppressing the CLICK while the
+// BUTTONS still render — which shows the reader an affordance that does
+// nothing. Deciding it here is the only place the buttons can be withheld.
+//
+// It must be a pure function of the block, because it is consulted every
+// frame. Nil accepts everything, which is the default and the behaviour
+// before this existed.
+func WithCodeActionFilter(accept func(text string, lang string) bool) (opt RenderOpt) {
+	opt = func(o *renderOptions) {
+		o.actionAccept = accept
+	}
+	return
+}
+
 // renderCtx threads the per-Render-invocation id sequence counter and
 // the configured fit cap through the recursive segment walk. A single
 // instance is allocated per Render call and threaded by pointer;
@@ -287,6 +307,10 @@ type renderCtx struct {
 	// which is what keeps every link an ordinary hyperlink.
 	linkClaims  func(url string) bool
 	linkClicked func(label string, url string)
+
+	// actionAccept gates the per-block action buttons ([WithCodeActionFilter]).
+	// Nil accepts every block.
+	actionAccept func(text string, lang string) bool
 }
 
 // Option configures [Parse]. Pass options at construction time.

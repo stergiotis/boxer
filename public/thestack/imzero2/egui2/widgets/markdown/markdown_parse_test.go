@@ -1094,3 +1094,56 @@ func kindsOf(segs []segment) []segKindE {
 	}
 	return out
 }
+
+// WithCodeActionFilter must withhold the BUTTONS, not merely let the host
+// ignore the click — an affordance that does nothing is worse than none.
+//
+// The buttons themselves need a live Ui, so what is asserted here is the
+// contract the render path reads: the filter sees every fenced block, with its
+// language, in document order.
+func TestCodeActionFilterSeesEveryBlock(t *testing.T) {
+	doc := Parse([]byte("prose\n\n```sql\nSELECT 1\n```\n\n" +
+		"more\n\n```response\n\u250c\u2500a\u2500\u2510\n```\n\n```\nbare\n```\n"))
+
+	var ro renderOptions
+	WithCodeActionFilter(func(text, lang string) bool {
+		return lang == "sql" || lang == ""
+	})(&ro)
+	if ro.actionAccept == nil {
+		t.Fatal("WithCodeActionFilter must install the predicate")
+	}
+
+	var got [][2]string
+	var accepted []string
+	for i := range doc.segments {
+		if doc.segments[i].kind != segKindCodeBlock {
+			continue
+		}
+		text, lang := doc.segments[i].codeText, doc.segments[i].codeLang
+		got = append(got, [2]string{text, lang})
+		if ro.actionAccept(text, lang) {
+			accepted = append(accepted, lang)
+		}
+	}
+	want := [][2]string{
+		{"SELECT 1\n", "sql"},
+		{"\u250c\u2500a\u2500\u2510\n", "response"},
+		{"bare\n", ""},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("blocks offered = %q, want %q", got, want)
+	}
+	// The response block — ClickHouse query output — must not be actionable.
+	if !reflect.DeepEqual(accepted, []string{"sql", ""}) {
+		t.Errorf("accepted = %q, want the sql and untyped blocks only", accepted)
+	}
+}
+
+// The zero option set accepts everything, which is what keeps the behaviour of
+// callers that never pass the filter unchanged.
+func TestCodeActionFilterDefaultsToEverything(t *testing.T) {
+	var ro renderOptions
+	if ro.actionAccept != nil {
+		t.Error("nil predicate means accept every block")
+	}
+}
