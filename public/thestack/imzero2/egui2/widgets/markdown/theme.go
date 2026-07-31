@@ -21,6 +21,10 @@ var (
 	// design system uses for "this points elsewhere", over a transparent
 	// background so the frameless button reads as text until hovered.
 	linkFg = color.Hex(styletokens.InfoDefault.AsHex())
+	// Fully transparent: the palette has no "no background" token, and
+	// BeginRichTextColored requires one. The annotation must sit on the line
+	// immediately above the call — ignoreann covers only lines N and N+1.
+	// designlint:ignore=L2 (transparent; the palette has no absence-of-fill token)
 	linkBg = color.RGBA(0, 0, 0, 0)
 )
 
