@@ -268,6 +268,15 @@ interface would wrap a single call site. The parsers are pinned by verbatim
 fixtures captured from the live server, so a future output-dialect change
 fails a test rather than a render.
 
+Two affordances added on use: a remote lens gained a **view** toggle between
+the parsed graph and the raw EXPLAIN text as the server returned it
+(monospace, indentation intact — the graph is a reading of that text, the
+text is the full detail), and an endpoint whose SQL surface has no EXPLAIN
+(recognised by the introspection plane's `keelsonsql:` error namespace) gets
+a plain-language notice instead of a relayed parser error — routing is
+working as designed when that fires; only the lens has nothing to ask. The
+panel is documented in the app's help book (`help/features.md`, "Flow").
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the layeredgraph widget stack this renders through.
