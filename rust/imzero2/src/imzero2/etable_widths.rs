@@ -63,12 +63,7 @@ mod tests {
 
         struct NullDelegate;
         impl egui_table::TableDelegate for NullDelegate {
-            fn header_cell_ui(
-                &mut self,
-                _ui: &mut egui::Ui,
-                _cell: &egui_table::HeaderCellInfo,
-            ) {
-            }
+            fn header_cell_ui(&mut self, _ui: &mut egui::Ui, _cell: &egui_table::HeaderCellInfo) {}
             fn cell_ui(&mut self, _ui: &mut egui::Ui, _cell: &egui_table::CellInfo) {}
         }
 
@@ -91,22 +86,15 @@ mod tests {
             ui.allocate_ui_with_layout(bounds, layout, |child_ui| {
                 let state_id = table_state_id(child_ui, salt);
 
-                let mut st =
-                    egui_table::TableState::load(child_ui, state_id).unwrap_or_default();
+                let mut st = egui_table::TableState::load(child_ui, state_id).unwrap_or_default();
                 for (idx, w) in seeded.iter().enumerate() {
                     st.col_widths.insert(column_width_key(idx), *w);
                 }
                 st.store(child_ui.ctx(), state_id);
 
-                let table = egui_table::Table::new()
-                    .id_salt(salt)
-                    .num_rows(4)
-                    .columns(
-                        supplied
-                            .iter()
-                            .map(|w| egui_table::Column::new(*w))
-                            .collect::<Vec<_>>(),
-                    );
+                let table = egui_table::Table::new().id_salt(salt).num_rows(4).columns(
+                    supplied.iter().map(|w| egui_table::Column::new(*w)).collect::<Vec<_>>(),
+                );
                 table.show(child_ui, &mut NullDelegate);
 
                 let after = egui_table::TableState::load(child_ui, state_id);
