@@ -112,16 +112,22 @@ func TestTopologyBookQueriesExecute(t *testing.T) {
 	require.NoError(t, providers.RegisterStatic(reg))
 	require.NoError(t, providers.RegisterTopology(reg, holder))
 
+	// Beside the engine test's marked carrier and unmarked plain proc: a
+	// mark no registry entry declares (drift's observed-only direction) and
+	// a pid-0 listener — the fd table the collector could not read, e.g. a
+	// root-owned or containerised daemon (the map's `unattributed` node).
 	payload, err := sysmetricsbus.NewCBORCodec().Encode(&sysmsnap.BundleSnapshot{
 		SampledAtUnixMs: 42_000,
 		Procs: []sysmsnap.ProcInfo{
 			{PID: 4711, PPID: 1, Name: "carrier", Component: "imzero2-demo", CgroupUnit: "imzero2-demo.service", State: 'S'},
 			{PID: 9000, PPID: 1, Name: "plain", State: 'R'},
+			{PID: 9100, PPID: 1, Name: "rogue", Component: "rogue-svc", State: 'S'},
 		},
 		Sockets: &sysmsnap.SocketsSnapshot{
 			CollectedAtUnixMs: 41_500,
 			Sockets: []sysmsnap.SocketInfo{
 				{Proto: sysmsnap.SocketProtoTCP, Addr: "127.0.0.1", Port: 8089, Inode: 777, PID: 4711},
+				{Proto: sysmsnap.SocketProtoTCP, Addr: "0.0.0.0", Port: 4222, Inode: 900, PID: 0},
 			},
 		},
 	})
@@ -148,27 +154,48 @@ func TestTopologyBookQueriesExecute(t *testing.T) {
 	}
 
 	// The map: declared needs edges plus the observed listener walked to
-	// its component.
+	// its component. The pid-0 socket must NOT surface as a listener edge.
 	out := run("topology-map")
 	assert.Contains(t, out, "needs")
 	assert.Contains(t, out, "sock:tcp/127.0.0.1:8089")
+	assert.NotContains(t, out, "4222")
+
+	// The map's vertices carry the liveness join: same CTEs, sink swapped
+	// to probe what the Network tab's vertices lane will read.
+	mapDef := bySlug["topology-map"]
+	require.NotNil(t, mapDef)
+	vsql := strings.Replace(mapDef.SQL, "SELECT * FROM edges",
+		"SELECT label, `group` FROM vertices ORDER BY id", 1)
+	require.NotEqual(t, mapDef.SQL, vsql, "vertices probe: sink replacement missed")
+	vout, _, verr := e.Query(context.Background(), vsql, "TabSeparated")
+	require.NoError(t, verr)
+	assert.Contains(t, string(vout), "imzero2-demo ·1\trunning")
+	assert.Contains(t, string(vout), "caddy ·0\tabsent")
+	assert.Contains(t, string(vout), "rogue-svc ·1\tundeclared")
+	assert.Contains(t, string(vout), "unattributed ·1\tunattributed")
 
 	// Drift: caddy is declared with no live mark, imzero2-demo runs as
-	// declared and carries the observing host.
+	// declared and carries the observing host, the rogue mark is the
+	// observed-only direction.
 	out = run("topology-drift")
 	assert.Contains(t, out, "declared-only")
 	assert.Contains(t, out, "both")
 	assert.Contains(t, out, "component:caddy")
 	assert.Contains(t, out, "box-a")
+	assert.Contains(t, out, "observed-only")
+	assert.Contains(t, out, "component:rogue-svc")
 
-	// The default port filter (0) keeps every listener, attributed.
+	// The default port filter (0) keeps every listener — attributed and
+	// pid-0 alike (the LEFT JOIN keeps the row, process columns empty).
 	out = run("socket-owners")
 	assert.Contains(t, out, "8089")
 	assert.Contains(t, out, "imzero2-demo")
+	assert.Contains(t, out, "4222")
 
 	// The default LIKE pattern keeps marked processes only.
 	out = run("component-procs")
 	assert.Contains(t, out, "carrier")
+	assert.Contains(t, out, "rogue-svc")
 	assert.NotContains(t, out, "plain")
 
 	// caddy's declared closure is exactly the carrier component.
