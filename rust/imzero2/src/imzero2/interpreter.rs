@@ -2365,11 +2365,14 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub r25_et_colwidth_counts: Vec<u64>,
     pub r25_et_colwidth_values: Vec<f32>,
 
-    // Last width epoch applied per etable id. Retained across frames (the
-    // "library owns state that must survive frames" bucket): it is what
-    // makes an apply happen exactly once per Go-side width change instead
-    // of every frame, which is what leaves a live drag alone.
-    pub et_width_epochs: std::collections::HashMap<u64, u32>,
+    // Last width epoch applied per table widget id, across every table
+    // surface (egui_table's endETable, egui_extras' table and newTable).
+    // One map because widget ids are globally unique, so the surfaces
+    // cannot collide. Retained across frames (the "library owns state that
+    // must survive frames" bucket): it is what makes an apply happen
+    // exactly once per Go-side width change instead of every frame, which
+    // is what leaves a live drag alone.
+    pub width_epochs: std::collections::HashMap<u64, u32>,
 
     // egui_dock layout state keyed by dock-area id. Persisted across frames
     // (splits, active tab per group, drag-to-reorder live here). Go sends
@@ -2616,7 +2619,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r25_et_colwidth_ids: Vec::with_capacity(4),
             r25_et_colwidth_counts: Vec::with_capacity(4),
             r25_et_colwidth_values: Vec::with_capacity(32),
-            et_width_epochs: std::collections::HashMap::new(),
+            width_epochs: std::collections::HashMap::new(),
             dock_states: std::collections::HashMap::new(),
             video_pipeline_request: None,
             video_cap_ids: Vec::new(),
@@ -2724,7 +2727,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             // unfetched frame is normal (a table using applyWidths without a
             // resolver reading back). Cleared without a log, as r24 is.
             //
-            // et_width_epochs is deliberately NOT cleared: it is retained
+            // width_epochs is deliberately NOT cleared: it is retained
             // state, and forgetting it would make every frame look like an
             // epoch change and re-apply widths on top of a live drag.
             self.r25_et_colwidth_ids.clear();
@@ -5648,7 +5651,7 @@ self.apply_widget(w,u,f,Some(i));
 
                         if let Some(epoch) = apply_widths_epoch {
                             let seen =
-                                delegate.inner.interpreter.et_width_epochs.get(&table_gid).copied();
+                                delegate.inner.interpreter.width_epochs.get(&table_gid).copied();
                             if seen != Some(epoch) {
                                 // Seeding TableState does two things at once, and both are
                                 // wanted. egui_table copies col_widths over each column's
@@ -5669,7 +5672,7 @@ self.apply_widget(w,u,f,Some(i));
                                     }
                                 }
                                 st.store(child_ui.ctx(), state_id);
-                                delegate.inner.interpreter.et_width_epochs.insert(table_gid, epoch);
+                                delegate.inner.interpreter.width_epochs.insert(table_gid, epoch);
                             }
                         }
 
@@ -8280,6 +8283,7 @@ egui::Grid::new(i);
                 let mut auto_shrink_h: bool = true;
                 let mut auto_shrink_v: bool = true;
                 let mut auto_shrink_set: bool = false;
+                let mut apply_widths_epoch: Option<u32> = None;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(NewTableBuilderMethodId::from_repr)?;
@@ -8333,6 +8337,13 @@ egui::Grid::new(i);
                             let mut val = self.io.read_plain_f32()?;
                             header_height = val;
                         }
+                        NewTableBuilderMethodId::ApplyWidths => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match NewTableBuilderMethodId::ApplyWidths");
+                            #[allow(unused_mut)]
+                            let mut epoch = self.io.read_plain_u32()?;
+                            apply_widths_epoch = Some(epoch);
+                        }
                         NewTableBuilderMethodId::AutoShrink => {
                             #[cfg(feature = "puffin")]
                             puffin::profile_scope!("match NewTableBuilderMethodId::AutoShrink");
@@ -8368,6 +8379,7 @@ egui::Grid::new(i);
                         max_scroll_height,
                         scroll_to_row,
                         auto_shrink_opt,
+                        apply_widths_epoch,
                     );
                 } else {
                     self.new_table_columns.clear();
@@ -11342,6 +11354,7 @@ let mut w = // generating location: egui2_definition_templating.go:67 github.com
 
                 #[allow(unused_mut)]
                 let mut w = TableConfig::new(row_height, num_rows);
+                let mut apply_widths_epoch: Option<u32> = None;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(TableBuilderMethodId::from_repr)?;
@@ -11389,6 +11402,13 @@ let mut w = // generating location: egui2_definition_templating.go:67 github.com
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                             w.max_scroll_height = val;
                         }
+                        TableBuilderMethodId::ApplyWidths => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TableBuilderMethodId::ApplyWidths");
+                            #[allow(unused_mut)]
+                            let mut epoch = self.io.read_plain_u32()?;
+                            apply_widths_epoch = Some(epoch);
+                        }
                     }
                 }
                 if d == 0 {
@@ -11433,6 +11453,18 @@ let mut w = // generating location: egui2_definition_templating.go:67 github.com
                         }
                         if w.max_scroll_height > 0.0 {
                             builder = builder.max_scroll_height(w.max_scroll_height);
+                        }
+
+                        // Width apply (ADR-0151 §SD4). Must sit before header()/body(): those
+                        // are what call TableState::load, and reset() only has an effect if the
+                        // state is already gone by then. reset() addresses ui.id().with(id_salt),
+                        // the same id load() reads, so the push_id above covers both.
+                        if let Some(epoch) = apply_widths_epoch {
+                            let gid = i.value();
+                            if self.width_epochs.get(&gid).copied() != Some(epoch) {
+                                builder.reset();
+                                self.width_epochs.insert(gid, epoch);
+                            }
                         }
 
                         let cells: Vec<TableCell> = self.table_cells.drain(..).collect();
@@ -14295,6 +14327,7 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         max_scroll_height: f32,
         scroll_to_row: Option<usize>,
         auto_shrink: Option<(bool, bool)>,
+        apply_widths_epoch: Option<u32>,
     ) -> InterpretResult<()> {
         // Read deferred block maps in declaration order (matches
         // SpliceDeferredBlockMap order on the Go side). These reads
@@ -14342,6 +14375,17 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
         let mut builder = egui_extras::TableBuilder::new(ui).id_salt(egui::Id::new(table_id));
         for col in columns {
             builder = builder.column(col);
+        }
+
+        // Width apply (ADR-0151 §SD4), before header()/body() call
+        // TableState::load. reset() addresses ui.id().with(id_salt) — the
+        // same id_salt set above — so it drops exactly this table's state
+        // and the next layout rebuilds from each column's initial width.
+        if let Some(epoch) = apply_widths_epoch {
+            if self.width_epochs.get(&table_id).copied() != Some(epoch) {
+                builder.reset();
+                self.width_epochs.insert(table_id, epoch);
+            }
         }
         if striped {
             builder = builder.striped(true);

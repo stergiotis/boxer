@@ -358,7 +358,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 		let state_id = egui_table::TableState::id(child_ui, egui::IdSalt::new({{Id}}));
 
 		if let Some(epoch) = apply_widths_epoch {
-			let seen = delegate.inner.interpreter.et_width_epochs.get(&table_gid).copied();
+			let seen = delegate.inner.interpreter.width_epochs.get(&table_gid).copied();
 			if seen != Some(epoch) {
 				// Seeding TableState does two things at once, and both are
 				// wanted. egui_table copies col_widths over each column's
@@ -378,7 +378,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 					}
 				}
 				st.store(child_ui.ctx(), state_id);
-				delegate.inner.interpreter.et_width_epochs.insert(table_gid, epoch);
+				delegate.inner.interpreter.width_epochs.insert(table_gid, epoch);
 			}
 		}
 

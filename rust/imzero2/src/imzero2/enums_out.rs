@@ -746,7 +746,8 @@ pub enum NewTableBuilderMethodId {
     MaxScrollHeight = 4,
     ScrollToRow = 5,
     HeaderHeight = 6,
-    AutoShrink = 7,
+    ApplyWidths = 7,
+    AutoShrink = 8,
 }
 
 #[allow(dead_code)]
@@ -1265,6 +1266,7 @@ pub enum TableBuilderMethodId {
     ScrollToRow = 3,
     MinScrolledHeight = 4,
     MaxScrollHeight = 5,
+    ApplyWidths = 6,
 }
 
 #[allow(dead_code)]

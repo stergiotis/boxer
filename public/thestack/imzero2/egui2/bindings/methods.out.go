@@ -2356,6 +2356,14 @@ func (inst NewTableFluid) HeaderHeight(val float32) NewTableFluid {
 	return inst
 }
 
+func (inst NewTableFluid) ApplyWidths(epoch uint32) NewTableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(NewTableMethodIdApplyWidths))
+	r.WriteUint32(epoch)
+
+	return inst
+}
+
 func (inst NewTableFluid) AutoShrink(horiz bool, vert bool) NewTableFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(NewTableMethodIdAutoShrink))
@@ -4001,6 +4009,14 @@ func (inst TableFluid) MaxScrollHeight(val float32) TableFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(TableMethodIdMaxScrollHeight))
 	r.WriteFloat32(val)
+
+	return inst
+}
+
+func (inst TableFluid) ApplyWidths(epoch uint32) TableFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TableMethodIdApplyWidths))
+	r.WriteUint32(epoch)
 
 	return inst
 }

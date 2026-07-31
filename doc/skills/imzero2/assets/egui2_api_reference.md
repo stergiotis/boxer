@@ -108,7 +108,7 @@ status: draft
 | MenuBar | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | MenuButton | BuilderFactory | No | 0 | 1 | 0 | BlockIterator |
 | MoveWindowToTop | Procedural | Yes | 0 | 0 | - | - |
-| NewTable | BuilderFactory | Yes | 0 | 0 | 7 | Immediate, Retained |
+| NewTable | BuilderFactory | Yes | 0 | 0 | 8 | Immediate, Retained |
 | NewTableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
 | NewTableRowHeight | BuilderFactory | No | 1 | 0 | 0 | Immediate |
 | NodeDir | BuilderFactory | Yes | 0 | 1 | 0 | Immediate, Retained |
@@ -176,7 +176,7 @@ status: draft
 | SnarlPin | BuilderFactory | No | 5 | 0 | 0 | Immediate |
 | Spinner | BuilderFactory | No | 0 | 0 | 1 | Immediate |
 | StyledSections | BuilderFactory | No | 0 | 0 | 1 | Retained |
-| Table | BuilderFactory | Yes | 2 | 0 | 5 | Immediate, Retained |
+| Table | BuilderFactory | Yes | 2 | 0 | 6 | Immediate, Retained |
 | TableCellRichText | BuilderFactory | No | 0 | 1 | 0 | Immediate, Retained |
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
@@ -1332,6 +1332,7 @@ Block
 - **MaxScrollHeight**(val: f32)
 - **ScrollToRow**(row: u64)
 - **HeaderHeight**(val: f32)
+- **ApplyWidths**(epoch: u32)
 - **AutoShrink**(horiz: b, vert: b)
 
 #### Deferred Block Maps
@@ -2527,6 +2528,7 @@ StyledSections
 - **ScrollToRow**(row: u64)
 - **MinScrolledHeight**(val: f32)
 - **MaxScrollHeight**(val: f32)
+- **ApplyWidths**(epoch: u32)
 
 #### Return Type
 

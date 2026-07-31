@@ -136,6 +136,13 @@ func definitionsNewTableBlock() []*ir.BuilderFactoryNode {
 			// are not supported at the crate level — at most one header().
 			BeginMethod("headerHeight").Arg("val", ctabb.F32).
 			CodeClientRust(rustClientCode("header_height = val;\n")).EndMethod().
+			// applyWidths — ADR-0151 §SD4's cheaper cut, same shape as the
+			// `table` node's: egui_extras exposes no way to seed its private
+			// TableState, so an apply is TableBuilder::reset and the widths
+			// ride each column's initial width. Epoch-gated so a reset lands
+			// once per Go-side width change rather than every frame.
+			BeginMethod("applyWidths").Arg("epoch", ctabb.U32).
+			CodeClientRust(rustClientCode("apply_widths_epoch = Some(epoch);\n")).EndMethod().
 			// autoShrink: forwards to the inner ScrollArea's auto_shrink
 			// flag. egui_extras defaults to (true, true) which makes the
 			// underlying ScrollArea shrink to its content width — meaning
@@ -160,6 +167,7 @@ let mut scroll_to_row: Option<usize> = None;
 let mut auto_shrink_h: bool = true;
 let mut auto_shrink_v: bool = true;
 let mut auto_shrink_set: bool = false;
+let mut apply_widths_epoch: Option<u32> = None;
 `)).
 		WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
@@ -173,6 +181,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 		min_scrolled_height, max_scroll_height,
 		scroll_to_row,
 		auto_shrink_opt,
+		apply_widths_epoch,
 	);
 } else {
 	self.new_table_columns.clear();

@@ -561,7 +561,8 @@ const (
 	NewTableMethodIdMaxScrollHeight   NewTableMethodIdE = 4
 	NewTableMethodIdScrollToRow       NewTableMethodIdE = 5
 	NewTableMethodIdHeaderHeight      NewTableMethodIdE = 6
-	NewTableMethodIdAutoShrink        NewTableMethodIdE = 7
+	NewTableMethodIdApplyWidths       NewTableMethodIdE = 7
+	NewTableMethodIdAutoShrink        NewTableMethodIdE = 8
 )
 
 const (
@@ -815,6 +816,7 @@ const (
 	TableMethodIdScrollToRow       TableMethodIdE = 3
 	TableMethodIdMinScrolledHeight TableMethodIdE = 4
 	TableMethodIdMaxScrollHeight   TableMethodIdE = 5
+	TableMethodIdApplyWidths       TableMethodIdE = 6
 )
 
 const (

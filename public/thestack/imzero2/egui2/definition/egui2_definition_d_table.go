@@ -141,10 +141,28 @@ func definitionsTableBlock() []*ir.BuilderFactoryNode {
 			CodeClientRust(rustClientCode("{{Instance}}.min_scrolled_height = val;\n")).EndMethod().
 			BeginMethod("maxScrollHeight").Arg("val", ctabb.F32).
 			CodeClientRust(rustClientCode("{{Instance}}.max_scroll_height = val;\n")).EndMethod().
+			// applyWidths opts the table into the ADR-0151 width protocol
+			// (§SD4's cheaper cut for the egui_extras surfaces). Unlike
+			// egui_table, egui_extras keeps its widths in a private
+			// TableState with positional entries and exposes no way to seed
+			// them — only TableBuilder::reset, which drops the stored state
+			// so the next layout rebuilds from each column's initial width.
+			// So the apply here is a reset, and the widths themselves ride
+			// the existing TableColumn.Initial.
+			//
+			// Epoch-gated for the same reason the etable is: resetting every
+			// frame would discard the user's drag on every frame. On the
+			// frame the epoch changes, a drag in flight on that table is
+			// lost — accepted by §SD4 for this surface, and bounded by the
+			// fact that overrides only change on user action.
+			BeginMethod("applyWidths").Arg("epoch", ctabb.U32).
+			CodeClientRust(rustClientCode("apply_widths_epoch = Some(epoch);\n")).EndMethod().
 			Build()...).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("TableConfig::new(row_height, num_rows);\n")).
+		WithConstructionCodeClientRust(rustClientCode(`TableConfig::new(row_height, num_rows);
+let mut apply_widths_epoch: Option<u32> = None;
+`)).
 		WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
 	let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -182,6 +200,18 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	}
 	if {{Instance}}.max_scroll_height > 0.0 {
 		builder = builder.max_scroll_height({{Instance}}.max_scroll_height);
+	}
+
+	// Width apply (ADR-0151 §SD4). Must sit before header()/body(): those
+	// are what call TableState::load, and reset() only has an effect if the
+	// state is already gone by then. reset() addresses ui.id().with(id_salt),
+	// the same id load() reads, so the push_id above covers both.
+	if let Some(epoch) = apply_widths_epoch {
+		let gid = {{Id}}.value();
+		if self.width_epochs.get(&gid).copied() != Some(epoch) {
+			builder.reset();
+			self.width_epochs.insert(gid, epoch);
+		}
 	}
 
 	let cells: Vec<TableCell> = self.table_cells.drain(..).collect();
