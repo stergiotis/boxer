@@ -14,28 +14,31 @@ import (
 // be set explicitly.
 //
 // dmin/dmax bound the data range; m is the desired tick count (5 reads as
-// "around 5"). Returns empty slices when the range is degenerate so the
-// axis falls back to implot's own locator.
-func talbotTicks(dmin, dmax float64, m int) (values []float64, labels []string) {
+// "around 5"). OnlyLoose keeps the chosen view around [dmin, dmax] rather
+// than letting Talbot trade coverage for nicer numbers, which matters
+// because callers pin the axis to that view: a view that clipped the range
+// would clip the data with it. Reports ok=false when the range is degenerate
+// or nothing scored, so the axis falls back to implot's own locator.
+func talbotTicks(dmin, dmax float64, m int) (layout finddivisions.AxisLayout, ok bool) {
 	if !(dmax > dmin) || math.IsNaN(dmin) || math.IsNaN(dmax) {
 		return
 	}
-	layout := finddivisions.Talbot(dmin, dmax, m, finddivisions.TalbotOptions{
-		Weights:  finddivisions.DefaultWeights,
-		FastMode: true,
+	layout = finddivisions.Talbot(dmin, dmax, m, finddivisions.TalbotOptions{
+		Weights:   finddivisions.DefaultWeights,
+		FastMode:  true,
+		OnlyLoose: true,
 	}, finddivisions.SimpleLegibilityScorer{})
-	if len(layout.TickValues) == 0 {
-		return
+	if len(layout.TickValues) == 0 || !(layout.ViewMax > layout.ViewMin) {
+		return finddivisions.AxisLayout{}, false
 	}
-	values = layout.TickValues
-	labels = layout.TickLabels
-	if len(labels) != len(values) {
-		labels = make([]string, len(values))
-		for i, v := range values {
+	if len(layout.TickLabels) != len(layout.TickValues) {
+		labels := make([]string, len(layout.TickValues))
+		for i, v := range layout.TickValues {
 			labels[i] = fmt.Sprintf("%g", v)
 		}
+		layout.TickLabels = labels
 	}
-	return
+	return layout, true
 }
 
 // rateUpperBound returns a stable, slightly-padded upper bound for rate
