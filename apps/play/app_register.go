@@ -107,6 +107,12 @@ var (
 		Description: "pin a fixed Map widget size as \"WxH\" logical points (deterministic scripted screenshots); empty or unparseable keeps the default (the map fills the Map tab)",
 		Category:    env.CategoryE("boxer-play"),
 	})
+
+	WindowSize = env.NewString(env.Spec{
+		Name:        "BOXER_PLAY_WINDOW_SIZE",
+		Description: "open the play window at \"WxH\" logical points (scripted screenshots); empty or unparseable keeps the host's archetype default",
+		Category:    env.CategoryE("boxer-play"),
+	})
 )
 
 // NewLivePlayApp builds a PlayApp wired to a live ClickHouse Client — the same
@@ -158,6 +164,20 @@ var _ app.AppI = (*PlayLauncher)(nil)
 // existing `play.AppId` spelling working.
 const AppId app.AppIdT = launchcfg.AppId
 
+// playSurfaceHints reads BOXER_PLAY_WINDOW_SIZE into the manifest's window
+// hints. Unset (or unparseable, or non-positive) returns the zero value, which
+// the host reads as "pick the archetype default" — so this is inert outside a
+// scripted capture. Clamped to uint16 because that is the hint's own width.
+func playSurfaceHints() (h app.SurfaceHints) {
+	w, ht, ok := parseWxH(WindowSize.Get())
+	if !ok || w <= 0 || ht <= 0 || w > 65535 || ht > 65535 {
+		return
+	}
+	h.PreferredWidth = uint16(w)
+	h.PreferredHeight = uint16(ht)
+	return
+}
+
 func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 	m = app.Manifest{
 		Id:       AppId,
@@ -167,6 +187,13 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		Icon:     "🛢",
 		Category: "Tools",
 		Surface:  app.SurfaceWindowed,
+		// No SurfaceHints: the host's archetype fallback picks the size.
+		// BOXER_PLAY_WINDOW_SIZE overrides it for scripted screenshots —
+		// play's dock is three zones deep and the fallback opens narrow
+		// enough that the tab strip truncates, which a capture would then
+		// record as the app's shape. The knob is inert when unset, so an
+		// ordinary launch is unaffected (ADR-0065 owns the archetypes).
+		SurfaceHints: playSurfaceHints(),
 		// Inline help corpus (apps/play/help/), indexed by
 		// keelson/runtime/help and shown by the HelpHost.
 		Help: help.MustSub(helpFS, "help"),
