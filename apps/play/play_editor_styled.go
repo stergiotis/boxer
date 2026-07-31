@@ -111,6 +111,12 @@ func (inst *PlayApp) editorStyledSections() (out []codeview.StyledSection) {
 			Color: styleErrorTone,
 		})
 	}
+	// The Flow tab's clicked clause (ADR-0153): a background on the clause's
+	// bytes, present only while every coordinate hop re-verified (see
+	// flowSelectionSection — a stale or moved buffer declines silently).
+	if sec, ok := inst.flowSelectionSection(); ok {
+		out = append(out, sec)
+	}
 	return out
 }
 

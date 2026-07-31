@@ -345,7 +345,8 @@ type PlayApp struct {
 	networkDriver *NetworkDriver
 
 	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
-	// dataflow, derived statically from the split — no lane, nothing to Close.
+	// dataflow, derived statically from the split; the EXPLAIN lenses add
+	// three lanes (closed in Close, forgotten on Run like the Network's).
 	flow *flowDriver
 
 	// richCells memoises the ADR-0123 content-typed cells of the Detail pane's
@@ -809,7 +810,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
 	inst.networkDriver = NewNetworkDriver(mk(), client)
-	inst.flow = newFlowDriver(mk())
+	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.diag = NewDiagnosticsDriver(client)
@@ -867,6 +868,7 @@ func (inst *PlayApp) Close() {
 			inst.networkDriver.verticesLane.close()
 		}
 	}
+	inst.flow.closeLanes()
 	inst.docs.close()
 	if inst.diag != nil {
 		inst.diag.close()
@@ -1341,6 +1343,9 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	// key is the SQL, unchanged) and the lane inventory would stay stuck-errored
 	// though the board recovered.
 	inst.kanbanDriver.forgetLanes()
+	// The Flow tab's EXPLAIN lenses (ADR-0153) wrap this query on their own
+	// lanes; same reason again.
+	inst.flow.forgetLanes()
 	// Scripted-screenshot affordance: observe a named node on run so a
 	// capture can show the panels rendering an intermediate (mirrors
 	// BOXER_PLAY_FOCUS_*). Ignored when the node is absent.

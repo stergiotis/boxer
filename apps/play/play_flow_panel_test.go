@@ -13,7 +13,7 @@ import (
 // UI; render is exercised live (ADR-0153 M4).
 
 func TestFlowDriverMemoStableAcrossFrames(t *testing.T) {
-	d := newFlowDriver(nil)
+	d := newFlowDriver(nil, nil)
 	node := splitNode{ID: "main", SQL: "SELECT a FROM t WHERE a > 0"}
 	d.ensure(node)
 	require.NoError(t, d.graphErr)
@@ -24,7 +24,7 @@ func TestFlowDriverMemoStableAcrossFrames(t *testing.T) {
 }
 
 func TestFlowDriverMemoRebuildOnSQLChange(t *testing.T) {
-	d := newFlowDriver(nil)
+	d := newFlowDriver(nil, nil)
 	d.ensure(splitNode{ID: "main", SQL: "SELECT 1"})
 	require.NoError(t, d.graphErr)
 	n1 := len(d.graph.Nodes)
@@ -36,7 +36,7 @@ func TestFlowDriverMemoRebuildOnSQLChange(t *testing.T) {
 // The sibling set is part of the memo key: deleting a sibling CTE
 // re-classifies a source without changing the node's own SQL.
 func TestFlowDriverMemoRebuildOnDepsChange(t *testing.T) {
-	d := newFlowDriver(nil)
+	d := newFlowDriver(nil, nil)
 	d.ensure(splitNode{ID: "by_kind", SQL: "SELECT * FROM recent"})
 	require.Equal(t, flowSourceTable, d.graph.Nodes[0].Kind)
 	d.ensure(splitNode{ID: "by_kind", SQL: "SELECT * FROM recent", DependsOn: []NodeID{"recent"}})
@@ -44,7 +44,7 @@ func TestFlowDriverMemoRebuildOnDepsChange(t *testing.T) {
 }
 
 func TestFlowDriverSelectionSurvivesAndClears(t *testing.T) {
-	d := newFlowDriver(nil)
+	d := newFlowDriver(nil, nil)
 	d.ensure(splitNode{ID: "main", SQL: "SELECT a FROM t WHERE a > 0"})
 	d.selectedID = "q:where"
 	d.ensure(splitNode{ID: "main", SQL: "SELECT b FROM u WHERE b > 1"})
@@ -54,7 +54,7 @@ func TestFlowDriverSelectionSurvivesAndClears(t *testing.T) {
 }
 
 func TestFlowDriverErrorThenRecover(t *testing.T) {
-	d := newFlowDriver(nil)
+	d := newFlowDriver(nil, nil)
 	d.ensure(splitNode{ID: "main", SQL: "SELECT * FROM"})
 	require.Error(t, d.graphErr)
 	require.Empty(t, d.graph.Nodes)

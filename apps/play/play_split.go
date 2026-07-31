@@ -35,6 +35,17 @@ type splitNode struct {
 	DependsOn []NodeID   // data edges: CTE nodes referenced
 	Reads     []SignalID // signal edges: unbound param-slot names referenced
 
+	// SrcOff is the byte offset of SQL within the statement text the split
+	// parsed, or -1 when no verified anchor exists. The sink carries the
+	// whole statement (offset 0); a CTE body's offset is anchored by locating
+	// the body text inside its CST source range — when the token-stream text
+	// and the source disagree, -1 declines rather than recording a
+	// plausible-but-wrong offset. Consumers (the Flow tab's editor highlight,
+	// ADR-0153) must treat the offset as advisory and re-verify by slice
+	// equality before acting on it; nodes built outside splitGraph carry no
+	// meaningful value here.
+	SrcOff int
+
 	// OwnWith marks a CTE node whose body opens with its own WITH clause
 	// (a nested CTE or scalar alias inside the body). fuseNode must then
 	// CONTINUE that WITH list with the transitive dep definitions instead
@@ -123,10 +134,12 @@ func splitGraph(sql string) (res splitResult, err error) {
 	// (data edges), and the param slots its body reads (signal edges).
 	for i := range root.CTEDefs {
 		cte := root.CTEDefs[i]
+		body := cteBodyText(pr, cte)
 		res.Nodes = append(res.Nodes, splitNode{
-			ID:   NodeID(cte.Name),
-			Kind: splitNodeCTE,
-			SQL:  cteBodyText(pr, cte),
+			ID:     NodeID(cte.Name),
+			Kind:   splitNodeCTE,
+			SQL:    body,
+			SrcOff: srcOffsetOf(pr, cte, body),
 			// A recursive CTE's self-reference resolves to its own lifted def;
 			// that is node-internal recursion (SD9), not a data edge — skipped
 			// via the self id.
@@ -156,6 +169,7 @@ func splitGraph(sql string) (res splitResult, err error) {
 		ID:        sinkID,
 		Kind:      splitNodeStatement,
 		SQL:       stmt,
+		SrcOff:    0, // the sink IS the statement, verbatim
 		DependsOn: resolvedDeps(scopes, topLevel, sinkID),
 		Reads:     paramSlotsOfAll(pr, sinkReads),
 	})
@@ -447,6 +461,26 @@ func cteBodyText(pr *nanopass.ParseResult, cte nanopass.CTEDef) string {
 		return strings.TrimSpace(nanopass.NodeText(pr, q))
 	}
 	return strings.TrimSpace(nanopass.NodeText(pr, cte.Node))
+}
+
+// srcOffsetOf anchors a CTE body text inside the parsed statement
+// (pr.Source): the body's CST source range, adjusted for the trim, verified
+// by an actual substring match. NodeText reconstructs from the token stream,
+// so it CAN differ from the source slice (that is why cteBodyText exists);
+// when it does, -1 records "no anchor" instead of a guess.
+func srcOffsetOf(pr *nanopass.ParseResult, cte nanopass.CTEDef, body string) int {
+	var ctx antlr.ParserRuleContext = cte.Node
+	if q := bodyQueryCtx(cte); q != nil {
+		ctx = q
+	}
+	r := pr.SourceRangeOf(ctx)
+	if body == "" || r.Empty() || r.Start < 0 || r.End > len(pr.Source) {
+		return -1
+	}
+	if idx := strings.Index(pr.Source[r.Start:r.End], body); idx >= 0 {
+		return r.Start + idx
+	}
+	return -1
 }
 
 // bodyOpensWithClause reports whether a CTE body starts with its own WITH

@@ -37,6 +37,7 @@ const (
 	flowLimit // LIMIT / LIMIT BY / OFFSET
 	flowUnion // UNION / EXCEPT / INTERSECT merge
 	flowResult
+	flowOp // a lens operator (an EXPLAIN plan step, pipeline processor, AST node)
 )
 
 // isSource reports whether the kind is one of the four source kinds (used for
@@ -52,11 +53,17 @@ func (k flowNodeKind) isSource() bool {
 // flowNode is one vertex of the derived graph. ID is positional and
 // deterministic (see flowBuilder); Label is short (truncated); Detail carries
 // the whitespace-collapsed clause snippet plus markers (FINAL, aliases, …).
+// Start/End are the byte range of the node's clause within the SQL text the
+// graph was derived from (zero range = no source anchor — union/result nodes,
+// and every lens-produced node); the editor highlight rebases and re-verifies
+// them before acting (ADR-0153, flowSelectionSection).
 type flowNode struct {
 	ID     string
 	Kind   flowNodeKind
 	Label  string
 	Detail string
+	Start  int
+	End    int
 }
 
 // flowEdge is a directed dataflow edge. Label marks join inputs ("l"/"r").
@@ -185,17 +192,26 @@ func (b *flowBuilder) addEdge(from, to, label string) {
 	b.g.Edges = append(b.g.Edges, flowEdge{From: from, To: to, Label: label})
 }
 
-// snippet returns the whitespace-collapsed, truncated source text of a CST
-// context ("" for nil/synthetic contexts).
-func (b *flowBuilder) snippet(ctx antlr.ParserRuleContext) string {
+// snipRange returns the whitespace-collapsed, truncated source text of a CST
+// context plus its byte range in the parsed SQL ("" and a zero range for
+// nil/synthetic contexts).
+func (b *flowBuilder) snipRange(ctx antlr.ParserRuleContext) (snip string, start, end int) {
 	if ctx == nil {
-		return ""
+		return "", 0, 0
 	}
 	r := b.pr.SourceRangeOf(ctx)
 	if r.Empty() {
-		return ""
+		return "", 0, 0
 	}
-	return truncateRunes(strings.Join(strings.Fields(b.pr.Source[r.Start:r.End]), " "), flowSnippetRunes)
+	return truncateRunes(strings.Join(strings.Fields(b.pr.Source[r.Start:r.End]), " "), flowSnippetRunes),
+		r.Start, r.End
+}
+
+// snippet is snipRange's text half, for labels and details that carry no
+// anchor of their own.
+func (b *flowBuilder) snippet(ctx antlr.ParserRuleContext) string {
+	s, _, _ := b.snipRange(ctx)
+	return s
 }
 
 // buildUnion walks one selectUnionStmt level: the head SELECT plus its
@@ -310,13 +326,17 @@ func (b *flowBuilder) buildSelect(stmt *grammar1.SelectStmtContext, path string,
 
 	// stage chains cur through one clause node; a cap-dropped node is skipped
 	// (cur unchanged) so the chain stays connected.
-	stage := func(idSuffix string, kind flowNodeKind, label, detail string) {
+	stage := func(idSuffix string, kind flowNodeKind, label, detail string, start, end int) {
 		id := path + ":" + idSuffix
-		if !b.addNode(flowNode{ID: id, Kind: kind, Label: label, Detail: detail}) {
+		if !b.addNode(flowNode{ID: id, Kind: kind, Label: label, Detail: detail, Start: start, End: end}) {
 			return
 		}
 		b.addEdge(cur, id, "")
 		cur = id
+	}
+	clause := func(idSuffix string, kind flowNodeKind, label string, ctx antlr.ParserRuleContext) {
+		detail, start, end := b.snipRange(ctx)
+		stage(idSuffix, kind, label, detail, start, end)
 	}
 
 	if ac := stmt.ArrayJoinClause(); ac != nil {
@@ -324,13 +344,13 @@ func (b *flowBuilder) buildSelect(stmt *grammar1.SelectStmtContext, path string,
 		if ac.LEFT() != nil {
 			label = "LEFT ARRAY JOIN"
 		}
-		stage("arrayjoin", flowJoin, label, b.snippet(ac))
+		clause("arrayjoin", flowJoin, label, ac)
 	}
 	if pw := stmt.PrewhereClause(); pw != nil {
-		stage("prewhere", flowFilter, "PREWHERE", b.snippet(pw))
+		clause("prewhere", flowFilter, "PREWHERE", pw)
 	}
 	if wc := stmt.WhereClause(); wc != nil {
-		stage("where", flowFilter, "WHERE", b.snippet(wc))
+		clause("where", flowFilter, "WHERE", wc)
 	}
 	if gc := stmt.GroupByClause(); gc != nil {
 		label := "GROUP BY"
@@ -343,10 +363,10 @@ func (b *flowBuilder) buildSelect(stmt *grammar1.SelectStmtContext, path string,
 		if gc.TOTALS() != nil {
 			label += " +TOTALS"
 		}
-		stage("group", flowAggregate, label, b.snippet(gc))
+		clause("group", flowAggregate, label, gc)
 	}
 	if hc := stmt.HavingClause(); hc != nil {
-		stage("having", flowFilter, "HAVING", b.snippet(hc))
+		clause("having", flowFilter, "HAVING", hc)
 	}
 
 	// The projection node is unconditional — grammar1 requires the SELECT
@@ -355,32 +375,31 @@ func (b *flowBuilder) buildSelect(stmt *grammar1.SelectStmtContext, path string,
 	// a stage of its own.
 	pc := stmt.ProjectionClause()
 	{
-		label := "SELECT"
-		detail := b.snippet(pc)
+		detail, start, end := b.snipRange(pc)
 		if wc := stmt.WindowClause(); wc != nil {
 			detail += " · " + b.snippet(wc)
 		}
-		stage("select", flowProject, label, detail)
+		stage("select", flowProject, "SELECT", detail, start, end)
 	}
 
 	if qc := stmt.QualifyClause(); qc != nil {
-		stage("qualify", flowFilter, "QUALIFY", b.snippet(qc))
+		clause("qualify", flowFilter, "QUALIFY", qc)
 	}
 	if pc != nil && pc.DISTINCT() != nil {
-		stage("distinct", flowDistinct, "DISTINCT", "")
+		stage("distinct", flowDistinct, "DISTINCT", "", 0, 0)
 	}
 	if oc := stmt.OrderByClause(); oc != nil {
 		label := "ORDER BY"
 		if oc.FILL() != nil {
 			label += " +FILL"
 		}
-		stage("order", flowSort, label, b.snippet(oc))
+		clause("order", flowSort, label, oc)
 	}
 	if lb := stmt.LimitByClause(); lb != nil {
-		stage("limitby", flowLimit, "LIMIT BY", b.snippet(lb))
+		clause("limitby", flowLimit, "LIMIT BY", lb)
 	}
 	if lc := stmt.LimitClause(); lc != nil {
-		stage("limit", flowLimit, "LIMIT", b.snippet(lc))
+		clause("limit", flowLimit, "LIMIT", lc)
 	}
 	return cur
 }
@@ -413,8 +432,9 @@ func (b *flowBuilder) buildJoinTree(je grammar1.IJoinExprContext, path string, s
 		if t.GLOBAL() != nil {
 			label = "GLOBAL " + label
 		}
+		detail, dStart, dEnd := b.snipRange(t.JoinConstraintClause())
 		if !b.addNode(flowNode{ID: id, Kind: flowJoin, Label: truncateRunes(label, flowLabelRunes),
-			Detail: b.snippet(t.JoinConstraintClause())}) {
+			Detail: detail, Start: dStart, End: dEnd}) {
 			return left
 		}
 		b.addEdge(left, id, "l")
@@ -466,8 +486,13 @@ func (b *flowBuilder) buildSourceLeaf(t *grammar1.JoinExprTableContext, path str
 		marks = append(marks, "not expanded (depth cap)")
 	}
 
+	srcStart, srcEnd := 0, 0
+	if r := b.pr.SourceRangeOf(t); !r.Empty() {
+		srcStart, srcEnd = r.Start, r.End
+	}
 	if !b.addNode(flowNode{ID: id, Kind: kind, Label: truncateRunes(label, flowLabelRunes),
-		Detail: truncateRunes(strings.Join(marks, " · "), flowSnippetRunes)}) {
+		Detail: truncateRunes(strings.Join(marks, " · "), flowSnippetRunes),
+		Start:  srcStart, End: srcEnd}) {
 		return ""
 	}
 	if expand {
