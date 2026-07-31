@@ -7,10 +7,9 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** Describes the width machinery as of
-> 2026-07-31. The resolver and both table wires exist; **no app is wired to
-> them yet** — the seam that would let an app reach stored overrides is still
-> open (see [Not wired yet](#not-wired-yet)). Treat the call-site snippets as
-> the intended shape, not as code copied from a working adopter.
+> 2026-07-31, with play's attr grid as the first adopter (ADR-0151 M4). The
+> snippets follow that call site; nothing here has been exercised against a
+> live ClickHouse-backed store.
 
 # Controlling table column widths
 
@@ -36,13 +35,8 @@ their widths and a type change deliberately drops the override.
 ## Using the resolver
 
 `egui2/colwidth` is pure Go and holds no egui state. One resolver per app,
-built at Mount once storage is available:
-
-```go
-res, err := colwidth.New(store, colwidth.Opts{AppId: myAppId})
-if err != nil { /* … */ }
-if err := res.Load(); err != nil { /* non-fatal: defaults still work */ }
-```
+built on the first Frame — not at Mount, because the store arrives as a
+frame-context capability (see [Reaching a store](#reaching-a-store)).
 
 Per frame, describe the columns, resolve, and pass the epoch:
 
@@ -143,19 +137,28 @@ registers senses hover only, and the secondary click comes from the pointer
 and need stable ids: the popup body renders only while open, so an id drawn
 from a per-frame counter will drift.
 
-## Not wired yet
+## Reaching a store
 
-No app uses any of this. The resolver reads and writes column-width facts, and
-an app cannot reach a fact store: `MountContextI` exposes `Storage()` and
-`Bus()`, and handing an app a record store is not an option because its
-executor takes raw SQL, which would put an app outside the capability model.
-ADR-0151's M4 is blocked on that seam; the options are costed in
-[persist-api-surface-recordstore](../adr-background-work/persist-api-surface-recordstore.md).
+The store arrives as an optional frame-context capability, the shape
+[ADR-0155](../adr/0155-app-embed-seam.md) §SD1 settled for host-held
+collaborators. Acquire it once, on a frame:
 
-Until it is resolved, `colwidth.StoreI` can be satisfied by anything with the
-three column-width methods — including `factsstore.InMemoryFactsStore`, which
-is what the resolver's own tests use. That is enough to develop against, and
-not enough to ship a user-visible feature.
+```go
+if h, ok := ctx.(colwidth.HostI); ok {
+    if st := h.ColumnWidthStore(); st != nil {
+        res, _ = colwidth.New(st, colwidth.Opts{AppId: ctx.AppId(), MinPoints: 24, MaxPoints: 1200})
+        _ = res.Load()
+    }
+}
+```
+
+Absence is not an error — it means the host has no facts store, so widths
+come from your defaults and nothing persists. Every affordance still works.
+
+Construct with `ctx.AppId()`, never an identity you compose: ADR-0155 §SD3
+makes it the keying identity for embedded and windowed instances alike, so a
+column dragged in one follows the content to the other. A composed identity
+would fork the rows per embedder.
 
 ## See also
 
@@ -165,3 +168,6 @@ not enough to ship a user-visible feature.
   the storage choice follows.
 - [`egui2/colwidth`](../../public/thestack/imzero2/egui2/colwidth) — the
   resolver; its package doc covers the apply/capture state machine.
+- [ADR-0155](../adr/0155-app-embed-seam.md) — §SD1's optional-capability
+  shape, which is how the store reaches an app, and §SD3 on why the keying
+  identity is the mount context's.

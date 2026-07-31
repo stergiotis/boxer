@@ -487,27 +487,53 @@ close behaviour.
 This is a general binding, not a table feature; the width how-to uses it,
 and any widget that wants a context menu now can.
 
+## Update — 2026-07-31: M4 lands on ADR-0155's capability
+
+The seam M4 waited for arrived as
+[ADR-0155](./0155-app-embed-seam.md) §SD1: an optional capability
+type-asserted off the context, exactly as `WindowFocusI` is, leaving the
+four-method app contract frozen. `colwidth.HostI` is that capability for
+column widths; windowhost implements it on a wrapper embedding the static
+frame context, and only when it has a facts store — absence of the
+capability is how an app learns there is nowhere durable to put widths.
+
+It is declared in `colwidth` rather than in `app` because its store speaks
+in facts rows and `factsstore` imports `app`; declaring it there would
+close that loop.
+
+play resolves the attr grid through it, with the existing sampled
+estimator demoted to the default for untouched columns. Two call-site
+details were not obvious from §SD4 and are worth carrying to the next
+adopter:
+
+- **The fixed leading column must still appear in the resolver's column
+  list.** The width read-back is positional, so omitting it shifts every
+  later column onto the wrong identity. Being unresizable it is never
+  captured — the binding reports the supplied width straight back.
+- **The first report a table makes is its force-autofit frame.** Those
+  widths are the crate's, not the user's; passing `firstShow` there is
+  what stops the estimator's first result being frozen as an override
+  nobody chose.
+
+Column identity is the raw Arrow field name and type rather than the
+rendered label, so an override does not change identity if the label
+builder does. Font size is passed as 0: play has no single text size to
+attribute a width to, and zero disables rescaling — the documented
+meaning, not a gap.
+
+ADR-0155 §SD3 verified its identity decision against this ADR
+pre-acceptance; M4 is the other half of that, and uses the mount context's
+`AppId` exactly as SD3 requires.
+
 ## Status
 
-Accepted 2026-07-30. M2 was discharged outside this ADR before acceptance
-(§SD3). Q2/§SD2's storage choice was superseded by the ADR-0148
-data-centricity invariant (Update 2026-07-30) before any of it was built.
-The fact kind, M1, M3, M5 and M6 are implemented (Updates 2026-07-31),
-including the header context menu once `c.ContextMenu()` was added. **M4 is
-blocked** on the app-state seam recorded in the second Update of that date —
-so nothing here is reachable from an app yet.
+Accepted 2026-07-30. The fact kind and M1–M6 are all implemented (Updates
+2026-07-31), M4 last, on the capability ADR-0155 established. M2 was
+discharged outside this ADR before acceptance (§SD3), and Q2/§SD2's
+storage choice was superseded by the ADR-0148 data-centricity invariant
+before any of it was built.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers. Subsequent refinements land as dated `## Update`
 sections.
-
-## References
-
-- [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) (§SD3 persist subjects, §SD6 facts)
-- [ADR-0148 — App workingsets](./0148-app-workingsets.md) (persist limits, facts-backend follow-up, last-writer-wins)
-- [ADR-0132 — SQL applets](./0132-sqlapplet-sql-defined-applets.md) (O4 store over `StorageI`; the index-key enumeration workaround)
-- `egui_table` 0.9.0 `table.rs` (TableState precedence, first-show autofit), `columns.rs` (`Column::auto_size`)
-- `egui_extras` 0.33.3 `table.rs` (sizing pass, grow-only ratchet, 8 px/frame shrink)
-- Gange, Marriott, Stuckey — [Optimal Automatic Table Layout](https://people.eng.unimelb.edu.au/pstuckey/papers/complete-table-2011.pdf) (the optimal-layout benchmark; contextual)
-- Dear ImGui [`imgui_tables.cpp`](https://github.com/ocornut/imgui/blob/master/imgui_tables.cpp) (content-seeded stretch weights; contextual)
