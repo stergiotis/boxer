@@ -25,6 +25,23 @@ const (
 	snippetButtonReplace = 1
 )
 
+// sqlBlockActionable gates which fenced blocks carry the Insert/Replace row
+// (markdown.WithCodeActionFilter). Only SQL — or untyped, which the corpora
+// use for plain snippets — may reach the editor.
+//
+// It withholds the BUTTONS, not just the click. Both surfaces used to render
+// the row on every block and ignore the unwanted clicks, which left a
+// ```response block of ClickHouse's box-drawing output advertising an Insert
+// that did nothing. An affordance that does nothing is worse than no
+// affordance: the reader has to click it to find out.
+//
+// Shared by the Snippets tab and the Docs pane so the two cannot drift about
+// what is insertable, and it is the single gate — neither call site re-checks
+// the language after the fact.
+func sqlBlockActionable(_ string, lang string) bool {
+	return lang == "sql" || lang == ""
+}
+
 // snippetDoc memoizes the parsed "snippets" help doc for the whole package.
 // The corpus is embedded and immutable, so one parse serves every PlayApp
 // instance. The book is built straight from the embedded FS (helpFS) rather
@@ -78,12 +95,8 @@ func (inst *PlayApp) renderSnippetsTab() {
 		// documented invariant), so the Snippets tab can't collide ids with
 		// the Help center rendering the same doc.
 		for range c.IdScope(inst.ids.PrepareStr("snippets-doc")) {
-			for act := range doc.RenderActionsN(inst.ids, snippetActionLabels) {
-				// Never drop a prose block (e.g. a ```bash sample) into the
-				// SQL editor; only SQL or untyped blocks are actionable.
-				if act.Lang != "sql" && act.Lang != "" {
-					continue
-				}
+			for act := range doc.RenderActionsN(inst.ids, snippetActionLabels,
+				markdown.WithCodeActionFilter(sqlBlockActionable)) {
 				// Deliver through the public seam (play_delivery.go): both
 				// ops focus the Editor tab, so the splice lands where the
 				// buffer is live (a hidden editor discards its body buffer

@@ -151,16 +151,12 @@ func (inst *PlayApp) renderDocsTab() {
 		// tab or the Help center rendering another document the same frame.
 		for range c.IdScope(ids.PrepareStr("docsBody")) {
 			// Links the endpoint itself documents are followed in place; the
-			// rest stay browser hyperlinks. See docsLinkClaimed.
+			// rest stay browser hyperlinks (docsLinkClaimed). The action
+			// filter is what keeps a ```response block of query output from
+			// advertising an Insert (sqlBlockActionable).
 			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels,
-				markdown.WithLinkRouter(docsLinkClaimed, inst.followDocsLink)) {
-				// The corpus is full of runnable examples; only SQL (or
-				// untyped) blocks may reach the editor. A ```response block
-				// showing ClickHouse's box-drawing output must never be
-				// insertable — the same gate the Snippets tab applies.
-				if act.Lang != "sql" && act.Lang != "" {
-					continue
-				}
+				markdown.WithLinkRouter(docsLinkClaimed, inst.followDocsLink),
+				markdown.WithCodeActionFilter(sqlBlockActionable)) {
 				switch act.Button {
 				case snippetButtonInsert:
 					inst.InsertSqlAtCaret(act.Text)
@@ -210,7 +206,7 @@ func (inst *PlayApp) resolveDocs(cands []string) (res *docsResult) {
 	// the same: a name may simply not be documented, and the next candidate is
 	// the better guess rather than a failure.
 	if len(s.nav) > 0 {
-		for i, cand := range s.nav {
+		for _, cand := range s.nav {
 			hit := inst.docs.cached(cand)
 			if hit == nil {
 				res, _ = inst.docs.lookup(cand)
@@ -230,7 +226,6 @@ func (inst *PlayApp) resolveDocs(cands []string) (res *docsResult) {
 				}
 				return hit
 			}
-			_ = i
 		}
 		// Nothing the link could have meant is documented here. Keep the URL
 		// so the pane can still offer the page it pointed at.
