@@ -190,6 +190,17 @@ layout, local selection, width probe) → **M3** registration + registry-test
 updates + env-vars regen → **M4** live verification (scripted focus +
 egui-mcp drive), then a dated Update here.
 
+Built the same day, M1–M4: 25 extractor fixtures (including the order
+invariant, the sibling-CTE contract, depth/node caps and id determinism)
+plus 6 driver tests, full `apps/play` suite green. M4 ran the
+scripted-screenshot path (`BOXER_PLAY_FOCUS_FLOW` on a private headless
+weston): the capture shows the left-right chain, the `l`/`r` join fan-in,
+the layout toggle, the status line and the result ellipse for a
+CTE-self-join query. The click path (local highlight + detail line) is
+covered by the driver tests, not yet driven interactively. Code is in the
+working tree pending review; acceptance, if granted, arrives as a dated
+Update.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the layeredgraph widget stack this renders through.
