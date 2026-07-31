@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 // docsPaneState is the pane's own view state — what it is showing and how it
@@ -137,8 +136,10 @@ func (inst *PlayApp) renderDocsTab() {
 		// documented invariant) so the pane cannot collide with the Snippets
 		// tab or the Help center rendering another document the same frame.
 		for range c.IdScope(ids.PrepareStr("docsBody")) {
-			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels,
-				markdown.WithLinkRouter(docsLinkClaimed, inst.followDocsLink)) {
+			// The link router is deliberately NOT wired yet — see
+			// docsLinkClaimed. Links stay browser hyperlinks until a widget
+			// emitted in the markdown inline flow can receive a click.
+			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels) {
 				// The corpus is full of runnable examples; only SQL (or
 				// untyped) blocks may reach the editor. A ```response block
 				// showing ClickHouse's box-drawing output must never be

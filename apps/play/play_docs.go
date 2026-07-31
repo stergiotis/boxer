@@ -373,6 +373,23 @@ func docsCandidates(e highlight.CaretEntity, ok bool) (out []string) {
 // docsLinkClaimed reports whether a link target is a ClickHouse documentation
 // page, and so belongs in this pane rather than in a browser.
 //
+// NOT WIRED YET, and deliberately so. A widget emitted inside the markdown
+// widget's inline paragraph flow never receives a click: driving the live pane
+// shows its response flags stuck at Enabled|ClickedElsewhere, with Hovered
+// never set even under an explicit hover, while an identical widget emitted at
+// the segment level of the SAME document (the code-block action buttons) takes
+// clicks normally. Ruled out along the way: the widget kind (Button and
+// SelectableLabel behave the same), Frame(false), the atoms construction, the
+// enclosing HorizontalWrapped versus Horizontal, and a wrapped sibling label
+// overlapping it. That leaves egui hit-testing disagreeing with the rect
+// accesskit reports for the inline flow — an imzero2-level question, below
+// this pane.
+//
+// Wiring it before that is settled would trade working browser links for links
+// that look live and do nothing, which is strictly worse. The routing itself
+// (markdown.WithLinkRouter, docsLinkCandidates, followDocsLink) is built and
+// table-tested, so adopting it is one call site once the seam works.
+//
 // It runs once per link per frame during layout, so it is a cheap syntactic
 // test and never a lookup: whether the target names something this server
 // documents is decided on the click, where a query is affordable. Claiming a
