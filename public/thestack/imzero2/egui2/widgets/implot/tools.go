@@ -143,7 +143,7 @@ func (p *Plot) emitToolsClipped(tr transform, areaX, areaY, areaW, areaH float32
 			}
 			c.PaintLine(px, py, bx+bw/2, by+bh/2, color.Hex((t.colHex&^0xff)|0x66), 1.0).Send()
 			c.PaintRectFilled(bx, by, bx+bw, by+bh, 2.0, color.Hex((t.colHex&^0xff)|0xd8)).Send()
-			c.PaintText(bx+4, by+bh/2, 0, 1, t.text, tickFontSize, color.Hex(colContrastDark)).Monospace().Send()
+			c.PaintText(bx+4, by+bh/2, 0, 1, t.text, tickFontSize, color.Hex(contrastText(t.colHex))).Monospace().Send()
 		}
 	}
 }
@@ -179,13 +179,13 @@ func (p *Plot) emitToolChrome(tr transform, areaX, areaY, areaW, areaH float32, 
 			lbl := formatTick(t.x, 2)
 			bw := float32(len(lbl))*charW + 6
 			c.PaintRectFilled(px-bw/2, areaY+areaH+1, px+bw/2, areaY+areaH+tickLen+13, 2.0, color.Hex(t.colHex)).Send()
-			c.PaintText(px, areaY+areaH+tickLen+3, 1, 0, lbl, tickFontSize, color.Hex(colContrastDark)).Monospace().Send()
+			c.PaintText(px, areaY+areaH+tickLen+3, 1, 0, lbl, tickFontSize, color.Hex(contrastText(t.colHex))).Monospace().Send()
 		case toolTagY:
 			py := tr.pxY(t.y)
 			lbl := formatTick(t.y, 2)
 			bw := float32(len(lbl))*charW + 6
 			c.PaintRectFilled(areaX-tickLen-bw-1, py-7, areaX-1, py+7, 2.0, color.Hex(t.colHex)).Send()
-			c.PaintText(areaX-tickLen-4, py, 2, 1, lbl, tickFontSize, color.Hex(colContrastDark)).Monospace().Send()
+			c.PaintText(areaX-tickLen-4, py, 2, 1, lbl, tickFontSize, color.Hex(contrastText(t.colHex))).Monospace().Send()
 		}
 	}
 }
