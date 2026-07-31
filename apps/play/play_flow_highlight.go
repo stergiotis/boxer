@@ -40,7 +40,14 @@ func (inst *PlayApp) flowSelectionSection() (sec codeview.StyledSection, ok bool
 	if !selOK || node.SrcOff < 0 || fn.End <= fn.Start || fn.Start < 0 || fn.End > len(node.SQL) {
 		return
 	}
-	sink, sinkOK := findSplitNode(inst.currentSplit, inst.currentSplit.Sink)
+	// Caret mode derives from the live split; run mode from the last Run's.
+	// Either way the statement is located below by text equality against the
+	// buffer's own split, and the final slice guard decides.
+	split := inst.currentSplit
+	if inst.flow.srcMode == flowSrcCaret {
+		split = inst.flow.liveSplit
+	}
+	sink, sinkOK := findSplitNode(split, split.Sink)
 	if !sinkOK {
 		return
 	}

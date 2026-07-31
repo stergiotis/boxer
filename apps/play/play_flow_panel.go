@@ -43,8 +43,14 @@ type flowDriver struct {
 	// EXPLAIN text the server returned (the graph is a reading of that text;
 	// the text is the full detail, and what a bug report should carry).
 	lensView flowLensView
-	rankDir  layeredgraph.RankDir
-	view     view.ViewState
+	// srcMode picks what the tab derives from: the last Run's split (the
+	// default, §SD5), or the statement under the editor caret in the CURRENT
+	// buffer — re-derived as the buffer changes, with the caret also picking
+	// the node inside the statement (a CTE body under the caret shows that
+	// CTE's flow).
+	srcMode flowSrcMode
+	rankDir layeredgraph.RankDir
+	view    view.ViewState
 
 	// selectedID highlights the last-clicked node, feeds the detail line,
 	// and — on the statement lens — the editor tint.
@@ -63,6 +69,13 @@ type flowDriver struct {
 	lineageGraph flowGraph
 	lineageErr  error
 	lineageNote string
+
+	// Caret mode: the live split of the statement under the caret, memoised
+	// on its text — the same per-edit parse-cost class as the editor's own
+	// statement machinery.
+	liveKey   string
+	liveSplit splitResult
+	liveErr   error
 
 	// EXPLAIN lenses: one lane per lens (nil map for an unwired host —
 	// tests), the parse memoised on the lane's served key. lensShown tracks
@@ -290,28 +303,58 @@ func flowToModel(g flowGraph) layeredgraph.GraphModel {
 	return layeredgraph.GraphModel{Nodes: nodes, Edges: edges}
 }
 
-// renderFlowTab is the Flow dock tab body (ADR-0153). The active node follows
-// the observe gesture; when nothing is observed the plain mainNodeID may miss
-// a disambiguated sink id ("main (sink)"), so the miss resolves to the split's
-// sink before giving up.
+// renderFlowTab is the Flow dock tab body (ADR-0153): resolve what the tab
+// derives from this frame (the last Run's split, or the caret statement,
+// per the source toggle), then dispatch to the selected lens.
 func (inst *PlayApp) renderFlowTab() {
-	active := inst.activeNodeID()
-	if _, ok := findSplitNode(inst.currentSplit, active); !ok && active == mainNodeID {
-		active = inst.currentSplit.Sink
-	}
 	d := inst.flow
+	split, active, srcErr := inst.flowFeed()
 	d.renderControls(active)
 	d.syncLens()
 	if d.lens == lensLineage {
-		d.renderLineage(inst.currentSplit, active, inst.splitErr)
+		d.renderLineage(split, active, srcErr)
 		return
 	}
 	if d.lens.remote() {
-		lines, feed := inst.demandFlowLens(active)
+		lines, feed := inst.demandFlowLens(split, active)
 		d.renderLens(lines, feed)
 		return
 	}
-	d.renderStatement(inst.currentSplit, active, inst.splitErr)
+	d.renderStatement(split, active, srcErr)
+}
+
+// flowFeed resolves the split and active node the Flow tab derives from.
+//
+// Run mode: the last Run's split; the active node follows the observe
+// gesture, and a plain mainNodeID that misses a disambiguated sink id
+// ("main (sink)") resolves to the split's sink before giving up.
+//
+// Caret mode: the statement under the editor caret in the CURRENT buffer,
+// split live (memoised on its text); within it, the caret picks the node —
+// a CTE body under the caret shows that CTE, anywhere else the sink. The
+// resolution rides splitNode.SrcOff, the same verified anchor the editor
+// highlight uses, so an unanchored body simply falls back to the sink.
+func (inst *PlayApp) flowFeed() (split splitResult, active NodeID, srcErr error) {
+	d := inst.flow
+	if d.srcMode == flowSrcRun {
+		active = inst.activeNodeID()
+		if _, ok := findSplitNode(inst.currentSplit, active); !ok && active == mainNodeID {
+			active = inst.currentSplit.Sink
+		}
+		return inst.currentSplit, active, inst.splitErr
+	}
+	stmt, _, _, ok := inst.caretStatement()
+	if !ok || stmt.Src.Start < 0 || stmt.Src.End > len(inst.sql) || stmt.Src.Start >= stmt.Src.End {
+		return splitResult{}, "", nil
+	}
+	slice := inst.sql[stmt.Src.Start:stmt.Src.End]
+	text := strings.TrimSpace(slice)
+	d.ensureLive(text)
+	if d.liveErr != nil || len(d.liveSplit.Nodes) == 0 {
+		return splitResult{}, "", d.liveErr
+	}
+	rel := inst.caretByte - (stmt.Src.Start + strings.Index(slice, text))
+	return d.liveSplit, caretFlowNode(d.liveSplit, rel), nil
 }
 
 // flowLensFeed is what the app-side demand hands the driver about a remote
@@ -328,23 +371,33 @@ type flowLensFeed struct {
 // other node's, so a `{p:Type}` slot inside the explained statement rides the
 // URL — verified server-side substitution (play_flow_lens.go). Returns the
 // result lines (the `explain` column's rows) plus the lane state.
-func (inst *PlayApp) demandFlowLens(active NodeID) (lines []string, feed flowLensFeed) {
+func (inst *PlayApp) demandFlowLens(split splitResult, active NodeID) (lines []string, feed flowLensFeed) {
 	d := inst.flow
 	lane := d.lensLane()
 	if lane == nil {
 		feed.reason = "EXPLAIN lenses need a connected endpoint."
 		return
 	}
-	node, ok := findSplitNode(inst.currentSplit, active)
+	node, ok := findSplitNode(split, active)
 	if !ok {
 		feed.reason = "Run a query first — the lens explains the active node's SQL."
+		if d.srcMode == flowSrcCaret {
+			feed.reason = "Place the caret in a statement — the lens explains the SQL under it."
+		}
+		return
+	}
+	// Caret mode asks the server only when the debounced pipeline has seen
+	// exactly this buffer (the diagnostics-probe discipline) — a half-typed
+	// statement keeps the last-good graph instead of streaming parse errors.
+	// The lane memo already collapses repeats of a settled text.
+	if d.srcMode == flowSrcCaret && inst.sql != inst.formattedFor {
 		return
 	}
 	// The compiled SQL is the PLAIN fused node — the lane's transport applies
 	// the EXPLAIN wrap to the residual (explainWrap), so the demand memo, the
 	// routing decision and the rewrites all see the statement itself.
 	v := lane.demand(compiledNode{
-		SQL:    fuseNode(inst.currentSplit, active),
+		SQL:    fuseNode(split, active),
 		Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	feed.loading = v.loading
@@ -378,8 +431,11 @@ func (inst *flowDriver) renderStatement(split splitResult, active NodeID, splitE
 	node, ok := findSplitNode(split, active)
 	if !ok {
 		msg := "Run a query to see its dataflow."
+		if inst.srcMode == flowSrcCaret {
+			msg = "Place the caret in a statement to see its dataflow."
+		}
 		if splitErr != nil {
-			msg = "The buffer did not split: " + truncateRunes(firstLine(splitErr.Error()), 120)
+			msg = "The statement did not split: " + truncateRunes(firstLine(splitErr.Error()), 120)
 		}
 		for rt := range c.RichTextLabel(msg) {
 			rt.Small().Weak()
@@ -404,6 +460,48 @@ const (
 	flowViewText // the raw EXPLAIN output, indentation preserved
 )
 
+// flowSrcMode selects what the tab derives from.
+type flowSrcMode uint8
+
+const (
+	flowSrcRun   flowSrcMode = iota // the last Run's split (§SD5 default)
+	flowSrcCaret                    // the statement under the caret, live
+)
+
+// ensureLive re-splits the caret statement when its text changes. Cost is
+// bounded by the memo: an unchanged statement (caret travel, edits
+// elsewhere) re-derives nothing.
+func (inst *flowDriver) ensureLive(stmtText string) {
+	if stmtText == inst.liveKey {
+		return
+	}
+	inst.liveKey = stmtText
+	if strings.TrimSpace(stmtText) == "" {
+		inst.liveSplit, inst.liveErr = splitResult{}, nil
+		return
+	}
+	inst.liveSplit, inst.liveErr = splitGraph(stmtText)
+	if inst.liveErr != nil {
+		inst.liveSplit = splitResult{}
+	}
+}
+
+// caretFlowNode picks the node whose body contains the statement-relative
+// caret offset — editing inside a CTE shows that CTE's flow — else the sink.
+// Nodes without a verified source anchor never match.
+func caretFlowNode(split splitResult, rel int) NodeID {
+	for i := range split.Nodes {
+		n := &split.Nodes[i]
+		if n.ID == split.Sink || n.SrcOff < 0 {
+			continue
+		}
+		if rel >= n.SrcOff && rel < n.SrcOff+len(n.SQL) {
+			return n.ID
+		}
+	}
+	return split.Sink
+}
+
 // renderLineage is the lineage lens's body: output-column provenance of the
 // active node's SELECT list (play_flow_lineage.go), same discipline as the
 // statement lens.
@@ -411,8 +509,11 @@ func (inst *flowDriver) renderLineage(split splitResult, active NodeID, splitErr
 	node, ok := findSplitNode(split, active)
 	if !ok {
 		msg := "Run a query to see its column lineage."
+		if inst.srcMode == flowSrcCaret {
+			msg = "Place the caret in a statement to see its column lineage."
+		}
 		if splitErr != nil {
-			msg = "The buffer did not split: " + truncateRunes(firstLine(splitErr.Error()), 120)
+			msg = "The statement did not split: " + truncateRunes(firstLine(splitErr.Error()), 120)
 		}
 		for rt := range c.RichTextLabel(msg) {
 			rt.Small().Weak()
@@ -630,13 +731,15 @@ func (inst *flowDriver) nodeFill(g flowGraph, id string) (col color.Color, ok bo
 	return
 }
 
-// renderControls draws the lens selector, the layout-direction toggle and the
-// active node badge.
+// renderControls draws the lens selector on its own row, and the secondary
+// toggles (source, layout, view) with the node badge on a second — one row
+// clipped once seven lenses plus three toggles landed, and a control that
+// renders off-pane cannot be clicked by anyone.
 func (inst *flowDriver) renderControls(active NodeID) {
 	for range c.Horizontal().KeepIter() {
 		c.Label("lens").Send()
 		// The framed segmented skin (the package default), not the frameless
-		// one the layout/view toggles use: the lens is the pane's primary
+		// one the secondary toggles use: the lens is the pane's primary
 		// mode switch, and the frame is what says "this is a control" at a
 		// glance.
 		selector.Segmented(inst.ids, "flow-lens", &inst.lens).
@@ -648,6 +751,15 @@ func (inst *flowDriver) renderControls(active NodeID) {
 			Option(lensEstimate, "estimate").
 			Option(lensIndexes, "indexes").
 			Option(lensLineage, "lineage").
+			SendResp()
+	}
+	for range c.Horizontal().KeepIter() {
+		c.Label("source").Send()
+		selector.Segmented(inst.ids, "flow-src", &inst.srcMode).
+			Inline().
+			Frameless().
+			Option(flowSrcRun, "run").
+			Option(flowSrcCaret, "caret").
 			SendResp()
 		c.Label("layout").Send()
 		selector.Segmented(inst.ids, "flow-rank-dir", &inst.rankDir).
@@ -665,7 +777,14 @@ func (inst *flowDriver) renderControls(active NodeID) {
 				Option(flowViewText, "text").
 				SendResp()
 		}
-		for rt := range c.RichTextLabel("node: " + string(active)) {
+		badge := "node: " + string(active)
+		if active == "" {
+			badge = "node: —"
+		}
+		if inst.srcMode == flowSrcCaret {
+			badge += " · live"
+		}
+		for rt := range c.RichTextLabel(badge) {
 			rt.Small().Weak()
 		}
 	}

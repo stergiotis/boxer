@@ -488,6 +488,15 @@ and what a bug report should carry. Lens results refresh on Run and when the
 statement's parameters move; a clicked node's step text appears under the
 canvas the same way clause text does.
 
+The **source** toggle picks what the tab derives from. **run** (the
+default) is the last Run's statement, with the observe gesture choosing the
+node. **caret** follows the editor instead: the statement under the caret
+in the current buffer, re-derived as you edit — and within it, the caret
+picks the node, so placing it inside a CTE body shows that CTE's flow. The
+node badge reads `· live` in this mode. Local lenses update immediately;
+remote lenses ask the server only once the buffer has settled, so a
+half-typed statement keeps the last answer instead of streaming errors.
+
 ### Schema
 
 A leeway `TableDesc` inspector over the active result's Arrow schema — column

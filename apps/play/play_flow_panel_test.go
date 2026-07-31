@@ -1,6 +1,7 @@
 package play
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -61,6 +62,72 @@ func TestFlowDriverErrorThenRecover(t *testing.T) {
 	d.ensure(splitNode{ID: "main", SQL: "SELECT 1"})
 	require.NoError(t, d.graphErr)
 	require.NotEmpty(t, d.graph.Nodes)
+}
+
+// The caret picks the node whose body contains it — a CTE body under the
+// caret shows that CTE — with the sink as the fallback everywhere else.
+func TestCaretFlowNode(t *testing.T) {
+	const stmt = "WITH a AS (SELECT 1 AS x), b AS (SELECT 2 AS y) SELECT * FROM a, b"
+	res, err := splitGraph(stmt)
+	require.NoError(t, err)
+
+	na, ok := findSplitNode(res, NodeID("a"))
+	require.True(t, ok)
+	require.GreaterOrEqual(t, na.SrcOff, 0)
+	require.Equal(t, NodeID("a"), caretFlowNode(res, na.SrcOff+2))
+
+	nb, ok := findSplitNode(res, NodeID("b"))
+	require.True(t, ok)
+	require.Equal(t, NodeID("b"), caretFlowNode(res, nb.SrcOff+2))
+
+	require.Equal(t, res.Sink, caretFlowNode(res, len(stmt)-3), "the outer SELECT is the sink's")
+	require.Equal(t, res.Sink, caretFlowNode(res, -5), "out of range falls back to the sink")
+}
+
+func TestFlowDriverEnsureLiveMemo(t *testing.T) {
+	d := newFlowDriver(nil, nil)
+	d.ensureLive("WITH d AS (SELECT 1 AS x) SELECT * FROM d")
+	require.NoError(t, d.liveErr)
+	require.Len(t, d.liveSplit.Nodes, 2)
+	first := &d.liveSplit.Nodes[0]
+	d.ensureLive("WITH d AS (SELECT 1 AS x) SELECT * FROM d")
+	require.Same(t, first, &d.liveSplit.Nodes[0], "unchanged text ⇒ no re-split")
+
+	d.ensureLive("SELECT * FROM")
+	require.Error(t, d.liveErr)
+	require.Empty(t, d.liveSplit.Nodes)
+
+	d.ensureLive("   ")
+	require.NoError(t, d.liveErr)
+	require.Empty(t, d.liveSplit.Nodes)
+}
+
+// flowFeed in caret mode follows the caret across statements and into CTE
+// bodies of the CURRENT buffer; run mode keeps the last Run's split.
+func TestFlowFeedCaretMode(t *testing.T) {
+	inst := tabsTestApp()
+	inst.sql = "SELECT 7 AS q;\nWITH d AS (SELECT 1 AS x) SELECT * FROM d"
+	inst.flow.srcMode = flowSrcCaret
+
+	inst.caretByte = 3 // inside the first statement
+	split, active, srcErr := inst.flowFeed()
+	require.NoError(t, srcErr)
+	require.Equal(t, split.Sink, active)
+	sink, ok := findSplitNode(split, active)
+	require.True(t, ok)
+	require.Equal(t, "SELECT 7 AS q", sink.SQL)
+
+	// Inside d's body in the second statement.
+	inst.caretByte = strings.Index(inst.sql, "SELECT 1 AS x") + 3
+	split, active, srcErr = inst.flowFeed()
+	require.NoError(t, srcErr)
+	require.Equal(t, NodeID("d"), active)
+	require.Len(t, split.Nodes, 2)
+
+	// Run mode is untouched by the caret.
+	inst.flow.srcMode = flowSrcRun
+	_, active, _ = inst.flowFeed()
+	require.Equal(t, inst.currentSplit.Sink, active)
 }
 
 func TestFlowToModelShapes(t *testing.T) {
