@@ -152,6 +152,14 @@ Accepted — 2026-06-21 (reviewed by @spx). Phasing: **Phase 0** — SD7(f) flee
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 `## Updates` H3 / Tier 3 superseding ADR).
 
+## Updates
+
+### 2026-07-31 — `gofakeit` removed; the TinyGo-guest kill-reason now rests on two of its three citations
+
+§Alternatives rules out the **TinyGo guest** on reflection and GC limits, citing three reflection-heavy areas: leeway's `marshallreflect`, the jsonv2 paths, and gofakeit-driven testing. The third no longer exists. `github.com/brianvoe/gofakeit/v7` was dropped from `go.mod` and its one consumer — the random CBOR document generator in `public/semistructured/cbor` — rewritten against a self-contained word corpus; the generator's semantic variety was never load-bearing, since the encoder observes only byte length and UTF-8 validity. The kill-reason stands on the remaining two and the Decision is unchanged. This entry exists so a reader does not go hunting for a dependency the repo no longer has.
+
+The citation was also imprecise in a way worth correcting: `gofakeit` was imported from `random.go`, a **non-test** file, so it was not confined to testing and sat in that package's non-test import closure. [ADR-0078](./0078-tinygo-wasm-amenability-survey.md) §Updates records what that means for the survey.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — remote access via pixel streaming; the server-resident sibling; its O5 is the nearest prior evaluation of wasm-in-browser, under different premises.

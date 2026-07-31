@@ -244,3 +244,30 @@ in `both` mode rather than prune them (see open question 6).
    seeded-Red packages are never compiled (see Update). `redStdlib` was
    corrected; `unsupportedExternalPrefix` (Arrow, `x/tools`) is still
    unvalidated. Fix: in `both` mode, probe seeded-Reds instead of pruning them.
+
+## Updates
+
+### 2026-07-31 — `gofakeit` is no longer a dependency; §Context's back-reference narrowed
+
+§Context relays [ADR-0077](./0077-keelson-browser-wasm-execution.md)'s TinyGo
+rejection as resting on `marshallreflect`, the json/v2 paths, and
+"gofakeit-driven tests". `github.com/brianvoe/gofakeit/v7` has since been removed
+from `go.mod` — its only consumer, the random CBOR document generator in
+`public/semistructured/cbor`, was rewritten against a self-contained word
+corpus. The relayed rejection is unaffected in substance (see that ADR's
+§Updates), but the phrasing understated the dependency's reach in a way this
+survey cares about.
+
+**It was a non-test import.** `gofakeit` was imported from `random.go`, not a
+`_test.go` file, so it entered the **non-test** closure this survey classifies
+by, contributing three packages (`v7`, `v7/data`, `v7/source`). Matching neither
+prefix list in `support.go`, it seeded `ReasonUnknownExternal` → Yellow. Its
+removal shrinks the unknown-external surface without changing the package's
+static tier: `github.com/zeebo/xxh3` is also unmatched, so
+`public/semistructured/cbor` still triages Yellow pending the empirical pass.
+The curated props recorded for that package
+([ADR-0080](./0080-packageprops-per-package-declarations.md) — `WASMWASI`,
+`WASMJS`, `WASMFreestanding` all `WASMCompiles`) are unaffected: dropping a
+dependency cannot stop a package compiling. Open question 5 gains nothing
+either — `gofakeit` was on neither curated list, so this removes an unknown
+rather than resolving one.
