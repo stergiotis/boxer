@@ -130,6 +130,10 @@ type seriesFrame struct {
 	img      *imageFrame
 	boxes    *boxFrame
 	txt      *textFrame
+	// custom is the kindCustom draw closure (custom.go); unclipped lifts
+	// the plot-area clip around its call.
+	custom    func(DrawCtx)
+	unclipped bool
 }
 
 // Plot is the frame-transient handle between Begin and End. Methods follow
@@ -160,10 +164,14 @@ type Plot struct {
 	noInputs      bool
 	noLegend      bool
 	ended         bool
-	clickOk       bool
-	clickPos      [2]float32
-	xCustomTicks  []tick
-	yCustomTicks  []tick
+	// emitting is true while End invokes item renderers; item declarations
+	// from inside a Custom closure are debug-logged no-ops (they would
+	// silently never render — the series loop is already underway).
+	emitting     bool
+	clickOk      bool
+	clickPos     [2]float32
+	xCustomTicks []tick
+	yCustomTicks []tick
 }
 
 // Begin opens a plot with the given title (which is also its identity, as
@@ -537,6 +545,15 @@ func (p *Plot) warnIfLocked(fn string) bool {
 	if p.setupLocked {
 		log.Debug().Str("plot", p.title).Str("call", fn).
 			Msg("implot: Setup call after the first item is ignored (protocol: Setup* before items)")
+		return true
+	}
+	return false
+}
+
+func (p *Plot) warnIfEmitting(fn string) bool {
+	if p.emitting {
+		log.Debug().Str("plot", p.title).Str("call", fn).
+			Msg("implot: item declaration during End emission is ignored (a Custom closure must only paint)")
 		return true
 	}
 	return false

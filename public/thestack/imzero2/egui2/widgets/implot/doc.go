@@ -27,9 +27,19 @@
 // (the upstream label→item registry semantics), so error bars merge
 // with the series they decorate.
 //
+// Caller-drawn custom items (Custom / CustomUnclipped, custom.go)
+// re-express upstream's custom-rendering idiom — GetPlotDrawList +
+// PushPlotClipRect + PlotToPixels — as draw closures invoked during End,
+// because under this port's deferred emission the frame transform does
+// not exist earlier (see custom.go). Declaration order is z-order, as
+// upstream's draw-list order is; labeled customs join the legend like
+// any item.
+//
 // House extensions beyond the upstream surface, named as such in their
 // doc comments: Boxes, IncludeX/IncludeY, TimeTicksLocal,
-// AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached.
+// AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, and the
+// pixel-space readbacks HoverPixelPos/ClickedPixelPos/PlotAreaPrev
+// (hit-testing pixel-pinned custom geometry).
 //
 // Known deviations from upstream:
 //   - Box-zoom is Shift+drag (upstream: right-drag). The response-flag

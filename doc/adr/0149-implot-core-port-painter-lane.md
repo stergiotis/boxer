@@ -502,6 +502,65 @@ hand-maintained region and were removed by hand ahead of the regen —
 `egui2gen` type-checks the bindings package before writing, so the
 hand-written `PlotResponse`/`GetPlotPointer` plumbing had to go first.
 
+## Update 2026-07-31 — the custom-item lane (adoption-survey P2)
+
+The [adoption survey](../explanation/implot-adoption-survey.md) identified
+one gap blocking the second adoption wave (bespoke widgets adopting the
+plot frame while keeping their own items): upstream's custom-rendering
+idiom — `GetPlotDrawList` + `PushPlotClipRect` + `PlotToPixels` — was
+never ported. It now is, with one structural change forced by the port's
+own architecture, agreed in a design dialogue before code.
+
+Upstream locks axes at the first item, so `PlotToPixels` works
+immediately; this port defers emission to `End` so auto-fit resolves
+against the whole frame's data first (an M1 design choice that removed
+upstream's one-frame fit lag). The frame transform therefore does not
+exist between `Begin` and item declarations — an exported
+`PlotToPixels` could only return last frame's transform and would smear
+custom drawing by one frame during pan/zoom, and painting after `End`
+lands in the next widget's canvas (the `PaintCanvas` drain has already
+been emitted). The literal upstream API shape is structurally dead here;
+custom drawing became a closure the plot invokes during emission:
+
+- **`Custom(label, fn)` / `CustomUnclipped(label, fn)`** record a
+  `kindCustom` item; the closure runs inside `End` with a `DrawCtx` —
+  the exported frame `Transform` (`PxX/PxY/PlotX/PlotY`, the
+  axis-separated `PlotToPixels`/`PixelsToPlot`), the plot-area rect,
+  canvas size, and the item's resolved color/weight/legend-hover state.
+  Because items emit in declaration order from one list, custom items
+  inherit upstream's call-order z-model, palette-slot assignment, legend
+  rows with visibility toggles (a hidden custom's closure is not
+  invoked), and same-label merging — the internal `BeginItem`/`EndItem`
+  protocol upstream custom plotters use, re-expressed for free.
+- **Clipping**: clipped to the plot area by default; the unclipped
+  variant lifts the clip for gutter spill (callouts, gutter
+  decorations), restoring the M0 clip stack around the call.
+- **Fit**: custom items declare their extent via the existing
+  `IncludeX`/`IncludeY`; they contribute nothing implicitly.
+- **Pixel readbacks** (house extensions): `HoverPixelPos`,
+  `ClickedPixelPos` and `PlotAreaPrev` complement the plot-space
+  readbacks for hit-testing pixel-pinned custom geometry (lane rows —
+  the Digital-item pattern), one frame behind like every register read.
+- **Guard**: item declarations from inside a closure are debug-logged
+  no-ops (they would silently never render mid-iteration); sense-region
+  emission stays plot-owned (the M7 hit-test-priority lesson).
+
+Not included, recorded as deferred: a gutter-reservation knob
+(`SetupExtraGutter`) — unclipped drawing borrows existing gutter space;
+whether the timeline adoption needs reserved space is that dialogue's
+question, not this one's.
+
+Acceptance: `implot_custom`, a mini interval-lane chart exercising every
+piece (time axis with pinned y, pixel-space lanes under implot pan/zoom,
+band-under-series vs flags-over-series declaration order, legend-toggled
+customs, an unclipped selection callout, lane hit tests over the pixel
+readbacks) — deliberately shaped as a prototype of the survey's P3
+timeline adoption. The survey's P1 landed alongside as
+`implot_colorbar`: an implot heatmap and a `colorscale` legend sharing
+one `colormap.Config`, with the colorscale's hover dimming out-of-band
+cells through a `Custom` overlay — the visible half of M4's colormap
+integration, plus the first outside consumer of the custom lane.
+
 ## References
 
 - Upstream: [ImPlot](https://github.com/epezent/implot) v1.1-WIP, commit

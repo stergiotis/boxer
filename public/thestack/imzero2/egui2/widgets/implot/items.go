@@ -23,6 +23,7 @@ const (
 	kindShadedBetween
 	kindBoxes
 	kindText
+	kindCustom
 )
 
 // MarkerE selects a scatter glyph; the numbering is the paintMarkers wire
@@ -210,8 +211,12 @@ func digitalRuns(xs []float64, ys []float64, emit func(x0 float64, x1 float64, v
 
 // addSeries locks setup, assigns the palette slot, accumulates fit extents
 // (skipping a series the legend has hidden), and records the item for
-// End's render pass.
+// End's render pass. During End emission it is a debug-logged no-op — an
+// item declared from inside a Custom closure would silently never render.
 func (p *Plot) addSeries(s seriesFrame, fitXs bool, fitYs bool) {
+	if p.warnIfEmitting("item declaration") {
+		return
+	}
 	p.setupLocked = true
 	s.slot = p.assignSlot(s.label)
 	s.colHex, s.colOk, s.weight = p.takeNextStyle()

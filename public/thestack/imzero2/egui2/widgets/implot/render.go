@@ -195,8 +195,10 @@ func (p *Plot) End() {
 		}
 	}
 
-	// --- Series, clipped to the plot area (the M0 clip stack).
+	// --- Series, clipped to the plot area (the M0 clip stack). emitting
+	// arms the declaration guard for the span in which Custom closures run.
 	c.PaintClipPush(areaX, areaY, areaX+areaW, areaY+areaH).Send()
+	p.emitting = true
 	for si := range p.series {
 		s := &p.series[si]
 		if st.hidden[s.label] {
@@ -215,6 +217,7 @@ func (p *Plot) End() {
 		}
 		p.emitSeries(s, tr, areaX, areaY, areaW, areaH, colHex, weight)
 	}
+	p.emitting = false
 	if st.dragging && st.dragBox {
 		x0, y0 := st.boxStart[0], st.boxStart[1]
 		x1, y1 := st.boxCur[0], st.boxCur[1]
@@ -483,6 +486,29 @@ func (p *Plot) emitSeries(s *seriesFrame, tr transform, areaX, areaY, areaW, are
 		p.emitBoxes(s, tr)
 	case kindText:
 		p.emitText(s, tr)
+	case kindCustom:
+		// Caller-drawn item (custom.go): hand over this frame's transform
+		// and geometry; declaration order already put us at the right z.
+		if s.custom == nil {
+			return
+		}
+		dc := DrawCtx{
+			T:     Transform{tr},
+			AreaX: areaX, AreaY: areaY, AreaW: areaW, AreaH: areaH,
+			W: p.w, H: p.h,
+			Color:       colHex,
+			Weight:      weight,
+			Highlighted: s.label != "" && s.label == st.legendHover,
+		}
+		if s.unclipped {
+			// Lift the plot-area clip for the call, restore it after — the
+			// M0 clip stack stays balanced either way.
+			c.PaintClipPop().Send()
+			s.custom(dc)
+			c.PaintClipPush(areaX, areaY, areaX+areaW, areaY+areaH).Send()
+		} else {
+			s.custom(dc)
+		}
 	}
 }
 

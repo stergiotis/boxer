@@ -225,10 +225,14 @@ are not plots.
    `implot.Heatmap` with a `colorscale` legend on one shared
    `colormap.Config`, including hover linkage. No API changes; it
    documents the intended pattern and finishes M4's integration story
-   visibly.
+   visibly. *(Implemented 2026-07-31 as `implot_colorbar`; see
+   ADR-0149's update of that date.)*
 2. **P2 — E1, the custom-item lane** (small, high leverage). Land with
    its own gallery demo (e.g. a custom-drawn overlay on a stock plot);
    record the API addition as a dated Update to ADR-0149.
+   *(Implemented 2026-07-31 — `Custom`/`CustomUnclipped` draw closures,
+   design dialogue recorded in the ADR update; the acceptance demo
+   `implot_custom` is a lane chart shaped as a P3 prototype.)*
 3. **P3 — timeline onto the frame** (large). Design dialogue first,
    then the rebuild behind the existing public API, goldens updated
    deliberately. Calibration note: ADR-0149's effort estimate ran ~4×

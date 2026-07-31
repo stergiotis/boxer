@@ -40,6 +40,9 @@ type heatTex struct {
 // pixels only when the content signature changes or the host reports the
 // texture starved.
 func (p *Plot) Heatmap(label string, values []float64, rows int, cols int, cm *colormap.Config, x0 float64, y0 float64, x1 float64, y1 float64) *Plot {
+	if p.warnIfEmitting("Heatmap") {
+		return p
+	}
 	p.setupLocked = true
 	p.takeNextStyle() // colormap-driven; a pending override must not leak
 	if !p.st.hidden[label] {
