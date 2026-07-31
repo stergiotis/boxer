@@ -267,6 +267,10 @@ var builtinTabDefs = []builtinTabDef{
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
 	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
 	{id: "passes", dockID: dockTabPasses, title: "Passes", lazy: true},
+	// Docs is a TOOL pane, not a result panel: it reads the editor's caret,
+	// not the query result, so it registers with no PanelI. Lazy because a
+	// hidden pane must not keep asking the server what the caret is on.
+	{id: "docs", dockID: dockTabDocs, title: "Docs", lazy: true},
 	{id: "detail", dockID: dockTabDetail, title: "Detail", zone: TabZoneSide},
 }
 
@@ -420,6 +424,10 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			}
 		case "passes":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPassesTab) }
+		case "docs":
+			// No scrollTab: the body scrolls its own markdown, below a header
+			// that must stay put while the document under it moves.
+			spec.Render = func(f *TabFrame) { inst.renderDocsTab() }
 		case "detail":
 			spec.Panel = detailPanel{app: inst}
 			spec.Render = func(f *TabFrame) { inst.renderDetailTab(f.Rec, f.Schema, f.Executed) }

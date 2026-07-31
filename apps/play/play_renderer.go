@@ -86,6 +86,7 @@ const (
 	dockTabKanban      uint64 = 14
 	dockTabPasses      uint64 = 15
 	dockTabNetwork     uint64 = 16
+	dockTabDocs        uint64 = 17
 )
 
 type PlayApp struct {
@@ -132,6 +133,12 @@ type PlayApp struct {
 
 	sql         string
 	lastSentSql string
+
+	// docs is the Docs pane's lookup lane over system.documentation, and
+	// docsPane its view state. A tool pane, not a result panel: its input is
+	// the editor's published caret entity, never the query result.
+	docs     *docsDriver
+	docsPane *docsPaneState
 
 	// editor is the SQL editing surface (ADR-0147). It owns what follows
 	// from the buffer and the caret alone — the colour tiers, the statement
@@ -800,6 +807,8 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.diag = NewDiagnosticsDriver(client)
+	inst.docs = newDocsDriver(client)
+	inst.docsPane = newDocsPaneState()
 	inst.runsHist = newRunsHistoryDriver(client)
 	inst.pins = newPinDriver(client)
 	inst.pinsBrowser = newPinsBrowserDriver(client)
@@ -852,6 +861,7 @@ func (inst *PlayApp) Close() {
 			inst.networkDriver.verticesLane.close()
 		}
 	}
+	inst.docs.close()
 	if inst.diag != nil {
 		inst.diag.close()
 	}
