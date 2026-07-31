@@ -488,6 +488,84 @@ Recorded because the earlier figures are quoted in the package documentation and
 in the entries above, and because "benchmarked under an unnoticed governor" is a
 failure mode worth naming rather than quietly patching.
 
+### 2026-07-31 — first evaluation on data nobody synthesised; the detector does not clear the one-liners
+
+Every accuracy figure above comes from fixtures this repository generated, which
+is a real gap: a generator and a detector written by the same hand can agree
+about a signal that does not exist. `public/analytics/timeseries/loadstudy`
+closes it, and the result is unflattering.
+
+**What it reads.** Host load from ClickHouse's own `system.asynchronous_metric_log`
+at 1 Hz — CPU split three ways, run-queue depth, resident memory, block IO both
+directions, inbound network — correlated against application lifecycle and run
+events from `boxer.facts`. Not from
+[`github.com/stergiotis/boxer/public/observability/sysmetrics`](../../public/observability/sysmetrics),
+which would have been the natural source: **that scraper publishes to NATS and
+persists nothing**, so its data does not exist to analyse. Nor from `boxer.facts`
+itself, which carries no numeric payload at all.
+
+**The result.** Across five gap-free spans on two grids, the left-discord
+detector beats Wu and Keogh's one-liner baselines on **some** channels at
+**some** windows, and loses on most. On the longest span it is behind the
+baseline on six of eight channels at every window tried. On the one span where
+it leads clearly it does so on seven of eight channels, at a single window.
+There is no configuration at which it is reliably ahead.
+
+The honest reading is **not** "the detector is bad". It is that *this evaluation
+cannot demonstrate its value*, for reasons that are properties of the data:
+
+- Events are not anomaly labels. A detector can be right and score badly here,
+  because a detection with no event near it counts against precision.
+- Label prevalence ran from about 2% to about 38% depending on the span. At the
+  top of that range VUS-PR near 0.5 is close to chance, so the span says nothing.
+- The spans are short — hours, not days.
+
+**The `event_rate` channel proved the baseline comparison earns its place.**
+Binning the events into a rate series and scoring it produced a *baseline*
+VUS-PR above 0.8 on every span, far beyond anything the detector reached. That
+is not a finding about detection; the labels are derived from the events, so a
+one-liner on the event rate is reading the answer key. Had we reported the
+detector's number on that channel without the baseline beside it, we would have
+reported a leak as a success.
+
+**Two answers to open questions.**
+
+1. **Preferred window, in wall-clock, is roughly five to sixteen minutes** — the
+   ten-second grid favoured windows of 32–64 bins, the sixty-second grid 16. So
+   the window is not arbitrary on real data, and the M2 finding that window
+   choice dominates accuracy survives contact with it.
+2. **The transform's regime is unreachable here.** No gap-free span was long
+   enough to test a window of 256 at all, let alone need one. That is evidence
+   about this host's recording rather than about signal structure, but it is the
+   only evidence we have, and it weakens the case for keeping the FFT path.
+
+**One detector behaviour worth recording.** On the sparsest span, scores went
+flat above window 16 — every window reporting nearly the same value. A left
+discord is dominated by the first genuinely novel stretch after training, and
+once that sets the running maximum the remaining variation is small enough that
+ranking carries little information. Streaming discords appear to need a longer
+warm-up on real data than a synthetic fixture suggests.
+
+**The harness found two bugs in itself before it found anything about the data**,
+both of the kind that yield confident wrong answers rather than errors:
+
+- ClickHouse renders `DateTime` in the *server's* timezone. Reading a timestamp
+  back and re-parsing it as UTC shifted every window by two hours — far enough to
+  select a neighbouring stretch of real data and look entirely plausible.
+- `rowNumberInAllBlocks()` does not respect a subquery's `ORDER BY` once the scan
+  is split across blocks, so the gap-free-run detector over-reported run lengths
+  roughly three-fold. Runs are now delimited with `lagInFrame` over an explicit
+  window frame.
+
+Both are guarded by an invariant in the study: a span reported gap-free must
+extract with zero forward-filled bins on the channel the span was detected from.
+
+**What would make a better study.** Continuous recording. The limiting factor
+throughout was that the host records intermittently — the longest usable span was
+a few hours. Giving `sysmetrics` a persistence path (declined at acceptance, and
+still not obviously worth it on its own) would produce dense, continuous,
+per-process data and turn this from a suggestive exercise into a measurement.
+
 ## References
 
 - Survey and literature landscape:

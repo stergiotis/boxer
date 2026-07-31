@@ -1,0 +1,62 @@
+// Package loadstudy pulls real recorded load metrics and application events out
+// of ClickHouse so the ADR-0150 detectors can be measured against something
+// nobody synthesised.
+//
+// Every accuracy figure in
+// [github.com/stergiotis/boxer/public/analytics/timeseries/adscore] and its
+// siblings comes from fixtures this repository generated. That is a real gap:
+// a generator and a detector written by the same hand can agree with each other
+// about a signal that does not exist. This package closes it with data that was
+// recorded for other reasons entirely.
+//
+// # What it reads, and what it does not
+//
+// Load metrics come from ClickHouse's own `system.asynchronous_metric_log`,
+// sampled at 1 Hz: CPU split into user, system and iowait, run-queue depth,
+// resident memory, block IO in both directions, inbound network. Per-device
+// families are summed across devices, so the channel set is portable across
+// machines whose disks and interfaces are named differently.
+//
+// They do *not* come from
+// [github.com/stergiotis/boxer/public/observability/sysmetrics], which would be
+// the natural source. That scraper publishes to NATS and persists nothing, so
+// its data does not exist to analyse. Nor do they come from `boxer.facts`, which
+// carries no numeric payload at all — it is an event log.
+//
+// Events come from `boxer.facts`: application lifecycle, run starts and stops.
+// Heartbeats are excluded, because they fire on a timer rather than on anything
+// happening.
+//
+// # The caveat that governs how any result may be read
+//
+// **Events are not anomaly labels.** An application starting is normal
+// behaviour. Scoring a detector against event times measures whether it fires
+// when the workload composition changed — useful, and not the same as accuracy.
+// Two consequences follow and neither is optional:
+//
+//   - A detection with no event near it is not necessarily a false positive.
+//     The precision term is therefore pessimistic by an unknown amount.
+//   - Any figure produced here is meaningful only *relative to* the one-liner
+//     baselines in adscore, run over the same series. If a moving-average
+//     residual correlates with events just as well, then the correlation is
+//     trivial and says nothing about the detector.
+//
+// [EventLabels] widens each event across a tolerance, because a start changes
+// what the machine does over the following seconds rather than in the bin the
+// log line landed in. That tolerance is the study's most arguable parameter.
+//
+// # Gaps
+//
+// The 1 Hz source is not gap-free: ClickHouse is not always running. Bins with
+// no sample are forward-filled and counted in [Series.Gaps]. A large count means
+// part of the series is invented, and a report that does not say so is
+// misleading.
+//
+// # Running it
+//
+// The study itself is an integration test in this package, carrying
+// `//go:build integration` because it needs a live server. It skips when
+// CLICKHOUSE_ENDPOINT is unset. See
+// doc/adr/0150-timeseries-subsequence-anomaly-detection.md for what it was
+// built to decide.
+package loadstudy
