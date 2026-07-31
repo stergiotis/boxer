@@ -268,6 +268,15 @@ interface would wrap a single call site. The parsers are pinned by verbatim
 fixtures captured from the live server, so a future output-dialect change
 fails a test rather than a render.
 
+Two further lenses landed the same day, closing the deferral above:
+**estimate** (`EXPLAIN ESTIMATE`, the one tabular dialect — rows arrive
+tab-joined from the multi-column result and render as one source node per
+MergeTree table, carrying parts/rows/marks, draining into a read-estimate
+terminal; a statement reading no MergeTree tables estimates empty and the
+pane says so) and **indexes** (`EXPLAIN PLAN indexes = 1, json = 1`, riding
+the existing PLAN parser — the `Indexes` entries fold into the ReadFrom
+node's detail as selected-vs-initial parts and granules per index).
+
 Two affordances added on use: a remote lens gained a **view** toggle between
 the parsed graph and the raw EXPLAIN text as the server returned it
 (monospace, indentation intact — the graph is a reading of that text, the
