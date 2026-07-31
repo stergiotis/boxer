@@ -112,6 +112,18 @@ func definitionsEtBlock() []*ir.BuilderFactoryNode {
 			// when the etable sits inside a vertically flowing parent.
 			BeginMethod("maxHeight").Arg("height", ctabb.F32).
 			CodeClientRust(rustClientCode("max_height_override = Some(height);\n")).EndMethod().
+			// applyWidths opts the table into the ADR-0151 width protocol.
+			// The epoch is Go's "my resolved widths changed" generation: the
+			// binding seeds egui_table's TableState from the etColumn widths
+			// only when it differs from the epoch last seen for this table.
+			// Between bumps TableState wins, which is what leaves the user's
+			// drag alone — re-asserting every frame is the pathology §SD4
+			// exists to avoid.
+			//
+			// Calling it also turns on the width read-back for this table, so
+			// a table that never opts in pays nothing.
+			BeginMethod("applyWidths").Arg("epoch", ctabb.U32).
+			CodeClientRust(rustClientCode("apply_widths_epoch = Some(epoch);\n")).EndMethod().
 			Build()...).
 		// Deferred block maps: cells keyed by (row, col), headers keyed by (header_row, col)
 		WithReturnType(structEtDummy()).
@@ -128,6 +140,7 @@ let mut auto_size_mode = egui_table::AutoSizeMode::Never;
 let mut striped_flag = false;
 let mut selected_row_opt: Option<u64> = None;
 let mut max_height_override: Option<f32> = None;
+let mut apply_widths_epoch: Option<u32> = None;
 fn decode_scroll_align(v: u8) -> Option<egui::Align> {
     match v { 1 => Some(egui::Align::TOP), 2 => Some(egui::Align::Center), 3 => Some(egui::Align::BOTTOM), _ => None }
 }
@@ -146,6 +159,15 @@ if {{EguiUiOptionalOuter}}.is_some() {
 
 	let columns: Vec<egui_table::Column> = self.et_columns.drain(..).collect();
 	let header_texts: Vec<String> = self.et_header_texts.drain(..).collect();
+
+	// Snapshot the Go-supplied widths before the columns move into the
+	// table. They are the read-back fallback for columns egui_table never
+	// records: its store-back loop skips non-resizable columns, so their
+	// entry in TableState.col_widths never exists. Reporting 0.0 for those
+	// would read Go-side as "the user changed it to zero" and be captured
+	// as an override; reporting what we supplied reads as "unchanged",
+	// which for a column that cannot be dragged is simply true.
+	let col_currents: Vec<f32> = columns.iter().map(|cc| cc.current).collect();
 
 	// Compute cumulative row offsets from per-row heights (prefix sum).
 	// Pushes N+1 entries: offsets[i] is the top of row i, and offsets[N] is
@@ -328,8 +350,56 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	};
 	let bound_size = egui::Vec2::new(avail_x, bounded_height);
 	let layout = *ui.layout();
+	let table_gid = {{Id}}.value();
 	ui.allocate_ui_with_layout(bound_size, layout, |child_ui| {
+		// The state id must be derived from the SAME ui table.show() will
+		// receive: TableState::id is ui.make_persistent_id(salt), so
+		// computing it from the outer ui would address a different slot.
+		let state_id = egui_table::TableState::id(child_ui, egui::IdSalt::new({{Id}}));
+
+		if let Some(epoch) = apply_widths_epoch {
+			let seen = delegate.inner.interpreter.et_width_epochs.get(&table_gid).copied();
+			if seen != Some(epoch) {
+				// Seeding TableState does two things at once, and both are
+				// wanted. egui_table copies col_widths over each column's
+				// current width before laying out (table.rs:390), so ours
+				// win; and because it treats a present state as "not new"
+				// (is_new = state.is_none(), table.rs:384), storing one also
+				// suppresses the first-show force-autofit that would
+				// otherwise overwrite them on the very first frame.
+				let mut st = egui_table::TableState::load(child_ui, state_id).unwrap_or_default();
+				for (idx, wpt) in col_currents.iter().enumerate() {
+					if *wpt > 0.0 {
+						// Key must match Column::id_for(i), which is
+						// egui::Id::new(col_idx) over a usize. Taken from the
+						// crate rather than from whatever integer is in hand;
+						// see etable_widths.rs, which asserts the match.
+						st.col_widths.insert(egui::Id::new(idx), *wpt);
+					}
+				}
+				st.store(child_ui.ctx(), state_id);
+				delegate.inner.interpreter.et_width_epochs.insert(table_gid, epoch);
+			}
+		}
+
 		table.show(child_ui, &mut delegate);
+
+		if apply_widths_epoch.is_some() {
+			// Read back AFTER show: this is the width egui_table settled on
+			// once it had reconciled stored state, the user's drag, and its
+			// own grow-to-fit pass.
+			let after = egui_table::TableState::load(child_ui, state_id);
+			let interp = &mut delegate.inner.interpreter;
+			interp.r25_et_colwidth_ids.push(table_gid);
+			interp.r25_et_colwidth_counts.push(col_currents.len() as u64);
+			for (idx, fallback) in col_currents.iter().enumerate() {
+				let wpt = after
+					.as_ref()
+					.and_then(|st| st.col_widths.get(&egui::Id::new(idx)).copied())
+					.unwrap_or(*fallback);
+				interp.r25_et_colwidth_values.push(wpt);
+			}
+		}
 	});
 } else {
 	self.et_columns.clear();

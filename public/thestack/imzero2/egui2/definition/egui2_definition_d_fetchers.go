@@ -81,6 +81,26 @@ self.io.write_plain_u64h(len * 5, self.r9_et_prefetch_values.drain(..))?;
 		AddReturnValue("values", ctabb.U64h).
 		Build())
 
+	// egui_table settled column widths (ADR-0151 §SD4), pushed only by
+	// tables that opted in via applyWidths. Three parallel arrays rather
+	// than the prefetch register's fixed stride, because the column count
+	// varies per table: ids[i] has counts[i] widths, laid end to end in
+	// widths. Sending the counts rather than inferring them keeps the
+	// reader honest if a table is ever pushed with zero columns.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchR25EtColWidths").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.r25_et_colwidth_ids.len();
+let vlen = self.r25_et_colwidth_values.len();
+self.io.write_plain_u64h(len, self.r25_et_colwidth_ids.drain(..))?;
+self.io.write_plain_u64h(len, self.r25_et_colwidth_counts.drain(..))?;
+self.io.write_plain_f32h(vlen, self.r25_et_colwidth_values.drain(..))?;
+{{SendMessage}}
+`)).
+		AddReturnValue("ids", ctabb.U64h).
+		AddReturnValue("counts", ctabb.U64h).
+		AddReturnValue("widths", ctabb.F32h).
+		Build())
+
 	fetchers = append(fetchers, idl.NewFetcherNode("fetchR10").
 		WithApplyCodeClientRust(rustClientCode(`
 self.io.write_plain_u64h(self.r10_true_ids.len(), self.r10_true_ids.drain(..))?;

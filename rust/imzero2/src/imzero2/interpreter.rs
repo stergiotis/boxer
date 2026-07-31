@@ -2357,6 +2357,20 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub r21_ui_rect_max_x: Vec<f32>,
     pub r21_ui_rect_max_y: Vec<f32>,
 
+    // egui_table settled column widths (ADR-0151 §SD4), pushed after
+    // Table::show by tables that opted in via applyWidths. ids[i] owns
+    // counts[i] entries in values, laid end to end — the column count
+    // varies per table, so this cannot use the fixed stride r9 uses.
+    pub r25_et_colwidth_ids: Vec<u64>,
+    pub r25_et_colwidth_counts: Vec<u64>,
+    pub r25_et_colwidth_values: Vec<f32>,
+
+    // Last width epoch applied per etable id. Retained across frames (the
+    // "library owns state that must survive frames" bucket): it is what
+    // makes an apply happen exactly once per Go-side width change instead
+    // of every frame, which is what leaves a live drag alone.
+    pub et_width_epochs: std::collections::HashMap<u64, u32>,
+
     // egui_dock layout state keyed by dock-area id. Persisted across frames
     // (splits, active tab per group, drag-to-reorder live here). Go sends
     // the tab id list each frame; the apply code reconciles it against the
@@ -2599,6 +2613,10 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             r21_ui_rect_min_y: Vec::with_capacity(8),
             r21_ui_rect_max_x: Vec::with_capacity(8),
             r21_ui_rect_max_y: Vec::with_capacity(8),
+            r25_et_colwidth_ids: Vec::with_capacity(4),
+            r25_et_colwidth_counts: Vec::with_capacity(4),
+            r25_et_colwidth_values: Vec::with_capacity(32),
+            et_width_epochs: std::collections::HashMap::new(),
             dock_states: std::collections::HashMap::new(),
             video_pipeline_request: None,
             video_cap_ids: Vec::new(),
@@ -2699,6 +2717,19 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
             self.r24_canvas_pointer_pos_x.clear();
             self.r24_canvas_pointer_pos_y.clear();
             self.r24_canvas_pointer_mods.clear();
+        }
+
+        {
+            // r25 is re-stamped every frame by every opted-in etable, so an
+            // unfetched frame is normal (a table using applyWidths without a
+            // resolver reading back). Cleared without a log, as r24 is.
+            //
+            // et_width_epochs is deliberately NOT cleared: it is retained
+            // state, and forgetting it would make every frame look like an
+            // epoch change and re-apply widths on top of a live drag.
+            self.r25_et_colwidth_ids.clear();
+            self.r25_et_colwidth_counts.clear();
+            self.r25_et_colwidth_values.clear();
         }
 
         // Hyperlink zones — cleared so a removed link doesn't carry into
@@ -5278,6 +5309,7 @@ self.apply_widget(w,u,f,Some(i));
                 let mut striped_flag = false;
                 let mut selected_row_opt: Option<u64> = None;
                 let mut max_height_override: Option<f32> = None;
+                let mut apply_widths_epoch: Option<u32> = None;
                 fn decode_scroll_align(v: u8) -> Option<egui::Align> {
                     match v {
                         1 => Some(egui::Align::TOP),
@@ -5373,6 +5405,13 @@ self.apply_widget(w,u,f,Some(i));
                             let mut height = self.io.read_plain_f32()?;
                             max_height_override = Some(height);
                         }
+                        EndETableBuilderMethodId::ApplyWidths => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match EndETableBuilderMethodId::ApplyWidths");
+                            #[allow(unused_mut)]
+                            let mut epoch = self.io.read_plain_u32()?;
+                            apply_widths_epoch = Some(epoch);
+                        }
                     }
                 }
                 // apply
@@ -5392,6 +5431,15 @@ self.apply_widget(w,u,f,Some(i));
 
                     let columns: Vec<egui_table::Column> = self.et_columns.drain(..).collect();
                     let header_texts: Vec<String> = self.et_header_texts.drain(..).collect();
+
+                    // Snapshot the Go-supplied widths before the columns move into the
+                    // table. They are the read-back fallback for columns egui_table never
+                    // records: its store-back loop skips non-resizable columns, so their
+                    // entry in TableState.col_widths never exists. Reporting 0.0 for those
+                    // would read Go-side as "the user changed it to zero" and be captured
+                    // as an override; reporting what we supplied reads as "unchanged",
+                    // which for a column that cannot be dragged is simply true.
+                    let col_currents: Vec<f32> = columns.iter().map(|cc| cc.current).collect();
 
                     // Compute cumulative row offsets from per-row heights (prefix sum).
                     // Pushes N+1 entries: offsets[i] is the top of row i, and offsets[N] is
@@ -5591,8 +5639,58 @@ self.apply_widget(w,u,f,Some(i));
                     };
                     let bound_size = egui::Vec2::new(avail_x, bounded_height);
                     let layout = *ui.layout();
+                    let table_gid = i.value();
                     ui.allocate_ui_with_layout(bound_size, layout, |child_ui| {
+                        // The state id must be derived from the SAME ui table.show() will
+                        // receive: TableState::id is ui.make_persistent_id(salt), so
+                        // computing it from the outer ui would address a different slot.
+                        let state_id = egui_table::TableState::id(child_ui, egui::IdSalt::new(i));
+
+                        if let Some(epoch) = apply_widths_epoch {
+                            let seen =
+                                delegate.inner.interpreter.et_width_epochs.get(&table_gid).copied();
+                            if seen != Some(epoch) {
+                                // Seeding TableState does two things at once, and both are
+                                // wanted. egui_table copies col_widths over each column's
+                                // current width before laying out (table.rs:390), so ours
+                                // win; and because it treats a present state as "not new"
+                                // (is_new = state.is_none(), table.rs:384), storing one also
+                                // suppresses the first-show force-autofit that would
+                                // otherwise overwrite them on the very first frame.
+                                let mut st = egui_table::TableState::load(child_ui, state_id)
+                                    .unwrap_or_default();
+                                for (idx, wpt) in col_currents.iter().enumerate() {
+                                    if *wpt > 0.0 {
+                                        // Key must match Column::id_for(i), which is
+                                        // egui::Id::new(col_idx) over a usize. Taken from the
+                                        // crate rather than from whatever integer is in hand;
+                                        // see etable_widths.rs, which asserts the match.
+                                        st.col_widths.insert(egui::Id::new(idx), *wpt);
+                                    }
+                                }
+                                st.store(child_ui.ctx(), state_id);
+                                delegate.inner.interpreter.et_width_epochs.insert(table_gid, epoch);
+                            }
+                        }
+
                         table.show(child_ui, &mut delegate);
+
+                        if apply_widths_epoch.is_some() {
+                            // Read back AFTER show: this is the width egui_table settled on
+                            // once it had reconciled stored state, the user's drag, and its
+                            // own grow-to-fit pass.
+                            let after = egui_table::TableState::load(child_ui, state_id);
+                            let interp = &mut delegate.inner.interpreter;
+                            interp.r25_et_colwidth_ids.push(table_gid);
+                            interp.r25_et_colwidth_counts.push(col_currents.len() as u64);
+                            for (idx, fallback) in col_currents.iter().enumerate() {
+                                let wpt = after
+                                    .as_ref()
+                                    .and_then(|st| st.col_widths.get(&egui::Id::new(idx)).copied())
+                                    .unwrap_or(*fallback);
+                                interp.r25_et_colwidth_values.push(wpt);
+                            }
+                        }
                     });
                 } else {
                     self.et_columns.clear();
@@ -6121,6 +6219,22 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_x.drain(..))?;
                 self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_y.drain(..))?;
                 self.io.write_plain_u8h(len, self.r24_canvas_pointer_mods.drain(..))?;
+                self.io.flush()?;
+            }
+            FuncProcId::FetchR25EtColWidths => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR25EtColWidths");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let len = self.r25_et_colwidth_ids.len();
+                let vlen = self.r25_et_colwidth_values.len();
+                self.io.write_plain_u64h(len, self.r25_et_colwidth_ids.drain(..))?;
+                self.io.write_plain_u64h(len, self.r25_et_colwidth_counts.drain(..))?;
+                self.io.write_plain_f32h(vlen, self.r25_et_colwidth_values.drain(..))?;
                 self.io.flush()?;
             }
             FuncProcId::FetchR7 => {

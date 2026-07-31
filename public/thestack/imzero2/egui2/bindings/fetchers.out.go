@@ -148,6 +148,13 @@ func (inst *Fetcher) FetchR24CanvasPointers() (ids []uint64, originXs []float32,
 	mods = inst.iterateU8h()
 	return
 }
+func (inst *Fetcher) FetchR25EtColWidths() (ids []uint64, counts []uint64, widths iter.Seq[float32]) {
+	inst.invoke(FuncProcIdFetchR25EtColWidths)
+	ids = inst.readU64h()
+	counts = inst.readU64h()
+	widths = inst.iterateF32h()
+	return
+}
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchR7)
 	ids = inst.readU64h()

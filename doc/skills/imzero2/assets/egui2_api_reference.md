@@ -41,7 +41,7 @@ status: draft
 | DragValueU64 | BuilderFactory | Yes | 1 | 0 | 10 | Immediate, Retained |
 | EnabledUi | BuilderFactory | No | 1 | 0 | 0 | Immediate, BlockIterator |
 | End | Procedural | No | 0 | 0 | - | - |
-| EndETable | BuilderFactory | Yes | 4 | 0 | 8 | Immediate, Retained |
+| EndETable | BuilderFactory | Yes | 4 | 0 | 9 | Immediate, Retained |
 | EndRow | Procedural | No | 0 | 0 | - | - |
 | EtColumn | BuilderFactory | No | 1 | 0 | 3 | Immediate, Retained |
 | EtHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
@@ -66,6 +66,7 @@ status: draft
 | FetchR22StarvedTextures | Fetcher | No | 0 | 0 | - | - |
 | FetchR23CanvasWheel | Fetcher | No | 0 | 0 | - | - |
 | FetchR24CanvasPointers | Fetcher | No | 0 | 0 | - | - |
+| FetchR25EtColWidths | Fetcher | No | 0 | 0 | - | - |
 | FetchR7 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9EtPrefetch | Fetcher | No | 0 | 0 | - | - |
 | FetchR9F64 | Fetcher | No | 0 | 0 | - | - |
@@ -678,6 +679,7 @@ Block
 - **Striped**(val: b)
 - **SelectedRow**(row: u64)
 - **MaxHeight**(height: f32)
+- **ApplyWidths**(epoch: u32)
 
 #### Deferred Block Maps
 
@@ -3594,6 +3596,20 @@ Block
 | posXs | f32h |
 | posYs | f32h |
 | mods | u8h |
+
+---
+
+### FetchR25EtColWidths
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+| counts | u64h |
+| widths | f32h |
 
 ---
 

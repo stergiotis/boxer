@@ -567,6 +567,29 @@ func (inst EndETableFluid) VisibleRange() (rowBegin, rowEnd uint64, colBegin, co
 	return v.RowBegin, v.RowEnd, v.ColBegin, v.ColEnd, v.NumStickyCols, true
 }
 
+// ColumnWidths returns the widths egui_table settled on for this table
+// last frame, for tables that opted in by calling ApplyWidths (ADR-0151
+// §SD4). ok is false until the first frame after such a table has shown —
+// the same one-frame lag and first-frame semantics VisibleRange has.
+//
+// The widths reflect egui_table's reconciliation, not only the user's
+// drag: its store-back pass grows a column to fit the widest visible cell
+// (table.rs:860). A caller feeding these into a width resolver therefore
+// captures grow-to-fit the same way it captures a drag, which matches the
+// "fit it, keep it" stance for double-click autofit but does mean widths
+// ratchet upward as wider content scrolls into view.
+//
+// The slice is owned by the state manager and reused across frames; copy
+// it if it must outlive this frame.
+func (inst EndETableFluid) ColumnWidths() (widths []float32, ok bool) {
+	v, ok := CurrentApplicationState.StateManager.GetEtColWidths(
+		widgethandle.Make(inst.id))
+	if !ok {
+		return nil, false
+	}
+	return v.Widths, true
+}
+
 // ColVisible reports whether a given column index will actually be drawn
 // this frame, given the prefetched window and sticky count from the
 // previous frame. On the first frame after a table is shown (no prefetch

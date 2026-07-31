@@ -27,6 +27,19 @@ type EtPrefetchValue struct {
 	NumStickyCols uint32
 }
 
+// EtColWidthsValue is the per-table column widths egui_table settled on
+// after reconciling stored state, the user's drag, and its own
+// grow-to-fit pass (ADR-0151 §SD4). Pushed only by tables that called
+// ApplyWidths, and available with the same one-frame lag as
+// EtPrefetchValue — the read happens during the previous frame's Rust
+// render and is drained at end-of-frame Sync.
+//
+// Widths is owned by the state manager and reused across frames; a caller
+// that needs to keep it past the current frame must copy it.
+type EtColWidthsValue struct {
+	Widths []float32
+}
+
 // CanvasPointerValue is the cached payload of the R14 canvas-pointer
 // register, drained once per frame by StateManager.Sync. Read via
 // StateManager.GetCanvasPointer; callers that previously invoked
@@ -202,6 +215,7 @@ type StateManager struct {
 	r9U64Databinds       *containers.BinarySearchGrowingKV[uint64, *uint64]
 	r9SDatabinds         *containers.BinarySearchGrowingKV[uint64, *string]
 	etPrefetch           *containers.BinarySearchGrowingKV[uint64, EtPrefetchValue]
+	etColWidths          *containers.BinarySearchGrowingKV[uint64, EtColWidthsValue]
 	overriddenBindingIds *containers.HashSet[uint64]
 	fetcher              *Fetcher
 
@@ -264,6 +278,7 @@ func NewStateManager() *StateManager {
 		r9U64Databinds:       containers.NewBinarySearchGrowingKVOrdered[uint64, *uint64](128),
 		r9SDatabinds:         containers.NewBinarySearchGrowingKVOrdered[uint64, *string](128),
 		etPrefetch:           containers.NewBinarySearchGrowingKVOrdered[uint64, EtPrefetchValue](16),
+		etColWidths:          containers.NewBinarySearchGrowingKVOrdered[uint64, EtColWidthsValue](8),
 		overriddenBindingIds: containers.NewHashSet[uint64](128),
 		fetcher:              NewFetcher(),
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
@@ -456,6 +471,56 @@ func (inst *StateManager) GetGraphMetrics() GraphMetricsValue {
 // in that case.
 func (inst *StateManager) GetEtPrefetch(h widgethandle.WidgetHandle) (EtPrefetchValue, bool) {
 	return inst.etPrefetch.Get(h.Resolve())
+}
+
+// GetEtColWidths returns the previous frame's settled column widths for
+// an etable, for tables that opted in via ApplyWidths. The slice is
+// owned by the state manager and reused; copy it to keep it.
+func (inst *StateManager) GetEtColWidths(h widgethandle.WidgetHandle) (EtColWidthsValue, bool) {
+	return inst.etColWidths.Get(h.Resolve())
+}
+
+// applyEtColWidths unpacks the R25 drain into the per-table cache.
+//
+// The layout is ragged rather than fixed-stride like R9's: ids[i] owns
+// counts[i] consecutive entries in vals. The values iterator is consumed
+// to exhaustion whatever the ids and counts say, because a partially
+// drained fetch desynchronizes the FFI channel for every later reader in
+// the frame — a wrong width is a cosmetic bug, a desynced channel is not.
+func (inst *StateManager) applyEtColWidths(ids []uint64, counts []uint64, vals iter.Seq[float32]) {
+	next, stop := iter.Pull(vals)
+	defer stop()
+	for i, id := range ids {
+		var n int
+		if i < len(counts) {
+			n = int(counts[i])
+		}
+		// Reuse the previous frame's backing array: a table's column count
+		// is stable frame to frame, so the steady state allocates nothing.
+		prev, had := inst.etColWidths.Get(id)
+		buf := prev.Widths
+		if !had || cap(buf) < n {
+			buf = make([]float32, n)
+		} else {
+			buf = buf[:n]
+		}
+		for j := range buf {
+			v, ok := next()
+			if !ok {
+				// Truncated payload: keep what arrived rather than
+				// publishing zeros a resolver would capture as overrides.
+				buf = buf[:j]
+				break
+			}
+			buf[j] = v
+		}
+		inst.etColWidths.UpsertBatch(id, EtColWidthsValue{Widths: buf})
+	}
+	for {
+		if _, more := next(); !more {
+			break
+		}
+	}
 }
 func (inst *StateManager) Fetcher() *Fetcher {
 	return inst.fetcher
@@ -708,6 +773,13 @@ func (inst *StateManager) Sync() {
 		}
 		stop()
 	}
+
+	// ETable settled column widths (ADR-0151 §SD4) — ids[i] owns counts[i]
+	// entries in widths, laid end to end. Only tables that called
+	// ApplyWidths push here, so this is usually empty. As above, the
+	// iterator must be consumed fully even when unused or the FFI channel
+	// desynchronizes.
+	inst.applyEtColWidths(fetcher.FetchR25EtColWidths())
 
 	inst.r9F64Databinds.Reset()
 	inst.r9U64Databinds.Reset()

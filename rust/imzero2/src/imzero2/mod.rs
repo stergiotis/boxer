@@ -12,6 +12,7 @@ pub mod debugtools;
 pub mod encoderpipe;
 #[cfg(feature = "desktop")]
 pub mod entry;
+pub mod etable_widths;
 pub mod fenums;
 #[cfg(feature = "headless")]
 pub mod framesink;
