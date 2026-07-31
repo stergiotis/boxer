@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-31
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-31
 ---
-
-> **Status: proposed — pre-human-review.** Not verified; do not cite as
-> authoritative.
 
 # ADR-0154: Headless carrier — accessibility-tree export, coordinate-free actuation, capture on demand
 
@@ -259,7 +258,32 @@ every deployment that never asks.
 
 ## Status
 
-Proposed. Next step is review of the SD carve and, if accepted, M1.
+Accepted 2026-07-31, with M1–M4 built and verified the same day.
+
+- **M1** — the tree channel, the AccessKit action verb and capture-on-demand
+  ship in the headless host; `ws_probe` gained matching verbs.
+- **M2/M3** — `public/thestack/imzero2/carrierclient` speaks the wire, and
+  `imzero2 drive` replays traces against it.
+- **M4** — `scripts/dev/play-screenshot-tour.sh` captures 29 scenes of `play`,
+  five of them states no launch knob can reach, with no compositor running.
+
+Verified across the two seams: the same widget resolves to the same node id
+and the same bounds centre through `egui-mcp` on the desktop host and through
+this channel on the headless one, so a locator written against either runs on
+both.
+
+**M5 stays deferred** (§SD8): an MCP server over this seam would let an agent
+drive a *deployed* headless instance, which the desktop-only inspection port
+cannot. Nothing in M1–M4 depends on it.
+
+Two limits found while building, neither of them blocking:
+
+- `egui_dock`'s tab strip is custom-painted and emits no AccessKit nodes, so a
+  dock tab resolves by position only — the ladder's last rung. The
+  `BOXER_PLAY_FOCUS_*` knobs remain the better way to select a body tab.
+- A `wait` has to poll rather than resolve once. The state worth waiting for is
+  usually a node that is present but not yet enabled, which a single resolution
+  fails on.
 
 ## References
 
