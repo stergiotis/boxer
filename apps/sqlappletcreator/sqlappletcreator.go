@@ -11,7 +11,7 @@
 package sqlappletcreator
 
 import (
-	"math"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
 // App is the authoring window. A fresh instance per Open (factory dispatch);
@@ -35,6 +36,10 @@ type App struct {
 	ids *c.WidgetIdStack
 	bus app.BusI
 	log zerolog.Logger
+
+	// editor is the shared SQL editing surface (ADR-0147). Zero value ready;
+	// it holds the caret channel and the colour tiers across frames.
+	editor sqleditor.Editor
 
 	sql      string // seeded from the launch config; editable
 	slug     string
@@ -95,12 +100,27 @@ func (inst *App) renderForm() {
 			c.Separator().Send()
 
 			c.Label("SQL").Send()
-			c.TextEdit(ids.PrepareStr("sql"), inst.sql, true).
-				CodeEditor().
-				DesiredRows(8).
-				DesiredWidth(float32(math.Inf(1))).
-				HintText("-- the query this applet runs").
-				SendRespVal(&inst.sql)
+			// The shared editing surface (ADR-0147 §SD3): gutter, marks lane,
+			// lexical-then-semantic colour and the statement tint arrive with
+			// it. The Decoration is zero — this app has no analysis of its own
+			// to contribute, which is the point of the seam being optional.
+			res := inst.editor.Bind(sqleditor.Frame{
+				IDSlot: "sql",
+				Value:  &inst.sql,
+				Rows:   8,
+				Hint:   "-- the query this applet runs",
+			})
+			inst.editor.Render(ids, sqleditor.Decoration{})
+			// Run-under-cursor is inherited rather than implemented: the app
+			// has only ever shipped whole buffers, so say which statement a
+			// run would take when the buffer holds more than one.
+			if res.Total > 1 {
+				for rt := range c.RichTextLabel(fmt.Sprintf(
+					"%d statements — the applet stores the whole buffer; the caret is in statement %d.",
+					res.Total, res.Number)) {
+					rt.Small().Weak()
+				}
+			}
 
 			for range c.Horizontal().KeepIter() {
 				c.Label("slug").Send()
