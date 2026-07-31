@@ -182,6 +182,20 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
                 } else {
                     let inner = retr.unwrap();
                     resp2.populate(&inner.response);
+                    // WINDOW_TOPMOST: this window's Area is the top layer of
+                    // egui's Middle order — the shell notion of "the active
+                    // window" (egui raises a window's layer on any press
+                    // inside it). Computed here rather than in populate()
+                    // because it is a fact about the window's LAYER, not its
+                    // response. Tooltips and combo popups live in Foreground
+                    // and cannot take it; another egui::Window can — including
+                    // a collapsed one, whose title bar still holds the layer,
+                    // which is why this sits above the collapsed check.
+                    let topmost = {{EguiContext}}.memory(|m| {
+                        m.areas().top_layer_id(egui::Order::Middle)
+                            == Some(inner.response.layer_id)
+                    });
+                    resp2.set(ResponseFlags::WINDOW_TOPMOST, topmost);
                     if inner.inner.is_none() {
                         // collapsed
                         resp2.insert(ResponseFlags::BLOCK_SKIPPED);

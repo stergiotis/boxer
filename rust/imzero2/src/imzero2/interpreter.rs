@@ -12723,8 +12723,7 @@ egui::Window::new(label).id(i);
                     // a collapsed one, whose title bar still holds the layer,
                     // which is why this sits above the collapsed check.
                     let topmost = c.memory(|m| {
-                        m.areas().top_layer_id(egui::Order::Middle)
-                            == Some(inner.response.layer_id)
+                        m.areas().top_layer_id(egui::Order::Middle) == Some(inner.response.layer_id)
                     });
                     resp2.set(ResponseFlags::WINDOW_TOPMOST, topmost);
                     if inner.inner.is_none() {
