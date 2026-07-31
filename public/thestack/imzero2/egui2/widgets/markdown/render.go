@@ -367,11 +367,12 @@ func renderLinkRun(r *paragraphRun, rc *renderCtx) {
 	}
 	seq := rc.idSeq
 	rc.idSeq++
-	atoms := c.Atoms()
-	for rt := range atoms.StyledTextColored(linkFg, linkBg, r.label) {
-		_ = rt
-	}
-	if c.Button(rc.ids.PrepareSeq(seq), atoms.Keep()).
+	// Id prepared before the atoms, both inside the one call expression —
+	// the form every other call site in the tree uses. (It was also a
+	// suspect for why a link's click never arrives; it is not the cause, and
+	// the reason is recorded on play's docsLinkClaimed. Kept for the idiom.)
+	if c.Button(rc.ids.PrepareSeq(seq),
+		c.Atoms().BeginRichTextColored(linkFg, linkBg, r.label).End().Keep()).
 		Frame(false).
 		SendResp().HasPrimaryClicked() {
 		rc.linkClicked(r.label, r.url)
