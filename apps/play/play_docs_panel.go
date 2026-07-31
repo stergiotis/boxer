@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
 // docsPaneState is the pane's own view state — what it is showing and how it
@@ -44,6 +45,13 @@ type docsPaneState struct {
 	navURL string
 	// back is the names visited before the current one, most recent last.
 	back []string
+
+	// scrolled is the name whose body the ScrollArea is currently positioned
+	// in. A page reached by following a link would otherwise inherit the
+	// previous page's scroll offset and open part-way down — worst on the
+	// short entries the corpus is full of, where the offset can be past the
+	// whole body and the pane looks empty.
+	scrolled string
 }
 
 // docsFollowDefault is true: a pane that has to be switched on before it does
@@ -132,14 +140,20 @@ func (inst *PlayApp) renderDocsTab() {
 	c.Separator().Send()
 
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+		// Emitted before the body, so the op targets the cursor at the top of
+		// the document: a page change scrolls back to the start exactly once.
+		if s.scrolled != entry.Name {
+			c.ScrollToCursor(0)
+			s.scrolled = entry.Name
+		}
 		// IdScope isolates the document's derived widget ids (markdown.Doc's
 		// documented invariant) so the pane cannot collide with the Snippets
 		// tab or the Help center rendering another document the same frame.
 		for range c.IdScope(ids.PrepareStr("docsBody")) {
-			// The link router is deliberately NOT wired yet — see
-			// docsLinkClaimed. Links stay browser hyperlinks until a widget
-			// emitted in the markdown inline flow can receive a click.
-			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels) {
+			// Links the endpoint itself documents are followed in place; the
+			// rest stay browser hyperlinks. See docsLinkClaimed.
+			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels,
+				markdown.WithLinkRouter(docsLinkClaimed, inst.followDocsLink)) {
 				// The corpus is full of runnable examples; only SQL (or
 				// untyped) blocks may reach the editor. A ```response block
 				// showing ClickHouse's box-drawing output must never be
@@ -208,7 +222,9 @@ func (inst *PlayApp) resolveDocs(cands []string) (res *docsResult) {
 			}
 			if len(hit.entries) > 0 || hit.err != nil {
 				s.shown, s.shownKind, s.lastMiss = cand, "", ""
-				s.nav, s.navURL = nil, s.navURL
+				// navURL survives a successful resolve only long enough for an
+				// errored lookup to still offer the original page.
+				s.nav = nil
 				if hit.err == nil {
 					s.navURL = ""
 				}
