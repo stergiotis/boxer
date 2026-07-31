@@ -525,7 +525,8 @@ All of it is in this repository; no downstream consumer needs a change.
   [`widgets/jsonhighlight`](../../public/thestack/imzero2/egui2/widgets/jsonhighlight),
   [`widgets/gohighlight`](../../public/thestack/imzero2/egui2/widgets/gohighlight),
   [`nanopass/highlight`](../../public/db/clickhouse/dsl/nanopass/highlight),
-  [`apps/play/play_sql_highlight.go`](../../apps/play/play_sql_highlight.go),
+  [`widgets/sqleditor`](../../public/thestack/imzero2/egui2/widgets/sqleditor)
+  (the L1/L2 highlight tiers, extracted from `apps/play` by ADR-0147 §SD1),
   [`apps/play/play_renderer.go`](../../apps/play/play_renderer.go),
   [`apps/play/launchcfg`](../../apps/play/launchcfg),
   [`keelson/runtime/adhocdata`](../../public/keelson/runtime/adhocdata),

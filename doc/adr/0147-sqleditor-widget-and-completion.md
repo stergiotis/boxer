@@ -307,9 +307,93 @@ live — where they can be seen, and with no regen risk.
   reads as wrong is the trigger for C4 in the survey's ladder, not a defect to
   pre-empt.
 
+## Updates
+
+### 2026-07-31 — M0 landed, plus a caret-entity seam ahead of schedule
+
+M0 (SD1–SD4) is implemented and `sqlappletcreator` has adopted the widget
+(SD3). Recorded here rather than folded into the text above because the work
+diverged from the plan in four places worth stating.
+
+**The seam is two calls, not one.** `Editor.Bind(Frame) Result` then
+`Editor.Render(ids, Decoration)`. The split is forced by ordering: the caret
+arrives one frame late through the FFI, and the embedder's overlays are derived
+*from* the caret, so there is no single call that can both resolve it and
+consume decorations computed from it. Bind publishes; the embedder decorates;
+Render draws.
+
+**The statement tint moved to the widget**, per SD2's own test — it follows
+from buffer and caret alone. Two consequences. The gutter's active mark is
+derived by recognising a section's *tone*, so the tones are exported
+(`ToneError`, `ToneStatementTint`, …) and play composes in the same vocabulary
+rather than defining a second one that would drift. And the tint is no longer
+behind play's pipeline-quiescence gate, which it never needed: it now stays put
+while typing instead of flickering off. That is a deliberate behaviour change
+in a commit that was meant to be behaviour-identical, and it is the only one.
+
+**The caret is resolved once, against the buffer that rendered.** The
+pre-extraction code resolved twice in hide-prelude mode — first against the
+canonical buffer (short by the elided prelude), then against the mirror, after
+the overlays had already been derived from the first answer. Deciding the
+binding before `Bind` retires that; play's `renderSqlEditor` now picks the
+buffer, then binds, then decorates.
+
+**Subquery narrowing did not move.** SD1 lists "statement splitting, caret
+resolution"; narrowing is neither — it needs a nanopass parse of the statement,
+which is a subsystem rather than a buffer-and-caret derivation. It stays in
+`apps/play` and reaches the widget as `Decoration.SubqueryMark`.
+
+**M1's provider interface is not built.** M0 shipped without it because nothing
+needs it yet; the completion engine (M1–M4) is untouched and its milestones
+stand.
+
+#### The caret-entity seam
+
+`Result.Entity` publishes what the caret is pointing at: the name it sits on
+(`highlight.CaretEntity.Name`, with `Call` set when the lexer's `(`
+peek-ahead promoted it) and `Enclosing`, the callees of the argument lists
+around it, innermost first. The resolver is `highlight.EntityAt`, pure over the
+lex-span stream and the caret offset — the same tier, and for the same reason,
+as SD5's context classifier: it answers on a buffer that does not parse, which
+is every moment the question is asked.
+
+This is ahead of the milestone order — the first consumer is documentation
+lookup, not completion — and it is placed in `highlight` rather than in the
+widget because it is pure over the token stream that already lives there, and
+so is table-testable without a UI. The widget publishes it because SD2 says
+anything derivable from buffer-and-caret is the widget's to publish, and
+because two consumers deriving it separately would eventually disagree about
+which frame's caret they used. Completion is the next reader of the same walk.
+
+#### First consumer: play's Docs pane
+
+A tool pane (nil `PanelI`, dock id 17) rendering ClickHouse's own
+`system.documentation` row for the caret's entity as markdown. It reads
+`Result.Entity` and nothing else of the editor's, which is the acceptance test
+for the seam pointing outwards. Two facts it established that a later reader
+will want:
+
+- **`type` is an `Enum8`, and ClickHouse ships an Enum8 over Arrow as the raw
+  int8 ordinal** — the enum's names do not cross the wire at all. A client
+  reading the column directly gets numbers and no way back to "Table Engine";
+  `toString(type)` server-side is the only place the dictionary exists. Caught
+  by a live test, not a unit test.
+- **The corpus's links are site-relative** — a CommonMark link whose target
+  starts `/sql-reference/…` — written for ClickHouse's documentation site,
+  which has a base this app does not. The markdown widget's resolver
+  seam covers wikilinks and embeds, not plain CommonMark links, so they are
+  absolutised in a textual pre-pass before `markdown.Parse`.
+
+The lookup runs on an ordinary `newNodeLane` over `clientExecutor`, so it
+inherits endpoint routing, auth, the pre-execute pass registry and the Arrow
+decode, and stays off the frame thread — the same discipline SD6 requires of
+the completion probes, arrived at independently because the constraint is the
+same.
+
 ## Status
 
-Proposed — awaiting review.
+Proposed — awaiting review. M0 is implemented (see the 2026-07-31 Update);
+`reviewed-by` is still unset, so the acceptance flip is a separate act.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
