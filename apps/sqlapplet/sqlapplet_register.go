@@ -21,9 +21,19 @@ import (
 //go:embed book
 var bookFS embed.FS
 
+// booktopoFS embeds the topology suite (apps/sqlapplet/booktopo/*.md) —
+// the ADR-0126 appliance-topology tables as a curated applet corpus, one
+// applet per canonical query shape from doc/howto/topology-queries.md.
+//
+//go:embed booktopo
+var booktopoFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book")); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
+	}
+	if err := RegisterBook("topology", help.MustSub(booktopoFS, "booktopo")); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register topology book")
 	}
 }
 
