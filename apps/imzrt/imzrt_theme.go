@@ -16,13 +16,6 @@ var (
 	colorMetricPrimary = color.Hex(styletokens.InfoDefault.AsHex())
 	colorAxisLabel     = color.Hex(styletokens.NeutralTextSecondary.AsHex())
 	colorAxisTick      = color.Hex(styletokens.NeutralBorderFaint.AsHex())
-
-	// Faint twins for the raw underlay beneath a smoothed trend line
-	// (imzrt_smooth.go): the same hue at ~1/3 alpha, so raw and smoothed
-	// read as one series at two confidence levels rather than two series.
-	colorWarnFaint          = color.Hex(styletokens.WarningDefault.AsHex()&^uint32(0xff) | 0x55)
-	colorHotFaint           = color.Hex(styletokens.ErrorDefault.AsHex()&^uint32(0xff) | 0x55)
-	colorMetricPrimaryFaint = color.Hex(styletokens.InfoDefault.AsHex()&^uint32(0xff) | 0x55)
 )
 
 // qualitativeColor returns the idx-th colour of the IDS qualitative cycle

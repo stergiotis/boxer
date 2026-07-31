@@ -262,7 +262,11 @@ sawtooth plus the forced-GC spike train deliberately excluded as structure
 a low-pass would misreport. The consuming-app record is the dated update in
 [ADR-0061](./0061-imzero2-imzrt-go-runtime-dashboard.md); the exclusions
 there are a worked example of this ADR's scope note that peak-*shaped*
-signals are the design center, not peak-*valued* event trains.
+signals are the design center, not peak-*valued* event trains. imztop
+followed as the second consumer (dated update in
+[ADR-0020](./0020-imzero2-imztop-resource-monitor.md)), at which point the
+overlay helper was lifted into the shared `trendsmooth` widget package —
+the repository's duplicate-then-lift convention at its lift step.
 
 ## References
 

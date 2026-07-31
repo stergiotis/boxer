@@ -72,8 +72,7 @@ func (inst *App) renderMemPanel(snap *PublishedSnapshot) {
 	if len(snap.HistoryTimeUnixSec) >= 2 && len(snap.HistoryMemUsed) == len(snap.HistoryTimeUnixSec) {
 		c.AddSpace(inst.spaceTight())
 		p := inst.beginTimePlot("##mem-history", 168, "%", snap.HistoryTimeUnixSec, 0, 100)
-		p.SetNextColor(colorMetricPrimary.Literal()).SetNextWeight(2.0)
-		p.Line("RAM %", snap.HistoryTimeUnixSec, snap.HistoryMemUsed)
+		inst.smooth.Line(p, "RAM %", snap.HistoryTimeUnixSec, snap.HistoryMemUsed, colorMetricPrimary, 2.0)
 		p.SetNextColor(colorGridLine.Literal()).SetNextWeight(0.5)
 		p.InfLinesH("100%", []float64{100})
 		p.End()

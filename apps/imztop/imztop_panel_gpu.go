@@ -85,8 +85,7 @@ func (inst *App) renderGPUPanel(snap *PublishedSnapshot) {
 		if len(dev) != len(times) {
 			continue
 		}
-		p.SetNextColor(markerColor(i).Literal()).SetNextWeight(1.8)
-		p.Line(fmt.Sprintf("gpu%d %%", i), times, dev)
+		inst.smooth.Line(p, fmt.Sprintf("gpu%d %%", i), times, dev, markerColor(i), 1.8)
 	}
 	p.SetNextColor(colorGridLine.Literal()).SetNextWeight(0.5)
 	p.InfLinesH("100%", []float64{100})

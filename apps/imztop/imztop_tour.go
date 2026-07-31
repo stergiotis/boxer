@@ -122,6 +122,9 @@ func makeTourInit(filter string, activate uint64) func(ids *c.WidgetIdStack) (st
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
 		inst.ids = ids
+		// Showcase the smoothing overlay in captures (ADR-0152 wiring); the
+		// interactive default stays off.
+		inst.smooth.On = true
 		inst.activateTab = activate // 0 for most scenes; the Proc Map scene targets its tab
 		ensureTourFeed()            // the tour has no host bus; feed the consumer locally
 		_, _ = ensureSampler()      // start the singleton consumer; the feed sets the cadence

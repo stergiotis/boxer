@@ -91,7 +91,7 @@ func (inst *App) renderSchedPanel(snap *PublishedSnapshot) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("Goroutines")
 		p := inst.beginTimePlot("##sched-goroutines", 140, "count", t)
-		inst.lineSmoothed(p, "goroutines", t, snap.HistGoroutines, colorMetricPrimary, colorMetricPrimaryFaint, 2.0)
+		inst.smooth.Line(p, "goroutines", t, snap.HistGoroutines, colorMetricPrimary, 2.0)
 		p.End()
 	}
 
@@ -106,7 +106,7 @@ func (inst *App) renderSchedPanel(snap *PublishedSnapshot) {
 		c.AddSpace(inst.spaceTight())
 		inst.sectionHeader("Scheduling latency p99")
 		p := inst.beginTimePlot("##sched-p99", 140, "ms", t)
-		inst.lineSmoothed(p, "p99", t, snap.HistSchedP99Ms, colorWarn, colorWarnFaint, 2.0)
+		inst.smooth.Line(p, "p99", t, snap.HistSchedP99Ms, colorWarn, 2.0)
 		p.End()
 	}
 }

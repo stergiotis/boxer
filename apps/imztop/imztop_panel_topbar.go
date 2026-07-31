@@ -40,6 +40,10 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 		c.Label(fmt.Sprintf("cadence: %s", s.IntervalLabel())).Send()
 		c.Separator().Vertical().Send()
 
+		// Trend smoothing (ADR-0152); acts on the history plots only.
+		inst.smooth.RenderControls(inst.ids)
+		c.Separator().Vertical().Send()
+
 		ts := time.UnixMilli(snap.SampledAtUnixMs).Format("15:04:05")
 		c.Label(fmt.Sprintf("last: %s", ts)).Send()
 

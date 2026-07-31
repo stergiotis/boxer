@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap/layout"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/trendsmooth"
 )
 
 // Sampler is a system-wide singleton: one OS sampler feeds every open
@@ -77,6 +78,12 @@ type App struct {
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at newApp.
 	density styletokens.DensityE
+
+	// smooth is the per-window trend-smoothing overlay for the history
+	// plots (ADR-0152; shared helper — see the trendsmooth package doc for
+	// the design commitments, and ADR-0020's 2026-07-31 update for which
+	// series are wired here).
+	smooth *trendsmooth.State
 
 	// netSelectedIfaceIdx is the index of the network interface the
 	// user picked from this window's ComboBox. Defaults to 0; auto-
@@ -207,6 +214,7 @@ func newApp() (inst *App) {
 		gpuDistsumDigest:  tdigest.NewTDigest(),
 		lazyPanes:         map[uint64]*lazypane.Pane{},
 		procView:          defaultProcView(),
+		smooth:            trendsmooth.New(),
 	}
 	return
 }
@@ -302,6 +310,7 @@ func (inst *App) lazyBody(dockID uint64, title string) (skip bool) {
 // dock_state on the Rust side wins and the initial layout is no
 // longer consulted (ADR-0020 follow-on: DockArea pre-split bindings).
 func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
+	inst.smooth.BeginFrame()
 	if snap == nil {
 		for range c.PanelCentralInside().KeepIter() {
 			c.Label("Imztop: waiting for first sample…").Send()

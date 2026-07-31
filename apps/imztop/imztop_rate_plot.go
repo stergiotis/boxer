@@ -33,23 +33,19 @@ func (inst *App) renderRateHistoryPlot(times []float64, spec ratePlotSpec) {
 		if len(s.Y) != len(times) {
 			continue
 		}
-		p.SetNextColor(markerColor(i).Literal()).SetNextWeight(1.2)
-		p.Line(fmt.Sprintf("%s %s", s.Name, spec.primaryDevLabel), times, s.Y)
+		inst.smooth.Line(p, fmt.Sprintf("%s %s", s.Name, spec.primaryDevLabel), times, s.Y, markerColor(i), 1.2)
 	}
 	for i, s := range spec.secondaryByDev {
 		if len(s.Y) != len(times) {
 			continue
 		}
-		p.SetNextColor(markerColor(i).Literal()).SetNextWeight(1.2)
-		p.Line(fmt.Sprintf("%s %s", s.Name, spec.secondaryDevLabel), times, s.Y)
+		inst.smooth.Line(p, fmt.Sprintf("%s %s", s.Name, spec.secondaryDevLabel), times, s.Y, markerColor(i), 1.2)
 	}
 	if len(spec.primarySum) == len(times) {
-		p.SetNextColor(markerColor(0).Literal()).SetNextWeight(2.4)
-		p.Line(spec.primarySumLabel, times, spec.primarySum)
+		inst.smooth.Line(p, spec.primarySumLabel, times, spec.primarySum, markerColor(0), 2.4)
 	}
 	if len(spec.secondarySum) == len(times) {
-		p.SetNextColor(markerColor(1).Literal()).SetNextWeight(2.4)
-		p.Line(spec.secondarySumLabel, times, spec.secondarySum)
+		inst.smooth.Line(p, spec.secondarySumLabel, times, spec.secondarySum, markerColor(1), 2.4)
 	}
 	p.End()
 }

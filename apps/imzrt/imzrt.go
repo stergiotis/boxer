@@ -5,10 +5,10 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/analytics/timeseries/mssmooth"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/trendsmooth"
 )
 
 // Sampler is a process-wide singleton: there is exactly one Go runtime per
@@ -36,15 +36,11 @@ type App struct {
 	// carries the histogram's bucket layout. See imzrt_panel_sched.go.
 	schedSpectro schedSpectroState
 
-	// Trend smoothing (ADR-0152; see imzrt_smooth.go). smoothOn/smoothM are
-	// the per-window display selection; the kernel is a cache derived from
-	// smoothM, and the arena recycles the smoothed series' backing slices
-	// across frames (implot does not copy).
-	smoothOn       bool
-	smoothM        int32
-	smoothKernel   *mssmooth.Kernel
-	smoothArena    [][]float64
-	smoothArenaIdx int
+	// smooth is the per-window trend-smoothing overlay for the rate/latency
+	// plots (ADR-0152; shared helper — see the trendsmooth package doc for
+	// the design commitments, and ADR-0061's 2026-07-31 update for which
+	// series are wired and which are excluded on purpose).
+	smooth *trendsmooth.State
 }
 
 var _ app.AppI = (*App)(nil)
@@ -53,7 +49,7 @@ func newApp() (inst *App) {
 	inst = &App{
 		ids:     c.NewWidgetIdStack(),
 		density: styletokens.DensityFromEnv(),
-		smoothM: smoothDefaultM,
+		smooth:  trendsmooth.New(),
 	}
 	return
 }
@@ -109,7 +105,7 @@ const (
 // top bar plus a DockArea holding the Heap and GC tabs. M3 adds the Scheduler tab
 // to the same leaf (ADR-0061).
 func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
-	inst.beginSmoothFrame()
+	inst.smooth.BeginFrame()
 	if snap == nil {
 		for range c.PanelCentralInside().KeepIter() {
 			c.Label("imzrt: waiting for first sample…").Send()

@@ -254,6 +254,25 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-07-31 — trend smoothing on the history plots (ADR-0152)
+
+The history plots — RAM %, per-GPU busy %, and the disk/net rate plots
+(per-device series and their Σ aggregates) — gained the optional
+modified-sinc smoothing overlay of
+[ADR-0152](./0152-modified-sinc-smoothing.md), the same feature imzrt
+received earlier the same day. The helper was lifted from imzrt into the
+shared `trendsmooth` widget package on this second adoption — the
+SlidingWindow lifting precedent (ADR-0061 SD13) run in the other direction.
+A top-bar checkbox plus ±half-width stepper controls it per window, off by
+default; when on, the raw series stays visible as a faint underlay under
+the smoothed curve, both sharing one legend entry. The CPU spectrograms,
+per-core sparklines and distribution summaries are untouched — they are not
+line-trend surfaces. The tour scenes pin the overlay on so captures
+showcase it.
+
+The accepted decision stands; this is a panel-level display option, so
+`status` / `reviewed-date` are not re-stamped.
+
 ### 2026-07-12 — `Proc Map` panel (process-tree treemap) + freeze relabel
 
 Adds a `Proc Map` dock tab (`dockTabProcMap`) that draws the live process tree as a treemap: processes nested by PPID, each box sized by resident memory (RSS, the default) or CPU%, tinted by CPU load. It complements the text process-tree (the proc panel's `tree` toggle, 2026-05-30 Update): that view answers *who spawned whom* structurally; this one answers *where is memory / CPU going, by subtree* spatially. Built entirely over existing bus data (`ProcInfo.PID` / `PPID` / `RSSBytes` / `CPUPercent`, delivered on the [ADR-0090](./0090-sysmetrics-pubsub-data-plane.md) metric plane) and the existing `treemap` widget — no new dependency, IDL, or scraper change, so no separate ADR.
