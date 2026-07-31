@@ -98,7 +98,16 @@ step_begin "codelint"
 # severity is per-rule, in a separate commit, once residual count
 # reaches zero. Same `if out=$(...)` pattern as doclint below —
 # required because the script runs under `set -e`.
-if out=$("$here/../../boxer.sh" gov codelint --tags "$tags" --min-severity warn ./public/... 2>/dev/null); then
+#
+# stderr is captured to a temp file rather than discarded. boxer.sh logs a
+# completion line there on every run, so folding it into $out with 2>&1 would
+# turn a clean run into a spurious "warn" — but when the underlying build
+# fails, that stream is the ONLY place the compile error appears while $out is
+# empty, leaving the step reporting "fail" with no diagnostics at all. Replayed
+# on the failure path only. Same for the entry-points and doclint steps below.
+codelint_err=$(mktemp -t codelint-err.XXXXXX)
+if out=$("$here/../../boxer.sh" gov codelint --tags "$tags" --min-severity warn ./public/... 2>"$codelint_err"); then
+    rm -f "$codelint_err"
     if [ -n "$out" ]; then
         echo "$out"
         step_end warn
@@ -108,6 +117,8 @@ if out=$("$here/../../boxer.sh" gov codelint --tags "$tags" --min-severity warn 
     fi
 else
     echo "$out"
+    cat "$codelint_err"
+    rm -f "$codelint_err"
     rc=1
     step_end fail
 fi
@@ -153,7 +164,9 @@ step_begin "entry-points"
 # in boxer today; the mechanism exists for parity with pebble2impl's
 # CI wiring and as a documented escape hatch). Same `if out=$(...)`
 # pattern as the other boxer.sh-based steps — required under `set -e`.
-if out=$("$here/../../boxer.sh" dev entry-points --tags "$tags" --baseline "$here/entry-points-baseline.txt" --strict 2>/dev/null); then
+entry_points_err=$(mktemp -t entry-points-err.XXXXXX)
+if out=$("$here/../../boxer.sh" dev entry-points --tags "$tags" --baseline "$here/entry-points-baseline.txt" --strict 2>"$entry_points_err"); then
+    rm -f "$entry_points_err"
     if [ -n "$out" ]; then
         echo "$out"
     else
@@ -162,6 +175,8 @@ if out=$("$here/../../boxer.sh" dev entry-points --tags "$tags" --baseline "$her
     step_end pass
 else
     echo "$out"
+    cat "$entry_points_err"
+    rm -f "$entry_points_err"
     rc=1
     step_end fail
 fi
@@ -198,7 +213,9 @@ step_begin "doclint"
 # The 'if' wrapper is required because the script runs under `set -e`:
 # a direct `out=$(...)` assignment would abort the script when doclint
 # exits non-zero on error-severity findings.
-if out=$("$here/../../boxer.sh" gov doclint --min-severity warn . 2>/dev/null); then
+doclint_err=$(mktemp -t doclint-err.XXXXXX)
+if out=$("$here/../../boxer.sh" gov doclint --min-severity warn . 2>"$doclint_err"); then
+    rm -f "$doclint_err"
     if [ -n "$out" ]; then
         echo "$out"
         step_end warn
@@ -208,6 +225,8 @@ if out=$("$here/../../boxer.sh" gov doclint --min-severity warn . 2>/dev/null); 
     fi
 else
     echo "$out"
+    cat "$doclint_err"
+    rm -f "$doclint_err"
     rc=1
     step_end fail
 fi
