@@ -64,7 +64,7 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 	// The body zone keeps today's presentation order.
 	assert.Equal(t, []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets,
 		dockTabMap, dockTabWorld, dockTabKanban, dockTabNetwork, dockTabGraph, dockTabSchema,
-		dockTabDiagnostics, dockTabPasses, dockTabDocs},
+		dockTabDiagnostics, dockTabPasses},
 		dockIDsOf(reg.byZone(TabZoneBody)))
 }
 
@@ -129,7 +129,7 @@ func TestBodyTabOrderFocusReorder(t *testing.T) {
 // The focus knobs derive from the tab definitions: one per body tab, named
 // BOXER_PLAY_FOCUS_<ID>.
 func TestFocusVarsDerivedFromBodyTabs(t *testing.T) {
-	wantIDs := []string{"table", "projection", "timeline", "snippets", "map", "world", "kanban", "network", "graph", "schema", "diagnostics", "passes", "docs"}
+	wantIDs := []string{"table", "projection", "timeline", "snippets", "map", "world", "kanban", "network", "graph", "schema", "diagnostics", "passes"}
 	require.Len(t, focusVars, len(wantIDs))
 	for _, id := range wantIDs {
 		v, ok := focusVars[id]

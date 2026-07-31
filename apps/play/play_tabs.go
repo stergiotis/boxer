@@ -229,13 +229,24 @@ type builtinTabDef struct {
 // text-heavy history/diagnostics panes. Deliberately eager: editor (the
 // snippet-insert delivery target), table (the most-trafficked result view,
 // spared the one-frame loading tick), snippets (trivial body), and the
-// preview/detail tabs (each alone in its own leaf, so effectively always
-// visible — a gate would never fire). Data pipelines are unaffected either
+// preview/detail tabs. Detail is alone in its leaf, so a gate would never
+// fire; Preview now shares one with Docs and so CAN be hidden, but its body
+// is a memoised CodeView over already-computed text — cheap enough that the
+// one-frame tick a gate costs would be the more visible of the two. Data pipelines are unaffected either
 // way: lane demand, updatePreview and the diagnostics probe run before the
 // tab bodies (see Render), so a lazy tab reveals with fresh data.
 var builtinTabDefs = []builtinTabDef{
 	{id: "editor", dockID: dockTabEditor, title: "Editor", zone: TabZoneEditor},
 	{id: "history", dockID: dockTabHistory, title: "History", zone: TabZoneEditor, lazy: true},
+	// Docs and Preview share the leaf to the right of the editor: both are
+	// reference surfaces you read WHILE editing, which is what that leaf is
+	// for. Docs is listed first, so a fresh layout opens on it; the dock
+	// persists whichever the user then picks.
+	//
+	// A TOOL pane, not a result panel — it reads the editor's caret, not the
+	// query result, so it registers with no PanelI. Lazy because a hidden
+	// pane must not keep asking the server what the caret is on.
+	{id: "docs", dockID: dockTabDocs, title: "Docs", zone: TabZonePreview, lazy: true},
 	{id: "preview", dockID: dockTabPreview, title: "Preview", zone: TabZonePreview},
 	{id: "table", dockID: dockTabTable, title: "Table", writes: []SignalID{signalSelection}},
 	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true,
@@ -267,10 +278,6 @@ var builtinTabDefs = []builtinTabDef{
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
 	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
 	{id: "passes", dockID: dockTabPasses, title: "Passes", lazy: true},
-	// Docs is a TOOL pane, not a result panel: it reads the editor's caret,
-	// not the query result, so it registers with no PanelI. Lazy because a
-	// hidden pane must not keep asking the server what the caret is on.
-	{id: "docs", dockID: dockTabDocs, title: "Docs", lazy: true},
 	{id: "detail", dockID: dockTabDetail, title: "Detail", zone: TabZoneSide},
 }
 
