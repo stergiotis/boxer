@@ -24,7 +24,7 @@ func tabsTestApp() *PlayApp {
 func TestDefaultTabsEnumeration(t *testing.T) {
 	reg := tabsTestApp().Tabs()
 	specs := reg.all()
-	require.Len(t, specs, 17)
+	require.Len(t, specs, 18)
 
 	wantDockID := map[string]uint64{
 		"editor": dockTabEditor, "history": dockTabHistory, "preview": dockTabPreview,
@@ -32,7 +32,7 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		"snippets": dockTabSnippets, "map": dockTabMap, "world": dockTabWorld,
 		"kanban": dockTabKanban, "network": dockTabNetwork, "graph": dockTabGraph,
 		"schema": dockTabSchema, "diagnostics": dockTabDiagnostics, "passes": dockTabPasses,
-		"docs": dockTabDocs, "detail": dockTabDetail,
+		"docs": dockTabDocs, "flow": dockTabFlow, "detail": dockTabDetail,
 	}
 	seen := make(map[string]TabSpec, len(specs))
 	for _, s := range specs {
@@ -64,7 +64,7 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 	// The body zone keeps today's presentation order.
 	assert.Equal(t, []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets,
 		dockTabMap, dockTabWorld, dockTabKanban, dockTabNetwork, dockTabGraph, dockTabSchema,
-		dockTabDiagnostics, dockTabPasses},
+		dockTabDiagnostics, dockTabPasses, dockTabFlow},
 		dockIDsOf(reg.byZone(TabZoneBody)))
 }
 
@@ -81,18 +81,18 @@ func TestTabRegistryMutationAndFreeze(t *testing.T) {
 	require.Error(t, reg.Add(TabSpec{ID: "x", DockID: dockTabTable, Render: noop}), "duplicate DockID")
 
 	require.NoError(t, reg.Add(TabSpec{ID: "x", DockID: 64, Title: "X", Render: noop}))
-	require.Len(t, reg.all(), 18)
-	assert.Equal(t, TabZoneBody, reg.all()[17].Zone, "embedder tabs default to the body zone")
+	require.Len(t, reg.all(), 19)
+	assert.Equal(t, TabZoneBody, reg.all()[18].Zone, "embedder tabs default to the body zone")
 
 	// Replace keeps the position and re-validates against the others.
 	require.Error(t, reg.Replace("x", TabSpec{ID: "table", DockID: 64, Render: noop}),
 		"replacement must not collide with another tab")
 	require.NoError(t, reg.Replace("x", TabSpec{ID: "y", DockID: 65, Title: "Y", Render: noop}))
-	assert.Equal(t, "y", reg.all()[17].ID)
+	assert.Equal(t, "y", reg.all()[18].ID)
 	require.Error(t, reg.Replace("x", TabSpec{ID: "z", DockID: 66, Render: noop}), "x is gone")
 
 	require.NoError(t, reg.Remove("y"))
-	require.Len(t, reg.all(), 17)
+	require.Len(t, reg.all(), 18)
 	require.Error(t, reg.Remove("y"), "already removed")
 
 	reg.freeze()
@@ -129,7 +129,7 @@ func TestBodyTabOrderFocusReorder(t *testing.T) {
 // The focus knobs derive from the tab definitions: one per body tab, named
 // BOXER_PLAY_FOCUS_<ID>.
 func TestFocusVarsDerivedFromBodyTabs(t *testing.T) {
-	wantIDs := []string{"table", "projection", "timeline", "snippets", "map", "world", "kanban", "network", "graph", "schema", "diagnostics", "passes"}
+	wantIDs := []string{"table", "projection", "timeline", "snippets", "map", "world", "kanban", "network", "graph", "schema", "diagnostics", "passes", "flow"}
 	require.Len(t, focusVars, len(wantIDs))
 	for _, id := range wantIDs {
 		v, ok := focusVars[id]

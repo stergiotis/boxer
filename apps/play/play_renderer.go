@@ -87,6 +87,7 @@ const (
 	dockTabPasses      uint64 = 15
 	dockTabNetwork     uint64 = 16
 	dockTabDocs        uint64 = 17
+	dockTabFlow        uint64 = 18
 )
 
 type PlayApp struct {
@@ -342,6 +343,10 @@ type PlayApp struct {
 	// node-link view whose vertices and edges come from two named CTEs of the
 	// user's query, each on its own lane (closed in Close).
 	networkDriver *NetworkDriver
+
+	// flow is the ADR-0153 Flow dock tab: the active node's clause-level
+	// dataflow, derived statically from the split — no lane, nothing to Close.
+	flow *flowDriver
 
 	// richCells memoises the ADR-0123 content-typed cells of the Detail pane's
 	// selected row (a parsed markdown doc, a highlighted job, decoded pixels).
@@ -804,6 +809,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string) *PlayApp {
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
 	inst.networkDriver = NewNetworkDriver(mk(), client)
+	inst.flow = newFlowDriver(mk())
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.diag = NewDiagnosticsDriver(client)

@@ -278,6 +278,12 @@ var builtinTabDefs = []builtinTabDef{
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
 	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
 	{id: "passes", dockID: dockTabPasses, title: "Passes", lazy: true},
+	// Flow draws the ACTIVE node's clause-level dataflow derived from the SQL
+	// itself (ADR-0153) — inside one statement, where the Graph tab's boxes
+	// end. A TOOL pane like Docs: it reads the split, not the query result, so
+	// it registers with no PanelI and writes nothing (selection is local to
+	// the driver).
+	{id: "flow", dockID: dockTabFlow, title: "Flow", lazy: true},
 	{id: "detail", dockID: dockTabDetail, title: "Detail", zone: TabZoneSide},
 }
 
@@ -431,6 +437,8 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			}
 		case "passes":
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPassesTab) }
+		case "flow":
+			spec.Render = func(f *TabFrame) { scrollTab(inst.renderFlowTab) }
 		case "docs":
 			// No scrollTab: the body scrolls its own markdown, below a header
 			// that must stay put while the document under it moves.
