@@ -805,7 +805,7 @@ Internal: [ADR-0021](../adr/0021-imzero2-snarl-node-editor-binding.md),
 [ADR-0139](../adr/0139-semantic-layer-text2dsl.md),
 [ADR-0140](../adr/0140-imzero2-hover-scoped-wheel-capture.md),
 [ADR-0148](../adr/0148-app-workingsets.md),
-[why-boxer](./why-boxer.md).
+[why-boxer](../explanation/why-boxer.md).
 
 External, verified this survey: egui 0.31 release notes ("Scene container",
 <https://github.com/emilk/egui/releases/tag/0.31.0>); JSON Canvas

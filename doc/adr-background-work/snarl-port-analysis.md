@@ -7,8 +7,7 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** Compiled 2026-07-31 as a companion to
-> the app-composition survey (an uncommitted working draft at the time of
-> writing, hence not linked); nothing here is a
+> [the app-composition survey](./app-composition-survey.md); nothing here is a
 > decision, and an ADR — not this page — is where any of it would become one.
 > Provenance is three-tiered: (a) claims about this repository were verified
 > against the working tree on the compile date; (b) the runtime behaviour in §2
@@ -384,9 +383,8 @@ Internal: [ADR-0021](../adr/0021-imzero2-snarl-node-editor-binding.md),
 [ADR-0069](../adr/0069-imzero2-layeredgraph-widget.md),
 [ADR-0119](../adr/0119-imzero2-pipelineview-widget.md),
 [ADR-0140](../adr/0140-imzero2-hover-scoped-wheel-capture.md),
-[ADR-0149](../adr/0149-implot-core-port-painter-lane.md). The app-composition
-survey this page answers to was an uncommitted working draft when this was
-written; link it here once it lands.
+[ADR-0149](../adr/0149-implot-core-port-painter-lane.md),
+[app-composition-survey](./app-composition-survey.md).
 
 Code touched by this analysis:
 [`egui2_definition_d_snarl.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_snarl.go),

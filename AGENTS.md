@@ -24,6 +24,7 @@ the linked document wins.
 | Understand the toolchain (CI, lint, governance, supply-chain) | [doc/ENGINEERING_PRACTICES.md](./doc/ENGINEERING_PRACTICES.md) |
 | Write or edit a doc / ADR | [doc/DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md) |
 | See *why* the architecture is the way it is | [doc/adr/](./doc/adr/) |
+| Read the analysis behind a decision — surveys, measurements, costed options | [doc/adr-background-work/](./doc/adr-background-work/) |
 | Configure behaviour via env vars | [doc/env-vars.md](./doc/env-vars.md) |
 | Run a task end to end | [doc/howto/](./doc/howto/) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
