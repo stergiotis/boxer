@@ -14,8 +14,9 @@ const appletMaxHistory = 25
 
 // chromeTabIDs are the exploration-chrome tabs an applet removes pre-mount
 // (ADR-0132 §SD3). The result panels and the status bar stay; the dock
-// handles an emptied editor zone (ADR-0097 slice 6a).
-var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes"}
+// handles an emptied editor zone (ADR-0097 slice 6a). Docs is chrome too:
+// its follow-caret half reads the editor the applet just removed.
+var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs"}
 
 // orderedResultTabIDs is resultTabIDs in play's registration order, for
 // deterministic removal when an explicit `tabs:` list prunes the set.
