@@ -282,6 +282,25 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-07-31 — the depth cycle rejoins `styletokens.QualitativeCycle`
+
+§SD2 settled on a hand-picked four-colour bracket-depth cycle rather than the
+shared qualitative palette, because that palette (`batlowS`) was chosen for
+fills and opened on a near-black navy — invisible as foreground on the dark
+editor background. That reasoning was correct, and it expired with
+[ADR-0156](./0156-qualitative-palette-dark-surface.md): every entry of the
+replacement cycle clears 3:1 as a foreground, so `regexDepthColors` is now
+taken from `QualitativeCycle` and the tie to the Preview tab's
+per-capture-group cells is a shared constant rather than a resemblance.
+
+Rejoining also fixed a defect in the hand-picked set that the divergence had
+hidden: its gold and orchid measured ΔE 1.2 apart under simulated
+deuteranopia, so *consecutive* bracket depths — the one distinction the cycle
+exists to carry — were nearly indistinguishable to a deuteranope. The
+replacement's first four measure 14.6. Minimum contrast drops from 6.73:1 to
+4.79:1, still clear of the floor.
+
+
 ### 2026-07-27 — implemented
 
 Landed as `widgets/regexhighlight` (lexer), `codeview/regex.go` (palette and

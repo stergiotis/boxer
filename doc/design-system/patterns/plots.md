@@ -20,7 +20,7 @@ This doc covers when to reach for which plot type, how IDS layers on top of `egu
 
 **Foundational dependencies.** Plots pull from every foundations sub-ADR:
 
-- Color ([ADR-0031](../../adr/0031-imzero2-design-system-color.md)) — the data-encoding palette (Crameri `batlowS` qualitative, `batlow` sequential, `vik` diverging; viridis family as opt-in) is the plot color source. Semantic palette is used *only* for status overlays (HLine threshold, alert region) — never for series identity.
+- Color ([ADR-0031](../../adr/0031-imzero2-design-system-color.md), [ADR-0156](../../adr/0156-qualitative-palette-dark-surface.md)) — the data-encoding palette (Okabe-Ito qualitative, Crameri `batlow` sequential, `vik` diverging; viridis family as opt-in) is the plot color source. Semantic palette is used *only* for status overlays (HLine threshold, alert region) — never for series identity.
 - Typography ([ADR-0030](../../adr/0030-imzero2-design-system-typography.md)) — `Caption.Mono.Numeric` for tick labels (tabular figures, fixed-width); `Caption` proportional for axis labels and legend entries; `Body` for plot titles.
 - Spacing ([ADR-0032](../../adr/0032-imzero2-design-system-spacing-density-motion.md)) — `Padding.Outer` for plot margin to surrounding panel; `Gap.Items` for legend entries; `Stroke.Hair` for grid lines; `Stroke.Regular` for axes; `Stroke.Strong` for annotation lines.
 - Motion ([ADR-0032 §SD5](../../adr/0032-imzero2-design-system-spacing-density-motion.md)) — pan / zoom transitions use `Motion.Quick`; reduced-motion resolves to instant.
@@ -42,19 +42,19 @@ The first decision is what the plot is encoding, which dictates the palette:
 
 | Plot type | Encoding intent | IDS palette |
 |---|---|---|
-| **Line plot** (time series, scalar vs continuous X) | series identity (categorical) | `batlowS` qualitative cycle |
+| **Line plot** (time series, scalar vs continuous X) | series identity (categorical) | Okabe-Ito qualitative cycle |
 | **Scatter plot** | two dimensions + optional third via color | qualitative if 3rd is categorical; `batlow` if 3rd is magnitude |
-| **Bar chart** (categorical X) | category magnitude | `batlowS` qualitative or single semantic color |
-| **Stacked bar** | composition within category | `batlowS` qualitative; same N colors fleet-wide |
+| **Bar chart** (categorical X) | category magnitude | qualitative cycle or single semantic color |
+| **Stacked bar** | composition within category | qualitative cycle; same N colors fleet-wide |
 | **Histogram** (binned distribution) | density of one variable | single semantic color, `info.default` default |
 | **Heatmap** (binned 2D distribution) | magnitude over 2D grid | `batlow` sequential (or `vik` diverging if signed) |
 | **Density plot** (KDE, contour) | continuous density | `batlow` sequential alpha-modulated |
-| **Box plot** | distribution summary | `batlowS` qualitative or single `info.default` |
+| **Box plot** | distribution summary | qualitative cycle or single `info.default` |
 | **Sparkline** (inline mini-plot) | scalar trend over time, single series | single semantic color, `info.default` default |
-| **Step plot** (discrete state over time) | state transitions | `batlowS` qualitative per state-class |
+| **Step plot** (discrete state over time) | state transitions | qualitative cycle per state-class |
 | **Annotations** (HLine, VLine, region) | reference values, thresholds, alert ranges | semantic palette (`warning` / `error` / `success`) |
 
-The palette type is *intent-driven*, not aesthetic. Qualitative for categorical; sequential for ordered magnitude; diverging for signed deviation from a midpoint. Mixing these — using `batlow` for series identity, or `batlowS` for a heatmap — collapses the visual encoding's meaning. Tier 2 rubric V2 (color-encoding consistency) catches the misuse.
+The palette type is *intent-driven*, not aesthetic. Qualitative for categorical; sequential for ordered magnitude; diverging for signed deviation from a midpoint. Mixing these — using `batlow` for series identity, or the qualitative cycle for a heatmap — collapses the visual encoding's meaning. Tier 2 rubric V2 (color-encoding consistency) catches the misuse.
 
 ### Lines, scatters, bars — concrete usage
 
@@ -73,7 +73,7 @@ Plot::new("cpu_usage").show(ui, |plot_ui| {
 });
 ```
 
-`qualitative_cycle(idx)` reads from the `batlowS` LUT ([ADR-0031 §SD7](../../adr/0031-imzero2-design-system-color.md)); the i-th series gets the i-th color, deterministically. No random colors, no hand-picked hex values. `PlotPoints::Borrowed` avoids per-frame allocation when the data lives in app-owned storage.
+`qualitative_cycle(idx)` reads from the Okabe-Ito LUT ([ADR-0031 §SD7](../../adr/0031-imzero2-design-system-color.md), [ADR-0156](../../adr/0156-qualitative-palette-dark-surface.md)); the i-th series gets the i-th color, deterministically. No random colors, no hand-picked hex values. `PlotPoints::Borrowed` avoids per-frame allocation when the data lives in app-owned storage.
 
 **Secondary encoding** is mandatory per [ADR-0031 §SD6](../../adr/0031-imzero2-design-system-color.md) — color must not be the only series-distinguishing channel:
 
@@ -119,10 +119,10 @@ Sparklines communicate *trend over time*; their job is to give context to a nume
 - The plot's midpoint must correspond to `t = 0` in `diverging(DivergingE::Vik, t)`; non-symmetric data ranges still center the diverging midpoint at the baseline value, even if visual coverage is asymmetric.
 - Always show a midpoint label in the legend ([patterns/status-and-legends.md](./status-and-legends.md) — diverging continuous legend anatomy).
 
-**Qualitative palette use** (`batlowS`):
+**Qualitative palette use** (Okabe-Ito):
 
 - Series identity in line / scatter / bar / stacked / step plots.
-- Up to 10 colors via `qualitative_cycle(i)`. Beyond 10, repetition occurs — consider whether the plot has too many series to be readable. Down-sample series count if so.
+- Up to 7 colors via `qualitative_cycle(i)`. Beyond 7, repetition occurs — consider whether the plot has too many series to be readable, and down-sample series count if so. Seven is the count at which every entry still clears 3:1 against the plot surface; a plot needing more categories should vary a second channel (dash pattern, marker shape) rather than expect an eighth hue ([ADR-0156](../../adr/0156-qualitative-palette-dark-surface.md)).
 - Per-app series-color registry recommended: if the same logical series (`cpu.user`) appears in three plots within one app, it should use the same color in all three. The registry is a `HashMap<SeriesName, u8>` mapping series-name to qualitative-cycle index; populated as series are first encountered in a panel.
 
 **Semantic palette use** (info / success / warning / error / neutral / accent):
@@ -206,7 +206,7 @@ Tick label sizes follow the density type-scale per [ADR-0030 §SD3](../../adr/00
 
 - **~100 k visible points per pane** is the design target ([`project_grafana_replacement`]); beyond that, down-sample upstream in SQL (M4-like aggregation) before the plot sees the data.
 - **`PlotPoints::Borrowed(&[..])`** for series data owned by the app — avoids per-frame allocation. The alternative `PlotPoints::Owned(Vec<..>)` allocates on every paint.
-- **Series count.** ~10 series visible is the soft cap (matches `batlowS`); ~20 is the hard cap before legend collapsing becomes mandatory. Beyond 20, the plot is communicating something else (a small-multiples view is probably the right abstraction).
+- **Series count.** ~7 series visible is the soft cap (matches the qualitative cycle); ~20 is the hard cap before legend collapsing becomes mandatory. Beyond 20, the plot is communicating something else (a small-multiples view is probably the right abstraction).
 - **Tick caching.** Talbot tick generation is fast per-frame but can be cached when zoom/pan is idle. Boxer timeticks similarly. Cache invalidation: any range change.
 - **Heatmap cell count.** Cap at ~10 k cells (e.g., 100 × 100). Beyond that, render the heatmap to a texture once and blit; egui_plot supports image overlays via `PlotImage`.
 
@@ -217,7 +217,7 @@ Tick label sizes follow the density type-scale per [ADR-0030 §SD3](../../adr/00
 - Time-series plots show the displayed time range explicitly — either in the legend, the panel header, or via a linked time-range picker.
 - Series colors come from `qualitative_cycle(idx)`; raw color literals are banned (Tier 1 L2).
 - Secondary encoding is mandatory beyond ~3 series: line style or marker shape varies independently of color.
-- Annotation colors (HLine, VLine, regions) come from the *semantic* palette, never `batlowS`. Series colors come from `batlowS`, never the semantic palette. The two never collide in one plot.
+- Annotation colors (HLine, VLine, regions) come from the *semantic* palette, never the qualitative cycle. Series colors come from the qualitative cycle, never the semantic palette. The two never collide in one plot.
 - Per-app series-color registry: the same logical series (`cpu.user`) uses the same qualitative-cycle index in every plot within the app.
 - Reduced-motion preference respected — pan / zoom complete instantly when set.
 - Streaming plots that have been panned / zoomed by the user do not auto-follow new data.
@@ -235,8 +235,8 @@ Tick label sizes follow the density type-scale per [ADR-0030 §SD3](../../adr/00
 
 ## Anti-patterns
 
-- Qualitative palette (`batlowS`) for a heatmap (`batlow` is required).
-- Sequential palette (`batlow`) for series identity (use `batlowS`).
+- Qualitative palette (Okabe-Ito) for a heatmap (`batlow` is required).
+- Sequential palette (`batlow`) for series identity (use the qualitative cycle).
 - Diverging palette (`vik`) without a clear midpoint (every value is "deviation from what?").
 - Random per-series colors (use `qualitative_cycle(idx)` for determinism + CVD safety).
 - Hardcoded `Color32::from_rgb(...)` for series — Tier 1 L2 catches.
@@ -265,5 +265,6 @@ Tick label sizes follow the density type-scale per [ADR-0030 §SD3](../../adr/00
 - [`egui_plot`](https://docs.rs/egui_plot) — upstream substrate; `Plot`, `Line`, `Points`, `BarChart`, `BoxPlot`, `HLine`, `VLine`, `Polygon`, `PlotPoints::Borrowed`.
 - `boxer/public/math/numerical/timeticks` ([`reference_boxer_timeticks`]) — calendar-aware time axis tick generator.
 - `boxer/public/math/numerical/finddivisions` ([`project_finddivisions_talbot_weights`]) — Talbot numeric axis tick generator; *always populate `DefaultWeights`*.
-- Crameri, F. (2018). *Scientific colour maps* (Version 8.0.1) [Zenodo](https://doi.org/10.5281/zenodo.1243862) — source for `batlow`, `vik`, `batlowS` ([ADR-0031](../../adr/0031-imzero2-design-system-color.md) §SD3).
+- Crameri, F. (2018). *Scientific colour maps* (Version 8.0.1) [Zenodo](https://doi.org/10.5281/zenodo.1243862) — source for `batlow`, `vik` ([ADR-0031](../../adr/0031-imzero2-design-system-color.md) §SD3).
+- Okabe, M. & Ito, K. (2002, rev. 2008). *Color Universal Design* — source for the qualitative cycle ([ADR-0156](../../adr/0156-qualitative-palette-dark-surface.md)).
 - van der Walt & Smith (2015). *viridis family.* [matplotlib colormap rationale](https://bids.github.io/colormap/).

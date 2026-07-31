@@ -646,3 +646,31 @@ Those are a larger change than a palette swap and want their own pass.
   acceptance-corpus vehicle.
 - [ADR-0083](./0083-retire-llm-generated-build-tags.md) — provenance via git
   trailers.
+
+## Update 2026-07-31 (3) — the IDS series palette is seven entries, and the table stopped being fixed at ten
+
+The palette update above said the chrome and series pairs are "both
+ten-entry cycles, so a slot maps the same way under either". That stopped
+being true the same day:
+[ADR-0156](./0156-qualitative-palette-dark-surface.md) took
+`styletokens.QualitativeCycle` from Crameri `batlowS` to Okabe-Ito and from
+ten entries to seven, because four of the ten measured below WCAG 1.4.11's
+3:1 against the plot-area fill — one of them at the fill's own luminance.
+
+The open question that update left — whether to revert implot's default to
+`PaletteDeep` as an interim, or hold the IDS default and fix the token layer
+— was resolved by fixing the token layer. `PaletteIDS` was never reverted and
+remains the default. Measurement supports that outcome more strongly than
+expected: `PaletteDeep` clears contrast at every slot but its worst pair is
+ΔE 1.7 under protanopia and 2.1 under deuteranopia, so an interim revert
+would have traded a contrast bug for a CVD bug rather than buying safety.
+
+One implementation change followed. `seriesPalette` was a fixed
+`[10]uint32` filled by cycling the token accessor; against a seven-entry
+cycle that would have made implot's slot 7 alias slot 0 while
+`QualitativeCycle(7)` aliased it one wrap earlier, so the two agreed up to
+slot 9 and disagreed after. The table is now sized per palette — seven under
+`PaletteIDS`, ten under `PaletteDeep` — and the unit test asserts agreement
+with the accessor across the wrap rather than only within the first ten
+slots. A slot therefore does *not* map to the same colour under both
+palettes, which the previous update's symmetry claim implied it would.

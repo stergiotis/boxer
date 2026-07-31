@@ -137,7 +137,7 @@ The token-reference sidecar prevents the model from grading colors against its o
 **Grading criteria.**
 
 - Pass: same logical data (e.g., `cpu.user` series, `error` status) renders in the same color across both inputs.
-- Warn: colors differ by ≤ one cycle position in `batlowS` or one semantic-role shift.
+- Warn: colors differ by ≤ one cycle position in the qualitative cycle or one semantic-role shift.
 - Fail: same data renders with materially different colors; or qualitative palette used for a continuous magnitude; or sequential palette used for categorical series.
 
 **Verdict semantics.** Advisory; the rubric also reads the IDS token reference and the qualitative-cycle index registry to ground "same logical data" comparisons.

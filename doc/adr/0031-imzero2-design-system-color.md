@@ -339,6 +339,35 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## Updates
 
+### 2026-07-31 — §SD3's qualitative choice and §SD5's data-encoding exemption superseded by ADR-0156
+
+[ADR-0156](./0156-qualitative-palette-dark-surface.md) replaces `batlowS` as
+the qualitative cycle with Okabe-Ito (seven entries) and makes data-encoding
+palettes subject to an enforcing in-house gate.
+
+Two rules recorded here changed:
+
+- **§SD3's qualitative recommendation.** `batlowS` was justified above on the
+  grounds that "each color sits at a distinct L and hue, which means the
+  palette degrades gracefully to grayscale (still ordered)". On a fixed dark
+  surface that distinct-L property is the defect, not the feature: four of the
+  ten entries measured below WCAG 1.4.11's 3:1 against `NeutralBgSurface`, and
+  the first sat at the background's own luminance. The "adopt verbatim, no
+  construction, no perturbation" rule itself **stands** — ADR-0156 §SD2 reads
+  it as permitting documented subsetting, which is what §SD4 of
+  [ADR-0033](./0033-imzero2-design-system-palette-m0.md) already did.
+  `batlowS` remains vendored and remains correct for *fills*.
+- **§SD5's "Data-encoding CVD verification … no in-house re-verification".**
+  Superseded. Publication trust is kept for what publications verify (CVD
+  design intent) and dropped for what they do not (contrast against one
+  particular dark UI surface). ADR-0156 §SD3 sets the floors.
+
+§SD5's APCA gate for the *semantic* palette is untouched. Note, recorded
+there and repeated here because it is easy to misread this ADR otherwise: the
+semantic palette's CVD ΔE check is **advisory**, not enforcing — `colors/gen`
+prints findings as warnings and only APCA gates the build.
+
+
 ### 2026-06-06 — Semantic tone *roles* promoted to a first-class IDS API (`styletokens.Tone`)
 
 **What this ADR named, and what was missing.** The Context above commits IDS to a *semantic* palette of roles — **info / success / warning / error / neutral / accent** — and the semantic-palette flow (§SD8) ships them as emphasis-leveled tokens (`SuccessSubtle/Default/Strong`, `AccentDefault`, the neutral spine, …). What it never gave a home to is the *role selector*: the small enumerator that says "paint this in the **error** role" and resolves that intent to the right token. That selector grew up inside a single widget — `badge.ToneE` plus an unexported `tonePalette()` — because the badge was the only consumer that needed it.

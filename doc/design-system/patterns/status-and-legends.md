@@ -22,7 +22,7 @@ This is an *explanation* of why IDS status and legends look the way they do, not
 
 **Foundational dependencies.** Status and legends draw on every foundations sub-ADR:
 
-- Color ([ADR-0031](../../adr/0031-imzero2-design-system-color.md)) — semantic palette (info / success / warning / error / neutral) for status; Crameri data-encoding palette (`batlowS` qualitative, `batlow` sequential, `vik` diverging) for plot legends; the semantic and data-encoding palettes are *disjoint* by construction so a chart color never collides with a status meaning.
+- Color ([ADR-0031](../../adr/0031-imzero2-design-system-color.md)) — semantic palette (info / success / warning / error / neutral) for status; the data-encoding palettes (Okabe-Ito qualitative, Crameri `batlow` sequential, `vik` diverging) for plot legends; the semantic and data-encoding palettes are *disjoint* by construction so a chart color never collides with a status meaning.
 - Typography ([ADR-0030](../../adr/0030-imzero2-design-system-typography.md)) — `Caption` for badge labels, `Body` for banner text, `Caption.Mono` for technical status values.
 - Icons ([ADR-0030 §SD12](../../adr/0030-imzero2-design-system-typography.md)) — Symbols Nerd Font Mono is the icon fallback family; status icons come from its FontAwesome / Octicons / Codicons subsets.
 - Spacing ([ADR-0032](../../adr/0032-imzero2-design-system-spacing-density-motion.md)) — `Padding.Inner`, `Gap.Inline`, `Gap.Items` for badge interiors and legend layouts; density preset scales all of these.
@@ -151,7 +151,7 @@ For plots with multiple series:
 └────────────────────────────┘
 ```
 
-- **Swatch**: 12 × 12 px filled rectangle (Standard density; scales with density) using the series' qualitative color from `batlowS`. For line plots, the swatch may be a short colored line segment matching the line style.
+- **Swatch**: 12 × 12 px filled rectangle (Standard density; scales with density) using the series' qualitative color from the cycle. For line plots, the swatch may be a short colored line segment matching the line style.
 - **Label**: `Caption` size, `text.primary` color.
 - **Gap swatch ↔ label**: `Gap.Inline`.
 - **Gap entry ↔ entry**: `Gap.Items` vertically, `Gap.Sections` horizontally.
@@ -223,7 +223,7 @@ Missing any of these is a V5 finding.
 - The `accent` semantic role is reserved for selection / focus / brand emphasis. It is *not* a status. Tier 2 rubric V2 catches `accent` used for state.
 - Status icons come from the Symbols Nerd Font Mono catalogue; the role → glyph mapping is fleet-wide. Apps do not invent app-local status icons.
 - Data-state → semantic-role mapping is fleet-wide per the canonical table in this doc. Deviations require Tier 3.
-- Plot legends use the data-encoding palettes (Crameri qualitative `batlowS`, sequential `batlow`, diverging `vik`). Status keys use the semantic palette. They never collide on the same surface.
+- Plot legends use the data-encoding palettes (Okabe-Ito qualitative, Crameri sequential `batlow`, diverging `vik`). Status keys use the semantic palette. They never collide on the same surface.
 - Discrete legends have one entry per visible series; continuous legends carry endpoint value labels and units; diverging continuous legends carry an explicit midpoint label.
 - Status transitions use `Motion.Quick` cross-fade; reduced-motion resolves to instant swap.
 - Legends are placed adjacent to the data they describe — never overlapping the plot area.
@@ -251,7 +251,7 @@ Missing any of these is a V5 finding.
 - Diverging continuous legend without an explicit midpoint label.
 - Loading state shown as "live" data (the data-freshness pattern is load-bearing — stale data must read as stale).
 - Per-app icon catalog (status icons are fleet-wide; Tier 3 to extend or change).
-- Crameri sequential palette used for categorical legend (use `batlowS` for categorical).
+- Crameri sequential palette used for categorical legend (use the qualitative cycle for categorical).
 - Animation on every status change beyond cross-fade (no bounce, no slide).
 
 ## Further reading

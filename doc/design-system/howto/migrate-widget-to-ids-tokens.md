@@ -154,14 +154,15 @@ Mirrors the Rust `style::tokens::sequential` / `diverging` /
 
 | Use case | Accessor | Return |
 |---|---|---|
-| Series identity (categorical) | `styletokens.QualitativeCycle(idx)` | wraps mod 10 over BatlowS |
+| Series identity (categorical) | `styletokens.QualitativeCycle(idx)` | wraps mod `QualitativeCycleLen` (7) over Okabe-Ito |
 | Ordered magnitude (heatmap, density) | `styletokens.Sequential(palette, t)` | clamped t ∈ [0, 1] |
 | Signed deviation from baseline | `styletokens.Diverging(palette, t)` | clamped t ∈ [-1, 1] |
 | Discrete N-tier sample of a sequential palette | hand-roll a `sample8`-style helper that loops over `Sequential(p, i/(N-1))` | see treemap's `palettes.go` |
 
 Defaults per [ADR-0031 §SD3](../../adr/0031-imzero2-design-system-color.md):
 `SequentialBatlow` for sequential, `DivergingVik` for diverging,
-`QualitativeCycle` always reads BatlowS. Matplotlib alternates
+`QualitativeCycle` always reads Okabe-Ito ([ADR-0156](../../adr/0156-qualitative-palette-dark-surface.md)).
+Matplotlib alternates
 (`SequentialViridis` / `SequentialMagma` / `SequentialPlasma` /
 `SequentialInferno`) are available for callers who explicitly want
 that visual character.

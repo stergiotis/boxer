@@ -26,7 +26,7 @@ For everything beyond a fact-table, IDS uses `TableBuilder`. `Grid` is reserved 
 **Foundational dependencies.** Table rendering pulls from every foundations sub-ADR:
 
 - Typography ([ADR-0030](../../adr/0030-imzero2-design-system-typography.md)) — `Body.Mono` for code/data cells, `Body` for prose, `Body.Numeric` for numeric columns (Aile `tnum` on, IDS Mono tabular by construction).
-- Color ([ADR-0031](../../adr/0031-imzero2-design-system-color.md)) — semantic palette for status cells; Crameri sequential for magnitude shading; Crameri qualitative (`batlowS`) for categorical columns; never raw `Color32::from_rgb`.
+- Color ([ADR-0031](../../adr/0031-imzero2-design-system-color.md)) — semantic palette for status cells; Crameri sequential for magnitude shading; the qualitative cycle (Okabe-Ito) for categorical columns; never raw `Color32::from_rgb`.
 - Spacing / density / motion ([ADR-0032](../../adr/0032-imzero2-design-system-spacing-density-motion.md)) — `Padding.Default` for cell padding, `Gap.Items` for row stride, density preset drives both.
 
 **Why data-intensive tables are hard.** Three forces tug against each other: information density (more rows, more columns, smaller text), legibility (enough whitespace to scan), and interaction (clickable cells, sortable headers, range selection). Swiss-minimalist aesthetic resolves the tension toward density-and-legibility by removing decoration — no row backgrounds beyond faint zebra-striping, no heavy borders, no decorative icons in cells. The grid is implicit in the alignment, not drawn in pixels.
