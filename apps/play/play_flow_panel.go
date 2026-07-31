@@ -38,9 +38,13 @@ type flowDriver struct {
 	ids    *c.WidgetIdStack
 	idSeed uint64
 
-	lens    flowLens
-	rankDir layeredgraph.RankDir
-	view    view.ViewState
+	lens flowLens
+	// lensView switches a remote lens between the parsed graph and the raw
+	// EXPLAIN text the server returned (the graph is a reading of that text;
+	// the text is the full detail, and what a bug report should carry).
+	lensView flowLensView
+	rankDir  layeredgraph.RankDir
+	view     view.ViewState
 
 	// selectedID highlights the last-clicked node, feeds the detail line,
 	// and — on the statement lens — the editor tint.
@@ -330,12 +334,33 @@ func (inst *flowDriver) renderStatement(split splitResult, active NodeID, splitE
 	inst.renderGraph(inst.graph)
 }
 
-// renderLens is a remote lens's body: the parsed EXPLAIN graph, with the
-// lane's loading/error state. The last-parsed graph stays visible through a
-// reload or an error — the lane holds last-good the same way.
+// flowLensView selects how a remote lens shows its result.
+type flowLensView uint8
+
+const (
+	flowViewGraph flowLensView = iota
+	flowViewText // the raw EXPLAIN output, indentation preserved
+)
+
+// renderLens is a remote lens's body: the parsed EXPLAIN graph or the raw
+// output text, with the lane's loading/error state. The last-parsed graph
+// stays visible through a reload or a transient error — the lane holds
+// last-good the same way.
 func (inst *flowDriver) renderLens(lines []string, feed flowLensFeed) {
 	if feed.reason != "" {
 		for rt := range c.RichTextLabel(feed.reason) {
+			rt.Small().Weak()
+		}
+		return
+	}
+	if explainUnsupportedByEndpoint(feed.err) {
+		// Routing worked — the statement runs on this endpoint — but its SQL
+		// surface has no EXPLAIN to answer with. Say that instead of
+		// relaying the endpoint's parser error, and do not render a stale
+		// graph from another endpoint under it.
+		for rt := range c.RichTextLabel("This endpoint cannot EXPLAIN: the query itself runs here, " +
+			"but its SQL surface has no EXPLAIN statement. The statement lens still works; " +
+			"for plans, point at a full ClickHouse endpoint.") {
 			rt.Small().Weak()
 		}
 		return
@@ -344,6 +369,10 @@ func (inst *flowDriver) renderLens(lines []string, feed flowLensFeed) {
 		for rt := range c.RichTextLabel("EXPLAIN failed: " + truncateRunes(firstLine(feed.err.Error()), 140)) {
 			rt.Small().Weak()
 		}
+	}
+	if inst.lensView == flowViewText {
+		inst.renderLensText(lines, feed)
+		return
 	}
 	if lines != nil {
 		inst.ensureLensGraph(feed.key, lines)
@@ -363,6 +392,37 @@ func (inst *flowDriver) renderLens(lines []string, feed flowLensFeed) {
 		return
 	}
 	inst.renderGraph(inst.lensGraph)
+}
+
+// renderLensText shows the raw EXPLAIN output as the server returned it —
+// monospace, one label per line, indentation intact (the AST and PIPELINE
+// dialects carry their structure in it). A result row may embed newlines
+// (PLAN's json=1 document is one row), so rows are flattened to real lines
+// first. Bounded by the lens result itself, which EXPLAIN keeps small.
+func (inst *flowDriver) renderLensText(lines []string, feed flowLensFeed) {
+	if len(lines) == 0 {
+		if feed.loading {
+			for rt := range c.RichTextLabel("asking the server…") {
+				rt.Small().Weak()
+			}
+		}
+		return
+	}
+	flat := make([]string, 0, len(lines))
+	for _, ln := range lines {
+		flat = append(flat, strings.Split(ln, "\n")...)
+	}
+	c.Label(fmt.Sprintf("%d lines · raw %s output", len(flat), inst.lens.String())).Send()
+	c.Separator().Horizontal().Send()
+	for _, ln := range flat {
+		if ln == "" {
+			c.AddSpace(6)
+			continue
+		}
+		for rt := range c.RichTextLabel(ln) {
+			rt.Monospace()
+		}
+	}
 }
 
 // renderGraph lays out (cached) and draws one graph, tracks the local
@@ -472,9 +532,12 @@ func (inst *flowDriver) nodeFill(g flowGraph, id string) (col color.Color, ok bo
 func (inst *flowDriver) renderControls(active NodeID) {
 	for range c.Horizontal().KeepIter() {
 		c.Label("lens").Send()
+		// The framed segmented skin (the package default), not the frameless
+		// one the layout/view toggles use: the lens is the pane's primary
+		// mode switch, and the frame is what says "this is a control" at a
+		// glance.
 		selector.Segmented(inst.ids, "flow-lens", &inst.lens).
 			Inline().
-			Frameless().
 			Option(lensStatement, "statement").
 			Option(lensAST, "ast").
 			Option(lensPlan, "plan").
@@ -487,6 +550,15 @@ func (inst *flowDriver) renderControls(active NodeID) {
 			Option(layeredgraph.RankDirLeftRight, "left-right").
 			Option(layeredgraph.RankDirTopBottom, "top-down").
 			SendResp()
+		if inst.lens.remote() {
+			c.Label("view").Send()
+			selector.Segmented(inst.ids, "flow-lens-view", &inst.lensView).
+				Inline().
+				Frameless().
+				Option(flowViewGraph, "graph").
+				Option(flowViewText, "text").
+				SendResp()
+		}
 		for rt := range c.RichTextLabel("node: " + string(active)) {
 			rt.Small().Weak()
 		}

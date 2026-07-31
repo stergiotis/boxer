@@ -435,6 +435,40 @@ last-run buffer follows as a collapsible entry — the final `SELECT` is the
 sink the panels observe, with per-node buttons to observe it in all panels or
 bind a single tab to it.
 
+### Flow
+
+A dataflow graph of the **active node's** SQL — the statement the result
+panels observe (the last Run's final `SELECT`, or the node observed from the
+Graph tab). Where the Graph tab draws the surface *between* queries, Flow
+draws the inside of one: sources — tables, sibling CTEs, subqueries, table
+functions — feed the join tree, and its output passes through the clause
+stages in evaluation order (`PREWHERE → WHERE → GROUP BY → HAVING → SELECT →
+QUALIFY → DISTINCT → ORDER BY → LIMIT`) into the result. Drag pans,
+ctrl+scroll zooms; the **layout** toggle flips left-right/top-down.
+
+Clicking a node highlights it and shows its clause text under the canvas; on
+the statement lens the same click also tints that clause's bytes in the
+editor, for as long as the buffer still contains the statement that ran.
+
+The **lens** selector picks what the graph is derived from:
+
+- **statement** — the SQL itself, parsed locally. Works offline and is the
+  only lens with editor highlighting.
+- **ast**, **plan**, **pipeline** — the server's `EXPLAIN AST`,
+  `EXPLAIN PLAN` and `EXPLAIN PIPELINE` of the same statement. A lens query
+  follows the statement's own endpoint routing — index structure and schema
+  are endpoint-local, so the EXPLAIN interrogates the endpoint the query
+  would actually run on. An endpoint whose SQL surface has no `EXPLAIN`
+  (the in-process introspection plane, today) says so in plain language
+  instead of relaying its parser error.
+
+For a remote lens, the **view** toggle switches between the parsed graph and
+the **raw EXPLAIN text** exactly as the server returned it, indentation
+intact — the graph is a reading of that text; the text is the full detail,
+and what a bug report should carry. Lens results refresh on Run and when the
+statement's parameters move; a clicked node's step text appears under the
+canvas the same way clause text does.
+
 ### Schema
 
 A leeway `TableDesc` inspector over the active result's Arrow schema — column

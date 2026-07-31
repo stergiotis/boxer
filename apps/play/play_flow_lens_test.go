@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -207,6 +208,16 @@ func TestEnsureLensGraphMemo(t *testing.T) {
 	d.ensureLensGraph("k2", []string{"OnlyRoot"})
 	require.Len(t, d.lensGraph.Nodes, 1)
 	require.Empty(t, d.selectedID, "selection pruned when its node vanishes")
+}
+
+// The "endpoint cannot EXPLAIN" class is recognised by the introspection
+// plane's error namespace; anything else stays a plain error line.
+func TestExplainUnsupportedByEndpoint(t *testing.T) {
+	require.False(t, explainUnsupportedByEndpoint(nil))
+	require.False(t, explainUnsupportedByEndpoint(
+		errors.New("clickhouse http 400: Syntax error: failed at position 15")))
+	require.True(t, explainUnsupportedByEndpoint(
+		errors.New("clientExecutor.execute: clickhouse http 400: apply failed: keelsonsql: parse: syntax error: 1:33")))
 }
 
 // Switching lenses must clear the shown graph — a parsed graph from another

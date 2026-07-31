@@ -76,6 +76,16 @@ func explainWrap(l flowLens) func(string) string {
 	}
 }
 
+// explainUnsupportedByEndpoint recognises the failure class "this endpoint's
+// SQL surface has no EXPLAIN" — today that is the in-process introspection
+// plane, whose keelsonsql parser rejects the wrapper with its own error
+// namespace. Routing is working as designed when this fires (the statement
+// itself runs on that endpoint); only the lens has nothing to ask, so the
+// panel says that in plain language instead of relaying a parse error.
+func explainUnsupportedByEndpoint(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "keelsonsql:")
+}
+
 // lensGraphAssembler accumulates a flowGraph under the shared caps, with the
 // same both-endpoints edge guard as the statement builder.
 type lensGraphAssembler struct {
