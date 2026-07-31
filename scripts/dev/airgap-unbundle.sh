@@ -16,7 +16,10 @@
 #   --env-only    just (re)write boxer-airgap.env and exit.
 #
 # After it runs, `source boxer-airgap.env` in any shell to get an offline-
-# configured Go (and, in full scope, Rust) toolchain on PATH.
+# configured Go (and, in full scope, Rust) toolchain on PATH — plus `tinygo` when
+# the bundle carries one, both on PATH and pinned for boxer's own resolution via
+# BOXER_TINYGO. _airgap/bin is deliberately NOT on PATH: its ffmpeg is reached
+# through IMZERO2_FFMPEG_BIN so it cannot shadow the system one.
 
 set -euo pipefail
 
@@ -42,6 +45,7 @@ tags="$(tr -d '\n' < "$repo/tags")"
 
 go_tc="$repo/_airgap/toolchains/go"
 rust_tc="$repo/_airgap/toolchains/rust"
+tinygo_tc="$repo/_airgap/toolchains/tinygo"
 cargo_home="$repo/_airgap/cargo"
 ffmpeg_bin="$repo/_airgap/bin/ffmpeg"
 [ -d "$go_tc" ] || airgap_die "shipped Go SDK missing at $go_tc."
@@ -58,6 +62,9 @@ airgap_step "write boxer-airgap.env"
     # lane probe and the stream encoder read this). Omitted when none was
     # bundled, leaving the plain PATH lookup in force.
     airgap_ffmpeg_env_lines "$ffmpeg_bin"
+    # The bundled tinygo, if any: BOXER_TINYGO for extbin's resolution, plus PATH
+    # for direct use.
+    airgap_tinygo_env_lines "$tinygo_tc"
     echo "# Point boxer's OpenAI-compatible client at the environment's ollama, e.g.:"
     echo "#   export OPENAI_BASE_URL=http://127.0.0.1:11434/v1"
 } > "$repo/boxer-airgap.env"
@@ -81,6 +88,10 @@ airgap_preflight_vulkan
 # ffmpeg is bundled when the packing host could build it; only fall back to
 # expecting one from the environment when it is not.
 airgap_preflight_ffmpeg "$ffmpeg_bin" || airgap_preflight_services ffmpeg
+# Same shape for tinygo: report the bundled one (by running it), else fall back to
+# expecting a host copy. The Go SDK goes on the probe's PATH because
+# `tinygo version` consults `go`.
+airgap_preflight_tinygo "$tinygo_tc" "$go_tc" || airgap_preflight_services tinygo
 # Environment-provided runtime deps (informational — not bundled by design).
 airgap_preflight_services clickhouse ollama
 

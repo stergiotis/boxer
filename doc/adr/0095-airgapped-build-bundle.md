@@ -187,9 +187,68 @@ crate set — ~1 minute cold on a 32-thread workstation, longer on a modest CI
 runner. That is the correct trade against shipping a tarball whose Rust half does
 not compile, which cannot be diagnosed or repaired on the far side of an air gap.
 
+### 2026-07-31 — `tinygo` bundled as a pinned upstream binary
+
+The bundle now carries `tinygo` at `_airgap/toolchains/tinygo` (a whole
+`TINYGOROOT`), by a route none of the decision above accounts for.
+
+**The gap it closes.** The WASM survey
+([ADR-0077](./0077-keelson-browser-wasm-execution.md),
+[ADR-0078](./0078-tinygo-wasm-amenability-survey.md)) shells out to `tinygo`
+through `extbin`, so on an offline target that tooling simply did not run. The
+"Build/CI tooling is excluded" consequence below does not cover it: that carve-out
+is about lint and regeneration, and the survey is a product path.
+
+**Why the route is different.** Everything else in a bundle is vendored source,
+compiled here from source (`ffmpeg`), or a copy of a toolchain the packing
+operator already installed and trusts (the Go SDK, the Rust sysroot). TinyGo can
+be had none of those ways — building it means building LLVM — so it is taken as an
+upstream **prebuilt release artefact**: weaker provenance than anything else here,
+and the first artefact the packing script itself downloads rather than compiles or
+copies. (The shipped Go SDK is prebuilt too, but it arrives as a copy of an
+install the operator chose; this arrives because this script fetched it.)
+
+The pin is the whole of the compensating control: it is fetched from an
+exact-version URL and refused unless its SHA-256 matches the constant in
+`airgap-lib.sh`, downloads are cached at `.airgap-dl/`, and the `MANIFEST` records
+what actually went in. A version bump means changing URL and hash together; a bump
+with a stale hash fails closed. This does not make a prebuilt binary equivalent to
+one built here — it makes the bundle reproducible with respect to a decision
+someone made once, deliberately, and can re-audit. The fetch primitive is written
+to be general, so a future tool in the same position lands on the same terms.
+
+**Verified, not just shipped.** Packing compiles a wasm smoke module with the
+bundled tinygo *and the bundled Go SDK*, which is the only check that those two
+halves agree — a TinyGo release that has not caught up with the Go version in
+`GOROOT` would otherwise first be discovered on the far side of the gap. Same
+argument as the 2026-07-28 Rust entry above, at a much lower cost (seconds). It
+**fails closed**: a tinygo that does not compile here is dropped from the bundle
+rather than shipped, because the unbundler would otherwise pin `BOXER_TINYGO` at
+it and mask whatever the target has.
+
+**On `PATH` as well as env-pinned.** The 2026-07-28 entry established that a
+bundled binary is reached by environment variable rather than `PATH`, so it cannot
+shadow a system tool. That reasoning is specific to `ffmpeg`, a common system tool
+many other things invoke, and does not generalise. TinyGo takes both hooks:
+`BOXER_TINYGO` (a new `extbin` `OverrideEnv`,
+[ADR-0118](./0118-extbin-external-process-chokepoint.md)) so boxer's own
+resolution does not depend on `PATH` order, and `PATH` so an operator can run it
+directly — an airgapped target has no other `tinygo` for that to displace.
+
+**Costs:**
+
+- **Size.** ~172 MB compressed, ~1.2 GB unpacked — material against a `go-only`
+  bundle, whose reason to exist is being small. `--no-tinygo` opts out, mirroring
+  `--no-ffmpeg`.
+- **Architecture.** `linux-amd64` and `linux-arm64` are pinned; any other
+  architecture gets a warning and no tinygo. The binary is statically linked, so
+  unlike the shipped Go SDK and `rustc` it constrains architecture but not libc.
+  Best-effort throughout, matching `ffmpeg`: what could not be obtained is warned
+  about at pack time and recorded as absent in the `MANIFEST`.
+
 ## Status
 
-Accepted (2026-06-23; updated 2026-07-28).
+Accepted (2026-06-23; updated 2026-07-31).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

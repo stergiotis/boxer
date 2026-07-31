@@ -188,11 +188,15 @@ useful cross-check on this boundary; it is not the authority for it.
 
 ## Deferred
 
-- `OverrideEnv` is populated only for `clickhouse-local` (the one site with a
-  real path-override need today); other programs can gain it without touching
-  call sites.
+- `OverrideEnv` is populated for `clickhouse-local` (`BOXER_CLICKHOUSE_LOCAL`, a
+  real path-override need) and `tinygo` (`BOXER_TINYGO`, which the airgap bundle
+  exports at the TinyGo distribution it ships and verified —
+  [ADR-0095](./0095-airgapped-build-bundle.md)). Other programs can gain it
+  without touching call sites; that the first airgap consumer needed no call-site
+  change is the evidence for the claim.
 - A hermetic/airgap mode that *requires* `OverrideEnv` (denies ambient PATH) is
-  designed-for but not built.
+  designed-for but not built. The airgap bundle populates the override where it
+  can, but nothing yet refuses a PATH resolution when it cannot.
 - CS012 covers `os/exec` only; `syscall.Exec` / `os.StartProcess` are not in
   use and not yet gated.
 - **Gating the spawn is not attempted** (§Scope). Making `extbin` a chokepoint

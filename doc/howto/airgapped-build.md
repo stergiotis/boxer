@@ -66,6 +66,26 @@ probes and falls back on its own. Packing is best-effort: a build host lacking
 environment-provided behaviour returns. `--no-ffmpeg` opts out deliberately.
 Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
 
+**`tinygo` is bundled as a pinned upstream binary** at `_airgap/toolchains/tinygo`
+— a whole `TINYGOROOT`, since TinyGo finds its root from its own executable and
+nothing has to export `TINYGOROOT`. The wasm survey shells out to it, so without
+it that tooling does not run offline. It cannot be produced the way the rest of
+the bundle is (building TinyGo means building LLVM), so it is taken as an upstream
+*prebuilt release artefact*: fetched by exact version and refused on a SHA-256
+mismatch (pins in `scripts/dev/airgap-lib.sh`, downloads cached at
+`.airgap-dl/`). That is weaker provenance than anything else in the bundle; the
+pin and the `MANIFEST` entry are what make it auditable.
+
+Packing compiles a wasm smoke module with the bundled tinygo *and* the bundled Go
+SDK — the only check that the pair agrees — and **drops** a tinygo that fails it
+rather than shipping one the target cannot use. The unbundler puts it on `PATH`
+*and* points `BOXER_TINYGO` at it, so boxer's own resolution does not depend on
+`PATH` order. Unlike `ffmpeg`, which is deliberately kept off `PATH` so it cannot
+shadow the system one, an airgapped target has no other `tinygo` to displace.
+`--no-tinygo` opts out; it is ~172 MB compressed, ~1.2 GB unpacked, which is
+material against a `go-only` bundle. `linux-amd64` and `linux-arm64` are pinned;
+any other architecture gets a warning and no tinygo.
+
 **Not bundled and the target still needs** (no language vendoring covers these):
 
 - *Build time, `full` scope only:* a C compiler (`cc`/`gcc`/`clang`) and
@@ -89,6 +109,10 @@ Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
   cargo auto-install the same toolchain, the two races roll each other back, and
   you are left with a half-installed sysroot.
 - `git`, `tar`, and `zstd` (falls back to `gzip`).
+- `curl`, to fetch the pinned `tinygo` release. Without it the bundle is packed
+  without `tinygo` rather than failing.
+- Network access **on this host only** — the pinned artefact is downloaded here
+  and cached at `.airgap-dl/`, so a re-pack does not re-fetch it.
 - Commit your work first: the source tree is taken from `git archive HEAD`, so
   uncommitted changes are not included (the two airgap files are copied in
   explicitly so a pre-commit bundle still works).
@@ -102,6 +126,8 @@ Verify a bundled binary with `scripts/dev/verify-ffmpeg-lanes.sh`.
 scripts/dev/airgap-bundle.sh --scope full
 #    ...or the lean path:
 scripts/dev/airgap-bundle.sh --scope go-only
+#    ...dropping the bundled tinygo (~172 MB compressed):
+scripts/dev/airgap-bundle.sh --scope go-only --no-tinygo
 #    -> boxer-airgap-<scope>-<arch>-<date>.tar.zst
 
 # 2. Transfer the single tarball across the gap (USB, etc.).
@@ -116,7 +142,8 @@ the imzero2 Go host offline before packing — the step most people skip. The
 unbundler writes `boxer-airgap.env` (an offline-configured `GOROOT`/`PATH`, plus
 `GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`, `GOFLAGS=-mod=vendor`, and in
 `full` scope the Rust toolchain and a `CARGO_HOME` with the vendored-sources
-config). `source boxer-airgap.env` in any later shell to get the toolchains back.
+config; plus `BOXER_TINYGO` and a `PATH` entry when the bundle carries a tinygo).
+`source boxer-airgap.env` in any later shell to get the toolchains back.
 
 ## Verification
 
@@ -170,10 +197,17 @@ go build -tags "$(tr -d '\n' < tags)" -o /dev/null ./public/app   # rebuilds off
 - **Toolchains are dynamically linked.** The shipped `rustc` (and the `go` tool)
   expect a compatible glibc and the same CPU architecture as the build host.
   Across distro families, prefer `go-only` (Go binaries are static) or run the
-  bundle script on a host matching the target.
-- **Build/CI tooling is excluded.** `golangci-lint`, `cyclonedx-gomod`, and the
-  antlr grammar regen are not vendored — the bundle builds the product, it does
-  not lint or regenerate it. Ship those separately if needed offline.
+  bundle script on a host matching the target. The bundled `tinygo` and `ffmpeg`
+  are the exceptions — both static, so they constrain architecture only.
+- **`tinygo` is pinned, not built here.** It comes from an upstream release,
+  verified against a SHA-256 in `scripts/dev/airgap-lib.sh`. Bump the version and
+  its hash together; a bump with a stale hash fails closed and the bundle is
+  packed without it.
+- **Build/CI tooling is mostly excluded.** `golangci-lint`, `cyclonedx-gomod`,
+  and the antlr grammar regen are not vendored — the bundle builds the product,
+  it does not lint or regenerate it. Ship those separately if needed offline.
+  `tinygo` is the one exception, bundled because the wasm survey is a *product*
+  path rather than a governance one.
 - **h3bridge wasm.** Its crate sources vendor in `full` scope, but *building* the
   `wasm32-unknown-unknown` artifact needs that target's std added to the
   toolchain. The committed `h3.wasm` is used at runtime regardless, so this only

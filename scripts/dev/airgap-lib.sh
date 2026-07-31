@@ -289,6 +289,172 @@ airgap_preflight_ffmpeg() {  # <ffmpeg-path>
     return 1
 }
 
+# ---- pinned upstream prebuilt tools -----------------------------------------
+# Everything else in a bundle is either vendored source, compiled here from
+# source (ffmpeg), or a copy of a toolchain the packing operator already
+# installed and trusts (the Go SDK, the Rust sysroot). TinyGo fits none of those
+# routes — building it means building LLVM — so it is taken as an upstream
+# **prebuilt release artefact**.
+#
+# That is weaker provenance than the rest of the bundle, so the pin carries the
+# whole of the guarantee: the artefact is fetched from an exact-version URL and
+# refused unless its SHA-256 matches the constant here. Bump a version and its
+# hash together — a bump with a stale hash fails closed (nothing is staged) and
+# says so. Downloads are cached across runs, and the MANIFEST records what the
+# bundle actually got.
+#
+# The fetch primitive is deliberately general: a future tool that cannot be built
+# in a packing script belongs here too, on the same terms.
+
+# Fetch <url> into <cachedir> unless already cached, verify its SHA-256 against
+# <sha256>, and echo the cached path. A file that fails to verify is deleted, so
+# a corrupted or truncated cache entry re-fetches on the next run rather than
+# failing forever. Returns non-zero, with the reason on stderr, when the artefact
+# could not be obtained or did not verify.
+#   args: <url> <sha256> <cachedir>
+airgap_fetch_pinned() {
+    local url="$1" want="$2" cache="$3"
+    local file="${url##*/}" path got
+    mkdir -p "$cache" || return 1
+    path="$cache/$file"
+    if [ ! -f "$path" ]; then
+        command -v curl >/dev/null 2>&1 || { airgap_warn "curl not found — cannot fetch $file."; return 1; }
+        # Download to .part and rename, so an interrupted transfer is never left
+        # behind as a complete-looking cache entry (build-static-ffmpeg.sh does
+        # the same).
+        if ! curl -sSL --retry 3 -o "$path.part" "$url"; then
+            rm -f "$path.part"
+            airgap_warn "download failed: $url"
+            return 1
+        fi
+        mv -f "$path.part" "$path"
+    fi
+    got="$(sha256sum "$path" | cut -d' ' -f1)"
+    if [ "$got" != "$want" ]; then
+        airgap_warn "SHA-256 mismatch for $file — discarding it."
+        airgap_warn "  expected $want"
+        airgap_warn "  actual   $got"
+        rm -f "$path"
+        return 1
+    fi
+    echo "$path"
+}
+
+# TinyGo — pinned upstream release (github.com/tinygo-org/tinygo).
+AIRGAP_TINYGO_VERSION=0.41.1
+AIRGAP_TINYGO_SHA256_amd64=e156d1d93a376eef639a4143d13be07e8c463fb6cf2d7d447698ed4474d23e91
+AIRGAP_TINYGO_SHA256_arm64=789733bc3b5bace0bd1835a267b3ea267804a7ef1cfe69bc522c295f5226d624
+
+# Stage a whole TinyGo distribution — a TINYGOROOT: bin/ (tinygo + wasm-opt),
+# lib/, src/, targets/ — into <destdir>, which becomes the root itself. TinyGo
+# derives its root from the location of its own executable, so the tree must stay
+# intact and nothing has to export TINYGOROOT on the target.
+#
+# Unlike the shipped Go SDK and rustc, the tinygo binary is statically linked, so
+# it constrains the target's CPU architecture but not its libc. It does still need
+# a `go` on PATH; the bundle's shipped GOROOT supplies that.
+#
+# BEST-EFFORT, like airgap_ship_ffmpeg: an architecture with no pinned release, a
+# missing curl, or a hash mismatch warns and stages nothing, leaving the target to
+# supply its own tinygo. Returns non-zero when nothing was staged.
+#   args: <destdir> <cachedir>
+airgap_ship_tinygo() {
+    local dest="$1" cache="$2"
+    local arch sha url tarball work
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64|amd64)  arch=amd64; sha="$AIRGAP_TINYGO_SHA256_amd64" ;;
+        aarch64|arm64) arch=arm64; sha="$AIRGAP_TINYGO_SHA256_arm64" ;;
+        *) airgap_warn "no pinned TinyGo release for $arch — not bundling tinygo."; return 1 ;;
+    esac
+    url="https://github.com/tinygo-org/tinygo/releases/download/v${AIRGAP_TINYGO_VERSION}/tinygo${AIRGAP_TINYGO_VERSION}.linux-${arch}.tar.gz"
+    airgap_step "stage TinyGo ${AIRGAP_TINYGO_VERSION} (linux-${arch})"
+    tarball="$(airgap_fetch_pinned "$url" "$sha" "$cache")" || return 1
+    # Unpack beside the destination rather than in /tmp: the tree is ~1.2 GB, and
+    # a same-filesystem move afterwards is a rename instead of a second copy.
+    work="$(dirname "$dest")/.tinygo-unpack.$$"
+    rm -rf -- "$work"
+    mkdir -p "$work"
+    if ! tar -xzf "$tarball" -C "$work"; then
+        rm -rf -- "$work"
+        airgap_warn "could not extract ${tarball##*/} — not bundling tinygo."
+        return 1
+    fi
+    if [ ! -x "$work/tinygo/bin/tinygo" ]; then
+        rm -rf -- "$work"
+        airgap_warn "unexpected TinyGo tarball layout (no tinygo/bin/tinygo) — not bundling tinygo."
+        return 1
+    fi
+    rm -rf -- "$dest"
+    mv "$work/tinygo" "$dest"
+    rm -rf -- "$work"
+    airgap_ok "shipped TinyGo ($(du -sh "$dest" | cut -f1)) -> ${dest##*/}"
+    return 0
+}
+
+# Compile a trivial package to wasm with the *bundled* tinygo and the *bundled*
+# Go SDK, proving the pair the bundle ships can actually build — the TinyGo
+# analogue of the Go vendor build and the Rust offline compile. It is the one
+# check that catches a TinyGo release that has not caught up with the Go version
+# in GOROOT, a mismatch whose first symptom would otherwise appear on the far
+# side of the air gap. Cheap: a few seconds cold, under a second warm.
+#
+# Warns and returns non-zero on failure; the caller decides whether that is fatal.
+#   args: <tinygoroot> <goroot> [target]
+airgap_verify_tinygo() {
+    local root="$1" goroot="$2" target="${3:-wasi}"
+    local tmp out
+    [ -x "$root/bin/tinygo" ] || return 1
+    tmp="$(mktemp -d)"
+    printf 'module airgapsmoke\n\ngo 1.23\n'      > "$tmp/go.mod"
+    printf 'package main\n\nfunc main() {}\n'     > "$tmp/main.go"
+    # A deliberately minimal env: the repo's GOFLAGS=-mod=vendor would look for a
+    # vendor/ tree this throwaway module does not have, GOWORK=off keeps any
+    # ambient workspace out of it, and GOPROXY=off proves the build reaches for
+    # nothing.
+    if out="$( cd "$tmp" && env -u GOFLAGS \
+                 PATH="$goroot/bin:$PATH" GOROOT="$goroot" \
+                 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOWORK=off \
+                 "$root/bin/tinygo" build -target="$target" -o "$tmp/out.wasm" . 2>&1 )"; then
+        rm -rf -- "$tmp"
+        airgap_ok "bundled tinygo compiles for -target=$target with the bundled Go SDK"
+        return 0
+    fi
+    rm -rf -- "$tmp"
+    airgap_warn "bundled tinygo failed to build -target=$target:"
+    printf '%s\n' "$out" | head -5 >&2
+    return 1
+}
+
+# Emit the env lines for a bundled TinyGo. Two hooks, deliberately:
+#   BOXER_TINYGO  — extbin's declared override for the `tinygo` program, so
+#                   boxer's own resolution is pinned at the bundled copy and does
+#                   not depend on PATH order.
+#   PATH          — so an operator can just run `tinygo`. ffmpeg is kept off PATH
+#                   because it is a common system tool the bundle must not shadow
+#                   for everything else; tinygo is not, and an airgapped target
+#                   has no other one for this to displace.
+#   args: <tinygoroot>
+airgap_tinygo_env_lines() {
+    [ -x "$1/bin/tinygo" ] || return 0
+    echo "export BOXER_TINYGO=\"$1/bin/tinygo\""
+    echo "export PATH=\"$1/bin:\$PATH\""
+}
+
+# Report a bundled tinygo, running it to prove the target can. Returns 0 when the
+# bundle supplies a working one, so the caller can skip preflighting a host copy.
+#   args: <tinygoroot> [goroot]
+airgap_preflight_tinygo() {
+    local bin="$1/bin/tinygo" v
+    [ -x "$bin" ] || return 1
+    if v="$(PATH="${2:+$2/bin:}$PATH" "$bin" version 2>&1 | head -1)"; then
+        airgap_ok "tinygo bundled ($v); BOXER_TINYGO points at it"
+        return 0
+    fi
+    airgap_warn "bundled tinygo will not run here: $v"
+    return 1
+}
+
 airgap_preflight_services() {  # <tool...>
     local tool
     for tool in "$@"; do

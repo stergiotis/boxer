@@ -30,6 +30,18 @@
 #   --skip-rust-verify  pack without compiling (local iteration; the bundle may
 #                       then ship a Rust tree its own toolchain cannot build).
 #
+# tinygo rides along as a pinned upstream *prebuilt* release at
+# _airgap/toolchains/tinygo, because it cannot be produced the way the rest of the
+# bundle is: building it means building LLVM. It is the compiler the wasm survey
+# shells out to, so without it that path does not run offline. The unbundler puts
+# it on PATH and points extbin's BOXER_TINYGO override at it. Packing verifies it
+# by compiling a wasm smoke module with the very Go SDK the bundle ships, which is
+# the only check that the two halves of that pair agree; a failure drops it rather
+# than shipping a tinygo the target cannot use. It is fetched by exact version and
+# refused on a SHA-256 mismatch (pins in airgap-lib.sh), and like ffmpeg it is
+# best-effort — a packing host that cannot fetch or verify it produces a bundle
+# without it, and says so. `--no-tinygo` opts out (~1.2 GB unpacked).
+#
 # ffmpeg USED to be on that list and no longer is: the bundle now builds a
 # static, software-only ffmpeg carrying exactly the components the imzero2
 # headless encoder invokes, ships it at _airgap/bin/ffmpeg, and the unbundler
@@ -77,6 +89,7 @@ scope=full
 out=""
 verify_rust=1
 ship_ffmpeg=1
+ship_tinygo=1
 while [ $# -gt 0 ]; do
     case "$1" in
         --scope)        scope="${2:-}"; shift 2 ;;
@@ -86,6 +99,7 @@ while [ $# -gt 0 ]; do
         --verify-rust)  verify_rust=1; shift ;;  # now the default; kept for callers that pass it
         --skip-rust-verify) verify_rust=0; shift ;;
         --no-ffmpeg)    ship_ffmpeg=0; shift ;;  # rely on the target's own ffmpeg
+        --no-tinygo)    ship_tinygo=0; shift ;;  # drop ~1.2 GB; the wasm survey then needs a host tinygo
         -h|--help)
             grep '^#' "$BASH_SOURCE" | sed 's/^# \?//'; exit 0 ;;
         *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
@@ -215,6 +229,31 @@ else
     echo "NOTE: --no-ffmpeg: the target must supply its own ffmpeg." >&2
 fi
 
+# ---- pinned prebuilt tools ---------------------------------------------------
+# Cached alongside the ffmpeg sources so a re-pack re-uses the ~170 MB download;
+# the pins in airgap-lib.sh are re-verified on every use.
+dl_cache="$repo/.airgap-dl"
+tinygo_root="$src/_airgap/toolchains/tinygo"
+
+tinygo_shipped=0
+if [ "$ship_tinygo" = 1 ]; then
+    if airgap_ship_tinygo "$tinygo_root" "$dl_cache"; then
+        # The pair matters, not either half: a TinyGo release that has not caught
+        # up with the Go version in the shipped GOROOT fails here, on the
+        # connected host, instead of on the target where neither can be replaced.
+        # Fail closed — an unverified tinygo is worse than none, because the
+        # unbundler would pin BOXER_TINYGO at it and mask whatever the target has.
+        if airgap_verify_tinygo "$tinygo_root" "$src/_airgap/toolchains/go"; then
+            tinygo_shipped=1
+        else
+            airgap_warn "dropping the staged tinygo; the target falls back to its own."
+            rm -rf -- "$tinygo_root"
+        fi
+    fi
+else
+    echo "NOTE: --no-tinygo: the wasm survey needs a tinygo from the target's environment." >&2
+fi
+
 # ---- record what we built ----------------------------------------------------
 {
     echo "scope=$scope"
@@ -224,6 +263,13 @@ fi
     echo "tags=$tags"
     [ "$scope" = full ] && echo "rust=$(cd rust/imzero2 && rustc --version 2>/dev/null || true)"
     echo "ffmpeg=$([ "$ffmpeg_shipped" = 1 ] && "$src/_airgap/bin/ffmpeg" -hide_banner -version 2>/dev/null | head -1 || echo "none (environment-provided)")"
+    # A tinygo appears here only if the wasm smoke build passed; a failure drops
+    # it from the bundle, so the version line doubles as the verification record.
+    if [ "$tinygo_shipped" = 1 ]; then
+        echo "tinygo=$("$tinygo_root/bin/tinygo" version 2>/dev/null | head -1) (wasm smoke build verified)"
+    else
+        echo "tinygo=none (environment-provided)"
+    fi
     echo "head=$(git rev-parse HEAD)"
 } > "$src/_airgap/MANIFEST"
 

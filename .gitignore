@@ -59,6 +59,11 @@ rust/*/target/
 # shipped. Never committed.
 /.airgap-ffmpeg-src/
 
+# Pinned upstream release tarballs the bundle ships prebuilt (tinygo). Cached at
+# repo root across packs — ~170 MB — and re-verified against the SHA-256 pins in
+# airgap-lib.sh on every use. Never committed.
+/.airgap-dl/
+
 # boxer adr tool cache — the `boxer adr build` default --out dir. It can be
 # created in any working directory (the command takes --root), so not anchored.
 .adrcache/

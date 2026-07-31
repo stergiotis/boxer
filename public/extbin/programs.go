@@ -63,10 +63,14 @@ var (
 
 // Language toolchains for code synthesis / analysis.
 var (
-	// TinyGo compiles the WASM survey probes.
+	// TinyGo compiles the WASM survey probes. The airgap bundle ships a pinned
+	// TinyGo distribution and points BOXER_TINYGO at it (ADR-0095), so an
+	// offline target resolves the copy that was verified against the bundled Go
+	// SDK rather than whatever PATH happens to offer.
 	TinyGo = Declare(Program{
 		Name:        "tinygo",
 		Kind:        Host,
+		OverrideEnv: "BOXER_TINYGO",
 		InstallHint: "https://tinygo.org/getting-started/install/",
 	})
 
