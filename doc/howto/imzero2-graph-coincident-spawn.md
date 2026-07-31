@@ -12,7 +12,7 @@ status: draft
 
 This documents a downstream change to `reconcile_graph_state` in
 [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs),
-made 2026-07-18 from the `hackathon_2026` consumer, so the reasoning is
+made 2026-07-18 from an external consumer, so the reasoning is
 reviewable and the change can be offered upstream.
 
 ## Symptom
@@ -20,7 +20,7 @@ reviewable and the change can be offered upstream.
 In a force-directed `Graph` widget, some nodes render **exactly on top of each
 other** and never separate — the simulation converges with them stacked, and
 zoom/drag on the cluster reveals two (or more) labels painted at one position.
-Observed in the `egonet` sanctions ego-network app (hackathon_2026): a center
+Observed in an external consumer's ego-network app: a center
 node with several leaf neighbours reliably produced stacked leaves. Any
 consumer of the Graph binding with symmetric topology (godepview included) can
 reproduce it.
@@ -105,5 +105,5 @@ harmless.
 - Repro before/after: in any Graph consumer, declare a hub node with ≥ 2
   leaf nodes connected only to the hub (identical neighbour sets). Before:
   leaves converge stacked at one point. After: leaves settle separated.
-  The hackathon_2026 `egonet` app ("Slobodan Milosevic" ego network on the
-  SECO import) is the originating repro.
+  An external consumer's ego-network app (a hub node with several leaf-only
+  neighbours) is the originating repro.

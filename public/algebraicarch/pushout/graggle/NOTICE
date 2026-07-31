@@ -46,9 +46,9 @@ The blog posts have no declared licence — they are cited, not
 redistributed; the upstream repo SHA and the Wayback snapshots above
 provide archival pointers without re-hosting.
 
-The Go code in this subtree was first authored in the sister project
-`hackathon_2026` and moved into boxer (commit `c6b802a`); boxer is the
-canonical implementation, and `hackathon_2026` consumes it as a module
+The Go code in this subtree was first authored in a sister project of
+the same author and moved into boxer (commit `c6b802a`); boxer is the
+canonical implementation, and that project consumes it as a module
 dependency.
 
 ----------------------------------------------------------------------

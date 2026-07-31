@@ -12,15 +12,15 @@ status: draft
 
 Documents a downstream change to `reconcile_graph_state` in
 [`rust/imzero2/src/imzero2/interpreter.rs`](../../rust/imzero2/src/imzero2/interpreter.rs),
-made 2026-07-19 from the `hackathon_2026` consumer, companion to
+made 2026-07-19 from an external consumer, companion to
 [`imzero2-graph-coincident-spawn.md`](./imzero2-graph-coincident-spawn.md).
 
 ## Symptom
 
 `c.GraphNode(id, label).Color(col).Send()` has no visible effect: every node
 renders in the theme's default stroke color (white on the dark theme),
-regardless of the color passed. Edge colors work. Observed in the
-hackathon_2026 `egonet` app; `godepview`'s per-class node coloring is
+regardless of the color passed. Edge colors work. Observed in an
+external consumer's ego-network app; `godepview`'s per-class node coloring is
 affected the same way.
 
 ## Root cause
@@ -80,5 +80,5 @@ carried the color).
 - Any Graph consumer that calls `.Color(...)` per node: nodes render in the
   declared colors instead of uniform theme white; colors update live when a
   node's declared color changes between frames (the update path re-mirrors).
-  The hackathon_2026 `egonet` app (schema-colored nodes + violet center) is
-  the originating repro.
+  An external consumer's ego-network app (schema-colored nodes + violet
+  center) is the originating repro.

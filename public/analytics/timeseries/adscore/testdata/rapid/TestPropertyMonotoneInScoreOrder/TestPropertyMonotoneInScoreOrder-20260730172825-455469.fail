@@ -4,12 +4,12 @@
 # 2026/07/30 17:28:25.971033 [TestPropertyMonotoneInScoreOrder] [rapid] draw scores: []float64{1, 1, 1, 1, 1, 1, 1, 1, 1.3877787807814457e-17, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2.0816681711721685e-17}
 # 2026/07/30 17:28:25.971050 [TestPropertyMonotoneInScoreOrder] [rapid] draw maxBuffer: 0
 # 2026/07/30 17:28:25.971105 [TestPropertyMonotoneInScoreOrder] 
-# 	Error Trace:	/home/spx/repo/boxer/public/analytics/timeseries/adscore/adscore_test.go:395
-# 	            				/home/spx/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
-# 	            				/home/spx/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
-# 	            				/home/spx/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
-# 	            				/home/spx/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
-# 	            				/home/spx/repo/boxer/public/analytics/timeseries/adscore/adscore_test.go:375
+# 	Error Trace:	adscore_test.go:395
+# 	            				pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				adscore_test.go:375
 # 	Error:      	Max difference between 0.3816964285714286 and 0.38392857142857145 allowed is 1e-09, but difference was -0.002232142857142849
 # 	Test:       	TestPropertyMonotoneInScoreOrder
 # 
