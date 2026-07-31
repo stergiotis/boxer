@@ -94,6 +94,8 @@ func newFlowDriver(ids *c.WidgetIdStack, client *Client) (inst *flowDriver) {
 			lensAST:      lane("flow-ast", lensAST),
 			lensPlan:     lane("flow-plan", lensPlan),
 			lensPipeline: lane("flow-pipeline", lensPipeline),
+			lensEstimate: lane("flow-estimate", lensEstimate),
+			lensIndexes:  lane("flow-indexes", lensIndexes),
 		}
 	}
 	return
@@ -303,9 +305,21 @@ func (inst *PlayApp) demandFlowLens(active NodeID) (lines []string, feed flowLen
 	if v.rec != nil {
 		defer v.rec.Release()
 		rows := v.rec.NumRows()
+		cols := int(v.rec.NumCols())
 		lines = make([]string, 0, rows)
 		for row := range rows {
-			lines = append(lines, formatCell(v.rec, 0, row))
+			// Tree-shaped EXPLAINs answer with one `explain` column; the
+			// tabular ones (ESTIMATE) answer with several — tab-join those
+			// so a line stays one row and the parser splits it back.
+			if cols <= 1 {
+				lines = append(lines, formatCell(v.rec, 0, row))
+				continue
+			}
+			cells := make([]string, cols)
+			for col := range cols {
+				cells[col] = formatCell(v.rec, col, row)
+			}
+			lines = append(lines, strings.Join(cells, "\t"))
 		}
 	}
 	return
@@ -384,8 +398,19 @@ func (inst *flowDriver) renderLens(lines []string, feed flowLensFeed) {
 		return
 	}
 	if len(inst.lensGraph.Nodes) == 0 {
-		if feed.loading {
+		switch {
+		case feed.loading:
 			for rt := range c.RichTextLabel("asking the server…") {
+				rt.Small().Weak()
+			}
+		case inst.lensKey != "" && feed.err == nil:
+			// Served and parsed, and there is genuinely nothing: an
+			// ESTIMATE over no MergeTree reads is the common case.
+			msg := "the server returned an empty result for this lens."
+			if inst.lens == lensEstimate {
+				msg = "nothing to estimate: the statement reads no MergeTree tables."
+			}
+			for rt := range c.RichTextLabel(msg) {
 				rt.Small().Weak()
 			}
 		}
@@ -542,6 +567,8 @@ func (inst *flowDriver) renderControls(active NodeID) {
 			Option(lensAST, "ast").
 			Option(lensPlan, "plan").
 			Option(lensPipeline, "pipeline").
+			Option(lensEstimate, "estimate").
+			Option(lensIndexes, "indexes").
 			SendResp()
 		c.Label("layout").Send()
 		selector.Segmented(inst.ids, "flow-rank-dir", &inst.rankDir).

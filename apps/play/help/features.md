@@ -461,6 +461,14 @@ The **lens** selector picks what the graph is derived from:
   would actually run on. An endpoint whose SQL surface has no `EXPLAIN`
   (the in-process introspection plane, today) says so in plain language
   instead of relaying its parser error.
+- **estimate** — `EXPLAIN ESTIMATE`: one node per MergeTree table the
+  statement reads, carrying the parts, rows and marks the server expects to
+  touch. A statement reading no MergeTree tables estimates empty, and the
+  pane says so.
+- **indexes** — `EXPLAIN PLAN indexes = 1`: the plan with each read step's
+  index usage folded into its detail — selected vs initial parts and
+  granules per index, so a filter that fails to prune shows up as `n/n`.
+  Click the read node (or flip to the text view) for the figures.
 
 For a remote lens, the **view** toggle switches between the parsed graph and
 the **raw EXPLAIN text** exactly as the server returned it, indentation

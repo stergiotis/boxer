@@ -24,9 +24,81 @@ func TestExplainWrapKinds(t *testing.T) {
 	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1)", explainWrap(lensAST)("SELECT 1"))
 	require.Equal(t, "SELECT * FROM (EXPLAIN PLAN json = 1 SELECT 1)", explainWrap(lensPlan)("SELECT 1"))
 	require.Equal(t, "SELECT * FROM (EXPLAIN PIPELINE SELECT 1)", explainWrap(lensPipeline)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN ESTIMATE SELECT 1)", explainWrap(lensEstimate)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN PLAN indexes = 1, json = 1 SELECT 1)", explainWrap(lensIndexes)("SELECT 1"))
 	require.Nil(t, explainWrap(lensStatement), "the static lens has no wire wrap")
 	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1)", explainWrap(lensAST)("SELECT 1;\n"),
 		"a trailing delimiter must not end up inside the parens")
+}
+
+// ESTIMATE rows arrive tab-joined (database, table, parts, rows, marks):
+// each table becomes a source node carrying its estimate, draining into one
+// terminal; a duplicate table folds; a short row is skipped.
+func TestParseExplainEstimate(t *testing.T) {
+	g := parseExplainEstimate([]string{
+		"boxer\tfacts\t2\t5887\t2",
+		"db2\tevents\t10\t123456\t40",
+		"boxer\tfacts\t2\t5887\t2", // duplicate folds
+		"malformed line",           // skipped
+	})
+	byID := flowByID(t, g)
+	require.Len(t, g.Nodes, 3) // two tables + the terminal
+	require.Equal(t, flowSourceTable, byID["boxer.facts"].Kind)
+	require.Equal(t, "parts 2 · rows 5887 · marks 2", byID["boxer.facts"].Detail)
+	require.Equal(t, flowResult, byID["estimate"].Kind)
+	require.Contains(t, g.Edges, flowEdge{From: "boxer.facts", To: "estimate"})
+	require.Contains(t, g.Edges, flowEdge{From: "db2.events", To: "estimate"})
+
+	empty := parseExplainEstimate(nil)
+	require.Empty(t, empty.Nodes, "no MergeTree reads ⇒ empty graph, the panel reports it")
+}
+
+// Captured shape of EXPLAIN PLAN indexes = 1, json = 1 over a MergeTree read:
+// the Indexes entries fold into the ReadFrom node's detail.
+const explainPlanIndexesFixture = `[
+  {
+    "Plan": {
+      "Node Type": "Filter",
+      "Node Id": "Filter_7",
+      "Plans": [
+        {
+          "Node Type": "ReadFromMergeTree",
+          "Node Id": "ReadFromMergeTree_0",
+          "Description": "boxer.facts",
+          "Indexes": [
+            {
+              "Type": "PrimaryKey",
+              "Condition": "true",
+              "Initial Parts": 2,
+              "Selected Parts": 2,
+              "Initial Granules": 2,
+              "Selected Granules": 2
+            },
+            {
+              "Type": "Skip",
+              "Name": "idx_ts",
+              "Keys": ["ts"],
+              "Condition": "(ts > 100)",
+              "Initial Parts": 2,
+              "Selected Parts": 1,
+              "Initial Granules": 2,
+              "Selected Granules": 1
+            }
+          ]
+        }
+      ]
+    }
+  }
+]`
+
+func TestParseExplainPlanIndexesDetail(t *testing.T) {
+	g, err := parseExplainPlanJSON(explainPlanIndexesFixture)
+	require.NoError(t, err)
+	read := flowByID(t, g)["ReadFromMergeTree_0"]
+	require.Equal(t, flowSourceTable, read.Kind)
+	require.Contains(t, read.Detail, "boxer.facts")
+	require.Contains(t, read.Detail, "PrimaryKey parts 2/2 granules 2/2")
+	require.Contains(t, read.Detail, "Skip idx_ts keys(ts) cond (ts > 100) parts 1/2 granules 1/2")
 }
 
 // The wrap is wire-body-only (ExecOptions.WrapStatement): the SET prelude is
@@ -179,6 +251,14 @@ func TestParseLensRecordDispatch(t *testing.T) {
 	g, err = parseLensRecord(lensPlan, strings.Split(explainPlanJSONFixture, "\n"))
 	require.NoError(t, err)
 	require.Len(t, g.Nodes, 3)
+
+	g, err = parseLensRecord(lensIndexes, strings.Split(explainPlanIndexesFixture, "\n"))
+	require.NoError(t, err)
+	require.Len(t, g.Nodes, 2, "indexes rides the PLAN json parser")
+
+	g, err = parseLensRecord(lensEstimate, []string{"a\tb\t1\t2\t3"})
+	require.NoError(t, err)
+	require.Len(t, g.Nodes, 2)
 
 	g, err = parseLensRecord(lensStatement, []string{"x"})
 	require.NoError(t, err)

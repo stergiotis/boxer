@@ -2,6 +2,7 @@ package play
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -32,6 +33,8 @@ const (
 	lensAST
 	lensPlan
 	lensPipeline
+	lensEstimate // EXPLAIN ESTIMATE — tabular per-table parts/rows/marks
+	lensIndexes  // EXPLAIN PLAN indexes=1 — the plan with per-read index usage
 )
 
 // remote reports whether the lens needs a server round-trip (everything but
@@ -46,6 +49,10 @@ func (l flowLens) String() string {
 		return "plan"
 	case lensPipeline:
 		return "pipeline"
+	case lensEstimate:
+		return "estimate"
+	case lensIndexes:
+		return "indexes"
 	}
 	return "statement"
 }
@@ -68,6 +75,10 @@ func explainWrap(l flowLens) func(string) string {
 		kind = "EXPLAIN PLAN json = 1"
 	case lensPipeline:
 		kind = "EXPLAIN PIPELINE"
+	case lensEstimate:
+		kind = "EXPLAIN ESTIMATE"
+	case lensIndexes:
+		kind = "EXPLAIN PLAN indexes = 1, json = 1"
 	default:
 		return nil
 	}
@@ -203,12 +214,51 @@ func parseExplainPipeline(lines []string) flowGraph {
 }
 
 // explainPlanNode is the shape of one step in `EXPLAIN PLAN json = 1` output.
-// The document is [{"Plan": <node>}] with nested "Plans" children.
+// The document is [{"Plan": <node>}] with nested "Plans" children; with
+// `indexes = 1` the ReadFrom* steps additionally carry an "Indexes" array.
 type explainPlanNode struct {
-	NodeType    string            `json:"Node Type"`
-	NodeID      string            `json:"Node Id"`
-	Description string            `json:"Description"`
-	Plans       []explainPlanNode `json:"Plans"`
+	NodeType    string             `json:"Node Type"`
+	NodeID      string             `json:"Node Id"`
+	Description string             `json:"Description"`
+	Plans       []explainPlanNode  `json:"Plans"`
+	Indexes     []explainPlanIndex `json:"Indexes"`
+}
+
+// explainPlanIndex is one index-usage entry of an indexes=1 plan: what the
+// index selected against what existed. Keys/Name/Condition appear per index
+// kind (PrimaryKey carries Condition, a skip index carries Name, …).
+type explainPlanIndex struct {
+	Type             string   `json:"Type"`
+	Name             string   `json:"Name"`
+	Keys             []string `json:"Keys"`
+	Condition        string   `json:"Condition"`
+	InitialParts     int64    `json:"Initial Parts"`
+	SelectedParts    int64    `json:"Selected Parts"`
+	InitialGranules  int64    `json:"Initial Granules"`
+	SelectedGranules int64    `json:"Selected Granules"`
+}
+
+// summary renders one index entry for a node's Detail — the selected/initial
+// ratios are the payload (how much the index pruned).
+func (ix explainPlanIndex) summary() string {
+	var b strings.Builder
+	b.WriteString(ix.Type)
+	if ix.Name != "" {
+		b.WriteString(" ")
+		b.WriteString(ix.Name)
+	}
+	if len(ix.Keys) > 0 {
+		b.WriteString(" keys(")
+		b.WriteString(strings.Join(ix.Keys, ", "))
+		b.WriteString(")")
+	}
+	if ix.Condition != "" && ix.Condition != "true" {
+		b.WriteString(" cond ")
+		b.WriteString(truncateRunes(ix.Condition, 48))
+	}
+	fmt.Fprintf(&b, " parts %d/%d granules %d/%d",
+		ix.SelectedParts, ix.InitialParts, ix.SelectedGranules, ix.InitialGranules)
+	return b.String()
 }
 
 // parseExplainPlanJSON maps `EXPLAIN PLAN json = 1` output onto the IR. IDs
@@ -231,8 +281,15 @@ func parseExplainPlanJSON(doc string) (flowGraph, error) {
 		if strings.HasPrefix(n.NodeType, "ReadFrom") {
 			kind = flowSourceTable
 		}
+		detail := n.Description
+		for _, ix := range n.Indexes {
+			if detail != "" {
+				detail += " · "
+			}
+			detail += ix.summary()
+		}
 		if !a.addNode(flowNode{ID: id, Kind: kind,
-			Label: truncateRunes(n.NodeType, flowLabelRunes), Detail: truncateRunes(n.Description, flowSnippetRunes)}) {
+			Label: truncateRunes(n.NodeType, flowLabelRunes), Detail: truncateRunes(detail, flowSnippetRunes)}) {
 			return
 		}
 		a.addEdge(id, parent)
@@ -246,6 +303,42 @@ func parseExplainPlanJSON(doc string) (flowGraph, error) {
 	return a.g, nil
 }
 
+// parseExplainEstimate maps `EXPLAIN ESTIMATE` rows — tab-joined cells of
+// (database, table, parts, rows, marks), one per MergeTree table the
+// statement reads — onto the IR: each table is a source node whose detail
+// carries the estimate, draining into one terminal so the drawing reads like
+// the statement lens's sources→result. A statement reading no MergeTree
+// tables estimates empty, which the panel reports as such.
+func parseExplainEstimate(lines []string) flowGraph {
+	a := newLensGraphAssembler()
+	tables := make([]string, 0, len(lines))
+	for _, ln := range lines {
+		cells := strings.Split(ln, "\t")
+		if len(cells) < 5 {
+			continue
+		}
+		id := cells[0] + "." + cells[1]
+		if _, dup := a.ids[id]; dup {
+			continue
+		}
+		if !a.addNode(flowNode{ID: id, Kind: flowSourceTable,
+			Label:  truncateRunes(id, flowLabelRunes),
+			Detail: "parts " + cells[2] + " · rows " + cells[3] + " · marks " + cells[4]}) {
+			break
+		}
+		tables = append(tables, id)
+	}
+	if len(tables) == 0 {
+		return a.g
+	}
+	if a.addNode(flowNode{ID: "estimate", Kind: flowResult, Label: "read estimate"}) {
+		for _, id := range tables {
+			a.addEdge(id, "estimate")
+		}
+	}
+	return a.g
+}
+
 // parseLensRecord dispatches a lens's result lines to its parser. PLAN's
 // json=1 output may arrive as one row or as split lines — joining is total
 // either way.
@@ -255,8 +348,10 @@ func parseLensRecord(l flowLens, lines []string) (flowGraph, error) {
 		return parseExplainAST(lines), nil
 	case lensPipeline:
 		return parseExplainPipeline(lines), nil
-	case lensPlan:
+	case lensPlan, lensIndexes:
 		return parseExplainPlanJSON(strings.Join(lines, "\n"))
+	case lensEstimate:
+		return parseExplainEstimate(lines), nil
 	}
 	return flowGraph{}, nil
 }
