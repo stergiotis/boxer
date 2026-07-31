@@ -34,16 +34,55 @@ func (s SimpleLegibilityScorer) Format(lmin, lmax, lstep, dmin, dmax float64) []
 		useSci = true
 	}
 
+	dec := decimalsForStep(lstep)
 	for i, t := range ticks {
-		if useSci {
+		switch {
+		case useSci:
 			labels[i] = strconv.FormatFloat(t, 'e', 2, 64)
-		} else {
-			// standard formatting, remove trailing zeros
-			s := strconv.FormatFloat(t, 'f', -1, 64)
-			labels[i] = s
+		case dec < 0:
+			// No usable decimal precision for the step (degenerate axis):
+			// fall back to the shortest representation that round-trips.
+			labels[i] = strconv.FormatFloat(t, 'f', -1, 64)
+		default:
+			labels[i] = trimTrailingZeros(strconv.FormatFloat(t, 'f', dec, 64))
 		}
 	}
 	return labels
+}
+
+// decimalsForStep returns the fewest decimal places that still render step
+// itself — 0 for 15, 1 for 0.4, 2 for 0.25 — or -1 when step is not a usable
+// decimal (zero, NaN, infinite, or finer than the search). Formatting ticks at
+// that precision is what keeps float noise off the axis: the noise lives many
+// orders of magnitude below the step's last significant digit, so rounding to
+// the step's own precision drops it, where a shortest-round-trip format prints
+// 1.2000000000000002 in full.
+func decimalsForStep(step float64) int {
+	step = math.Abs(step)
+	if !(step > 0) || math.IsInf(step, 0) {
+		return -1
+	}
+	// A tick set is only ever a handful of significant digits wide; the tenth
+	// decimal is already far past anything a reader can use.
+	const maxDecimals = 12
+	const tol = 1e-10
+	for d := 0; d <= maxDecimals; d++ {
+		v, err := strconv.ParseFloat(strconv.FormatFloat(step, 'f', d, 64), 64)
+		if err == nil && math.Abs(v-step) <= step*tol {
+			return d
+		}
+	}
+	return -1
+}
+
+// trimTrailingZeros drops the padding from a fixed-precision decimal ("1.200"
+// to "1.2", "3.000" to "3"). Integers are returned untouched — trimming zeros
+// off "100" would read it as "1".
+func trimTrailingZeros(s string) string {
+	if !strings.Contains(s, ".") {
+		return s
+	}
+	return strings.TrimRight(strings.TrimRight(s, "0"), ".")
 }
 
 /* see https://github.com/jtalbot/Labeling/blob/master/Layout/Formatters/QuantitativeFormatter.cs for the original implementation
@@ -148,12 +187,7 @@ func (inst *TypesettingScorer) generateLabelsAndScore(ticks []float64) ([]string
 		if useScientific {
 			labels[i] = fmt.Sprintf("%.2e", t)
 		} else {
-			s := fmt.Sprintf("%.4f", t)
-			if strings.Contains(s, ".") {
-				s = strings.TrimRight(s, "0")
-				s = strings.TrimRight(s, ".")
-			}
-			labels[i] = s
+			labels[i] = trimTrailingZeros(fmt.Sprintf("%.4f", t))
 		}
 	}
 

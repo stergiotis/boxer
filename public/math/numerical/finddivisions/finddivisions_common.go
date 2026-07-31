@@ -103,19 +103,52 @@ func GenerateTicksRobust(start, end, step float64) []float64 {
 		// val = start + i * step
 		val := start + float64(i)*step
 
-		// 3. Snap to Zero
+		// 3. Precision Truncation for Display
+		// Multiplying bounds the error at one rounding instead of letting it
+		// accumulate, but it does not remove it: 3*0.4 is 1.2000000000000002.
+		// A shortest-round-trip formatter then prints all seventeen digits, so
+		// snap onto a decimal grid far below the step before anyone sees it.
+		val = snapDecimal(val, step)
+
+		// 4. Snap to Zero
 		// If the value is extremely close to zero (relative to the step), make it exactly 0.0.
 		// This fixes "-0.00" string formatting issues and simplicity score checks.
 		if math.Abs(val) < step*eps {
 			val = 0.0
 		}
 
-		// 4. Precision Truncation for Display
-		// This prevents "0.1 + 0.2 = 0.300000000004"
-		// We round to the 10th decimal place relative to the step magnitude.
-		// (Optional, but recommended for visual systems)
-
 		ticks = append(ticks, val)
 	}
 	return ticks
+}
+
+// snapDecimal rounds v onto a decimal grid ten decades below step's own
+// decade. That is fine enough to leave every digit a reader could care about
+// untouched — the grid sits far below the step's last significant digit, and
+// far below one pixel on any axis — and coarse enough to erase the binary
+// noise that start+i*step leaves behind.
+//
+// The scale factor is a power of ten, so it is exact for 10^0..10^22 and both
+// the multiply and the divide are single correctly rounded operations; outside
+// that range the value is returned untouched rather than snapped onto a grid
+// that is itself inexact. Values that would overflow when scaled are likewise
+// left alone.
+func snapDecimal(v float64, step float64) float64 {
+	if v == 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+		return v
+	}
+	step = math.Abs(step)
+	if !(step > 0) || math.IsInf(step, 0) {
+		return v
+	}
+	e := 10 - math.Floor(math.Log10(step))
+	if !(e >= 0 && e <= 22) {
+		return v
+	}
+	p := math.Pow(10, e)
+	scaled := v * p
+	if math.IsInf(scaled, 0) {
+		return v
+	}
+	return math.Round(scaled) / p
 }

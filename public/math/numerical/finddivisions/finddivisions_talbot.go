@@ -64,6 +64,23 @@ var DefaultWeights = Weights{0.25, 0.2, 0.5, 0.05}
 var DefaultQ = []float64{1, 5, 2, 2.5, 4, 3}
 var WilkinsonQ = []float64{1, 5, 2, 2.5, 3, 4, 1.5, 7, 6, 8, 9}
 
+// niceStep returns scale*10^z, applying the power of ten exactly wherever it
+// can be. math.Pow(10, z) is inexact for z < 0, so the straightforward
+// scale*math.Pow(10, z) makes the "nice" step un-nice at the bit level:
+// 3*math.Pow(10, -1) is 0.30000000000000004, and every tick and label derived
+// from it inherits the noise. Dividing by 10^-z instead is one correctly
+// rounded operation on an exactly representable divisor (10^0..10^22), so the
+// result is the nearest double to the intended decimal. Outside that exponent
+// range — and for z >= 0, where the multiply is already exact — the plain form
+// stands, not least because 10^-z would overflow to +Inf for z below -308 and
+// silently collapse a tiny step to zero.
+func niceStep(scale float64, z float64) float64 {
+	if z < 0 && z >= -22 {
+		return scale / math.Pow(10, -z)
+	}
+	return scale * math.Pow(10, z)
+}
+
 // simplicity calculates the simplicity score (how "nice" the numbers are)
 func simplicity(q float64, Q []float64, j int, lmin, lmax, lstep float64) float64 {
 	n := float64(len(Q))
@@ -223,7 +240,7 @@ func Talbot(dmin, dmax float64, m int, opts TalbotOptions, scorer LegibilityScor
 				// Inner loop: z (Coverage / Zoom level)
 				// Safety cap.
 				for zLoop := 0; zLoop < maxZ; zLoop++ {
-					step := float64(j) * q * math.Pow(10, z)
+					step := niceStep(float64(j)*q, z)
 
 					// Calculate span for k ticks
 					span := step * float64(k-1)
