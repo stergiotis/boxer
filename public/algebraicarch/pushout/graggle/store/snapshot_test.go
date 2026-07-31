@@ -134,7 +134,6 @@ func TestSnapshot_RoundTripProperty(tt *testing.T) {
 		tick := time.Unix(10_000, 0)
 		g.SetClock(func() time.Time { tick = tick.Add(time.Minute); return tick })
 
-		var patches []*patch.Patch
 		steps := rapid.IntRange(1, 8).Draw(rt, "steps")
 		for i := 0; i < steps; i++ {
 			liveIDs := []t.NodeID{}
@@ -150,7 +149,6 @@ func TestSnapshot_RoundTripProperty(tt *testing.T) {
 				if err := p.Apply(g); err != nil {
 					rt.Fatalf("del apply: %v", err)
 				}
-				patches = append(patches, p)
 				continue
 			}
 			up := t.RootNodeID
@@ -167,7 +165,6 @@ func TestSnapshot_RoundTripProperty(tt *testing.T) {
 			if err := p.Apply(g); err != nil {
 				rt.Fatalf("ins apply: %v", err)
 			}
-			patches = append(patches, p)
 		}
 		if rapid.Bool().Draw(rt, "sweep") {
 			g.SweepTombstones(tick.Add(time.Hour), time.Duration(rapid.IntRange(0, 5).Draw(rt, "horizon"))*time.Minute)
