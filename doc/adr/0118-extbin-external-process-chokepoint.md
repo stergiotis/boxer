@@ -1,18 +1,16 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-14
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-31
 ---
-
-> **Status: proposed — pre-human-review.** Package `public/extbin` built, all
-> in-tree call sites migrated, and the CS012 enforcement rule added (2026-07-14)
-> — see the Status section. Awaiting review before acceptance.
 
 # ADR-0118: a single audited chokepoint for external-binary resolution
 
 ## Status
 
-Proposed. Implemented ahead of acceptance so the decision is reviewed against
+Accepted 2026-07-31. Implemented ahead of acceptance so the decision is reviewed against
 working code:
 
 - `public/extbin` — the `Program` registry, `Kind`-based resolution, and the
