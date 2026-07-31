@@ -10,15 +10,9 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// paletteDeep is ImPlot's default colormap ("Deep", seaborn's deep 10),
-// cycled by series declaration order.
-var paletteDeep = [10]uint32{
-	0x4c72b0ff, 0xdd8452ff, 0x55a868ff, 0xc44e52ff, 0x8172b3ff,
-	0x937860ff, 0xda8bc3ff, 0x8c8c8cff, 0xccb974ff, 0x64b5cdff,
-}
-
-// Typography and tick geometry — chrome-independent (the chrome color
-// palette lives in chrome.go behind SetChrome).
+// Typography and tick geometry — palette-independent (the chrome colors
+// live in chrome.go behind SetChrome, the data-series colors in palette.go
+// behind SetSeriesPalette).
 const (
 	tickFontSize  = 10.5
 	labelFontSize = 12.0

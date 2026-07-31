@@ -39,10 +39,11 @@
 // doc comments: Boxes, IncludeX/IncludeY, TimeTicksLocal,
 // AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, the pixel-space
 // readbacks HoverPixelPos/ClickedPixelPos/PlotAreaPrev (hit-testing
-// pixel-pinned custom geometry), and SetChrome — the process-wide chrome
-// palette selector (IDS-token default, the port's original palette as
-// ChromeClassic; chrome.go). The data-series palette is not chrome and
-// never switches.
+// pixel-pinned custom geometry), and the two process-wide palette
+// selectors — SetChrome for the frame around the data (IDS-token default,
+// the port's original palette as ChromeClassic; chrome.go) and
+// SetSeriesPalette for the data itself (IDS qualitative default,
+// upstream's Deep as PaletteDeep; palette.go). The two are independent.
 //
 // Known deviations from upstream:
 //   - Box-zoom is Shift+drag (upstream: right-drag). The response-flag
@@ -61,6 +62,8 @@
 //     texture-id parameter has no equivalent on this substrate.
 //   - Error bars draw in a fixed foreground color and a fixed whisker
 //     width (upstream styles both).
+//   - Series cycle the IDS qualitative palette by default, not upstream's
+//     Deep colormap; SetSeriesPalette(PaletteDeep) restores it.
 //
 // Interaction state is read one frame behind, like every imzero2 register
 // (ADR-0140 wheel, R24 canvas pointer, R7 response flags) — imperceptible

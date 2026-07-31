@@ -4,9 +4,9 @@ import "github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 
 // ChromeE selects the plot chrome palette: backgrounds, grid, border,
 // axis/legend/readout text, the box-zoom rect, error-bar whiskers and the
-// contrast-text pair. It does NOT touch the data-series palette
-// (paletteDeep) — series colors and their legend swatches are part of the
-// port's ImPlot identity and stay identical under both chromes.
+// contrast-text pair. It does NOT touch the data-series palette — that has
+// its own selector (SetSeriesPalette, palette.go); series colors and their
+// legend swatches are identical under both chromes.
 type ChromeE uint8
 
 const (

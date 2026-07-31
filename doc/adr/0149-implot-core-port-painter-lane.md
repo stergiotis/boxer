@@ -582,6 +582,48 @@ one `colormap.Config`, with the colorscale's hover dimming out-of-band
 cells through a `Custom` overlay — the visible half of M4's colormap
 integration, plus the first outside consumer of the custom lane.
 
+## Update 2026-07-31 (2) — the series palette gets the same knob
+
+The chrome update above kept the data-series palette on upstream's Deep
+colormap, reasoning that series colors are part of the port's ImPlot
+identity. A design-system review pointed out that this left two accepted
+ADRs contradicting each other in the tree:
+[ADR-0031](./0031-imzero2-design-system-color.md) §SD7 makes
+`QualitativeCycle` the source of series identity, and the plots pattern
+carries it as an invariant.
+
+Resolved symmetrically rather than by carve-out: the series palette now
+has its own runtime selector (`SetSeriesPalette`, `palette.go`), shaped
+exactly like `SetChrome` and equally independent of it. `PaletteIDS`
+cycles `styletokens.QualitativeCycle` and is the default; `PaletteDeep`
+restores upstream's table. Both compile always and are pinned by a unit
+test, for the same anti-rot reason the chrome pair is. Upstream's Deep
+therefore survives as an opt-in rather than a default nobody could turn
+off — the fleet's plots read their qualitative colors from the same
+source as everything else, and the batlowS entries are CVD-safe where
+Deep's are not.
+
+Practical impact is small: every consumer in the tree already overrode
+the default per series with `SetNextColor`, most of them from
+`styletokens` (`imztop`/`imzrt` theme files, `play`'s projection panel,
+the IDS showcase's own data-encoding panel). What changes is what a new
+caller gets for free.
+
+The review also found a contrast bug the chrome commit had propagated
+rather than introduced: axis tags and annotations painted their label in
+the chrome's dark contrast color unconditionally, on a plate filled with
+the *caller's* color. `contrastText` — used by pie slices since M4 —
+now picks the branch at all three sites, so a caller passing a dark
+annotation color (the `*Subtle` semantic roles the plots pattern
+recommends for exactly this) no longer gets near-black text on a
+near-black plate.
+
+Still outside the token system and recorded here as known: the type
+sizes (`10.5 / 12 / 13.5`, off the ADR-0030 ladder), the layout literals
+in `render.go`, stroke and rounding values, and the widget's
+density-blindness — `Begin` neither takes nor derives a `DensityE`.
+Those are a larger change than a palette swap and want their own pass.
+
 ## References
 
 - Upstream: [ImPlot](https://github.com/epezent/implot) v1.1-WIP, commit

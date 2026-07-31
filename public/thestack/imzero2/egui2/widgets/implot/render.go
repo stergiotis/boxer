@@ -204,7 +204,7 @@ func (p *Plot) End() {
 		if st.hidden[s.label] {
 			continue
 		}
-		colHex := paletteDeep[s.slot%len(paletteDeep)]
+		colHex := seriesColor(s.slot)
 		if s.colOk {
 			colHex = s.colHex
 		}
@@ -545,11 +545,11 @@ func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
 	for row, si := range leg {
 		s := &p.series[si]
 		ry := ly + pad + float32(row)*rowH
-		colHex := paletteDeep[s.slot%len(paletteDeep)]
+		colHex := seriesColor(s.slot)
 		if s.colOk {
 			colHex = s.colHex
 		}
-		swCol, txtCol := colHex, uint32(colTickLabel)
+		swCol, txtCol := colHex, colTickLabel
 		if st.hidden[s.label] {
 			swCol = (colHex &^ 0xff) | 0x40
 			txtCol = colLegendHidden
