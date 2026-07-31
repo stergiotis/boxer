@@ -540,7 +540,7 @@ func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
 	lw := pad*3 + swatch + float32(maxChars)*charW
 	lh := pad*2 + float32(len(leg))*rowH
 	lx, ly := areaX+8, areaY+8
-	c.PaintRectFilled(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(0x14171dee)).Send()
+	c.PaintRectFilled(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colLegendBg)).Send()
 	c.PaintRectStroke(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colBorder), 1.0).Send()
 	for row, si := range leg {
 		s := &p.series[si]
@@ -552,7 +552,7 @@ func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
 		swCol, txtCol := colHex, uint32(colTickLabel)
 		if st.hidden[s.label] {
 			swCol = (colHex &^ 0xff) | 0x40
-			txtCol = 0x667080ff
+			txtCol = colLegendHidden
 		}
 		c.PaintRectFilled(lx+pad, ry+(rowH-swatch)/2, lx+pad+swatch, ry+(rowH+swatch)/2, 2.0, color.Hex(swCol)).Send()
 		c.PaintText(lx+pad*2+swatch, ry+rowH/2, 0, 1, s.label, tickFontSize, color.Hex(txtCol)).Monospace().Send()

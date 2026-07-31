@@ -550,6 +550,27 @@ Not included, recorded as deferred: a gutter-reservation knob
 whether the timeline adoption needs reserved space is that dialogue's
 question, not this one's.
 
+The same arc surfaced and fixed a fleet bug the two demos exposed when
+open together: `colorscale` and `timeline` were the last widgets reading
+the single-slot R14 canvas-pointer register — last-canvas-wins, so their
+hover went blind whenever a second canvas rendered in the same frame.
+Both moved to the per-canvas R24 row (the register this port was born
+on); R14 is left with no widget reader in the tree.
+
+**Chrome palette.** The port's chrome constants were a hand-matched
+near-IDS palette predating token sourcing. The chrome now derives from
+the IDS semantic palette (styletokens: neutral spine, accent role for
+the box-zoom selection) by default, with the original palette kept
+selectable at runtime — `SetChrome(ChromeClassic)` — as the port's
+first, deliberately tiny style knob (`chrome.go`). A `//go:build` fork
+was considered and killed: the untagged variant would be an untested
+build configuration that rots silently, it forks the screenshot-tour
+goldens, and every tag in `./tags` today is a functional lane, not a
+preference. Both palettes compile always and are pinned by a unit test.
+The data-series palette (`paletteDeep`) is not chrome and does not
+switch. Custom-item consumers (the demos) source their own chrome from
+styletokens directly.
+
 Acceptance: `implot_custom`, a mini interval-lane chart exercising every
 piece (time axis with pinned y, pixel-space lanes under implot pan/zoom,
 band-under-series vs flags-over-series declaration order, legend-toggled

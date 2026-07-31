@@ -37,9 +37,12 @@
 //
 // House extensions beyond the upstream surface, named as such in their
 // doc comments: Boxes, IncludeX/IncludeY, TimeTicksLocal,
-// AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, and the
-// pixel-space readbacks HoverPixelPos/ClickedPixelPos/PlotAreaPrev
-// (hit-testing pixel-pinned custom geometry).
+// AxisFlagsFollow, Clicked/HoverPlotPos, NewDetached, the pixel-space
+// readbacks HoverPixelPos/ClickedPixelPos/PlotAreaPrev (hit-testing
+// pixel-pinned custom geometry), and SetChrome — the process-wide chrome
+// palette selector (IDS-token default, the port's original palette as
+// ChromeClassic; chrome.go). The data-series palette is not chrome and
+// never switches.
 //
 // Known deviations from upstream:
 //   - Box-zoom is Shift+drag (upstream: right-drag). The response-flag

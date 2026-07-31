@@ -138,7 +138,7 @@ func contrastText(colHex uint32) uint32 {
 	g := float64(colHex >> 16 & 0xff)
 	b := float64(colHex >> 8 & 0xff)
 	if 0.299*r+0.587*g+0.114*b > 140 {
-		return 0x10131aff
+		return colContrastDark
 	}
-	return 0xe6e9eeff
+	return colContrastLite
 }

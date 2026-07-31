@@ -17,20 +17,9 @@ var paletteDeep = [10]uint32{
 	0x937860ff, 0xda8bc3ff, 0x8c8c8cff, 0xccb974ff, 0x64b5cdff,
 }
 
-// Dark-theme chrome, matched to the house canvas demos.
+// Typography and tick geometry — chrome-independent (the chrome color
+// palette lives in chrome.go behind SetChrome).
 const (
-	colPlotBg     = 0x111318ff
-	colAreaBg     = 0x1a1d24ff
-	colBorder     = 0x3a3f4bff
-	colGridMajor  = 0x2c313cff
-	colGridMinor  = 0x21252eff
-	colTickLabel  = 0xaab2c0ff
-	colAxisLabel  = 0xcdd3ddff
-	colTitle      = 0xe6e9eeff
-	colReadout    = 0x8891a0ff
-	colBoxFill    = 0x4c72b028
-	colBoxStroke  = 0x4c72b0cc
-	colErrorBar   = 0xc9cfdaff
 	tickFontSize  = 10.5
 	labelFontSize = 12.0
 	titleFontSize = 13.5

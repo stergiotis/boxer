@@ -224,10 +224,12 @@ func TestCustomTicksFilter(t *testing.T) {
 }
 
 func TestContrastText(t *testing.T) {
-	if contrastText(0xfafafaff) != 0x10131aff {
+	// The branch colors follow the active chrome (chrome.go); the
+	// luminance split itself is chrome-independent.
+	if contrastText(0xfafafaff) != colContrastDark {
 		t.Error("light fill must get dark text")
 	}
-	if contrastText(0x101010ff) != 0xe6e9eeff {
+	if contrastText(0x101010ff) != colContrastLite {
 		t.Error("dark fill must get light text")
 	}
 }
