@@ -269,6 +269,16 @@ struct Inner {
     bytes_sent: std::sync::atomic::AtomicU64,
     frames_sent: std::sync::atomic::AtomicU64,
     frames_decoded: std::sync::atomic::AtomicU64,
+    /// ADR-0154 SD1: the active connection has asked for an accessibility tree
+    /// and has not been served yet. Set by the socket task, cleared by the
+    /// render thread once it has a snapshot to send. A flag rather than a
+    /// queue: two requests before one pass are one answer, and the answer is
+    /// always "the tree as of the next completed pass".
+    tree_wanted: std::sync::atomic::AtomicBool,
+    /// ADR-0154 SD4: capture name the active connection asked for, drained by
+    /// the render thread. Latest-wins for the same reason `resize` is: a second
+    /// request before the first is served asks about a newer frame.
+    capture_request: std::sync::Mutex<Option<String>>,
 }
 
 pub struct WsCarrier {
@@ -347,6 +357,8 @@ impl WsCarrier {
             bytes_sent: std::sync::atomic::AtomicU64::new(0),
             frames_sent: std::sync::atomic::AtomicU64::new(0),
             frames_decoded: std::sync::atomic::AtomicU64::new(0),
+            tree_wanted: std::sync::atomic::AtomicBool::new(false),
+            capture_request: std::sync::Mutex::new(None),
         });
         // Bind synchronously so startup errors (port in use) fail fast in
         // the caller instead of asynchronously on the carrier thread.
@@ -498,6 +510,48 @@ impl WsCarrier {
     /// a dropped update is simply retried next pass.
     pub fn send_cursor_to_active(&self, shape: u32) {
         push_cursor(&self.inner, shape);
+    }
+
+    /// ADR-0154 SD1: has the active connection asked for a tree it has not been
+    /// served yet? The render thread checks this *before* running the pass, so
+    /// it can turn AccessKit generation on for that pass — the tree is built
+    /// during the pass or not at all.
+    pub fn tree_wanted(&self) -> bool {
+        self.inner.tree_wanted.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Send one tree snapshot to the active connection and clear the request.
+    ///
+    /// Unlike the cursor there is no memo to strand: an unserved request stays
+    /// set, so a drop here is retried on the next pass rather than answered
+    /// with silence. Callers only reach this when [`Self::tree_wanted`] held.
+    pub fn send_tree_to_active(&self, snapshot: pb::TreeSnapshot) {
+        let nodes = snapshot.nodes.len();
+        let msg = pb::SessionControl {
+            control: Some(pb::session_control::Control::TreeSnapshot(snapshot)),
+        };
+        if send_control_to_active(&self.inner, &msg) {
+            self.inner.tree_wanted.store(false, std::sync::atomic::Ordering::Relaxed);
+            tracing::debug!(nodes, "accessibility tree sent to active connection");
+        } else {
+            tracing::debug!(nodes, "tree snapshot dropped — will retry next pass");
+        }
+    }
+
+    /// Take the pending capture name, if the active connection asked for one
+    /// (ADR-0154 SD4). Draining rather than peeking: one request, one capture.
+    pub fn take_capture_request(&self) -> Option<String> {
+        self.inner.capture_request.lock().ok()?.take()
+    }
+
+    /// Acknowledge a capture with the path actually written.
+    pub fn send_capture_done(&self, done: pb::CaptureDone) {
+        let msg = pb::SessionControl {
+            control: Some(pb::session_control::Control::CaptureDone(done)),
+        };
+        if !send_control_to_active(&self.inner, &msg) {
+            tracing::debug!("capture ack dropped — active viewer queue full");
+        }
     }
 
     /// Commit a new stream geometry (already clamped by the host): update the
@@ -804,6 +858,22 @@ fn broadcast_hello(inner: &Inner, hello: pb::SessionHello) {
 /// exact stale-cursor failure the reset exists to prevent. The lock is held
 /// across a non-blocking `try_send` only, and `broadcast_roster` already holds
 /// it for a longer fan-out, so this adds no new contention shape.
+/// Frame one session-control message and enqueue it for the active connection.
+/// Returns whether it was enqueued — the caller decides whether a drop is worth
+/// retrying (the tree) or forgetting (a capture ack).
+fn send_control_to_active(inner: &Inner, msg: &pb::SessionControl) -> bool {
+    let Ok(reg) = inner.registry.lock() else {
+        return false;
+    };
+    let Some(tx) = reg.active_tx() else {
+        return false;
+    };
+    let mut framed = Vec::with_capacity(1 + msg.encoded_len());
+    framed.push(pb::PREFIX_SESSION);
+    let _ = msg.encode(&mut framed);
+    tx.try_send(framed).is_ok()
+}
+
 fn push_cursor(inner: &Inner, shape: u32) {
     use std::sync::atomic::Ordering;
     let Ok(reg) = inner.registry.lock() else {
@@ -1216,10 +1286,32 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
                         let _ = inner.waker.send(());
                     }
                 }
+                Some(pb::session_control::Control::TreeRequest(_)) => {
+                    // ADR-0154 SD1: hand the next completed pass's accessibility
+                    // tree to whoever asked. Active-only, like input: the tree
+                    // carries the labels and values on screen, so it is data
+                    // egress and belongs to the connection already driving.
+                    if active {
+                        inner.tree_wanted.store(true, std::sync::atomic::Ordering::Relaxed);
+                        let _ = inner.waker.send(()); // a tree wants a pass now
+                    }
+                }
+                Some(pb::session_control::Control::CaptureRequest(c)) => {
+                    // ADR-0154 SD4. The host sanitises the name and resolves the
+                    // directory; nothing from the wire reaches a path join.
+                    if active {
+                        if let Ok(mut pending) = inner.capture_request.lock() {
+                            *pending = Some(c.name);
+                        }
+                        let _ = inner.waker.send(());
+                    }
+                }
                 // Server→client only; ignore if a client echoes one.
                 Some(pb::session_control::Control::Hello(_))
                 | Some(pb::session_control::Control::Roster(_))
                 | Some(pb::session_control::Control::CursorShape(_))
+                | Some(pb::session_control::Control::TreeSnapshot(_))
+                | Some(pb::session_control::Control::CaptureDone(_))
                 | None => {}
             },
             Err(e) => tracing::debug!(error=%e, "undecodable session control"),
@@ -1317,6 +1409,8 @@ mod tests {
             bytes_sent: std::sync::atomic::AtomicU64::new(0),
             frames_sent: std::sync::atomic::AtomicU64::new(0),
             frames_decoded: std::sync::atomic::AtomicU64::new(0),
+            tree_wanted: std::sync::atomic::AtomicBool::new(false),
+            capture_request: std::sync::Mutex::new(None),
         }
     }
 

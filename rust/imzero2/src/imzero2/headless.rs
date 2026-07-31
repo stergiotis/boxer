@@ -33,7 +33,10 @@
 //! - `IMZERO2_HEADLESS_MAX_FRAMES` — stop after N frames (0 = unbounded;
 //!   smoke-test hook).
 //! - `IMZERO2_HEADLESS_DUMP_DIR` — when set, dump rendered frames as
-//!   `frame_NNNNNN.png` into this directory.
+//!   `frame_NNNNNN.png` into this directory. It is also where a client's
+//!   `CaptureRequest` lands (ADR-0154 SD4) — the request names the file, the
+//!   host owns the directory — so a scripted driver needs this set even when it
+//!   wants no periodic dump at all (pair it with a large `DUMP_EVERY`).
 //! - `IMZERO2_HEADLESS_DUMP_EVERY` — dump every Nth frame (default 60).
 //! - `IMZERO2_HEADLESS_PIXELS_PER_POINT` — initial HiDPI scale of the
 //!   offscreen target (default 1.0). A connected viewer's reported
@@ -69,9 +72,10 @@ use crate::imzero2::codeclane::{CodecLane, LaneProbe, VideoCodec};
 #[cfg(feature = "headless_wgpu")]
 use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
 #[cfg(feature = "headless_wgpu")]
-use crate::imzero2::framesink::{FrameSink, NullSink, PngDumpSink};
+use crate::imzero2::framesink::{self, FrameSink, NullSink, PngDumpSink};
 use crate::imzero2::inputmap::{self, InputTranslator};
 use crate::imzero2::interpreter::InterpretError;
+use crate::imzero2::treemap;
 use crate::imzero2::wscarrier::WsCarrier;
 
 #[derive(thiserror::Error, Debug)]
@@ -754,6 +758,9 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     // Latch so an app that re-emits ViewportCommand::Close every frame under
     // `ignore_close` logs once, not once per frame.
     let mut warned_ignore_close = false;
+    // ADR-0154 SD1: mirrors egui's own AccessKit flag so the toggle is only
+    // written when it actually changes.
+    let mut accesskit_on = false;
     #[cfg(feature = "headless_wgpu")]
     let mut bgra_frame: Vec<u8> = Vec::new();
     let mut translator = InputTranslator::default();
@@ -885,6 +892,21 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             Some(ppp);
 
         let mut shutdown = false;
+        // ADR-0154 SD1: AccessKit generation is a runtime toggle and the tree
+        // is built *during* a pass, so the decision has to be made before
+        // `run_ui` below. Off by default and switched on only while someone is
+        // asking, so a host nobody drives never pays for it — which is the
+        // whole reason this is request/response and not a subscription.
+        let tree_wanted = carrier.as_ref().is_some_and(|c| c.tree_wanted());
+        if tree_wanted != accesskit_on {
+            if tree_wanted {
+                ctx.enable_accesskit();
+            } else {
+                ctx.disable_accesskit();
+            }
+            accesskit_on = tree_wanted;
+            tracing::debug!(enabled = tree_wanted, "accesskit generation toggled");
+        }
         // ADR-0088: publish current video-pipeline capabilities for the Go
         // control to fetch while it builds this frame (must precede dispatch).
         if let Some(c) = &carrier {
@@ -984,6 +1006,13 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 }
             }
             c.send_cursor_to_active(inputmap::cursor_shape_code(out.platform_output.cursor_icon));
+            // ADR-0154 SD1: the accessibility tree rides the same drain as the
+            // cursor — it is the other thing egui resolves per pass that a
+            // remote client cannot see in the pixels. Present only while
+            // generation is on, i.e. only when someone asked.
+            if let Some(update) = &out.platform_output.accesskit_update {
+                c.send_tree_to_active(treemap::snapshot(update, frame_idx));
+            }
         }
 
         // ADR-0088: apply a runtime codec switch the Go control requested
@@ -1028,12 +1057,51 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         // rasterize with, so it does nothing here.
         #[cfg(feature = "headless_wgpu")]
         {
+            // ADR-0154 SD4: a capture request forces the pixel path for this
+            // frame even when nothing else consumes pixels — an idle host with
+            // no viewer is exactly the case a scripted capture runs in.
+            let capture = carrier.as_ref().and_then(|c| c.take_capture_request());
             let need_pixels = !sinks.is_empty()
+                || capture.is_some()
                 || carrier.as_ref().map(|c| c.connected() && c.wants_pixels()).unwrap_or(false);
             if need_pixels {
                 gpu.render_and_readback(&ctx, out, &screen, &mut bgra_frame)?;
                 for sink in &mut sinks {
                     sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
+                }
+                if let (Some(name), Some(c)) = (capture, carrier.as_ref()) {
+                    match opts.dump_dir.as_deref() {
+                        Some(dir) => {
+                            match framesink::capture_named(
+                                dir,
+                                &name,
+                                &bgra_frame,
+                                width_px,
+                                height_px,
+                            ) {
+                                Ok(path) => {
+                                    tracing::info!(path=%path.display(), frame_idx, "capture written");
+                                    c.send_capture_done(crate::imzero2::inputproto::CaptureDone {
+                                        path: path.to_string_lossy().into_owned(),
+                                        width: width_px,
+                                        height: height_px,
+                                        frame_index: frame_idx,
+                                    });
+                                }
+                                // No ack on failure: the client is waiting for
+                                // one, and a silent timeout there is a better
+                                // signal than a "done" naming a file that is
+                                // not on disk.
+                                Err(e) => {
+                                    tracing::warn!(error=%e, name, "capture request failed")
+                                }
+                            }
+                        }
+                        None => tracing::warn!(
+                            name,
+                            "capture requested but IMZERO2_HEADLESS_DUMP_DIR is unset — ignoring"
+                        ),
+                    }
                 }
                 if let Some(c) = &mut carrier {
                     c.on_frame(&bgra_frame, width_px, height_px, frame_idx);

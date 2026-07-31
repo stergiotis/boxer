@@ -187,6 +187,31 @@ impl InputTranslator {
                     out.push(egui::Event::Zoom(z.factor.clamp(0.2, 5.0)));
                 }
             }
+            E::AccesskitAction(a) => {
+                // ADR-0154 SD3: actuate by node instead of by position. egui
+                // honours an injected action request for Click, Focus,
+                // SetValue and ScrollIntoView, so a driver targeting a node
+                // needs no coordinates at all — and cannot land on whatever
+                // moved into a stale position. Painter-only widgets have no
+                // node; those still take synthetic pointer events.
+                let Some(action) = super::treemap::action_from_code(a.action) else {
+                    tracing::debug!(action = a.action, "ignoring unknown accesskit action");
+                    return;
+                };
+                let data = (action == egui::accesskit::Action::SetValue)
+                    .then(|| egui::accesskit::ActionData::Value(a.value.clone().into()));
+                out.push(egui::Event::AccessKitActionRequest(
+                    egui::accesskit::ActionRequest {
+                        action,
+                        // egui builds its whole tree under the root tree id
+                        // (context.rs stamps `TreeId::ROOT` on every update),
+                        // so that is the only id a request can target.
+                        target_tree: egui::accesskit::TreeId::ROOT,
+                        target_node: egui::accesskit::NodeId(a.node_id),
+                        data,
+                    },
+                ));
+            }
         }
     }
 }

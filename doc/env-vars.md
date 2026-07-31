@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-07-31T12:09:17Z
+generated-at: 2026-07-31T15:59:03Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -92,7 +92,7 @@ generated-at: 2026-07-31T12:09:17Z
 | `IMZERO2_FFMPEG_BIN` | path | — | — |  | explicit path to the ffmpeg binary the headless encoder and lane probe spawn; empty uses the PATH lookup |
 | `IMZERO2_HEADLESS` | string | — | — |  | dual-feature builds only: 1 or on selects the headless host at runtime; ignored in single-host builds |
 | `IMZERO2_HEADLESS_CODEC` | categorial-string | `h264` | — |  | startup stream lane: h264 (default; honours ENCODER_ARGS) \| vp9 \| av1 \| av1-444 (AV1 4:4:4) \| mesh (ADR-0128 draw-stream, WebGL2 viewer); runtime-switchable from the Go control<br>**Allowed:** `h264` \| `vp9` \| `av1` \| `av1-444` \| `mesh` |
-| `IMZERO2_HEADLESS_DUMP_DIR` | path | — | — |  | directory for per-frame PNG dumps (verification); empty disables |
+| `IMZERO2_HEADLESS_DUMP_DIR` | path | — | — |  | directory for per-frame PNG dumps (verification) and for client-requested captures (ADR-0154 CaptureRequest); empty disables both |
 | `IMZERO2_HEADLESS_DUMP_EVERY` | int64 | `60` | — |  | with IMZERO2_HEADLESS_DUMP_DIR, dump every Nth frame |
 | `IMZERO2_HEADLESS_ENCODER_ARGS` | string | — | — |  | override ffmpeg encode args between rawvideo input and -f h264 output; empty uses the VAAPI default |
 | `IMZERO2_HEADLESS_FPS` | float64 | `60` | — |  | headless render tick in Hz, 1-240; Rust clamps to that range |

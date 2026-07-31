@@ -222,7 +222,7 @@ var (
 	// directory for verification. Empty disables.
 	HeadlessDumpDir = env.NewPath(env.Spec{
 		Name:        "IMZERO2_HEADLESS_DUMP_DIR",
-		Description: "directory for per-frame PNG dumps (verification); empty disables",
+		Description: "directory for per-frame PNG dumps (verification) and for client-requested captures (ADR-0154 CaptureRequest); empty disables both",
 		Category:    env.CategoryDev,
 	})
 

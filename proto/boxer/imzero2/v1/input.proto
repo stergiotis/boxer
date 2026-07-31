@@ -37,6 +37,8 @@ message InputEvent {
     TextInput text = 5;
     PointerGone pointer_gone = 6;
     PinchZoom pinch_zoom = 7;
+    // ADR-0154 SD3: actuate a widget by node id instead of by position.
+    AccessKitAction accesskit_action = 8;
   }
 }
 
@@ -95,6 +97,28 @@ message PinchZoom {
   float factor = 1;
 }
 
+// ADR-0154 SD3: a coordinate-free action against a node of the tree
+// TreeSnapshot reports. `node_id` is the AccessKit node id, which for egui
+// is the raw widget id — a pure function of the widget's path down the id
+// stack, so it is stable across runs and resolutions. Actions egui honours
+// when injected: click, focus, set-value, scroll-into-view. A driver falls
+// back to synthetic pointer events for painter-only widgets, which have no
+// node at all.
+message AccessKitAction {
+  uint64 node_id = 1;
+  // Wire-stable action code, numbered here rather than taken from
+  // `accesskit::Action as u32` for the same reason CursorShape pins its
+  // own codes: an upstream variant inserted mid-enum would silently
+  // renumber the wire. The host maps it with an explicit match; an unknown
+  // code is ignored rather than guessed at.
+  //
+  //   0 click   1 focus   2 set-value   3 scroll-into-view
+  uint32 action = 2;
+  // Payload for set-value (action 2); ignored otherwise. Sliders and drag
+  // values take a numeric string, text edits take the literal text.
+  string value = 3;
+}
+
 message SessionControl {
   oneof control {
     SessionHello hello = 1;
@@ -110,7 +134,82 @@ message SessionControl {
     ClipboardData clipboard = 9;
     // ADR-0024 Update 2026-07-28 mouse cursor shape:
     CursorShape cursor_shape = 10;  // server→client, active connection only
+    // ADR-0154 accessibility tree + capture on demand. All four are
+    // honoured from / sent to the ACTIVE connection only, like input.
+    TreeRequest tree_request = 11;      // client→server
+    TreeSnapshot tree_snapshot = 12;    // server→client
+    CaptureRequest capture_request = 13;  // client→server
+    CaptureDone capture_done = 14;      // server→client
   }
+}
+
+// ADR-0154 SD1. Client→server: send me the accessibility tree as of the next
+// completed pass. Request/response rather than a push subscription: the
+// cursor shape is four bytes that change rarely, whereas a tree is hundreds
+// of nodes that any hover mutates, so pushing on change would put a per-pass
+// build and diff on the render loop for a consumer that reads it a handful of
+// times per session. The first request also switches AccessKit generation on
+// (`egui::Context::enable_accesskit`), so a host nobody asks pays nothing.
+message TreeRequest {
+}
+
+// Server→client: the widget tree of one pass, flattened. Node order is
+// unspecified; use `parent`/`children` to walk it. Sent only to the
+// connection that asked.
+message TreeSnapshot {
+  repeated TreeNode nodes = 1;
+  // Node id holding keyboard focus, or 0 when nothing is focused.
+  uint64 focus = 2;
+  // The host's frame counter when the tree was taken, so a client can tell
+  // two snapshots apart and pair one with a capture.
+  uint64 pass = 3;
+}
+
+// One widget. A deliberately reduced projection of `accesskit::Node`:
+// enough to resolve a locator and to assert an effect, and nothing whose
+// meaning would shift under an AccessKit upgrade. Bounds are in logical
+// points, the same frame as MouseMove/MouseButton and, at
+// pixels_per_point 1.0, as the streamed pixels.
+message TreeNode {
+  uint64 id = 1;
+  // AccessKit role, lower-snake ("button", "check_box", "text_input", …).
+  // A string rather than an enum: roles are open-ended upstream, and a
+  // client matching on unknown roles should see them, not a zero.
+  string role = 2;
+  // Accessible name — the label a locator matches on.
+  string name = 3;
+  // Current value, where the widget has one (text edits, sliders, labels
+  // that carry their text as a value).
+  string value = 4;
+  float x = 5;
+  float y = 6;
+  float w = 7;
+  float h = 8;
+  // Bitmask: 1=disabled, 2=hidden, 4=focused, 8=selected.
+  uint32 flags = 9;
+  // 0 when this is the root.
+  uint64 parent = 10;
+  repeated uint64 children = 11;
+}
+
+// ADR-0154 SD4. Client→server: write the current frame as a PNG. Replaces
+// picking one out of a periodic dump, so the client chooses the moment.
+//
+// `name` is sanitised to a basename by the host and written under the
+// configured dump directory; with no dump directory configured the request
+// is ignored. The carrier already grants the active connection full input
+// control, which is no reason to also grant it arbitrary filesystem writes.
+message CaptureRequest {
+  string name = 1;
+}
+
+// Server→client: the capture landed. `path` is the file the host actually
+// wrote, after sanitising.
+message CaptureDone {
+  string path = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  uint64 frame_index = 4;
 }
 
 // Server→client (ADR-0024 Update 2026-07-28): the mouse cursor shape egui

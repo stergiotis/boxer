@@ -58,6 +58,49 @@ impl FrameSink for PngDumpSink {
     }
 }
 
+/// Write one BGRA frame as a PNG named by a *remote* request (ADR-0154 SD4).
+///
+/// The name crosses the wire, so it is reduced to its final component before it
+/// reaches a path join: the active connection already holds full input control,
+/// which is no argument for also letting it choose where on the filesystem to
+/// write. `..`, an absolute path and anything with directory separators all
+/// collapse to a basename under `dir`, and a name that has no usable final
+/// component is refused outright.
+pub fn capture_named(
+    dir: &std::path::Path,
+    name: &str,
+    bgra: &[u8],
+    width: u32,
+    height: u32,
+) -> std::io::Result<std::path::PathBuf> {
+    let base = std::path::Path::new(name)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty() && *s != "." && *s != "..")
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("capture name has no usable file component: {name:?}"),
+            )
+        })?;
+    let file =
+        if std::path::Path::new(base).extension().is_some_and(|e| e.eq_ignore_ascii_case("png")) {
+            base.to_owned()
+        } else {
+            format!("{base}.png")
+        };
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(file);
+    let mut rgba = Vec::with_capacity(bgra.len());
+    for px in bgra.chunks_exact(4) {
+        if let &[b, g, r, a] = px {
+            rgba.extend_from_slice(&[r, g, b, a]);
+        }
+    }
+    write_png(&path, &rgba, width, height)?;
+    Ok(path)
+}
+
 pub fn write_png(
     path: &std::path::Path,
     rgba: &[u8],

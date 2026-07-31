@@ -25,8 +25,16 @@
 //! order (e.g. open the dialog, pick Mesh, pick H.264). Every SessionHello is
 //! printed with its `codec` string, so a runtime switch is observable.
 //!
+//! ADR-0154 verbs — `tree <at_secs>`, `clicknode <name> <at_secs>` and
+//! `capture <name> <at_secs>` — exercise the accessibility-tree channel,
+//! coordinate-free actuation and capture-on-demand. They are scheduled on
+//! **wall clock**, unlike the older verbs' access-unit counts: an idle UI under
+//! reactive cadence emits almost no video (the carrier dedupes identical
+//! frames), so an AU-counted gesture on a static screen never fires at all.
+//!
 //! Usage:
 //!   imzero2_ws_probe <ws-url> <out.h264> <num_frames> [x y after_frame]... [resize lw lh scale after_au] [take after_au]
+//!                    [tree <at_secs>] [clicknode <name> <at_secs>] [capture <name> <at_secs>]
 
 use futures_util::{SinkExt as _, StreamExt as _};
 use imzero2::imzero2::inputproto as pb;
@@ -41,6 +49,22 @@ fn framed(prefix: u8, msg: &impl prost::Message) -> Vec<u8> {
 
 fn input_event(ev: pb::input_event::Event) -> Vec<u8> {
     framed(pb::PREFIX_INPUT, &pb::InputEvent { event: Some(ev) })
+}
+
+fn control(c: pb::session_control::Control) -> Vec<u8> {
+    framed(pb::PREFIX_SESSION, &pb::SessionControl { control: Some(c) })
+}
+
+/// ADR-0154 verbs, fired on wall clock rather than on received access units.
+#[derive(Clone)]
+enum Timed {
+    /// Ask for the accessibility tree and print a summary.
+    Tree,
+    /// Click the node whose accessible name contains this string, by node id —
+    /// no coordinates. Needs a `tree` scheduled earlier to resolve against.
+    ClickNode(String),
+    /// Ask the host to write the current frame as a PNG under its dump dir.
+    Capture(String),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -69,6 +93,8 @@ async fn main() {
     // After `after_au` AUs, request to become the active connection
     // (ADR-0086 TakeSession) — scripted takeover verification.
     let mut take_session: Option<u64> = None;
+    // ADR-0154 verbs, scheduled in seconds since connect.
+    let mut timed: Vec<(f32, Timed)> = Vec::new();
     let mut i = 4;
     while i < args.len() {
         if args.get(i).map(String::as_str) == Some("cadence") {
@@ -87,6 +113,29 @@ async fn main() {
             take_session =
                 Some(args.get(i + 1).and_then(|v| v.parse().ok()).expect("take after_au"));
             i += 2;
+        } else if args.get(i).map(String::as_str) == Some("tree") {
+            // ADR-0154 verbs are scheduled on WALL CLOCK, not on received
+            // access units. The AU-counted schedule the older verbs use starves
+            // on an idle UI: reactive cadence plus the carrier's frame dedup
+            // means a static screen emits almost no video, so a click "after 30
+            // AUs" never fires. A driver has the same problem and the same fix.
+            timed.push((
+                args.get(i + 1).and_then(|v| v.parse().ok()).expect("tree at_secs"),
+                Timed::Tree,
+            ));
+            i += 2;
+        } else if args.get(i).map(String::as_str) == Some("clicknode") {
+            timed.push((
+                args.get(i + 2).and_then(|v| v.parse().ok()).expect("clicknode at_secs"),
+                Timed::ClickNode(args.get(i + 1).expect("clicknode name").clone()),
+            ));
+            i += 3;
+        } else if args.get(i).map(String::as_str) == Some("capture") {
+            timed.push((
+                args.get(i + 2).and_then(|v| v.parse().ok()).expect("capture at_secs"),
+                Timed::Capture(args.get(i + 1).expect("capture name").clone()),
+            ));
+            i += 3;
         } else if args.get(i).map(String::as_str) == Some("resize") {
             resize = Some((
                 args.get(i + 1).and_then(|v| v.parse().ok()).expect("resize lw"),
@@ -163,9 +212,73 @@ async fn main() {
     let mut resize_sent = false;
     let mut hellos: u32 = 0;
 
+    // Latest tree snapshot, so `clicknode` can resolve a name to a node id.
+    let mut tree: Option<pb::TreeSnapshot> = None;
+    timed.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let started = std::time::Instant::now();
+    let mut ticker = tokio::time::interval(std::time::Duration::from_millis(50));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while frames < num_aus && std::time::Instant::now() < deadline {
-        let Some(msg) = rx.next().await else { break };
+        // Wall-clock verbs race the socket read, so they fire whether or not
+        // the stream is producing — the point of scheduling them this way.
+        let msg = tokio::select! {
+            _ = ticker.tick() => {
+                let now = started.elapsed().as_secs_f32();
+                while timed.first().is_some_and(|(at, _)| *at <= now) {
+                    let (_, what) = timed.remove(0);
+                    match what {
+                        Timed::Tree => {
+                            eprintln!("[{now:.1}s] requesting accessibility tree");
+                            tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+                                control(pb::session_control::Control::TreeRequest(
+                                    pb::TreeRequest {},
+                                )).into(),
+                            )).await.expect("send tree request");
+                        }
+                        Timed::ClickNode(name) => {
+                            let hit = tree.as_ref().and_then(|t| {
+                                t.nodes.iter().find(|n| n.name.contains(&name))
+                            });
+                            match hit {
+                                Some(n) => {
+                                    eprintln!(
+                                        "[{now:.1}s] clicking node #{} {:?} ({}) by id — no coordinates",
+                                        n.id, n.name, n.role
+                                    );
+                                    tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+                                        input_event(pb::input_event::Event::AccesskitAction(
+                                            pb::AccessKitAction {
+                                                node_id: n.id,
+                                                action: 0, // click
+                                                value: String::new(),
+                                            },
+                                        )).into(),
+                                    )).await.expect("send accesskit action");
+                                }
+                                None => eprintln!(
+                                    "[{now:.1}s] no node whose name contains {name:?} (request a tree first)"
+                                ),
+                            }
+                        }
+                        Timed::Capture(name) => {
+                            eprintln!("[{now:.1}s] requesting capture {name:?}");
+                            tx.send(tokio_tungstenite::tungstenite::Message::Binary(
+                                control(pb::session_control::Control::CaptureRequest(
+                                    pb::CaptureRequest { name },
+                                )).into(),
+                            )).await.expect("send capture request");
+                        }
+                    }
+                }
+                continue;
+            }
+            m = rx.next() => match m {
+                Some(m) => m,
+                None => break,
+            },
+        };
         let msg = msg.expect("websocket read failed");
         let tokio_tungstenite::tungstenite::Message::Binary(data) = msg else {
             continue;
@@ -226,6 +339,36 @@ async fn main() {
                         }
                         Some(pb::session_control::Control::Clipboard(c)) => {
                             eprintln!("clipboard <- {:?}", c.text);
+                        }
+                        Some(pb::session_control::Control::TreeSnapshot(t)) => {
+                            eprintln!(
+                                "tree <- {} nodes, focus #{}, pass {}",
+                                t.nodes.len(),
+                                t.focus,
+                                t.pass
+                            );
+                            // Dump named nodes beside the stream so a scripted
+                            // check can assert on them without a decoder.
+                            let path = format!("{out_path}.tree");
+                            let mut lines = String::new();
+                            for n in &t.nodes {
+                                if n.name.is_empty() && n.value.is_empty() {
+                                    continue;
+                                }
+                                lines.push_str(&format!(
+                                    "{}\t{}\t{}\t{}\t{:.1},{:.1} {:.1}x{:.1}\tflags={}\n",
+                                    n.id, n.role, n.name, n.value, n.x, n.y, n.w, n.h, n.flags
+                                ));
+                            }
+                            let _ = std::fs::write(&path, lines);
+                            eprintln!("tree dumped to {path}");
+                            tree = Some(t);
+                        }
+                        Some(pb::session_control::Control::CaptureDone(c)) => {
+                            eprintln!(
+                                "capture <- {} ({}x{}, frame {})",
+                                c.path, c.width, c.height, c.frame_index
+                            );
                         }
                         _ => {}
                     }

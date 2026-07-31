@@ -36,6 +36,8 @@ pub mod svgexport;
 pub mod text_edit_highlight;
 pub mod time_range_picker;
 #[cfg(feature = "headless")]
+pub mod treemap;
+#[cfg(feature = "headless")]
 pub mod wscarrier;
 
 // generated
