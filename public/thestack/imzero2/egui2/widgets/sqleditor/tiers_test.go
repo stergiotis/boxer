@@ -1,4 +1,4 @@
-package play
+package sqleditor
 
 import (
 	"testing"
@@ -7,14 +7,14 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
 )
 
-// fakeClock is a manually advanced time source for sqlSemanticHl tests.
+// fakeClock is a manually advanced time source for semanticTier tests.
 type fakeClock struct{ t time.Time }
 
 func (f *fakeClock) now() time.Time                { return f.t }
 func (f *fakeClock) advance(d time.Duration)       { f.t = f.t.Add(d) }
 func newFakeClock() *fakeClock                     { return &fakeClock{t: time.Unix(1000, 0)} }
 func spansFor(src string) []highlight.Span         { return highlight.HighlightLex(src) }
-func waitIdleOrDone(t *testing.T, s *sqlSemanticHl) {
+func waitIdleOrDone(t *testing.T, s *semanticTier) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for s.runner.Running() {
@@ -25,13 +25,13 @@ func waitIdleOrDone(t *testing.T, s *sqlSemanticHl) {
 	}
 }
 
-// TestSqlSemanticUpgradeAfterQuiescence: no launch while the buffer is
+// TestSemanticTierUpgradeAfterQuiescence: no launch while the buffer is
 // fresh; launch after the quiescence window; install on drain; cached
 // thereafter without relaunching.
-func TestSqlSemanticUpgradeAfterQuiescence(t *testing.T) {
+func TestSemanticTierUpgradeAfterQuiescence(t *testing.T) {
 	clock := newFakeClock()
 	parsed := 0
-	s := &sqlSemanticHl{
+	s := &semanticTier{
 		now: clock.now,
 		parse: func(src string) []highlight.Span {
 			parsed++
@@ -47,7 +47,7 @@ func TestSqlSemanticUpgradeAfterQuiescence(t *testing.T) {
 		t.Fatal("must not launch before quiescence")
 	}
 
-	clock.advance(sqlSemanticQuiescence + time.Millisecond)
+	clock.advance(semanticQuiescence + time.Millisecond)
 	if _, ok := s.jobFor(src); ok {
 		t.Fatal("job cannot be ready the same call that launches it")
 	}
@@ -65,13 +65,13 @@ func TestSqlSemanticUpgradeAfterQuiescence(t *testing.T) {
 	}
 }
 
-// TestSqlSemanticSupersession: a result for an edited-away buffer is
+// TestSemanticTierSupersession: a result for an edited-away buffer is
 // dropped, and the tier recovers by parsing the new content.
-func TestSqlSemanticSupersession(t *testing.T) {
+func TestSemanticTierSupersession(t *testing.T) {
 	clock := newFakeClock()
 	release := make(chan struct{})
 	var parsedSrcs []string
-	s := &sqlSemanticHl{
+	s := &semanticTier{
 		now: clock.now,
 		parse: func(src string) []highlight.Span {
 			<-release
@@ -83,7 +83,7 @@ func TestSqlSemanticSupersession(t *testing.T) {
 	const srcB = "SELECT 2"
 
 	s.jobFor(srcA)
-	clock.advance(sqlSemanticQuiescence + time.Millisecond)
+	clock.advance(semanticQuiescence + time.Millisecond)
 	s.jobFor(srcA) // launches A, worker blocked
 	if !s.runner.Running() {
 		t.Fatal("A must be in flight")
@@ -91,7 +91,7 @@ func TestSqlSemanticSupersession(t *testing.T) {
 
 	// user edits to B; A's eventual result must not install
 	s.jobFor(srcB)
-	clock.advance(sqlSemanticQuiescence + time.Millisecond)
+	clock.advance(semanticQuiescence + time.Millisecond)
 	release <- struct{}{} // let A finish
 	waitIdleOrDone(t, s)
 
@@ -115,18 +115,18 @@ func TestSqlSemanticSupersession(t *testing.T) {
 	}
 }
 
-// TestSqlSemanticEditResetsQuiescence: every content change restamps the
+// TestSemanticTierEditResetsQuiescence: every content change restamps the
 // edit clock, so continuous typing never launches.
-func TestSqlSemanticEditResetsQuiescence(t *testing.T) {
+func TestSemanticTierEditResetsQuiescence(t *testing.T) {
 	clock := newFakeClock()
-	s := &sqlSemanticHl{
+	s := &semanticTier{
 		now:   clock.now,
 		parse: spansFor,
 	}
 	src := "SELECT"
 	for i := 0; i < 5; i++ {
 		s.jobFor(src)
-		clock.advance(sqlSemanticQuiescence - time.Millisecond)
+		clock.advance(semanticQuiescence - time.Millisecond)
 		src += "x" // keystroke just before the window elapses
 	}
 	if s.runner.Running() {
