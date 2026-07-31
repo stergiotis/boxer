@@ -906,6 +906,77 @@ let mut layout = egui::Layout::default();`)).
 `)).
 		WithReturnType(structHoverUiDummy()).
 		Build())
+	// contextMenu wraps a target body and shows a popup body on secondary
+	// click, the hoverUi shape with a menu in place of the tooltip.
+	//
+	// It deliberately does NOT use `Response::context_menu`. That helper
+	// reads `secondary_clicked()` off the response it is given, which means
+	// the response must sense clicks — and a click-sensing widget covering
+	// the whole target rect wins the pointer over every interactive widget
+	// drawn inside it, so a menu on a sortable header would eat the sort
+	// click. The overlay here senses hover only, exactly as hoverUi's does,
+	// and the secondary click is read from the pointer instead. Nothing
+	// inside the target loses a click.
+	//
+	// The hover-only overlay still has to be registered AFTER the body
+	// (see hoverText for why): egui marks a non-interactive widget hovered
+	// only when it sits above the topmost interactive one, so an overlay
+	// created before the body would report hovered=false whenever the
+	// pointer is over an inner button — which is where a right-click most
+	// often lands.
+	//
+	// Open/close mirrors `Popup::context_menu`: secondary click opens,
+	// primary click on the target closes. Clicks inside the popup are left
+	// to egui's own close behaviour.
+	blocks = append(blocks, idl.NewBuilderFactoryNode("contextMenu").
+		WithDeferredBlockMap("menu", ctabb.U32).
+		WithDeferredBlockMap("target", ctabb.U32).
+		WithSettingImmediate(true).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let mut menu_blocks = self.io.read_deferred_block_map_u32()?;
+						let mut target_blocks = self.io.read_deferred_block_map_u32()?;
+						let menu = menu_blocks.drain().next().map(|(_, v)| v);
+						let target = target_blocks.drain().next().map(|(_, v)| v);
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let scope_resp = ui.scope(|ui| {
+							if let Some(block) = &target {
+								let _ = self.replay_deferred_block_logged({{EguiContext}}, ui, block);
+							}
+						}).response;
+						let anchor = ui.interact(
+							scope_resp.rect,
+							scope_resp.id.with("imzero2_context_menu"),
+							egui::Sense::hover(),
+						);
+						if let Some(block) = menu {
+							let (secondary, primary) = anchor.ctx.input(|i| {
+								(i.pointer.secondary_clicked(), i.pointer.primary_clicked())
+							});
+							let hovered = anchor.hovered();
+							let cmd = if hovered && secondary {
+								Some(egui::SetOpenCommand::Bool(true))
+							} else if hovered && primary {
+								Some(egui::SetOpenCommand::Bool(false))
+							} else {
+								None
+							};
+							let ctx_cloned = anchor.ctx.clone();
+							let _ = egui::Popup::menu(&anchor)
+								.open_memory(cmd)
+								.at_pointer_fixed()
+								.show(|ui| {
+									let _ = self.replay_deferred_block_logged(&ctx_cloned, ui, &block);
+								});
+						}
+					} else {
+						self.io.skip_deferred_block_map_u32()?;
+						self.io.skip_deferred_block_map_u32()?;
+					}
+`)).
+		WithReturnType(structContextMenuDummy()).
+		Build())
 	blocks = append(blocks, definitionsTableBlock()...)
 
 	for _, w := range blocks {

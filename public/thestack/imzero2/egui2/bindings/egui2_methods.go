@@ -163,6 +163,39 @@ func (inst HoverUiFluid) Render(tipBody, targetBody func()) {
 	inst.Send()
 }
 
+// Render captures the two closure bodies as the menu and target content
+// and sends the contextMenu opcode. The target renders in place inside a
+// `ui.scope(...)`; the menu renders in a popup at the pointer when the
+// target is secondary-clicked, and closes on a primary click.
+//
+//	c.ContextMenu().Render(
+//	    func() {
+//	        if c.Button(ids.PrepareStr("reset"), resetAtoms).SendResp().HasPrimaryClicked() {
+//	            resetWidths()
+//	        }
+//	    },
+//	    func() { c.LabelAtoms(headerAtoms).Send() },
+//	)
+//
+// Unlike a click-sensed Frame, this does not steal clicks from widgets
+// drawn inside the target: the overlay it registers senses hover only and
+// the secondary click is read from the pointer. A sortable header keeps
+// its sort click.
+//
+// Menu items are ordinary widgets and need their own stable ids. Because
+// the popup body only renders while open, ids inside it must not be drawn
+// from a per-frame counter — the same id-stability rule every conditional
+// body follows.
+func (inst ContextMenuFluid) Render(menuBody, targetBody func()) {
+	inst.BeginMenu(0)
+	menuBody()
+	inst.EndMenu()
+	inst.BeginTarget(0)
+	targetBody()
+	inst.EndTarget()
+	inst.Send()
+}
+
 // --- egui_dock docking helper (iter-style wrapper over DockAreaRaw) ---
 
 // DockLeafIdT names a leaf in the initial-layout descriptor passed to

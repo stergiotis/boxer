@@ -109,6 +109,9 @@ func structProgressBar() ir.ConcreteType {
 func structHoverUiDummy() ir.ConcreteType {
 	return ir.NewConcreteType("hoverUiDummy")
 }
+func structContextMenuDummy() ir.ConcreteType {
+	return ir.NewConcreteType("contextMenuDummy")
+}
 func structDockAreaDummy() ir.ConcreteType {
 	return ir.NewConcreteType("dockAreaDummy")
 }

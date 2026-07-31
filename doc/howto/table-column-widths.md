@@ -117,20 +117,31 @@ if err := res.ClearAll(tableTag, cols); err != nil { /* log */ }
 The next `Resolve` returns different widths, bumps the epoch, and the table
 re-seeds — the call site does nothing else.
 
-**On the gesture.** ADR-0151 M6 calls for this on a header *context menu*.
-egui2 has no context-menu binding, so there is nothing to hang it on today.
-Until one exists, the gesture is a secondary click on the header cell:
+**The gesture** is a header context menu, via `c.ContextMenu()`:
 
 ```go
 et.BeginHeaders(0, colIdx)
-if c.LabelAtoms(headerAtoms).SendResp().HasSecondaryClicked() {
-    _ = res.Clear(tableTag, cols[colIdx])
-}
+c.ContextMenu().Render(
+    func() { // the menu
+        if c.Button(ids.PrepareStr("clearcol"), clearAtoms).SendResp().HasPrimaryClicked() {
+            _ = res.Clear(tableTag, cols[colIdx])
+        }
+        if c.Button(ids.PrepareStr("clearall"), resetAtoms).SendResp().HasPrimaryClicked() {
+            _ = res.ClearAll(tableTag, cols)
+        }
+    },
+    func() { // the header cell itself
+        c.LabelAtoms(headerAtoms).Send()
+    },
+)
 et.EndHeaders()
 ```
 
-This is a recipe, not a component: header content is app-specific, and a
-helper that rendered it would be more intrusive than the two lines it saved.
+`ContextMenu` does not steal clicks from what it wraps — the overlay it
+registers senses hover only, and the secondary click comes from the pointer
+— so a sortable header keeps its sort click. Menu items are ordinary widgets
+and need stable ids: the popup body renders only while open, so an id drawn
+from a per-frame counter will drift.
 
 ## Not wired yet
 

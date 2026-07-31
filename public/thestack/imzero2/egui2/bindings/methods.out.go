@@ -691,6 +691,35 @@ func (inst ComboBoxFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 
 	}
 }
+func (inst ContextMenuFluid) Send() {
+	r := inst.r
+
+	r.SpliceDeferredBlockMap(inst.deferredMenu)
+	r.SpliceDeferredBlockMap(inst.deferredTarget)
+	inst.deferredMenu.ReleaseWithHint()
+	inst.deferredTarget.ReleaseWithHint()
+	r.SendIntermediate()
+}
+func (inst ContextMenuFluid) BeginMenu(key0 uint32) ContextMenuFluid {
+	inst.deferredMenu.Begin(key0)
+	return inst
+}
+
+func (inst ContextMenuFluid) EndMenu() ContextMenuFluid {
+	inst.deferredMenu.End()
+	return inst
+}
+
+func (inst ContextMenuFluid) BeginTarget(key0 uint32) ContextMenuFluid {
+	inst.deferredTarget.Begin(key0)
+	return inst
+}
+
+func (inst ContextMenuFluid) EndTarget() ContextMenuFluid {
+	inst.deferredTarget.End()
+	return inst
+}
+
 func (inst DatePickerButtonFluid) Format(format string) DatePickerButtonFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(DatePickerButtonMethodIdFormat))

@@ -442,11 +442,10 @@ behaviours the design rests on are pinned by tests against the real crate —
 that stored state beats a later `initial()` (without which the reset would
 be unnecessary), and that a reset before the body restores it.
 
-**M6's docs half landed; its affordance half could not.** §SD5 asks for the
-clear action on a header *context menu*, and egui2 has no context-menu
-binding — there is nothing to hang it on without adding a wire surface,
-which is more than an affordance milestone should decide. What shipped
-instead:
+**M6 landed in two steps.** §SD5 asks for the clear action on a header
+*context menu*, and egui2 had no context-menu binding — so the gesture
+first shipped as a documented recipe, and the binding followed the same
+day (`c.ContextMenu()`, see the Update below). What M6 contains:
 
 - `Resolver.ClearAll(tableTag, cols)` beside the existing per-column
   `Clear`, so "reset this table" is one call. It deliberately does not stop
@@ -458,24 +457,45 @@ instead:
   surprise: the one-frame lag, grow-to-fit being captured like a drag, the
   epoch meaning "widths changed" rather than "frame happened", and the
   egui_extras surfaces losing an in-flight drag on an epoch change.
-- The clear gesture as a documented recipe — secondary click on the header
-  cell — rather than a component. Header content is app-specific, and a
-  helper that rendered it would be more intrusive than the two lines it
-  replaced.
+- The clear gesture, first as a recipe and then on the real binding.
 
-A context-menu binding would make the intended affordance a small addition;
-that is a separate piece of work and no consumer is waiting on it, since M4
-is blocked and nothing renders these headers yet.
+## Update — 2026-07-31: the context-menu binding, and why it is not `Response::context_menu`
+
+`c.ContextMenu()` closes M6's affordance gap: a `contextMenu` block that
+wraps a target body and shows a menu body on secondary click, built on the
+`hoverUi` two-deferred-block shape.
+
+It deliberately does not use egui's own `Response::context_menu`. That
+helper reads `secondary_clicked()` off the response it is handed, so the
+response has to sense clicks — and a click-sensing widget covering the
+target's whole rect wins the pointer over every interactive widget drawn
+inside it. On a sortable header the menu would eat the sort click. That
+failure is already recorded in this tree for `Frame.SenseClick`.
+
+So the overlay senses hover only and the secondary click is read from the
+pointer instead, with the anchor's `hovered()` as the gate. Nothing inside
+the target loses a click. The overlay is still registered *after* the body,
+for the reason `hoverText` documents: egui marks a non-interactive widget
+hovered only when it sits above the topmost interactive one, and an overlay
+created before the body would report `hovered=false` exactly where a
+right-click most often lands — over an inner button.
+
+Open/close mirrors `Popup::context_menu`: secondary click opens, primary
+click on the target closes, clicks inside the popup are left to egui's own
+close behaviour.
+
+This is a general binding, not a table feature; the width how-to uses it,
+and any widget that wants a context menu now can.
 
 ## Status
 
 Accepted 2026-07-30. M2 was discharged outside this ADR before acceptance
 (§SD3). Q2/§SD2's storage choice was superseded by the ADR-0148
 data-centricity invariant (Update 2026-07-30) before any of it was built.
-The fact kind, M1, M3 and M5 are implemented, and M6 is implemented except
-for the header context menu, which has no binding to build on (Updates
-2026-07-31). **M4 is blocked** on the app-state seam recorded in the second
-Update of that date — so nothing here is reachable from an app yet.
+The fact kind, M1, M3, M5 and M6 are implemented (Updates 2026-07-31),
+including the header context menu once `c.ContextMenu()` was added. **M4 is
+blocked** on the app-state seam recorded in the second Update of that date —
+so nothing here is reachable from an app yet.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

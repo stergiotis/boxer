@@ -31,6 +31,7 @@ status: draft
 | Color | BuilderFactory | No | 0 | 0 | 34 | Retained |
 | ComboBox | BuilderFactory | Yes | 0 | 2 | 4 | Immediate, Retained, BlockIterator |
 | ContextInspectionUi | Procedural | No | 0 | 0 | - | - |
+| ContextMenu | BuilderFactory | No | 0 | 0 | 0 | Immediate |
 | ContextSendViewPortCommandClose | Procedural | No | 0 | 0 | - | - |
 | CopyTextToClipboard | Procedural | No | 1 | 0 | - | - |
 | DatePickerButton | BuilderFactory | Yes | 1 | 0 | 7 | Immediate, Retained |
@@ -458,6 +459,23 @@ Color32
 #### Return Type
 
 Block
+
+---
+
+### ContextMenu
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Deferred Block Maps
+
+- **Menu** — keys: (u32)
+- **Target** — keys: (u32)
+
+#### Return Type
+
+ContextMenuDummy
 
 ---
 

@@ -206,6 +206,20 @@ func ContextInspectionUi() {
 	r.SendIntermediate()
 }
 
+func ContextMenu() (inst ContextMenuFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdContextMenu))
+
+	inst = ContextMenuFluid{
+		r: r,
+	}
+
+	inst.deferredMenu = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Menu"))
+	inst.deferredTarget = runtime.NewDeferredBlockScopeHinted(typed.GetCurrentFffiCapture, binary.LittleEndian, runtime.RegisterScopeHint("Target"))
+
+	return
+}
+
 func ContextSendViewPortCommandClose() {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdContextSendViewPortCommandClose))

@@ -4543,6 +4543,60 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     c.inspection_ui(u.as_mut().unwrap());
                 }
             }
+            FuncProcId::ContextMenu => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::ContextMenu");
+                // arguments
+                // construct
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let mut menu_blocks = self.io.read_deferred_block_map_u32()?;
+                    let mut target_blocks = self.io.read_deferred_block_map_u32()?;
+                    let menu = menu_blocks.drain().next().map(|(_, v)| v);
+                    let target = target_blocks.drain().next().map(|(_, v)| v);
+                    let ui = u.as_mut().unwrap();
+                    let scope_resp = ui
+                        .scope(|ui| {
+                            if let Some(block) = &target {
+                                let _ = self.replay_deferred_block_logged(c, ui, block);
+                            }
+                        })
+                        .response;
+                    let anchor = ui.interact(
+                        scope_resp.rect,
+                        scope_resp.id.with("imzero2_context_menu"),
+                        egui::Sense::hover(),
+                    );
+                    if let Some(block) = menu {
+                        let (secondary, primary) = anchor.ctx.input(|i| {
+                            (i.pointer.secondary_clicked(), i.pointer.primary_clicked())
+                        });
+                        let hovered = anchor.hovered();
+                        let cmd = if hovered && secondary {
+                            Some(egui::SetOpenCommand::Bool(true))
+                        } else if hovered && primary {
+                            Some(egui::SetOpenCommand::Bool(false))
+                        } else {
+                            None
+                        };
+                        let ctx_cloned = anchor.ctx.clone();
+                        let _ = egui::Popup::menu(&anchor)
+                            .open_memory(cmd)
+                            .at_pointer_fixed()
+                            .show(|ui| {
+                                let _ = self.replay_deferred_block_logged(&ctx_cloned, ui, &block);
+                            });
+                    }
+                } else {
+                    self.io.skip_deferred_block_map_u32()?;
+                    self.io.skip_deferred_block_map_u32()?;
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+            }
             FuncProcId::ContextSendViewPortCommandClose => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::ContextSendViewPortCommandClose");
