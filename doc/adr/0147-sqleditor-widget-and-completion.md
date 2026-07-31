@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-28
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-31
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0147: `sqleditor` widget and context-sensitive SQL completion
 
@@ -392,8 +390,9 @@ same.
 
 ## Status
 
-Proposed — awaiting review. M0 is implemented (see the 2026-07-31 Update);
-`reviewed-by` is still unset, so the acceptance flip is a separate act.
+Accepted 2026-07-31. M0 is implemented and adopted by both surfaces (see the
+2026-07-31 Update); M1–M5, the completion engine, are open and their milestones
+stand as written.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
