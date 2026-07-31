@@ -86,6 +86,7 @@ func generateArgumentsDeclPlain(first bool, w io.Writer, spec ir.PlainArgumentSp
 			name.Convert(naming.LowerCamelCase),
 			typeCode,
 		)
+		tracker.MergeError(err)
 		first = false
 	}
 	firstOut = first
@@ -205,6 +206,7 @@ func generateFactoryArgumentsHandlingPlain(first bool, w io.Writer, spec ir.Plai
 				typeCode,
 				name.Convert(naming.LowerCamelCase),
 			)
+			tracker.MergeError(err)
 		} else {
 			// Non-scalar types (homogeneous arrays like F64h, U32h, Sh, etc.)
 			// Use runtime.Put<ScalarType>SliceArg which handles nil + length prefix + elements
@@ -216,6 +218,7 @@ func generateFactoryArgumentsHandlingPlain(first bool, w io.Writer, spec ir.Plai
 				typeCode,
 				name.Convert(naming.LowerCamelCase),
 			)
+			tracker.MergeError(err)
 		}
 	}
 	return
