@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-18
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-31
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not
-> implement as if accepted.
 
 # ADR-0129: `play` layered-graph result panel — a node-link view from two CTEs
 
@@ -259,18 +258,29 @@ toggle re-laid-out top-down↔left-right, and a node click highlighted in place 
 persisted with the pointer away (2 and 3 above). (1) and (5) rest on the unit
 tests; the live cross-fixtures remain a follow-up.
 
+**Verified 2026-07-31** against the ADR-0126 topology fixture named above, now
+as production consumers: the ADR-0132 topology applets pin the Network tab
+(`tabs: [network, table]`) and live-drew both the component/listener map
+(vertices + edges CTEs, origin-set `group` colouring) and the declared-needs
+graph from a buffer whose sink is a `WITH RECURSIVE` closure — the edges lane
+fuses beside a recursive CTE (the ADR-0097 SD9 clause-wide `RECURSIVE`
+handling), and the local click-highlight held in the applet surface.
+
 ## Status
 
-Proposed 2026-07-18. The design dialogue settled the binding model (SD1 — edges
-required, vertices inferred when absent) and the column contract (SD2 —
-`source`/`target` for edges, `id` for vertices, all by name) before any code.
+Proposed 2026-07-18; **accepted 2026-07-31**. The design dialogue settled the
+binding model (SD1 — edges required, vertices inferred when absent) and the
+column contract (SD2 — `source`/`target` for edges, `id` for vertices, all by
+name) before any code; live-driving then corrected SD4 from a shared-signal
+selection to a local highlight (recorded there).
 
-**Built the same day and live-verified** (see Validation) in the working tree,
-not yet committed: `apps/play/play_layeredgraph_panel.go` (+ tests), the Network
-dock tab (`dockTabNetwork`, `BOXER_PLAY_FOCUS_NETWORK`), and the driver wiring.
-Live-driving corrected SD4 from a shared-signal selection to a local highlight
-(recorded there). Awaiting human review — reviewed-by / a status flip to
-`accepted` is the reviewer's, per the ADR lifecycle.
+The implementation is committed: `apps/play/play_layeredgraph_panel.go`
+(+ tests), the Network dock tab (`dockTabNetwork`, `BOXER_PLAY_FOCUS_NETWORK`),
+and the driver wiring. The first production consumers beyond the playground are
+the ADR-0132 topology applets, which pin the tab from their `tabs:` list (see
+Validation). Open refinements stay as recorded: cross-panel selection waits on
+the SD7 observe/bind path, and parallel-edge collapse remains a widget-v1
+limit.
 
 ## References
 
