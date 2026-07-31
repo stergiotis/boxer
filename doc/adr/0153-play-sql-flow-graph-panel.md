@@ -230,7 +230,12 @@ statement (default) · ast · plan · pipeline. Remote lenses ship
 statement an ordinary SELECT, so FORMAT, URL params and endpoint dispatch
 behave exactly as for any node — verified against ClickHouse 26.7, including
 `{p:Type}` substitution inside the explained statement. It does require a
-server recent enough to accept EXPLAIN in a table subquery. A SET prelude is
+server recent enough to accept EXPLAIN in a table subquery. One dispatch
+nuance, observed live: the security classifier cannot parse the wrapper
+(grammar1 has no EXPLAIN-in-subquery), so the statement classifies as not
+provably read-only and endpoint auto-routing declines — lens queries always
+go to the configured endpoint, which is also where the explained query's
+tables live. A SET prelude is
 re-lifted in front of the wrapper (inside the parens it would be a syntax
 error; the client harvests it onto the URL as usual). Output dialects: PLAN
 uses `json = 1` (a recursive document; the server's `Node Id` becomes the
@@ -240,7 +245,9 @@ detail. Edges point child→parent throughout, so storage sits left and the
 output right, as on the statement lens; `ReadFrom*` steps render as sources,
 everything else as a new generic `flowOp` kind. Each lens runs on its own
 lane — forgotten on Run (the ADR-0129 memo-on-error lesson) and closed in
-Close — and the parse is memoised on the lane's served key.
+Close — and the parse is memoised on the lane's served key; switching lenses
+clears the shown graph and the selection (node ids do not carry across
+lenses) rather than displaying the previous lens's while the new one loads.
 
 Even at two producers no lens *interface* materialized: the seam is the
 `flowGraph` IR itself plus one dispatch switch (`parseLensRecord`), and a Go
