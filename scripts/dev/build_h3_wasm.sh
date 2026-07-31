@@ -48,6 +48,12 @@ fi
 # so the release wasm is byte-reproducible across machines.
 export CONST_RANDOM_SEED="boxer-h3-fixed-seed"
 
+# Remap absolute source paths out of the panic/debug strings baked into the
+# artifact: registry sources land under /cargo, workspace sources under
+# /build. Without this the blob carries the building user's $CARGO_HOME and
+# checkout path, and byte-parity across machines is impossible.
+export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=$PWD=/build"
+
 echo "=== cargo build --release --target wasm32-unknown-unknown ==="
 cargo build \
     --release \
@@ -72,7 +78,10 @@ fi
 
 if command -v wasm-opt >/dev/null 2>&1; then
     echo "=== wasm-opt -Oz --strip-debug --strip-producers ==="
-    wasm-opt -Oz --strip-debug --strip-producers "$tmp" -o "$tmp.opt"
+    # rustc (≥1.82) emits bulk-memory and nontrapping float-to-int by default
+    # and the wazero runtime accepts both; wasm-opt must be told to allow them.
+    wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
+        --strip-debug --strip-producers "$tmp" -o "$tmp.opt"
     mv "$tmp.opt" "$tmp"
 fi
 

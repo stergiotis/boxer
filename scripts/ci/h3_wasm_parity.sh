@@ -39,6 +39,10 @@ trap 'rm -rf "$tmpdir"' EXIT
 # See scripts/dev/build_h3_wasm.sh for why this seed is pinned.
 export CONST_RANDOM_SEED="boxer-h3-fixed-seed"
 
+# Path remap must match scripts/dev/build_h3_wasm.sh, or parity drifts on
+# every machine whose $CARGO_HOME or checkout path differs from the builder's.
+export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=$PWD=/build"
+
 cargo build \
     --release \
     --locked \
@@ -56,7 +60,9 @@ if command -v wasm-strip >/dev/null 2>&1; then
     wasm-strip "$built"
 fi
 if command -v wasm-opt >/dev/null 2>&1; then
-    wasm-opt -Oz --strip-debug --strip-producers "$built" -o "$built.opt"
+    # Feature flags must match scripts/dev/build_h3_wasm.sh.
+    wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
+        --strip-debug --strip-producers "$built" -o "$built.opt"
     mv "$built.opt" "$built"
 fi
 
