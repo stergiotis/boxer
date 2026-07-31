@@ -8,7 +8,7 @@ import (
 
 // Aggregate Σ-rx / Σ-tx series colors come from the IDS qualitative
 // cycle (qualitativeColor in imztop_theme.go) — slots 0/1 give a
-// CVD-distinct pair from Crameri batlowS, replacing the pre-IDS
+// CVD-distinct pair from Okabe-Ito (ADR-0156), replacing the pre-IDS
 // 0x44cc88 / 0xcc4488 ad-hoc duo.
 
 // renderNetPanel is an App method because the selected-interface

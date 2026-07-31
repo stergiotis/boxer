@@ -52,17 +52,17 @@ func RenderTourTypography(ids *c.WidgetIdStack) {
 	inst.renderTypeScale()
 }
 
-// RenderTourEncoding renders the data-encoding palettes + the egui_plot
+// RenderTourEncoding renders the data-encoding palettes + the implot
 // integration sample (QualitativeCycle-driven series colors).
 func RenderTourEncoding(ids *c.WidgetIdStack) {
 	inst := &App{ids: ids, density: styletokens.DensityFromEnv()}
-	c.Label("IDS data encoding — ADR-0031 §SD3 (Crameri / viridis)").Send()
+	c.Label("IDS data encoding — ADR-0031 §SD3, ADR-0156 (Okabe-Ito / Crameri / viridis)").Send()
 	c.Label(fmt.Sprintf("active density: %s   (IMZERO2_DENSITY)", inst.density.String())).Send()
 	c.Separator().Horizontal().Send()
 	c.Label("Data encoding — scientifically-published colormaps").Send()
 	inst.renderDataEncoding()
 	c.AddSpace(styletokens.GapSections(inst.density))
-	c.Label("Data encoding in egui_plot — QualitativeCycle drives series colors").Send()
+	c.Label("Data encoding in implot — QualitativeCycle drives series colors").Send()
 	inst.renderDataEncodingPlot()
 }
 
@@ -127,7 +127,7 @@ func init() {
 		Stage:       [2]float32{1024, 700},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "IDS data encoding — Crameri qualitative / sequential / diverging strips + egui_plot QualitativeCycle integration.",
+		Description: "IDS data encoding — Okabe-Ito qualitative + Crameri sequential / diverging strips + implot QualitativeCycle integration.",
 		Render:      RenderTourEncoding,
 		SourceFunc:  (*App)(nil).renderDataEncoding,
 	})

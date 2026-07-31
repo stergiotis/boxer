@@ -59,37 +59,34 @@ func withAlpha(token styletokens.RGBA8, alpha uint8) (cl color.Color) {
 }
 
 // qualitativeColor returns the idx-th color of the IDS qualitative
-// cycle (batlowS, Crameri MIT — see ADR-0031 §SD3) as a color.Color.
-// Used for categorical series colors: per-core CPU lines, per-device
-// disk / GPU markers, Rx/Tx pairs in network panels. idx wraps mod 10
-// inside the styletokens accessor; callers don't need a modulo guard.
+// cycle (Okabe-Ito — see ADR-0156) as a color.Color. Used for
+// categorical series colors: per-core CPU lines, per-device disk / GPU
+// markers, Rx/Tx pairs in network panels. idx wraps inside the
+// styletokens accessor; callers don't need a modulo guard.
 func qualitativeColor(idx int) (cl color.Color) {
 	cl = color.Hex(styletokens.QualitativeCycle(idx).AsHex())
 	return
 }
 
-// markerColorOrder reshuffles the BatlowS qualitative cycle so the
-// brightest stops come first. The raw BatlowS table opens with a
-// near-black navy (RGB 1,25,89) that all but disappears under a single
-// "●" glyph against the dark IDS theme; reordering pushes that stop
-// to the tail where it's only used when the caller has 8+ series and
-// can afford a dim marker buried among brighter siblings.
+// markerColor returns a pick from the qualitative cycle for tiny
+// categorical markers (the per-device "●" prefix in disk / net / GPU
+// panels). It is now a straight pass-through to qualitativeColor.
 //
-// The reorder is local to imztop's tiny dot/legend markers — plot
-// lines stay on the natural cycle because a 1.2 px stroke carries
-// enough pixels that even the dark stops read fine.
-var markerColorOrder = [...]int{1, 4, 7, 2, 5, 3, 6, 9, 0, 8}
-
-// markerColor returns a brightened pick from the qualitative cycle
-// suitable for tiny categorical markers (the per-device "●" prefix
-// in disk / net / GPU panels). Same palette as qualitativeColor —
-// just re-indexed so dark stops don't land on the user's first two
-// or three devices.
+// It used to reshuffle the cycle so bright stops came first, because
+// the previous palette (batlowS) opened with a near-black navy that
+// disappeared under a single glyph. That reorder only deferred the
+// problem — a caller with 8+ series still reached the dark stops — and
+// its stated reason for not reshuffling plot lines ("a 1.2 px stroke
+// carries enough pixels that even the dark stops read fine") did not
+// hold: the navy measured 1.00:1 against the plot surface, the same
+// luminance as the background, so no stroke width could rescue it.
+// ADR-0156 fixed the palette instead; every entry now clears 3:1.
+//
+// Kept as a named seam rather than inlined: markers and lines have
+// different legibility constraints, and a future divergence should have
+// somewhere to live.
 func markerColor(idx int) (cl color.Color) {
-	if idx < 0 {
-		idx = -idx
-	}
-	cl = qualitativeColor(markerColorOrder[idx%len(markerColorOrder)])
+	cl = qualitativeColor(idx)
 	return
 }
 

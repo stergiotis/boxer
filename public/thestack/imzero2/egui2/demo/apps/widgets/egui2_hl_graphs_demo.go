@@ -121,10 +121,18 @@ func demoGraphBasic(ids *c.WidgetIdStack, st *graphsDemoState) {
 	}
 
 	const n = 5
-	// Migrated to IDS qualitative cycle (batlowS, 10 perceptually-uniform
-	// colours per Crameri 2018). Edges offset by 5 (half-cycle) so they
-	// land on the opposite side of the palette from nodes — keeps the
-	// edge-vs-node distinction the old hardcoded palettes provided.
+	// Nodes are the categorical thing here, so they take the IDS
+	// qualitative cycle (Okabe-Ito, ADR-0156).
+	//
+	// Edges used to take the same cycle offset by 5 — a half-cycle when
+	// the palette had ten entries — to keep them clear of the node hues.
+	// At seven entries that offset no longer separates them: five nodes
+	// plus five edges want ten distinct colours and the cycle has seven,
+	// so some edge would land on a node's hue whatever the offset. Edges
+	// take a structural neutral instead, which is the more honest
+	// encoding anyway — an edge here carries no category, only topology,
+	// and ADR-0031 §SD7 scopes the qualitative cycle to categorical data.
+	edgeCol := color.Hex(styletokens.NeutralBorderDefault.AsHex())
 	for i := uint64(0); i < n; i++ {
 		c.GraphNode(i+1, fmt.Sprintf("n%d", i+1)).
 			Color(color.Hex(styletokens.QualitativeCycle(int(i)).AsHex())).Send()
@@ -134,7 +142,7 @@ func demoGraphBasic(ids *c.WidgetIdStack, st *graphsDemoState) {
 		to := (i+1)%n + 1
 		c.GraphEdge(from, to).
 			Label(fmt.Sprintf("%d→%d", from, to)).
-			Color(color.Hex(styletokens.QualitativeCycle(int(i) + 5).AsHex())).
+			Color(edgeCol).
 			Send()
 	}
 

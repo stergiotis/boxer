@@ -19,7 +19,7 @@ var (
 )
 
 // qualitativeColor returns the idx-th colour of the IDS qualitative cycle
-// (batlowS — ADR-0031 §SD3). idx wraps inside the accessor.
+// (Okabe-Ito — ADR-0156). idx wraps inside the accessor.
 func qualitativeColor(idx int) (cl color.Color) {
 	cl = color.Hex(styletokens.QualitativeCycle(idx).AsHex())
 	return

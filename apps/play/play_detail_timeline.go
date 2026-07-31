@@ -580,12 +580,15 @@ func NewDetailTimeline(ids *c.WidgetIdStack) (inst *DetailTimeline) {
 	return inst
 }
 
-// qualitativePalette is the 10-entry categorical cycle used for both flags
-// (the widget applies it to Annotation.PaletteIdx internally) and lane bars
-// (via WithIntervalColors + IntervalEvent.KindID), so an attribute's flag, bar,
-// and legend swatch share one hue.
+// qualitativePalette is the categorical cycle used for both flags (the
+// widget applies it to Annotation.PaletteIdx internally) and lane bars
+// (via WithIntervalColors + IntervalEvent.KindID), so an attribute's flag,
+// bar, and legend swatch share one hue. Length follows the token cycle
+// (ADR-0156 took it from ten to seven); a row with more temporal
+// attributes than that repeats hues rather than reaching for an entry the
+// palette does not have.
 func qualitativePalette() []color.Color {
-	p := make([]color.Color, 10)
+	p := make([]color.Color, styletokens.QualitativeCycleLen)
 	for i := range p {
 		p[i] = color.Hex(styletokens.QualitativeCycle(i).AsHex())
 	}
@@ -657,8 +660,10 @@ func (inst *DetailTimeline) renderLegend() {
 // legendSwatch draws the shared leading "● N" of a legend entry: the flag-hued
 // dot plus the 1-based attribute number.
 func legendSwatch(i int) {
+	// No modulo here: the accessor wraps, and hard-coding a length would
+	// drift from the cycle the flags and bars actually use.
 	for rt := range c.RichTextLabelColored(
-		color.Hex(styletokens.QualitativeCycle(i%10).AsHex()),
+		color.Hex(styletokens.QualitativeCycle(i).AsHex()),
 		color.Transparent, "●") {
 		rt.Small()
 	}

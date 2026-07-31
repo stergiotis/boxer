@@ -91,7 +91,7 @@ func (inst IntervalEvent) Validate() (err error) {
 // annotation idiom. Number is caller-supplied so sibling widgets can
 // reference the same annotation across data updates (slice indices would
 // shift on add/remove). PaletteIdx selects a categorical hue from
-// styletokens.QualitativeCycle (BatlowS, 10 entries, CVD-safe). Label
+// styletokens.QualitativeCycle (Okabe-Ito, 7 entries, CVD-safe). Label
 // is shown in the hover tooltip.
 type Annotation struct {
 	TMS        int64

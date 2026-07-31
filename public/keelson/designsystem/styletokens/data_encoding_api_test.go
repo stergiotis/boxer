@@ -5,6 +5,8 @@ package styletokens_test
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/contrast"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/cvd"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens/data_encoding"
 )
@@ -64,21 +66,22 @@ func TestDivergingMidpoint(t *testing.T) {
 }
 
 func TestQualitativeCycleWraps(t *testing.T) {
+	n := styletokens.QualitativeCycleLen
 	c0 := styletokens.QualitativeCycle(0)
-	c10 := styletokens.QualitativeCycle(10)
-	c20 := styletokens.QualitativeCycle(20)
-	if c0 != c10 || c0 != c20 {
-		t.Errorf("qualitative cycle should wrap mod 10: c0=%+v c10=%+v c20=%+v", c0, c10, c20)
+	cN := styletokens.QualitativeCycle(n)
+	c2N := styletokens.QualitativeCycle(2 * n)
+	if c0 != cN || c0 != c2N {
+		t.Errorf("qualitative cycle should wrap mod %d: c0=%+v cN=%+v c2N=%+v", n, c0, cN, c2N)
 	}
 	c3 := styletokens.QualitativeCycle(3)
-	c13 := styletokens.QualitativeCycle(13)
-	if c3 != c13 {
-		t.Errorf("qualitative cycle offset wrap: c3=%+v c13=%+v", c3, c13)
+	c3N := styletokens.QualitativeCycle(3 + n)
+	if c3 != c3N {
+		t.Errorf("qualitative cycle offset wrap: c3=%+v c3+N=%+v", c3, c3N)
 	}
 }
 
 func TestQualitativeCycleAlphaOpaque(t *testing.T) {
-	for i := 0; i < 10; i++ {
+	for i := range styletokens.QualitativeCycleLen {
 		c := styletokens.QualitativeCycle(i)
 		if c.A != 0xFF {
 			t.Errorf("idx=%d alpha want 0xFF got %#x", i, c.A)
@@ -87,24 +90,68 @@ func TestQualitativeCycleAlphaOpaque(t *testing.T) {
 }
 
 // TestQualitativeCyclePairwiseDistinct guards the qualitative palette's core
-// contract: every pair of cycle entries must be visually tellable apart.
-// batlowS is prefix-ordered by categorical distinctness, so the vendored
-// first-10 subset satisfies this; a resampling regression in the vendor
-// pipeline (which once produced pairs ~4 RGB units apart) fails here.
+// contract: every pair of cycle entries must be tellable apart. The floor is
+// perceptual (OKLab ΔE) rather than RGB-Euclidean — the RGB metric this
+// replaced passed a palette whose worst pair was ΔE 4.9, because equal RGB
+// steps are not equal perceptual steps. ADR-0156 §SD3 sets the floor.
 func TestQualitativeCyclePairwiseDistinct(t *testing.T) {
-	const minDist2 = 15 * 15 // squared RGB Euclidean floor
-	for i := range 10 {
-		for j := i + 1; j < 10; j++ {
+	const minDeltaE = 15.0
+	n := styletokens.QualitativeCycleLen
+	for i := range n {
+		for j := i + 1; j < n; j++ {
 			a := styletokens.QualitativeCycle(i)
 			b := styletokens.QualitativeCycle(j)
-			dr := int(a.R) - int(b.R)
-			dg := int(a.G) - int(b.G)
-			db := int(a.B) - int(b.B)
-			d2 := dr*dr + dg*dg + db*db
-			if d2 < minDist2 {
-				t.Errorf("cycle entries %d and %d are near-duplicates: (%d,%d,%d) vs (%d,%d,%d), dist²=%d < %d",
-					i, j, a.R, a.G, a.B, b.R, b.G, b.B, d2, minDist2)
+			de := cvd.DeltaEOklab(a.R, a.G, a.B, b.R, b.G, b.B)
+			if de <= minDeltaE {
+				t.Errorf("cycle entries %d and %d too close: (%d,%d,%d) vs (%d,%d,%d), ΔE=%.2f ≤ %.1f",
+					i, j, a.R, a.G, a.B, b.R, b.G, b.B, de, minDeltaE)
 			}
+		}
+	}
+}
+
+// TestQualitativeCyclePairwiseDistinctCVD is the same contract under
+// simulated dichromacy. The floor is lower than the normal-vision one and
+// is empirical, not perceptual: no qualitative palette of this cardinality
+// reaches ΔE 15 once dichromacy collapses a colour axis — the semantic
+// palette measures 0.2–0.5 under the same simulation. 6.0 is set below what
+// the shipped palette achieves (min 7.5) and above every candidate ADR-0156
+// §SD4 rejected, so it catches a regression without pretending to a
+// threshold the literature does not supply.
+func TestQualitativeCyclePairwiseDistinctCVD(t *testing.T) {
+	const minDeltaE = 6.0
+	n := styletokens.QualitativeCycleLen
+	for _, cond := range []cvd.Type{cvd.Deuteranopia, cvd.Protanopia, cvd.Tritanopia} {
+		for i := range n {
+			for j := i + 1; j < n; j++ {
+				a := styletokens.QualitativeCycle(i)
+				b := styletokens.QualitativeCycle(j)
+				ar, ag, ab := cvd.Simulate(cond, a.R, a.G, a.B)
+				br, bg, bb := cvd.Simulate(cond, b.R, b.G, b.B)
+				de := cvd.DeltaEOklab(ar, ag, ab, br, bg, bb)
+				if de <= minDeltaE {
+					t.Errorf("%s: cycle entries %d and %d too close: ΔE=%.2f ≤ %.1f",
+						cond, i, j, de, minDeltaE)
+				}
+			}
+		}
+	}
+}
+
+// TestQualitativeCycleContrastOnSurface is the defect ADR-0156 fixes: every
+// cycle entry must be legible as a foreground on the IDS spine. The gate is
+// WCAG 1.4.11 (3:1 for graphical objects). NeutralBgSurface is the binding
+// case — it is the lightest of the three dark surfaces, so clearing it
+// clears NeutralBgPanel and NeutralBgFaint too.
+func TestQualitativeCycleContrastOnSurface(t *testing.T) {
+	floor := contrast.AAFloor(contrast.KindUI)
+	bg := styletokens.NeutralBgSurface
+	for i := range styletokens.QualitativeCycleLen {
+		c := styletokens.QualitativeCycle(i)
+		r := contrast.Ratio(c.R, c.G, c.B, bg.R, bg.G, bg.B)
+		if r < floor {
+			t.Errorf("slot %d (#%02x%02x%02x) is %.2f:1 on NeutralBgSurface, want ≥ %.1f:1",
+				i, c.R, c.G, c.B, r, floor)
 		}
 	}
 }

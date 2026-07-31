@@ -1,6 +1,7 @@
 package codeview
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -21,12 +22,18 @@ var regexColors [regexhighlight.CategoryError + 1]color.Color
 // colour from the span's Depth, so a nested pattern's parens pair up by
 // eye (ADR-0015 §SD2).
 //
-// Hand-picked rather than taken from styletokens.QualitativeCycle, which
-// the Preview tab's per-capture-group cells use: that palette (BatlowS)
-// is chosen for *fills* and its first entry is near-black (1, 25, 89) —
-// legible behind dark text, invisible as foreground text on the dark
-// editor background. The tie to the Preview tab is therefore conceptual
-// (both cycle by ordinal), not a shared constant.
+// Taken from styletokens.QualitativeCycle, the same source the Preview
+// tab's per-capture-group cells use, so the two cycle in step by ordinal
+// rather than merely resembling each other.
+//
+// This diverged into a hand-picked set until ADR-0156. The reason given
+// was sound at the time — the then-current palette (batlowS) was chosen
+// for fills and opened on a near-black navy, invisible as foreground on
+// the dark editor background — and it no longer holds now that every
+// cycle entry clears 3:1 as a foreground. Rejoining also fixes something
+// the hand-picked set got wrong: its gold and orchid were ΔE 1.2 apart
+// under deuteranopia, so consecutive bracket depths were nearly
+// indistinguishable to a deuteranope. The cycle's first four measure 14.6.
 //
 // Four entries: what matters is that *consecutive* depths differ
 // strongly, which they do; a pattern nested more than four deep repeats
@@ -61,10 +68,10 @@ func init() {
 	regexColors[regexhighlight.CategoryFlags] = yellow
 	regexColors[regexhighlight.CategoryError] = red
 
-	regexDepthColors[0] = internRgb(215, 186, 125) // gold
-	regexDepthColors[1] = internRgb(218, 140, 205) // orchid
-	regexDepthColors[2] = internRgb(100, 190, 235) // sky
-	regexDepthColors[3] = internRgb(154, 205, 120) // sage
+	for i := range regexDepthColors {
+		q := styletokens.QualitativeCycle(i)
+		regexDepthColors[i] = internRgb(q.R, q.G, q.B)
+	}
 
 	regexSpec = highlighterSpec{
 		highlight:   regexHighlight,

@@ -9,6 +9,11 @@
 //   - matplotlib viridis family (viridis, magma, plasma, inferno) — imported
 //     from github.com/dim13/colormap (ISC), which carries the canonical
 //     256-entry LUTs from BIDS/colormap (CC0).
+//   - Okabe-Ito qualitative — a bare-hex `.txt` alongside the Crameri files,
+//     transcribed from the Color Universal Design publication. It carries no
+//     formal license; the values are published as a standard and are widely
+//     redistributed. ADR-0156 §SD2 records that gap rather than papering
+//     over it.
 //
 // Cividis is omitted from M0 — neither cmcrameri nor dim13/colormap ships
 // it; it lands in a follow-on PR with a Nuñez-paper-traceable source.
@@ -39,6 +44,10 @@ import (
 	"strings"
 
 	"github.com/dim13/colormap"
+
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/contrast"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/cvd"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 )
 
 // Config controls a vendor invocation.
@@ -60,8 +69,16 @@ type lut struct {
 	Provenance     string     // long-form source description
 	UpstreamSHA256 string     // for crameri files; empty for matplotlib
 	UpstreamRef    string     // package@version for matplotlib
-	Cardinality    int        // 256 for sequential/diverging; 10 for batlowS
+	Cardinality    int        // 256 for sequential/diverging; 7 for okabe_ito
 	RGB            [][3]uint8 // gamma-encoded sRGB
+
+	// Qualitative marks a palette used as a categorical *cycle*, whose
+	// entries are drawn as foreground — strokes, markers, glyphs — on the
+	// IDS spine. Those are gated (see gateQualitative); sequential and
+	// diverging ramps are not, because they are sampled by t and are meant
+	// to span lightness. batlowS is deliberately not marked: it remains
+	// vendored for fill use, which is the polarity it is legible in.
+	Qualitative bool
 }
 
 // Run executes the vendor pipeline.
@@ -102,6 +119,22 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		}
 		return luts[i].Name < luts[j].Name
 	})
+
+	// Gate before emitting: a qualitative palette that fails on the IDS
+	// spine must not reach the tree at all. Findings are collected across
+	// every palette so one run reports the whole picture.
+	var gateFindings []string
+	for _, l := range luts {
+		if !l.Qualitative {
+			continue
+		}
+		gateFindings = append(gateFindings, gateQualitative(l)...)
+	}
+	if len(gateFindings) > 0 {
+		err = fmt.Errorf("qualitative palette gate: %d finding(s) (ADR-0156 §SD3):\n  %s",
+			len(gateFindings), strings.Join(gateFindings, "\n  "))
+		return
+	}
 
 	for _, l := range luts {
 		rustOut := emitRust(l)
@@ -193,6 +226,26 @@ func assemble(upstreamDir string) (out []lut, err error) {
 		"(Zenodo DOI 10.5281/zenodo.1243862); first-10 subset per ADR-0033 §SD4."
 	out = append(out, bS)
 
+	// ---- Okabe-Ito qualitative — 8 entries upstream; drop the black anchor ----
+	// The published set opens with black, which the source assumes will sit on
+	// a white figure background. On the IDS dark spine it reaches 1.28:1
+	// against NeutralBgSurface, so the converter subsets it away and keeps the
+	// remaining seven verbatim (ADR-0156 §SD2). Subsetting, not perturbation:
+	// the values that ship are unmodified, as with batlowS's first-10 rule.
+	var oi lut
+	oi, err = readHexPalette(filepath.Join(upstreamDir, "okabe_ito.txt"), "okabe_ito", 8)
+	if err != nil {
+		return
+	}
+	oi.Cardinality = 7
+	oi.RGB = oi.RGB[1:]
+	oi.Qualitative = true
+	oi.Family = "okabe-ito"
+	oi.License = "public (no formal license; values published as a standard)"
+	oi.Provenance = "Okabe & Ito, Color Universal Design (2002, rev. 2008), " +
+		"https://jfly.uni-koeln.de/color/; black anchor dropped per ADR-0156 §SD2."
+	out = append(out, oi)
+
 	// ---- matplotlib viridis family (256 entries) via dim13/colormap ----
 	for _, vf := range []struct {
 		name string
@@ -268,6 +321,116 @@ func readCrameriTxt(path, name string, expected int) (l lut, err error) {
 			return
 		}
 		rgbs = append(rgbs, [3]uint8{toU8(r), toU8(g), toU8(bl)})
+	}
+	err = scanner.Err()
+	if err != nil {
+		err = fmt.Errorf("%s scan: %w", path, err)
+		return
+	}
+	if len(rgbs) != expected {
+		err = fmt.Errorf("%s: got %d entries, want %d", path, len(rgbs), expected)
+		return
+	}
+	l.Cardinality = expected
+	l.RGB = rgbs
+	return
+}
+
+// Gate floors for qualitative palettes (ADR-0156 §SD3). All three are
+// enforcing — a palette that misses any of them is not emitted.
+const (
+	// gateMinRatio is WCAG 1.4.11's floor for graphical objects. Measured
+	// against NeutralBgSurface, the lightest of the three IDS dark
+	// surfaces and therefore the binding one.
+	gateMinRatio = 3.0
+	// gateMinDeltaE is the normal-vision OKLab separation floor, the same
+	// number ADR-0031 §SD5 uses for the semantic palette.
+	gateMinDeltaE = 15.0
+	// gateMinDeltaECVD is the separation floor under simulated dichromacy.
+	// It is empirical rather than perceptual: dichromacy collapses a colour
+	// axis, so no categorical palette of this cardinality reaches 15 once
+	// simulated. Set below what the shipped palette achieves (min 7.5) and
+	// above every candidate ADR-0156 §SD4 measured and rejected.
+	gateMinDeltaECVD = 6.0
+)
+
+// gateQualitative measures a categorical palette against the IDS spine and
+// returns one finding per violation. This is the check whose absence let a
+// palette with an entry at the background's own luminance ship: ADR-0031
+// §SD5 exempted data-encoding palettes from in-house verification on the
+// grounds that publication pre-validates them, but publications validate
+// CVD safety, not contrast against one particular dark UI surface.
+func gateQualitative(l lut) (findings []string) {
+	bg := styletokens.NeutralBgSurface
+	for i, c := range l.RGB {
+		r := contrast.Ratio(c[0], c[1], c[2], bg.R, bg.G, bg.B)
+		if r < gateMinRatio {
+			findings = append(findings, fmt.Sprintf(
+				"%s slot %d (#%02x%02x%02x): %.2f:1 on NeutralBgSurface < %.1f:1",
+				l.Name, i, c[0], c[1], c[2], r, gateMinRatio))
+		}
+	}
+	for i := 0; i < len(l.RGB); i++ {
+		for j := i + 1; j < len(l.RGB); j++ {
+			a, b := l.RGB[i], l.RGB[j]
+			de := cvd.DeltaEOklab(a[0], a[1], a[2], b[0], b[1], b[2])
+			if de <= gateMinDeltaE {
+				findings = append(findings, fmt.Sprintf(
+					"%s slots %d/%d: ΔE %.2f ≤ %.1f (normal vision)",
+					l.Name, i, j, de, gateMinDeltaE))
+			}
+			for _, t := range []cvd.Type{cvd.Deuteranopia, cvd.Protanopia, cvd.Tritanopia} {
+				ar, ag, ab := cvd.Simulate(t, a[0], a[1], a[2])
+				br, bg2, bb := cvd.Simulate(t, b[0], b[1], b[2])
+				deC := cvd.DeltaEOklab(ar, ag, ab, br, bg2, bb)
+				if deC <= gateMinDeltaECVD {
+					findings = append(findings, fmt.Sprintf(
+						"%s slots %d/%d: ΔE %.2f ≤ %.1f under %s",
+						l.Name, i, j, deC, gateMinDeltaECVD, t))
+				}
+			}
+		}
+	}
+	return
+}
+
+// readHexPalette reads a bare-hex LUT (`RRGGBB` per line, '#'-prefixed
+// comments, optional trailing name). Used for palettes the upstream
+// publishes as 8-bit integers rather than floats, so no float round-trip
+// sits between the publication and the emitted table. expected is the line
+// count we expect; mismatch is an error.
+func readHexPalette(path, name string, expected int) (l lut, err error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		err = fmt.Errorf("read %s: %w", path, err)
+		return
+	}
+	sum := sha256.Sum256(b)
+	l.Name = name
+	l.UpstreamSHA256 = hex.EncodeToString(sum[:])
+
+	scanner := bufio.NewScanner(strings.NewReader(string(b)))
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+	var rgbs [][3]uint8
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		field := strings.Fields(line)[0]
+		if len(field) != 6 {
+			err = fmt.Errorf("%s line %d: expected 6 hex digits, got %q", path, lineNo, field)
+			return
+		}
+		var v uint64
+		v, err = strconv.ParseUint(field, 16, 32)
+		if err != nil {
+			err = fmt.Errorf("%s line %d: parse hex: %w", path, lineNo, err)
+			return
+		}
+		rgbs = append(rgbs, [3]uint8{uint8(v >> 16), uint8(v >> 8), uint8(v)})
 	}
 	err = scanner.Err()
 	if err != nil {

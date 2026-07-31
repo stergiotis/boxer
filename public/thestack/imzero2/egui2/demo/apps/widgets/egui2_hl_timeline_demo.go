@@ -357,7 +357,7 @@ func composeBandProducers(producers ...timeline.BackgroundBandProducer) timeline
 // makeAnnotationFixture returns six Grafana-style annotations spread
 // across the three-day window: one deploy, one alert, one hotfix, one
 // release, one incident-resolve, one config-change. PaletteIdx values fan
-// across the BatlowS qualitative palette so the flags read as visually
+// across the IDS qualitative palette so the flags read as visually
 // distinct. The hotfix lands 30 minutes after the alert — too close for
 // side-by-side flags at the demo's default zoom — so the pair exercises
 // the flag-row stagger (zoom in to watch them rejoin one row).

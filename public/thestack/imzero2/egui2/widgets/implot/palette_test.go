@@ -20,16 +20,20 @@ func TestSetSeriesPalette(t *testing.T) {
 	}
 
 	SetSeriesPalette(PaletteIDS)
-	for slot := range 10 {
+	// The IDS branch must agree with the token accessor at *every* slot,
+	// including past the wrap — the two cycle at the same length or they
+	// disagree about which series shares a color with which.
+	for slot := range 25 {
 		want := styletokens.QualitativeCycle(slot).AsHex()
 		if got := seriesColor(slot); got != want {
 			t.Errorf("ids slot %d = %#x, want %#x", slot, got, want)
 		}
 	}
 
-	// Slots past the tenth cycle rather than run off the table.
-	if got, want := seriesColor(13), seriesColor(3); got != want {
-		t.Errorf("slot 13 = %#x, want the slot-3 color %#x", got, want)
+	// Slots past the cycle wrap rather than run off the table.
+	n := styletokens.QualitativeCycleLen
+	if got, want := seriesColor(n+3), seriesColor(3); got != want {
+		t.Errorf("slot %d = %#x, want the slot-3 color %#x", n+3, got, want)
 	}
 }
 

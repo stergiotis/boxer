@@ -269,16 +269,23 @@ func (inst *App) renderTypeScale() {
 }
 
 // renderDataEncodingPlot exercises the styletokens.QualitativeCycle
-// accessor against a real egui_plot consumer — 6 phase-shifted sine
-// waves, each colored by `QualitativeCycle(i)` from batlowS. Mirrors
-// the canonical "per-series categorical color cycle" use case
-// (ADR-0031 §SD7 plot integration) and validates the full Rust→Go
-// LUT round-trip end-to-end.
+// accessor against a real implot consumer — one phase-shifted sine wave
+// per cycle entry, each colored by `QualitativeCycle(i)`. Mirrors the
+// canonical "per-series categorical color cycle" use case (ADR-0031 §SD7
+// plot integration) and validates the full Rust→Go LUT round-trip
+// end-to-end.
+//
+// Series count follows the cycle length rather than a literal, so the
+// panel always shows the whole palette and exactly once each. It used to
+// draw a fixed 6 from a 10-entry cycle, which meant the shop window for
+// the data-encoding palette silently omitted four of its colours — and,
+// before ADR-0156, opened on an entry that was invisible against the plot
+// area.
 //
 // Line width threads StrokeRegular so the panel touches a second IDS
 // token slot — the visual story is "two IDS axes in one consumer."
 const dataEncodingPlotSamples = 200
-const dataEncodingPlotSeries = 6
+const dataEncodingPlotSeries = styletokens.QualitativeCycleLen
 
 func (inst *App) renderDataEncodingPlot() {
 	xs := make([]float64, dataEncodingPlotSamples)
@@ -292,7 +299,7 @@ func (inst *App) renderDataEncodingPlot() {
 	p.NoInputs()
 	for s := 0; s < dataEncodingPlotSeries; s++ {
 		ys := make([]float64, dataEncodingPlotSamples)
-		phase := float64(s) * math.Pi / 3.0
+		phase := float64(s) * 2.0 * math.Pi / float64(dataEncodingPlotSeries)
 		for i := range ys {
 			ys[i] = math.Sin(xs[i] + phase)
 		}
@@ -359,11 +366,12 @@ func (inst *App) renderRoundingLadder() {
 }
 
 // renderDataEncoding shows the IDS data-encoding palettes (ADR-0031
-// §SD3): qualitative batlowS (10 categorical colors), sequential batlow
+// §SD3): qualitative Okabe-Ito (7 categorical colors), sequential batlow
 // (256-entry LUT sampled at 24 ticks), and diverging vik (256-entry LUT
 // sampled symmetrically around the midpoint). All three are vendored
-// verbatim from peer-reviewed scientific publications (Crameri 2018,
-// MIT); see INSPIRATIONS.md for citation.
+// from published sources, values unmodified — the two ramps from Crameri
+// 2018 (MIT), the qualitative cycle from Okabe & Ito's Color Universal
+// Design (ADR-0156); see INSPIRATIONS.md for citation.
 //
 // The sequential and diverging strips use minimal InnerMargin so the 24
 // chips read as a continuous gradient rather than discrete swatches.
@@ -379,8 +387,8 @@ func (inst *App) renderDataEncoding() {
 
 func (inst *App) renderQualitative() {
 	for range c.Horizontal().KeepIter() {
-		c.Label(fmt.Sprintf("%-12s", "batlowS")).Send()
-		for i, rgb := range dataenc.BatlowS {
+		c.Label(fmt.Sprintf("%-12s", "okabeIto")).Send()
+		for i, rgb := range dataenc.OkabeIto {
 			fill := encodeRGB(rgb)
 			for range c.Frame(inst.ids.PrepareStr(fmt.Sprintf("qual:%d", i))).
 				Fill(fill).

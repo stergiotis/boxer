@@ -104,10 +104,17 @@ pub enum DivergingE {
     Cork,
 }
 
-/// Qualitative cycle from `batlowS` (10 colors); `idx % 10`.
+/// Number of distinct colors in the qualitative cycle.
+pub const QUALITATIVE_CYCLE_LEN: usize = super::super::data_encoding::OKABE_ITO.len();
+
+/// Qualitative cycle from Okabe-Ito (7 colors); `idx % 7`.
+///
+/// Every entry clears WCAG 1.4.11's 3:1 against `NeutralBgSurface`, so the
+/// cycle is usable as a stroke or marker colour and not only as a fill.
+/// See ADR-0156 for why this replaced the ten-entry `batlowS` cycle.
 #[inline]
 pub fn qualitative_cycle(idx: usize) -> Color32 {
-    let lut = &super::super::data_encoding::BATLOW_S;
+    let lut = &super::super::data_encoding::OKABE_ITO;
     let n = lut.len();
     let (r, g, b) = lut[idx % n];
     Color32::from_rgb(r, g, b)
@@ -159,9 +166,20 @@ mod tests {
 
     #[test]
     fn qualitative_cycle_wraps() {
-        // 10-color batlowS — index 0 and 10 give the same color.
-        assert_eq!(qualitative_cycle(0), qualitative_cycle(10));
-        assert_eq!(qualitative_cycle(3), qualitative_cycle(13));
+        // 7-color Okabe-Ito — index 0 and 7 give the same color.
+        assert_eq!(QUALITATIVE_CYCLE_LEN, 7);
+        assert_eq!(qualitative_cycle(0), qualitative_cycle(7));
+        assert_eq!(qualitative_cycle(3), qualitative_cycle(10));
+        // ...and the wrap is the only way two slots collide.
+        for i in 0..QUALITATIVE_CYCLE_LEN {
+            for j in (i + 1)..QUALITATIVE_CYCLE_LEN {
+                assert_ne!(
+                    qualitative_cycle(i),
+                    qualitative_cycle(j),
+                    "slots {i} and {j}"
+                );
+            }
+        }
     }
 
     #[test]

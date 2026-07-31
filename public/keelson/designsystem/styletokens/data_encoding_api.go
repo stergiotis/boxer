@@ -118,15 +118,33 @@ func Diverging(palette DivergingE, t float32) (rgba RGBA8) {
 	return
 }
 
+// QualitativeCycleLen is the number of distinct colors in the qualitative
+// cycle. Callers that need to know when they will start repeating — a
+// legend, or a series allocator deciding whether to add a second visual
+// channel — should read this rather than assume a count.
+const QualitativeCycleLen = len(data_encoding.OkabeIto)
+
 // QualitativeCycle returns the idx-th color from the IDS qualitative
-// palette (BatlowS, 10 entries, Crameri MIT). idx wraps modulo 10 so it
-// can be called with any non-negative cycle index. Mirrors the Rust
+// palette (Okabe-Ito, 7 entries). idx wraps modulo QualitativeCycleLen so
+// it can be called with any cycle index. Mirrors the Rust
 // `style::tokens::qualitative_cycle` accessor.
+//
+// Every entry clears WCAG 1.4.11's 3:1 against NeutralBgSurface — the
+// lightest, and therefore hardest, IDS surface — so the cycle is usable as
+// a stroke, marker or glyph colour, not only as a fill. That is the
+// property the previous palette (Crameri batlowS) lacked: four of its ten
+// entries sat below 3:1 and one was at the background's own luminance.
+// ADR-0156 records the change and the numbers behind it.
+//
+// Seven is the honest count, not a rounding of ten: no published CVD-safe
+// qualitative set reaches ten entries that all clear 3:1 on a dark spine.
+// Consumers needing more than seven categories should vary a second
+// channel (dash pattern, marker shape) rather than expect an eighth hue.
 func QualitativeCycle(idx int) (rgba RGBA8) {
 	if idx < 0 {
 		idx = -idx
 	}
-	lut := &data_encoding.BatlowS
+	lut := &data_encoding.OkabeIto
 	c := lut[idx%len(lut)]
 	rgba = RGBA8{R: c[0], G: c[1], B: c[2], A: 0xFF}
 	return

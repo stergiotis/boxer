@@ -15,6 +15,7 @@
 //   - oslo (crameri, MIT, 256 entries)
 //   - roma (crameri, MIT, 256 entries)
 //   - vik (crameri, MIT, 256 entries)
+//   - okabe_ito (okabe-ito, public (no formal license; values published as a standard), 7 entries)
 //   - inferno (viridis-mpl, CC0, 256 entries)
 //   - magma (viridis-mpl, CC0, 256 entries)
 //   - plasma (viridis-mpl, CC0, 256 entries)

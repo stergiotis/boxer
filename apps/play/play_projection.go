@@ -466,9 +466,14 @@ const (
 )
 
 // projectionColorPoint / projectionColorSelected source from the IDS
-// qualitative cycle (batlowS, Crameri MIT). Slot 0 for the default
+// qualitative cycle (Okabe-Ito, ADR-0156). Slot 0 for the default
 // point, AccentDefault for selection (ADR-0031 §SD2 reserves accent
 // for "selection, focus rings, branded highlights").
+//
+// Slot 0 was unreadable until ADR-0156: the previous palette's first
+// entry measured 1.00:1 against the implot plot area — the background's
+// own luminance — so unselected scatter points were invisible. It now
+// reads 7.28:1.
 var (
 	projectionColorPoint    = color.Hex(styletokens.QualitativeCycle(0).AsHex())
 	projectionColorSelected = color.Hex(styletokens.AccentDefault.AsHex())

@@ -17,11 +17,12 @@
 //   - Type scale — six rows (Display / Heading / Body / Caption / Micro
 //     plus Body.Mono) rendered through the egui TextStyle slots
 //     apply_typography bound on the Rust side. ADR-0030 §SD3.
-//   - Data encoding — qualitative (batlowS, 10 categorical chips),
+//   - Data encoding — qualitative (Okabe-Ito, 7 categorical chips),
 //     sequential (batlow, 24 samples across t∈[0,1]), and diverging
 //     (vik, 24 samples across t∈[-1,1]). ADR-0031 §SD3; all three are
-//     verbatim from Crameri 2018 (MIT-licensed scientific colormaps).
-//   - Data encoding in egui_plot — six phase-shifted sine waves
+//     verbatim from their publications — the two ramps from Crameri 2018
+//     (MIT), the qualitative cycle from Okabe & Ito (ADR-0156).
+//   - Data encoding in implot — one phase-shifted sine wave per cycle entry
 //     colored by `styletokens.QualitativeCycle(i)`, validating that
 //     the IDS palette consumes through implot series colors
 //     end-to-end. ADR-0031 §SD7.

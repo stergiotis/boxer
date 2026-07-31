@@ -5,12 +5,19 @@ import "github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 // PaletteE selects the data-series palette: the color a series takes from
 // its slot, and the swatch its legend row draws. Independent of the chrome
 // palette (chrome.go) — chrome is the frame around the data, this is the
-// data. Both are ten-entry cycles, so a slot maps the same way under either.
+// data.
+//
+// The two differ in length: PaletteIDS cycles seven colors, PaletteDeep
+// ten. A slot therefore does *not* map to the same position under both,
+// and the table is sized per palette rather than fixed at ten — sizing it
+// at ten and filling it from a seven-cycle would make implot's slot 7
+// silently alias slot 0 while styletokens.QualitativeCycle(7) did the
+// same thing one wrap earlier, so the two would disagree past slot 9.
 type PaletteE uint8
 
 const (
 	// PaletteIDS cycles the IDS qualitative data-encoding palette
-	// (styletokens.QualitativeCycle — Crameri batlowS, ADR-0031 §SD7).
+	// (styletokens.QualitativeCycle — Okabe-Ito, ADR-0031 §SD7 / ADR-0156).
 	// The default: series identity is a data encoding, and the fleet reads
 	// its qualitative colors from one source.
 	PaletteIDS PaletteE = iota
@@ -29,7 +36,8 @@ var paletteDeep = [10]uint32{
 
 // seriesPalette is the active table, assigned by SetSeriesPalette (package
 // init applies PaletteIDS). Packed 0xRRGGBBAA, as color.Hex expects.
-var seriesPalette [10]uint32
+// Length tracks the active palette; see PaletteE.
+var seriesPalette []uint32
 
 func init() { SetSeriesPalette(PaletteIDS) }
 
@@ -39,9 +47,10 @@ func init() { SetSeriesPalette(PaletteIDS) }
 // SetNextColor still overrides whichever palette is active.
 func SetSeriesPalette(palette PaletteE) {
 	if palette == PaletteDeep {
-		seriesPalette = paletteDeep
+		seriesPalette = paletteDeep[:]
 		return
 	}
+	seriesPalette = make([]uint32, styletokens.QualitativeCycleLen)
 	for i := range seriesPalette {
 		seriesPalette[i] = styletokens.QualitativeCycle(i).AsHex()
 	}
