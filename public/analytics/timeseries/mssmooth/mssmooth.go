@@ -230,8 +230,47 @@ func (inst *Kernel) Coeffs() (coeffs []float64) {
 // results; otherwise a fresh slice is allocated. values itself is not
 // modified, and dst may not alias it.
 func (inst *Kernel) SmoothE(values []float64, dst []float64) (out []float64, err error) {
+	err = validateSeriesE(values)
+	if err != nil {
+		return
+	}
+	out = ensureLen(dst, len(values))
+	inst.convolveExtended(values, out, 0)
+	return
+}
+
+// DerivativeE returns the smoothed first derivative of values, in units of
+// value change per sample step, as a series of the same length. It is the
+// centered difference of the MS-smoothed series — the paper's §3.2
+// recommendation of smoothing first and differentiating numerically, which
+// beats the reverse order on both noise and boundary artifacts. The centered
+// form (z[k+1] − z[k−1])/2 keeps the result zero-phase: no half-sample shift
+// against the input. At the series ends the difference reads smoothed values
+// just outside the data range, which the boundary extrapolation defines.
+//
+// The derivative is where the kernel's stopband earns its keep:
+// differentiation amplifies exactly the high frequencies a traditional
+// Savitzky–Golay filter fails to suppress. Callers with a sample interval Δt
+// divide by Δt for physical units.
+//
+// dst follows the [Kernel.SmoothE] contract.
+func (inst *Kernel) DerivativeE(values []float64, dst []float64) (out []float64, err error) {
+	err = validateSeriesE(values)
+	if err != nil {
+		return
+	}
 	n := len(values)
-	if n == 0 {
+	out = ensureLen(dst, n)
+	z := make([]float64, n+2)
+	inst.convolveExtended(values, z, 1)
+	for k := range n {
+		out[k] = 0.5 * (z[k+2] - z[k])
+	}
+	return
+}
+
+func validateSeriesE(values []float64) (err error) {
+	if len(values) == 0 {
 		err = eb.Build().Errorf("empty series")
 		return
 	}
@@ -241,26 +280,44 @@ func (inst *Kernel) SmoothE(values []float64, dst []float64) (out []float64, err
 			return
 		}
 	}
+	return
+}
 
-	m := int(inst.m)
-	ext := make([]float64, n+2*m)
-	copy(ext[m:m+n], values)
-	icept, slope := inst.fitBoundary(values, 0, 1)
-	for d := 1; d <= m; d++ {
-		ext[m-d] = icept - slope*float64(d)
-	}
-	icept, slope = inst.fitBoundary(values, n-1, -1)
-	for d := 1; d <= m; d++ {
-		ext[m+n-1+d] = icept - slope*float64(d)
-	}
-
+// ensureLen returns dst resized to n when its capacity suffices, a fresh
+// slice otherwise.
+func ensureLen(dst []float64, n int) (out []float64) {
 	if cap(dst) >= n {
 		out = dst[:n]
-	} else {
-		out = make([]float64, n)
+		return
 	}
+	out = make([]float64, n)
+	return
+}
+
+// convolveExtended fills out[p] with the smoothed value at series position
+// p − margin, for p in [0, len(values)+2·margin) — so out must have exactly
+// that length. The data are first continued by the weighted linear
+// extrapolation, halfWidth+margin points per side. A margin of 0 is plain
+// smoothing; a positive margin lets a caller read smoothed values just
+// outside the data range, which is what the derivative's centered difference
+// needs at the series ends.
+func (inst *Kernel) convolveExtended(values []float64, out []float64, margin int) {
+	n := len(values)
+	m := int(inst.m)
+	e := m + margin
+	ext := make([]float64, n+2*e)
+	copy(ext[e:e+n], values)
+	icept, slope := inst.fitBoundary(values, 0, 1)
+	for d := 1; d <= e; d++ {
+		ext[e-d] = icept - slope*float64(d)
+	}
+	icept, slope = inst.fitBoundary(values, n-1, -1)
+	for d := 1; d <= e; d++ {
+		ext[e+n-1+d] = icept - slope*float64(d)
+	}
+
 	k := inst.coeffs
-	for p := range n {
+	for p := range out {
 		seg := ext[p : p+2*m+1]
 		var acc float64
 		for i, kv := range k {
@@ -268,7 +325,6 @@ func (inst *Kernel) SmoothE(values []float64, dst []float64) (out []float64, err
 		}
 		out[p] = acc
 	}
-	return
 }
 
 // fitBoundary fits a straight line to the data next to one boundary, weighted

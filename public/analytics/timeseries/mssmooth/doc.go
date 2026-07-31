@@ -59,9 +59,12 @@
 //
 // # Derivatives
 //
-// Smooth first, then difference numerically; the operations commute in the
-// interior, and this order has both the lower noise and the smaller boundary
-// artifacts of the two (paper §3.2). No derivative kernels are provided.
+// [Kernel.DerivativeE] returns the smoothed first derivative: smooth first,
+// then difference numerically — the operations commute in the interior, and
+// this order has both the lower noise and the smaller boundary artifacts of
+// the two (paper §3.2). The difference is centered, so the derivative is
+// zero-phase against the input. No analytic derivative kernels are provided;
+// the paper measures the numeric route as equal or slightly better.
 //
 // # Why not Whittaker–Henderson
 //

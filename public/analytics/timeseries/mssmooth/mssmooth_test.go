@@ -187,6 +187,62 @@ func TestGaussianPeakFidelity(t *testing.T) {
 	}
 }
 
+// TestDerivativeOfLineIsExactSlope: the derivative path shares the
+// line-exactness argument of smoothing — the extrapolation continues an exact
+// line and the centered difference of a line is its slope — so the derivative
+// of a linear series must be the slope at every point, boundaries included.
+func TestDerivativeOfLineIsExactSlope(t *testing.T) {
+	for _, n := range []int{1, 2, 40, 200} {
+		inst, err := mssmooth.NewKernelE(6, 25)
+		require.NoError(t, err)
+		values := make([]float64, n)
+		for i := range values {
+			values[i] = -2.5 + 0.375*float64(i)
+		}
+		out, err := inst.DerivativeE(values, nil)
+		require.NoError(t, err)
+		require.Len(t, out, n)
+		want := 0.375
+		if n == 1 {
+			// A single point extends as a constant, whose derivative is zero.
+			want = 0.0
+		}
+		for i := range out {
+			assert.InDelta(t, want, out[i], 1e-9, "len %d index %d", n, i)
+		}
+	}
+}
+
+// TestDerivativeGaussianAttenuation reproduces the paper's §3.2 setup: filter
+// parameters at 95% peak fidelity for the Gaussian attenuate the peaks of its
+// derivative to about 90%.
+func TestDerivativeGaussianAttenuation(t *testing.T) {
+	const fwhm = 20.0
+	halfWidth, err := mssmooth.HalfWidthForPeakE(4, fwhm, mssmooth.Fidelity95)
+	require.NoError(t, err)
+	inst, err := mssmooth.NewKernelE(4, halfWidth)
+	require.NoError(t, err)
+
+	const n = 601
+	values := make([]float64, n)
+	analytic := make([]float64, n)
+	c := 4.0 * math.Ln2 / (fwhm * fwhm)
+	for i := range values {
+		x := float64(i - n/2)
+		values[i] = math.Exp(-c * x * x)
+		analytic[i] = -2.0 * c * x * values[i]
+	}
+	out, err := inst.DerivativeE(values, nil)
+	require.NoError(t, err)
+
+	var gotMax, wantMax float64
+	for i := range out {
+		gotMax = math.Max(gotMax, math.Abs(out[i]))
+		wantMax = math.Max(wantMax, math.Abs(analytic[i]))
+	}
+	assert.InDelta(t, 0.90, gotMax/wantMax, 0.03, "derivative peak attenuation")
+}
+
 // TestSmoothReusesDst covers the destination-buffer contract.
 func TestSmoothReusesDst(t *testing.T) {
 	inst, err := mssmooth.NewKernelE(4, 10)
@@ -273,6 +329,20 @@ func TestPropertyAffineEquivariance(t *testing.T) {
 			tol := 1e-9 * (1.0 + math.Abs(want))
 			if math.Abs(want-got[i]) > tol {
 				t.Fatalf("index %d: want %g, got %g", i, want, got[i])
+			}
+		}
+
+		// The derivative is linear too, and the offset must vanish:
+		// D(a·y + b) = a·D(y).
+		baseD, err := inst.DerivativeE(values, nil)
+		require.NoError(t, err)
+		gotD, err := inst.DerivativeE(transformed, nil)
+		require.NoError(t, err)
+		for i := range baseD {
+			want := scale * baseD[i]
+			tol := 1e-9 * (1.0 + math.Abs(want))
+			if math.Abs(want-gotD[i]) > tol {
+				t.Fatalf("derivative index %d: want %g, got %g", i, want, gotD[i])
 			}
 		}
 	})

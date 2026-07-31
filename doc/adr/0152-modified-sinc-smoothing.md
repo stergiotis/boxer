@@ -232,6 +232,30 @@ Deliberately left open, each until a consumer makes it concrete:
    data, WH is the recorded alternative; its adoption would be a dated update
    here, not a new ADR, unless it displaces MS as the default.
 
+## Updates
+
+### 2026-07-31 — smoothed derivatives ship as `DerivativeE`; live demo
+
+The Decision above listed derivatives as "none provided; smooth first, then
+difference numerically". That guidance is now packaged rather than left to
+callers: `Kernel.DerivativeE` returns the smoothed first derivative as the
+*centered* difference of the MS-smoothed series, computed over a one-sample
+margin of the boundary extrapolation so the ends need no special casing and
+the result stays zero-phase (no half-sample shift). What remains deliberately
+absent is unchanged: analytic derivative kernels, which the paper measures as
+equal-or-worse than the numeric route. Tests anchor the addition to the
+paper's §3.2 setup — filter parameters at 95% peak fidelity attenuate the
+derivative peaks of a Gaussian to ≈90% — plus exact slope reproduction on
+linear series, boundaries included.
+
+A first consumer-visible surface also landed: the demo-registry entry
+`mssmooth` (Charts & plots), a live strip chart of a scrolling noisy peak
+train against its smoothed curve and, below, the derivative — raw
+differencing against smooth-then-difference against the analytic truth —
+with degree/half-width/noise controls. The open sub-decision on *app*
+consumer wiring (Status point 1) stands; a gallery demo demonstrates, it
+does not wire.
+
 ## References
 
 - M. Schmid, D. Rath, U. Diebold, *Why and How Savitzky–Golay Filters Should
