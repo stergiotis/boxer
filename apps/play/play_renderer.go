@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
@@ -458,6 +459,21 @@ type PlayApp struct {
 	// to the server always keeps physical names — this is presentation only.
 	colLabelsForSchema *arrow.Schema
 	colLabels          map[string]string
+	// colWidthRes resolves and captures persisted table column widths
+	// (ADR-0151 M4). Distinct from colWidths above, which is the per-schema
+	// estimator for the row-oriented results grid: this one is the durable
+	// override layer, and the estimator feeds it as the default.
+	//
+	// Nil when the host exposes no column-width store — every width
+	// affordance still works, nothing persists. Acquired once on the first
+	// Frame, since the capability rides the frame context.
+	colWidthRes     *colwidth.Resolver
+	colWidthResInit bool
+	// attrWidthsSeen gates the first width report for the attr grid. The
+	// crate force-autofits on its first show, and that result is the
+	// estimator's rather than the user's — capturing it would freeze a
+	// width nobody chose. The first report a table makes is that frame.
+	attrWidthsSeen bool
 
 	// attrSink is the per-attribute Table view's exploder (play_table_attr.go),
 	// pooled across frames: the per-attribute grid is re-driven every frame it is

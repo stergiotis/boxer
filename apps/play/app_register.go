@@ -410,6 +410,7 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 		focused = f.WindowFocused()
 	}
 	inst.inner.windowUnfocused = !focused
+	inst.inner.ensureColWidthRes(ctx)
 	err = inst.inner.Render()
 	return
 }

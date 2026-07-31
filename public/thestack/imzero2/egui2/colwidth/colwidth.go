@@ -94,6 +94,36 @@ type StoreI interface {
 	DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error)
 }
 
+// HostI is the optional frame-context capability a host with a facts store
+// provides so an app can persist column widths. It takes the shape
+// [ADR-0155] §SD1 settled for reaching host-held collaborators: an optional
+// capability type-asserted off the context, exactly as [app.WindowFocusI]
+// is, so the four-method app contract stays frozen and hosts without a
+// facts store owe nothing.
+//
+// It is declared here rather than in `app` because its store speaks in
+// facts rows, and `factsstore` imports `app` — declaring it there would
+// close that loop.
+//
+// Absence means no durable widths, not an error. An app that cannot
+// acquire a store renders with its own defaults; every width affordance
+// stays usable and nothing persists:
+//
+//	var res *colwidth.Resolver
+//	if h, ok := ctx.(colwidth.HostI); ok {
+//		if st := h.ColumnWidthStore(); st != nil {
+//			res, _ = colwidth.New(st, colwidth.Opts{AppId: ctx.AppId()})
+//		}
+//	}
+//
+// Construct with the mount context's AppId, never one the app composes:
+// ADR-0155 §SD3 makes that the keying identity for embedded and windowed
+// instances alike, so a column dragged in one follows the content to the
+// other.
+type HostI interface {
+	ColumnWidthStore() (store StoreI)
+}
+
 func writeLenPrefixed(h *blake3.Hasher, s string) {
 	var n [4]byte
 	l := uint32(len(s))

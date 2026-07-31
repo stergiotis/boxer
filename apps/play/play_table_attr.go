@@ -1,6 +1,8 @@
 package play
 
 import (
+	"time"
+
 	"strconv"
 	"strings"
 
@@ -15,6 +17,8 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
@@ -478,14 +482,36 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 	inst.ensureColLabels(schema)
 	widths := inst.attrColWidths(schema, visCols, rows)
 
-	// Leading "#" (source DB row) column + the data columns, same order as the
-	// per-DB-row grid.
-	c.EtColumn(48.0).Resizable(false).Send()
-	for i := range visCols {
-		c.EtColumn(widths[i]).Resizable(true).Send()
+	// ADR-0151: a width the user set outranks the sampled estimator, which
+	// becomes the default for columns they have not touched. cols and the
+	// EtColumn sequence stay index-aligned — the leading "#" column takes
+	// part so the read-back lines up, and since it is not resizable the
+	// binding reports our own width back for it and nothing is captured.
+	cols := inst.attrColumnKeys(schema, visCols)
+	resolved := make([]float64, 0, len(cols))
+	resolved = append(resolved, attrRowNumColWidth)
+	for _, w := range widths {
+		resolved = append(resolved, float64(w))
+	}
+	if inst.colWidthRes != nil {
+		// Font size 0: play has no single text size to attribute a width
+		// to, and passing one it does not render at would rescale stored
+		// widths against a fiction. Zero disables rescaling, which is the
+		// documented meaning.
+		resolved = inst.colWidthRes.Resolve(attrTableTag, cols, 0, resolved)
 	}
 
-	et := c.EndETable(ids.PrepareStr("attr-results"), uint64(len(rows)), attrRowHeight, 1, 1).Striped(true)
+	// Leading "#" (source DB row) column + the data columns, same order as the
+	// per-DB-row grid.
+	c.EtColumn(float32(resolved[0])).Resizable(false).Send()
+	for i := range visCols {
+		c.EtColumn(float32(resolved[i+1])).Resizable(true).Send()
+	}
+
+	et := c.EndETable(ids.PrepareStr(attrTableTag), uint64(len(rows)), attrRowHeight, 1, 1).Striped(true)
+	if inst.colWidthRes != nil {
+		et = et.ApplyWidths(inst.colWidthRes.Epoch(attrTableTag))
+	}
 
 	if vis, _ := et.ColVisible(0); vis {
 		for range et.Headers(0, 0) {
@@ -557,6 +583,33 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 		}
 	}
 	et.Send()
+	inst.captureAttrWidths(et, cols)
+}
+
+// captureAttrWidths feeds the widths egui_table settled on back into the
+// resolver and lets the debounce write them.
+//
+// The first report a table makes is its force-autofit frame, whose widths
+// are the crate's idea rather than the user's; passing firstShow on that
+// frame is what stops the estimator's first result being frozen as an
+// override nobody chose.
+func (inst *PlayApp) captureAttrWidths(et c.EndETableFluid, cols []colwidth.Column) {
+	if inst.colWidthRes == nil {
+		return
+	}
+	now := time.Now()
+	if fetched, ok := et.ColumnWidths(); ok {
+		widths := make([]float64, len(fetched))
+		for i, w := range fetched {
+			widths[i] = float64(w)
+		}
+		firstShow := !inst.attrWidthsSeen
+		inst.attrWidthsSeen = true
+		inst.colWidthRes.Observe(attrTableTag, cols, widths, 0, firstShow, now)
+	}
+	if _, err := inst.colWidthRes.Flush(now); err != nil {
+		log.Warn().Err(err).Msg("play: storing column widths failed; will retry")
+	}
 }
 
 // attrColWidths sizes each data column to its exploded (scalar) content, sampled
@@ -591,4 +644,76 @@ func (inst *PlayApp) attrColWidths(schema *arrow.Schema, visCols []int, rows []a
 		widths[i] = w
 	}
 	return widths
+}
+
+
+// attrTableTag is the stable instance-tier scope for the attr grid's
+// column-width overrides, and the etable's id. One constant so the two
+// cannot drift apart.
+const attrTableTag = "attr-results"
+
+// attrRowNumColWidth is the fixed width of the leading "#" column. It is
+// not resizable, so it never acquires an override; it takes part in the
+// resolver's column list only to keep indices aligned with the EtColumn
+// sequence and with the width read-back.
+const attrRowNumColWidth = 48.0
+
+// ensureColWidthRes acquires the column-width resolver once, on the first
+// Frame. The capability rides the frame context (ADR-0155 §SD1), so it
+// cannot be picked up in Mount.
+//
+// A host without the capability, or a construction failure, leaves the
+// resolver nil and widths come from the estimator alone — what play did
+// before ADR-0151. A failed Load is likewise non-fatal: stored overrides
+// are simply not applied this session rather than the grid failing.
+func (inst *PlayApp) ensureColWidthRes(ctx app.FrameContextI) {
+	if inst.colWidthResInit {
+		return
+	}
+	inst.colWidthResInit = true
+	h, ok := ctx.(colwidth.HostI)
+	if !ok {
+		return
+	}
+	store := h.ColumnWidthStore()
+	if store == nil {
+		return
+	}
+	res, err := colwidth.New(store, colwidth.Opts{
+		// The mount context's id, never a composed one: ADR-0155 §SD3 makes
+		// this the keying identity, so a column dragged in an embedded
+		// instance follows the content to a windowed one.
+		AppId: ctx.AppId(),
+		// Below the minimum a column cannot be grabbed to drag back out;
+		// above the maximum one column pushes every other off-screen.
+		MinPoints: 24,
+		MaxPoints: 1200,
+	})
+	if err != nil {
+		log.Warn().Err(err).Msg("play: column-width resolver unavailable")
+		return
+	}
+	if lErr := res.Load(); lErr != nil {
+		log.Warn().Err(lErr).Msg("play: stored column widths could not be loaded")
+	}
+	inst.colWidthRes = res
+}
+
+// attrColumnKeys builds the resolver's column identities for the attr
+// grid, index-aligned with the EtColumn sequence: the leading "#" column
+// first, then the visible data columns.
+//
+// Identity is the raw Arrow field name and type, not the friendly label
+// the header renders: the label is derived, so an override keyed on it
+// would change identity if the label builder ever did, while the field
+// name is what the query actually returned. The type participates so a
+// column that changes type drops its stored width.
+func (inst *PlayApp) attrColumnKeys(schema *arrow.Schema, visCols []int) (cols []colwidth.Column) {
+	cols = make([]colwidth.Column, 0, len(visCols)+1)
+	cols = append(cols, colwidth.Column{Name: "#", Type: "rownum"})
+	for _, arrowCol := range visCols {
+		f := schema.Field(arrowCol)
+		cols = append(cols, colwidth.Column{Name: f.Name, Type: f.Type.String()})
+	}
+	return
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
 )
 
@@ -46,6 +47,12 @@ type window struct {
 	appInst  app.AppI
 	mountCtx *app.StaticMountContext
 	frameCtx *app.StaticFrameContext
+	// frameCtxApp is what Frame() actually receives: frameCtx itself, or a
+	// wrapper adding the column-width capability when this host has a facts
+	// store. frameCtx is kept alongside because the host calls its setters
+	// (focus, egui scope) every frame; the wrapper embeds it, so those
+	// still land.
+	frameCtxApp app.FrameContextI
 	// mount is the per-AppI-instance shared Mount/Unmount lifecycle state.
 	// Singleton-registered apps return the same AppI for every Open, so two
 	// windows over one instance must share one Mount (on first Frame) and one
@@ -453,6 +460,16 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	appIds := c.NewWidgetIdStack()
 	mountCtx.SetIds(appIds)
 	frameCtx := app.NewStaticFrameContext(mountCtx, nil)
+	// Column-width capability (ADR-0151 M4) in the ADR-0155 §SD1 shape: an
+	// optional capability on the frame context, not a contract method. Only
+	// wrapped when a facts store exists, because absence of the capability
+	// is how an app learns there is nowhere durable to put widths — wrapping
+	// unconditionally and handing back nil would move that check to every
+	// call site instead.
+	var frameCtxApp app.FrameContextI = frameCtx
+	if inst.facts != nil {
+		frameCtxApp = &frameCtxColWidth{StaticFrameContext: frameCtx, store: inst.facts}
+	}
 	// Share Mount/Unmount state per AppI instance: a second window over a
 	// singleton-registered app reuses the existing instMount (refs++), so the
 	// instance is Mounted once and Unmounted only when its last window closes.
@@ -467,7 +484,8 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		manifest: m,
 		appInst:  a,
 		mountCtx: mountCtx,
-		frameCtx: frameCtx,
+		frameCtx:    frameCtx,
+		frameCtxApp: frameCtxApp,
 		appIds:   appIds,
 		mount:    ms,
 		openFlag: true,
@@ -1317,7 +1335,7 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 		return
 	}
 	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
-		fErr := w.appInst.Frame(w.frameCtx)
+		fErr := w.appInst.Frame(w.frameCtxApp)
 		if fErr != nil {
 			c.Label("windowhost: frame error: " + fErr.Error()).Send()
 		}
@@ -1404,4 +1422,24 @@ func sortManifestsByDisplay(manifests []app.Manifest) {
 		less = di < dj
 		return
 	})
+}
+
+// frameCtxColWidth adds the ADR-0151 column-width capability to a window's
+// frame context. It embeds the static context rather than reimplementing
+// it, so every other capability the host sets each frame — window focus,
+// the egui scope — passes through untouched.
+type frameCtxColWidth struct {
+	*app.StaticFrameContext
+	store colwidth.StoreI
+}
+
+var _ colwidth.HostI = (*frameCtxColWidth)(nil)
+
+// ColumnWidthStore hands back the host's facts store, whose column-width
+// verbs are exactly colwidth.StoreI. Scoping is the app's: the resolver
+// keys every read and write by the mount context's AppId, so one app's
+// overrides cannot reach another's through this.
+func (inst *frameCtxColWidth) ColumnWidthStore() (store colwidth.StoreI) {
+	store = inst.store
+	return
 }
