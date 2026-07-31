@@ -25,9 +25,49 @@ resolve_noto() {
 # when fontconfig is unavailable.
 MAIN_FONT="${MAIN_FONT:-$(resolve_noto 'Noto Sans' 'Noto Sans')}"
 MAIN_FONT="${MAIN_FONT:-/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf}"
-# MONO_FONT is empty by default; the Rust loader then re-uses MAIN_FONT
-# as the FontFamily::Monospace primary (preserves pre-split UX). Set it
-# (e.g. via hmi-fonts-pragmatapro.sh) to scope a mono override.
+# Fixed-width font, resolved the same guarded way, with one extra
+# requirement: BOX-DRAWING COVERAGE (U+2500…).
+#
+# It is not enough for the face to be monospaced. Anything that renders a
+# query result — ClickHouse's own `system.documentation` examples, a
+# `clickhouse-client` transcript pasted into a doc — draws its frame from
+# U+2500-block characters, and a face without them sends exactly those
+# characters to the fallback chain, where the advance is somebody else's.
+# The result is a box whose corners do not meet: every row is individually
+# monospaced and no two rows are the same width. So the guard here checks
+# the charset, not just the family name.
+#
+# Leaving this empty makes the Rust loader re-use MAIN_FONT as the
+# FontFamily::Monospace primary — a PROPORTIONAL face, under which nothing
+# fixed-width lines up at all. That was the default until it was found to
+# be the reason boxes render ragged; it survives only as the last resort
+# when no covering face exists on the machine.
+resolve_mono() {
+    local family="$1" line file fam
+    command -v fc-match >/dev/null 2>&1 || return 0
+    line=$(fc-match -f '%{file}\t%{family}\n' "$family" 2>/dev/null) || return 0
+    file="${line%%$'\t'*}"; fam="${line#*$'\t'}"
+    [[ -f "$file" ]] || return 0
+    # Reject a silent fallback to an unrelated family, then require the
+    # box-drawing block. fc-query prints the charset as hex ranges; 2500
+    # falling inside one of them is what makes the frame line up.
+    [[ "$fam" == *"$want_mono"* ]] || return 0
+    command -v fc-query >/dev/null 2>&1 || { printf '%s' "$file"; return 0; }
+    fc-query --format='%{charset}\n' "$file" 2>/dev/null \
+        | tr ' ' '\n' | grep -qE '^25[0-7][0-9a-f]' || return 0
+    printf '%s' "$file"
+}
+# Preference order: DejaVu Sans Mono is the widest-installed face that
+# covers the block; Liberation Mono and Adwaita Mono are the common
+# alternatives on distros that ship neither.
+if [ -z "${MONO_FONT:-}" ]; then
+    for want_mono in 'DejaVu Sans Mono' 'Liberation Mono' 'Adwaita Mono'; do
+        MONO_FONT=$(resolve_mono "$want_mono")
+        [ -n "$MONO_FONT" ] && break
+    done
+fi
+# Set MONO_FONT explicitly to pin a face (e.g. via
+# hmi-fonts-pragmatapro.sh, which scopes a licensed override).
 MONO_FONT="${MONO_FONT:-}"
 # ADR-0044 iconography: PHOSPHOR_FONT is the single icon font (Phosphor
 # regular). Vendored from the `stergiotis/ids-fonts` v0.2.4 release at
