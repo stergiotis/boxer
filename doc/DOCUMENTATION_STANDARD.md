@@ -118,6 +118,8 @@ Supersession is cheap. Prefer it over an `Updates` chain that has started to des
 
 If ADRs accumulate in `proposed` indefinitely, the bar is being misread. Flip them.
 
+`scripts/dev/adr-accept.sh <number|path>` does the mechanical part of the flip — front-matter status, `reviewed-by` / `reviewed-date`, the banner, and the leading sentence of `## Status` — then runs doclint. It leaves the rest of the `## Status` prose alone and prints it, because text written against a pending decision ("awaiting review by …") usually needs a human edit afterwards.
+
 ---
 
 ## 2. Directory Layout
