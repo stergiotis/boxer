@@ -1,12 +1,12 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-31
 ---
 
-> **Status: draft — pre-human-review.** Design-space survey, compiled
+> **Provenance.** Design-space survey, compiled
 > 2026-07-31, ahead of any decision: nothing in here is settled, and an ADR —
 > not this page — is where any of it would become one. Provenance is
 > three-tiered and marked throughout: (a) claims about this repository were
