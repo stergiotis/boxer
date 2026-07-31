@@ -242,3 +242,89 @@ func TestInMemoryFactsStore_ListWorkingsets_DefensiveCopy(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello", string(rows[0].Config), "the caller must not be able to edit the store")
 }
+
+// Column-width overrides (ADR-0151). The behaviours asserted here are the
+// contract chstore's implementation must match; the CH-side tests mirror
+// them so the two backends cannot drift silently.
+
+func TestInMemoryFactsStore_ColumnWidth_LatestPerKey(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	t0 := time.Now().UTC()
+	for _, row := range []ColumnWidthRow{
+		{AppId: "play", Tier: ColWidthTierInstance, Scope: "attrs", ColumnKey: "k1", Points: 100, FontSize: 12, Ts: t0},
+		{AppId: "play", Tier: ColWidthTierInstance, Scope: "attrs", ColumnKey: "k1", Points: 140, FontSize: 12, Ts: t0.Add(time.Second)},
+		{AppId: "play", Tier: ColWidthTierColumn, ColumnKey: "k1", Points: 90, FontSize: 12, Ts: t0},
+		{AppId: "imztop", Tier: ColWidthTierColumn, ColumnKey: "k1", Points: 50, FontSize: 12, Ts: t0},
+	} {
+		_, err := s.WriteColumnWidth(row)
+		require.NoError(t, err)
+	}
+
+	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "one row per key, not per write")
+	// SortColumnWidths orders by tier: "column" precedes "instance".
+	assert.Equal(t, ColWidthTierColumn, rows[0].Tier)
+	assert.Equal(t, 90.0, rows[0].Points)
+	assert.Equal(t, ColWidthTierInstance, rows[1].Tier)
+	assert.Equal(t, 140.0, rows[1].Points, "the later write wins")
+}
+
+// The tier is part of the identity: an instance-tier and a column-tier
+// entry for the same column key are different overrides, and one must not
+// collapse onto the other.
+func TestInMemoryFactsStore_ColumnWidth_TierIsPartOfIdentity(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	_, err := s.WriteColumnWidth(ColumnWidthRow{AppId: "play", Tier: ColWidthTierInstance, Scope: "t", ColumnKey: "k", Points: 10})
+	require.NoError(t, err)
+	_, err = s.WriteColumnWidth(ColumnWidthRow{AppId: "play", Tier: ColWidthTierColumn, ColumnKey: "k", Points: 20})
+	require.NoError(t, err)
+
+	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, err)
+	assert.Len(t, rows, 2)
+}
+
+// A cleared override stays cleared. Writing, clearing, then writing again
+// must resurrect it — and clearing must not let an older surviving write
+// show through, which is the failure mode a WHERE-based tombstone filter
+// produces on the CH side.
+func TestInMemoryFactsStore_ColumnWidth_DeleteThenWrite(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	k := ColumnWidthRow{AppId: "play", Tier: ColWidthTierColumn, ColumnKey: "k"}
+
+	k.Points = 10
+	_, err := s.WriteColumnWidth(k)
+	require.NoError(t, err)
+	k.Points = 20
+	_, err = s.WriteColumnWidth(k)
+	require.NoError(t, err)
+
+	require.NoError(t, s.DeleteColumnWidth("play", ColWidthTierColumn, "", "k"))
+	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, err)
+	assert.Empty(t, rows, "a cleared override must not fall back to an older write")
+
+	k.Points = 30
+	_, err = s.WriteColumnWidth(k)
+	require.NoError(t, err)
+	rows, err = s.ListColumnWidths("play")
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 30.0, rows[0].Points)
+}
+
+func TestInMemoryFactsStore_ColumnWidth_DeleteAbsentKey(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	require.NoError(t, s.DeleteColumnWidth("play", ColWidthTierColumn, "", "never-written"))
+	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestInMemoryFactsStore_ColumnWidth_EmptyForUnknownApp(t *testing.T) {
+	s := NewInMemoryFactsStore()
+	rows, err := s.ListColumnWidths("nobody")
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}

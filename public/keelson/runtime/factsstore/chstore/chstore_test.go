@@ -591,3 +591,93 @@ func TestStore_ListWorkingsets_IgnoresOtherKinds_LiveCH(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
+
+// Column-width overrides (ADR-0151). These mirror the InMemoryFactsStore
+// tests of the same names so the two backends cannot drift: the collapse
+// happens server-side here and in a reverse scan there, and only running
+// both shapes against the same assertions keeps them honest.
+
+func TestStore_ListColumnWidths_Empty_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestStore_ListColumnWidths_LatestPerKey_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	t0 := time.Now().UTC().Truncate(time.Second)
+	for _, row := range []factsstore.ColumnWidthRow{
+		{AppId: "play", Tier: factsstore.ColWidthTierInstance, Scope: "attrs", ColumnKey: "k1", Points: 100, FontSize: 12, Ts: t0},
+		{AppId: "play", Tier: factsstore.ColWidthTierInstance, Scope: "attrs", ColumnKey: "k1", Points: 140.5, FontSize: 13.5, Ts: t0.Add(time.Second)},
+		{AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: "k1", Points: 90, FontSize: 12, Ts: t0},
+		{AppId: "imztop", Tier: factsstore.ColWidthTierColumn, ColumnKey: "k1", Points: 50, FontSize: 12, Ts: t0},
+	} {
+		_, err := s.WriteColumnWidth(row)
+		require.NoError(t, err)
+	}
+
+	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "one row per key, not per write; and imztop's row must not leak in")
+	assert.Equal(t, factsstore.ColWidthTierColumn, rows[0].Tier)
+	assert.Empty(t, rows[0].Scope, "the column tier carries no scope")
+	assert.InDelta(t, 90.0, rows[0].Points, 1e-9)
+	assert.Equal(t, factsstore.ColWidthTierInstance, rows[1].Tier)
+	assert.Equal(t, "attrs", rows[1].Scope)
+	assert.InDelta(t, 140.5, rows[1].Points, 1e-9, "the later write wins")
+	assert.InDelta(t, 13.5, rows[1].FontSize, 1e-9, "font size travels with the width")
+	assert.Equal(t, app.AppIdT("play"), rows[1].AppId)
+}
+
+func TestStore_ColumnWidth_TierIsPartOfIdentity_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	_, err := s.WriteColumnWidth(factsstore.ColumnWidthRow{
+		AppId: "play", Tier: factsstore.ColWidthTierInstance, Scope: "t", ColumnKey: "k", Points: 10})
+	require.NoError(t, err)
+	_, err = s.WriteColumnWidth(factsstore.ColumnWidthRow{
+		AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: "k", Points: 20})
+	require.NoError(t, err)
+
+	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, err)
+	assert.Len(t, rows, 2)
+}
+
+// The HAVING-vs-WHERE trap, asserted directly: a WHERE-based tombstone
+// filter would return the surviving Points=10 row after the delete.
+func TestStore_ColumnWidth_DeleteThenWrite_LiveCH(t *testing.T) {
+	s, cleanup := newLiveStore(t)
+	defer cleanup()
+	// Timestamps must sit in the past: DeleteColumnWidth stamps itself at
+	// now, and a write dated into the future would out-rank the tombstone
+	// on the (ts, id) sort key and legitimately win. That is the contract,
+	// not a bug — but it is not what a real capture does.
+	t0 := time.Now().UTC().Truncate(time.Second).Add(-10 * time.Second)
+	row := factsstore.ColumnWidthRow{AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: "k", FontSize: 12}
+
+	row.Points, row.Ts = 10, t0
+	_, err := s.WriteColumnWidth(row)
+	require.NoError(t, err)
+	row.Points, row.Ts = 20, t0.Add(time.Second)
+	_, err = s.WriteColumnWidth(row)
+	require.NoError(t, err)
+
+	require.NoError(t, s.DeleteColumnWidth("play", factsstore.ColWidthTierColumn, "", "k"))
+	rows, err := s.ListColumnWidths("play")
+	require.NoError(t, err)
+	assert.Empty(t, rows, "a cleared override must not fall back to an older write")
+
+	// Zero Ts takes defaultTs (now), so the resurrect lands at or after the
+	// tombstone's second and wins the tie on the monotonic entity id.
+	row.Points, row.Ts = 30, time.Time{}
+	_, err = s.WriteColumnWidth(row)
+	require.NoError(t, err)
+	rows, err = s.ListColumnWidths("play")
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.InDelta(t, 30.0, rows[0].Points, 1e-9)
+}

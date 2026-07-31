@@ -193,6 +193,89 @@ type WorkingsetRow struct {
 	Ts      time.Time
 }
 
+// Column-width tier names (ADR-0151 §SD1), most specific first. They are
+// stored as their own low-cardinality column rather than being inferred
+// from whether Scope is empty, so a reader never has to reconstruct the
+// tier from the shape of another field.
+const (
+	// ColWidthTierInstance scopes an override to one table in one app;
+	// Scope carries the call site's stable table tag.
+	ColWidthTierInstance = "instance"
+	// ColWidthTierShape scopes an override to "the same logical table"
+	// wherever it appears; Scope carries the shape hash over the sorted
+	// column-key set. Read-only in v1 — nothing writes this tier yet
+	// (§SD1's deliberate small cut).
+	ColWidthTierShape = "shape"
+	// ColWidthTierColumn scopes an override to a column anywhere in the
+	// app; Scope is empty. This is the tier that lets a recurring column
+	// keep its width across differently-shaped ad-hoc query results.
+	ColWidthTierColumn = "column"
+)
+
+// ColumnWidthRow records one table column-width override (ADR-0151,
+// Update 2026-07-30). One row per entry rather than one document per app:
+// the trail is the history, and last-writer-wins lands at entry
+// granularity, which is what removes the cross-window race the ADR's
+// original document layout could only narrow.
+//
+// Identity is (AppId, Tier, Scope, ColumnKey). ColumnKey is the
+// blake3short of (column name, type discriminator), so a type change
+// invalidates the override by construction rather than by a rule someone
+// has to remember. Rows are append-only; the latest row for a key wins and
+// a tombstone (DeleteColumnWidth) reads back as absent — the LatestState
+// semantics, reused a third time after workingsets.
+//
+// Points and FontSize travel together because a width is only meaningful
+// against the font it was captured at: resolution rescales proportionally
+// when the current font size differs (§SD1). FontSize of 0 means "captured
+// without a font reference" and disables rescaling for that entry.
+//
+// One backend difference is worth knowing before writing a test: "latest"
+// means insertion order in InMemoryFactsStore and (Ts, id) in chstore, as
+// it already does for state and workingsets. The two agree for every
+// caller that lets Ts default to now, and diverge only for a caller that
+// back- or post-dates a write — so a test that stamps a future Ts will see
+// a tombstone lose on one backend and win on the other.
+type ColumnWidthRow struct {
+	AppId     app.AppIdT
+	Tier      string
+	Scope     string
+	ColumnKey string
+	Points    float64
+	FontSize  float64
+	Ts        time.Time
+}
+
+// ColumnWidthKey is the identity tuple of an override, extracted so the
+// backends and the resolver agree on what "the same entry" means without
+// each re-deriving it.
+type ColumnWidthKey struct {
+	Tier      string
+	Scope     string
+	ColumnKey string
+}
+
+// Key returns the row's identity within its app.
+func (inst ColumnWidthRow) Key() (k ColumnWidthKey) {
+	k = ColumnWidthKey{Tier: inst.Tier, Scope: inst.Scope, ColumnKey: inst.ColumnKey}
+	return
+}
+
+// SortColumnWidths orders rows by (Tier, Scope, ColumnKey). Both backends
+// call it so they agree on ordering without either trusting ClickHouse's
+// collation — the same reason SortWorkingsets exists.
+func SortColumnWidths(rows []ColumnWidthRow) {
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Tier != rows[j].Tier {
+			return rows[i].Tier < rows[j].Tier
+		}
+		if rows[i].Scope != rows[j].Scope {
+			return rows[i].Scope < rows[j].Scope
+		}
+		return rows[i].ColumnKey < rows[j].ColumnKey
+	})
+}
+
 // LogFieldKindE discriminates the runtime type of a LogField's value. Drives
 // the typed-section fan-out in chstore.WriteLog — fields decoded from
 // zerolog's CBOR wire format land in i64 / u64 / f64 / string / bool / blob
@@ -364,6 +447,22 @@ type FactsStoreI interface {
 	// DeleteWorkingset appends a tombstone for (appId, name); subsequent
 	// LatestWorkingset calls read back found=false until the next write.
 	DeleteWorkingset(appId app.AppIdT, name string) (err error)
+	// WriteColumnWidth appends one table column-width override
+	// (ADR-0151, Update 2026-07-30). Append-only: a later write for the
+	// same (AppId, Tier, Scope, ColumnKey) supersedes the earlier one
+	// without erasing it.
+	WriteColumnWidth(row ColumnWidthRow) (id uint64, err error)
+	// ListColumnWidths returns the latest non-tombstoned override for
+	// every key belonging to appId — the whole override set a resolver
+	// loads at once, since resolution walks three tiers per column and a
+	// per-key read would be one round-trip per column per frame. Rows come
+	// back ordered by [SortColumnWidths]. A cleared override is absent,
+	// not present-and-zero.
+	ListColumnWidths(appId app.AppIdT) (rows []ColumnWidthRow, err error)
+	// DeleteColumnWidth tombstones one override key. Clearing a key that
+	// was never written is not an error; the tombstone simply becomes the
+	// latest row for a key that had none.
+	DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error)
 }
 
 // InMemoryFactsStore is the M2.5 backend. Stores grants / audit / state in
@@ -384,7 +483,10 @@ type InMemoryFactsStore struct {
 	// workingsets is the append-only workingset trail (ADR-0148 §SD6),
 	// read latest-wins by the same reverse scan LatestState uses.
 	workingsets []workingsetEntry
-	nextId      atomic.Uint64
+	// colWidths is the append-only column-width override trail
+	// (ADR-0151), collapsed latest-wins per key by ListColumnWidths.
+	colWidths []colWidthEntry
+	nextId    atomic.Uint64
 }
 
 type stateEntry struct {
@@ -394,6 +496,11 @@ type stateEntry struct {
 
 type workingsetEntry struct {
 	row       WorkingsetRow
+	tombstone bool
+}
+
+type colWidthEntry struct {
+	row       ColumnWidthRow
 	tombstone bool
 }
 
@@ -761,5 +868,60 @@ func (inst *InMemoryFactsStore) StateRows() (rows []StateRow) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		return rows[i].Ts.Before(rows[j].Ts)
 	})
+	return
+}
+
+// WriteColumnWidth appends one override to the trail (ADR-0151).
+func (inst *InMemoryFactsStore) WriteColumnWidth(row ColumnWidthRow) (id uint64, err error) {
+	id = inst.nextId.Add(1)
+	if row.Ts.IsZero() {
+		row.Ts = time.Now().UTC()
+	}
+	inst.mu.Lock()
+	inst.colWidths = append(inst.colWidths, colWidthEntry{row: row})
+	inst.mu.Unlock()
+	return
+}
+
+// ListColumnWidths collapses the trail to the latest entry per key for
+// appId. The scan runs in reverse and keeps the first sighting of each
+// key, so a tombstone reached first suppresses the key entirely rather
+// than letting an older surviving write show through — the same ordering
+// trap the CH backend has to spell out as HAVING argMax(is_tomb) = 0.
+func (inst *InMemoryFactsStore) ListColumnWidths(appId app.AppIdT) (rows []ColumnWidthRow, err error) {
+	rows = []ColumnWidthRow{}
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	seen := make(map[ColumnWidthKey]struct{}, len(inst.colWidths))
+	for i := len(inst.colWidths) - 1; i >= 0; i-- {
+		e := inst.colWidths[i]
+		if e.row.AppId != appId {
+			continue
+		}
+		k := e.row.Key()
+		if _, dup := seen[k]; dup {
+			continue
+		}
+		seen[k] = struct{}{}
+		if e.tombstone {
+			continue
+		}
+		rows = append(rows, e.row)
+	}
+	SortColumnWidths(rows)
+	return
+}
+
+// DeleteColumnWidth appends a tombstone for one override key.
+func (inst *InMemoryFactsStore) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
+	inst.mu.Lock()
+	inst.colWidths = append(inst.colWidths, colWidthEntry{
+		row: ColumnWidthRow{
+			AppId: appId, Tier: tier, Scope: scope, ColumnKey: columnKey,
+			Ts: time.Now().UTC(),
+		},
+		tombstone: true,
+	})
+	inst.mu.Unlock()
 	return
 }

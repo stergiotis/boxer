@@ -216,6 +216,35 @@ var (
 	// ADR-0135 ordering constraint).
 	MembKindWorkingset = NkRegistry.MustBegin("runtimeKindWorkingset").End()
 	MembWorkingsetName = NkRegistry.MustBegin("runtimeWorkingsetName").End()
+
+	// Table column-width override (ADR-0151, Update 2026-07-30) — one row
+	// per override entry rather than one document per app, so the trail is
+	// the history and last-writer-wins lands at entry granularity instead
+	// of document granularity. App identity reuses MembRuntimeApp and a
+	// cleared override reuses MembPersistTombstone on the bool section, the
+	// LatestState short-circuit pattern that DeleteWorkingset also follows.
+	//
+	// The identity of an entry is (app, tier, scope, columnKey). Tier is one
+	// of "instance" / "shape" / "column" (§SD1) and is genuinely
+	// low-cardinality; scope carries the tableTag for the instance tier and
+	// the shape hash for the shape tier, and is empty for the column tier,
+	// whose whole point is to apply anywhere in the app. ColumnKey is the
+	// blake3short of (name, typeDiscriminator) — a type change is meant to
+	// invalidate the override, which falls out of the key rather than
+	// needing a rule.
+	//
+	// Points and FontSize ride the f64 section as a pair because a width is
+	// only meaningful against the font it was captured at; resolution
+	// rescales proportionally when the two disagree (§SD1).
+	//
+	// Appended at the end for the same reason the workingset terms were:
+	// membership ids follow declaration order and persisted rows carry them.
+	MembKindColumnWidth   = NkRegistry.MustBegin("runtimeKindColumnWidth").End()
+	MembColWidthTier      = NkRegistry.MustBegin("runtimeColWidthTier").End()
+	MembColWidthScope     = NkRegistry.MustBegin("runtimeColWidthScope").End()
+	MembColWidthColumnKey = NkRegistry.MustBegin("runtimeColWidthColumnKey").End()
+	MembColWidthPoints    = NkRegistry.MustBegin("runtimeColWidthPoints").End()
+	MembColWidthFontSize  = NkRegistry.MustBegin("runtimeColWidthFontSize").End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -240,4 +269,6 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembQueryRunProfileEvent,
 	MembKindLaunch, MembLaunchCaller, MembLaunchConfigKind, MembLaunchConfig,
 	MembKindWorkingset, MembWorkingsetName,
+	MembKindColumnWidth, MembColWidthTier, MembColWidthScope,
+	MembColWidthColumnKey, MembColWidthPoints, MembColWidthFontSize,
 }
