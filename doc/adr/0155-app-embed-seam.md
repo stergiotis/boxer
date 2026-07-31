@@ -1,14 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-31
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-31
 ---
-
-> **Status: proposed — pre-human-review.** Records the F2 embed-seam
-> dialogue outcome of 2026-07-31 (forks settled in dialogue; this text
-> awaits review). Background:
-> [app-composition survey](../adr-background-work/app-composition-survey.md)
-> §4, §14 F2.
 
 # ADR-0155: App embed seam — hosting a registered app's body inside another app
 
@@ -236,7 +232,9 @@ panel-using app inside a constrained region before the canvas host
 
 ## Status
 
-Proposed (2026-07-31). Dialogue outcome recorded; awaiting review.
+Accepted (2026-07-31). Forks settled in the design dialogue the same
+day; SD3 was verified against ADR-0151's implemented identity scheme
+pre-acceptance.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
