@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/profiling"
 	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient/drivecmd"
 	demo2 "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/carousel"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/driver"
 	"github.com/stergiotis/boxer/showcase/deploy"
@@ -57,6 +58,7 @@ func mainC() (exitCode int) {
 					demo2.NewCommand(),
 					driver.NewCliCommand(),
 					deploy.NewCommand(),
+					drivecmd.NewCommand(),
 				},
 			},
 			observability.NewCliCommand(),
