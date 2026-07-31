@@ -758,7 +758,8 @@ Three design consequences, two of which are recorded as rules:
 - **F2 — embed contract.** Host-mediated (windowhost mints the instance,
   hands the embedder a handle) vs. embedder-constructed (adhocdemo's
   current shape, generalized). Instance identity: composed stamp vs. real
-  window-key-like instance keys in lifecycle facts.
+  window-key-like instance keys in lifecycle facts. Settled 2026-07-31:
+  [ADR-0155](../adr/0155-app-embed-seam.md).
 - **F3 — output ports.** Declare app outputs (datasets, offered subjects)
   in `Manifest`, or derive them purely from observed facts? Declaration
   enables the assistant/action-space story; observation is zero-cost but
