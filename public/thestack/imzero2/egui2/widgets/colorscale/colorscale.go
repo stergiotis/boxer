@@ -21,6 +21,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/math/numerical/finddivisions"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -194,10 +195,10 @@ type ColorScale struct {
 	cachedAxis                        finddivisions.AxisLayout
 	cachedValid                       bool
 
-	// Hover state: filled by FetchR14CanvasPointer after the PaintCanvas
-	// each frame; the marker is drawn ONE FRAME LATER (since the canvas
-	// has already been flushed). One-frame lag is imperceptible for a
-	// live pointer indicator.
+	// Hover state: filled from the R24 canvas-pointer row (keyed by this
+	// widget's canvas id) after the PaintCanvas each frame; the marker is
+	// drawn ONE FRAME LATER (since the canvas has already been flushed).
+	// One-frame lag is imperceptible for a live pointer indicator.
 	lastHover HoverInfo
 	onHover   func(HoverInfo)
 
@@ -281,6 +282,25 @@ func (inst *ColorScale) HoveredValue() HoverInfo { return inst.lastHover }
 // hover state (ok=false when not hovering). Replaces any previous callback.
 // Pass nil to disable.
 func (inst *ColorScale) OnHover(fn func(HoverInfo)) { inst.onHover = fn }
+
+// canvasCursor reads this widget's R24 canvas-pointer row: the pointer in
+// canvas-relative coordinates, NaN when it is not over the canvas. R24 is
+// keyed per canvas id, so the readback survives other canvases rendering
+// in the same frame — the single-slot R14 register this widget read
+// before was last-canvas-wins, which blinded the hover whenever another
+// canvas-bearing widget (an implot plot, a treemap) was visible. Must be
+// called inside the Render id scope so the derived id matches the
+// PaintCanvas above it; prepare+Derive is deterministic and does not
+// consume id-stack state.
+func (inst *ColorScale) canvasCursor() (hx float32, hy float32) {
+	hx = float32(math.NaN())
+	hy = hx
+	if cur, ok := c.CurrentApplicationState.StateManager.GetCanvasCursor(
+		widgethandle.Make(inst.ids.PrepareStr("canvas").Derive())); ok {
+		hx, hy = cur.PosX, cur.PosY
+	}
+	return
+}
 
 // Render emits the widget inside the current Ui. Wraps its body in
 // c.IdScope(scopeKey) so multiple instances sharing the same WidgetIdStack
@@ -367,8 +387,8 @@ func (inst *ColorScale) renderHorizontal() {
 	// Flush the frame's accumulated paint commands into an egui-allocated
 	// canvas. PaintCanvas allocates (width, height) in the parent Ui's
 	// current layout cursor — so the scale flows naturally between whatever
-	// the caller emitted before and after. The canvas's response exposes
-	// pointer hover/click via r14.
+	// the caller emitted before and after. The canvas stamps a per-id R24
+	// pointer row read back below.
 	c.PaintCanvas(inst.ids.PrepareStr("canvas"), inst.width, inst.height).
 		Background(color.Hex(inst.bgColor)).
 		Send()
@@ -379,8 +399,7 @@ func (inst *ColorScale) renderHorizontal() {
 	// callback. Reads cache rather than inline-fetching because inline
 	// fetches inside deferred-block captures (e.g. dock.Tab bodies)
 	// buffer instead of flushing and deadlock the render loop.
-	cp := c.CurrentApplicationState.StateManager.GetCanvasPointer()
-	hx := cp.HoverX
+	hx, _ := inst.canvasCursor()
 	hover := HoverInfo{}
 	if !math.IsNaN(float64(hx)) && hx >= 0 && hx <= inst.width {
 		t := float64(hx) / float64(inst.width)
@@ -474,8 +493,7 @@ func (inst *ColorScale) renderVertical() {
 		Background(color.Hex(inst.bgColor)).
 		Send()
 
-	cp := c.CurrentApplicationState.StateManager.GetCanvasPointer()
-	hy := cp.HoverY
+	_, hy := inst.canvasCursor()
 	hover := HoverInfo{}
 	if !math.IsNaN(float64(hy)) && hy >= 0 && hy <= inst.height {
 		t := float64(hy) / float64(inst.height) // 0 at the top

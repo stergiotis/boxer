@@ -49,9 +49,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
+	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/axisruler"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -85,17 +85,17 @@ type BackgroundBandProducer func(viewMinMS, viewMaxMS int64) iter.Seq[layout.Bac
 // zero-valued struct literal.
 type Visuals struct {
 	// Layout (pixel dimensions)
-	LaneHeight       float32
-	LaneGap          float32
-	AxisHeight       float32
-	RolloverRowH     float32
-	CornerRadius     float32
-	BarMinPx         float32
-	RugStripH        float32
-	RugGap           float32
-	AnnotationBandH  float32
-	AnnotationFlagW  float32
-	AnnotationFlagH  float32
+	LaneHeight      float32
+	LaneGap         float32
+	AxisHeight      float32
+	RolloverRowH    float32
+	CornerRadius    float32
+	BarMinPx        float32
+	RugStripH       float32
+	RugGap          float32
+	AnnotationBandH float32
+	AnnotationFlagW float32
+	AnnotationFlagH float32
 
 	// Colors
 	BgColor              color.Color
@@ -196,33 +196,33 @@ const (
 	// aren't surfaced through FFFI2 yet, so an empirical constant is the
 	// pragmatic answer until they are. Promote to Visuals if a caller
 	// needs to tune.
-	tooltipCharWidthPx       float32 = 6.5
-	minZoomMul               float32 = 0.05
-	maxZoomMul               float32 = 20.0
-	rugMarkWidthPx           float32 = 1.0
-	rugDensityMinPx          float32 = 1.0
+	tooltipCharWidthPx float32 = 6.5
+	minZoomMul         float32 = 0.05
+	maxZoomMul         float32 = 20.0
+	rugMarkWidthPx     float32 = 1.0
+	rugDensityMinPx    float32 = 1.0
 	// rugDensityMinTint floors the density-mode rug colormap input so even
 	// single-event buckets land at a mid-palette brightness instead of the
 	// near-bg dark end. Without this, low-count cells visually vanish
 	// against NeutralBgSurface — they're there but unreadable. Applies
 	// only to density mode; raw mode preserves per-point Intensity intact.
-	rugDensityMinTint        float32 = 0.3
-	labelPaddingX            float32 = 8
-	labelBandMaxW            float32 = 200
-	crosshairWidthPx         float32 = 1
+	rugDensityMinTint float32 = 0.3
+	labelPaddingX     float32 = 8
+	labelBandMaxW     float32 = 200
+	crosshairWidthPx  float32 = 1
 	// laneCursorWidthPx is the stroke of the horizontal lane cursor. Held
 	// at the vertical crosshair's weight on purpose: the two read as one
 	// pair of orthogonal locators rather than as two competing marks.
-	laneCursorWidthPx        float32 = 1
-	selectionStrokeWidthPx   float32 = 2
-	annotationGap            float32 = 4
-	annotationFlagPaddingY   float32 = 2
-	annotationFlagCornerR    float32 = 2
-	annotationDashLen        float32 = 4
-	annotationGapLen         float32 = 4
-	annotationStrokeW        float32 = 1
-	annotationFlagFontSize   float32 = 10
-	annotationHitCorridorPx  float32 = 13
+	laneCursorWidthPx       float32 = 1
+	selectionStrokeWidthPx  float32 = 2
+	annotationGap           float32 = 4
+	annotationFlagPaddingY  float32 = 2
+	annotationFlagCornerR   float32 = 2
+	annotationDashLen       float32 = 4
+	annotationGapLen        float32 = 4
+	annotationStrokeW       float32 = 1
+	annotationFlagFontSize  float32 = 10
+	annotationHitCorridorPx float32 = 13
 	// annotationSelectionInsetPx widens the back-fill rect drawn behind a
 	// selected annotation flag — the visible margin between back-fill
 	// and flag fill reads as the selection outline. Avoids PaintRectStroke
@@ -683,7 +683,6 @@ func WithLODScales(scales []time.Duration) Option {
 	}
 }
 
-
 // New constructs a Timeline that paints the given intervals. ids and
 // scopeKey are required (panic on nil / empty); intervals may be nil for
 // an empty-state widget that still renders the axis.
@@ -1077,11 +1076,21 @@ func (inst *Timeline) Render() {
 
 func (inst *Timeline) renderBody() {
 	stateMgr := c.CurrentApplicationState.StateManager
-	cp := stateMgr.GetCanvasPointer()
+	canvasH := widgethandle.Make(inst.ids.PrepareStr(canvasIdKey).Derive())
+	// Pointer from the per-canvas R24 row (canvas-relative, NaN when not
+	// over us) and the click edge from the canvas's r7 response flags —
+	// not the single-slot R14 register, which is last-canvas-wins and went
+	// blind whenever another canvas-bearing widget rendered in the same
+	// frame. Same one-frame lag either way.
+	cp := c.CanvasPointerValue{HoverX: float32(math.NaN()), HoverY: float32(math.NaN())}
+	if cur, ok := stateMgr.GetCanvasCursor(canvasH); ok {
+		cp.HoverX, cp.HoverY = cur.PosX, cur.PosY
+	}
+	cp.Clicked = stateMgr.GetResponse(canvasH).HasPrimaryClicked()
 	// ADR-0140: read the wheel scoped to THIS canvas (only non-identity when the
 	// pointer was over us last frame), not the global zoom register that any
 	// hovered canvas would also see.
-	wheel := stateMgr.GetCanvasWheel(widgethandle.Make(inst.ids.PrepareStr(canvasIdKey).Derive()))
+	wheel := stateMgr.GetCanvasWheel(canvasH)
 	avail := stateMgr.GetAvailableSize()
 
 	effW := inst.effectiveContainerW(avail)
