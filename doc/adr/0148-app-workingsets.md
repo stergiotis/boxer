@@ -491,6 +491,75 @@ for the same reason the *Consequences* degradation note is not: with
 ClickHouse down, persist and workingsets both fall back to process
 lifetime, together, and the runtime status bar says so.
 
+## Update — 2026-07-30: data-centricity is the rule, not this record's preference
+
+**Two of the rejections above were argued as if they were local taste.**
+The *Alternatives* kill O2 because "records stay opaque blobs under key
+conventions", and kill egui-side persistence because it is "opaque to the
+data plane". Both reasons are properties of the platform, not of
+workingsets: nothing about a saved window makes an opaque blob worse than
+it would be for any other app state. Read narrowly, they licensed the
+reading that this ADR simply preferred typed rows for its own record while
+leaving every other route open. They did not, and this Update says so
+directly rather than leaving it to be inferred from two bullet points.
+
+**The invariant.** Runtime and app state is stored in the runtime facts
+table (`boxer.facts`) and modelled as facts there. No other storage
+location is permitted, and storing bytes *in* the table is not the same as
+storing data *as* facts — an opaque payload in the blob section
+reconstructs, one column down, exactly the flat-`payload` shape
+[ADR-0026](./0026-app-runtime-and-capability-subjects.md) §SD6 rejected for
+the table as a whole, and forfeits the same properties: typed query,
+dictionary compression, membership ACL, subset projection.
+
+**What this prohibits.**
+
+- **Opaque payloads as a destination for new state.** `runtime.persist`
+  values are `[]byte` by construction (§SD3), so the channel satisfies the
+  location rule and fails the modelling rule. New state is modelled;
+  persist is not the route to reach for.
+- **Rust-side persistence of egui memory.** `eframe`'s `persistence`
+  feature must stay off. It is not an abstract hazard: it enables
+  `egui/persistence`, which serializes the `IdTypeMap`, and
+  `egui_table::TableState` (0.9.0) derives serde and stores itself with
+  `insert_persisted` while carrying `col_widths`. Turning the feature on
+  would write column widths to a file under the home directory — and
+  because `TableState` overrides the Go-supplied `currentWidth` on every
+  frame after first show, that file would be the *authoritative* copy while
+  `boxer.facts` became the shadow. The line in
+  `rust/imzero2/Cargo.toml` that keeps it off is load-bearing.
+- **Per-app files and local config files** for app state, which also
+  bypass the capability model.
+
+**What this does not prohibit**, since a rule that cannot be applied is not
+a rule:
+
+- **Read-only asset loads** — fonts read at startup are inputs, not state.
+- **Outputs the user asked for** — PNG/SVG capture, fs Powerbox document
+  export. A file the user requested is a product, not a store.
+- **Transport** — the IPC pipes and shared memory the render loop runs on.
+- **Ephemeral in-memory interaction state** — egui's `Memory` between
+  frames, scroll offsets, caret position, and a table's live drag between
+  authoritative applies. The test is twofold: it must not outlive the
+  process, and facts must be authoritative at boot. State that fails
+  either test is storage and belongs in the table.
+
+**Existing adopters are grandfathered, with a direction rather than a
+deadline.** play's `lastSql` and `timelineBandsSql`, the applet store's
+documents and its hand-rolled `index`
+([ADR-0132](./0132-sqlapplet-sql-defined-applets.md) O4), and
+[ADR-0151](./0151-table-column-width-overrides.md)'s `colw` document all
+predate this Update and all currently store opaque bytes. They are durable
+and they work; nothing here breaks them. What changes is that their shape
+is now a known debt to be paid as each is next touched, not a pattern to
+copy. ADR-0151 is the nearest case — it is accepted but unimplemented, so
+it carries its own Update rather than shipping against a rule it was
+written before.
+
+**A rule with no gate is a comment.** The `eframe` prohibition is checked
+in `scripts/ci/lint.sh`; the modelling rule is not mechanically checkable
+and rests on review, which is the honest description of its strength.
+
 ## Status
 
 Accepted (2026-07-29). Implemented 2026-07-29.

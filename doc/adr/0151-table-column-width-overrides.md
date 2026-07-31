@@ -300,10 +300,67 @@ which is part of why the single document was chosen over per-table keys.
 - **M6** — affordances: header context "clear override"; docs
   (`doc/howto` note on width behavior).
 
+## Update — 2026-07-30: `colw` becomes modelled facts, not a persist document
+
+**Q2 and §SD2 are superseded by the data-centricity invariant recorded in
+[ADR-0148](./0148-app-workingsets.md) (Update 2026-07-30): state lives in
+`boxer.facts` and is modelled there.** Q2 rejected a dedicated fact kind
+because "a new kind means vocab + DDL + codec surface for no query anyone
+has asked", and chose a versioned JSON document under `runtime.persist`.
+That cost was real and is unchanged; what changed is that it is no longer
+the deciding consideration. An opaque document reaches the table and stays
+invisible to it, which is the shape §SD6 of
+[ADR-0026](./0026-app-runtime-and-capability-subjects.md) rejected. The
+accompanying *Alternatives* paragraph — declining ADR-0148's typed-payload
+critique because the payload is one "nobody queries" — is withdrawn for
+the same reason.
+
+This ADR is the natural first case rather than an unlucky one: it is
+accepted but unimplemented, so nothing has to be migrated, only written
+differently.
+
+**The record shape follows `WorkingsetRow`.** One row per override entry —
+tier, the tier's key (`tableTag`+`columnKey`, `shapeHash`+`columnKey`, or
+`columnKey` alone), width in points, font size at capture, app id — with
+latest-wins per key and a tombstone for "clear override". §SD1's three
+tiers, §SD4's wire, and §SD5's capture detection are unaffected; they were
+never storage-dependent.
+
+Two consequences are improvements rather than costs, and are worth naming
+because they retire text above:
+
+- **The cross-window race in §SD2 disappears.** Per-entry rows make
+  last-writer-wins land at entry granularity by construction, so the
+  read-merge-write rule §SD2 introduced — and the same-entry race it
+  admitted it could not close — are both moot.
+- **The LRU cap stops being a document rewrite.** Bounding growth becomes
+  a retention question over rows, the same one every other fact kind has,
+  rather than an eviction pass that rewrites the whole document on save.
+
+**Milestones change shape.** M1's resolver keeps tiers, epoch, capture
+detection and fingerprinting, and loses the document codec and the
+merge-on-save rule. A new milestone precedes it: the fact kind — vocabulary
+terms, the row type, and both `FactsStoreI` backends, mirroring what
+ADR-0148 §SD6 did for workingsets. M4 no longer adds `colw` to
+`Manifest.PersistedKeys`, since no persist key is involved.
+
+**One trap is already known.** The chstore read is a latest-per-key
+collapse, the same shape `ListWorkingsets` needed. Its tombstone predicate
+must be `HAVING argMax(is_tomb, sk) = 0`; a `WHERE NOT is_tomb` filter
+combined with `argMax` returns the newest surviving non-tombstone row and
+silently resurrects a cleared override.
+
+**What is unchanged.** §SD3 still holds — durability comes from the facts
+store and degrades to process lifetime when ClickHouse is down. The persist
+facts backend that discharged M2 keeps its value for every other adopter;
+it is simply no longer this ADR's storage route.
+
 ## Status
 
 Accepted 2026-07-30. M2 was discharged outside this ADR before acceptance
-(§SD3); implementation of M1/M3–M6 not started.
+(§SD3); implementation of M1/M3–M6 not started. Q2/§SD2's storage choice
+was superseded by the ADR-0148 data-centricity invariant (Update
+2026-07-30) before any of it was built.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

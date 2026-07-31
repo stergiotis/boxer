@@ -359,6 +359,12 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-07-30 (later) — `runtime.persist` is a legacy channel under the data-centricity invariant
+
+**§SD3's values are `[]byte` by construction, and §SD6 rejected exactly that shape one level up.** With the facts backend wired (the Update below), persist writes now land in `boxer.facts` — so the channel satisfies "state lives in the facts table" and fails "state is modelled as facts". [ADR-0148](./0148-app-workingsets.md)'s Update of the same date makes the second half a rule rather than a preference, which reclassifies this subject family: it stays wired, stays durable, and stays the right answer for the referenced-content path §SD1 of that ADR describes, but it is no longer where new app state should be sent. State that needs to survive gets a modelled fact kind, as workingsets did.
+
+Nothing about §SD3's grammar, caps, or `StorageI` changes here, and existing adopters keep working — the reclassification is about where the next thing goes, not about breaking what exists. The declared limits stay declared: keys are single subject tokens, there is no listing operation, and the missing enumeration op is still worked around with a hand-rolled index by the applet store.
+
 ### 2026-07-30 — the facts-backed persist backend exists; `runtime.persist` is durable when ClickHouse is up
 
 **§SD6's persist half was never built.** The §SD3 subject family shipped with `persist.MemoryBackend` as its only `StorageBackendI`, and the *Carousel wiring* note below described that as "Phase C scope; a `boxer.facts`-backed backend lands in a follow-up". The follow-up did not land. `FactsStoreI` had carried `WriteState` / `LatestState` / `DeleteState` since M2.5 — documented in the interface itself as existing to "support the persist service when run with a facts-backed StorageBackendI" — and `chstore.Store` implemented all three against live ClickHouse. What was missing was only the adapter between them, so every `StorageI` user was process-scoped in practice while reading as durable in the ADRs. `persist.FactsBackend` is that adapter: `Set` → `WriteState`, `Get` → `LatestState`, `Delete` → `DeleteState`, no cache and no batching.
