@@ -173,6 +173,22 @@ engine from the decision rather than a URL, one per run
 consumed by something that also knows how to observe and cancel on the
 endpoint it names.
 
+### 2026-07-31 — wrapped wire bodies resolve from the statement they wrap
+
+The diagnostics probe's rule — "resolve from the statement it wraps rather
+than from its own `EXPLAIN AST` text" — gained a second consumer and with it
+a general form: `ExecOptions.WrapStatement`, a wire-body-only transform the
+transport applies to the residual between the client-side rewrites and the
+FORMAT step. A lane that sets it (the Flow tab's EXPLAIN lenses, ADR-0153)
+compiles, routes, rewrites and memoises the plain statement; only the bytes
+on the wire differ. The placement argument is the same as the probe's, made
+sharper by the lenses: index structure and schema are endpoint-local, so an
+EXPLAIN answered by any endpoint other than the one the statement routes to
+describes a query that will never run there. The hook lives on `ExecOptions`
+— what the Alternatives rejected was a *decision* field, which would have
+made "no decision" representable; a wire transform carries no placement and
+leaves the required-parameter seam intact.
+
 ## References
 
 - [doc/explanation/query-system-requirements.md](../explanation/query-system-requirements.md) — the requirements and the E-point catalog.

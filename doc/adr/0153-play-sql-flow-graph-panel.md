@@ -226,28 +226,41 @@ nodes carry no ranges — the highlight is statement-lens only.
 
 **EXPLAIN lenses (§SD2 realized).** The controls row gained a lens selector —
 statement (default) · ast · plan · pipeline. Remote lenses ship
-`SELECT * FROM (EXPLAIN … <fused node>)`: the subquery form keeps the outer
-statement an ordinary SELECT, so FORMAT, URL params and endpoint dispatch
-behave exactly as for any node — verified against ClickHouse 26.7, including
-`{p:Type}` substitution inside the explained statement. It does require a
-server recent enough to accept EXPLAIN in a table subquery. One dispatch
-nuance, observed live: the security classifier cannot parse the wrapper
-(grammar1 has no EXPLAIN-in-subquery), so the statement classifies as not
-provably read-only and endpoint auto-routing declines — lens queries always
-go to the configured endpoint, which is also where the explained query's
-tables live. A SET prelude is
-re-lifted in front of the wrapper (inside the parens it would be a syntax
-error; the client harvests it onto the URL as usual). Output dialects: PLAN
-uses `json = 1` (a recursive document; the server's `Node Id` becomes the
-node id), AST parses one-space-per-level indentation, PIPELINE two-space
-indentation with `(PlanStep)` group markers folded into the processors'
-detail. Edges point child→parent throughout, so storage sits left and the
-output right, as on the statement lens; `ReadFrom*` steps render as sources,
-everything else as a new generic `flowOp` kind. Each lens runs on its own
-lane — forgotten on Run (the ADR-0129 memo-on-error lesson) and closed in
-Close — and the parse is memoised on the lane's served key; switching lenses
-clears the shown graph and the selection (node ids do not carry across
-lenses) rather than displaying the previous lens's while the new one loads.
+`SELECT * FROM (EXPLAIN … <residual>)`: the subquery form keeps the outer
+statement an ordinary SELECT, so FORMAT and URL params behave exactly as for
+any node — verified against ClickHouse 26.7, including `{p:Type}`
+substitution inside the explained statement. It does require a server recent
+enough to accept EXPLAIN in a table subquery.
+
+The lens lane compiles and routes the **plain fused statement**; the wrap is
+wire-body-only, applied by the transport to the residual
+(`ExecOptions.WrapStatement` — the ADR-0141 probe precedent, "resolve from
+the statement it wraps", generalized to lanes). This is load-bearing, not
+cosmetic: index structure and schema are endpoint-local, so the EXPLAIN must
+interrogate the endpoint the statement itself routes to — a first cut that
+wrapped before dispatch sent every lens query to the configured endpoint,
+because the security classifier cannot parse the wrapper (grammar1 has no
+EXPLAIN-in-subquery) and auto-routing declined. Wrapping late also lets the
+pre-execute rewrites and the SET-prelude harvest see the statement (a pass
+skips what it cannot parse, so an early wrap shipped the inner statement
+unrewritten), and the demand memo keys on the statement itself. The wrapper
+is applied between the rewrites and the FORMAT step — a FORMAT inside the
+parens would bind to the inner statement — and the row cap is read from the
+wire form, since an inner LIMIT bounds the explained query, not the
+wrapper's result.
+
+Output dialects: PLAN uses `json = 1` (a recursive document; the server's
+`Node Id` becomes the node id), AST parses one-space-per-level indentation,
+PIPELINE two-space indentation with `(PlanStep)` group markers folded into
+the processors' detail. Edges point child→parent throughout, so storage sits
+left and the output right, as on the statement lens; `ReadFrom*` steps
+render as sources, everything else as a new generic `flowOp` kind. Each lens
+runs on its own lane — forgotten on Run (the ADR-0129 memo-on-error lesson)
+and closed in Close — and the parse is memoised on the lane's served key,
+scoped by lens (all three lanes compile the same plain statement, so served
+keys collide across lenses by construction); switching lenses clears the
+shown graph and the selection (node ids do not carry across lenses) rather
+than displaying the previous lens's while the new one loads.
 
 Even at two producers no lens *interface* materialized: the seam is the
 `flowGraph` IR itself plus one dispatch switch (`parseLensRecord`), and a Go
