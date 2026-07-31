@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-31
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-07-31
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0153: `play` SQL flow-graph panel — a clause-level dataflow view of the active node
 
@@ -184,22 +184,19 @@ status line rather than truncating silently.
 
 ## Status
 
-Proposed 2026-07-31. Milestones: **M1** IR + extractor + fixture tests
-(pure, no UI) → **M2** driver + tab body (memoised derivation, cached
-layout, local selection, width probe) → **M3** registration + registry-test
-updates + env-vars regen → **M4** live verification (scripted focus +
-egui-mcp drive), then a dated Update here.
-
-Built the same day, M1–M4: 25 extractor fixtures (including the order
-invariant, the sibling-CTE contract, depth/node caps and id determinism)
-plus 6 driver tests, full `apps/play` suite green. M4 ran the
+Accepted 2026-07-31 (reviewed-by p@stergiotis). Proposed, built and
+verified the same day: **M1** IR + extractor + fixture tests → **M2**
+driver + tab body (memoised derivation, cached layout, local selection,
+width probe) → **M3** registration + registry-test updates + env-vars
+regen → **M4** live verification. 25 extractor fixtures (including the
+order invariant, the sibling-CTE contract, depth/node caps and id
+determinism) plus 6 driver tests, full `apps/play` suite green. M4 ran the
 scripted-screenshot path (`BOXER_PLAY_FOCUS_FLOW` on a private headless
 weston): the capture shows the left-right chain, the `l`/`r` join fan-in,
 the layout toggle, the status line and the result ellipse for a
 CTE-self-join query. The click path (local highlight + detail line) is
-covered by the driver tests, not yet driven interactively. Code is in the
-working tree pending review; acceptance, if granted, arrives as a dated
-Update.
+covered by the driver tests, not yet driven interactively. The code landed
+as `50902410`. Post-acceptance changes arrive as dated Updates.
 
 ## References
 
