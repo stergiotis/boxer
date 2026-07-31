@@ -57,6 +57,13 @@ type flowDriver struct {
 	graph      flowGraph
 	graphErr   error
 
+	// Lineage lens: its own memo over the same active node (both local
+	// lenses may alternate without invalidating each other).
+	lineageKey  string
+	lineageGraph flowGraph
+	lineageErr  error
+	lineageNote string
+
 	// EXPLAIN lenses: one lane per lens (nil map for an unwired host —
 	// tests), the parse memoised on the lane's served key. lensShown tracks
 	// which lens the parsed graph belongs to, so switching lenses clears the
@@ -181,6 +188,26 @@ func (inst *flowDriver) syncLens() {
 	inst.selectedID = ""
 }
 
+// ensureLineage re-derives the lineage graph when the memo key moves —
+// the statement-lens discipline, on its own key.
+func (inst *flowDriver) ensureLineage(node splitNode) {
+	key := flowMemoKey(node)
+	if key == inst.lineageKey {
+		return
+	}
+	inst.lineageKey = key
+	inst.activeNode = node
+	sibs := make(map[string]struct{}, len(node.DependsOn))
+	for _, d := range node.DependsOn {
+		sibs[string(d)] = struct{}{}
+	}
+	inst.lineageGraph, inst.lineageNote, inst.lineageErr = buildLineageGraph(node.SQL, sibs)
+	if inst.lineageErr != nil {
+		inst.lineageGraph = flowGraph{}
+	}
+	inst.pruneSelection(inst.lineageGraph)
+}
+
 // ensureLensGraph parses a lens lane's served lines once per served key; a
 // selection whose node vanished is dropped. The memo key is lens-scoped:
 // with the wrap on the transport, all three lanes compile the SAME plain
@@ -213,14 +240,31 @@ func (inst *flowDriver) pruneSelection(g flowGraph) {
 	inst.selectedID = ""
 }
 
-// statementSelection returns the clicked node and the split node the
-// statement-lens graph derived from — the editor-highlight source. Absent for
-// remote lenses (their nodes carry no source ranges).
+// statementSelection returns the clicked node and the split node the current
+// LOCAL lens's graph derived from — the editor-highlight source. Both local
+// lenses carry node-SQL-relative ranges (a clause on the statement lens, a
+// select item or identifier occurrence on the lineage lens); remote lenses
+// carry none.
 func (inst *flowDriver) statementSelection() (n flowNode, node splitNode, ok bool) {
-	if inst == nil || inst.lens != lensStatement || inst.selectedID == "" || inst.graphErr != nil {
+	if inst == nil || inst.selectedID == "" {
 		return
 	}
-	for _, fn := range inst.graph.Nodes {
+	var g flowGraph
+	switch inst.lens {
+	case lensStatement:
+		if inst.graphErr != nil {
+			return
+		}
+		g = inst.graph
+	case lensLineage:
+		if inst.lineageErr != nil {
+			return
+		}
+		g = inst.lineageGraph
+	default:
+		return
+	}
+	for _, fn := range g.Nodes {
 		if fn.ID == inst.selectedID {
 			return fn, inst.activeNode, true
 		}
@@ -258,6 +302,10 @@ func (inst *PlayApp) renderFlowTab() {
 	d := inst.flow
 	d.renderControls(active)
 	d.syncLens()
+	if d.lens == lensLineage {
+		d.renderLineage(inst.currentSplit, active, inst.splitErr)
+		return
+	}
 	if d.lens.remote() {
 		lines, feed := inst.demandFlowLens(active)
 		d.renderLens(lines, feed)
@@ -355,6 +403,36 @@ const (
 	flowViewGraph flowLensView = iota
 	flowViewText // the raw EXPLAIN output, indentation preserved
 )
+
+// renderLineage is the lineage lens's body: output-column provenance of the
+// active node's SELECT list (play_flow_lineage.go), same discipline as the
+// statement lens.
+func (inst *flowDriver) renderLineage(split splitResult, active NodeID, splitErr error) {
+	node, ok := findSplitNode(split, active)
+	if !ok {
+		msg := "Run a query to see its column lineage."
+		if splitErr != nil {
+			msg = "The buffer did not split: " + truncateRunes(firstLine(splitErr.Error()), 120)
+		}
+		for rt := range c.RichTextLabel(msg) {
+			rt.Small().Weak()
+		}
+		return
+	}
+	inst.ensureLineage(node)
+	if inst.lineageErr != nil {
+		for rt := range c.RichTextLabel("no lineage: " + truncateRunes(firstLine(inst.lineageErr.Error()), 140)) {
+			rt.Small().Weak()
+		}
+		return
+	}
+	if inst.lineageNote != "" {
+		for rt := range c.RichTextLabel(inst.lineageNote) {
+			rt.Small().Weak()
+		}
+	}
+	inst.renderGraph(inst.lineageGraph)
+}
 
 // renderLens is a remote lens's body: the parsed EXPLAIN graph or the raw
 // output text, with the lane's loading/error state. The last-parsed graph
@@ -569,6 +647,7 @@ func (inst *flowDriver) renderControls(active NodeID) {
 			Option(lensPipeline, "pipeline").
 			Option(lensEstimate, "estimate").
 			Option(lensIndexes, "indexes").
+			Option(lensLineage, "lineage").
 			SendResp()
 		c.Label("layout").Send()
 		selector.Segmented(inst.ids, "flow-rank-dir", &inst.rankDir).

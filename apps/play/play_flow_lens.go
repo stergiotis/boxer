@@ -35,11 +35,12 @@ const (
 	lensPipeline
 	lensEstimate // EXPLAIN ESTIMATE — tabular per-table parts/rows/marks
 	lensIndexes  // EXPLAIN PLAN indexes=1 — the plan with per-read index usage
+	lensLineage  // column-level lineage of the SELECT list — local, like statement
 )
 
-// remote reports whether the lens needs a server round-trip (everything but
-// the static statement lens).
-func (l flowLens) remote() bool { return l != lensStatement }
+// remote reports whether the lens needs a server round-trip — everything but
+// the two local derivations (statement, lineage).
+func (l flowLens) remote() bool { return l != lensStatement && l != lensLineage }
 
 func (l flowLens) String() string {
 	switch l {
@@ -53,6 +54,8 @@ func (l flowLens) String() string {
 		return "estimate"
 	case lensIndexes:
 		return "indexes"
+	case lensLineage:
+		return "lineage"
 	}
 	return "statement"
 }

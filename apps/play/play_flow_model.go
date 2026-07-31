@@ -37,14 +37,16 @@ const (
 	flowLimit // LIMIT / LIMIT BY / OFFSET
 	flowUnion // UNION / EXCEPT / INTERSECT merge
 	flowResult
-	flowOp // a lens operator (an EXPLAIN plan step, pipeline processor, AST node)
+	flowOp        // a lens operator (an EXPLAIN plan step, pipeline processor, AST node)
+	flowColumnSrc // lineage: a source column (table/CTE/subquery side)
+	flowColumnOut // lineage: an output column (a SELECT-list item)
 )
 
 // isSource reports whether the kind is one of the four source kinds (used for
 // styling; sources are where the dataflow begins).
 func (k flowNodeKind) isSource() bool {
 	switch k {
-	case flowSourceTable, flowSourceCTE, flowSourceSubquery, flowSourceFunction:
+	case flowSourceTable, flowSourceCTE, flowSourceSubquery, flowSourceFunction, flowColumnSrc:
 		return true
 	}
 	return false

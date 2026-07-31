@@ -469,6 +469,17 @@ The **lens** selector picks what the graph is derived from:
   index usage folded into its detail — selected vs initial parts and
   granules per index, so a filter that fails to prune shows up as `n/n`.
   Click the read node (or flip to the text view) for the figures.
+- **lineage** — column-level provenance of the SELECT list, derived locally
+  like the statement lens: each output column is fed by the source columns
+  its expression references, resolved the way ClickHouse resolves them — a
+  select-list alias shadows a column, so `SELECT a AS b, b+1 AS c` draws
+  `c ← b ← t.a`. A bare column over several joined sources is flagged
+  ambiguous rather than guessed; `*` stays a star per source (the panel
+  cannot know the column set offline); scalar subqueries are marked, not
+  traced. Clicking a column highlights its expression (or the identifier)
+  in the editor. Columns a `WHERE` or `GROUP BY` consumes without
+  projecting are not drawn — this lens answers "where does each output
+  column come from", not "what does the query read".
 
 For a remote lens, the **view** toggle switches between the parsed graph and
 the **raw EXPLAIN text** exactly as the server returned it, indentation
