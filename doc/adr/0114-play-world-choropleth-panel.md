@@ -295,3 +295,35 @@ geometry, or pan/zoom becoming a goal, are the two facts that would flip it.
 The ~22 ms resolve pass is worth attacking on its own terms — it recomputes a
 per-pixel subsample majority that depends only on the raster size, not on the
 data — but that is an optimization inside §SD3, not a change to it.
+
+## Update (2026-08-01, later) — the resolve pass, split and cached
+
+The optimization the previous update left open. §SD3's pass now separates what
+the outlines and the output size determine from what the data does: the
+scanline fill, the border walk and the per-pixel subsample majority are built
+once per size and kept, and a value change re-runs only the recolour. The
+recolour is a lookup per pixel — the colour of a pixel whose subsamples agree
+is its own fill blended with its border coverage, both known ahead of the data,
+so the (fill × coverage) table is built once per repaint and indexed by the
+cached majority. Only the pixels whose subsamples disagree still need the
+four-way average, and they are 1–2% of the raster (13.9k of 851k at 1280 px).
+
+Measured on the same machine as the previous update, at 1280 px:
+
+| | before | after |
+| --- | --- | --- |
+| value / palette change (per query result) | ~30 ms, 23.8 MB | **~1.0 ms, 4 KB** |
+| size change (pane resize) | ~30 ms | **~14.5 ms** |
+
+The size change halved as a side effect: the majority reduction is skipped for
+the 98% of pixels whose subsamples agree. The cache costs ~1.1 MB beyond what
+the widget already retained (the coverage byte per pixel and the boundary
+list; the majority buffer *is* the hit-test index buffer, which was retained
+already).
+
+This changes no decision — §SD3 still rasterizes, for the reasons above — but
+it moves the number the previous update argued from. A value change was the
+raster's one visible cost against a painted map; at ~1 ms it is no longer a
+frame's worth of work, while painting would still be ~85 KB and ~10k triangles
+every frame. The reduction is bit-identical to the pass it replaces, pinned by
+hashes taken before the split.
