@@ -402,6 +402,61 @@ scene_29_history_two_runs() {
 {"do":"capture","text":"29_history_two_runs","settleMs":800}'
 }
 
+scene_30_regex_affordance() {
+	desc="Affordances — the inline regex tester the editor attaches to a recognised multiMatch* call: each pattern compiled in-process and counted against a shared test input"
+	# The tester is driven by the DEBOUNCED parse, not by Run: the call site is
+	# reported by the FunctionEvaluator that rides the canonicalisation
+	# pipeline, which registers the multiMatch* family with a discard handler —
+	# it observes the call and folds nothing, so the arguments survive verbatim
+	# in the buffer for the affordance to slice. Nothing has to run for the
+	# block to appear; the Run below is only what fills the result panes.
+	senv=(BOXER_PLAY_FOCUS_TABLE=1)
+	# The haystack is a column reference, so the call cannot be constant-folded
+	# — hence the "(non-literal haystack)" hint beside the header. The patterns
+	# are chosen to separate on one test string: 'AIR ?LINES' hits twice
+	# (AIRLINES and AIR LINES), the other two once each.
+	#
+	# The query is spread over eight lines on purpose. The scroll below takes
+	# the pane to its end, which cuts the first three editor lines out of frame;
+	# folding this onto four lines would take the multiMatchAny call — the one
+	# line the capture is about — with them.
+	sql="SELECT ownOp     AS operator,
+       uniq(icao) AS aircraft,
+       count()    AS pings
+FROM default.planes_mercator_sample100
+WHERE multiMatchAny(ownOp, ['AIR ?LINES', '^(FEDERAL|UNITED)', 'TRUSTEE\$'])
+GROUP BY operator
+ORDER BY pings DESC
+LIMIT 20"
+	# The test input is addressed by index, not by name. An untouched TextEdit
+	# carries neither an accessible name nor a value, so it is nameless in the
+	# tree — and `--dumpTree` does not even list it, since that skips nodes with
+	# neither. Two of them are on screen: the Docs pane's look-up field first,
+	# this one second. An out-of-range index is an error rather than a silent
+	# pick of the wrong field, so the tour fails loudly if that order ever
+	# changes.
+	#
+	# focus and type are separate steps ON PURPOSE. egui applies an injected
+	# AccessKit focus request on the frame after it arrives, so text sent in the
+	# same batch is delivered to whatever had focus before — nothing — and is
+	# dropped without an error. The settle between them is what makes the text
+	# land. Patterns are compiled here by Go's regexp (RE2) while the server
+	# runs the same strings through VectorScan (ADR-0054 §SD1), so the counts
+	# are a tuning aid, not the server's own verdict.
+	#
+	# The scroll is not decoration: the editor reserves a FIXED strip under
+	# itself for the affordance block, and a third pattern row overflows it. The
+	# pane scrolls, the strip does not grow, so without this the capture ends at
+	# pattern [0]. The pointer has to be parked inside the pane first — a wheel
+	# event goes to whatever is hovered — and below the editor box, or the
+	# editor's own internal scroll eats it.
+	steps='{"do":"focus","role":"text_input","nth":1,"comment":"the shared test input — nameless, so by index","settleMs":400}
+{"do":"type","role":"text_input","nth":1,"text":"UNITED AIRLINES INC / DELTA AIR LINES INC TRUSTEE"}
+{"do":"click","x":600,"y":520,"comment":"park the pointer over the affordance block"}
+{"do":"scroll","x":0,"y":-200,"settleMs":500}
+{"do":"capture","text":"30_regex_affordance","settleMs":800}'
+}
+
 # =============================================================================
 # Fixtures the scenes read. Checked once, up front, so a missing one is a line
 # of output rather than twenty screenshots of an error state.
