@@ -529,18 +529,24 @@ func (inst *PlayApp) renderAttrExplodeGrid(schema *arrow.Schema, visCols []int, 
 		for range et.Headers(0, colPos) {
 			c.AddSpace(cellPadX)
 			field := schema.Field(arrowCol)
+			// The full type goes on hover and the header carries the short
+			// tag, for the same reason the per-DB-row grid does it: whatever
+			// the header renders is a floor under the column's width, and the
+			// spelled-out type is routinely wider than the values below it.
 			if label := inst.colLabels[field.Name]; label != "" {
-				for range c.HoverText(field.Name).KeepIter() {
+				for range c.HoverText(field.Name + " — " + field.Type.String()).KeepIter() {
 					for rt := range c.RichTextLabel(label) {
 						rt.Strong().Monospace()
 					}
 				}
 			} else {
-				for rt := range c.RichTextLabel(field.Name) {
-					rt.Strong().Monospace()
+				for range c.HoverText(field.Type.String()).KeepIter() {
+					for rt := range c.RichTextLabel(field.Name) {
+						rt.Strong().Monospace()
+					}
 				}
 			}
-			for rt := range c.RichTextLabel(field.Type.String()) {
+			for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
 				rt.Small().Weak().Monospace()
 			}
 		}

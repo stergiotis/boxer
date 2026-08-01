@@ -138,3 +138,53 @@ func TestListElemType(t *testing.T) {
 		t.Errorf("List<int64> element classified string-like, want numeric")
 	}
 }
+
+// shortArrowType is a layout decision: the header's width is a floor under
+// the column's, so the tag must stay short for every type the fixtures
+// actually produce.
+func TestShortArrowType(t *testing.T) {
+	cases := []struct {
+		dt   arrow.DataType
+		want string
+	}{
+		{arrow.PrimitiveTypes.Uint64, "u64"},
+		{arrow.PrimitiveTypes.Int32, "i32"},
+		{arrow.PrimitiveTypes.Float32, "f32"},
+		{arrow.PrimitiveTypes.Float64, "f64"},
+		{arrow.BinaryTypes.String, "str"},
+		{arrow.BinaryTypes.LargeString, "str"},
+		{arrow.FixedWidthTypes.Boolean, "bool"},
+		{arrow.FixedWidthTypes.Timestamp_us, "ts"},
+		// The leeway value columns the Table pane spends its life showing.
+		{arrow.ListOf(arrow.BinaryTypes.String), "[str]"},
+		{arrow.LargeListOf(arrow.PrimitiveTypes.Float32), "[f32]"},
+		{arrow.ListOf(arrow.ListOf(arrow.PrimitiveTypes.Uint64)), "[[u64]]"},
+		// CH LowCardinality(String) arrives dictionary-encoded; the encoding
+		// is storage, not something the header should spend width on.
+		{&arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Uint32, ValueType: arrow.BinaryTypes.String}, "str"},
+	}
+	for _, tc := range cases {
+		if got := shortArrowType(tc.dt); got != tc.want {
+			t.Errorf("shortArrowType(%s) = %q, want %q", tc.dt, got, tc.want)
+		}
+	}
+}
+
+// The point of the tag is that it is narrower than what it replaces. A type
+// this does not know falls through to its own String(), which is allowed to
+// be long — but nothing here may be *longer* than the spelled-out type.
+func TestShortArrowTypeNeverWidensTheHeader(t *testing.T) {
+	for _, dt := range []arrow.DataType{
+		arrow.PrimitiveTypes.Uint64,
+		arrow.BinaryTypes.String,
+		arrow.ListOf(arrow.PrimitiveTypes.Float32),
+		arrow.LargeListOf(arrow.BinaryTypes.String),
+		arrow.FixedWidthTypes.Timestamp_us,
+		arrow.StructOf(arrow.Field{Name: "a", Type: arrow.BinaryTypes.String}),
+	} {
+		short, full := shortArrowType(dt), dt.String()
+		if utf8.RuneCountInString(short) > utf8.RuneCountInString(full) {
+			t.Errorf("shortArrowType(%s) = %q is wider than the full type it replaces", dt, short)
+		}
+	}
+}

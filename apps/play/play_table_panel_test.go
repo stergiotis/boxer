@@ -39,3 +39,45 @@ func TestTablePanelDeclaresMainChannel(t *testing.T) {
 	require.Equal(t, PanelID("table"), p.ID())
 	require.Equal(t, []ChannelSpec{{ID: chMain, Required: true, Label: "rows"}}, p.Channels())
 }
+
+// The re-fit trigger has to fire exactly once per change: never firing
+// leaves a new result wearing the previous one's column widths, and firing
+// every frame re-measures the columns while the user is reading them.
+func TestTableColsChangedFiresOncePerChange(t *testing.T) {
+	inst := &PlayApp{}
+	a := schemaWith(strField("x"), strField("y"))
+	b := schemaWith(strField("x"), strField("y"))
+
+	require.True(t, inst.tableColsChanged(a, []int{0, 1}), "the first result is a change")
+	require.False(t, inst.tableColsChanged(a, []int{0, 1}), "a steady frame is not")
+
+	// A new query: same column count and names, but a different result and
+	// so a different *arrow.Schema.
+	require.True(t, inst.tableColsChanged(b, []int{0, 1}), "a new result re-fits")
+	require.False(t, inst.tableColsChanged(b, []int{0, 1}))
+
+	// The options bar reveals a column without touching the schema. This is
+	// the case that keying on the schema alone would miss, and it is the one
+	// that puts a column into a slot sized for its predecessor.
+	require.True(t, inst.tableColsChanged(b, []int{0, 1, 2}), "a revealed column re-fits")
+	require.False(t, inst.tableColsChanged(b, []int{0, 1, 2}))
+
+	// Hiding one again is equally a change, and a reordering with the same
+	// length must not slip through a length-only comparison.
+	require.True(t, inst.tableColsChanged(b, []int{0, 1}))
+	require.True(t, inst.tableColsChanged(b, []int{1, 0}), "a reorder changes what each slot holds")
+	require.False(t, inst.tableColsChanged(b, []int{1, 0}))
+}
+
+// The recorded column set must be a copy: visibleTableCols hands back a
+// slice the next frame is free to overwrite, and retaining it would make
+// every later comparison compare a slice with itself.
+func TestTableColsChangedCopiesTheColumnSet(t *testing.T) {
+	inst := &PlayApp{}
+	s := schemaWith(strField("x"))
+	cols := []int{0, 1}
+	require.True(t, inst.tableColsChanged(s, cols))
+
+	cols[1] = 7 // the caller's buffer, reused
+	require.True(t, inst.tableColsChanged(s, cols), "a mutated column set is a change")
+}

@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -457,6 +459,14 @@ type PlayApp struct {
 	// string lengths.
 	colWidthsForSchema *arrow.Schema
 	colWidths          []float32
+
+	// The column set the results grid last emitted. egui_table fits a
+	// column to its content only on a table's first show, so play asks for
+	// a re-fit whenever this changes; see tableColsChanged. Distinct from
+	// colWidthsForSchema above, which caches the width *estimate* — this
+	// one decides when the crate is told to measure for itself.
+	tableFitSchema *arrow.Schema
+	tableFitCols   []int
 
 	// Friendly leeway column labels for the current result: physical column
 	// name → display label (section / section:column, via lwsql.BuildLabels).
@@ -2747,6 +2757,8 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	cellPadX := styletokens.PaddingTight(inst.density)
 
 	// Leading "#" selector column (click to select row) + the data columns.
+	// It never takes part in a re-fit: it is not resizable, so egui_table
+	// never stores a width for it and the one emitted here always stands.
 	c.EtColumn(44.0).Resizable(false).Send()
 
 	// Emit per-column widths from the schema-keyed cache. Resampling every
@@ -2756,8 +2768,20 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// changes, i.e. on a new query.
 	inst.ensureColLabels(schema)
 	inst.ensureColWidths(rec, schema, pageStart, pageEnd)
+	// egui_table keeps its own width per column *position*, and re-fits to
+	// content only on a table's first show ever — so without this a second
+	// query inherits the first one's widths by position, and a revealed
+	// support column lands in a slot sized for whatever used to sit there.
+	// Asking for a re-fit on the frame the column set changes is what makes
+	// the widths belong to the result on screen. It has to be one frame:
+	// re-fitting continuously would move the columns while the user reads.
+	refit := inst.tableColsChanged(schema, visCols)
 	for _, arrowCol := range visCols {
-		c.EtColumn(inst.colWidths[arrowCol]).Resizable(true).Send()
+		col := c.EtColumn(inst.colWidths[arrowCol]).Resizable(true)
+		if refit {
+			col = col.AutoSizeThisFrame(true)
+		}
+		col.Send()
 	}
 
 	// The header-click sort (play_table_sort.go) is a permutation of the rows
@@ -2810,9 +2834,10 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			}
 			// The header is a frameless button: clicking it cycles this
 			// column's sort (asc → desc → unsorted). The physical column name
-			// stays on hover, as it did when the header was a plain label, so
-			// a leeway handle never hides the name it stands for.
-			for range c.HoverText(field.Name + " — click to sort").KeepIter() {
+			// and the full type stay on hover, as the name did when the header
+			// was a plain label — so a leeway handle never hides the name it
+			// stands for, and abbreviating the type below loses nothing.
+			for range c.HoverText(field.Name + " — " + field.Type.String() + " — click to sort").KeepIter() {
 				if c.Button(ids.PrepareSeq(tableSortIDSalt+uint64(arrowCol)),
 					c.Atoms().BeginRichText(name+inst.tableSort.glyph(arrowCol)).Strong().Monospace().End().Keep()).
 					Frame(false).
@@ -2821,7 +2846,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 					inst.tableSort.clicked(arrowCol)
 				}
 			}
-			for rt := range c.RichTextLabel(field.Type.String()) {
+			for rt := range c.RichTextLabel(shortArrowType(field.Type)) {
 				rt.Small().Weak().Monospace()
 			}
 		}
@@ -2875,9 +2900,16 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 // ensureColWidths samples per-column widths the first time a given schema
 // is seen and caches them. Subsequent calls with the same schema are a
 // cheap pointer compare. The sample window is the first colSampleRows rows
-// of whichever page happens to be active when the cache gets populated —
-// good enough for initial sizing; user resizes via drag persist separately
-// in egui_table's own state.
+// of whichever page happens to be active when the cache gets populated.
+//
+// This is a *seed*, not the width the user ends up looking at. egui_table
+// re-fits the column to what it can actually measure — real glyph advances,
+// the header, the visible cells — on the frame renderMasterTable asks it to
+// (tableColsChanged), and keeps its own width from then on. What this
+// estimate buys is the frame before that measurement lands, and the columns
+// egui_table never stores a width for. Keeping it roughly right is worth the
+// few lines; making it exact would be work spent on a number that is
+// overwritten a frame later.
 func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema, pageStart, pageEnd int64) {
 	if schema == inst.colWidthsForSchema && len(inst.colWidths) == schema.NumFields() {
 		return
@@ -2893,14 +2925,16 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	cellPadX := styletokens.PaddingTight(inst.density)
 	for col := 0; col < ncols; col++ {
 		// The header shows the friendly label when there is one, so size to it
-		// rather than the (longer) physical name.
-		headerText := schema.Field(col).Name
+		// rather than the (longer) physical name — plus the short type tag it
+		// renders beside the label, which is part of the header's width.
+		field := schema.Field(col)
+		headerText := field.Name
 		if lbl := inst.colLabels[headerText]; lbl != "" {
 			headerText = lbl
 		}
-		maxChars := len(headerText)
+		maxChars := utf8.RuneCountInString(headerText) + 1 + utf8.RuneCountInString(shortArrowType(field.Type))
 		for r := int64(0); r < sampleN; r++ {
-			if n := len(formatCell(rec, col, pageStart+r)); n > maxChars {
+			if n := utf8.RuneCountInString(formatCell(rec, col, pageStart+r)); n > maxChars {
 				maxChars = n
 			}
 		}
@@ -2915,6 +2949,25 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 	}
 	inst.colWidthsForSchema = schema
 	inst.colWidths = widths
+}
+
+// tableColsChanged reports whether the results grid is about to emit a
+// different set of columns than it did last frame, and records the new one.
+// It is the trigger for a one-frame re-fit, so it must answer true exactly
+// once per change.
+//
+// Both halves matter. The schema pointer catches a new query; the visCols
+// contents catch a column set that changed under an unchanged schema, which
+// is what the options bar's support/membership reveals and the hide-empty
+// toggle do. Keying on the schema alone would leave a revealed column
+// wearing the width of whichever column used to occupy its position.
+func (inst *PlayApp) tableColsChanged(schema *arrow.Schema, visCols []int) (changed bool) {
+	changed = schema != inst.tableFitSchema || !slices.Equal(visCols, inst.tableFitCols)
+	if changed {
+		inst.tableFitSchema = schema
+		inst.tableFitCols = append(inst.tableFitCols[:0], visCols...)
+	}
+	return
 }
 
 // ensureColLabels rebuilds the friendly column-label map when the result schema

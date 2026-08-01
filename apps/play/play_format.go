@@ -127,6 +127,74 @@ func stringLikeArrowType(dt arrow.DataType) bool {
 	return false
 }
 
+// shortArrowType renders an Arrow type as a compact tag for a column header:
+// `list<item: float32>` becomes `[f32]`, `utf8` becomes `str`.
+//
+// This is a layout decision as much as a display one. egui_table fits a column
+// to the widest thing in it *including the header*, so whatever the header
+// renders sets a floor under the column's width — and the full type string is
+// routinely three times the width of the values below it, which is how a
+// column of `[len=1]` cells ends up 270px wide. The header keeps the full type
+// on hover, so nothing is lost, only moved.
+//
+// An unrecognised type falls through to its own String(): a long tag is better
+// than a wrong one, and the width cost lands only on types this does not know.
+func shortArrowType(dt arrow.DataType) string {
+	switch t := dt.(type) {
+	case *arrow.ListType:
+		return "[" + shortArrowType(t.Elem()) + "]"
+	case *arrow.LargeListType:
+		return "[" + shortArrowType(t.Elem()) + "]"
+	case *arrow.FixedSizeListType:
+		return "[" + shortArrowType(t.Elem()) + "]"
+	case *arrow.DictionaryType:
+		// The dictionary encoding is a storage detail — CH LowCardinality(String)
+		// arrives this way and reads as its value type to anyone writing SQL.
+		return shortArrowType(t.ValueType)
+	}
+	switch dt.ID() {
+	case arrow.BOOL:
+		return "bool"
+	case arrow.INT8:
+		return "i8"
+	case arrow.INT16:
+		return "i16"
+	case arrow.INT32:
+		return "i32"
+	case arrow.INT64:
+		return "i64"
+	case arrow.UINT8:
+		return "u8"
+	case arrow.UINT16:
+		return "u16"
+	case arrow.UINT32:
+		return "u32"
+	case arrow.UINT64:
+		return "u64"
+	case arrow.FLOAT16:
+		return "f16"
+	case arrow.FLOAT32:
+		return "f32"
+	case arrow.FLOAT64:
+		return "f64"
+	case arrow.STRING, arrow.LARGE_STRING:
+		return "str"
+	case arrow.BINARY, arrow.LARGE_BINARY, arrow.FIXED_SIZE_BINARY:
+		return "bin"
+	case arrow.DATE32, arrow.DATE64:
+		return "date"
+	case arrow.TIMESTAMP:
+		return "ts"
+	case arrow.TIME32, arrow.TIME64:
+		return "time"
+	case arrow.DECIMAL128, arrow.DECIMAL256:
+		return "dec"
+	case arrow.NULL:
+		return "null"
+	}
+	return dt.String()
+}
+
 // listElemType returns a list type's element type, or dt unchanged when it is
 // not a list. The per-attribute Table view explodes each list value down its
 // own rows, so a value column's element type — not the outer List — is what
