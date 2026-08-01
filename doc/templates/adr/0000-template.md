@@ -47,6 +47,14 @@ reconstruct the pressures without external context.>
 <The choice we are making, stated in one or two sentences. Prefer the
 active voice, e.g. "We will …".>
 
+## Surfaces — Tier 1
+
+> An inventory, not prose: which named contracts change shape, and what moves with them. Required when the decision touches a core surface per [CODINGSTANDARDS § What triggers an ADR](../../../CODINGSTANDARDS.md#what-triggers-an-adr); optional for a leaf decision. Delete this section if unused. `Consequences` records what the change *costs*; this section records what it *reaches*.
+
+| Surface | Change | Moves with it |
+| --- | --- | --- |
+| <named contract — encoding, registry, IDL, exported API, gate> | <added / reshaped / removed> | <the downstream pass, generated artifact, or consumer that must change in the same commit> |
+
 ## Alternatives
 
 - **<Alternative A>.** <One sentence on why rejected.>
@@ -65,6 +73,23 @@ active voice, e.g. "We will …".>
 ### Neutral
 
 - <Effects that are neither clearly good nor bad but worth recording.>
+
+## Migration — Tier 1
+
+> What breaks, and what a reader who is already on the old shape does about it. Delete this section if the decision breaks nothing. State "nothing to migrate" explicitly rather than deleting when the surface changed but the change is additive — the distinction is what a later reader needs.
+
+- **Breaks.** <What stops compiling, parsing, or round-tripping. Name the symbol / encoding / key.>
+- **Path.** <The steps, in order. Link a recipe under `doc/migration/` when the steps run past a few lines.>
+- **Regeneration.** <Which generators must re-run, and whether both sides of an FFI boundary need rebuilding.>
+- **Old shape.** <Deprecated-then-removed, removed outright, or kept indefinitely — and if removed, when.>
+
+## Verification plan — Tier 1
+
+> How the next reader will know this still holds. Name the lane, not the intention. Optional for a leaf decision; delete this section if unused. "None, because <reason>" is a valid entry — an unverifiable decision is worth marking as one.
+
+- **Lane.** <default `go test`, the `//go:build integration` lane, a golden, a headless scene, the screenshot tour, a benchmark, a property test.>
+- **What would fail.** <The observable that goes red if the decision is violated or silently regressed.>
+- **Gap.** <What this plan does not cover, and why that is acceptable.>
 
 ## Status
 

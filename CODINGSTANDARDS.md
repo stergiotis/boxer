@@ -35,7 +35,28 @@ This holds even when the request reads as "add a package that does X" or "integr
 
 *   **Iterate, then freeze.** Present concrete options with their trade-offs and let the decision settle before implementing. Capture it with the ADR template at [`doc/templates/adr/0000-template.md`](./doc/templates/adr/0000-template.md); use a QOC matrix when there are ≥3 viable options against ≥3 criteria (see [§1 of DOCUMENTATION_STANDARD.md](./doc/DOCUMENTATION_STANDARD.md#1-artifact-types--where-they-belong)).
 *   **Implement against the accepted decision.** Start coding once the ADR is `accepted`; the ADR is then the contract the code follows. A later change of direction is a new or superseding ADR, not a silent divergence in the implementation.
-*   **Scope.** This covers new packages, new subsystems, and changes that cross package boundaries or revise a cross-cutting contract. Bug fixes, local refactors, and additions that fit an existing package's established shape do not need an ADR first.
+### What triggers an ADR
+
+"Significant" is not checkable at the change site, so the trigger is enumerated instead. Two tiers, and they are answered in order.
+
+**Tier 1 — core surfaces.** A contract whose consumers are *not visible from the file being edited*. Touching the shape of one of these needs an ADR before the code:
+
+| Surface | Where it lives |
+| --- | --- |
+| Wire and on-disk encodings | leeway encodings, the FFFI2 frame boundary, `buscodec`, ClickHouse DDL, the facts schema |
+| Generated-code inputs | the egui2 IDL under `public/thestack/imzero2/egui2/definition/`, the leeway codec generators — anything `go generate ./...` re-emits |
+| Named registries | environment variables ([ADR-0009](./doc/adr/0009-environment-variable-registry.md)), keelson subjects and vocab, capability subjects ([ADR-0026](./doc/adr/0026-app-runtime-and-capability-subjects.md)), design-system tokens |
+| Pipeline stage contracts | leeway's six stages, nanopass pass properties — a change in one stage usually moves a downstream pass with it |
+| Exported Go API under `public/` | anything a downstream module compiles against |
+| Build and toolchain gates | `./tags`, the entry-points baseline, the lint and license gates |
+
+Adding a *member* to a registry is not a decision; changing what a registry means, how it is keyed, or how it is encoded is.
+
+**Tier 2 — leaf surfaces.** Apps under `apps/`, individual widgets, and package-internal work, where the blast radius stops at the leaf. These need an ADR only when the *shape* is new — a new app, a new widget contract, a new genre of panel — not when an established shape gains another instance. A `play` panel that follows the existing panel contract is code; a new *kind* of panel is a decision.
+
+**Neither.** Bug fixes, local refactors, and additions that fit an existing package's established shape do not need an ADR first.
+
+When a change spans both tiers, it is a Tier 1 change: the core surface sets the bar.
 
 ## Go Version
 Target the most recent stable go version available.
