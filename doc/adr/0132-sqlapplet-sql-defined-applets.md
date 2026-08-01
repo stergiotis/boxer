@@ -521,6 +521,40 @@ so a document embedding an image degrades to markdown's glyph-hyperlink
 fallback. Carrying the FS through the seam is deferred until a corpus
 document wants one.
 
+## Update (2026-08-01, later) — a `md preamble` fence, over the results
+
+§SD1 gave the document three jobs: frontmatter is the manifest, prose is the
+help page, the first `sql` fence is the buffer. It left no way to say
+something *on* the results — the caveat a reader needs before reading the
+numbers, not after going looking for it. A fourth job, opt-in:
+
+````markdown
+```md preamble
+Every knob the process **declares**, not every knob it reads.
+```
+````
+
+The instance renders it as markdown inside the central panel, above the
+DockArea, so it spans every result pane and sits below the controls rather
+than among them. `markdown` is accepted as a synonym for `md`. The strip is
+absent, not empty, when the fence is.
+
+This is an aux fence, in the shape `sql bands` already established (§SD1),
+rather than a reuse of the document's leading prose. Two reasons: prose
+serves the Help center and the Definition drawer, where length is free and
+over the results it is not; and an author is the one who knows which
+sentence is a caveat on the data and which is background. Existing applets
+therefore gain nothing they did not ask for.
+
+Two more rules fall out of the parser rather than the design, and are worth
+knowing before writing one. `scanFences` does not nest, so a preamble cannot
+itself contain a fenced block. And the strip is not resizable — it fits its
+content the way the top bar fits its buttons — so a preamble long enough to
+crowd the panes is the signal to move that prose into the document proper,
+where the drawer already shows it.
+
+The dogfood is `book/runtime-env.md`.
+
 ## References
 
 Internal:

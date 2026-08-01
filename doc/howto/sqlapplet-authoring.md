@@ -48,6 +48,10 @@ tabs: [table, detail]
 Prose — this body is the applet's help page, and the place to say what
 the query shows and what its parameters mean.
 
+```md preamble
+Every knob the process **declares**, not every knob it reads.
+```
+
 ```sql
 SET param_pattern = '%';
 SELECT * FROM keelson('env')
@@ -64,6 +68,12 @@ The rules, all enforced by the same gate everywhere:
   pasteable-complete: paste it into the playground, press Run, and you have
   the applet. Later role-less fences are prose examples; a `sql bands`
   fence carries the Timeline panel's band query.
+- An optional **`md preamble` fence** is explanatory markdown the applet
+  shows *above* its result panes — the caveat a reader needs before reading
+  the numbers. Keep it to a sentence or two: the strip fits its content, so
+  a long one crowds the panels, and the body prose is already one click away
+  under **Definition**. Fences do not nest, so a preamble cannot contain a
+  fenced block. `markdown` works in place of `md`.
 - The **filename is the slug** (`runtime-env.md` → `runtime-env`):
   lowercase alphanumerics and dashes.
 - **`endpoint`** is `default` (the env-configured ClickHouse; may be
