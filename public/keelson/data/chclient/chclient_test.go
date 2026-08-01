@@ -2,9 +2,12 @@ package chclient
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -176,4 +179,110 @@ func TestQueryURL_PreservesExistingQuery(t *testing.T) {
 	c := &Client{cfg: Config{URL: "http://localhost:8123/?async_insert=1"}}
 	got := c.queryURL("INSERT INTO foo FORMAT Arrow")
 	assert.Contains(t, got, "async_insert=1&query=")
+}
+
+const (
+	configFromEnvChildKey = "CHCLIENT_CONFIG_FROM_ENV_CHILD"
+	configFromEnvMarker   = "RESOLVED\t"
+)
+
+// TestConfigFromEnvChild is the child half of TestConfigFromEnv_Precedence. It
+// prints the resolved Config on a marker line and is skipped in a normal run.
+func TestConfigFromEnvChild(t *testing.T) {
+	if os.Getenv(configFromEnvChildKey) != "1" {
+		t.Skip("child-process helper for TestConfigFromEnv_Precedence")
+	}
+	c := ConfigFromEnv()
+	fmt.Printf("\n%s%s\t%s\t%s\n", configFromEnvMarker, c.URL, c.User, c.Password)
+}
+
+// ConfigFromEnv reads the entries through env.StringVar.Get, which caches on
+// first call, so the precedence cannot be exercised by mutating the
+// environment in-process — the first case to run would fix the values for
+// every later one. Each case therefore runs in a fresh child of this test
+// binary, with inherited CLICKHOUSE_* scrubbed so a developer's shell cannot
+// colour the result.
+func TestConfigFromEnv_Precedence(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		env      []string
+		wantURL  string
+		wantUser string
+		wantPass string
+	}{
+		{
+			name:     "nothing set falls back to Defaults",
+			wantURL:  Defaults().URL,
+			wantUser: Defaults().User,
+		},
+		{
+			name:     "endpoint is used",
+			env:      []string{"CLICKHOUSE_ENDPOINT=http://endpoint:8123"},
+			wantURL:  "http://endpoint:8123",
+			wantUser: Defaults().User,
+		},
+		{
+			name:     "url is used when endpoint is unset",
+			env:      []string{"CLICKHOUSE_URL=http://url:8123/"},
+			wantURL:  "http://url:8123/",
+			wantUser: Defaults().User,
+		},
+		{
+			name:     "endpoint beats url",
+			env:      []string{"CLICKHOUSE_ENDPOINT=http://endpoint:8123", "CLICKHOUSE_URL=http://url:8123"},
+			wantURL:  "http://endpoint:8123",
+			wantUser: Defaults().User,
+		},
+		{
+			// An exported-but-empty endpoint is indistinguishable from unset,
+			// which is what lets a wrapper export it unconditionally.
+			name:     "empty endpoint defers to url",
+			env:      []string{"CLICKHOUSE_ENDPOINT=", "CLICKHOUSE_URL=http://url:8123"},
+			wantURL:  "http://url:8123",
+			wantUser: Defaults().User,
+		},
+		{
+			name:     "credentials override the defaults",
+			env:      []string{"CLICKHOUSE_USER=alice", "CLICKHOUSE_PASSWORD=hunter2"},
+			wantURL:  Defaults().URL,
+			wantUser: "alice",
+			wantPass: "hunter2",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gotURL, gotUser, gotPass := runConfigFromEnvChild(t, tc.env)
+			assert.Equal(t, tc.wantURL, gotURL, "URL")
+			assert.Equal(t, tc.wantUser, gotUser, "User")
+			assert.Equal(t, tc.wantPass, gotPass, "Password")
+		})
+	}
+}
+
+func runConfigFromEnvChild(t *testing.T, extra []string) (url string, user string, password string) {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestConfigFromEnvChild$", "-test.v")
+	cmd.Env = append(scrubClickHouseEnv(os.Environ()), configFromEnvChildKey+"=1")
+	cmd.Env = append(cmd.Env, extra...)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if after, ok := strings.CutPrefix(line, configFromEnvMarker); ok {
+			f := strings.Split(after, "\t")
+			require.Len(t, f, 3, line)
+			return f[0], f[1], f[2]
+		}
+	}
+	require.FailNow(t, "child printed no marker line", string(out))
+	return
+}
+
+func scrubClickHouseEnv(environ []string) (out []string) {
+	out = make([]string, 0, len(environ))
+	for _, kv := range environ {
+		if strings.HasPrefix(kv, "CLICKHOUSE_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return
 }

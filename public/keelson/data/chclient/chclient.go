@@ -60,6 +60,12 @@ func Defaults() (c Config) {
 // decides which wins. Either may carry a trailing slash — Ping trims it and
 // the query paths tolerate its absence.
 //
+// Not a live re-read: the registry resolves each entry once and caches it (a
+// CLI flag bound to the same Spec writes through that cache), so mutating the
+// environment after the first resolution has no effect. Callers wanting a
+// different server pass it in the environment before start, or build a Config
+// themselves.
+//
 // Callers that must not read the environment (fixed coordinates, or a test
 // pinning a server) keep using Defaults.
 func ConfigFromEnv() (c Config) {
