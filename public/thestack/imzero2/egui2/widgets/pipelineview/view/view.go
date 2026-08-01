@@ -99,6 +99,66 @@ type RenderOpts struct {
 	NodeText func(id string) (col color.Color, ok bool)
 	// EdgeStroke overrides an edge's stroke colour by endpoint node ids.
 	EdgeStroke func(from, to string) (col color.Color, ok bool)
+	// EdgeWidth overrides an edge's stroke width in pixels, given the flow
+	// quantity the layout carried through (0 when unknown). Returning
+	// ok=false keeps Style.EdgeStrokeW.
+	//
+	// This is the seam for the volume overlay (ADR-0119 §SD5): a host that
+	// knows what its volumes mean chooses the mapping, and VolumeWidth is a
+	// ready-made one. Widths are pixels, not layout units — like
+	// Style.EdgeStrokeW and unlike Style.CornerR, so a hairline stays a
+	// hairline when the diagram is scaled down to fit.
+	EdgeWidth func(from, to string, volume float64) (w float32, ok bool)
+}
+
+// Volume-overlay stroke widths, in pixels. The minimum is the default edge
+// stroke, so the thinnest carrying edge looks like an ordinary one.
+const (
+	DefaultVolumeMinW = 1.25
+	DefaultVolumeMaxW = 7.0
+)
+
+// VolumeWidth returns an EdgeWidth hook mapping each edge's volume onto
+// [minW, maxW], scaled against the largest volume in lay. Either bound may be
+// 0 for its default.
+//
+// The curve is a square root, and the reason is worth stating plainly: this is
+// a schematic, not a Sankey. Its edges share no baseline and its stages do not
+// conserve, so width here orders and emphasises — it is not something to read
+// a quantity off. A linear map would additionally collapse every edge but the
+// largest to a hairline as soon as the volumes span orders of magnitude, which
+// byte counts usually do.
+//
+// An edge whose volume is not positive keeps the default width, because the
+// model documents 0 as *unknown* rather than *none* — drawing it as a hairline
+// would assert something the caller did not say. If no edge carries a volume
+// the hook declines every edge, so a diagram without volumes renders exactly
+// as it did before.
+func VolumeWidth(lay *pipelineview.Layout, minW float32, maxW float32) func(from string, to string, volume float64) (float32, bool) {
+	if minW <= 0 {
+		minW = DefaultVolumeMinW
+	}
+	if maxW <= 0 {
+		maxW = DefaultVolumeMaxW
+	}
+	if maxW < minW {
+		maxW = minW
+	}
+	maxV := 0.0
+	if lay != nil {
+		for i := range lay.Edges {
+			if v := lay.Edges[i].Volume; v > maxV {
+				maxV = v
+			}
+		}
+	}
+	return func(_ string, _ string, volume float64) (float32, bool) {
+		if maxV <= 0 || volume <= 0 {
+			return 0, false
+		}
+		t := math.Sqrt(math.Min(volume, maxV) / maxV)
+		return minW + (maxW-minW)*float32(t), true
+	}
 }
 
 // RenderResult reports hit-testing from the previous frame: the node
@@ -149,7 +209,13 @@ func Render(idBase uint64, lay *pipelineview.Layout, opts RenderOpts) RenderResu
 					col = c2
 				}
 			}
-			drawOrtho(e.Points, tf, col, st.EdgeStrokeW, st.CornerR*fscale, e.Dashed)
+			ew := st.EdgeStrokeW
+			if opts.EdgeWidth != nil {
+				if w, ok := opts.EdgeWidth(e.From.Key(), e.To.Key(), e.Volume); ok {
+					ew = w
+				}
+			}
+			drawOrtho(e.Points, tf, col, ew, st.CornerR*fscale, e.Dashed)
 			if e.LabelPos != nil && e.Label != "" {
 				lx, ly := tf(*e.LabelPos)
 				if e.Kind == pipelineview.EdgeSide {
@@ -318,7 +384,11 @@ func drawOrtho(pts []pipelineview.Point, tf func(pipelineview.Point) (float32, f
 	if dx == 0 && dy == 0 {
 		return
 	}
-	const headLen, headHalfW = 8.0, 3.6
+	// The head grows with the stroke, so a volume-thickened edge does not end
+	// in a pin. At the default stroke width both clamp to the original
+	// constants, leaving an overlay-free diagram byte-identical.
+	headLen := max(float32(8.0), strokeW*3.5)
+	headHalfW := max(float32(3.6), strokeW*1.7)
 	bxp, byp := xs[last]-dx*headLen, ys[last]-dy*headLen
 	px, py := -dy*headHalfW, dx*headHalfW
 	c.PaintPolygonFilled(
