@@ -1,9 +1,10 @@
 package stage2
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -14,8 +15,10 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -48,19 +51,31 @@ func writeArrowFile(t *testing.T, rec arrow.RecordBatch) string {
 	return path
 }
 
+// runClickHouseLocal executes a (multi-statement) SQL script in a worker from
+// keelson's chlocalpool (ADR-0028) — the pre-spawned clickhouse-local pool the
+// runtime uses for low-latency local SQL — instead of exec'ing the binary
+// directly; binary resolution goes through the extbin chokepoint (ADR-0118).
+// Workers are single-use: acquire, submit, drain stdout, wait. The FORMAT
+// argument attaches to the script's final statement (the SELECT).
 func runClickHouseLocal(t *testing.T, script string) string {
 	t.Helper()
-	bin, err := exec.LookPath("clickhouse-local")
+	pool, err := chlocalpool.New(chlocalpool.Config{MinIdle: 1, MaxConcurrent: 1, SpawnConcurrency: 1}, zerolog.Nop())
+	require.NoError(t, err, "pool config must be valid")
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	defer func() { _ = pool.Stop(ctx) }()
+
+	w, err := pool.Acquire(ctx)
 	if err != nil {
-		t.Skipf("clickhouse-local not on PATH: %v", err)
+		t.Skipf("clickhouse-local worker unavailable (binary missing?): %v", err)
 	}
-	cmd := exec.Command(bin, "--multiquery", "--output-format", "TSV")
-	cmd.Stdin = strings.NewReader(script)
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	require.NoError(t, cmd.Run(), "clickhouse-local stderr:\n%s", stderr.String())
-	return stdout.String()
+	defer w.Close()
+
+	require.NoError(t, w.WriteSQL(script, "TSV"))
+	out, err := io.ReadAll(w.Stdout())
+	require.NoError(t, err)
+	require.NoError(t, w.Wait())
+	return string(out)
 }
 
 // TestRoundTripClickHouse is the stage-2 mirror of stage-1's Presence/Validate:

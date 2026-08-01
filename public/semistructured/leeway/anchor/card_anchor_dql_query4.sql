@@ -1,31 +1,38 @@
-/*
-Query 4: Silver Tier – The PII "Data Cleanroom" Transformation
+/* Query 4 — a sanitized "silver" projection for third-party sharing.
 
-The Scenario: By law, AeroDrop must share its drone flight paths with the Swiss Federal Office of Civil Aviation (FOCA). However, they cannot share the exact GPS delivery coordinates (Lat/Lng) or the hr Customer UUIDs attached to the GeoPoint section.
-The Solution: We create a sanitized Silver Leeway entity. We keep the Symbol and TimeRange, but we use ClickHouse arrayMap to zero out the exact coordinates and discard the membership columns, leaving only the anonymized H3 hex index.
+The drone operator must hand flight data to an aviation authority without the
+exact GPS coordinates or the customer refs attached to the geoPoint section.
+This keeps symbol and timeRange, zeroes the coordinates with arrayMap, keeps
+the coarse H3 index, and blanks the high-cardinality membership columns.
+
+Two naming mechanisms combine so the result is itself leeway-shaped:
+
+  - An unaliased handle (`id:id`, `symbol:value`, …) resolves to its physical
+    column, and ClickHouse derives the result name from the rewritten
+    expression — the output column is automatically the physical name.
+  - A computed column needs an explicit alias, and that alias must be the
+    physical name (spelled out verbatim; the resolve pass rewrites references,
+    never aliases). The alias is what defines the silver entity's shape.
 */
--- Creates a sanitized Silver Leeway table for third-party sharing
 SELECT
-    `id:id:u64:2k:0:0:` AS id,
-    `id:naturalKey:y:g:0:0:`,
+    `id:id`,
+    `id:naturalKey`,
 
-    -- 1. Pass through Symbol and TimeRange sections untouched
-    `tv:symbol:value:val:s:m:0:24:0::data`,
-    `tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`,
-    `tv:timeRange:beginIncl:val:z64:2k:0:0:0::data`,
-    `tv:timeRange:endExcl:val:z64:2k:0:0:0::data`,
+    -- pass symbol and timeRange through untouched
+    `symbol:value`,
+    `symbol:lrcard`,
+    `timeRange:beginIncl`,
+    `timeRange:endExcl`,
 
-    -- 2. Anonymize GeoPoint: Zero out Lat/Lng using arrayMap, but keep H3
-    arrayMap(x -> CAST(0.0 AS Float32), `tv:geoPoint:pointLat:val:f32:g:0:0:0::geo`) AS `tv:geoPoint:pointLat:val:f32:g:0:0:0::geo`,
-    arrayMap(x -> CAST(0.0 AS Float32), `tv:geoPoint:pointLng:val:f32:g:0:0:0::geo`) AS `tv:geoPoint:pointLng:val:f32:g:0:0:0::geo`,
-    `tv:geoPoint:h3:val:u64:g:0:0:0::geo` AS `tv:geoPoint:h3:val:u64:g:0:0:0::geo`,
+    -- anonymize geoPoint: zero the coordinates, keep the H3 index
+    arrayMap(x -> CAST(0.0 AS Float32), `geoPoint:pointLat`) AS `tv:geoPoint:pointLat:val:f32:g:0:0:0::geo`,
+    arrayMap(x -> CAST(0.0 AS Float32), `geoPoint:pointLng`) AS `tv:geoPoint:pointLng:val:f32:g:0:0:0::geo`,
+    `geoPoint:h3`,
 
-    -- 3. Erase High-Cardinality references (Customer UUIDs) by overwriting with empty arrays
+    -- erase the high-cardinality references (customer ids)
     CAST([] AS Array(UInt64)) AS `tv:geoPoint:hr:hr:u64:2k:0:0:0::geo`,
     CAST([] AS Array(UInt64)) AS `tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo`
 
--- ... (pass through empty arrays for remaining sections)
-FROM anchor.facts
--- Filter only for Drone events
-WHERE has(`tv:symbol:value:val:s:m:0:24:0::data`, 'DELIVERED')
-   OR has(`tv:symbol:value:val:s:m:0:24:0::data`, 'IN_TRANSIT');
+FROM facts
+WHERE has(`symbol:value`, 'DELIVERED')
+   OR has(`symbol:value`, 'IN_TRANSIT')

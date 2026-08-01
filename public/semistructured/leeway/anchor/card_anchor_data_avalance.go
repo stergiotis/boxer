@@ -14,26 +14,30 @@ import (
 )
 
 /*
-Because Leeway uses highly sparse, nested Apache Arrow lists (`ListOfNonNullable`), an empty section consumes exactly **zero bytes** of storage penalty. This allows an entire organization to use a **Single Unified Enterprise Event Bus** table in ClickHouse.
+Second demo domain: a fictional alpine avalanche and seismic sensor network.
+An empty tagged section costs no storage beyond its list offsets (sparse
+Arrow lists), which is what lets unrelated domains share one table; this
+domain exists to make that sharing concrete next to the drone missions.
 
-To demonstrate this, let's look at an entirely orthogonal application: **AlpWatch - An Alpine Avalanche & Seismic Sensor Network**, operating in the Swiss Alps (e.g., around Zermatt).
-
-### 🏔️ The Orthogonal Use Case: AlpWatch Sensor Network
-
-Even though an avalanche warning has nothing to do with a drone delivery, it maps perfectly to the *exact same* Leeway schema:
-* **Entity `id` & `naturalKey`:** The Event Sequence Number and the Sensor Node ID (e.g., `SENS-ZRM-042`).
-* **`Symbol` (Categorical String):** The Event Type (`"SEISMIC_ANOMALY"`, `"SNOW_SHIFT"`, `"HEARTBEAT"`).
-* **`U64Array`:** Snow load in kg/m² or peak seismic amplitude (single-value array via `BeginAttributeSingle`).
-* **`TimeRange`:** The time window over which the anomaly accumulated — two Z64 (`time.Time`) wall-clock bounds.
-* **`TimeArray`:** Detection wall-clock (Z64 `time.Time`), via `BeginAttributeSingle`.
-* **`GeoPoint`:** The static GPS coordinates of the sensor station.
-* **`GeoArea`:** The dynamically calculated *Avalanche Danger Polygon* projected down the mountain.
-* **`Text`:** Automated weather bulletin text ("Heavy snowfall warning above 2000m..."). Single-word bags use `BeginAttributeSingle(text, wordLength, wordBag)`.
-* **`BlobArray`:** A cryptographic hash of the high-frequency raw seismic waveform stored in cold storage (S3), via `BeginAttributeSingle`.
+Mapping onto the anchor sections:
+  - entity `id` / `naturalKey`: the event sequence number and the sensor
+    node id (e.g. `SENS-ZRM-042`).
+  - `symbol`: the event type ("SEISMIC_ANOMALY", "SNOW_SHIFT", "HEARTBEAT").
+  - `u64Array`: snow load or peak seismic amplitude (single-value array via
+    BeginAttributeSingle).
+  - `timeRange`: the window over which the anomaly accumulated, two Z64
+    (`time.Time`) bounds.
+  - `timeArray`: the detection wall-clock, via BeginAttributeSingle.
+  - `geoPoint`: the sensor station's coordinates.
+  - `geoArea`: the projected danger polygon down the mountain.
+  - `text`: automated bulletin text; single-word bags use
+    BeginAttributeSingle(text, wordLength, wordBag).
+  - `blobArray`: a hash of the raw waveform held in cold storage, via
+    BeginAttributeSingle.
 */
 
-// GenerateAlpineEvents generates mock Arrow records for 20 avalanche sensor events.
-// It uses the EXACT SAME Leeway schema as the Drone Delivery use case.
+// GenerateAlpineEvents generates mock Arrow records for n avalanche sensor
+// events against the same anchor schema as the other domains.
 func GenerateAlpineEvents(recordsIn []arrow.RecordBatch, n int) (recordsOut []arrow.RecordBatch, err error) {
 	allocator := memory.NewGoAllocator()
 
@@ -97,7 +101,7 @@ func GenerateAlpineEvents(recordsIn []arrow.RecordBatch, n int) (recordsOut []ar
 			EndAttribute().
 			EndSection()
 
-		// 5. Add Text (Automated Weather/System Bulletin) - Sparse data!
+		// 5. Add Text (automated bulletin) — present on a subset only, keeping the section sparse
 		// One-word bag — fold the (text, wordLength, wordBag) tuple through *Single.
 		if eventType == "SEISMIC_ANOMALY" {
 			table.GetSectionText().

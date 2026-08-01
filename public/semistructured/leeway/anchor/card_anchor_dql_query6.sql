@@ -1,7 +1,14 @@
-/*
-ClickHouse SQL: The Leeway Integrity Scanner
+/* Query 6 — an integrity scanner over leeway's support-column invariants.
 
-Here is a diagnostic query that checks the consistency of the GeoPoint and Text sections. It uses UNION ALL so you can easily expand it to all 10 sections. If this query returns any rows, your SQL transformation introduced a corruption.
+Checks the structural consistency of the geoPoint and text sections: base
+value arrays and per-attribute cardinality columns must have equal lengths,
+and each flattened channel (refs, co-containers) must sum to its cardinality
+column. A returned row means a transformation corrupted the shape; extend the
+UNION ALL with one branch per further section.
+
+Support columns are addressed through the same friendly handles as value
+columns (`geoPoint:hr`, `geoPoint:hrcard`, `text:len`, …) — the resolver knows
+every column of a section, value and support alike.
 */
 SELECT
     id,
@@ -12,58 +19,45 @@ SELECT
     expected_flattened_length,
     actual_flattened_length
 FROM (
-         -- ==========================================
-         -- CHECK 1: GeoPoint Section Integrity
-         -- ==========================================
-         SELECT
-             `id:id:u64:2k:0:0:` AS id,
-             `id:naturalKey:y:g:0:0:` AS naturalKey,
-             'GeoPoint' AS section,
-             multiIf(
-                 -- Rule 1 & 2: Base arrays and support columns must have identical lengths
-                     length(`tv:geoPoint:pointLat:val:f32:g:0:0:0::geo`) != length(`tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo`), 'Base/Card Length Mismatch',
-                     length(`tv:geoPoint:pointLat:val:f32:g:0:0:0::geo`) != length(`tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::geo`), 'Base/Card Length Mismatch',
+    -- geoPoint section
+    SELECT
+        `id:id` AS id,
+        `id:naturalKey` AS naturalKey,
+        'GeoPoint' AS section,
+        multiIf(
+            -- base arrays and cardinality columns must have identical lengths
+            length(`geoPoint:pointLat`) != length(`geoPoint:hrcard`), 'Base/Card Length Mismatch',
+            length(`geoPoint:pointLat`) != length(`geoPoint:lrcard`), 'Base/Card Length Mismatch',
+            -- each flattened ref channel must sum to its cardinality column
+            length(`geoPoint:hr`) != toUInt64(arraySum(`geoPoint:hrcard`)), 'High-Card (hr) Integrity Failure',
+            length(`geoPoint:lr`) != toUInt64(arraySum(`geoPoint:lrcard`)), 'Low-Card (lr) Integrity Failure',
+            length(`geoPoint:lmr`) != toUInt64(arraySum(`geoPoint:lmrcard`)), 'Mixed-Card (lmr) Integrity Failure',
+            length(`geoPoint:mrhp`) != toUInt64(arraySum(`geoPoint:lmrcard`)), 'Mixed-Card Payload (mrhp) Integrity Failure',
+            'Valid'
+        ) AS error_type,
+        length(`geoPoint:pointLat`) AS base_attribute_count,
+        toUInt64(arraySum(`geoPoint:hrcard`)) AS expected_flattened_length,
+        length(`geoPoint:hr`) AS actual_flattened_length
+    FROM facts
 
-                 -- Rule 3: Flattened High-Cardinality References must match the sum of hrcard
-                     length(`tv:geoPoint:hr:hr:u64:2k:0:0:0::geo`) != toUInt64(arraySum(`tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo`)), 'High-Card (hr) Integrity Failure',
+    UNION ALL
 
-                 -- Rule 3: Flattened Low-Cardinality References must match the sum of lrcard
-                     length(`tv:geoPoint:lr:lr:u64:2q:0:0:0::geo`) != toUInt64(arraySum(`tv:geoPoint:lrcard:lrcard:u64:4gw:0:0:0::geo`)), 'Low-Card (lr) Integrity Failure',
-
-                 -- Rule 3: Mixed Low-Card (lmr) and Hash Payload (mrhp) share the lmrcard length
-                     length(`tv:geoPoint:lmr:lmr:u64:2q:0:0:0::geo`) != toUInt64(arraySum(`tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::geo`)), 'Mixed-Card (lmr) Integrity Failure',
-                     length(`tv:geoPoint:mrhp:mrhp:y:g:0:0:0::geo`) != toUInt64(arraySum(`tv:geoPoint:lmrcard:lmrcard:u64:4gw:0:0:0::geo`)), 'Mixed-Card Payload (mrhp) Integrity Failure',
-
-                     'Valid'
-             ) AS error_type,
-             length(`tv:geoPoint:pointLat:val:f32:g:0:0:0::geo`) AS base_attribute_count,
-             toUInt64(arraySum(`tv:geoPoint:hrcard:hrcard:u64:4gw:0:0:0::geo`)) AS expected_flattened_length,
-             length(`tv:geoPoint:hr:hr:u64:2k:0:0:0::geo`) AS actual_flattened_length
-         FROM anchor.facts
-
-         UNION ALL
-
-         -- ==========================================
-         -- CHECK 2: Text Section Integrity (Testing Co-Containers)
-         -- ==========================================
-         SELECT
-             `id:id:u64:2k:0:0:` AS id,
-             `id:naturalKey:y:g:0:0:` AS naturalKey,
-             'Text' AS section,
-             multiIf(
-                 -- Support columns lengths must match the base string array
-                 -- (`text` is the scalar value column on the text section)
-                     length(`tv:text:text:val:s:0:0:0:0::`) != length(`tv:text:len:len:u64:28o:0:0:0::`), 'Base/Len Length Mismatch',
-
-                 -- Co-Container Integrity: The flattened word arrays must match the sum of the `len` column
-                     length(`tv:text:wordLength:val:u32h:0:0:0:0::`) != toUInt64(arraySum(`tv:text:len:len:u64:28o:0:0:0::`)), 'Co-Container (wordLength) Integrity Failure',
-                     length(`tv:text:wordBag:val:sh:0:0:0:0::`) != toUInt64(arraySum(`tv:text:len:len:u64:28o:0:0:0::`)), 'Co-Container (wordBag) Integrity Failure',
-
-                     'Valid'
-             ) AS error_type,
-             length(`tv:text:text:val:s:0:0:0:0::`) AS base_attribute_count,
-             toUInt64(arraySum(`tv:text:len:len:u64:28o:0:0:0::`)) AS expected_flattened_length,
-             length(`tv:text:wordBag:val:sh:0:0:0:0::`) AS actual_flattened_length
-         FROM anchor.facts
-         )
-WHERE error_type != 'Valid';
+    -- text section (co-containers)
+    SELECT
+        `id:id` AS id,
+        `id:naturalKey` AS naturalKey,
+        'Text' AS section,
+        multiIf(
+            -- support-column lengths must match the base string array
+            length(`text:text`) != length(`text:len`), 'Base/Len Length Mismatch',
+            -- flattened co-containers must sum to the len column
+            length(`text:wordLength`) != toUInt64(arraySum(`text:len`)), 'Co-Container (wordLength) Integrity Failure',
+            length(`text:wordBag`) != toUInt64(arraySum(`text:len`)), 'Co-Container (wordBag) Integrity Failure',
+            'Valid'
+        ) AS error_type,
+        length(`text:text`) AS base_attribute_count,
+        toUInt64(arraySum(`text:len`)) AS expected_flattened_length,
+        length(`text:wordBag`) AS actual_flattened_length
+    FROM facts
+)
+WHERE error_type != 'Valid'

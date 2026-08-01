@@ -12,28 +12,29 @@ import (
 )
 
 /*
-This is the perfect opportunity to stretch the limits of the **Single Unified Enterprise Event Bus** concept.
+Third demo domain: a fictional threat-intelligence network logging network
+intrusion events. It is deliberately far from the other two domains (drones,
+mountain sensors) yet shares the one anchor schema — the point the
+cross-domain queries build on.
 
-To prove that Leeway’s sparse columnar design allows *truly* orthogonal data to live in the exact same table without performance or storage penalties, let's step completely out of the physical world of drones and mountains.
-
-### 🛡️ The Third Orthogonal Use Case: CyberShield (Threat Intelligence Network)
-
-Imagine a Swiss national cybersecurity initiative monitoring the critical infrastructure (data centers, banks, power grids). We need to log high-frequency **Network Intrusion & Threat Events**.
-
-Astonishingly, a cyber attack maps perfectly to the *exact same Leeway schema*:
-* **Entity `id` & `naturalKey`:** The Security Information and Event Management (SIEM) Alert ID and the Incident Ticket (e.g., `INC-2026-CH-001`).
-* **`Symbol` (Categorical String):** The Attack Vector (`"DDOS"`, `"SQL_INJECTION"`, `"PORT_SCAN"`). We map the Low-Cardinality reference (`lr`) to the targeted Network Port (e.g., Port 443).
-* **`TimeRange`:** The exact start and end time of the sustained attack — two Z64 (`time.Time`) wall-clock bounds.
-* **`TimeArray`:** SIEM alert wall-clock (Z64 `time.Time`), via `BeginAttributeSingle`.
-* **`GeoPoint`:** The IP Geo-location of the attacker's origin. We map the High-Cardinality reference (`hr`) to the attacker's ASN (Autonomous System Number).
-* **`GeoArea`:** The physical geofence of the targeted Swiss Data Center (e.g., the underground bunkers in the Swiss Alps or Zurich's financial district).
-* **`Text`:** The parsed malicious payload or CVE vulnerability description.
-* **`U64Array`:** The severity scale, or the total number of malicious packets dropped by the firewall (single-value array via `BeginAttributeSingle`).
-* **`BlobArray`:** A cryptographic hash of the PCAP (Packet Capture) file for forensic auditing (single-value array via `BeginAttributeSingle`).
+Mapping onto the anchor sections:
+  - entity `id` / `naturalKey`: the SIEM alert id and the incident ticket
+    (e.g. `INC-2026-CH-001`).
+  - `symbol`: the attack vector ("DDOS", "SQL_INJECTION", "PORT_SCAN"), with
+    the low-cardinality ref (`lr`) carrying the targeted network port.
+  - `timeRange`: start and end of the sustained attack, two Z64 bounds.
+  - `timeArray`: the SIEM alert wall-clock, via BeginAttributeSingle.
+  - `geoPoint`: the attack origin's geo-location, with the high-cardinality
+    ref (`hr`) carrying the origin ASN.
+  - `geoArea`: the geofence of the targeted facility.
+  - `text`: the parsed payload or CVE description.
+  - `u64Array`: severity, or packets dropped (single-value array).
+  - `blobArray`: a hash of the captured PCAP for later forensics
+    (single-value array).
 */
 
-// GenerateCyberThreatEvents generates mock Arrow records for 20 network security incidents.
-// It uses the EXACT SAME Leeway schema as the Drones and Alpine Sensors.
+// GenerateCyberThreatEvents generates mock Arrow records for 20 network
+// security incidents against the same anchor schema as the other domains.
 func GenerateCyberThreatEvents(recordsIn []arrow.RecordBatch) (recordsOut []arrow.RecordBatch, err error) {
 	allocator := memory.NewGoAllocator()
 

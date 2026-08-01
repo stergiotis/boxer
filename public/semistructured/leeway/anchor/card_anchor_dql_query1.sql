@@ -1,18 +1,27 @@
-/*Query 1: Extracting Cyber Threats and their Nested Ports (The "How-To")
-Let's decode the CyberShield data. We want to list the attack types (Symbol) and the target network ports (lr low-cardinality references). We will use the UDF to map the ports to the correct attack attribute, and ARRAY JOIN to explode them into relational rows.
- */
-WITH ANCHOR_UNFLATTEN_LEEWAY_ARRAY(
-    `tv:symbol:lr:lr:u64:2q:0:0:0::data`,
-    `tv:symbol:lrcard:lrcard:u64:4gw:0:0:0::data`
-) AS nested_target_ports
+/* Query 1 — attack types and their target ports, via the unflatten UDF.
+
+Lists each cyber incident's attack type (the `symbol` section value) together
+with its target network ports, which ride the same attributes as low-cardinality
+ref memberships (`lr`). The UDF regroups the flat `lr` list by the per-attribute
+`lrcard` counts so it can be ARRAY-JOINed in parallel with the value column.
+
+Column references are friendly leeway handles (`section:column`, ADR-0116); the
+nanopass pipeline resolves them to physical names (see the .out.sql neighbour).
+`symbol:lr` and `symbol:lrcard` are support columns — handles cover those too.
+
+The UDF call sits inline in ARRAY JOIN rather than in a `WITH expr AS name`
+clause: the resolve pass walks each SELECT's own subtree, and a query-level
+WITH-expression clause is outside it — handles there would pass through
+unresolved. (deferred: teach ResolveColumnNames the query-level WITH clause.)
+*/
 SELECT
-    `id:id:u64:2k:0:0:` AS id,
-    `id:naturalKey:y:g:0:0:` AS incident_ticket,
+    `id:id` AS id,
+    `id:naturalKey` AS incident_ticket,
     attack_type,
     target_ports
-FROM anchor.facts
--- Parallel ARRAY JOIN explodes the lists so each attribute becomes a row
+FROM facts
+-- parallel ARRAY JOIN: both lists carry one element per attribute
 ARRAY JOIN
-    `tv:symbol:value:val:s:m:0:24:0::data` AS attack_type,
-    nested_target_ports AS target_ports
-WHERE has(['DDOS', 'SQL_INJECTION', 'PORT_SCAN'], attack_type);
+    `symbol:value` AS attack_type,
+    ANCHOR_UNFLATTEN_LEEWAY_ARRAY(`symbol:lr`, `symbol:lrcard`) AS target_ports
+WHERE has(['DDOS', 'SQL_INJECTION', 'PORT_SCAN'], attack_type)

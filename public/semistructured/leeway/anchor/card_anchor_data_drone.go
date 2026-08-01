@@ -12,26 +12,27 @@ import (
 )
 
 /*
-### 🚁 The Use Case: Autonomous Drone Delivery Network (AeroDrop)
+First demo domain: a fictional drone-delivery operator. Each flight yields a
+semi-structured mission log — one flight carries delivery notes and no-fly
+zones, another only telemetry and status changes — the per-entity variability
+the tagged sections absorb without per-domain tables.
 
-Imagine a futuristic but realistic logistics company called **AeroDrop** that delivers packages using autonomous drones. Every flight generates a complex, semi-structured "Mission Log".
-
-Traditional relational databases struggle with this because every flight is different:
-* One flight might have 5 delivery notes (Text) and encounter 3 no-fly zones (GeoArea).
-* Another flight might have 0 delivery notes, but 50 telemetry pings (GeoPoint) and multiple status changes (Symbol).
-
-**Leeway** handles this perfectly because its columnar Arrow-list architecture means empty sections take up practically zero space, while nested data is grouped tightly for blazingly fast analytics in ClickHouse.
-
-#### Mapping the Leeway Schema to AeroDrop:
-* **Entity `id` & `naturalKey`:** The unique Mission ID and the external Tracking Number (e.g., `TRK-8829A`).
-* **`Symbol` (Categorical String):** Drone Status (`"IN_TRANSIT"`, `"DELIVERED"`, `"WEATHER_DELAY"`). We map a Low-Cardinality reference (`lr`) to represent the Drone Model ID.
-* **`GeoPoint`:** Delivery drop-off coordinates. We map a High-Cardinality reference (`hr`) to the specific Pilot/Operator UUID.
-* **`GeoArea`:** Dynamic Geofences (e.g., a polygon of a suddenly restricted airspace).
-* **`Text`:** Customer delivery instructions. We use the Co-Container for word length and bag-of-words to enable fast full-text search.
-* **`TimeRange`:** The promised delivery time window — two Z64 (`time.Time`) wall-clock bounds.
-* **`TimeArray`:** Dispatch wall-clock (Z64 `time.Time`), via `BeginAttributeSingle`.
-* **`U64Array`:** Real-time telemetry, such as remaining battery capacity in mAh (single-value array via `BeginAttributeSingle`).
-* **`BlobArray`:** A cryptographic hash of the customer's digital signature for proof of delivery (single-value array via `BeginAttributeSingle`).
+Mapping onto the anchor sections:
+  - entity `id` / `naturalKey`: the mission id and the external tracking
+    number (e.g. `TRK-8829A`).
+  - `symbol`: the drone status ("IN_TRANSIT", "DELIVERED", "WEATHER_DELAY"),
+    with a low-cardinality ref (`lr`) carrying the drone model id.
+  - `geoPoint`: the drop-off coordinates, with a high-cardinality ref (`hr`)
+    carrying the customer id.
+  - `geoArea`: dynamic geofences (e.g. a restricted-airspace polygon).
+  - `text`: customer delivery instructions, with the co-containers
+    (wordLength, wordBag) carrying the pre-tokenized form for token search.
+  - `timeRange`: the promised delivery window, two Z64 (`time.Time`) bounds.
+  - `timeArray`: the dispatch wall-clock, via BeginAttributeSingle.
+  - `u64Array`: telemetry such as remaining battery capacity (single-value
+    array via BeginAttributeSingle).
+  - `blobArray`: a hash of the customer's delivery signature (single-value
+    array via BeginAttributeSingle).
 */
 
 // GenerateDroneMissionEvents generates mock Arrow records for 20 drone missions.
@@ -95,8 +96,8 @@ func GenerateDroneMissionEvents(recordsIn []arrow.RecordBatch) (recordsOut []arr
 			EndAttribute().
 			EndSection()
 
-		// 5. Add Text (Customer Instructions) - only for odd numbered missions!
-		// Demonstrates zero-penalty sparsity (no allocation if not present)
+		// 5. Add Text (customer instructions) — only for odd-numbered missions,
+		// so the section stays sparse (absent attributes allocate nothing)
 		if i%2 != 0 {
 			textSection := table.GetSectionText()
 			attr := textSection.BeginAttribute("Leave quietly at the back door.")
@@ -139,7 +140,7 @@ func GenerateDroneMissionEvents(recordsIn []arrow.RecordBatch) (recordsOut []arr
 		// Finalize the record into the Arrow builders
 		err = table.CommitEntity()
 		if err != nil {
-			// Structured Error Building (eb) for production-grade telemetry
+			// structured error context via eb
 			err = eb.Build().
 				Int("iteration", i).
 				Uint64("missionId", missionID).
