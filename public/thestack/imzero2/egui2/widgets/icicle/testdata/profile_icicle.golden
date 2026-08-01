@@ -1,0 +1,12 @@
+orientation 0 rows 3 nodes 7
+node main   depth=0 parent=-1 idx=0 x=[0.000000,18.000000] y=[-1.000000,0.000000] self=1.000 total=18.000
+node parse  depth=1 parent=0 idx=1 x=[0.000000,9.000000] y=[-2.000000,-1.000000] self=2.000 total=9.000
+node lex    depth=2 parent=1 idx=2 x=[0.000000,4.000000] y=[-3.000000,-2.000000] self=4.000 total=4.000
+node ast    depth=2 parent=1 idx=3 x=[4.000000,7.000000] y=[-3.000000,-2.000000] self=3.000 total=3.000
+node eval   depth=1 parent=0 idx=4 x=[9.000000,17.000000] y=[-2.000000,-1.000000] self=1.000 total=8.000
+node walk   depth=2 parent=4 idx=5 x=[9.000000,14.000000] y=[-3.000000,-2.000000] self=5.000 total=5.000
+node emit   depth=2 parent=4 idx=6 x=[14.000000,16.000000] y=[-3.000000,-2.000000] self=2.000 total=2.000
+row 0: main
+row 1: parse eval
+row 2: lex ast walk emit
+report total=18.000 unit="ms" pruned=0 prunedValue=0.000 maxDepth=2
