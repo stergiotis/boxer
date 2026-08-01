@@ -245,8 +245,14 @@ Not in this cut, recorded so they do not gate it:
 - **Differential flamegraphs.** Signed values (red/blue against a baseline)
   need a second tree and a diff model; the widget rejects negative values today
   rather than half-supporting them.
-- **Text measurement.** Label fitting is the estimate idiom inherited from
-  ADR-0149 §SD6; it under-measures CJK, which will elide too late.
+- **Text measurement.** Label fitting uses `implot.EstimateTextWidth`, the
+  lane's shared estimate: rune-counted, charging the East Asian wide blocks a
+  full em, and budgeted in pixels so what `elide` returns fits what it was cut
+  for. Real measurement is *not* unavailable — `bindings.MeasureText` is live
+  and `widgets/colorscale` drives it on a one-frame lag. What ADR-0149 §SD6
+  defers is a fetcher inside implot for its own tick and legend sizing.
+  Adopting measurement here would want a shared cache and a frame of lag for
+  what is a few percent of width, so the estimate stands.
 - **Search / highlight-by-pattern.** Wants a host-side query surface.
 - **Minimap / value-axis overview.** Only earns its keep once a real profile is
   driving the widget.
@@ -301,7 +307,8 @@ Not in this cut, recorded so they do not gate it:
   corrects on the second. A widget that appears and is screenshotted in the
   same frame may capture the estimate.
 - Label fitting is still an estimate, so labels are dropped conservatively;
-  some rectangles that could hold a short label will not get one.
+  some rectangles that could hold a short label will not get one. Kerning and
+  font fallback are unmodelled, so the error is a few percent either way.
 - Two colour schemes and an override is more surface than a single scheme, and
   the hash-based default will occasionally place two same-coloured siblings
   next to each other despite the gap.
@@ -369,8 +376,8 @@ was consulted, per ADR-0119 §SD6.
 ### Related ADRs
 
 - [ADR-0149](./0149-implot-core-port-painter-lane.md) — the implot port: the
-  custom-item lane this widget renders through, the text-measurement deferral
-  it inherits (§SD6), and the surface the per-axis locks extend.
+  custom-item lane this widget renders through, the shared text-width estimate
+  it fits labels with, and the surface the per-axis locks extend.
 - [ADR-0159](./0159-imzero2-sankey-flow-widget.md) — the sankey widget: the
   package split, the plot-space hit-test argument, and the first user of the
   custom-item lane.

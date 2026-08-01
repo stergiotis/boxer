@@ -42,20 +42,20 @@ func TestNilSafety(t *testing.T) {
 	lay := testLayout(t)
 	p := implot.NewDetached()
 	// None of these may panic, and all must report nothing.
-	if h, cl, ok := Probe(nil, lay, 0); h != NoHit || cl != NoHit || ok {
+	if h, cl, ok := Probe(nil, lay, 0); !h.None() || !cl.None() || ok {
 		t.Errorf("Probe(nil plot) = %v, %v, %v", h, cl, ok)
 	}
-	if h, cl, ok := Probe(p, nil, 0); h != NoHit || cl != NoHit || ok {
+	if h, cl, ok := Probe(p, nil, 0); !h.None() || !cl.None() || ok {
 		t.Errorf("Probe(nil layout) = %v, %v, %v", h, cl, ok)
 	}
-	if h, cl, ok := Probe(p, lay, 0); h != NoHit || cl != NoHit || ok {
+	if h, cl, ok := Probe(p, lay, 0); !h.None() || !cl.None() || ok {
 		t.Errorf("Probe with no pointer = %v, %v, %v", h, cl, ok)
 	}
 	var r Renderer
-	if h, cl, ok := r.Probe(nil, lay, 0); h != NoHit || cl != NoHit || ok {
+	if h, cl, ok := r.Probe(nil, lay, 0); !h.None() || !cl.None() || ok {
 		t.Errorf("Renderer.Probe(nil plot) = %v, %v, %v", h, cl, ok)
 	}
-	if h, cl, ok := r.Probe(p, nil, 0); h != NoHit || cl != NoHit || ok {
+	if h, cl, ok := r.Probe(p, nil, 0); !h.None() || !cl.None() || ok {
 		t.Errorf("Renderer.Probe(nil layout) = %v, %v, %v", h, cl, ok)
 	}
 	Draw(nil, lay, Opts{})
@@ -63,13 +63,14 @@ func TestNilSafety(t *testing.T) {
 	Draw(p, lay, Opts{})
 	Setup(p, Opts{})
 	Setup(p, Opts{Layers: true})
-	if h, cl, ok := Show(nil, "t", 10, 10, nil, Opts{}); h != NoHit || cl != NoHit || ok {
+	if h, cl, ok := Show(nil, "t", 10, 10, nil, Opts{}); !h.None() || !cl.None() || ok {
 		t.Errorf("Show(nil layout) = %v, %v, %v", h, cl, ok)
 	}
 }
 
-// TestZeroOptsEmphasisesNothing is the regression guard for the zero-Hit
-// trap: Opts{} must not read as "node 0 is hovered".
+// TestZeroOptsEmphasisesNothing: Opts{} must not read as "node 0 is hovered".
+// The Hit kind makes that true by construction; this pins it anyway, since it
+// is the property the shape was chosen for.
 func TestZeroOptsEmphasisesNothing(t *testing.T) {
 	lay := testLayout(t)
 	s := newState(lay, normalizeOpts(lay, Opts{}))
@@ -87,23 +88,30 @@ func TestZeroOptsEmphasisesNothing(t *testing.T) {
 // whatever now sits at that index.
 func TestStaleHitIsFoldedAway(t *testing.T) {
 	lay := testLayout(t) // three nodes, three links
-	if got := normalizeOpts(lay, Opts{Selected: Hit{Node: 99, Link: 42}}).Selected; got != NoHit {
-		t.Errorf("stale Selected %v, want NoHit", got)
+	for _, h := range []Hit{NodeHit(99), LinkHit(42), NodeHit(-1)} {
+		if got := normalizeOpts(lay, Opts{Selected: h}).Selected; !got.None() {
+			t.Errorf("stale Selected %v survived as %v", h, got)
+		}
 	}
-	// Only the half that is out of range is dropped.
-	if got := normalizeOpts(lay, Opts{Hover: Hit{Node: 1, Link: 42}}).Hover; got != (Hit{Node: 1, Link: -1}) {
-		t.Errorf("half-stale Hover %v, want {1 -1}", got)
+	// An index the layout does hold is left alone.
+	if got := normalizeOpts(lay, Opts{Hover: NodeHit(1)}).Hover; got != NodeHit(1) {
+		t.Errorf("live Hover came back as %v", got)
 	}
-	s := newState(lay, normalizeOpts(lay, Opts{Selected: Hit{Node: 99, Link: 99}}))
+	s := newState(lay, normalizeOpts(lay, Opts{Selected: NodeHit(99)}))
 	if s.focusActive() {
 		t.Error("a stale selection still reports an active focus")
 	}
 }
 
-// TestIndexZeroIsAddressable is why Selected is a Hit and not an int.
+// TestIndexZeroIsAddressable is why Hit carries a kind rather than a pair of
+// -1-defaulted indices: selecting link 0 has to be distinguishable from
+// selecting nothing.
 func TestIndexZeroIsAddressable(t *testing.T) {
 	lay := testLayout(t)
-	s := newState(lay, normalizeOpts(lay, Opts{Selected: Hit{Node: -1, Link: 0}}))
+	if LinkHit(0).None() {
+		t.Error("link 0 reads as no hit")
+	}
+	s := newState(lay, normalizeOpts(lay, Opts{Selected: LinkHit(0)}))
 	if got := s.emphasis(0); got != 0xff {
 		t.Errorf("selected link 0 alpha %#x, want 0xff", got)
 	}
@@ -114,7 +122,7 @@ func TestIndexZeroIsAddressable(t *testing.T) {
 
 func TestHoverLinkDimsTheRest(t *testing.T) {
 	lay := testLayout(t)
-	s := newState(lay, normalizeOpts(lay, Opts{Hover: Hit{Node: -1, Link: 1}}))
+	s := newState(lay, normalizeOpts(lay, Opts{Hover: LinkHit(1)}))
 	if got := s.emphasis(1); got != 0xff {
 		t.Errorf("hovered link alpha %#x, want 0xff", got)
 	}
@@ -130,7 +138,7 @@ func TestHoverLinkDimsTheRest(t *testing.T) {
 func TestHoverNodeEmphasisesItsLinks(t *testing.T) {
 	lay := testLayout(t)
 	b := nodeIndex(lay, "b")
-	s := newState(lay, normalizeOpts(lay, Opts{Hover: Hit{Node: b, Link: -1}}))
+	s := newState(lay, normalizeOpts(lay, Opts{Hover: NodeHit(b)}))
 	for li := range lay.Links {
 		l := &lay.Links[li]
 		want := uint8(dimAlpha)

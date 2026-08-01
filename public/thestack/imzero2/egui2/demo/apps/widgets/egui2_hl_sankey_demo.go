@@ -126,7 +126,6 @@ func init() {
 		Description: "Flow-quantity diagrams on the implot custom-item lane (ADR-0159): ribbon thickness is the value, through one diagram-wide scale. Sankey mode derives the stage from the graph and relaxes the order within it to reduce crossings; alluvial mode takes both from the caller, so a category keeps its slot across checkpoints. The fill selector switches a ribbon between one concave filled polygon each and the whole diagram as a single batched rect call — the batched route also carries a source-to-target gradient, and is the one that renders in the headless scene lane. Axes are pinned to the layout's unit box, so implot supplies pan, wheel zoom and box-zoom; the layer legend (off by default, since it overlays the diagram) toggles flows, bars and labels. Hover and click resolve in plot space against the same sampled geometry that was drawn: click pins, clicking empty area clears.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			st := &sankeyDemoState{
-				selected: sankeyview.NoHit,
 				diagrams: []sankeyDemoDiagram{
 					{name: "energy balance (sankey)", diagram: sankeyDemoEnergy()},
 					{name: "cohort (alluvial)", diagram: sankeyDemoCohort()},
@@ -168,7 +167,7 @@ func demoSankey(ids *c.WidgetIdStack, st *sankeyDemoState) {
 					Frame(true).
 					SendResp().HasPrimaryClicked() {
 					st.diagramIdx = i
-					st.selected = sankeyview.NoHit // ids do not carry across diagrams
+					st.selected = sankeyview.Hit{} // ids do not carry across diagrams
 				}
 			}
 		}
@@ -237,12 +236,12 @@ func sankeyDemoStatus(cur *sankeyDemoDiagram, hover sankeyview.Hit, selected san
 	lay := cur.layout
 	rep := lay.Report
 	describe := func(h sankeyview.Hit) string {
-		switch {
-		case h.Node >= 0:
-			n := &lay.Nodes[h.Node]
+		switch h.Kind {
+		case sankeyview.HitNode:
+			n := &lay.Nodes[h.Node()]
 			return fmt.Sprintf("%s — %.0f %s in, %.0f out", n.Label, n.In, rep.Unit, n.Out)
-		case h.Link >= 0:
-			l := &lay.Links[h.Link]
+		case sankeyview.HitLink:
+			l := &lay.Links[h.Link()]
 			return fmt.Sprintf("%s → %s — %.0f %s (%.1f%% of total)",
 				lay.Nodes[l.Source].Label, lay.Nodes[l.Target].Label,
 				l.Value, rep.Unit, 100*l.Value/rep.Total)

@@ -58,15 +58,57 @@ const (
 	FillColumns
 )
 
-// Hit is what a pointer is over, in layout terms. Both fields are -1 when
-// nothing matches; a pointer inside a node bar reports that node and no link.
+// HitKind says what a Hit refers to. HitNone is the zero value, so a Hit that
+// nobody set means "nothing" — which is what keeps index 0 addressable
+// without a sentinel. A pair of -1-defaulted indices cannot: its zero value
+// reads as "node 0", and every consumer then has to remember to fold that
+// away. icicle/view avoids the same trap with an Ok bool for its single kind.
+type HitKind uint8
+
+const (
+	// HitNone is nothing under the pointer.
+	HitNone HitKind = iota
+	// HitNode is a node bar. A bar wins over a ribbon underneath it.
+	HitNode
+	// HitLink is a ribbon.
+	HitLink
+)
+
+// Hit is what a pointer is over, in layout terms. The zero value is nothing.
 type Hit struct {
-	Node int
-	Link int
+	Kind HitKind
+	// Index is into Layout.Nodes or Layout.Links according to Kind, and is
+	// meaningless when Kind is HitNone.
+	Index int32
 }
 
-// NoHit is the empty result.
-var NoHit = Hit{Node: -1, Link: -1}
+// NodeHit and LinkHit name the two things a pointer can be over. The
+// constructor idiom mirrors icicle/view's NodeHit, so the two widgets on this
+// lane read the same way.
+func NodeHit(i int) Hit { return Hit{Kind: HitNode, Index: int32(i)} }
+
+// LinkHit is NodeHit for a ribbon.
+func LinkHit(i int) Hit { return Hit{Kind: HitLink, Index: int32(i)} }
+
+// Node returns the node index this hit refers to, or -1 when it refers to
+// something else.
+func (h Hit) Node() int {
+	if h.Kind == HitNode {
+		return int(h.Index)
+	}
+	return -1
+}
+
+// Link returns the link index this hit refers to, or -1.
+func (h Hit) Link() int {
+	if h.Kind == HitLink {
+		return int(h.Index)
+	}
+	return -1
+}
+
+// None reports that nothing is under the pointer.
+func (h Hit) None() bool { return h.Kind == HitNone }
 
 // Opts configures one draw. The zero value is usable: concave-polygon
 // ribbons, no legend, labels shown, default palette, nothing highlighted.
@@ -81,12 +123,8 @@ type Opts struct {
 	// colour. FillColumns only — a single polygon has one colour.
 	Gradient bool
 	// Hover is what Probe returned this frame. Hovering emphasises a ribbon
-	// and dims the rest.
-	//
-	// Both Hover and Selected are Hit rather than a bare index so that the
-	// zero value means "nothing", leaving index 0 addressable: selecting the
-	// first link is Hit{Node: -1, Link: 0}, which is not the zero Hit. Draw
-	// reads a zero Hit as NoHit.
+	// and dims the rest. The zero value is "nothing", so Opts{} highlights
+	// nothing rather than node 0.
 	Hover Hit
 	// Selected stays emphasised regardless of the pointer — hosts use it for
 	// click-to-pin.
@@ -133,9 +171,9 @@ const (
 // entry point; a host that wants to add its own items to the same plot should
 // drive implot itself and call Probe and Draw.
 //
-// clicked distinguishes a click that landed on nothing (click == NoHit,
-// clicked true) from no click at all (clicked false) — the difference a host
-// needs to implement click-to-pin with click-away-to-clear.
+// clicked distinguishes a click that landed on nothing (click.None(), clicked
+// true) from no click at all (clicked false) — the difference a host needs to
+// implement click-to-pin with click-away-to-clear.
 //
 // The returned hover and click are one frame behind, like every register read.
 func Show(ids *c.WidgetIdStack, title string, w float32, h float32, lay *sankey.Layout, opts Opts) (hover Hit, click Hit, clicked bool) {
@@ -146,7 +184,7 @@ func Show(ids *c.WidgetIdStack, title string, w float32, h float32, lay *sankey.
 // Show is the Renderer method behind the free function, reusing this
 // Renderer's buffers across frames.
 func (r *Renderer) Show(ids *c.WidgetIdStack, title string, w float32, h float32, lay *sankey.Layout, opts Opts) (hover Hit, click Hit, clicked bool) {
-	hover, click = NoHit, NoHit
+	hover, click = Hit{}, Hit{}
 	if lay == nil {
 		return
 	}
@@ -183,9 +221,9 @@ func Setup(p *implot.Plot, opts Opts) {
 // Probe resolves the pointer against the layout, in plot space. A node bar
 // wins over a ribbon underneath it.
 //
-// clicked reports that a click happened at all, which is not the same as
-// click != NoHit: a click that landed on empty plot area returns NoHit with
-// clicked true, and that is what clears a pinned selection.
+// clicked reports that a click happened at all, which is not the same as the
+// click having hit something: a click on empty plot area returns an empty Hit
+// with clicked true, and that is what clears a pinned selection.
 func Probe(p *implot.Plot, lay *sankey.Layout, samples int) (hover Hit, click Hit, clicked bool) {
 	var r Renderer
 	return r.Probe(p, lay, samples)
@@ -196,16 +234,19 @@ func Probe(p *implot.Plot, lay *sankey.Layout, samples int) (hover Hit, click Hi
 // frames is what keeps that off the allocator — the free function builds a
 // throwaway one and pays per frame.
 func (r *Renderer) Probe(p *implot.Plot, lay *sankey.Layout, samples int) (hover Hit, click Hit, clicked bool) {
-	hover, click = NoHit, NoHit
+	hover, click = Hit{}, Hit{}
 	if p == nil || lay == nil {
 		return
 	}
 	scratch := &r.s.ribbon
 	resolve := func(x float64, y float64) Hit {
 		if n := lay.NodeAt(x, y); n >= 0 {
-			return Hit{Node: n, Link: -1}
+			return NodeHit(n)
 		}
-		return Hit{Node: -1, Link: lay.LinkAt(x, y, samples, scratch)}
+		if l := lay.LinkAt(x, y, samples, scratch); l >= 0 {
+			return LinkHit(l)
+		}
+		return Hit{}
 	}
 	if x, y, ok := p.HoverPlotPos(); ok {
 		hover = resolve(x, y)
@@ -252,12 +293,11 @@ func (r *Renderer) Draw(p *implot.Plot, lay *sankey.Layout, opts Opts) {
 	}
 }
 
-// normalizeOpts folds the zero Hit onto NoHit, and an out-of-range one too.
-// Without the first an Opts{} would emphasise node 0 and dim everything else,
-// which is the wrong reading of "the caller said nothing". Without the second
-// a Selected pinned against a previous, larger layout would address whatever
+// normalizeOpts folds an out-of-range hit onto the empty one. A Selected
+// pinned against a previous, larger layout would otherwise address whatever
 // now sits at that index — a host swapping diagrams has to clear the pin, and
-// this is what happens when it forgets.
+// this is what happens when it forgets. The zero Hit needs no folding: it
+// already means nothing.
 func normalizeOpts(lay *sankey.Layout, o Opts) Opts {
 	o.Hover = normalizeHit(lay, o.Hover)
 	o.Selected = normalizeHit(lay, o.Selected)
@@ -265,14 +305,17 @@ func normalizeOpts(lay *sankey.Layout, o Opts) Opts {
 }
 
 func normalizeHit(lay *sankey.Layout, h Hit) Hit {
-	if h == (Hit{}) {
-		return NoHit
+	n := -1
+	switch h.Kind {
+	case HitNode:
+		n = len(lay.Nodes)
+	case HitLink:
+		n = len(lay.Links)
+	default:
+		return Hit{}
 	}
-	if h.Node >= len(lay.Nodes) {
-		h.Node = -1
-	}
-	if h.Link >= len(lay.Links) {
-		h.Link = -1
+	if h.Index < 0 || int(h.Index) >= n {
+		return Hit{}
 	}
 	return h
 }
@@ -367,7 +410,13 @@ func (s *state) linkColor(i int) uint32 {
 func (s *state) emphasis(li int) uint8 {
 	l := &s.lay.Links[li]
 	touches := func(h Hit) bool {
-		return li == h.Link || (h.Node >= 0 && (l.Source == h.Node || l.Target == h.Node))
+		switch h.Kind {
+		case HitLink:
+			return li == h.Link()
+		case HitNode:
+			return l.Source == h.Node() || l.Target == h.Node()
+		}
+		return false
 	}
 	if touches(s.opts.Hover) || touches(s.opts.Selected) {
 		return 0xff
@@ -381,12 +430,7 @@ func (s *state) emphasis(li int) uint8 {
 // focusActive reports whether anything is emphasised, which is what turns the
 // dimming of everything else on.
 func (s *state) focusActive() bool {
-	for _, h := range [2]Hit{s.opts.Hover, s.opts.Selected} {
-		if h.Node >= 0 || h.Link >= 0 {
-			return true
-		}
-	}
-	return false
+	return !s.opts.Hover.None() || !s.opts.Selected.None()
 }
 
 func withAlpha(rgba uint32, a uint8) uint32 { return (rgba &^ 0xff) | uint32(a) }
@@ -505,9 +549,10 @@ func (s *state) drawNodes(dc implot.DrawCtx) {
 	c.PaintRectsFilled(s.rMinX, s.rMinY, s.rMaxX, s.rMaxY, color.ColorsFromU32(s.rCols)).Send()
 	// Selection is the accent role, not a bare white.
 	ring := color.Hex(styletokens.AccentStrong.AsHex())
-	for _, h := range [2]int{s.opts.Hover.Node, s.opts.Selected.Node} {
-		if h >= 0 && h < nn {
-			c.PaintRectStroke(s.rMinX[h], s.rMinY[h], s.rMaxX[h], s.rMaxY[h], 0, ring, 1.5).Send()
+	for _, h := range [2]Hit{s.opts.Hover, s.opts.Selected} {
+		// normalizeOpts has already dropped an index the layout cannot hold.
+		if i := h.Node(); i >= 0 {
+			c.PaintRectStroke(s.rMinX[i], s.rMinY[i], s.rMaxX[i], s.rMaxY[i], 0, ring, 1.5).Send()
 		}
 	}
 }

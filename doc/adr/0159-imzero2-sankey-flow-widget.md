@@ -352,6 +352,36 @@ ascending. The fit extent is still unverified — `dataXMin` is unexported,
 so only implot's own tests can observe a fit contribution. §Verification
 plan's "Gap" grows that item.
 
+## Update 2026-08-02 — `Hit` grows a kind; the glyph estimate moves to the lane
+
+Two follow-ups from the same review, both changing the §Surfaces row for
+`widgets/sankey/view`. Nothing outside this tree consumes either, so
+§Migration still reads "breaks nothing".
+
+- **`Hit` is now a kind plus an index**, with `NodeHit` / `LinkHit`
+  constructors and `Node()` / `Link()` / `None()` accessors; `NoHit` is gone,
+  because the zero value now means nothing on its own. The old pair of
+  `-1`-defaulted indices had a zero value that read as "node 0", which is why
+  `Draw` needed a normalization step purely to fold `Opts{}` back to
+  "nothing". [ADR-0160](./0160-imzero2-icicle-flamegraph-widget.md)'s widget,
+  landing on the same lane, avoided that with an `Ok` bool for its single
+  kind. The two are now the same discipline and the same constructor
+  vocabulary, without forcing a shared type on two widgets whose hits differ
+  in arity — the one-kind case does not want a kind enum. Normalization
+  survives, but only to drop an index a swapped layout no longer holds.
+- **Label width comes from `implot.EstimateTextWidth`**, one estimate for the
+  lane, replacing five per-package copies at three ratios. It counts runes and
+  charges the East Asian wide blocks a full em.
+
+That last point retires the CJK claim in the Update above, and a broader one
+this ADR made: **text measurement is not deferred**. `bindings.MeasureText` is
+live, and `widgets/colorscale` drives it with a one-frame-lag cache.
+[ADR-0149](./0149-implot-core-port-painter-lane.md) §SD6 defers a fetcher
+*inside implot* for its own tick and legend sizing — not the channel. So the
+estimate here is a choice, and a defensible one at a few percent of width for
+a drop-or-keep decision; it is no longer the only option, and §Consequences'
+"until a measurement channel exists" was wrong.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
