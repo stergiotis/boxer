@@ -257,16 +257,17 @@ func bufferReads(slots []paramSlot) (out map[string]bool) {
 
 // declaredWrites expands a tab's declared writes with the companions the
 // dispatcher stamps on its behalf: a pane that publishes `selection` also
-// publishes `selection_node` and, on a leeway result, `selection_id`
-// (selectionStamper), so a query cross-filtering on `{selection_id:UInt64}` is
-// driven by every selecting pane and not just by the one that declared it.
+// publishes `selection_node`, on a leeway result `selection_id`, and on a
+// result carrying a `key` column `selection_key` (selectionStamper), so a
+// query cross-filtering on `{selection_id:UInt64}` or `{selection_key:String}`
+// is driven by every selecting pane and not just by the one that declared it.
 func declaredWrites(spec *TabSpec) (out []SignalID) {
 	out = spec.Writes
 	for _, w := range spec.Writes {
 		if w != signalSelection {
 			continue
 		}
-		out = append(append([]SignalID(nil), out...), signalSelectionNode, signalSelectionID)
+		out = append(append([]SignalID(nil), out...), signalSelectionNode, signalSelectionID, signalSelectionKey)
 		break
 	}
 	return

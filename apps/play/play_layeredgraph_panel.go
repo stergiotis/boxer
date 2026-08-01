@@ -26,9 +26,10 @@ import (
 // inferred from the edge endpoints.
 //
 // The contract is named columns rather than detection (§SD2), like kanban:
-// edges carry `source`/`target` (+ optional `label`); vertices carry `id`
-// (+ optional `label`, `group`, `shape`). Nothing but intent separates a
-// source column from a target column, so the panel asks for the names.
+// edges carry `source`/`target` (+ optional `label`, `tone`); vertices carry
+// `id` (+ optional `label`, `group`, `shape`, `tone`). Nothing but intent
+// separates a source column from a target column, so the panel asks for the
+// names.
 
 const (
 	// Edge columns (chEdges). source/target are the graph-data standard and
@@ -41,6 +42,11 @@ const (
 	networkGroupCol = "group"
 	networkShapeCol = "shape"
 	networkLabelCol = "label"
+	// tone names a design-system semantic family for one vertex or edge, for
+	// when the drawing carries a *meaning* the auto-palette cannot: a
+	// forbidden dependency is not "category 4", it is an error. Shared by
+	// both contracts, like label.
+	networkToneCol = "tone"
 
 	// networkEdgesNodeID / networkVerticesNodeID are the CTEs the two channels
 	// bind to (§SD1). Nodes of the user's own split graph, demanded on their
@@ -79,6 +85,42 @@ func networkGroupColor(idx int) color.Color {
 	return color.Hex(networkGroupPalette[idx%len(networkGroupPalette)].AsHex())
 }
 
+// networkTone maps a `tone` cell to a design-system colour. The vocabulary is
+// the six semantic families — accent, info, success, warning, error, neutral —
+// and the *role* picks the variant: a vertex body is a background, so it takes
+// the Subtle tone the group palette also uses; an edge is a foreground stroke,
+// where a subtle background tone would be invisible, so it takes Default.
+// Anything else (including an empty cell) returns ok=false, leaving the group
+// palette or the style default in charge — an unknown tone must not blank a
+// node.
+//
+// Naming a family rather than a colour is what keeps ADR-0156's palette
+// decision in one place: the query says what a vertex *means*, the design
+// system says what that looks like.
+func networkTone(s string, foreground bool) (col color.Color, ok bool) {
+	var subtle, def styletokens.RGBA8
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "accent":
+		subtle, def = styletokens.AccentSubtle, styletokens.AccentDefault
+	case "info":
+		subtle, def = styletokens.InfoSubtle, styletokens.InfoDefault
+	case "success":
+		subtle, def = styletokens.SuccessSubtle, styletokens.SuccessDefault
+	case "warning":
+		subtle, def = styletokens.WarningSubtle, styletokens.WarningDefault
+	case "error":
+		subtle, def = styletokens.ErrorSubtle, styletokens.ErrorDefault
+	case "neutral":
+		subtle, def = styletokens.NeutralSubtle, styletokens.NeutralDefault
+	default:
+		return
+	}
+	if foreground {
+		return color.Hex(def.AsHex()), true
+	}
+	return color.Hex(subtle.AsHex()), true
+}
+
 // parseNetworkShape maps a `shape` cell to a node boundary; the box is the
 // default for an absent or unrecognised value.
 func parseNetworkShape(s string) layeredgraph.NodeShape {
@@ -96,11 +138,11 @@ func parseNetworkShape(s string) layeredgraph.NodeShape {
 // channel's schema yields in AcceptForChannel and Render consumes. -1 marks an
 // absent optional column.
 type networkEdgesClaim struct {
-	srcCol, tgtCol, labelCol int
+	srcCol, tgtCol, labelCol, toneCol int
 }
 
 type networkVerticesClaim struct {
-	idCol, labelCol, groupCol, shapeCol int
+	idCol, labelCol, groupCol, shapeCol, toneCol int
 }
 
 // NetworkDriver owns the Network tab state: the two input lanes, the cached
@@ -123,13 +165,18 @@ type NetworkDriver struct {
 	rankDir layeredgraph.RankDir
 	view    view.ViewState
 
-	// selectedID highlights the last-clicked node. Selection is LOCAL to the
-	// panel in v1: the graph's vertices come from a private lane, not an
-	// observable split node, so publishing to the shared `selection` signal
-	// would be clamped away (syncSelectionClamp sends a cursor on an unbound
-	// node home) and would jerk the other panels to row 0. Cross-panel
-	// selection waits for the graph's CTEs to become observable nodes (ADR-0129
-	// §SD7 — the observe/bind direction).
+	// selectedID highlights the last-clicked node, and is published as the
+	// `selection_key` signal so a query can follow the click.
+	//
+	// The row-index `selection` signal stays unpublished, for the reason
+	// ADR-0129 §SD4 records: the graph's vertices come from a private lane,
+	// not an observable split node, so a cursor emit is clamped away
+	// (syncSelectionClamp sends a cursor on an unbound node home) and would
+	// jerk the other panels to row 0. A vertex id is a *value*, not a cursor
+	// — nothing in play reads `selection_key`, so publishing it moves no
+	// other panel — which is why it can cross the same boundary the cursor
+	// cannot. The observe/bind direction (§SD7) remains the route to a real
+	// shared cursor.
 	selectedID string
 
 	layout    *layeredgraph.Layout
@@ -223,8 +270,9 @@ func (inst layeredGraphPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schem
 	return
 }
 
-// Render draws the graph. emit is unused — selection is local in v1 (see
-// NetworkDriver.selectedID), so the panel publishes no signal.
+// Render draws the graph. A vertex click publishes `selection_key` (the
+// clicked vertex id); the row-index `selection` stays unpublished — see
+// NetworkDriver.selectedID for why the two differ.
 func (inst layeredGraphPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
 	edges, ok := filled[chEdges]
 	if !ok {
@@ -234,7 +282,7 @@ func (inst layeredGraphPanel) Render(filled map[ChannelID]ChannelResult, emit Si
 	if !ok {
 		return
 	}
-	vc := networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1}
+	vc := networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1}
 	var vertRec arrow.RecordBatch
 	if v, has := filled[chVertices]; has {
 		if got, isC := v.Claim.(networkVerticesClaim); isC {
@@ -242,14 +290,14 @@ func (inst layeredGraphPanel) Render(filled map[ChannelID]ChannelResult, emit Si
 			vertRec = v.Rec
 		}
 	}
-	inst.driver.render(edges.Rec, ec, vertRec, vc)
+	inst.driver.render(edges.Rec, ec, vertRec, vc, emit)
 }
 
 // resolveNetworkEdges applies the §SD2 edge contract to a schema. Pure and
 // schema-only; source/target are read through formatCell (total over Arrow
 // types), so they carry no type requirement — a numeric id is a fine key.
 func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason string) {
-	ec = networkEdgesClaim{srcCol: -1, tgtCol: -1, labelCol: -1}
+	ec = networkEdgesClaim{srcCol: -1, tgtCol: -1, labelCol: -1, toneCol: -1}
 	for ci, f := range schema.Fields() {
 		switch f.Name {
 		case networkSourceCol:
@@ -258,6 +306,8 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 			ec.tgtCol = ci
 		case networkLabelCol:
 			ec.labelCol = ci
+		case networkToneCol:
+			ec.toneCol = ci
 		}
 	}
 	if ec.srcCol < 0 || ec.tgtCol < 0 {
@@ -270,7 +320,7 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 		}
 		reason = fmt.Sprintf("The graph's `edges` CTE needs a %s column. Name them in the query — e.g. "+
 			"WITH edges AS (SELECT a AS source, b AS target FROM t) SELECT * FROM edges — and optionally add a "+
-			"`vertices` CTE (`id`, `label`, `group`, `shape`) to decorate the nodes.",
+			"`vertices` CTE (`id`, `label`, `group`, `shape`, `tone`) to decorate the nodes.",
 			strings.Join(missing, " and a "))
 	}
 	return
@@ -280,7 +330,7 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 // required; a vertices CTE missing it is rejected, and because the channel is
 // optional the panel simply draws from the edges alone (endpoint inference).
 func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reason string) {
-	vc = networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1}
+	vc = networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1}
 	for ci, f := range schema.Fields() {
 		switch f.Name {
 		case networkIDCol:
@@ -291,6 +341,8 @@ func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reas
 			vc.groupCol = ci
 		case networkShapeCol:
 			vc.shapeCol = ci
+		case networkToneCol:
+			vc.toneCol = ci
 		}
 	}
 	if vc.idCol < 0 {
@@ -303,8 +355,11 @@ func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reas
 // the model plus the per-vertex group fill Render's NodeFill hook reads.
 type networkBuild struct {
 	model  layeredgraph.GraphModel
-	fillOf map[string]color.Color // vertex id → group fill (absent → default)
-	capped bool
+	fillOf map[string]color.Color // vertex id → tone or group fill (absent → default)
+	// strokeOf colours an edge by its endpoints, the key view.RenderOpts'
+	// EdgeStroke hook is given. Only edges naming a tone appear.
+	strokeOf map[[2]string]color.Color
+	capped   bool
 }
 
 // buildNetworkModel maps the edges/vertices records to a directed GraphModel
@@ -361,7 +416,17 @@ func buildNetworkModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec
 				node.Shape = parseNetworkShape(formatCell(vertRec, vc.shapeCol, row))
 			}
 			nodes = append(nodes, node)
-			if vc.groupCol >= 0 {
+			// An explicit tone wins over the group palette: `group` says
+			// "these belong together", `tone` says "this one means something",
+			// and a query that bothers to name a meaning meant it.
+			toned := false
+			if vc.toneCol >= 0 {
+				if col, ok := networkTone(formatCell(vertRec, vc.toneCol, row), false); ok {
+					b.fillOf[id] = col
+					toned = true
+				}
+			}
+			if !toned && vc.groupCol >= 0 {
 				if g := formatCell(vertRec, vc.groupCol, row); g != "" {
 					idx, ok := groupIdx[g]
 					if !ok {
@@ -401,6 +466,14 @@ func buildNetworkModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec
 			if ec.labelCol >= 0 {
 				e.Label = formatCell(edgesRec, ec.labelCol, row)
 			}
+			if ec.toneCol >= 0 {
+				if col, ok := networkTone(formatCell(edgesRec, ec.toneCol, row), true); ok {
+					if b.strokeOf == nil {
+						b.strokeOf = make(map[[2]string]color.Color, 8)
+					}
+					b.strokeOf[key] = col
+				}
+			}
 			edges = append(edges, e)
 		}
 	}
@@ -410,7 +483,7 @@ func buildNetworkModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec
 
 // render maps the two results into a graph, lays it out (cached), draws it, and
 // tracks the locally-selected node.
-func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim) {
+func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim, emit SignalEmitterI) {
 	inst.renderControls()
 
 	b := buildNetworkModel(edgesRec, ec, vertRec, vc)
@@ -481,20 +554,35 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		col, ok = b.fillOf[id]
 		return
 	}
+	// Edges carrying a `tone` are stroked with it; the rest keep the style
+	// default. Nothing overrides the selection highlight, which is a fill.
+	stroke := func(from, to string) (col color.Color, ok bool) {
+		if b.strokeOf == nil {
+			return
+		}
+		col, ok = b.strokeOf[[2]string{from, to}]
+		return
+	}
 	res := view.Render(networkIDSalt+inst.idSeed, inst.layout, view.RenderOpts{
-		Style:    view.DefaultStyle(),
-		CanvasW:  w,
-		CanvasH:  h,
-		NodeFill: fill,
-		State:    &inst.view,
+		Style:      view.DefaultStyle(),
+		CanvasW:    w,
+		CanvasH:    h,
+		NodeFill:   fill,
+		EdgeStroke: stroke,
+		State:      &inst.view,
 	})
-	// A vertex click highlights it (local selection — v1 publishes no shared
-	// signal, see selectedID); clicking the highlighted node again clears it.
+	// A vertex click highlights it and publishes the id as `selection_key`;
+	// clicking the highlighted node again clears both. The empty string is
+	// the honest "nothing focused" value — a query reading
+	// `{selection_key:String}` sees the same state it started in.
 	if res.Clicked != "" {
 		if inst.selectedID == res.Clicked {
 			inst.selectedID = ""
 		} else {
 			inst.selectedID = res.Clicked
+		}
+		if emit != nil {
+			emit.Emit(signalSelectionKey, inst.selectedID)
 		}
 	}
 	for rt := range c.RichTextLabel("drag pans, ctrl+scroll zooms; click a node to highlight it") {

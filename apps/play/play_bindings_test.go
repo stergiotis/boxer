@@ -98,6 +98,87 @@ func TestDispatcherStampsSelectionNodeAndId(t *testing.T) {
 	}
 }
 
+// keyRec builds a two-column record whose first column is the conventional
+// `key` a result opts into key publishing with.
+func keyRec(t *testing.T, keys []string) arrow.RecordBatch {
+	t.Helper()
+	mem := memory.NewGoAllocator()
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: selectionKeyCol, Type: arrow.BinaryTypes.String},
+		{Name: "n", Type: arrow.PrimitiveTypes.Int64},
+	}, nil)
+	kb := array.NewStringBuilder(mem)
+	nb := array.NewInt64Builder(mem)
+	for i, v := range keys {
+		kb.Append(v)
+		nb.Append(int64(i))
+	}
+	ka, na := kb.NewArray(), nb.NewArray()
+	rec := array.NewRecordBatch(schema, []arrow.Array{ka, na}, int64(len(keys)))
+	kb.Release()
+	nb.Release()
+	ka.Release()
+	na.Release()
+	return rec
+}
+
+func TestSelectionKeyValue(t *testing.T) {
+	rec := keyRec(t, []string{"pkg/a", "pkg/b"})
+	defer rec.Release()
+
+	raw, found := selectionKeyValue(rec, 1)
+	require.True(t, found)
+	assert.Equal(t, "pkg/b", raw)
+
+	_, found = selectionKeyValue(rec, 9)
+	assert.False(t, found, "out-of-range row")
+	_, found = selectionKeyValue(nil, 0)
+	assert.False(t, found, "nil record")
+
+	// A result with no `key` column publishes nothing: the contract is a
+	// named column, not a guess at which column identifies the row.
+	plain := int64Rec("n", 3)
+	defer plain.Release()
+	_, found = selectionKeyValue(plain, 0)
+	assert.False(t, found)
+}
+
+// A row click on a result carrying `key` publishes the key as a value, so a
+// query reading {selection_key:String} re-focuses on the clicked entity.
+func TestDispatcherStampsSelectionKey(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	rec := keyRec(t, []string{"pkg/a", "pkg/b"})
+	defer rec.Release()
+
+	reject := dispatchPanel(selectionProbePanel{}, map[ChannelID]channelInput{
+		chMain: {node: "pkgs", rec: rec, sig: g.signals()},
+	}, graphEmitter{graph: g})
+	require.Empty(t, reject)
+
+	key, ok := g.signals().Get(signalSelectionKey)
+	require.True(t, ok)
+	assert.Equal(t, "pkg/b", key.Raw)
+
+	// The same click on an id-less, key-less result leaves the last key
+	// standing rather than clearing it — the selection_id precedent.
+	plain := int64Rec("n", 3)
+	defer plain.Release()
+	reject = dispatchPanel(selectionProbePanel{}, map[ChannelID]channelInput{
+		chMain: {node: "other", rec: plain, sig: g.signals()},
+	}, graphEmitter{graph: g})
+	require.Empty(t, reject)
+	key, _ = g.signals().Get(signalSelectionKey)
+	assert.Equal(t, "pkg/b", key.Raw)
+}
+
+// The key signal is typed and empty-defaulted, so a buffer referencing
+// {selection_key:String} runs before the first click instead of blocking as
+// an unfilled input.
+func TestSelectionKeyIsReservedAndEmptyDefaulted(t *testing.T) {
+	assert.Equal(t, "String", reservedSignalTypes()[string(signalSelectionKey)])
+	assert.True(t, signalDefaultsEmpty(string(signalSelectionKey)))
+}
+
 // The read gate: a panel sees `selection` only when the cursor indexes its
 // own node; an unset selection_node (bootstrap/history) matches everything.
 func TestNodeScopedSelectionGate(t *testing.T) {

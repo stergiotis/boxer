@@ -198,7 +198,11 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 	assert.Contains(t, writes["timeline"], signalTimelineMin)
 	assert.Contains(t, writes["table"], signalSelection)
 	assert.NotContains(t, writes, "detail", "Detail is a pure consumer")
-	assert.NotContains(t, writes, "network", "selection is local to the Network driver in v1")
+	// The Network tab publishes the clicked vertex as a value, never as a row
+	// cursor: a `selection` emit from a private lane is clamped away and would
+	// jerk the other panels to row 0 (ADR-0129 §SD4).
+	assert.Equal(t, []SignalID{signalSelectionKey}, writes["network"])
+	assert.NotContains(t, writes["network"], signalSelection)
 
 	for _, s := range specs {
 		if s.ShapeContract {

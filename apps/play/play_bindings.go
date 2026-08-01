@@ -33,6 +33,28 @@ const signalSelectionNode SignalID = "selection_node"
 // selection: clicking a row of an id-less result leaves it unchanged.
 const signalSelectionID SignalID = "selection_id"
 
+// signalSelectionKey carries the clicked entity's key: the `key` column of a
+// selected row, or the clicked vertex id in the Network panel. Like
+// `selection_id` it is a value rather than a row ordinal, so `{selection_key:
+// String}` re-focuses a query no matter which panel published it — the
+// mechanism a master/detail applet navigates with (click a package in the
+// table or a node in the graph, the neighbourhood query follows).
+//
+// It is deliberately NOT the row-index `selection`: that one is node-scoped
+// and clamped (ADR-0129 §SD4 records the Network panel's clamped attempt),
+// which is exactly what a cross-panel *value* must not be. Nothing in play
+// reads it — it exists for the query to read — so publishing it from a panel
+// cannot jerk another panel's cursor.
+//
+// The key column is named, not detected (the ADR-0122 §SD2 contract): a
+// result without a `key` column simply publishes nothing, leaving the last
+// key in place. Clearing a Network selection publishes the empty string,
+// which is the "nothing focused" value a String signal defaults to.
+const signalSelectionKey SignalID = "selection_key"
+
+// selectionKeyCol is the column name a result opts into key publishing with.
+const selectionKeyCol = "key"
+
 // bindTab binds a panel tab's primary channel to a split node. Rebinding
 // replaces; the lane for the node is created on the next frame's demand.
 func (inst *PlayApp) bindTab(tabID string, node NodeID) {
@@ -289,6 +311,26 @@ func (inst selectionStamper) Emit(id SignalID, value any) {
 	if raw, found := leewayIdValue(inst.rec, row); found {
 		inst.inner.Emit(signalSelectionID, raw)
 	}
+	if raw, found := selectionKeyValue(inst.rec, row); found {
+		inst.inner.Emit(signalSelectionKey, raw)
+	}
+}
+
+// selectionKeyValue reads the row's `key` column as text. Read through
+// formatCell like the graph's source/target, so the column carries no type
+// requirement — a numeric id is a fine key.
+func selectionKeyValue(rec arrow.RecordBatch, row int64) (raw string, found bool) {
+	if rec == nil || row < 0 || row >= rec.NumRows() {
+		return
+	}
+	schema := rec.Schema()
+	for i := 0; i < schema.NumFields(); i++ {
+		if schema.Field(i).Name != selectionKeyCol {
+			continue
+		}
+		return formatCell(rec, i, row), true
+	}
+	return
 }
 
 // leewayIdValue extracts the row's primary leeway id — the first `id:id:…`

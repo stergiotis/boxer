@@ -148,7 +148,7 @@ func edgeSet(m layeredgraph.GraphModel) map[[2]string]string {
 // noVerts is the zero vertices claim (no vertices CTE): idCol -1 disables the
 // vertex pass, so buildNetworkModel infers nodes from the edge endpoints.
 func noVerts() networkVerticesClaim {
-	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1}
+	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1}
 }
 
 func TestNetworkAcceptEdgesContract(t *testing.T) {
@@ -237,6 +237,83 @@ func TestNetworkBuildDecoratesVertices(t *testing.T) {
 
 	// edge labels carried through.
 	assert.Equal(t, "to-c", edgeSet(b.model)[[2]string{"b", "c"}])
+}
+
+// netTonedVerts builds a vertices record carrying `group` and `tone`, the
+// pair whose precedence the tone tests pin.
+func netTonedVerts(t *testing.T, id, group, tone []string) arrow.RecordBatch {
+	t.Helper()
+	fields := []arrow.Field{strField("id"), strField("group"), strField("tone")}
+	cols := []arrow.Array{netStrArr(t, id), netStrArr(t, group), netStrArr(t, tone)}
+	return array.NewRecordBatch(arrow.NewSchema(fields, nil), cols, int64(len(id)))
+}
+
+// netTonedEdges builds an edges record carrying `tone`.
+func netTonedEdges(t *testing.T, src, tgt, tone []string) arrow.RecordBatch {
+	t.Helper()
+	fields := []arrow.Field{strField("source"), strField("target"), strField("tone")}
+	cols := []arrow.Array{netStrArr(t, src), netStrArr(t, tgt), netStrArr(t, tone)}
+	return array.NewRecordBatch(arrow.NewSchema(fields, nil), cols, int64(len(src)))
+}
+
+// The vocabulary is the six semantic families; the role picks the variant, so
+// a stroke never gets the background tone a node body wants.
+func TestNetworkToneVocabulary(t *testing.T) {
+	for _, name := range []string{"accent", "info", "success", "warning", "error", "neutral"} {
+		bg, okBg := networkTone(name, false)
+		fg, okFg := networkTone(name, true)
+		require.True(t, okBg, "background tone %q", name)
+		require.True(t, okFg, "foreground tone %q", name)
+		assert.NotEqual(t, bg, fg, "%q: a stroke and a node body take different variants", name)
+	}
+	// Case and surrounding space are forgiven; anything else asserts nothing
+	// rather than blanking the node.
+	_, ok := networkTone("  ERROR ", false)
+	assert.True(t, ok)
+	_, ok = networkTone("chartreuse", false)
+	assert.False(t, ok)
+	_, ok = networkTone("", false)
+	assert.False(t, ok)
+}
+
+// `group` says "these belong together"; `tone` says "this one means
+// something". A query that named a meaning gets it.
+func TestNetworkBuildToneOverridesGroup(t *testing.T) {
+	vr := netTonedVerts(t,
+		[]string{"a", "b", "c"},
+		[]string{"x", "x", "x"},             // one group for all three
+		[]string{"error", "", "not-a-tone"}) // only a names a tone
+	er := netEdges(t, []string{"a"}, []string{"b"}, nil)
+	ec, _ := resolveNetworkEdges(er.Schema())
+	vc, reason := resolveNetworkVertices(vr.Schema())
+	require.Empty(t, reason)
+
+	b := buildNetworkModel(er, ec, vr, vc)
+	want, _ := networkTone("error", false)
+	assert.Equal(t, want, b.fillOf["a"], "the named tone wins over the group palette")
+	assert.NotEqual(t, b.fillOf["a"], b.fillOf["b"], "same group, but a is toned")
+	assert.Equal(t, b.fillOf["b"], b.fillOf["c"],
+		"an unrecognised tone falls back to the group fill rather than blanking")
+}
+
+// A toned edge is stroked by endpoints; an untoned one keeps the style
+// default, and a result with no tone column allocates nothing.
+func TestNetworkBuildEdgeTone(t *testing.T) {
+	er := netTonedEdges(t,
+		[]string{"a", "b"}, []string{"b", "c"}, []string{"error", ""})
+	ec, reason := resolveNetworkEdges(er.Schema())
+	require.Empty(t, reason)
+
+	b := buildNetworkModel(er, ec, nil, noVerts())
+	want, _ := networkTone("error", true)
+	assert.Equal(t, want, b.strokeOf[[2]string{"a", "b"}])
+	_, has := b.strokeOf[[2]string{"b", "c"}]
+	assert.False(t, has, "an empty tone leaves the edge at the style default")
+
+	plain := netEdges(t, []string{"a"}, []string{"b"}, nil)
+	pec, _ := resolveNetworkEdges(plain.Schema())
+	pb := buildNetworkModel(plain, pec, nil, noVerts())
+	assert.Nil(t, pb.strokeOf, "no tone column, no stroke map")
 }
 
 func TestNetworkBuildDeDupesVertices(t *testing.T) {

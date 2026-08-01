@@ -272,8 +272,10 @@ var builtinTabDefs = []builtinTabDef{
 		writes: []SignalID{signalSelection}},
 	// The Network tab draws the result as a node-link graph (ADR-0129). Its
 	// title is deliberately not "Graph" — that is the dataflow chrome below.
-	// It writes nothing: selection is local to the driver in v1.
-	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true, shapeContract: true},
+	// It publishes the clicked vertex id as `selection_key` (a value); the
+	// row-index `selection` stays local to the driver, per ADR-0129 §SD4.
+	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelectionKey}},
 	{id: "graph", dockID: dockTabGraph, title: "Graph", lazy: true},
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
 	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},

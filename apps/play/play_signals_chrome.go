@@ -63,6 +63,7 @@ func reservedSignalTypes() (out map[string]string) {
 	out[string(signalSelection)] = "Int64"
 	out[string(signalSelectionNode)] = "String"
 	out[string(signalSelectionID)] = "UInt64"
+	out[string(signalSelectionKey)] = "String"
 	out[string(signalSelectionCountry)] = "String"
 	return
 }
