@@ -483,13 +483,12 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ### 2026-08-01 — SQL tools leave the result strip (design): the zone becomes a kind, and the focus knobs stop being body-only
 
-Eighteen built-in tabs, thirteen of them in the body leaf — enough that the
-scripted tour's own captures show `Timeline`, `Kanban` and `Network` truncated
-mid-title. Five of the thirteen never touch a row. Passes, Diagnostics, Flow,
-Graph and Snippets read the buffer, the caret, the split or the pass registry,
-and are read *while editing* rather than while looking at a result. They are in
-the result strip for no reason beyond D4's default: a tab that does not name a
-zone lands in the body.
+Eighteen built-in tabs, thirteen of them in the body leaf, and five of the
+thirteen never touch a row. Passes, Diagnostics, Flow, Graph and Snippets read
+the buffer, the caret, the split or the pass registry, and are read *while
+editing* rather than while looking at a result. They are in the result strip for
+no reason beyond D4's default: a tab that does not name a zone lands in the
+body.
 
 **Decision — zone by input, not by subject.** The registry already draws the
 line 6a made structural (SD7): a result panel carries a `PanelI` and is fed the
@@ -574,11 +573,17 @@ collapses repeats of a settled buffer, and the caret-mode gate already refuses
 to ask about a half-typed statement, so the standing cost is one extra
 demand per settled buffer rather than per frame.
 
-The destination is also the narrower leaf, so the move trades one crowded strip
-for two less crowded ones rather than removing crowding: five titles in a leaf
-roughly 45% of the window's width, against ten in the full-width one. If that
-reads badly in the app, the editor's share of the top row is the first thing to
-give.
+The destination is also the narrower leaf — roughly 45% of the window's width
+against the body's full width — so the move redistributes strip pressure rather
+than removing it: six titles there, nine below. If it reads badly in the app,
+the editor's share of the top row is the first thing to give.
+
+An earlier draft of this Update claimed the tour's captures showed body titles
+truncating at thirteen tabs. They did not: the `-` on `Timeline`, `Kanban` and
+`Network` is the shape-reject mark of the 2026-07-27 Update, and at the tour's
+1920×1200 the strip fits. The crowding argument is a real one at the narrower
+sizes play opens at by default, but it is not the argument that carries this
+change; the classification is.
 
 **What it does not cost: nothing to migrate.** D3 describes the dock ids as
 keying "the Rust-side persisted dock layout", which makes a re-zoning look like
@@ -607,6 +612,32 @@ built-in enumeration already asserts zones, so it moves with the set; the focus
 derivation gains the non-body knobs; the per-zone reorder gets the coverage
 `bodyTabOrder` has. Verified by capturing one scene per moved tab through its
 restored knob, which is also what proves the derivation.
+
+**Shipped the same day, as designed.** `TabZoneTools` replaces
+`TabZonePreview`; Flow, Passes, Diagnostics and Snippets join Docs and Preview
+in it; Graph and Schema stay in the body. `bodyTabOrder` became `zoneTabOrder`,
+applied to all four zones, and `registerFocusVars` dropped its body filter — 19
+knobs where there were 14, the new ones being `DOCS`, `PREVIEW`, `EDITOR`,
+`HISTORY` and `DETAIL` (the last two inert, each tab already being first in its
+leaf). One refinement while building: `zoneTabOrder` raises the earliest
+*spec* named by the knob set rather than the first *knob* that resolves, so its
+result turns on the set of focused ids and not on the order they arrive in — a
+weaker precondition on the caller, and the property a test asserted before the
+code had it.
+
+The tour found a second instance of the bug that motivated the knob work:
+scene 17 set `BOXER_PLAY_PREVIEW_AS_SENT` without focusing Preview, so it
+configured a pane it then failed to raise. Both preview scenes now capture the
+Preview tab for the first time.
+
+Live-verified headlessly across eight scenes. Two things the captures settle
+that the design could only guess at: the Passes schematic and the Flow graph
+both fit the narrower leaf without scrolling, and the case for the move is
+better than the argument made for it — the Diagnostics scene puts the
+`symbal:value` / `geoPoint:lattitude` complaints directly beside the editor
+lines that contain the typos, which the old layout could not do at all. The one
+measured regression is that Diagnostics no longer shows all seven sections
+without scrolling.
 
 ### 2026-08-01 — a node's signal edges are those of its fused subgraph
 

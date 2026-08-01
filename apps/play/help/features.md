@@ -13,11 +13,14 @@ A reference for everything the SQL playground does. For a gentle introduction
 see the **Overview**, for a verified query set see **Example queries**, and for
 ready-to-run fragments see **Snippets**. This page describes each feature in turn.
 
-The window is a rearrangeable, splittable dock of tabs (Editor, Preview, History,
-Table, Projection, Timeline, Snippets, Detail, Map, World, Graph, Schema,
-Diagnostics) between a pinned top bar (Run, Load, connection) and a status bar
-(the query-state inspector). Drag a tab to re-dock or split it; the layout is
-remembered.
+The window is a rearrangeable, splittable dock of tabs between a pinned top bar
+(Run, Load, connection) and a status bar (the query-state inspector). They fall
+into three groups: the **editor** (Editor, History), the **tool panes** beside
+it (Docs, Preview, Flow, Passes, Diagnostics, Snippets — each reads the buffer,
+or something derived from it, while you type), and the **result panes** below
+(Table, Projection, Timeline, Map, World, Kanban, Network, Graph, Schema, and
+Detail alongside them). Drag a tab to re-dock or split it; the layout holds for
+the session and starts fresh next launch.
 
 ## Connecting to ClickHouse
 

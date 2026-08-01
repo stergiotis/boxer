@@ -44,9 +44,19 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 
 	assert.Equal(t, TabZoneEditor, seen["editor"].Zone)
 	assert.Equal(t, TabZoneEditor, seen["history"].Zone)
-	assert.Equal(t, TabZonePreview, seen["preview"].Zone)
 	assert.Equal(t, TabZoneSide, seen["detail"].Zone)
 	assert.Equal(t, TabZoneBody, seen["table"].Zone, "body is the zero-value zone")
+
+	// The tool panes: chrome fed by the buffer or by what is derived from it
+	// (ADR-0097 Update 2026-08-01). Graph is deliberately NOT among them —
+	// it qualifies by input and stays in the body for room — and Schema is
+	// not one at all, its input being the result's own schema.
+	for _, id := range []string{"docs", "preview", "flow", "passes", "diagnostics", "snippets"} {
+		assert.Equal(t, TabZoneTools, seen[id].Zone, "tab %q is a tool pane", id)
+		assert.Nil(t, seen[id].Panel, "a tool pane carries no PanelI (SD7)")
+	}
+	assert.Equal(t, TabZoneBody, seen["graph"].Zone, "Graph stays in the body against its classification")
+	assert.Equal(t, TabZoneBody, seen["schema"].Zone, "Schema is fed the result, not the buffer")
 
 	// Map is the only no-scroll leaf: it sizes its raster from the available
 	// space, so it needs a bounded one. World left this set when it moved to a
@@ -64,11 +74,14 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 	assert.ElementsMatch(t, []string{"table", "projection", "timeline", "world", "kanban", "network", "schema", "detail"},
 		panelIDs, "chrome registers with a nil PanelI (SD7)")
 
-	// The body zone keeps today's presentation order.
-	assert.Equal(t, []uint64{dockTabTable, dockTabProjection, dockTabTimeline, dockTabSnippets,
-		dockTabMap, dockTabWorld, dockTabKanban, dockTabNetwork, dockTabGraph, dockTabSchema,
-		dockTabDiagnostics, dockTabPasses, dockTabFlow},
+	// Presentation order per zone. Docs stays first among the tools so a
+	// fresh layout opens on it.
+	assert.Equal(t, []uint64{dockTabTable, dockTabProjection, dockTabTimeline,
+		dockTabMap, dockTabWorld, dockTabKanban, dockTabNetwork, dockTabGraph, dockTabSchema},
 		dockIDsOf(reg.byZone(TabZoneBody)))
+	assert.Equal(t, []uint64{dockTabDocs, dockTabPreview, dockTabFlow, dockTabPasses,
+		dockTabDiagnostics, dockTabSnippets},
+		dockIDsOf(reg.byZone(TabZoneTools)))
 }
 
 // Mutation window (D4): Add/Replace/Remove validate and work before the first
@@ -114,29 +127,47 @@ func TestTabRegistrySpecsIsACopy(t *testing.T) {
 	assert.NotEqual(t, "clobbered", reg.all()[0].ID, "Specs must return a copy")
 }
 
-// The focus reorder: one pure function over the body zone instead of six
-// hand-permuted arrays (whose FOCUS_MAP copy had silently dropped Graph).
-func TestBodyTabOrderFocusReorder(t *testing.T) {
+// The focus reorder: one pure function per zone instead of six hand-permuted
+// arrays (whose FOCUS_MAP copy had silently dropped Graph).
+func TestZoneTabOrderFocusReorder(t *testing.T) {
 	body := tabsTestApp().Tabs().byZone(TabZoneBody)
 	base := dockIDsOf(body)
 
-	assert.Equal(t, base, bodyTabOrder(body, ""), "no focus ⇒ definition order")
-	assert.Equal(t, base, bodyTabOrder(body, "nope"), "unknown id ⇒ definition order")
+	assert.Equal(t, base, zoneTabOrder(body, nil), "no focus ⇒ definition order")
+	assert.Equal(t, base, zoneTabOrder(body, []string{"nope"}), "unknown id ⇒ definition order")
 
-	got := bodyTabOrder(body, "graph")
+	got := zoneTabOrder(body, []string{"graph"})
 	require.Equal(t, dockTabGraph, got[0], "the focused tab moves to the front")
 	assert.ElementsMatch(t, base, got, "reordering never drops a tab")
 	assert.Len(t, got, len(base))
+
+	// A knob naming a tab in ANOTHER zone leaves this one in definition
+	// order: each leaf raises its own, so two knobs no longer contend
+	// (ADR-0097 Update 2026-08-01).
+	assert.Equal(t, base, zoneTabOrder(body, []string{"passes"}),
+		"a tools-zone id must not reorder the body")
+	tools := tabsTestApp().Tabs().byZone(TabZoneTools)
+	require.Equal(t, dockTabPasses, zoneTabOrder(tools, []string{"passes", "graph"})[0])
+	require.Equal(t, dockTabGraph, zoneTabOrder(body, []string{"passes", "graph"})[0])
+
+	// Within one zone, definition order still picks.
+	assert.Equal(t, dockTabTable, zoneTabOrder(body, []string{"schema", "table"})[0],
+		"the earliest focused id in the zone wins")
 }
 
-// The focus knobs derive from the tab definitions: one per body tab, named
-// BOXER_PLAY_FOCUS_<ID>.
-func TestFocusVarsDerivedFromBodyTabs(t *testing.T) {
-	wantIDs := []string{"table", "projection", "timeline", "snippets", "map", "world", "kanban", "network", "graph", "schema", "diagnostics", "passes", "flow"}
-	require.Len(t, focusVars, len(wantIDs))
-	for _, id := range wantIDs {
-		v, ok := focusVars[id]
-		require.True(t, ok, "no focus knob for %q", id)
-		assert.Equal(t, "BOXER_PLAY_FOCUS_"+strings.ToUpper(id), v.Spec().Name)
+// The focus knobs derive from the tab definitions: one per built-in tab in
+// EVERY zone, named BOXER_PLAY_FOCUS_<ID>. Body-only derivation is what left
+// the Preview tab without one when it moved out of the body leaf.
+func TestFocusVarsDerivedFromEveryBuiltinTab(t *testing.T) {
+	reg := tabsTestApp().Tabs()
+	require.Len(t, focusVars, len(reg.all()))
+	for _, spec := range reg.all() {
+		v, ok := focusVars[spec.ID]
+		require.True(t, ok, "no focus knob for %q", spec.ID)
+		assert.Equal(t, "BOXER_PLAY_FOCUS_"+strings.ToUpper(spec.ID), v.Spec().Name)
+	}
+	for _, id := range []string{"preview", "docs", "flow", "passes", "diagnostics", "snippets", "history"} {
+		_, ok := focusVars[id]
+		assert.True(t, ok, "the non-body zones carry knobs too (%q)", id)
 	}
 }

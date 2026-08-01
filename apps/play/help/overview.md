@@ -22,30 +22,49 @@ appended `FORMAT` clause is invalid on those statements.
 ## Tabs
 
 The window is a dock of tabs you can rearrange and split (each, and every other
-feature, is covered in depth on the **Features** page):
+feature, is covered in depth on the **Features** page). They fall into three
+groups by what they read.
+
+**The editor**, top left:
 
 - **Editor** — the SQL buffer plus a row of parameter editors (see below). The
   buffer is persisted across sessions.
-- **Preview** — the editor's SQL re-rendered in its canonical, syntax-highlighted
-  form. A parse aid, not a second query.
 - **History** — previously run queries.
+
+**The tool panes**, beside the editor — each reads the buffer, or something
+derived from it, so you keep them open while typing:
+
+- **Docs** — the server's own documentation for whatever the caret is on.
+- **Preview** — the editor's SQL re-rendered in its canonical, syntax-highlighted
+  form. A parse aid, not a second query. Its "as sent to server" view shows the
+  statement that actually ships.
+- **Flow** — clause-level dataflow inside one statement: where the columns a
+  `SELECT` returns come from.
+- **Passes** — the pre-execute rewrite sequence the buffer runs through, in
+  order, with any that were skipped marked.
+- **Diagnostics** — parse advice and the full error texts (the other tabs only
+  point here). When boxer's grammar can't parse the buffer, an `EXPLAIN AST`
+  probe against the server distinguishes a boxer grammar gap from broken SQL.
+- **Snippets** — a library of ready-to-run fragments with Insert/Replace buttons.
+
+**The result panes**, below — these are fed the query's rows:
+
 - **Table** — the result grid. Select a row here to drive the Detail tab.
+- **Detail** — the per-row card for the row selected in Table.
 - **Projection** — a derived/projection view over the result columns.
 - **Timeline** — plots time-shaped results on a horizontal time axis, when the
   result matches the timeline column contract (see the example-queries page).
-- **Snippets** — a library of ready-to-run fragments with Insert/Replace buttons.
-- **Detail** — the per-row card for the row selected in Table.
 - **Map** — an in-database-rendered geo raster over a pannable map, for tables
   with mercator columns (queries on its own, independent of the editor).
 - **World** — a schematic world choropleth when the result names countries
   (ISO codes or names) alongside a numeric column.
+- **Kanban** — the result as cards in lanes, when it carries `lane` and `title`
+  columns.
+- **Network** — the result as a node-link graph, when it names an `edges` set.
 - **Graph** — the reactive query-graph: the buffer's CTEs as nodes; observe an
   intermediate node to point the result tabs at it. Also hosts the **signals**
   editor (see below).
 - **Schema** — a structural inspector over the result's schema.
-- **Diagnostics** — parse advice and the full error texts (the other tabs only
-  point here). When boxer's grammar can't parse the buffer, an `EXPLAIN AST`
-  probe against the server distinguishes a boxer grammar gap from broken SQL.
 
 ## The Detail card and leeway data
 

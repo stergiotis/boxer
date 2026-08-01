@@ -261,7 +261,7 @@ LIMIT 100"
 
 scene_16_preview_canonical() {
 	desc="Preview — the canonical form the nanopass pipeline rewrites the buffer into, before any handle resolution"
-	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_PREVIEW_TAB=1)
+	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_FOCUS_PREVIEW=1)
 	sql="SELECT domain, countIf(level = 1) AS l1, countIf(level = 2) AS l2, count() AS total
 FROM capmap.capabilities
 WHERE domain != ''
@@ -272,7 +272,7 @@ ORDER BY total DESC"
 
 scene_17_preview_as_sent() {
 	desc="Preview — 'as sent to server': the post-pass wire SQL, with the appended FORMAT ArrowStream and the statement selection"
-	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_PREVIEW_AS_SENT=1)
+	senv=(BOXER_PLAY_FOCUS_TABLE=1 BOXER_PLAY_FOCUS_PREVIEW=1 BOXER_PLAY_PREVIEW_AS_SENT=1)
 	sql="SELECT \`id:id\`, \`symbol:value\`
 FROM anchor.facts
 WHERE hasAny(\`symbol:value\`, ['DELIVERED'])

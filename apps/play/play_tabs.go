@@ -1,6 +1,7 @@
 package play
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -25,10 +26,16 @@ import (
 type TabZoneE uint8
 
 const (
-	TabZoneBody    TabZoneE = iota // the main body leaf (result views)
-	TabZoneEditor                  // the editor leaf (Editor, History)
-	TabZonePreview                 // split right of the editor leaf
-	TabZoneSide                    // split right of the body leaf (Detail)
+	TabZoneBody   TabZoneE = iota // the main body leaf (result views)
+	TabZoneEditor                 // the editor leaf (Editor, History)
+	// TabZoneTools is the leaf split right of the editor: the tool panes,
+	// read WHILE editing. A tool pane is chrome (nil Panel) whose input is
+	// the buffer or what is derived from it — the caret, the split, the
+	// pre-execute pipeline — as opposed to a result panel, which is fed the
+	// query result over a channel (ADR-0097 Update 2026-08-01). It was
+	// TabZonePreview when Preview was its only occupant.
+	TabZoneTools
+	TabZoneSide // split right of the body leaf (Detail)
 )
 
 // TabFrame is the per-frame view a tab body renders from: the active result
@@ -230,7 +237,7 @@ type builtinTabDef struct {
 // snippet-insert delivery target), table (the most-trafficked result view,
 // spared the one-frame loading tick), snippets (trivial body), and the
 // preview/detail tabs. Detail is alone in its leaf, so a gate would never
-// fire; Preview now shares one with Docs and so CAN be hidden, but its body
+// fire; Preview shares one and so CAN be hidden, but its body
 // is a memoised CodeView over already-computed text — cheap enough that the
 // one-frame tick a gate costs would be the more visible of the two. Data pipelines are unaffected either
 // way: lane demand, updatePreview and the diagnostics probe run before the
@@ -238,22 +245,45 @@ type builtinTabDef struct {
 var builtinTabDefs = []builtinTabDef{
 	{id: "editor", dockID: dockTabEditor, title: "Editor", zone: TabZoneEditor},
 	{id: "history", dockID: dockTabHistory, title: "History", zone: TabZoneEditor, lazy: true},
-	// Docs and Preview share the leaf to the right of the editor: both are
-	// reference surfaces you read WHILE editing, which is what that leaf is
-	// for. Docs is listed first, so a fresh layout opens on it; the dock
-	// persists whichever the user then picks.
+
+	// The tool panes, in the leaf right of the editor (ADR-0097 Update
+	// 2026-08-01). Each is chrome fed by the buffer or by what is derived
+	// from it, so none carries a PanelI, and each is read while editing
+	// rather than while looking at rows. Docs is listed first, so a fresh
+	// layout opens on it; the dock keeps whichever the user then picks.
 	//
-	// A TOOL pane, not a result panel — it reads the editor's caret, not the
-	// query result, so it registers with no PanelI. Lazy because a hidden
-	// pane must not keep asking the server what the caret is on.
-	{id: "docs", dockID: dockTabDocs, title: "Docs", zone: TabZonePreview, lazy: true},
-	{id: "preview", dockID: dockTabPreview, title: "Preview", zone: TabZonePreview},
+	// Docs reads the editor's caret. Lazy because a hidden pane must not
+	// keep asking the server what the caret is on.
+	{id: "docs", dockID: dockTabDocs, title: "Docs", zone: TabZoneTools, lazy: true},
+	{id: "preview", dockID: dockTabPreview, title: "Preview", zone: TabZoneTools},
+	// Flow draws the ACTIVE node's clause-level dataflow derived from the SQL
+	// itself (ADR-0153) — inside one statement, where the Graph tab's boxes
+	// end. It follows the split or, in caret mode, the statement under the
+	// cursor: the same input as Docs. Selection is local to the driver, so it
+	// writes nothing.
+	{id: "flow", dockID: dockTabFlow, title: "Flow", zone: TabZoneTools, lazy: true},
+	// Passes draws the pre-execute rewrite pipeline over the statement Run
+	// would ship — keyed on the buffer and the passreg catalog, never on a
+	// row (ADR-0119 M3).
+	{id: "passes", dockID: dockTabPasses, title: "Passes", zone: TabZoneTools, lazy: true},
+	// Diagnostics is six buffer-fed sections (statement, rewrites, column
+	// resolution, security context, split, signal emits) and one that reports
+	// the last run. It moves whole: a run error is read while fixing the SQL
+	// that caused it, and Preview and Graph both point here for prose they
+	// decline to own.
+	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", zone: TabZoneTools, lazy: true},
+	// Snippets is an editor tool: its input is the help corpus and its output
+	// is the buffer. Its splice needs the editor visible, which this leaf
+	// satisfies — it is a SIBLING of the editor leaf, not the same one, and
+	// the delivery ops raise the editor leaf, so Snippets cannot hide itself
+	// with its own click.
+	{id: "snippets", dockID: dockTabSnippets, title: "Snippets", zone: TabZoneTools},
+
 	{id: "table", dockID: dockTabTable, title: "Table", writes: []SignalID{signalSelection}},
 	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true,
 		writes: []SignalID{signalSelection}},
 	{id: "timeline", dockID: dockTabTimeline, title: "Timeline", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection, signalTimelineMin, signalTimelineMax}},
-	{id: "snippets", dockID: dockTabSnippets, title: "Snippets"},
 	// NoScroll: the walkers map reads wheel/zoom input globally (no
 	// consumption), so the dock's default body ScrollArea would scroll the
 	// panel in the same gesture that pans/zooms the map.
@@ -276,66 +306,84 @@ var builtinTabDefs = []builtinTabDef{
 	// row-index `selection` stays local to the driver, per ADR-0129 §SD4.
 	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelectionKey}},
+	// Graph stays in the body against its classification: its input is the
+	// split and the signal store, so by the criterion above it is a tool pane,
+	// but its subject is the SESSION's reactive wiring rather than the
+	// statement being typed, and it is a canvas plus the Signals section — it
+	// wants more room than the tools leaf has (ADR-0097 Update 2026-08-01).
 	{id: "graph", dockID: dockTabGraph, title: "Graph", lazy: true},
+	// Schema reads like a tool pane and is not one: its input is the RESULT's
+	// Arrow schema, which is why it carries a PanelI at all.
 	{id: "schema", dockID: dockTabSchema, title: "Schema", lazy: true},
-	{id: "diagnostics", dockID: dockTabDiagnostics, title: "Diagnostics", lazy: true},
-	{id: "passes", dockID: dockTabPasses, title: "Passes", lazy: true},
-	// Flow draws the ACTIVE node's clause-level dataflow derived from the SQL
-	// itself (ADR-0153) — inside one statement, where the Graph tab's boxes
-	// end. A TOOL pane like Docs: it reads the split, not the query result, so
-	// it registers with no PanelI and writes nothing (selection is local to
-	// the driver).
-	{id: "flow", dockID: dockTabFlow, title: "Flow", lazy: true},
 	{id: "detail", dockID: dockTabDetail, title: "Detail", zone: TabZoneSide},
 }
 
 // focusVars are the BOXER_PLAY_FOCUS_<ID> scripted-screenshot knobs, one per
-// built-in body tab, derived from the tab definitions (slice 6a — this
-// replaces six hand-registered specs and their hand-permuted reorder blocks;
-// TABLE, PROJECTION and SNIPPETS knobs are new with the derivation).
+// built-in tab, derived from the tab definitions (slice 6a — this replaces six
+// hand-registered specs and their hand-permuted reorder blocks).
+//
+// The derivation covers every zone, not just the body (ADR-0097 Update
+// 2026-08-01): a knob that exists only while its tab happens to sit in the body
+// leaf is a knob that disappears when the tab is re-zoned, which is how the
+// Preview tab came to have none. Two of them are inert — Editor and Detail are
+// each first in their leaf already — and registering them anyway is what keeps
+// the set from needing a hand-maintained exception list.
 var focusVars = registerFocusVars()
 
 func registerFocusVars() (out map[string]*env.StringVar) {
 	out = make(map[string]*env.StringVar, len(builtinTabDefs))
 	for _, def := range builtinTabDefs {
-		if def.zone != TabZoneBody {
-			continue
-		}
 		out[def.id] = env.NewString(env.Spec{
 			Name:        "BOXER_PLAY_FOCUS_" + strings.ToUpper(def.id),
-			Description: "non-empty makes " + def.title + " the default-active body tab (scripted screenshots)",
+			Description: "non-empty makes " + def.title + " the default-active tab in its dock leaf (scripted screenshots)",
 			Category:    env.CategoryE("boxer-play"),
 		})
 	}
 	return
 }
 
-// focusedTabID returns the body-tab id a BOXER_PLAY_FOCUS_* knob selects
-// (first set knob in definition order), or "".
-func focusedTabID() string {
+// focusedTabIDs returns the ids whose BOXER_PLAY_FOCUS_* knob is set, in
+// definition order. One takes effect per leaf: zoneTabOrder raises the earliest
+// of its own zone's specs named here, so knobs set in two zones focus a tab in
+// each rather than contending. Within one zone the tab earliest in definition
+// order picks — a degenerate scripting case either way.
+func focusedTabIDs() (out []string) {
 	for _, def := range builtinTabDefs {
 		if v, ok := focusVars[def.id]; ok && v.Get() != "" {
-			return def.id
+			out = append(out, def.id)
 		}
 	}
-	return ""
+	return
 }
 
-// bodyTabOrder maps the body-zone specs to their dock ids with the focused
-// tab (when set and present) moved to the front — a fresh dock leaf activates
-// its first tab. Pure; the env read stays in focusedTabID.
-func bodyTabOrder(specs []TabSpec, focusedID string) (out []uint64) {
+// zoneTabOrder maps one zone's specs to their dock ids with the first focused
+// tab among them moved to the front — a fresh dock leaf activates its first
+// tab. Pure; the env read stays in focusedTabIDs.
+func zoneTabOrder(specs []TabSpec, focused []string) (out []uint64) {
 	out = make([]uint64, 0, len(specs))
-	var focused []uint64
-	for i := range specs {
-		if specs[i].ID == focusedID {
-			focused = append(focused, specs[i].DockID)
-			continue
-		}
-		out = append(out, specs[i].DockID)
+	raise := indexOfFirstFocused(specs, focused)
+	if raise >= 0 {
+		out = append(out, specs[raise].DockID)
 	}
-	out = append(focused, out...)
+	for i := range specs {
+		if i != raise {
+			out = append(out, specs[i].DockID)
+		}
+	}
 	return
+}
+
+// indexOfFirstFocused returns the position of the earliest spec named by
+// focused, or -1 when this zone holds none of them. It scans the zone rather
+// than the knob list, so the result turns on the SET of focused ids and not on
+// the order they arrive in.
+func indexOfFirstFocused(specs []TabSpec, focused []string) (idx int) {
+	for i := range specs {
+		if slices.Contains(focused, specs[i].ID) {
+			return i
+		}
+	}
+	return -1
 }
 
 // dockIDForSlug resolves a tab's human slug to its frozen DockID (D3) — the

@@ -1173,8 +1173,13 @@ func (inst *PlayApp) Render() error {
 				Executed: executed, Err: err,
 				Sig: inst.frameSig, Emit: inst.sigEmit,
 			}
-			editorIDs := dockIDsOf(inst.tabs.byZone(TabZoneEditor))
-			bodyIDs := bodyTabOrder(inst.tabs.byZone(TabZoneBody), focusedTabID())
+			// Every zone runs through the same reorder: a fresh leaf
+			// activates its first tab, so raising the focused one is what a
+			// BOXER_PLAY_FOCUS_* knob means in any of them (ADR-0097 Update
+			// 2026-08-01 — it used to mean it only in the body zone).
+			focused := focusedTabIDs()
+			editorIDs := zoneTabOrder(inst.tabs.byZone(TabZoneEditor), focused)
+			bodyIDs := zoneTabOrder(inst.tabs.byZone(TabZoneBody), focused)
 			rootIDs := editorIDs
 			if len(rootIDs) == 0 {
 				rootIDs = bodyIDs // an embedder removed the editor zone
@@ -1184,11 +1189,11 @@ func (inst *PlayApp) Render() error {
 			if len(editorIDs) > 0 && len(bodyIDs) > 0 {
 				bodyLeaf = dock.Split(rootLeaf, c.DockBelow, 0.45, bodyIDs...)
 			}
-			if side := dockIDsOf(inst.tabs.byZone(TabZoneSide)); len(side) > 0 {
+			if side := zoneTabOrder(inst.tabs.byZone(TabZoneSide), focused); len(side) > 0 {
 				_ = dock.Split(bodyLeaf, c.DockRight, 0.70, side...)
 			}
-			if prev := dockIDsOf(inst.tabs.byZone(TabZonePreview)); len(prev) > 0 {
-				_ = dock.Split(rootLeaf, c.DockRight, 0.55, prev...)
+			if tools := zoneTabOrder(inst.tabs.byZone(TabZoneTools), focused); len(tools) > 0 {
+				_ = dock.Split(rootLeaf, c.DockRight, 0.55, tools...)
 			}
 			for _, spec := range inst.tabs.all() {
 				// Per-tab frame view (slice 6c): a bound tab renders its
@@ -1252,10 +1257,11 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 	// new result is on the way. The empty-state spinner cannot cover this:
 	// it is reached only when there is no result at all.
 	//
-	// Body-zone result panes only. Chrome tabs (Snippets, Graph, Passes …)
-	// do not render the frame at all, and the side zone is narrow by design
-	// — Detail is ~250 pt wide, where bar + numbers clip, and the body pane
-	// beside it is already carrying the same strip.
+	// Body-zone result panes only. Chrome tabs (Graph, and every tool
+	// pane in its own leaf) do not render the frame at all, and the side
+	// zone is narrow by design — Detail is ~250 pt wide, where bar +
+	// numbers clip, and the body pane beside it is already carrying the
+	// same strip.
 	if spec.Panel != nil && spec.Zone == TabZoneBody && f.Loading && f.Rec != nil {
 		inst.renderPaneProgressStrip(inst.tabOnActiveLane(spec.ID))
 	}
