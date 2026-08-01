@@ -6,7 +6,9 @@
 package introspecthttp
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -186,7 +188,7 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 	// and this endpoint is loopback-only (non-loopback binds are refused at
 	// Start). Without a decryptor wired, it is refused.
 	if enc, isEnc := p.(introspect.EncryptedDatasetI); isEnc {
-		s.serveEncrypted(w, enc)
+		s.serveEncrypted(w, r, enc)
 		return
 	}
 	proj := introspect.AllColumns()
@@ -200,16 +202,30 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
-	_, _ = w.Write(b)
+	// ServeContent rather than a plain write: it answers range requests,
+	// which ClickHouse's Arrow reader issues to skip column buffers a
+	// query does not read (see serveEncrypted).
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
 }
 
-// serveEncrypted streams an ad-hoc dataset's decryption as ArrowStream
-// (ADR-0134 §SD3, revised). A decryptor must be wired (else 4xx). A
-// mid-stream decrypt failure — truncation or authentication error — cannot
-// change the already-sent status, so it aborts the connection, which
-// clickhouse-local's url() reader surfaces as a failed fetch: the query
-// fails as a whole rather than accepting a silently-truncated result.
-func (s *Server) serveEncrypted(w http.ResponseWriter, enc introspect.EncryptedDatasetI) {
+// serveEncrypted serves an ad-hoc dataset's decryption as ArrowStream
+// (ADR-0134 §SD3, revised; ranges per the 2026-08-01 update). A decryptor
+// must be wired (else 4xx).
+//
+// It answers through ServeContent over the seekable plaintext because
+// range requests are load-bearing here: ClickHouse's Arrow reader skips
+// column buffers a query does not touch by re-requesting the source from
+// a later offset, so a dataset larger than the client's read buffer is
+// unreadable from a stream-only endpoint (found live: heap profiles,
+// ~7 MiB). The ETag carries the revision, so a ranged continuation that
+// straddles a republish fails If-Range validation instead of splicing
+// two revisions.
+//
+// A decrypt failure — truncation or authentication — cannot change the
+// already-sent status, so it aborts the connection, which the url()
+// reader surfaces as a failed fetch: the query fails as a whole rather
+// than accepting a silently-truncated result.
+func (s *Server) serveEncrypted(w http.ResponseWriter, r *http.Request, enc introspect.EncryptedDatasetI) {
 	if s.decryptor == nil {
 		http.Error(w, "ad-hoc dataset "+enc.Name()+" is not served here (no decryptor wired)", http.StatusForbidden)
 		return
@@ -230,10 +246,37 @@ func (s *Server) serveEncrypted(w http.ResponseWriter, enc introspect.EncryptedD
 	}
 	defer func() { _ = rc.Close() }()
 	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
-	if _, err = io.Copy(w, rc); err != nil {
-		s.log.Warn().Err(err).Str("table", enc.Name()).Msg("introspecthttp: ad-hoc dataset stream aborted")
+	w.Header().Set("ETag", fmt.Sprintf("%q", fmt.Sprintf("%s-r%d", enc.Name(), enc.Revision())))
+	tracked := &erroringReadSeeker{rs: rc}
+	http.ServeContent(w, r, "", time.Time{}, tracked)
+	if tracked.err != nil {
+		s.log.Warn().Err(tracked.err).Str("table", enc.Name()).Msg("introspecthttp: ad-hoc dataset stream aborted")
 		panic(http.ErrAbortHandler)
 	}
+}
+
+// erroringReadSeeker records the first read/seek failure so the handler
+// can abort the connection after ServeContent returns — ServeContent
+// itself swallows copy errors.
+type erroringReadSeeker struct {
+	rs  io.ReadSeeker
+	err error
+}
+
+func (inst *erroringReadSeeker) Read(p []byte) (n int, err error) {
+	n, err = inst.rs.Read(p)
+	if err != nil && err != io.EOF && inst.err == nil {
+		inst.err = err
+	}
+	return
+}
+
+func (inst *erroringReadSeeker) Seek(offset int64, whence int) (pos int64, err error) {
+	pos, err = inst.rs.Seek(offset, whence)
+	if err != nil && inst.err == nil {
+		inst.err = err
+	}
+	return
 }
 
 // maxQueryBytes caps the SQL a /query request may carry.

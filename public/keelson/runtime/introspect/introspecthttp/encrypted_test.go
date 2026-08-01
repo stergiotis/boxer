@@ -17,11 +17,15 @@ import (
 )
 
 // fakeDecryptor returns a fixed plaintext for any handle, standing in for
-// the broker's real streaming decrypt.
+// the broker's real seekable decrypt.
 type fakeDecryptor struct{ plaintext []byte }
 
-func (f fakeDecryptor) OpenDatasetPlaintext(ref adhocdata.Ref) (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewReader(f.plaintext)), nil
+type fakePlaintext struct{ *bytes.Reader }
+
+func (fakePlaintext) Close() error { return nil }
+
+func (f fakeDecryptor) OpenDatasetPlaintext(ref adhocdata.Ref) (adhocdata.PlaintextI, error) {
+	return fakePlaintext{bytes.NewReader(f.plaintext)}, nil
 }
 
 // TestServer_EncryptedDatasetRefused checks that the HTTP table source

@@ -16,6 +16,7 @@
 package queryrunsvc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net"
@@ -285,19 +286,28 @@ func (s *Service) handlePull(w http.ResponseWriter, r *http.Request) {
 	}()
 	// ArrowStream = the IPC stream format (schema + batches; a zero-row
 	// response is a valid schema-only stream, which url() reads as an
-	// empty table).
-	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
-	iw := ipc.NewWriter(w, ipc.WithSchema(ent.GetSchema()))
+	// empty table). Encode into memory first, then answer through
+	// ServeContent: the ClickHouse url() reader skips column buffers a
+	// projecting query does not touch — and resumes interrupted reads —
+	// via HTTP range requests, which a stream-only response cannot serve
+	// (ADR-0134 update 2026-08-01). Buffering also turns an encode
+	// failure into a clean 500 instead of a truncated body.
+	var buf bytes.Buffer
+	iw := ipc.NewWriter(&buf, ipc.WithSchema(ent.GetSchema()))
 	for _, rec := range records {
 		if wErr := iw.Write(rec); wErr != nil {
-			s.log.Warn().Err(wErr).Msg("queryrunsvc: stream write failed")
+			s.log.Warn().Err(wErr).Msg("queryrunsvc: stream encode failed")
+			http.Error(w, wErr.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	if cErr := iw.Close(); cErr != nil {
 		s.log.Warn().Err(cErr).Msg("queryrunsvc: stream close failed")
+		http.Error(w, cErr.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(buf.Bytes()))
 	if len(rows) > 0 {
 		s.log.Debug().Int("rows", len(rows)).Msg("queryrunsvc: served pull batch")
 	}

@@ -567,7 +567,53 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
-## References
+## Updates
+
+### 2026-08-01 — `/table` answers HTTP range requests; the decrypt seam turned seekable
+
+Found live through the imzrt Profiles tab (pprof-profiles-as-data M2):
+a ~7 MiB heap-profile dataset was unreadable as `keelson('<handle>')` —
+the query died after ~30 s of retries with `HTTP_RANGE_NOT_SATISFIABLE`.
+The cause is a ClickHouse client behaviour the original design did not
+anticipate: its Arrow-over-URL reader **skips the buffers of columns a
+query does not touch by re-requesting the source from a later offset**
+(`Range: bytes=N-`), and it also resumes interrupted reads the same way.
+The stream-only `/table` handler answered every request with a full-body
+200, which the client treats as a failed ranged read. Small datasets
+never surfaced this because the skip lands inside the client's read
+buffer; sub-buffer datasets were all the tests exercised.
+
+What changed:
+
+- **`/table` serves via `http.ServeContent`** for both provider
+  snapshots and sealed datasets: 206 partial content, `Accept-Ranges`,
+  `Content-Length`. A decrypt failure mid-stream still aborts the
+  connection (the no-silent-truncation property is unchanged); the
+  ETag carries `handle-r<revision>`, so a ranged continuation that
+  straddles a republish fails `If-Range` validation instead of splicing
+  two revisions.
+- **`DecryptorI` returns a seekable plaintext** (`PlaintextI`), backed
+  by the new `adhocdata.SeekableReader`: SD1's format already pins the
+  geometry — every non-final chunk carries exactly chunk-size
+  plaintext — so a plaintext offset maps arithmetically to a chunk, each
+  chunk authenticates independently under its counter nonce, and the
+  total plaintext size falls out of the ciphertext size. Random access
+  adds no new trust surface: a tampered or truncated file fails the
+  geometry check or the first touched chunk's authentication.
+- Regression pins: `TestLargeDatasetPartialReadE2E` (a dataset with a
+  multi-megabyte unread column tail through the production endpoint
+  wiring — the exact failing shape) and `SeekableReader` unit tests
+  including a cross-check against the streaming reader.
+- The same client reads `queryrunsvc`'s `GET /pull` (a refreshable
+  materialized view over `url()`), which had the same stream-only
+  answer; it now buffers the encoded batch and serves it through
+  `ServeContent` too. The query-engine adapters (`chserver`,
+  `chlocalbroker`) are clients, not `url()` targets — nothing to do
+  there.
+
+The accepted decision stands; serving got a capability the deployed
+client requires, and the format's §SD1 chunk choice is what made it
+cheap.
 
 Internal:
 

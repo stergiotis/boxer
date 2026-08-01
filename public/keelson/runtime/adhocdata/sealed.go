@@ -47,11 +47,22 @@ type Ref struct {
 	Revision uint64
 }
 
-// DecryptorI streams a sealed dataset's plaintext.
+// PlaintextI is a sealed dataset's decrypted read seam: a seekable
+// reader over the plaintext Arrow stream. Seek is load-bearing — it is
+// what lets the /table endpoint honor HTTP range requests, which
+// ClickHouse's Arrow reader issues to skip column buffers a query does
+// not touch (ADR-0134 update 2026-08-01). [SeekableReader] provides it
+// from the chunk geometry.
+type PlaintextI interface {
+	io.ReadSeeker
+	io.Closer
+}
+
+// DecryptorI serves a sealed dataset's plaintext.
 //
 // The implementation resolves the key in-process by [Ref.Handle] and
-// returns a reader over the decrypted Arrow stream; the caller closes it.
-// A mid-stream authentication or truncation failure surfaces as a read
+// returns a seekable reader over the decrypted Arrow stream; the caller
+// closes it. An authentication or truncation failure surfaces as a read
 // error rather than as a short result, which is the property the whole
 // scheme rests on — a truncated dataset must fail the query, not shorten
 // it.
@@ -59,5 +70,5 @@ type Ref struct {
 // Taking an interface here is what keeps the loopback endpoint from
 // importing the broker.
 type DecryptorI interface {
-	OpenDatasetPlaintext(ref Ref) (rc io.ReadCloser, err error)
+	OpenDatasetPlaintext(ref Ref) (rc PlaintextI, err error)
 }
