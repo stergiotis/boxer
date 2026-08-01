@@ -904,6 +904,8 @@ pub enum PaintMarkersBuilderMethodId {
 #[repr(u32)]
 pub enum PaintPolygonFilledBuilderMethodId {
     Build = 0,
+    Concave = 1,
+    Stroke = 2,
 }
 
 #[allow(dead_code)]

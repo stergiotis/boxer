@@ -597,6 +597,13 @@ const (
 )
 
 const (
+	PaintPolygonFilledMethodIdBuild PaintPolygonFilledMethodIdE = 0
+
+	PaintPolygonFilledMethodIdConcave PaintPolygonFilledMethodIdE = 1
+	PaintPolygonFilledMethodIdStroke  PaintPolygonFilledMethodIdE = 2
+)
+
+const (
 	PaintTextMethodIdBuild PaintTextMethodIdE = 0
 
 	PaintTextMethodIdMonospace PaintTextMethodIdE = 1

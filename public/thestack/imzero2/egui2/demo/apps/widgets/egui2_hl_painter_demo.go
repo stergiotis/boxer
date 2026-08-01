@@ -52,6 +52,15 @@ func init() {
 		Description: "ADR-0149 M0 painter primitives: a pushed/popped clip rectangle, the ten batched marker glyphs, and a per-rect-colored filled-rect batch.",
 		Render:      demoPainterM0,
 	})
+	registry.Register(registry.Demo{
+		Name:        "painter_polygons",
+		Category:    "Graphics & canvas",
+		Title:       icons.IconPaintBucket + " painter polygons (convex / concave / stroke)",
+		Stage:       [2]float32{520, 540},
+		Kind:        registry.DemoKindMixed,
+		Description: "PaintPolygonFilled: convex fan-fill vs Concave() ear-clip tessellation, the Stroke() outline, and the ellipse primitives.",
+		Render:      demoPainterPolygons,
+	})
 }
 
 // =============================================================================
@@ -236,6 +245,75 @@ func demoPainterM0(ids *c.WidgetIdStack) {
 	c.PaintText(gridX0+float32(gridCols)*(cell+gap)/2.0, gridY0+float32(gridRows)*(cell+gap)+4.0, 1, 0, "one PaintRectsFilled opcode: 32 rects", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
 
 	c.PaintCanvas(ids.PrepareStr("painter-m0"), 470.0, 400.0).
+		Background(color.Hex(0x1a1a1aff)).
+		Send()
+}
+
+// =============================================================================
+// DEMO: Filled polygons — convex vs Concave() ear-clip, Stroke(), ellipses
+// =============================================================================
+
+// polygonRing returns a regular n-gon when innerR == outerR, or a 2n-point
+// star alternating outer/inner radius otherwise. Point 0 points up.
+func polygonRing(cx, cy, outerR, innerR float32, n int) (xs, ys []float32) {
+	m := n
+	if innerR != outerR {
+		m = 2 * n
+	}
+	xs = make([]float32, m)
+	ys = make([]float32, m)
+	for i := range m {
+		ang := float64(i) * 2.0 * math.Pi / float64(m)
+		r := outerR
+		if innerR != outerR && i%2 == 1 {
+			r = innerR
+		}
+		xs[i] = cx + r*float32(math.Sin(ang))
+		ys[i] = cy - r*float32(math.Cos(ang))
+	}
+	return
+}
+
+func demoPainterPolygons(ids *c.WidgetIdStack) {
+	c.PaintText(235.0, 8.0, 1, 0, "PaintPolygonFilled: convex / Concave() / Stroke()", 14.0, color.Hex(0xffffffff)).Send()
+
+	// --- Convex baseline: hexagon through epaint's native fan-fill (feathered
+	// AA), with the Stroke() outline that used to be hard-coded off.
+	hxs, hys := polygonRing(80.0, 100.0, 48.0, 48.0, 6)
+	c.PaintPolygonFilled(hxs, hys, color.Hex(0x0066ffcc)).
+		Stroke(color.Hex(0x88bbffff), 2.0).Send()
+	c.PaintText(80.0, 160.0, 1, 0, "convex + Stroke()", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
+
+	// --- The same star with and without Concave(). The left one is the
+	// deliberate counter-example: a concave outline through the convex
+	// fan-fill mis-renders (that artifact is why the flag exists). The right
+	// one ear-clips to a mesh and fills exactly; the same-color hairline
+	// Stroke() covers the mesh's unfeathered edge.
+	sxs, sys := polygonRing(225.0, 100.0, 52.0, 22.0, 5)
+	c.PaintPolygonFilled(sxs, sys, color.Hex(0xff6600cc)).Send()
+	c.PaintText(225.0, 160.0, 1, 0, "concave, no flag: artifact", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
+
+	sxs2, sys2 := polygonRing(370.0, 100.0, 52.0, 22.0, 5)
+	c.PaintPolygonFilled(sxs2, sys2, color.Hex(0xff6600cc)).
+		Concave().
+		Stroke(color.Hex(0xff6600ff), 1.0).Send()
+	c.PaintText(370.0, 160.0, 1, 0, "Concave() + Stroke()", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
+
+	// --- A reflex-cornered flow arrow: the everyday concave case.
+	axs := []float32{40.0, 150.0, 150.0, 200.0, 150.0, 150.0, 40.0}
+	ays := []float32{215.0, 215.0, 195.0, 245.0, 295.0, 275.0, 275.0}
+	c.PaintPolygonFilled(axs, ays, color.Hex(0x44ffaacc)).
+		Concave().
+		Stroke(color.Hex(0x44ffaaff), 1.0).Send()
+	c.PaintText(120.0, 305.0, 1, 0, "notched arrow: Concave()", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
+
+	// --- The ellipse primitives, first shown here.
+	c.PaintEllipseFilled(300.0, 245.0, 55.0, 30.0, color.Hex(0xaa44ffcc)).Send()
+	c.PaintEllipseStroke(300.0, 245.0, 55.0, 30.0, color.Hex(0xdd99ffff), 1.5).Send()
+	c.PaintEllipseStroke(410.0, 245.0, 30.0, 42.0, color.Hex(0x44ddffff), 2.0).Send()
+	c.PaintText(345.0, 305.0, 1, 0, "ellipses: filled + stroked", 10.0, color.Hex(0xaaaaaaff)).Monospace().Send()
+
+	c.PaintCanvas(ids.PrepareStr("painter-polygons"), 470.0, 330.0).
 		Background(color.Hex(0x1a1a1aff)).
 		Send()
 }

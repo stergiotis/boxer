@@ -2664,9 +2664,25 @@ func (inst PaintMarkersFluid) Send() {
 
 	r.SendIntermediate()
 }
+func (inst PaintPolygonFilledFluid) Concave() PaintPolygonFilledFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintPolygonFilledMethodIdConcave))
+
+	return inst
+}
+
+func (inst PaintPolygonFilledFluid) Stroke(sc color.Color, sw float32) PaintPolygonFilledFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintPolygonFilledMethodIdStroke))
+	color.PutAsU32(r, sc)
+	r.WriteFloat32(sw)
+
+	return inst
+}
+
 func (inst PaintPolygonFilledFluid) Send() {
 	r := inst.r
-
+	r.WriteOpCode(uint32(PaintPolygonFilledMethodIdBuild))
 	r.SendIntermediate()
 }
 func (inst PaintPolylineFluid) Send() {

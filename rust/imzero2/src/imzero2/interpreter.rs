@@ -1006,6 +1006,8 @@ pub enum PaintCmd {
     PolygonFilled {
         points: Vec<[f32; 2]>,
         fill: egui::Color32,
+        stroke: egui::Stroke,
+        concave: bool,
     },
     EllipseFilled {
         cx: f32,
@@ -9183,6 +9185,41 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                 #[allow(unused_mut)]
                 let mut col = self.io.read_plain_u32()?;
                 // construct
+
+                #[allow(unused_mut)]
+                let mut w = 0u8;
+                let mut concave = false;
+                let mut stroke_col: u32 = 0;
+                let mut stroke_width: f32 = 0.0;
+                // methods
+                loop {
+                    let (m, _) =
+                        self.read_from_repr(PaintPolygonFilledBuilderMethodId::from_repr)?;
+                    match m {
+                        PaintPolygonFilledBuilderMethodId::Build => {
+                            break;
+                        }
+                        PaintPolygonFilledBuilderMethodId::Concave => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match PaintPolygonFilledBuilderMethodId::Concave"
+                            );
+                            concave = true;
+                        }
+                        PaintPolygonFilledBuilderMethodId::Stroke => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match PaintPolygonFilledBuilderMethodId::Stroke"
+                            );
+                            #[allow(unused_mut)]
+                            let mut sc = self.io.read_plain_u32()?;
+                            #[allow(unused_mut)]
+                            let mut sw = self.io.read_plain_f32()?;
+                            stroke_col = sc;
+                            stroke_width = sw;
+                        }
+                    }
+                }
                 if d == 0 {
                     self.end_consume_message()?;
                 }
@@ -9196,6 +9233,8 @@ egui_ltreeview::NodeBuilder::leaf(i.value()).label(label);
                     self.paint_cmds.push(PaintCmd::PolygonFilled {
                         points,
                         fill: color32_from_rgba_u32(col),
+                        stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(stroke_col)),
+                        concave,
                     });
                 }
             }
@@ -13739,12 +13778,51 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
                         .collect();
                     cur.line(pts, *stroke);
                 }
-                PaintCmd::PolygonFilled { points, fill } => {
+                PaintCmd::PolygonFilled {
+                    points,
+                    fill,
+                    stroke,
+                    concave,
+                } => {
                     let pts: Vec<egui::Pos2> = points
                         .iter()
                         .map(|p| egui::Pos2::new(origin.x + p[0], origin.y + p[1]))
                         .collect();
-                    cur.add(egui::Shape::convex_polygon(pts, *fill, egui::Stroke::NONE));
+                    if *concave && pts.len() >= 3 {
+                        // epaint fan-fills assuming convexity; ear-clip into a
+                        // mesh instead. A raw mesh gets no feathering — the
+                        // optional outline stroke below covers the hard edge.
+                        let flat: Vec<f64> =
+                            pts.iter().flat_map(|p| [p.x as f64, p.y as f64]).collect();
+                        match earcutr::earcut(&flat, &[], 2) {
+                            Ok(indices) => {
+                                let mut mesh = egui::Mesh::default();
+                                mesh.vertices.reserve(pts.len());
+                                for p in &pts {
+                                    mesh.colored_vertex(*p, *fill);
+                                }
+                                mesh.indices = indices.into_iter().map(|ix| ix as u32).collect();
+                                cur.add(egui::Shape::mesh(mesh));
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    ?err,
+                                    n = pts.len(),
+                                    "paintPolygonFilled: earcut failed; dropping fill"
+                                );
+                            }
+                        }
+                        if stroke.width > 0.0 {
+                            cur.add(egui::Shape::closed_line(pts, *stroke));
+                        }
+                    } else if *concave {
+                        // < 3 points: nothing fillable; honour a stroke if any.
+                        if stroke.width > 0.0 {
+                            cur.add(egui::Shape::closed_line(pts, *stroke));
+                        }
+                    } else {
+                        cur.add(egui::Shape::convex_polygon(pts, *fill, *stroke));
+                    }
                 }
                 PaintCmd::EllipseFilled {
                     cx,

@@ -225,19 +225,36 @@ self.paint_cmds.push(PaintCmd::Polyline { points, stroke: egui::Stroke::new(stro
 		WithReturnType(structPaintCmd()).
 		Build())
 
-	// paintPolygonFilled — filled convex polygon (e.g. solid arrow heads)
+	// paintPolygonFilled — filled polygon (e.g. solid arrow heads). Convex by
+	// default: egui's native fan-fill, feathered AA, cheapest. Concave() opts
+	// into ear-clip tessellation (earcutr → Shape::Mesh) for correct fills of
+	// non-convex outlines — a mesh fill bypasses epaint's feathering, so its
+	// edge is unantialiased; Stroke() with a hairline of the fill color covers
+	// it. Stroke() outlines the closed polygon in either mode (width 0 =
+	// default = no outline). Single outer ring only — holes are deferred until
+	// a real need (earcut supports them via ring indices).
 	registered = append(registered, idl.NewBuilderFactoryNode("paintPolygonFilled").
 		AddArguments(idl.NewArgumentsBuilder().
 			PlainArg("xs", ctabb.F32h).
 			PlainArg("ys", ctabb.F32h).
 			PlainArg("col", ctabb.U32).AsColor().
 			Build()).
-		WithConstructionCodeClientRust(ir.EmptyCode).
+		AddMethods(idl.NewMethodBuilder().
+			BeginMethod("concave").
+			CodeClientRust(rustClientCode("concave = true;\n")).EndMethod().
+			BeginMethod("stroke").Arg("sc", ctabb.U32).AsColor().Arg("sw", ctabb.F32).
+			CodeClientRust(rustClientCode("stroke_col = sc; stroke_width = sw;\n")).EndMethod().
+			Build()...).
+		WithConstructionCodeClientRust(rustClientCode(`0u8;
+let mut concave = false;
+let mut stroke_col: u32 = 0;
+let mut stroke_width: f32 = 0.0;
+`)).
 		WithApplyCodeClientRust(rustClientCode(`{
 let n = xs.len().min(ys.len());
 let mut points: Vec<[f32; 2]> = Vec::with_capacity(n);
 for i in 0..n { points.push([xs[i], ys[i]]); }
-self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u32(col) });
+self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u32(col), stroke: egui::Stroke::new(stroke_width, color32_from_rgba_u32(stroke_col)), concave });
 }
 `)).
 		WithSettingImmediate(true).

@@ -129,7 +129,7 @@ status: draft
 | PaintImage | BuilderFactory | No | 9 | 0 | 2 | Immediate |
 | PaintLine | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintMarkers | BuilderFactory | No | 6 | 0 | 0 | Immediate |
-| PaintPolygonFilled | BuilderFactory | No | 3 | 0 | 0 | Immediate |
+| PaintPolygonFilled | BuilderFactory | No | 3 | 0 | 2 | Immediate |
 | PaintPolyline | BuilderFactory | No | 4 | 0 | 0 | Immediate |
 | PaintRectFilled | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintRectStroke | BuilderFactory | No | 7 | 0 | 0 | Immediate |
@@ -1772,6 +1772,11 @@ PaintCmd
 | xs | plain | f32h |
 | ys | plain | f32h |
 | col | plain | u32 |
+
+#### Builder Methods
+
+- **Concave**()
+- **Stroke**(sc: u32, sw: f32)
 
 #### Return Type
 

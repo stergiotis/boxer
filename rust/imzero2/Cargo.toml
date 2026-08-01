@@ -149,6 +149,10 @@ ttf-parser = "0.25"
 subsetter = "0.2"
 base64 = "0.22"
 h3o = { version = "0.10", features = ["geo"] }
+# Concave-polygon fill for the painter (paintPolygonFilled.Concave()):
+# ear-clip triangulation → egui::Shape::Mesh, since epaint itself fills
+# only convex outlines.
+earcutr = "0.4"
 egui-snarl = "0.11.0"
 
 env_logger = "0.11.8"
