@@ -15,9 +15,9 @@ document: frontmatter as its manifest, prose as its help page, and one SQL
 fence as its entire behaviour
 ([ADR-0132](../adr/0132-sqlapplet-sql-defined-applets.md)). The host renders
 it as an attenuated SQL Playground — result panels, a params strip, Run and
-Copy SQL, no exploration chrome. This page walks the two authoring routes:
-saving from a running playground, and committing a document into an applet
-book.
+a Definition view, no exploration chrome. This page walks the two authoring
+routes: saving from a running playground, and committing a document into an
+applet book.
 
 Caveats up front. A slug is a durably public name the moment it ships —
 renaming one is a deprecation event. Applets saved at runtime live in the
@@ -135,10 +135,12 @@ main_go … --launch "subject_alias = 'runtime-env'"
 ## When it breaks
 
 A broken applet fails visibly, never silently: the status bar carries the
-server error, and the panels show the failed state. To debug, press **Copy
-SQL** in the applet, paste into the SQL Playground, and work with the full
-chrome — Diagnostics for the class and grammar verdict, Preview for the
-as-sent body. The most common failure is an endpoint mismatch: a buffer
+server error, and the panels show the failed state. To debug, press
+**Open in Playground** and work with the full chrome — Diagnostics for the
+class and grammar verdict, Preview for the as-sent body. **Definition**
+opens the applet's own document beside the result, with a `Copy` button on
+each SQL fence if you would rather paste it somewhere yourself. The most
+common failure is an endpoint mismatch: a buffer
 using `keelson('…')` against a plain server errors with *Unknown table
 function keelson* — set `endpoint: introspection` (or re-save from a
 playground pointed there).

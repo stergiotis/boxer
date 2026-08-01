@@ -483,6 +483,44 @@ limitation rather than something durability closed.
 Export (fs Powerbox save) is no longer the only durable path out of an
 authoring session, but it stays the only *portable* one.
 
+## Update (2026-08-01) — the §SD3 escape hatch shows the document, not the buffer
+
+The "Copy SQL" button is gone from the minimal toolbar. A **"Definition"**
+toggle stands where it was, opening a right-hand drawer that renders the
+applet's own markdown document — the frontmatter that is its manifest, the
+prose, and the SQL — through the `widgets/markdown` view.
+
+§SD3 chose the clipboard on the argument that the buffer is the artifact.
+That reads as half the story now. The document is what the applet was minted
+from, and it is what a reader needs in order to judge the numbers on screen:
+which endpoint answered, which panels the author pinned, what the query is
+actually counting. A button that exported the SQL text left all of that
+behind, and left no in-app route to it — the prose reaches the Help center,
+but only for applets whose manifest ships a book, and never beside the result
+it explains.
+
+Mechanically:
+
+- `AppletDef` carries the document's raw markdown (`Source`), and
+  `NewEmbedded` hands it to the instance through a new play seam,
+  `PlayApp.SetDefinitionMarkdown`. Both mounting paths — a minted applet and
+  an embedder ([ADR-0134](./0134-adhoc-datasets.md) §SD7) — go through
+  `NewEmbedded`, so both get the drawer.
+- The toggle is gated on a definition existing, not on the minimal toolbar
+  and not on a bus: reading the document reaches nothing outside the process.
+  An ordinary playground has no definition and grows no toggle.
+- The clipboard hatch survives inside the drawer as a `Copy` button per
+  fenced SQL block (`markdown.Doc.RenderActions` — the mechanism the Snippets
+  tab and Docs pane already use). It still needs `clipboard.write`, and
+  without a bus the buttons are withheld rather than rendered dead. The §SD8
+  cap list is therefore unchanged; only the stated reason moved from the
+  toolbar to the drawer.
+
+Not done: the drawer parses the bytes handed to it, not the book's `fs.FS`,
+so a document embedding an image degrades to markdown's glyph-hyperlink
+fallback. Carrying the FS through the seam is deferred until a corpus
+document wants one.
+
 ## References
 
 Internal:
