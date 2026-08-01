@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/icicle"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // testTree is the same call tree the layout tests use: main(18) over
@@ -269,9 +270,8 @@ func TestLabelForFitsAndDeclines(t *testing.T) {
 	if !strings.HasSuffix(text, "…") {
 		t.Errorf("label %q was not elided to fit 120 px", text)
 	}
-	frameW := float32(120)
-	if maxFit := int(frameW / (DefaultFontSize * glyphWidthRatio)); len([]rune(text)) > maxFit {
-		t.Errorf("elided label %q is still too long for the frame", text)
+	if w := implot.EstimateTextWidth(text, DefaultFontSize); w > 120 {
+		t.Errorf("elided label %q estimates at %v px, wider than its 120 px frame", text, w)
 	}
 
 	// Narrow still elides; narrower than one character plus an ellipsis
@@ -289,26 +289,41 @@ func TestLabelForFitsAndDeclines(t *testing.T) {
 }
 
 func TestElide(t *testing.T) {
+	// At this size a Latin glyph is 6.2 px and a CJK one 10, which is what
+	// makes the budgets below readable.
+	const size = 10
 	cases := []struct {
-		in       string
-		maxChars int
-		want     string
+		in      string
+		availPx float32
+		want    string
 	}{
-		{"runtime.mallocgc", 20, "runtime.mallocgc"},
-		{"runtime.mallocgc", 16, "runtime.mallocgc"},
-		{"runtime.mallocgc", 8, "runtime…"},
-		{"runtime.mallocgc", 2, "r…"},
-		{"runtime.mallocgc", 1, ""},
+		{"runtime.mallocgc", 200, "runtime.mallocgc"},
+		{"runtime.mallocgc", 100, "runtime.mallocgc"}, // 99.2 px, fits exactly
+		{"runtime.mallocgc", 50, "runtime…"},
+		{"runtime.mallocgc", 13, "r…"},
+		{"runtime.mallocgc", 8, ""}, // no room for a glyph beside the ellipsis
 		{"runtime.mallocgc", 0, ""},
 		{"runtime.mallocgc", -3, ""},
 		{"", 10, ""},
-		// Multi-byte: the cut must land on a rune boundary, not a byte one.
-		{"日本語のフレーム", 4, "日本語…"},
-		{"日本語", 10, "日本語"},
+		// Multi-byte: the cut lands on a rune boundary, not a byte one.
+		{"日本語のフレーム", 40, "日本語…"},
+		{"日本語", 30, "日本語"},
+		// And the reason the budget is pixels rather than characters: a box
+		// 49.6 px wide holds eight Latin glyphs, so a character budget would
+		// have kept all eight of these — 80 px of them. It keeps four.
+		{"日本語のフレーム", 49.6, "日本語の…"},
 	}
 	for _, tc := range cases {
-		if got := elide(tc.in, tc.maxChars); got != tc.want {
-			t.Errorf("elide(%q,%d) = %q, want %q", tc.in, tc.maxChars, got, tc.want)
+		if got := elide(tc.in, tc.availPx, size); got != tc.want {
+			t.Errorf("elide(%q, %v) = %q, want %q", tc.in, tc.availPx, got, tc.want)
+		}
+	}
+	// Whatever comes back must actually fit what it was cut for.
+	for _, tc := range cases {
+		if got := elide(tc.in, tc.availPx, size); got != "" {
+			if w := implot.EstimateTextWidth(got, size); w > tc.availPx {
+				t.Errorf("elide(%q, %v) = %q, which is %v px wide", tc.in, tc.availPx, got, w)
+			}
 		}
 	}
 }

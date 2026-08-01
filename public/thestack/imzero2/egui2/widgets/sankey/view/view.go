@@ -117,14 +117,6 @@ const (
 	defaultRibbonAlpha = 0x99
 	// dimAlpha is what a ribbon fades to while another one is emphasised.
 	dimAlpha = 0x33
-	// glyphWidthRatio estimates a glyph's advance as a fraction of the font
-	// size. Text measurement is still deferred (ADR-0149 SD6), so label
-	// fitting is an estimate, and the estimate counts bytes: a three-byte
-	// CJK glyph is charged 1.8 em against a true advance near 1.0. Those
-	// labels are therefore dropped early rather than drawn over the plot
-	// edge — the error is in the safe direction, which is why it is left
-	// alone until a measurement channel exists.
-	glyphWidthRatio = 0.6
 	// labelGapPx is the space between a node bar and its label.
 	labelGapPx = 5.0
 	// minLabelBarPx is the shortest bar that still gets a label, and the only
@@ -539,10 +531,11 @@ func (s *state) drawLabels(dc implot.DrawCtx) {
 		} else {
 			px, anchorH = dc.T.PxX(n.X1)+labelGapPx, 0
 		}
-		// The estimate idiom: no text measurement channel exists yet
-		// (ADR-0149 SD6), so a label that would leave the area is dropped
-		// rather than clipped mid-glyph.
-		w := float32(len(n.Label)) * s.fontSize * glyphWidthRatio
+		// A label that would leave the plot area is dropped rather than
+		// clipped mid-glyph. The width is the lane's shared estimate, which
+		// is a budget and not a measurement — see implot's text.go for when
+		// to reach for the real thing instead.
+		w := implot.EstimateTextWidth(n.Label, s.fontSize)
 		if anchorH == 0 && px+w > dc.AreaX+dc.AreaW {
 			continue
 		}

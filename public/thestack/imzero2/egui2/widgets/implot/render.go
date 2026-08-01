@@ -90,13 +90,15 @@ func (p *Plot) End() {
 	} else {
 		st.ticksY = locateTicksScaled(st.y.rng, areaH, st.y.scale, st.ticksY)
 	}
-	maxYChars := 1
+	// The widest label, not the longest one: they part company as soon as a
+	// custom tick carries anything but digits.
+	widestY := float32(charW)
 	for i := range st.ticksY {
-		if n := len(st.ticksY[i].label); n > maxYChars {
-			maxYChars = n
+		if w := EstimateTextWidth(st.ticksY[i].label, tickFontSize); w > widestY {
+			widestY = w
 		}
 	}
-	leftGutter := float32(maxYChars)*charW + tickLen + 10
+	leftGutter := widestY + tickLen + 10
 	if st.y.flags&AxisFlagsNoTickLabels != 0 {
 		leftGutter = 8
 	}
@@ -527,17 +529,17 @@ const (
 // series index (legendIndices).
 func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
 	st := p.st
-	maxChars := 0
+	widestLabel := float32(0)
 	for _, si := range leg {
-		if n := len(p.series[si].label); n > maxChars {
-			maxChars = n
+		if w := EstimateTextWidth(p.series[si].label, tickFontSize); w > widestLabel {
+			widestLabel = w
 		}
 	}
 	if len(leg) == 0 {
 		return
 	}
 	const rowH, pad, swatch = 16.0, 6.0, 10.0
-	lw := pad*3 + swatch + float32(maxChars)*charW
+	lw := pad*3 + swatch + widestLabel
 	lh := pad*2 + float32(len(leg))*rowH
 	lx, ly := areaX+8, areaY+8
 	c.PaintRectFilled(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colLegendBg)).Send()

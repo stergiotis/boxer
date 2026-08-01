@@ -18,9 +18,10 @@ const (
 	labelFontSize = 12.0
 	titleFontSize = 13.5
 	tickLen       = 4.0
-	// charW is the house estimation idiom for text width (ASCII tick labels
-	// are digits, for which a monospace estimate is nearly exact).
-	charW = tickFontSize * 0.62
+	// charW is one tick-label glyph's width — the estimation idiom of
+	// text.go, pre-multiplied for the tick font because every use of it is
+	// at that size. Prefer EstimateTextWidth where a label may not be ASCII.
+	charW = tickFontSize * GlyphWidthRatio
 )
 
 // axisState is the retained per-axis half of a plot's state.

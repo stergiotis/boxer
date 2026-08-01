@@ -22,6 +22,7 @@ package view
 import (
 	"math"
 	"sort"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -125,10 +126,6 @@ const (
 	minRectPx = 0.75
 	// labelPadPx is the inset between a frame's edge and its label.
 	labelPadPx = 3.0
-	// glyphWidthRatio estimates a glyph's advance as a fraction of the font
-	// size. Text measurement is still deferred (ADR-0149 SD6), so label
-	// fitting is an estimate — it under-measures CJK, which will elide late.
-	glyphWidthRatio = 0.6
 	// spanEps is the slack on the derived depth-axis span before it is
 	// re-asserted; below it the difference is sub-pixel.
 	spanEps = 1e-3
@@ -549,7 +546,7 @@ func (s *state) labelFor(f frame, n *icicle.Node) (text string, x float32, y flo
 		return "", 0, 0, false // the row is shorter than the glyphs
 	}
 	avail := x1 - x0 - 2*labelPadPx
-	text = elide(n.Label, int(avail/(size*glyphWidthRatio)))
+	text = elide(n.Label, avail, size)
 	if text == "" {
 		return "", 0, 0, false
 	}
@@ -569,22 +566,31 @@ func (s *state) drawLabels(dc implot.DrawCtx) {
 	})
 }
 
-// elide shortens a label to fit, or returns "" when not even an ellipsis and
-// one character would fit — a one-glyph label is noise, not information.
-func elide(s string, maxChars int) string {
-	if maxChars < 2 {
-		return ""
-	}
-	// Bytes are never fewer than runes, so a string that fits by length fits
-	// by glyphs, and the common case avoids the conversion.
-	if len(s) <= maxChars {
+// elide shortens a label to fit availPx, or returns "" when not even an
+// ellipsis and one glyph would fit — a one-glyph label is noise, not
+// information.
+//
+// It budgets in pixels rather than characters, using the same estimate the
+// caller decided the frame was labellable with, so the string it returns
+// really does fit the space it was cut for. A character budget cannot: it
+// charges a CJK glyph the same as an "l", and those labels then overflow.
+func elide(s string, availPx float32, fontSize float32) string {
+	if implot.EstimateTextWidth(s, fontSize) <= availPx {
 		return s
 	}
-	r := []rune(s)
-	if len(r) <= maxChars {
-		return s
+	budget := availPx - implot.EstimateRuneWidth('…', fontSize)
+	used, cut := float32(0), 0
+	for i, r := range s {
+		w := implot.EstimateRuneWidth(r, fontSize)
+		if used+w > budget {
+			break
+		}
+		used, cut = used+w, i+utf8.RuneLen(r)
 	}
-	return string(r[:maxChars-1]) + "…"
+	if cut == 0 {
+		return "" // not even one glyph beside the ellipsis
+	}
+	return s[:cut] + "…"
 }
 
 // contrastText picks the readable ink for a fill by WCAG relative luminance.
