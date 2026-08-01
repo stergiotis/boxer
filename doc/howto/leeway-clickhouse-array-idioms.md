@@ -40,7 +40,7 @@ querying both layouts by hand, and the idioms built from it. Caveats up front:
 |---|---|---|
 | element access | `a[i]` | 1-based; index `0` and out-of-range yield the element type's default; negative counts from the end |
 | keyed position | `indexOf(a, k)` | first position, `0` when absent |
-| membership | `has`, `hasAny`, `hasAll`, `hasSubstr` | constant-argument forms; the only shapes skip indexes can serve |
+| membership | `has`, `hasAny`, `hasAll`, `hasSubstr` | constant-argument forms; the shapes skip indexes serve |
 | first match | `arrayFirst`, `arrayFirstIndex`, `arrayLast…` | lambda may span several co-lanes |
 | argwhere | `arrayFilter((i, …) -> p, arrayEnumerate(a), …)` | positions where a predicate holds |
 | gather | `arrayMap(i -> lane[i], sel)` | project any lane through an index list |
@@ -120,10 +120,15 @@ arrayExists((st, v) -> st = 'myst' AND v = 'abc',
 AND has("string:short", 'abc')
 ```
 
-The `has` conjunct is not redundant: lambdas are opaque to index analysis,
-while `has` / `hasAny` / `hasAll` with constant arguments are the shapes a
-bloom-filter skip index (and PREWHERE) can serve. Keep the lambda as the
-semantics and the `has` as the pruner.
+The `has` conjunct looks redundant but usually is not. ClickHouse rewrites
+one special case by itself — a single-lane pure-equality lambda,
+`arrayExists(v -> v = 'abc', lane)`, becomes `has(lane, 'abc')` in the query
+tree (`optimize_rewrite_array_exists_to_has`, on by default) and prunes on
+its own. Everything past that special case — multi-lane lambdas like the one
+above, `LIKE`, arithmetic — is opaque to index analysis: on a
+bloom-filter-indexed table the two-lane form scanned every granule without
+the guard and 4/245 granules with it. Keep the lambda as the semantics and
+the `has` as the pruner.
 
 ### Reductions across lanes
 
@@ -224,6 +229,39 @@ Three aggregate families work on co-arrays across rows without exploding:
 - `-ForEach` combinators aggregate position-wise and return an array:
   `sumForEach(a)` over rows `[1,2]` and `[3,4]` yields `[4,6]`.
 
+## Wrapping the idioms in SQL UDFs
+
+`CREATE FUNCTION` (SQL UDFs, not executable UDFs) fits this vocabulary
+unusually well because a SQL UDF is a macro: it is inlined into the query
+tree during analysis. Verified consequences:
+
+```sql
+CREATE OR REPLACE FUNCTION csrSegments AS (vals, card) ->
+    arrayMap((c, hi) -> arraySlice(vals, hi - c + 1, c), card, arrayCumSum(card))
+```
+
+- **Zero overhead.** `EXPLAIN actions = 1` of a UDF call and of its
+  handwritten expansion are byte-identical.
+- **Index-transparent.** A UDF-wrapped `has` prunes granules exactly like a
+  bare one and moves to the PREWHERE filter; bundling
+  `arrayExists(f, lane) AND has(lane, x)` inside one UDF keeps the pruning.
+- **Lambdas can be parameters.** A UDF may accept a lambda and forward it to
+  a higher-order builtin —
+  `CREATE FUNCTION csrExists AS (f, vals, card) -> arrayMap(vs -> arrayExists(f, vs), csrSegments(vals, card))`
+  works — so the kernel lifts to the ragged case generically.
+- **UDFs compose.** A UDF body may call other UDFs (non-recursively), and
+  constant arguments stay constant through inlining: even a constructed
+  aggregate name, `arrayReduce(concat('topK(', toString(k), ')'), a)`, folds
+  and is accepted.
+- **Duplication is free.** Textually repeated subexpressions (e.g. the
+  double `indexOf` in a lookup-or-NULL body) become one node in the actions
+  DAG.
+
+Two caveats: the namespace is global and flat (prefix a function pack), and
+`CREATE FUNCTION` is server state — a read-only or external target
+(`url(...)`) will not have it. Since inlining is all a SQL UDF does, a
+client-side expansion of the same bodies is an equivalent substitute there.
+
 ## Sharp edges
 
 1. Arrays are 1-based; index `0` and out-of-range return the element type's
@@ -240,5 +278,8 @@ Three aggregate families work on co-arrays across rows without exploding:
    type must match exactly — write `toUInt64(0)`, not `0`.
 5. `mapFromArrays` keeps duplicate keys; `m[k]` returns the first match and a
    missing key returns the default value — not NULL, not an error.
-6. Lambdas never use indexes; when a query should prune granules, add a
-   constant-argument `has` / `hasAny` guard beside the lambda.
+6. Lambdas past the single-lane equality rewrite never use indexes; when a
+   query should prune granules, add a constant-argument `has` / `hasAny`
+   guard beside the lambda. Stream-level `has(vals, x)` stays a valid guard
+   under CSR: it is a necessary condition for any member's list to contain
+   `x`.
