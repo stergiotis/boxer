@@ -99,41 +99,95 @@ func TestResolve(t *testing.T) {
 	}
 }
 
-func TestFitBox(t *testing.T) {
-	var w Widget // fitBox reads only the display knobs, not the atlas.
+func TestCanvasBox(t *testing.T) {
+	var w Widget // canvasBox reads only the display knobs, not the atlas.
 
-	// Default: fill the available width, no height cap.
-	if fw, fh := w.fitBox(); fw != 0 || fh != 0 {
-		t.Fatalf("default fitBox = (%d, %d), want (0, 0)", fw, fh)
+	// Default: span the probed pane width (less the scrollbar margin), height
+	// from the projection aspect.
+	cw, ch := w.canvasBox(1000)
+	if cw != 1000-canvasMargin {
+		t.Fatalf("pane-sized width = %d, want %d", cw, 1000-canvasMargin)
+	}
+	if want := max(int(float64(cw)/ProjectionAspect()), 1); ch != want {
+		t.Fatalf("pane-sized height = %d, want %d (aspect-derived)", ch, want)
+	}
+	if cw <= ch {
+		t.Fatalf("world map should be wider than tall, got %dx%d", cw, ch)
 	}
 
-	// A height cap fills the width but bounds the height.
-	w.SetDisplayHeight(340)
-	if fw, fh := w.fitBox(); fw != 0 || fh != 340 {
-		t.Fatalf("height-capped fitBox = (%d, %d), want (0, 340)", fw, fh)
+	// A height cap binds, and the width follows it back down to keep the
+	// aspect rather than stretching the map.
+	w.SetDisplayHeight(200)
+	cw, ch = w.canvasBox(1000)
+	if ch != 200 {
+		t.Fatalf("height-capped height = %d, want 200", ch)
+	}
+	if want := int(float64(200) * ProjectionAspect()); cw != want {
+		t.Fatalf("height-capped width = %d, want %d (aspect-derived)", cw, want)
 	}
 
-	// An explicit display width wins over the height cap (the demo's "Width:"
-	// slider must resize the map, not be shadowed by a fill-available fit): the
-	// box carries the map's own aspect, so the width is exact and the height is
-	// aspect-derived.
+	// An explicit display width wins over the pane probe (the demo's "Width:"
+	// slider must resize the map) — the height still follows the aspect, so a
+	// height cap under it still binds.
+	w.SetDisplayHeight(0)
 	w.SetDisplayWidth(900)
-	fw, fh := w.fitBox()
-	if fw != 900 {
-		t.Fatalf("display-width fitBox width = %d, want 900 (height cap must not shadow it)", fw)
+	cw, ch = w.canvasBox(1000)
+	if cw != 900 {
+		t.Fatalf("display-width width = %d, want 900 (the pane probe must not shadow it)", cw)
 	}
-	wantH := uint32(max(int(float64(900)/ProjectionAspect()), 1))
-	if fh != wantH {
-		t.Fatalf("display-width fitBox height = %d, want %d (aspect-derived)", fh, wantH)
-	}
-	if fw <= fh {
-		t.Fatalf("world map should be wider than tall, got %dx%d", fw, fh)
+	if want := max(int(float64(900)/ProjectionAspect()), 1); ch != want {
+		t.Fatalf("display-width height = %d, want %d (aspect-derived)", ch, want)
 	}
 
-	// Clearing the width falls back to the height-cap path.
+	// Clearing the width falls back to the pane probe.
 	w.SetDisplayWidth(0)
-	if fw, fh := w.fitBox(); fw != 0 || fh != 340 {
-		t.Fatalf("after clearing width, fitBox = (%d, %d), want (0, 340)", fw, fh)
+	if cw, _ = w.canvasBox(600); cw != 600-canvasMargin {
+		t.Fatalf("after clearing width, width = %d, want %d", cw, 600-canvasMargin)
+	}
+
+	// A degenerate probe (first frame passes the fallback) still yields a
+	// drawable box, and an absurd one is clamped rather than trusted.
+	if cw, ch = w.canvasBox(0); cw < minCanvasW || ch < 1 {
+		t.Fatalf("zero-pane box = %dx%d, want at least %d wide", cw, ch, minCanvasW)
+	}
+	if cw, ch = w.canvasBox(1e6); cw > maxCanvasW || ch > maxCanvasH {
+		t.Fatalf("huge-pane box = %dx%d, want clamped to %dx%d", cw, ch, maxCanvasW, maxCanvasH)
+	}
+}
+
+// The painter highlight fills outer rings and only outlines holes, so the
+// atlas has to keep the roles parallel to the rings. The asset carries exactly
+// one hole (South Africa's Lesotho enclave); that count is a fact about the
+// vendored file, so a change to it should be noticed.
+func TestRingRoles(t *testing.T) {
+	a, err := LoadAtlas()
+	if err != nil {
+		t.Fatal(err)
+	}
+	holes := 0
+	var holed []string
+	for i := range a.Countries {
+		ct := &a.Countries[i]
+		if len(ct.ringHole) != len(ct.rings) {
+			t.Fatalf("%s: %d ring roles for %d rings", ct.Admin, len(ct.ringHole), len(ct.rings))
+		}
+		if len(ct.rings) > 0 && ct.ringHole[0] {
+			t.Fatalf("%s: first ring marked as a hole", ct.Admin)
+		}
+		for _, h := range ct.ringHole {
+			if h {
+				holes++
+			}
+		}
+		if len(ct.ringHole) > 0 && ct.ringHole[len(ct.ringHole)-1] {
+			holed = append(holed, ct.Admin)
+		}
+	}
+	if holes != 1 {
+		t.Fatalf("asset carries %d hole rings, want 1 (South Africa/Lesotho) — holed: %v", holes, holed)
+	}
+	if len(holed) != 1 || holed[0] != "South Africa" {
+		t.Fatalf("hole belongs to %v, want [South Africa]", holed)
 	}
 }
 

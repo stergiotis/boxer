@@ -44,7 +44,8 @@ func init() {
 		Kind:     registry.DemoKindUX,
 		Description: "Schematic world choropleth (ADR-0114): Natural Earth 110m outlines, " +
 			"Natural Earth projection, Go-side scanline rasterization into a content-versioned " +
-			"Image, colormap legend, O(1) hover hit-testing. Synthetic values keyed by ISO code " +
+			"texture painted into a canvas, colormap legend, O(1) hover hit-testing with a " +
+			"concave-painter outline on the hovered country. Synthetic values keyed by ISO code " +
 			"and country name; presence mode fills membership without a legend.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = &worldmapDemoState{width: 900}
@@ -64,11 +65,10 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 		st.widget = worldmap.New(ids, "worldmap-demo")
 		// Size the map explicitly by on-screen width — the "Width:" slider
 		// below drives this every frame, so scrubbing it visibly resizes the
-		// map. SetDisplayWidth also sidesteps the gallery's vertical ScrollArea
-		// (a fill-available map reads a ~0 available height there and collapses
-		// to nothing): an explicit width derives the height from the projection
-		// aspect and needs no available-size read. SetPixelWidth keeps the
-		// raster resolution in step so the map stays crisp at the chosen size.
+		// map, rather than letting it span the gallery pane. SetPixelWidth
+		// pins the raster resolution to match; without it the widget would
+		// track the canvas width by itself, which is what the play pane wants
+		// but would make this slider's two roles indistinguishable.
 		st.widget.SetPixelWidth(st.width)
 		st.widget.SetDisplayWidth(st.width)
 	}

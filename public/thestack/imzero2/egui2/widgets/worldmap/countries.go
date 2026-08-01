@@ -39,6 +39,13 @@ type Country struct {
 	A3    string // ISO 3166-1 alpha-3 (upstream ISO_A3_EH); "" when absent
 
 	rings [][]projPt
+	// ringHole marks, per ring, whether it is an interior ring (a hole) of its
+	// member polygon rather than an outer boundary. The rasterizer ignores it
+	// — even-odd needs no such distinction — but a painter overlay does: a
+	// filled polygon has no hole support, so a hole must be outlined and never
+	// filled. Exactly one ring in the vendored asset is a hole (South Africa's
+	// Lesotho enclave).
+	ringHole []bool
 	// bbox in normalized projection space: minX, minY, maxX, maxY.
 	bbox [4]float32
 }
@@ -120,7 +127,7 @@ func loadAtlas() (*Atlas, error) {
 		byKey:     make(map[string]CountryIdx, len(fc.Features)*4),
 	}
 	for _, f := range fc.Features {
-		rings, rerr := decodeRings(f.Geometry)
+		rings, holes, rerr := decodeRings(f.Geometry)
 		if rerr != nil {
 			return nil, fmt.Errorf("worldmap: %s: %w", f.Properties.Admin, rerr)
 		}
@@ -128,12 +135,13 @@ func loadAtlas() (*Atlas, error) {
 			continue
 		}
 		ct := Country{
-			Admin: f.Properties.Admin,
-			Name:  f.Properties.Name,
-			A2:    cleanIso(f.Properties.IsoA2E),
-			A3:    cleanIso(f.Properties.IsoA3E),
-			rings: rings,
-			bbox:  ringsBBox(rings),
+			Admin:    f.Properties.Admin,
+			Name:     f.Properties.Name,
+			A2:       cleanIso(f.Properties.IsoA2E),
+			A3:       cleanIso(f.Properties.IsoA3E),
+			rings:    rings,
+			ringHole: holes,
+			bbox:     ringsBBox(rings),
 		}
 		idx := CountryIdx(len(a.Countries))
 		a.Countries = append(a.Countries, ct)
@@ -186,43 +194,50 @@ func (inst *Atlas) Resolve(s string) (idx CountryIdx, ok bool) {
 	return
 }
 
-// decodeRings flattens a Polygon or MultiPolygon into projected rings.
-func decodeRings(g neGeometry) ([][]projPt, error) {
+// decodeRings flattens a Polygon or MultiPolygon into projected rings, plus
+// the parallel outer/hole roles (see Country.ringHole).
+func decodeRings(g neGeometry) ([][]projPt, []bool, error) {
 	switch g.Type {
 	case "Polygon":
 		var poly [][][2]float64
 		if err := json.Unmarshal(g.Coordinates, &poly); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return projectPoly(nil, poly), nil
+		rings, holes := projectPoly(nil, nil, poly)
+		return rings, holes, nil
 	case "MultiPolygon":
 		var mp [][][][2]float64
 		if err := json.Unmarshal(g.Coordinates, &mp); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var rings [][]projPt
+		var holes []bool
 		for _, poly := range mp {
-			rings = projectPoly(rings, poly)
+			rings, holes = projectPoly(rings, holes, poly)
 		}
-		return rings, nil
+		return rings, holes, nil
 	default:
-		return nil, fmt.Errorf("unsupported geometry type %q", g.Type)
+		return nil, nil, fmt.Errorf("unsupported geometry type %q", g.Type)
 	}
 }
 
-func projectPoly(dst [][]projPt, poly [][][2]float64) [][]projPt {
-	for _, ring := range poly {
+// projectPoly appends one GeoJSON polygon's rings. Ring 0 of a polygon is its
+// outer boundary and the rest are holes — the only place that distinction is
+// still visible, so it is recorded here rather than re-derived by winding.
+func projectPoly(dstR [][]projPt, dstH []bool, poly [][][2]float64) ([][]projPt, []bool) {
+	for i, ring := range poly {
 		if len(ring) < 4 { // degenerate (GeoJSON rings repeat the first point)
 			continue
 		}
 		pr := make([]projPt, len(ring))
-		for i, ll := range ring {
+		for j, ll := range ring {
 			x, y := projectNorm(ll[0], ll[1])
-			pr[i] = projPt{X: float32(x), Y: float32(y)}
+			pr[j] = projPt{X: float32(x), Y: float32(y)}
 		}
-		dst = append(dst, pr)
+		dstR = append(dstR, pr)
+		dstH = append(dstH, i > 0)
 	}
-	return dst
+	return dstR, dstH
 }
 
 func ringsBBox(rings [][]projPt) (bb [4]float32) {
