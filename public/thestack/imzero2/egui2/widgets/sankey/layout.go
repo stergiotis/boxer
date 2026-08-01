@@ -84,6 +84,20 @@ type wnode struct {
 
 func (n *wnode) center() float64 { return (n.y0 + n.y1) / 2 }
 
+// wlink is the working form of a Link, its endpoints resolved to node indices.
+type wlink struct {
+	s, t  int
+	value float64
+	label string
+	color uint32
+}
+
+// linkTarget and linkSource are the two far-end selectors relaxation sweeps
+// with. Named rather than inline so the sweep does not build a closure per
+// node per iteration.
+func linkTarget(l wlink) int { return l.t }
+func linkSource(l wlink) int { return l.s }
+
 // Compute lays d out into the unit box. It validates first, so a malformed
 // diagram returns an error rather than partial geometry.
 //
@@ -91,12 +105,12 @@ func (n *wnode) center() float64 { return (n.y0 + n.y1) / 2 }
 // (node id), and no map is iterated. Two runs on equal input are deep-equal,
 // which is what lets a host memoize on a diagram fingerprint.
 func Compute(d Diagram, opts Options) (*Layout, error) {
-	if err := d.Validate(); err != nil {
+	index, topo, err := d.validate()
+	if err != nil {
 		return nil, err
 	}
 	o := opts.withDefaults()
 
-	index := make(map[string]int, len(d.Nodes))
 	ns := make([]wnode, len(d.Nodes))
 	for i, n := range d.Nodes {
 		label := n.Label
@@ -104,13 +118,6 @@ func Compute(d Diagram, opts Options) (*Layout, error) {
 			label = n.ID
 		}
 		ns[i] = wnode{id: n.ID, label: label, stage: n.Stage, order: n.Order, color: n.Color}
-		index[n.ID] = i
-	}
-	type wlink struct {
-		s, t  int
-		value float64
-		label string
-		color uint32
 	}
 	ls := make([]wlink, len(d.Links))
 	for i, l := range d.Links {
@@ -127,8 +134,7 @@ func Compute(d Diagram, opts Options) (*Layout, error) {
 
 	stages := 1
 	if d.Mode == ModeSankey {
-		stages = assignStages(ns, func(i int) []int { return ns[i].outLinks },
-			func(li int) int { return ls[li].t }, o.Align)
+		stages = assignStages(ns, ls, topo, o.Align)
 	} else {
 		for i := range ns {
 			stages = max(stages, ns[i].stage+1)
@@ -194,11 +200,7 @@ func Compute(d Diagram, opts Options) (*Layout, error) {
 	stackStages(ns, byStage, scale, pad)
 
 	if d.Mode == ModeSankey {
-		ends := make([]linkEnds, len(ls))
-		for i := range ls {
-			ends[i] = linkEnds{s: ls[i].s, t: ls[i].t, value: ls[i].value}
-		}
-		relax(ns, ends, byStage, pad, o.Iterations)
+		relax(ns, ls, byStage, pad, o.Iterations)
 	}
 
 	// Final within-stage order, top to bottom, is what Index reports.
@@ -312,12 +314,6 @@ func Compute(d Diagram, opts Options) (*Layout, error) {
 	return lay, nil
 }
 
-// linkEnds is the slice of a link that relaxation cares about.
-type linkEnds struct {
-	s, t  int
-	value float64
-}
-
 // relaxDecay damps successive sweeps so the stacks settle instead of
 // oscillating between the two directions.
 const relaxDecay = 0.99
@@ -328,21 +324,21 @@ const relaxDecay = 0.99
 // the practical answer to a crossing-minimization problem that is NP-hard in
 // general (ADR-0159); it is a heuristic, and the layout tests assert
 // determinism and the structural invariants rather than crossing quality.
-func relax(ns []wnode, ls []linkEnds, byStage [][]int, pad float64, iterations int) {
+func relax(ns []wnode, ls []wlink, byStage [][]int, pad float64, iterations int) {
 	alpha := 1.0
 	for range iterations {
 		alpha *= relaxDecay
 		// Right to left: look at where our targets sit.
 		for s := len(byStage) - 2; s >= 0; s-- {
 			for _, i := range byStage[s] {
-				pullToward(ns, ls, i, ns[i].outLinks, func(l linkEnds) int { return l.t }, alpha)
+				pullToward(ns, ls, i, ns[i].outLinks, linkTarget, alpha)
 			}
 			resolveCollisions(ns, byStage[s], pad)
 		}
 		// Left to right: look at where our sources sit.
 		for s := 1; s < len(byStage); s++ {
 			for _, i := range byStage[s] {
-				pullToward(ns, ls, i, ns[i].inLinks, func(l linkEnds) int { return l.s }, alpha)
+				pullToward(ns, ls, i, ns[i].inLinks, linkSource, alpha)
 			}
 			resolveCollisions(ns, byStage[s], pad)
 		}
@@ -351,7 +347,7 @@ func relax(ns []wnode, ls []linkEnds, byStage [][]int, pad float64, iterations i
 
 // pullToward shifts node i by alpha times the gap between its centre and the
 // value-weighted centre of the far ends of the given links.
-func pullToward(ns []wnode, ls []linkEnds, i int, links []int, far func(linkEnds) int, alpha float64) {
+func pullToward(ns []wnode, ls []wlink, i int, links []int, far func(wlink) int, alpha float64) {
 	if len(links) == 0 {
 		return
 	}
@@ -401,26 +397,21 @@ func clampNodeWidth(w float64, stages int) float64 {
 	return math.Min(w, maxNodeWidthShare/float64(stages))
 }
 
-// assignStages derives the column of every node by longest path, then applies
-// the alignment. It assumes the graph is acyclic (Validate has checked).
-func assignStages(ns []wnode, outOf func(int) []int, targetOf func(int) int, align Align) int {
+// assignStages derives the column of every node, then applies the alignment.
+//
+// topo is a topological order, which validate already had to compute to rule
+// cycles out. In that order the longest path from the sources falls out of one
+// forward sweep — every predecessor of a node is settled before the node is —
+// and the longest path to a sink out of one backward sweep. Those two numbers
+// are what all four alignments are combinations of.
+func assignStages(ns []wnode, ls []wlink, topo []int, align Align) int {
 	n := len(ns)
 	depth := make([]int, n)
-	// Longest path from the sources: repeatedly relax in topological waves.
-	// The graph is acyclic, so n-1 waves suffice and usually far fewer.
-	for range n {
-		changed := false
-		for v := range n {
-			for _, li := range outOf(v) {
-				w := targetOf(li)
-				if depth[w] < depth[v]+1 {
-					depth[w] = depth[v] + 1
-					changed = true
-				}
+	for _, v := range topo {
+		for _, li := range ns[v].outLinks {
+			if w := ls[li].t; depth[w] < depth[v]+1 {
+				depth[w] = depth[v] + 1
 			}
-		}
-		if !changed {
-			break
 		}
 	}
 	maxDepth := 0
@@ -432,26 +423,19 @@ func assignStages(ns []wnode, outOf func(int) []int, targetOf func(int) int, ali
 		// depth as computed
 	case AlignJustify:
 		for v := range n {
-			if len(outOf(v)) == 0 {
+			if len(ns[v].outLinks) == 0 {
 				depth[v] = maxDepth
 			}
 		}
 	case AlignRight:
 		// Height = longest path to a sink; place at maxDepth - height.
 		height := make([]int, n)
-		for range n {
-			changed := false
-			for v := range n {
-				for _, li := range outOf(v) {
-					w := targetOf(li)
-					if height[v] < height[w]+1 {
-						height[v] = height[w] + 1
-						changed = true
-					}
+		for k := len(topo) - 1; k >= 0; k-- {
+			v := topo[k]
+			for _, li := range ns[v].outLinks {
+				if w := ls[li].t; height[v] < height[w]+1 {
+					height[v] = height[w] + 1
 				}
-			}
-			if !changed {
-				break
 			}
 		}
 		for v := range n {
@@ -459,19 +443,13 @@ func assignStages(ns []wnode, outOf func(int) []int, targetOf func(int) int, ali
 		}
 	case AlignCenter:
 		// A node with no inbound links sits just before its earliest target.
-		hasIn := make([]bool, n)
 		for v := range n {
-			for _, li := range outOf(v) {
-				hasIn[targetOf(li)] = true
-			}
-		}
-		for v := range n {
-			if hasIn[v] || len(outOf(v)) == 0 {
+			if len(ns[v].inLinks) > 0 || len(ns[v].outLinks) == 0 {
 				continue
 			}
 			best := maxDepth
-			for _, li := range outOf(v) {
-				best = min(best, depth[targetOf(li)])
+			for _, li := range ns[v].outLinks {
+				best = min(best, depth[ls[li].t])
 			}
 			depth[v] = max(0, best-1)
 		}

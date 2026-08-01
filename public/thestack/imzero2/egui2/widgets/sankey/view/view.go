@@ -21,6 +21,7 @@ package view
 
 import (
 	"math"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -159,7 +160,7 @@ func (r *Renderer) Show(ids *c.WidgetIdStack, title string, w float32, h float32
 	}
 	for p := range implot.Scoped(ids, title, w, h) {
 		Setup(p, opts)
-		hover, click, clicked = Probe(p, lay, opts.Samples)
+		hover, click, clicked = r.Probe(p, lay, opts.Samples)
 		opts.Hover = hover
 		r.Draw(p, lay, opts)
 	}
@@ -194,16 +195,25 @@ func Setup(p *implot.Plot, opts Opts) {
 // click != NoHit: a click that landed on empty plot area returns NoHit with
 // clicked true, and that is what clears a pinned selection.
 func Probe(p *implot.Plot, lay *sankey.Layout, samples int) (hover Hit, click Hit, clicked bool) {
+	var r Renderer
+	return r.Probe(p, lay, samples)
+}
+
+// Probe is the Renderer method behind the free function. It samples every
+// ribbon to resolve the pointer, so going through a Renderer kept across
+// frames is what keeps that off the allocator — the free function builds a
+// throwaway one and pays per frame.
+func (r *Renderer) Probe(p *implot.Plot, lay *sankey.Layout, samples int) (hover Hit, click Hit, clicked bool) {
 	hover, click = NoHit, NoHit
 	if p == nil || lay == nil {
 		return
 	}
-	var scratch sankey.Ribbon
+	scratch := &r.s.ribbon
 	resolve := func(x float64, y float64) Hit {
 		if n := lay.NodeAt(x, y); n >= 0 {
 			return Hit{Node: n, Link: -1}
 		}
-		return Hit{Node: -1, Link: lay.LinkAt(x, y, samples, &scratch)}
+		return Hit{Node: -1, Link: lay.LinkAt(x, y, samples, scratch)}
 	}
 	if x, y, ok := p.HoverPlotPos(); ok {
 		hover = resolve(x, y)
@@ -229,7 +239,7 @@ func (r *Renderer) Draw(p *implot.Plot, lay *sankey.Layout, opts Opts) {
 		return
 	}
 	st := &r.s
-	st.prepare(lay, normalizeOpts(opts))
+	st.prepare(lay, normalizeOpts(lay, opts))
 	// Custom items do not contribute to auto-fit, so the extent has to be
 	// declared or a double-click would fit to nothing — silently, leaving a
 	// panned-away diagram with no way back.
@@ -250,17 +260,29 @@ func (r *Renderer) Draw(p *implot.Plot, lay *sankey.Layout, opts Opts) {
 	}
 }
 
-// normalizeOpts folds the zero Hit onto NoHit. Without it an Opts{} would
-// emphasise node 0 and dim everything else, which is the wrong reading of
-// "the caller said nothing".
-func normalizeOpts(o Opts) Opts {
-	if o.Hover == (Hit{}) {
-		o.Hover = NoHit
-	}
-	if o.Selected == (Hit{}) {
-		o.Selected = NoHit
-	}
+// normalizeOpts folds the zero Hit onto NoHit, and an out-of-range one too.
+// Without the first an Opts{} would emphasise node 0 and dim everything else,
+// which is the wrong reading of "the caller said nothing". Without the second
+// a Selected pinned against a previous, larger layout would address whatever
+// now sits at that index — a host swapping diagrams has to clear the pin, and
+// this is what happens when it forgets.
+func normalizeOpts(lay *sankey.Layout, o Opts) Opts {
+	o.Hover = normalizeHit(lay, o.Hover)
+	o.Selected = normalizeHit(lay, o.Selected)
 	return o
+}
+
+func normalizeHit(lay *sankey.Layout, h Hit) Hit {
+	if h == (Hit{}) {
+		return NoHit
+	}
+	if h.Node >= len(lay.Nodes) {
+		h.Node = -1
+	}
+	if h.Link >= len(lay.Links) {
+		h.Link = -1
+	}
+	return h
 }
 
 // Renderer owns the scratch buffers a draw needs, so a host that keeps one
@@ -304,7 +326,7 @@ func (s *state) prepare(lay *sankey.Layout, opts Opts) {
 	if s.alpha == 0 {
 		s.alpha = defaultRibbonAlpha
 	}
-	s.nodeCol = growU32(s.nodeCol, len(lay.Nodes))
+	s.nodeCol = fit(s.nodeCol, len(lay.Nodes))
 	for i := range lay.Nodes {
 		s.nodeCol[i] = s.resolveNodeColor(i)
 	}
@@ -383,8 +405,8 @@ func (s *state) drawFlows(dc implot.DrawCtx) {
 		return
 	}
 	n := s.samples + 1
-	s.xs = grow(s.xs, 2*n)
-	s.ys = grow(s.ys, 2*n)
+	s.xs = fit(s.xs, 2*n)
+	s.ys = fit(s.ys, 2*n)
 	for li := range s.lay.Links {
 		s.lay.Links[li].Sample(s.samples, &s.ribbon)
 		col := withAlpha(s.linkColor(li), s.emphasis(li))
@@ -460,8 +482,8 @@ func (s *state) drawFlowsColumns(dc implot.DrawCtx) {
 	c.PaintRectsFilled(s.rMinX, s.rMinY, s.rMaxX, s.rMaxY, color.ColorsFromU32(s.rCols)).Send()
 	// Stroke the boundaries so the stepped fill edge reads as a curve.
 	n := samples + 1
-	s.xs = grow(s.xs, n)
-	s.ys = grow(s.ys, n)
+	s.xs = fit(s.xs, n)
+	s.ys = fit(s.ys, n)
 	for li := range s.lay.Links {
 		s.lay.Links[li].Sample(samples, &s.ribbon)
 		col := withAlpha(s.linkColor(li), s.emphasis(li))
@@ -477,9 +499,9 @@ func (s *state) drawFlowsColumns(dc implot.DrawCtx) {
 
 func (s *state) drawNodes(dc implot.DrawCtx) {
 	nn := len(s.lay.Nodes)
-	s.rMinX, s.rMinY = grow(s.rMinX, nn), grow(s.rMinY, nn)
-	s.rMaxX, s.rMaxY = grow(s.rMaxX, nn), grow(s.rMaxY, nn)
-	s.rCols = growU32(s.rCols, nn)
+	s.rMinX, s.rMinY = fit(s.rMinX, nn), fit(s.rMinY, nn)
+	s.rMaxX, s.rMaxY = fit(s.rMaxX, nn), fit(s.rMaxY, nn)
+	s.rCols = fit(s.rCols, nn)
 	for i := range s.lay.Nodes {
 		n := &s.lay.Nodes[i]
 		s.rMinX[i] = dc.T.PxX(n.X0)
@@ -548,16 +570,10 @@ func lerpRGB(a uint32, b uint32, t float64) uint32 {
 	return ch(24)<<24 | ch(16)<<16 | ch(8)<<8 | a&0xff
 }
 
-func grow(s []float32, n int) []float32 {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return make([]float32, n)
-}
-
-func growU32(s []uint32, n int) []uint32 {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return make([]uint32, n)
+// fit reslices s to length n, allocating only when its capacity cannot reach —
+// the same scratch-buffer idiom the sampler runs on, which is what lets a
+// Renderer kept across frames allocate only on its first. The contents are not
+// cleared: every caller writes all n entries before reading any.
+func fit[T any](s []T, n int) []T {
+	return slices.Grow(s[:0], n)[:n]
 }

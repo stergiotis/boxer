@@ -200,55 +200,68 @@ const conserveEps = 1e-9
 // diagram cannot show a flow that returns to an earlier stage, and silently
 // dropping the offending edge would misstate the quantities.
 func (d Diagram) Validate() error {
+	_, _, err := d.validate()
+	return err
+}
+
+// validate is Validate's working half. It hands back what the checking had to
+// build anyway — the id-to-index map, and in ModeSankey a topological order —
+// so Compute does not build either a second time.
+//
+// order is empty in ModeAlluvial: the stage index is given there, and the
+// adjacency rule already rules a cycle out, so nothing needs a traversal.
+func (d Diagram) validate() (index map[string]int, order []int, err error) {
 	if len(d.Nodes) == 0 {
-		return fmt.Errorf("sankey: diagram has no nodes")
+		return nil, nil, fmt.Errorf("sankey: diagram has no nodes")
 	}
-	seen := make(map[string]int, len(d.Nodes))
+	index = make(map[string]int, len(d.Nodes))
 	for i, n := range d.Nodes {
 		if n.ID == "" {
-			return fmt.Errorf("sankey: node %d has an empty id", i)
+			return nil, nil, fmt.Errorf("sankey: node %d has an empty id", i)
 		}
-		if _, dup := seen[n.ID]; dup {
-			return fmt.Errorf("sankey: duplicate node id %q", n.ID)
+		if _, dup := index[n.ID]; dup {
+			return nil, nil, fmt.Errorf("sankey: duplicate node id %q", n.ID)
 		}
 		if d.Mode == ModeAlluvial && n.Stage < 0 {
-			return fmt.Errorf("sankey: node %q has stage %d; alluvial stages must be >= 0", n.ID, n.Stage)
+			return nil, nil, fmt.Errorf("sankey: node %q has stage %d; alluvial stages must be >= 0", n.ID, n.Stage)
 		}
-		seen[n.ID] = i
+		index[n.ID] = i
 	}
 	for i, l := range d.Links {
-		si, okS := seen[l.Source]
+		si, okS := index[l.Source]
 		if !okS {
-			return fmt.Errorf("sankey: link %d references unknown source %q", i, l.Source)
+			return nil, nil, fmt.Errorf("sankey: link %d references unknown source %q", i, l.Source)
 		}
-		ti, okT := seen[l.Target]
+		ti, okT := index[l.Target]
 		if !okT {
-			return fmt.Errorf("sankey: link %d references unknown target %q", i, l.Target)
+			return nil, nil, fmt.Errorf("sankey: link %d references unknown target %q", i, l.Target)
 		}
 		if si == ti {
-			return fmt.Errorf("sankey: link %d is a self-link on %q", i, l.Source)
+			return nil, nil, fmt.Errorf("sankey: link %d is a self-link on %q", i, l.Source)
 		}
 		if math.IsNaN(l.Value) || math.IsInf(l.Value, 0) || l.Value <= 0 {
-			return fmt.Errorf("sankey: link %d (%s->%s) has value %v; values must be finite and > 0",
+			return nil, nil, fmt.Errorf("sankey: link %d (%s->%s) has value %v; values must be finite and > 0",
 				i, l.Source, l.Target, l.Value)
 		}
 		if d.Mode == ModeAlluvial {
 			if got := d.Nodes[ti].Stage - d.Nodes[si].Stage; got != 1 {
-				return fmt.Errorf("sankey: link %d (%s->%s) spans %d stages; alluvial links must join adjacent stages",
+				return nil, nil, fmt.Errorf("sankey: link %d (%s->%s) spans %d stages; alluvial links must join adjacent stages",
 					i, l.Source, l.Target, got)
 			}
 		}
 	}
 	if d.Mode == ModeSankey {
-		if err := d.checkAcyclic(seen); err != nil {
-			return err
+		if order, err = d.topoOrder(index); err != nil {
+			return nil, nil, err
 		}
 	}
-	return nil
+	return index, order, nil
 }
 
-// checkAcyclic runs Kahn's algorithm and names an edge on a surviving cycle.
-func (d Diagram) checkAcyclic(index map[string]int) error {
+// topoOrder runs Kahn's algorithm. The settled queue is the topological order,
+// so the one traversal answers both questions asked of it: whether a cycle
+// survives, and — when none does — the order assignStages sweeps in.
+func (d Diagram) topoOrder(index map[string]int) ([]int, error) {
 	n := len(d.Nodes)
 	indeg := make([]int, n)
 	out := make([][]int, n)
@@ -257,33 +270,31 @@ func (d Diagram) checkAcyclic(index map[string]int) error {
 		out[s] = append(out[s], t)
 		indeg[t]++
 	}
-	queue := make([]int, 0, n)
+	order := make([]int, 0, n)
 	for i := range n {
 		if indeg[i] == 0 {
-			queue = append(queue, i)
+			order = append(order, i)
 		}
 	}
-	settled := 0
-	for len(queue) > 0 {
-		v := queue[0]
-		queue = queue[1:]
-		settled++
-		for _, w := range out[v] {
+	// The queue grows as it is walked; k catches up with len(order) exactly
+	// when nothing is left to settle.
+	for k := 0; k < len(order); k++ {
+		for _, w := range out[order[k]] {
 			indeg[w]--
 			if indeg[w] == 0 {
-				queue = append(queue, w)
+				order = append(order, w)
 			}
 		}
 	}
-	if settled == n {
-		return nil
+	if len(order) == n {
+		return order, nil
 	}
 	// Name a concrete edge inside the cycle: both ends are unsettled.
 	for i, l := range d.Links {
 		if indeg[index[l.Source]] > 0 && indeg[index[l.Target]] > 0 {
-			return fmt.Errorf("sankey: link %d (%s->%s) lies on a cycle; flow diagrams are acyclic (ADR-0159 SD6)",
+			return nil, fmt.Errorf("sankey: link %d (%s->%s) lies on a cycle; flow diagrams are acyclic (ADR-0159 SD6)",
 				i, l.Source, l.Target)
 		}
 	}
-	return fmt.Errorf("sankey: the graph contains a cycle")
+	return nil, fmt.Errorf("sankey: the graph contains a cycle")
 }

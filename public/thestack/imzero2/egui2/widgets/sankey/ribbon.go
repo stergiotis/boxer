@@ -1,6 +1,6 @@
 package sankey
 
-import "sort"
+import "slices"
 
 // DefaultSamples is how many points each ribbon edge is sampled at. It is the
 // renderer's default and the hit test's default, and they must agree — the
@@ -44,9 +44,9 @@ func (l LinkLayout) Sample(samples int, dst *Ribbon) *Ribbon {
 		dst = &Ribbon{}
 	}
 	n := samples + 1
-	dst.Xs = resize(dst.Xs, n)
-	dst.Top = resize(dst.Top, n)
-	dst.Bot = resize(dst.Bot, n)
+	dst.Xs = fit(dst.Xs, n)
+	dst.Top = fit(dst.Top, n)
+	dst.Bot = fit(dst.Bot, n)
 	dst.Thickness = l.SY1 - l.SY0
 
 	xm := (l.SX + l.TX) / 2
@@ -79,7 +79,7 @@ func (r *Ribbon) Contains(x float64, y float64) bool {
 		return false
 	}
 	// First index with Xs[i] >= x; the segment is [i-1, i].
-	i := sort.SearchFloat64s(r.Xs, x)
+	i, _ := slices.BinarySearch(r.Xs, x)
 	if i == 0 {
 		return y <= r.Top[0] && y >= r.Bot[0]
 	}
@@ -127,9 +127,10 @@ func (lay *Layout) LinkAt(x float64, y float64, samples int, scratch *Ribbon) in
 	return found
 }
 
-func resize(s []float64, n int) []float64 {
-	if cap(s) >= n {
-		return s[:n]
-	}
-	return make([]float64, n)
+// fit reslices s to length n, allocating only when its capacity cannot reach.
+// It is the scratch-buffer idiom the sampler and the renderer both run on: keep
+// one slice across frames and pay for growth once. The contents are not
+// cleared — every caller writes all n entries before reading any.
+func fit[T any](s []T, n int) []T {
+	return slices.Grow(s[:0], n)[:n]
 }

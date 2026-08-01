@@ -51,6 +51,13 @@ func TestNilSafety(t *testing.T) {
 	if h, cl, ok := Probe(p, lay, 0); h != NoHit || cl != NoHit || ok {
 		t.Errorf("Probe with no pointer = %v, %v, %v", h, cl, ok)
 	}
+	var r Renderer
+	if h, cl, ok := r.Probe(nil, lay, 0); h != NoHit || cl != NoHit || ok {
+		t.Errorf("Renderer.Probe(nil plot) = %v, %v, %v", h, cl, ok)
+	}
+	if h, cl, ok := r.Probe(p, nil, 0); h != NoHit || cl != NoHit || ok {
+		t.Errorf("Renderer.Probe(nil layout) = %v, %v, %v", h, cl, ok)
+	}
 	Draw(nil, lay, Opts{})
 	Draw(p, nil, Opts{})
 	Draw(p, lay, Opts{})
@@ -65,7 +72,7 @@ func TestNilSafety(t *testing.T) {
 // trap: Opts{} must not read as "node 0 is hovered".
 func TestZeroOptsEmphasisesNothing(t *testing.T) {
 	lay := testLayout(t)
-	s := newState(lay, normalizeOpts(Opts{}))
+	s := newState(lay, normalizeOpts(lay, Opts{}))
 	if s.focusActive() {
 		t.Error("Opts{} reports an active focus")
 	}
@@ -76,10 +83,27 @@ func TestZeroOptsEmphasisesNothing(t *testing.T) {
 	}
 }
 
+// TestStaleHitIsFoldedAway: a pin held across a diagram swap must not address
+// whatever now sits at that index.
+func TestStaleHitIsFoldedAway(t *testing.T) {
+	lay := testLayout(t) // three nodes, three links
+	if got := normalizeOpts(lay, Opts{Selected: Hit{Node: 99, Link: 42}}).Selected; got != NoHit {
+		t.Errorf("stale Selected %v, want NoHit", got)
+	}
+	// Only the half that is out of range is dropped.
+	if got := normalizeOpts(lay, Opts{Hover: Hit{Node: 1, Link: 42}}).Hover; got != (Hit{Node: 1, Link: -1}) {
+		t.Errorf("half-stale Hover %v, want {1 -1}", got)
+	}
+	s := newState(lay, normalizeOpts(lay, Opts{Selected: Hit{Node: 99, Link: 99}}))
+	if s.focusActive() {
+		t.Error("a stale selection still reports an active focus")
+	}
+}
+
 // TestIndexZeroIsAddressable is why Selected is a Hit and not an int.
 func TestIndexZeroIsAddressable(t *testing.T) {
 	lay := testLayout(t)
-	s := newState(lay, normalizeOpts(Opts{Selected: Hit{Node: -1, Link: 0}}))
+	s := newState(lay, normalizeOpts(lay, Opts{Selected: Hit{Node: -1, Link: 0}}))
 	if got := s.emphasis(0); got != 0xff {
 		t.Errorf("selected link 0 alpha %#x, want 0xff", got)
 	}
@@ -90,7 +114,7 @@ func TestIndexZeroIsAddressable(t *testing.T) {
 
 func TestHoverLinkDimsTheRest(t *testing.T) {
 	lay := testLayout(t)
-	s := newState(lay, normalizeOpts(Opts{Hover: Hit{Node: -1, Link: 1}}))
+	s := newState(lay, normalizeOpts(lay, Opts{Hover: Hit{Node: -1, Link: 1}}))
 	if got := s.emphasis(1); got != 0xff {
 		t.Errorf("hovered link alpha %#x, want 0xff", got)
 	}
@@ -106,7 +130,7 @@ func TestHoverLinkDimsTheRest(t *testing.T) {
 func TestHoverNodeEmphasisesItsLinks(t *testing.T) {
 	lay := testLayout(t)
 	b := nodeIndex(lay, "b")
-	s := newState(lay, normalizeOpts(Opts{Hover: Hit{Node: b, Link: -1}}))
+	s := newState(lay, normalizeOpts(lay, Opts{Hover: Hit{Node: b, Link: -1}}))
 	for li := range lay.Links {
 		l := &lay.Links[li]
 		want := uint8(dimAlpha)
@@ -124,7 +148,7 @@ func TestNodeColorPrecedence(t *testing.T) {
 	lay := testLayout(t)
 	// Bottom of the chain: the qualitative palette, cycled by the node's
 	// position in the slice.
-	s := newState(lay, normalizeOpts(Opts{}))
+	s := newState(lay, normalizeOpts(lay, Opts{}))
 	for i := range lay.Nodes {
 		want := styletokens.QualitativeCycle(i).AsHex()
 		if s.nodeCol[i] != want {
@@ -133,12 +157,12 @@ func TestNodeColorPrecedence(t *testing.T) {
 	}
 	// Node.Color beats the palette.
 	lay.Nodes[0].Color = 0x11223344
-	s = newState(lay, normalizeOpts(Opts{}))
+	s = newState(lay, normalizeOpts(lay, Opts{}))
 	if s.nodeCol[0] != 0x11223344 {
 		t.Errorf("Node.Color ignored: got %#x", s.nodeCol[0])
 	}
 	// The callback beats Node.Color.
-	s = newState(lay, normalizeOpts(Opts{
+	s = newState(lay, normalizeOpts(lay, Opts{
 		NodeColor: func(n *sankey.NodeLayout) (uint32, bool) {
 			if n.ID == "a" {
 				return 0xaabbccdd, true
@@ -157,7 +181,7 @@ func TestNodeColorPrecedence(t *testing.T) {
 func TestLinkColorFallsBackToSource(t *testing.T) {
 	lay := testLayout(t)
 	lay.Nodes[nodeIndex(lay, "a")].Color = 0x01020304
-	s := newState(lay, normalizeOpts(Opts{}))
+	s := newState(lay, normalizeOpts(lay, Opts{}))
 	for li := range lay.Links {
 		if lay.Links[li].Source != nodeIndex(lay, "a") {
 			continue
@@ -167,7 +191,7 @@ func TestLinkColorFallsBackToSource(t *testing.T) {
 		}
 	}
 	lay.Links[0].Color = 0x0a0b0c0d
-	s = newState(lay, normalizeOpts(Opts{}))
+	s = newState(lay, normalizeOpts(lay, Opts{}))
 	if got := s.linkColor(0); got != 0x0a0b0c0d {
 		t.Errorf("Link.Color ignored: got %#x", got)
 	}
@@ -204,7 +228,7 @@ func TestLerpRGB(t *testing.T) {
 
 func TestStateDefaults(t *testing.T) {
 	lay := testLayout(t)
-	s := newState(lay, normalizeOpts(Opts{}))
+	s := newState(lay, normalizeOpts(lay, Opts{}))
 	if s.samples != sankey.DefaultSamples {
 		t.Errorf("samples = %d, want %d", s.samples, sankey.DefaultSamples)
 	}
@@ -214,7 +238,7 @@ func TestStateDefaults(t *testing.T) {
 	if s.alpha != defaultRibbonAlpha {
 		t.Errorf("alpha = %#x, want %#x", s.alpha, uint8(defaultRibbonAlpha))
 	}
-	s = newState(lay, normalizeOpts(Opts{Samples: 4, FontSize: 20, RibbonAlpha: 0x40}))
+	s = newState(lay, normalizeOpts(lay, Opts{Samples: 4, FontSize: 20, RibbonAlpha: 0x40}))
 	if s.samples != 4 || s.fontSize != 20 || s.alpha != 0x40 {
 		t.Errorf("explicit options not honoured: %+v", *s)
 	}
