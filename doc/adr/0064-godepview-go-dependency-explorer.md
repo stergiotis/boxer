@@ -413,7 +413,7 @@ that pins `godep`'s freedom from toolchain and UI imports stays with it.
 **Now unreferenced outside its own tests**: the derived-lens half of the
 package — `Index.BoundedNeighborhood`, `BuildGroupGraph`, `SiblingViolations`,
 `StronglyConnected`, `ModuleStats`, `ReverseReachInternal`,
-`ShortestImportPathTo` (`group.go`, `module.go`, and the `Index` machinery in
+`ShortestImportPathTo` (`group.go`, `module.go`, and the neighbourhood walk in
 `manifest.go`). The applets re-express all of it in SQL, and the providers
 build their rows from `Manifest` alone. It is deliberately left in place
 rather than deleted in the same breath: the `gov godep` CI/scripting surface
@@ -421,6 +421,28 @@ this ADR has twice named as their natural home is still not built and still
 not precluded, and `group_module_test.go` keeps them honest meanwhile. If that
 surface is dropped as an intention, deleting them is the follow-up — a
 decision about this package, not about the app.
+
+### 2026-08-01 — the derived lenses are deleted; the seam is not
+
+The follow-up above was taken the same day: `group.go`, `module.go` and
+`group_module_test.go` are gone, and `manifest.go` keeps only the id→node
+`Index`. What remains of this ADR's §1 and §2 — the two fact kinds, the
+`Manifest` aggregate, `BuildIndex`/`Node`, and the `SourceI` port — is
+unchanged and still has readers.
+
+One claim in the entry above was **wrong and is corrected here**: the `Index`
+machinery was *not* unreferenced. `wasmsurvey` builds an index over a stored
+manifest and resolves nodes through it (`closure.go`, `classify.go`), which is
+why `BuildIndex` and `Node` survive while `Importers`, `Len`, `Direction`,
+`NeighborhoodOpts`, `Neighborhood` and `BoundedNeighborhood` — none of which
+any reader calls — do not. `BuildIndex` no longer builds the reverse-adjacency
+map, since the neighbourhood walk was its only consumer.
+
+The deleted analyses are recoverable from git history, and the queries that
+replaced them are in `apps/sqlapplet/bookgodep/`. A future `gov godep` would
+re-derive them against the tables rather than against `Index`, which is the
+better shape anyway: one implementation of the group quotient, not two.
+`manifest_test.go` now covers the surviving lookup instead of the walk.
 
 ## References
 

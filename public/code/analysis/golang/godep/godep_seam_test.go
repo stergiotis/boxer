@@ -9,9 +9,10 @@ import (
 // TestSeam_NoToolchainOrUIImports enforces ADR-0064's load-bearing
 // invariant: the manifest package must not import the go-toolchain
 // analysis library (golang.org/x/tools/...) or any imzero2/egui binding.
-// Both the collector (godepcollect) and the app (apps/godepview) depend on
-// godep; godep must depend on neither, so the collection<->visualization
-// separation holds at build time rather than by convention.
+// The collector (godepcollect) and every reader — the keelson go_* table
+// providers, wasmsurvey — depend on godep; godep must depend on neither the
+// toolchain nor a UI, so the separation holds at build time rather than by
+// convention.
 //
 // The check reads the package's non-test imports via go/build (stdlib, so
 // the test itself adds no forbidden import). Test imports land in
