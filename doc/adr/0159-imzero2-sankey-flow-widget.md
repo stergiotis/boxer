@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-01
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-01
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0159: a Sankey / alluvial flow widget on the implot custom-item lane
 
@@ -286,7 +284,19 @@ are not interchangeable.
 
 ## Status
 
-Proposed — awaiting review by @spx.
+Accepted 2026-08-01, with the layout core, the renderer and the gallery demo
+built and verified the same day.
+
+- **Layout core** — `widgets/sankey`: model, validation, barycentre layout and
+  the shared ribbon sampler, under golden and invariant tests.
+- **Renderer** — `widgets/sankey/view`: both fill routes, plot-space hit
+  testing, and the optional layer legend.
+- **Demo** — one gallery entry carrying both modes and both fill routes,
+  captured by the screenshot tour.
+
+Both §SD5 lanes were checked by capture, and §SD2's pixel snapping came out of
+looking at one. No consumer is wired yet; ADR-0119 §SD5's volume overlay is the
+nearest candidate, and a `play` panel stays deferred per §SD6.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
