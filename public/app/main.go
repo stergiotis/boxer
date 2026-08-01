@@ -52,6 +52,11 @@ import (
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
+	// The godep tables are registered from the carousel (so x/tools stays out
+	// of appliance builds), which this binary does not link — without this
+	// their BOXER_GODEP_* specs would be invisible to `boxer env list`. The
+	// CLI already links x/tools for wasmsurvey, so it costs no dependency.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep"
 	_ "github.com/stergiotis/boxer/public/llm/openaichat"
 	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 )

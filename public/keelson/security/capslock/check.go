@@ -36,10 +36,11 @@
 //	imztop.formatPercent -> strconv.FormatFloat -> … -> internal/strconv.float32bits
 //	  => DIRECT UNSAFE_POINTER, i.e. formatting a float hard-fails the gate.
 //
-//	godepview.Mount -> context.WithCancel$1 -> (*context.cancelCtx).cancel
+//	<app>.Mount -> context.WithCancel$1 -> (*context.cancelCtx).cancel
 //	  -> (*context.afterFuncCtx).cancel$1 -> (*net.netFD).connect$1
 //	  => DIRECT NETWORK, because VTA links every func() ever passed to
-//	     context.AfterFunc anywhere in the program.
+//	     context.AfterFunc anywhere in the program. (Observed on an app since
+//	     deleted; any Mount that cancels a context reproduces it.)
 //
 // Requiring the app to make the call itself drops 17 of 27 such pairs, and every
 // pair that survives names a real call site (play.newExecOptions -> os.Getpid;
@@ -89,7 +90,6 @@ import (
 	_ "github.com/stergiotis/boxer/apps/capdemo"
 	_ "github.com/stergiotis/boxer/apps/capinspector"
 	_ "github.com/stergiotis/boxer/apps/fibscope"
-	_ "github.com/stergiotis/boxer/apps/godepview"
 	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"

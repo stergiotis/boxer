@@ -32,7 +32,6 @@ import (
 	_ "github.com/stergiotis/boxer/apps/capdemo"
 	_ "github.com/stergiotis/boxer/apps/capinspector"
 	_ "github.com/stergiotis/boxer/apps/fibscope"
-	_ "github.com/stergiotis/boxer/apps/godepview"
 	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/play"

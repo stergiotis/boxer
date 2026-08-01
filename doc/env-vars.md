@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-07-31T15:59:03Z
+generated-at: 2026-08-01T19:53:34Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -80,10 +80,10 @@ generated-at: 2026-07-31T15:59:03Z
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_ADR_DIR` | path | — | — |  | ADR markdown directory to read as the corpus; empty finds the nearest doc/adr at or above the working directory |
 | `BOXER_ADR_ROOT` | path | — | — |  | source tree to scan for ADR code citations; empty derives the checkout containing the ADR directory, and an unresolvable root just omits the code evidence |
+| `BOXER_GODEP_ROOT` | path | — | — |  | module directory the keelson go_packages/go_imports tables collect from; empty resolves the nearest go.mod above the working directory |
+| `BOXER_GODEP_TAGS` | string | — | — |  | comma-separated build tags for the keelson go_packages/go_imports collection; empty falls back to <root>/tags then inherited GOFLAGS |
 | `BOXER_IMZERO_DEBUG_MODE` | string | — | — |  | imzero2 debug profile: memcheck\|massif\|flamegraph\|heaptrack; empty uses the default launcher |
 | `BOXER_WAIT_FOR_DEBUGGER` | bool | — | `--waitForDebugger` |  | execution of program waits until an attached debugger is detected (linux only) |
-| `GODEPVIEW_ROOT` | path | — | — |  | module directory to collect the Go dependency graph from; empty resolves the nearest go.mod above the working directory |
-| `GODEPVIEW_TAGS` | string | — | — |  | comma-separated build tags for collection; empty falls back to <root>/tags then inherited GOFLAGS |
 | `IDS_ACCESSIBILITY` | categorial-string | `default` | — |  | accessibility preset overriding Tier-1 palettes: default (honour IDS_PALETTE_*), high-contrast (batlowK + alpha/range boost), monochrome (grayC for sequential, vik fallback for diverging).<br>**Allowed:** `default` \| `high-contrast` \| `monochrome` |
 | `IDS_PALETTE_DIVERGING` | categorial-string | `vik` | — |  | user-default diverging palette for signed-deviation charts (delta heatmaps, residual plots). Overridden by IDS_ACCESSIBILITY.<br>**Allowed:** `vik` \| `roma` \| `broc` \| `cork` |
 | `IDS_PALETTE_SEQUENTIAL` | categorial-string | `batlow` | — |  | user-default sequential palette for ordered-data charts (boxenplot, treemap, heatmap). All values in the IDS catalogue are perceptually uniform and CVD-safe; the choice is aesthetic. Overridden by IDS_ACCESSIBILITY when that is non-default.<br>**Allowed:** `batlow` \| `lapaz` \| `oslo` \| `lajolla` \| `viridis` \| `magma` \| `plasma` \| `inferno` \| `batlow_k` \| `gray_c` |
@@ -208,6 +208,8 @@ generated-at: 2026-07-31T15:59:03Z
 | `BOXER_COMPONENT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/topo` |
 | `BOXER_FLIGHT_RECORDER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/tracing` |
 | `BOXER_FLIGHT_RECORDER_OUTPUT_FILE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/tracing` |
+| `BOXER_GODEP_ROOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep` |
+| `BOXER_GODEP_TAGS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep` |
 | `BOXER_IMZERO_DEBUG_MODE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env` |
 | `BOXER_LOG_CALLER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/logging` |
 | `BOXER_LOG_COLOR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/logging` |
@@ -259,8 +261,6 @@ generated-at: 2026-07-31T15:59:03Z
 | `CLICKHOUSE_URL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv` |
 | `CLICKHOUSE_USER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv` |
 | `GEMINI_API_KEY` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/llm/openaichat` |
-| `GODEPVIEW_ROOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/godepview` |
-| `GODEPVIEW_TAGS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/godepview` |
 | `GOPATH` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/config/env` |
 | `GOROOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/config/env` |
 | `GOWORK` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/config/env` |

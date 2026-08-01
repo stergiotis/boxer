@@ -391,6 +391,37 @@ default in the applet prose. Whether this app is retired now that the views
 exist as data is deliberately left open until the two have been compared
 side by side.
 
+### 2026-08-01 — `apps/godepview` is deleted; the seam and the collector stay
+
+The comparison was made and the app is gone. What this ADR decided is not
+withdrawn — O3 (a serializable manifest behind a `SourceI` port) is what made
+the replacement a *new consumer* rather than a rewrite — but the third layer
+it specifies, "§3. The app", no longer exists. A reader wanting the explorer
+today opens the `go-packages`, `go-architecture` or `go-modules` applet.
+
+Deleted: `apps/godepview/` in full, including its embedded help corpus and its
+ADR-0057 demo-registry tour (the seeded-fixture gallery entry goes with it),
+plus the two blank imports that registered it (the carousel's app set and the
+capslock check list) and its `GODEPVIEW_ROOT` / `GODEPVIEW_TAGS` env specs,
+whose role is now filled by `BOXER_GODEP_ROOT` / `BOXER_GODEP_TAGS`.
+
+Kept, and still load-bearing: `public/code/analysis/golang/godep` (the
+manifest DTOs and the `SourceI` port) and `godepcollect` (the live collector),
+which the keelson providers and `wasmsurvey` both depend on. The seam test
+that pins `godep`'s freedom from toolchain and UI imports stays with it.
+
+**Now unreferenced outside its own tests**: the derived-lens half of the
+package — `Index.BoundedNeighborhood`, `BuildGroupGraph`, `SiblingViolations`,
+`StronglyConnected`, `ModuleStats`, `ReverseReachInternal`,
+`ShortestImportPathTo` (`group.go`, `module.go`, and the `Index` machinery in
+`manifest.go`). The applets re-express all of it in SQL, and the providers
+build their rows from `Manifest` alone. It is deliberately left in place
+rather than deleted in the same breath: the `gov godep` CI/scripting surface
+this ADR has twice named as their natural home is still not built and still
+not precluded, and `group_module_test.go` keeps them honest meanwhile. If that
+surface is dropped as an intention, deleting them is the follow-up — a
+decision about this package, not about the app.
+
 ## References
 
 - [ADR-0042](0042-keelson-leeway-codec-soa-generator.md) — `marshallgen` SoA codec generator; the grammar the manifest DTOs target.
