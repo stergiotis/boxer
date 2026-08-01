@@ -643,6 +643,45 @@ This is the "alias-latest" resolution the pprof analysis deferred, landed
 as applet-open semantics rather than new SQL syntax: buffers keep naming
 aliases, handles stay unguessable and never appear in committed text.
 
+### 2026-08-01 — a miss is retried after open, and the applet says so
+
+Resolving only at open, as the entry above landed it, made "capture first,
+then open" an ordering the reader had to know and nothing enforced. On the
+wrong side of it the window was stuck for good: the later capture published
+fine, the catalog listed it, and the open applet stayed bound to nothing,
+answering every Run with `unknown keelson table "pprof_cpu"` — an alias the
+reader had no reason to recognise — until they thought to close and reopen
+it. The prose that explains the ordering is in the book page, which the
+applet surface strips (ADR-0132 §SD3 removes the Docs tab). Two changes,
+both in the sqlapplet host:
+
+- **The aliases that miss at open are retried until they land.** The retry
+  runs off the render thread on a seconds-scale interval and stops as soon
+  as nothing is pending; when one lands, the host binds it and re-runs the
+  buffer, so the window fills in by itself. Off-thread is a requirement,
+  not a preference: a bus `Request` waits the full request timeout when
+  nothing serves the subject, and `adhoc.*` is unbound exactly when the
+  ad-hoc service failed to start — a resolve on the frame loop would freeze
+  the UI for the whole timeout on the one configuration where it can never
+  succeed.
+- **The window says what it is waiting for.** A new play surface
+  (`SetDatasetNotice`, a strip above the preamble) names the unresolved
+  aliases, and an optional `datasets_hint:` frontmatter key carries the one
+  line only the author can write — for the pprof book, that imzrt's
+  Profiles tab is what publishes them. play knows an alias is unbound; it
+  cannot know what produces it.
+
+What did **not** change: a miss still never fails the mount, resolution is
+still newest-per-alias, and an already-open applet still tracks re-captures
+through the stable handle rather than by re-resolving. Retrying is for the
+alias that has *no* dataset yet, not for finding a newer one.
+
+Deferred, recorded so it does not gate: a push notification
+(`adhoc.published`) would replace the poll with an event and shrink the
+wait to a frame. It is the better mechanism and wants its own wire surface;
+the retry is bounded, self-terminating, and costs nothing once bound, so it
+is not worth blocking on.
+
 Internal:
 
 - [ADR-0094 — keelson introspection tables](./0094-keelson-introspection-tables.md)

@@ -312,6 +312,14 @@ keep; it moves to the deferred list pending a capture-pinning UX. The
 books bind their declared aliases at open via the new `adhoc.resolve` —
 the §8 alias-latest seam, landed as ADR-0134's 2026-08-01 update.)*
 
+*(Follow-up, 2026-08-01: binding only at open made "capture first, then
+open" an unenforced ordering that a window on the wrong side of could not
+recover from — a later capture left the open applet bound to nothing,
+failing every Run with `unknown keelson table "pprof_cpu"`. Unresolved
+aliases are now retried after open and the window names what it is waiting
+for; see ADR-0134's second 2026-08-01 update. A push notification instead
+of the retry is recorded as deferred there.)*
+
 Deferred, recorded here so they don't gate: durable history (§7); continuous
 / fleet profiling (the [ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md)
 scraper pattern is the obvious template when wanted); folded-text ingest
