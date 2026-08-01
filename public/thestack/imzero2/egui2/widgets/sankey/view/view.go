@@ -6,6 +6,10 @@
 // to [0,1], and every mark is projected through the frame transform inside a
 // Custom closure — so pan, pointer-anchored wheel zoom, box-zoom and
 // double-click fit all work without this package implementing any of them.
+// The one thing it does owe the lane is the diagram's extent: custom items do
+// not contribute to auto-fit, so Draw declares the unit box with IncludeX /
+// IncludeY, without which a fit would silently fit to nothing.
+//
 // Hit tests are in plot space for the same reason: they read HoverPlotPos and
 // Clicked and probe the layout directly, so they stay correct at any zoom.
 //
@@ -154,11 +158,18 @@ func (r *Renderer) Show(ids *c.WidgetIdStack, title string, w float32, h float32
 // to the unit box and their grid and labels suppressed. CondOnce, not
 // CondAlways, so a pan or zoom sticks. Call it before Draw when driving
 // implot yourself.
+//
+// The constraints bound where a gesture can go. All the geometry is inside
+// the unit box, so there is nothing to see outside it, and without a bound a
+// pan can leave the pane blank — which pairs badly with a fit that only works
+// because Draw declares the extent for it.
 func Setup(p *implot.Plot, opts Opts) {
 	hidden := implot.AxisFlagsNoGrid | implot.AxisFlagsNoTickLabels
 	p.SetupAxes("", "", hidden, hidden)
 	p.SetupAxisLimits(implot.AxisX1, 0, 1, implot.CondOnce)
 	p.SetupAxisLimits(implot.AxisY1, 0, 1, implot.CondOnce)
+	p.SetupAxisLimitsConstraints(implot.AxisX1, 0, 1)
+	p.SetupAxisLimitsConstraints(implot.AxisY1, 0, 1)
 	if !opts.Layers {
 		p.NoLegend()
 	}
@@ -207,6 +218,13 @@ func (r *Renderer) Draw(p *implot.Plot, lay *sankey.Layout, opts Opts) {
 	}
 	st := &r.s
 	st.prepare(lay, normalizeOpts(opts))
+	// Custom items do not contribute to auto-fit, so the extent has to be
+	// declared or a double-click would fit to nothing — silently, leaving a
+	// panned-away diagram with no way back.
+	p.IncludeX(0)
+	p.IncludeX(1)
+	p.IncludeY(0)
+	p.IncludeY(1)
 	label := func(s string) string {
 		if opts.Layers {
 			return s

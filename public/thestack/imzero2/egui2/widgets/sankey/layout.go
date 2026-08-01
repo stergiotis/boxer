@@ -135,6 +135,11 @@ func Compute(d Diagram, opts Options) (*Layout, error) {
 		}
 	}
 
+	// The bar width has to leave room for the stages either side of it, and
+	// how much room there is depends on how many stages there are — which is
+	// only known now.
+	width := clampNodeWidth(o.NodeWidth, stages)
+
 	// Stage membership, in insertion order — the starting point both modes
 	// reorder from.
 	byStage := make([][]int, stages)
@@ -211,17 +216,17 @@ func Compute(d Diagram, opts Options) (*Layout, error) {
 		Links:     make([]LinkLayout, len(ls)),
 		Stages:    stages,
 		Scale:     scale,
-		NodeWidth: o.NodeWidth,
+		NodeWidth: width,
 		NodePad:   pad,
 		Report:    Report{Unit: d.Unit},
 	}
 	for s, st := range byStage {
-		x0 := stageX(s, stages, o.NodeWidth)
+		x0 := stageX(s, stages, width)
 		for k, i := range st {
 			n := &ns[i]
 			lay.Nodes[i] = NodeLayout{
 				ID: n.id, Label: n.label, Stage: s, Index: k,
-				X0: x0, X1: x0 + o.NodeWidth,
+				X0: x0, X1: x0 + width,
 				Y0: 1 - n.y1, Y1: 1 - n.y0, // flip into plot convention
 				Value: n.value, In: n.in, Out: n.out, Color: n.color,
 			}
@@ -288,13 +293,18 @@ func Compute(d Diagram, opts Options) (*Layout, error) {
 	}
 
 	for i := range ls {
-		lay.Report.Total += ls[i].value
 		if ls[i].value*scale < o.ThinFrac {
 			lay.Report.ThinLinks++
 		}
 	}
 	for i := range ns {
 		n := &ns[i]
+		// What enters the diagram is what leaves the nodes nothing enters —
+		// counting links instead would count a multi-stage flow once per
+		// stage it crosses.
+		if n.in == 0 {
+			lay.Report.Total += n.out
+		}
 		if n.in > 0 && n.out > 0 && math.Abs(n.in-n.out) > conserveEps*math.Max(n.in, n.out) {
 			lay.Report.NonConserving = append(lay.Report.NonConserving, n.id)
 		}
@@ -366,6 +376,29 @@ func stageX(s int, stages int, w float64) float64 {
 		return 0.5 - w/2
 	}
 	return float64(s) * (1 - w) / float64(stages-1)
+}
+
+// maxNodeWidthShare is how much of the distance between two stages a bar may
+// take. Half leaves the ribbon at least as much room as the bar it leaves
+// from.
+const maxNodeWidthShare = 0.5
+
+// clampNodeWidth caps the bar width so that adjacent stages cannot overlap.
+// stageX spreads the stages' left edges (1-w)/(stages-1) apart, so the exact
+// bound is w <= share/(stages-1+share); share/stages is the simpler and
+// slightly stricter form of it.
+//
+// Without the cap a wide bar on a long diagram puts a stage's right edge past
+// the next stage's left one, and every ribbon then runs backwards. That is
+// not merely ugly: LinkLayout.Sample's x would descend, which breaks both the
+// ear clipper's simple-ring precondition (ADR-0159 SD2) and the binary search
+// in Ribbon.Contains (SD3), so ribbons would fill as self-intersecting
+// garbage and the hit test would miss them.
+func clampNodeWidth(w float64, stages int) float64 {
+	if stages <= 1 {
+		return math.Min(w, 1)
+	}
+	return math.Min(w, maxNodeWidthShare/float64(stages))
 }
 
 // assignStages derives the column of every node by longest path, then applies

@@ -340,6 +340,37 @@ func TestAlluvialKeepsCallerOrder(t *testing.T) {
 	}
 }
 
+// TestReportTotalCountsQuantityNotLinks is the guard for the number a host
+// puts in a status line and uses as a "% of total" denominator. Counting
+// links instead counts a multi-stage flow once per stage it crosses.
+func TestReportTotalCountsQuantityNotLinks(t *testing.T) {
+	chain := Diagram{
+		Nodes: []Node{{ID: "a"}, {ID: "b"}, {ID: "c"}},
+		Links: []Link{
+			{Source: "a", Target: "b", Value: 100},
+			{Source: "b", Target: "c", Value: 100},
+		},
+	}
+	if got := mustCompute(t, chain, Options{}).Report.Total; got != 100 {
+		t.Errorf("100 units through a->b->c reports Total %v, want 100", got)
+	}
+	// The energy diagram: 80 PJ of primary energy, 199 PJ of link values.
+	if got := mustCompute(t, testEnergy(), Options{}).Report.Total; got != 80 {
+		t.Errorf("energy Total %v, want the 80 PJ entering it", got)
+	}
+	// Several sources, and a source that also happens to be a sink.
+	fan := Diagram{
+		Nodes: []Node{{ID: "s1"}, {ID: "s2"}, {ID: "t"}, {ID: "lonely"}},
+		Links: []Link{
+			{Source: "s1", Target: "t", Value: 3},
+			{Source: "s2", Target: "t", Value: 4},
+		},
+	}
+	if got := mustCompute(t, fan, Options{}).Report.Total; got != 7 {
+		t.Errorf("fan-in Total %v, want 7", got)
+	}
+}
+
 func TestReportFlagsNonConservingNode(t *testing.T) {
 	lay := mustCompute(t, testEnergy(), Options{})
 	// thermal takes 65 and emits 65; grid takes 54 and emits 54; every other
@@ -455,6 +486,111 @@ func TestSingleStageDiagram(t *testing.T) {
 	n := lay.Nodes[0]
 	if math.IsNaN(n.X0) || math.IsNaN(n.Y0) {
 		t.Errorf("lone node placed at NaN: %+v", n)
+	}
+}
+
+// chain builds an n-stage diagram, one node per stage — the shape that runs
+// out of horizontal room first.
+func chain(n int) Diagram {
+	d := Diagram{Nodes: []Node{{ID: "n000"}}}
+	for i := 1; i < n; i++ {
+		d.Nodes = append(d.Nodes, Node{ID: fmt.Sprintf("n%03d", i)})
+		d.Links = append(d.Links, Link{
+			Source: fmt.Sprintf("n%03d", i-1), Target: fmt.Sprintf("n%03d", i), Value: 10,
+		})
+	}
+	return d
+}
+
+// TestNodeWidthClampedToStages guards the horizontal counterpart of the pad
+// clamp. An unclamped bar wider than the stage pitch overlaps the next stage,
+// which sends every ribbon backwards — and a backwards ribbon has descending
+// x, breaking both the simple-ring precondition the fill needs and the binary
+// search the hit test needs.
+func TestNodeWidthClampedToStages(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stages int
+		width  float64
+	}{
+		{"wide bars on a long chain", 12, 0.15},
+		{"default width past the point it fits", 80, 0},
+		{"a width larger than the whole box", 4, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lay := mustCompute(t, chain(tc.stages), Options{NodeWidth: tc.width})
+			if lay.NodeWidth <= 0 || lay.NodeWidth > 1.0/float64(lay.Stages) {
+				t.Errorf("effective NodeWidth %.6f over %d stages leaves no room",
+					lay.NodeWidth, lay.Stages)
+			}
+			for i := range lay.Nodes {
+				n := &lay.Nodes[i]
+				if n.X0 < -eps || n.X1 > 1+eps {
+					t.Errorf("node %s escapes the box: x=[%.6f,%.6f]", n.ID, n.X0, n.X1)
+				}
+				if got := n.X1 - n.X0; math.Abs(got-lay.NodeWidth) > eps {
+					t.Errorf("node %s is %.6f wide, want the reported %.6f", n.ID, got, lay.NodeWidth)
+				}
+			}
+			var r Ribbon
+			for i := range lay.Links {
+				l := &lay.Links[i]
+				if l.TX < l.SX {
+					t.Fatalf("link %d runs backwards: SX=%.6f TX=%.6f", i, l.SX, l.TX)
+				}
+				l.Sample(DefaultSamples, &r)
+				for k := 1; k < len(r.Xs); k++ {
+					if r.Xs[k] < r.Xs[k-1] {
+						t.Fatalf("link %d: Xs not ascending at %d (%.9f < %.9f)",
+							i, k, r.Xs[k], r.Xs[k-1])
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestDefaultsSurviveTheClamp: the clamp must not move a diagram that already
+// fits, or every golden would shift under it.
+func TestDefaultsSurviveTheClamp(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		d    Diagram
+	}{{"energy", testEnergy()}, {"cohort", testCohort()}} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustCompute(t, tc.d, Options{}).NodeWidth; got != DefaultNodeWidth {
+				t.Errorf("NodeWidth %.6f, want the untouched default %.6f", got, DefaultNodeWidth)
+			}
+		})
+	}
+}
+
+// TestOptionsRejectNonsense: a fraction that is not a finite positive number
+// takes the default, rather than laying out an inside-out diagram.
+func TestOptionsRejectNonsense(t *testing.T) {
+	nan, inf := math.NaN(), math.Inf(1)
+	for _, o := range []Options{
+		{NodeWidth: -0.5}, {NodeWidth: nan}, {NodeWidth: inf},
+		{NodePad: -0.5}, {NodePad: nan}, {NodePad: inf},
+		{ThinFrac: -1}, {ThinFrac: nan}, {ThinFrac: inf},
+	} {
+		lay := mustCompute(t, testEnergy(), o)
+		if lay.NodeWidth <= 0 || lay.NodePad < 0 || lay.Scale <= 0 {
+			t.Errorf("Options%+v gave width %.6f pad %.6f scale %v",
+				o, lay.NodeWidth, lay.NodePad, lay.Scale)
+		}
+		for i := range lay.Nodes {
+			n := &lay.Nodes[i]
+			if n.X1 < n.X0 || n.Y1 < n.Y0 {
+				t.Errorf("Options%+v inverted node %s", o, n.ID)
+				break
+			}
+		}
+	}
+	// And the sanitized run matches the plain default run exactly.
+	want := dump(mustCompute(t, testEnergy(), Options{}))
+	if got := dump(mustCompute(t, testEnergy(), Options{NodePad: -1, NodeWidth: nan})); got != want {
+		t.Error("a sanitized Options did not reproduce the default layout")
 	}
 }
 

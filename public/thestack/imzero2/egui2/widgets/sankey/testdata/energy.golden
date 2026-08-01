@@ -15,4 +15,4 @@ link thermal    -> losses     v=26.000 s=(0.346667,0.015540,0.327540) t=(0.98000
 link grid       -> industry   v=30.000 s=(0.673333,0.515657,0.875657) t=(0.980000,0.640000,1.000000)
 link grid       -> homes      v=20.000 s=(0.673333,0.275657,0.515657) t=(0.980000,0.380000,0.620000)
 link grid       -> losses     v=4.000 s=(0.673333,0.227657,0.275657) t=(0.980000,0.312000,0.360000)
-report total=199.000 unit="PJ" thin=0 nonconserving=[]
+report total=80.000 unit="PJ" thin=0 nonconserving=[]

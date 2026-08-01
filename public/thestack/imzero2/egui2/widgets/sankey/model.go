@@ -104,16 +104,24 @@ type Diagram struct {
 
 // Options tunes the layout. The zero value is usable: every field falls back
 // to the constant beside it.
+//
+// The three box fractions take the default not only at zero but at any value
+// a fraction cannot be — negative, NaN, infinite. Laying a diagram out with a
+// negative bar width would draw inside-out bars rather than report the
+// mistake, and a silently wrong picture is the one failure this form cannot
+// afford. Iterations keeps its own rule, below.
 type Options struct {
 	// Iterations is the number of barycentre relaxation sweeps, ModeSankey
 	// only. 0 means DefaultIterations; a negative value disables relaxation,
 	// leaving the insertion order.
 	Iterations int
 	// NodePad is the vertical gap between two nodes in a stage, as a fraction
-	// of the box height. 0 means DefaultNodePad.
+	// of the box height. 0 means DefaultNodePad. It shrinks when a stage has
+	// too many nodes to pad them all.
 	NodePad float64
 	// NodeWidth is the bar's thickness, as a fraction of the box width.
-	// 0 means DefaultNodeWidth.
+	// 0 means DefaultNodeWidth. It is capped so that stages cannot overlap,
+	// however many of them there are; Layout.NodeWidth reports what was used.
 	NodeWidth float64
 	// Align places nodes that are free to move (ModeSankey only).
 	Align Align
@@ -138,16 +146,20 @@ func (o Options) withDefaults() Options {
 	} else if o.Iterations < 0 {
 		o.Iterations = 0
 	}
-	if o.NodePad == 0 {
-		o.NodePad = DefaultNodePad
-	}
-	if o.NodeWidth == 0 {
-		o.NodeWidth = DefaultNodeWidth
-	}
-	if o.ThinFrac == 0 {
-		o.ThinFrac = DefaultThinFrac
-	}
+	o.NodePad = frac(o.NodePad, DefaultNodePad)
+	o.NodeWidth = frac(o.NodeWidth, DefaultNodeWidth)
+	o.ThinFrac = frac(o.ThinFrac, DefaultThinFrac)
 	return o
+}
+
+// frac resolves one of Options' box fractions: anything that is not a finite
+// positive number asks for the default. The comparison rejects NaN too, which
+// is why it is written as a positive test rather than a chain of negations.
+func frac(v float64, def float64) float64 {
+	if v > 0 && !math.IsInf(v, 1) {
+		return v
+	}
+	return def
 }
 
 // Report records what the layout noticed but could not decide on the
@@ -156,7 +168,16 @@ func (o Options) withDefaults() Options {
 type Report struct {
 	// Unit is Diagram.Unit, carried through for labelling.
 	Unit string
-	// Total is the sum of all link values.
+	// Total is the quantity the diagram carries: the outflow of every node
+	// that has no inflow.
+	//
+	// It is deliberately not the sum of all link values. A flow crossing
+	// three stages is three links but one quantity, so that sum overstates a
+	// conserved diagram by roughly its stage count — 199 for an energy
+	// balance of 80 — and it is wrong in the direction that flatters, which
+	// is the direction a caller is least likely to check. It is also the
+	// denominator a host reaches for when writing "x% of total"; getting it
+	// wrong there misstates every share on screen.
 	Total float64
 	// NonConserving names nodes with both inflow and outflow that disagree by
 	// more than a relative epsilon. Sources and sinks are not listed: their
