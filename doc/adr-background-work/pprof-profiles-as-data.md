@@ -252,7 +252,11 @@ buffers and saved applet params stay valid across re-captures.
 
 **CLI ingest verb** for files (`app pprof-publish <file.pb.gz>` on the
 existing CLI host): parses, publishes, prints the handle — covers profiles
-from other machines, CI, or older saved captures.
+from other machines, CI, or older saved captures. *(Adjusted during M2,
+2026-08-01: the ad-hoc publish subject lives on the in-process bus, so a
+separate CLI process cannot reach it; file ingest needs an in-app affordance
+(filepicker + fsbroker caps) or a bus bridge, and is deferred with that
+note rather than shipped as a verb that couldn't publish.)*
 
 **A seam friction worth recording**: `keelson('…')` table-function arguments
 are resolved by rewrite *before* server-side parameter substitution, so a

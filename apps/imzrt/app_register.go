@@ -2,13 +2,17 @@ package imzrt
 
 import (
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
-// manifest is the static AppI descriptor every imzrt instance returns. imzrt is
-// observe-only — it declares no capabilities (ADR-0061 SD6): it reads the Go
-// runtime's own metrics and mutates nothing.
+// manifest is the static AppI descriptor every imzrt instance returns. imzrt
+// reads the Go runtime's own metrics and mutates no runtime tunables
+// (ADR-0061 SD6); the two capabilities below are the one deliberate,
+// user-initiated act the dashboard performs — capturing a pprof profile of
+// this process and handing it to play (ADR-0061 update 2026-08-01).
 var manifest = app.Manifest{
 	Id:      "github.com/stergiotis/boxer/apps/imzrt",
 	Version: "0.1.0",
@@ -19,6 +23,18 @@ var manifest = app.Manifest{
 	Icon:     icons.PhPulse,
 	Category: "Tools",
 	Surface:  app.SurfaceWindowed,
+	Caps: []app.SubjectFilter{
+		{
+			Pattern:   adhocdata.SubjectPublish,
+			Direction: app.CapDirectionPub,
+			Reason:    "imzrt: publish captured pprof profiles as ad-hoc datasets, republishing each kind onto its stable handle (ADR-0134)",
+		},
+		{
+			Pattern:   windowhost.OpenSubject,
+			Direction: app.CapDirectionPub,
+			Reason:    "imzrt: Explore — open a play window seeded on a captured profile, bound to the introspection endpoint (ADR-0135)",
+		},
+	},
 }
 
 func init() {

@@ -41,6 +41,8 @@ var imzrtScenes = []struct {
 		"imzrt's GC panel — live garbage-collector metrics over a sliding window."},
 	{"imzrt-sched", "sched", icons.PhPulse + " imzrt — scheduler",
 		"imzrt's scheduler panel — live scheduler-latency metrics, including the latency spectrogram."},
+	{"imzrt-profiles", "profiles", icons.PhPulse + " imzrt — profiles",
+		"imzrt's profile-capture panel — capture a pprof profile, publish it as an ad-hoc dataset, explore it in play."},
 }
 
 func init() {
@@ -120,6 +122,8 @@ func (inst *App) renderTourScene(snap *PublishedSnapshot, s *Sampler, scene stri
 				inst.renderGCPanel(snap)
 			case "sched":
 				inst.renderSchedPanel(snap)
+			case "profiles":
+				inst.renderProfilesPanel()
 			default:
 				inst.renderHeapPanel(snap)
 			}

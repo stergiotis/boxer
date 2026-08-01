@@ -7,6 +7,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/trendsmooth"
 )
@@ -41,6 +42,12 @@ type App struct {
 	// the design commitments, and ADR-0061's 2026-07-31 update for which
 	// series are wired and which are excluded on purpose).
 	smooth *trendsmooth.State
+
+	// bus and tasks back the Profiles tab's capture→publish→explore path
+	// (ADR-0061's 2026-08-01 update). Nil outside a real Mount (tour
+	// mode); the affordances then surface the failure instead of acting.
+	bus   app.BusI
+	tasks task.TaskApiI
 }
 
 var _ app.AppI = (*App)(nil)
@@ -58,6 +65,8 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
+	inst.bus = ctx.Bus()
+	inst.tasks = task.ForApp(ctx)
 	return
 }
 
@@ -94,11 +103,12 @@ func ensureSampler() (s *Sampler, err error) {
 }
 
 // Stable dock tab identifiers. egui_dock keys its persistent layout state off
-// them, so they must not be reused across tabs. M3 adds the Scheduler tab.
+// them, so they must not be reused across tabs.
 const (
-	dockTabHeap  uint64 = 1
-	dockTabGC    uint64 = 2
-	dockTabSched uint64 = 3
+	dockTabHeap     uint64 = 1
+	dockTabGC       uint64 = 2
+	dockTabSched    uint64 = 3
+	dockTabProfiles uint64 = 4
 )
 
 // renderApp lays the body out inside the runtime-created window scope: a pinned
@@ -118,7 +128,7 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(inst.ids.PrepareStr("imzrt-dock")) {
-			dock.InitRoot(dockTabHeap, dockTabGC, dockTabSched)
+			dock.InitRoot(dockTabHeap, dockTabGC, dockTabSched, dockTabProfiles)
 			for range dock.Tab(dockTabHeap, "Heap") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderHeapPanel(snap)
@@ -132,6 +142,11 @@ func (inst *App) renderApp(snap *PublishedSnapshot, s *Sampler) {
 			for range dock.Tab(dockTabSched, "Scheduler") {
 				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 					inst.renderSchedPanel(snap)
+				}
+			}
+			for range dock.Tab(dockTabProfiles, "Profiles") {
+				for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+					inst.renderProfilesPanel()
 				}
 			}
 		}

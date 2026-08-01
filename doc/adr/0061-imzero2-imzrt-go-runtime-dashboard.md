@@ -401,6 +401,37 @@ showcase it.
 The accepted decision stands; this is a panel-level display option, so
 `status` / `reviewed-date` are not re-stamped.
 
+### 2026-08-01 — Profiles tab: SD6's `Caps: nil` relaxed for profile capture
+
+`imzrt` gained a fourth dock tab, **Profiles**, as the producer home for
+pprof exploration (owner-decided; analysis in
+[pprof-profiles-as-data](../adr-background-work/pprof-profiles-as-data.md),
+M2): per-kind capture of this process's CPU / heap / allocs / goroutine
+profiles (CPU as a cancellable `bgjob` over a fixed 10 s window), conversion
+through `pprofarrow`, publish as an ad-hoc dataset
+([ADR-0134](./0134-adhoc-datasets.md)) under the stable alias
+`pprof_<kind>` — re-captures republish onto the same handle, so open
+explorations track the newest capture — and an Explore button that opens a
+`play` window seeded with a top-by-self-cost query, bound to the
+introspection endpoint ([ADR-0135](./0135-app-launch-requests.md)).
+
+This narrows SD6. The observe-only posture was two claims — reads runtime
+metrics, mutates nothing, `Caps: nil` — and the capture affordance keeps the
+first while relaxing the second: the manifest now declares exactly two `Pub`
+capabilities (`adhoc.publish`, `windowhost.open`), each user-initiated per
+click, never ambient. What SD6 actually guards — no mutation of global
+runtime tunables (GOGC, GOMEMLIMIT, forced GC) — still holds, which is also
+why block and mutex profiles are deliberately absent: they are empty unless
+their runtime rates are set, and setting rates is exactly the tunable
+mutation this app does not do. Capture's observer effect (CPU sampling
+overhead, a profile buffer) is the trade every profiler makes and is
+bounded by the fixed window.
+
+Datasets are deliberately **not retracted on Unmount** (deviating from the
+`adhocdemo` precedent): a profile stays explorable after the dashboard
+closes, one dataset per kind bounds the store cost, and process exit clears
+everything with the store.
+
 ## References
 
 - [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) — `imztop`; the structural template this ADR mirrors.
