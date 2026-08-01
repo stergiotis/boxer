@@ -481,6 +481,133 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-08-01 — SQL tools leave the result strip (design): the zone becomes a kind, and the focus knobs stop being body-only
+
+Eighteen built-in tabs, thirteen of them in the body leaf — enough that the
+scripted tour's own captures show `Timeline`, `Kanban` and `Network` truncated
+mid-title. Five of the thirteen never touch a row. Passes, Diagnostics, Flow,
+Graph and Snippets read the buffer, the caret, the split or the pass registry,
+and are read *while editing* rather than while looking at a result. They are in
+the result strip for no reason beyond D4's default: a tab that does not name a
+zone lands in the body.
+
+**Decision — zone by input, not by subject.** The registry already draws the
+line 6a made structural (SD7): a result panel carries a `PanelI` and is fed the
+query result over a channel; chrome registers `Panel: nil` and reads something
+else. This Update names the dominant case in that second half and gives it a
+home. A **tool pane** is chrome whose input is the buffer, or what is derived
+from it — the caret, the split, the pre-execute pipeline. Its place is beside
+the editor, in the leaf Docs and Preview already share, not in the strip a
+person scans to choose how to look at rows.
+
+Applying that criterion to the current set:
+
+- **Flow and Passes move.** Flow resolves its feed from the last Run's split or
+  from the statement under the caret; in caret mode it follows the cursor, the
+  same input as Docs, and ADR-0153 already describes it as a tool pane like
+  Docs. Passes keys its trace on the buffer Run would ship and on the passreg
+  catalog. Neither reads a row in any mode.
+- **Diagnostics moves, with one section arguing the other way.** Six of its
+  seven sections are buffer-fed — statement, pre-execute rewrites, column
+  resolution, security context, split, signal emits — and only the last-run
+  section takes the frame's result stats. It is also the pane Preview and Graph
+  point *at* when they decline to own an error's prose, and a cross-reference
+  between two leaves is worse than one within a leaf. Moving it whole is
+  preferred over splitting the last-run section out: a run error is read while
+  fixing the SQL that caused it.
+- **Snippets moves**, on the weakest of the four arguments: it is an editor
+  tool, its input is the help corpus and its output is the buffer. Its own
+  standing justification for the body zone — that the editor must stay visible
+  for a caret splice to land — does not pin it, because the tools leaf is a
+  *sibling* of the editor leaf rather than the same one, and the delivery ops
+  raise the editor leaf, so Snippets cannot hide itself with its own click.
+- **Graph stays**, against its classification. Its input is the split and the
+  signal store, so by the criterion above it is a tool pane; two things
+  outweigh that. Its subject is the session's reactive wiring rather than the
+  statement being typed, and it is a canvas plus the Signals section in a leaf
+  that is roughly 45% of the window in each axis. Revisit if the tools leaf
+  ever gets its own vertical split.
+- **Schema and Map stay.** Schema reads like an SQL tool and is not one: its
+  input is the *result's* Arrow schema, which is why it carries a `PanelI`. The
+  Map writes `vp_*` into the query without being fed by the SQL text at all —
+  it drives, it is not derived.
+
+**The zone is renamed with the kind.** `TabZonePreview` was named for its only
+occupant; holding five it becomes `TabZoneTools`, documented as the reference
+surfaces read while editing — which is what the Docs/Preview registration
+comment already says in prose. The constant's *value* is persisted nowhere,
+only `DockID` is (D3), so this is a compile-time break on the embedder surface
+and nothing more.
+
+**Mechanics (subsidiary).** Exactly three sites read `Zone`, and only the third
+costs anything:
+
+- The dock layout block, which is the move itself.
+- The pane-progress strip, gated on `spec.Panel != nil && spec.Zone ==
+  TabZoneBody`. Unaffected: every mover carries a nil `PanelI`.
+- The `BOXER_PLAY_FOCUS_*` derivation, which skips every non-body zone, and the
+  focus reorder, which permutes only the body zone. Moving a tab therefore
+  **deletes** its env spec — five of them here, registered under ADR-0009,
+  listed in `doc/env-vars.md`, and cited by ADR-0119, ADR-0153, ADR-0154 and
+  five scenes of the screenshot tour. So the derivation generalises to every
+  built-in tab in any zone, and the reorder generalises from a body-only
+  `bodyTabOrder` to a per-zone one: a fresh leaf activates its first tab, so
+  the same trick works per leaf, and two knobs set in different zones now
+  focus one tab in each instead of contending.
+
+**One knob was already missing.** The tour asks for the canonical-SQL scene
+with `BOXER_PLAY_PREVIEW_TAB`, which is registered nowhere and does nothing;
+that capture lands on Docs, listed first and so taking the fresh leaf. It has
+been wrong since the Docs pane was added, earlier the same day as the tour, and
+was not caught because the scene still produces a plausible screenshot of the
+right leaf. The generalised derivation gives the scene a real
+`BOXER_PLAY_FOCUS_PREVIEW`; the phantom knob goes.
+
+**What it costs.** One more pane body renders per frame: today exactly one body
+tab is visible and every other tab is gated by its lazy pane, and afterwards
+one body tab plus one tool tab are. That is the point of the move — read the
+canonical form while looking at the rows — but it is not free, and the sharpest
+case is Flow, whose remote lenses demand a lane. Those lenses can currently be
+demanded only when Flow is the visible body pane, which is to say when no
+result pane is; afterwards they can be demanded alongside one. The lane memo
+collapses repeats of a settled buffer, and the caret-mode gate already refuses
+to ask about a half-typed statement, so the standing cost is one extra
+demand per settled buffer rather than per frame.
+
+The destination is also the narrower leaf, so the move trades one crowded strip
+for two less crowded ones rather than removing crowding: five titles in a leaf
+roughly 45% of the window's width, against ten in the full-width one. If that
+reads badly in the app, the editor's share of the top row is the first thing to
+give.
+
+**What it does not cost: nothing to migrate.** D3 describes the dock ids as
+keying "the Rust-side persisted dock layout", which makes a re-zoning look like
+it would strand existing layouts. It would not. The interpreter's dock states
+are an in-process map with no serde behind them, and the host's `eframe::App
+save` is a no-op, so the persistence is across *frames within one run*, not
+across runs; every launch re-parses the declared initial layout. The new zoning
+lands on the next start, and no layout-reset affordance is needed — the Layout
+menu's "Arrange Windows" resets egui areas, not the dock.
+
+**Descoped — a third group in the Panes menu.** The menu of the 2026-07-27
+Update lists a pane under "shows this result" when it carries a `PanelI` and
+under "drives this query" when it writes a name the split reads. Every tool
+pane is in neither group, so the menu has no entry for Docs, Preview, Flow,
+Passes, Graph, Diagnostics or Snippets, and a person who never drags the tools
+leaf has no in-app index of them. A third group ("about this query") is the
+obvious place for the kind this Update names, and is deliberately not part of
+it: the move is worth doing on the layout argument alone, and the menu grouping
+wants its own look at what belongs in it — the editor and history are tool
+panes by the same criterion, and listing them in a *panes* menu may be noise.
+Trigger: the first report that a tool pane is hard to find.
+
+**Delivery — one slice.** The zone assignments, the rename, the generalised
+knob derivation and per-zone reorder, the tour's phantom knob. Tests: the
+built-in enumeration already asserts zones, so it moves with the set; the focus
+derivation gains the non-body knobs; the per-zone reorder gets the coverage
+`bodyTabOrder` has. Verified by capturing one scene per moved tab through its
+restored knob, which is also what proves the derivation.
+
 ### 2026-08-01 — a node's signal edges are those of its fused subgraph
 
 Two defects in how a lane's params are resolved, both found by live-driving an
