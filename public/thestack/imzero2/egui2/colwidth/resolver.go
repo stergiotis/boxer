@@ -52,13 +52,30 @@ type entry struct {
 	changedAt time.Time
 }
 
-// tableState is the per-table apply bookkeeping. applied is what Go last
-// handed the binding for each column, which is what capture detection
-// compares against — a fetched width equal to it means the crate is simply
-// echoing us back, not reporting a drag.
+// tableState is the per-table apply bookkeeping.
 type tableState struct {
-	epoch   uint32
-	applied map[string]float64
+	epoch uint32
+	cols  map[string]colState
+}
+
+// colState separates the two widths a column carries between frames. They
+// start equal and are only ever told apart by the crate: `sent` is what Go
+// handed the binding, `settled` what the binding reported back.
+//
+// Keeping one value for both roles conflates "my resolved widths changed"
+// with "the crate ended up somewhere else". A table whose crate-side width
+// legitimately differs from the resolved one — the layout grew a column to
+// fit its content, say — would then bump its epoch every frame and re-seed
+// the crate against its own layout, which is the per-frame re-assertion the
+// ADR's Q4 rejects.
+type colState struct {
+	// sent is the width Resolve last returned for this column. The epoch
+	// bumps when it changes, and only then.
+	sent float64
+	// settled is the width the crate last reported. Capture detection
+	// compares a fetched width against this — equal means the crate is
+	// echoing its own state back, not reporting a drag.
+	settled float64
 }
 
 // Resolver resolves and captures column widths for one app.
@@ -155,21 +172,31 @@ func (inst *Resolver) Resolve(tableTag string, cols []Column, fontSize float64, 
 		}
 		w = inst.clamp(w)
 		widths[i] = w
-		if prev, seen := st.applied[key]; !seen || prev != w {
+		if prev, seen := st.cols[key]; !seen || prev.sent != w {
 			changed = true
 		}
 	}
 	// Rebuild rather than mutate: a column removed from the table should
-	// drop out of `applied`, or a later table with the same tag and fewer
-	// columns would compare against a stale entry.
-	next := make(map[string]float64, len(cols))
+	// drop out, or a later table with the same tag and fewer columns would
+	// compare against a stale entry.
+	//
+	// A column whose sent width is unchanged keeps whatever the crate had
+	// settled on; one that moved has its settled width reset to the new
+	// value, because the epoch bump below is about to seed the crate with
+	// exactly that and anything it settled on before is gone.
+	next := make(map[string]colState, len(cols))
 	for i, c := range cols {
-		next[c.Key()] = widths[i]
+		key := c.Key()
+		cs := colState{sent: widths[i], settled: widths[i]}
+		if prev, seen := st.cols[key]; seen && prev.sent == widths[i] {
+			cs.settled = prev.settled
+		}
+		next[key] = cs
 	}
-	if len(next) != len(st.applied) {
+	if len(next) != len(st.cols) {
 		changed = true
 	}
-	st.applied = next
+	st.cols = next
 	if changed {
 		st.epoch++
 	}
@@ -217,35 +244,46 @@ func (inst *Resolver) Epoch(tableTag string) (epoch uint32) {
 
 // Observe reports the widths the binding read back after a frame.
 //
-// A fetched width that differs from what Resolve applied for that column
-// is a user adjustment, and is captured as an override on the instance and
-// column tiers (§SD1). Two things are deliberately not captures: the
-// first-show frame, where the crate force-autofits and the widths are its
-// idea rather than the user's, and a value equal to what we applied, which
-// is the crate echoing us back.
+// A fetched width that differs from what the crate last settled on for that
+// column is a user adjustment, and is captured as an override on the
+// instance and column tiers (§SD1). Two things are deliberately not
+// captures: the first-show frame, where the crate force-autofits and the
+// widths are its idea rather than the user's, and a value equal to the
+// settled one, which is the crate echoing itself back.
 //
-// The applied value is updated to the fetched one without bumping the
-// epoch. That is the echo suppression the ADR calls for: the crate already
-// holds the width, so re-applying it would fight the very drag that
-// produced it.
+// A capture updates the sent width too, without bumping the epoch. That is
+// the echo suppression the ADR calls for: the crate already holds the
+// width, so re-applying it would fight the very drag that produced it.
+//
+// firstShow *adopts* rather than ignores, and this is the whole of its
+// effect. Skipping the frame outright left the settled width holding the
+// default the call site supplied, so the very widths this is meant to
+// disown read as a change on the next frame and were captured then — a
+// one-frame delay, not a suppression, and enough for every column of a
+// table nobody touched to acquire a durable override. Taking them as the
+// baseline instead means only what moves *after* the crate settled counts
+// as the user's.
 func (inst *Resolver) Observe(tableTag string, cols []Column, fetched []float64, fontSize float64, firstShow bool, now time.Time) {
-	if firstShow {
-		return
-	}
 	st := inst.tableFor(tableTag)
 	n := min(len(cols), len(fetched))
 	for i := range n {
 		key := cols[i].Key()
-		applied, seen := st.applied[key]
+		cs, seen := st.cols[key]
 		if !seen {
 			continue
 		}
 		w := inst.clamp(fetched[i])
-		if w == applied {
+		if firstShow {
+			cs.settled = w
+			st.cols[key] = cs
+			continue
+		}
+		if w == cs.settled {
 			continue
 		}
 		inst.capture(tableTag, key, w, fontSize, now)
-		st.applied[key] = w
+		cs.sent, cs.settled = w, w
+		st.cols[key] = cs
 	}
 }
 
@@ -324,10 +362,10 @@ func (inst *Resolver) Clear(tableTag string, col Column) (err error) {
 			return
 		}
 	}
-	// Drop the table's applied map so the next Resolve reports a change
-	// and re-seeds the crate.
+	// Drop the table's per-column state so the next Resolve reports a
+	// change and re-seeds the crate.
 	if st, ok := inst.tables[tableTag]; ok {
-		st.applied = map[string]float64{}
+		st.cols = map[string]colState{}
 	}
 	return
 }
@@ -369,7 +407,7 @@ func (inst *Resolver) Len() (n int) {
 func (inst *Resolver) tableFor(tableTag string) (st *tableState) {
 	st, ok := inst.tables[tableTag]
 	if !ok {
-		st = &tableState{applied: map[string]float64{}}
+		st = &tableState{cols: map[string]colState{}}
 		inst.tables[tableTag] = st
 	}
 	return

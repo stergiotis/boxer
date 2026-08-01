@@ -525,6 +525,47 @@ ADR-0155 §SD3 verified its identity decision against this ADR
 pre-acceptance; M4 is the other half of that, and uses the mount context's
 `AppId` exactly as SD3 requires.
 
+## Update — 2026-08-01: the first-show gate suppressed one frame, not the first show
+
+The Update above calls `firstShow` "what stops the estimator's first result
+being frozen as an override nobody chose". It did not. `Observe` returned
+before recording anything, so the width it declined to capture was still
+unlike the applied one on the next frame — and the read-back lags a frame,
+so there was always a next frame — and it was captured then. Opening play's
+attr grid on a five-column result and touching nothing wrote ten rows: every
+column, on both the instance and column tiers.
+
+The column tier is what makes this more than cosmetic. Keyed by name and
+type alone, a width measured once from one query's visible rows then applies
+to any later result carrying a column of that name and type, and survives
+restarts. The automatic estimator §SD5 puts underneath the overrides stops
+being reachable at all.
+
+The gate now adopts the reported widths as the comparison baseline instead
+of returning. Two things about that are worth recording, because §SD4 would
+not predict them:
+
+- **The per-table record had to split in two.** It held one width per
+  column, serving both as "what Resolve last handed the binding" — which
+  drives the epoch — and as "what a fetched width is compared against" —
+  which drives capture. Adopting the crate's width into that single value
+  bumps the epoch on the next Resolve, so the binding re-seeds the crate
+  against its own layout on every frame, which is the per-frame
+  re-assertion Q4 rejects. The two are now separate fields and only the
+  first moves the epoch.
+- **A capture still writes both**, which is why the split does not disturb
+  §SD5's echo-suppression rule: a captured drag updates the sent width
+  without bumping the epoch, exactly as before.
+
+**A neighbouring defect is left open.** The read-back's one-frame lag means
+that on the first frame after a result's column set changes, the previous
+shape's widths are matched positionally against the new columns, so a column
+that moved position can have another column's width captured for it. play's
+side of the same seam is `attrWidthsSeen`, one bool for the app's lifetime,
+which never re-arms for a new shape. Closing it needs the shape to travel
+with the read-back, or the call site to declare it — a wire or API question
+rather than a resolver one.
+
 ## Status
 
 Accepted 2026-07-30. The fact kind and M1–M6 are all implemented (Updates

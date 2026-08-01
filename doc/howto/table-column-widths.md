@@ -90,7 +90,10 @@ until a table has shown once.
 widest *visible* cell and stores the result. The resolver cannot tell that
 apart from a drag, so scrolling wider content into view can widen a column and
 persist it. This matches the "fit it, keep it" stance the ADR takes for
-double-click autofit, but it does mean widths ratchet upward.
+double-click autofit, but it does mean widths ratchet upward. The one growth
+that is *not* captured is the width the crate settles on when a table first
+shows: `firstShow` adopts it as the baseline, so only movement after it
+counts as the user's.
 
 **Don't call `ApplyWidths` with a fresh epoch every frame.** The epoch means
 "my resolved widths changed". `Resolve` bumps it only when they actually did.

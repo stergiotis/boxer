@@ -275,6 +275,66 @@ func TestObserve_FirstShowIsNotACapture(t *testing.T) {
 	assert.Zero(t, r.PendingCount())
 }
 
+// The frame *after* first show is where skipping used to leak: the width
+// disowned on the first-show frame was still unlike the default, so the
+// next frame read it as a change and captured it. Every column of a table
+// nobody had touched then acquired a durable override.
+func TestObserve_FirstShowSuppressesTheFollowingFrameToo(t *testing.T) {
+	r, _ := newResolver(t)
+	cols := []Column{colA}
+
+	// The steady-state loop: the call site resolves and observes every
+	// frame, and the crate keeps reporting the width it settled on.
+	for frame := range 4 {
+		r.Resolve("tbl", cols, 12, []float64{50})
+		r.Observe("tbl", cols, []float64{140}, 12, frame == 0, t0)
+	}
+	assert.Zero(t, r.PendingCount(), "a width the user never touched must not be captured")
+
+	_, err := r.Flush(t0.Add(2 * DefaultDebounce))
+	require.NoError(t, err)
+	assert.Zero(t, r.Len(), "and nothing must reach the store")
+}
+
+// Adopting the crate's width must not read back as "my resolved widths
+// changed". If it did, the epoch would bump every frame and the binding
+// would re-seed the crate against its own layout — the per-frame
+// re-assertion that makes dragging impossible.
+func TestObserve_FirstShowAdoptDoesNotBumpTheEpoch(t *testing.T) {
+	r, _ := newResolver(t)
+	cols := []Column{colA}
+	r.Resolve("tbl", cols, 12, []float64{50})
+	r.Observe("tbl", cols, []float64{140}, 12, true, t0)
+	e := r.Epoch("tbl")
+
+	for range 3 {
+		r.Resolve("tbl", cols, 12, []float64{50})
+		r.Observe("tbl", cols, []float64{140}, 12, false, t0)
+	}
+	assert.Equal(t, e, r.Epoch("tbl"), "the crate's own width is not a resolved-width change")
+}
+
+// The suppression is scoped to the crate's opening width, not to the table
+// for good: a drag after it still captures.
+func TestObserve_DragAfterFirstShowStillCaptures(t *testing.T) {
+	r, store := newResolver(t)
+	cols := []Column{colA}
+	r.Resolve("tbl", cols, 12, []float64{50})
+	r.Observe("tbl", cols, []float64{140}, 12, true, t0)
+
+	r.Resolve("tbl", cols, 12, []float64{50})
+	r.Observe("tbl", cols, []float64{220}, 12, false, t0)
+	assert.Equal(t, 2, r.PendingCount(), "the instance and column tiers")
+
+	n, err := r.Flush(t0.Add(DefaultDebounce))
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+	rows, err := store.ListColumnWidths("play")
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, 220.0, rows[0].Points)
+}
+
 // A column the resolver never applied a width for cannot have been
 // dragged away from one.
 func TestObserve_UnknownColumnIsIgnored(t *testing.T) {
