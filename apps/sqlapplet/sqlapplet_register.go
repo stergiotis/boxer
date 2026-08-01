@@ -28,12 +28,22 @@ var bookFS embed.FS
 //go:embed booktopo
 var booktopoFS embed.FS
 
+// bookgodepFS embeds the Go dependency suite (apps/sqlapplet/bookgodep/*.md)
+// — the keelson('go_*') tables as the four lenses ADR-0064's godepview app
+// draws: the closure, the group quotient, and the third-party surface.
+//
+//go:embed bookgodep
+var bookgodepFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book")); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
 	}
 	if err := RegisterBook("topology", help.MustSub(booktopoFS, "booktopo")); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register topology book")
+	}
+	if err := RegisterBook("godep", help.MustSub(bookgodepFS, "bookgodep")); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register godep book")
 	}
 }
 
