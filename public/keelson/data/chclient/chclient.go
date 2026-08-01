@@ -24,6 +24,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -43,6 +44,36 @@ func Defaults() (c Config) {
 	c = Config{
 		URL:  "http://localhost:8123/",
 		User: "default",
+	}
+	return
+}
+
+// ConfigFromEnv layers the CLICKHOUSE_* registry entries (ADR-0009) over
+// Defaults. The endpoint is CLICKHOUSE_ENDPOINT, falling back to
+// CLICKHOUSE_URL and then to the Defaults URL; credentials come from
+// CLICKHOUSE_USER / CLICKHOUSE_PASSWORD. An entry that is unset or empty
+// leaves the corresponding default in place, so the zero-configuration case
+// stays exactly what Defaults describes.
+//
+// The two endpoint spellings exist because CLICKHOUSE_URL predates
+// CLICKHOUSE_ENDPOINT and both remain declared; this is the one place that
+// decides which wins. Either may carry a trailing slash — Ping trims it and
+// the query paths tolerate its absence.
+//
+// Callers that must not read the environment (fixed coordinates, or a test
+// pinning a server) keep using Defaults.
+func ConfigFromEnv() (c Config) {
+	c = Defaults()
+	if v := clickhouseenv.Endpoint.Get(); v != "" {
+		c.URL = v
+	} else if v := clickhouseenv.URL.Get(); v != "" {
+		c.URL = v
+	}
+	if v := clickhouseenv.User.Get(); v != "" {
+		c.User = v
+	}
+	if v := clickhouseenv.Password.Get(); v != "" {
+		c.Password = v
 	}
 	return
 }
