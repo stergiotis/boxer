@@ -209,3 +209,89 @@ above.
 - Integration: screenshot tour entry; live run against a `VALUES`-literal
   countries query and a real dataset, hover + click verified via the
   egui_mcp driver.
+
+## Update (2026-08-01) — the concave painter takes the interaction layer, not the fill
+
+`PaintPolygonFilled(...).Concave()` landed (commit 04999929): the builder
+ear-clips the outline with `earcutr` into an `egui::Mesh`, and `.Stroke()`
+outlines the closed polygon in both modes. That retires the substrate fact this
+ADR was built around — "egui fills **convex** polygons only" (§Context, §SD3,
+§Alternatives) — so the raster was re-examined against a painter-drawn map. The
+fill stays rasterized; what changes is where it is drawn and what is drawn over
+it.
+
+### What was measured
+
+The embedded asset carries its 177 countries as **289 rings / 10,654 points**
+(largest ring 556 points, median 37 points per country) — ~85 KB of `xs`/`ys`
+and ~10,000 triangles per frame if countries were painted rather than
+rasterized. Against that, one `rasterize` pass at the width play uses (1280 px)
+costs ~30 ms and ~24 MB of scratch on the development machine, split ~6–7 ms
+geometry (scanline fill + border walk) and ~22 ms resolve (subsample downsample
++ recolour); it runs when the data, palette or value column changes, and an idle
+frame costs one cached-texture command. A Go-side point-in-polygon test over
+every ring — the replacement for the index buffer — measures 323 ns on a hit and
+187 ns on a miss, so §SD6's O(1) readout is not what keeps the raster.
+
+### Why the fill stays rasterized
+
+Concave support fixes correctness, not cost, and the painter route carries
+regressions the raster does not have:
+
+- Painter geometry is per-frame — `paint_cmds` is drained every frame, so the
+  ear-clip and the 289 builder calls would repeat at frame rate to draw a
+  picture that changes only when the query does. There is no batched polygon
+  primitive (`paintRectsFilled` has one; polygons do not), so each ring is its
+  own call.
+- A mesh fill bypasses epaint's feathering, so every ring needs a hairline
+  stroke in its own fill colour to restore the anti-aliasing the 2× supersampled
+  raster already has.
+- Shared borders would double-draw. The rasterizer marks both neighbours onto
+  the same subpixels precisely so a shared border is not darker than a coastline
+  (`raster.go`, `strokeCountry`); independently stroked rings have no such
+  property.
+- SVG export would go from one embedded texture to ~10,000 `<polygon>`
+  triangles per exported frame — the tessellation cost §SD3 rejected, unchanged.
+- Holes remain unimplemented in the builder (earcut is called with no hole
+  indices). The asset has exactly one interior ring — South Africa's Lesotho
+  enclave — and Lesotho is the next feature after South Africa, so atlas draw
+  order repaints it. That is luck, not a contract.
+
+### §SD2's sizing constraint no longer holds
+
+§SD2 fixed the raster width as an explicit control because the available-size
+capture (R18) is a single global last-writer-wins slot already owned by play's
+editor pane. That reasoning is superseded: `captureUiRect` (R21) is a per-seq
+append register with no contention, and two play panels
+(`play_layeredgraph_panel.go`, `play_flow_panel.go`) already size a canvas to
+their pane width through it at one frame of lag. The World pane now does the
+same, so the texture is rasterized at the width it is displayed at rather than a
+fixed 1280 px scaled into whatever the pane happens to be.
+
+### What changed
+
+- The map is drawn as `paintImage` inside a `paintCanvas` rather than as an
+  `Image` widget. Same content-versioned texture and the same ship-once protocol
+  (the starved-texture report still re-arms it); the canvas is what puts map and
+  overlay in one coordinate frame.
+- Hover and click come from the canvas's per-id pointer row (R24) and its
+  response, not the image's texture-space hover readout. R24's "did not render
+  last frame" answer replaces the image-register liveness probe that re-armed
+  the tracker on a dock tab's hidden→visible edge.
+- The hovered country is outlined with `PaintPolygonFilled(...).Concave()
+  .Stroke(...)` over the texture — the first thing here the raster genuinely
+  could not do, since a highlight would otherwise cost a full re-raster and
+  re-upload per pointer move.
+- Ring role (outer vs. hole) is now carried on the atlas so the highlight fills
+  outer rings and only outlines the one hole. The rasterizer still ignores the
+  distinction — even-odd does not need it.
+- The raster width follows the canvas width unless a caller sets one explicitly
+  (`SetPixelWidth`), reusing the existing resize debounce so a drag re-rasters
+  once at rest.
+
+Deferred, unchanged: pan/zoom stays a non-goal (§SD2), so the case for full
+vector geometry stays weak. A batched polygon primitive plus retained painter
+geometry, or pan/zoom becoming a goal, are the two facts that would flip it.
+The ~22 ms resolve pass is worth attacking on its own terms — it recomputes a
+per-pixel subsample majority that depends only on the raster size, not on the
+data — but that is an optimization inside §SD3, not a change to it.
