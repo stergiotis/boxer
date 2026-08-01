@@ -37,6 +37,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
@@ -441,6 +442,16 @@ func NewCommand() *cli.Command {
 			}
 			if passErr := play.RegisterPasses(passreg.Default); passErr != nil {
 				log.Warn().Err(passErr).Msg("passreg: play host pass registration failed")
+			}
+
+			// This module's Go package graph as keelson('go_packages') and
+			// friends — registered HERE rather than in introspecthost's static
+			// provider set on purpose: collecting the graph links
+			// golang.org/x/tools, which appliance builds have no use for, and
+			// the static set is shared with them. Registration is cheap; the
+			// toolchain runs only if a query touches one of the tables.
+			if godepErr := providersgodep.Register(introspectReg, providersgodep.Config{Log: log.Logger}); godepErr != nil {
+				log.Warn().Err(godepErr).Msg("introspect: godep table registration failed")
 			}
 
 			// ADR-0094 §SD3/§SD4: expose keelson runtime state as ClickHouse-
