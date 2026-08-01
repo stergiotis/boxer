@@ -18,7 +18,12 @@ CH_ENDPOINT="http://localhost:8123"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(git -C "$script_dir" rev-parse --show-toplevel)"
-tags="$(cat "$repo_root/tags")" # boxer build tags; the package won't compile without them
+# boxer build tags; the package won't compile without them. `integration` is
+# appended because the loader is a member of the integration lane
+# (`//go:build integration`, ENGINEERING_PRACTICES §4) — without that tag the
+# test is not compiled in, `-run` matches nothing, and `go test` exits 0 having
+# inserted nothing at all.
+tags="$(cat "$repo_root/tags"),integration"
 
 # 1. Pre-flight. If ClickHouse is down the test would SKIP silently and leave
 #    the table untouched, so fail loudly here instead.
@@ -34,7 +39,15 @@ fi
 echo "Seeding anchor.facts via TestLeewayClickHouse ..."
 go test -tags="$tags" -count=1 -v -run '^TestLeewayClickHouse$' "$script_dir"
 
-# 3. Verify.
+# 3. Verify. Checked rather than just reported: a `-run` pattern that matches
+#    nothing is not an error to `go test`, so without this guard a renamed or
+#    re-tagged loader leaves the table empty and the script still exits 0.
 count="$(curl -fsS -H 'X-ClickHouse-User: default' "$CH_ENDPOINT/" \
 	--data-binary 'SELECT count() FROM anchor.facts')"
+if [ "$count" -eq 0 ]; then
+	echo "error: anchor.facts is still empty — the loader inserted nothing" >&2
+	echo "       check that TestLeewayClickHouse still exists under that name," >&2
+	echo "       and that the build tags above still match the ones it carries" >&2
+	exit 1
+fi
 echo "anchor.facts now holds ${count} row(s)."
