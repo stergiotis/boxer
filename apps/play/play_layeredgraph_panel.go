@@ -603,7 +603,7 @@ func (inst *PlayApp) demandNetworkEdges() (rec arrow.RecordBatch, schema *arrow.
 	}
 	v := d.edgesLane.demand(compiledNode{
 		SQL:    fuseNode(inst.currentSplit, networkEdgesNodeID),
-		Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
+		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	d.edgesLoading = v.loading
 	d.edgesErr = v.err // mirrored every demand — nil clears (no latch)
@@ -624,7 +624,7 @@ func (inst *PlayApp) demandNetworkVertices() (rec arrow.RecordBatch, schema *arr
 	}
 	v := d.verticesLane.demand(compiledNode{
 		SQL:    fuseNode(inst.currentSplit, networkVerticesNodeID),
-		Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
+		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	d.verticesLoading = v.loading
 	d.verticesErr = v.err

@@ -398,7 +398,7 @@ func (inst *PlayApp) demandFlowLens(split splitResult, active NodeID) (lines []s
 	// routing decision and the rewrites all see the statement itself.
 	v := lane.demand(compiledNode{
 		SQL:    fuseNode(split, active),
-		Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
+		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	feed.loading = v.loading
 	feed.err = v.err

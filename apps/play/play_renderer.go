@@ -962,7 +962,7 @@ func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Sche
 			// fused SQL's SET prelude instead (slice 5a).
 			view := inst.intermediateLane.demand(compiledNode{
 				SQL:    fuseNode(split, inst.observedNode),
-				Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
+				Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 			})
 			if view.rec != nil {
 				numRows = view.rec.NumRows()
@@ -2599,7 +2599,7 @@ func (inst *PlayApp) demandKanbanLanes() (rec arrow.RecordBatch, schema *arrow.S
 	}
 	view := d.lanesLane.demand(compiledNode{
 		SQL:    fuseNode(inst.currentSplit, kanbanLanesNodeID),
-		Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
+		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	d.lanesLoading = view.loading
 	d.lanesErr = view.err // mirrored every demand — nil clears (no latch)

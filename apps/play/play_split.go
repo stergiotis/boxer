@@ -2,6 +2,7 @@ package play
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -180,7 +181,71 @@ func splitGraph(sql string) (res splitResult, err error) {
 		return
 	}
 	err = checkAcyclic(res.Nodes)
+	if err != nil {
+		return
+	}
+	closeReads(res.Nodes, res.Sink)
 	return
+}
+
+// closeReads widens each node's signal edges to what its EXECUTED SQL
+// actually references. A node is executed as `fuseNode(split, id)`, which
+// inlines its whole dependency closure, so a slot named only in an upstream
+// CTE is in the query text even though it is absent from that CTE's own body
+// — and a param the executor does not send is a hard ClickHouse error
+// ("Substitution `x` is not set"), not a silent default. Discovered by a
+// graph lane whose `edges` CTE reached a `{selection_key:String}` two CTEs
+// upstream: the main result rendered and the lane failed.
+//
+// The sink is the whole statement verbatim, including CTEs nothing
+// references, so it takes the union of every node's reads rather than the
+// closure of its own dependencies.
+//
+// Runs after checkAcyclic, so the walk terminates.
+func closeReads(nodes []splitNode, sink NodeID) {
+	own := make(map[NodeID][]SignalID, len(nodes))
+	byID := make(map[NodeID]*splitNode, len(nodes))
+	all := make(map[SignalID]struct{}, 8)
+	for i := range nodes {
+		own[nodes[i].ID] = nodes[i].Reads
+		byID[nodes[i].ID] = &nodes[i]
+		for _, r := range nodes[i].Reads {
+			all[r] = struct{}{}
+		}
+	}
+
+	var walk func(id NodeID, seen map[NodeID]bool, acc map[SignalID]struct{})
+	walk = func(id NodeID, seen map[NodeID]bool, acc map[SignalID]struct{}) {
+		if seen[id] {
+			return
+		}
+		seen[id] = true
+		for _, r := range own[id] {
+			acc[r] = struct{}{}
+		}
+		if n, ok := byID[id]; ok {
+			for _, dep := range n.DependsOn {
+				walk(dep, seen, acc)
+			}
+		}
+	}
+
+	for i := range nodes {
+		acc := make(map[SignalID]struct{}, len(all))
+		if nodes[i].ID == sink {
+			acc = all
+		} else {
+			walk(nodes[i].ID, make(map[NodeID]bool, len(nodes)), acc)
+		}
+		out := make([]SignalID, 0, len(acc))
+		for r := range acc {
+			out = append(out, r)
+		}
+		// Sorted: Reads feeds the compiled node's Params, which keys a lane's
+		// memo — an unstable order would re-execute every frame.
+		slices.Sort(out)
+		nodes[i].Reads = out
+	}
 }
 
 // uniqueSinkID returns the sink node's id: mainNodeID, disambiguated when a

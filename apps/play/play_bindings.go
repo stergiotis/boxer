@@ -148,7 +148,7 @@ func (inst *PlayApp) demandBoundNodes() (release func()) {
 		}
 		inst.boundViews[nodeID] = lane.demand(compiledNode{
 			SQL:    fuseNode(split, nodeID),
-			Params: resolveSignalNames(node.Reads, inst.lastRunBound, inst.frameSig),
+			Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 		})
 	}
 

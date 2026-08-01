@@ -291,7 +291,7 @@ func (inst *TimelineDriver) demandBands(sig SignalEnvI) (rec arrow.RecordBatch, 
 		inst.bandsLaneErr = nil
 		return
 	}
-	params := resolveSignalNames(inst.bandsSlotNames, inst.bandsBound, sig)
+	params := resolveSignalNamesWithDefaults(inst.bandsSlotNames, inst.bandsBound, sig)
 	if inst.bandsExtentPending(params) {
 		inst.bandsLoading = false
 		inst.bandsLaneErr = nil

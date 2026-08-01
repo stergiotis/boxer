@@ -288,7 +288,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	// new one loads). Gated on the full vp_* set — the signals land one frame
 	// after the first settle. Re-pack only when the served fingerprint moves.
 	if inst.template != "" {
-		params := resolveSignalNames(inst.templateReads, nil, sig)
+		params := resolveSignalNamesWithDefaults(inst.templateReads, nil, sig)
 		if hasViewportParams(params) {
 			view := inst.lane.demand(compiledNode{SQL: inst.template, Params: params})
 			inst.loading = view.loading
