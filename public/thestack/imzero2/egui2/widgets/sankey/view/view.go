@@ -46,11 +46,14 @@ const (
 	// (ADR-0159 SD5).
 	FillPolygon FillMode = iota
 	// FillColumns rasterizes every ribbon in the diagram as ~2 px vertical
-	// strips in a single batched rect call — one paint opcode for the whole
-	// diagram, a source-to-target gradient at no extra cost, and ordinary
-	// rects and polylines, so it renders in every export lane. It stair-steps
-	// slightly where a ribbon edge is steep, which the boundary polylines
-	// cover.
+	// strips in a single batched rect call, which is also what carries a
+	// source-to-target gradient at no extra cost. It stair-steps where a
+	// ribbon edge is steep, so the two boundary curves are stroked over it:
+	// the fill is one opcode for the whole diagram, the outlines two more per
+	// ribbon.
+	//
+	// Everything it emits is ordinary rects and polylines, so unlike
+	// FillPolygon it renders in every export lane (ADR-0159 SD5).
 	FillColumns
 )
 
@@ -115,11 +118,20 @@ const (
 	dimAlpha = 0x33
 	// glyphWidthRatio estimates a glyph's advance as a fraction of the font
 	// size. Text measurement is still deferred (ADR-0149 SD6), so label
-	// fitting is an estimate — it under-measures CJK, which will overlap.
+	// fitting is an estimate, and the estimate counts bytes: a three-byte
+	// CJK glyph is charged 1.8 em against a true advance near 1.0. Those
+	// labels are therefore dropped early rather than drawn over the plot
+	// edge — the error is in the safe direction, which is why it is left
+	// alone until a measurement channel exists.
 	glyphWidthRatio = 0.6
 	// labelGapPx is the space between a node bar and its label.
 	labelGapPx = 5.0
-	// minLabelBarPx is the shortest bar that still gets a label.
+	// minLabelBarPx is the shortest bar that still gets a label, and the only
+	// thing standing between one label and the next: the width estimate
+	// decides whether a label leaves the plot area, never whether it collides
+	// with its neighbour. A stage of short bars can still overlap, and
+	// aggregating upstream is the answer — the same answer the thin ribbons
+	// those bars belong to already get from Report.ThinLinks.
 	minLabelBarPx = 7.0
 )
 

@@ -298,6 +298,60 @@ Both §SD5 lanes were checked by capture, and §SD2's pixel snapping came out of
 looking at one. No consumer is wired yet; ADR-0119 §SD5's volume overlay is the
 nearest candidate, and a `play` panel stays deferred per §SD6.
 
+## Update 2026-08-01 — an adversarial review; three silent defects, and two claims this ADR got wrong
+
+A review of the shipped packages against this ADR found three defects, each
+of which failed quietly rather than visibly.
+
+- **`Report.Total` counted links, not quantity.** A flow crossing three
+  stages is three links but one quantity, so the sum overstated a conserved
+  diagram by roughly its stage count: 199 PJ for the 80 PJ energy balance,
+  2400 accounts for the 1200-account cohort. The demo printed that as the
+  diagram's total *and* divided by it for "% of total", so every share on
+  screen was wrong too. It is now the outflow of every node with no inflow.
+  This is the one number the widget published that contradicted §C5, the
+  criterion the form was chosen on.
+- **`Options.NodeWidth` was never clamped**, though `Layout.NodeWidth`'s
+  doc claimed it reported a clamped value. Past roughly `1/NodeWidth`
+  stages a bar reaches into the next stage and every ribbon runs backwards.
+  That is not cosmetic: the sampler's x then descends, which breaks the
+  simple-ring precondition §SD2 relies on *and* the binary search §SD3
+  relies on, so ribbons fill as self-intersecting meshes and the hit test
+  stops finding them. Capped at half the stage pitch. The other box
+  fractions now take their default on any value a fraction cannot be.
+- **Double-click fit was a no-op.** Custom items do not contribute to
+  implot's auto-fit, so with the axes pinned `CondOnce` and no extent
+  declared, `dataOk` stayed false and the fit was skipped — leaving a
+  panned-away diagram with no way back. `Draw` now declares the unit box
+  and `Setup` bounds the gestures to it. §Consequences claimed this lane
+  gave us fit "already working"; it gives us the *mechanism*, and the
+  extent is the adopter's to declare. `icicle/view`, built on the same lane
+  afterwards, had already learned this.
+
+Two statements in this ADR were also wrong on the facts:
+
+- The **CJK label** bullet under §Consequences said badly-estimated scripts
+  "will overlap". The estimate counts bytes, so CJK is charged about 1.8 em
+  per glyph against a true advance near 1.0 — it over-measures, and those
+  labels are *dropped*, not overlapped. Separately, the estimate only ever
+  decides whether a label leaves the plot area; nothing deconflicts a label
+  from its vertical neighbour, so label crowding — named in §Context as a
+  failure mode needing an explicit answer — is answered only by a 7 px
+  minimum bar height against an 11 pt font. Aggregating upstream remains
+  the honest answer, as it is for the thin ribbons those bars belong to.
+- §SD3's "the region tested is the region drawn" is exact only for
+  `FillPolygon`. `FillColumns` raises the sample count to about one strip
+  per two pixels and steps its edge, so the two disagree — by well under a
+  pixel, but the word "exactly" was not earned.
+
+Verification moved with it: goldens for the total (geometry unchanged,
+which is what confirms the width clamp leaves a fitting diagram alone), and
+new cases for the clamp on a long chain, an over-wide bar and a bar wider
+than the box, asserting ribbons stay forward and the sampler stays
+ascending. The fit extent is still unverified — `dataXMin` is unexported,
+so only implot's own tests can observe a fit contribution. §Verification
+plan's "Gap" grows that item.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 

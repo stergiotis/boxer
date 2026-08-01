@@ -4,8 +4,13 @@ import "sort"
 
 // DefaultSamples is how many points each ribbon edge is sampled at. It is the
 // renderer's default and the hit test's default, and they must agree — the
-// point of sharing one sampler is that the region a pointer tests against is
-// exactly the region that was drawn (ADR-0159 SD3).
+// point of sharing one sampler is that a pointer tests the region that was
+// drawn (ADR-0159 SD3), not a bounding box around it.
+//
+// "The same region" is exact for the polygon fill route. The column route
+// raises the count to about one strip per two pixels, so its edge is a finer
+// polyline than the hit test's, and a stepped one; the two disagree by well
+// under a pixel.
 const DefaultSamples = 24
 
 // Ribbon is a sampled link: the shared vertical-extrusion geometry behind
