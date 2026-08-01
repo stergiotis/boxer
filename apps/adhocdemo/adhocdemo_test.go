@@ -50,8 +50,8 @@ func TestSeriesEncodes(t *testing.T) {
 // TestManifestCapsCoverEmbeddedApplet pins the cap contract: the embedded
 // applet's capabilities ride this manifest (ADR-0132 §SD8), so the two
 // escape hatches the minimal toolbar renders must be declared here or the
-// buttons are dead — Copy SQL a silent no-op, Open in Playground a
-// permission refusal.
+// buttons are dead — the Definition drawer's Copy a silent no-op, Open in
+// Playground a permission refusal.
 func TestManifestCapsCoverEmbeddedApplet(t *testing.T) {
 	patterns := make(map[string]app.CapDirectionE, len(manifest.Caps))
 	for _, cap := range manifest.Caps {

@@ -20,7 +20,6 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
@@ -520,10 +519,18 @@ type PlayApp struct {
 
 	// toolbarMinimal attenuates the top bar to the applet surface
 	// (ADR-0132 §SD3): Load .sql, the endpoint switcher, the prelude and
-	// conditions toggles disappear, and a "Copy SQL" escape hatch appears
-	// (the buffer is the artifact — the clipboard is a faithful export).
-	// Set via SetToolbarMinimal between construction and mount.
+	// conditions toggles disappear, and the "Open in Playground" escape
+	// hatch appears. Set via SetToolbarMinimal between construction and
+	// mount.
 	toolbarMinimal bool
+
+	// definition is the document this instance was defined by, when an
+	// embedder handed one over (SetDefinitionMarkdown) — a sqlapplet's
+	// markdown source. Non-nil puts the "Definition" toggle in the top bar
+	// and the drawer behind it; nil in an ordinary playground, where the
+	// buffer is the user's own and stands behind no document. See
+	// play_definition.go.
+	definition *definitionView
 
 	// Param-slot UI (see play_param_render.go). paramSlots mirrors what
 	// the debounced parse extracted from inst.sql; paramDrafts owns the
@@ -1126,6 +1133,10 @@ func (inst *PlayApp) Render() error {
 	for range c.PanelBottomInside(ids.PrepareStr("status")).Resizable(false).KeepIter() {
 		inst.renderStatus(numRows, elapsed, summary, executed, err, inst.activeTruncation())
 	}
+	// The definition drawer, when an embedder gave this instance a document
+	// and the reader opened it. Before the central panel: side panels claim
+	// their width in the order they are added.
+	inst.renderDefinitionPanel()
 	for range c.PanelCentralInside().KeepIter() {
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			if inst.pendingDockActivate != 0 {
@@ -1628,20 +1639,25 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			}
 		}
 
-		// Copy SQL — the toolbarMinimal escape hatch (ADR-0132 §SD3): the
-		// whole buffer over clipboard.write, off the frame goroutine
-		// (Request blocks until the broker acks — the helphost Copy
-		// precedent). Needs a bus with the clipboard cap declared; without
-		// one the button would be a silent no-op, so it is not offered.
+		// Definition — the ADR-0132 §SD3 escape hatch, widened: the document
+		// the applet is defined BY rather than only the SQL it runs. Offered
+		// whenever an embedder handed one over, with no bus needed — reading
+		// the definition reaches nothing outside the process. The per-fence
+		// Copy inside the drawer is what the old "Copy SQL" button became,
+		// and it is the part that still needs the clipboard cap.
+		if inst.definition != nil {
+			c.Separator().Vertical().Send()
+			for range c.HoverText("The markdown document this applet is defined by: the frontmatter that is its manifest, the prose, and the SQL it runs.").KeepIter() {
+				if c.Button(ids.PrepareStr("definition"), c.Atoms().Text("Definition").Keep()).
+					Selected(inst.definition.open).
+					SendResp().HasPrimaryClicked() {
+					inst.definition.open = !inst.definition.open
+				}
+			}
+		}
+
 		if inst.toolbarMinimal && inst.bus != nil {
 			c.Separator().Vertical().Send()
-			if c.Button(ids.PrepareStr("copySql"), c.Atoms().Text("Copy SQL").Keep()).
-				SendResp().HasPrimaryClicked() {
-				text := inst.sql
-				go func() {
-					_, _ = inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
-				}()
-			}
 
 			// Open in Playground — the recorded §SD3 escape-hatch upgrade
 			// (ADR-0135 §SD7): compose the buffer + run flags into a
@@ -1649,7 +1665,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			// Offered whenever a bus is wired — the honest gate: a missing
 			// cap or absent open service surfaces as the refusal label
 			// below instead of a silently hidden button. Off the frame
-			// goroutine, the Copy SQL rule.
+			// goroutine, the clipboard rule (see renderDefinitionDoc).
 			inst.openPlayMu.Lock()
 			openBusy := inst.openPlayBusy
 			openErr := inst.openPlayErr
@@ -1723,7 +1739,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 		// windowhost.open, seeded with the current buffer; the slug/title/icon
 		// form that used to live inline here moved out with the O4 seam.
 		// Authoring surface only: attenuated windows are consumers, and the
-		// launch needs the bus. Off the frame goroutine, the Copy SQL rule.
+		// launch needs the bus. Off the frame goroutine, the clipboard rule.
 		if inst.bus != nil && !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			inst.saveAppletMu.Lock()

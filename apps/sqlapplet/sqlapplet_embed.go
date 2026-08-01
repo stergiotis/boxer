@@ -67,6 +67,11 @@ func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err erro
 		inner.SetTimelineBandsSql(def.BandsSQL)
 	}
 	inner.SetToolbarMinimal(true)
+	// The document this instance was minted from, for the "Definition"
+	// drawer (ADR-0132 §SD3): the applet shows what it is defined by, which
+	// is strictly more than the buffer the old Copy SQL button exported. A
+	// hand-built def carries no Source, and the drawer stays absent.
+	inner.SetDefinitionMarkdown(def.Source)
 	if err = attenuateTabs(inner, def, cfg.Log); err != nil {
 		return nil, err
 	}

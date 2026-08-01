@@ -48,6 +48,14 @@ func TestStarterBookCorpus(t *testing.T) {
 	assert.Equal(t, EndpointDefault, recent.Endpoint)
 	assert.Equal(t, analysis.QuerySecurityRead, recent.Class)
 	assert.False(t, recent.HasUnboundSlots, "the lim slot is prelude-bound — a param, not a signal")
+
+	// Every def carries the whole document, not just what parsing extracted
+	// from it: the Definition drawer shows the source, so a def that dropped
+	// it would mint an applet unable to say what it is.
+	for _, def := range defs {
+		assert.Contains(t, string(def.Source), def.SQL, "%s: Source is the document the buffer came from", def.Slug)
+		assert.Contains(t, string(def.Source), "title:", "%s: frontmatter survives into Source", def.Slug)
+	}
 }
 
 func TestMintStarterBook(t *testing.T) {

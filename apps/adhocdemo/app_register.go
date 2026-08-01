@@ -35,13 +35,14 @@ var manifest = app.Manifest{
 		},
 		// The embedded applet's two escape hatches ride this manifest
 		// (ADR-0132 §SD8: an embedded applet's capabilities are the
-		// embedder's). Without them the minimal toolbar still offers both
-		// buttons — Copy SQL no-ops silently, Open in Playground shows a
-		// permission refusal — so the caps are what makes the surface honest.
+		// embedder's). Without them the surface still offers both — the
+		// Definition drawer's per-fence Copy no-ops silently, Open in
+		// Playground shows a permission refusal — so the caps are what makes
+		// it honest.
 		{
 			Pattern:   clipboardbroker.SubjectWrite,
 			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: Copy SQL escape hatch of the embedded applet (ADR-0132 §SD3)",
+			Reason:    "adhocdemo: copy a fenced block out of the embedded applet's Definition drawer (ADR-0132 §SD3)",
 		},
 		{
 			Pattern:   windowhost.OpenSubject,

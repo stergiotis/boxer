@@ -85,9 +85,11 @@ func (inst *PlayApp) SetLiveMain(on bool) {
 // SetToolbarMinimal attenuates the top bar to the applet surface (ADR-0132
 // §SD3): Load .sql, the endpoint switcher, and the prelude/conditions
 // toggles disappear; Run/Cancel, the Live toggle, and the unfilled-inputs
-// hint stay; the "Copy SQL" and "Open in Playground" escape hatches
-// (ADR-0135 §SD7) appear when a bus is wired. Call it between
-// construction and mount, like the tab registry.
+// hint stay; the "Open in Playground" escape hatch (ADR-0135 §SD7) appears
+// when a bus is wired. Call it between construction and mount, like the tab
+// registry. The other escape hatch, "Definition", rides
+// [PlayApp.SetDefinitionMarkdown] rather than this flag — it is offered
+// wherever a document exists to show.
 func (inst *PlayApp) SetToolbarMinimal(on bool) {
 	inst.toolbarMinimal = on
 }
@@ -96,7 +98,7 @@ func (inst *PlayApp) SetToolbarMinimal(on bool) {
 // seeded with cfg over `windowhost.open` (ADR-0135 §SD7 — the ADR-0132
 // §SD3 escape-hatch upgrade rendered as the minimal toolbar's "Open in
 // Playground" button). Blocks on the bus round-trip, so call it from a
-// goroutine off the frame loop — the Copy SQL rule. The outcome lands in
+// goroutine off the frame loop — the clipboard rule. The outcome lands in
 // openPlayErr (empty on success) for the toolbar to surface; a re-click
 // while a request is in flight is dropped.
 func (inst *PlayApp) requestOpenPlayground(cfg launchcfg.PlayLaunch) {

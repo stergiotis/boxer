@@ -12,6 +12,7 @@
 package sqlapplet
 
 import (
+	"bytes"
 	"io/fs"
 	"maps"
 	"regexp"
@@ -81,6 +82,14 @@ type AppletDef struct {
 	// ephemeral handle before mount. The corpus gate treats them as
 	// valid-by-declaration.
 	Datasets []string
+	// Source is the document's raw markdown — the definition itself, kept so
+	// an instance can show a reader what it was minted from (play's
+	// "Definition" drawer). Bytes rather than a parsed markdown.Doc: parsing
+	// at mint time would hold a segment tree per corpus document for the
+	// whole session, where the drawer needs one per opened applet. A def
+	// built by hand rather than parsed carries none, and the drawer is
+	// simply absent.
+	Source []byte
 }
 
 // slugPattern is the accepted applet-slug shape. The slug becomes the minted
@@ -257,6 +266,9 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 		BookID: bookID,
 		Title:  title,
 		SQL:    sql,
+		// Cloned: the runtime-store path parses a document off the bus, and
+		// a def outlives the request buffer it was read from.
+		Source: bytes.Clone(src),
 	}
 	if bands != nil {
 		def.BandsSQL = strings.TrimSpace(bands.Text)
