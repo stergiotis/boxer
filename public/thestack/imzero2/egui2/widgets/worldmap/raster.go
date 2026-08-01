@@ -8,15 +8,28 @@ import (
 // Software rasterization of the atlas into an RGBA texture + a country-index
 // hit-test buffer (ADR-0114 §SD3). Scanline even-odd filling handles the
 // concave, holed, multi-part country outlines uniformly — the reason this is
-// rasterized Go-side at all instead of using egui's convex-only polygon fill.
+// rasterized Go-side at all instead of using egui's polygon fill.
 //
 // The pass renders at ssFactor× supersampling and box-downsamples, baking
 // country borders (drawn into a 2× coverage mask) into the same buffer. The
-// output is row-major 0xRRGGBBAA, row 0 = north — the Image widget's pixel
-// contract. The index buffer is at the output (1×) resolution: the Image
-// hover readout is in texture-pixel space, so hit-testing is one array load.
+// output is row-major 0xRRGGBBAA, row 0 = north — the image pixel contract.
+// The index buffer is at the output (1×) resolution: hover maps the canvas
+// pointer to a texture pixel, so hit-testing is one array load.
+//
+// The pass is split in two, because the expensive half does not depend on the
+// data. rasterGeometry holds everything derived from the outlines and the
+// output size; resolve turns it into pixels for a given set of fills. A value
+// change re-runs only the second half, which is a lookup per pixel plus a
+// fix-up over the boundary pixels — the scanline fill, the border walk and the
+// per-pixel subsample majority all stay cached.
 
-const ssFactor = 2
+const (
+	ssFactor = 2
+	nSub     = ssFactor * ssFactor
+	// coverLevels is the number of distinct border-coverage values a pixel can
+	// carry: none through all nSub subsamples.
+	coverLevels = nSub + 1
+)
 
 // rasterStyle carries the per-render colors. fills is indexed by CountryIdx
 // and must cover every country in the atlas.
@@ -26,9 +39,31 @@ type rasterStyle struct {
 	stroke uint32   // border color; alpha scales the baked stroke opacity
 }
 
-// rasterize renders the atlas at (w × h). Returns the RGBA pixels and the
-// per-pixel country index (NoCountry = sea).
-func rasterize(atlas *Atlas, w, h int, style rasterStyle) (rgba []uint32, index []CountryIdx) {
+// mixedPixel is one output pixel whose subsamples disagree — a coastline or a
+// shared border. Its color is the mean of the four subsample colors, so it
+// cannot come from the fill lookup table and is fixed up separately.
+type mixedPixel struct {
+	off int32
+	sub [nSub]CountryIdx
+}
+
+// rasterGeometry is the size-dependent half of the pass: what the outlines and
+// the output size determine, and the data does not. Built once per size and
+// reused across every value, palette and column change.
+type rasterGeometry struct {
+	w, h int
+	// index is the per-pixel country — the hit-test buffer, and the fill key
+	// for every pixel whose subsamples agree.
+	index []CountryIdx
+	// cover is the per-pixel border coverage, 0..nSub.
+	cover []uint8
+	// mixed are the boundary pixels, in scan order.
+	mixed []mixedPixel
+}
+
+// buildRasterGeometry runs the scanline fill, the border walk and the
+// subsample reduction for an (w × h) output.
+func buildRasterGeometry(atlas *Atlas, w, h int) *rasterGeometry {
 	w2 := w * ssFactor
 	h2 := h * ssFactor
 	idx2 := make([]CountryIdx, w2*h2)
@@ -44,56 +79,126 @@ func rasterize(atlas *Atlas, w, h int, style rasterStyle) (rgba []uint32, index 
 		strokeCountry(mask2, w2, h2, &atlas.Countries[ci])
 	}
 
-	rgba = make([]uint32, w*h)
-	index = make([]CountryIdx, w*h)
-	sr, sg, sb, sa := unpackRGBA(style.stroke)
+	inst := &rasterGeometry{
+		w:     w,
+		h:     h,
+		index: make([]CountryIdx, w*h),
+		cover: make([]uint8, w*h),
+	}
 	for y := range h {
 		for x := range w {
 			// Gather the ssFactor² subsamples.
-			var r, g, b, a, cover uint32
-			var cand [ssFactor * ssFactor]CountryIdx
+			var cand [nSub]CountryIdx
+			var cover uint8
 			n := 0
+			uniform := true
 			for sy := range ssFactor {
 				row := (y*ssFactor + sy) * w2
 				for sx := range ssFactor {
 					o := row + x*ssFactor + sx
 					ci := idx2[o]
 					cand[n] = ci
-					n++
-					col := style.sea
-					if ci != NoCountry {
-						col = style.fills[ci]
+					if ci != cand[0] {
+						uniform = false
 					}
-					cr, cg, cb, ca := unpackRGBA(col)
-					r += cr
-					g += cg
-					b += cb
-					a += ca
-					cover += uint32(mask2[o])
-				}
-			}
-			const nSub = ssFactor * ssFactor
-			r /= nSub
-			g /= nSub
-			b /= nSub
-			a /= nSub
-			// Blend the border stroke over the averaged fill, scaled by the
-			// subsample coverage — 4-level anti-aliasing at ssFactor 2.
-			if cover > 0 {
-				ba := sa * cover / nSub
-				r = (sr*ba + r*(255-ba)) / 255
-				g = (sg*ba + g*(255-ba)) / 255
-				b = (sb*ba + b*(255-ba)) / 255
-				if ba > a {
-					a = ba
+					n++
+					cover += mask2[o]
 				}
 			}
 			o := y*w + x
-			rgba[o] = r<<24 | g<<16 | b<<8 | a
-			index[o] = majorityIdx(cand[:])
+			inst.cover[o] = cover
+			if uniform {
+				// majorityIdx of nSub identical values is that value.
+				inst.index[o] = cand[0]
+				continue
+			}
+			inst.index[o] = majorityIdx(cand[:])
+			inst.mixed = append(inst.mixed, mixedPixel{off: int32(o), sub: cand})
 		}
 	}
-	return
+	return inst
+}
+
+// resolve paints the geometry into rgba (which must hold w*h pixels) for the
+// given style. Every pixel takes its color from the fill table; the boundary
+// pixels are then overwritten with their four-subsample mean.
+func (inst *rasterGeometry) resolve(rgba []uint32, style rasterStyle) {
+	lut := buildFillLUT(style)
+	for o, ci := range inst.index {
+		rgba[o] = lut[(int(ci)+1)*coverLevels+int(inst.cover[o])]
+	}
+	sr, sg, sb, sa := unpackRGBA(style.stroke)
+	for i := range inst.mixed {
+		mp := &inst.mixed[i]
+		var r, g, b, a uint32
+		for _, ci := range mp.sub {
+			cr, cg, cb, ca := unpackRGBA(fillOf(style, ci))
+			r += cr
+			g += cg
+			b += cb
+			a += ca
+		}
+		r /= nSub
+		g /= nSub
+		b /= nSub
+		a /= nSub
+		r, g, b, a = blendStroke(r, g, b, a, uint32(inst.cover[mp.off]), sr, sg, sb, sa)
+		rgba[mp.off] = r<<24 | g<<16 | b<<8 | a
+	}
+}
+
+// buildFillLUT precomputes the final color of every (fill, coverage) pair: one
+// row per country plus the sea at row 0, one column per coverage level. A
+// pixel whose subsamples agree averages to its own fill exactly, so its color
+// is a table lookup rather than four unpacks, a divide and a blend.
+func buildFillLUT(style rasterStyle) []uint32 {
+	lut := make([]uint32, (len(style.fills)+1)*coverLevels)
+	sr, sg, sb, sa := unpackRGBA(style.stroke)
+	for i := range len(style.fills) + 1 {
+		col := style.sea
+		if i > 0 {
+			col = style.fills[i-1]
+		}
+		cr, cg, cb, ca := unpackRGBA(col)
+		for cover := range coverLevels {
+			r, g, b, a := blendStroke(cr, cg, cb, ca, uint32(cover), sr, sg, sb, sa)
+			lut[i*coverLevels+cover] = r<<24 | g<<16 | b<<8 | a
+		}
+	}
+	return lut
+}
+
+// blendStroke lays the border color over an already-averaged fill, scaled by
+// the subsample coverage — nSub+1 level anti-aliasing.
+func blendStroke(r, g, b, a, cover, sr, sg, sb, sa uint32) (uint32, uint32, uint32, uint32) {
+	if cover == 0 {
+		return r, g, b, a
+	}
+	ba := sa * cover / nSub
+	r = (sr*ba + r*(255-ba)) / 255
+	g = (sg*ba + g*(255-ba)) / 255
+	b = (sb*ba + b*(255-ba)) / 255
+	if ba > a {
+		a = ba
+	}
+	return r, g, b, a
+}
+
+func fillOf(style rasterStyle, ci CountryIdx) uint32 {
+	if ci == NoCountry {
+		return style.sea
+	}
+	return style.fills[ci]
+}
+
+// rasterize renders the atlas at (w × h) in one shot, building the geometry and
+// throwing it away. Callers that re-render on data changes should keep a
+// rasterGeometry and call resolve instead.
+func rasterize(atlas *Atlas, w, h int, style rasterStyle) (rgba []uint32, index []CountryIdx) {
+	g := buildRasterGeometry(atlas, w, h)
+	rgba = make([]uint32, w*h)
+	g.resolve(rgba, style)
+	return rgba, g.index
 }
 
 // majorityIdx picks the hit-test index for one output pixel from its

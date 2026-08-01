@@ -343,6 +343,155 @@ func TestRasterizeDeterministic(t *testing.T) {
 	}
 }
 
+// The raster output is pinned by hash. The pass is split into a cached
+// size-derived half and a per-data recolour, with a lookup table standing in
+// for the four-subsample average wherever the subsamples agree — all of which
+// is only sound if it reproduces the straightforward pass exactly. These
+// hashes are that pass's output, taken before the split; they are not
+// arbitrary goldens to re-bless, so a diff here means the reduction changed,
+// not that the test drifted.
+func TestRasterizeGolden(t *testing.T) {
+	a := mustAtlas(t)
+	for _, tc := range []struct {
+		w           int
+		rgba, index uint64
+	}{
+		{w: 256, rgba: 0x9ce5bd28b0ae1683, index: 0x25198ccf54eff5a6},
+		{w: 512, rgba: 0xcc0be04b485a4a97, index: 0x9843a812853fd285},
+	} {
+		h := int(float64(tc.w) / ProjectionAspect())
+		rgba, index := rasterize(a, tc.w, h, testStyle(a))
+		if got := hashPixels(rgba); got != tc.rgba {
+			t.Errorf("w=%d rgba hash = %#016x, want %#016x", tc.w, got, tc.rgba)
+		}
+		if got := hashIndex(index); got != tc.index {
+			t.Errorf("w=%d index hash = %#016x, want %#016x", tc.w, got, tc.index)
+		}
+	}
+}
+
+// A cached geometry must repaint to exactly what a from-scratch pass produces,
+// for any style — otherwise a value change would leave the previous data's
+// colours (or its lookup table) showing through.
+func TestResolveReusesGeometry(t *testing.T) {
+	a := mustAtlas(t)
+	const w = 256
+	h := int(float64(w) / ProjectionAspect())
+
+	alt := testStyle(a)
+	for i := range alt.fills { // a palette with nothing in common with testStyle
+		alt.fills[i] = uint32(len(alt.fills)-i)<<8 | 0xff0000ff
+	}
+	alt.sea = 0x102030ff
+	alt.stroke = 0xffffffc0
+
+	g := buildRasterGeometry(a, w, h)
+	rgba := make([]uint32, w*h)
+	// Same geometry, three repaints in a row: each must match the one-shot
+	// pass, including the second visit to a style already painted once.
+	for _, style := range []rasterStyle{testStyle(a), alt, testStyle(a)} {
+		g.resolve(rgba, style)
+		want, _ := rasterize(a, w, h, style)
+		if hashPixels(rgba) != hashPixels(want) {
+			t.Fatalf("cached resolve differs from a fresh rasterize")
+		}
+	}
+}
+
+// The widget keeps the geometry across data changes and must drop it when the
+// raster size changes — a stale one would repaint into a buffer of the wrong
+// shape, or silently keep the old resolution.
+func TestWidgetGeometryCacheLifecycle(t *testing.T) {
+	a := mustAtlas(t)
+	w := &Widget{atlas: a, NoDataRGBA: 0x555555ff, StrokeRGBA: 0x0a0a0a8c}
+
+	h1 := int(float64(256) / ProjectionAspect())
+	w.rasterizeNow(256, h1)
+	first := w.geom
+	if first == nil || w.rw != 256 || len(w.rgba) != 256*h1 {
+		t.Fatalf("first raster: geom=%v rw=%d pixels=%d", first != nil, w.rw, len(w.rgba))
+	}
+	if w.index == nil || len(w.index) != 256*h1 {
+		t.Fatalf("hit-test buffer not published (%d entries)", len(w.index))
+	}
+
+	// A data change at the same size keeps the geometry and the buffer.
+	rgbaBefore := w.rgba
+	w.PresenceRGBA = 0x2a788eff
+	w.presence, w.haveValues = true, true
+	w.values = make([]float64, len(a.Countries))
+	w.values[0] = 1
+	w.rasterizeNow(256, h1)
+	if w.geom != first {
+		t.Error("a value change rebuilt the geometry")
+	}
+	if &w.rgba[0] != &rgbaBefore[0] {
+		t.Error("a value change reallocated the pixel buffer")
+	}
+
+	// A size change replaces both, and the published hit-test buffer follows.
+	h2 := int(float64(320) / ProjectionAspect())
+	w.rasterizeNow(320, h2)
+	if w.geom == first {
+		t.Error("a size change kept the old geometry")
+	}
+	if len(w.rgba) != 320*h2 || w.rw != 320 || w.rh != h2 {
+		t.Errorf("after resize: %dx%d, %d pixels", w.rw, w.rh, len(w.rgba))
+	}
+	if len(w.index) != 320*h2 {
+		t.Errorf("hit-test buffer still %d entries, want %d", len(w.index), 320*h2)
+	}
+}
+
+func hashPixels(px []uint32) uint64 {
+	h := fnv.New64a()
+	for _, p := range px {
+		h.Write([]byte{byte(p >> 24), byte(p >> 16), byte(p >> 8), byte(p)})
+	}
+	return h.Sum64()
+}
+
+func hashIndex(index []CountryIdx) uint64 {
+	h := fnv.New64a()
+	for _, ci := range index {
+		h.Write([]byte{byte(uint32(ci) >> 24), byte(uint32(ci) >> 16), byte(uint32(ci) >> 8), byte(uint32(ci))})
+	}
+	return h.Sum64()
+}
+
+// The two halves of the pass, measured apart: BenchmarkRasterGeometry is what a
+// size change costs, BenchmarkRasterResolve what a value change costs. The
+// second is the one that runs on every query result.
+func BenchmarkRasterGeometry(b *testing.B) {
+	a, err := LoadAtlas()
+	if err != nil {
+		b.Fatal(err)
+	}
+	const w = 1280
+	h := int(float64(w) / ProjectionAspect())
+	b.ReportAllocs()
+	for b.Loop() {
+		buildRasterGeometry(a, w, h)
+	}
+}
+
+func BenchmarkRasterResolve(b *testing.B) {
+	a, err := LoadAtlas()
+	if err != nil {
+		b.Fatal(err)
+	}
+	const w = 1280
+	h := int(float64(w) / ProjectionAspect())
+	g := buildRasterGeometry(a, w, h)
+	style := testStyle(a)
+	rgba := make([]uint32, w*h)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for b.Loop() {
+		g.resolve(rgba, style)
+	}
+}
+
 func TestRasterizeFillMatchesIndex(t *testing.T) {
 	a := mustAtlas(t)
 	style := testStyle(a)

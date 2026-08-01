@@ -88,7 +88,10 @@ type Widget struct {
 	legend  *colorscale.ColorScale
 	tracker *c.ImageVersionTracker[string]
 
-	// Raster state: what the texture currently shows.
+	// Raster state: what the texture currently shows. geom is the size-derived
+	// half of the raster pass, kept across data changes — a new value set
+	// re-runs only the recolour (see rasterizeNow).
+	geom    *rasterGeometry
 	rgba    []uint32
 	index   []CountryIdx
 	rw, rh  int
@@ -564,8 +567,11 @@ func (inst *Widget) heightFor(w int) int {
 	return max(int(float64(w)/ProjectionAspect()), 1)
 }
 
-// rasterizeNow rebuilds the texture + index buffer at (w × h) from the
-// current values and bumps the content version.
+// rasterizeNow repaints the texture at (w × h) from the current values and
+// bumps the content version. Only the size-derived half is expensive, and it
+// survives a data change: at an unchanged size this is a recolour of a cached
+// geometry, not a re-rasterization. The output buffer is reused too, so a
+// value change allocates only the fill table.
 func (inst *Widget) rasterizeNow(w, h int) {
 	fills := make([]uint32, len(inst.atlas.Countries))
 	for i := range fills {
@@ -580,7 +586,12 @@ func (inst *Widget) rasterizeNow(w, h int) {
 			fills[i] = inst.cm.At(inst.values[i])
 		}
 	}
-	inst.rgba, inst.index = rasterize(inst.atlas, w, h, rasterStyle{
+	if inst.geom == nil || inst.geom.w != w || inst.geom.h != h {
+		inst.geom = buildRasterGeometry(inst.atlas, w, h)
+		inst.rgba = make([]uint32, w*h)
+		inst.index = inst.geom.index
+	}
+	inst.geom.resolve(inst.rgba, rasterStyle{
 		fills:  fills,
 		sea:    inst.SeaRGBA,
 		stroke: inst.StrokeRGBA,
