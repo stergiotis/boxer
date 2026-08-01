@@ -301,6 +301,27 @@ nearest candidate, and a `play` panel stays deferred per §SD6.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-08-01 — pipelineview's overlay shipped without consuming this package
+
+§Consequences claims ADR-0119 §SD5's deferral "gains something concrete to
+adopt". That deferral has now been closed
+([ADR-0119 Update](./0119-imzero2-pipelineview-widget.md#updates)) and it did
+**not** adopt this package: the overlay is a thickness encoding on
+pipelineview's own routed orthogonal edges.
+
+The claim was optimistic in a specific way worth naming, because it will
+recur. Adopting this layout core means adopting stacked node faces and
+value-proportional ribbons — the Sankey read — and ADR-0119 §SD2 chose against
+exactly that for a schematic. So the deferral's *quantity* half was servable by
+a stroke width, while its *ribbon* half was never really pipelineview's to
+implement; it was this widget's, and now lives here.
+
+The useful division: a schematic whose wires carry a weight is that overlay;
+"where did the quantity go" is this widget. A shared lineage of ideas, not
+shared code.
+
 ## References
 
 ### Method sources (clean room — papers and public documentation only)

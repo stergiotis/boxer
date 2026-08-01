@@ -372,6 +372,52 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Updates
+
+### 2026-08-01 — M4, half of it: the volume overlay is thickness, and the ribbon half is retired
+
+**Shipped.** `view.RenderOpts` gained `EdgeWidth`, an override in the same
+shape as the existing `NodeFill` / `EdgeStroke` hooks: given an edge's
+endpoints and the `Volume` the layout was already carrying through, it
+returns a stroke width, and declining leaves `Style.EdgeStrokeW`.
+`view.VolumeWidth` is the ready-made mapping — volumes onto a width range by
+**square root** of the ratio to the largest volume present. The arrow head now
+grows with the stroke so a thick edge does not end in a pin, clamped so an
+overlay-free diagram is unchanged.
+
+**Two decisions inside that are easy to get wrong later.**
+
+- *A volume of 0 keeps the default width.* §SD5's model documents 0 as
+  *unknown*, not *none*, so drawing it as a hairline would assert something the
+  caller never said. A diagram with no volumes at all is therefore pixel-identical
+  to before — which is what keeps the play Passes tab and the prior tour capture
+  honest.
+- *The curve is square root, not linear.* A schematic's edges share no baseline
+  and its stages do not conserve, so width here **orders and emphasises; it is
+  not a quantity to read off**. Linear would also collapse everything but the
+  largest edge to a hairline as soon as volumes span orders of magnitude, which
+  byte counts do.
+
+**Weighting the spine needs an explicit adjacency.** Implied spine edges are
+generated from the stage tree and have no caller to take a `Volume` from.
+Declaring the adjacency explicitly produces the same `routeAxial` geometry
+*and* carries the volume, so this is a caller-side matter and needed no layout
+change. The demo does exactly that.
+
+**The "ribbons" half of §SD5 is retired rather than deferred.** Value-proportional
+ribbons require a stage's face to be subdivided among its links and sorted by
+far-end y — that is the Sankey node model, and adopting it would turn this
+schematic into the form §SD2 deliberately chose against ("encodes where the
+bytes went, not what the pipeline is"). That form now exists on its own terms
+in [ADR-0159](./0159-imzero2-sankey-flow-widget.md). The split to remember:
+a weighted-wire schematic is this overlay; *where did the bytes go* is the
+sankey widget. Notably the overlay does **not** consume that package — the two
+share a lineage of ideas, not code.
+
+**Still deferred:** dash-march animation for live flow. It wants a frame clock
+and would make the tour capture non-deterministic, so it waits for a consumer
+that actually streams.
+
 ## References
 
 ### Clean-room sources — papers (the implement-from set)
