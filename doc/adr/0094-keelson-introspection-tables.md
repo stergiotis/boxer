@@ -221,6 +221,57 @@ Accepted (2026-06-23). v1 is implemented and wired into the carousel host —
 clickhouse-local 26.5. The §SD6 console widget is deferred to interactive,
 GUI-verified work; per-package `package_props` seeding awaits a TinyGo 0.41.1 box.
 
+## Updates
+
+### 2026-08-01 — the Go dependency graph as four tables, and what they cost
+
+`keelson('go_packages')`, `go_imports`, `go_collection` and
+`go_package_props` expose this module's Go package graph
+(`public/keelson/runtime/introspect/providersgodep`), so the questions
+[ADR-0064](0064-godepview-go-dependency-explorer.md)'s app answers inside one
+window — the closure, the group quotient, module fan-in and blast radius —
+become SQL, joinable with `keelson('adr')`, `coderef` and `sbom`.
+
+They are repo-corpus tables in the sense [ADR-0122](0122-play-kanban-panel.md)
+§SD4 recorded, and they push that tension further than the ADR corpus does:
+collecting means running the `go` toolchain through
+`golang.org/x/tools/go/packages`, not reading files. Four properties keep it
+honest, and they are the decision worth recording:
+
+- **Collect once per process, cached.** Measured on this repository:
+  1.4 s warm, 1411 packages, 13030 import edges. A query answers from the
+  cache and never re-runs the toolchain — which is also godepview's own
+  snapshot semantics, so the tables are as fresh as the process, no fresher.
+- **Asynchronous first collect, bounded wait.** `Provider.Snapshot` takes no
+  context, so a cold toolchain run would block a query with no cancellation.
+  The first query starts collection and waits ~5 s; past that it answers with
+  **zero rows** while `go_collection.status` reads `collecting`, and the next
+  query gets the rows. `FreshnessStatic` was rejected for this: the engine may
+  cache a provider's bytes for the whole run, which would freeze that first
+  empty snapshot in.
+- **Empty, with a reason, when there is nothing to collect.** Off-repo,
+  `go list ./...` does not fail — it reports one synthetic package for the
+  unresolved pattern. A collection with no main module is therefore refused
+  outright (found by launching the applet from a directory with no `go.mod`,
+  where that lone row reached the table): `go_collection` carries the status
+  and the pointer to `BOXER_GODEP_ROOT`, and the other three stay empty.
+- **Registered from the dev composition root, not the static set.**
+  `x/tools` must not link into appliance builds, so the carousel registers
+  these on its shared registry; `introspecthost`'s static provider set is
+  untouched. `providersgui` is the existing precedent.
+
+`go_imports` deliberately duplicates the adjacency ADR-0064 §SD2 embeds in the
+node: adjacency-in-node is the right *fact* shape and the wrong *query* shape,
+since every recursive walk and every join wants pairs. Both come from one
+manifest in one pass, so they cannot disagree.
+
+The consumers are the four `bookgodep` applets (ADR-0132). What those buffers
+can ask is bounded by the engine: a recursive CTE here supports only
+`UNION ALL` — `UNION DISTINCT` is refused — so a cyclic walk needs an explicit
+depth bound, and an unbounded transitive closure over the group quotient
+exhausts the 1 GiB query memory limit in under a second. The applets carry
+measured bounds and say so in their prose.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 

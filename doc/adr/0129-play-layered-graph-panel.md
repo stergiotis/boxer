@@ -282,6 +282,37 @@ Validation). Open refinements stay as recorded: cross-panel selection waits on
 the SD7 observe/bind path, and parallel-edge collapse remains a widget-v1
 limit.
 
+## Updates
+
+### 2026-08-01 — a value-carrying selection, and named tones
+
+Two §SD7 deferrals close, driven by the Go dependency applet suite (a master
+table beside a neighbourhood graph, where clicking either has to move the
+other).
+
+**`selection_key`.** The panel now publishes the clicked vertex's `id` as a
+new String signal, read from SQL as `{selection_key:String}`. This does not
+revisit §SD4: the row-index `selection` stays unpublished for exactly the
+reason recorded there — it is a *cursor*, it is node-scoped, `syncSelectionClamp`
+erases it, and it would jerk Table and Detail to row 0. A vertex id is a
+*value*: nothing in play reads `selection_key`, so publishing it moves no
+other panel, which is why it crosses a boundary the cursor cannot. The Table
+panel publishes the same signal from a conventional `key` column (via
+`selectionStamper`, beside `selection_id`), so a click in either panel
+re-focuses a query. The §SD7 observe/bind path remains the route to a genuinely
+shared *cursor*; this is not a substitute for it.
+
+**`tone`.** Both CTEs may now carry a `tone` column naming a design-system
+semantic family — accent, info, success, warning, error, neutral. The role
+picks the variant: a vertex body is a background and takes the Subtle tone the
+`group` palette uses, an edge is a foreground stroke and takes Default. An
+unknown or empty value asserts nothing and falls back to the auto-palette, so a
+typo cannot blank a node. Naming a family rather than a colour keeps
+[ADR-0156](0156-qualitative-palette-dark-surface.md) the single owner of what
+those tones look like. This closes the "explicit per-vertex colour tokens"
+deferral; it is what lets the architecture applet draw forbidden app→app edges
+in the error tone and cycle edges in the warning tone, verified live.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the `layeredgraph` widget

@@ -346,6 +346,51 @@ No change to the seam, the manifest DTOs, or the deferred facts path. The
 home for these same derived queries (group coupling, module rollup) as a
 CI/scripting surface — still not built, still not precluded.
 
+### 2026-08-01 — the same views, as tables and SQL applets
+
+The three views now also exist without this app: the manifest is served as four
+keelson tables (`go_packages`, `go_imports`, `go_collection`,
+`go_package_props` — see [ADR-0094](0094-keelson-introspection-tables.md)'s
+dated Update) and the views as four documents in the `bookgodep` applet book
+([ADR-0132](0132-sqlapplet-sql-defined-applets.md)): *Go overview*, *Go
+packages*, *Go architecture*, *Go modules*.
+
+The seam is unchanged and is what made this cheap: the providers are a third
+consumer of the same `Manifest`, beside this app and the still-deferred
+`FactsSource`. What moved is where the derived lenses live — `Index`'s
+`BoundedNeighborhood`, `BuildGroupGraph`, `SiblingViolations`,
+`StronglyConnected`, `ModuleStats`, `ReverseReachInternal` and
+`ShortestImportPathTo` are re-expressed as SQL over those tables, so they can
+be read, edited and joined with the rest of the repository corpus rather than
+being methods with one consumer.
+
+Two of the applets' behaviours needed play to grow: a value-carrying
+`selection_key` signal so clicking a table row *or* a graph vertex re-focuses
+the neighbourhood, and a `tone` column so forbidden app→app edges and cycle
+edges keep the error/warning colouring this app gives them (both recorded on
+[ADR-0129](0129-play-layered-graph-panel.md)). Header-click sorting was added
+to play's Table tab for the same reason.
+
+Three things did **not** survive the move, and are stated rather than glossed:
+
+- **The live/layered engine toggle.** play's Network tab is layered-only; a
+  second engine there is ADR-0129's decision, not this one's.
+- **The detail pane's clickable Imports / Imported-by lists.** The
+  neighbourhood graph plus `selection_key` covers the navigation; the
+  architecture and modules lenses carry their list content as capped array
+  columns (`members`, `violation_edges`, `importers`, `reached`) that the
+  Detail tab renders.
+- **The single view switch.** Each lens is its own applet, so cross-view jumps
+  ("this violation, in the Packages view") are now "open the other applet and
+  paste the path".
+
+The SQL also carries bounds the Go code did not need: ClickHouse recursive
+CTEs accept only `UNION ALL`, so cyclic walks are depth-bounded (group cycles
+to 6 hops, blast radius to 12), with the measurements that justify each
+default in the applet prose. Whether this app is retired now that the views
+exist as data is deliberately left open until the two have been compared
+side by side.
+
 ## References
 
 - [ADR-0042](0042-keelson-leeway-codec-soa-generator.md) — `marshallgen` SoA codec generator; the grammar the manifest DTOs target.

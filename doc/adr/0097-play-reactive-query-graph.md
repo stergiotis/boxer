@@ -481,6 +481,35 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-08-01 — a node's signal edges are those of its fused subgraph
+
+Two defects in how a lane's params are resolved, both found by live-driving an
+applet whose graph lanes read a signal defined two CTEs upstream: the main
+result rendered and the Network tab stayed empty, with the broker logging
+`Code: 456 … Substitution 'selection_key' is not set`.
+
+- **`Reads` was per-body, execution is per-subgraph.** `splitGraph` set each
+  CTE node's `Reads` from the slots in *that CTE's own text*, but a node is
+  executed as `fuseNode(split, id)`, which inlines its whole dependency
+  closure — so a slot named only upstream was in the query text and absent
+  from the params. `closeReads` now widens every node's `Reads` to the
+  transitive closure over `DependsOn` (and the sink, which carries the whole
+  statement verbatim including CTEs nothing references, to the union of all).
+  It runs after `checkAcyclic`, so the walk terminates, and sorts the result
+  because `Reads` feeds a lane's memo key.
+- **Only the Run applied the reserved-String empty default.** The Run path
+  resolved through `resolveSignalNamesWithDefaults` while every lane —
+  Network, bound tabs, the observed intermediate, kanban lanes, Flow, Map,
+  timeline bands — used the plain `resolveSignalNames`, so an unwritten
+  `selection_country`/`selection_key` was omitted rather than sent as `''`.
+  A param the executor does not send is a hard ClickHouse error, not a
+  default, so the lane failed while the Run succeeded. All execution-compiling
+  call sites now use the defaults variant; the Run, the staleness witness and
+  every lane resolve identically.
+
+Neither is specific to the applet that surfaced them: any lane reading a
+defaultable signal, or any signal referenced from an upstream CTE, hit them.
+
 ### 2026-06-28 — Slices 1–2 shipped; slice-3 first cut landed
 
 Implemented on `main`, behaviour-verified live against ClickHouse:
