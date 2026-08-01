@@ -15,7 +15,7 @@ import (
 )
 
 func ProfilingHandleExit(context *cli.Context) {
-	if context.IsSet("cpuProfileFile") {
+	if context.IsSet(flagNameCpuOutputFile) {
 		pprof.StopCPUProfile()
 	}
 }

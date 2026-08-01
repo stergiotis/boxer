@@ -4,9 +4,16 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const (
+	// flagNameCpuOutputFile is shared with ProfilingHandleExit, whose
+	// stop path keys on IsSet of exactly this name.
+	flagNameCpuOutputFile     = "pprofCpuOutputFile"
+	flagNameHttpListenAddress = "pprofHttpListenAddress"
+)
+
 var ProfilingFlags = []cli.Flag{
 	&cli.StringFlag{
-		Name:        "pprofCpuOutputFile",
+		Name:        flagNameCpuOutputFile,
 		Category:    "profiling",
 		DefaultText: "",
 		FilePath:    "",
@@ -18,7 +25,7 @@ var ProfilingFlags = []cli.Flag{
 		Action:      cpuProfileFileAction,
 	},
 	&cli.StringFlag{
-		Name:     "pprofHttpListenAddress",
+		Name:     flagNameHttpListenAddress,
 		Category: "profiling",
 		Action:   httpServerAddressAction,
 	},
