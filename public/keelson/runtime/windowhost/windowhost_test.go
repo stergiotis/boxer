@@ -44,6 +44,7 @@ func mkManifest(id app.AppIdT) (m app.Manifest) {
 		Version: "0.1.0",
 		Display: string(id),
 		Title:   string(id),
+		Topics:  []app.TopicT{app.TopicRuntime},
 		Surface: app.SurfaceWindowed,
 	}
 	return

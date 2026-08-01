@@ -34,7 +34,8 @@ var manifest = app.Manifest{
 	Display:  "Help center",
 	Title:    "Help center",
 	Icon:     icons.PhBookOpen,
-	Category: "Runtime",
+	Topics:   []app.TopicT{app.TopicRuntime},
+	Keywords: []string{"help", "docs", "documentation", "manual", "book"},
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceApp.W,

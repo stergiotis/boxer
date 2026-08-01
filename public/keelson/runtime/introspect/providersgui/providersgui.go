@@ -38,9 +38,9 @@ func RegisterAll(r *introspect.Registry, host *windowhost.Inst) (err error) {
 
 type demosProvider struct{}
 
-func (demosProvider) Name() string                        { return "demos" }
+func (demosProvider) Name() string                         { return "demos" }
 func (demosProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (demosProvider) Schema() *arrow.Schema               { return demosTable(nil).Schema() }
+func (demosProvider) Schema() *arrow.Schema                { return demosTable(nil).Schema() }
 
 func (demosProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	ds := demoreg.All() // sorted by Name
@@ -82,9 +82,9 @@ func demosTable(ds []demoreg.Demo) *introspect.Table {
 
 type windowsProvider struct{ host *windowhost.Inst }
 
-func (windowsProvider) Name() string                        { return "windows" }
+func (windowsProvider) Name() string                         { return "windows" }
 func (windowsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
-func (p windowsProvider) Schema() *arrow.Schema             { return windowsTable(nil).Schema() }
+func (p windowsProvider) Schema() *arrow.Schema              { return windowsTable(nil).Schema() }
 
 func (p windowsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	var infos []windowhost.WindowInfo
@@ -101,7 +101,14 @@ func windowsTable(ws []windowhost.WindowInfo) *introspect.Table {
 		String("display", func(i int) string { return ws[i].Display }).
 		String("title", func(i int) string { return ws[i].Title }).
 		String("surface", func(i int) string { return ws[i].Surface.String() }).
-		String("category", func(i int) string { return ws[i].Category }).
+		StringList("topics", func(i int) []string {
+			out := make([]string, 0, len(ws[i].Topics))
+			for _, t := range ws[i].Topics {
+				out = append(out, t.String())
+			}
+			return out
+		}).
+		String("kind", func(i int) string { return ws[i].Kind.String() }).
 		String("stop_reason", func(i int) string { return ws[i].StopReason }).
 		// How this window came to hold what it holds (ADR-0148 §SD5):
 		// "plain" (nobody delivered a config), "caller" (another app opened

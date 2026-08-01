@@ -33,7 +33,9 @@ var manifest = app.Manifest{
 	Display:  "Capability broker",
 	Title:    "Capability broker",
 	Icon:     icons.PhLockKey,
-	Category: "Demos",
+	Topics:   []app.TopicT{app.TopicRuntime},
+	Keywords: []string{"capability", "broker", "permission", "grant"},
+	Kind:     app.KindDemo,
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  720,

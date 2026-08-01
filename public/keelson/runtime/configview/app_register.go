@@ -21,7 +21,8 @@ var manifest = app.Manifest{
 	Display:  "Config inspector",
 	Title:    "Config inspector",
 	Icon:     icons.PhGear,
-	Category: "Runtime",
+	Topics:   []app.TopicT{app.TopicRuntime},
+	Keywords: []string{"config", "env", "environment", "settings", "flags"},
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceTool.W,

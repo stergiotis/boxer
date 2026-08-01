@@ -17,7 +17,8 @@ var manifest = runtimeapp.Manifest{
 	Display:  "Repo code exploration",
 	Title:    "Repo code exploration",
 	Icon:     icons.PhGridNine,
-	Category: "Tools",
+	Topics:   []runtimeapp.TopicT{runtimeapp.TopicCode},
+	Keywords: []string{"packages", "imports", "scc", "dependencies", "cycles"},
 	Surface:  runtimeapp.SurfaceWindowed,
 	SurfaceHints: runtimeapp.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceWorkspace.W,

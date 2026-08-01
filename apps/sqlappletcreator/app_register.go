@@ -21,7 +21,8 @@ var manifest = app.Manifest{
 	Display:      "SQL applet creator",
 	Title:        "SQL applet creator",
 	Icon:         "🧩",
-	Category:     "Tools",
+	Topics:       []app.TopicT{app.TopicSql},
+	Keywords:     []string{"applet", "author", "publish", "save"},
 	Surface:      app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 640, PreferredHeight: 560},
 	Caps: []app.SubjectFilter{

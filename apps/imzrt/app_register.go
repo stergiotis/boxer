@@ -21,7 +21,8 @@ var manifest = app.Manifest{
 	// Phosphor pulse — the runtime-heartbeat metaphor; distinct from imztop's
 	// PhGauge (the system-monitor metaphor) so the two siblings read apart.
 	Icon:     icons.PhPulse,
-	Category: "Tools",
+	Topics:   []app.TopicT{app.TopicObservability},
+	Keywords: []string{"render", "telemetry", "fps", "frames", "latency"},
 	Surface:  app.SurfaceWindowed,
 	Caps: []app.SubjectFilter{
 		{

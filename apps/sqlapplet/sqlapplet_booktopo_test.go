@@ -67,8 +67,8 @@ func TestTopologyBookCorpus(t *testing.T) {
 func TestMintAllEmbeddedBooks(t *testing.T) {
 	reg := app.NewRegistry()
 	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{
-		{id: "sqlapplet", fsys: help.MustSub(bookFS, "book")},
-		{id: "topology", fsys: help.MustSub(booktopoFS, "booktopo")},
+		{id: "sqlapplet", fsys: help.MustSub(bookFS, "book"), topics: []app.TopicT{app.TopicRuntime}},
+		{id: "topology", fsys: help.MustSub(booktopoFS, "booktopo"), topics: []app.TopicT{app.TopicTopology}},
 	})
 	require.Empty(t, errs)
 	assert.Equal(t, 9, minted)

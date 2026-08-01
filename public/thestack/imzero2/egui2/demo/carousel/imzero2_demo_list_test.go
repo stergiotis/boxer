@@ -24,8 +24,8 @@ func TestManifestsToArrowIPC_SchemaAndRowCount(t *testing.T) {
 				PreferredWidth:  800,
 				PreferredHeight: 600,
 			},
-			Version:  "0.1.0",
-			Category: "test",
+			Version: "0.1.0",
+			Topics:  []runtimeapp.TopicT{runtimeapp.TopicRuntime},
 		},
 		{
 			Id:      "github.com/example/bar",
@@ -45,7 +45,11 @@ func TestManifestsToArrowIPC_SchemaAndRowCount(t *testing.T) {
 	require.True(t, rdr.Next(), "expected at least one record")
 	rec := rdr.Record()
 	assert.Equal(t, int64(2), rec.NumRows())
-	assert.Equal(t, 13, int(rec.NumCols()))
+	// 14 since ADR-0158 §SD8: `category` gave way to `topics` (a list) and
+	// `kind`, so the column count rose by one and positions after field 5
+	// shifted. The schema's documented positional stability was broken
+	// deliberately — the column it stabilised is the one that went away.
+	assert.Equal(t, 14, int(rec.NumCols()))
 
 	// Sorted by Id — "github.com/example/bar" sorts before "...foo".
 	idCol := rec.Column(0).(arrowStringView)
@@ -63,8 +67,11 @@ func TestManifestsToArrowIPC_SchemaAndRowCount(t *testing.T) {
 	assert.Equal(t, "Bar", titleCol.Value(0))
 	assert.Equal(t, "F Foo Title", titleCol.Value(1))
 
-	// Field 6 = surface — String() form.
-	surfaceCol := rec.Column(6).(arrowStringView)
+	// Field 6 = kind, field 7 = surface — both String() forms.
+	kindCol := rec.Column(6).(arrowStringView)
+	assert.Equal(t, "app", kindCol.Value(0), "the zero Kind reads as the common case")
+
+	surfaceCol := rec.Column(7).(arrowStringView)
 	assert.Equal(t, "headless", surfaceCol.Value(0))
 	assert.Equal(t, "windowed", surfaceCol.Value(1))
 }
@@ -109,10 +116,10 @@ func TestManifestsToArrowIPC_LegacyCodeNullForUnmapped(t *testing.T) {
 func TestRenderManifestsAscii_ContainsRows(t *testing.T) {
 	mans := []runtimeapp.Manifest{
 		{
-			Id:       "github.com/example/foo",
-			Display:  "Foo",
-			Surface:  runtimeapp.SurfaceWindowed,
-			Category: "test",
+			Id:      "github.com/example/foo",
+			Display: "Foo",
+			Surface: runtimeapp.SurfaceWindowed,
+			Topics:  []runtimeapp.TopicT{runtimeapp.TopicRuntime},
 		},
 	}
 	var out bytes.Buffer

@@ -20,6 +20,7 @@ func testManifest(id AppIdT) (m Manifest) {
 		Id:      id,
 		Version: "0.1.0",
 		Display: string(id),
+		Topics:  []TopicT{TopicRuntime},
 		Surface: SurfaceWindowed,
 	}
 	return

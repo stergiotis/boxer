@@ -108,6 +108,21 @@ type AppletDef struct {
 	// built by hand rather than parsed carries none, and the drawer is
 	// simply absent.
 	Source []byte
+	// Topics classify the applet by subject for the launcher (ADR-0158
+	// §SD2). Set from a frontmatter `topics:` list; nil when the document
+	// omits it, in which case the *minter* fills the contributing book's
+	// default (see RegisterBook) — the grouping the corpus already carries,
+	// which pre-0158 minting discarded. The default lands at mint rather
+	// than at parse because ParseDocSource is shared with the runtime store
+	// and with embedders, neither of which has a book to default from.
+	//
+	// A frontmatter topic outside the registered vocabulary fails the parse
+	// rather than being dropped: a silently ignored topic would mint an
+	// applet the launcher cannot section.
+	Topics []app.TopicT
+	// Keywords are the document's optional frontmatter `keywords:` list,
+	// passed through to the manifest as free retrieval text (ADR-0158 §SD4).
+	Keywords []string
 }
 
 // slugPattern is the accepted applet-slug shape. The slug becomes the minted
@@ -328,6 +343,12 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	if def.DatasetsHint, err = parseDatasetsHint(bookID, path, fm["datasets_hint"], def.Datasets); err != nil {
 		return
 	}
+	if def.Topics, err = parseTopics(bookID, path, fm["topics"]); err != nil {
+		return
+	}
+	if def.Keywords, err = parseKeywords(bookID, path, fm["keywords"]); err != nil {
+		return
+	}
 	// The §SD5 class, computed once per corpus at parse time. An
 	// unclassifiable buffer is a definition error (§SD6), never a runtime
 	// surprise — the conservative direction with the corpus as the gate.
@@ -481,6 +502,80 @@ func parseDatasetsHint(bookID string, path string, v any, datasets []string) (hi
 	if hint != "" && len(datasets) == 0 {
 		err = eh.Errorf("sqlapplet: %s/%s: `datasets_hint` without `datasets` never renders", bookID, path)
 		return
+	}
+	return
+}
+
+// parseTopics maps the frontmatter `topics` value into the ADR-0158 §SD1
+// vocabulary: absent is nil, which leaves the caller's book default in
+// place; a list overrides it wholesale. An unregistered token is a
+// definition error rather than a skip — a silently dropped topic would mint
+// an applet the launcher cannot section, and the corpus gate is the right
+// place to catch a typo (§SD9: at runtime the same mistake costs the applet
+// its registration).
+func parseTopics(bookID string, path string, v any) (topics []app.TopicT, err error) {
+	if v == nil {
+		return
+	}
+	list, isList := v.([]any)
+	if !isList {
+		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `topics` must be a list", bookID, path)
+		return
+	}
+	seen := make(map[app.TopicT]struct{}, len(list))
+	for _, item := range list {
+		name, isStr := item.(string)
+		if !isStr {
+			err = eh.Errorf("sqlapplet: %s/%s: `topics` entries must be strings", bookID, path)
+			return
+		}
+		t, known := app.ParseTopic(name)
+		if !known {
+			err = eh.Errorf("sqlapplet: %s/%s: `topics` names %q, which is not a registered topic (ADR-0158 §SD1)", bookID, path, name)
+			return
+		}
+		if _, dup := seen[t]; dup {
+			err = eh.Errorf("sqlapplet: %s/%s: `topics` lists %q twice", bookID, path, name)
+			return
+		}
+		seen[t] = struct{}{}
+		topics = append(topics, t)
+	}
+	return
+}
+
+// parseKeywords maps the frontmatter `keywords` value: absent is nil, a list
+// of free-text retrieval aids otherwise. Deliberately unvalidated beyond
+// shape and non-emptiness (ADR-0158 §SD4) — keywords are never rendered as
+// structure, so there is no vocabulary for one to violate. Duplicates are
+// still refused, since a repeated keyword is a typo rather than a choice.
+func parseKeywords(bookID string, path string, v any) (keywords []string, err error) {
+	if v == nil {
+		return
+	}
+	list, isList := v.([]any)
+	if !isList {
+		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `keywords` must be a list", bookID, path)
+		return
+	}
+	seen := make(map[string]struct{}, len(list))
+	for _, item := range list {
+		kw, isStr := item.(string)
+		if !isStr {
+			err = eh.Errorf("sqlapplet: %s/%s: `keywords` entries must be strings", bookID, path)
+			return
+		}
+		kw = strings.TrimSpace(kw)
+		if kw == "" {
+			err = eh.Errorf("sqlapplet: %s/%s: `keywords` has an empty entry", bookID, path)
+			return
+		}
+		if _, dup := seen[kw]; dup {
+			err = eh.Errorf("sqlapplet: %s/%s: `keywords` lists %q twice", bookID, path, kw)
+			return
+		}
+		seen[kw] = struct{}{}
+		keywords = append(keywords, kw)
 	}
 	return
 }

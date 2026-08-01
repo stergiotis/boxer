@@ -84,6 +84,7 @@ func TestLibrary_SyncFromRegistry(t *testing.T) {
 			app.Manifest{
 				Id:      testId,
 				Display: "Help sync fixture",
+				Topics:  []app.TopicT{app.TopicRuntime},
 				Surface: app.SurfaceWindowed,
 				Help:    helpFSWithOverview(),
 			},

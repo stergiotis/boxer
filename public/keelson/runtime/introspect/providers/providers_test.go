@@ -104,10 +104,13 @@ func firstString(t *testing.T, rec arrow.RecordBatch, col string) string {
 // remember anything" without reading Go source.
 func TestAppsTableRendersLaunchAndWorkingset(t *testing.T) {
 	rs := []app.Registration{
-		{Manifest: app.Manifest{Id: "test.plain", Display: "Plain", Surface: app.SurfaceWindowed}},
+		{Manifest: app.Manifest{
+			Id: "test.plain", Display: "Plain", Surface: app.SurfaceWindowed,
+			Topics: []app.TopicT{app.TopicRuntime},
+		}},
 		{Manifest: app.Manifest{
 			Id: "test.stateful", Display: "Stateful", Surface: app.SurfaceWindowed,
-			LaunchKind: "testLaunch", Workingset: true,
+			Topics: []app.TopicT{app.TopicRuntime}, LaunchKind: "testLaunch", Workingset: true,
 		}},
 	}
 	for _, r := range rs {
@@ -153,4 +156,44 @@ func TestAppsTableRendersRegistrationMode(t *testing.T) {
 	col := rec.Column(idx[0]).(*array.String)
 	assert.Equal(t, "factory", col.Value(0))
 	assert.Equal(t, "singleton", col.Value(1), "the row a workingset audit would flag")
+}
+
+// TestAppsTableRendersClassification covers the ADR-0158 columns: the
+// subject axis as a list, the free keyword layer, and provenance as a
+// column rather than a section.
+func TestAppsTableRendersClassification(t *testing.T) {
+	rs := []app.Registration{
+		{Manifest: app.Manifest{
+			Id: "test.multi", Display: "Multi", Surface: app.SurfaceWindowed,
+			Topics:   []app.TopicT{app.TopicCode, app.TopicTopology},
+			Keywords: []string{"deps", "imports"},
+			Kind:     app.KindApplet,
+		}},
+	}
+	for _, r := range rs {
+		require.NoError(t, r.Manifest.Validate(), "the fixtures must be manifests the registry would accept")
+	}
+	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
+	defer rec.Release()
+	require.EqualValues(t, 1, rec.NumRows())
+
+	assert.Equal(t, []string{"code", "topology"}, firstStringList(t, rec, "topics"),
+		"topics is a list so a predicate can ask has(topics, 'code')")
+	assert.Equal(t, []string{"deps", "imports"}, firstStringList(t, rec, "keywords"))
+	assert.Equal(t, "applet", firstString(t, rec, "kind"))
+}
+
+// firstStringList returns the row-0 value of the named List<Utf8> column.
+func firstStringList(t *testing.T, rec arrow.RecordBatch, col string) (out []string) {
+	t.Helper()
+	idx := rec.Schema().FieldIndices(col)
+	require.NotEmpty(t, idx, "column %q not found", col)
+	lst := rec.Column(idx[0]).(*array.List)
+	vals := lst.ListValues().(*array.String)
+	start, end := lst.ValueOffsets(0)
+	out = make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		out = append(out, vals.Value(int(i)))
+	}
+	return
 }

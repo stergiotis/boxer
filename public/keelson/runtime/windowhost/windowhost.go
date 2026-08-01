@@ -205,6 +205,188 @@ type Inst struct {
 	// invariant ever loosens, fold this into a per-Inst mu-guarded
 	// snapshot.
 	searchText string
+
+	// kindShown backs the launcher's provenance toggles (ADR-0158
+	// §SD5/§SD6): the controls that answer "show me the demos" now that
+	// provenance is no longer a browse section. One entry per app.AllKinds
+	// member, positionally — not indexed by the enum value, so the toggles
+	// do not silently depend on KindE staying contiguous from zero.
+	//
+	// It is a []bool rather than the kindFilterT mask the filter actually
+	// wants because Checkbox.SendRespVal needs a stable address to write
+	// into, and that write is *deferred* to StateManager.Sync — after the
+	// frame body has run. Comparing a local before/after inside the body
+	// would therefore never observe a change, and the toggle would be a
+	// silent no-op. Binding straight to a persistent field is the working
+	// pattern; kindFilter() derives the mask each frame.
+	//
+	// Shared by the Apps ▾ menu and the empty-state pane for the same
+	// reason searchText is, and mutated on the render thread only.
+	kindShown []bool
+
+	// topicFilter restricts the browse view to a chosen set of topics
+	// (ADR-0158 §SD6). Held as the mask itself rather than as a []bool
+	// mirror because its chips are SelectableLabels, whose click response
+	// is read within the frame — the deferred-write problem that shapes
+	// kindShown does not arise here.
+	topicFilter topicFilterT
+}
+
+// topicFilterT is the set of topics the launcher restricts the view to, as
+// a bitmask over app.AllTopics *positions* (TopicT is a string, so position
+// is what a mask can address; it also means the mask never depends on the
+// tokens themselves).
+//
+// The zero value selects nothing and means **no restriction** — the
+// opposite polarity to [kindFilterT], which stores what is hidden. That is
+// deliberate rather than an inconsistency: the two axes are used with
+// different gestures. There are three kinds, you normally want all of them,
+// and the useful action is "hide the demos" — so a hidden-set is the
+// natural store. There are nine topics, you normally want one, and the
+// useful action is "show me only code" — so a selected-set is. Both
+// conventions make the zero value inert, which is the property that
+// matters for an untouched host.
+type topicFilterT uint32
+
+// topicIndex resolves a topic to its position in app.AllTopics.
+func topicIndex(t app.TopicT) (idx int, ok bool) {
+	for i, x := range app.AllTopics {
+		if x == t {
+			idx = i
+			ok = true
+			return
+		}
+	}
+	return
+}
+
+// isInert reports whether the filter restricts nothing.
+func (inst topicFilterT) isInert() (ok bool) {
+	ok = inst == 0
+	return
+}
+
+// selectedAt reports whether the topic at position idx is selected.
+func (inst topicFilterT) selectedAt(idx int) (ok bool) {
+	ok = inst&(1<<idx) != 0
+	return
+}
+
+// toggledAt returns the filter with position idx flipped.
+func (inst topicFilterT) toggledAt(idx int) (out topicFilterT) {
+	out = inst ^ (1 << idx)
+	return
+}
+
+// shows reports whether topic t passes. An inert filter passes everything,
+// which is what makes "nothing selected" mean "no restriction".
+func (inst topicFilterT) shows(t app.TopicT) (ok bool) {
+	if inst.isInert() {
+		ok = true
+		return
+	}
+	idx, known := topicIndex(t)
+	if !known {
+		return
+	}
+	ok = inst.selectedAt(idx)
+	return
+}
+
+// showsAny reports whether a manifest carries at least one passing topic —
+// the manifest-level question, since a manifest may carry several.
+func (inst topicFilterT) showsAny(topics []app.TopicT) (ok bool) {
+	if inst.isInert() {
+		ok = true
+		return
+	}
+	for _, t := range topics {
+		if inst.shows(t) {
+			ok = true
+			return
+		}
+	}
+	return
+}
+
+// launcherFilter is the launcher's whole filter state (ADR-0158 §SD6) in
+// one value: the query string, the provenance toggles, and the topic chips.
+// Both surfaces resolve through it, which is what keeps the Apps ▾ menu and
+// the empty-state pane from drifting apart.
+type launcherFilter struct {
+	query  string
+	kinds  kindFilterT
+	topics topicFilterT
+}
+
+// isInert reports whether the filter would remove nothing.
+func (inst launcherFilter) isInert() (ok bool) {
+	ok = strings.TrimSpace(inst.query) == "" &&
+		!inst.kinds.hidesAnything() &&
+		inst.topics.isInert()
+	return
+}
+
+// kindFilterT is the set of app.KindE values the launcher **hides**.
+//
+// Storing the hidden set rather than the shown one is deliberate on two
+// counts: the zero value hides nothing, so an untouched host shows
+// everything and needs no initialisation; and "every kind hidden" stays
+// distinguishable from "nothing configured yet", which a shown-set mask
+// with a zero-means-all convention could not express.
+type kindFilterT uint8
+
+// shows reports whether a manifest of kind k survives the filter.
+func (inst kindFilterT) shows(k app.KindE) (ok bool) {
+	ok = inst&(1<<k) == 0
+	return
+}
+
+// toggled returns the filter with k's visibility flipped.
+func (inst kindFilterT) toggled(k app.KindE) (out kindFilterT) {
+	out = inst ^ (1 << k)
+	return
+}
+
+// hidesAnything reports whether the filter is doing something — used to
+// tell "your query matched nothing" apart from "your toggles hid it".
+func (inst kindFilterT) hidesAnything() (ok bool) {
+	ok = inst != 0
+	return
+}
+
+// kindFilter derives the filter value from the per-kind toggle state. A
+// host whose toggles were never initialised — the zero Inst, which tests
+// construct — yields the inert filter, so "uninitialised" shows everything
+// rather than hiding everything.
+func (inst *Inst) kindFilter() (f kindFilterT) {
+	if len(inst.kindShown) != len(app.AllKinds) {
+		return
+	}
+	for i, k := range app.AllKinds {
+		if !inst.kindShown[i] {
+			f = f.toggled(k)
+		}
+	}
+	return
+}
+
+// kindLabel is a toggle's user-facing label: the plural of the kind, since
+// the toggle governs a set. Kept here rather than on app.KindE because it is
+// presentation — the introspection column wants the singular wire form that
+// KindE.String gives, and the two should not drift into one another.
+func kindLabel(k app.KindE) (s string) {
+	switch k {
+	case app.KindApp:
+		s = "Apps"
+	case app.KindApplet:
+		s = "Applets"
+	case app.KindDemo:
+		s = "Demos"
+	default:
+		s = k.String()
+	}
+	return
 }
 
 // NewInst constructs a WindowHost backed by registry. logger is used
@@ -480,15 +662,15 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	}
 	ms.refs++
 	inst.windows = append(inst.windows, &window{
-		key:      key,
-		manifest: m,
-		appInst:  a,
-		mountCtx: mountCtx,
+		key:         key,
+		manifest:    m,
+		appInst:     a,
+		mountCtx:    mountCtx,
 		frameCtx:    frameCtx,
 		frameCtxApp: frameCtxApp,
-		appIds:   appIds,
-		mount:    ms,
-		openFlag: true,
+		appIds:      appIds,
+		mount:       ms,
+		openFlag:    true,
 	})
 	runId := inst.runId
 	facts := inst.facts
@@ -673,12 +855,18 @@ func (inst *Inst) Len() (n int) {
 // metadata, returned by WindowInfos for runtime introspection (ADR-0094
 // §SD8) without exposing the private window state.
 type WindowInfo struct {
-	Key        WindowKeyT
-	AppId      app.AppIdT
-	Display    string
-	Title      string
-	Surface    app.SurfaceE
-	Category   string
+	Key     WindowKeyT
+	AppId   app.AppIdT
+	Display string
+	Title   string
+	Surface app.SurfaceE
+	// Topics is the app's subject classification (ADR-0158 §SD2), copied
+	// from the manifest so a window row is readable without joining the
+	// app table. Multi-valued: a window has no single category.
+	Topics []app.TopicT
+	// Kind is the app's provenance (ADR-0158 §SD5) — a filter dimension,
+	// not a section.
+	Kind       app.KindE
 	StopReason string
 
 	// LaunchReason says where this window's content came from: nobody
@@ -732,7 +920,8 @@ func (inst *Inst) WindowInfos() (out []WindowInfo) {
 			Display:        w.manifest.Display,
 			Title:          w.manifest.WindowTitle(),
 			Surface:        w.manifest.Surface,
-			Category:       w.manifest.Category,
+			Topics:         w.manifest.Topics,
+			Kind:           w.manifest.Kind,
 			StopReason:     w.stopReason,
 			LaunchReason:   w.mountCtx.LaunchReason(),
 			ConfigKind:     kind,
@@ -1053,133 +1242,147 @@ func windowDefaultSize(h app.SurfaceHints) (w, height float32) {
 	return
 }
 
-// preferredCategoryOrder is the display order the launcher renders for
-// Manifest.Category buckets. Categories not listed here sort
-// alphabetically after the named buckets; uncategorisedBucket always
-// sorts last.
-var preferredCategoryOrder = []string{
-	"Runtime",
-	"Tools",
-	"Demos",
-}
-
-// uncategorisedBucket is the label used for manifests whose Category is
-// empty. Always sorts last regardless of what's in preferredCategoryOrder.
-const uncategorisedBucket = "Other"
-
-// manifestGroup is one launcher bucket: a category label and the
-// manifests that belong to it. Used by both the Apps menu and the
-// empty-state pane so the two surfaces stay in sync.
+// manifestGroup is one launcher section: a topic and the manifests that
+// carry it. Used by both the Apps menu and the empty-state pane so the two
+// surfaces stay in sync.
+//
+// Sections are views, not homes (ADR-0158 §SD3): a manifest appears in every
+// section whose topic it declares, so the groups' Manifests slices
+// deliberately overlap. There is no catch-all bucket — Manifest.Validate
+// refuses a windowed app with no topics, so the only manifests that fall out
+// of every section are headless ones, which have no window to open anyway.
 type manifestGroup struct {
-	Category  string
+	Topic     app.TopicT
 	Manifests []app.Manifest
 }
 
-// groupByCategory partitions manifests into per-Category buckets and
-// returns them in the order defined by preferredCategoryOrder, with any
-// extra categories sorted alphabetically in between and
-// uncategorisedBucket (catch-all for empty Category) last. Within each
-// bucket manifests sort by Display then Id, so two apps that happen to
-// share a label still produce stable ordering.
-func groupByCategory(manifests []app.Manifest) (groups []manifestGroup) {
+// groupByTopic sections manifests by topic, in app.AllTopics order, keeping
+// only the sections `only` admits. Empty sections are omitted rather than
+// rendered blank, so the browse view shows only topics the process actually
+// has apps for. Within a section manifests
+// sort by Display then Id, so two apps sharing a label still order stably.
+//
+// Ordering comes from the vocabulary rather than from a launcher-local list:
+// the old preferredCategoryOrder had to cope with categories it had never
+// heard of, which a closed vocabulary makes impossible.
+func groupByTopic(manifests []app.Manifest, only topicFilterT) (groups []manifestGroup) {
 	if len(manifests) == 0 {
 		return
 	}
-	byCat := make(map[string][]app.Manifest, len(preferredCategoryOrder)+1)
+	byTopic := make(map[app.TopicT][]app.Manifest, len(app.AllTopics))
 	for _, m := range manifests {
-		cat := m.Category
-		if cat == "" {
-			cat = uncategorisedBucket
+		for _, t := range m.Topics {
+			byTopic[t] = append(byTopic[t], m)
 		}
-		byCat[cat] = append(byCat[cat], m)
 	}
-	preferred := make(map[string]int32, len(preferredCategoryOrder))
-	for i, c := range preferredCategoryOrder {
-		preferred[c] = int32(i)
-	}
-	cats := make([]string, 0, len(byCat))
-	for c := range byCat {
-		cats = append(cats, c)
-	}
-	sort.SliceStable(cats, func(i, j int) (less bool) {
-		ci, cj := cats[i], cats[j]
-		// uncategorisedBucket always last
-		if ci == uncategorisedBucket {
-			less = false
-			return
+	groups = make([]manifestGroup, 0, len(app.AllTopics))
+	for _, t := range app.AllTopics {
+		// The chips drop whole sections, not just manifests. Filtering
+		// only at the manifest level would leave a two-topic app visible
+		// under its *unselected* topic as well, since a manifest that
+		// passes the filter is still sectioned under everything it carries.
+		if !only.shows(t) {
+			continue
 		}
-		if cj == uncategorisedBucket {
-			less = true
-			return
+		ms := byTopic[t]
+		if len(ms) == 0 {
+			continue
 		}
-		pi, oki := preferred[ci]
-		pj, okj := preferred[cj]
-		switch {
-		case oki && okj:
-			less = pi < pj
-		case oki:
-			less = true
-		case okj:
-			less = false
-		default:
-			less = ci < cj
-		}
-		return
-	})
-	groups = make([]manifestGroup, 0, len(cats))
-	for _, c := range cats {
-		ms := byCat[c]
 		sortManifestsByDisplay(ms)
-		groups = append(groups, manifestGroup{Category: c, Manifests: ms})
+		groups = append(groups, manifestGroup{Topic: t, Manifests: ms})
 	}
 	return
 }
 
-// filterManifests returns the subset of manifests whose Display or
-// Category matches the query (case-insensitive substring). Empty
-// query returns the input slice unchanged so callers can treat
-// "no query" and "query matches everything" identically without an
-// extra branch.
+// filterManifests returns the subset of manifests passing the launcher's
+// whole filter state (ADR-0158 §SD6): provenance toggles, topic chips, and
+// the query string. It is the one function both surfaces resolve through,
+// so the Apps ▾ menu and the empty-state pane cannot disagree.
 //
-// Match scope is intentionally narrow: Display first (what the user
-// types looking at the visible label), then Category as a secondary
-// signal ("demo" should surface every Demos entry even when no app's
-// own name starts with the word). Id and Title are deliberately
-// excluded — Id is the full import path (would match every entry on
-// "github") and Title is usually a longer-form variant of Display.
+// An inert filter returns the input slice unchanged, so callers can treat
+// "no filter" and "filter matches everything" identically. Kind and topic
+// are applied even when the query is empty: the chips and toggles govern
+// the sectioned browse view too, not just search hits.
 //
-// Ordering follows the input; callers control sort (the launcher's
-// flat hit path sorts by Display via the same sort used inside
-// groupByCategory's intra-bucket pass).
-func filterManifests(manifests []app.Manifest, query string) (hits []app.Manifest) {
-	q := strings.TrimSpace(query)
-	if q == "" {
+// Ordering follows the input; callers control sort.
+func filterManifests(manifests []app.Manifest, f launcherFilter) (hits []app.Manifest) {
+	if f.isInert() {
 		hits = manifests
 		return
 	}
-	qLower := strings.ToLower(q)
+	qLower := strings.ToLower(strings.TrimSpace(f.query))
 	hits = make([]app.Manifest, 0, len(manifests))
 	for _, m := range manifests {
-		if matchManifestSearch(m, qLower) {
-			hits = append(hits, m)
+		if !f.kinds.shows(m.Kind) {
+			continue
 		}
+		if !f.topics.showsAny(m.Topics) {
+			continue
+		}
+		if qLower != "" && !matchManifestSearch(m, qLower) {
+			continue
+		}
+		hits = append(hits, m)
 	}
 	return
 }
 
-// matchManifestSearch returns whether manifest m matches the
-// pre-lowercased query qLower. Factored so filterManifests stays a
-// straight-line loop and the match rule itself is one line per
-// candidate field — easy to extend later without changing the
-// filtering control flow.
+// matchManifestSearch reports whether manifest m matches the pre-lowercased
+// query qLower (ADR-0158 §SD6). Three ways to match, cheapest first:
+// substring of the Display name, substring of any topic or keyword, or a
+// subsequence of the Display name.
+//
+// The subsequence pass is what makes initials and elisions work — "gdep"
+// reaches "Go dependency explorer" — and it is deliberately last, since it is
+// the loosest and would otherwise mask the reason a stricter rule already
+// matched. Keywords carry the synonyms a display name cannot (ADR-0158 §SD4):
+// "cpu" and "htop" reach the process monitor because its manifest says so.
+//
+// Id stays excluded: it is the full import path, so every entry would match
+// "github". Title is excluded as a longer-form variant of Display.
 func matchManifestSearch(m app.Manifest, qLower string) (ok bool) {
-	if strings.Contains(strings.ToLower(m.Display), qLower) {
+	display := strings.ToLower(m.Display)
+	if strings.Contains(display, qLower) {
 		ok = true
 		return
 	}
-	if strings.Contains(strings.ToLower(m.Category), qLower) {
+	for _, t := range m.Topics {
+		if strings.Contains(strings.ToLower(string(t)), qLower) {
+			ok = true
+			return
+		}
+	}
+	for _, kw := range m.Keywords {
+		if strings.Contains(strings.ToLower(kw), qLower) {
+			ok = true
+			return
+		}
+	}
+	ok = matchesSubsequence(display, qLower)
+	return
+}
+
+// matchesSubsequence reports whether needle's runes appear in haystack in
+// order, not necessarily adjacently. Both must already be lowercased. An
+// empty needle matches; a needle longer than the haystack cannot.
+//
+// Rune-wise rather than byte-wise so a multi-byte character in a display
+// name cannot be matched by half of itself.
+func matchesSubsequence(haystack string, needle string) (ok bool) {
+	if needle == "" {
 		ok = true
 		return
+	}
+	nr := []rune(needle)
+	i := 0
+	for _, hc := range haystack {
+		if hc == nr[i] {
+			i++
+			if i == len(nr) {
+				ok = true
+				return
+			}
+		}
 	}
 	return
 }
@@ -1216,48 +1419,157 @@ func (inst *Inst) renderEmptyState(ids *c.WidgetIdStack) {
 			DesiredWidth(360).
 			SendRespVal(&inst.searchText)
 	}
+	inst.renderKindToggles(ids, "empty-state")
+	inst.renderTopicChips(ids)
 	query := strings.TrimSpace(inst.searchText)
+	// The chips and toggles apply to the sectioned browse too, so filter
+	// before sectioning rather than only on the search path (ADR-0158 §SD6).
+	browse := launcherFilter{kinds: inst.kindFilter(), topics: inst.topicFilter}
+	visible := filterManifests(manifests, browse)
 	for range c.ScrollArea().Vscroll(true).KeepIter() {
 		if query == "" {
-			groups := groupByCategory(manifests)
+			groups := groupByTopic(visible, inst.topicFilter)
+			if len(groups) == 0 {
+				c.Label(inst.emptyResultHint()).Send()
+				return
+			}
 			for gi, g := range groups {
 				if gi > 0 {
 					c.AddSpace(styletokens.GapSections(inst.density))
 				}
-				c.Label(g.Category).Send()
+				c.Label(g.Topic.String()).Send()
 				c.Separator().Horizontal().Send()
 				for _, m := range g.Manifests {
-					inst.renderEmptyStateEntry(ids, m, false)
+					inst.renderEmptyStateEntry(ids, g.Topic.String(), m, false)
 				}
 			}
 			return
 		}
-		hits := filterManifests(manifests, query)
+		hits := filterManifests(visible, launcherFilter{query: query})
 		if len(hits) == 0 {
-			c.Label("(no matches)").Send()
+			c.Label(inst.emptyResultHint()).Send()
 			return
 		}
 		sortManifestsByDisplay(hits)
 		for _, m := range hits {
-			inst.renderEmptyStateEntry(ids, m, true)
+			inst.renderEmptyStateEntry(ids, "hits", m, true)
+		}
+	}
+}
+
+// emptyResultHint distinguishes "nothing matched what you typed" from
+// "your own toggles hid it". Without the second wording a user who has
+// switched Demos off sees a bare "(no matches)" and reasonably concludes
+// the app is gone rather than filtered — the failure mode that makes
+// hide-toggles annoying elsewhere.
+func (inst *Inst) emptyResultHint() (s string) {
+	switch {
+	case !inst.topicFilter.isInert() && inst.kindFilter().hidesAnything():
+		s = "(no matches — a topic filter and hidden kinds are both active)"
+	case !inst.topicFilter.isInert():
+		s = "(no matches — filtered to selected topics)"
+	case inst.kindFilter().hidesAnything():
+		s = "(no matches — some kinds are hidden)"
+	default:
+		s = "(no matches)"
+	}
+	return
+}
+
+// renderTopicChips draws the topic filter (ADR-0158 §SD6): one selectable
+// chip per vocabulary member, wrapping, with none selected meaning no
+// restriction. Selecting a chip narrows the browse view to that section;
+// selecting several unions them.
+//
+// Only the vocabulary members some registered app actually carries get a
+// chip — a chip that can only ever yield an empty view is a dead control.
+// SelectableLabel reports its click within the frame, so unlike the pane's
+// kind checkboxes this needs no persistent mirror to write into.
+func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
+	manifests := inst.registry.AllManifests()
+	present := make(map[app.TopicT]struct{}, len(app.AllTopics))
+	for _, m := range manifests {
+		for _, t := range m.Topics {
+			present[t] = struct{}{}
+		}
+	}
+	for range c.HorizontalWrapped().KeepIter() {
+		c.Label("Topics:").Send()
+		for i, t := range app.AllTopics {
+			if _, has := present[t]; !has {
+				continue
+			}
+			if c.SelectableLabel(ids.PrepareStr("topic-chip-"+t.String()),
+				inst.topicFilter.selectedAt(i), t.String()).
+				SendResp().HasPrimaryClicked() {
+				inst.topicFilter = inst.topicFilter.toggledAt(i)
+			}
+		}
+		if !inst.topicFilter.isInert() {
+			// An explicit reset: with several chips on, clicking each one
+			// off again is tedious, and "no chips" is not otherwise
+			// reachable in one gesture.
+			if c.Button(ids.PrepareStr("topic-chip-clear"), c.Atoms().Text("✕ Clear").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.topicFilter = 0
+			}
+		}
+	}
+}
+
+// ensureKindShown lazily initialises the toggle state to "everything
+// shown". Lazy rather than done in NewInst so a zero Inst — and any future
+// constructor — cannot start out hiding every app.
+func (inst *Inst) ensureKindShown() {
+	if len(inst.kindShown) == len(app.AllKinds) {
+		return
+	}
+	inst.kindShown = make([]bool, len(app.AllKinds))
+	for i := range inst.kindShown {
+		inst.kindShown[i] = true
+	}
+}
+
+// renderKindToggles draws the provenance filter (ADR-0158 §SD5): one
+// checkbox per kind, all on by default. These exist because §SD3 retired
+// "Applets" and "Demos" as browse sections — provenance is a filter over a
+// subject-organised list, not a place an app lives — and without them that
+// retirement would simply delete two views people use.
+//
+// scope keys the widget ids so the pane and the menu can both draw the same
+// toggles without deriving the same ids.
+func (inst *Inst) renderKindToggles(ids *c.WidgetIdStack, scope string) {
+	inst.ensureKindShown()
+	for range c.Horizontal().KeepIter() {
+		c.Label("Show:").Send()
+		for i, k := range app.AllKinds {
+			c.Checkbox(ids.PrepareStr("kind-"+scope+"-"+k.String()), inst.kindShown[i], kindLabel(k)).
+				SendRespVal(&inst.kindShown[i])
 		}
 	}
 }
 
 // renderEmptyStateEntry draws one app row inside the empty-state pane,
 // mirroring renderAppsMenuEntry's contract. withCategory appends an
-// em-dashed Category suffix — only meaningful in the flattened
-// search-hit view, where the section header no longer carries that
-// information.
-func (inst *Inst) renderEmptyStateEntry(ids *c.WidgetIdStack, m app.Manifest, withCategory bool) {
+// em-dashed topic suffix — only meaningful in the flattened search-hit
+// view, where the section header no longer carries that information.
+//
+// section keys the widget id alongside the app id. Under ADR-0158 §SD3 one
+// manifest renders in every section whose topic it declares, so the app id
+// alone no longer identifies a row: two sections would derive the same
+// button id, and a duplicate id resolves to one shared response — clicking
+// either row would open whichever the id stack landed on.
+func (inst *Inst) renderEmptyStateEntry(ids *c.WidgetIdStack, section string, m app.Manifest, withTopics bool) {
 	label := m.WindowTitle()
 	if label == "" {
 		label = string(m.Id)
 	}
-	if withCategory && m.Category != "" {
-		label = label + " — " + m.Category
+	if withTopics {
+		if suffix := topicSuffix(m); suffix != "" {
+			label = label + " — " + suffix
+		}
 	}
-	btnId := ids.PrepareStr("empty-open-" + string(m.Id))
+	btnId := ids.PrepareStr("empty-open-" + section + "-" + string(m.Id))
 	if !c.Button(btnId, c.Atoms().Text(label).Keep()).
 		SendResp().HasPrimaryClicked() {
 		return
@@ -1343,22 +1655,31 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 }
 
 // RenderAppsMenu draws an "Apps ▾" menu listing every registered app,
-// grouped into per-Category submenus (preferredCategoryOrder — Runtime,
-// Tools, Demos — then alphabetised extras, then "Other"). Clicking an
-// entry calls Open(id) for that app; the new window appears on the
-// next frame. Entries within a category sort by Display.
+// grouped into per-topic submenus in app.AllTopics order (ADR-0158 §SD3;
+// an app carrying two topics appears under both). Clicking an entry calls
+// Open(id) for that app; the new window appears on the next frame. Entries
+// within a topic sort by Display.
 //
-// ids is the caller's stack; the menu uses derived ids for the
-// per-entry buttons. Place inside a MenuBar (typically the carousel's
-// top PanelTop), alongside File / Layout menus.
+// ids is the caller's stack; the menu uses derived ids for the per-entry
+// buttons. Place inside a MenuBar (typically the carousel's top PanelTop),
+// alongside File / Layout menus.
 //
-// The menu deliberately has no in-bar search field. egui's
-// menu_button closes on any click outside a menu Button (TextEdit
-// focus clicks included), and lifting the field into the menu bar
-// added chrome clutter for a rarely-used affordance. Search lives in
-// the empty-state pane instead (see renderEmptyState), backed by the
-// same inst.searchText buffer so future surfaces can hook into the
-// same filter state.
+// The menu deliberately has no in-bar search field. egui's menu_button
+// closes on any click outside a menu Button (TextEdit focus clicks
+// included), and lifting the field into the menu bar added chrome clutter
+// for a rarely-used affordance. Search lives in the empty-state pane
+// instead (see renderEmptyState), backed by the same inst.searchText
+// buffer so future surfaces hook into the same filter state.
+//
+// The kind toggles are a different matter and do appear here, as a "Show"
+// submenu of plain Buttons rather than the pane's checkboxes — same
+// constraint, different resolution. The menu is the *only* launcher
+// surface once a window is open, so a filter reachable solely from the
+// pane could not be undone without closing everything; and a Button is
+// exactly the widget the menu tolerates. The cost is that the menu closes
+// on the click, so changing two toggles means opening it twice. That is
+// acceptable for a mode switch, and it is why the label reports state
+// ("✔ Demos") rather than relying on the user remembering it.
 func (inst *Inst) RenderAppsMenu(ids *c.WidgetIdStack) {
 	for range c.MenuButton(c.Atoms().Text("Apps").Keep()).KeepIter() {
 		manifests := inst.registry.AllManifests()
@@ -1366,12 +1687,49 @@ func (inst *Inst) RenderAppsMenu(ids *c.WidgetIdStack) {
 			c.Label("(no apps registered)").Send()
 			return
 		}
-		groups := groupByCategory(manifests)
+		inst.renderKindMenu(ids)
+		c.Separator().Horizontal().Send()
+		// The menu carries no topic chips: its per-topic submenus already
+		// *are* the topic axis, and a chip row that hid submenus would be
+		// two controls for one thing. It still honours a selection made in
+		// the pane, so the two surfaces agree about what is on screen.
+		visible := filterManifests(manifests, launcherFilter{kinds: inst.kindFilter(), topics: inst.topicFilter})
+		groups := groupByTopic(visible, inst.topicFilter)
+		if len(groups) == 0 {
+			c.Label(inst.emptyResultHint()).Send()
+			return
+		}
 		for _, g := range groups {
-			for range c.MenuButton(c.Atoms().Text(g.Category).Keep()).KeepIter() {
+			for range c.MenuButton(c.Atoms().Text(g.Topic.String()).Keep()).KeepIter() {
 				for _, m := range g.Manifests {
-					inst.renderAppsMenuEntry(ids, m, false)
+					inst.renderAppsMenuEntry(ids, g.Topic.String(), m, false)
 				}
+			}
+		}
+	}
+}
+
+// renderKindMenu draws the provenance filter as a "Show" submenu of
+// state-reporting Buttons — the menu-side counterpart of the pane's
+// renderKindToggles, sharing inst.kindFilter so the two never disagree.
+// See RenderAppsMenu for why this is Buttons and not checkboxes.
+func (inst *Inst) renderKindMenu(ids *c.WidgetIdStack) {
+	inst.ensureKindShown()
+	for range c.MenuButton(c.Atoms().Text("Show").Keep()).KeepIter() {
+		for i, k := range app.AllKinds {
+			mark := "✔ "
+			if !inst.kindShown[i] {
+				// An en-space, not a plain space: it advances the same
+				// width as the check mark, so the labels stay aligned
+				// whether or not their kind is shown.
+				mark = "\u2002 "
+			}
+			btnId := ids.PrepareStr("kindmenu-" + k.String())
+			if c.Button(btnId, c.Atoms().Text(mark+kindLabel(k)).Keep()).
+				SendResp().HasPrimaryClicked() {
+				// A Button response is read within the frame, unlike the
+				// pane checkbox's deferred write, so this flip is direct.
+				inst.kindShown[i] = !inst.kindShown[i]
 			}
 		}
 	}
@@ -1379,20 +1737,25 @@ func (inst *Inst) RenderAppsMenu(ids *c.WidgetIdStack) {
 
 // renderAppsMenuEntry draws one menu entry for the given manifest.
 // Factored out of RenderAppsMenu so the per-entry click dispatch is
-// reusable across category submenus and the flat search-hit list.
-// When withCategory is true the manifest's Category is appended to the
-// button label as an em-dashed suffix — only meaningful in the
-// flattened search view, where the submenu chrome no longer carries
-// that information.
-func (inst *Inst) renderAppsMenuEntry(ids *c.WidgetIdStack, m app.Manifest, withCategory bool) {
+// reusable across topic submenus and the flat search-hit list. When
+// withTopics is true the manifest's topics are appended to the button
+// label as an em-dashed suffix — only meaningful in the flattened search
+// view, where the submenu chrome no longer carries that information.
+//
+// section keys the widget id alongside the app id, for the ADR-0158 §SD3
+// reason spelled out on renderEmptyStateEntry: one manifest renders under
+// every topic it declares, so the app id alone no longer identifies a row.
+func (inst *Inst) renderAppsMenuEntry(ids *c.WidgetIdStack, section string, m app.Manifest, withTopics bool) {
 	label := m.WindowTitle()
 	if label == "" {
 		label = string(m.Id)
 	}
-	if withCategory && m.Category != "" {
-		label = label + " — " + m.Category
+	if withTopics {
+		if suffix := topicSuffix(m); suffix != "" {
+			label = label + " — " + suffix
+		}
 	}
-	btnId := ids.PrepareStr("open-" + string(m.Id))
+	btnId := ids.PrepareStr("open-" + section + "-" + string(m.Id))
 	if !c.Button(btnId, c.Atoms().Text(label).Keep()).
 		SendResp().HasPrimaryClicked() {
 		return
@@ -1406,6 +1769,22 @@ func (inst *Inst) renderAppsMenuEntry(ids *c.WidgetIdStack, m app.Manifest, with
 			Str("id", string(m.Id)).
 			Msg("windowhost: open from menu failed")
 	}
+}
+
+// topicSuffix renders a manifest's topics as a compact label suffix for the
+// flattened search views, where no section header says what an entry is
+// about. Joined with a middot rather than a comma: the list is short, and a
+// comma reads as part of the app name when it follows one.
+func topicSuffix(m app.Manifest) (s string) {
+	if len(m.Topics) == 0 {
+		return
+	}
+	parts := make([]string, 0, len(m.Topics))
+	for _, t := range m.Topics {
+		parts = append(parts, t.String())
+	}
+	s = strings.Join(parts, " · ")
+	return
 }
 
 // sortManifestsByDisplay reorders the slice in place by Display

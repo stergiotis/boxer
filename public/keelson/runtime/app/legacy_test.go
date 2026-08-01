@@ -53,10 +53,10 @@ func TestLegacyFuncApp_Frame_PropagatesError(t *testing.T) {
 
 func TestLegacyFuncApp_Manifest_Returns(t *testing.T) {
 	m := testManifest("org.test.m")
-	m.Category = "tools"
+	m.Topics = []TopicT{TopicRuntime}
 	a, err := NewLegacyFuncApp(m, func() (err error) { return })
 	require.NoError(t, err)
 	got := a.Manifest()
 	assert.Equal(t, m.Id, got.Id)
-	assert.Equal(t, m.Category, got.Category)
+	assert.Equal(t, m.Topics, got.Topics)
 }

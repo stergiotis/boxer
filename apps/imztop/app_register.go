@@ -18,7 +18,8 @@ var manifest = app.Manifest{
 	// Phosphor gauge — the system-monitor metaphor; rendered from the
 	// Phosphor icon font registered at carousel startup (ADR-0044).
 	Icon:     icons.PhGauge,
-	Category: "Tools",
+	Topics:   []app.TopicT{app.TopicObservability},
+	Keywords: []string{"top", "htop", "process", "processes", "cpu", "memory"},
 	Surface:  app.SurfaceWindowed,
 	// imztop is a pure consumer of the system-metrics plane (ADR-0090): it
 	// subscribes to a scraper's published bundles and holds no filesystem or

@@ -221,9 +221,30 @@ type Manifest struct {
 	// Convention: one Unicode codepoint (emoji or material-design glyph).
 	// The runtime renders it as "Icon Title" in the title bar.
 	Icon string
-	// Category groups apps in interactive shells. Empty means "uncategorised".
-	// Folded in from ADR-0057's Demo.Category.
-	Category string
+	// Topics classify the app by subject (ADR-0158 §SD1/§SD2): what it is
+	// about, never how it was built. Multi-valued and unordered, drawn from
+	// the registered vocabulary in topics.go; required non-empty for
+	// SurfaceWindowed apps and validated at Register.
+	//
+	// The authoring rule is freedesktop's: list every topic that clearly
+	// applies, none that only vaguely applies. An app carrying several
+	// browses under each of them (§SD3) — there is no primary topic, so
+	// order carries no meaning.
+	//
+	// Replaced the single free-form Category field, whose axis had drifted
+	// to provenance; that job is Kind's now.
+	Topics []TopicT
+	// Keywords are free retrieval text: what someone might type looking for
+	// this app when its Display name is not what came to mind ("cpu",
+	// "htop", "deps"). Ungoverned by design (ADR-0158 §SD4) — no vocabulary,
+	// duplicates and near-synonyms harmless — because they are never
+	// rendered as structure, only matched against. Governance is owed on
+	// terms a reader navigates, and these are not.
+	Keywords []string
+	// Kind is the app's provenance (ADR-0158 §SD5): a filter and an
+	// introspection column, not a browse section. Zero value KindApp covers
+	// ordinary Go apps, so most manifests leave it unset.
+	Kind KindE
 
 	Surface      SurfaceE
 	SurfaceHints SurfaceHints
@@ -316,6 +337,27 @@ func (inst Manifest) Validate() (err error) {
 	}
 	if inst.Surface == SurfaceUnspecified {
 		err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: Surface must be set id=%s", string(inst.Id))
+		return
+	}
+	// ADR-0158 §SD1/§SD2: topics are the launcher's only subject axis, so a
+	// windowed app that declares none cannot be sectioned or filtered — it
+	// would exist in the registry and be reachable from nowhere. Headless
+	// apps have no launcher presence and are exempt.
+	if inst.Surface == SurfaceWindowed && len(inst.Topics) == 0 {
+		err = eb.Build().Str("id", string(inst.Id)).
+			Errorf("manifest: windowed app declares no Topics id=%s", string(inst.Id))
+		return
+	}
+	for _, t := range inst.Topics {
+		if !t.IsRegistered() {
+			err = eb.Build().Str("id", string(inst.Id)).Str("topic", string(t)).
+				Errorf("manifest: unregistered topic %q id=%s", string(t), string(inst.Id))
+			return
+		}
+	}
+	if !inst.Kind.IsValid() {
+		err = eb.Build().Str("id", string(inst.Id)).
+			Errorf("manifest: invalid Kind %d id=%s", uint8(inst.Kind), string(inst.Id))
 		return
 	}
 	// ADR-0148 §SD7: a workingset record is an instance of the app's

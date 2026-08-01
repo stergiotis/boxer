@@ -19,7 +19,9 @@ var manifest = app.Manifest{
 	Display:      "Ad-hoc dataset demo",
 	Title:        "Ad-hoc dataset demo",
 	Icon:         icons.PhDatabase,
-	Category:     "Runtime",
+	Topics:       []app.TopicT{app.TopicData},
+	Keywords:     []string{"dataset", "ad-hoc", "arrow", "upload"},
+	Kind:         app.KindDemo,
 	Surface:      app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 900, PreferredHeight: 700},
 	Caps: []app.SubjectFilter{

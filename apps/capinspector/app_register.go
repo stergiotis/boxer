@@ -18,15 +18,16 @@ var helpFS embed.FS
 const ManifestId app.AppIdT = "github.com/stergiotis/boxer/apps/capinspector"
 
 var manifest = app.Manifest{
-	Id:       ManifestId,
-	Version:  "0.1.0",
-	Display:  "Capability inspector",
-	Title:    "Capability inspector",
+	Id:      ManifestId,
+	Version: "0.1.0",
+	Display: "Capability inspector",
+	Title:   "Capability inspector",
 	// Phosphor plug — the capability-inspector metaphor (plugged-in
 	// runtime introspection); rendered from the Phosphor icon font
 	// registered at carousel startup (ADR-0044).
 	Icon:     icons.PhPlug,
-	Category: "Runtime",
+	Topics:   []app.TopicT{app.TopicRuntime},
+	Keywords: []string{"capability", "permission", "subject", "audit"},
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  860,

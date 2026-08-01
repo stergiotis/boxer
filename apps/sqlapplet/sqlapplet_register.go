@@ -44,16 +44,16 @@ var bookgodepFS embed.FS
 var bookpprofFS embed.FS
 
 func init() {
-	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book")); err != nil {
+	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
 	}
-	if err := RegisterBook("topology", help.MustSub(booktopoFS, "booktopo")); err != nil {
+	if err := RegisterBook("topology", help.MustSub(booktopoFS, "booktopo"), []app.TopicT{app.TopicTopology}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register topology book")
 	}
-	if err := RegisterBook("godep", help.MustSub(bookgodepFS, "bookgodep")); err != nil {
+	if err := RegisterBook("godep", help.MustSub(bookgodepFS, "bookgodep"), []app.TopicT{app.TopicCode}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register godep book")
 	}
-	if err := RegisterBook("pprof", help.MustSub(bookpprofFS, "bookpprof")); err != nil {
+	if err := RegisterBook("pprof", help.MustSub(bookpprofFS, "bookpprof"), []app.TopicT{app.TopicObservability}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register pprof book")
 	}
 }
@@ -62,7 +62,19 @@ func init() {
 type registeredBook struct {
 	id   string
 	fsys fs.FS
+	// topics is the book's default classification (ADR-0158 §SD7), applied
+	// to every document that does not carry its own `topics:` frontmatter.
+	// A book is a curated set on one subject, so the book id is exactly the
+	// grouping signal the pre-0158 minter discarded.
+	topics []app.TopicT
 }
+
+// storeDefaultTopics classifies runtime-authored applets (ADR-0132 "O4"),
+// which arrive through the store rather than a book and so have no default
+// to inherit. They are SQL someone wrote in the playground; nothing more
+// specific is knowable without asking the author, and §SD1's vocabulary has
+// no "misc" member by design.
+var storeDefaultTopics = []app.TopicT{app.TopicSql}
 
 var (
 	booksMu sync.Mutex
@@ -73,10 +85,26 @@ var (
 // the ADR-0132 §SD1 shape. Packages call it from init (the help-facility
 // pattern); [MintManifests] later parses every registered book. The id names
 // the book in diagnostics and must be unique.
-func RegisterBook(id string, fsys fs.FS) (err error) {
+//
+// topics is the book's default ADR-0158 §SD1 classification, applied to
+// every document that does not override it with its own `topics:`
+// frontmatter. It is required and must be registered: a book whose applets
+// cannot be sectioned is refused here rather than producing manifests the
+// launcher silently drops at registration (§SD9).
+func RegisterBook(id string, fsys fs.FS, topics []app.TopicT) (err error) {
 	if id == "" || fsys == nil {
 		err = eh.Errorf("sqlapplet: RegisterBook: empty id or nil fs")
 		return
+	}
+	if len(topics) == 0 {
+		err = eh.Errorf("sqlapplet: RegisterBook: book %q declares no default topics (ADR-0158 §SD7)", id)
+		return
+	}
+	for _, t := range topics {
+		if !t.IsRegistered() {
+			err = eh.Errorf("sqlapplet: RegisterBook: book %q declares unregistered topic %q", id, t)
+			return
+		}
 	}
 	booksMu.Lock()
 	defer booksMu.Unlock()
@@ -86,7 +114,7 @@ func RegisterBook(id string, fsys fs.FS) (err error) {
 			return
 		}
 	}
-	books = append(books, registeredBook{id: id, fsys: fsys})
+	books = append(books, registeredBook{id: id, fsys: fsys, topics: topics})
 	return
 }
 
@@ -113,6 +141,14 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 	sort.Slice(snapshot, func(i, j int) bool { return snapshot[i].id < snapshot[j].id })
 	seen := make(map[string]string, 8) // slug → book id
 	for _, b := range snapshot {
+		// RegisterBook enforces this, but mintBooks also takes hand-built
+		// snapshots. Reporting it once per book beats letting every document
+		// in it fail Validate with "declares no Topics", which names the
+		// symptom and not the cause.
+		if len(b.topics) == 0 {
+			errs = append(errs, eh.Errorf("sqlapplet: book %q has no default topics (ADR-0158 §SD7)", b.id))
+			continue
+		}
 		defs, perrs := ParseBook(b.id, b.fsys)
 		errs = append(errs, perrs...)
 		for _, def := range defs {
@@ -121,6 +157,13 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 				continue
 			}
 			seen[def.Slug] = def.BookID
+			// ADR-0158 §SD7: the book's grouping is the default, applied
+			// here rather than at parse because ParseDocSource is shared
+			// with callers that have no book. A document's own `topics:`
+			// wins outright — it is the more specific statement.
+			if len(def.Topics) == 0 {
+				def.Topics = b.topics
+			}
 			m := manifestFor(def, b.fsys)
 			if verr := m.Validate(); verr != nil {
 				errs = append(errs, eh.Errorf("sqlapplet: %s/%s: manifest: %w", def.BookID, def.Slug, verr))
@@ -156,7 +199,9 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 		Display:  def.Title,
 		Title:    def.Title,
 		Icon:     def.Icon,
-		Category: "Applets",
+		Topics:   def.Topics,
+		Keywords: def.Keywords,
+		Kind:     app.KindApplet,
 		Surface:  app.SurfaceWindowed,
 		Help:     bookFsys,
 		Caps: []app.SubjectFilter{

@@ -12,6 +12,7 @@ func TestManifest_Validate_OK(t *testing.T) {
 	m := Manifest{
 		Id:      "org.test.ok",
 		Display: "OK",
+		Topics:  []TopicT{TopicRuntime},
 		Surface: SurfaceWindowed,
 	}
 	err := m.Validate()
@@ -65,6 +66,7 @@ func TestManifest_Validate_WorkingsetNeedsLaunchKind(t *testing.T) {
 		Id:         "org.test.x",
 		Display:    "X",
 		Surface:    SurfaceWindowed,
+		Topics:     []TopicT{TopicRuntime},
 		Workingset: true,
 	}
 	err := m.Validate()
@@ -78,6 +80,7 @@ func TestManifest_Validate_WorkingsetWithLaunchKind_OK(t *testing.T) {
 		Id:         "org.test.x",
 		Display:    "X",
 		Surface:    SurfaceWindowed,
+		Topics:     []TopicT{TopicRuntime},
 		LaunchKind: "xLaunch",
 		Workingset: true,
 	}
@@ -90,6 +93,7 @@ func TestManifest_Validate_LaunchKindWithoutWorkingset_OK(t *testing.T) {
 		Id:         "org.test.x",
 		Display:    "X",
 		Surface:    SurfaceWindowed,
+		Topics:     []TopicT{TopicRuntime},
 		LaunchKind: "xLaunch",
 	}
 	require.NoError(t, m.Validate())
@@ -168,13 +172,13 @@ func TestCapDirectionE_String(t *testing.T) {
 func TestAppIdT_SubjectAlias(t *testing.T) {
 	cases := map[AppIdT]string{
 		"github.com/stergiotis/boxer/apps/play": "play",
-		"github.com/.../apps/widgets":            "widgets",
-		"github.com/.../apps/widgets/table":      "table",
-		"runtime.broker":                         "runtime_broker",
-		"runtime.persist":                        "runtime_persist",
-		"play":                                   "play",
-		"a-b_c":                                  "a-b_c",
-		"weird/name with spaces":                 "name_with_spaces",
+		"github.com/.../apps/widgets":           "widgets",
+		"github.com/.../apps/widgets/table":     "table",
+		"runtime.broker":                        "runtime_broker",
+		"runtime.persist":                       "runtime_persist",
+		"play":                                  "play",
+		"a-b_c":                                 "a-b_c",
+		"weird/name with spaces":                "name_with_spaces",
 	}
 	for id, want := range cases {
 		assert.Equal(t, want, id.SubjectAlias(), "id=%q", id)
@@ -186,4 +190,92 @@ func TestAllSurfaces_Contents(t *testing.T) {
 	assert.Contains(t, AllSurfaces, SurfaceWindowed)
 	assert.NotContains(t, AllSurfaces, SurfaceUnspecified)
 	assert.Len(t, AllSurfaces, 2)
+}
+
+// --- ADR-0158 classification ------------------------------------------------
+
+func TestManifest_Validate_WindowedNeedsTopics(t *testing.T) {
+	m := Manifest{
+		Id:      "org.test.x",
+		Display: "X",
+		Surface: SurfaceWindowed,
+	}
+	err := m.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "declares no Topics")
+	assert.Contains(t, err.Error(), "org.test.x")
+}
+
+func TestManifest_Validate_HeadlessNeedsNoTopics(t *testing.T) {
+	// A headless app has no launcher presence, so it has nothing to be
+	// sectioned into (ADR-0158 §SD2).
+	m := Manifest{
+		Id:      "org.test.x",
+		Display: "X",
+		Surface: SurfaceHeadless,
+	}
+	require.NoError(t, m.Validate())
+}
+
+func TestManifest_Validate_UnregisteredTopicRefused(t *testing.T) {
+	m := Manifest{
+		Id:      "org.test.x",
+		Display: "X",
+		Surface: SurfaceWindowed,
+		Topics:  []TopicT{TopicRuntime, TopicT("nonsense")},
+	}
+	err := m.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unregistered topic")
+	assert.Contains(t, err.Error(), "nonsense")
+}
+
+func TestManifest_Validate_InvalidKindRefused(t *testing.T) {
+	m := Manifest{
+		Id:      "org.test.x",
+		Display: "X",
+		Surface: SurfaceWindowed,
+		Topics:  []TopicT{TopicRuntime},
+		Kind:    KindE(99),
+	}
+	err := m.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Kind")
+}
+
+func TestManifest_Validate_KeywordsUngoverned(t *testing.T) {
+	// ADR-0158 §SD4: keywords are never rendered as structure, so there is
+	// no vocabulary for them to violate. Anything goes.
+	m := Manifest{
+		Id:       "org.test.x",
+		Display:  "X",
+		Surface:  SurfaceWindowed,
+		Topics:   []TopicT{TopicRuntime},
+		Keywords: []string{"cpu", "HTOP", "not a topic", "runtime"},
+	}
+	require.NoError(t, m.Validate())
+}
+
+func TestTopicT_IsRegistered(t *testing.T) {
+	for _, tp := range AllTopics {
+		assert.True(t, tp.IsRegistered(), "%q is in AllTopics", tp)
+	}
+	assert.False(t, TopicT("").IsRegistered(), "the empty topic is malformed, not uncategorised")
+	assert.False(t, TopicT("Runtime").IsRegistered(), "the vocabulary is lowercase")
+	assert.False(t, TopicT("nonsense").IsRegistered())
+}
+
+func TestParseTopic(t *testing.T) {
+	got, ok := ParseTopic("code")
+	require.True(t, ok)
+	assert.Equal(t, TopicCode, got)
+
+	_, ok = ParseTopic("nonsense")
+	assert.False(t, ok, "an unknown token must not synthesise a vocabulary member")
+}
+
+func TestKindE_String(t *testing.T) {
+	assert.Equal(t, "app", KindApp.String(), "the zero value reads as the common case")
+	assert.Equal(t, "applet", KindApplet.String())
+	assert.Equal(t, "demo", KindDemo.String())
 }

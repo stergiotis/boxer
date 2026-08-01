@@ -33,7 +33,8 @@ var manifest = app.Manifest{
 	Display:  "Splash screen",
 	Title:    "splash",
 	Icon:     icons.PhSparkle,
-	Category: "Tools",
+	Topics:   []app.TopicT{app.TopicAbout},
+	Keywords: []string{"about", "licence", "license", "notice", "version"},
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		// Portrait-ish to suit the portrait artwork plus the tab strip.

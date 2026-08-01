@@ -75,10 +75,10 @@ func TestPprofBookCorpus(t *testing.T) {
 func TestMintPprofBook(t *testing.T) {
 	reg := app.NewRegistry()
 	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{
-		{id: "sqlapplet", fsys: help.MustSub(bookFS, "book")},
-		{id: "topology", fsys: help.MustSub(booktopoFS, "booktopo")},
-		{id: "godep", fsys: help.MustSub(bookgodepFS, "bookgodep")},
-		{id: "pprof", fsys: help.MustSub(bookpprofFS, "bookpprof")},
+		{id: "sqlapplet", fsys: help.MustSub(bookFS, "book"), topics: []app.TopicT{app.TopicRuntime}},
+		{id: "topology", fsys: help.MustSub(booktopoFS, "booktopo"), topics: []app.TopicT{app.TopicTopology}},
+		{id: "godep", fsys: help.MustSub(bookgodepFS, "bookgodep"), topics: []app.TopicT{app.TopicCode}},
+		{id: "pprof", fsys: help.MustSub(bookpprofFS, "bookpprof"), topics: []app.TopicT{app.TopicObservability}},
 	})
 	require.Empty(t, errs)
 	assert.Equal(t, 16, minted)

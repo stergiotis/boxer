@@ -17,7 +17,8 @@ var manifest = runtimeapp.Manifest{
 	Display:  "Regex explorer",
 	Title:    "Regex Explorer",
 	Icon:     "🔍",
-	Category: "Tools",
+	Topics:   []runtimeapp.TopicT{runtimeapp.TopicCode},
+	Keywords: []string{"regex", "regexp", "pattern", "match", "text"},
 	Surface:  runtimeapp.SurfaceWindowed,
 	SurfaceHints: runtimeapp.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceWorkspace.W,

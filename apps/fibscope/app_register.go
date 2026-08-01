@@ -18,7 +18,8 @@ var manifest = app.Manifest{
 	Display:  "Fibscope",
 	Title:    "Fibscope — fibonacci-tagged id explorer",
 	Icon:     icons.PhBinary,
-	Category: "Data",
+	Topics:   []app.TopicT{app.TopicData},
+	Keywords: []string{"fibonacci", "sequence", "numbers"},
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		// Sized to fit the 64-bit strip and the split/SQL readout on the

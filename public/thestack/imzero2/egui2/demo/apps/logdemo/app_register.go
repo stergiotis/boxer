@@ -15,7 +15,9 @@ var manifest = runtimeapp.Manifest{
 	Display:  "Log emitter",
 	Title:    "Log emitter",
 	Icon:     icons.PhPaperPlaneTilt,
-	Category: "Demos",
+	Topics:   []runtimeapp.TopicT{runtimeapp.TopicObservability},
+	Keywords: []string{"log", "emit", "zerolog", "levels"},
+	Kind:     runtimeapp.KindDemo,
 	Surface:  runtimeapp.SurfaceWindowed,
 	// Deliberate short, wide log strip — much shorter than any surface
 	// archetype (SurfaceTool is 720×600). Kept on literals as the documented

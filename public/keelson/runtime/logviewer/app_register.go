@@ -22,7 +22,8 @@ var manifest = runtimeapp.Manifest{
 	Display:  "Log viewer",
 	Title:    "Log Viewer",
 	Icon:     "📜",
-	Category: "Runtime",
+	Topics:   []runtimeapp.TopicT{runtimeapp.TopicRuntime, runtimeapp.TopicObservability},
+	Keywords: []string{"log", "logs", "zerolog", "trace", "level"},
 	Surface:  runtimeapp.SurfaceWindowed,
 	// Width matches SurfaceWorkspace exactly; height rises 600→720 (a
 	// role-snap beyond the ±80 guide), accepted because a log table reads

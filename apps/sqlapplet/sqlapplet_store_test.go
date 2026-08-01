@@ -59,7 +59,7 @@ func TestStoreSaveMintsAndPersists(t *testing.T) {
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "my-tables"))
 	require.True(t, ok, "saved applet must be minted live")
 	assert.Equal(t, "My tables", m.Display)
-	assert.Equal(t, "Applets", m.Category)
+	assert.Equal(t, app.KindApplet, m.Kind, "provenance is a column, not a section (ADR-0158 §SD5)")
 
 	a, err := reg.Open(m.Id)
 	require.NoError(t, err)
@@ -107,7 +107,10 @@ func TestStoreRefusals(t *testing.T) {
 	reg, _, _, caller := newStoreHarness(t)
 
 	// The committed corpus wins slug collisions (O4-D3).
-	committed := &AppletDef{Slug: "taken", Title: "Taken", SQL: "SELECT 1", Class: analysis.QuerySecurityRead}
+	committed := &AppletDef{
+		Slug: "taken", Title: "Taken", SQL: "SELECT 1",
+		Class: analysis.QuerySecurityRead, Topics: []app.TopicT{app.TopicSql},
+	}
 	require.NoError(t, reg.RegisterFactory(manifestFor(committed, nil), func() (app.AppI, error) {
 		return &appletApp{def: committed}, nil
 	}))

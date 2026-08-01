@@ -18,7 +18,9 @@ var manifest = runtimeapp.Manifest{
 	Display:  "IDS showcase",
 	Title:    "IDS token catalogue",
 	Icon:     "🎨",
-	Category: "Demos",
+	Topics:   []runtimeapp.TopicT{runtimeapp.TopicUi},
+	Keywords: []string{"design system", "tokens", "ids", "spacing", "density"},
+	Kind:     runtimeapp.KindDemo,
 	Surface:  runtimeapp.SurfaceWindowed,
 	SurfaceHints: runtimeapp.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceApp.W,

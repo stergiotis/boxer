@@ -18,7 +18,9 @@ var manifest = app.Manifest{
 	Display:  "Widget gallery",
 	Title:    "Widget gallery",
 	Icon:     icons.PhSquaresFour,
-	Category: "Demos",
+	Topics:   []app.TopicT{app.TopicUi},
+	Keywords: []string{"gallery", "widgets", "showcase", "demo"},
+	Kind:     app.KindDemo,
 	Surface:  app.SurfaceWindowed,
 	Caps: []app.SubjectFilter{
 		{

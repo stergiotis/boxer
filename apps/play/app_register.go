@@ -186,7 +186,8 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		Display:  "SQL playground",
 		Title:    "SQL Playground",
 		Icon:     "🛢",
-		Category: "Tools",
+		Topics:   []app.TopicT{app.TopicSql, app.TopicData},
+		Keywords: []string{"query", "queries", "playground", "editor", "clickhouse", "ide"},
 		Surface:  app.SurfaceWindowed,
 		// No SurfaceHints: the host's archetype fallback picks the size.
 		// BOXER_PLAY_WINDOW_SIZE overrides it for scripted screenshots —

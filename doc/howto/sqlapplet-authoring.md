@@ -86,6 +86,19 @@ The rules, all enforced by the same gate everywhere:
   `projection`, `timeline`, `world`, `kanban`, `network`, `schema`,
   `detail`), optionally bound to a CTE by name (`table:recent`), which is
   how one buffer serves several sub-views.
+- **`topics`** classifies the applet for the launcher
+  ([ADR-0158](../adr/0158-app-classification-topics-keywords-kind.md)).
+  Omit it and the applet inherits its book's default, which is usually
+  right — set it only when a document sits off its book's subject, or
+  belongs under more than one. Entries come from the registered vocabulary
+  (`runtime`, `code`, `topology`, `observability`, `data`, `sql`, `ui`,
+  `geo`, `about`); anything else fails the gate. List every topic that
+  clearly applies and none that only vaguely applies: an applet under two
+  topics is browsable under both, which is the point.
+- **`keywords`** is free retrieval text — the words someone would type
+  looking for this applet when its title is not what came to mind. No
+  vocabulary, no validation: keywords are only ever matched against, never
+  shown as structure, so nothing has to be kept consistent with anything.
 
 The SQL itself determines the rest. A `SET param_<name>` prelude plus a
 `{name:Type}` placeholder becomes a widget in the applet's params strip

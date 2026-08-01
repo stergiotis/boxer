@@ -21,7 +21,8 @@ var manifest = app.Manifest{
 	Display:  "Terrain scope",
 	Title:    "Terrain scope — swissALTI3D line-of-sight",
 	Icon:     icons.PhMountains,
-	Category: "Science",
+	Topics:   []app.TopicT{app.TopicGeo},
+	Keywords: []string{"terrain", "elevation", "line of sight", "viewshed", "swisstopo"},
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		// Sized to fit the slippy map plus the sweep plot (and its legend)

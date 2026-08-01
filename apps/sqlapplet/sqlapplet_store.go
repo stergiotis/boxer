@@ -147,6 +147,11 @@ func (inst *StoreService) loadStored() {
 // resolves the definition through the service at every Open, so an
 // overwrite (O4-D4) reaches future windows without re-registration.
 func (inst *StoreService) mint(def *AppletDef) (err error) {
+	// ADR-0158 §SD7: a stored applet inherits no book, so it falls back to
+	// the store default unless its document classified itself.
+	if len(def.Topics) == 0 {
+		def.Topics = storeDefaultTopics
+	}
 	m := manifestFor(def, nil)
 	if err = m.Validate(); err != nil {
 		return

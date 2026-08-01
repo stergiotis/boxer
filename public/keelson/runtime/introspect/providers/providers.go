@@ -102,6 +102,17 @@ func (appsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, err
 	return appsTable(rs).Build(proj, len(rs)), nil
 }
 
+// topicStrings renders a manifest's topics for the Arrow list column. The
+// table speaks strings so a SQL predicate can name a topic without knowing
+// the Go type (ADR-0158 §SD8).
+func topicStrings(ts []app.TopicT) (out []string) {
+	out = make([]string, 0, len(ts))
+	for _, t := range ts {
+		out = append(out, t.String())
+	}
+	return
+}
+
 // appsTable renders registrations rather than bare manifests: how an app
 // was registered decides whether two windows of it are independent, and
 // the manifest cannot say.
@@ -126,7 +137,11 @@ func appsTable(rs []app.Registration) *introspect.Table {
 		String("display", func(i int) string { return m(i).Display }).
 		String("title", func(i int) string { return m(i).WindowTitle() }).
 		String("icon", func(i int) string { return m(i).Icon }).
-		String("category", func(i int) string { return m(i).Category }).
+		StringList("topics", func(i int) []string { return topicStrings(m(i).Topics) }).
+		StringList("keywords", func(i int) []string { return m(i).Keywords }).
+		// Provenance, deliberately a column rather than a section (ADR-0158
+		// §SD5): "show me every applet" is a filter, not a place apps live.
+		String("kind", func(i int) string { return m(i).Kind.String() }).
 		String("surface", func(i int) string { return m(i).Surface.String() }).
 		Int32("preferred_width", func(i int) int32 { return int32(m(i).SurfaceHints.PreferredWidth) }).
 		Int32("preferred_height", func(i int) int32 { return int32(m(i).SurfaceHints.PreferredHeight) }).

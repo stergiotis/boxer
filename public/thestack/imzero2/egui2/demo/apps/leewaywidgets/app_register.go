@@ -15,7 +15,9 @@ var manifest = app.Manifest{
 	Display:  "Leeway widgets tour",
 	Title:    "leeway widgets — fixture showcase",
 	Icon:     "🧪",
-	Category: "Demos",
+	Topics:   []app.TopicT{app.TopicData, app.TopicUi},
+	Keywords: []string{"leeway", "columnar", "schema", "mapping"},
+	Kind:     app.KindDemo,
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceWorkspace.W,

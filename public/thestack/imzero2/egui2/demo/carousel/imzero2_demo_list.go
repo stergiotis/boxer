@@ -30,7 +30,10 @@ var listSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "legacy_code", Type: arrow.PrimitiveTypes.Uint64, Nullable: true},
 	{Name: "display", Type: arrow.BinaryTypes.String},
 	{Name: "title", Type: arrow.BinaryTypes.String},
-	{Name: "category", Type: arrow.BinaryTypes.String},
+	// topics is a list so a predicate can ask has(topics, 'code') rather
+	// than pattern-matching a delimited string (ADR-0158 §SD8).
+	{Name: "topics", Type: arrow.ListOf(arrow.BinaryTypes.String)},
+	{Name: "kind", Type: arrow.BinaryTypes.String},
 	{Name: "surface", Type: arrow.BinaryTypes.String},
 	{Name: "pref_w", Type: arrow.PrimitiveTypes.Uint16},
 	{Name: "pref_h", Type: arrow.PrimitiveTypes.Uint16},
@@ -75,14 +78,16 @@ func manifestsToArrowIPC(manifests []runtimeapp.Manifest) (buf []byte, err error
 	legacy := bldr.Field(2).(*array.Uint64Builder)
 	display := bldr.Field(3).(*array.StringBuilder)
 	title := bldr.Field(4).(*array.StringBuilder)
-	category := bldr.Field(5).(*array.StringBuilder)
-	surface := bldr.Field(6).(*array.StringBuilder)
-	prefW := bldr.Field(7).(*array.Uint16Builder)
-	prefH := bldr.Field(8).(*array.Uint16Builder)
-	bgTick := bldr.Field(9).(*array.Uint8Builder)
-	caps := bldr.Field(10).(*array.Uint32Builder)
-	persisted := bldr.Field(11).(*array.Uint32Builder)
-	version := bldr.Field(12).(*array.StringBuilder)
+	topics := bldr.Field(5).(*array.ListBuilder)
+	topicVals := topics.ValueBuilder().(*array.StringBuilder)
+	kind := bldr.Field(6).(*array.StringBuilder)
+	surface := bldr.Field(7).(*array.StringBuilder)
+	prefW := bldr.Field(8).(*array.Uint16Builder)
+	prefH := bldr.Field(9).(*array.Uint16Builder)
+	bgTick := bldr.Field(10).(*array.Uint8Builder)
+	caps := bldr.Field(11).(*array.Uint32Builder)
+	persisted := bldr.Field(12).(*array.Uint32Builder)
+	version := bldr.Field(13).(*array.StringBuilder)
 
 	for _, m := range sorted {
 		id.Append(string(m.Id))
@@ -94,7 +99,11 @@ func manifestsToArrowIPC(manifests []runtimeapp.Manifest) (buf []byte, err error
 		}
 		display.Append(m.Display)
 		title.Append(m.WindowTitle())
-		category.Append(m.Category)
+		topics.Append(true)
+		for _, t := range m.Topics {
+			topicVals.Append(t.String())
+		}
+		kind.Append(m.Kind.String())
 		surface.Append(m.Surface.String())
 		prefW.Append(m.SurfaceHints.PreferredWidth)
 		prefH.Append(m.SurfaceHints.PreferredHeight)
@@ -195,17 +204,28 @@ func runChLocalQuery(arrowBytes []byte, query, format string, stdout io.Writer) 
 	return
 }
 
+// joinTopics renders a manifest's topics for the plain-text fallback, which
+// has no notion of a list column.
+func joinTopics(ts []runtimeapp.TopicT) (s string) {
+	parts := make([]string, 0, len(ts))
+	for _, t := range ts {
+		parts = append(parts, t.String())
+	}
+	s = strings.Join(parts, ",")
+	return
+}
+
 // renderManifestsAscii is the no-CH fallback. Plain text, one row per
 // manifest, columns separated by two spaces with per-column padding.
 // Mirrors the columns most useful for a human eye: legacy code, alias,
-// surface, category, display, and id.
+// surface, topics, display, and id.
 func renderManifestsAscii(manifests []runtimeapp.Manifest, w io.Writer) (err error) {
 	sorted := make([]runtimeapp.Manifest, len(manifests))
 	copy(sorted, manifests)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Id < sorted[j].Id
 	})
-	headers := []string{"code", "alias", "surface", "category", "display", "id"}
+	headers := []string{"code", "alias", "surface", "topics", "display", "id"}
 	rows := make([][]string, 0, len(sorted))
 	for _, m := range sorted {
 		code := "-"
@@ -216,7 +236,7 @@ func renderManifestsAscii(manifests []runtimeapp.Manifest, w io.Writer) (err err
 			code,
 			m.Id.SubjectAlias(),
 			m.Surface.String(),
-			m.Category,
+			joinTopics(m.Topics),
 			m.Display,
 			string(m.Id),
 		})

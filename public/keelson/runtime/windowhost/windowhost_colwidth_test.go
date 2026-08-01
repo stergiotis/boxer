@@ -34,6 +34,7 @@ func mkColWidthApp() *colWidthApp {
 	return &colWidthApp{manifest: app.Manifest{
 		Id:      "test.colwidth",
 		Display: "colwidth",
+		Topics:  []app.TopicT{app.TopicRuntime},
 		Surface: app.SurfaceWindowed,
 	}}
 }

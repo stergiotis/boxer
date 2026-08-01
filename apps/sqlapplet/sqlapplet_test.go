@@ -63,14 +63,14 @@ func TestStarterBookCorpus(t *testing.T) {
 
 func TestMintStarterBook(t *testing.T) {
 	reg := app.NewRegistry()
-	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{{id: "sqlapplet", fsys: help.MustSub(bookFS, "book")}})
+	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{{id: "sqlapplet", fsys: help.MustSub(bookFS, "book"), topics: []app.TopicT{app.TopicRuntime}}})
 	require.Empty(t, errs)
 	assert.Equal(t, 3, minted)
 
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "runtime-apps"))
 	require.True(t, ok)
 	assert.Equal(t, "Runtime apps", m.Display)
-	assert.Equal(t, "Applets", m.Category)
+	assert.Equal(t, app.KindApplet, m.Kind, "provenance is a column, not a section (ADR-0158 §SD5)")
 	assert.Equal(t, app.SurfaceWindowed, m.Surface)
 	require.Len(t, m.Caps, 2, "attenuation in manifest form: the two escape hatches only")
 	assert.Equal(t, clipboardbroker.SubjectWrite, m.Caps[0].Pattern)
@@ -236,8 +236,8 @@ func TestMintDuplicateSlugAcrossBooks(t *testing.T) {
 	mk := func() *fstest.MapFile { return docMD("title: Dup", sqlFence) }
 	reg := app.NewRegistry()
 	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{
-		{id: "book-a", fsys: fstest.MapFS{"dup.md": mk()}},
-		{id: "book-b", fsys: fstest.MapFS{"dup.md": mk()}},
+		{id: "book-a", fsys: fstest.MapFS{"dup.md": mk()}, topics: []app.TopicT{app.TopicRuntime}},
+		{id: "book-b", fsys: fstest.MapFS{"dup.md": mk()}, topics: []app.TopicT{app.TopicRuntime}},
 	})
 	assert.Equal(t, 1, minted, "first book wins deterministically (sorted by book id)")
 	require.Len(t, errs, 1)

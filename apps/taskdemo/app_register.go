@@ -20,7 +20,9 @@ var manifest = app.Manifest{
 	Display:  "Task primitive",
 	Title:    "Background task",
 	Icon:     icons.PhHourglass,
-	Category: "Demos",
+	Topics:   []app.TopicT{app.TopicRuntime},
+	Keywords: []string{"task", "background", "job", "progress"},
+	Kind:     app.KindDemo,
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  720,
