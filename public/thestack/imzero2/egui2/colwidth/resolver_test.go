@@ -33,6 +33,23 @@ var (
 // precisely so its debounce can be tested without sleeping.
 var t0 = time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 
+// settled drives a table past the reports the crate still owes the last
+// re-seed, the way a render loop would: Resolve and Observe once per frame,
+// with the crate handing back exactly what it was given. A test that wants
+// to exercise a *drag* starts here, because until this returns a differing
+// width is the crate finding its feet rather than a person moving anything.
+//
+// It returns the widths in force, which is what a following Observe should
+// differ from.
+func settled(t *testing.T, r *Resolver, tag string, cols []Column, defaults []float64) (widths []float64) {
+	t.Helper()
+	for range reseedSettleFrames {
+		widths = r.Resolve(tag, cols, 12, defaults)
+		r.Observe(tag, cols, widths, 12, false, t0)
+	}
+	return
+}
+
 func TestNew_Validation(t *testing.T) {
 	store := factsstore.NewInMemoryFactsStore()
 	_, err := New(nil, Opts{AppId: "play"})
@@ -227,7 +244,7 @@ func TestEpoch_BumpsWhenColumnSetShrinks(t *testing.T) {
 func TestObserve_CapturesDragOnInstanceAndColumnTiers(t *testing.T) {
 	r, _ := newResolver(t)
 	cols := []Column{colA}
-	r.Resolve("tbl", cols, 12, []float64{50})
+	settled(t, r, "tbl", cols, []float64{50})
 
 	r.Observe("tbl", cols, []float64{140}, 12, false, t0)
 
@@ -252,7 +269,7 @@ func TestObserve_EchoIsNotACapture(t *testing.T) {
 func TestObserve_CaptureDoesNotBumpEpoch(t *testing.T) {
 	r, _ := newResolver(t)
 	cols := []Column{colA}
-	r.Resolve("tbl", cols, 12, []float64{50})
+	settled(t, r, "tbl", cols, []float64{50})
 	e := r.Epoch("tbl")
 
 	r.Observe("tbl", cols, []float64{140}, 12, false, t0)
@@ -321,8 +338,8 @@ func TestObserve_DragAfterFirstShowStillCaptures(t *testing.T) {
 	cols := []Column{colA}
 	r.Resolve("tbl", cols, 12, []float64{50})
 	r.Observe("tbl", cols, []float64{140}, 12, true, t0)
+	settled(t, r, "tbl", cols, []float64{50})
 
-	r.Resolve("tbl", cols, 12, []float64{50})
 	r.Observe("tbl", cols, []float64{220}, 12, false, t0)
 	assert.Equal(t, 2, r.PendingCount(), "the instance and column tiers")
 
@@ -347,7 +364,7 @@ func TestObserve_UnknownColumnIsIgnored(t *testing.T) {
 func TestFlush_DebouncesUntilMotionStops(t *testing.T) {
 	r, store := newResolver(t)
 	cols := []Column{colA}
-	r.Resolve("tbl", cols, 12, []float64{50})
+	settled(t, r, "tbl", cols, []float64{50})
 
 	r.Observe("tbl", cols, []float64{100}, 12, false, t0)
 	n, err := r.Flush(t0.Add(100 * time.Millisecond))
@@ -384,7 +401,7 @@ func TestFlush_FailureLeavesEntryPending(t *testing.T) {
 	r, err := New(store, Opts{AppId: "play"})
 	require.NoError(t, err)
 	cols := []Column{colA}
-	r.Resolve("tbl", cols, 12, []float64{50})
+	settled(t, r, "tbl", cols, []float64{50})
 	r.Observe("tbl", cols, []float64{140}, 12, false, t0)
 
 	_, err = r.Flush(t0.Add(time.Hour))
@@ -419,7 +436,7 @@ func TestClear_RemovesOverrideAndRestoresDefault(t *testing.T) {
 func TestClear_DropsPendingCapture(t *testing.T) {
 	r, store := newResolver(t)
 	cols := []Column{colA}
-	r.Resolve("tbl", cols, 12, []float64{50})
+	settled(t, r, "tbl", cols, []float64{50})
 	r.Observe("tbl", cols, []float64{140}, 12, false, t0)
 	require.Equal(t, 2, r.PendingCount())
 
@@ -445,7 +462,7 @@ func TestLoad_KeepsPendingCaptures(t *testing.T) {
 	require.NoError(t, r.Load())
 
 	cols := []Column{colA}
-	r.Resolve("tbl", cols, 12, nil)
+	settled(t, r, "tbl", cols, nil)
 	r.Observe("tbl", cols, []float64{140}, 12, false, t0)
 
 	require.NoError(t, r.Load())
@@ -483,7 +500,7 @@ func TestEvict_BoundsMemoryAndSparesPendingCaptures(t *testing.T) {
 
 	// A pending capture is never evicted, even past the cap.
 	cols := []Column{colB}
-	r.Resolve("tbl", cols, 12, []float64{50})
+	settled(t, r, "tbl", cols, []float64{50})
 	r.Observe("tbl", cols, []float64{140}, 12, false, t0)
 	require.NoError(t, r.Load())
 	assert.Equal(t, 2, r.PendingCount(), "unsaved user adjustments must survive eviction")
@@ -511,7 +528,7 @@ var _ StoreI = (factsstore.FactsStoreI)(nil)
 func TestClearAll_ResetsEveryColumn(t *testing.T) {
 	r, store := newResolver(t)
 	cols := []Column{colA, colB}
-	r.Resolve("tbl", cols, 12, []float64{50, 60})
+	settled(t, r, "tbl", cols, []float64{50, 60})
 	r.Observe("tbl", cols, []float64{140, 160}, 12, false, t0)
 	_, err := r.Flush(t0.Add(time.Hour))
 	require.NoError(t, err)
@@ -570,3 +587,81 @@ func (inst *failingDeleteStore) DeleteColumnWidth(appId app.AppIdT, tier string,
 }
 
 var _ StoreI = (*failingDeleteStore)(nil)
+
+// The read-back lags a frame, so the report arriving just after a table's
+// columns change was produced under the *previous* set. Lined up by
+// position against the new one, it hands each column whatever its
+// predecessor in that slot was wearing — and the column tier makes that
+// stick app-wide, for every later result carrying the same column.
+func TestObserve_StaleReportAfterAColumnSetChangeIsNotACapture(t *testing.T) {
+	r, store := newResolver(t)
+	wide, narrow := Column{Name: "text", Type: "String"}, Column{Name: "n", Type: "UInt64"}
+
+	// A settled two-column table: 300pt of text beside a 40pt count.
+	before := []Column{wide, narrow}
+	settled(t, r, "tbl", before, []float64{300, 40})
+
+	// The query changes and the columns swap places. This frame's report is
+	// still the previous frame's, so fetched[0] is the wide column's 300 and
+	// fetched[1] the narrow one's 40 — now against the opposite columns.
+	after := []Column{narrow, wide}
+	r.Resolve("tbl", after, 12, []float64{40, 300})
+	r.Observe("tbl", after, []float64{300, 40}, 12, false, t0)
+
+	assert.Zero(t, r.PendingCount(), "a stale report is not somebody dragging")
+	n, err := r.Flush(t0.Add(2 * DefaultDebounce))
+	require.NoError(t, err)
+	assert.Zero(t, n)
+	rows, err := store.ListColumnWidths("play")
+	require.NoError(t, err)
+	assert.Empty(t, rows, "and nothing may reach the store")
+}
+
+// The wire is positional throughout — the EtColumn sequence, the seed and
+// the read-back all go by slot — so a reorder changes what every slot means
+// and the crate has to be re-seeded even though the set and the widths are
+// identical.
+func TestResolve_ReorderBumpsTheEpoch(t *testing.T) {
+	r, _ := newResolver(t)
+	r.Resolve("tbl", []Column{colA, colB}, 12, []float64{50, 50})
+	e := r.Epoch("tbl")
+
+	r.Resolve("tbl", []Column{colB, colA}, 12, []float64{50, 50})
+	assert.Greater(t, r.Epoch("tbl"), e, "the same widths in another order are not the same table")
+}
+
+// A report of a different length cannot describe these columns, whatever
+// produced it — another column set, or a payload the state manager
+// truncated. Matching the overlap up anyway is the same mis-attribution by
+// another route.
+func TestObserve_ReportOfAnotherLengthIsDropped(t *testing.T) {
+	r, _ := newResolver(t)
+	cols := []Column{colA, colB}
+	settled(t, r, "tbl", cols, []float64{50, 60})
+
+	r.Observe("tbl", cols, []float64{140}, 12, false, t0)
+	assert.Zero(t, r.PendingCount(), "a short report is evidence of a mismatch, not a drag")
+
+	r.Observe("tbl", cols, []float64{140, 160, 180}, 12, false, t0)
+	assert.Zero(t, r.PendingCount(), "nor is a long one")
+}
+
+// A dropped report must not spend the table's settle window: the report
+// being waited for has not arrived yet. If it did, the stale one that
+// follows would be read as a drag.
+func TestObserve_DroppedReportDoesNotSpendTheSettleWindow(t *testing.T) {
+	r, _ := newResolver(t)
+	one, two := []Column{colA}, []Column{colA, colB}
+	settled(t, r, "tbl", one, []float64{50})
+
+	// The column set grows. The crate is still reporting one width for a
+	// frame, then reports two — the first of which is the pre-seed frame.
+	r.Resolve("tbl", two, 12, []float64{50, 60})
+	r.Observe("tbl", two, []float64{999}, 12, false, t0)
+	r.Resolve("tbl", two, 12, []float64{50, 60})
+	r.Observe("tbl", two, []float64{140, 160}, 12, false, t0)
+	r.Resolve("tbl", two, 12, []float64{50, 60})
+	r.Observe("tbl", two, []float64{140, 160}, 12, false, t0)
+
+	assert.Zero(t, r.PendingCount(), "none of that is a user gesture")
+}

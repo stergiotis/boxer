@@ -86,14 +86,29 @@ width the user set.
 frame settled on, like every other read-back in the binding. `ok` is false
 until a table has shown once.
 
+**Nothing is captured for two reports after the widths change.** Because of
+that lag, the first report following a re-seed describes the columns as they
+were — and the read-back is positional, so matching it against a changed
+column set would hand each column its predecessor's width. So `Resolve`
+opens a settle window whenever it bumps the epoch: those reports set the
+baseline rather than being read as a gesture. A report whose length does not
+match the column list is dropped outright, for the same reason. The practical
+consequence is that a drag which begins and ends within ~two frames of a new
+result landing is not captured.
+
+**Pass the whole column list, in the order the columns are emitted.** Both
+of the above depend on it — including the fixed leading column a table never
+lets anyone resize. Omitting it shifts every later column onto the wrong
+identity, and the length check is what turns that from a silent mis-capture
+into a dropped report.
+
 **Growth is captured like a drag.** egui_table grows a column to fit the
 widest *visible* cell and stores the result. The resolver cannot tell that
 apart from a drag, so scrolling wider content into view can widen a column and
 persist it. This matches the "fit it, keep it" stance the ADR takes for
-double-click autofit, but it does mean widths ratchet upward. The one growth
-that is *not* captured is the width the crate settles on when a table first
-shows: `firstShow` adopts it as the baseline, so only movement after it
-counts as the user's.
+double-click autofit, but it does mean widths ratchet upward. The growth that
+is *not* captured is whatever the crate settles on right after a re-seed,
+which the settle window above absorbs.
 
 **Don't call `ApplyWidths` with a fresh epoch every frame.** The epoch means
 "my resolved widths changed". `Resolve` bumps it only when they actually did.

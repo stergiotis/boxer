@@ -566,6 +566,46 @@ which never re-arms for a new shape. Closing it needs the shape to travel
 with the read-back, or the call site to declare it — a wire or API question
 rather than a resolver one.
 
+## Update — 2026-08-02: the positional mis-attribution, and where it was closed
+
+The Update above left this open and guessed wrong about what closing it
+would take: "needs the shape to travel with the read-back, or the call site
+to declare it — a wire or API question rather than a resolver one." The
+resolver is handed the column list on every `Resolve`, so it can see the
+shape change for itself. No wire or API change was needed.
+
+Measured before fixing, on play's attr grid: switching to the per-attribute
+view and toggling the support columns once wrote **290 override rows** with
+nobody dragging anything. Each column-set change is followed by one report
+describing the columns as they were, and lining that up by slot hands every
+column its predecessor's width — which the column tier then applies to any
+later result carrying that column.
+
+Three parts, and the middle one was a bug in its own right:
+
+- **A report whose length differs from the column list is dropped.** The
+  read-back is positional, so a differing length is proof it belongs to
+  another shape, or arrived truncated. The previous code lined the overlap
+  up under a `min`.
+- **A reordering now bumps the epoch.** Change detection compared a map of
+  column keys, so the same set in a different order looked identical — yet
+  everything on this wire goes by slot, including the seed. A reorder was
+  therefore leaving the crate showing the previous order's widths, quite
+  apart from what it did to capture detection.
+- **Every re-seed opens a two-report settle window**, during which reports
+  set the baseline instead of being captured. Two because they are
+  different reports: the read-back lags a frame, so the first was produced
+  before the seed landed, and the second is the seeded frame's own result.
+
+The cost is a drag that begins and ends inside those two frames after a
+re-seed — about 33ms — which is not captured. A drag emits a width every
+frame it moves, so anything a hand can do outruns the window.
+
+`firstShow` keeps its meaning but is no longer load-bearing: the first
+`Resolve` for a table changes its order from nothing to something, which
+opens the same window. play's `attrWidthsSeen`, which the Update above
+criticised for never re-arming, is belt-and-braces for the same reason.
+
 ## Status
 
 Accepted 2026-07-30. The fact kind and M1–M6 are all implemented (Updates

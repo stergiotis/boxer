@@ -1,6 +1,7 @@
 package colwidth
 
 import (
+	"slices"
 	"sort"
 	"time"
 
@@ -52,10 +53,30 @@ type entry struct {
 	changedAt time.Time
 }
 
+// reseedSettleFrames is how many width reports following a re-seed are
+// read as the crate's own doing rather than the user's.
+//
+// Two, and the two are different reports. The read-back lags a frame, so
+// the first one to arrive after Resolve bumps the epoch was produced
+// *before* the seed landed and describes the columns as they were — match
+// it up positionally against the new ones and a column acquires whatever
+// its predecessor in that slot was wearing. The second is the seeded
+// frame's own result, which is the baseline capture detection needs. Only
+// from the third does a difference mean a person moved something.
+const reseedSettleFrames = 2
+
 // tableState is the per-table apply bookkeeping.
 type tableState struct {
 	epoch uint32
 	cols  map[string]colState
+	// order is the column keys as Resolve last returned them. The wire is
+	// positional — the EtColumn sequence, the seed, and the read-back all
+	// go by slot — so a reordering changes what every slot means even when
+	// the set and the widths are identical, and has to bump the epoch like
+	// any other change.
+	order []string
+	// settle counts the reports still owed to the last re-seed.
+	settle int
 }
 
 // colState separates the two widths a column carries between frames. They
@@ -185,20 +206,29 @@ func (inst *Resolver) Resolve(tableTag string, cols []Column, fontSize float64, 
 	// value, because the epoch bump below is about to seed the crate with
 	// exactly that and anything it settled on before is gone.
 	next := make(map[string]colState, len(cols))
+	order := make([]string, len(cols))
 	for i, c := range cols {
 		key := c.Key()
+		order[i] = key
 		cs := colState{sent: widths[i], settled: widths[i]}
 		if prev, seen := st.cols[key]; seen && prev.sent == widths[i] {
 			cs.settled = prev.settled
 		}
 		next[key] = cs
 	}
-	if len(next) != len(st.cols) {
+	// The order comparison also covers a column added or removed, and one
+	// case a map-size comparison would miss: a table showing the same
+	// column twice has fewer map entries than slots.
+	if !slices.Equal(order, st.order) {
 		changed = true
 	}
 	st.cols = next
+	st.order = order
 	if changed {
 		st.epoch++
+		// A re-seed is on its way to the crate; the next reports describe
+		// what came before it. See reseedSettleFrames.
+		st.settle = reseedSettleFrames
 	}
 	return
 }
@@ -262,18 +292,33 @@ func (inst *Resolver) Epoch(tableTag string) (epoch uint32) {
 // one-frame delay, not a suppression, and enough for every column of a
 // table nobody touched to acquire a durable override. Taking them as the
 // baseline instead means only what moves *after* the crate settled counts
-// as the user's.
+// as the user's. Since Resolve now opens the same window itself whenever
+// it re-seeds, a call site that cannot tell a first show from any other
+// frame may pass false throughout.
+//
+// A report is matched to cols by position, so one whose length differs is
+// not about these columns at all — it was produced under a different set,
+// or arrived truncated — and is dropped rather than lined up anyway.
 func (inst *Resolver) Observe(tableTag string, cols []Column, fetched []float64, fontSize float64, firstShow bool, now time.Time) {
 	st := inst.tableFor(tableTag)
-	n := min(len(cols), len(fetched))
-	for i := range n {
+	if len(fetched) != len(cols) {
+		// Deliberately without spending a settle frame: the report we are
+		// waiting for has not arrived yet, and this is evidence of that
+		// rather than the thing itself.
+		return
+	}
+	adopt := firstShow || st.settle > 0
+	if st.settle > 0 {
+		st.settle--
+	}
+	for i := range cols {
 		key := cols[i].Key()
 		cs, seen := st.cols[key]
 		if !seen {
 			continue
 		}
 		w := inst.clamp(fetched[i])
-		if firstShow {
+		if adopt {
 			cs.settled = w
 			st.cols[key] = cs
 			continue
@@ -363,9 +408,13 @@ func (inst *Resolver) Clear(tableTag string, col Column) (err error) {
 		}
 	}
 	// Drop the table's per-column state so the next Resolve reports a
-	// change and re-seeds the crate.
+	// change and re-seeds the crate. The recorded order goes with it:
+	// leaving it behind would describe a set of widths that no longer
+	// exists, and the next Resolve would compare against a shape it never
+	// actually sent.
 	if st, ok := inst.tables[tableTag]; ok {
 		st.cols = map[string]colState{}
+		st.order = nil
 	}
 	return
 }
