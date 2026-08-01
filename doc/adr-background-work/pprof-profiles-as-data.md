@@ -91,7 +91,7 @@ hosts call on exit) checks `context.IsSet("cpuProfileFile")` — a name no flag
 registers — so `pprof.StopCPUProfile()` is never called. `runtime/pprof`
 serializes the profile *at Stop*, so the flag as shipped produces an unusable
 (empty) file. One-line fix plus a test; it is M0 below regardless of any
-other decision here.
+other decision here. *(Fixed since — commit `ff2965e6`.)*
 
 ## 4 What is actually missing
 
