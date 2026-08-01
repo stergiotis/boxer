@@ -324,6 +324,53 @@ func (inst *Service) Grant(handle string) (res GrantResult, err error) {
 	return res, nil
 }
 
+// ResolveResult is what an alias resolves to: the newest live dataset
+// published under it.
+type ResolveResult struct {
+	Handle          string
+	Revision        uint64
+	Rows            uint64
+	Bytes           uint64
+	CreatedAtUnixUs int64
+}
+
+// Resolve maps a stable alias to the newest live dataset published under
+// it — newest by creation instant, ties broken on handle for determinism.
+// It is what lets a committed applet declare `datasets: [pprof_cpu]` and
+// bind at open time without ever learning a handle ahead of time
+// (ADR-0134 §SD4 for standalone applets, update 2026-08-01). Republishing
+// onto a handle keeps its creation instant, so a producer that reuses one
+// handle per alias — the imzrt Profiles pattern — stays the resolution
+// target across re-captures.
+func (inst *Service) Resolve(alias string) (res ResolveResult, err error) {
+	inst.mu.RLock()
+	var best *dataset
+	for _, ds := range inst.datasets {
+		if ds.alias != alias {
+			continue
+		}
+		if best == nil ||
+			ds.createdAtUnixUs > best.createdAtUnixUs ||
+			(ds.createdAtUnixUs == best.createdAtUnixUs && ds.handle > best.handle) {
+			best = ds
+		}
+	}
+	if best == nil {
+		inst.mu.RUnlock()
+		return res, eh.Errorf("adhocdata: no live dataset published under alias %q", alias)
+	}
+	res = ResolveResult{
+		Handle:          best.handle,
+		Revision:        best.revision,
+		Rows:            best.rows,
+		Bytes:           best.bytes,
+		CreatedAtUnixUs: best.createdAtUnixUs,
+	}
+	inst.mu.RUnlock()
+	inst.emitAudit("resolve", res.Handle, alias, res.Revision)
+	return res, nil
+}
+
 // Retract forgets a dataset: deregister the key, unregister the provider,
 // delete the file, drop the record (ADR-0134 SD2).
 func (inst *Service) Retract(handle string) (err error) {

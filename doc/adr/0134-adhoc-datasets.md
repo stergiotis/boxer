@@ -615,6 +615,34 @@ The accepted decision stands; serving got a capability the deployed
 client requires, and the format's §SD1 chunk choice is what made it
 cheap.
 
+### 2026-08-01 — `datasets:` aliases resolve at standalone applet open
+
+§SD4 gave a committed applet the vocabulary to declare the stable aliases
+its buffer names (`datasets: [pprof_cpu]`), but only an embedder could
+bind them — a standalone applet minted from a book had no way to reach a
+live handle, so a dataset-declaring book was only usable embedded. The
+first committed consumer (the pprof book,
+[pprof-profiles-as-data](../adr-background-work/pprof-profiles-as-data.md)
+M3) closed that gap:
+
+- **`adhoc.resolve`** joins publish/grant/retract on the capability
+  service: alias in, the **newest live dataset** published under it out
+  (newest by creation instant, ties on handle; a republish keeps its
+  creation instant, so a producer that reuses one handle per alias — the
+  imzrt Profiles pattern — stays the target across re-captures).
+- **The sqlapplet host resolves declared aliases at open** and binds them
+  exactly as an embedder would; minted manifests of dataset-declaring
+  applets carry the one extra `Pub adhoc.resolve` capability. A miss
+  binds nothing rather than failing the mount — the applet opens, the
+  unresolved `keelson('<alias>')` reports readably, and the documented
+  flow is "capture first, then open". Bindings resolve per open; an
+  already-open applet tracks re-captures through the stable handle, not
+  through re-resolution.
+
+This is the "alias-latest" resolution the pprof analysis deferred, landed
+as applet-open semantics rather than new SQL syntax: buffers keep naming
+aliases, handles stay unguessable and never appear in committed text.
+
 Internal:
 
 - [ADR-0094 — keelson introspection tables](./0094-keelson-introspection-tables.md)

@@ -13,6 +13,7 @@ const (
 	SubjectPublish = "adhoc.publish"
 	SubjectGrant   = "adhoc.grant"
 	SubjectRetract = "adhoc.retract"
+	SubjectResolve = "adhoc.resolve"
 	subjectAll     = "adhoc.>"
 )
 
@@ -48,6 +49,22 @@ type wireGrantRep struct {
 	SchemaSummary string `json:"schema_summary,omitempty"`
 	Revision      uint64 `json:"revision,omitempty"`
 	Alias         string `json:"alias,omitempty"`
+}
+
+type wireResolveReq struct {
+	V     uint8  `json:"v"`
+	Alias string `json:"alias"`
+}
+
+type wireResolveRep struct {
+	V               uint8  `json:"v"`
+	OK              bool   `json:"ok"`
+	Error           string `json:"error,omitempty"`
+	Handle          string `json:"handle,omitempty"`
+	Revision        uint64 `json:"revision,omitempty"`
+	Rows            uint64 `json:"rows,omitempty"`
+	Bytes           uint64 `json:"bytes,omitempty"`
+	CreatedAtUnixUs int64  `json:"created_at_unix_us,omitempty"`
 }
 
 type wireRetractReq struct {
@@ -91,6 +108,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.handleGrant(msg)
 	case SubjectRetract:
 		inst.handleRetract(msg)
+	case SubjectResolve:
+		inst.handleResolve(msg)
 	default:
 		inst.reply(msg.Reply, wireRetractRep{V: wireVersion, OK: false, Error: "unknown adhoc subject: " + msg.Subject})
 	}
@@ -130,6 +149,23 @@ func (inst *Service) handleGrant(msg *app.Msg) {
 	inst.reply(msg.Reply, wireGrantRep{
 		V: wireVersion, OK: true, Structure: res.Structure, SchemaSummary: res.SchemaSummary,
 		Revision: res.Revision, Alias: res.Alias,
+	})
+}
+
+func (inst *Service) handleResolve(msg *app.Msg) {
+	req, err := buscodec.Decode[wireResolveReq](msg.Payload)
+	if err != nil {
+		inst.reply(msg.Reply, wireResolveRep{V: wireVersion, Error: "decode: " + err.Error()})
+		return
+	}
+	res, rErr := inst.Resolve(req.Alias)
+	if rErr != nil {
+		inst.reply(msg.Reply, wireResolveRep{V: wireVersion, Error: rErr.Error()})
+		return
+	}
+	inst.reply(msg.Reply, wireResolveRep{
+		V: wireVersion, OK: true, Handle: res.Handle, Revision: res.Revision,
+		Rows: res.Rows, Bytes: res.Bytes, CreatedAtUnixUs: res.CreatedAtUnixUs,
 	})
 }
 

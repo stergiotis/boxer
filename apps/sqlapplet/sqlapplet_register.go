@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
@@ -35,6 +36,13 @@ var booktopoFS embed.FS
 //go:embed bookgodep
 var bookgodepFS embed.FS
 
+// bookpprofFS embeds the profile suite (apps/sqlapplet/bookpprof/*.md) —
+// exploration lenses over the pprof_* ad-hoc datasets the imzrt Profiles
+// tab publishes (doc/adr-background-work/pprof-profiles-as-data.md M3).
+//
+//go:embed bookpprof
+var bookpprofFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book")); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -44,6 +52,9 @@ func init() {
 	}
 	if err := RegisterBook("godep", help.MustSub(bookgodepFS, "bookgodep")); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register godep book")
+	}
+	if err := RegisterBook("pprof", help.MustSub(bookpprofFS, "bookpprof")); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register pprof book")
 	}
 }
 
@@ -134,9 +145,10 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 // book's FS, so the applet's prose page is reachable through the Help
 // center; narrowing Help to the single document is a recorded nicety for
 // later. The cap list is the attenuation in manifest form (ADR-0132 §SD8):
-// the two escape hatches only — clipboard.write for Copy SQL and
-// windowhost.open for Open in Playground (ADR-0135 §SD7) — and no
-// persisted keys, because the buffer is committed definition.
+// the two escape hatches only — clipboard.write for the per-fence Copy in
+// the Definition drawer and windowhost.open for Open in Playground
+// (ADR-0135 §SD7) — and no persisted keys, because the buffer is committed
+// definition.
 func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 	m = app.Manifest{
 		Id:       app.AppIdT(appletIdPrefix + def.Slug),
@@ -151,7 +163,7 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 			{
 				Pattern:   clipboardbroker.SubjectWrite,
 				Direction: app.CapDirectionPub,
-				Reason:    "Copy SQL escape hatch (ADR-0132 §SD3): the buffer is the artifact",
+				Reason:    "Copy a fenced block out of the Definition drawer (ADR-0132 §SD3): the document is the artifact",
 			},
 			{
 				Pattern:   windowhost.OpenSubject,
@@ -159,6 +171,16 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 				Reason:    "Open in Playground (ADR-0135 §SD7): the §SD3 escape-hatch upgrade",
 			},
 		},
+	}
+	// Declared datasets add the one capability their open-time binding
+	// needs (ADR-0134 §SD4, update 2026-08-01); a dataset-less applet
+	// keeps the two-cap surface.
+	if len(def.Datasets) > 0 {
+		m.Caps = append(m.Caps, app.SubjectFilter{
+			Pattern:   adhocdata.SubjectResolve,
+			Direction: app.CapDirectionPub,
+			Reason:    "resolve declared dataset aliases to their newest live handles at open (ADR-0134 §SD4)",
+		})
 	}
 	return
 }

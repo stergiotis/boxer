@@ -303,6 +303,15 @@ small, self-contained follow-up worth its own mini-dialogue.
 | M4 | Treemap result panel + `profile-treemap` applet | R1 dialogue |
 | M5 | Flame widget + panel (own ADR) | R2 dialogue |
 
+*(M3 shipped 2026-08-01 with two adjustments: the graph book's tab slug is
+`network` — the ADR-0129 panel's id in today's play — and `profile-diff`
+became `profile-heap` (in-use vs churn from the heap profile's own four
+measures). A generic two-capture diff needs two live handles of the same
+kind, which the republish-onto-one-handle design deliberately does not
+keep; it moves to the deferred list pending a capture-pinning UX. The
+books bind their declared aliases at open via the new `adhoc.resolve` —
+the §8 alias-latest seam, landed as ADR-0134's 2026-08-01 update.)*
+
 Deferred, recorded here so they don't gate: durable history (§7); continuous
 / fleet profiling (the [ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md)
 scraper pattern is the obvious template when wanted); folded-text ingest

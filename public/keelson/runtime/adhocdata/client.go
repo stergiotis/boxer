@@ -37,6 +37,33 @@ func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error
 	return PublishResult{Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows, Bytes: rep.Bytes}, nil
 }
 
+// ResolveRequest maps a stable alias to the newest live dataset published
+// under it via the adhoc.resolve subject (ADR-0134 §SD4, update
+// 2026-08-01). It is how a standalone applet binds its declared
+// `datasets:` aliases at open; the caller's bus client needs Pub on
+// adhoc.resolve.
+func ResolveRequest(bus app.BusI, alias string) (res ResolveResult, err error) {
+	payload, err := buscodec.Encode(wireResolveReq{V: wireVersion, Alias: alias})
+	if err != nil {
+		return res, eh.Errorf("adhocdata: encode resolve: %w", err)
+	}
+	replyBytes, err := bus.Request(SubjectResolve, payload)
+	if err != nil {
+		return res, eh.Errorf("adhocdata: resolve request: %w", err)
+	}
+	rep, err := buscodec.Decode[wireResolveRep](replyBytes)
+	if err != nil {
+		return res, eh.Errorf("adhocdata: decode resolve reply: %w", err)
+	}
+	if !rep.OK {
+		return res, eh.Errorf("adhocdata: resolve rejected: %s", rep.Error)
+	}
+	return ResolveResult{
+		Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
+		Bytes: rep.Bytes, CreatedAtUnixUs: rep.CreatedAtUnixUs,
+	}, nil
+}
+
 // RetractRequest retracts a dataset via the adhoc.retract subject.
 func RetractRequest(bus app.BusI, handle string) (err error) {
 	payload, err := buscodec.Encode(wireRetractReq{V: wireVersion, Handle: handle})
