@@ -155,6 +155,9 @@ const (
 	defaultRibbonAlpha = 0x99
 	// dimAlpha is what a ribbon fades to while another one is emphasised.
 	dimAlpha = 0x33
+	// hairlineWeight is the ribbon outline's stroke, declared through
+	// SetNextWeight so the lane can double it on legend hover.
+	hairlineWeight = 1.0
 	// labelGapPx is the space between a node bar and its label.
 	labelGapPx = 5.0
 	// minLabelBarPx is the shortest bar that still gets a label, and the only
@@ -280,17 +283,48 @@ func (r *Renderer) Draw(p *implot.Plot, lay *sankey.Layout, opts Opts) {
 	p.IncludeX(1)
 	p.IncludeY(0)
 	p.IncludeY(1)
-	label := func(s string) string {
-		if opts.Layers {
-			return s
+
+	// A layer is anonymous unless the legend is on: label "" takes no legend
+	// row. When it is on, the row's swatch is set from what the layer draws
+	// rather than left on implot's series palette — these rows are toggles,
+	// not series, and an unrelated palette slot beside "flows" says nothing.
+	//
+	// The diagram's own colours stay the diagram's: dc.Color arrives as the
+	// swatch we just set and the closures ignore it, because a node's fill is
+	// data (Opts.NodeColor, Node.Color, ADR-0156's palette) and not a slot
+	// implot handed out.
+	//
+	// SetNextWeight pins the outline hairline at 1, which the lane doubles
+	// while the layer's legend row is hovered — the built-in series emphasis,
+	// for free, via dc.Weight.
+	rep := st.representativeColor()
+	layer := func(name string, swatch uint32, fn func(implot.DrawCtx)) {
+		// The weight is set either way: without it an unlabelled item would
+		// take the series default of 1.5 and the hairline would thicken
+		// merely because the legend is off.
+		p.SetNextWeight(hairlineWeight)
+		if !opts.Layers {
+			p.Custom("", fn)
+			return
 		}
-		return ""
+		p.SetNextColor(swatch)
+		p.Custom(name, fn)
 	}
-	p.Custom(label("flows"), st.drawFlows)
-	p.Custom(label("nodes"), st.drawNodes)
+	layer("flows", withAlpha(rep, st.alpha), st.drawFlows)
+	layer("nodes", withAlpha(rep, 0xff), st.drawNodes)
 	if !opts.HideLabels {
-		p.Custom(label("labels"), st.drawLabels)
+		layer("labels", styletokens.NeutralTextPrimary.AsHex(), st.drawLabels)
 	}
+}
+
+// representativeColor is the swatch a layer's legend row shows: the first
+// node's resolved colour, so the row reflects whatever the caller's colour
+// scheme actually produced rather than a fixed guess.
+func (s *state) representativeColor() uint32 {
+	if len(s.nodeCol) == 0 {
+		return styletokens.NeutralTextPrimary.AsHex()
+	}
+	return s.nodeCol[0]
 }
 
 // normalizeOpts folds an out-of-range hit onto the empty one. A Selected
@@ -340,8 +374,10 @@ type state struct {
 	fontSize float32
 	alpha    uint8
 	nodeCol  []uint32
-	ribbon   sankey.Ribbon
-	xs, ys   []float32
+	// paletteRepeats is how many bars had to reuse a hue; see PaletteRepeats.
+	paletteRepeats int
+	ribbon         sankey.Ribbon
+	xs, ys         []float32
 	// batched rect scratch, FillColumns only
 	rMinX, rMinY, rMaxX, rMaxY []float32
 	rCols                      []uint32
@@ -362,9 +398,15 @@ func (s *state) prepare(lay *sankey.Layout, opts Opts) {
 		s.alpha = defaultRibbonAlpha
 	}
 	s.nodeCol = fit(s.nodeCol, len(lay.Nodes))
+	slot := 0
 	for i := range lay.Nodes {
-		s.nodeCol[i] = s.resolveNodeColor(i)
+		col, usedPalette := s.resolveNodeColor(i, slot)
+		s.nodeCol[i] = col
+		if usedPalette {
+			slot++
+		}
 	}
+	s.paletteRepeats = max(0, slot-styletokens.QualitativeCycleLen)
 }
 
 // newState is the test and one-shot entry point: a fresh state, prepared.
@@ -374,21 +416,46 @@ func newState(lay *sankey.Layout, opts Opts) *state {
 	return s
 }
 
-func (s *state) resolveNodeColor(i int) uint32 {
+// resolveNodeColor applies the colour precedence for node i. slot is how many
+// nodes have already reached the palette, which is what the cycle advances on:
+// counting every node instead would burn hues on the ones a caller has already
+// coloured and wrap that much sooner.
+//
+// The cycle is not keyed on the within-stage index either — that gives every
+// single-node stage slot 0, collapsing a whole spine to one hue.
+func (s *state) resolveNodeColor(i int, slot int) (rgba uint32, usedPalette bool) {
 	n := &s.lay.Nodes[i]
 	if s.opts.NodeColor != nil {
 		if col, ok := s.opts.NodeColor(n); ok {
-			return col
+			return col, false
 		}
 	}
 	if n.Color != 0 {
-		return n.Color
+		return n.Color, false
 	}
-	// Cycle by position in the node slice, not by the within-stage index:
-	// the latter gives every single-node stage slot 0, which collapses a
-	// whole spine to one hue. Callers who want a meaningful encoding — by
-	// category, by sector — pass NodeColor.
-	return styletokens.QualitativeCycle(i).AsHex()
+	return styletokens.QualitativeCycle(slot).AsHex(), true
+}
+
+// PaletteRepeats reports how many node bars fall back to a hue another bar
+// already carries, because the qualitative palette ran out.
+//
+// The palette is seven entries and says so: ADR-0156's own guidance is that a
+// consumer needing more should vary a second channel or encode something
+// meaningful, not expect an eighth hue. A flow diagram routinely has more than
+// seven nodes, and since a ribbon defaults to its source's colour the repeat
+// lands on the flows too.
+//
+// This widget will not invent a hue, and will not darken one either — a shade
+// tier reads as "related", which is a claim about the data, and it is not
+// checked against the palette's contrast floor. It reports instead, the way
+// the layout reports thin links, and Opts.NodeColor is how a host answers.
+// Zero means every bar is distinguishable, either from the palette or because
+// the caller coloured it.
+func PaletteRepeats(lay *sankey.Layout, opts Opts) int {
+	if lay == nil {
+		return 0
+	}
+	return newState(lay, normalizeOpts(lay, opts)).paletteRepeats
 }
 
 func (s *state) linkColor(i int) uint32 {
@@ -407,7 +474,18 @@ func (s *state) linkColor(i int) uint32 {
 // emphasis reports the alpha a ribbon should carry: full while it is the
 // pointer's or the selection's, dimmed while some other ribbon is, and the
 // default otherwise. Hovering a node emphasises everything joined to it.
-func (s *state) emphasis(li int) uint8 {
+//
+// layerHot is DrawCtx.Highlighted — the flows layer's own legend row is
+// hovered, which asks for the whole layer at once. It wins over the dimming,
+// since "show me the flows" is not a request to hide most of them.
+func (s *state) emphasis(li int, layerHot bool) uint8 {
+	if layerHot {
+		return 0xff
+	}
+	return s.pointerEmphasis(li)
+}
+
+func (s *state) pointerEmphasis(li int) uint8 {
 	l := &s.lay.Links[li]
 	touches := func(h Hit) bool {
 		switch h.Kind {
@@ -445,7 +523,7 @@ func (s *state) drawFlows(dc implot.DrawCtx) {
 	s.ys = fit(s.ys, 2*n)
 	for li := range s.lay.Links {
 		s.lay.Links[li].Sample(s.samples, &s.ribbon)
-		col := withAlpha(s.linkColor(li), s.emphasis(li))
+		col := withAlpha(s.linkColor(li), s.emphasis(li, dc.Highlighted))
 		// The outline runs along the top edge left to right, then back along
 		// the bottom: one simple ring, which is what the ear clipper wants.
 		for i := range n {
@@ -458,7 +536,7 @@ func (s *state) drawFlows(dc implot.DrawCtx) {
 		}
 		c.PaintPolygonFilled(s.xs, s.ys, color.Hex(col)).
 			Concave().
-			Stroke(color.Hex(col), 1).
+			Stroke(color.Hex(col), dc.Weight).
 			Send()
 	}
 }
@@ -476,7 +554,7 @@ func (s *state) drawFlowsColumns(dc implot.DrawCtx) {
 	for li := range s.lay.Links {
 		l := &s.lay.Links[li]
 		l.Sample(samples, &s.ribbon)
-		a := s.emphasis(li)
+		a := s.emphasis(li, dc.Highlighted)
 		from := s.linkColor(li)
 		to := from
 		if s.opts.Gradient {
@@ -522,13 +600,13 @@ func (s *state) drawFlowsColumns(dc implot.DrawCtx) {
 	s.ys = fit(s.ys, n)
 	for li := range s.lay.Links {
 		s.lay.Links[li].Sample(samples, &s.ribbon)
-		col := withAlpha(s.linkColor(li), s.emphasis(li))
+		col := withAlpha(s.linkColor(li), s.emphasis(li, dc.Highlighted))
 		for _, edge := range [2][]float64{s.ribbon.Top, s.ribbon.Bot} {
 			for i := range n {
 				s.xs[i] = dc.T.PxX(s.ribbon.Xs[i])
 				s.ys[i] = dc.T.PxY(edge[i])
 			}
-			c.PaintPolyline(s.xs, s.ys, color.Hex(col), 1).Send()
+			c.PaintPolyline(s.xs, s.ys, color.Hex(col), dc.Weight).Send()
 		}
 	}
 }

@@ -260,6 +260,13 @@ func sankeyDemoStatus(cur *sankeyDemoDiagram, hover sankeyview.Hit, selected san
 	if rep.ThinLinks > 0 {
 		fmt.Fprintf(&b, " · %d flow(s) too thin to read", rep.ThinLinks)
 	}
+	// The energy diagram has nine nodes against a seven-hue palette, so this
+	// fires — which is the point of showing it. A real host would answer with
+	// Opts.NodeColor; the demo leaves it visible instead. Opts{} matches what
+	// this demo passes, since it sets no colour callback.
+	if n := sankeyview.PaletteRepeats(lay, sankeyview.Opts{}); n > 0 {
+		fmt.Fprintf(&b, " · %d bar(s) reuse a hue", n)
+	}
 	if len(rep.NonConserving) > 0 {
 		fmt.Fprintf(&b, " · unbalanced: %s", strings.Join(rep.NonConserving, ", "))
 	}

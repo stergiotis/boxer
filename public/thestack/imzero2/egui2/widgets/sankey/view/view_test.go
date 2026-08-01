@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -58,11 +59,13 @@ func TestNilSafety(t *testing.T) {
 	if h, cl, ok := r.Probe(p, nil, 0); !h.None() || !cl.None() || ok {
 		t.Errorf("Renderer.Probe(nil layout) = %v, %v, %v", h, cl, ok)
 	}
+	// Setup before Draw: the implot protocol wants every Setup* call ahead of
+	// the first item, and Draw declares items.
+	Setup(p, Opts{})
+	Setup(p, Opts{Layers: true})
 	Draw(nil, lay, Opts{})
 	Draw(p, nil, Opts{})
 	Draw(p, lay, Opts{})
-	Setup(p, Opts{})
-	Setup(p, Opts{Layers: true})
 	if h, cl, ok := Show(nil, "t", 10, 10, nil, Opts{}); !h.None() || !cl.None() || ok {
 		t.Errorf("Show(nil layout) = %v, %v, %v", h, cl, ok)
 	}
@@ -78,7 +81,7 @@ func TestZeroOptsEmphasisesNothing(t *testing.T) {
 		t.Error("Opts{} reports an active focus")
 	}
 	for li := range lay.Links {
-		if got := s.emphasis(li); got != defaultRibbonAlpha {
+		if got := s.emphasis(li, false); got != defaultRibbonAlpha {
 			t.Errorf("link %d alpha %#x under Opts{}, want the default %#x", li, got, defaultRibbonAlpha)
 		}
 	}
@@ -112,10 +115,10 @@ func TestIndexZeroIsAddressable(t *testing.T) {
 		t.Error("link 0 reads as no hit")
 	}
 	s := newState(lay, normalizeOpts(lay, Opts{Selected: LinkHit(0)}))
-	if got := s.emphasis(0); got != 0xff {
+	if got := s.emphasis(0, false); got != 0xff {
 		t.Errorf("selected link 0 alpha %#x, want 0xff", got)
 	}
-	if got := s.emphasis(1); got != dimAlpha {
+	if got := s.emphasis(1, false); got != dimAlpha {
 		t.Errorf("unselected link 1 alpha %#x, want the dim %#x", got, dimAlpha)
 	}
 }
@@ -123,11 +126,11 @@ func TestIndexZeroIsAddressable(t *testing.T) {
 func TestHoverLinkDimsTheRest(t *testing.T) {
 	lay := testLayout(t)
 	s := newState(lay, normalizeOpts(lay, Opts{Hover: LinkHit(1)}))
-	if got := s.emphasis(1); got != 0xff {
+	if got := s.emphasis(1, false); got != 0xff {
 		t.Errorf("hovered link alpha %#x, want 0xff", got)
 	}
 	for _, li := range []int{0, 2} {
-		if got := s.emphasis(li); got != dimAlpha {
+		if got := s.emphasis(li, false); got != dimAlpha {
 			t.Errorf("link %d alpha %#x, want the dim %#x", li, got, dimAlpha)
 		}
 	}
@@ -145,7 +148,7 @@ func TestHoverNodeEmphasisesItsLinks(t *testing.T) {
 		if l.Source == b || l.Target == b {
 			want = 0xff
 		}
-		if got := s.emphasis(li); got != want {
+		if got := s.emphasis(li, false); got != want {
 			t.Errorf("link %s->%s alpha %#x, want %#x",
 				lay.Nodes[l.Source].ID, lay.Nodes[l.Target].ID, got, want)
 		}
@@ -154,8 +157,8 @@ func TestHoverNodeEmphasisesItsLinks(t *testing.T) {
 
 func TestNodeColorPrecedence(t *testing.T) {
 	lay := testLayout(t)
-	// Bottom of the chain: the qualitative palette, cycled by the node's
-	// position in the slice.
+	// Bottom of the chain: the qualitative palette. With nothing else set,
+	// every node reaches it, so the slot is the node's own index.
 	s := newState(lay, normalizeOpts(lay, Opts{}))
 	for i := range lay.Nodes {
 		want := styletokens.QualitativeCycle(i).AsHex()
@@ -181,8 +184,54 @@ func TestNodeColorPrecedence(t *testing.T) {
 	if s.nodeCol[0] != 0xaabbccdd {
 		t.Errorf("NodeColor callback ignored: got %#x", s.nodeCol[0])
 	}
-	if s.nodeCol[1] != styletokens.QualitativeCycle(1).AsHex() {
-		t.Error("a callback returning ok=false did not fall through")
+	// Node "a" was claimed by the callback, so it consumed no palette slot and
+	// node "b" gets the first one. Advancing the cycle only on the nodes that
+	// reach it is what keeps a diagram from wrapping earlier than it must.
+	if s.nodeCol[1] != styletokens.QualitativeCycle(0).AsHex() {
+		t.Errorf("a callback returning ok=false did not fall through to slot 0: got %#x", s.nodeCol[1])
+	}
+}
+
+// TestPaletteRepeatsCountsTheWrap: the palette is seven entries, and a flow
+// diagram routinely has more nodes than that. The widget will not invent an
+// eighth hue, so it has to say when bars start sharing one.
+func TestPaletteRepeatsCountsTheWrap(t *testing.T) {
+	build := func(n int) *sankey.Layout {
+		t.Helper()
+		d := sankey.Diagram{Nodes: []sankey.Node{{ID: "src"}}}
+		for i := range n {
+			id := fmt.Sprintf("leaf%02d", i)
+			d.Nodes = append(d.Nodes, sankey.Node{ID: id})
+			d.Links = append(d.Links, sankey.Link{Source: "src", Target: id, Value: 1})
+		}
+		lay, err := sankey.Compute(d, sankey.Options{})
+		if err != nil {
+			t.Fatalf("Compute: %v", err)
+		}
+		return lay
+	}
+	const cycle = styletokens.QualitativeCycleLen
+	if got := PaletteRepeats(build(cycle-1), Opts{}); got != 0 {
+		t.Errorf("a diagram inside the palette reports %d repeats", got)
+	}
+	// One node past the cycle is one bar that must share.
+	if got := PaletteRepeats(build(cycle), Opts{}); got != 1 {
+		t.Errorf("PaletteRepeats = %d at one node past the cycle, want 1", got)
+	}
+	// Colouring the overflow yourself is the documented answer, and it works:
+	// a claimed node consumes no slot.
+	big := build(cycle + 5)
+	opts := Opts{NodeColor: func(n *sankey.NodeLayout) (uint32, bool) {
+		if n.ID > "leaf01" { // everything but src, leaf00 and leaf01
+			return 0x11223344, true
+		}
+		return 0, false
+	}}
+	if got := PaletteRepeats(big, opts); got != 0 {
+		t.Errorf("PaletteRepeats = %d once the caller colours the overflow, want 0", got)
+	}
+	if got := PaletteRepeats(nil, Opts{}); got != 0 {
+		t.Errorf("PaletteRepeats(nil) = %d", got)
 	}
 }
 

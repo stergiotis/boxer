@@ -382,6 +382,44 @@ estimate here is a choice, and a defensible one at a few percent of width for
 a drop-or-keep decision; it is no longer the only option, and §Consequences'
 "until a measurement channel exists" was wrong.
 
+## Update 2026-08-02 (2) — the palette wrap is reported; the legend rows carry their layer's ink
+
+The last two review items, both in `widgets/sankey/view`, both adding to its
+§Surfaces row.
+
+- **`PaletteRepeats`** reports how many bars fall back to a hue another bar
+  already carries. [ADR-0156](./0156-qualitative-palette-dark-surface.md)'s
+  palette is seven entries and its own guidance is that a consumer needing
+  more should vary a second channel, not expect an eighth hue — but a flow
+  diagram routinely has more than seven nodes, and since a ribbon defaults to
+  its source's colour the repeat lands on the flows too. The gallery demo's
+  own energy diagram has nine, so it was shipping duplicate hues silently.
+
+  Inventing a hue is out, and so is darkening one: a shade tier reads as
+  "related", which is a claim about the data, and it is not checked against
+  the palette's contrast floor. So this follows the §SD6 precedent set for
+  sub-pixel flows — report it, let the host answer, and keep the encoding
+  honest. `Opts.NodeColor` is the answer, and the demo now prints the count
+  rather than hiding it.
+
+  The cycle also advances only on nodes that actually reach the palette. It
+  was advancing per node index, so hues were burned on nodes a caller had
+  already coloured and the wrap came sooner than it needed to.
+
+- **The lane's item style is wired up.** With `Layers` on, each legend row's
+  swatch is now set from what its layer draws — the first resolved node
+  colour at ribbon alpha, at full alpha, and the label ink — instead of
+  whatever series slot implot handed out; these rows are toggles, and an
+  unrelated colour beside "flows" said nothing. `DrawCtx.Highlighted` now
+  emphasises a whole layer while its legend row is hovered, and the ribbon
+  outline's weight comes from `DrawCtx.Weight` via `SetNextWeight`, so the
+  lane's built-in ×2 hover emphasis applies for free.
+
+  The diagram's own colours stay the diagram's: `DrawCtx.Color` arrives as
+  the swatch just set and the closures ignore it, because a node's fill is
+  data and not a slot. That is deliberate, and noted in the code so it is not
+  "fixed" the other way round.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
