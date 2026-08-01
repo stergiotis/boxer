@@ -30,10 +30,6 @@ const (
 	// worldResolveThreshold is SD5's claim bar: the fraction of sampled
 	// distinct values that must resolve to a country.
 	worldResolveThreshold = 0.5
-	// worldRasterW is the fixed map raster resolution. The map's on-screen size
-	// is FitAspectMax against the available pane (it always fills), so this only
-	// sets texture crispness — a fixed sensible value beats a user size knob.
-	worldRasterW = 1280
 )
 
 // signalSelectionCountry is the click companion to signalSelection: when a
@@ -104,7 +100,10 @@ func NewWorldDriver(ids *c.WidgetIdStack) *WorldDriver {
 		rowOf:     map[worldmap.CountryIdx]int64{},
 		detectCol: -1,
 	}
-	d.widget.SetPixelWidth(worldRasterW)
+	// No SetPixelWidth: the widget rasterizes at its own canvas width, which it
+	// reads from a ui-rect probe of this pane (ADR-0114 Update 2026-08-01). A
+	// pinned resolution was either wasted on a narrow pane or upscaled on a
+	// wide one.
 	return d
 }
 
@@ -168,10 +167,10 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 	valueCol := inst.effectiveValueCol(numeric)
 	inst.extract(rec, schema, countryCol, valueCol, atlas)
 
-	// Toolbar: the country column and the value picker only. The map fills the
-	// available pane on its own (FitAspectMax against ui.available_size); the
-	// removed raster-width slider changed texture resolution, not on-screen size,
-	// so it read as a no-op. Raster size is fixed at construction (worldRasterW).
+	// Toolbar: the country column and the value picker only. The map sizes
+	// itself to the pane and rasterizes at that width; the removed raster-width
+	// slider changed texture resolution, not on-screen size, so it read as a
+	// no-op.
 	for range c.Horizontal().KeepIter() {
 		c.Label("country: " + schema.Field(countryCol).Name).Send()
 		if len(numeric) > 0 {

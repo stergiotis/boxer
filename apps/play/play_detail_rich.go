@@ -427,7 +427,7 @@ func (inst *richCellCache) renderImage(col int, e *richEntry) {
 	key := "play-detail-img-" + strconv.Itoa(col)
 	// Two separate PrepareStr creators: each is a single-use state machine, so
 	// reusing one across Derive() and the Image call panics (the worldmap's
-	// note at renderImage).
+	// note at paintMap).
 	imgId := inst.ids.PrepareStr(key).Derive()
 	// PixelsToSendFor, not PixelsToSend: the Detail pane is a dock tab, whose
 	// body renders every frame into a buffer the host only interprets when the

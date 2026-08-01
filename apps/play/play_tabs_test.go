@@ -48,8 +48,11 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 	assert.Equal(t, TabZoneSide, seen["detail"].Zone)
 	assert.Equal(t, TabZoneBody, seen["table"].Zone, "body is the zero-value zone")
 
+	// Map is the only no-scroll leaf: it sizes its raster from the available
+	// space, so it needs a bounded one. World left this set when it moved to a
+	// probe-sized canvas (ADR-0114 Update 2026-08-01).
 	for id, s := range seen {
-		assert.Equal(t, id == "map" || id == "world", s.NoScroll, "NoScroll set for %q", id)
+		assert.Equal(t, id == "map", s.NoScroll, "NoScroll set for %q", id)
 	}
 
 	panelIDs := make([]string, 0, 6)

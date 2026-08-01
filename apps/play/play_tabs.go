@@ -261,12 +261,12 @@ var builtinTabDefs = []builtinTabDef{
 	// the case that puts Writes on the spec rather than on the panel.
 	{id: "map", dockID: dockTabMap, title: "Map", noScroll: true, lazy: true,
 		writes: mapViewportSignals[:]},
-	// NoScroll: the world choropleth sizes its map image from
-	// ui.available_size() (zero-box FitAspectMax); inside the dock's
-	// auto-shrinking ScrollArea, zero is a stable fixed point after a
-	// tab-activation layout pass. A no-scroll leaf is bounded, so the
-	// available size is the real remainder; overflow clips, as on Map.
-	{id: "world", dockID: dockTabWorld, title: "World", noScroll: true, lazy: true, shapeContract: true,
+	// Scrolls, unlike Map: the world choropleth now draws into a canvas it
+	// sizes from a ui-rect probe of the pane width (ADR-0114 Update
+	// 2026-08-01), so it no longer needs a bounded leaf to read an available
+	// size from — and a canvas is a fixed box, so a pane too short for the
+	// map's aspect scrolls instead of clipping its southern hemisphere.
+	{id: "world", dockID: dockTabWorld, title: "World", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection, signalSelectionCountry}},
 	{id: "kanban", dockID: dockTabKanban, title: "Kanban", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection}},
