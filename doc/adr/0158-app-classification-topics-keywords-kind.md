@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-01
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-01
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0158: App classification — topics, keywords, and kind
 
@@ -177,11 +175,16 @@ from a category tree into a facet-filtered list.
   decision (CODINGSTANDARDS § What triggers an ADR), so a later topic needs no
   ADR. Changing what the vocabulary *means* — its axis — would.
 
-- **SD2 — `Topics []string` replaces `Category`.** The field is removed, not
+- **SD2 — `Topics []TopicT` replaces `Category`.** The field is removed, not
   deprecated. `Topics` is multi-valued, unordered, drawn from §SD1, and
   required non-empty for `SurfaceWindowed` apps. The authoring rule is
   freedesktop's: list every topic that clearly applies, none that only vaguely
-  applies.
+  applies. The element is a **named type with exported constants**, not a bare
+  string, following the `SurfaceE` / `CapDirectionE` precedent in the same
+  package: it makes an in-tree typo a compile error rather than a
+  registration-time one, which matters given §SD9. Runtime-supplied topics
+  (applet frontmatter) parse into the same type and are checked against the
+  registry.
 
 - **SD3 — An entry browses under every topic it carries.** There is no primary
   topic and no single home. The no-query browse view lists each entry once per
@@ -236,11 +239,15 @@ from a category tree into a facet-filtered list.
   rename, the compiler finds every in-tree registration site in the same
   commit; there is no window in which a site is half-converted, so the
   warn-then-error staging an additive change would have needed is unnecessary.
-  What the compiler cannot catch is a *registered but wrong* topic, and what
-  `Validate` catches — an unregistered one — is dropped by `RegisterFactory`
-  with a Warn, meaning a future typo removes an app from the UI without an
-  error. That hazard is real, pre-existing, and not fixed here; §Verification
-  plan names the tree-wide test that contains it.
+  §SD2's named type narrows what can go wrong further: an in-tree topic that
+  is not a declared constant no longer compiles. Two hazards survive it. A
+  *registered but wrong* topic — apt-looking, misfiled — is invisible to both
+  the compiler and `Validate`, and stays a review matter. And an unregistered
+  topic arriving at runtime from applet frontmatter fails `Validate`, which
+  `RegisterFactory` handles by dropping the app with a Warn — so a bad
+  frontmatter topic removes an applet from the UI without an error. That drop
+  behaviour is pre-existing and not fixed here; §Verification plan names the
+  tree-wide test that contains it.
 
 - **SD10 — Recorded deferrals.** Three things this ADR deliberately does not
   decide. **Ranking** — frecency, recents, pins — needs a launch record in
@@ -399,10 +406,53 @@ from a category tree into a facet-filtered list.
 
 ## Status
 
-Proposed — awaiting review by the repository owner.
+Accepted (2026-08-01). Implementation follows the §Migration path.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-08-02 — implemented; four things the decision did not anticipate
+
+§Migration steps 1–5 are done and the tree is green. Four refinements the
+implementation forced, none of which change the decision:
+
+- **Multi-placement collides widget ids.** §SD3 renders one manifest under
+  every topic it declares, so the app id alone stopped identifying a launcher
+  row: two sections derived the same button id, and a duplicate id resolves to
+  one shared response — clicking either row would open whichever the id stack
+  landed on. Both entry renderers now take a section key
+  (`"open-" + section + "-" + id`). This compiles and vets clean either way,
+  so it would have surfaced only as a mis-dispatched click.
+
+- **The kind toggles cannot be written the obvious way.** `SendRespVal` is
+  deferred to `StateManager.Sync`, after the frame body — so the natural
+  `before := …; Checkbox(…).SendRespVal(&local); if local != before` never
+  observes a change and the toggle is a silent no-op. The toggles bind
+  straight to a persistent `[]bool` and the mask is derived per frame.
+  `SelectableLabel` and `Button` report clicks in-frame and are unaffected,
+  which is why the topic chips need no such mirror.
+
+- **The two filter axes store opposite sets.** Kind stores what is *hidden*,
+  topic stores what is *selected*. Both make the zero value inert, which is
+  the property that matters; the difference follows the gesture — three kinds
+  you normally want all of ("hide the demos") against nine topics you normally
+  want one of ("show me only code"). A shown-set for kinds could not tell
+  "everything hidden" from "nothing configured".
+
+- **The menu carries no topic chips.** §SD6 says the menu gets chips; in
+  practice its per-topic submenus already *are* the topic axis, so a chip row
+  there would be two controls for one thing. The menu does carry the kind
+  filter, as a `Show` submenu of state-reporting Buttons rather than
+  checkboxes — the menu is the only launcher surface once a window is open, so
+  a kind filter reachable only from the empty-state pane could not be undone
+  without closing everything. Both surfaces share one `launcherFilter` value,
+  so they cannot disagree about what is on screen.
+
+Also worth recording: `registry.Demo.Category` (ADR-0057's screenshot-tour
+struct) is a *different* field and was left alone. §Surfaces did not
+distinguish the two, and a reader grepping `Category` will find both.
 
 ## References
 
