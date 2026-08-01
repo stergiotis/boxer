@@ -292,6 +292,10 @@ type PlayApp struct {
 	// the bar only appears when the result is leeway-shaped.
 	tableOpts tableDisplayOpts
 
+	// tableSort is the Table pane's header-click sort: a permutation over the
+	// record already in hand, never a re-issued query (play_table_sort.go).
+	tableSort tableSortState
+
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
 	// a leeway TableDesc inferred from the active result's Arrow schema (plain
 	// opaque columns — tagged sections/memberships aren't recoverable from an
@@ -2731,14 +2735,21 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		c.EtColumn(inst.colWidths[arrowCol]).Resizable(true).Send()
 	}
 
+	// The header-click sort (play_table_sort.go) is a permutation of the rows
+	// this record already holds: display position p draws record row
+	// order[p]. nil means "record order", the unsorted case.
+	order := inst.tableSort.orderFor(rec, totalRows)
+
 	et := c.EndETable(ids.PrepareStr("results"),
 		uint64(displayRows),
 		18.0, 1, 1).
 		Striped(true)
 	// Selection is stored as an absolute row index; translate to the
 	// page-local row when highlighting so the stripe lands on the right line.
-	if selectedRow >= pageStart && selectedRow < pageEnd {
-		et = et.SelectedRow(uint64(selectedRow - pageStart))
+	// Under a sort that is the row's *displayed* position, not its record
+	// index — the selection survives sorting rather than following the line.
+	if selPos := inst.tableSort.displayPos(order, selectedRow); selPos >= pageStart && selPos < pageEnd {
+		et = et.SelectedRow(uint64(selPos - pageStart))
 	}
 
 	// Visibility prefetch: the previous frame's egui_table::prepare pushed
@@ -2768,17 +2779,21 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		for range et.Headers(0, colPos) {
 			c.AddSpace(cellPadX)
 			field := schema.Field(arrowCol)
-			if label := inst.colLabels[field.Name]; label != "" {
-				// Friendly leeway handle; the physical name is on hover so it
-				// stays available (e.g. to copy) without cluttering the header.
-				for range c.HoverText(field.Name).KeepIter() {
-					for rt := range c.RichTextLabel(label) {
-						rt.Strong().Monospace()
-					}
-				}
-			} else {
-				for rt := range c.RichTextLabel(field.Name) {
-					rt.Strong().Monospace()
+			name := field.Name
+			if label := inst.colLabels[name]; label != "" {
+				name = label
+			}
+			// The header is a frameless button: clicking it cycles this
+			// column's sort (asc → desc → unsorted). The physical column name
+			// stays on hover, as it did when the header was a plain label, so
+			// a leeway handle never hides the name it stands for.
+			for range c.HoverText(field.Name + " — click to sort").KeepIter() {
+				if c.Button(ids.PrepareSeq(tableSortIDSalt+uint64(arrowCol)),
+					c.Atoms().BeginRichText(name+inst.tableSort.glyph(arrowCol)).Strong().Monospace().End().Keep()).
+					Frame(false).
+					Truncate().
+					SendResp().HasPrimaryClicked() {
+					inst.tableSort.clicked(arrowCol)
 				}
 			}
 			for rt := range c.RichTextLabel(field.Type.String()) {
@@ -2803,7 +2818,9 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 		}
 	}
 	for local := rowLo; local < rowHi; local++ {
-		absRow := pageStart + int64(local)
+		// The display position walks the page; the record row it draws comes
+		// from the sort permutation (identity when unsorted).
+		absRow := inst.tableSort.rowAt(order, pageStart+int64(local))
 		selected := absRow == selectedRow
 		rowBase := cellIdBase + uint64(absRow)*cellColStride
 
