@@ -66,6 +66,14 @@ type AppletDef struct {
 	Endpoint EndpointE
 	SQL      string
 	BandsSQL string // optional `sql bands` aux fence (Timeline panel-local SQL)
+	// Preamble is the optional `md preamble` aux fence: explanatory markdown
+	// the instance renders above the result panes. It is deliberately its own
+	// fence rather than the document's leading prose — an author decides what
+	// belongs over the numbers and what belongs in the Definition drawer, and
+	// existing applets gain nothing they did not ask for. Note that
+	// [scanFences] does not nest, so a preamble cannot itself contain a
+	// fenced block.
+	Preamble string
 	// Class is the ADR-0132 §SD5 security class of SQL, computed at parse
 	// time. It gates AutoRun at mount: only QuerySecurityRead applets run on
 	// open.
@@ -206,33 +214,47 @@ func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef
 // page.
 func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err error) {
 	fences := scanFences(src)
-	var primary, bands *fence
+	var primary, bands, preamble *fence
 	for i := range fences {
 		f := &fences[i]
-		if f.Lang != "sql" {
-			continue
-		}
-		switch f.Role {
-		case "":
-			// The FIRST role-less sql fence is the buffer; later ones are
-			// prose examples (they keep their Snippets-style Insert buttons
-			// when the doc renders as help, and mint nothing).
-			if primary == nil {
-				primary = f
-			}
-		case "bands":
-			if bands != nil {
-				err = eh.Errorf("sqlapplet: %s/%s: more than one `sql bands` fence", bookID, path)
+		switch f.Lang {
+		case "sql":
+			switch f.Role {
+			case "":
+				// The FIRST role-less sql fence is the buffer; later ones are
+				// prose examples (they keep their Snippets-style Insert buttons
+				// when the doc renders as help, and mint nothing).
+				if primary == nil {
+					primary = f
+				}
+			case "bands":
+				if bands != nil {
+					err = eh.Errorf("sqlapplet: %s/%s: more than one `sql bands` fence", bookID, path)
+					return
+				}
+				bands = f
+			default:
+				err = eh.Errorf("sqlapplet: %s/%s: unknown `sql` fence role %q (known: bands)", bookID, path, f.Role)
 				return
 			}
-			bands = f
-		default:
-			err = eh.Errorf("sqlapplet: %s/%s: unknown fence role %q (known: bands)", bookID, path, f.Role)
-			return
+		case "md", "markdown":
+			switch f.Role {
+			case "":
+				// A prose example that happens to be markdown — not a directive.
+			case "preamble":
+				if preamble != nil {
+					err = eh.Errorf("sqlapplet: %s/%s: more than one `md preamble` fence", bookID, path)
+					return
+				}
+				preamble = f
+			default:
+				err = eh.Errorf("sqlapplet: %s/%s: unknown `%s` fence role %q (known: preamble)", bookID, path, f.Lang, f.Role)
+				return
+			}
 		}
 	}
 	if primary == nil {
-		if bands != nil {
+		if bands != nil || preamble != nil {
 			err = eh.Errorf("sqlapplet: %s/%s: aux fence without a buffer (no role-less `sql` fence)", bookID, path)
 		}
 		// No fences at all: a prose page, not an applet.
@@ -272,6 +294,9 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	}
 	if bands != nil {
 		def.BandsSQL = strings.TrimSpace(bands.Text)
+	}
+	if preamble != nil {
+		def.Preamble = strings.TrimSpace(preamble.Text)
 	}
 	if icon, has := fm["icon"]; has {
 		s, isStr := icon.(string)

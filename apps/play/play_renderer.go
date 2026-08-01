@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
@@ -531,6 +532,11 @@ type PlayApp struct {
 	// buffer is the user's own and stands behind no document. See
 	// play_definition.go.
 	definition *definitionView
+
+	// preamble is the explanatory passage that rides above the result panes,
+	// from an applet's `md preamble` fence (SetPreambleMarkdown). nil renders
+	// nothing. Parsed once; see play_definition.go.
+	preamble *markdown.Doc
 
 	// Param-slot UI (see play_param_render.go). paramSlots mirrors what
 	// the debounced parse extracted from inst.sql; paramDrafts owns the
@@ -1138,6 +1144,9 @@ func (inst *PlayApp) Render() error {
 	// their width in the order they are added.
 	inst.renderDefinitionPanel()
 	for range c.PanelCentralInside().KeepIter() {
+		// The author's explanatory passage, above every result pane and
+		// below the controls — an applet's `md preamble` fence.
+		inst.renderPreamble()
 		for dock := range c.DockArea(ids.PrepareStr("play-dock")) {
 			if inst.pendingDockActivate != 0 {
 				dock.ActivateTab(inst.pendingDockActivate)

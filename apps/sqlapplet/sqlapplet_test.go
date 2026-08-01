@@ -43,6 +43,9 @@ func TestStarterBookCorpus(t *testing.T) {
 	assert.Equal(t, EndpointIntrospection, env.Endpoint)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail"}}, env.Tabs)
 	assert.Equal(t, analysis.QuerySecurityRead, env.Class)
+	assert.Contains(t, env.Preamble, "declares", "the `md preamble` fence rides the def")
+	assert.NotContains(t, env.Preamble, "```", "the fence markers stay out of the text")
+	assert.Empty(t, apps.Preamble, "absent fence ⇒ no preamble, not an empty strip")
 
 	assert.Equal(t, "recent-queries", recent.Slug)
 	assert.Equal(t, EndpointDefault, recent.Endpoint)
@@ -124,6 +127,21 @@ func TestParseDocShapes(t *testing.T) {
 	require.NotNil(t, def)
 	assert.Equal(t, "SELECT 2", def.BandsSQL)
 
+	// The preamble aux fence lands beside the buffer, trimmed; a plain `md`
+	// fence is a prose example and claims nothing.
+	def, errs = parseOne(t, "prefaced.md", docMD("title: Prefaced",
+		"```md preamble\nCounts are **per package**.\n```\n\n```sql\nSELECT 1\n```\n\n```md\njust an example\n```"))
+	require.Empty(t, errs)
+	require.NotNil(t, def)
+	assert.Equal(t, "Counts are **per package**.", def.Preamble)
+
+	// `markdown` is accepted alongside `md`.
+	def, errs = parseOne(t, "prefaced-long.md", docMD("title: Prefaced long",
+		"```sql\nSELECT 1\n```\n\n```markdown preamble\nRead me first.\n```"))
+	require.Empty(t, errs)
+	require.NotNil(t, def)
+	assert.Equal(t, "Read me first.", def.Preamble)
+
 	// A mutating buffer parses and mints — it just never auto-runs (§SD3).
 	def, errs = parseOne(t, "setter.md", docMD("title: Setter",
 		"```sql\nSET max_threads = 4; SELECT 1\n```"))
@@ -174,9 +192,12 @@ func TestParseDocErrors(t *testing.T) {
 		body    string
 		errPart string
 	}{
-		{"unknown_role", "a.md", "title: A", "```sql wat\nSELECT 1\n```\n" + sqlFence, "unknown fence role"},
+		{"unknown_role", "a.md", "title: A", "```sql wat\nSELECT 1\n```\n" + sqlFence, "unknown `sql` fence role"},
+		{"unknown_md_role", "a.md", "title: A", "```md epilogue\nhi\n```\n" + sqlFence, "unknown `md` fence role"},
 		{"bands_without_buffer", "a.md", "title: A", "```sql bands\nSELECT 1\n```", "aux fence without a buffer"},
+		{"preamble_without_buffer", "a.md", "title: A", "```md preamble\nhi\n```", "aux fence without a buffer"},
 		{"double_bands", "a.md", "title: A", sqlFence + "\n```sql bands\nSELECT 1\n```\n```sql bands\nSELECT 2\n```", "more than one"},
+		{"double_preamble", "a.md", "title: A", sqlFence + "\n```md preamble\na\n```\n```md preamble\nb\n```", "more than one"},
 		{"unparseable_sql", "a.md", "title: A", "```sql\nINSERT INTO t VALUES (1)\n```", "does not parse"},
 		{"empty_buffer", "a.md", "title: A", "```sql\n\n```", "empty sql buffer"},
 		{"bad_slug", "bad_slug.md", "title: A", sqlFence, "must match"},

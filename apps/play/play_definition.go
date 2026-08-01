@@ -1,8 +1,13 @@
 package play
 
-// play_definition.go is the applet definition view: the markdown document an
-// embedded instance was defined BY, rendered inside the instance as a
-// right-hand drawer the top bar's "Definition" toggle opens.
+// play_definition.go carries the two surfaces an embedded instance derives
+// from the document it was defined by: the **Definition drawer** (the whole
+// document, on demand) and the **preamble** (a short explanatory passage the
+// author chose to keep over the numbers, always visible).
+//
+// The Definition drawer is the markdown document an embedded instance was
+// defined BY, rendered as a right-hand drawer the top bar's "Definition"
+// toggle opens.
 //
 // It replaces the ADR-0132 §SD3 "Copy SQL" button, which exported the buffer
 // and only the buffer. A sqlapplet's document carries more than that — the
@@ -93,6 +98,46 @@ func (inst *PlayApp) renderDefinitionPanel() {
 				d.doc.RenderFrontmatter()
 			}
 		}
+	}
+}
+
+// SetPreambleMarkdown hands play the explanatory passage an applet author
+// wants standing over the results — a sqlapplet's `md preamble` aux fence.
+// It renders above every result pane, inside the central panel, so it reads
+// as a header on the data rather than as another piece of toolbar. Call it
+// between construction and mount; empty source renders nothing.
+//
+// Separate from [PlayApp.SetDefinitionMarkdown] on purpose: the definition is
+// the whole document a reader opens deliberately, the preamble is the couple
+// of sentences they should not have to open anything to see. An applet may
+// have either, both, or neither.
+func (inst *PlayApp) SetPreambleMarkdown(src []byte) {
+	if len(bytes.TrimSpace(src)) == 0 {
+		inst.preamble = nil
+		return
+	}
+	inst.preamble = markdown.Parse(src)
+}
+
+// renderPreamble draws the preamble strip. Render calls it inside the central
+// panel, above the DockArea, so it spans every result tab and leaves the top
+// bar to the controls. Non-resizable, so it fits its content the way the top
+// bar fits its buttons — a two-line preamble reserves two lines. A runaway
+// one squeezes the panes, which is the author's signal to move the prose into
+// the document proper, where the Definition drawer already shows it.
+func (inst *PlayApp) renderPreamble() {
+	if inst.preamble == nil {
+		return
+	}
+	ids := inst.ids
+	for range c.PanelTopInside(ids.PrepareStr("preamblePanel")).Resizable(false).KeepIter() {
+		// IdScope isolates the document's derived widget ids — the same
+		// invariant the Definition drawer observes, and it matters more here:
+		// both documents can be on screen in the same frame.
+		for range c.IdScope(ids.PrepareStr("preambleBody")) {
+			inst.preamble.Render(ids)
+		}
+		c.Separator().Send()
 	}
 }
 

@@ -61,3 +61,26 @@ func TestSetDefinitionMarkdownEmptyIsOff(t *testing.T) {
 		assert.Nil(t, inst.definition, "%q leaves the drawer off", string(src))
 	}
 }
+
+// TestPreambleIsIndependentOfTheDefinition pins that the two document-derived
+// surfaces do not imply each other: an applet may carry a preamble, a
+// definition, both, or neither, and the strip is absent rather than empty
+// when the author wrote no preamble.
+func TestPreambleIsIndependentOfTheDefinition(t *testing.T) {
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x")
+	defer inst.Close()
+
+	assert.Nil(t, inst.preamble, "a plain playground has no preamble")
+
+	inst.SetDefinitionMarkdown([]byte(definitionDocMD))
+	assert.Nil(t, inst.preamble, "a definition alone does not conjure a preamble")
+
+	inst.SetPreambleMarkdown([]byte("Counts are **per package**."))
+	require.NotNil(t, inst.preamble)
+	require.NotNil(t, inst.definition, "and the preamble does not displace the drawer")
+
+	for _, src := range [][]byte{nil, {}, []byte(" \n\t")} {
+		inst.SetPreambleMarkdown(src)
+		assert.Nil(t, inst.preamble, "%q renders no strip", string(src))
+	}
+}

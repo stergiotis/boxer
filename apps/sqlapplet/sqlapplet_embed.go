@@ -72,6 +72,9 @@ func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err erro
 	// is strictly more than the buffer the old Copy SQL button exported. A
 	// hand-built def carries no Source, and the drawer stays absent.
 	inner.SetDefinitionMarkdown(def.Source)
+	// The `md preamble` fence, standing over the result panes: what the
+	// author wants read before the numbers are.
+	inner.SetPreambleMarkdown([]byte(def.Preamble))
 	if err = attenuateTabs(inner, def, cfg.Log); err != nil {
 		return nil, err
 	}

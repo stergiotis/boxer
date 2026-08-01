@@ -22,7 +22,14 @@ the applet's params strip — parameter binding against the in-process
 endpoint per ADR-0133.
 
 This document is itself an ADR-0132 SQL applet; its `tabs:` list pins the
-surface to the Table and Detail panes.
+surface to the Table and Detail panes, and the `md preamble` fence below is
+what the applet shows above those panes.
+
+```md preamble
+Every knob the process **declares**, not every knob it reads: a variable
+absent from the ADR-0009 registry does not appear here even when it is set.
+Values marked sensitive are redacted at the source.
+```
 
 ```sql
 SET param_pattern = '%';
